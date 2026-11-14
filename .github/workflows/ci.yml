@@ -79,8 +79,8 @@ jobs:
         # need it (slicers._run), as in the bake-off. The exit code is
         # printed, so a failure after the summary shows where it came from.
         run: |
-          set -o pipefail
-          python -X faulthandler -m unittest discover -s tests -v > "$RUNNER_TEMP/tests.log" 2>&1; code=$?
+          code=0
+          python -X faulthandler -m unittest discover -s tests -v > "$RUNNER_TEMP/tests.log" 2>&1 || code=$?
           tail -n 400 "$RUNNER_TEMP/tests.log"
           echo "unittest exit code: $code"
           exit $code
