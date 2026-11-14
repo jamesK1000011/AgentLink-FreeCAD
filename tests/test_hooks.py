@@ -11,8 +11,13 @@ from agentlink.protocol import Tool, ToolError  # noqa: E402
 
 
 class Hooks(unittest.TestCase):
-    def tearDown(self):
+    # What other add-ons registered (other tests' servers) is put back.
+    def setUp(self):
+        self.state = hooks.saved()
         hooks.reset()
+
+    def tearDown(self):
+        hooks.restore(self.state)
 
     def test_api_ranges(self):
         self.assertTrue(hooks.api_ok(None))
