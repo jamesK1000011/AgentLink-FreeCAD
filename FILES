@@ -8,7 +8,6 @@ Studio Light/Studio Light.cfg
 Studio Light/parameters/Studio Light.yaml
 agentlink/__init__.py
 agentlink/boxes.py
-agentlink/calibrate.py
 agentlink/ccx_io.py
 agentlink/cells.py
 agentlink/charts.py
@@ -22,9 +21,7 @@ agentlink/code/packs.py
 agentlink/code/packs_shipped/example.demo.json
 agentlink/code/units.py
 agentlink/commands.py
-agentlink/data/orca-options.json
 agentlink/data/slicer-minimal.json
-agentlink/draco.py
 agentlink/echo.py
 agentlink/embeds.py
 agentlink/ext.py
@@ -85,7 +82,6 @@ agentlink/fits_hw.py
 agentlink/fitting.py
 agentlink/flat2d.py
 agentlink/frame.py
-agentlink/gcode_view.py
 agentlink/gdt.py
 agentlink/geometry.py
 agentlink/grab.py
@@ -135,7 +131,7 @@ agentlink/macros.py
 agentlink/meshdist.py
 agentlink/meshformats.py
 agentlink/millsim.py
-agentlink/orca3mf.py
+agentlink/orcalink_find.py
 agentlink/packing.py
 agentlink/panel.py
 agentlink/panel_tabs.py
@@ -143,7 +139,6 @@ agentlink/paths.py
 agentlink/printability.py
 agentlink/printers.py
 agentlink/printmass.py
-agentlink/printstrength.py
 agentlink/protocol.py
 agentlink/render.py
 agentlink/restart_mark.py
@@ -167,13 +162,11 @@ agentlink_state.py
 package.xml
 tests/_fc.py
 tests/_pd_base.py
-tests/data/orca-two-boxes.json
 tests/test_app_install.py
 tests/test_assembly.py
 tests/test_assembly_more.py
 tests/test_batch_rollback.py
 tests/test_bim_gaps.py
-tests/test_calibrate.py
 tests/test_cam.py
 tests/test_cam_more.py
 tests/test_ccx_io_more.py
@@ -185,7 +178,6 @@ tests/test_core_guards.py
 tests/test_core_guards_fc.py
 tests/test_cut.py
 tests/test_doc.py
-tests/test_draco.py
 tests/test_draft.py
 tests/test_drawing.py
 tests/test_echo_map.py
@@ -200,7 +192,6 @@ tests/test_files.py
 tests/test_fitting.py
 tests/test_flat2d.py
 tests/test_gaps_redteam.py
-tests/test_gcode_view.py
 tests/test_guides.py
 tests/test_hull3d.py
 tests/test_inspection.py
@@ -220,7 +211,6 @@ tests/test_model.py
 tests/test_model_more.py
 tests/test_more_families.py
 tests/test_orca.py
-tests/test_orca3mf.py
 tests/test_panel_tabs.py
 tests/test_param.py
 tests/test_parts.py
@@ -228,7 +218,6 @@ tests/test_paths.py
 tests/test_pref_import.py
 tests/test_printer.py
 tests/test_printmass.py
-tests/test_printstrength.py
 tests/test_protocol.py
 tests/test_share.py
 tests/test_sheet.py

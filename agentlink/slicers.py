@@ -225,12 +225,15 @@ def make_project(name, stls, dest, settings, profiles=None, options=None, timeou
         # Some builds export only what they slice: slice, then drop the results.
         run = _run(args[:1] + ["--slice", "0"] + args[1:], timeout, cwd=out_dir)
         if os.path.isfile(made):
-            from . import orca3mf
+            try:
+                from .orcalink_find import module
 
-            pr = orca3mf.Project(made)
-            pr.strip_results()
-            pr.changed = False
-            pr.save()
+                pr = module("orca3mf").Project(made)
+                pr.strip_results()
+                pr.changed = False
+                pr.save()
+            except ImportError:
+                pass  # left with its results: OrcaSlicer still opens it
     if not os.path.isfile(made):
         why = result_error(out_dir)
         raise RuntimeError((why + " — " if why else "") + _tail(run))

@@ -20,10 +20,11 @@ try:
 except ImportError:
     HAVE = False
 
-from agentlink import slicers  # noqa: E402
+from agentlink import orcalink_find, slicers  # noqa: E402
 
 
 @unittest.skipUnless(HAVE, "FreeCAD is not importable here")
+@unittest.skipUnless(orcalink_find.find(), "Agent Link for OrcaSlicer is not installed beside this add-on (AGENTLINK_ORCALINK)")
 class OrcaLoop(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -145,7 +146,9 @@ class OrcaLoop(unittest.TestCase):
             self.skipTest("no OrcaSlicer on this machine")
         import zipfile
 
-        from agentlink import orca3mf as O
+        from agentlink.orcalink_find import module
+
+        O = module("orca3mf")
 
         p = self.ok("orca_project", {"action": "new", "bodies": ["Peg"], "path": "more2.3mf"})["project"]
         stl = os.path.join(self.dir, "wedge.stl")

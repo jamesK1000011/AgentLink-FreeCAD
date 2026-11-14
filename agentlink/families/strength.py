@@ -170,8 +170,12 @@ def tools(session):
         st = {"body": o.Label, "material": mid, "mesh": mesh, "buildDir": build, "holds": old.get("holds", []) if keep else [], "loads": old.get("loads", []) if keep else []}
         if a.get("printed"):
             # The slicer's settings read back: what the print falls short of the solid body.
-            from .. import orca3mf as O3, printstrength as PS
+            from ..orcalink_find import module
 
+            try:
+                O3, PS = module("orca3mf"), module("printstrength")
+            except ImportError as e:
+                raise ToolError("unavailable", f"printed: {e}")
             pr = a["printed"]
             try:
                 proj = O3.Project(os.path.expanduser(pr["project"]) if os.path.isabs(os.path.expanduser(pr["project"])) else os.path.join(s.out_dir, pr["project"]))

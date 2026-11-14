@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Agent Link's own tests, installed alone (no ScanRuler for FreeCAD, no
-# Collab: a hidden dependency fails here straight away), on the newest
+# Agent Link's own tests, installed with Agent Link for OrcaSlicer only (no
+# ScanRuler for FreeCAD, no Collab: a hidden dependency fails here straight away), on the newest
 # FreeCAD conda-forge has and the newest 1.1 and 1.0, with PrusaSlicer and
 # the latest OrcaSlicer for the slicing tests. The coverage audit and the
 # ScanRuler bake-off run with both add-ons in ScanRuler's own CI.
@@ -33,6 +33,11 @@ jobs:
         shell: bash -el {0}
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        # Agent Link for OrcaSlicer, the orca tools' own add-on, beside it.
+        with:
+          repository: jamesK1000011/OrcaSlicer-AgentLink
+          path: orcalink-addon
       - uses: mamba-org/setup-micromamba@v2
         with:
           environment-name: fc-${{ matrix.series }}
@@ -48,6 +53,7 @@ jobs:
         run: |
           echo "FREECAD_LIB=$CONDA_PREFIX/lib" >> "$GITHUB_ENV"
           echo "PYTHONPATH=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+          echo "AGENTLINK_ORCALINK=$GITHUB_WORKSPACE/orcalink-addon" >> "$GITHUB_ENV"
           python -c "import sys; sys.path.append('$CONDA_PREFIX/lib'); import FreeCAD, Part, MeshPart; print('FreeCAD', FreeCAD.Version()[:3])"
       - name: PrusaSlicer and a virtual screen
         timeout-minutes: 6
@@ -67,6 +73,6 @@ jobs:
           cd "$RUNNER_TEMP/orca" && chmod +x "$name" && "./$name" --appimage-extract > /dev/null
           sudo apt-get install -y -qq --no-install-recommends libwebkit2gtk-4.1-0 libgstreamer-plugins-base1.0-0 > /dev/null || true
           echo "AGENTLINK_ORCASLICER=$RUNNER_TEMP/orca/squashfs-root/AppRun" >> "$GITHUB_ENV"
-      - name: Agent Link tests, alone
+      - name: Agent Link tests, with Agent Link for OrcaSlicer
         timeout-minutes: 20
         run: xvfb-run -a python -X faulthandler -m unittest discover -s tests -v 2>&1 | tail -n 400; exit ${PIPESTATUS[0]}
