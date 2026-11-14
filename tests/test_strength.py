@@ -95,7 +95,7 @@ class Strength(unittest.TestCase):
         err, r = self.call("fea_solve")
         self.assertTrue(err)
         self.assertEqual(r["error"]["code"], "invalid_state")
-        err, r = self.call("fea_setup", {"body": "Beam", "mesh": 2.5, "buildDir": "+z"})
+        err, r = self.call("fea_setup", {"body": "Beam", "mesh": 2.5})
         self.assertFalse(err, r)
         self.assertEqual(r["material"]["id"], "pla")
         err, r = self.call("fea_solve")
@@ -128,9 +128,7 @@ class Strength(unittest.TestCase):
         self.assertLess(r["vonMisesMax"]["MPa"], 30)
         self.assertLess(r["vonMisesMax"]["at"][0], 15)
         self.assertAlmostEqual(r["safety"], 50 / r["vonMisesMax"]["MPa"], delta=0.02)
-        self.assertIn("acrossLayers", r)
         self.assertFalse(any("large" in w for w in r["warnings"]), r["warnings"])
-        self.assertEqual(r["acrossLayers"]["factor"], 0.5)
         err, again = self.call("fea_results")
         self.assertFalse(again["stale"])
         # The stress as a picture: hottest at the held root.

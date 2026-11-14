@@ -55,9 +55,10 @@ class Hooks(unittest.TestCase):
             if a.get("printed"):
                 return {**out, "printed": True}
 
-        hooks.extend_tool("fea_setup", {"printed": {"type": "boolean"}}, before, after)
+        hooks.extend_tool("fea_setup", {"printed": {"type": "boolean"}}, before, after, "printed: true for a printed part.")
         hooks.apply_extensions([t], session=None)
         self.assertIn("printed", t.schema["properties"])
+        self.assertEqual(t.description, "x printed: true for a printed part.")
         out = t.fn({"body": "B", "printed": True})
         # The owner never sees the extension's arguments.
         self.assertEqual(out, {"body": "B", "keys": ["body"], "printed": True})

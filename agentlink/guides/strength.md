@@ -1,10 +1,10 @@
 # Strength (finite elements)
 
 ## The study
-1. `fea_setup { body, material, mesh, buildDir }`. The material is the body's (material_set) unless given.
+1. `fea_setup { body, material, mesh }`. The material is the body's (material_set) unless given.
 2. `fea_hold { faces }`: where it is mounted. Ask the person how it is held.
 3. `fea_load { faces, force | pressure }` or `{ gravity }`: what pushes on it, in N or MPa.
-4. `fea_solve`: von Mises peak and where, displacement, safety factor against yield; for a printed part the tension across the layers against half the yield.
+4. `fea_solve`: von Mises peak and where, displacement, safety factor against yield.
 5. `view_render { map: "stress", views: "all" }`: look at where it is hot — a peak at a held face is the hold's, not the part's.
 
 ## Shaking: natural frequencies
@@ -25,7 +25,6 @@
 - A rigid hold makes stress no real mount does: a peak on a held face reads high. Look a little away from it, or hold a wider face.
 - A coarse mesh under-reads peaks. Halve `mesh` and solve again; if the peak rises by more than 10 %, keep going.
 - Library figures are typical. For a part that must not fail, use the supplier's (material_set custom) and keep a safety factor of 2 or more.
-- Across the layers is a simplification (0.5 × yield): a real printed part can be weaker still, and is weakest where layers are pulled apart.
 - A linear solve is wrong past yield or for large deflections; the warnings say when.
 - Needs CalculiX (`ccx`) and Gmsh (`gmsh`) installed; without them fea_solve says what to install.
 
@@ -45,6 +44,5 @@
 
 Past yield, `fea_solve { nonlinear: true }` follows the part into yield: large deflections, and each material elastic-plastic from its yield to its tensile strength. The answer adds `nonlinear.plasticStrainMax` (a permanent set where it is above 0). If the solve stops finding equilibrium, the load is past what the part can carry: it would collapse or break. `elasticOnly: true` keeps large deflections but no yielding (thin, springy parts).
 
-## Frames and shells
-- `fea_frame` solves a frame of straight members with beam elements: members by ends and section (rect, circ, pipe, box), or BIM bodies (their centre lines and sizes, joined within `tolerance`). Supports pinned, fixed or roller at member ends; loads along members (N/mm, or kPa over a width) and at joints; `gravity` for own weight. Each member's stress, safety, deflection (span over deflection; `deflectionLimit` judges it) and each support's reaction. Checked: a simple beam's stress and deflection within 1 % of the textbook.
+## Shells
 - `fea_shell` solves a thin plate or sheet by shell elements: the object's faces are the mid-surface, `thickness` sets the rest; edges simply supported (pinned) or clamped (fixed); pressure and own weight. Checked against the classic square-plate results within 3 %. A deflection past half the thickness is flagged: the plate then also stretches, which a linear solve misses.

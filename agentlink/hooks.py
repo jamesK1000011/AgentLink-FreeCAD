@@ -17,7 +17,7 @@ Families (the tools)          FAMILIES = [module, ...] in agentlink_families;
 Readers                       register_reader(kind, fn); readers(kind)
 Services                      provide(name, obj); service(name)
 Events                        on(event, fn); emit(event, *args)
-Tool extensions               extend_tool(name, properties, before, after)
+Tool extensions               extend_tool(name, properties, before, after, describe)
 Panel                         register_tab(title, factory, order);
                               register_reviewer(fn)
 Protected settings            guard_setting(path, name)
@@ -131,8 +131,10 @@ def emit(event, *args, **kw):
 _EXTENSIONS = {}
 
 
-def extend_tool(name, properties=None, before=None, after=None):
-    _EXTENSIONS.setdefault(name, []).append({"properties": dict(properties or {}), "before": before, "after": after})
+def extend_tool(name, properties=None, before=None, after=None, describe=None):
+    """describe: a sentence added to the tool's description, saying what the
+    extension's arguments and answers are."""
+    _EXTENSIONS.setdefault(name, []).append({"properties": dict(properties or {}), "before": before, "after": after, "describe": describe})
 
 
 def apply_extensions(tools, session):
@@ -146,6 +148,8 @@ def apply_extensions(tools, session):
         for x in exts:
             for k, v in x["properties"].items():
                 props.setdefault(k, v)
+            if x.get("describe") and x["describe"] not in t.description:
+                t.description = t.description.rstrip() + " " + x["describe"]
         fn = t.fn
 
         def wrapped(a, _fn=fn, _exts=list(exts)):

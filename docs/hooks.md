@@ -55,7 +55,7 @@ All optional. Every hook catches and logs your exceptions.
 | `register_reader(kind, fn)` | Answer a question by kind (`"wall"`: the thinnest wall of a shape; `"thread_scan"`: a thread read from a scan). Return `None` to pass; the first answer wins. |
 | `provide(name, obj)` / `service(name)` | Offer or use a named service (`process_of`, `checkpoints`, `material_cards`, `frame_solver`, `encased`). Absent gives `None`. |
 | `on(event, fn)` | `after_change(session, tool)`, `setting_changed(path, name, old, new)`, `docs_changed(session)`, `call_done(session, tool, ok)`. |
-| `extend_tool(name, properties, before, after)` | Add arguments to a tool another family owns. `before(args, session)` may return changed arguments; `after(args, answer, session)` may return a fuller answer. The owner never sees your arguments. |
+| `extend_tool(name, properties, before, after, describe)` | Add arguments to a tool another family owns. `before(args, session)` may return changed arguments; `after(args, answer, session)` may return a fuller answer; `describe` is a sentence added to the tool's description. The owner never sees your arguments. |
 | `register_tab(title, factory, order)` | A tab in Agent Link's panel: `factory(panel)` returns a QWidget. |
 | `register_reviewer(fn)` | `fn(session, body)` gives the Review tab its verdict. |
 | `guard_setting(path, name)` | A setting `pref_set` must not change. |

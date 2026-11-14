@@ -34,7 +34,6 @@ agentlink/families/bim_more.py
 agentlink/families/cam.py
 agentlink/families/cam_more.py
 agentlink/families/code.py
-agentlink/families/cut.py
 agentlink/families/doc.py
 agentlink/families/draft.py
 agentlink/families/draft_more.py
@@ -48,7 +47,6 @@ agentlink/families/inspection.py
 agentlink/families/material.py
 agentlink/families/measure.py
 agentlink/families/meshobj.py
-agentlink/families/mill.py
 agentlink/families/model.py
 agentlink/families/model_more.py
 agentlink/families/notes.py
@@ -73,7 +71,6 @@ agentlink/families/view.py
 agentlink/fits_hw.py
 agentlink/fitting.py
 agentlink/flat2d.py
-agentlink/frame.py
 agentlink/gdt.py
 agentlink/geometry.py
 agentlink/grab.py
@@ -82,7 +79,6 @@ agentlink/guides/assembly.md
 agentlink/guides/bim.md
 agentlink/guides/cam.md
 agentlink/guides/code.md
-agentlink/guides/cut.md
 agentlink/guides/doc.md
 agentlink/guides/draft.md
 agentlink/guides/drawing.md
@@ -92,7 +88,6 @@ agentlink/guides/inspection.md
 agentlink/guides/material.md
 agentlink/guides/measure.md
 agentlink/guides/mesh.md
-agentlink/guides/mill.md
 agentlink/guides/model.md
 agentlink/guides/orca.md
 agentlink/guides/param.md
@@ -127,7 +122,6 @@ agentlink/protocol.py
 agentlink/render.py
 agentlink/restart_mark.py
 agentlink/server.py
-agentlink/sheetfile.py
 agentlink/sheets.py
 agentlink/shots.py
 agentlink/smoke.py
@@ -149,14 +143,12 @@ tests/test_batch_rollback.py
 tests/test_bim_gaps.py
 tests/test_cam.py
 tests/test_cam_more.py
-tests/test_ccx_io_more.py
 tests/test_cells.py
 tests/test_charts.py
 tests/test_code_engine.py
 tests/test_code_redteam.py
 tests/test_core_guards.py
 tests/test_core_guards_fc.py
-tests/test_cut.py
 tests/test_doc.py
 tests/test_draft.py
 tests/test_drawing.py
@@ -185,7 +177,6 @@ tests/test_measure.py
 tests/test_meshdist.py
 tests/test_meshformats.py
 tests/test_meshobj.py
-tests/test_mill.py
 tests/test_millsim.py
 tests/test_model.py
 tests/test_model_more.py

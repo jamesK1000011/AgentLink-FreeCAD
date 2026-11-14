@@ -620,7 +620,10 @@ def build_server(session, name="freecad-agentlink", version="0.2.0", lean=None):
                 raise
             sys.stderr.write(f"Agent Link: the {getattr(fam, 'GROUP', fam)} tools of an extension are left out — {type(e).__name__}: {e}\n")
             continue
-        info[fam.GROUP] = fam.INFO + (f" — {fam.CREDIT}" if external and getattr(fam, "CREDIT", None) and fam.CREDIT not in fam.INFO else "")
+        if fam.GROUP in info:  # a family joining a group already there keeps its INFO
+            pass
+        else:
+            info[fam.GROUP] = fam.INFO + (f" — {fam.CREDIT}" if external and getattr(fam, "CREDIT", None) and fam.CREDIT not in fam.INFO else "")
         # A family says itself that it belongs in the default list.
         if getattr(fam, "LEAN", False):
             lean_groups.add(fam.GROUP)
