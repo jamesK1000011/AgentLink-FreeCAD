@@ -34,6 +34,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: actions/checkout@v5
+        # AddonKit for FreeCAD, the library Agent Link and the add-ons share.
+        with:
+          repository: jamesK1000011/AddonKit-FreeCAD
+          path: addonkit-lib
+      - uses: actions/checkout@v5
         # Agent Link for OrcaSlicer, the orca tools' own add-on, beside it.
         with:
           repository: jamesK1000011/AgentLink-OrcaSlicer
@@ -58,7 +63,7 @@ jobs:
       - name: FreeCAD imports
         run: |
           echo "FREECAD_LIB=$CONDA_PREFIX/lib" >> "$GITHUB_ENV"
-          echo "PYTHONPATH=$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/workshop-addons/Common:$GITHUB_WORKSPACE/workshop-addons/Parts" >> "$GITHUB_ENV"
+          echo "PYTHONPATH=$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/addonkit-lib:$GITHUB_WORKSPACE/workshop-addons/Common:$GITHUB_WORKSPACE/workshop-addons/Parts" >> "$GITHUB_ENV"
           echo "AGENTLINK_ORCALINK=$GITHUB_WORKSPACE/orcalink-addon" >> "$GITHUB_ENV"
           python -c "import sys; sys.path.append('$CONDA_PREFIX/lib'); import FreeCAD, Part, MeshPart; print('FreeCAD', FreeCAD.Version()[:3])"
       - name: PrusaSlicer and a virtual screen

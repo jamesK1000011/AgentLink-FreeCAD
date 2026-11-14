@@ -91,11 +91,14 @@ def _discovered():
 # The extensions loaded, each with its own credit and licence (their
 # agentlink_families module's CREDIT and LICENSE): shown where they load.
 EXTENSIONS = []
+# Extensions left out because they need another Agent Link API, and why.
+SKIPPED = []
 
 
 def load():
     out = []
     del EXTENSIONS[:]
+    del SKIPPED[:]
     for n in NAMES:
         try:
             out.append(importlib.import_module(f"{__name__}.{n}"))
@@ -114,6 +117,13 @@ def load():
             fams = list(getattr(mod, "FAMILIES", []))
         except Exception as e:
             sys.stderr.write(f"Agent Link: extension {n} left out — {type(e).__name__}: {e}\n")
+            continue
+        from .. import hooks
+
+        need = getattr(mod, "AGENTLINK_API", None)
+        if not hooks.api_ok(need):
+            sys.stderr.write(f"Agent Link: extension {n} left out — it needs Agent Link API {need}, this is API {hooks.API}; update one or the other\n")
+            SKIPPED.append({"module": n, "needs": need, "api": hooks.API})
             continue
         credit, lic = getattr(mod, "CREDIT", None), getattr(mod, "LICENSE", None)
         for f in fams:

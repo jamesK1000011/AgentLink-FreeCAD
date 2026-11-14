@@ -7,6 +7,7 @@ Studio Dark/parameters/Studio Dark.yaml
 Studio Light/Studio Light.cfg
 Studio Light/parameters/Studio Light.yaml
 agentlink/__init__.py
+agentlink/_addonkit.py
 agentlink/ccx_io.py
 agentlink/cells.py
 agentlink/charts.py
@@ -117,6 +118,7 @@ agentlink/guides/techdraw.md
 agentlink/guides/thread.md
 agentlink/guides/view.md
 agentlink/heavy.py
+agentlink/hooks.py
 agentlink/hull3d.py
 agentlink/install_job.py
 agentlink/iso286.py
@@ -156,6 +158,7 @@ agentlink/usage.py
 agentlink/views.py
 agentlink_headless.py
 agentlink_state.py
+docs/hooks.md
 package.xml
 tests/_fc.py
 tests/_pd_base.py
@@ -190,6 +193,7 @@ tests/test_fitting.py
 tests/test_flat2d.py
 tests/test_gaps_redteam.py
 tests/test_guides.py
+tests/test_hooks.py
 tests/test_hull3d.py
 tests/test_inspection.py
 tests/test_iso286.py
