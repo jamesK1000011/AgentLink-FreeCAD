@@ -23,7 +23,6 @@ NAMES = [
     "sheet",
     "material",
     "strength",
-    "orca",
     "techdraw",
     "inspection",
     "view",
