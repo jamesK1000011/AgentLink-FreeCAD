@@ -83,4 +83,6 @@ jobs:
           python -X faulthandler -m unittest discover -s tests -v > "$RUNNER_TEMP/tests.log" 2>&1 || code=$?
           tail -n 400 "$RUNNER_TEMP/tests.log"
           echo "unittest exit code: $code"
-          exit $code
+          # Not exit: a login shell's exit runs ~/.bash_logout, whose
+          # clear_console fails on the runner and turns a pass into 1.
+          test "$code" -eq 0
