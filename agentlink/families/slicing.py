@@ -7,9 +7,7 @@
 import json
 import os
 
-from .. import embeds as E
-from .. import printability, slicer_presets as SP, slicers, store
-from . import embed as EM
+from .. import hooks, printability, slicer_presets as SP, slicers, store
 from ..protocol import Tool, ToolError
 
 GROUP = "slice"
@@ -24,16 +22,11 @@ def obj(props, required=()):
 
 def pauses_for(session, o, setup):
     """The pauses a body's print needs: [{ z, note }] from the bed, z the
-    top of the layer after which it stops — what insert_pauses takes."""
-    first, lh = E.grid(setup)
-    recs, _ = EM.live(session, o)
-    meta = session.meta.get(o.Label) or {}
-    items = [{"id": r["id"], "layer": r["layer"], "note": r["note"]} for r in recs]
-    enc = meta.get("encased")
-    if enc:
-        k, _ = E.layer_at_or_above(enc["top"], first, lh)
-        items.append({"id": "gen_make", "layer": k, "note": f"Insert {enc['count']} {enc['what']}"})
-    return [{"z": p["z"], "note": p["note"], "afterLayer": p["afterLayer"]} for p in E.pauses(items, first, lh)]
+    top of the layer after which it stops — what insert_pauses takes. Asked
+    of whichever add-on offers the "print_pauses" service (parts encased
+    mid-print); none when no add-on does."""
+    svc = hooks.service("print_pauses")
+    return svc(session, o, setup) if svc else []
 
 
 def tools(session):
