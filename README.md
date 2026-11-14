@@ -27,7 +27,7 @@ whether it is listed or not. Every change is one FreeCAD undo step.
 | cam | FreeCAD's CAM workbench: `cam_job` (stock and end mill), `cam_op` (profile, pocket, adaptive, facing, drilling — each computed and read back), `cam_sim` (the operations run on a height map of the stock: crashes, gouges, what is left, a picture), `cam_post` (G-code by FreeCAD's post-processors, checked against the stock), `cam_list`, `cam_tool`, `cam_remove` |
 | slice, printer | PrusaSlicer, OrcaSlicer and Bambu Studio command lines with pauses written in; OctoPrint, Moonraker and PrusaLink printers. Starting, pausing or stopping a print needs the person's typed confirmation |
 | orca | OrcaSlicer projects made from bodies, changed at every level, painted by face, sliced, exported and read back. These tools come from [Agent Link for OrcaSlicer](https://github.com/jamesK1000011/AgentLink-OrcaSlicer), a separate add-on installed beside this one (or found by `AGENTLINK_ORCALINK`); without it, the group is left out |
-| drawing, electronics, share | TechDraw sheets (feature dims, fits and hole callouts on the page as TechDraw's own dimensions), exploded assembly steps with a bill of materials, patent figures and a draft for an attorney's review; KiCad board import, board enclosures, PCB order packages, printed wiring channels; a library pack with licence, credits and private paths removed |
+| drawing, share | TechDraw sheets (feature dims, fits and hole callouts on the page as TechDraw's own dimensions), exploded assembly steps with a bill of materials, patent figures and a draft for an attorney's review; a library pack with licence, credits and private paths removed |
 
 Each group has a guide (`guide_read`).
 
