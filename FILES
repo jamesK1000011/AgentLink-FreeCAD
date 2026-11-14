@@ -37,7 +37,6 @@ agentlink/families/code.py
 agentlink/families/doc.py
 agentlink/families/draft.py
 agentlink/families/draft_more.py
-agentlink/families/drawing.py
 agentlink/families/feature.py
 agentlink/families/feature_more.py
 agentlink/families/fem_more.py
@@ -57,7 +56,6 @@ agentlink/families/pd_common.py
 agentlink/families/picks.py
 agentlink/families/points.py
 agentlink/families/robot.py
-agentlink/families/share.py
 agentlink/families/sheet.py
 agentlink/families/sketch.py
 agentlink/families/sketch_more.py
@@ -80,7 +78,6 @@ agentlink/guides/cam.md
 agentlink/guides/code.md
 agentlink/guides/doc.md
 agentlink/guides/draft.md
-agentlink/guides/drawing.md
 agentlink/guides/feature.md
 agentlink/guides/inspection.md
 agentlink/guides/material.md
@@ -90,7 +87,6 @@ agentlink/guides/model.md
 agentlink/guides/orca.md
 agentlink/guides/param.md
 agentlink/guides/points.md
-agentlink/guides/share.md
 agentlink/guides/sheet.md
 agentlink/guides/sketch.md
 agentlink/guides/start.md
@@ -111,7 +107,6 @@ agentlink/meshdist.py
 agentlink/meshformats.py
 agentlink/millsim.py
 agentlink/orcalink_find.py
-agentlink/packing.py
 agentlink/panel.py
 agentlink/panel_tabs.py
 agentlink/paths.py
@@ -126,7 +121,6 @@ agentlink/store.py
 agentlink/supervise.py
 agentlink/tools.py
 agentlink/usage.py
-agentlink/views.py
 agentlink_headless.py
 agentlink_state.py
 docs/hooks.md
@@ -148,7 +142,6 @@ tests/test_core_guards.py
 tests/test_core_guards_fc.py
 tests/test_doc.py
 tests/test_draft.py
-tests/test_drawing.py
 tests/test_echo_map.py
 tests/test_ext.py
 tests/test_facepick.py
@@ -163,7 +156,6 @@ tests/test_guides.py
 tests/test_hooks.py
 tests/test_hull3d.py
 tests/test_inspection.py
-tests/test_iso286.py
 tests/test_keep.py
 tests/test_licence_boundary.py
 tests/test_link_token.py
@@ -183,7 +175,6 @@ tests/test_param.py
 tests/test_paths.py
 tests/test_pref_import.py
 tests/test_protocol.py
-tests/test_share.py
 tests/test_sheet.py
 tests/test_sketch.py
 tests/test_sketch_gaps.py
