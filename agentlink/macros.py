@@ -59,7 +59,19 @@ def with_params(text, params):
     for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
             n = node.targets[0].id
+            # Only a constant the person wrote as a plain value (a number, a
+            # string, a list of them): never an expression, a call or a
+            # path built in code, which the approval did not cover as data.
+            try:
+                ast.literal_eval(node.value)
+            except (ValueError, TypeError, SyntaxError, RecursionError):
+                continue
             if n in params:
+                v = params[n]
+                try:
+                    ast.literal_eval(repr(v))
+                except (ValueError, SyntaxError):
+                    continue
                 node.value = ast.Constant(params[n]) if not isinstance(params[n], (list, dict)) else ast.parse(repr(params[n]), mode="eval").body
                 known.add(n)
     missing = [k for k in params if k not in known]

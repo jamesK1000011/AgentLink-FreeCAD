@@ -90,10 +90,17 @@ _GUARDED = {("Mod/AgentLink", "ExtensionRepos"), ("Mod/AgentLink", "CollabAllow"
 _GUARDED_WORDS = ("binarypath", "executable", "exepath", "binpath")
 
 
+# Whole groups no agent sets: the Addon Manager's (its catalog address and
+# custom repositories decide what code an update installs).
+_GUARDED_GROUPS = ("Addons", "AddonManager", "Mod/AddonManager")
+
+
 def guarded(path, name):
     p = (path or "").strip("/")
     if p.startswith(ROOT):
         p = p[len(ROOT):]
+    if any(p == g or p.endswith("/" + g) or p.startswith(g + "/") or ("/" + g + "/") in ("/" + p + "/") for g in _GUARDED_GROUPS):
+        return True
     for gp, gn in _GUARDED:
         if name == gn and (p.endswith(gp) or p == gp):
             return True

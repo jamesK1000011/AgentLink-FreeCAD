@@ -12,6 +12,31 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agentlink import supervise  # noqa: E402
 
+# A token of its own, so the supervisor says hello first, as on the Mac.
+import tempfile  # noqa: E402
+
+_TOKEN_DIR = tempfile.mkdtemp(prefix="agentlink-token-")
+os.environ["AGENTLINK_TOKEN_FILE"] = os.path.join(_TOKEN_DIR, "link-token")
+with open(os.environ["AGENTLINK_TOKEN_FILE"], "w") as _f:
+    _f.write("route-test-token\n")
+
+
+from agentlink import link_token  # noqa: E402
+
+
+def _pair(f):
+    """The window's side of the pairing, as the real window does it."""
+    reply, w = link_token.window_greet(f.readline(), "route-test-token")
+    f.write(reply)
+    f.flush()
+    assert link_token.window_check(f.readline(), "route-test-token", w)
+
+
+def _call(f):
+    """Paired, then the next line (a call)."""
+    _pair(f)
+    return f.readline()
+
 
 class WindowRoute(unittest.TestCase):
     def test_no_window_means_hidden(self):
@@ -28,6 +53,7 @@ class WindowRoute(unittest.TestCase):
         def serve():
             conn, _ = srv.accept()
             f = conn.makefile("rw", encoding="utf-8", newline="\n")
+            _pair(f)
             for line in f:
                 mid = json.loads(line)["id"]
                 f.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}) + "\n")
@@ -69,7 +95,7 @@ class WindowRoute(unittest.TestCase):
             def once():
                 conn, _ = srv.accept()
                 f = conn.makefile("rw", encoding="utf-8", newline="\n")
-                line = f.readline()
+                line = _call(f)
                 f.write(json.dumps({"jsonrpc": "2.0", "id": json.loads(line)["id"], "result": {}}) + "\n")
                 f.flush()
                 conn.close()
@@ -110,6 +136,7 @@ class WindowRoute(unittest.TestCase):
                 srv.listen(1)
                 conn, _ = srv.accept()
                 f = conn.makefile("rw", encoding="utf-8", newline="\n")
+                _pair(f)
                 for line in f:
                     f.write(json.dumps({"jsonrpc": "2.0", "id": json.loads(line)["id"], "result": {"where": "window"}}) + "\n")
                     f.flush()
@@ -188,7 +215,7 @@ class WindowRoute(unittest.TestCase):
             def first():
                 conn, _ = srv.accept()
                 f = conn.makefile("rw", encoding="utf-8", newline="\n")
-                line = f.readline()
+                line = _call(f)
                 f.write(json.dumps({"jsonrpc": "2.0", "id": json.loads(line)["id"], "result": {"restarting": True}}) + "\n")
                 f.flush()
                 restart_mark.write(["/nowhere/a.FCStd"])
@@ -203,6 +230,7 @@ class WindowRoute(unittest.TestCase):
                 again.listen(1)
                 c2, _ = again.accept()
                 g = c2.makefile("rw", encoding="utf-8", newline="\n")
+                _pair(g)
                 for ln in g:
                     g.write(json.dumps({"jsonrpc": "2.0", "id": json.loads(ln)["id"], "result": {"where": "window"}}) + "\n")
                     g.flush()

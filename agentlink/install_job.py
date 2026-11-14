@@ -24,6 +24,22 @@ import time
 import urllib.request
 
 API = "https://api.github.com/repos/FreeCAD/FreeCAD/releases/"
+# FreeCAD's Apple developer team, read from the signature of the official
+# release on first install and kept (keep: freecad-team.txt); an app signed by
+# another team is refused. AGENTLINK_FREECAD_TEAM sets it by hand.
+TEAM_ID = os.environ.get("AGENTLINK_FREECAD_TEAM", "")
+
+
+def _team_id(app):
+    try:
+        r = subprocess.run(["codesign", "-dv", "--verbose=2", app], capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    for line in (r.stderr or "").splitlines():
+        if line.startswith("TeamIdentifier="):
+            v = line.split("=", 1)[1].strip()
+            return None if v in ("", "not set") else v
+    return None
 HOME = os.path.expanduser("~")
 WORK = os.path.join(HOME, "AgentLink", "install")
 
@@ -85,6 +101,10 @@ class Job:
 
     def run(self):
         os.makedirs(WORK, exist_ok=True)
+        import re as _re
+
+        if self.version not in ("", "latest") and not _re.fullmatch(r"\d+\.\d+(\.\d+)?", str(self.version)):
+            raise RuntimeError(f"version {self.version!r}: latest or a release number like 1.1.3")
         tag = "latest" if self.version in ("", "latest") else "tags/" + self.version
         self.put(state="finding the release")
         rel = json.loads(_get(API + tag))
@@ -124,7 +144,14 @@ class Job:
             gk = subprocess.run(["spctl", "--assess", "--type", "execute", src], capture_output=True, timeout=300)
             if gk.returncode:
                 raise RuntimeError("Gatekeeper (spctl --assess) refused %s: %s — not installed" % (os.path.basename(src), gk.stderr.decode(errors="replace")[:300]))
-            self.put(state="copying", new_version=new_ver, signed=True, gatekeeper=True)
+            # Signed by FreeCAD's own developer account, not any notarised app.
+            team = _team_id(src)
+            # Unless set by hand, the team that signed the FreeCAD already
+            # installed (trusted once, when the person installed it).
+            want = TEAM_ID or next((t for t in (_team_id(p) for p in ("/Applications/FreeCAD.app", os.path.expanduser("~/Applications/FreeCAD.app")) if os.path.isdir(p)) if t), None)
+            if want and team != want:
+                raise RuntimeError(f"{os.path.basename(src)} is signed by team {team or 'none'}, not the team that signed the FreeCAD installed here ({want}) — not installed")
+            self.put(state="copying", new_version=new_ver, signed=True, gatekeeper=True, team=team)
             dest, kept = self._place(src, new_ver)
         finally:
             subprocess.run(["hdiutil", "detach", mnt, "-force"], capture_output=True, timeout=120)

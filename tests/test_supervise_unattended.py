@@ -47,15 +47,25 @@ FAKE_WINDOW = textwrap.dedent('''
     def beat():
         while True:
             if state["beat"]:
-                hb = {"pid": os.getpid(), "t": time.time(), "app": "Fake.app", "docs": [{"name": "Plate", "label": "Plate", "file": "/tmp/Plate.FCStd"}], "dialog": state["dialog"]}
+                hb = {"pid": os.getpid(), "t": time.time(), "pairing": 1, "app": "Fake.app", "docs": [{"name": "Plate", "label": "Plate", "file": "/tmp/Plate.FCStd"}], "dialog": state["dialog"]}
                 tmp = os.path.join(home, "heartbeat.json.tmp")
                 json.dump(hb, open(tmp, "w")); os.replace(tmp, os.path.join(home, "heartbeat.json"))
             time.sleep(0.3)
     threading.Thread(target=beat, daemon=True).start()
     srv = socket.socket(); srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(("127.0.0.1", port)); srv.listen(4)
+    sys.path.insert(0, os.environ["AGENTLINK_DIR"])
+    from agentlink import link_token
+    secret = link_token.read()
     def serve(c):
         f = c.makefile("rw")
+        # Paired first, as the real window is (agentlink/link_token.py).
+        reply, w = link_token.window_greet(f.readline(), secret)
+        if reply is None:
+            c.close(); return
+        f.write(reply); f.flush()
+        if not link_token.window_check(f.readline(), secret, w):
+            c.close(); return
         for line in f:
             m = json.loads(line)
             name = (m.get("params") or {}).get("name")
@@ -93,7 +103,10 @@ class Sup(unittest.TestCase):
         self.port = free_port()
         self.env = {**os.environ, "AGENTLINK_HOME": self.home, "AGENTLINK_DEADLINE": "1", "AGENTLINK_GRACE": "1",
                     "AGENTLINK_WINDOW": "1" if self.window else "0", "AGENTLINK_WINDOW_PORT": str(self.port),
-                    "AGENTLINK_RESTART_MARK": os.path.join(self.home, ".restarting")}
+                    "AGENTLINK_RESTART_MARK": os.path.join(self.home, ".restarting"),
+                    "AGENTLINK_TOKEN_FILE": os.path.join(self.home, "link-token"), "AGENTLINK_DIR": AL}
+        with open(self.env["AGENTLINK_TOKEN_FILE"], "w") as f:
+            f.write("sup-test-token\n")
         self.procs = []
         if self.window:
             fw = os.path.join(self.tmp, "fake_window.py")

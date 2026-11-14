@@ -363,7 +363,8 @@ def tools(s):
 
     # ---- the Addon Manager, headless (I) ---------------------------------------------------
 
-    OURS = {"AgentLink", "ScanRulerFC", "AddonManager"}
+    # Kept by agentlink_update (pinned to what CI checked), never by the Addon Manager.
+    OURS = {"AgentLink", "ScanRulerFC", "OrcaLink", "AddonManager"}
 
     def _am():
         """The Addon Manager's own modules (FreeCAD 1.1 and newer)."""
@@ -488,10 +489,12 @@ def tools(s):
             raise ToolError("invalid_input", f"{name} is kept up to date by agentlink_update, not here.")
         mod = fci.DataPaths().mod_dir
         where = os.path.join(mod, name)
-        if action in ("install", "remove"):
+        if action in ("install", "remove", "update"):
+            # An update is new code FreeCAD runs too: the person's word, as
+            # for an install.
             want = f"{action} {name}"
             if (a.get("confirm") or "").strip() != want:
-                raise ToolError("not_allowed", f"confirm: \"{want}\", word for word, typed by the person — " + ("an add-on is code FreeCAD runs" if action == "install" else "it takes their add-on away") + ". Nothing was changed.")
+                raise ToolError("not_allowed", f"confirm: \"{want}\", word for word, typed by the person — " + ("it takes their add-on away" if action == "remove" else "an add-on is code FreeCAD runs") + ". Nothing was changed.")
         if action == "remove":
             if not os.path.isdir(where):
                 raise ToolError("not_found", f"{name} is not installed (addon list).")
@@ -501,12 +504,19 @@ def tools(s):
                 raise ToolError("failed", f"The Addon Manager could not remove {name}.")
             return {"removed": name, "note": "Gone from the Mod folder; app_restart (window) takes it out of the running FreeCAD."}
         if action not in ("install", "update"):
-            raise bad("action: list | search { query } | install { name, url?, branch?, confirm } | update { name } | remove { name, confirm }.")
+            raise bad("action: list | search { query } | install { name, url?, branch?, confirm } | update { name, confirm } | remove { name, confirm }.")
         if action == "install" and os.path.isdir(where):
             raise ToolError("invalid_state", f"{name} is installed already: action update.")
         if action == "update" and not os.path.isdir(where):
             raise ToolError("not_found", f"{name} is not installed: action install.")
         url, branch = a.get("url"), a.get("branch") or ""
+        sources_file = keep.path("addon-sources.json")
+        sources = keep._load(sources_file, {}) or {}
+        if action == "update":
+            # An update comes from where the add-on came from, never a new address.
+            if url:
+                raise bad("update takes no url: it comes from where the add-on was installed from. To change where it comes from, remove it and install it from the new address (each with the person's confirm).")
+            url, branch = (sources.get(name) or {}).get("url"), branch or (sources.get(name) or {}).get("branch") or ""
         if url:
             if not (url.startswith(("https://", "git@")) or os.path.isdir(os.path.expanduser(url))):
                 raise bad("url: an https or git address of the add-on's repository, or a folder on this computer.")
@@ -546,6 +556,9 @@ def tools(s):
             keep.record_versions({"addon": name}, {"addon": name}, "smoke failed: rolled back")
             raise ToolError("failed", f"{name} broke the smoke test after its {action}: " + "; ".join(res.get("failures") or [])[:500] + (". The version before is back." if kept else ". It was removed again."))
         keep.record_versions({"addon": name}, {"addon": name, "url": getattr(ad, "url", url)}, f"{action}: smoke passed")
+        if action == "install":
+            sources[name] = {"url": url or None, "branch": branch or None}
+            keep._save(sources_file, sources)
         return {action + "ed" if action == "install" else "updated": name, "folder": where, "smoke": "passed", **({"previous": kept} if kept else {}),
                 "note": "In the Mod folder and checked headless; app_restart (window) loads it there."}
 
@@ -572,7 +585,7 @@ def tools(s):
         Tool("macro_unapprove", "Take a macro off the approved list.", obj({"name": st}, ["name"]), macro_unapprove),
         Tool("macro_run", "Run an approved macro: params { CONSTANT: value } changes its named sizes for this run. One checkpoint before; a call refused part way rolls the whole run back. An unapproved or changed macro is refused.",
              obj({"name": st, "params": {"type": "object"}}, ["name"]), macro_run),
-        Tool("addon", "FreeCAD's Addon Manager, headless (FreeCAD 1.1 and newer): list (installed in the Mod folder) | search { query } (the official catalog) | install { name, url? (git or a folder), branch?, confirm: \"install <name>\" typed by the person } | update { name } | remove { name, confirm: \"remove <name>\" typed by the person }. Each install or update passes a smoke test or is rolled back.",
+        Tool("addon", "FreeCAD's Addon Manager, headless (FreeCAD 1.1 and newer): list (installed in the Mod folder) | search { query } (the official catalog) | install { name, url? (git or a folder), branch?, confirm: \"install <name>\" typed by the person } | update { name, confirm: \"update <name>\" typed by the person } | remove { name, confirm: \"remove <name>\" typed by the person }. Each install or update passes a smoke test or is rolled back.",
              obj({"action": {"type": "string", "enum": ["list", "search", "install", "update", "remove"]}, "name": st, "query": st, "url": st, "branch": st, "confirm": st}), addon),
         Tool("doc_switch", "Which open document the agent works in: document (name, label or file) switches to it — the session stays on it whatever the person brings to the front of the window; front: true also brings it to the front. No document: the agent's one and those open.",
              obj({"document": st, "front": {"type": "boolean"}}), doc_switch),

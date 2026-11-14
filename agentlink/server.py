@@ -50,6 +50,15 @@ def relay(port, out):
         sys.exit(2)
     s.settimeout(None)
     f = s.makefile("rw", encoding="utf-8", newline="\n")
+    from . import link_token
+
+    try:
+        s.settimeout(10)
+        link_token.client_pair(f)
+        s.settimeout(None)
+    except (link_token.Refused, OSError) as e:
+        sys.stderr.write(f"Agent Link: the FreeCAD window could not be paired with ({e}).\n")
+        sys.exit(2)
 
     def down():
         for line in f:

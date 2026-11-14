@@ -127,6 +127,7 @@ agentlink/iso286.py
 agentlink/keep.py
 agentlink/kicad.py
 agentlink/launcher_check.py
+agentlink/link_token.py
 agentlink/macros.py
 agentlink/meshdist.py
 agentlink/meshformats.py
@@ -198,6 +199,7 @@ tests/test_inspection.py
 tests/test_iso286.py
 tests/test_keep.py
 tests/test_licence_boundary.py
+tests/test_link_token.py
 tests/test_mass.py
 tests/test_material.py
 tests/test_mcp_contract.py

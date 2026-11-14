@@ -197,6 +197,10 @@ class Link:
     def start(self):
         from PySide import QtCore
 
+        from . import link_token
+
+        self.token = link_token.ensure()
+        self._pending, self._pending_lock = [], threading.Lock()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(("127.0.0.1", self.port))
@@ -248,7 +252,7 @@ class Link:
                     pass
             docs = [{"name": x.Name, "label": x.Label, "file": x.FileName or ""} for x in FreeCAD.listDocuments().values()]
             keep._save(keep.path("heartbeat.json"), {
-                "pid": os.getpid(), "t": time.time(), "app": _bundle(), "freecad": ".".join(FreeCAD.Version()[:3]), "port": self.port,
+                "pid": os.getpid(), "t": time.time(), "pairing": 1, "app": _bundle(), "freecad": ".".join(FreeCAD.Version()[:3]), "port": self.port,
                 "docs": docs, "busy": self.busy, "pinned": getattr(self.session, "doc", None).Name if self.session and getattr(self.session, "doc", None) else None,
                 "dialog": {k: v for k, v in d.items() if k != "widget"} if d else None,
             })
@@ -281,9 +285,53 @@ class Link:
         browser's request starts with an HTTP line ("POST / HTTP/1.1") and
         headers, so its body — a tool call — was run once the lines that
         were not JSON had been skipped. Only a client speaking the protocol
-        from its first line is served."""
+        from its first line is served, and only after that line presented
+        the pairing token (agentlink/link_token.py): any other program on
+        the computer could reach the port as well."""
+        from . import link_token
+
         f = conn.makefile("rw", encoding="utf-8", newline="\n")
+        # Pairing has 5 s in all and short lines only; at most four
+        # connections wait unpaired, and a fifth pushes out the one that has
+        # waited longest, so nothing holding connections open can lock the
+        # person's agent out.
+        with self._pending_lock:
+            if len(self._pending) >= 4:
+                old = self._pending.pop(0)
+                try:
+                    old.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+            self._pending.append(conn)
+        waiting, paired, w = True, False, None
+        deadline = time.time() + 5
         try:
+            while not paired:
+                left = deadline - time.time()
+                if left <= 0:
+                    raise OSError("pairing took too long")
+                conn.settimeout(left)
+                line = f.readline(1024)
+                if not line or not line.endswith("\n") or not line.strip():
+                    self._refused()
+                    raise OSError("not a pairing line")
+                if w is None:
+                    reply, w = link_token.window_greet(line, self.token)
+                    if reply is None:
+                        self._refused()
+                        raise OSError("bad hello")
+                    f.write(reply)
+                    f.flush()
+                    continue
+                if not link_token.window_check(line, self.token, w):
+                    self._refused()
+                    raise OSError("bad proof")
+                paired = True
+            with self._pending_lock:
+                if conn in self._pending:
+                    self._pending.remove(conn)
+            waiting = False
+            conn.settimeout(None)
             for line in f:
                 if not line.strip():
                     continue
@@ -295,10 +343,22 @@ class Link:
                 return
         except (OSError, UnicodeDecodeError):
             pass
+        finally:
+            if waiting:
+                with self._pending_lock:
+                    if conn in self._pending:
+                        self._pending.remove(conn)
         try:
             conn.shutdown(socket.SHUT_RDWR)
             conn.close()
         except OSError:
+            pass
+
+    @staticmethod
+    def _refused():
+        try:
+            FreeCAD.Console.PrintWarning("Agent Link: a connection that could not pair was refused (it did not prove it knows the link's token)\n")
+        except Exception:
             pass
 
     def _back(self):

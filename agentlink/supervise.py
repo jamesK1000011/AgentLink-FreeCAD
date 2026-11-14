@@ -180,13 +180,43 @@ class Window:
 
         if self.f is not None:
             return True
+        # A window from before pairing (its heartbeat says nothing of it)
+        # cannot pair: the hidden FreeCAD answers at once rather than after
+        # a wait each call, and the person is told once to restart FreeCAD.
+        hb = heartbeat() if keep is not None else None
+        if hb and not hb.get("pairing") and time.time() - float(hb.get("t") or 0) < 10:
+            if not getattr(self, "_told_old", False):
+                self._told_old = True
+                sys.stderr.write("Agent Link: the FreeCAD window runs add-ons from before the update (no pairing); restart FreeCAD (app_restart) to finish it.\n")
+            return False
+        if time.time() < getattr(self, "_pair_failed_until", 0):
+            return False
         try:
             s = socket.create_connection(("127.0.0.1", WINDOW_PORT), timeout=0.3)
         except OSError:
             return False
+        f = s.makefile("rw", encoding="utf-8", newline="\n")
+        # Paired first (agentlink/link_token.py): both sides prove they know
+        # the window's token. Whatever cannot is not the window: the hidden
+        # FreeCAD answers instead.
+        try:
+            from . import link_token
+
+            s.settimeout(5)
+            link_token.client_pair(f)
+        except ImportError:
+            pass
+        except Exception as e:  # noqa: BLE001 — Refused, a timeout, a reset
+            sys.stderr.write(f"Agent Link: the window's port did not pair ({e}); the hidden FreeCAD answers.\n")
+            self._pair_failed_until = time.time() + 30
+            try:
+                s.close()
+            except OSError:
+                pass
+            return False
         s.settimeout(None)
         self.sock = s
-        self.f = s.makefile("rw", encoding="utf-8", newline="\n")
+        self.f = f
         return True
 
     def _drop(self):

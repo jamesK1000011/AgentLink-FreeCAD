@@ -260,7 +260,9 @@ class Unattended(Base):
         self.assertEqual(got["smoke"], "passed")
         names = [x["name"] for x in self.ok("addon", {"action": "list"})["installed"]]
         self.assertIn("AgentLinkTestAddon", names)
-        up = self.ok("addon", {"action": "update", "name": "AgentLinkTestAddon", "url": src})
+        self.assertEqual(self.refused("addon", {"action": "update", "name": "AgentLinkTestAddon"})["code"], "not_allowed")
+        self.refused("addon", {"action": "update", "name": "AgentLinkTestAddon", "url": "https://example.com/other.git", "confirm": "update AgentLinkTestAddon"})
+        up = self.ok("addon", {"action": "update", "name": "AgentLinkTestAddon", "confirm": "update AgentLinkTestAddon"})
         self.assertTrue(os.path.isdir(up["previous"]))
         self.assertIn("agentlink_update", self.refused("addon", {"action": "update", "name": "AgentLink"})["message"])
         self.ok("addon", {"action": "remove", "name": "AgentLinkTestAddon", "confirm": "remove AgentLinkTestAddon"})
