@@ -27,11 +27,25 @@ class CoreGuards(unittest.TestCase):
         a.shutdown(socket.SHUT_WR)
         link._read(b)
         self.assertTrue(link.inbox.empty())
+        # A call with no pairing first is not served either (link_token.py).
         a2, b2 = socket.socketpair()
         a2.sendall(body.encode())
         a2.shutdown(socket.SHUT_WR)
         link._read(b2)
-        self.assertEqual(link.inbox.qsize(), 1)
+        self.assertTrue(link.inbox.empty())
+        # Paired, it is.
+        import threading
+
+        from agentlink import link_token
+
+        link.token = link_token.ensure()
+        a3, b3 = socket.socketpair()
+        threading.Thread(target=link._read, args=(b3,), daemon=True).start()
+        f = a3.makefile("rw", encoding="utf-8", newline="\n")
+        link_token.client_pair(f, link.token)
+        f.write(body)
+        f.flush()
+        link.inbox.get(timeout=5)
 
     def test_settings_the_person_sets(self):
         for path, name, value in (("BaseApp/Preferences/Mod/AgentLink", "CollabAllow", "live"), ("BaseApp/Preferences/Mod/AgentLink", "ExtensionRepos", "x/y"),

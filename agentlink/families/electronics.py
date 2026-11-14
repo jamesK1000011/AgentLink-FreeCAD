@@ -22,7 +22,27 @@ from .. import kicad, packing, store
 from workshop_parts import boxes  # noqa: E402
 from .. import geometry as geo
 from ..protocol import Tool, ToolError
-from .parts import add_bodies, calibration
+from workshop_parts.api import calibration as _calibration  # noqa: E402
+
+
+def calibration(doc):
+    return _calibration(doc)
+
+
+def add_bodies(session, made, base_name=None, placement=None):
+    """Each shape as its own body; the labels given back."""
+    labels = []
+    for i, (name, shape) in enumerate(made):
+        label = session.unique(base_name + ("" if i == 0 else " lid") if base_name else name)
+        o = session.doc.addObject("Part::Feature", "Body")
+        o.Label = label
+        if placement is not None:
+            shape = shape.copy()
+            shape.translate(placement)
+        o.Shape = shape
+        labels.append(label)
+    session.doc.recompute()
+    return labels
 
 GROUP = "electronics"
 INFO = "Boards and wiring: KiCad boards read in, enclosures round them, PCB order packages, channels for wire or conductive traces with their resistance."

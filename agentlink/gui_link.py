@@ -147,6 +147,8 @@ class Link:
         self.session = None
         self.server = None
         self.going = False
+        self.token = None  # made by start() (agentlink/link_token.py)
+        self._pending, self._pending_lock = [], threading.Lock()
 
     def _ready(self):
         """The session, made at the first call (so a link turned on as the
@@ -200,7 +202,6 @@ class Link:
         from . import link_token
 
         self.token = link_token.ensure()
-        self._pending, self._pending_lock = [], threading.Lock()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(("127.0.0.1", self.port))
