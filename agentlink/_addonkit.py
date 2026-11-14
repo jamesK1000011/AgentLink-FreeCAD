@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # AddonKit for FreeCAD, the library Agent Link and the add-ons share, at a
 # version this Agent Link accepts.
-ACCEPTS = ">=1.3,<2"
+ACCEPTS = ">=1.4,<2"
 
 try:
     import addonkit
