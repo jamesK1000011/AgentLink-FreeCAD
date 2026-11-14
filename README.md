@@ -26,7 +26,7 @@ whether it is listed or not. Every change is one FreeCAD undo step.
 | assembly | FreeCAD's Assembly workbench: `asm_new` (parts, one grounded), `asm_joint` (fixed, revolute, cylindrical, slider, ball, distance, parallel, perpendicular, angle between faces and edges picked by query, solved), `asm_check` (overlaps, clearances, parts left floating), `asm_list`, `asm_ground`, `asm_add`, `asm_joint_remove` |
 | cam | FreeCAD's CAM workbench: `cam_job` (stock and end mill), `cam_op` (profile, pocket, adaptive, facing, drilling — each computed and read back), `cam_sim` (the operations run on a height map of the stock: crashes, gouges, what is left, a picture), `cam_post` (G-code by FreeCAD's post-processors, checked against the stock), `cam_list`, `cam_tool`, `cam_remove` |
 | slice, printer | PrusaSlicer, OrcaSlicer and Bambu Studio command lines with pauses written in; OctoPrint, Moonraker and PrusaLink printers. Starting, pausing or stopping a print needs the person's typed confirmation |
-| orca | OrcaSlicer projects made from bodies, changed at every level, painted by face, sliced, exported and read back. These tools come from [Agent Link for OrcaSlicer](https://github.com/jamesK1000011/AgentLink-OrcaSlicer), a separate add-on installed beside this one (or found by `AGENTLINK_ORCALINK`); without it, the group is left out |
+| orca | OrcaSlicer projects made from bodies, changed at every level, painted by face, sliced, exported and read back. These tools come from [Agent Link for OrcaSlicer](https://github.com/jamesK1000011/AgentLink-OrcaSlicer), a separate add-on that brings them when it is installed beside this one |
 
 Each group has a guide (`guide_read`).
 

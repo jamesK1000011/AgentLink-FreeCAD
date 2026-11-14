@@ -49,7 +49,6 @@ agentlink/families/model.py
 agentlink/families/model_more.py
 agentlink/families/notes.py
 agentlink/families/openscad.py
-agentlink/families/orca.py
 agentlink/families/param.py
 agentlink/families/part_more.py
 agentlink/families/pd_common.py
@@ -84,7 +83,6 @@ agentlink/guides/material.md
 agentlink/guides/measure.md
 agentlink/guides/mesh.md
 agentlink/guides/model.md
-agentlink/guides/orca.md
 agentlink/guides/param.md
 agentlink/guides/points.md
 agentlink/guides/sheet.md
@@ -106,7 +104,6 @@ agentlink/macros.py
 agentlink/meshdist.py
 agentlink/meshformats.py
 agentlink/millsim.py
-agentlink/orcalink_find.py
 agentlink/panel.py
 agentlink/panel_tabs.py
 agentlink/paths.py
@@ -169,7 +166,6 @@ tests/test_millsim.py
 tests/test_model.py
 tests/test_model_more.py
 tests/test_more_families.py
-tests/test_orca.py
 tests/test_panel_tabs.py
 tests/test_param.py
 tests/test_paths.py
