@@ -212,9 +212,9 @@ def paper_size(page):
 
 
 def wait(views_):
-    from .drawing import _wait_views
+    from addonkit.techdraw import wait_views
 
-    return _wait_views([v for v in views_ if v.isDerivedFrom("TechDraw::DrawViewPart")])
+    return wait_views([v for v in views_ if v.isDerivedFrom("TechDraw::DrawViewPart")])
 
 
 def edges_of(v):
