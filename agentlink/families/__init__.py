@@ -22,7 +22,6 @@ NAMES = [
     "param",
     "sheet",
     "material",
-    "mass",
     "strength",
     "cut",
     "mill",

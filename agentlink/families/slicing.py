@@ -7,7 +7,7 @@
 import json
 import os
 
-from .. import hooks, printability, slicer_presets as SP, slicers, store
+from .. import hooks, slicer_presets as SP, slicers, store
 from ..protocol import Tool, ToolError
 
 GROUP = "slice"
@@ -62,7 +62,8 @@ def tools(session):
         mat = store.materials(s.doc).get(o.Label) or "pla"
         settings["filament"] = mat.split("-")[0]
         settings["density"] = DENSITY.get(mat, 1.24)
-        settings["volume"] = printability.PRINTERS.get(setup.get("printer") or "generic", printability.PRINTERS["generic"])
+        vol = hooks.service("printer_volume")
+        settings["volume"] = (vol(setup.get("printer")) if vol else None) or (220, 220, 250)
         import MeshPart
 
         base = os.path.join(s.out_dir, a.get("name") or f"{o.Label.replace(' ', '_')}-{name}")
