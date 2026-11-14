@@ -31,7 +31,6 @@ NAMES = [
     "printer",
     "slicing",
     "orca",
-    "parts",
     "drawing",
     "techdraw",
     "inspection",

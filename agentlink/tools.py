@@ -21,7 +21,7 @@ import FreeCAD
 import Part
 
 from . import geometry as geo
-from . import fits_hw, gridfinity, keep, printability, slicer, store
+from . import fits_hw, keep, printability, slicer, store
 from . import printmass
 from .protocol import Tool, ToolError
 
@@ -347,28 +347,6 @@ class Session:
                     out["dialog"] = {k: v for k, v in d.items() if k != "widget"}
             except Exception:
                 pass
-        return out
-
-    def gen_make(self, a):
-        gen = a.get("generator", "gridfinity_bin")
-        if gen != "gridfinity_bin":
-            raise ToolError("invalid_input", "generator: gridfinity_bin is the one this spike has.")
-        p = gridfinity.values(a.get("params") or {})
-        shape = gridfinity.bin_shape(p)
-        part = {"name": gridfinity.name_of(p), "volume": round(shape.Volume, 1), **geo.box_of(shape)}
-        if a.get("measure"):
-            return {"generator": gen, "values": p, "parts": [part], "made": False}
-        label = self.unique(a.get("name") or gridfinity.name_of(p))
-        o = self.doc.addObject("Part::Feature", "Body")
-        o.Label = label
-        o.Shape = shape
-        self.doc.recompute()
-        mags = gridfinity.magnets(p)
-        self.meta[label] = {"generator": gen, "values": p, "encased": mags}
-        self.snapshot("gen_make")
-        out = {"generator": gen, "values": p, "bodies": [label], "parts": [part], "step": len(self.steps)}
-        if mags:
-            out["encased"] = {"what": f"{mags['count']} {mags['what']}", "pauseAt": mags["top"], "note": "The magnet holes open onto the bed: press the magnets in after printing, or drop them in at the pause and print over them."}
         return out
 
     def body_check(self, a):
@@ -863,7 +841,7 @@ class Session:
         return changed
 
 
-MAGNET_T_MM = gridfinity.MAGNET_T
+MAGNET_T_MM = 2.0  # a 6 x 2 mm magnet, as Workshop Parts' Gridfinity bins take
 
 # What the server says it is, at initialize: how a session goes, in the
 # order an agent needs it. Built per server: headless or the FreeCAD window,
@@ -917,18 +895,6 @@ def make_tools(session):
     body = {"type": "string", "description": "A body's name; may be left out when there is one."}
     return [
         Tool("session_state", "What the document holds: each body's volume, area, faces, solids and size (mm), the step count and where files go. launcher: true adds the Claude extension's launcher as seen from here (the copy fetched from GitHub, whether it can load, its log's last lines). Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
-        Tool(
-            "gen_make",
-            "Make a standard part to size as a body: gridfinity_bin (42 mm cells, 7 mm units, lip, magnets 6x2, screws, dividers, label ledge). measure: true builds it and gives size and volume without adding it. Magnets come back as encased, with the height to pause at.",
-            obj({
-                "generator": {"type": "string", "enum": ["gridfinity_bin"]},
-                "params": {"type": "object", "description": "; ".join(f"{k}: {v['tip']}" for k, v in gridfinity.PARAMS.items())},
-                "name": {"type": "string"},
-                "measure": {"type": "boolean"},
-            }),
-            s.gen_make,
-            changes=True,
-        ),
         Tool("body_check", "Whether a body is sound: valid, closed, one solid, no sliver faces (under 0.01 mm wide) or very short edges, with where each problem is.", obj({"body": body}), s.body_check),
         Tool(
             "setup",

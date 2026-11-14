@@ -16,7 +16,7 @@ whether it is listed or not. Every change is one FreeCAD undo step.
 | model | Part primitives, booleans, transforms and arrays, fillet, chamfer, offset, shell, extrude, revolve, loft, sweep |
 | measure | `shape_query` (faces and edges picked by kind, normal, radius, place: the references other tools take), measure, section, `measure_mass`, clearance |
 | sketch, feature, param | PartDesign bodies, sketches and constraints with a ready-for-feature check; pad, pocket, revolve, groove, hole (ISO threads), fillet, chamfer, draft, shell, mirror, patterns, loft, pipe; spreadsheet parameters bound to features |
-| parts | Gridfinity bins (`gen_make`) and baseplates, project boxes and board enclosures (`gen_part`) |
+| parts | Gridfinity bins (`gen_make`) and baseplates, project boxes and board enclosures (`gen_part`): from [FreeCAD Workshop](https://github.com/jamesK1000011/FreeCAD-Workshop)'s Parts add-on, when it is installed |
 | make | setups (print, cut, mill), part spec and material, printability (`dfm_check`), `part_review`, `slice` |
 | fits, embed | fits, printer calibration, tolerance stacks, hardware holes; parts sealed in mid-print with their pauses |
 | material, mass, strength, thread | FreeCAD's material library and custom materials; mass as printed, centre of mass, ballast to a target; FEM with CalculiX: strength (print-aware), natural frequencies, steady heat against where the material softens; thread tables, identification and cutting |

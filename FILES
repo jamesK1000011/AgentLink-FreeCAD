@@ -7,7 +7,6 @@ Studio Dark/parameters/Studio Dark.yaml
 Studio Light/Studio Light.cfg
 Studio Light/parameters/Studio Light.yaml
 agentlink/__init__.py
-agentlink/boxes.py
 agentlink/ccx_io.py
 agentlink/cells.py
 agentlink/charts.py
@@ -60,7 +59,6 @@ agentlink/families/openscad.py
 agentlink/families/orca.py
 agentlink/families/param.py
 agentlink/families/part_more.py
-agentlink/families/parts.py
 agentlink/families/pd_common.py
 agentlink/families/picks.py
 agentlink/families/points.py
@@ -85,7 +83,6 @@ agentlink/frame.py
 agentlink/gdt.py
 agentlink/geometry.py
 agentlink/grab.py
-agentlink/gridfinity.py
 agentlink/gui_link.py
 agentlink/guides/assembly.md
 agentlink/guides/bim.md
@@ -107,7 +104,6 @@ agentlink/guides/mill.md
 agentlink/guides/model.md
 agentlink/guides/orca.md
 agentlink/guides/param.md
-agentlink/guides/parts.md
 agentlink/guides/points.md
 agentlink/guides/printer.md
 agentlink/guides/share.md
@@ -215,7 +211,6 @@ tests/test_more_families.py
 tests/test_orca.py
 tests/test_panel_tabs.py
 tests/test_param.py
-tests/test_parts.py
 tests/test_paths.py
 tests/test_pref_import.py
 tests/test_printer.py
