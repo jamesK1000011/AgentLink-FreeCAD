@@ -46,7 +46,6 @@ agentlink/families/feature_more.py
 agentlink/families/fem_more.py
 agentlink/families/ifc.py
 agentlink/families/inspection.py
-agentlink/families/mass.py
 agentlink/families/material.py
 agentlink/families/measure.py
 agentlink/families/meshobj.py
@@ -93,7 +92,6 @@ agentlink/guides/drawing.md
 agentlink/guides/electronics.md
 agentlink/guides/feature.md
 agentlink/guides/inspection.md
-agentlink/guides/mass.md
 agentlink/guides/material.md
 agentlink/guides/measure.md
 agentlink/guides/mesh.md
@@ -130,9 +128,7 @@ agentlink/packing.py
 agentlink/panel.py
 agentlink/panel_tabs.py
 agentlink/paths.py
-agentlink/printability.py
 agentlink/printers.py
-agentlink/printmass.py
 agentlink/protocol.py
 agentlink/render.py
 agentlink/restart_mark.py
@@ -193,7 +189,6 @@ tests/test_iso286.py
 tests/test_keep.py
 tests/test_licence_boundary.py
 tests/test_link_token.py
-tests/test_mass.py
 tests/test_material.py
 tests/test_mcp_contract.py
 tests/test_measure.py
@@ -211,7 +206,6 @@ tests/test_param.py
 tests/test_paths.py
 tests/test_pref_import.py
 tests/test_printer.py
-tests/test_printmass.py
 tests/test_protocol.py
 tests/test_share.py
 tests/test_sheet.py
@@ -226,10 +220,8 @@ tests/test_techdraw.py
 tests/test_techdraw_gaps.py
 tests/test_theme.py
 tests/test_threemf.py
-tests/test_tools.py
 tests/test_unattended.py
 tests/test_usage.py
 tests/test_usage_strip.py
 tests/test_view.py
-tests/test_wall_readers.py
 tests/test_window_route.py

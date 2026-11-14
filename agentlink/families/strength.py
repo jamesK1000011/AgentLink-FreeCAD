@@ -953,6 +953,9 @@ def tools(session):
         at = {n: i for i, n in enumerate(ids)}
         field["elements"] = [[at[n] for n in e] for e in elems.values() if all(n in at for n in e)]
         s._agentlink_fea = {"body": o.Label, "stats": geo.stats(shape), "study": st, "result": out, "field": field}
+        from .. import hooks
+
+        hooks.remember(s, "fea", s._agentlink_fea)
         return out
 
     def fea_results(a):
@@ -979,6 +982,9 @@ def tools(session):
         had = _study(s.doc) is not None
         store.remove(s.doc, KEY)
         s._agentlink_fea = None
+        from .. import hooks
+
+        hooks.remember(s, "fea", None)
         s.snapshot("fea_clear")
         return {"cleared": had}
 

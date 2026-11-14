@@ -54,21 +54,6 @@ def _bodies(s, a):
 
 # ---- the maps Agent Link has ---------------------------------------------------------
 
-def _wall(s, a):
-    reach = float(a.get("reach", 12.0))
-    layers = []
-    for i, o in enumerate(_bodies(s, a)):
-        L = render.body_layer(o, i, tol=float(a.get("tolerance", 0.05)))
-        V, F, vals = render.wall_map(L["V"], L["F"], reach=reach, cap=int(a.get("detail", 16000)))
-        layers.append({"name": o.Label, "V": V, "F": F, "values": vals, "creases": True})
-    # Colours spent on the thin end: up to twice the typical wall.
-    allv = np.concatenate([l["values"] for l in layers]) if layers else np.zeros(0)
-    fin = allv[np.isfinite(allv)]
-    hi = min(reach, max(2.0, 2 * float(np.median(fin)))) if len(fin) else reach
-    return {"layers": layers, "unit": "mm", "cmap": "jet_r", "worst": "min", "label": "WALL", "range": [0.0, round(hi, 1)],
-            "note": f"The wall at each spot: straight in from the surface to where the material ends; {reach:g} mm or more reads {reach:g}. Red is thin."}
-
-
 def _stress(s, a):
     r = getattr(s, "_agentlink_fea", None)
     if not r or "field" not in r:
@@ -135,7 +120,6 @@ def _heat(s, a):
     return out
 
 
-render.register_map("wall", _wall, "The wall thickness at each spot of the parts (red thin).")
 render.register_map("stress", _stress, "Von Mises stress of the last fea_solve.")
 render.register_map("heat", _heat, "Temperature of the last fea_heat (red hot).")
 
