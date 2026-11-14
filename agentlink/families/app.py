@@ -776,8 +776,7 @@ def tools(session):
             from .. import keep, smoke
 
             here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            mods = os.path.dirname(here)
-            res = smoke.against(app=target, addon_dirs=[mods])
+            res = smoke.against(app=target, addon_dirs=[here])
             cur = sys.executable
             before = {"app": cur.split(".app/")[0] + ".app" if ".app/" in cur else cur, "freecad": ".".join(FreeCAD.Version()[:3])}
             keep.record_versions(before, {"app": target, "freecad": res.get("freecad")}, "smoke passed" if res.get("ok") else "smoke failed: refused")

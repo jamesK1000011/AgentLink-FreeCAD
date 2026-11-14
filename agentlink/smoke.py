@@ -107,8 +107,16 @@ def against(app=None, addon_dirs=(), python=None, lib=None, timeout=600):
     if not exe:
         return {"ok": False, "failures": [f"no Python or FreeCADCmd in {app}"]}
     here = os.path.dirname(os.path.abspath(__file__))
-    dirs = [os.path.join(d, "AgentLink") if os.path.isdir(os.path.join(d, "AgentLink")) else d for d in addon_dirs] or [os.path.dirname(here)]
-    extra = [os.path.join(d, "ScanRulerFC") for d in addon_dirs if os.path.isdir(os.path.join(d, "ScanRulerFC"))]
+    # Each folder is the add-on itself (it holds the agentlink package, as a
+    # checkout of FreeCAD-AgentLink does under any name) or holds it as
+    # AgentLink (a Mod folder); its neighbours come from beside it.
+    dirs = [d if os.path.isdir(os.path.join(d, "agentlink")) else os.path.join(d, "AgentLink") if os.path.isdir(os.path.join(d, "AgentLink")) else d for d in addon_dirs] or [os.path.dirname(here)]
+    extra = []
+    for d in dirs:
+        for n in ("ScanRulerFC", "OrcaLink"):
+            p = os.path.join(os.path.dirname(d), n)
+            if os.path.isdir(p) and p not in extra:
+                extra.append(p)
     env = {**os.environ, "PYTHONPATH": os.pathsep.join(dirs + extra + ([lib] if lib else [])), **({"FREECAD_LIB": lib} if lib else {})}
     env.pop("AGENTLINK_SUPERVISED", None)
     script = os.path.join(dirs[0], "agentlink", "smoke.py")

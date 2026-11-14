@@ -39,7 +39,7 @@
 
 ## Scans
 - With ScanRuler for FreeCAD installed, scans are measured, aligned, compared with a reference and cleaned up here too: read `measure-scan`, and `mesh-tools` for cleaning one up.
-- A scan lives in the session, not in the FreeCAD file; `section_to_sketch` turns a section of it into a sketch to model from.
+- A scan lives in the session, not in the FreeCAD file; ScanRuler for FreeCAD, when installed, turns a section of it into a sketch to model from.
 
 ## Refusals
 Every refusal is `{ error: { code, message } }`; the message says what to change. By code:

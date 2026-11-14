@@ -463,8 +463,8 @@ def tools(s):
         here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         exe = sys.executable
         if ".app/" in exe:
-            return smoke.against(app=exe.split(".app/")[0] + ".app", addon_dirs=[os.path.dirname(here)])
-        return smoke.against(python=exe, lib=os.environ.get("FREECAD_LIB"), addon_dirs=[os.path.dirname(here)])
+            return smoke.against(app=exe.split(".app/")[0] + ".app", addon_dirs=[here])
+        return smoke.against(python=exe, lib=os.environ.get("FREECAD_LIB"), addon_dirs=[here])
 
     def addon(a):
         action = a.get("action", "list")
