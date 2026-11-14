@@ -175,6 +175,15 @@ class OrcaLoop(unittest.TestCase):
         t = self.ok("gcode_read", {"path": s["gcode"][0], "toolpaths": True})
         self.assertGreater(t["ribbons"], 10)
         self.ok("orca_slice", {"path": p, "export": "amf"})
+        # Our Draco files read back by OrcaSlicer's own Draco decoder.
+        d = self.ok("orca_slice", {"path": p, "export": "drcs", "plate": 1})
+        drc = d["files"][0]
+        back = self.ok("orca_project", {"action": "object_add", "path": p, "file": drc, "plate": 2})
+        print("drc back", json.dumps(back)[:300], flush=True)
+        info = self.ok("orca_project", {"action": "info", "path": p})
+        self.assertTrue(any(o["name"].endswith(".stl") and o.get("size") for o in info["objects"]))
+        sv = self.ok("orca_slice", {"path": p, "export": "svg", "plate": 1})
+        self.assertGreater(sv["layers"], 10)
 
     def test_calibrations(self):
         if not slicers.find("orcaslicer"):

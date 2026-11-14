@@ -1628,6 +1628,118 @@ class Project:
             f.write("\n".join(out) + "\n")
         return path
 
+    def placed_meshes(self, plate=None):
+        """[(name, vertices, faces)] of the printable objects as placed, one
+        per object instance (solid parts merged)."""
+        plates = {p["plate"]: set(p["objects"]) for p in self.plates()}
+        out = []
+        for o in self.objects():
+            if plate and o["id"] not in plates.get(plate, set()):
+                continue
+            for k, inst in enumerate(o["instances"]):
+                vs, fs = [], []
+                for p in o["parts"]:
+                    if p["kind"] != "normal_part":
+                        continue
+                    v, t, _ = self.mesh(p)
+                    tr = mul(inst["transform"], p["transform"])
+                    base = len(vs)
+                    vs += [apply(tr, q) for q in v]
+                    fs += [(a + base, b + base, c + base) for a, b, c in t]
+                if fs:
+                    out.append((f"{o['name'] or 'object'}" + (f" {k + 1}" if len(o["instances"]) > 1 else ""), vs, fs))
+        return out
+
+    def export_drc(self, path, plate=None, each=False):
+        """Draco files of the objects as placed: one file holding them all,
+        or (each) one file per object in the folder path."""
+        from . import draco
+
+        meshes = self.placed_meshes(plate)
+        if not meshes:
+            raise ProjectError("nothing printable to export.")
+        if not each:
+            vs, fs = [], []
+            for _, v, f in meshes:
+                base = len(vs)
+                vs += v
+                fs += [(a + base, b + base, c + base) for a, b, c in f]
+            with open(path, "wb") as fh:
+                fh.write(draco.encode(vs, fs))
+            return [path]
+        os.makedirs(path, exist_ok=True)
+        made = []
+        for name, v, f in meshes:
+            p = os.path.join(path, re.sub(r"[^\w.-]", "_", os.path.splitext(name)[0]) + ".drc")
+            with open(p, "wb") as fh:
+                fh.write(draco.encode(v, f))
+            made.append(p)
+        return made
+
+    def export_svg(self, path, layer_height=None, plate=None):
+        """The solid slices of the printable objects as placed, every layer
+        a group in one SVG (the slicer's old "export solid slices as SVG"):
+        each layer cut at its middle, outlines filled even-odd."""
+        lh = float(layer_height or self.config.get("layer_height") or 0.2)
+        first = float(self.config.get("initial_layer_print_height") or lh)
+        plates = {p["plate"]: set(p["objects"]) for p in self.plates()}
+        tris = []
+        for o in self.objects():
+            if plate and o["id"] not in plates.get(plate, set()):
+                continue
+            for inst in o["instances"]:
+                if not inst["printable"]:
+                    continue
+                for p in o["parts"]:
+                    if p["kind"] != "normal_part":
+                        continue
+                    v, t, _ = self.mesh(p)
+                    tr = mul(inst["transform"], p["transform"])
+                    w = [apply(tr, q) for q in v]
+                    tris += [(w[a], w[b], w[c]) for a, b, c in t]
+        if not tris:
+            raise ProjectError("nothing printable to slice.")
+        b = bbox([q for t in tris for q in t])
+        zs, z = [], first
+        while z <= b[5] + 1e-9:
+            zs.append((z, z - (first if not zs else lh) / 2))
+            z += lh
+        by_band = {}
+        for t in tris:
+            lo, hi = min(q[2] for q in t), max(q[2] for q in t)
+            i0 = max(0, int((lo - first) // lh))
+            for i in range(i0, len(zs)):
+                cz = zs[i][1]
+                if cz > hi:
+                    break
+                if cz >= lo:
+                    by_band.setdefault(i, []).append(t)
+        W, H = b[3] - b[0], b[4] - b[1]
+        out = [f'<?xml version="1.0" encoding="UTF-8"?>', f'<svg xmlns="http://www.w3.org/2000/svg" width="{_fmt(W)}mm" height="{_fmt(H)}mm" viewBox="{_fmt(b[0])} {_fmt(-b[4])} {_fmt(W)} {_fmt(H)}">']
+        layers = 0
+        for i, (top, cz) in enumerate(zs):
+            segs = []
+            for t in by_band.get(i, []):
+                pts = []
+                for k in range(3):
+                    p, q = t[k], t[(k + 1) % 3]
+                    if (p[2] - cz) * (q[2] - cz) < 0:
+                        f = (cz - p[2]) / (q[2] - p[2])
+                        pts.append((p[0] + f * (q[0] - p[0]), p[1] + f * (q[1] - p[1])))
+                if len(pts) == 2:
+                    segs.append(pts)
+            if not segs:
+                continue
+            d = " ".join(f"M{_fmt(a[0])},{_fmt(-a[1])}L{_fmt(c[0])},{_fmt(-c[1])}" for a, c in segs)
+            loops = _chain(segs)
+            fill = " ".join("M" + "L".join(f"{_fmt(x)},{_fmt(-y)}" for x, y in lp) + "Z" for lp in loops)
+            out.append(f' <g id="layer{i}" data-z="{_fmt(top)}"><path d="{fill or d}" fill="black" fill-rule="evenodd" stroke="none"/></g>')
+            layers += 1
+        out.append("</svg>")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(out) + "\n")
+        return {"path": path, "layers": layers, "layerHeight": lh}
+
     def export_obj(self, path, plate=None):
         """The printable objects as placed (solid parts) in one OBJ file."""
         lines, base = ["# OrcaSlicer project objects, as placed"], 1
@@ -1681,6 +1793,33 @@ class Project:
         self.path = path
         self.changed = False
         return path
+
+
+def _chain(segs, tol=1e-4):
+    """Segments joined end to end into closed outlines."""
+    key = lambda p: (round(p[0] / tol), round(p[1] / tol))
+    ends = {}
+    for i, (a, b) in enumerate(segs):
+        ends.setdefault(key(a), []).append((i, 1))
+        ends.setdefault(key(b), []).append((i, 0))
+    used, loops = set(), []
+    for i in range(len(segs)):
+        if i in used:
+            continue
+        used.add(i)
+        loop = [segs[i][0], segs[i][1]]
+        while True:
+            nxt = [(j, w) for j, w in ends.get(key(loop[-1]), []) if j not in used]
+            if not nxt:
+                break
+            j, w = nxt[0]
+            used.add(j)
+            loop.append(segs[j][w])
+            if key(loop[-1]) == key(loop[0]):
+                break
+        if len(loop) >= 4:
+            loops.append(loop[:-1] if key(loop[-1]) == key(loop[0]) else loop)
+    return loops
 
 
 def invert(m):

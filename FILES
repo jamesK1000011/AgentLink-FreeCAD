@@ -24,6 +24,7 @@ agentlink/code/units.py
 agentlink/commands.py
 agentlink/data/orca-options.json
 agentlink/data/slicer-minimal.json
+agentlink/draco.py
 agentlink/echo.py
 agentlink/embeds.py
 agentlink/ext.py
@@ -184,6 +185,7 @@ tests/test_core_guards.py
 tests/test_core_guards_fc.py
 tests/test_cut.py
 tests/test_doc.py
+tests/test_draco.py
 tests/test_draft.py
 tests/test_drawing.py
 tests/test_echo_map.py

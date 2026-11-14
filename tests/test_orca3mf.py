@@ -414,6 +414,28 @@ class Project(unittest.TestCase):
         o = pr.export_obj(os.path.join(self.d, "o.obj"))
         self.assertEqual(len(O.read_obj(o)), 24)
 
+    def test_export_drc(self):
+        from agentlink import draco
+
+        pr = O.Project(self.p)
+        one = pr.export_drc(os.path.join(self.d, "all.drc"))
+        with open(one[0], "rb") as f:
+            v, faces = draco.decode(f.read())
+        self.assertEqual(len(faces), 24)
+        each = pr.export_drc(os.path.join(self.d, "each"), each=True)
+        self.assertEqual(sorted(os.path.basename(x) for x in each), ["box.drc", "tall.drc"])
+
+    def test_export_svg_slices(self):
+        pr = O.Project(self.p)
+        r = pr.export_svg(os.path.join(self.d, "s.svg"))
+        root = ET.parse(r["path"]).getroot()
+        groups = root.findall("{http://www.w3.org/2000/svg}g")
+        self.assertEqual(len(groups), r["layers"])
+        self.assertEqual(r["layers"], 100)  # the tall box: 20 mm of 0.2 mm layers
+        # A low layer holds both boxes' outlines; a high one only the tall box's.
+        self.assertEqual(groups[5].find("{http://www.w3.org/2000/svg}path").get("d").count("Z"), 2)
+        self.assertEqual(groups[60].find("{http://www.w3.org/2000/svg}path").get("d").count("Z"), 1)
+
     def test_options_table(self):
         t = O.options()["options"]
         self.assertGreater(len(t), 700)

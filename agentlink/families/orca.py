@@ -961,6 +961,14 @@ def tools(session):
                     res["sliced"] = os.path.splitext(p)[0] + "-sliced.3mf"
                 res["next"] = "gcode_read { path } shows it layer by layer; starting the print is the person's call."
                 return res
+            if what in ("drc", "drcs"):
+                os.makedirs(out_dir, exist_ok=True)
+                dest = os.path.join(out_dir, a.get("name") or ("objects.drc" if what == "drc" else "drc"))
+                return {"export": what, "files": O.Project(p).export_drc(dest, a.get("plate"), each=what == "drcs"),
+                        "note": "Draco without compression (any Draco reader opens it)."}
+            if what == "svg":
+                os.makedirs(out_dir, exist_ok=True)
+                return {"export": "svg", **O.Project(p).export_svg(os.path.join(out_dir, a.get("name") or "slices.svg"), a.get("layerHeight"), a.get("plate"))}
             if what == "amf":
                 os.makedirs(out_dir, exist_ok=True)
                 return {"export": "amf", "files": [O.Project(p).export_amf(os.path.join(out_dir, a.get("name") or "objects.amf"))]}
@@ -1063,8 +1071,8 @@ def tools(session):
         ),
         Tool(
             "orca_slice",
-            "Slice an OrcaSlicer project as it stands, by its command line (headless): { path, plate (0 all), keep (the sliced .3mf, default true) } gives time, filament, warnings and statistics; export stl|stls|obj|amf|settings|slicedata|3mf writes those instead, inspect_mesh|inspect_paint|info gives Orca's own report; options (timelapse, skip_objects \"3,5\", allow_mix_temp, allow_multicolor_oneplate, no_check, mtcpp, mstpp) go to the slice.",
-            obj({"path": {"type": "string"}, "plate": {"type": "integer"}, "keep": {"type": "boolean"}, "export": {"type": "string", "enum": ["gcode", "stl", "stls", "obj", "amf", "settings", "slicedata", "3mf", "inspect_mesh", "inspect_paint", "info"]}, "options": {"type": "object"}, "name": {"type": "string"}}, ["path"]),
+            "Slice an OrcaSlicer project as it stands, by its command line (headless): { path, plate (0 all), keep (the sliced .3mf, default true) } gives time, filament, warnings and statistics; export stl|stls|obj|amf|drc|drcs|svg (solid slices, a layer a group)|settings|slicedata|3mf writes those instead, inspect_mesh|inspect_paint|info gives Orca's own report; options (timelapse, skip_objects \"3,5\", allow_mix_temp, allow_multicolor_oneplate, no_check, mtcpp, mstpp) go to the slice.",
+            obj({"path": {"type": "string"}, "plate": {"type": "integer"}, "keep": {"type": "boolean"}, "export": {"type": "string", "enum": ["gcode", "stl", "stls", "obj", "amf", "svg", "drc", "drcs", "settings", "slicedata", "3mf", "inspect_mesh", "inspect_paint", "info"]}, "options": {"type": "object"}, "name": {"type": "string"}, "layerHeight": {"type": "number"}}, ["path"]),
             orca_slice,
         ),
         Tool(
