@@ -111,13 +111,22 @@ def against(app=None, addon_dirs=(), python=None, lib=None, timeout=600):
     # checkout of AgentLink-FreeCAD does under any name) or holds it as
     # AgentLink (a Mod folder); its neighbours come from beside it.
     dirs = [d if os.path.isdir(os.path.join(d, "agentlink")) else os.path.join(d, "AgentLink") if os.path.isdir(os.path.join(d, "AgentLink")) else d for d in addon_dirs] or [os.path.dirname(here)]
+    # Its neighbours: every other add-on in the same Mod folder (the library
+    # it needs, and whatever plugs into it), none of them named here; then
+    # the path this process was given.
     extra = []
     for d in dirs:
-        for n in ("ScanRulerFC", "OrcaLink"):
-            p = os.path.join(os.path.dirname(d), n)
-            if os.path.isdir(p) and p not in extra:
+        parent = os.path.dirname(d)
+        try:
+            names = sorted(os.listdir(parent))
+        except OSError:
+            names = []
+        for n in names:
+            p = os.path.join(parent, n)
+            if p not in dirs and p not in extra and (os.path.isfile(os.path.join(p, "package.xml")) or os.path.isfile(os.path.join(p, "Init.py"))):
                 extra.append(p)
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join(dirs + extra + ([lib] if lib else [])), **({"FREECAD_LIB": lib} if lib else {})}
+    inherited = [x for x in os.environ.get("PYTHONPATH", "").split(os.pathsep) if x and x not in dirs + extra]
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(dirs + extra + inherited + ([lib] if lib else [])), **({"FREECAD_LIB": lib} if lib else {})}
     env.pop("AGENTLINK_SUPERVISED", None)
     script = os.path.join(dirs[0], "agentlink", "smoke.py")
     if not os.path.isfile(script):
