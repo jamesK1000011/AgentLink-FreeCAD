@@ -13,7 +13,7 @@ from ..protocol import Tool, ToolError
 GROUP = "slice"
 INFO = "Slicing with PrusaSlicer, OrcaSlicer or Bambu Studio, profiles by path, the encased parts' pauses written in."
 
-DENSITY = {"pla": 1.24, "petg": 1.27, "abs": 1.04, "asa": 1.07, "pa6-cf": 1.12, "tpu-95a": 1.21}
+from addonkit.materials import DENSITY  # noqa: E402 — the one filament table (AddonKit)
 
 
 def obj(props, required=()):

@@ -699,7 +699,7 @@ def tools(session):
     # ---- drawing_exploded ------------------------------------------------------------------
 
     def drawing_exploded(a):
-        from ..tools import DENSITY
+        from addonkit.materials import DENSITY
 
         steps = a.get("steps")
         if not isinstance(steps, list) or not steps or not all(isinstance(x, dict) and x.get("add") for x in steps):

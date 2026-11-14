@@ -22,7 +22,7 @@ def tools(session):
     s = session
 
     def library_pack(a):
-        from ..tools import DENSITY
+        from addonkit.materials import DENSITY
 
         lic = a.get("license")
         if lic not in packing.LICENSES:
