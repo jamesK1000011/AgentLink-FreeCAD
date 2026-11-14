@@ -16,7 +16,9 @@ import Part
 from .. import iso286
 from .. import store
 from ..protocol import Tool, ToolError
-from ..tools import DENSITY, obj
+from addonkit.materials import DENSITY
+
+from ..tools import obj
 from . import assembly as A
 
 GROUP = "assembly"

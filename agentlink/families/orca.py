@@ -87,7 +87,7 @@ def geo_for(session, base):
         def presets(label, work):
             from .. import slicer_presets as SP
             from .. import store
-            from .slicing import DENSITY
+            from addonkit.materials import DENSITY
 
             setup = (store.setup_of(s.doc, label, "print") if label else None) or {}
             settings = {k: v for k, v in setup.items() if k not in ("id", "name", "type", "bodies")}

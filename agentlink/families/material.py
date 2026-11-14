@@ -12,22 +12,18 @@ import re
 
 from .. import store
 from ..protocol import Tool, ToolError
-from ..tools import DENSITY, obj
+from addonkit import materials as _fil
+from addonkit.materials import DENSITY
+
+from ..tools import obj
 
 GROUP = "material"
 INFO = "Materials: search FreeCAD's library and the printing filaments, read a card's figures, set what each body is made of."
 
 # Typical figures for FDM-printed filament, along the layers (MPa, g/cm³).
 # Data sheets vary a good deal between brands; these are middling ones.
-FILAMENT = {
-    # k: thermal conductivity W/(m·K); softens: heat deflection at 0.45 MPa, °C.
-    "pla": {"name": "PLA (printed)", "E": 3500, "nu": 0.36, "yield": 50, "uts": 55, "k": 0.13, "softens": 55},
-    "petg": {"name": "PETG (printed)", "E": 2100, "nu": 0.38, "yield": 45, "uts": 50, "k": 0.20, "softens": 70},
-    "abs": {"name": "ABS (printed)", "E": 2200, "nu": 0.35, "yield": 40, "uts": 42, "k": 0.17, "softens": 95},
-    "asa": {"name": "ASA (printed)", "E": 2000, "nu": 0.35, "yield": 42, "uts": 45, "k": 0.17, "softens": 95},
-    "pa6-cf": {"name": "PA6-CF (printed, dry)", "E": 6000, "nu": 0.35, "yield": 80, "uts": 90, "k": 0.30, "softens": 150},
-    "tpu-95a": {"name": "TPU 95A (printed)", "E": 26, "nu": 0.48, "yield": None, "uts": 35, "k": 0.20, "softens": None},
-}
+# The printing filaments: AddonKit's one table (addonkit/data/filaments.json).
+FILAMENT = {k: {f: v.get(f) for f in ("name", "E", "nu", "yield", "uts", "k", "softens")} for k, v in _fil.FILAMENTS.items()}
 FILAMENT_SOURCE = "Agent Link's typical FDM filament figures, along the layers"
 TYPICAL = "Library and filament figures are typical: for a part that must not fail, use the supplier's data sheet (material_set custom)."
 # Library folders that hold no solid's mechanics.
@@ -108,9 +104,11 @@ def _library():
 
 
 def filament_card(key):
-    f = FILAMENT.get(key, {"name": key.upper(), "E": None, "nu": None, "yield": None, "uts": None})
-    return {"id": key, "name": f["name"], "category": "Printing filament", "density": DENSITY[key], "E": f["E"], "nu": f["nu"], "yield": f["yield"], "uts": f["uts"],
-            "k": f.get("k"), "softens": f.get("softens"), "source": FILAMENT_SOURCE}
+    c = _fil.card(key)
+    if c is None:
+        c = {"id": key, "name": key.upper(), "category": "Printing filament", "density": DENSITY.get(key), "E": None, "nu": None, "yield": None, "uts": None, "k": None, "softens": None}
+    c["source"] = FILAMENT_SOURCE
+    return c
 
 
 def defs(doc):

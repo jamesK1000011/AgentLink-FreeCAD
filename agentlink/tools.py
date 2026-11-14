@@ -25,7 +25,7 @@ from . import keep, printability, slicer, store
 from . import printmass
 from .protocol import Tool, ToolError
 
-DENSITY = {"pla": 1.24, "petg": 1.27, "abs": 1.04, "asa": 1.07, "pa6-cf": 1.12, "tpu-95a": 1.21}
+from addonkit.materials import DENSITY  # noqa: E402 — the one filament table (AddonKit)
 NDFEB = 7.5  # g/cm³, the magnets
 LINE = 0.42  # mm, one extrusion line of a 0.4 mm nozzle
 
