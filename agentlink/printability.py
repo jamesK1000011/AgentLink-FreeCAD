@@ -89,7 +89,9 @@ def _regions(shape, keep, tol=0.05):
 # Add-ons that read wall thickness better (ScanRuler's, through ScanRulerFC)
 # add a reader here: f(shape) -> a dict shaped as geometry.least_wall's, with
 # "by" naming it, or None to leave it to the next. The built-in rays are last.
-WALL_READERS = []
+from . import hooks as _hooks
+
+WALL_READERS = _hooks.readers("wall")  # live: register_reader("wall", fn) lands here too
 
 
 def wall(shape):

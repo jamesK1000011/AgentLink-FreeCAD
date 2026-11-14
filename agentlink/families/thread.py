@@ -10,6 +10,7 @@ import FreeCAD
 import Part
 
 from .. import facepick
+from .. import hooks as _hooks
 from .. import geometry as geo
 from .. import store
 from .. import threads_table as tt
@@ -24,7 +25,7 @@ V = FreeCAD.Vector
 # Add-ons that read a thread off a scan (ScanRulerFC's scan_thread) add a
 # reader here: f(session, args) -> its reading. thread_identify { scan } asks
 # the first, so a CAD face and a scanned thread are named by one tool.
-SCAN_READERS = []
+SCAN_READERS = _hooks.readers("thread_scan")  # live: register_reader("thread_scan", fn) lands here too
 HOLE_TYPE = {"metric": "ISOMetricProfile", "metric-fine": "ISOMetricFineProfile", "unc": "UNC", "unf": "UNF"}
 
 

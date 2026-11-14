@@ -96,6 +96,9 @@ class Session:
         except Exception:
             pass
         self.after_change()
+        from . import hooks
+
+        hooks.emit("after_change", self, tool.name)
         return out
 
     def record_call(self, tool, args):
@@ -1054,10 +1057,13 @@ def build_server(session, name="freecad-agentlink", version="0.2.0", lean=None):
 
     if lean is None:
         lean = os.environ.get("AGENTLINK_TOOLS", "lean") != "full"
+    from . import hooks
+
     tools = make_tools(session)
     for t in tools:
         t.group = GROUP_OF.get(t.name, t.group)
     info = dict(GROUP_INFO)
+    lean_groups = set(LEAN)
     # Two tools of one name: the second would hide the first without a word.
     seen = {}
     for t in tools:
@@ -1074,6 +1080,9 @@ def build_server(session, name="freecad-agentlink", version="0.2.0", lean=None):
             sys.stderr.write(f"Agent Link: the {getattr(fam, 'GROUP', fam)} tools of an extension are left out — {type(e).__name__}: {e}\n")
             continue
         info[fam.GROUP] = fam.INFO + (f" — {fam.CREDIT}" if external and getattr(fam, "CREDIT", None) and fam.CREDIT not in fam.INFO else "")
+        # A family says itself that it belongs in the default list.
+        if getattr(fam, "LEAN", False):
+            lean_groups.add(fam.GROUP)
         for t in made:
             t.group = fam.GROUP
             if t.name in seen:
@@ -1090,7 +1099,8 @@ def build_server(session, name="freecad-agentlink", version="0.2.0", lean=None):
         window = False
     from . import paths
 
-    server = Server(name, version, tools, instructions(lean, window), run=session.execute, groups=set(LEAN) if lean else None, resources=Resources(session),
+    hooks.apply_extensions(tools, session)
+    server = Server(name, version, tools, instructions(lean, window), run=session.execute, groups=lean_groups if lean else None, resources=Resources(session),
                     guard=lambda tool, args: paths.guard(tool, args, session.out_dir))
     server.on_call = session.record_call
     session.server = server
