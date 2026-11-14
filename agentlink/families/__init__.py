@@ -25,8 +25,6 @@ NAMES = [
     "strength",
     "cut",
     "mill",
-    "printer",
-    "slicing",
     "orca",
     "drawing",
     "techdraw",
