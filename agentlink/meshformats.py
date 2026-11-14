@@ -561,7 +561,7 @@ def _gltf(parts):
                      **({"alphaMode": "BLEND"} if rgba[3] < 1 else {})})
         meshes.append({"name": p["name"], "primitives": [{"attributes": {"POSITION": a_p, "NORMAL": a_n}, "indices": a_i, "material": len(mats) - 1}]})
         nodes.append({"name": p["name"], "mesh": len(meshes) - 1})
-    doc = {"asset": {"version": "2.0", "generator": "FreeCAD Agent Link"}, "scene": 0,
+    doc = {"asset": {"version": "2.0", "generator": "Agent Link for FreeCAD"}, "scene": 0,
            "scenes": [{"nodes": list(range(len(nodes)))}], "nodes": nodes, "meshes": meshes,
            "materials": mats, "accessors": accs, "bufferViews": views, "buffers": [{"byteLength": off}]}
     return doc, b"".join(bufs)
@@ -616,7 +616,7 @@ def write_dae(path, parts):
                      f'<instance_material symbol="m" target="#{k}-mat"/></technique_common></bind_material></instance_geometry></node>')
     xml = ('<?xml version="1.0" encoding="utf-8"?>\n'
            '<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">'
-           '<asset><contributor><authoring_tool>FreeCAD Agent Link</authoring_tool></contributor>'
+           '<asset><contributor><authoring_tool>Agent Link for FreeCAD</authoring_tool></contributor>'
            '<unit name="meter" meter="1"/><up_axis>Y_UP</up_axis></asset>'
            f'<library_effects>{"".join(effs)}</library_effects><library_materials>{"".join(mats)}</library_materials>'
            f'<library_geometries>{"".join(geos)}</library_geometries>'

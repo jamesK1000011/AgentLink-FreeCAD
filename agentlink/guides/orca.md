@@ -1,6 +1,6 @@
 # OrcaSlicer, headless
 
-These tools are Agent Link for OrcaSlicer's (a separate add-on, github.com/jamesK1000011/OrcaSlicer-AgentLink), given FreeCAD's bodies, faces and kernel here.
+These tools are Agent Link for OrcaSlicer's (a separate add-on, github.com/jamesK1000011/AgentLink-OrcaSlicer), given FreeCAD's bodies, faces and kernel here.
 
 ## The loop
 1. `orca_project { action: new, bodies, path }` makes the project from FreeCAD bodies with the print setup's presets (`slicer_presets use` first, else minimal ones).

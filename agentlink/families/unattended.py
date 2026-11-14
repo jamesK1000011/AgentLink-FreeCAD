@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Unattended use (the "James on a beach" test): what lets work go on, or stop
+# Unattended use (the "no one at the computer" test): what lets work go on, or stop
 # safely and say why, with no one at the Mac. Recovering documents after a
 # crash or a hang, answering harmless dialogs, the settings' change log and
 # rollback, macros the person approved, the window's pinned document, the
@@ -444,7 +444,7 @@ def tools(s):
         except Exception:
             url = None
         url = url or "https://addons.freecad.org/addon_catalog_cache.zip"
-        req = urllib.request.Request(url, headers={"User-Agent": "FreeCAD-AgentLink"})
+        req = urllib.request.Request(url, headers={"User-Agent": "AgentLink-FreeCAD"})
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 data = r.read()

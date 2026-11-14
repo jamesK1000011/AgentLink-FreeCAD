@@ -108,7 +108,7 @@ def against(app=None, addon_dirs=(), python=None, lib=None, timeout=600):
         return {"ok": False, "failures": [f"no Python or FreeCADCmd in {app}"]}
     here = os.path.dirname(os.path.abspath(__file__))
     # Each folder is the add-on itself (it holds the agentlink package, as a
-    # checkout of FreeCAD-AgentLink does under any name) or holds it as
+    # checkout of AgentLink-FreeCAD does under any name) or holds it as
     # AgentLink (a Mod folder); its neighbours come from beside it.
     dirs = [d if os.path.isdir(os.path.join(d, "agentlink")) else os.path.join(d, "AgentLink") if os.path.isdir(os.path.join(d, "AgentLink")) else d for d in addon_dirs] or [os.path.dirname(here)]
     extra = []

@@ -17,7 +17,7 @@ import Part
 
 from .. import kicad, packing, store
 
-# Board enclosures are Workshop Parts' boxes (FreeCAD Workshop): this family
+# Board enclosures are Workshop Parts' boxes (Workshop for FreeCAD): this family
 # needs that add-on until it moves to Workshop Electronics.
 from workshop_parts import boxes  # noqa: E402
 from .. import geometry as geo

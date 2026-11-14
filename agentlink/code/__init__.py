@@ -6,4 +6,4 @@
 # FreeCAD. Nothing in this package certifies anything: a licensed
 # professional reviews, approves and stamps.
 
-DISCLAIMER = "Planning estimate prepared with FreeCAD Agent Link. Not reviewed, approved or stamped by a licensed professional."
+DISCLAIMER = "Planning estimate prepared with Agent Link for FreeCAD. Not reviewed, approved or stamped by a licensed professional."

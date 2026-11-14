@@ -36,13 +36,13 @@ jobs:
       - uses: actions/checkout@v5
         # Agent Link for OrcaSlicer, the orca tools' own add-on, beside it.
         with:
-          repository: jamesK1000011/OrcaSlicer-AgentLink
+          repository: jamesK1000011/AgentLink-OrcaSlicer
           path: orcalink-addon
       - uses: actions/checkout@v5
-        # FreeCAD Workshop's Common and Parts: the tests that make a part to
+        # Workshop for FreeCAD's Common and Parts: the tests that make a part to
         # work on (gen_make) and the board enclosures use them.
         with:
-          repository: jamesK1000011/FreeCAD-Workshop
+          repository: jamesK1000011/Workshop-FreeCAD
           path: workshop-addons
       - uses: mamba-org/setup-micromamba@v2
         with:
