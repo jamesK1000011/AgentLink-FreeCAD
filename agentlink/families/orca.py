@@ -85,7 +85,7 @@ def geo_for(session, base):
 
         @staticmethod
         def presets(label, work):
-            from .. import slicer_presets as SP
+            SP = orcalink_find.module("presets")
             from .. import store
             from addonkit.materials import DENSITY
 

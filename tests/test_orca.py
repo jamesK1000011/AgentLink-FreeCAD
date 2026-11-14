@@ -20,7 +20,12 @@ try:
 except ImportError:
     HAVE = False
 
-from agentlink import orcalink_find, slicers  # noqa: E402
+from agentlink import orcalink_find  # noqa: E402
+
+try:
+    slicers = orcalink_find.module("cli")
+except ImportError:
+    slicers = None
 
 
 @unittest.skipUnless(HAVE, "FreeCAD is not importable here")
