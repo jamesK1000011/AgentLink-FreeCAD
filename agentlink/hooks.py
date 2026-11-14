@@ -218,6 +218,25 @@ def analysis(session, kind):
     return (getattr(session, "_agentlink_results", None) or {}).get(kind)
 
 
+def saved():
+    """For tests: every registration as it stands, for restore()."""
+    return ({k: list(v) for k, v in _READERS.items()}, dict(_SERVICES), {k: list(v) for k, v in _EVENTS.items()},
+            {k: list(v) for k, v in _EXTENSIONS.items()}, list(TABS), list(REVIEWERS), set(GUARDED))
+
+
+def restore(state):
+    readers_, services, events, exts, tabs, reviewers, guarded = state
+    reset()
+    for k, v in readers_.items():
+        readers(k)[:] = v
+    _SERVICES.update(services)
+    _EVENTS.update(events)
+    _EXTENSIONS.update(exts)
+    TABS[:] = tabs
+    REVIEWERS[:] = reviewers
+    GUARDED.update(guarded)
+
+
 def reset():
     """For tests: every registration forgotten."""
     for lst in _READERS.values():
