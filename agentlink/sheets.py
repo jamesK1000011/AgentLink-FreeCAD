@@ -169,7 +169,7 @@ class Sheet:
             f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {self.w * k:.2f} {self.h * k:.2f}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>".encode(),
             b"<< /Length " + str(len(content)).encode() + b" /Filter /FlateDecode >>\nstream\n" + content + b"\nendstream",
             b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
-            f"<< /Title ({_pdfstr(self.title)}) /Producer (FreeCAD Agent Link) >>".encode("latin-1", "replace"),
+            f"<< /Title ({_pdfstr(self.title)}) /Producer (Agent Link for FreeCAD) >>".encode("latin-1", "replace"),
         ]
         buf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
         offsets = []

@@ -13,7 +13,7 @@ from ..protocol import Tool, ToolError
 
 GROUP = "orca"
 INFO = "OrcaSlicer headless (Agent Link for OrcaSlicer): projects from bodies, every setting and part, paint by faces, slice, export, G-code read back."
-MISSING = "Agent Link for OrcaSlicer is not installed (github.com/jamesK1000011/OrcaSlicer-AgentLink): agentlink_update installs it beside this add-on."
+MISSING = "Agent Link for OrcaSlicer is not installed (github.com/jamesK1000011/AgentLink-OrcaSlicer): agentlink_update installs it beside this add-on."
 
 
 def _mesh_of(shape, tol=0.01):

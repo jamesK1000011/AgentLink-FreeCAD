@@ -1,6 +1,8 @@
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 # Agent Link for FreeCAD (spike)
 
+> Not affiliated with or endorsed by the FreeCAD project or the FreeCAD project association (FPA); FreeCAD is the FPA's trademark. Get FreeCAD itself from [freecad.org](https://freecad.org).
+
 An agent drives FreeCAD over the Model Context Protocol, in ScanRuler's
 manner: one call per job, small answers in millimetres and grams, and
 refusals that say what to do instead. There are 146 tools in 27 groups.
@@ -16,7 +18,7 @@ whether it is listed or not. Every change is one FreeCAD undo step.
 | model | Part primitives, booleans, transforms and arrays, fillet, chamfer, offset, shell, extrude, revolve, loft, sweep |
 | measure | `shape_query` (faces and edges picked by kind, normal, radius, place: the references other tools take), measure, section, `measure_mass`, clearance |
 | sketch, feature, param | PartDesign bodies, sketches and constraints with a ready-for-feature check; pad, pocket, revolve, groove, hole (ISO threads), fillet, chamfer, draft, shell, mirror, patterns, loft, pipe; spreadsheet parameters bound to features |
-| parts | Gridfinity bins (`gen_make`) and baseplates, project boxes and board enclosures (`gen_part`): from [FreeCAD Workshop](https://github.com/jamesK1000011/FreeCAD-Workshop)'s Parts add-on, when it is installed |
+| parts | Gridfinity bins (`gen_make`) and baseplates, project boxes and board enclosures (`gen_part`): from [Workshop for FreeCAD](https://github.com/jamesK1000011/Workshop-FreeCAD)'s Parts add-on, when it is installed |
 | make | setups (print, cut, mill), part spec and material, printability (`dfm_check`), `part_review`, `slice` |
 | fits, embed | fits, printer calibration, tolerance stacks, hardware holes; parts sealed in mid-print with their pauses |
 | material, mass, strength, thread | FreeCAD's material library and custom materials; mass as printed, centre of mass, ballast to a target; FEM with CalculiX: strength (print-aware), natural frequencies, steady heat against where the material softens; thread tables, identification and cutting |
@@ -25,7 +27,7 @@ whether it is listed or not. Every change is one FreeCAD undo step.
 | cam | FreeCAD's CAM workbench: `cam_job` (stock and end mill), `cam_op` (profile, pocket, adaptive, facing, drilling — each computed and read back), `cam_sim` (the operations run on a height map of the stock: crashes, gouges, what is left, a picture), `cam_post` (G-code by FreeCAD's post-processors, checked against the stock), `cam_list`, `cam_tool`, `cam_remove` |
 | cut, mill | sheet-part checks with DXF/SVG nested on the sheet; milling checks with STEP and a setup sheet |
 | slice, printer | PrusaSlicer, OrcaSlicer and Bambu Studio command lines with pauses written in; OctoPrint, Moonraker and PrusaLink printers. Starting, pausing or stopping a print needs the person's typed confirmation |
-| orca | OrcaSlicer projects made from bodies, changed at every level, painted by face, sliced, exported and read back. These tools come from [Agent Link for OrcaSlicer](https://github.com/jamesK1000011/OrcaSlicer-AgentLink), a separate add-on installed beside this one (or found by `AGENTLINK_ORCALINK`); without it, the group is left out |
+| orca | OrcaSlicer projects made from bodies, changed at every level, painted by face, sliced, exported and read back. These tools come from [Agent Link for OrcaSlicer](https://github.com/jamesK1000011/AgentLink-OrcaSlicer), a separate add-on installed beside this one (or found by `AGENTLINK_ORCALINK`); without it, the group is left out |
 | drawing, electronics, share | TechDraw sheets (feature dims, fits and hole callouts on the page as TechDraw's own dimensions), exploded assembly steps with a bill of materials, patent figures and a draft for an attorney's review; KiCad board import, board enclosures, PCB order packages, printed wiring channels; a library pack with licence, credits and private paths removed |
 
 Each group has a guide (`guide_read`).

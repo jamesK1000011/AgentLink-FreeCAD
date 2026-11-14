@@ -6,7 +6,7 @@
   <date>2026-11-12</date>
   <maintainer email="jamesK1000011@users.noreply.github.com">jamesK1000011</maintainer>
   <license file="LICENSE">LGPL-2.1-or-later</license>
-  <url type="repository" branch="main">https://github.com/jamesK1000011/FreeCAD-AgentLink</url>
+  <url type="repository" branch="main">https://github.com/jamesK1000011/AgentLink-FreeCAD</url>
   <freecadmin>1.0.0</freecadmin>
   <tag>MCP</tag>
   <tag>AI</tag>

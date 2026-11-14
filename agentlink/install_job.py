@@ -80,7 +80,7 @@ def app_version(app):
 
 
 def _get(url):
-    r = urllib.request.Request(url, headers={"User-Agent": "FreeCAD-AgentLink", "Accept": "application/vnd.github+json"})
+    r = urllib.request.Request(url, headers={"User-Agent": "AgentLink-FreeCAD", "Accept": "application/vnd.github+json"})
     with urllib.request.urlopen(r, timeout=60) as f:
         return f.read()
 
@@ -194,7 +194,7 @@ class Job:
 
     def _download(self, url, path, size):
         part = path + ".part"
-        req = urllib.request.Request(url, headers={"User-Agent": "FreeCAD-AgentLink"})
+        req = urllib.request.Request(url, headers={"User-Agent": "AgentLink-FreeCAD"})
         got, last = 0, 0
         with urllib.request.urlopen(req, timeout=120) as r, open(part, "wb") as f:
             while True:
