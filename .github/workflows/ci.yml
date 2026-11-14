@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Agent Link's own tests, installed alone (no ScanRuler for FreeCAD, no
+# Collab: a hidden dependency fails here straight away), on the newest
+# FreeCAD conda-forge has and the newest 1.1 and 1.0, with PrusaSlicer and
+# the latest OrcaSlicer for the slicing tests. The coverage audit and the
+# ScanRuler bake-off run with both add-ons in ScanRuler's own CI.
+name: Agent Link tests
+
+on:
+  push:
+    branches: [main, 'test-*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        series: ['newest', '1.1', '1.0']
+    name: freecad-${{ matrix.series }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: fc-${{ matrix.series }}
+          create-args: >-
+            -c conda-forge
+            ${{ matrix.series == 'newest' && 'freecad' || format('freecad={0}', matrix.series) }}
+            python=3.11
+            calculix
+            gmsh
+            numpy
+          cache-environment: true
+      - name: FreeCAD imports
+        run: |
+          echo "FREECAD_LIB=$CONDA_PREFIX/lib" >> "$GITHUB_ENV"
+          echo "PYTHONPATH=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+          python -c "import sys; sys.path.append('$CONDA_PREFIX/lib'); import FreeCAD, Part, MeshPart; print('FreeCAD', FreeCAD.Version()[:3])"
+      - name: PrusaSlicer and a virtual screen
+        timeout-minutes: 6
+        continue-on-error: true
+        run: sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update -qq && sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 install -y -qq --no-install-recommends prusa-slicer xvfb libopengl0 libegl1 libgl1 > /dev/null
+      - name: OrcaSlicer
+        # The latest release's Linux AppImage, unpacked (no FUSE on the
+        # runner); the Orca tests skip without it.
+        timeout-minutes: 6
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name=$(gh api repos/OrcaSlicer/OrcaSlicer/releases/latest -q '[.assets[].name | select(endswith(".AppImage"))] | map(select(test("aarch64") | not)) | (map(select(test("2404"))) + .)[0]')
+          echo "asset: $name"
+          gh release download --repo OrcaSlicer/OrcaSlicer --pattern "$name" --dir "$RUNNER_TEMP/orca"
+          cd "$RUNNER_TEMP/orca" && chmod +x "$name" && "./$name" --appimage-extract > /dev/null
+          sudo apt-get install -y -qq --no-install-recommends libwebkit2gtk-4.1-0 libgstreamer-plugins-base1.0-0 > /dev/null || true
+          echo "AGENTLINK_ORCASLICER=$RUNNER_TEMP/orca/squashfs-root/AppRun" >> "$GITHUB_ENV"
+      - name: Agent Link tests, alone
+        timeout-minutes: 20
+        run: xvfb-run -a python -X faulthandler -m unittest discover -s tests -v 2>&1 | tail -n 400; exit ${PIPESTATUS[0]}

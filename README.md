@@ -35,8 +35,8 @@ Each group has a guide (`guide_read`).
 or `FREECAD_LIB` pointing at FreeCAD's `lib`), or FreeCAD's own command line:
 
 ```
-python src/Mod/AgentLink/agentlink_headless.py --out ~/Documents/AgentLink
-AGENTLINK_OUT=~/Documents/AgentLink FreeCADCmd src/Mod/AgentLink/agentlink_headless.py
+python agentlink_headless.py --out ~/Documents/AgentLink
+AGENTLINK_OUT=~/Documents/AgentLink FreeCADCmd agentlink_headless.py
 ```
 
 **In the FreeCAD window, so you can watch.** Copy or link this folder into
@@ -45,18 +45,22 @@ link**; it listens on 127.0.0.1:7318 only. Then the MCP client starts the
 relay:
 
 ```
-python src/Mod/AgentLink/agentlink_headless.py --connect 7318
+python agentlink_headless.py --connect 7318
 ```
 
 Each call runs on FreeCAD's own thread, in the document you have open.
 
 ## Tests and the bake-off
 
-`python -m unittest discover -s src/Mod/AgentLink/tests` runs the protocol tests
-anywhere. The tool tests need FreeCAD and are skipped without it.
+`python -m unittest discover -s tests` runs the protocol tests anywhere.
+The tool tests need FreeCAD and are skipped without it. This repository's
+own CI (`.github/workflows/ci.yml`) runs them all with Agent Link installed
+alone, on the newest FreeCAD and on 1.1 and 1.0, with PrusaSlicer and
+OrcaSlicer.
 
-The workflow `.github/workflows/freecad-bakeoff.yml` runs the tool tests
-and the bake-off on GitHub's machines on every push to `freecad-spike`.
+The coverage audit and the bake-off live in ScanRuler's CI
+(`.github/workflows/freecad-bakeoff.yml` there, branch `freecad-spike`), which
+tests Agent Link and ScanRuler for FreeCAD together.
 The bake-off is one Gridfinity brief (`scripts/bakeoff/brief.mjs`) given to
 this add-on headless and to ScanRuler in headless Chrome. ScanRuler's
 Deviation workspace then compares the two bins both ways, and the
