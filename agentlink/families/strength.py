@@ -8,7 +8,6 @@
 
 import math
 import os
-import shutil
 import subprocess
 import time
 
@@ -29,7 +28,6 @@ INFO = "Strength by finite elements (Gmsh and CalculiX): set up a body, hold fac
 
 V = FreeCAD.Vector
 KEY = "fea"
-LAYER_FACTOR = 0.5  # across-layer strength taken as this share of the yield
 G = 9810.0  # mm/s²
 TRAPS = "A rigid hold makes stress no real mount does; a coarse mesh under-reads peaks; library figures are typical."
 
@@ -74,29 +72,7 @@ def ObjectsFem_():
 
 
 def _binary(name, pref_group, pref_key, env):
-    p = os.environ.get(env)
-    if p and shutil.which(p):
-        return shutil.which(p)
-    try:
-        q = FreeCAD.ParamGet(f"User parameter:BaseApp/Preferences/Mod/Fem/{pref_group}").GetString(pref_key, "")
-        if q and shutil.which(q):
-            return shutil.which(q)
-    except Exception:
-        pass
-    return shutil.which(name)
-
-
-def _dir(v):
-    if isinstance(v, str):
-        m = {"+x": (1, 0, 0), "-x": (-1, 0, 0), "+y": (0, 1, 0), "-y": (0, -1, 0), "+z": (0, 0, 1), "-z": (0, 0, -1)}
-        if v.lower() not in m:
-            raise ToolError("invalid_input", "buildDir: +x, -x, +y, -y, +z, -z or [x, y, z].")
-        return list(m[v.lower()])
-    if isinstance(v, list) and len(v) == 3:
-        n = math.sqrt(sum(float(x) ** 2 for x in v))
-        if n > 0:
-            return [float(x) / n for x in v]
-    raise ToolError("invalid_input", "buildDir: +x, -x, +y, -y, +z, -z or [x, y, z].")
+    return ccx_io.find_binary(name, pref_group, pref_key, env)
 
 
 def _nonlinear(text, cards, a):
@@ -159,48 +135,12 @@ def tools(session):
             mid, said = c["id"], "the body's" if set_ else "assumed PLA: material_set records the real one"
         if not c.get("E"):
             raise ToolError("invalid_state", f"{c['name']} has no Young's modulus on its card: material_set custom {{ name, density, youngsMPa, yieldMPa }} gives one.")
-        setup = store.setup_of(s.doc, o.Label, "print")
-        build = None
-        if a.get("buildDir") is not None:
-            build = _dir(a["buildDir"])
-        elif setup:
-            build = _dir(setup.get("up", "+z"))
         old = _study(s.doc) or {}
         keep = old.get("body") == o.Label and not a.get("reset")
-        st = {"body": o.Label, "material": mid, "mesh": mesh, "buildDir": build, "holds": old.get("holds", []) if keep else [], "loads": old.get("loads", []) if keep else []}
-        if a.get("printed"):
-            # The slicer's settings read back: what the print falls short of the solid body.
-            from ..orcalink_find import module
-
-            try:
-                O3, PS = module("orca3mf"), module("printstrength")
-            except ImportError as e:
-                raise ToolError("unavailable", f"printed: {e}")
-            pr = a["printed"]
-            try:
-                proj = O3.Project(os.path.expanduser(pr["project"]) if os.path.isabs(os.path.expanduser(pr["project"])) else os.path.join(s.out_dir, pr["project"]))
-                po = proj.object(pr.get("object", 1))
-            except (KeyError, OSError, ValueError) as e:
-                raise ToolError("invalid_input", f"printed: {{ project (an OrcaSlicer .3mf), object }} — {e}")
-            eff = {k: v for k, v in proj.config.items()}
-            eff.update(po.get("settings") or {})
-            ft = proj.config.get("filament_type") or []
-            if ft:
-                eff["filament"] = ft[min(int(po.get("extruder") or 1), len(ft)) - 1]
-            d = PS.describe(eff, o.Shape)
-            st["print"] = {"project": pr["project"], "object": po["name"], **{k: d[k] for k in ("shellMm", "solidShare", "stiffnessFactor", "strengthFactor", "layerFactor")},
-                           "settings": d["settings"], "advice": d["advice"]}
-            if not build:
-                st["buildDir"] = build = _dir((setup or {}).get("up", "+z"))
-        elif keep and old.get("print"):
-            st["print"] = old["print"]
+        st = {"body": o.Label, "material": mid, "mesh": mesh, "holds": old.get("holds", []) if keep else [], "loads": old.get("loads", []) if keep else []}
         _save(s.doc, st)
         s.snapshot("fea_setup")
         out = {"study": st, "material": {"id": mid, "name": c["name"], "E": c["E"], "nu": c.get("nu"), "yield": c.get("yield"), "from": said}}
-        if build:
-            out["printed"] = f"Built along {build}: the safety across the layers is judged at {(st.get('print') or {}).get('layerFactor', LAYER_FACTOR)}× yield."
-        if st.get("print"):
-            out["printSettings"] = st["print"]
         if mesh > least / 2:
             out["warning"] = f"mesh {mesh:g} mm is over half the part's least size ({least:.1f} mm): too coarse to read stress — {round(least / 3, 2)} mm or less."
         out["next"] = "fea_hold the faces it is held by, fea_load what pushes on it, then fea_solve."
@@ -539,7 +479,7 @@ def tools(session):
         bb = comp.BoundBox
         least = min(min(x.BoundBox.XLength, x.BoundBox.YLength, x.BoundBox.ZLength) for x in sol)
         mesh = float(a.get("mesh") or round(max(0.5, min(least / 3.0, bb.DiagonalLength / 15.0)), 2))
-        st = {"body": holder.Label, "material": parts[0]["material"], "mesh": mesh, "buildDir": None, "holds": [], "loads": [],
+        st = {"body": holder.Label, "material": parts[0]["material"], "mesh": mesh, "holds": [], "loads": [],
               "parts": parts, "join": how, "friction": float(a.get("friction", 0)), "tolerance": tol}
         _save(s.doc, st)
         s.snapshot("fea_parts")
@@ -595,101 +535,6 @@ def tools(session):
                 if sa and sb:
                     pairs.append((i, j, sorted(set(sb)), sorted(set(sa))))  # slave on the second part
         return groups, pairs
-
-    def fea_frame(a):
-        """A frame of straight members by beam elements: from members given
-        (from, to, section, material) or from bodies (box-like BIM members:
-        their centre line and their own width and depth)."""
-        from .. import frame as FR
-
-        ccx = _binary("ccx", "Ccx", "ccxBinaryPath", "AGENTLINK_CCX")
-        if not ccx:
-            raise ToolError("unavailable", "CalculiX (ccx) not found: install it, or set its path in FreeCAD's FEM preferences or AGENTLINK_CCX.")
-        members, cards = [], {}
-        default_mat = a.get("material")
-
-        def mat_of(mid, label=None):
-            if mid:
-                c = matfam.card(s.doc, mid) or matfam.card(s.doc, str(mid).lower())
-                if c is None:
-                    raise ToolError("not_found", f"material {mid!r}: material_list finds one.")
-            elif label:
-                c, _ = matfam.of_body(s.doc, label)
-            else:
-                raise ToolError("invalid_input", "material: an id (material_list) for the members, or on each member.")
-            if not c.get("E"):
-                raise ToolError("invalid_state", f"{c['name']} has no Young's modulus.")
-            return c
-
-        for k, m in enumerate(a.get("members") or []):
-            sec = m.get("section") or {}
-            if sec.get("kind", "rect") not in FR.SECTIONS:
-                raise ToolError("invalid_input", f"members[{k}].section.kind: {', '.join(FR.SECTIONS)}.")
-            c = mat_of(m.get("material") or default_mat)
-            name = m.get("name") or f"M{k + 1}"
-            cards[name] = c
-            members.append({"name": name, "from": m["from"], "to": m["to"], "section": sec, "E": float(c["E"]), "nu": float(c.get("nu") or 0.3),
-                            "rho": float(c.get("density") or 0) * 1000})
-        for ref in a.get("bodies") or []:
-            o = s.body(ref) if not isinstance(ref, str) or not s.doc.getObjectsByLabel(ref) else s.doc.getObjectsByLabel(ref)[0]
-            sh = o.Shape
-            if not sh.Solids:
-                raise ToolError("invalid_state", f"{o.Label} has no solid.")
-            rot = o.Placement.Rotation
-            loc = sh.copy()
-            loc.transformShape(o.Placement.inverse().toMatrix(), True)
-            bb = loc.BoundBox
-            dims = sorted([(bb.XLength, rot.multVec(V(1, 0, 0))), (bb.YLength, rot.multVec(V(0, 1, 0))), (bb.ZLength, rot.multVec(V(0, 0, 1)))], key=lambda t_: -t_[0])
-            run, axis = dims[0]
-            rest = sorted(dims[1:], key=lambda t_: -abs(t_[1].z))
-            depth, width = rest[0][0], rest[1][0]
-            if abs(axis.z) > 0.95:
-                depth, width = max(depth, width), min(depth, width)
-            cen = sh.BoundBox.Center
-            p0, p1 = cen - axis * (run / 2), cen + axis * (run / 2)
-            c = mat_of(default_mat, o.Label)
-            cards[o.Label] = c
-            members.append({"name": o.Label, "from": [p0.x, p0.y, p0.z], "to": [p1.x, p1.y, p1.z], "section": {"kind": "rect", "b": width, "d": depth},
-                            "E": float(c["E"]), "nu": float(c.get("nu") or 0.3), "rho": float(c.get("density") or 0) * 1000})
-        if not members:
-            raise ToolError("invalid_input", "members [{ name, from, to, section { kind rect (b, d) | circ (d) | pipe (d, t) | box (b, d, t) }, material }] or bodies [labels].")
-        loads = []
-        for ld in a.get("loads") or []:
-            if ld.get("member") and ld.get("kPa") is not None:
-                w = -float(ld["kPa"]) * 1e-3 * float(ld.get("width", 1000))
-                loads.append({"member": ld["member"], "w": [0, 0, w]})
-            elif ld.get("member"):
-                w = ld.get("w")
-                loads.append({"member": ld["member"], "w": [0, 0, -float(w)] if isinstance(w, (int, float)) else w})
-            else:
-                loads.append(ld)
-        tol = float(a.get("tolerance", 1.0 if not a.get("bodies") else max(max(m["section"].get("b", 0), m["section"].get("d", 0)) for m in members)))
-        g = [0, 0, -G] if a.get("gravity") else None
-        wd = os.path.join(s.out_dir, "frame_" + "".join(ch if ch.isalnum() else "_" for ch in (a.get("name") or "study")))
-        try:
-            text, _ = FR.build(members, a.get("supports") or [], loads, g, int(a.get("elements", 8)), tol)
-        except (ValueError, KeyError) as e:
-            raise ToolError("invalid_input", str(e))
-        if not a.get("supports"):
-            raise ToolError("invalid_input", "supports [{ at [x,y,z] a member's end, kind pinned | fixed | roller }]: a frame with none flies off.")
-        try:
-            res = FR.solve(ccx, wd, members, a.get("supports"), loads, g, int(a.get("elements", 8)), float(a.get("timeout", 300)), tol)
-        except (ValueError, KeyError) as e:
-            raise ToolError("invalid_input", str(e))
-        except RuntimeError as e:
-            raise ToolError("failed", str(e))
-        limit = float(a.get("deflectionLimit", 0) or 0)
-        for row in res["members"]:
-            c = cards.get(row["member"])
-            y = c.get("yield") if c else None
-            if y and row.get("vonMisesMPa"):
-                row["safety"] = round(y / row["vonMisesMPa"], 2) if row["vonMisesMPa"] > 0 else None
-            if limit and row.get("spanOverDeflection"):
-                row["deflectionOk"] = row["spanOverDeflection"] >= limit
-        worst = min((r for r in res["members"] if r.get("safety")), key=lambda r: r["safety"], default=None)
-        out = {**res, "members": res["members"], "elements": "B32 beams, expanded to solids by CalculiX", "worst": worst["member"] if worst else None,
-               "note": "Joints between members are rigid; pinned and roller supports are held about the member's own axis. A frame model is a sizing look, not the connection design."}
-        return out
 
     def fea_shell(a):
         """A thin plate or shell by shell elements (CalculiX S6 on Gmsh's
@@ -900,22 +745,6 @@ def tools(session):
                 warnings.append(f"Past yield ({smax:.1f} over {y:g} MPa): a linear solve is not right past yield — the part yields or breaks there (nonlinear: true follows it into yield).")
         else:
             warnings.append("The card has no yield strength: no safety factor — material_set custom with the supplier's yieldMPa.")
-        if st.get("buildDir"):
-            bd = st["buildDir"]
-            sn = {n: ccx_io.normal_stress(sv, bd) for n, sv in stress.items()}
-            n_l = max(sn, key=sn.get)
-            lf = (st.get("print") or {}).get("layerFactor", LAYER_FACTOR)
-            out["acrossLayers"] = {"tensileMPa": round(max(0.0, sn[n_l]), 3), **where(n_l), "buildDir": bd, "factor": lf}
-            if y:
-                out["acrossLayers"]["safety"] = round(lf * y / sn[n_l], 2) if sn[n_l] > 0 else None
-            out["acrossLayers"]["note"] = f"Printed layers are weaker across than along: the tension along the build direction is judged against {LAYER_FACTOR}× yield. A simplification — the real factor depends on printer, material and settings."
-        if st.get("print") and y and smax > 0:
-            pp = st["print"]
-            out["asPrinted"] = {"safety": round(pp["strengthFactor"] * y / smax, 2), "displacementMm": round(dmag[n_dmax] / pp["stiffnessFactor"], 4),
-                                "from": f"{pp['object']} in {os.path.basename(pp['project'])}: shell {pp['shellMm']} mm, solid share {pp['solidShare']}",
-                                "note": "Solved on the solid body, scaled by the print's estimated knock-downs: a feasibility check, never a sign-off."}
-            if out["asPrinted"]["safety"] < 2 and pp.get("advice"):
-                out["asPrinted"]["stronger"] = pp["advice"]
         if n_max in fixed:
             warnings.append("The peak is on a held face: a rigid hold makes stress no real mount does — read it as high, and look a little away from the hold.")
         bb = shape.BoundBox
@@ -949,7 +778,8 @@ def tools(session):
         # Every node's stress and displacement, for a map of the part
         # (view_render map stress): kept with the session, not the file.
         ids = [n for n in vm if n in nodes]
-        field = {"points": [nodes[n] for n in ids], "vonMises": [vm[n] for n in ids], "displacement": [list(disp.get(n, (0, 0, 0))[:3]) for n in ids]}
+        field = {"points": [nodes[n] for n in ids], "vonMises": [vm[n] for n in ids], "displacement": [list(disp.get(n, (0, 0, 0))[:3]) for n in ids],
+                 "stress": [list(stress.get(n, (0.0,) * 6)) for n in ids]}
         at = {n: i for i, n in enumerate(ids)}
         field["elements"] = [[at[n] for n in e] for e in elems.values() if all(n in at for n in e)]
         s._agentlink_fea = {"body": o.Label, "stats": geo.stats(shape), "study": st, "result": out, "field": field}
@@ -1614,10 +1444,6 @@ def tools(session):
         return out
 
     return [
-        Tool("fea_frame", "A frame of straight members by beam elements (CalculiX B32): members [{ name, from, to, section { kind rect (b, d) | circ (d) | pipe (d, t) | box (b, d, t) }, material }] or bodies [box-like BIM members: their centre lines and sizes]; supports [{ at a member's end (within tolerance mm: 1, or the largest section with bodies), kind pinned | fixed | roller }]; loads [{ member, w N/mm down (or [wx,wy,wz]) | kPa with width mm }, { at a joint, force [fx,fy,fz] N }], gravity (own weight). Answers each member's stress along it, von Mises and safety, its deflection (span over deflection; deflectionLimit 360 judges it) and each support's reaction. Beams, rafters, portal frames, trusses, shelving.",
-             obj({"members": {"type": "array", "items": {"type": "object"}}, "bodies": {"type": "array", "items": {"type": "string"}}, "material": {"type": "string"}, "supports": {"type": "array", "items": {"type": "object"}},
-                  "loads": {"type": "array", "items": {"type": "object"}}, "gravity": {"type": "boolean"}, "deflectionLimit": {"type": "number"}, "tolerance": {"type": "number"},
-                  "elements": {"type": "integer"}, "name": {"type": "string"}, "timeout": {"type": "number"}}), fea_frame),
         Tool("fea_shell", "A thin plate or shell by shell elements (CalculiX on Gmsh's triangles): object (a face, shell or sheet: its faces are the mid-surface; faces narrows), thickness mm, material, holds [{ edges \"boundary\" (every free edge) | [{ near: [x,y,z] }], kind pinned (simply supported) | fixed (clamped) }], pressure MPa and/or gravity. Answers the largest deflection and stress. Panels, lids, sheet-metal, floors and walls as plates.",
              obj({"object": {"type": "string"}, "faces": {"type": "array", "items": {"type": "string"}}, "thickness": {"type": "number"}, "material": {"type": "string"},
                   "holds": {"type": "array", "items": {"type": "object"}}, "pressure": {"type": "number"}, "gravity": {"type": "boolean"}, "mesh": {"type": "number"}, "timeout": {"type": "number"}}, ["object", "thickness"]), fea_shell),
@@ -1626,9 +1452,8 @@ def tools(session):
                   "friction": {"type": "number"}, "tolerance": {"type": "number"}, "mesh": {"type": "number"}, "name": {"type": "string"}}, ["bodies"]), fea_parts, changes=True),
         Tool(
             "fea_setup",
-            "Start (or change) a strength study of one body: material (the body's by default), mesh (largest element edge, mm; a third of the least size by default), buildDir for a printed part (+z from its print setup), printed { project, object } (an OrcaSlicer project: its walls, infill and layers read back and the results given as printed too). reset: true drops the holds and loads. " + TRAPS,
-            obj({"body": {"type": "string"}, "material": {"type": "string"}, "mesh": {"type": "number"}, "buildDir": {}, "reset": {"type": "boolean"},
-                 "printed": {"type": "object", "properties": {"project": {"type": "string"}, "object": {"type": ["string", "integer"]}}, "required": ["project"]}}),
+            "Start (or change) a strength study of one body: material (the body's by default), mesh (largest element edge, mm; a third of the least size by default). reset: true drops the holds and loads. " + TRAPS,
+            obj({"body": {"type": "string"}, "material": {"type": "string"}, "mesh": {"type": "number"}, "reset": {"type": "boolean"}}),
             fea_setup,
             changes=True,
         ),
@@ -1648,7 +1473,7 @@ def tools(session):
         ),
         Tool(
             "fea_solve",
-            "Solve the study: Gmsh meshes the body (second-order tetrahedra), CalculiX solves it linear static. Answers the largest von Mises stress (MPa) and where, the largest displacement (mm) and where, the safety factor against yield, and for a printed part the tension across the layers against half the yield (a simplification), with warnings. nonlinear: true follows large deflections and each material into yield (elastic-plastic from yield to its tensile strength; elasticOnly: true keeps it elastic) and answers the plastic strain — for a part loaded past yield, a thin part that bends far, or contact. " + TRAPS + " Needs ccx and gmsh installed (timeout s, 300).",
+            "Solve the study: Gmsh meshes the body (second-order tetrahedra), CalculiX solves it linear static. Answers the largest von Mises stress (MPa) and where, the largest displacement (mm) and where, the safety factor against yield, with warnings. nonlinear: true follows large deflections and each material into yield (elastic-plastic from yield to its tensile strength; elasticOnly: true keeps it elastic) and answers the plastic strain — for a part loaded past yield, a thin part that bends far, or contact. " + TRAPS + " Needs ccx and gmsh installed (timeout s, 300).",
             obj({"timeout": {"type": "number"}, "nonlinear": {"type": "boolean"}, "elasticOnly": {"type": "boolean"}}),
             fea_solve,
         ),
