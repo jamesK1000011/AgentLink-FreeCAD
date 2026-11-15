@@ -79,6 +79,10 @@ FAKE_WINDOW = textwrap.dedent('''
             if name == "behind_dialog":
                 state["dialog"] = {"class": "QMessageBox", "title": "Unsaved", "text": "Save changes?", "buttons": ["Save", "Discard"], "since": time.time()}
                 time.sleep(3600)
+            if name == "dialog_answer":
+                # A window just started: its first call builds the session.
+                time.sleep(7)
+                state["dialog"] = None
             body = {"recovered": [{"label": "Plate", "source": "checkpoint", "time": "now", "lost": "nothing after it lost"}]} if name == "app_recover" else {"ok": name, "pid": os.getpid()}
             f.write(json.dumps({"jsonrpc": "2.0", "id": m["id"], "result": {"content": [{"type": "text", "text": json.dumps(body)}]}}) + "\\n"); f.flush()
     while True:
@@ -257,6 +261,13 @@ class WindowSide(Sup):
         self.assertIn("Blocked by a dialog", out["error"]["message"])
         self.assertIn("Save changes?", out["error"]["message"])
         self.assertEqual(self.call("ping")[1]["ok"], "ping")
+
+    def test_slow_first_dialog_answer_is_not_refused(self):
+        self.assertEqual(self.call("ping")[1]["ok"], "ping")
+        self.call("behind_dialog")
+        err, out = self.call_args("dialog_answer", {"button": "Cancel"}, timeout=30)
+        self.assertFalse(err, out)
+        self.assertEqual(out["ok"], "dialog_answer")
 
     def test_force_restart_frees_a_window_stuck_behind_a_dialog(self):
         first = self.call("ping")[1]["pid"]
