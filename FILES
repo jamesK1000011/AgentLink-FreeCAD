@@ -39,6 +39,7 @@ agentlink/families/bim_gaps.py
 agentlink/families/bim_more.py
 agentlink/families/cam.py
 agentlink/families/cam_more.py
+agentlink/families/dev.py
 agentlink/families/doc.py
 agentlink/families/draft.py
 agentlink/families/draft_more.py
@@ -135,6 +136,7 @@ agentlink/smoke.py
 agentlink/store.py
 agentlink/supervise.py
 agentlink/td_wait.py
+agentlink/testrun.py
 agentlink/theme.py
 agentlink/tooldata.py
 agentlink/tools.py
@@ -160,6 +162,7 @@ scripts/tool_tables.py
 server.json
 tests/_fc.py
 tests/_pd_base.py
+tests/test_addon_test.py
 tests/test_app_install.py
 tests/test_assembly.py
 tests/test_assembly_more.py

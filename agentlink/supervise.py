@@ -115,12 +115,18 @@ def _call_info(line):
     return m.get("id"), p.get("name"), p.get("arguments") or {}
 
 
-def deadline_for(tool):
+def deadline_for(tool, args=None):
     if os.environ.get("AGENTLINK_DEADLINE"):
         return float(os.environ["AGENTLINK_DEADLINE"])
     if keep is None:
         return NO_ESTIMATE
-    if keep is not None and keep.is_heavy(tool):
+    limit = _deadline(tool)
+    own = keep.call_deadline(tool, args) if keep.is_heavy(tool) else None
+    return max(limit, own) if own else limit
+
+
+def _deadline(tool):
+    if keep.is_heavy(tool):
         try:
             q = keep.queue_state()
             pts = (q.get("timings") or {}).get(tool) or []
@@ -615,7 +621,7 @@ def run(script, argv):
                                        f"{c['tool']} is waiting behind it. dialog_answer {{ button }} presses one of its buttons: read it and press what the job needs (Cancel backs out); app_force_restart if the window is stuck.")
                         continue
                     last = float((hb or {}).get("t") or c["start"])
-                    limit = deadline_for(c["tool"])
+                    limit = deadline_for(c["tool"], c.get("args"))
                     if keep.hung(now, c["start"], max(last, c["start"]), limit) and not keep.saving():
                         pid = (hb or {}).get("pid")
                         if pid:
@@ -629,7 +635,7 @@ def run(script, argv):
                 first = min(inflight.items(), key=lambda kv: kv[1]["start"]) if inflight else None
                 for mid, h in [first] if first else []:
                     began = max(h["start"], state.get("last_reply") or 0)
-                    limit = deadline_for(h["tool"])
+                    limit = deadline_for(h["tool"], h.get("args"))
                     if (keep.hung(now, began, began + limit, limit) and not keep.saving() and state["hang"] is None
                             and not state.get("restarting")):
                         child = state["child"]

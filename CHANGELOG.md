@@ -12,6 +12,7 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 
 ### Added
 
+- `addon_test` (group `dev`, not in the lean list): an installed add-on's own tests, or Agent Link's, run in a separate FreeCAD command-line process on this computer, never the window or the hidden FreeCAD, with a fresh `AGENTLINK_HOME` and FreeCAD user folder. pytest when FreeCAD's Python has it, else a small built-in runner (unittest classes, plain `test_*` functions, simple fixtures, `tmp_path`, `monkeypatch`; anything more is skipped with the reason). Answers counts, time and each failure's last traceback lines; the full log goes to `~/AgentLink/tests/`. Only add-ons the launcher installed may be tested. A heavy call's own `timeout` now sets the watchdog's deadline for it.
 - `crash_collect`: FreeCAD's document-recovery folders, its crash.log and the system's crash reports for FreeCAD copied into `~/AgentLink/crash/<time>/` (copies only); `dialog_answer` runs it before Document Recovery's Cleanup, so a crash can still be looked into.
 - The `notice` service (`docs/hooks.md`): an add-on's short line for the agent, such as a new screenshot, rides once on the next answer as `"notice"`; a slow or failing provider never holds an answer up.
 - An MCP server that drives FreeCAD headless or in the person's own window:
