@@ -90,6 +90,9 @@ class Writes:
     def isTouched(self):  # noqa: N802
         return self.touched
 
+    def purgeTouched(self):  # noqa: N802
+        object.__setattr__(self, "touched", False)
+
 
 class Untouched(unittest.TestCase):
     """Opening a panel and refreshing it leave a saved document untouched:
@@ -107,6 +110,19 @@ class Untouched(unittest.TestCase):
         object.__setattr__(d, "UndoMode", 0)
         undo_on(d)
         self.assertEqual(d.log, ["UndoMode"])
+        # Turning undo on in a saved document (reopened after a restart,
+        # undo off) leaves it saved: seen on the Mac as the "*" after
+        # Workshop Make's panel made the session.
+        self.assertFalse(d.isTouched())
+
+    def test_undo_on_keeps_real_changes_marked(self):
+        from agentlink.store import undo_on
+
+        d = Writes()
+        object.__setattr__(d, "UndoMode", 0)
+        object.__setattr__(d, "touched", True)
+        undo_on(d)
+        self.assertTrue(d.isTouched())
 
     def test_same_record_again_writes_nothing(self):
         from agentlink import store
