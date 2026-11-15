@@ -64,18 +64,29 @@ def tools(s):
         from .. import gui_link
 
         d = gui_link.modal_info() if FreeCAD.GuiUp else None
-        if d is None:
-            return {"dialog": None, "note": "No dialog is open in the FreeCAD window."}
-        info = {k: v for k, v in d.items() if k != "widget"}
+        task = gui_link.task_info() if FreeCAD.GuiUp and d is None else None
+        if d is None and task is None:
+            return {"dialog": None, "note": "No dialog or task panel is open in the FreeCAD window."}
         btn = a.get("button")
+        if d is None:
+            # No modal dialog, but a task panel (Combo View's Tasks): its OK,
+            # Cancel or other buttons, pressed the same way.
+            info = {k: v for k, v in task.items() if k != "widget"}
+            if not btn:
+                return {"task": info}
+            if not gui_link.press_task(task, btn):
+                raise bad(f"button: one of {', '.join(task['buttons'])} (Cancel closes the task).")
+            keep.log_watchdog({"event": "task", "title": task["title"], "pressed": btn, "by": "dialog_answer"})
+            return {"pressed": btn, "task": info}
+        info = {k: v for k, v in d.items() if k != "widget"}
         if not btn:
             return {"dialog": info}
         # The agent operates FreeCAD as the person would, whoever opened the
         # dialog: it reads it and presses the button the job needs, as if the
         # person were just watching. What was pressed is logged and said in
         # the answer, so the person can see it.
-        if btn.lower() not in [b.lower() for b in d["buttons"]]:
-            raise bad(f"button: one of {', '.join(d['buttons'])}.")
+        if btn.lower() not in [b.lower() for b in d["buttons"]] and btn.lower() not in gui_link.BACK_OUT:
+            raise bad(f"button: one of {', '.join(d['buttons']) or 'none (Cancel closes it)'}.")
         if not gui_link.press(d, btn):
             raise ToolError("failed", f"Could not press {btn}.")
         keep.log_watchdog({"event": "dialog", "title": d["title"], "pressed": btn, "by": "dialog_answer"})
@@ -327,6 +338,6 @@ def tools(s):
              obj({"action": {"type": "string", "enum": ["list", "search", "install", "update", "remove"]}, "name": st, "query": st, "url": st, "branch": st, "confirm": st}), addon),
         Tool("doc_switch", "Which open document the agent works in: document (name, label or file) switches to it — the session stays on it whatever the person brings to the front of the window; front: true also brings it to the front. No document: the agent's one and those open.",
              obj({"document": st, "front": {"type": "boolean"}}), doc_switch),
-        Tool("dialog_answer", "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one by its text. You operate FreeCAD as the person would: read the dialog and press what the job needs (Cancel backs out of anything you did not mean to open); say what you pressed. A stuck window: app_force_restart.",
+        Tool("dialog_answer", "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one by its text (Cancel also closes a file picker). With no dialog, the open task panel and its buttons (OK, Cancel …). You operate FreeCAD as the person would: read it and press what the job needs (Cancel backs out of anything you did not mean to open); say what you pressed. A stuck window: app_force_restart.",
              obj({"button": st}), dialog_answer),
     ]
