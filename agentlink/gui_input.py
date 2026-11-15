@@ -216,6 +216,26 @@ def parse_steps(steps):
 
 # ---- the maths (no Qt) ---------------------------------------------------------------------
 
+def coin_project(view, p):
+    """A world point in the 3D view's Coin viewport (device pixels, origin
+    bottom-left) as Coin draws it, and the viewport's size. A tall view
+    widens the view volume by 1 / aspect, which FreeCAD's
+    getPointOnViewport leaves out, so its points are off there."""
+    from pivy import coin
+
+    rm = view.getViewer().getSoRenderManager()
+    cam, vp = rm.getCamera(), rm.getViewportRegion()
+    a = vp.getViewportAspectRatio()
+    vv = cam.getViewVolume(a)
+    if 0 < a < 1.0:
+        vv.scale(1.0 / a)
+    out = coin.SbVec3f()
+    vv.projectToScreen(coin.SbVec3f(*[float(c) for c in p]), out)
+    w, h = vp.getViewportSizePixels().getValue()
+    x, y = out.getValue()[:2]
+    return float(x) * w, float(y) * h, (w, h)
+
+
 def view_point(px, py, width, height, coin_size=None, dpr=1.0):
     """A point from view.getPointOnViewport (Coin's viewport: device pixels,
     origin bottom-left) in the view widget's logical pixels from its
@@ -601,12 +621,15 @@ class Run:
             if kind == "view":
                 x, y = v
             else:
-                px, py = view.getPointOnViewport(self.vector(*v))[:2]
                 coin = None
                 try:
-                    coin = tuple(view.getSize())[:2]
-                except Exception:
-                    coin = None
+                    px, py, coin = coin_project(view, v)
+                except Exception:  # no Coin render manager: FreeCAD's own call (off in tall views)
+                    px, py = view.getPointOnViewport(self.vector(*v))[:2]
+                    try:
+                        coin = tuple(view.getSize())[:2]
+                    except Exception:
+                        coin = None
                 x, y = view_point(px, py, w, h, coin, self._dpr(vp))
                 self.last_point = {"world": list(v), "viewport": [round(px, 1), round(py, 1)], "coinSize": list(coin) if coin else None,
                                    "widget": [w, h], "dpr": self._dpr(vp), "at": [round(x, 1), round(y, 1)]}
