@@ -14,10 +14,6 @@ agentlink/charts.py
 agentlink/commands.py
 agentlink/data/filaments.json
 agentlink/data/filaments.schema.json
-agentlink/data/fits.json
-agentlink/data/fits.schema.json
-agentlink/data/metric-hardware.json
-agentlink/data/metric-hardware.schema.json
 agentlink/data/tools.schema.json
 agentlink/datafiles.py
 agentlink/echo.py
@@ -62,7 +58,6 @@ agentlink/families/surface.py
 agentlink/families/techdraw.py
 agentlink/families/unattended.py
 agentlink/families/view.py
-agentlink/fits_hw.py
 agentlink/fitting.py
 agentlink/flat2d.py
 agentlink/gdt.py
