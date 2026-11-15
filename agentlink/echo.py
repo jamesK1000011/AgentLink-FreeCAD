@@ -81,6 +81,9 @@ CAM_DRESSUP = {"dogbone": "CAM_DressupDogbone", "tag": "CAM_DressupTag", "tags":
 
 def command_for(name, args):
     """The command whose button does what this call does."""
+    # An add-on's NO_BUTTON (exact name or prefix): no button, whatever matches.
+    if _longest(name, ((k, True) for k in NO_BUTTON)):
+        return None
     kind = str((args or {}).get("kind") or "").lower().replace("-", "").replace("_", "")
     if name == "asm_joint" and kind:
         return "Assembly_CreateJoint" + {"rackpinion": "RackPinion", "slider": "Slider", "ball": "Ball"}.get(kind, kind.capitalize())
@@ -106,6 +109,9 @@ def command_for(name, args):
 # {tool or prefix: command}, and command_for(name, args) callables.
 COMMANDS = {}
 COMMAND_FNS = []
+# Tools (names or prefixes) whose calls light no button, even where a
+# COMMANDS prefix would match them.
+NO_BUTTON = set()
 
 
 def _longest(name, pairs):
@@ -211,7 +217,8 @@ def declare(fam):
     {tool or prefix: workbench} to bring up for its tools (the longest
     match wins, so an add-on's "part_check" can go to another bench than core's
     "part_"); COMMANDS, {tool or prefix: command} whose button lights for
-    its tools, or command_for(name, args) -> command or None; PAGES,
+    its tools, or command_for(name, args) -> command or None; NO_BUTTON,
+    names or prefixes of its tools that light no button at all; PAGES,
     prefixes of its tools that work on a drawing page."""
     global SHOWN
     shown = tuple(x for x in (getattr(fam, "SHOWN", ()) or ()) if isinstance(x, str) and x not in SHOWN)
@@ -224,6 +231,7 @@ def declare(fam):
     for k, v in dict(getattr(fam, "COMMANDS", None) or {}).items():
         if isinstance(k, str) and isinstance(v, str):
             COMMANDS.setdefault(k, v)
+    NO_BUTTON.update(k for k in (getattr(fam, "NO_BUTTON", None) or ()) if isinstance(k, str) and k)
     fn = getattr(fam, "command_for", None)
     if callable(fn) and fn not in COMMAND_FNS:
         COMMAND_FNS.append(fn)

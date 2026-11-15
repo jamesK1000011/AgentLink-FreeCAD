@@ -39,6 +39,7 @@ SHOWN = ("mine_check",)              # read-only tools (names or prefixes) still
 AREAS = {"mine": "Mine"}             # prefix → the name the Activity list gives its calls
 WORKBENCHES = {"mine_": "MineWorkbench"}  # tool or prefix → the workbench brought up for them (longest match wins)
 COMMANDS = {"mine_do": "Mine_Do"}    # tool or prefix → the command whose button (and menu item) lights for them
+NO_BUTTON = {"mine_do_quiet"}        # tools or prefixes that light no button, even where a COMMANDS prefix matches
 PAGES = ("mine_page_",)              # prefixes of tools working on a drawing page (opened, view not reframed)
 # def command_for(name, args): ...   # optional: the command for a call by its arguments, or None
 
@@ -50,7 +51,7 @@ def tools(session):
     return [Tool("mine_do", "What it does, when to use it.", schema, do_it, changes=True)]
 ```
 
-- **The live echo.** When the agent runs one of your tools, the bench from `WORKBENCHES` comes up (use your own workbench where the tool has a button there; a drawing-page tool goes to `TechDrawWorkbench`; safety and settings tools declare none) and the button from `COMMANDS` lights. A bench not loaded in this window is left alone and logged once, never an error. Neither is needed for a tool to work.
+- **The live echo.** When the agent runs one of your tools, the bench from `WORKBENCHES` comes up (use your own workbench where the tool has a button there; a drawing-page tool goes to `TechDrawWorkbench`; safety and settings tools declare none) and the button from `COMMANDS` lights, unless the tool is in `NO_BUTTON` (an exact name or a prefix), which always wins. A bench not loaded in this window is left alone and logged once, never an error. Neither is needed for a tool to work.
 - **Keep your core free of Agent Link.** Put the work in your own API (plain
   functions on FreeCAD) and keep the family a thin layer over it. Raise
   `ToolError(code, message)` with a message that says what to do instead.
