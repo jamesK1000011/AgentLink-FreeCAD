@@ -455,6 +455,7 @@ class Run:
         self.done = []
         self.cur = None
         self.answered = False
+        self.pressed = None
         self.shots = []
         self.level = 0
         self.front_at_start = None
@@ -655,11 +656,15 @@ class Run:
         it before the event, outside sendEvent)."""
         Qt = self.qt.QtCore.Qt
         click = _int(_enum(Qt, "FocusPolicy", "ClickFocus"))
+        # Keys that follow go where this press went, even when the window is
+        # in the background and Qt keeps no focus widget for it.
+        self.pressed = w
         p = w
         while p is not None:
             try:
                 if p.isEnabled() and _int(p.focusPolicy()) & click == click:
                     p.setFocus(_enum(Qt, "FocusReason", "MouseFocusReason"))
+                    self.pressed = p
                     return
                 if p.isWindow():
                     return
@@ -681,6 +686,8 @@ class Run:
             if self.app().activePopupWidget() is b:
                 return b
             return b.focusWidget() or b
+        if self.pressed is not None and _alive(self.pressed) and self.pressed.isVisible():
+            return self.pressed
         app = self.app()
         return app.focusWidget() or self.mw().focusWidget() or self.mw()
 
