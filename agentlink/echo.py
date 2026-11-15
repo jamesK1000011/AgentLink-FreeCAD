@@ -278,10 +278,23 @@ def _view_widget():
 
 
 _caption = None
+CAPTION_MARGIN, CAPTION_MAX, SLIDE_ROOM = 14, 420, 300
+
+
+def caption_box(view_w, view_h, cap_w, cap_h):
+    """(max width, x, y) of the caption in a 3D view this big: bottom right,
+    clear of the left edge where the panel slides out (SLIDE_ROOM) and of
+    the corners' view cube and axes above it; as wide as fits."""
+    m = CAPTION_MARGIN
+    most = max(160, min(CAPTION_MAX, view_w - SLIDE_ROOM - 2 * m))
+    w = min(cap_w, most)
+    x = max(m, view_w - w - m)
+    y = max(m, view_h - cap_h - m)
+    return most, x, y
 
 
 def caption(text, ms=2600):
-    """A line of text over the 3D view, bottom left, fading after ms."""
+    """A line of text over the 3D view, bottom right, fading after ms."""
     global _caption
     QtCore, _QtGui, QtW = _qt()
     host = _view_widget()
@@ -293,9 +306,11 @@ def caption(text, ms=2600):
         _caption.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
     _caption.setText("✦ Agent: " + text)
     _caption.setWordWrap(True)
-    _caption.setMaximumWidth(max(200, host.width() - 28))
+    most, _x, _y = caption_box(host.width(), host.height(), host.width(), 0)
+    _caption.setMaximumWidth(most)
     _caption.adjustSize()
-    _caption.move(14, max(14, host.height() - _caption.height() - 14))
+    _most, x, y = caption_box(host.width(), host.height(), _caption.width(), _caption.height())
+    _caption.move(x, y)
     _caption.show()
     _caption.raise_()
     lbl = _caption

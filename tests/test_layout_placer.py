@@ -111,12 +111,31 @@ class Tabs(W):
     def current(self):
         return self.tabText(self.cur)
 
+    def currentIndex(self):  # noqa: N802
+        return self.cur
+
+
+class Meta:
+    def __init__(self, name):
+        self.name = name
+
+    def className(self):  # noqa: N802
+        return self.name
+
 
 class Dock(W):
-    def __init__(self, title="", parent=None):
+    def __init__(self, title="", parent=None, name=None, cls="QDockWidget"):
         super().__init__(parent)
         self.title = title
-        self.name = title
+        self.name = title if name is None else name
+        self.cls = cls
+        self.w = 270
+
+    def metaObject(self):  # noqa: N802
+        return Meta(self.cls)
+
+    def width(self):
+        return self.w
 
     def windowTitle(self):  # noqa: N802
         return self.title
@@ -132,13 +151,16 @@ class Dock(W):
 
 
 class Main(W):
-    def __init__(self, combo=True):
+    def __init__(self, combo=True, name="Std_ComboView", cls="QDockWidget"):
         super().__init__()
         self.workbenchActivated = Sig()
-        self.docks = []
+        self.docks = [Dock("Report view", name="Std_ReportView")]
         self.right = []
+        self.resized = []
         if combo:
-            c = Dock("Combo View")
+            c = Dock("Combo View", name=name, cls=cls)
+            c.shown = True
+            self.combo_dock = c
             c.tabs = Tabs()
             c.tabs.addTab(W(), "Model")
             c.tabs.addTab(W(), "Tasks")
@@ -166,18 +188,23 @@ class Main(W):
     def tabifyDockWidget(self, a, b):  # noqa: N802
         pass
 
+    def resizeDocks(self, docks, sizes, orientation):  # noqa: N802
+        self.resized.append(sizes[0])
+        docks[0].w = sizes[0]
+
     def centralWidget(self):  # noqa: N802
         return self.area
 
 
 class Slide(W):
-    def __init__(self, area, on_toggle=None):
+    def __init__(self, area, on_toggle=None, on_open=None):
         super().__init__(area)
         self.tabs = Tabs()
-        self.on_toggle = on_toggle
+        self.on_toggle, self.on_open = on_toggle, on_open
 
     def set_open(self, on):
         self.shown = bool(on) and self.tabs.count() > 0
+        self.on_open(self.shown)
 
     def toggle(self):
         self.set_open(not self.shown)
@@ -201,12 +228,12 @@ class Placer(unittest.TestCase):
         gui = types.SimpleNamespace(getMainWindow=lambda: self.mw,
                                     activeWorkbench=lambda: types.SimpleNamespace(name=lambda: self.wb[0]),
                                     Control=types.SimpleNamespace(activeDialog=lambda: self.task[0]))
-        core = types.SimpleNamespace(Qt=types.SimpleNamespace(RightDockWidgetArea=2, ScrollBarAlwaysOff=1),
+        core = types.SimpleNamespace(Qt=types.SimpleNamespace(RightDockWidgetArea=2, ScrollBarAlwaysOff=1, Horizontal=1),
                                      QTimer=lambda *a: types.SimpleNamespace(setInterval=lambda *a: None, timeout=Sig(), start=lambda: None),
                                      QObject=object, QEvent=types.SimpleNamespace(Close=19, Resize=14))
         core.QTimer.singleShot = lambda ms, fn: fn()
         widgets = types.SimpleNamespace(QDockWidget=Dock, QTabWidget=Tabs, QScrollArea=W, QFrame=types.SimpleNamespace(NoFrame=0),
-                                        QSizePolicy=types.SimpleNamespace(Expanding=7))
+                                        QSizePolicy=types.SimpleNamespace(Expanding=7, Ignored=13, Preferred=5))
         self.saved = (layout._qt, layout._gui, layout.read, dict(layout._CLASSES))
         self.core = core
         layout._qt = lambda: (core, widgets)
@@ -231,17 +258,22 @@ class Placer(unittest.TestCase):
         self.mw.workbenchActivated.emit(wb)
 
     def test_right_capped_and_only_in_its_workbench(self):
+        self.params.v["PanelLayout"] = "right"
         d = self.dock("ScanRuler")
+        content = d.widget()
         self.switch("ScanRulerWorkbench")
         self.assertEqual(self.p.show("sr", d, "ScanRulerWorkbench"), "right")
         self.assertTrue(d.shown)
         self.assertEqual(d.max_w, 360)
+        self.assertIsNot(d.widget(), content)  # in a frame that follows the dock's width
+        self.assertIs(d.widget().widget(), content)
         self.switch("PartDesignWorkbench")
         self.assertFalse(d.shown)
         self.switch("ScanRulerWorkbench")
         self.assertTrue(d.shown)
 
     def test_closed_stays_closed_until_asked(self):
+        self.params.v["PanelLayout"] = "right"
         d = self.dock("Make")
         self.switch("WorkshopMakeWorkbench")
         self.p.show("make", d, "WorkshopMakeWorkbench")
@@ -286,6 +318,34 @@ class Placer(unittest.TestCase):
         self.task[0] = False
         self.assertEqual(self.p.memory.task(False, "TexturizerWorkbench"), "Texturizer")
 
+    def test_default_is_left_tab_and_finds_std_combo_view(self):
+        d = self.dock("ScanRuler")
+        self.switch("ScanRulerWorkbench")
+        self.assertEqual(self.p.show("sr", d, "ScanRulerWorkbench"), "left-tab")
+
+    def test_combo_view_found_by_its_class(self):
+        self.mw = Main(name="SomethingElse", cls="Gui::DockWnd::ComboView")
+        self.assertIs(layout.combo_tabs(self.mw), self.mw.combo)
+
+    def test_empty_tasks_gives_way(self):
+        self.params.v["PanelLayout"] = "right"
+        self.mw.combo.setCurrentIndex(1)  # Tasks, no task running
+        self.p.show("sr", self.dock("ScanRuler"), "ScanRulerWorkbench")
+        self.assertEqual(self.mw.combo.current(), "Model")
+        self.task[0] = True
+        self.mw.combo.setCurrentIndex(1)
+        self.switch("ScanRulerWorkbench")
+        self.assertEqual(self.mw.combo.current(), "Tasks")  # a task runs: left to FreeCAD
+
+    def test_slide_out_narrows_the_combo_view(self):
+        self.params.v["PanelLayout"] = "left-slide"
+        self.mw.combo_dock.w = 270
+        self.switch("SafetyNetWorkbench")
+        self.p.show("sn", self.dock("SafetyNet"), "SafetyNetWorkbench")
+        self.assertEqual(self.mw.combo_dock.w, 220)
+        self.p.toggle()
+        self.assertEqual(self.mw.combo_dock.w, 270)
+
     def test_left_slide_toggles(self):
         self.params.v["PanelLayout"] = "left-slide"
         d = self.dock("SafetyNet")
@@ -299,6 +359,7 @@ class Placer(unittest.TestCase):
         self.assertFalse(self.p.slide.shown)  # left closed there
 
     def test_setting_changed_takes_effect_at_the_next_switch(self):
+        self.params.v["PanelLayout"] = "right"
         d = self.dock("ScanRuler")
         self.switch("ScanRulerWorkbench")
         self.p.show("sr", d, "ScanRulerWorkbench")

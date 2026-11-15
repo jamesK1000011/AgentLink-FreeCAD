@@ -900,7 +900,7 @@ def _switched(name):
 
 
 def show(tab=None):
-    """Open the panel where the layout setting puts it (right by default);
+    """Open the panel where the layout setting puts it (a Combo View tab by default);
     a second call brings it forward. tab: that tab in front, put in the bar
     for now if this workbench does not show it."""
     global _panel
@@ -914,6 +914,12 @@ def show(tab=None):
         from .echo import fit
 
         QtCore.QTimer.singleShot(400, fit)
+        try:  # the Report view kept out of the way from the first placement
+            from . import report_watch
+
+            report_watch.start_auto()
+        except Exception as e:  # noqa: BLE001
+            FreeCAD.Console.PrintLog(f"Agent Link Report view watch: {e}\n")
     p = layout.own()
     p.show(KEY, _panel, layout.EVERYWHERE, "Agent Link", force=True, fronts=_panel.fronts())
     if tab:

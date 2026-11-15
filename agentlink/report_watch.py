@@ -39,7 +39,7 @@ def _report_widget():
 
     mw = FreeCADGui.getMainWindow()
     for dock in mw.findChildren(QtWidgets.QDockWidget):
-        if dock.objectName() in ("Report view", "ReportView") or dock.windowTitle() in ("Report view", "Report View"):
+        if dock.objectName() in ("Std_ReportView", "Report view", "ReportView") or dock.windowTitle() in ("Report view", "Report View"):
             for w in [dock.widget()] + dock.findChildren(QtWidgets.QWidget):
                 if w is not None and hasattr(w, "toPlainText"):
                     return w
@@ -183,23 +183,46 @@ def _report_dock():
     from PySide import QtWidgets
 
     for dock in FreeCADGui.getMainWindow().findChildren(QtWidgets.QDockWidget):
-        if dock.objectName() in ("Report view", "ReportView") or dock.windowTitle() in ("Report view", "Report View"):
+        if dock.objectName() in ("Std_ReportView", "Report view", "ReportView") or dock.windowTitle() in ("Report view", "Report View"):
             return dock
     return None
+
+
+# Lines that are noise at start-up, not a problem for the person: Qt's font
+# and platform chatter and FreeCAD's missing icons. They still ride on the
+# agent's answers (MARK); they do not open the Report view.
+NOISE = re.compile(r"(\(qt\.qpa|^qt\.qpa|font famil|cannot find icon)", re.I)
+# FreeCAD shows the Report view again as it starts and at a workbench switch
+# (its saved dock layout): for this long after either, a Report view that
+# shows without a problem line is hidden again.
+GRACE = 6.0
+
+
+def problems_to_open(rows, colours):
+    """The problem lines (coloured()) that open the Report view: noise left
+    out."""
+    return [t for t in coloured(rows, colours) if not NOISE.search(t)]
 
 
 class AutoOpen:
     """One tick() per AUTO_MS: take the Report view over (hide it, the
     person's state kept in TAKEN/WAS), give it back when turned off, and
-    open it when a new block of the Report view is a problem line. The
-    window, the parameters and the colours are handed in for the tests."""
+    open it when a new block of the Report view is a problem line. Within
+    GRACE seconds of the start or a workbench switch (switched()), FreeCAD
+    showing it again is undone. The window, the parameters, the colours
+    and the clock are handed in for the tests."""
 
-    def __init__(self, params=None, dock=_report_dock, widget=_report_widget, colours=_problem_colours, blocks=None):
+    def __init__(self, params=None, dock=_report_dock, widget=_report_widget, colours=_problem_colours, blocks=None, clock=None):
+        import time
+
         self.params = params
         self.dock, self.widget, self.colours = dock, widget, colours
         self.blocks = blocks or _blocks
+        self.clock = clock or time.monotonic
         self.taken = False
+        self.opened = False
         self.seen = None
+        self.grace = self.clock() + GRACE
 
     def _p(self):
         if self.params is None:
@@ -207,6 +230,10 @@ class AutoOpen:
 
             self.params = FreeCAD.ParamGet(AL_PARAMS)
         return self.params
+
+    def switched(self, *_):
+        """A workbench switch: FreeCAD may show the Report view again."""
+        self.grace = self.clock() + GRACE
 
     def tick(self):
         """What it did: "hidden", "restored", "opened" or None."""
@@ -228,20 +255,26 @@ class AutoOpen:
                 p.SetBool(TAKEN, True)
             self.taken = True
             self.seen = w.document().blockCount() if w is not None else None
+            self.grace = self.clock() + GRACE
             dock.hide()
             return "hidden"
-        if w is None:
-            return None
-        n = w.document().blockCount()
-        if self.seen is not None and n == self.seen:
-            return None
-        # From the block that was last: FreeCAD writes into the empty block
-        # its last line left.
-        rows, self.seen = self.blocks(w, max(0, (self.seen or n) - 1))
-        if coloured(rows, self.colours()) and not dock.isVisible():
-            dock.show()
-            dock.raise_()
-            return "opened"
+        if self.opened and not dock.isVisible():
+            self.opened = False  # the person closed it after a problem
+        n = w.document().blockCount() if w is not None else self.seen
+        if w is not None and not (self.seen is not None and n == self.seen):
+            # From the block that was last: FreeCAD writes into the empty
+            # block its last line left.
+            rows, self.seen = self.blocks(w, max(0, (self.seen or n) - 1))
+            if problems_to_open(rows, self.colours()):
+                self.opened = True
+                if not dock.isVisible():
+                    dock.show()
+                    dock.raise_()
+                    return "opened"
+                return None
+        if dock.isVisible() and not self.opened and self.clock() < self.grace:
+            dock.hide()  # FreeCAD's start-up or switch showed it again
+            return "hidden"
         return None
 
 
@@ -269,4 +302,9 @@ def start_auto():
 
     t.timeout.connect(tick)
     t.start()
+    try:
+        FreeCADGui.getMainWindow().workbenchActivated.connect(it.switched)
+    except Exception:  # noqa: BLE001
+        pass
+    tick()  # hidden at once, not after the first interval
     return it
