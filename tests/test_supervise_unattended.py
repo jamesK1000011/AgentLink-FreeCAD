@@ -153,9 +153,12 @@ class Sup(unittest.TestCase):
         return self._q
 
     def call(self, name, timeout=60):
+        return self.call_args(name, {}, timeout)
+
+    def call_args(self, name, arguments, timeout=60):
         self.n += 1
         q = self._lines()
-        self.sup.stdin.write(json.dumps({"jsonrpc": "2.0", "id": self.n, "method": "tools/call", "params": {"name": name, "arguments": {}}}) + "\n")
+        self.sup.stdin.write(json.dumps({"jsonrpc": "2.0", "id": self.n, "method": "tools/call", "params": {"name": name, "arguments": arguments}}) + "\n")
         self.sup.stdin.flush()
         end = time.time() + timeout
         while True:
@@ -261,6 +264,11 @@ class WindowSide(Sup):
         self.assertTrue(err)
         err, out = self.call("app_force_restart", timeout=90)
         self.assertFalse(err, out)
+        self.assertTrue(out["restarted"])
+        mid = self.call("ping")[1]["pid"]
+        err, out = self.call_args("batch", {"calls": [{"tool": "app_force_restart", "arguments": {}}]}, timeout=90)
+        self.assertFalse(err, out)
+        self.assertNotEqual(mid, self.call("ping")[1]["pid"])
         self.assertTrue(out["restarted"])
         self.assertIn("started in the background", out["note"])
         again = self.call("ping")[1]["pid"]

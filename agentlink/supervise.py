@@ -91,6 +91,17 @@ def _result(mid, body):
 FREECAD_APP = "/Applications/FreeCAD.app"
 
 
+def _is_force_restart(line):
+    """app_force_restart, alone or as a batch of nothing else: a client lists
+    tools only when it starts, so a new tool is reached through batch, and
+    a batch would go to the very window that is stuck."""
+    _mid, tool, args = _call_info(line)
+    if tool == "app_force_restart":
+        return True
+    calls = (args or {}).get("calls") if tool == "batch" else None
+    return bool(calls) and all(isinstance(c, dict) and c.get("tool") == "app_force_restart" for c in calls)
+
+
 def _call_info(line):
     try:
         m = json.loads(line)
@@ -323,7 +334,10 @@ class Window:
         process stopped (TERM, then KILL), the call in hand answered, FreeCAD
         started again in the background and its documents recovered, as after
         a crash. The words for the answer."""
-        hb = self.last_hb or heartbeat() or {}
+        # The newest heartbeat first: the one kept from before may name a
+        # window that is gone, and its pid would stop nothing.
+        hb = heartbeat() or self.last_hb or {}
+        self.last_hb = hb
         pid, t0 = hb.get("pid"), time.time()
         if keep is not None:
             keep.log_watchdog({"event": "force_restart", "pid": pid})
@@ -640,7 +654,7 @@ def run(script, argv):
                 pending.pop(mid, None)
                 write(_answer(mid, "invalid_state", f"{tool} with these arguments hung FreeCAD twice this session: refused for the rest of it. Try another way (other sizes, a rough pass, fewer objects)."))
                 continue
-        if msg and msg.get("method") == "tools/call" and _call_info(line)[1] == "app_force_restart":
+        if msg and msg.get("method") == "tools/call" and _is_force_restart(line):
             # Answered here, never inside FreeCAD: the window may be the thing stuck.
             fid = msg.get("id")
             pending.pop(fid, None)
