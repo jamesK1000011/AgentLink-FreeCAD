@@ -72,10 +72,22 @@ def check(tool, key, value, out_dir, write):
     return value
 
 
-def local(session, p, expand=True):
-    """p in the session's folder when relative (~ expanded first, when expand)."""
+def local(session, p, expand=True, kind=None):
+    """p in the session's folder when relative (~ expanded first, when expand).
+    A path in the output folder with nothing there yet is noted, and recorded
+    as the call's output if it exists after the call (agentlink/outputs.py):
+    kind shot, run or export, else told by the tool and the name."""
     q = os.path.expanduser(p) if expand else p
-    return q if os.path.isabs(q) else os.path.join(session.out_dir, q)
+    q = q if os.path.isabs(q) else os.path.join(session.out_dir, q)
+    return made(session, q, kind)
+
+
+def made(session, p, kind=None):
+    """A path a tool builds in the output folder by hand, noted as local
+    notes its own; answers p."""
+    from . import outputs
+
+    return outputs.expect(session, p, kind)
 
 
 def in_file(session, tool, p, key="path", expand=True):
@@ -85,12 +97,13 @@ def in_file(session, tool, p, key="path", expand=True):
     return p
 
 
-def out_file(session, tool, p, ext=None, key="path", expand=True):
+def out_file(session, tool, p, ext=None, key="path", expand=True, kind=None):
     """A file a tool writes: local, ext added when it does not end so (any
     case), then checked as guard checks that tool's writes."""
-    p = local(session, p, expand)
+    p = local(session, p, expand, kind)
     if ext and not p.lower().endswith(ext.lower()):
         p += ext
+        made(session, p, kind)
     check(tool, key, p, session.out_dir, tool in WRITERS)
     return p
 

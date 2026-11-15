@@ -262,6 +262,9 @@ class Session:
             path = os.path.join(self.out_dir, path)
         if not ext:
             path += ".step" if fmt == "step" else ".stl"
+        from . import paths
+
+        paths.made(self, path, "export")
         tol = a.get("tolerance", 0.01)
         if not isinstance(tol, (int, float)) or isinstance(tol, bool) or not (0.001 <= float(tol) <= 5):
             raise ToolError("invalid_input", "tolerance: 0.001 … 5 mm (how far the STL's triangles may stray from the surface).")
@@ -559,10 +562,13 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         window = bool(FreeCAD.GuiUp)
     except Exception:
         window = False
-    from . import paths
+    from . import outputs, paths
 
     hooks.apply_extensions(tools, session)
-    server = Server(name, version, tools, instructions(lean, window), run=session.execute, groups=lean_groups if lean else None, resources=Resources(session),
+    # Each call's files in the output folder recorded, for the clear-up
+    # (agentlink/outputs.py).
+    server = Server(name, version, tools, instructions(lean, window), run=lambda tool, fn: outputs.track(session, tool, lambda: session.execute(tool, fn)),
+                    groups=lean_groups if lean else None, resources=Resources(session),
                     guard=lambda tool, args: paths.guard(tool, args, session.out_dir))
     server.on_call = session.record_call
     session.server = server
@@ -635,6 +641,20 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 rows.append({"group": g, "on": False, "count": len(ts), "about": short(info.get(g, ""))})
         return {"groups": rows, "listed": sum(1 for t in server.tools.values() if server.groups is None or t.group in server.groups),
                 "note": "Every tool is callable by name, listed or not. group: g (or detail: true) gives a group's whole about and its tools."}
+
+    def outputs_clean(a):
+        kinds = a.get("kinds")
+        if kinds is not None and (not isinstance(kinds, list) or any(k not in outputs.KINDS for k in kinds)):
+            raise ToolError("invalid_input", f"kinds: any of {', '.join(outputs.KINDS)}.")
+        age = a.get("older_than_days")
+        if age is not None and (isinstance(age, bool) or not isinstance(age, (int, float)) or age < 0):
+            raise ToolError("invalid_input", "older_than_days: days, 0 or more.")
+        if kinds and "export" in kinds and age is None and a.get("dry_run") is False:
+            raise ToolError("invalid_input", "Exports go only with an age the person chose: older_than_days with kinds [export].")
+        outputs.flush(s)
+        pr = outputs.settings()
+        return outputs.clean(s.out_dir, dry_run=a.get("dry_run", True) is not False, kinds=kinds, older_than_days=age, prefs=pr,
+                             linked=outputs.linked_paths(s.out_dir))
 
     def guide_read(a):
         topic = a.get("topic")
@@ -791,6 +811,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g, or detail: true, names their tools. Every tool is callable by name either way.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}}), tool_groups),
         Tool("guide_read", "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry. No topic: the index. topic: a guide whole; section: one of its ## sections.", obj({"topic": {"type": "string"}, "section": {"type": "string"}}), guide_read),
         Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }]. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it, so it stands or falls whole.", obj({"calls": {"type": "array", "items": {"type": "object"}}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}}, ["calls"]), batch),
+        Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded making): shots past the last 50 and 3 days, solver and job runs past 14 days, FreeCAD backups past 7; exports only listed. To the Trash. Dry run unless dry_run: false; kinds, older_than_days narrow it. Runs on its own daily.",
+             obj({"dry_run": {"type": "boolean"}, "kinds": {"type": "array", "items": {"type": "string", "enum": list(outputs.KINDS)}}, "older_than_days": {"type": "number"}}), outputs_clean),
         Tool("history_undo", "Undo the last change (steps: how many), as FreeCAD's Edit › Undo does.", obj({"steps": {"type": "integer"}}), history("undo")),
         Tool("history_redo", "Redo what was undone (steps: how many).", obj({"steps": {"type": "integer"}}), history("redo")),
     ]
@@ -803,4 +825,6 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
     for t in ext.tools(session):
         server.add(t)
     ext.install_all(server, session)
+    # The output folder's quiet clear at start (then at most daily after a call).
+    outputs.at_start(session)
     return server

@@ -14,6 +14,7 @@ import FreeCAD
 import Part
 
 from .. import iso286
+from .. import paths
 from .. import store
 from ..protocol import Tool, ToolError, bad
 from ..materials import DENSITY
@@ -650,7 +651,7 @@ def tools(session):
         res = {"motion": name, "frames": len(out_frames), "clashFrames": clash_at, "verdict": "clear" if not clash_at else f"parts overlap in {len(clash_at)} of {len(out_frames)} frames",
                "frameList": out_frames[: int(a.get("limit", 40))], "left": "at the last frame" if a.get("keep") else "as it was"}
         if a.get("path"):
-            pth = a["path"] if os.path.isabs(os.path.expanduser(a["path"])) else os.path.join(s.out_dir, a["path"])
+            pth = paths.made(s, a["path"] if os.path.isabs(os.path.expanduser(a["path"])) else os.path.join(s.out_dir, a["path"]))
             with open(os.path.expanduser(pth), "w") as f:
                 json.dump({"motion": name, "assembly": asm.Label, "frames": out_frames}, f, indent=1)
             res["path"] = pth
@@ -660,7 +661,7 @@ def tools(session):
         asm = A._assembly(doc(), a.get("assembly"))
         p = a.get("path") or f"{asm.Label.replace(' ', '_')}.asmt"
         p = p if os.path.isabs(os.path.expanduser(p)) else os.path.join(s.out_dir, p)
-        p = os.path.expanduser(p)
+        p = paths.made(s, os.path.expanduser(p))
         fn = getattr(asm, "exportAsASMT", None)
         if fn is None:
             raise ToolError("unavailable", "This FreeCAD's assembly cannot write its solver's file (exportAsASMT is FreeCAD 1.0 and newer).")

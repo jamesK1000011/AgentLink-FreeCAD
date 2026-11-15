@@ -15,6 +15,7 @@ import FreeCAD
 import Part
 
 from .. import ccx_io
+from .. import paths
 from .. import facepick
 from .. import geometry as geo
 from .. import store
@@ -305,7 +306,7 @@ def tools(session):
         except ImportError:
             raise ToolError("unavailable", "FreeCAD's FEM module is not in this build: a FreeCAD with FEM is needed for the solve.")
         shape = o.Shape
-        wd = os.path.join(s.out_dir, tag + "_" + "".join(ch if ch.isalnum() else "_" for ch in o.Label))
+        wd = paths.made(s, os.path.join(s.out_dir, tag + "_" + "".join(ch if ch.isalnum() else "_" for ch in o.Label)), "run")
         os.makedirs(wd, exist_ok=True)
         for n in os.listdir(wd):
             if n.startswith("job.") or n.startswith("part."):
@@ -560,7 +561,7 @@ def tools(session):
         shell = Part.makeShell(faces) if len(faces) > 1 else faces[0]
         bb = shell.BoundBox
         mesh = float(a.get("mesh") or round(max(1.0, bb.DiagonalLength / 25.0), 2))
-        wd = os.path.join(s.out_dir, "shell_" + "".join(ch if ch.isalnum() else "_" for ch in o.Label))
+        wd = paths.made(s, os.path.join(s.out_dir, "shell_" + "".join(ch if ch.isalnum() else "_" for ch in o.Label)), "run")
         os.makedirs(wd, exist_ok=True)
         for n in os.listdir(wd):
             if n.startswith(("job.", "shell.")):
@@ -1044,6 +1045,8 @@ def tools(session):
         f = r["field"]
         base = os.path.join(s.out_dir, (a.get("name") or f"{r['body']}-stress").replace(" ", "-"))
         kinds = a.get("formats") or ["vtu", "csv"]
+        for k in kinds:
+            paths.made(s, base + "." + k)
         files = {}
         if "vtu" in kinds:
             if not f.get("elements"):
@@ -1078,7 +1081,7 @@ def tools(session):
         vals = np.asarray(f["vonMises"], float) if field == "vonMises" else np.linalg.norm(np.asarray(f["displacement"], float), axis=1)
         base = "".join(ch if ch.isalnum() else "_" for ch in (a.get("name") or f"{r['body']}-{field}-{kind}"))
         os.makedirs(s.out_dir, exist_ok=True)
-        svg_path, csv_path = os.path.join(s.out_dir, base + ".svg"), os.path.join(s.out_dir, base + ".csv")
+        svg_path, csv_path = paths.made(s, os.path.join(s.out_dir, base + ".svg")), paths.made(s, os.path.join(s.out_dir, base + ".csv"))
         label = "von Mises stress (MPa)" if field == "vonMises" else "displacement (mm)"
         out = {"body": r["body"], "kind": kind, "field": field, "unit": unit, "nodes": int(len(vals))}
         if kind == "histogram":
@@ -1398,7 +1401,7 @@ def tools(session):
         if not _binary("gmsh", "Gmsh", "gmshBinaryPath", "AGENTLINK_GMSH"):
             raise ToolError("unavailable", "Gmsh not found: the case needs a mesh (conda install -c conda-forge gmsh, or FreeCAD's FEM preferences).")
         from femmesh import gmshtools
-        wd = os.path.join(s.out_dir, "elmer_" + "".join(ch if ch.isalnum() else "_" for ch in o.Label))
+        wd = paths.made(s, os.path.join(s.out_dir, "elmer_" + "".join(ch if ch.isalnum() else "_" for ch in o.Label)), "run")
         os.makedirs(wd, exist_ok=True)
         err = gmshtools.GmshTools(mesh).create_mesh()
         if err or not mesh.FemMesh.NodeCount:

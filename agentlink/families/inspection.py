@@ -376,7 +376,7 @@ def tools(session):
         P = points_of(o.Actual)
         lo, hi = band(o)
         rep = reading(o, int(a.get("worst", 10)))
-        csv_path = os.path.join(s.out_dir, base + ".csv")
+        csv_path = paths.made(s, os.path.join(s.out_dir, base + ".csv"))
         with open(csv_path, "w", newline="", encoding="utf-8") as fh:
             w = csv.writer(fh)
             w.writerow(["x", "y", "z", "distance_mm", "status"])
@@ -389,7 +389,7 @@ def tools(session):
                 else:
                     st, val = "", f"{v:.5f}"
                 w.writerow([f"{x:.5f}", f"{y:.5f}", f"{z:.5f}", val, st])
-        json_path = os.path.join(s.out_dir, base + ".json")
+        json_path = paths.made(s, os.path.join(s.out_dir, base + ".json"))
         with open(json_path, "w", encoding="utf-8") as fh:
             json.dump(rep, fh, indent=2)
         return {"inspection": o.Label, "files": {"csv": {"path": csv_path, "rows": int(d.size)}, "json": {"path": json_path}},

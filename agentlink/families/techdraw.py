@@ -2025,7 +2025,7 @@ def tools(session):
         if skipped:
             notes += skipped
         for k in kinds:
-            p = f"{base}.{k}"
+            p = paths.made(s, f"{base}.{k}")
             if k == "dxf":
                 try:
                     TechDraw.writeDXFPage(page, p)

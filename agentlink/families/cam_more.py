@@ -11,6 +11,7 @@ import os
 
 import FreeCAD
 
+from .. import paths
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
@@ -160,6 +161,7 @@ def tools(s):
             path = os.path.join(os.path.dirname(path), "job_" + os.path.basename(path))
         if not path.endswith(".json"):
             path += ".json"
+        paths.made(s, path)
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "w") as fp:
             json.dump(enc, fp, sort_keys=True, indent=2)

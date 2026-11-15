@@ -10,6 +10,7 @@ import os
 import FreeCAD
 import Robot  # noqa: F401 — the family stands on the Robot module; left out without it
 
+from .. import paths
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
@@ -266,6 +267,7 @@ def tools(session):
         p = p if os.path.isabs(p) else os.path.join(s.out_dir, p)
         if not p.lower().endswith(".src"):
             p += ".src"
+        paths.made(s, p)
         os.makedirs(os.path.dirname(p), exist_ok=True)
         try:
             import KukaExporter

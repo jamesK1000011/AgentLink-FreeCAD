@@ -325,7 +325,7 @@ def tools(session):
             raise ToolError("invalid_input", "path: a file path (relative ones go in the session's folder).")
         p = paths.local(s, path)
         if ext and not p.lower().endswith(ext.lower()):
-            p += ext
+            p = paths.made(s, p + ext)
         return p
 
     def doc_new(a):
