@@ -201,9 +201,12 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             except Exception as e:
                 FreeCAD.Console.PrintLog(f"Agent Link panel: {n} left out ({e})\n")
         tabs = QtWidgets.QTabWidget()
-        # Narrow docks: the tab bar scrolls rather than squeezing the panel wide.
+        # Narrow docks: the tab bar scrolls rather than squeezing the panel
+        # wide, and each tab keeps its whole name (eliding cut all eleven to
+        # "Not…", "Ste…" in the GUI pass on the Mac).
         tabs.setUsesScrollButtons(True)
-        tabs.setElideMode(QtCore.Qt.ElideRight)
+        tabs.setElideMode(QtCore.Qt.ElideNone)
+        tabs.tabBar().setExpanding(False)
         # Agent Link's tabs and the add-ons' (hooks.register_tab) in one
         # order: fill() on an add-on's widget, if it has one, each time its
         # tab comes up.
@@ -341,10 +344,17 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.note_list.itemChanged.connect(self.tick)
         self.note_list.itemDoubleClicked.connect(self.edit_note)
         lay.addWidget(self.note_list)
+        # Delete sits at the right at its own size, and only works with a
+        # note picked (a full-width button under an empty table, in the GUI pass).
         dele = QtWidgets.QPushButton("Delete")
         dele.setToolTip("Take the picked note out")
         dele.clicked.connect(self.delete_note)
-        lay.addWidget(dele)
+        dele.setEnabled(False)
+        self.note_list.itemSelectionChanged.connect(lambda: dele.setEnabled(bool(self.note_list.selectedItems())))
+        drow = QtWidgets.QHBoxLayout()
+        drow.addStretch(1)
+        drow.addWidget(dele)
+        lay.addLayout(drow)
         return w
 
     def set_placing(self, on):
