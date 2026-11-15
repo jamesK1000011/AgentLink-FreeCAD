@@ -206,6 +206,12 @@ def tools(session):
             have = repos()
             have = (have + [r]) if act == "add" and r not in have else [x for x in have if x != r]
             FreeCAD.ParamGet(PREFS).SetString("ExtensionRepos", ",".join(have))
+            # Written to disk now: a hidden FreeCAD that is stopped for an
+            # update never saves its settings, and the list would be lost.
+            try:
+                FreeCAD.saveParameter()
+            except Exception:  # noqa: BLE001 — an older FreeCAD: saved at exit as before
+                pass
             return {"repos": have}
         if act == "sync":
             return sync()
