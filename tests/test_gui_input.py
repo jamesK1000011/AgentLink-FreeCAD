@@ -355,8 +355,9 @@ class Delivery(unittest.TestCase):
 
     def test_drag_goes_to_the_pressed_widget(self):
         out = self.run.run(gi.parse_steps([{"drag": {"from": {"view": [10, 20]}, "to": {"window": [100, 100]}, "steps": 4}}]))
-        self.assertEqual(self.kinds(), [("viewport", "MouseButtonPress")] + [("viewport", "MouseMove")] * 4 + [("viewport", "MouseButtonRelease")])
-        press, moves, rel = self.sent[0][1], [e for _w, e in self.sent[1:5]], self.sent[5][1]
+        # The hand arrives first, as a real one does (hover-lit grips take the press).
+        self.assertEqual(self.kinds(), [("viewport", "MouseMove"), ("viewport", "MouseButtonPress")] + [("viewport", "MouseMove")] * 4 + [("viewport", "MouseButtonRelease")])
+        press, moves, rel = self.sent[1][1], [e for _w, e in self.sent[2:6]], self.sent[6][1]
         self.assertEqual((press.lp.x(), press.lp.y()), (10.0, 20.0))
         self.assertEqual((press.gp.x(), press.gp.y()), (410.0, 170.0))
         self.assertEqual(int(press.b), 1)
@@ -374,12 +375,12 @@ class Delivery(unittest.TestCase):
         self.run.run(gi.parse_steps([{"click": {"view_world": [100, 50, 0]}}]))
         ev = self.sent[0][1]
         self.assertEqual((ev.lp.x(), ev.lp.y()), (100.0, 350.0))
-        self.assertEqual(self.kinds(), [("viewport", "MouseButtonPress"), ("viewport", "MouseButtonRelease")])
+        self.assertEqual(self.kinds(), [("viewport", "MouseMove"), ("viewport", "MouseButtonPress"), ("viewport", "MouseButtonRelease")])
 
     def test_double_click(self):
         self.run.run(gi.parse_steps([{"click": {"view": [5, 5]}, "double": True}]))
-        self.assertEqual([t for _w, t in self.kinds()], ["MouseButtonPress", "MouseButtonRelease", "MouseButtonDblClick", "MouseButtonRelease"])
-        self.assertEqual(int(self.sent[2][1].bs), 1)
+        self.assertEqual([t for _w, t in self.kinds()], ["MouseMove", "MouseButtonPress", "MouseButtonRelease", "MouseButtonDblClick", "MouseButtonRelease"])
+        self.assertEqual(int(self.sent[3][1].bs), 1)
         self.assertEqual(gi.HELD["buttons"], [])
 
     def test_outside_the_view_refused(self):
@@ -404,7 +405,7 @@ class Delivery(unittest.TestCase):
         self.assertEqual(out["steps"][0]["hit"]["text"], "OK")
         self.assertIn("holds the window", out["steps"][1]["error"])
         self.assertEqual(len(out["steps"]), 2)  # stopped at the refusal
-        self.assertEqual([w for w, _e in self.sent], ["ok", "ok"])
+        self.assertEqual([w for w, _e in self.sent], ["ok", "ok", "ok"])  # a move onto it, press, release
 
     def test_keys_and_text_to_the_focused_widget(self):
         self.edit.focused = True
