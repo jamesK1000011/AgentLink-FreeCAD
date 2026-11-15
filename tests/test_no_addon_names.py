@@ -80,21 +80,6 @@ KNOWN = {
     "panel.py": {"macro_save"},
 }
 
-# panel_tabs.py's Setups, Materials, Fits and Manual tabs still name the
-# add-ons' tools; another build step moves them out to their add-ons. Only
-# while they are there is the file left out (the check below ends it).
-PANEL_TABS_LEGACY = ("def _setups_tab", "def _materials_tab", "def _fits_tab", "def _manual_tab")
-
-
-def _legacy_panel_tabs():
-    try:
-        with open(os.path.join(HERE, "panel_tabs.py"), encoding="utf-8") as f:
-            text = f.read()
-    except OSError:
-        return False
-    return any(k in text for k in PANEL_TABS_LEGACY)
-
-
 class NoAddonNames(unittest.TestCase):
     def test_lists_compile(self):
         self.assertTrue(TOOL_RE.search("x part_review y"))
@@ -102,7 +87,6 @@ class NoAddonNames(unittest.TestCase):
         self.assertTrue(MODULE_RE.search("needs SafetyNet"))
 
     def test_agentlink_names_no_addon(self):
-        skip_tabs = _legacy_panel_tabs()
         hits = []
         for root, dirs, files in os.walk(HERE):
             dirs[:] = [d for d in dirs if d != "__pycache__"]
@@ -111,8 +95,6 @@ class NoAddonNames(unittest.TestCase):
                     continue
                 p = os.path.join(root, f)
                 rel = os.path.relpath(p, HERE).replace(os.sep, "/")
-                if rel == "panel_tabs.py" and skip_tabs:
-                    continue
                 allowed = KNOWN.get(rel, set())
                 with open(p, encoding="utf-8", errors="replace") as fh:
                     for i, line in enumerate(fh, 1):

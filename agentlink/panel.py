@@ -197,10 +197,6 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         tabs.addTab(self._notes_tab(), "Notes")
         tabs.addTab(self._steps_tab(), "Steps")
         tabs.addTab(self._review_tab(), "Review")
-        tabs.addTab(self._setups_tab(), "Setups")
-        tabs.addTab(self._materials_tab(), "Materials")
-        tabs.addTab(self._fits_tab(), "Fits")
-        tabs.addTab(self._manual_tab(), "Manual")
         tabs.addTab(self._activity_tab(), "Activity")
         # Add-ons' tabs (hooks.register_tab), in their order: fill() on
         # their widget, if it has one, each time their tab comes up.
