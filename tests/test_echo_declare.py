@@ -16,6 +16,12 @@ class EchoDeclared(unittest.TestCase):
     def setUp(self):
         self.saved = (echo.SHOWN, dict(echo.PREFIX_NAME), list(echo.WORKBENCH), list(echo.PAGES),
                       dict(echo.COMMANDS), list(echo.COMMAND_FNS), set(echo.UNKNOWN_BENCHES), set(echo.NO_BUTTON))
+        # Only what each test declares: with real FreeCAD the installed add-ons'
+        # families (Workshop's Make answers "fit" itself) are declared already,
+        # and an earlier command_for is asked first.
+        echo.COMMANDS.clear()
+        echo.COMMAND_FNS[:] = []
+        echo.NO_BUTTON.clear()
 
     def tearDown(self):
         echo.SHOWN, names, wb, pages, cmds, fns, unknown, quiet = self.saved
