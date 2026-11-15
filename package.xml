@@ -8,7 +8,6 @@
   <license file="LICENSE">LGPL-2.1-or-later</license>
   <url type="repository" branch="main">https://github.com/jamesK1000011/AgentLink-FreeCAD</url>
   <freecadmin>1.0.0</freecadmin>
-  <depend>AddonKit</depend>
   <tag>MCP</tag>
   <tag>AI</tag>
   <tag>automation</tag>

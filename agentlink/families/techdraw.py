@@ -212,7 +212,7 @@ def paper_size(page):
 
 
 def wait(views_):
-    from addonkit.techdraw import wait_views
+    from ..td_wait import wait_views
 
     return wait_views([v for v in views_ if v.isDerivedFrom("TechDraw::DrawViewPart")])
 

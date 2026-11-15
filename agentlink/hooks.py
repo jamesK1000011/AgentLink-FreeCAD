@@ -13,7 +13,10 @@ FreeCAD or another add-on. docs/hooks.md is the reference for developers.
 
 Families (the tools)          FAMILIES = [module, ...] in agentlink_families;
                               each module has GROUP, INFO, tools(session),
-                              and may set LEAN = True to be in the default list.
+                              and may set LEAN = True to be in the default list,
+                              and HEAVY, WRITERS, GEOMETRIC (sets of its tool
+                              names: queued heavy jobs; a path written, not
+                              read; a path that is a curve, not a file).
 Readers                       register_reader(kind, fn); readers(kind)
 Services                      provide(name, obj); service(name)
 Events                        on(event, fn); emit(event, *args)
@@ -22,6 +25,9 @@ Panel                         register_tab(title, factory, order);
                               register_reviewer(fn)
 Protected settings            guard_setting(path, name)
 Last results                  remember(session, kind, value); analysis(session, kind)
+Tools as data                 tools_from_data(folder, group, handlers):
+                              the add-on's tools.json (agentlink/tooldata.py
+                              is the format) bound to its handlers
 Guides                        tools.register_guides(folder)
 Render layers and maps        render.register_layer / render.register_map
 """
@@ -52,6 +58,14 @@ def api_ok(spec, api=API):
         else:
             return False
     return True
+
+
+def tools_from_data(folder, group, handlers, who="this add-on"):
+    """An add-on's tools for one group from its folder/tools.json (the format
+    is agentlink/tooldata.py), each bound to its handler by name."""
+    from . import tooldata
+
+    return tooldata.build(folder, group, handlers, who)
 
 
 def _log(what, e):

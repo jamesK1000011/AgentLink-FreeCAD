@@ -122,4 +122,17 @@ def load():
         if fams:
             EXTENSIONS.append({"credit": credit, "license": lic, "groups": [getattr(f, "GROUP", "?") for f in fams]})
         out.extend(fams)
+    declared(out)
     return out
+
+
+def declared(fams):
+    """What each family says of its own tools, so no list here names them:
+    HEAVY (queued, timed, given a deadline), WRITERS (their path is written,
+    not read) and GEOMETRIC (their path is a curve, not a file)."""
+    from .. import keep, paths
+
+    for f in fams:
+        keep.HEAVY.update(getattr(f, "HEAVY", ()) or ())
+        paths.WRITERS.update(getattr(f, "WRITERS", ()) or ())
+        paths.GEOMETRIC.update(getattr(f, "GEOMETRIC", ()) or ())

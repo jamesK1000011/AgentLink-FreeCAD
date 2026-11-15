@@ -12,8 +12,8 @@ import re
 
 from .. import store
 from ..protocol import Tool, ToolError
-from addonkit import materials as _fil
-from addonkit.materials import DENSITY
+from .. import materials as _fil
+from ..materials import DENSITY
 
 from ..tools import obj
 
@@ -22,7 +22,7 @@ INFO = "Materials: search FreeCAD's library and the printing filaments, read a c
 
 # Typical figures for FDM-printed filament, along the layers (MPa, g/cm³).
 # Data sheets vary a good deal between brands; these are middling ones.
-# The printing filaments: AddonKit's one table (addonkit/data/filaments.json).
+# The printing filaments: one table (agentlink/data/filaments.json).
 FILAMENT = {k: {f: v.get(f) for f in ("name", "E", "nu", "yield", "uts", "k", "softens")} for k, v in _fil.FILAMENTS.items()}
 FILAMENT_SOURCE = "Agent Link's typical FDM filament figures, along the layers"
 TYPICAL = "Library and filament figures are typical: for a part that must not fail, use the supplier's data sheet (material_set custom)."

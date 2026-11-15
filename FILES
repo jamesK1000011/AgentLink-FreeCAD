@@ -1,13 +1,13 @@
 Init.py
 InitGui.py
 LICENSE
+LICENSE-DATA
 README.md
 Studio Dark/Studio Dark.cfg
 Studio Dark/parameters/Studio Dark.yaml
 Studio Light/Studio Light.cfg
 Studio Light/parameters/Studio Light.yaml
 agentlink/__init__.py
-agentlink/_addonkit.py
 agentlink/ccx_io.py
 agentlink/cells.py
 agentlink/charts.py
@@ -21,6 +21,14 @@ agentlink/code/packs.py
 agentlink/code/packs_shipped/example.demo.json
 agentlink/code/units.py
 agentlink/commands.py
+agentlink/data/filaments.json
+agentlink/data/filaments.schema.json
+agentlink/data/fits.json
+agentlink/data/fits.schema.json
+agentlink/data/metric-hardware.json
+agentlink/data/metric-hardware.schema.json
+agentlink/data/tools.schema.json
+agentlink/datafiles.py
 agentlink/echo.py
 agentlink/ext.py
 agentlink/facepick.py
@@ -101,6 +109,7 @@ agentlink/keep.py
 agentlink/launcher_check.py
 agentlink/link_token.py
 agentlink/macros.py
+agentlink/materials.py
 agentlink/meshdist.py
 agentlink/meshformats.py
 agentlink/millsim.py
@@ -108,6 +117,7 @@ agentlink/panel.py
 agentlink/panel_tabs.py
 agentlink/paths.py
 agentlink/protocol.py
+agentlink/refusal.py
 agentlink/render.py
 agentlink/restart_mark.py
 agentlink/server.py
@@ -116,11 +126,14 @@ agentlink/shots.py
 agentlink/smoke.py
 agentlink/store.py
 agentlink/supervise.py
+agentlink/td_wait.py
+agentlink/tooldata.py
 agentlink/tools.py
 agentlink/usage.py
 agentlink_headless.py
 agentlink_state.py
 docs/hooks.md
+docs/records.md
 package.xml
 tests/_fc.py
 tests/_pd_base.py
@@ -131,6 +144,7 @@ tests/test_batch_rollback.py
 tests/test_bim_gaps.py
 tests/test_cam.py
 tests/test_cam_more.py
+tests/test_ccx.py
 tests/test_cells.py
 tests/test_charts.py
 tests/test_code_engine.py
@@ -153,6 +167,7 @@ tests/test_guides.py
 tests/test_hooks.py
 tests/test_hull3d.py
 tests/test_inspection.py
+tests/test_iso286.py
 tests/test_keep.py
 tests/test_licence_boundary.py
 tests/test_link_token.py
@@ -172,6 +187,7 @@ tests/test_paths.py
 tests/test_pref_import.py
 tests/test_protocol.py
 tests/test_sheet.py
+tests/test_sheets.py
 tests/test_sketch.py
 tests/test_sketch_gaps.py
 tests/test_std_more.py
@@ -180,6 +196,7 @@ tests/test_supervise_unattended.py
 tests/test_techdraw.py
 tests/test_techdraw_gaps.py
 tests/test_theme.py
+tests/test_tooldata.py
 tests/test_unattended.py
 tests/test_usage.py
 tests/test_usage_strip.py
