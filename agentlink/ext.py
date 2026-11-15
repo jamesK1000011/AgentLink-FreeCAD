@@ -28,6 +28,25 @@ before_restart = []
 loaded = {}
 
 
+# An add-on installed from a repository whose root is the add-on (its
+# package.xml at the top) carries this file, naming the repository.
+MARK = ".agentlink-extension"
+
+
+def _addon_name(root):
+    """The add-on's folder name in Mod: package.xml's <name>, letters and
+    digits only, or None when the repository's root is not an add-on."""
+    import re
+
+    try:
+        with open(os.path.join(root, "package.xml"), encoding="utf-8") as f:
+            m = re.search(r"<name>([^<]+)</name>", f.read())
+    except OSError:
+        return None
+    name = re.sub(r"[^A-Za-z0-9]", "", m.group(1)) if m else ""
+    return name or None
+
+
 def _paths():
     """Mod folders beside this add-on's put on the path; the agentlink_…
     packages found in them."""
@@ -37,7 +56,11 @@ def _paths():
     try:
         for name in sorted(os.listdir(mod)):
             p = os.path.join(mod, name)
-            if not (name.startswith("AgentLink") and p != here and os.path.isdir(p)):
+            if p == here or not os.path.isdir(p):
+                continue
+            # AgentLink… folders, and add-ons app_extensions installed from a
+            # repository whose root is the add-on (marked when installed).
+            if not (name.startswith("AgentLink") or os.path.isfile(os.path.join(p, MARK))):
                 continue
             if p not in sys.path:
                 sys.path.append(p)
@@ -102,7 +125,9 @@ def _git():
 
 def sync(cache=None):
     """Each listed repository fetched (cloned, or brought up to date) and
-    its AgentLink… folders copied in beside this add-on. Returns what was
+    its AgentLink… folders copied in beside this add-on, or, when the
+    repository's root is an add-on (package.xml), the whole of it as
+    Mod/<its name>. Returns what was
     installed and what could not be reached, and why."""
     import shutil
     import subprocess
@@ -139,6 +164,20 @@ def sync(cache=None):
                 if os.path.abspath(target) == os.path.abspath(here):
                     continue
                 shutil.copytree(os.path.join(dest, n), target, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git", "__pycache__", "tests"))
+            root_name = None if tops else _addon_name(dest)
+            if root_name:
+                # The repository is the add-on: installed as Mod/<its name>,
+                # never over a folder some other add-on owns.
+                target = os.path.join(mod, root_name)
+                mark = os.path.join(target, MARK)
+                if os.path.isdir(target) and not os.path.isfile(mark):
+                    raise RuntimeError(f"Mod/{root_name} is already there and was not installed from {repo}: left as it is")
+                shutil.copytree(dest, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git", ".github", "__pycache__", "tests"))
+                with open(mark, "w", encoding="utf-8") as f:
+                    f.write(spec + "\n")
+                tops = [root_name]
+            if not tops:
+                raise RuntimeError("no AgentLink… folder and no package.xml at its root: not an add-on")
             out["installed"].append({"repo": spec, "commit": sha, "folders": tops})
         except Exception as e:
             out["failed"].append({"repo": spec, "why": str(e)[:300]})
