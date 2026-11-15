@@ -50,6 +50,26 @@ def size_of(session):
     return max(1, n)
 
 
+# Memory per heavy tool and size, in MB, as each job raised the peak. A new key:
+# the old "memory" entries held whole-process peaks, which made a small job
+# look like tens of GB.
+MEMORY_KEY = "memoryAdded"
+# A refusal needs at least this many runs to go on, and is never extrapolated
+# further than this many times the largest size already seen.
+MEMORY_MIN_RUNS = 2
+MEMORY_REACH = 4.0
+
+
+def memory_estimate(q, tool, size):
+    """MB a heavy job of this size should add, from its past runs here, or
+    None when there is too little to go on."""
+    pts = [(s, m) for s, m in (q.get(MEMORY_KEY) or {}).get(tool, []) if s > 0]
+    if len(pts) < MEMORY_MIN_RUNS:
+        return None
+    reach = max(s for s, _ in pts) * MEMORY_REACH
+    return keep.estimate({"timings": {tool: pts}}, tool, min(float(size), reach))
+
+
 def _fmt(sec):
     return f"{int(round(sec))} s" if sec < 90 else f"{sec / 60:.0f} min"
 
@@ -85,7 +105,7 @@ class Gate:
         size = size_of(self.s)
         m = keep.preset(self._overrides())
         ceiling = float(m.get("memoryCeilingGB") or 0)
-        mem = keep.estimate({"timings": q.get("memory") or {}}, tool.name, size)
+        mem = memory_estimate(q, tool.name, size)
         if ceiling and mem and mem / 1024.0 > ceiling:
             raise ToolError("invalid_state", f"{tool.name} at this size would need about {mem / 1024.0:.1f} GB (from its past runs here), over this Mac's {ceiling:g} GB ceiling for one job: a coarser pass (fewer elements or points) first. The person can raise the ceiling (Mod/AgentLink MemoryCeilingGB).")
         est = keep.estimate(q, tool.name, size)
@@ -121,11 +141,14 @@ class Gate:
             q = keep.queue_state()
             keep.log_timing(q, tool.name, size, secs)
             a1, b1 = _maxrss_mb()
-            peak = max(a1 if a1 > a0 else 0, b1 if b1 > b0 else 0)
-            if peak:
-                mem = {"timings": q.get("memory") or {}}
+            # What this job added to the high-water mark, not the process's
+            # lifetime peak (ru_maxrss never falls): a job that stayed under
+            # an earlier peak adds nothing and is not logged.
+            peak = max(a1 - a0, b1 - b0, 0.0)
+            if peak > 0:
+                mem = {"timings": q.get(MEMORY_KEY) or {}}
                 keep.log_timing(mem, tool.name, size, peak)
-                q["memory"] = mem["timings"]
+                q[MEMORY_KEY] = mem["timings"]
             keep.save_queue(q)
         except Exception:
             pass

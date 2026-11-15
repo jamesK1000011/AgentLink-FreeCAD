@@ -184,6 +184,7 @@ tests/test_flat2d.py
 tests/test_gaps_redteam.py
 tests/test_gui_shell.py
 tests/test_guides.py
+tests/test_heavy_memory.py
 tests/test_hooks.py
 tests/test_hull3d.py
 tests/test_inspection.py
