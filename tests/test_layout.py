@@ -174,6 +174,53 @@ class AddonPages(unittest.TestCase):
             hooks.restore(state)
 
 
+class GuiDoc:
+    """A stand-in Gui document: its Modified flips on any view property set."""
+
+    def __init__(self):
+        self.Modified = False
+
+    def set_view(self):
+        self.Modified = True
+
+
+class AppDoc:
+    def __init__(self):
+        self.UndoNames = []
+
+
+class Marks(unittest.TestCase):
+    """A panel's own work (Workshop Make opening its panel set the "*" with
+    no undo step on the Mac) leaves the window's modified marks alone; a
+    real change keeps its mark."""
+
+    def test_a_view_write_is_put_back(self):
+        g, d = GuiDoc(), AppDoc()
+        docs = lambda: [("Box", g, d)]  # noqa: E731
+        later = []
+        with layout.keep_marks(docs, later=lambda ms, fn: later.append(fn)):
+            g.set_view()
+        self.assertFalse(g.Modified)
+        g.set_view()  # set again after the panel's work, before the window settles
+        for fn in later:
+            fn()
+        self.assertFalse(g.Modified)
+
+    def test_a_real_change_keeps_its_mark(self):
+        g, d = GuiDoc(), AppDoc()
+        with layout.keep_marks(lambda: [("Box", g, d)], later=lambda ms, fn: None):
+            d.UndoNames.append("setup")
+            g.set_view()
+        self.assertTrue(g.Modified)
+
+    def test_an_already_changed_document_stays_marked(self):
+        g, d = GuiDoc(), AppDoc()
+        g.Modified = True
+        with layout.keep_marks(lambda: [("Box", g, d)], later=lambda ms, fn: None):
+            pass
+        self.assertTrue(g.Modified)
+
+
 class Doc:
     def __init__(self):
         self.n = 2
