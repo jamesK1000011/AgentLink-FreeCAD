@@ -8,10 +8,23 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-os.environ["AGENTLINK_HOME"] = tempfile.mkdtemp()  # declared heavy tools are written there
 
 from agentlink import datafiles, hooks, keep, paths, tooldata  # noqa: E402
 from agentlink.protocol import ToolError  # noqa: E402
+
+_HOME = os.environ.get("AGENTLINK_HOME")
+
+
+def setUpModule():
+    os.environ["AGENTLINK_HOME"] = tempfile.mkdtemp()  # declared heavy tools are written there
+
+
+def tearDownModule():
+    if _HOME is None:
+        os.environ.pop("AGENTLINK_HOME", None)
+    else:
+        os.environ["AGENTLINK_HOME"] = _HOME
+
 
 ENTRY = {"group": "g", "description": "A tool for the test, long enough.", "inputSchema": {"type": "object", "properties": {}},
          "changes": False, "source": "test", "date": "2026-11-14"}
