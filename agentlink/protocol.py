@@ -24,6 +24,11 @@ class ToolError(Exception):
         self.message = message
 
 
+def bad(msg):
+    """The usual refusal: invalid_input with msg."""
+    return ToolError("invalid_input", msg)
+
+
 class Tool:
     def __init__(self, name, description, schema, fn, changes=False, group="core"):
         self.name = name

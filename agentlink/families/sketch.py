@@ -14,6 +14,7 @@ import Sketcher
 
 from .. import geometry as geo
 from ..protocol import Tool, ToolError
+from ..tools import obj
 from . import pd_common as pc
 from . import picks
 
@@ -22,10 +23,6 @@ INFO = "PartDesign bodies and sketches: geometry, constraints, the solver's read
 
 V = FreeCAD.Vector
 SOLVE = {0: "solved", -1: "the solver failed", -2: "redundant constraints", -3: "conflicting constraints", -4: "over-constrained", -5: "malformed constraints"}
-
-
-def obj(props, required=()):
-    return {"type": "object", "properties": props, "required": list(required), "additionalProperties": False}
 
 
 def frame(pl):

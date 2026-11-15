@@ -10,16 +10,12 @@ import os
 import FreeCAD
 import Part
 
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
 
 GROUP = "openscad"
 INFO = "OpenSCAD: CSG and SCAD files in, OpenSCAD code run into the document, CSG out, hull and Minkowski sums."
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 @contextlib.contextmanager

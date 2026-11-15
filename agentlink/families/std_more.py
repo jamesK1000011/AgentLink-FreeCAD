@@ -15,7 +15,7 @@ import FreeCAD
 import Part
 
 from .. import runners
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import pd_common as pdc
 from . import picks
@@ -29,10 +29,6 @@ V = FreeCAD.Vector
 # shows when the file opens in the window (and export colours can read it).
 COLOR_PROP = "AgentLinkColor"
 FACE_PROP = "AgentLinkFaceColors"
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def tools(s):

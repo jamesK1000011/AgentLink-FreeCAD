@@ -11,7 +11,8 @@ import math
 import FreeCAD
 import Part
 
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
+from ..tools import obj
 from . import pd_common as pc
 from . import picks
 
@@ -20,14 +21,6 @@ INFO = ("Sketches: bodies, sketches on planes and faces, geometry and constraint
         "copy/move/rotate/scale, arrays, extend, join, carbon copy, projection from binders, B-spline conversion, validate and repair, the solver's state.")
 
 V = FreeCAD.Vector
-
-
-def obj(props, required=()):
-    return {"type": "object", "properties": props, "required": list(required), "additionalProperties": False}
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def ids_of(sk, geos, what="geometry"):

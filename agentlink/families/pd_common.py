@@ -24,15 +24,6 @@ def short(o):
     return o.TypeId.split("::", 1)[-1]
 
 
-def num(v):
-    """A property's value as JSON: Quantities as their number (mm, degrees)."""
-    if hasattr(v, "Value") and not isinstance(v, (int, float)):
-        return round(float(v.Value), 4) + 0.0
-    if isinstance(v, float):
-        return round(v, 4) + 0.0
-    return v
-
-
 def vec3(a, what):
     if not (isinstance(a, (list, tuple)) and len(a) == 3 and all(isinstance(x, (int, float)) for x in a)):
         raise ToolError("invalid_input", f"{what}: [x, y, z] in mm.")

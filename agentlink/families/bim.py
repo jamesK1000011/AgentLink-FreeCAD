@@ -15,7 +15,7 @@ import Arch  # FreeCAD's BIM workbench; the family is left out without it
 
 from .. import geometry as geo
 from .. import runners
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
 
@@ -27,10 +27,6 @@ UP = V(0, 0, 1)
 WINDOWS = ("Fixed", "Open 1-pane", "Open 2-pane", "Sash 2-pane", "Sliding 2-pane", "Sliding 4-pane", "Awning")
 DOORS = ("Simple door", "Glass door")
 ROLES = {"column": "Column", "beam": "Beam", "slab": "Slab", "footing": "Footing"}
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def vec(p, what):

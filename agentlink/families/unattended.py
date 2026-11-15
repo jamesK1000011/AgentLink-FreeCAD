@@ -18,14 +18,11 @@ import time
 import FreeCAD
 
 from .. import keep
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 
 GROUP = "unattended"
 INFO = "Unattended use: answer harmless dialogs, the pinned document, the heavy-job queue, the Addon Manager."
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def tools(s):

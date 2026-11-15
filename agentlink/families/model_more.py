@@ -10,7 +10,7 @@ import FreeCAD
 import Part
 
 from .. import geometry as geo
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
 
@@ -19,10 +19,6 @@ INFO = ("Part modelling: primitives, wires and curves (helix, spiral …), boole
         "fillets and chamfers, offset and shell, extrude, revolve, loft, sweep, ruled surfaces, projection, cross-sections, refine and repair, attachment, mesh to solid.")
 
 V = FreeCAD.Vector
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def frame(a):

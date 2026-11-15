@@ -7,6 +7,7 @@
 import re
 
 from ..protocol import Tool, ToolError
+from ..tools import obj
 from . import pd_common as pc
 from . import picks
 
@@ -16,10 +17,6 @@ INFO = "Named parameters in a Params spreadsheet, and properties or named sketch
 SHEET = "Params"
 NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 CELL = re.compile(r"^[A-Za-z]{1,2}[0-9]+$")
-
-
-def obj(props, required=()):
-    return {"type": "object", "properties": props, "required": list(required), "additionalProperties": False}
 
 
 def sheet(doc, make=False):
@@ -186,7 +183,7 @@ def tools(session):
             raise ToolError("invalid_input", f"{target} = {expr!r}: {e}")
         check(doc(), f"Binding {target} to {expr}")
         try:
-            now = pc.num(o.getDatum(path.split(".", 1)[1])) if path.startswith("Constraints.") else pc.num(getattr(o, path))
+            now = picks.num_json(o.getDatum(path.split(".", 1)[1])) if path.startswith("Constraints.") else picks.num_json(getattr(o, path))
         except Exception:
             now = None
         return picks.finish(s, "param_bind", lambda: {"target": target, "expression": expr, "value": now, "bodies": bodies_now()}, recompute=False)
