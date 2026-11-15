@@ -16,6 +16,7 @@ import Path  # noqa: F401  — FreeCAD's CAM workbench
 import Path.Main.Job as PathJob
 import Path.Tool.Controller as PathToolController
 
+from .. import paths
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import measure as M
@@ -478,9 +479,7 @@ def tools(session):
             importlib.reload(post)
         except ImportError:
             raise ToolError("unavailable", f"FreeCAD here has no {name} post-processor.")
-        path = a.get("path") or os.path.join(s.out_dir, f"{job.Label.replace(' ', '_')}.nc")
-        if not os.path.isabs(path):
-            path = os.path.join(s.out_dir, path)
+        path = paths.out_file(s, "cam_post", a.get("path") or os.path.join(s.out_dir, f"{job.Label.replace(' ', '_')}.nc"), expand=False)
         postables = []
         last_tc = None
         for op in ops:

@@ -14,6 +14,7 @@ import datetime
 import os
 
 from .. import facepick, render, store
+from .. import paths
 from ..protocol import Tool, ToolError
 from ..tools import obj
 
@@ -191,9 +192,7 @@ def tools(session):
         if view not in render.VIEWS:
             raise ToolError("invalid_input", "view: " + ", ".join(render.VIEWS) + ".")
         w, h = int(a.get("width", 480)), int(a.get("height", 360))
-        folder = os.path.expanduser(a.get("path") or f"steps_{''.join(ch if ch.isalnum() else '_' for ch in b.Label)}")
-        if not os.path.isabs(folder):
-            folder = os.path.join(s.out_dir, folder)
+        folder = paths.local(s, a.get("path") or f"steps_{''.join(ch if ch.isalnum() else '_' for ch in b.Label)}")
         os.makedirs(folder, exist_ok=True)
         # Framed on the finished part, so the camera holds still and the part grows in it.
         bb = b.Shape.BoundBox if not b.Shape.isNull() else None

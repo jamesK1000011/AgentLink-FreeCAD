@@ -20,6 +20,7 @@ import FreeCAD
 import TechDraw  # noqa: F401 — the family stands on TechDraw; left out without it
 
 from .. import gdt, iso286, sheets
+from .. import paths
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
@@ -1326,15 +1327,11 @@ def tools(session):
         pre = a.get("preset")
         if a.get("export"):
             data = load_presets()
-            path = os.path.expanduser(a["export"])
-            if not os.path.isabs(path):
-                path = os.path.join(s.out_dir, path)
+            path = paths.local(s, a["export"])
             save_presets(data, path)
             return {"exported": path, "presets": sorted(data)}
         if a.get("import"):
-            path = os.path.expanduser(a["import"])
-            if not os.path.isabs(path):
-                path = os.path.join(s.out_dir, path)
+            path = paths.local(s, a["import"])
             got = load_presets(path)
             if not got:
                 raise ToolError("not_found", f"{path}: no presets in it.")

@@ -15,6 +15,7 @@ import FreeCAD
 import Part
 
 from .. import runners
+from .. import paths
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import pd_common as pdc
@@ -610,9 +611,7 @@ def tools(s):
             dot += [f"  {q(o.Name)} [label={q(o.Label)}];" for o in nodes]
             dot += [f"  {q(x.Name)} -> {q(u.Name)};" for x, u in edges]
             dot.append("}")
-            p = os.path.expanduser(a.get("path") or f"{dd.Label}_graph.dot")
-            if not os.path.isabs(p):
-                p = os.path.join(s.out_dir, p)
+            p = paths.local(s, a.get("path") or f"{dd.Label}_graph.dot")
             if not p.lower().endswith(".dot"):
                 p += ".dot"
             os.makedirs(os.path.dirname(p) or ".", exist_ok=True)

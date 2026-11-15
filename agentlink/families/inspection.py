@@ -18,6 +18,7 @@ import Mesh
 import numpy as np
 
 from .. import render
+from .. import paths
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
@@ -215,9 +216,7 @@ def tools(session):
 
     def insp_run(a):
         if a.get("file"):
-            p = os.path.expanduser(a["file"])
-            if not os.path.isabs(p):
-                p = os.path.join(s.out_dir, p)
+            p = paths.in_file(s, "insp_run", a["file"], "file")
             if not os.path.isfile(p):
                 raise ToolError("not_found", f"{p}: no such file.")
             ext = os.path.splitext(p)[1].lower()

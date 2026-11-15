@@ -15,6 +15,7 @@ import Arch  # FreeCAD's BIM workbench; the family is left out without it
 
 from .. import geometry as geo
 from .. import runners
+from .. import paths
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
@@ -498,8 +499,7 @@ def tools(session):
         raise ToolError("unavailable", f"FreeCAD's {name} is not found in this build.")
 
     def where(p, default):
-        p = p or default
-        return p if os.path.isabs(p) else os.path.join(s.out_dir, p)
+        return paths.local(s, p or default, expand=False)
 
     def bim_export(a):
         need_ifc()
