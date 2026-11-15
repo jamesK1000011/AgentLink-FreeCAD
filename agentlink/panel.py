@@ -195,7 +195,26 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         tabs.addTab(self._fits_tab(), "Fits")
         tabs.addTab(self._manual_tab(), "Manual")
         tabs.addTab(self._activity_tab(), "Activity")
-        tabs.addTab(self._session_tab(), "Session")
+        # Add-ons' tabs (hooks.register_tab), in their order: fill() on
+        # their widget, if it has one, each time their tab comes up.
+        import importlib
+
+        from . import families, hooks
+
+        # The add-ons are loaded here if no session has loaded them yet.
+        for n in families._discovered():
+            try:
+                importlib.import_module(n)
+            except Exception as e:
+                FreeCAD.Console.PrintLog(f"Agent Link panel: {n} left out ({e})\n")
+        self.addon_tabs = {}
+        for tab in list(hooks.TABS):
+            try:
+                wdg = tab["factory"](self)
+                tabs.addTab(wdg, tab["title"])
+                self.addon_tabs[tab["title"]] = wdg
+            except Exception as e:
+                FreeCAD.Console.PrintLog(f"Agent Link panel: the {tab.get('title')} tab of an add-on was left out ({e})\n")
         tabs.setUsesScrollButtons(True)
         tabs.currentChanged.connect(lambda k: self.fill_tab(tabs.tabText(k)))
         self.tabs = tabs
@@ -565,7 +584,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         if not ok or not name.strip():
             return
         done, r = self._call("macro_save", {"name": name.strip()})
-        QtWidgets.QMessageBox.information(self, "Agent Link", (f"Saved {r.get('path') or name}." + (" Approve it in the Session tab to run it." if done else ""))
+        QtWidgets.QMessageBox.information(self, "Agent Link", (f"Saved {r.get('path') or name}." + (" It runs once you approve it." if done else ""))
                                           if done else (r.get("error") or {}).get("message", str(r)))
 
     def fill_bodies(self):

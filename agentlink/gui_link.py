@@ -108,25 +108,6 @@ def _bundle():
     return exe.split(".app/")[0] + ".app" if ".app/" in exe else exe
 
 
-def _autorecovery_on():
-    """FreeCAD's own auto-recovery stays on (unattended use, C): turned on
-    once if it is off, and the change logged."""
-    try:
-        from . import keep
-
-        al = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/AgentLink")
-        if al.GetBool("AutoRecoveryChecked", False):
-            return
-        g = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Document")
-        if not g.GetBool("AutoSaveEnabled", True):
-            g.SetBool("AutoSaveEnabled", True)
-            keep.settings_log({"tool": "agentlink", "path": "BaseApp/Preferences/Document", "name": "AutoSaveEnabled", "from": False, "to": True, "restart": False,
-                               "why": "FreeCAD's own recovery copies kept on for unattended use"})
-        al.SetBool("AutoRecoveryChecked", True)
-    except Exception:
-        pass
-
-
 def looks_like_call(line):
     """A JSON-RPC 2.0 message: an object with jsonrpc "2.0" and a method."""
     if len(line) > 8_000_000 or not line.lstrip().startswith("{"):
@@ -190,7 +171,7 @@ class Link:
                 s.closed_doc = gone
                 s.doc = active or FreeCAD.newDocument("AgentLink")
                 s.doc.UndoMode = 1
-                s.checkpoints, s.steps, s.meta = {}, [], {}
+                s.steps, s.meta = [], {}
         try:
             self.session.pinned_label = self.session.doc.Label
         except Exception:
@@ -220,7 +201,6 @@ class Link:
         self.beat = QtCore.QTimer()
         self.beat.timeout.connect(self._beat)
         self.beat.start(2000)
-        _autorecovery_on()
         self._beat()
         FreeCAD.Console.PrintMessage(f"Agent Link: listening on 127.0.0.1:{self.port}\n")
 
@@ -409,16 +389,6 @@ class Link:
                     FreeCADGui.setActiveDocument(d.Name)
             except Exception:
                 pass
-        # The documents app_restart did not save: reopened from their copies
-        # beside their files (unattended use, L).
-        for c in m.get("recover") or []:
-            try:
-                from .families import unattended
-
-                if os.path.isfile(c.get("copy", "")):
-                    unattended.open_copy(c["copy"], c.get("name") or "doc", c.get("label") or c.get("name") or "doc", float(c.get("t") or time.time()))
-            except Exception as e:
-                FreeCAD.Console.PrintWarning(f"Agent Link: could not reopen {c.get('label')} from its copy: {e}\n")
         restart_mark.clear()
         return True
 

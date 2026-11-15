@@ -95,7 +95,6 @@ agentlink/iso286.py
 agentlink/keep.py
 agentlink/launcher_check.py
 agentlink/link_token.py
-agentlink/macros.py
 agentlink/materials.py
 agentlink/meshdist.py
 agentlink/meshformats.py

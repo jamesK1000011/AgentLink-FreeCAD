@@ -262,7 +262,6 @@ def tools(session):
     def switch(doc):
         doc.UndoMode = 1
         s.doc = doc
-        s.checkpoints = {}
         s.meta = {}
         if FreeCAD.GuiUp:
             try:

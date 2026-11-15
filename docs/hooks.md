@@ -106,15 +106,41 @@ All optional. Every hook catches and logs your exceptions.
 | Hook | Use |
 |---|---|
 | `register_reader(kind, fn)` | Answer a question by kind (`"wall"`: the thinnest wall of a shape; `"thread_scan"`: a thread read from a scan). Return `None` to pass; the first answer wins. |
-| `provide(name, obj)` / `service(name)` | Offer or use a named service (`process_of`, `checkpoints`, `material_cards`, `frame_solver`, `encased`). Absent gives `None`. |
-| `on(event, fn)` | `after_change(session, tool)`, `setting_changed(path, name, old, new)`, `docs_changed(session)`, `call_done(session, tool, ok)`. |
+| `provide(name, obj)` / `service(name)` | Offer or use a named service (`process_of`, `checkpoints`, `reopen`, `material_cards`, `frame_solver`, `encased`). Absent gives `None`. |
+| `on(event, fn)` | `after_change(session, tool)`, `setting_changing(tool, path)`, `setting_changed(path, name, old, new, tool=, restart=, applies=)`, `reply_written(session)`, `docs_changed(session)`, `call_done(session, tool, ok)`. |
 | `extend_tool(name, properties, before, after, describe)` | Add arguments to a tool another family owns. `before(args, session)` may return changed arguments; `after(args, answer, session)` may return a fuller answer; `describe` is a sentence added to the tool's description. The owner never sees your arguments. |
-| `register_tab(title, factory, order)` | A tab in Agent Link's panel: `factory(panel)` returns a QWidget. |
+| `register_tab(title, factory, order)` | A tab in Agent Link's panel: `factory(panel)` returns a QWidget; its `fill()`, if it has one, runs each time the tab comes up. `panel._call(tool, args)` runs a tool as the person's click, answering `(ok, result)`. |
 | `register_reviewer(fn)` | `fn(session, body)` gives the Review tab its verdict. |
 | `guard_setting(path, name)` | A setting `pref_set` must not change (`path` as `pref_set` takes it, e.g. `"Mod/MyAddon"`): one that widens what the agent may do or which code FreeCAD loads. |
 | `remember(session, kind, value)` / `analysis(session, kind)` | Last results by kind, for example the last FEA solve. |
 | `agentlink.tools.register_guides(folder)` | Markdown guides the agent can read with `guide_read`. A `guides/` folder beside your `agentlink_families.py` is registered for you; if there is also a `freecad_guides/`, only that one is (for add-ons whose `guides/` serve their own server). |
 | `agentlink.render.register_layer` / `register_map` | Layers and colour maps for `view_render`. |
+
+### Services Agent Link asks for
+
+| Service | Methods | Used by | Without it |
+|---|---|---|---|
+| `checkpoints` | `take(session, name=None, auto=False, doc=None)` → `(entry, dropped)`; `find(session, ref)` → entry or `None`; `index(doc_name)` → entries; `restore(session, ref)` → answer | `history_diff { since: "cp3" }`, a copy before a heavy job and before `app_restart` saves | `history_diff` by checkpoint is refused `unavailable`; no copies are taken |
+| `reopen` | `keep([doc])` → `[{ name, label, file, copy, t }]` | `app_restart`, for changed documents it does not save | `app_restart` reopens saved files only, and refuses while a changed document would be lost |
+
+An entry is `{ id, name, file, step, tx, session, … }`: `file` a saved copy
+Agent Link can open, `session` the `id()` of the session that took it and
+`step`/`tx` that session's step and undo count then.
+
+### Events Agent Link emits
+
+| Event | When |
+|---|---|
+| `after_change(session, tool)` | After every changing call (one undo step). |
+| `setting_changing(tool, path)` | Before `pref_set`, `pref_reset`, `pref_pack` or `pref_import` changes anything: a snapshot taken now is the state before. |
+| `setting_changed(path, name, old, new, tool=, restart=, applies=)` | After each value changed; `restart` when it shows only after FreeCAD restarts, `applies` `"at next launch"` headless. |
+| `reply_written(session)` | After each reply of the stdio server (the hidden FreeCAD): say what it holds for whoever restarts it after a crash. |
+
+### Tools from Python
+
+`agentlink.run(tool, args)` calls a tool as a live call does (a saved macro's
+lines); `with agentlink.serving(server):` sends those calls to the given
+server while the block runs.
 
 ## Nothing shared to install
 
