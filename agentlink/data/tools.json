@@ -129,6 +129,346 @@
      "note": "A body built on the other's shape: it follows the original; add features on top."
     }
    }
+  },
+  "bim_level": {
+   "group": "bim",
+   "description": "A level (building storey) holding objects, at elevation mm (height: floor to floor).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "elevation": {
+      "type": "number"
+     },
+     "height": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/bim.py)",
+   "date": "2026-11-14",
+   "runner": "make",
+   "target": {
+    "maker": "Arch.makeFloor",
+    "call": [
+     "$objects"
+    ]
+   },
+   "args": {
+    "objects": {
+     "helper": "finds"
+    },
+    "elevation": {
+     "helper": "num",
+     "default": 0,
+     "with": [
+      "$value",
+      "$key"
+     ]
+    },
+    "name": {
+     "then": {
+      "call": "named",
+      "with": [
+       "$o",
+       {
+        "or": [
+         "$a.name",
+         "Level"
+        ]
+       }
+      ]
+     }
+    },
+    "=base": {
+     "value": {
+      "vec": [
+       0,
+       0,
+       "$elevation"
+      ]
+     },
+     "prop": "Placement.Base"
+    },
+    "height": {
+     "prop": "Height",
+     "has": true,
+     "when": "truthy",
+     "as": "float"
+    }
+   },
+   "answer": {
+    "via": "finish",
+    "with": [
+     "$o",
+     "$tool",
+     "$fields"
+    ],
+    "fields": {
+     "elevation": "$elevation",
+     "holds": "$objects[].Label"
+    }
+   }
+  },
+  "bim_pipe": {
+   "group": "bim",
+   "description": "A pipe along points: diameter, wall (thickness) mm.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "points": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "number"
+       }
+      }
+     },
+     "diameter": {
+      "type": "number"
+     },
+     "wall": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "points"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/bim.py)",
+   "date": "2026-11-14",
+   "runner": "make",
+   "target": {
+    "maker": "Arch.makePipe",
+    "headless": "headless_call",
+    "call": [
+     "$points",
+     "$diameter"
+    ]
+   },
+   "rules": [
+    {
+     "check": "available",
+     "of": "$maker",
+     "after": "start",
+     "code": "unavailable",
+     "message": "This FreeCAD's BIM has no pipe."
+    }
+   ],
+   "args": {
+    "=pname": {
+     "value": {
+      "or": [
+       "$a.name",
+       "Pipe"
+      ]
+     }
+    },
+    "points": {
+     "helper": "baseline",
+     "with": [
+      "$value",
+      {
+       "fmt": "{pname} path"
+      }
+     ]
+    },
+    "name": {
+     "then": {
+      "call": "named",
+      "with": [
+       "$o",
+       "$pname"
+      ]
+     }
+    },
+    "diameter": {
+     "helper": "pos",
+     "with": [
+      "$a",
+      "$key",
+      50
+     ],
+     "prop": "Diameter"
+    },
+    "wall": {
+     "prop": "WallThickness"
+    }
+   },
+   "answer": {
+    "via": "finish",
+    "with": [
+     "$o",
+     "$tool",
+     "$fields"
+    ],
+    "fields": {
+     "diameter": "$diameter",
+     "length": {
+      "round": [
+       "$points.Shape.Length",
+       1
+      ]
+     }
+    }
+   }
+  },
+  "bim_equipment": {
+   "group": "bim",
+   "description": "An object made BIM equipment (furniture, fixtures, appliances): object, ifc (e.g. Furniture, Sanitary Terminal), model, url, watts.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "object": {
+      "type": "string"
+     },
+     "ifc": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "url": {
+      "type": "string"
+     },
+     "watts": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "object"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/bim.py)",
+   "date": "2026-11-14",
+   "runner": "make",
+   "target": {
+    "maker": "Arch.makeEquipment",
+    "headless": "headless_call",
+    "call": [
+     "$object"
+    ]
+   },
+   "rules": [
+    {
+     "check": "available",
+     "of": "$maker",
+     "after": "start",
+     "code": "unavailable",
+     "message": "This FreeCAD's BIM has no equipment."
+    }
+   ],
+   "args": {
+    "object": {
+     "helper": "find"
+    },
+    "name": {
+     "then": {
+      "call": "named",
+      "with": [
+       "$o",
+       {
+        "or": [
+         "$a.name",
+         {
+          "fmt": "{object.Label} equipment"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "model": {
+     "prop": "Model"
+    },
+    "url": {
+     "prop": "Url"
+    },
+    "watts": {
+     "prop": "EquipmentPower"
+    },
+    "ifc": {
+     "prop": "IfcType",
+     "when": "truthy",
+     "alone": true
+    }
+   },
+   "answer": {
+    "via": "finish",
+    "with": [
+     "$o",
+     "$tool",
+     "$fields"
+    ],
+    "fields": {
+     "from": "$object.Label"
+    }
+   }
+  },
+  "bim_list": {
+   "group": "bim",
+   "description": "The BIM objects: IFC type, what each holds, which wall each opening is in. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/bim.py)",
+   "date": "2026-11-14",
+   "runner": "read",
+   "target": {
+    "from": "$doc.Objects",
+    "where": "is_bim",
+    "each": {
+     "object": "$o.Label",
+     "ifc": {
+      "call": "ifc_type",
+      "with": [
+       "$o"
+      ]
+     },
+     "holds": {
+      "when": "$o.Group?",
+      "value": "$o.Group[].Label"
+     },
+     "in": {
+      "when": "$o.Hosts?",
+      "value": "$o.Hosts[].Label"
+     }
+    }
+   },
+   "answer": {
+    "fields": {
+     "objects": "$rows",
+     "count": {
+      "len": "$rows"
+     }
+    }
+   }
   }
  }
 }
