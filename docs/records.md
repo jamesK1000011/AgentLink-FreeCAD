@@ -1,4 +1,5 @@
 # Records kept in the FreeCAD document (format 1)
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 Notes about the parts — how each is made, what it is made of, the limits it
 must meet, findings accepted on purpose — are saved inside the `.FCStd`, so

@@ -1,19 +1,29 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
   <name>Agent Link</name>
-  <description>Drive FreeCAD from an agent over the Model Context Protocol: About 290 tools in 34 groups to make, check, review, simulate (CalculiX, Elmer), draw and export parts, buildings (BIM, IFC, code checks) and assemblies, slice (PrusaSlicer, OrcaSlicer, Bambu Studio) and texture them, in the GUI or headless.</description>
+  <description>Drive FreeCAD from an AI agent over the Model Context Protocol: hundreds of tools to make, measure, check, draw, simulate (CalculiX), mill and export parts, buildings (BIM, IFC) and assemblies, headless or live in your window, with a panel for notes, steps, review and activity. Add-ons installed beside it bring more tools. Works with Claude Desktop, Claude Code, Cursor, VS Code, LM Studio and other MCP clients. Not affiliated with or endorsed by the FreeCAD project or the FPA.</description>
   <version>0.3.0</version>
   <date>2026-11-14</date>
   <maintainer email="jamesK1000011@users.noreply.github.com">jamesK1000011</maintainer>
   <license file="LICENSE">LGPL-2.1-or-later</license>
+  <license file="LICENSES/CC-BY-4.0.txt">CC-BY-4.0</license>
   <url type="repository" branch="main">https://github.com/jamesK1000011/AgentLink-FreeCAD</url>
-  <freecadmin>1.0.0</freecadmin>
+  <url type="bugtracker">https://github.com/jamesK1000011/AgentLink-FreeCAD/issues</url>
+  <url type="readme">https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/README.md</url>
+  <url type="documentation">https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/README.md</url>
+  <freecadmin>1.1.0</freecadmin>
   <icon>agentlink/icons/AgentLink_Workbench.svg</icon>
   <tag>MCP</tag>
   <tag>AI</tag>
   <tag>automation</tag>
+  <tag>agent</tag>
+  <tag>LLM</tag>
+  <tag>Claude</tag>
+  <tag>headless</tag>
   <content>
     <workbench>
+      <name>Agent Link</name>
+      <description>Start and stop the agent's link to this window, the Agent Link panel, a screenshot for the agent, the setup check and updates.</description>
       <classname>AgentLinkWorkbench</classname>
       <subdirectory>./</subdirectory>
       <icon>agentlink/icons/AgentLink_Workbench.svg</icon>

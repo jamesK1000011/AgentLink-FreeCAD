@@ -488,7 +488,7 @@ def _guide_index():
     return out
 
 
-def build_server(session, name="freecad-agentlink", version="0.2.0", lean=None):
+def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
     """The server: every family's tools, grouped, with the core ones that
     act on the server itself (groups, guides, batch, undo)."""
     from . import families

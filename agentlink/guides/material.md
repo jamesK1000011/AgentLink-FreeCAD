@@ -1,4 +1,5 @@
 # Materials
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 ## Choosing one
 - `material_list { words, category }`: the printing filaments (pla, petg, abs, asa, pa6-cf, tpu-95a) first, then FreeCAD's library (metals, thermoplastics, wood …).

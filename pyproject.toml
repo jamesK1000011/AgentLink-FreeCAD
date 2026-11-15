@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# The MCP server as a Python package, for `uvx agentlink-freecad` and other
+# MCP clients: a launcher that finds FreeCAD and serves in FreeCAD's own
+# Python (agentlink/launch.py). The FreeCAD add-on itself is this same
+# folder, installed by the Addon Manager; see docs/packaging.md.
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentlink-freecad"
+version = "0.3.0"
+description = "Agent Link for FreeCAD: drive FreeCAD from an agent over the Model Context Protocol."
+readme = "README.md"
+requires-python = ">=3.8"
+license = "LGPL-2.1-or-later"
+license-files = ["LICENSE", "LICENSE-DATA", "LICENSES/*"]
+authors = [{ name = "Agent Link contributors" }]
+keywords = ["FreeCAD", "MCP", "CAD", "agent"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: Microsoft :: Windows",
+  "Topic :: Scientific/Engineering",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/jamesK1000011/AgentLink-FreeCAD"
+Issues = "https://github.com/jamesK1000011/AgentLink-FreeCAD/issues"
+
+[project.scripts]
+agentlink-freecad = "agentlink.launch:main"
+
+[tool.setuptools]
+packages = ["agentlink", "agentlink.families"]
+py-modules = ["agentlink_headless", "agentlink_state"]
+include-package-data = false
+
+[tool.setuptools.package-data]
+agentlink = ["guides/*.md", "data/*.json"]

@@ -1,11 +1,15 @@
+CHANGELOG.md
 Init.py
 InitGui.py
 LICENSE
 LICENSE-DATA
 LICENSES/Apache-2.0.txt
+LICENSES/CC-BY-4.0.txt
+LICENSES/LGPL-2.1-or-later.txt
 LICENSES/MIT.txt
 README.md
 REUSE.toml
+SETUP.md
 Studio Dark/Studio Dark.cfg
 Studio Dark/parameters/Studio Dark.yaml
 Studio Light/Studio Light.cfg
@@ -104,6 +108,7 @@ agentlink/icons/CREDITS.md
 agentlink/install_job.py
 agentlink/iso286.py
 agentlink/keep.py
+agentlink/launch.py
 agentlink/launcher_check.py
 agentlink/link_token.py
 agentlink/materials.py
@@ -119,6 +124,7 @@ agentlink/render.py
 agentlink/restart_mark.py
 agentlink/runners.py
 agentlink/server.py
+agentlink/setup_check.py
 agentlink/sheets.py
 agentlink/shots.py
 agentlink/smoke.py
@@ -131,9 +137,20 @@ agentlink/tools.py
 agentlink/usage.py
 agentlink_headless.py
 agentlink_state.py
+docs/clients/README.md
+docs/clients/claude-code.md
+docs/clients/claude-desktop.md
+docs/clients/cursor.md
+docs/clients/generic.md
+docs/clients/lm-studio.md
+docs/clients/opencode-ollama.md
+docs/clients/vscode.md
 docs/hooks.md
+docs/packaging.md
 docs/records.md
 package.xml
+pyproject.toml
+scripts/tool_summary.py
 scripts/tool_tables.py
 tests/_fc.py
 tests/_pd_base.py
@@ -190,6 +207,7 @@ tests/test_param.py
 tests/test_paths.py
 tests/test_pref_import.py
 tests/test_protocol.py
+tests/test_release.py
 tests/test_runners.py
 tests/test_sheet.py
 tests/test_sheets.py

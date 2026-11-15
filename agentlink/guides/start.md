@@ -1,4 +1,5 @@
 # Start here: Agent Link for FreeCAD
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 ## The shape of a session
 - `session_state` first: what the document holds and the step count.

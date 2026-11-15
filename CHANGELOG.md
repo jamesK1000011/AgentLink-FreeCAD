@@ -1,0 +1,76 @@
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+# Changelog
+
+All notable changes to Agent Link for FreeCAD. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
+[Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+The first tagged release, 0.3.0 (the version in `package.xml`,
+`pyproject.toml` and the server), is being prepared.
+
+### Added
+
+- An MCP server that drives FreeCAD headless or in the person's own window:
+  documents, Part and PartDesign modelling, sketches with the solver's
+  reading, parameters and spreadsheets, measurement, materials, FEM
+  strength (Gmsh and CalculiX), TechDraw pages with GD&T, Inspection,
+  meshes and point clouds, Assembly, CAM with a stock simulation, Draft
+  text and surfaces, BIM and IFC, OpenSCAD and Robot, as tool groups with a
+  guide each. Every change is one FreeCAD undo step; `batch` stands or
+  falls whole.
+- The lean tool list (core and view) by default, the rest turned on by
+  group with `tool_groups`; `AGENTLINK_TOOLS=full` lists every tool.
+- Headless pictures (`view_render`): any view or four, cut open, zoomed,
+  with wall-thickness, stress and deviation maps.
+- The window link: the workbench's Start link pairs with the server over
+  127.0.0.1, and calls run on FreeCAD's own thread in the open document; a
+  supervisor restarts a FreeCAD that dies under a call.
+- The Agent Link panel beside the model tree: Notes, Steps (the build played
+  back), Review, Activity and the tabs add-ons register, with a token-usage
+  strip that says it is an estimate, not billing; Screenshot for the agent
+  (Alt+Shift+S).
+- Unattended use (Mac): harmless dialogs answered, the pinned document,
+  the heavy-job queue, the Addon Manager headless on 1.1+, app updates
+  smoke-tested before they are taken.
+- The add-on API (API 1, `docs/hooks.md`): add-ons bring tool families,
+  data-defined tools (`tools.json`), guides, panel tabs, reviewers and
+  button echoes, found at start and never named in Agent Link's code;
+  `app_extensions` installs them.
+- Tools as data: one-command wrappers defined in `agentlink/data/tools.json`
+  and run by the runners.
+- The Studio Light and Studio Dark preference packs.
+- Agent Link's own icons, drawn in FreeCAD's style, with their credits.
+- The Setup check and Updates commands in the Agent Link menu.
+- Release preparation: a beginner's README with a generated tool-group
+  table (`scripts/tool_summary.py`, checked by the tests), copy-paste client
+  configs (`docs/clients/`), `SETUP.md` for agents, the headless setup check
+  (`agentlink-freecad --check`, `python3 agentlink_headless.py --check`),
+  complete Addon Manager metadata, licence headers or `REUSE.toml` entries
+  for every file with the licence texts in `LICENSES/`, a `pyproject.toml`
+  for `uvx agentlink-freecad` (`docs/packaging.md`), and this changelog.
+- The privacy and identity check in CI.
+
+### Changed
+
+- Agent Link has its own repository (it began in ScanRuler's `freecad-spike`
+  branch).
+- Agent Link is a thin hub: printing, slicing, printers, cutting, milling,
+  fits, threads, mass and print-aware strength moved to Workshop Make;
+  standard parts to Workshop Parts; electronics and documents to Workshop
+  Electronics and Documents; the OrcaSlicer bridge to Agent Link for
+  OrcaSlicer; checkpoints, recovery, the settings log and macros to
+  SafetyNet; texture tools to Texturizer; building-code checks to a separate
+  add-on. Each keeps its own repository and licence.
+- AddonKit is retired: Agent Link carries its own records, shapes, data
+  loader, CalculiX reader and sheets.
+- Shared argument and refusal helpers (`picks`, `protocol.bad`, `paths`)
+  replace many per-tool copies; refusals keep each tool's own words.
+- The server reports version 0.3.0, as `package.xml` does.
+- `freecadmin` is 1.1.0, the FreeCAD the README names as required.
+
+### Removed
+
+- Agent Link's copies of what moved to add-ons, and the fits data nothing in
+  it used.
