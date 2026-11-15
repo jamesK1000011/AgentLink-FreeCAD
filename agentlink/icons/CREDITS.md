@@ -1,4 +1,5 @@
 # Icon credits
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 Icons adapted from Tabler Icons (MIT, tabler.io) and Pictogrammers Material Design Icons (Apache-2.0, pictogrammers.com). FreeCAD's own icons are used by name from FreeCAD.
 

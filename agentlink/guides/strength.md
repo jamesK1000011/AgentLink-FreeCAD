@@ -1,4 +1,5 @@
 # Strength (finite elements)
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 ## The study
 1. `fea_setup { body, material, mesh }`. The material is the body's (material_set) unless given.

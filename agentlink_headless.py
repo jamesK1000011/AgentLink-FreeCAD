@@ -3,10 +3,19 @@
 #   python agentlink_headless.py --out ~/Documents/AgentLink
 # or by FreeCAD's own command line, flags by env:
 #   AGENTLINK_OUT=~/Documents/AgentLink FreeCADCmd agentlink_headless.py
+# and, in any Python, what this computer is missing:
+#   python3 agentlink_headless.py --check
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# --check: what is missing on this computer and how to get it, in any
+# Python, no FreeCAD needed (agentlink/setup_check.py).
+if "--check" in sys.argv[1:]:
+    from agentlink import setup_check  # noqa: E402
+
+    sys.exit(setup_check.main([a for a in sys.argv[1:] if a != "--check"]))
 
 # The Claude extension's own launcher, mended where it cannot load (see
 # agentlink/launcher_check.py): never in the way of serving.
