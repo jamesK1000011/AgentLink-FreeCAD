@@ -71,6 +71,24 @@ def _parts(asm):
     return [o for o in asm.Group if o.TypeId != "Assembly::JointGroup" and hasattr(o, "Shape") and not o.Shape.isNull()]
 
 
+def ref_element(doc, r):
+    """A joint reference's part and element, either form: [asm,
+    ["Part.Face6", …]] (1.0) or [part, ["Face6", …]]."""
+    if not r:
+        return None, None, None
+    o, subs = r[0], (r[1] if len(r) > 1 else [])
+    sub = subs[0] if subs else ""
+    path = sub.split(".")
+    part = o
+    if o.TypeId == "Assembly::AssemblyObject" and len(path) > 1:
+        part = doc.getObject(path[0])
+    name = path[-1]
+    try:
+        return part, part.Shape.getElement(name), name
+    except Exception:
+        return part, None, name
+
+
 def _part(asm, ref):
     for o in _parts(asm):
         if ref in (o.Label, o.Name) or str(ref).lower() == o.Label.lower():
@@ -355,21 +373,7 @@ def tools(session):
         return {"assembly": asm.Label, "parts": [{"part": o.Label, "placement": _placement(o), "grounded": o in _grounded(asm)} for o in _parts(asm)], "joints": joints, "solve": said}
 
     def _ref_element(r):
-        """A joint reference's part and element shape, either form: [asm,
-        ["Part.Face6", …]] (1.0) or [part, ["Face6", …]]."""
-        if not r:
-            return None, None
-        o, subs = r[0], (r[1] if len(r) > 1 else [])
-        sub = subs[0] if subs else ""
-        path = sub.split(".")
-        part = o
-        if o.TypeId == "Assembly::AssemblyObject" and len(path) > 1:
-            part = doc().getObject(path[0])
-        el = path[-1]
-        try:
-            return part, part.Shape.getElement(el)
-        except Exception:
-            return part, None
+        return ref_element(doc(), r)[:2]
 
     def _axis(el):
         """Where a joint on this element turns and slides, as asm_joint puts

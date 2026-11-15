@@ -32,6 +32,16 @@ def num_json(v, nd=4):
     return v
 
 
+def ref_list(v, msg=None):
+    """One name or a list of them, as a list. msg: the refusal
+    (invalid_input) when there is none; without it, none passes through."""
+    if isinstance(v, str):
+        v = [v]
+    if msg is not None and not v:
+        raise ToolError("invalid_input", msg)
+    return v
+
+
 def r4(v):
     return round(float(v), 4) + 0.0
 

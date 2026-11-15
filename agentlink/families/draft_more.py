@@ -78,10 +78,7 @@ def tools(session):
                             objs=objs, refuse="Draft refused it: {msg} — nothing was kept.", extra=extra)
 
     def objs_of(refs, what="objects"):
-        if isinstance(refs, str):
-            refs = [refs]
-        if not refs:
-            raise bad(f"{what}: [names].")
+        refs = picks.ref_list(refs, f"{what}: [names].")
         return [picks.find(doc(), r) for r in refs]
 
     # ---- shapes ----

@@ -92,8 +92,7 @@ def add(s, shape, label):
 
 
 def elements(s, refs, what):
-    if isinstance(refs, str):
-        refs = [refs]
+    refs = picks.ref_list(refs)
     if not isinstance(refs, list) or not refs:
         raise bad(f"{what}: [\"Box.Face3\", …] or whole objects by name.")
     out = []

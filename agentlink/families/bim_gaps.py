@@ -33,10 +33,7 @@ def tools(s):
         return s.doc
 
     def objs(refs, what="objects"):
-        if isinstance(refs, str):
-            refs = [refs]
-        if not refs:
-            raise bad(f"{what}: one or more objects by label.")
+        refs = picks.ref_list(refs, f"{what}: one or more objects by label.")
         return [picks.find(d(), r, what) for r in refs]
 
     def done(tool, out):

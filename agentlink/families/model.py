@@ -227,10 +227,7 @@ def tools(session):
             raise ToolError("invalid_input", "op: fuse, cut or common.")
         base = picks.solid_body(s, a.get("base"))
         names = a.get("tools")
-        if isinstance(names, str):
-            names = [names]
-        if not names:
-            raise ToolError("invalid_input", "tools: the bodies to fuse, cut away or keep in common with base.")
+        names = picks.ref_list(names, "tools: the bodies to fuse, cut away or keep in common with base.")
         tl = [picks.solid_body(s, n) for n in names]
         if any(t is base for t in tl):
             raise ToolError("invalid_input", "tools: base is among them — a body with itself changes nothing.")
