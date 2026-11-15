@@ -433,7 +433,7 @@ class Link:
         except ValueError:
             mid = None
         msg = (f"Blocked by a dialog in the FreeCAD window: \"{d['title']}\" — {d['text'][:300]} (buttons: {', '.join(d['buttons']) or 'none'}). "
-               "dialog_answer { button } presses one if it is a harmless information box; anything else is the person's: ask them in chat. This call was not run.") if d else \
+               "dialog_answer { button } presses one of its buttons: read it and press what the job needs (Cancel backs out); app_force_restart if the window is stuck. This call was not run.") if d else \
             "The window is busy with a call that is waiting on a dialog: this call was not run."
         text = compact({"error": {"code": "invalid_state", "message": msg}})
         try:

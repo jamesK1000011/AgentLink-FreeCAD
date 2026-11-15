@@ -388,11 +388,18 @@ def instructions(lean, window):
 INSTRUCTIONS = instructions(True, False)
 
 
+def _force_restart_here(_a):
+    """Reached only with no supervisor in front (FreeCAD run by hand): the
+    window that answered is not stuck."""
+    raise ToolError("invalid_state", "This FreeCAD answered, so it is not stuck: app_restart quits and reopens it cleanly. (app_force_restart is run by Agent Link's supervisor, outside FreeCAD.)")
+
+
 def make_tools(session):
     s = session
     body = {"type": "string", "description": "A body's name; may be left out when there is one."}
     return [
         Tool("session_state", "What the document holds: each body's volume, area, faces, solids and size (mm), the step count and where files go. launcher: true adds the Claude extension's launcher as seen from here (the copy fetched from GitHub, whether it can load, its log's last lines). Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
+        Tool("app_force_restart", "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang): run by Agent Link outside FreeCAD; the documents come back from their newest saved copies, as after a crash. For a window that is stuck; app_restart quits a working one cleanly.", obj({}), _force_restart_here),
         Tool("body_check", "Whether a body is sound: valid, closed, one solid, no sliver faces (under 0.01 mm wide) or very short edges, with where each problem is.", obj({"body": body}), s.body_check),
         Tool(
             "export_file",
@@ -409,6 +416,7 @@ def make_tools(session):
 
 GROUP_OF = {
     "session_state": "core", "body_check": "core", "export_file": "core", "history_diff": "core",
+    "app_force_restart": "core", "dialog_answer": "core",
 }
 GROUP_INFO = {
     "core": "The session, groups, guides, batches, undo, soundness, export. Always listed.",
@@ -526,7 +534,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         if getattr(fam, "LEAN", False):
             lean_groups.add(fam.GROUP)
         for t in made:
-            t.group = fam.GROUP
+            t.group = fam.GROUP if external else GROUP_OF.get(t.name, fam.GROUP)
             if t.name in seen:
                 if not external:
                     raise RuntimeError(f"Agent Link: two tools are named {t.name} ({seen[t.name]} and {t.group}) — rename one.")
