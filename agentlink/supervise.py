@@ -46,7 +46,7 @@ def queue_admit(tool):
     """A heavy job's turn (N): None to go, else the answer's words. Held when
     the person said wait (their window work came first); waits while macOS
     reports heat throttling or memory pressure, up to QUEUE_WAIT."""
-    if keep is None or tool not in HEAVY:
+    if keep is None or not keep.is_heavy(tool):
         return None
     q = keep.queue_state()
     if q.get("held"):
@@ -70,7 +70,7 @@ def queue_admit(tool):
 
 
 def queue_done(tool):
-    if keep is None or tool not in HEAVY:
+    if keep is None or not keep.is_heavy(tool):
         return
     q = keep.queue_state()
     q["running"] = [r for r in q.get("running") or [] if r.get("tool") != tool]
@@ -98,7 +98,7 @@ def deadline_for(tool):
         return float(os.environ["AGENTLINK_DEADLINE"])
     if keep is None:
         return NO_ESTIMATE
-    if tool in HEAVY:
+    if keep is not None and keep.is_heavy(tool):
         try:
             q = keep.queue_state()
             pts = (q.get("timings") or {}).get(tool) or []
@@ -590,7 +590,7 @@ def run(script, argv):
                 pending.pop(mid, None)
                 write(_answer(mid, "invalid_state", held))
                 continue
-            heavy_tool = tool if tool in HEAVY else None
+            heavy_tool = tool if keep is not None and keep.is_heavy(tool) else None
         # Window first: a tool call goes to the FreeCAD window when its link
         # is on (Start link), so the person watches it land; else the hidden one.
         if msg and msg.get("method") == "tools/call" and window.call(line):
