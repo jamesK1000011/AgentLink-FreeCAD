@@ -322,7 +322,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         w = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(w)
         row = QtWidgets.QHBoxLayout()
-        self.pin_key = QtWidgets.QPushButton("Pin a note")
+        self.pin_key = QtWidgets.QPushButton("Pin a Note")
         self.pin_key.setCheckable(True)
         self.pin_key.setToolTip("Click the part to pin a note there")
         self.pin_key.toggled.connect(self.set_placing)
@@ -448,8 +448,9 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         except Exception as e:  # noqa: BLE001
             r = {"error": str(e)}
         box = QtWidgets.QMessageBox(self)
-        box.setWindowTitle("Agent Link — usage")
-        box.setText(usage_text(r))
+        from .commands import set_box_text
+
+        set_box_text(box, "Agent Link Usage", usage_text(r))
         box.exec_() if hasattr(box, "exec_") else box.exec()
 
     def refresh(self, force=False):
@@ -717,7 +718,9 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         if not ok or not name.strip():
             return
         done, r = self._call("macro_save", {"name": name.strip()})
-        QtWidgets.QMessageBox.information(self, "Agent Link", (f"Saved {r.get('path') or name}." + (" It runs once you approve it." if done else ""))
+        from .commands import info
+
+        info(self, "Agent Link", (f"Saved {r.get('path') or name}." + (" It runs once you approve it." if done else ""))
                                           if done else (r.get("error") or {}).get("message", str(r)))
 
     def fill_bodies(self):

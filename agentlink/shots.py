@@ -182,7 +182,7 @@ class Canvas(QtW.QWidget):
 class Card(QtW.QWidget):
     def __init__(self, shot, pix):
         super().__init__(None, QtCore.Qt.Tool | QtCore.Qt.WindowStaysOnTopHint)
-        self.setWindowTitle("Screenshot for the agent")
+        self.setWindowTitle("Screenshot for Agent")
         self.shot = shot
         self.pix = pix
         lay = QtW.QVBoxLayout(self)
