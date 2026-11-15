@@ -13,6 +13,7 @@ import Part
 
 import Arch  # FreeCAD's BIM workbench; the family is left out without it
 
+from .. import runners
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import picks
@@ -412,16 +413,6 @@ def tools(session):
 
     # ---- levels, building, site ---------------------------------------------------
 
-    def bim_level(a):
-        objs = [picks.find(doc(), r) for r in (a.get("objects") or [])]
-        o = Arch.makeFloor(objs)
-        named(o, a.get("name") or "Level")
-        z = picks.num(a.get("elevation", 0), "elevation")
-        o.Placement.Base = V(0, 0, z)
-        if hasattr(o, "Height") and a.get("height"):
-            o.Height = float(a["height"])
-        return finish(o, "bim_level", {"elevation": z, "holds": [x.Label for x in objs]})
-
     def bim_building(a):
         objs = [picks.find(doc(), r) for r in (a.get("levels") or [])]
         b = Arch.makeBuilding(objs)
@@ -617,20 +608,6 @@ def tools(session):
         s.snapshot("bim_import")
         return {"path": p, "objects": len(made), "byType": kinds, "read": how, "step": len(s.steps)}
 
-    def bim_list(a):
-        out = []
-        for o in doc().Objects:
-            t = ifc_type(o)
-            if not is_bim(o):
-                continue
-            e = {"object": o.Label, "ifc": t}
-            if getattr(o, "Group", None):
-                e["holds"] = [x.Label for x in o.Group]
-            if getattr(o, "Hosts", None):
-                e["in"] = [x.Label for x in o.Hosts]
-            out.append(e)
-        return {"objects": out, "count": len(out)}
-
     # ---- more building elements ---------------------------------------------------
 
     def setprops(o, vals):
@@ -746,29 +723,6 @@ def tools(session):
         named(o, a.get("name") or "Panel")
         return finish(o, "bim_panel", {"thickness": t})
 
-    def bim_pipe(a):
-        mk = getattr(Arch, "makePipe", None)
-        if mk is None:
-            raise ToolError("unavailable", "This FreeCAD's BIM has no pipe.")
-        path = baseline(a.get("points"), f"{a.get('name') or 'Pipe'} path")
-        d = pos(a, "diameter", 50)
-        o = headless_call(mk, path, d)
-        named(o, a.get("name") or "Pipe")
-        setprops(o, {"Diameter": d, "WallThickness": a.get("wall")})
-        return finish(o, "bim_pipe", {"diameter": d, "length": round(path.Shape.Length, 1)})
-
-    def bim_equipment(a):
-        mk = getattr(Arch, "makeEquipment", None)
-        if mk is None:
-            raise ToolError("unavailable", "This FreeCAD's BIM has no equipment.")
-        base = picks.find(doc(), a.get("object"))
-        o = headless_call(mk, base)
-        named(o, a.get("name") or f"{base.Label} equipment")
-        setprops(o, {"Model": a.get("model"), "Url": a.get("url"), "EquipmentPower": a.get("watts")})
-        if a.get("ifc"):
-            setprops(o, {"IfcType": a["ifc"]})
-        return finish(o, "bim_equipment", {"from": base.Label})
-
     def bim_grid(a):
         mk = getattr(Arch, "makeAxis", None)
         if mk is None:
@@ -826,9 +780,14 @@ def tools(session):
         s.snapshot("bim_material")
         return {"material": mat.Label, "data": data, "on": [o.Label for o in objs if hasattr(o, "Material")], "step": len(s.steps)}
 
+    # The wrappers kept as data (agentlink/data/tools.json) run on these.
+    helpers = {"doc": doc, "finish": finish, "named": named, "baseline": baseline, "setprops": setprops, "headless_call": headless_call,
+               "pos": pos, "num": picks.num, "is_bim": is_bim, "ifc_type": ifc_type,
+               "find": lambda ref, *what: picks.find(doc(), ref, *what), "finds": lambda refs: [picks.find(doc(), r) for r in (refs or [])]}
+
     pt = {"type": "array", "items": {"type": "number"}}
     pts = {"type": "array", "items": pt}
-    return [
+    return runners.tools(GROUP, s, helpers) + [
         Tool("bim_wall", "A wall along points [[x, y(, z)] …] (closed: true joins the last to the first) or a base sketch/wire: width (200), height (3000) mm, align center | left | right of the line.",
              obj({"points": pts, "closed": {"type": "boolean"}, "base": {"type": "string"}, "width": {"type": "number"}, "height": {"type": "number"},
                   "align": {"type": "string", "enum": ["center", "left", "right"]}, "name": {"type": "string"}}), bim_wall, changes=True),
@@ -848,8 +807,6 @@ def tools(session):
              obj({"at": pt, "direction": pt, "length": {"type": "number"}, "width": {"type": "number"}, "height": {"type": "number"}, "steps": {"type": "integer"}, "name": {"type": "string"}}), bim_stairs, changes=True),
         Tool("bim_space", "A space (a room) from its floor outline (points, height) or a base solid: its floor area; use the space's purpose.",
              obj({"points": pts, "base": {"type": "string"}, "height": {"type": "number"}, "use": {"type": "string"}, "name": {"type": "string"}}), bim_space, changes=True),
-        Tool("bim_level", "A level (building storey) holding objects, at elevation mm (height: floor to floor).",
-             obj({"objects": {"type": "array", "items": {"type": "string"}}, "elevation": {"type": "number"}, "height": {"type": "number"}, "name": {"type": "string"}}), bim_level, changes=True),
         Tool("bim_building", "A building holding levels, on a site (site: false for none).",
              obj({"levels": {"type": "array", "items": {"type": "string"}}, "site": {"type": "boolean"}, "siteName": {"type": "string"}, "name": {"type": "string"}}), bim_building, changes=True),
         Tool("bim_curtain_wall", "A curtain wall along points, height mm: mullions every vertical / horizontal mm (1500), mullion width and depth, glass thickness.",
@@ -860,9 +817,6 @@ def tools(session):
                   "cover": {"type": "number"}, "spacing": {"type": "number"}, "amount": {"type": "integer"}, "name": {"type": "string"}}, ["structure"]), bim_rebar, changes=True),
         Tool("bim_panel", "A panel (sheet material: plywood, cladding): an outline (points) or length × width at, thickness (18).",
              obj({"points": pts, "length": {"type": "number"}, "width": {"type": "number"}, "thickness": {"type": "number"}, "at": pt, "name": {"type": "string"}}), bim_panel, changes=True),
-        Tool("bim_pipe", "A pipe along points: diameter, wall (thickness) mm.", obj({"points": pts, "diameter": {"type": "number"}, "wall": {"type": "number"}, "name": {"type": "string"}}, ["points"]), bim_pipe, changes=True),
-        Tool("bim_equipment", "An object made BIM equipment (furniture, fixtures, appliances): object, ifc (e.g. Furniture, Sanitary Terminal), model, url, watts.",
-             obj({"object": {"type": "string"}, "ifc": {"type": "string"}, "model": {"type": "string"}, "url": {"type": "string"}, "watts": {"type": "number"}, "name": {"type": "string"}}, ["object"]), bim_equipment, changes=True),
         Tool("bim_grid", "Structural grid lines: spacing mm (one number with count, or a list), or xSpacing / ySpacing each; length of the lines.",
              obj({"spacing": {}, "xSpacing": {}, "ySpacing": {}, "count": {"type": "integer"}, "length": {"type": "number"}, "name": {"type": "string"}}), bim_grid, changes=True),
         Tool("bim_section", "A section plane through objects (all BIM objects when left out): at, normal ([0,0,1] for a plan cut).",
@@ -871,7 +825,6 @@ def tools(session):
              obj({"name": {"type": "string"}, "density": {"type": "number"}, "description": {"type": "string"}, "color": {"type": "string"}, "objects": {"type": "array", "items": {"type": "string"}}}, ["name"]), bim_material, changes=True),
         Tool("bim_schedule", "Quantities: every wall (length, height, area, volume), window and door (size, area), column, beam, slab, roof, stairs (volume) and space (floor area), with totals by kind; sheet: true (or a name) writes them to a spreadsheet.",
              obj({"sheet": {}}), bim_schedule),
-        Tool("bim_list", "The BIM objects: IFC type, what each holds, which wall each opening is in. Changes nothing.", obj({}), bim_list),
         Tool("bim_export", "Write IFC (path .ifc): the site or building, or objects; read back by type. Needs IfcOpenShell.",
              obj({"objects": {"type": "array", "items": {"type": "string"}}, "path": {"type": "string"}}), bim_export),
         Tool("bim_import", "Read an IFC file into the document (path). Needs IfcOpenShell.", obj({"path": {"type": "string"}}, ["path"]), bim_import, changes=True),
