@@ -77,6 +77,10 @@ def queue_done(tool):
     keep.save_queue(q)
 # A call stuck behind a dialog this long is answered "blocked".
 DIALOG_WAIT = 4.0
+# A dialog answer's own allowance: the first call into a window that has
+# just started builds its session first (several seconds), so the answer to
+# FreeCAD's Document Recovery at start was refused on every first try.
+ANSWER_WAIT = 30.0
 
 
 def _answer(mid, code, message):
@@ -606,7 +610,7 @@ def run(script, argv):
                     # dialog's age), but not for ever: a window that never
                     # answers it must not hold every call behind it.
                     waited = now - (c["start"] if _answers_dialog(c) else float(dlg.get("since") or now)) if dlg else 0
-                    if dlg and not dlg.get("pressed") and waited > DIALOG_WAIT:
+                    if dlg and not dlg.get("pressed") and waited > (ANSWER_WAIT if _answers_dialog(c) else DIALOG_WAIT):
                         window.abandon(f"Blocked by a dialog in the FreeCAD window: \"{dlg.get('title')}\" — {str(dlg.get('text'))[:300]} (buttons: {', '.join(dlg.get('buttons') or []) or 'none'}). "
                                        f"{c['tool']} is waiting behind it. dialog_answer {{ button }} presses one of its buttons: read it and press what the job needs (Cancel backs out); app_force_restart if the window is stuck.")
                         continue
