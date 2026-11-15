@@ -37,6 +37,23 @@ def _tool_name(line):
         return None
 
 
+def _dialog_call(line):
+    """True for dialog_answer, or a batch of nothing but dialog_answer calls:
+    the one thing that runs while a modal dialog holds the window. A client
+    that lists only the lean groups reaches dialog_answer through batch, and
+    a refused batch left a harmless OK box blocking every call (GUI pass)."""
+    name = _tool_name(line)
+    if name == "dialog_answer":
+        return True
+    if name != "batch":
+        return False
+    try:
+        calls = ((json.loads(line).get("params") or {}).get("arguments") or {}).get("calls") or []
+    except (ValueError, AttributeError):
+        return False
+    return bool(calls) and all(isinstance(c, dict) and c.get("tool") == "dialog_answer" for c in calls)
+
+
 # ---- what the window shows: a modal dialog, and the heartbeat (unattended use, E and F) ----
 
 def _qt():
@@ -429,7 +446,7 @@ class Link:
             wait = []
             for it in items:
                 name = _tool_name(it[0])
-                if d is not None and name == "dialog_answer":
+                if d is not None and _dialog_call(it[0]):
                     self._run_one(*it)
                 elif d is not None and name is not None:
                     self._blocked(it[0], it[1], d)
