@@ -6,7 +6,7 @@
 
 class _StartLink:
     def GetResources(self):
-        return {"MenuText": "Start link", "ToolTip": "Let an agent drive this window (local only)"}
+        return {"Pixmap": "AgentLink_Start", "MenuText": "Start link", "ToolTip": "Let an agent drive this window (local only)"}
 
     def IsActive(self):
         import agentlink_state
@@ -23,7 +23,7 @@ class _StartLink:
 
 class _StopLink:
     def GetResources(self):
-        return {"MenuText": "Stop link", "ToolTip": "Close the agent's link"}
+        return {"Pixmap": "AgentLink_Stop", "MenuText": "Stop link", "ToolTip": "Close the agent's link"}
 
     def IsActive(self):
         import agentlink_state
@@ -39,7 +39,7 @@ class _StopLink:
 
 class _Panel:
     def GetResources(self):
-        return {"MenuText": "Notes and steps", "ToolTip": "Notes pinned to the parts, and the build played step by step"}
+        return {"Pixmap": "AgentLink_Panel", "MenuText": "Notes and steps", "ToolTip": "Notes pinned to the parts, and the build played step by step"}
 
     def IsActive(self):
         return True
@@ -52,7 +52,7 @@ class _Panel:
 
 class _Shot:
     def GetResources(self):
-        return {"MenuText": "Screenshot for the agent", "ToolTip": "Take the window as you see it, mark it up and leave it for the agent (Alt+Shift+S)", "Accel": "Alt+Shift+S"}
+        return {"Pixmap": "AgentLink_Shot", "MenuText": "Screenshot for the agent", "ToolTip": "Take the window as you see it, mark it up and leave it for the agent (Alt+Shift+S)", "Accel": "Alt+Shift+S"}
 
     def IsActive(self):
         return True
