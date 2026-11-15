@@ -267,9 +267,7 @@ def tools(session):
         if a.get("mirror"):
             flat = flat.mirror(V(0, 0, 0), V(1, 0, 0))
         bb = flat.BoundBox
-        depth = picks.num(a.get("depth", 0.6), "depth")
-        if depth <= 0:
-            raise ToolError("invalid_input", "depth: mm, over 0.")
+        depth = picks.number(a, "depth", 0.6, gt=0, msg="depth: mm, over 0.")
         mode = a.get("mode", "emboss" if a.get("body") else "extrude")
         if mode not in ("emboss", "engrave", "extrude"):
             raise ToolError("invalid_input", "mode: emboss (raised on a face), engrave (cut in), or extrude (a part of its own).")

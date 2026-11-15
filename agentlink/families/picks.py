@@ -22,6 +22,16 @@ def num(v, name):
     return float(v)
 
 
+def number(a, key, default=None, *, gt=None, ge=None, le=None, msg=None, what=None):
+    """a[key] (default when it is absent) as a number (num, named what or
+    key), then a range: outside gt/ge/le it refuses invalid_input with msg,
+    the site's own words."""
+    v = num(a.get(key, default), what or key)
+    if (gt is not None and v <= gt) or (ge is not None and v < ge) or (le is not None and v > le):
+        raise ToolError("invalid_input", msg or f"{what or key}: out of range.")
+    return v
+
+
 def vec3(v, name, default=None):
     if v is None:
         if default is None:

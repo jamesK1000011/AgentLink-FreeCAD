@@ -160,9 +160,7 @@ def image_plane(d, path, label, a):
     except Exception as e:
         raise ToolError("unavailable", f"Image planes are not available here ({e}).")
     px = image_size(path)
-    w = picks.num(a.get("width", 100), "width")
-    if w <= 0:
-        raise ToolError("invalid_input", "width: the picture's width in mm, above 0.")
+    w = picks.number(a, "width", 100, gt=0, msg="width: the picture's width in mm, above 0.")
     o.Label = label
     o.ImageFile = path
     o.XSize = w
@@ -717,9 +715,7 @@ def tools(session):
             import Mesh
             import MeshPart
 
-            tol = picks.num(a.get("tolerance", 0.01), "tolerance")
-            if tol <= 0:
-                raise ToolError("invalid_input", "tolerance: the chord error, above 0 mm.")
+            tol = picks.number(a, "tolerance", 0.01, gt=0, msg="tolerance: the chord error, above 0 mm.")
 
             def mesh_of(sh):
                 return MeshPart.meshFromShape(Shape=sh, LinearDeflection=tol, AngularDeflection=0.0873, Relative=False)
