@@ -24,13 +24,21 @@ from .protocol import Tool, ToolError
 
 
 # Changing tools a macro does not replay: the session's own bookkeeping,
-# files and settings, the person's calls.
+# files and settings, the person's calls. By name, and by prefix (the
+# history, the app, settings and macros, whoever's tools they are); an
+# add-on adds its own with NOT_IN_MACROS on its family module.
 NOT_IN_MACROS = {
-    "history_undo", "history_redo", "history_checkpoint", "history_restore", "batch", "doc_save", "doc_save_all", "doc_close",
-    "doc_revert", "app_restart", "app_install", "agentlink_update", "app_extensions", "app_recover", "pref_set", "pref_reset",
-    "pref_import", "pref_pack", "pref_rollback", "macro_save", "macro_run", "macro_approve", "macro_unapprove", "addon",
+    "history_undo", "history_redo", "batch", "doc_save", "doc_save_all", "doc_close",
+    "doc_revert", "app_restart", "app_install", "agentlink_update", "app_extensions", "pref_set", "pref_reset",
+    "pref_import", "pref_pack", "addon",
     "note_add", "note_answer", "note_delete", "note_done", "dialog_answer", "queue_go", "doc_switch", "cmd_run", "menu_run",
 }
+NOT_IN_MACROS_PREFIXES = ("history_", "app_", "pref_", "macro_")
+
+
+def in_macros(name):
+    """Whether a changing call of this tool is kept for a macro."""
+    return name not in NOT_IN_MACROS and not name.startswith(NOT_IN_MACROS_PREFIXES)
 
 
 def obj(props, required=()):
@@ -61,7 +69,7 @@ class Session:
         # redo adds one): how an add-on's checkpoint knows whether the undo
         # stack still reaches it.
         self.tx = 0
-        # The changing calls, in order, for macro_save (J).
+        # The changing calls, in order, for saving as a macro (J).
         self.calls = []
         # Documents this session changed: app_restart saves these (L).
         self.agent_docs = set()
@@ -92,8 +100,8 @@ class Session:
         return out
 
     def record_call(self, tool, args):
-        """A changing call that went through, for macro_save."""
-        if tool.changes and tool.name not in NOT_IN_MACROS:
+        """A changing call that went through, for saving as a macro."""
+        if tool.changes and in_macros(tool.name):
             import copy
 
             self.calls.append({"tool": tool.name, "args": copy.deepcopy(args), "tx": self.tx, "step": len(self.steps)})
@@ -290,7 +298,7 @@ class Session:
 
             svc = hooks.service("checkpoints")
             if svc is None:
-                raise ToolError("unavailable", f"since {since!r}: a checkpoint needs SafetyNet, which is not installed here — since: a step of this session (session_state gives the step now).")
+                raise ToolError("unavailable", f"since {since!r}: a checkpoint needs an add-on that keeps checkpoints, and none is installed here — since: a step of this session (session_state gives the step now).")
             cp = svc.find(self, since)
             if not cp:
                 raise ToolError("not_found", f"since {since!r}: no such checkpoint — the add-on that keeps checkpoints lists them.")

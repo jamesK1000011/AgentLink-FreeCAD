@@ -24,6 +24,40 @@ from ..tools import obj
 GROUP = "unattended"
 INFO = "Unattended use: answer harmless dialogs, the pinned document, the heavy-job queue, the Addon Manager."
 
+# Used when the launcher's list is missing or unreadable (an install from
+# before it wrote one): Agent Link itself and the Addon Manager, no add-on
+# named here; the next launcher run writes the list.
+OURS_FALLBACK = frozenset({"AgentLink", "AddonManager"})
+INSTALLED_NAMES = ".installed-names"
+
+
+def mod_dir():
+    """FreeCAD's user Mod folder, where the launcher installs."""
+    return os.path.join(FreeCAD.getUserAppDataDir(), "Mod")
+
+
+def installed_names(mod=None):
+    """The folder names the launcher installed, from <Mod>/AgentLink/
+    .installed-names (a JSON list), plus AddonManager; None when the file
+    is missing or unreadable."""
+    try:
+        with open(os.path.join(mod or mod_dir(), "AgentLink", INSTALLED_NAMES), encoding="utf-8") as f:
+            names = json.load(f)
+    except (OSError, ValueError, TypeError):
+        return None
+    if not isinstance(names, list):
+        return None
+    return {n for n in names if isinstance(n, str) and n} | {"AgentLink", "AddonManager"}
+
+
+def ours(mod=None):
+    try:
+        got = installed_names(mod)
+    except Exception:  # noqa: BLE001  (no FreeCAD paths here)
+        got = None
+    return set(got) if got is not None else set(OURS_FALLBACK)
+
+
 
 def tools(s):
     def dialog_answer(a):
@@ -73,8 +107,9 @@ def tools(s):
 
     # ---- the Addon Manager, headless (I) ---------------------------------------------------
 
-    # Kept by agentlink_update (pinned to what CI checked), never by the Addon Manager.
-    OURS = {"AgentLink", "ScanRulerFC", "OrcaLink", "AddonManager"}
+    # Kept by agentlink_update (pinned to what CI checked), never by the
+    # Addon Manager: what the launcher installed (installed_names()).
+    OURS = ours()
 
     def _am():
         """The Addon Manager's own modules (FreeCAD 1.1 and newer)."""

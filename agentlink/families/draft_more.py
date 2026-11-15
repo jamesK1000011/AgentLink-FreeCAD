@@ -405,7 +405,7 @@ def tools(session):
             v.HiddenLines = True
         if a.get("section") and "ProjectionMode" in v.PropertiesList:
             v.ProjectionMode = "Cutfaces"
-        return finish(named(v, a.get("name"), f"{base.Label} 2D view"), "draft_2d_view", {"use": "cut_export or export (DXF) writes it; draft_dimension measures on it."})
+        return finish(named(v, a.get("name"), f"{base.Label} 2D view"), "draft_2d_view", {"use": "export (DXF) writes it; draft_dimension measures on it."})
 
     def draft_facebinder(a):
         active()

@@ -30,6 +30,13 @@ except ImportError:  # pragma: no cover
 # Agent Link's own panel, its own code: the idea credited, not the code.
 CREDIT = "Inspired by ScanRuler by Stefan Hermann (CNC Kitchen)."
 PIN_AGENT = (0.85, 0.45, 0.15)
+NO_REVIEWER = "No reviewer installed."
+
+
+def hooks_reviewers():
+    from . import hooks
+
+    return bool(hooks.REVIEWERS)
 
 
 def credit_text():
@@ -416,12 +423,17 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.review_pick = QtWidgets.QComboBox()
         self.review_pick.setToolTip("The body to review")
         go = QtWidgets.QPushButton("Check")
-        go.setToolTip("Soundness, printability (or the setup's process), mass and any strength results")
+        go.setToolTip("The installed reviewer's verdict on the body")
         go.clicked.connect(self.review)
+        # With no reviewer installed: the core soundness check.
+        self.sound_btn = QtWidgets.QPushButton("Body check")
+        self.sound_btn.setToolTip("Whether the body is sound: valid, closed, one solid, no slivers (body_check)")
+        self.sound_btn.clicked.connect(self.body_check)
         row.addWidget(self.review_pick, 1)
         row.addWidget(go)
+        row.addWidget(self.sound_btn)
         lay.addLayout(row)
-        self.verdict = QtWidgets.QLabel("")
+        self.verdict = QtWidgets.QLabel("" if hooks_reviewers() else NO_REVIEWER + " Body check gives the core soundness check.")
         self.verdict.setStyleSheet("font-weight: 600; font-size: 14px; padding: 4px;")
         lay.addWidget(self.verdict)
         self.findings = QtWidgets.QTreeWidget()
@@ -439,6 +451,12 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         """A tool, run as the agent's would be (so it is shown and logged)."""
         import json
 
+        server = self._server()[1]
+        r = server.call({"name": name, "arguments": args})
+        return not r.get("isError"), json.loads(r["content"][0]["text"])
+
+    def _server(self):
+        """(session, server): the link's, or with no link on the panel's own."""
         import agentlink_state
 
         link = agentlink_state.link
@@ -455,21 +473,28 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             if own is None or own[0].doc is not _doc():
                 sess = Session(doc=_doc(), out_dir=out)
                 own = self._own = (sess, build_server(sess))
-            server = own[1]
-        else:
-            link._ready()
-            server = link.server
-        r = server.call({"name": name, "arguments": args})
-        return not r.get("isError"), json.loads(r["content"][0]["text"])
+            return own
+        link._ready()
+        return link.session, link.server
 
     def review(self):
+        """The verdict of the reviewers add-ons registered
+        (hooks.register_reviewer), the first that answers; none names a tool
+        here."""
+        from . import hooks
+
         body = self.review_pick.currentText()
         if not body:
             return
-        ok, out = self._call("part_review", {"body": body})
         self.findings.clear()
-        if not ok:
-            self.verdict.setText("Could not review: " + (out.get("error") or {}).get("message", ""))
+        out = hooks.review(self._server()[0], body) if hooks.REVIEWERS else None
+        if out is None:
+            self.verdict.setText(NO_REVIEWER)
+            self.figures.setText("")
+            return
+        if not isinstance(out, dict) or out.get("error"):
+            err = out.get("error") if isinstance(out, dict) else None
+            self.verdict.setText("Could not review: " + ((err or {}).get("message", "") if isinstance(err, dict) else str(err or out)))
             return
         v = out.get("verdict", "?")
         colour = {"pass": "#3fae5a", "warn": "#e0a020", "fail": "#d94a4a"}.get(v, "palette(text)")
@@ -485,6 +510,26 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             self.findings.addTopLevelItem(QtWidgets.QTreeWidgetItem(["", "Nothing found", ""]))
         fig = out.get("figures") or {}
         self.figures.setText("  ·  ".join(f"{k} {v}" for k, v in fig.items()) + (f"\n{out.get('processFrom')}" if out.get("processFrom") else ""))
+
+    def body_check(self):
+        """The core soundness check, shown as the Review tab's findings."""
+        body = self.review_pick.currentText()
+        if not body:
+            return
+        ok, out = self._call("body_check", {"body": body})
+        self.findings.clear()
+        if not ok:
+            self.verdict.setText("Could not check: " + (out.get("error") or {}).get("message", ""))
+            return
+        sound = out.get("ok")
+        colour = "#3fae5a" if sound else "#d94a4a"
+        self.verdict.setText(f"<span style='color:{colour}'>{'SOUND' if sound else 'NOT SOUND'}</span> — {body}" + ("" if hooks_reviewers() else f" ({NO_REVIEWER})"))
+        self._last_findings = []
+        for msg in out.get("problems") or []:
+            self.findings.addTopLevelItem(QtWidgets.QTreeWidgetItem(["✗", str(msg), ""]))
+        if not out.get("problems"):
+            self.findings.addTopLevelItem(QtWidgets.QTreeWidgetItem(["", "Nothing found", ""]))
+        self.figures.setText("  ·  ".join(f"{k} {out[k]}" for k in ("solids", "volume", "area") if k in out))
 
     def _finding_picked(self, item, _col):
         """A finding with a place: point the view at it."""

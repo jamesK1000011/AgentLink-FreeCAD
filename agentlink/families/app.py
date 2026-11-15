@@ -499,7 +499,7 @@ def tools(session):
             done[k] = {"was": before, "now": _contents(g).get(k, {}).get("value"), "type": kind}
             if _settings_changed("pref_set", path, k, before, done[k]["now"]).get("applies"):
                 later.append(k)
-        out = {"path": path, "set": done, "note": "Most settings take effect at once; a few (the theme, the stylesheet, toolbars) only after FreeCAD restarts. pref_history lists the changes and pref_rollback takes them back, where they are installed."}
+        out = {"path": path, "set": done, "note": "Most settings take effect at once; a few (the theme, the stylesheet, toolbars) only after FreeCAD restarts. An add-on that keeps a settings history can list the changes and take them back."}
         if later:
             out["appliesAtNextLaunch"] = later
         return out
@@ -788,7 +788,7 @@ def tools(session):
             plan.append((d, "save" if save else ("drop" if a.get("discard") and not d.FileName else "copy")))
         lost = [d.Label for d, how in plan if how == "copy"]
         if lost and reopener is None:
-            raise ToolError("invalid_state", f"{', '.join(lost)}: changed and not being saved, and nothing here keeps a copy to reopen them from (that needs SafetyNet). doc_save them first, save: all (with the person's confirm), or discard: true for never-saved ones. Nothing was changed.")
+            raise ToolError("invalid_state", f"{', '.join(lost)}: changed and not being saved, and nothing here keeps a copy to reopen them from (that needs an add-on that keeps checkpoints). doc_save them first, save: all (with the person's confirm), or discard: true for never-saved ones. Nothing was changed.")
         saved, dropped = [], []
         for d, how in plan:
             if how == "save":
@@ -823,7 +823,7 @@ def tools(session):
         # The app and the files go to the shell as arguments, never into the
         # command's text: a path is not shell code, whatever it holds.
         # Waits for this FreeCAD to be gone (it writes its settings as it
-        # quits), puts a settings snapshot in place when pref_rollback asked,
+        # quits), puts a settings snapshot in place when a settings rollback asked,
         # and opens it again in the background (open -g: never in front).
         cfg_from = a.get("_cfg_from") or ""
         cfg_to = os.path.join(FreeCAD.getUserConfigDir(), "user.cfg") if cfg_from else ""

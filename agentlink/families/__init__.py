@@ -153,13 +153,20 @@ def _register_guides(mod):
 def declared(fams):
     """What each family says of its own tools, so no list here names them:
     HEAVY (queued, timed, given a deadline), WRITERS (their path is written,
-    not read), GEOMETRIC (their path is a curve, not a file), and for the
-    live echo in the window SHOWN, AREAS, WORKBENCHES and PAGES
+    not read), GEOMETRIC (their path is a curve, not a file), NOT_IN_MACROS
+    (changing calls a saved macro does not replay), and for the live echo
+    in the window SHOWN, AREAS, WORKBENCHES, COMMANDS and PAGES
     (agentlink/echo.py declare())."""
     from .. import echo, keep, paths
 
+    try:
+        from .. import tools
+    except ImportError:  # no FreeCAD (tests)
+        tools = None
     for f in fams:
         keep.declare_heavy(getattr(f, "HEAVY", ()) or ())
+        if tools is not None:
+            tools.NOT_IN_MACROS.update(x for x in (getattr(f, "NOT_IN_MACROS", ()) or ()) if isinstance(x, str))
         paths.WRITERS.update(getattr(f, "WRITERS", ()) or ())
         paths.GEOMETRIC.update(getattr(f, "GEOMETRIC", ()) or ())
         echo.declare(f)

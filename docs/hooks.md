@@ -33,11 +33,14 @@ LEAN = False                         # True: listed by default (keep it small)
 HEAVY = {"mine_solve"}               # optional: queued, timed, given a deadline
 WRITERS = {"mine_export"}            # optional: their "path" is written, not read
 GEOMETRIC = set()                    # optional: their "path" is a curve, not a file
+NOT_IN_MACROS = set()                # optional: changing calls a saved macro does not replay
 # Optional, for the live echo in the FreeCAD window (any family, data or code):
 SHOWN = ("mine_check",)              # read-only tools (names or prefixes) still shown as they run
 AREAS = {"mine": "Mine"}             # prefix → the name the Activity list gives its calls
-WORKBENCHES = {"mine_": "PartDesignWorkbench"}  # prefix → the workbench brought up for them
+WORKBENCHES = {"mine_": "MineWorkbench"}  # tool or prefix → the workbench brought up for them (longest match wins)
+COMMANDS = {"mine_do": "Mine_Do"}    # tool or prefix → the command whose button (and menu item) lights for them
 PAGES = ("mine_page_",)              # prefixes of tools working on a drawing page (opened, view not reframed)
+# def command_for(name, args): ...   # optional: the command for a call by its arguments, or None
 
 def tools(session):
     from agentlink.protocol import Tool, ToolError
@@ -47,6 +50,7 @@ def tools(session):
     return [Tool("mine_do", "What it does, when to use it.", schema, do_it, changes=True)]
 ```
 
+- **The live echo.** When the agent runs one of your tools, the bench from `WORKBENCHES` comes up (use your own workbench where the tool has a button there; a drawing-page tool goes to `TechDrawWorkbench`; safety and settings tools declare none) and the button from `COMMANDS` lights. A bench not loaded in this window is left alone and logged once, never an error. Neither is needed for a tool to work.
 - **Keep your core free of Agent Link.** Put the work in your own API (plain
   functions on FreeCAD) and keep the family a thin layer over it. Raise
   `ToolError(code, message)` with a message that says what to do instead.
@@ -110,7 +114,7 @@ All optional. Every hook catches and logs your exceptions.
 | `on(event, fn)` | `after_change(session, tool)`, `setting_changing(tool, path)`, `setting_changed(path, name, old, new, tool=, restart=, applies=)`, `reply_written(session)`, `docs_changed(session)`, `call_done(session, tool, ok)`. |
 | `extend_tool(name, properties, before, after, describe)` | Add arguments to a tool another family owns. `before(args, session)` may return changed arguments; `after(args, answer, session)` may return a fuller answer; `describe` is a sentence added to the tool's description. The owner never sees your arguments. |
 | `register_tab(title, factory, order)` | A tab in Agent Link's panel: `factory(panel)` returns a QWidget; its `fill()`, if it has one, runs each time the tab comes up. `panel._call(tool, args)` runs a tool as the person's click, answering `(ok, result)`. |
-| `register_reviewer(fn)` | `fn(session, body)` gives the Review tab its verdict. |
+| `register_reviewer(fn)` | `fn(session, body)` gives the Review tab its verdict (`{"verdict": "pass"/"warn"/"fail", "findings": [...], "figures": {...}, "process": ...}`), or `None` to pass. Reviewers are asked in the order they registered; the first answer that is not `None` is shown. With none, the tab says so and offers the core `body_check`. |
 | `guard_setting(path, name)` | A setting `pref_set` must not change (`path` as `pref_set` takes it, e.g. `"Mod/MyAddon"`): one that widens what the agent may do or which code FreeCAD loads. |
 | `remember(session, kind, value)` / `analysis(session, kind)` | Last results by kind, for example the last FEA solve. |
 | `agentlink.tools.register_guides(folder)` | Markdown guides the agent can read with `guide_read`. A `guides/` folder beside your `agentlink_families.py` is registered for you; if there is also a `freecad_guides/`, only that one is (for add-ons whose `guides/` serve their own server). |

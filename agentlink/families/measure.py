@@ -326,7 +326,7 @@ def tools(session):
             "note": "Points are [u, v] in the plane: a point is origin + u·U + v·V. outer: false marks a hole.",
         }
 
-    def mass_properties(a):
+    def measure_mass(a):
         o = picks.solid_body(s, a.get("body"))
         if a.get("density") is not None:
             rho = picks.num(a["density"], "density")
@@ -449,7 +449,7 @@ def tools(session):
             "measure_mass",
             "Volume, area, mass, centre of mass and inertia (g·mm² about the centre of mass; principal moments and axes for one solid) of a body solid through: material (" + ", ".join(MASS_DENSITY) + ") or density g/cm³; the material recorded (material_set) when neither is given. Trap: a printed part is not solid — an add-on for printing may estimate its printed mass.",
             obj({"body": body, "material": {"type": "string"}, "density": {"type": "number"}}),
-            mass_properties,
+            measure_mass,
         ),
         Tool(
             "clearance",

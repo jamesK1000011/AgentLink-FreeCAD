@@ -446,7 +446,7 @@ def tools(session):
         c = doc().addObject("Part::Feature", "Sections")
         c.Label = s.unique(a.get("name") or f"{o.Label} sections")
         c.Shape = Part.Compound(wires)
-        return picks.finish(s, "meshobj_sections", lambda: {"sections": c.Label, "normal": geo.vec(n), "slices": rows, "use": "section_to_sketch or cut_export takes them; part_face makes one a face."})
+        return picks.finish(s, "meshobj_sections", lambda: {"sections": c.Label, "normal": geo.vec(n), "slices": rows, "use": "export writes them as DXF; part_face makes one a face."})
 
     def meshobj_split(a):
         o = mesh_of(a.get("mesh"))
