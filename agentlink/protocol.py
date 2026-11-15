@@ -258,6 +258,7 @@ class Server:
     def call(self, params):
         t0 = time.time()
         result = self._call(params)
+        _add_notice(result)
         if self.meter is not None:
             try:
                 content = result.get("content") or []
@@ -337,6 +338,27 @@ class Server:
     @staticmethod
     def refusal(code, message):
         return {"content": [{"type": "text", "text": compact({"error": {"code": code, "message": message}})}], "isError": True}
+
+
+def _add_notice(result):
+    """A line an add-on's notice service has for the agent (hooks.notice):
+    added once, as "notice", to the answer in hand, refusals too. Anything
+    going wrong leaves the answer as it was."""
+    try:
+        from . import hooks
+
+        content = result.get("content") or []
+        body = json.loads(content[0]["text"]) if content and content[0].get("type") == "text" else None
+        if not isinstance(body, dict):
+            return
+        line = hooks.notice()
+        if not line:
+            return
+        had = body.get("notice")
+        body["notice"] = f"{had} {line}" if had else line
+        content[0]["text"] = compact(body)
+    except Exception:
+        pass
 
 
 def serve_lines(server, readline, write):

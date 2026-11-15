@@ -127,6 +127,13 @@ All optional. Every hook catches and logs your exceptions.
 |---|---|---|---|
 | `checkpoints` | `take(session, name=None, auto=False, doc=None)` → `(entry, dropped)`; `find(session, ref)` → entry or `None`; `index(doc_name)` → entries; `restore(session, ref)` → answer | `history_diff { since: "cp3" }`, a copy before a heavy job and before `app_restart` saves | `history_diff` by checkpoint is refused `unavailable`; no copies are taken |
 | `reopen` | `keep([doc])` → `[{ name, label, file, copy, t }]` | `app_restart`, for changed documents it does not save | `app_restart` reopens saved files only, and refuses while a changed document would be lost |
+| `notice` | `fn()` → a short line or `None` | Every tool call's answer: a line is added once as `"notice"`, on that answer only (refusals too) | Answers are unchanged |
+
+`notice` tells the agent of something the person did that it would not
+otherwise know, such as a screenshot taken in the window. Return a line only
+once for each new thing, and `None` the rest of the time. The provider is
+given 0.2 s: a slower one never holds an answer up, and a line it gives late
+rides on the next answer. A provider that raises is logged and skipped.
 
 An entry is `{ id, name, file, step, tx, session, … }`: `file` a saved copy
 Agent Link can open, `session` the `id()` of the session that took it and

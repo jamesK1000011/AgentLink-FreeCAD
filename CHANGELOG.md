@@ -12,6 +12,7 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 
 ### Added
 
+- The `notice` service (`docs/hooks.md`): an add-on's short line for the agent, such as a new screenshot, rides once on the next answer as `"notice"`; a slow or failing provider never holds an answer up.
 - An MCP server that drives FreeCAD headless or in the person's own window:
   documents, Part and PartDesign modelling, sketches with the solver's
   reading, parameters and spreadsheets, measurement, materials, FEM
