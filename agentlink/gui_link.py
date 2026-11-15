@@ -543,6 +543,14 @@ class Link:
                 except OSError:
                     pass
                 self.sock = None
+        if reply is not None and FreeCAD.GuiUp and _tool_name(line) is not None:
+            try:
+                from . import report_watch
+                from .protocol import add_report
+
+                add_report(reply, report_watch.take())
+            except Exception:
+                pass
         try:
             if reply is not None:
                 f.write(compact(reply) + "\n")

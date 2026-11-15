@@ -361,6 +361,23 @@ def _add_notice(result):
         pass
 
 
+def add_report(reply, lines):
+    """New Report view problem lines (report_watch.take) onto a call's
+    answer, as "report"; anything going wrong leaves the answer as it was."""
+    if not lines:
+        return
+    try:
+        result = reply.get("result") or {}
+        content = result.get("content") or []
+        body = json.loads(content[0]["text"]) if content and content[0].get("type") == "text" else None
+        if not isinstance(body, dict):
+            return
+        body["report"] = lines
+        content[0]["text"] = compact(body)
+    except Exception:
+        pass
+
+
 def serve_lines(server, readline, write):
     """Read a message a line until the input ends; write each reply a line."""
     while True:

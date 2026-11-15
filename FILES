@@ -121,6 +121,7 @@ agentlink/paths.py
 agentlink/protocol.py
 agentlink/refusal.py
 agentlink/render.py
+agentlink/report_watch.py
 agentlink/restart_mark.py
 agentlink/runners.py
 agentlink/server.py
@@ -213,6 +214,7 @@ tests/test_paths.py
 tests/test_pref_import.py
 tests/test_protocol.py
 tests/test_release.py
+tests/test_report_watch.py
 tests/test_runners.py
 tests/test_sheet.py
 tests/test_sheets.py
