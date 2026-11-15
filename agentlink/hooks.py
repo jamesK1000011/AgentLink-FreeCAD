@@ -228,6 +228,22 @@ def register_reviewer(fn):
     return fn
 
 
+def review(session, body):
+    """The Review tab's verdict on body: each reviewer in the order they
+    registered, the first answer that is not None. None when no reviewer
+    is installed or none answered; a reviewer that fails is logged and
+    the next asked."""
+    for fn in list(REVIEWERS):
+        try:
+            got = fn(session, body)
+        except Exception as e:  # noqa: BLE001
+            _log("a reviewer failed", e)
+            continue
+        if got is not None:
+            return got
+    return None
+
+
 # ---- protected settings: pref_set refuses to change these (an add-on's
 # own switches only the person changes, in its own panel).
 GUARDED = set()

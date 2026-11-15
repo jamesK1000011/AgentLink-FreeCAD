@@ -90,7 +90,7 @@ def edge_items(edges, layer, defl):
     return out
 
 
-def flat_export(objs, fmt, path, a):
+def flat_write(objs, fmt, path, a):
     """A 2D view of the objects (hidden lines on their own layer when hidden: true), or a section at z."""
     from .. import flat2d
 
@@ -704,7 +704,7 @@ def tools(session):
             if fmt == "iges" and not back.Solids:
                 verify["note"] = "IGES carries faces, not solids, as most readers take it."
         elif fmt in FLAT_OUT:
-            verify = flat_export(objs, fmt, p, a)
+            verify = flat_write(objs, fmt, p, a)
         else:
             import Mesh
             import MeshPart

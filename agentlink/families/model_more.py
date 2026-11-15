@@ -335,7 +335,7 @@ def tools(session):
         c = new_obj("Part::Feature", a.get("name") or f"{o.Label} slices")
         c.Shape = Part.Compound(wires)
         out = added(c, "part_slices", {"normal": geo.vec(n), "range": [round(lo, 3), round(hi, 3)], "slices": rows})
-        out["use"] = "cut_export writes them as DXF for a laser; section_to_sketch makes one a sketch."
+        out["use"] = "export writes them as DXF for a laser (and a cutting add-on, where installed); a sketch can be made from one."
         return out
 
     # ---- mesh to solid ----
@@ -364,7 +364,7 @@ def tools(session):
         try:
             sol = Part.makeSolid(Part.makeShell(sh.Faces) if not sh.Shells else sh.Shells[0])
         except Exception as e:
-            raise ToolError("failed", f"The mesh does not close into a solid ({e}): fill its holes first (mesh_fill_holes).")
+            raise ToolError("failed", f"The mesh does not close into a solid ({e}): fill its holes first (meshobj_repair).")
         if a.get("refine", True):
             try:
                 sol = sol.removeSplitter()

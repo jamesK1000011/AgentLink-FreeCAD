@@ -88,7 +88,33 @@ def command_for(name, args):
         return CAM_OP[kind]
     if name == "cam_dressup" and kind in CAM_DRESSUP:
         return CAM_DRESSUP[kind]
-    return COMMAND.get(name)
+    if name in COMMAND:
+        return COMMAND[name]
+    # What add-ons declared (declare()): their own callables first, then
+    # COMMANDS by exact name or longest prefix.
+    for fn in list(COMMAND_FNS):
+        try:
+            got = fn(name, args or {})
+        except Exception:
+            got = None
+        if isinstance(got, str) and got:
+            return got
+    return _longest(name, COMMANDS.items())
+
+
+# Add-ons' own buttons, declared on their family modules (declare()):
+# {tool or prefix: command}, and command_for(name, args) callables.
+COMMANDS = {}
+COMMAND_FNS = []
+
+
+def _longest(name, pairs):
+    """The value of the longest key that is name or a prefix of it."""
+    best, got = -1, None
+    for k, v in pairs:
+        if isinstance(k, str) and name.startswith(k) and len(k) > best:
+            best, got = len(k), v
+    return got
 
 
 # Read-only tools that still show something (a view, a picture).
@@ -182,8 +208,11 @@ def declare(fam):
     declared()). All optional, on the family module: SHOWN, names or name
     prefixes of read-only tools that still show something; AREAS, {prefix:
     name} for the Activity list ('slice' gives 'Slice › …'); WORKBENCHES,
-    {prefix: workbench} to bring up for its tools; PAGES, prefixes of its
-    tools that work on a drawing page."""
+    {tool or prefix: workbench} to bring up for its tools (the longest
+    match wins, so an add-on's "part_check" can go to another bench than core's
+    "part_"); COMMANDS, {tool or prefix: command} whose button lights for
+    its tools, or command_for(name, args) -> command or None; PAGES,
+    prefixes of its tools that work on a drawing page."""
     global SHOWN
     shown = tuple(x for x in (getattr(fam, "SHOWN", ()) or ()) if isinstance(x, str) and x not in SHOWN)
     SHOWN = SHOWN + shown
@@ -192,6 +221,12 @@ def declare(fam):
     for k, v in dict(getattr(fam, "WORKBENCHES", None) or {}).items():
         if not any(k == p for p, _ in WORKBENCH):
             WORKBENCH.append((k, v))
+    for k, v in dict(getattr(fam, "COMMANDS", None) or {}).items():
+        if isinstance(k, str) and isinstance(v, str):
+            COMMANDS.setdefault(k, v)
+    fn = getattr(fam, "command_for", None)
+    if callable(fn) and fn not in COMMAND_FNS:
+        COMMAND_FNS.append(fn)
     for k in getattr(fam, "PAGES", ()) or ():
         if isinstance(k, str) and k not in PAGES:
             PAGES.append(k)
@@ -259,21 +294,37 @@ def caption(text, ms=2600):
     QtCore.QTimer.singleShot(ms, lambda: lbl.isVisible() and lbl.text().endswith(text) and lbl.hide())
 
 
-def flash_command(cmd, ms=1300):
-    """Light the toolbar button (and menu item) that runs cmd."""
+def flash_command(cmd, ms=1300, settle=False):
+    """Light the toolbar button and the menu item that run cmd. settle:
+    the bench was just switched, so one paint first, for its toolbars and
+    menus to exist before their button can light."""
     import FreeCADGui
 
-    QtCore, _QtGui, QtW = _qt()
+    QtCore, QtGui, QtW = _qt()
+    if settle:
+        _paint()
     mw = FreeCADGui.getMainWindow()
-    for act in mw.findChildren(QtW.QAction if hasattr(QtW, "QAction") else _QtGui.QAction):
+    QAction = QtW.QAction if hasattr(QtW, "QAction") else QtGui.QAction
+    for act in mw.findChildren(QAction):
         if act.objectName() != cmd:
             continue
         widgets = act.associatedWidgets() if hasattr(act, "associatedWidgets") else act.associatedObjects()
+        lit = []
         for w in widgets:
             if isinstance(w, QtW.QToolButton):
                 old = w.styleSheet()
                 w.setStyleSheet("QToolButton { background: rgba(255,150,40,0.55); border: 1px solid #ff9628; border-radius: 4px; }")
                 QtCore.QTimer.singleShot(ms, lambda w=w, old=old: w.setStyleSheet(old))
+            elif isinstance(w, QtW.QMenu):
+                # The menu item and its menu's title in bold for a moment
+                # (no menu is opened: that would take the person's input).
+                lit += [act, w.menuAction()]
+        for a in dict.fromkeys(x for x in lit if x is not None):
+            old = QtGui.QFont(a.font())
+            f = QtGui.QFont(old)
+            f.setBold(True)
+            a.setFont(f)
+            QtCore.QTimer.singleShot(ms, lambda a=a, old=old: a.setFont(old))
 
 
 def fit():
@@ -325,10 +376,29 @@ def _select(objs):
 
 
 def _workbench_for(name):
-    for prefix, wb in WORKBENCH:
-        if name.startswith(prefix):
-            return wb
-    return None
+    """The bench for a tool: the longest WORKBENCH key that is its name or
+    a prefix of it (core's prefixes and what add-ons declared)."""
+    return _longest(name, WORKBENCH)
+
+
+# Declared benches not loaded in this window, logged once each.
+UNKNOWN_BENCHES = set()
+
+
+def bench_to_switch(name, loaded, active):
+    """The bench to bring up for this call, or None: none declared, already
+    in front, or not loaded in this window (an add-on's bench when the
+    add-on is not here) — that last logged once, never an error."""
+    wb = _workbench_for(name)
+    if not wb or wb == active:
+        return None
+    if wb not in loaded:
+        if wb not in UNKNOWN_BENCHES:
+            UNKNOWN_BENCHES.add(wb)
+            if FreeCAD is not None:
+                FreeCAD.Console.PrintLog(f"Agent Link echo: {wb} (for {name}) is not loaded here; the bench stays as it is.\n")
+        return None
+    return wb
 
 
 class Echo:
@@ -353,8 +423,9 @@ class Echo:
         try:
             import FreeCADGui
 
-            wb = _workbench_for(tool.name)
-            if wb and FreeCADGui.activeWorkbench().name() != wb and wb in FreeCADGui.listWorkbenches():
+            act = FreeCADGui.activeWorkbench()
+            wb = bench_to_switch(tool.name, FreeCADGui.listWorkbenches(), act.name() if act else None)
+            if wb:
                 FreeCADGui.activateWorkbench(wb)
             self._mode(tool.name, args)
             caption(_describe(tool.name, args))
@@ -368,7 +439,7 @@ class Echo:
             FreeCADGui.getMainWindow().statusBar().showMessage("Agent" + where + ": " + _describe(tool.name, args), 4000)
             cmd = command_for(tool.name, args)
             if cmd:
-                flash_command(cmd)
+                flash_command(cmd, settle=bool(wb))
             doc = self.s.doc
             _select(_objects(doc, [args.get(k) for k in ARG_KEYS if args.get(k)]))
             _paint()
