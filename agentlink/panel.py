@@ -614,13 +614,17 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             # A refresh with no document open makes none (a new "AgentLink"
             # document appeared just from opening a panel).
             return False, {"error": {"code": "invalid_state", "message": "No document open."}}
-        session, server = self._server()
-        was = getattr(session, "quiet_call", False)
-        session.quiet_call = bool(quiet)
-        try:
-            r = server.call({"name": name, "arguments": args})
-        finally:
-            session.quiet_call = was
+        from . import layout
+
+        # A refresh leaves the window's modified marks as they were.
+        with (layout.keep_marks() if quiet else _Nothing()):
+            session, server = self._server()
+            was = getattr(session, "quiet_call", False)
+            session.quiet_call = bool(quiet)
+            try:
+                r = server.call({"name": name, "arguments": args})
+            finally:
+                session.quiet_call = was
         return not r.get("isError"), json.loads(r["content"][0]["text"])
 
     _call.quiet_ok = True  # an add-on may pass quiet=True
@@ -896,6 +900,14 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         super().closeEvent(e)
 
 
+class _Nothing:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
 class _Caller:
     """Runs a tool as the panel does (shown and logged as the agent's are)
     with no panel built: Panel's own _call and _server."""
@@ -943,7 +955,8 @@ def _switched(name):
     if _panel is None:
         return
     try:
-        _panel.filter_tabs(str(name))
+        with layout.keep_marks():
+            _panel.filter_tabs(str(name))
         e = layout.own().entries.get(KEY)
         if e is not None:
             e["fronts"] = _panel.fronts()
