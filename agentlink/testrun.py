@@ -240,6 +240,24 @@ class Unsupported(Exception):
     """A pytest feature the small runner lacks: the test is skipped with it."""
 
 
+def real_python(exe, version=None):
+    """The Python interpreter shipped beside exe (FreeCAD's bin folder), when
+    exe is not itself one; else None."""
+    import os
+    import sys
+
+    name = os.path.basename(exe or "").lower()
+    if not exe or name.startswith("python"):
+        return None
+    v = version or sys.version_info
+    d = os.path.dirname(exe)
+    for cand in (f"python{v[0]}.{v[1]}", f"python{v[0]}", "python"):
+        p = os.path.join(d, cand)
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return None
+
+
 def main():
     # Imported here: FreeCAD's start-up can take module names out of a
     # script's globals.
@@ -255,6 +273,11 @@ def main():
     for p in reversed([x for x in os.environ.get("PYTHONPATH", "").split(os.pathsep) if x]):
         if p not in sys.path:
             sys.path.insert(0, p)
+    # Tests that start a fresh interpreter run sys.executable: in freecadcmd
+    # that is freecadcmd itself, which takes neither -I nor Python's -c.
+    py = real_python(sys.executable)
+    if py:
+        sys.executable = py
 
     def emit(row):
         with open(out, "a", encoding="utf-8") as f:
