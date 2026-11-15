@@ -388,6 +388,14 @@ def instructions(lean, window):
 INSTRUCTIONS = instructions(True, False)
 
 
+def _report_read(a):
+    if not getattr(FreeCAD, "GuiUp", False):
+        raise ToolError("unavailable", "No window here: the Report view is in the FreeCAD window (its link on).")
+    from . import report_watch
+
+    return report_watch.read(a.get("last", 40), bool(a.get("problems")))
+
+
 def _force_restart_here(_a):
     """Reached only with no supervisor in front (FreeCAD run by hand): the
     window that answered is not stuck."""
@@ -400,6 +408,7 @@ def make_tools(session):
     return [
         Tool("session_state", "What the document holds: each body's volume, area, faces, solids and size (mm), the step count and where files go. launcher: true adds the Claude extension's launcher as seen from here (the copy fetched from GitHub, whether it can load, its log's last lines). Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
         Tool("app_force_restart", "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang): run by Agent Link outside FreeCAD; the documents come back from their newest saved copies, as after a crash. For a window that is stuck; app_restart quits a working one cleanly.", obj({}), _force_restart_here),
+        Tool("report_read", "FreeCAD's Report view in the window: its last lines (last, 40 by default), or only the warnings and errors (problems: true). New problem lines also come back on each answer as \"report\". Window only.", obj({"last": {"type": "integer"}, "problems": {"type": "boolean"}}), _report_read),
         Tool("body_check", "Whether a body is sound: valid, closed, one solid, no sliver faces (under 0.01 mm wide) or very short edges, with where each problem is.", obj({"body": body}), s.body_check),
         Tool(
             "export_file",
@@ -416,7 +425,7 @@ def make_tools(session):
 
 GROUP_OF = {
     "session_state": "core", "body_check": "core", "export_file": "core", "history_diff": "core",
-    "app_force_restart": "core", "dialog_answer": "core",
+    "app_force_restart": "core", "dialog_answer": "core", "report_read": "core",
 }
 GROUP_INFO = {
     "core": "The session, groups, guides, batches, undo, soundness, export. Always listed.",

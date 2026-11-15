@@ -26,7 +26,7 @@ PORT = 7318
 # own: refused when the person has another in front (K), rather than acting
 # on theirs.
 FRONT_TOOLS = {"cmd_run", "menu_run", "view_snapshot"}
-PINNED_FREE = {"doc_open", "doc_new", "doc_switch", "session_state", "tool_groups", "guide_read", "app_recover", "dialog_answer", "usage_report", "doc_close"}
+PINNED_FREE = {"doc_open", "doc_new", "doc_switch", "session_state", "tool_groups", "guide_read", "app_recover", "dialog_answer", "usage_report", "doc_close", "report_read"}
 
 
 def _tool_name(line):
@@ -122,8 +122,13 @@ def agent_opened(d):
         return False
 
 
+BACK_OUT = ("cancel", "close", "escape", "esc", "dismiss")
+
+
 def press(d, label):
-    """Press a dialog's button by its text (never by where it is)."""
+    """Press a dialog's button by its text (never by where it is). Cancel,
+    Close or Escape on a dialog with no such button (a file picker, which on
+    macOS is the system's own panel with no Qt buttons) rejects it."""
     try:
         QtGui, QtWidgets = _qt()
         want = label.lower().replace("&", "")
@@ -131,6 +136,64 @@ def press(d, label):
             if b.isVisible() and b.isEnabled() and b.text().lower().replace("&", "") == want:
                 b.click()
                 return True
+        if want in BACK_OUT:
+            w = d["widget"]
+            if hasattr(w, "reject"):
+                w.reject()
+            else:
+                w.close()
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def task_info():
+    """The task panel open in the window (Combo View's Tasks), if any:
+    { title, buttons, widget } — FreeCAD's task dialogs are not modal, so
+    modal_info does not see them."""
+    try:
+        import FreeCADGui
+
+        if not FreeCADGui.Control.activeDialog():
+            return None
+        QtGui, QtWidgets = _qt()
+        mw = FreeCADGui.getMainWindow()
+        view = None
+        for w in mw.findChildren(QtWidgets.QWidget):
+            if w.metaObject().className() == "Gui::TaskView::TaskView" and w.isVisible():
+                view = w
+                break
+        buttons, titles = [], []
+        if view is not None:
+            for b in view.findChildren(QtWidgets.QAbstractButton):
+                if b.isVisible() and b.isEnabled() and b.text() and not b.isCheckable():
+                    buttons.append(b.text().replace("&", ""))
+            for g in view.findChildren(QtWidgets.QWidget):
+                t = g.windowTitle() if hasattr(g, "windowTitle") else ""
+                if t and g.isVisible() and t not in titles:
+                    titles.append(t)
+        return {"class": "TaskPanel", "title": titles[0] if titles else "Task", "text": ", ".join(titles[:6]), "buttons": buttons or ["OK", "Cancel"], "widget": view}
+    except Exception:
+        return None
+
+
+def press_task(d, label):
+    """A task panel's button by its text; Cancel/Close with none found
+    closes the task as FreeCAD's Cancel does."""
+    want = label.lower().replace("&", "")
+    try:
+        QtGui, QtWidgets = _qt()
+        if d.get("widget") is not None:
+            for b in d["widget"].findChildren(QtWidgets.QAbstractButton):
+                if b.isVisible() and b.isEnabled() and b.text().lower().replace("&", "") == want:
+                    b.click()
+                    return True
+        if want in BACK_OUT:
+            import FreeCADGui
+
+            FreeCADGui.Control.closeDialog()
+            return True
     except Exception:
         pass
     return False

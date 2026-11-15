@@ -31,18 +31,42 @@ def problems(text, start):
     return out, len(text)
 
 
+def _report_widget():
+    """FreeCAD's Report view: the text edit inside the dock named
+    "Report view" (its object name), else one whose class says Report."""
+    import FreeCADGui
+    from PySide import QtWidgets
+
+    mw = FreeCADGui.getMainWindow()
+    for dock in mw.findChildren(QtWidgets.QDockWidget):
+        if dock.objectName() in ("Report view", "ReportView") or dock.windowTitle() in ("Report view", "Report View"):
+            for w in [dock.widget()] + dock.findChildren(QtWidgets.QWidget):
+                if w is not None and hasattr(w, "toPlainText"):
+                    return w
+    for w in mw.findChildren(QtWidgets.QWidget):
+        if "Report" in w.metaObject().className() and hasattr(w, "toPlainText"):
+            return w
+    return None
+
+
 def _report_text():
     try:
-        import FreeCADGui
-        from PySide import QtWidgets
-
-        mw = FreeCADGui.getMainWindow()
-        for w in mw.findChildren(QtWidgets.QTextEdit):
-            if w.metaObject().className() == "Gui::DockWnd::ReportOutput":
-                return w.toPlainText()
+        w = _report_widget()
+        return w.toPlainText() if w is not None else None
     except Exception:
         return None
-    return None
+
+
+def read(last=40, problems_only=False):
+    """The Report view's last lines (for report_read): what is there, whether
+    it could be found at all, and the problem lines among them."""
+    text = _report_text()
+    if text is None:
+        return {"found": False, "lines": [], "note": "The Report view could not be found in this window."}
+    lines = [l for l in text.splitlines() if l.strip()]
+    probs = [l for l in lines if MARK.search(l)]
+    pick = probs if problems_only else lines
+    return {"found": True, "count": len(lines), "problems": len(probs), "lines": pick[-max(1, min(int(last), 200)):]}
 
 
 def take():
