@@ -32,8 +32,14 @@ MAX_TEXT = 2000
 ANSWER_MAX = 3000    # characters of the answer's text
 BUTTONS = ("left", "right", "middle")
 MODIFIERS = ("shift", "ctrl", "alt", "meta")
-TARGETS = ("view", "view_world", "widget", "window")
+TARGETS = ("view", "view_world", "widget", "window", "tab", "item")
 WIDGET_KEYS = ("objectName", "text", "toolTip", "class", "under")
+TAB_KEYS = ("text", "under")
+ITEM_KEYS = ("text", "under", "column")
+# Where a check box sits in an item's rect: its left edge plus this, in
+# logical pixels (Qt's styles draw the indicator a few pixels in, about a
+# line's height wide).
+CHECK_INSET = 3
 SHOT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 KEY_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,23}")
 # Keys by the names people use, to Qt's Key_ names.
@@ -81,9 +87,29 @@ def parse_target(t, where):
     if len(kinds) != 1:
         raise bad(f"{where}: one of {', '.join(TARGETS)}.")
     kind = kinds[0]
-    extra = [k for k in t if k not in (kind, "at")] + (["at"] if "at" in t and kind != "widget" else [])
+    extra = [k for k in t if k not in (kind, "at", "check")] + (["at"] if "at" in t and kind != "widget" else []) + (["check"] if "check" in t and kind != "item" else [])
     if extra:
-        raise bad(f"{where}.{extra[0]}: not a field here{' (at is for a widget target)' if extra[0] == 'at' else ''}.")
+        why = {"at": " (at is for a widget target)", "check": " (check is for an item target)"}.get(extra[0], "")
+        raise bad(f"{where}.{extra[0]}: not a field here{why}.")
+    if kind in ("tab", "item"):
+        keys = TAB_KEYS if kind == "tab" else ITEM_KEYS
+        spec = t[kind]
+        if not isinstance(spec, dict) or not isinstance(spec.get("text"), str) or not spec["text"].strip():
+            raise bad(f"{where}.{kind}: {{ text, {', '.join('%s?' % k for k in keys[1:])} }} — text as the {'tab' if kind == 'tab' else 'row'} shows it.")
+        for k, v in spec.items():
+            if k not in keys:
+                raise bad(f"{where}.{kind}.{k}: not a field — {', '.join(keys)}.")
+            if k == "column":
+                if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+                    raise bad(f"{where}.{kind}.column: a column number, 0 the first.")
+            elif not isinstance(v, str) or not v.strip():
+                raise bad(f"{where}.{kind}.{k}: text.")
+        out = {"kind": kind, "value": dict(spec)}
+        if "check" in t:
+            if not isinstance(t["check"], bool):
+                raise bad(f"{where}.check: true or false.")
+            out["check"] = t["check"]
+        return out
     if kind == "widget":
         spec = t["widget"]
         if not isinstance(spec, dict) or not spec:
@@ -193,7 +219,7 @@ def parse_step(st, i):
         out["target"] = parse_target(st["target"], f"{where}.target") if st.get("target") is not None else None
     elif kind == "wait":
         if isinstance(v, bool) or not _num(v) or not 0 <= v <= MAX_WAIT:
-            raise bad(f"{where}.wait: milliseconds, 0 to {MAX_WAIT}.")
+            raise bad(f"{where}.wait: milliseconds, 0 to {MAX_WAIT} — for longer, split it into several waits.")
         out["ms"] = int(v)
     elif kind == "shot":
         name = v[:-4] if isinstance(v, str) and v.lower().endswith(".png") else v
@@ -485,6 +511,11 @@ class Run:
         self.shots = []
         self.level = 0
         self.front_at_start = None
+        # What a tab or item target adds to its hit, by (widget, x, y).
+        self.extra = {}
+        # An item's check box clicked: (view, index, state before) until the
+        # click is done and checked.
+        self.checking = None
 
     # -- the window's parts --
 
@@ -583,20 +614,105 @@ class Run:
         except Exception:
             return False
 
-    def find_widget(self, spec):
-        QtW = self.qt.QtWidgets
+    def _tops(self):
         app = self.app()
         tops, seen = [], set()
         for t in [app.activePopupWidget(), app.activeModalWidget(), self.mw()] + list(app.topLevelWidgets()):
             if t is not None and id(t) not in seen and self._shown(t):
                 seen.add(id(t))
                 tops.append(t)
+        return tops
 
+    def _visible(self):
+        """Every visible widget, the front ones first, with its props."""
+        QtW = self.qt.QtWidgets
+        for t in self._tops():
+            for w in [t] + list(t.findChildren(QtW.QWidget)):
+                if self._shown(w):
+                    yield w, self._props(w)
+
+    @staticmethod
+    def _is(props, cls):
+        return any(c == cls or c.endswith("::" + cls) for c in props.get("classes") or ())
+
+    @staticmethod
+    def _under(props, spec):
+        if "under" not in spec:
+            return True
+        want = _norm(spec["under"])
+        return any(_norm(u) == want for u in props.get("under") or ())
+
+    def find_tab(self, spec):
+        """(tab bar, index, text) of the first visible tab showing spec's text
+        (whole before a part), in a dock or dialog titled under."""
+        bars = [(w, p) for w, p in self._visible() if self._is(p, "QTabBar") and self._under(p, spec)]
+        want = _norm(spec["text"])
+        for loose in (False, True):
+            for w, _p in bars:
+                for i in range(w.count()):
+                    have = _norm(w.tabText(i))
+                    if have and (want in have if loose else want == have):
+                        try:
+                            if hasattr(w, "isTabVisible") and not w.isTabVisible(i):
+                                continue
+                        except Exception:
+                            pass
+                        return w, i, w.tabText(i).replace("&", "")
+        raise ToolError("not_found", f"No visible tab {json.dumps(spec, ensure_ascii=False)}: window_snapshot shows what is there.")
+
+    def _rows(self, model, parent, depth=0):
+        """Every index of a model's column-0 rows, depth first (a tree's
+        children after their parent)."""
+        n = model.rowCount(parent) if parent is not None else model.rowCount()
+        for r in range(n):
+            ix = model.index(r, 0, parent) if parent is not None else model.index(r, 0)
+            yield ix
+            if depth < 12:
+                try:
+                    if model.rowCount(ix) > 0:
+                        yield from self._rows(model, ix, depth + 1)
+                except Exception:
+                    pass
+
+    def find_item(self, spec):
+        """(view, index, text) of the first row of a visible list, tree or
+        table whose shown text is spec's (whole before a part), in column
+        (any column when left out)."""
+        Qt = self.qt.QtCore.Qt
+        role = _enum(Qt, "ItemDataRole", "DisplayRole")
+        views = [(w, p) for w, p in self._visible() if self._is(p, "QAbstractItemView") and self._under(p, spec)]
+        want = _norm(spec["text"])
+        col = spec.get("column")
+        for loose in (False, True):
+            for v, _p in views:
+                m = v.model()
+                if m is None:
+                    continue
+                ncol = m.columnCount() if hasattr(m, "columnCount") else 1
+                cols = [col] if col is not None else range(max(1, ncol))
+                for ix in self._rows(m, None):
+                    for c in cols:
+                        cix = ix if c == 0 else ix.sibling(ix.row(), c)
+                        try:
+                            if hasattr(v, "isRowHidden") and v.isRowHidden(ix.row(), ix.parent()):
+                                continue
+                        except TypeError:
+                            pass
+                        have = _norm(m.data(cix, role))
+                        if have and (want in have if loose else want == have):
+                            return v, cix, str(m.data(cix, role))
+        raise ToolError("not_found", f"No visible list, tree or table row {json.dumps(spec, ensure_ascii=False)}: window_snapshot shows what is there.")
+
+    def _check_state(self, v, ix):
+        Qt = self.qt.QtCore.Qt
+        try:
+            return _int(v.model().data(ix, _enum(Qt, "ItemDataRole", "CheckStateRole")))
+        except Exception:
+            return None
+
+    def find_widget(self, spec):
         def cands():
-            for t in tops:
-                for w in [t] + list(t.findChildren(QtW.QWidget)):
-                    if self._shown(w):
-                        yield w, self._props(w)
+            yield from self._visible()
 
         w = pick(cands(), spec)
         if w is None:
@@ -643,6 +759,33 @@ class Run:
             if not inside(x, y, w, h):
                 raise ToolError("invalid_input", f"{kind} {v} is at ({x:.0f}, {y:.0f}), outside the 3D view ({w}×{h} logical pixels).")
             return self._deepest(vp, x, y)
+        if kind == "tab":
+            bar, i, text = self.find_tab(v)
+            r = bar.tabRect(i)
+            x, y = r.x() + r.width() / 2.0, r.y() + r.height() / 2.0
+            self.extra[(id(bar), x, y)] = {"class": "QTabBar", "tab": text}
+            return bar, x, y
+        if kind == "item":
+            view, ix, text = self.find_item(v)
+            try:
+                p = ix.parent()
+                while p is not None and p.isValid() and hasattr(view, "expand"):
+                    view.expand(p)
+                    p = p.parent()
+            except Exception:
+                pass
+            view.scrollTo(ix)
+            r = view.visualRect(ix)
+            vp = view.viewport()
+            y = r.y() + r.height() / 2.0
+            extra = {"class": self._props(view)["classes"][0], "item": text, "row": ix.row()}
+            if t.get("check"):
+                x = r.x() + CHECK_INSET + min(r.height(), 20) / 2.0
+                self.checking = (view, ix, self._check_state(view, ix))
+            else:
+                x = r.x() + r.width() / 2.0
+            self.extra[(id(vp), x, y)] = extra
+            return vp, x, y
         if kind == "widget":
             w = self.find_widget(v)
             if isinstance(w, self.qt.QtWidgets.QAbstractScrollArea) and "at" not in t:
@@ -662,6 +805,9 @@ class Run:
 
     def hit(self, w, x, y):
         g = global_point(self.qt, w, x, y)
+        extra = self.extra.pop((id(w), x, y), None)
+        if extra is not None:
+            return {**extra, "global": [int(round(g.x())), int(round(g.y()))]}
         p = self._props(w)
         out = {"class": p["classes"][0] if p["classes"] else type(w).__name__}
         if p["objectName"]:
@@ -796,11 +942,38 @@ class Run:
         do = st["do"]
         out = {"do": do}
         self.last_point = None
+        self.checking = None
         try:
-            return self._step(st, out)
+            self._step(st, out)
+            if self.checking is not None and do == "click" and not self.answered:
+                self._checked(out)
+            return out
         finally:
+            self.checking = None
             if self.last_point is not None:
                 out["point"] = self.last_point
+
+    def _checked(self, out):
+        """After a click on an item's check box: whether it took. If the
+        click left the state as it was (a style that puts the box elsewhere),
+        the model's check state is toggled instead, and the answer says so."""
+        view, ix, before = self.checking
+        Qt = self.qt.QtCore.Qt
+        self.pump(MOVE_GAP_MS)
+        after = self._check_state(view, ix)
+        hit = out.setdefault("hit", {})
+        if before is None and after is None:
+            hit["check"] = "not checkable"
+            return
+        if after != before:
+            hit["check"] = "clicked"
+        else:
+            checked = _int(_enum(Qt, "CheckState", "Checked"))
+            new = _enum(Qt, "CheckState", "Unchecked" if before == checked else "Checked")
+            view.model().setData(ix, new, _enum(Qt, "ItemDataRole", "CheckStateRole"))
+            after = self._check_state(view, ix)
+            hit["check"] = "set through the model (the click on its box did not take)"
+        hit["checked"] = after == _int(_enum(Qt, "CheckState", "Checked"))
 
     def _step(self, st, out):
         do = st["do"]

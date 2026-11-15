@@ -421,5 +421,202 @@ class Delivery(unittest.TestCase):
         self.assertIn("not a key Qt knows", out["steps"][0]["error"])
 
 
+class Chain(Meta):
+    def __init__(self, names):
+        super().__init__(names[0])
+        self.rest = names[1:]
+
+    def superClass(self):
+        return Chain(self.rest) if self.rest else None
+
+
+class Rect:
+    def __init__(self, x, y, w, h):
+        self._r = (x, y, w, h)
+
+    def x(self):
+        return self._r[0]
+
+    def y(self):
+        return self._r[1]
+
+    def width(self):
+        return self._r[2]
+
+    def height(self):
+        return self._r[3]
+
+
+class TabBar(Widget):
+    def __init__(self, name, ox, oy, tabs, parent=None):
+        super().__init__(name, ox, oy, 100 * len(tabs), 24, parent=parent, cls="QTabBar")
+        self.tabs = tabs
+
+    def metaObject(self):
+        return Chain(["QTabBar", "QWidget"])
+
+    def count(self):
+        return len(self.tabs)
+
+    def tabText(self, i):
+        return self.tabs[i]
+
+    def tabRect(self, i):
+        return Rect(100 * i, 0, 100, 24)
+
+
+class Ix:
+    def __init__(self, model, row, col=0):
+        self.m, self.r, self.c = model, row, col
+
+    def row(self):
+        return self.r
+
+    def parent(self):
+        return Ix(self.m, -1)
+
+    def isValid(self):
+        return self.r >= 0
+
+    def sibling(self, r, c):
+        return Ix(self.m, r, c)
+
+
+class Model:
+    def __init__(self, rows, checks=None):
+        self.rows, self.checks = rows, checks or {}
+
+    def rowCount(self, parent=None):
+        return len(self.rows) if parent is None or not parent.isValid() else 0
+
+    def columnCount(self, parent=None):
+        return len(self.rows[0])
+
+    def index(self, r, c, parent=None):
+        return Ix(self, r, c)
+
+    def data(self, ix, role=0):
+        if role == 10:
+            return self.checks.get(ix.r)
+        return self.rows[ix.r][ix.c]
+
+    def setData(self, ix, v, role):
+        self.checks[ix.r] = int(v)
+        return True
+
+
+class ItemView(Widget):
+    def __init__(self, name, ox, oy, model, parent=None, cls="QListWidget"):
+        super().__init__(name, ox, oy, 200, 300, parent=parent, cls=cls)
+        self.m = model
+        self.vp = Widget(name + "-viewport", ox, oy, 200, 300, parent=self)
+        self.scrolled = []
+
+    def metaObject(self):
+        return Chain([self.cls, "QAbstractItemView", "QAbstractScrollArea", "QWidget"])
+
+    def model(self):
+        return self.m
+
+    def viewport(self):
+        return self.vp
+
+    def scrollTo(self, ix):
+        self.scrolled.append(ix.r)
+
+    def visualRect(self, ix):
+        return Rect(0, 20 * ix.r, 200, 20)
+
+
+class Targets(unittest.TestCase):
+    def setUp(self):
+        gi.HELD.update({"widget": None, "buttons": []})
+        self.addCleanup(gi.HELD.update, {"widget": None, "buttons": []})
+        self.sent = []
+        self.mw = Widget("main", 100, 50, 1200, 800)
+        self.dock = type("QDockWidget", (Widget,), {})("Agent Link", 0, 0, 354, 800, parent=self.mw)
+        self.bar = TabBar("tabs", 10, 60, ["&Activity", "Notes", "Materials"], parent=self.dock)
+        self.model = Model([["PLA", "1.24"], ["PETG", "1.27"], ["ASA", "1.07"]], {0: 0, 1: 0, 2: 2})
+        self.view = ItemView("list", 10, 100, self.model, parent=self.dock)
+        st = {"modal": None, "popup": None, "main": self.mw}
+        st["app"] = types.SimpleNamespace(activePopupWidget=lambda: None, activeModalWidget=lambda: None,
+                                          topLevelWidgets=lambda: [self.mw], focusWidget=lambda: None)
+        self.qt = fake_qt(self.sent, st)
+        self.qt.QtWidgets.QDockWidget = type(self.dock)
+        Qt = self.qt.QtCore.Qt
+        Qt.ItemDataRole = types.SimpleNamespace(DisplayRole=0, CheckStateRole=10)
+        Qt.CheckState = types.SimpleNamespace(Unchecked=0, Checked=2)
+        gui = types.SimpleNamespace(getMainWindow=lambda: self.mw, ActiveDocument=None)
+        self.run = gi.Run(self.qt, gui, lambda *a: a, lambda: None, list, None, lambda body: False, "/nonexistent")
+
+    def test_parse(self):
+        self.assertEqual(gi.parse_target({"tab": {"text": "Materials", "under": "Agent Link"}}, "t")["kind"], "tab")
+        t = gi.parse_target({"item": {"text": "PLA", "column": 0}, "check": True}, "t")
+        self.assertEqual((t["kind"], t["check"]), ("item", True))
+        for bad_ in ({"tab": {}}, {"tab": {"text": "A", "column": 1}}, {"item": {"text": "A", "column": -1}},
+                     {"tab": {"text": "A"}, "check": True}, {"item": {"text": "A"}, "check": "yes"}):
+            with self.assertRaises(ToolError):
+                gi.parse_target(bad_, "t")
+
+    def test_wait_says_split(self):
+        with self.assertRaises(ToolError) as e:
+            gi.parse_steps([{"wait": 5000}])
+        self.assertIn("split it into several waits", str(e.exception))
+
+    def test_tab_clicked_at_its_centre(self):
+        out = self.run.run(gi.parse_steps([{"click": {"tab": {"text": "materials", "under": "Agent Link"}}}]))
+        hit = out["steps"][0]["hit"]
+        self.assertEqual((hit["class"], hit["tab"]), ("QTabBar", "Materials"))
+        press = [e for w, e in self.sent if e.t == "MouseButtonPress"][0]
+        self.assertEqual((press.lp.x(), press.lp.y()), (250.0, 12.0))
+        self.assertEqual((press.gp.x(), press.gp.y()), (260.0, 72.0))
+        self.assertTrue(all(w == "tabs" for w, _e in self.sent))
+        # & ignored
+        out = self.run.run(gi.parse_steps([{"click": {"tab": {"text": "Activity"}}}]))
+        self.assertEqual(out["steps"][-1]["hit"]["tab"], "Activity")
+
+    def test_tab_not_found(self):
+        out = self.run.run(gi.parse_steps([{"click": {"tab": {"text": "Materials", "under": "Elsewhere"}}}]))
+        self.assertIn("No visible tab", out["steps"][0]["error"])
+
+    def test_item_row_clicked_and_scrolled_to(self):
+        out = self.run.run(gi.parse_steps([{"click": {"item": {"text": "PETG"}}}]))
+        hit = out["steps"][0]["hit"]
+        self.assertEqual((hit["class"], hit["item"], hit["row"]), ("QListWidget", "PETG", 1))
+        self.assertEqual(self.view.scrolled, [1])
+        press = [e for w, e in self.sent if e.t == "MouseButtonPress"][0]
+        self.assertEqual((press.lp.x(), press.lp.y()), (100.0, 30.0))
+        self.assertTrue(all(w == "list-viewport" for w, _e in self.sent))
+        self.assertNotIn("check", hit)
+
+    def test_item_by_column(self):
+        out = self.run.run(gi.parse_steps([{"click": {"item": {"text": "1.07", "column": 1}}}]))
+        self.assertEqual(out["steps"][0]["hit"]["row"], 2)
+
+    def test_check_falls_back_to_the_model(self):
+        out = self.run.run(gi.parse_steps([{"click": {"item": {"text": "PLA"}, "check": True}}]))
+        hit = out["steps"][0]["hit"]
+        press = [e for w, e in self.sent if e.t == "MouseButtonPress"][0]
+        self.assertLess(press.lp.x(), 20)  # on the box, left of the text
+        self.assertIn("through the model", hit["check"])
+        self.assertTrue(hit["checked"])
+        self.assertEqual(self.model.checks[0], 2)
+
+    def test_check_by_click(self):
+        sent, model = self.sent, self.model
+        real = model.data
+
+        def data(ix, role=0):
+            if role == 10 and ix.r == 2:
+                flips = sum(1 for w, e in sent if e.t == "MouseButtonRelease")
+                return 0 if flips % 2 else 2
+            return real(ix, role)
+        model.data = data
+        out = self.run.run(gi.parse_steps([{"click": {"item": {"text": "ASA"}, "check": True}}]))
+        hit = out["steps"][0]["hit"]
+        self.assertEqual(hit["check"], "clicked")
+        self.assertFalse(hit["checked"])
+
+
 if __name__ == "__main__":
     unittest.main()
