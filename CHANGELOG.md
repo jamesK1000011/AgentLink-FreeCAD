@@ -55,6 +55,8 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 
 ### Changed
 
+- The supervisor's restart after a hang or crash answers and forgets only the calls in hand at that moment (a call sent right after the answer went to the fresh FreeCAD and was dropped from the watchdog's view, so it could wait for ever), and the watchdog leaves the dead child's call alone while the restart and recovery run (a slow recovery was counted as a second hang and the fresh FreeCAD stopped mid-recovery).
+
 - Agent Link has its own repository (it began in ScanRuler's `freecad-spike`
   branch).
 - Agent Link is a thin hub: printing, slicing, printers, cutting, milling,
