@@ -84,3 +84,7 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 
 - Agent Link's copies of what moved to add-ons, and the fits data nothing in
   it used.
+
+### Fixed
+
+- The agent's caption over the 3D view no longer raises "Internal C++ object already deleted" in the Report view when its document is closed before the caption fades.

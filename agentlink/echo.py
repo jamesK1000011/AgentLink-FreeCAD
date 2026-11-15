@@ -314,7 +314,19 @@ def caption(text, ms=2600):
     _caption.show()
     _caption.raise_()
     lbl = _caption
-    QtCore.QTimer.singleShot(ms, lambda: lbl.isVisible() and lbl.text().endswith(text) and lbl.hide())
+    QtCore.QTimer.singleShot(ms, lambda: _hide_later(lbl, text))
+
+
+def _hide_later(lbl, text):
+    """Hide the caption after its moment, unless it shows newer words or is
+    gone: closing a document deletes the 3D view and the label with it, and
+    the timer then raised "Internal C++ object already deleted" in the
+    Report view (as _later guards the lit buttons)."""
+    try:
+        if lbl.isVisible() and lbl.text().endswith(text):
+            lbl.hide()
+    except RuntimeError:
+        pass
 
 
 def flash_command(cmd, ms=1300, settle=False):
