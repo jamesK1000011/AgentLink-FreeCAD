@@ -456,6 +456,7 @@ class Run:
         self.cur = None
         self.answered = False
         self.pressed = None
+        self.last_point = None
         self.shots = []
         self.level = 0
         self.front_at_start = None
@@ -607,6 +608,8 @@ class Run:
                 except Exception:
                     coin = None
                 x, y = view_point(px, py, w, h, coin, self._dpr(vp))
+                self.last_point = {"world": list(v), "viewport": [round(px, 1), round(py, 1)], "coinSize": list(coin) if coin else None,
+                                   "widget": [w, h], "dpr": self._dpr(vp), "at": [round(x, 1), round(y, 1)]}
             if not inside(x, y, w, h):
                 raise ToolError("invalid_input", f"{kind} {v} is at ({x:.0f}, {y:.0f}), outside the 3D view ({w}×{h} logical pixels).")
             return self._deepest(vp, x, y)
@@ -731,6 +734,15 @@ class Run:
     def step(self, st):
         do = st["do"]
         out = {"do": do}
+        self.last_point = None
+        try:
+            return self._step(st, out)
+        finally:
+            if self.last_point is not None:
+                out["point"] = self.last_point
+
+    def _step(self, st, out):
+        do = st["do"]
         if do in ("click", "press", "release", "move", "scroll"):
             w, x, y = self._target(st["target"])
             out["hit"] = self.hit(w, x, y)
