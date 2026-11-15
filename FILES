@@ -182,6 +182,7 @@ tests/test_files.py
 tests/test_fitting.py
 tests/test_flat2d.py
 tests/test_gaps_redteam.py
+tests/test_gui_link_dialog.py
 tests/test_gui_shell.py
 tests/test_guides.py
 tests/test_heavy_memory.py

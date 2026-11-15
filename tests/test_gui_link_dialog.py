@@ -61,5 +61,18 @@ class DialogCall(unittest.TestCase):
         self.assertFalse(gui_link._dialog_call("not json"))
 
 
+class SupervisorLetsItThrough(unittest.TestCase):
+    """The supervisor answers a call stuck behind an old dialog; the call
+    that answers the dialog is not one of those."""
+
+    def test_answers_dialog(self):
+        from agentlink import supervise
+
+        self.assertTrue(supervise._answers_dialog({"tool": "dialog_answer", "args": {"button": "Cancel"}}))
+        self.assertTrue(supervise._answers_dialog({"tool": "batch", "args": {"calls": [{"tool": "dialog_answer", "arguments": {}}]}}))
+        self.assertFalse(supervise._answers_dialog({"tool": "batch", "args": {"calls": [{"tool": "dialog_answer"}, {"tool": "cmd_run"}]}}))
+        self.assertFalse(supervise._answers_dialog({"tool": "cmd_run", "args": {}}))
+
+
 if __name__ == "__main__":
     unittest.main()

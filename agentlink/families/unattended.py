@@ -70,8 +70,14 @@ def tools(s):
         btn = a.get("button")
         if not btn:
             return {"dialog": info}
-        if not keep.harmless(d):
-            raise ToolError("not_allowed", f"\"{d['title']}\" is not a plain information box ({', '.join(d['buttons'])}): which button is the person's call — ask them in chat, quoting it.")
+        # Cancel on a dialog the agent's own call opened (cmd_run of a command
+        # that shows Preferences, say) changes nothing and frees the window;
+        # any other button there, and any button on a dialog the person
+        # opened, stays theirs.
+        own_cancel = btn.lower() == "cancel" and gui_link.agent_opened(d)
+        if not keep.harmless(d) and not own_cancel:
+            raise ToolError("not_allowed", f"\"{d['title']}\" is not a plain information box ({', '.join(d['buttons'])}): which button is the person's call — ask them in chat, quoting it."
+                            + (" Cancel is yours to press on it: the agent's call opened it." if gui_link.agent_opened(d) else ""))
         if btn.lower() not in [b.lower() for b in d["buttons"]]:
             raise bad(f"button: one of {', '.join(d['buttons'])}.")
         if not gui_link.press(d, btn):
@@ -325,6 +331,6 @@ def tools(s):
              obj({"action": {"type": "string", "enum": ["list", "search", "install", "update", "remove"]}, "name": st, "query": st, "url": st, "branch": st, "confirm": st}), addon),
         Tool("doc_switch", "Which open document the agent works in: document (name, label or file) switches to it — the session stays on it whatever the person brings to the front of the window; front: true also brings it to the front. No document: the agent's one and those open.",
              obj({"document": st, "front": {"type": "boolean"}}), doc_switch),
-        Tool("dialog_answer", "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one — only on a plain information box (OK). Any other dialog is the person's: quote it to them in chat.",
+        Tool("dialog_answer", "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one — only on a plain information box (OK), or Cancel on a dialog your own call opened. Any other dialog is the person's: quote it to them in chat.",
              obj({"button": st}), dialog_answer),
     ]

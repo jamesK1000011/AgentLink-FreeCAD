@@ -158,6 +158,18 @@ def relaunch(app, why):
         return False
 
 
+def _answers_dialog(c):
+    """A call that is itself the answer to the dialog in front (dialog_answer,
+    or a batch of nothing but dialog_answer): never abandoned for waiting
+    behind that dialog. The dialog's age ran past DIALOG_WAIT long before, so
+    each such call was answered "waiting behind it" before it could run
+    (GUI pass, FreeCAD's Preferences opened by a command)."""
+    if c.get("tool") == "dialog_answer":
+        return True
+    calls = (c.get("args") or {}).get("calls") if c.get("tool") == "batch" else None
+    return bool(calls) and all(isinstance(x, dict) and x.get("tool") == "dialog_answer" for x in calls)
+
+
 class Window:
     """The FreeCAD window's link (the workbench's Start link), when it is on.
     Tried afresh for each call, so turning the link on or off takes effect
@@ -550,7 +562,7 @@ def run(script, argv):
                     if hb:
                         window.last_hb = hb
                     dlg = (hb or {}).get("dialog")
-                    if dlg and not dlg.get("pressed") and now - float(dlg.get("since") or now) > DIALOG_WAIT:
+                    if dlg and not dlg.get("pressed") and now - float(dlg.get("since") or now) > DIALOG_WAIT and not _answers_dialog(c):
                         window.abandon(f"Blocked by a dialog in the FreeCAD window: \"{dlg.get('title')}\" — {str(dlg.get('text'))[:300]} (buttons: {', '.join(dlg.get('buttons') or []) or 'none'}). "
                                        f"{c['tool']} is waiting behind it. dialog_answer {{ button }} presses one if it is a harmless information box; anything else is the person's: ask them in chat.")
                         continue

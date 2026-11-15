@@ -106,6 +106,22 @@ def modal_info():
     return {"class": w.metaObject().className(), "title": w.windowTitle(), "text": " ".join(text.split())[:600], "buttons": buttons, "widget": w}
 
 
+def mark_agent_opened(d):
+    """Note on the dialog itself that it came up during an agent's call (the
+    call is still in hand): Cancel on it is then the agent's to press."""
+    try:
+        d["widget"].setProperty("agentlink_opened", True)
+    except Exception:
+        pass
+
+
+def agent_opened(d):
+    try:
+        return bool(d["widget"].property("agentlink_opened"))
+    except Exception:
+        return False
+
+
 def press(d, label):
     """Press a dialog's button by its text (never by where it is)."""
     try:
@@ -432,6 +448,8 @@ class Link:
         if self.inbox.empty():
             return
         d = modal_info()
+        if d is not None and self.in_call:
+            mark_agent_opened(d)
         if d is not None or self.in_call:
             # Inside a dialog's own loop (Qt runs timers there): no tool call
             # runs nested in it but dialog_answer; the rest are answered
