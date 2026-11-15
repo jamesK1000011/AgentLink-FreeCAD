@@ -291,3 +291,21 @@ class Group(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RealPython(unittest.TestCase):
+    def test_python_beside_freecadcmd(self):
+        import stat
+        import tempfile
+
+        from agentlink import testrun
+
+        d = tempfile.mkdtemp()
+        cmd = os.path.join(d, "freecadcmd")
+        py = os.path.join(d, "python3.11")
+        for f in (cmd, py):
+            open(f, "w").close()
+            os.chmod(f, os.stat(f).st_mode | stat.S_IEXEC)
+        self.assertEqual(testrun.real_python(cmd, (3, 11)), py)
+        self.assertIsNone(testrun.real_python(py, (3, 11)))
+        self.assertIsNone(testrun.real_python(os.path.join(d, "nothing", "freecadcmd"), (3, 11)))
