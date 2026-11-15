@@ -191,8 +191,9 @@ def _answers_dialog(c):
     or a batch of nothing but dialog_answer): never abandoned for waiting
     behind that dialog. The dialog's age ran past DIALOG_WAIT long before, so
     each such call was answered "waiting behind it" before it could run
-    (GUI pass, FreeCAD's Preferences opened by a command)."""
-    if c.get("tool") == "dialog_answer":
+    (GUI pass, FreeCAD's Preferences opened by a command). gui_input too:
+    the window takes it only aimed inside the dialog."""
+    if c.get("tool") in ("dialog_answer", "gui_input"):
         return True
     calls = (c.get("args") or {}).get("calls") if c.get("tool") == "batch" else None
     return bool(calls) and all(isinstance(x, dict) and x.get("tool") == "dialog_answer" for x in calls)

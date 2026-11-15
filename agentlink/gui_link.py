@@ -43,7 +43,8 @@ def _dialog_call(line):
     that lists only the lean groups reaches dialog_answer through batch, and
     a refused batch left a harmless OK box blocking every call (GUI pass)."""
     name = _tool_name(line)
-    if name == "dialog_answer":
+    # gui_input runs too, and refuses any target outside what is in front.
+    if name in ("dialog_answer", "gui_input"):
         return True
     if name != "batch":
         return False
@@ -104,6 +105,35 @@ def modal_info():
 
     text = _re.sub(r"<[^>]+>", " ", " ".join(parts))
     return {"class": w.metaObject().className(), "title": w.windowTitle(), "text": " ".join(text.split())[:600], "buttons": buttons, "widget": w}
+
+
+def popup_info():
+    """A menu open in front (a context menu's own event loop), as
+    modal_info answers for a dialog; None when there is none."""
+    try:
+        QtGui, QtWidgets = _qt()
+        app = QtWidgets.QApplication.instance()
+        w = app.activePopupWidget() if app is not None else None
+    except Exception:
+        return None
+    if w is None:
+        return None
+    try:
+        items = [a.text().replace("&", "") for a in w.actions() if a.text() and a.isVisible()]
+    except Exception:
+        items = []
+    return {"class": w.metaObject().className(), "title": "a menu", "text": "items: " + ", ".join(items[:20]) + " — gui_input { steps: [{ key: \"Escape\" }] } closes it",
+            "buttons": [], "widget": w}
+
+
+def answer_now(tool, body):
+    """The answer to the call in hand, sent before it returns (gui_input,
+    whose step opened a dialog that holds it): True when it went out. Only
+    for that tool called on its own (not in a batch) through the link."""
+    import agentlink_state
+
+    link = getattr(agentlink_state, "link", None)
+    return bool(link is not None and link.answer_now(tool, body))
 
 
 def mark_agent_opened(d):
@@ -226,6 +256,8 @@ class Link:
         self.going = False
         self.token = None  # made by start() (agentlink/link_token.py)
         self._pending, self._pending_lock = [], threading.Lock()
+        # The calls in hand, innermost last: { id, name, f, answered }.
+        self.calls = []
 
     def _ready(self):
         """The session, made at the first call (so a link turned on as the
@@ -499,6 +531,28 @@ class Link:
         restart_mark.clear()
         return True
 
+    def answer_now(self, tool, body):
+        """Send the innermost call's answer now (answer_now above); its
+        own reply, when it returns, is then dropped."""
+        call = self.calls[-1] if self.calls else None
+        if call is None or call["answered"] or call["name"] != tool:
+            return False
+        reply = {"jsonrpc": "2.0", "id": call["id"], "result": {"content": [{"type": "text", "text": compact(body)}]}}
+        try:
+            from . import report_watch
+            from .protocol import add_report
+
+            add_report(reply, report_watch.take())
+        except Exception:
+            pass
+        try:
+            call["f"].write(compact(reply) + "\n")
+            call["f"].flush()
+        except OSError:
+            return False
+        call["answered"] = True
+        return True
+
     def _blocked(self, line, f, d):
         """A call that came while a modal dialog holds the window: answered
         at once, not run inside the dialog's loop."""
@@ -536,6 +590,10 @@ class Link:
         if self.inbox.empty():
             return
         d = modal_info()
+        # A menu opened by a call answered early (gui_input) holds that call
+        # as a dialog would: the same handling, or every call would wait.
+        if d is None and any(c["answered"] for c in self.calls):
+            d = popup_info()
         # While documents reopen after a restart, calls wait — except with a
         # dialog up: FreeCAD's Document Recovery comes up at start and holds
         # the reopening, so the dialog_answer that clears it must not wait
@@ -621,10 +679,16 @@ class Link:
                     return
             if name is not None and name != "dialog_answer":
                 self.busy, self.in_call = name, True
+            msg = json.loads(line)
+            call = {"id": msg.get("id") if isinstance(msg, dict) else None, "name": name, "f": f, "answered": False}
+            self.calls.append(call)
             try:
-                reply = self.server.handle(json.loads(line))
+                reply = self.server.handle(msg)
             finally:
                 self.busy, self.in_call = prev
+                self.calls = [c for c in self.calls if c is not call]
+            if call["answered"]:
+                reply = None  # sent already, while a dialog held the call
         except ValueError:
             reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}
         if not self.going and _tool_name(line) == "app_restart":

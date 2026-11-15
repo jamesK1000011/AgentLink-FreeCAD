@@ -360,7 +360,7 @@ class Group(unittest.TestCase):
         import tool_summary
 
         gs = tool_summary.groups()
-        self.assertEqual(gs["dev"]["tools"], ["addon_test"])
+        self.assertEqual(gs["dev"]["tools"], ["addon_test", "gui_input"])
         self.assertFalse(gs["dev"]["lean"])
         self.assertEqual(sorted(g for g, v in gs.items() if v["lean"]), ["core", "view"])
         with open(os.path.join(HERE, "agentlink", "tools.py")) as f:
