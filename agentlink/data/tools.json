@@ -1,0 +1,134 @@
+{
+ "dataVersion": "1.0.0",
+ "licence": "LGPL-2.1-or-later",
+ "about": "Agent Link's own tools that wrap one FreeCAD command, run by agentlink/runners.py. Descriptions, schemas and refusals are the tools' own, word for word.",
+ "entries": {
+  "pd_clone": {
+   "group": "std_more",
+   "description": "A new PartDesign body on another object's shape (PartDesign Clone): it follows the original; features go on top.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "from": {
+      "type": "string"
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "axis": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "angle": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "from"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/std_more.py)",
+   "date": "2026-11-14",
+   "runner": "make",
+   "target": {
+    "type": "PartDesign::Body",
+    "base": "Body"
+   },
+   "args": {
+    "name": {
+     "then": {
+      "set": [
+       "$o",
+       "Label",
+       {
+        "call": "unique",
+        "with": [
+         {
+          "or": [
+           "$a.name",
+           {
+            "fmt": "{from.Label} clone"
+           }
+          ]
+         },
+         "$o"
+        ]
+       }
+      ]
+     }
+    },
+    "from": {
+     "helper": "shaped",
+     "with": [
+      "$value",
+      "$key"
+     ],
+     "prop": "BaseFeature"
+    },
+    "=place": {
+     "then": {
+      "if": [
+       {
+        "call": "placed",
+        "with": [
+         "$a"
+        ]
+       },
+       {
+        "set": [
+         "$o",
+         "Placement",
+         {
+          "call": "placement",
+          "with": [
+           "$a"
+          ]
+         }
+        ]
+       },
+       null
+      ]
+     }
+    }
+   },
+   "answer": {
+    "first": [
+     {
+      "call": "done",
+      "with": [
+       "$tool",
+       null
+      ]
+     }
+    ],
+    "fields": {
+     "body": "$o.Label",
+     "from": "$from.Label",
+     "volume": {
+      "if": [
+       "$o.Shape.Solids",
+       {
+        "round": [
+         "$o.Shape.Volume",
+         3
+        ]
+       },
+       null
+      ]
+     },
+     "note": "A body built on the other's shape: it follows the original; add features on top."
+    }
+   }
+  }
+ }
+}
