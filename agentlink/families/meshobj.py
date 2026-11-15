@@ -19,6 +19,7 @@ import numpy as np
 from .. import geometry as geo
 from .. import render
 from .. import store
+from .. import runners
 from ..protocol import Tool, ToolError
 
 GROUP = "mesh"
@@ -322,15 +323,6 @@ def tools(session):
         if vol0:
             extra["volumeChange"] = round(m.Volume - vol0, 3)
         return keep(o, m, "meshobj_smooth", a, extra)
-
-    def meshobj_offset(a):
-        o = mesh_of(a.get("mesh"))
-        m = o.Mesh.copy()
-        d = float(a.get("distance", 0))
-        if d == 0:
-            raise bad("distance: mm along the normals (negative: inward).")
-        m.offset(d)
-        return keep(o, m, "meshobj_offset", a, {"offset": d})
 
     def meshobj_trim(a):
         o = mesh_of(a.get("mesh"))
@@ -832,7 +824,9 @@ def tools(session):
             out["wires"] = b.Label
         return out
 
-    return [
+    # The wrappers kept as data (agentlink/data/tools.json) run on these.
+    helpers = {"doc": doc, "mesh_of": mesh_of, "keep": keep}
+    return runners.tools(GROUP, s, helpers) + [
         Tool("meshobj_unwrap", "Lay a curved surface flat (MeshPart's unwrap): of a body's face \"Body.Face3\" or a mesh — its flat outline (a pattern to cut from sheet, fabric, leather), the area before and after and how much it stretched (mean, max %); path .svg or .dxf writes the pattern; make: false keeps no object.",
              obj({"of": {"type": "string"}, "path": {"type": "string"}, "make": {"type": "boolean"}, "tolerance": {"type": "number"}, "iterations": {"type": "integer"}, "weight": {"type": "number"}, "name": {"type": "string"}}, ["of"]), meshobj_unwrap, changes=True),
         Tool("meshobj_from_shape", "Mesh a body (MeshPart): method standard (deflection mm, angle deg) | mefisto (maxLength: even triangles, but it can leave faces with small holes open — the answer warns) | netgen (fineness verycoarse … veryfine). Kept as a mesh object.",
@@ -845,7 +839,6 @@ def tools(session):
         Tool("meshobj_refine", "More triangles: rounds (each splits every triangle in four), optimize: true evens their shapes.", obj({"mesh": mref, "rounds": {"type": "integer"}, "optimize": {"type": "boolean"}, **cp}), meshobj_refine, changes=True),
         Tool("meshobj_smooth", "Smooth a mesh: method taubin (keeps its size; lambda, mu) | laplace (lambda; shrinks), iterations.",
              obj({"mesh": mref, "method": {"type": "string"}, "iterations": {"type": "integer"}, "lambda": {"type": "number"}, "mu": {"type": "number"}, **cp}), meshobj_smooth, changes=True),
-        Tool("meshobj_offset", "Move a mesh's surface along its normals by distance mm (negative inward).", obj({"mesh": mref, "distance": {"type": "number"}, **cp}, ["distance"]), meshobj_offset, changes=True),
         Tool("meshobj_edit", "Edit a mesh on a copy, as ScanRuler's Mesh Tools do: action begin { mesh } (a copy made, the original hidden; every meshobj tool given the original then changes the copy, each step undoable) | use (the copy put in place of the original) | discard (the copy dropped) | state.",
              obj({"action": {"type": "string", "enum": ["begin", "use", "discard", "state"]}, "mesh": mref}), meshobj_edit, changes=True),
         Tool("meshobj_trim", "Cut a mesh with a plane: at [x,y,z], normal (the side it points to goes); close: true fills the cut; preview: true says what would go and changes nothing.",

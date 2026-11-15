@@ -701,6 +701,74 @@
      }
     }
    }
+  },
+  "meshobj_offset": {
+   "group": "mesh",
+   "description": "Move a mesh's surface along its normals by distance mm (negative inward).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "distance": {
+      "type": "number"
+     },
+     "copy": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "distance"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-14",
+   "runner": "apply",
+   "target": {
+    "on": "mesh",
+    "copy": "Mesh",
+    "method": "offset",
+    "call": [
+     "$distance"
+    ]
+   },
+   "args": {
+    "mesh": {
+     "helper": "mesh_of"
+    },
+    "distance": {
+     "default": 0,
+     "as": "float"
+    }
+   },
+   "rules": [
+    {
+     "check": "nonzero",
+     "of": "$distance",
+     "after": "distance",
+     "message": "distance: mm along the normals (negative: inward)."
+    }
+   ],
+   "answer": {
+    "via": "keep",
+    "with": [
+     "$o",
+     "$m",
+     "$tool",
+     "$a",
+     "$fields"
+    ],
+    "fields": {
+     "offset": "$distance"
+    }
+   }
   }
  }
 }
