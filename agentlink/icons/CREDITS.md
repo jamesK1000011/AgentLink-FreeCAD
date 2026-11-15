@@ -11,3 +11,5 @@ Each icon here is hand-drawn on a 64×64 canvas in FreeCAD's Artwork Guidelines 
 | AgentLink_Stop.svg | Tabler `plug-x` | Sky Blue plug, Scarlet Red × badge |
 | AgentLink_Panel.svg | Tabler `layout-sidebar` | Aluminium window, Sky Blue title bar and side panel |
 | AgentLink_Shot.svg | Tabler `screenshot` + `pencil` | Sky Blue crop corners around a window, Butter pencil marking it up |
+| AgentLink_Check.svg | Tabler `clipboard-check` | Aluminium clipboard, FreeTeal ticks |
+| AgentLink_Update.svg | Tabler `refresh` | FreeTeal arrows round a circle |

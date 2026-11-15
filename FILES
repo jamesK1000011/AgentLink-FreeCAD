@@ -93,10 +93,12 @@ agentlink/guides/view.md
 agentlink/heavy.py
 agentlink/hooks.py
 agentlink/hull3d.py
+agentlink/icons/AgentLink_Check.svg
 agentlink/icons/AgentLink_Panel.svg
 agentlink/icons/AgentLink_Shot.svg
 agentlink/icons/AgentLink_Start.svg
 agentlink/icons/AgentLink_Stop.svg
+agentlink/icons/AgentLink_Update.svg
 agentlink/icons/AgentLink_Workbench.svg
 agentlink/icons/CREDITS.md
 agentlink/install_job.py
@@ -123,6 +125,7 @@ agentlink/smoke.py
 agentlink/store.py
 agentlink/supervise.py
 agentlink/td_wait.py
+agentlink/theme.py
 agentlink/tooldata.py
 agentlink/tools.py
 agentlink/usage.py
@@ -161,6 +164,7 @@ tests/test_files.py
 tests/test_fitting.py
 tests/test_flat2d.py
 tests/test_gaps_redteam.py
+tests/test_gui_shell.py
 tests/test_guides.py
 tests/test_hooks.py
 tests/test_hull3d.py

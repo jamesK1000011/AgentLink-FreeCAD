@@ -66,3 +66,27 @@ def report(lines=12):
         except OSError:
             pass
     return out
+
+
+def summary(r):
+    """The Setup check command's words for report(): whether the Claude
+    extension's launcher is here and can load, and what to do if not."""
+    if r.get("error"):
+        return f"Could not check the launcher: {r['error']}"
+    if not r.get("fetched"):
+        lines = ["The Claude extension's launcher is not here yet. Open Claude Desktop with the FreeCAD Agent Link extension once: it fetches the launcher."]
+    else:
+        lines = [f"The Claude extension's launcher is here ({r.get('bytes', 0)} bytes)."]
+        if r.get("esModuleScope") and not r.get("ownPackageJson"):
+            lines.append(f"It cannot load: {r['esModuleScope']} makes it an ES module. Mend writes a package.json beside it that says CommonJS.")
+        else:
+            lines.append("Nothing stops it loading.")
+        if not r.get("hasUpdateTool"):
+            lines.append("It is from before agentlink_update; Claude Desktop fetches the new one at its next start.")
+    if r.get("log"):
+        lines += ["", "Its log, last lines:"] + [f"  {l}" for l in r["log"]]
+    return "\n".join(lines)
+
+
+def can_mend(r):
+    return bool(r.get("fetched") and r.get("esModuleScope") and not r.get("ownPackageJson"))

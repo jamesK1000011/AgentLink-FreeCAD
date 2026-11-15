@@ -14,7 +14,7 @@ import FreeCAD
 import FreeCADGui
 
 from .families import notes as nf
-from .panel_tabs import FlowRow, Tabs, muted
+from .panel_tabs import EMPTY, NO_REVIEWER, FlowRow, Tabs, link_status, panel_qss, review_hint, tab_order
 
 try:
     from PySide import QtCore, QtGui
@@ -30,7 +30,6 @@ except ImportError:  # pragma: no cover
 # Agent Link's own panel, its own code: the idea credited, not the code.
 CREDIT = "Inspired by ScanRuler by Stefan Hermann (CNC Kitchen)."
 PIN_AGENT = (0.85, 0.45, 0.15)
-NO_REVIEWER = "No reviewer installed."
 
 
 def hooks_reviewers():
@@ -190,40 +189,53 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.play_timer = QtCore.QTimer(self)
         self.play_timer.timeout.connect(self.next_step)
 
-        tabs = QtWidgets.QTabWidget()
-        # Narrow docks: the tab bar scrolls rather than squeezing the panel wide.
-        tabs.setUsesScrollButtons(True)
-        tabs.setElideMode(QtCore.Qt.ElideRight)
-        tabs.addTab(self._notes_tab(), "Notes")
-        tabs.addTab(self._steps_tab(), "Steps")
-        tabs.addTab(self._review_tab(), "Review")
-        tabs.addTab(self._activity_tab(), "Activity")
-        # Add-ons' tabs (hooks.register_tab), in their order: fill() on
-        # their widget, if it has one, each time their tab comes up.
+        # Add-ons are loaded first (if no session has loaded them yet), so
+        # their tabs and reviewers are known before the tabs are built.
         import importlib
 
         from . import families, hooks
 
-        # The add-ons are loaded here if no session has loaded them yet.
         for n in families._discovered():
             try:
                 importlib.import_module(n)
             except Exception as e:
                 FreeCAD.Console.PrintLog(f"Agent Link panel: {n} left out ({e})\n")
-        self.addon_tabs = {}
-        for tab in list(hooks.TABS):
-            try:
-                wdg = tab["factory"](self)
-                tabs.addTab(wdg, tab["title"])
-                self.addon_tabs[tab["title"]] = wdg
-            except Exception as e:
-                FreeCAD.Console.PrintLog(f"Agent Link panel: the {tab.get('title')} tab of an add-on was left out ({e})\n")
+        tabs = QtWidgets.QTabWidget()
+        # Narrow docks: the tab bar scrolls rather than squeezing the panel wide.
         tabs.setUsesScrollButtons(True)
+        tabs.setElideMode(QtCore.Qt.ElideRight)
+        # Agent Link's tabs and the add-ons' (hooks.register_tab) in one
+        # order: fill() on an add-on's widget, if it has one, each time its
+        # tab comes up.
+        own = {"Notes": self._notes_tab, "Steps": self._steps_tab, "Review": self._review_tab, "Activity": self._activity_tab}
+        factories = {t["title"]: t["factory"] for t in hooks.TABS}
+        self.addon_tabs = {}
+        for title, _order, addon in tab_order(list(hooks.TABS)):
+            if not addon:
+                tabs.addTab(own[title](), title)
+                continue
+            try:
+                wdg = factories[title](self)
+                tabs.addTab(wdg, title)
+                self.addon_tabs[title] = wdg
+            except Exception as e:
+                FreeCAD.Console.PrintLog(f"Agent Link panel: the {title} tab of an add-on was left out ({e})\n")
         tabs.currentChanged.connect(lambda k: self.fill_tab(tabs.tabText(k)))
         self.tabs = tabs
         box = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(box)
         lay.setContentsMargins(6, 6, 6, 6)
+        # The link: on or off, and the document the agent works in.
+        self.status = QtWidgets.QLabel("")
+        self.status.setObjectName("AgentLinkStatus")
+        self.status.setWordWrap(True)
+        self.link_key = QtWidgets.QPushButton("")
+        self.link_key.setToolTip("Start or stop the agent's link to this window")
+        self.link_key.clicked.connect(self.toggle_link)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(self.status, 1)
+        row.addWidget(self.link_key)
+        lay.addLayout(row)
         # Extensions' widgets above the tabs (agentlink/ext.py).
         from . import ext
 
@@ -236,20 +248,70 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             except Exception as e:
                 FreeCAD.Console.PrintLog(f"Agent Link panel extension: {e}\n")
         lay.addWidget(tabs)
-        # What the agent's work here has cost, apart from any credit.
+        # What the agent's work here has cost, apart from any credit:
+        # Agent Link's own estimate, not a bill.
         self.usage = QtWidgets.QPushButton("")
+        self.usage.setObjectName("AgentLinkUsage")
         self.usage.setFlat(True)
-        self.usage.setStyleSheet(f"text-align: left; color: {muted(self.usage)}; font-size: 10px; padding: 0;")
-        self.usage.setToolTip("Estimated tokens through Agent Link — click for where they went")
+        self.usage.setStyleSheet("text-align: left; font-size: 10px; padding: 0;")
+        self.usage.setToolTip("Tokens through Agent Link, estimated here; not your bill. Click for where they went.")
         self.usage.clicked.connect(self.usage_breakdown)
         lay.addWidget(self.usage)
         self._usage_seen = 0.0
         credit = QtWidgets.QLabel(credit_text())
+        credit.setObjectName("AgentLinkCredit")
         credit.setWordWrap(True)
-        credit.setStyleSheet(f"color: {muted(credit)}; font-size: 10px;")
+        credit.setStyleSheet("font-size: 10px;")
         lay.addWidget(credit)
         self.setWidget(box)
+        # Accents from FreeCAD's theme on these widgets only, again whenever
+        # the palette changes (a Studio pack applied restyles the panel).
+        from . import theme
+
+        theme.follow(self, panel_qss)
         self.refresh()
+
+    def _empty(self, tab):
+        """The tab's plain line on what it is for, shown while it is empty."""
+        lab = QtWidgets.QLabel(EMPTY[tab])
+        lab.setObjectName("AgentLinkEmpty")
+        lab.setWordWrap(True)
+        lab.setVisible(False)
+        return lab
+
+    def refresh_status(self):
+        import agentlink_state
+
+        link = agentlink_state.link
+        on = link is not None
+        doc = getattr(getattr(link, "session", None), "doc", None) if on else None
+        try:
+            label = doc.Label if doc is not None else None
+        except Exception:  # the document was closed under the link
+            label = None
+        text = link_status(on, label)
+        self.link_key.setText("Stop link" if on else "Start link")
+        if text != self.status.text():
+            self.status.setText(text)
+            self.status.setProperty("on", on)
+            # The [on] rule takes effect only once the label is polished again.
+            self.status.style().unpolish(self.status)
+            self.status.style().polish(self.status)
+
+    def toggle_link(self):
+        """Start link or Stop link, as the workbench's buttons do."""
+        import agentlink_state
+
+        # The commands' own code: they may not be registered yet (the link
+        # autostarts before the Agent Link workbench is ever opened).
+        from .commands import _StartLink, _StopLink
+
+        try:
+            (_StopLink() if agentlink_state.link is not None else _StartLink()).Activated()
+        except OSError as e:  # the port is taken
+            FreeCAD.Console.PrintWarning(f"Agent Link: link not started ({e})\n")
+            agentlink_state.link = None
+        self.refresh_status()
 
     # -- notes --
 
@@ -269,6 +331,8 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         row.addStretch(1)
         row.addWidget(self.show_pins)
         lay.addLayout(row)
+        self.notes_empty = self._empty("Notes")
+        lay.addWidget(self.notes_empty)
         self.note_list = QtWidgets.QTreeWidget()
         self.note_list.setHeaderLabels(["#", "Note", "Answer"])
         self.note_list.setRootIsDecorated(False)
@@ -381,6 +445,8 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
     def refresh(self, force=False):
         if hasattr(self, "usage"):
             self.refresh_usage()
+        if hasattr(self, "status"):
+            self.refresh_status()
         for wdg in getattr(self, "extras", []):
             try:
                 if hasattr(wdg, "refresh"):
@@ -404,6 +470,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             it.setToolTip(1, n["text"])
             self.note_list.addTopLevelItem(it)
         self._filling = False
+        self.notes_empty.setVisible(not notes)
         try:
             self.pins.show(notes, self.show_pins.isChecked())
         except Exception as e:  # a view without a scene (a TechDraw page in front)
@@ -419,7 +486,8 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.review_pick = QtWidgets.QComboBox()
         self.review_pick.setToolTip("The body to review")
         go = QtWidgets.QPushButton("Check")
-        go.setToolTip("The installed reviewer's verdict on the body")
+        go.setToolTip("The installed reviewer's verdict on the body" if hooks_reviewers() else NO_REVIEWER)
+        go.setEnabled(hooks_reviewers())
         go.clicked.connect(self.review)
         # With no reviewer installed: the core soundness check.
         self.sound_btn = QtWidgets.QPushButton("Body check")
@@ -429,7 +497,8 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         row.addWidget(go)
         row.addWidget(self.sound_btn)
         lay.addLayout(row)
-        self.verdict = QtWidgets.QLabel("" if hooks_reviewers() else NO_REVIEWER + " Body check gives the core soundness check.")
+        self.verdict = QtWidgets.QLabel(review_hint(hooks_reviewers()))
+        self.verdict.setWordWrap(True)
         self.verdict.setStyleSheet("font-weight: 600; font-size: 14px; padding: 4px;")
         lay.addWidget(self.verdict)
         self.findings = QtWidgets.QTreeWidget()
@@ -493,7 +562,8 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             self.verdict.setText("Could not review: " + ((err or {}).get("message", "") if isinstance(err, dict) else str(err or out)))
             return
         v = out.get("verdict", "?")
-        colour = {"pass": "#3fae5a", "warn": "#e0a020", "fail": "#d94a4a"}.get(v, "palette(text)")
+        r = self._roles()
+        colour = {"pass": r["ok"], "warn": r["warn"], "fail": r["bad"]}.get(v, "palette(text)")
         self.verdict.setText(f"<span style='color:{colour}'>{v.upper()}</span> — {body}, made by {out.get('process', 'unknown')}")
         self._last_findings = out.get("findings") or []
         for f in self._last_findings:
@@ -518,7 +588,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             self.verdict.setText("Could not check: " + (out.get("error") or {}).get("message", ""))
             return
         sound = out.get("ok")
-        colour = "#3fae5a" if sound else "#d94a4a"
+        colour = self._roles()["ok" if sound else "bad"]
         self.verdict.setText(f"<span style='color:{colour}'>{'SOUND' if sound else 'NOT SOUND'}</span> — {body}" + ("" if hooks_reviewers() else f" ({NO_REVIEWER})"))
         self._last_findings = []
         for msg in out.get("problems") or []:
@@ -526,6 +596,11 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         if not out.get("problems"):
             self.findings.addTopLevelItem(QtWidgets.QTreeWidgetItem(["", "Nothing found", ""]))
         self.figures.setText("  ·  ".join(f"{k} {out[k]}" for k in ("solids", "volume", "area") if k in out))
+
+    def _roles(self):
+        from . import theme
+
+        return theme.roles(self)
 
     def _finding_picked(self, item, _col):
         """A finding with a place: point the view at it."""
@@ -574,6 +649,9 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         row.addStretch(1)
         row.addWidget(self.pace)
         lay.addLayout(row)
+        self.activity_empty = self._empty("Activity")
+        self.activity_empty.setVisible(True)
+        lay.addWidget(self.activity_empty)
         self.activity = QtWidgets.QTreeWidget()
         self.activity.setHeaderLabels(["Time", "Did", "Result"])
         self.activity.setRootIsDecorated(False)
@@ -589,6 +667,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         it.setToolTip(2, e.get("result", ""))
         self.activity.addTopLevelItem(it)
         self.activity.scrollToItem(it)
+        self.activity_empty.setVisible(False)
 
     # -- steps --
 
@@ -599,10 +678,13 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.body_pick.setToolTip("The PartDesign body to play")
         self.body_pick.currentIndexChanged.connect(lambda _: self.load_steps())
         lay.addWidget(self.body_pick)
+        self.steps_empty = self._empty("Steps")
+        lay.addWidget(self.steps_empty)
         self.step_list = QtWidgets.QListWidget()
         self.step_list.currentRowChanged.connect(self.go_to)
         lay.addWidget(self.step_list)
         self.caption = QtWidgets.QLabel("")
+        self.caption.setObjectName("AgentLinkCaption")
         self.caption.setWordWrap(True)
         self.caption.setStyleSheet("font-weight: 600; padding: 4px;")
         lay.addWidget(self.caption)
@@ -639,6 +721,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             self.review_pick.addItems(solids)
             if keep in solids:
                 self.review_pick.setCurrentIndex(solids.index(keep))
+        self.steps_empty.setVisible(not names)
         if names != have:
             cur = self.body_pick.currentText()
             self.body_pick.blockSignals(True)
