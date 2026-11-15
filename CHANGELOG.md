@@ -53,6 +53,9 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
   for every file with the licence texts in `LICENSES/`, a `pyproject.toml`
   for `uvx agentlink-freecad` (`docs/packaging.md`), and this changelog.
 - The privacy and identity check in CI.
+- A privacy statement in the README, numpy declared in `package.xml`, and
+  `server.json` for the MCP Registry (it lists the PyPI package
+  `agentlink-freecad` once that is published).
 
 ### Changed
 
@@ -72,7 +75,8 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 - Shared argument and refusal helpers (`picks`, `protocol.bad`, `paths`)
   replace many per-tool copies; refusals keep each tool's own words.
 - The server reports version 0.3.0, as `package.xml` does.
-- `freecadmin` is 1.1.0, the FreeCAD the README names as required.
+- `freecadmin` is 1.0.0, the oldest FreeCAD CI runs; 1.1 is recommended,
+  as the README and the setup check say.
 
 ### Removed
 
