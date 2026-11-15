@@ -37,7 +37,7 @@ FreeCAD, **Agent Link > Setup check** does the same for the Claude extension.
 
 | | macOS | Linux | Windows |
 |---|---|---|---|
-| **FreeCAD 1.1 or later** (required) | [freecad.org/downloads](https://www.freecad.org/downloads.php), dragged into Applications | the AppImage, your distribution's package, or conda-forge's `freecad` | the installer from freecad.org |
+| **FreeCAD 1.0 or later** (required; 1.1 recommended) | [freecad.org/downloads](https://www.freecad.org/downloads.php), dragged into Applications | the AppImage, your distribution's package, or conda-forge's `freecad` | the installer from freecad.org |
 | **uv** (preferred: it brings its own Python) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` or `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
 | **Node 18+** (the backup to uv) | Claude Desktop brings its own for the extension; otherwise [nodejs.org](https://nodejs.org) | [nodejs.org](https://nodejs.org) or your package manager | [nodejs.org](https://nodejs.org) |
 | OrcaSlicer (optional, slicing) | [releases](https://github.com/OrcaSlicer/OrcaSlicer/releases) | AppImage or Flatpak | installer |

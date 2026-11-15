@@ -162,7 +162,7 @@ class PackageXml(unittest.TestCase):
             self.one(tag)
         self.assertRegex(self.one("version").text, r"^\d+\.\d+\.\d+$")
         self.assertRegex(self.one("date").text, r"^\d{4}-\d{2}-\d{2}$")
-        self.assertEqual(self.one("freecadmin").text.strip(), "1.1.0")
+        self.assertEqual(self.one("freecadmin").text.strip(), "1.0.0")
 
     def test_versions_agree(self):
         v = self.one("version").text.strip()
@@ -279,7 +279,7 @@ class SetupCheck(unittest.TestCase):
 
         fc = {"where": "/x", "bin": "/x/bin", "lib": "/x/lib", "python": "/x/bin/python", "cmd": None}
         with mock.patch.object(setup_check, "freecad_candidates", return_value=[fc]), \
-                mock.patch.object(setup_check, "ask_freecad", return_value=("1.0.2", "/nowhere")):
+                mock.patch.object(setup_check, "ask_freecad", return_value=("0.22.0", "/nowhere")):
             rows = setup_check.check()
         self.assertEqual([r["state"] for r in rows if r["item"] == "FreeCAD"], ["missing"])
 
