@@ -199,6 +199,7 @@ tests/test_installed_names.py
 tests/test_iso286.py
 tests/test_keep.py
 tests/test_layout.py
+tests/test_layout_placer.py
 tests/test_licence_boundary.py
 tests/test_link_token.py
 tests/test_material.py
