@@ -15,7 +15,7 @@ import Arch  # the family is left out without BIM
 
 from .. import runners
 from .. import geometry as geo
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
 from .bim import headless_call
@@ -24,10 +24,6 @@ GROUP = "bim_gaps"
 INFO = "BIM components, clones, references, structural systems, pipe connectors, panel cuts and sheets, nesting, IFC B-rep flag, 2D level views, image planes, library, re-extrude, rewire, glue, trash, reorder."
 
 V = FreeCAD.Vector
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def tools(s):

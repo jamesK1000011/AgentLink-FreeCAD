@@ -15,12 +15,13 @@ import Part
 
 from .. import iso286
 from .. import store
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..materials import DENSITY
 
 from ..tools import obj
 from . import assembly as A
 from . import picks
+from .picks import r4
 
 GROUP = "assembly"
 INFO = ("Assemblies (FreeCAD's Assembly workbench): parts put together, one grounded, joints solved; overlaps, sweeps, "
@@ -29,14 +30,6 @@ INFO = ("Assemblies (FreeCAD's Assembly workbench): parts put together, one grou
 V = FreeCAD.Vector
 EXPLODED = "AgentLinkExploded"
 POSE = "AgentLinkPose"
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
-
-
-def r4(v):
-    return round(float(v), 4) + 0.0
 
 
 def vec(v):

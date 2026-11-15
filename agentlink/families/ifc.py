@@ -9,7 +9,7 @@
 
 import os
 
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 
 try:
@@ -21,10 +21,6 @@ except ImportError:  # the family is left out without IfcOpenShell
 
 GROUP = "bim"
 INFO = "IFC edited in place: open, find, change attributes / property sets / materials / storeys / classification, remove, diff, save."
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def run(f, usage, **kw):

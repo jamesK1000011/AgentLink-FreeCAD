@@ -8,7 +8,7 @@
 import FreeCAD
 
 from .. import facepick
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
 
@@ -75,10 +75,6 @@ KINDS = {
     "mesh_transfinite_surface": ("makeMeshTransfiniteSurface", "mesh"),
     "mesh_transfinite_volume": ("makeMeshTransfiniteVolume", "mesh"),
 }
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def _fem():

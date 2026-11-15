@@ -14,7 +14,7 @@ import Draft
 
 from .. import runners
 from .. import geometry as geo
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
 
@@ -23,10 +23,6 @@ INFO = ("Draft: lettering, SVG/DXF outlines, arrays, and Draft's own parametric 
         "move/rotate/scale/mirror/offset, upgrade/downgrade, layers, hatches, Draft↔Sketch, 2D views, facebinders; surfaces and textures.")
 
 V = FreeCAD.Vector
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def v3(a, what, default=None):

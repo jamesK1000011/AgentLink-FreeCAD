@@ -8,7 +8,9 @@
 import FreeCAD
 
 from ..protocol import Tool, ToolError
+from ..tools import obj
 from . import pd_common as pc
+from . import picks
 
 GROUP = "feature"
 INFO = "PartDesign features (pad, pocket, revolve, hole, fillet, chamfer, draft, shell, patterns, loft, pipe, datum planes) and the body's feature history."
@@ -16,10 +18,6 @@ INFO = "PartDesign features (pad, pocket, revolve, hole, fillet, chamfer, draft,
 V = FreeCAD.Vector
 KEYS = ("SideType", "Type", "Type2", "Length", "Length2", "Midplane", "Reversed", "Angle", "Angle2", "Radius", "Size", "Value", "Occurrences",
         "Diameter", "Depth", "DepthType", "Threaded", "ThreadType", "ThreadSize", "HoleCutType", "HoleCutDiameter", "HoleCutDepth", "Ruled", "Closed", "Mode", "Suppressed", "Refine")
-
-
-def obj(props, required=()):
-    return {"type": "object", "properties": props, "required": list(required), "additionalProperties": False}
 
 
 def has(o, p):
@@ -49,7 +47,7 @@ def key_values(f):
                 v = getattr(f, k)
             except Exception:
                 continue
-            v = pc.num(v)
+            v = picks.num_json(v)
             if k in ("Suppressed", "Refine", "Midplane", "Reversed", "Threaded", "Ruled", "Closed") and not v:
                 continue
             if k in ("Length2", "Type2", "Angle2") and not (has(f, "SideType") and f.SideType == "Two sides"):
@@ -223,7 +221,7 @@ def tools(session):
             f.Reversed = True
         out = pc.settle(s, b, f, "pd_hole", before, "cut", hint="The hole goes against the sketch's normal: put the sketch on the face it enters, or reversed: true.")
         out["holes"] = len(circles)
-        out["diameter"] = pc.num(f.Diameter)
+        out["diameter"] = picks.num_json(f.Diameter)
         if thread:
             out["thread"] = f.ThreadSize + (" (cosmetic)" if f.Threaded and not getattr(f, "ModelThread", False) else "")
         return out
@@ -404,7 +402,7 @@ def tools(session):
                 setattr(f, k, v)
             except Exception as e:
                 raise ToolError("invalid_input", f"{k} = {v!r}: {e}")
-            done[k] = pc.num(getattr(f, k))
+            done[k] = picks.num_json(getattr(f, k))
         doc().recompute()
         repaired = pc.repair_refs(doc(), refs) if pc.broken(doc()) and refs else None
         out = pc.settle(s, b, f, "feature_edit", before)

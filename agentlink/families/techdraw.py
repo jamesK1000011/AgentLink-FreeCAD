@@ -20,7 +20,8 @@ import FreeCAD
 import TechDraw  # noqa: F401 — the family stands on TechDraw; left out without it
 
 from .. import gdt, iso286, sheets
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
+from ..tools import obj
 from . import picks
 
 GROUP = "techdraw"
@@ -40,14 +41,6 @@ PAPERS = {  # name: (width, height) landscape, mm
     "ANSIC": (558.8, 431.8), "ANSID": (863.6, 558.8), "ANSIE": (1117.6, 863.6),
 }
 GDT_PROP = "AgentLinkGdt"
-
-
-def obj(props, required=()):
-    return {"type": "object", "properties": props, "required": list(required), "additionalProperties": False}
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def num(v, nd=4):

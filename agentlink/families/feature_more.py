@@ -8,8 +8,10 @@
 
 import FreeCAD
 
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
+from ..tools import obj
 from . import pd_common as pc
+from . import picks
 
 GROUP = "feature"
 INFO = ("PartDesign features (pad, pocket, revolve, hole, fillet, chamfer, draft, shell, patterns, loft, pipe, primitives, helix, "
@@ -28,14 +30,6 @@ PRIMS = {
     "wedge": ("Wedge", {"xmin": ("Xmin", 0), "xmax": ("Xmax", 10), "ymin": ("Ymin", 0), "ymax": ("Ymax", 10), "zmin": ("Zmin", 0), "zmax": ("Zmax", 10),
                         "x2min": ("X2min", 2), "x2max": ("X2max", 8), "z2min": ("Z2min", 2), "z2max": ("Z2max", 8)}),
 }
-
-
-def obj(props, required=()):
-    return {"type": "object", "properties": props, "required": list(required), "additionalProperties": False}
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def placement(a):
@@ -226,7 +220,7 @@ def tools(session):
             b.Tip = f
         out = pc.settle(s, b, f, "pd_helix", before, "cut" if sub else "add",
                         hint="The profile is swept around the axis: it must not cross the axis, and a pitch smaller than the profile's height makes the turns run into one another.")
-        out["helix"] = {k: pc.num(getattr(f, p)) for k, p in (("pitch", "Pitch"), ("height", "Height"), ("turns", "Turns"))}
+        out["helix"] = {k: picks.num_json(getattr(f, p)) for k, p in (("pitch", "Pitch"), ("height", "Height"), ("turns", "Turns"))}
         return out
 
     # ---- MultiTransform ----

@@ -14,7 +14,7 @@ import Points  # noqa: F401 — the family stands on the Points module; left out
 import numpy as np
 
 from .. import fitting
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
 
@@ -23,10 +23,6 @@ INFO = "Point clouds (Points, Reverse Engineering): read and write ASC/XYZ, PCD,
 
 READS = ("asc", "xyz", "txt", "csv", "pcd", "ply", "e57")
 WRITES = ("asc", "xyz", "pcd", "ply", "csv")
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def array_of(o):

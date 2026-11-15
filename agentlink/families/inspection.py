@@ -18,26 +18,16 @@ import Mesh
 import numpy as np
 
 from .. import render
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
+from ..tools import obj
 from . import picks
+from .picks import r4
 
 GROUP = "inspection"
 INFO = "FreeCAD's Inspection: an actual (mesh, points, body or scan file) against nominals, point by point, with tolerance, statistics, worst spots, a colour map and a report."
 
 TOL_PROP = ("ToleranceLow", "ToleranceHigh")
 BIG = 1e30  # Inspection marks a point out of reach with ±FLT_MAX
-
-
-def obj(props, required=()):
-    return {"type": "object", "properties": props, "required": list(required), "additionalProperties": False}
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
-
-
-def r4(v):
-    return round(float(v), 4) + 0.0
 
 
 def kind_of(o):

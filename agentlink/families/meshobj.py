@@ -20,7 +20,8 @@ from .. import geometry as geo
 from .. import render
 from .. import store
 from .. import runners
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
+from ..tools import obj
 from . import picks
 
 GROUP = "mesh"
@@ -28,14 +29,6 @@ INFO = ("FreeCAD's Mesh workbench on document meshes: mesh a body, evaluate and 
         "booleans, cross-sections, split, planar and curvature segments, curvature, projection onto a mesh.")
 
 V = FreeCAD.Vector
-
-
-def obj(props, required=()):
-    return {"type": "object", "properties": props, "required": list(required), "additionalProperties": False}
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def meshes(doc):

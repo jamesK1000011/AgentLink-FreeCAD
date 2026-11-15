@@ -10,7 +10,7 @@ import os
 import FreeCAD
 import Robot  # noqa: F401 — the family stands on the Robot module; left out without it
 
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
 
@@ -19,10 +19,6 @@ INFO = "Robot: six-axis robots (KUKA models, your own kinematics), moves by axes
 
 V = FreeCAD.Vector
 MODELS = ("kr16", "kr125", "kr210", "kr500")
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def lib_file(model, ext):

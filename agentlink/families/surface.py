@@ -9,16 +9,12 @@ import Part
 import Surface  # noqa: F401 — loads the Surface features; the family is left out without it
 
 from .. import geometry as geo
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
 
 GROUP = "surface"
 INFO = "Surface workbench features (parametric): sections, boundary surfaces (stretched/Coons/curved), extend, sewing into shells and solids, surface cuts, blend curves."
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def reading(o):

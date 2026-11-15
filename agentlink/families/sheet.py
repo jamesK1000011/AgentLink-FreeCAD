@@ -10,7 +10,8 @@ import os
 import re
 
 from .. import cells as C
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
+from ..tools import obj
 from . import pd_common as pc
 from . import picks
 
@@ -25,14 +26,6 @@ CONF_PROP = "Configuration"
 CONF_GROUP = "ConfigurationTable"
 HIDDEN = re.compile(r"^=\s*hiddenref\(\s*(.+?)\.(\w+)\.String\s*\)\s*$")
 BIND = re.compile(r"^\.?cells\.Bind\.([A-Z]+[0-9]+)\.([A-Z]+[0-9]+)$")
-
-
-def obj(props, required=()):
-    return {"type": "object", "properties": props, "required": list(required), "additionalProperties": False}
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def addr_or_refuse(a, what="cell"):

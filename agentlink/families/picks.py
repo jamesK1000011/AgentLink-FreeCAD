@@ -22,6 +22,20 @@ def num(v, name):
     return float(v)
 
 
+def num_json(v, nd=4):
+    """A property's value as JSON (output; num checks input): Quantities as
+    their number (mm, degrees), floats rounded to nd places."""
+    if hasattr(v, "Value") and not isinstance(v, (int, float)):
+        return round(float(v.Value), nd) + 0.0
+    if isinstance(v, float):
+        return round(v, nd) + 0.0
+    return v
+
+
+def r4(v):
+    return round(float(v), 4) + 0.0
+
+
 def number(a, key, default=None, *, gt=None, ge=None, le=None, msg=None, what=None):
     """a[key] (default when it is absent) as a number (num, named what or
     key), then a range: outside gt/ge/le it refuses invalid_input with msg,

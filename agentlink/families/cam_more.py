@@ -11,16 +11,12 @@ import os
 
 import FreeCAD
 
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
 
 GROUP = "cam_more"
 INFO = "CAM paths from areas and shapes, compound, array, stop, fixture offsets, property bags, job templates; Draft dimension flip and heal; Assembly rigid groups and new parts."
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def _cam(what):

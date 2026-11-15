@@ -8,7 +8,7 @@
 import FreeCAD
 import Part
 
-from ..protocol import Tool, ToolError
+from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
 
@@ -45,10 +45,6 @@ def _sew(shape, tol):
     except Exception:
         pass
     return sew
-
-
-def bad(msg):
-    return ToolError("invalid_input", msg)
 
 
 def doc(s):
