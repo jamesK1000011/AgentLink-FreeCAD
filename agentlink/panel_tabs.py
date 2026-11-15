@@ -24,6 +24,13 @@ from .theme import muted  # noqa: F401  (one copy: the theme's)
 # Activity stays last.
 CORE_TABS = (("Notes", 10), ("Steps", 20), ("Review", 50), ("Activity", 95))
 
+# Agent Link's own workbench, and the tabs that show in every workbench.
+HOME = "AgentLinkWorkbench"
+ALWAYS = ("Notes", "Steps", "Activity")
+# Tabs whose page carries its own credit line for Stefan Hermann's work:
+# Agent Link's line is hidden while one is in front (one credit, not two).
+OWN_CREDIT = ("ScanRuler", "Texture")
+
 NO_REVIEWER = "No reviewer installed."
 
 # What each of Agent Link's tabs is for, said where its list is empty.
@@ -43,6 +50,29 @@ def tab_order(addon_tabs):
     rows = [(t, o, False) for t, o in CORE_TABS]
     rows += [(a["title"], a.get("order", 50), True) for a in addon_tabs if a.get("title") not in core]
     return sorted(rows, key=lambda r: (r[1], r[2]))
+
+
+def tabs_for(rows, active, where, extra=()):
+    """The titles of rows (tab_order's) that show while the workbench
+    active is up: Notes, Steps and Activity always; an add-on's tab only in
+    the workbenches it was registered for (where: hooks.TAB_WORKBENCHES),
+    or everywhere when it named none; Review in Agent Link's own workbench
+    and the reviewers' workbenches; extra: titles asked for by name (an
+    add-on's Panel command), until the next switch."""
+    out = []
+    for title, _order, addon in rows:
+        wbs = set(where.get(title, ()))
+        if title == "Review":
+            wbs.add(HOME)
+        if title in ALWAYS or title in extra or active in wbs or (addon and title not in where):
+            out.append(title)
+    return out
+
+
+def credit_shown(title, widget=None):
+    """Whether Agent Link's credit line shows under the tab title: not while
+    a page that credits Stefan Hermann itself is in front."""
+    return not (title in OWN_CREDIT or getattr(widget, "own_credit", False))
 
 
 def review_hint(has_reviewer):

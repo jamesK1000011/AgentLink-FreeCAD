@@ -157,3 +157,116 @@ def take():
     if len(out) > MAX_LINES:
         out = out[:MAX_LINES - 1] + [f"… and {len(out) - MAX_LINES + 1} more lines (report_read problems: true)"]
     return out
+
+
+# ---- the Report view kept out of the way -------------------------------------
+# While the panel layout is set (Mod/AgentLink PanelLayout), the Report view
+# is hidden: it took a quarter of the window's height to say "listening".
+# It opens itself when a warning or error line arrives (by FreeCAD's colours
+# or the words, as above). ReportAuto (on by default) turns this off; then
+# the Report view is shown or hidden again as the person last had it.
+# FreeCAD's own Report view preferences are not touched.
+
+AL_PARAMS = "User parameter:BaseApp/Preferences/Mod/AgentLink"
+AUTO, TAKEN, WAS = "ReportAuto", "ReportTaken", "ReportWasShown"
+AUTO_MS = 700
+
+
+def auto_on(params):
+    """Whether the Report view is kept hidden until a problem: the layout
+    setting set and ReportAuto on."""
+    return bool(params.GetString("PanelLayout", "").strip()) and params.GetBool(AUTO, True)
+
+
+def _report_dock():
+    import FreeCADGui
+    from PySide import QtWidgets
+
+    for dock in FreeCADGui.getMainWindow().findChildren(QtWidgets.QDockWidget):
+        if dock.objectName() in ("Report view", "ReportView") or dock.windowTitle() in ("Report view", "Report View"):
+            return dock
+    return None
+
+
+class AutoOpen:
+    """One tick() per AUTO_MS: take the Report view over (hide it, the
+    person's state kept in TAKEN/WAS), give it back when turned off, and
+    open it when a new block of the Report view is a problem line. The
+    window, the parameters and the colours are handed in for the tests."""
+
+    def __init__(self, params=None, dock=_report_dock, widget=_report_widget, colours=_problem_colours, blocks=None):
+        self.params = params
+        self.dock, self.widget, self.colours = dock, widget, colours
+        self.blocks = blocks or _blocks
+        self.taken = False
+        self.seen = None
+
+    def _p(self):
+        if self.params is None:
+            import FreeCAD
+
+            self.params = FreeCAD.ParamGet(AL_PARAMS)
+        return self.params
+
+    def tick(self):
+        """What it did: "hidden", "restored", "opened" or None."""
+        p = self._p()
+        dock = self.dock()
+        if dock is None:
+            return None
+        if not auto_on(p):
+            if p.GetBool(TAKEN, False):
+                dock.setVisible(p.GetBool(WAS, True))
+                p.SetBool(TAKEN, False)
+                self.taken = False
+                return "restored"
+            return None
+        w = self.widget()
+        if not self.taken:
+            if not p.GetBool(TAKEN, False):
+                p.SetBool(WAS, bool(dock.isVisible()))
+                p.SetBool(TAKEN, True)
+            self.taken = True
+            self.seen = w.document().blockCount() if w is not None else None
+            dock.hide()
+            return "hidden"
+        if w is None:
+            return None
+        n = w.document().blockCount()
+        if self.seen is not None and n == self.seen:
+            return None
+        # From the block that was last: FreeCAD writes into the empty block
+        # its last line left.
+        rows, self.seen = self.blocks(w, max(0, (self.seen or n) - 1))
+        if coloured(rows, self.colours()) and not dock.isVisible():
+            dock.show()
+            dock.raise_()
+            return "opened"
+        return None
+
+
+_auto = {}
+
+
+def start_auto():
+    """The Report view's watch, on FreeCAD's GUI timer (once)."""
+    if _auto:
+        return _auto["it"]
+    import FreeCADGui
+    from PySide import QtCore
+
+    it = _auto["it"] = AutoOpen()
+    t = _auto["timer"] = QtCore.QTimer(FreeCADGui.getMainWindow())
+    t.setInterval(AUTO_MS)
+
+    def tick():
+        try:
+            it.tick()
+        except Exception as e:  # noqa: BLE001 — never stop the GUI timer
+            import FreeCAD
+
+            FreeCAD.Console.PrintLog(f"Agent Link Report view watch: {e}\n")
+
+    t.timeout.connect(tick)
+    t.start()
+    return it

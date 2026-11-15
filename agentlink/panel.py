@@ -14,7 +14,9 @@ import FreeCAD
 import FreeCADGui
 
 from .families import notes as nf
-from .panel_tabs import EMPTY, NO_REVIEWER, FlowRow, Tabs, link_status, panel_qss, review_hint, tab_order
+from . import layout
+from .panel_tabs import (EMPTY, HOME, NO_REVIEWER, FlowRow, Tabs, credit_shown, link_status, panel_qss, review_hint, tab_order,
+                         tabs_for)
 
 try:
     from PySide import QtCore, QtGui
@@ -208,23 +210,36 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         tabs.setElideMode(QtCore.Qt.ElideNone)
         tabs.tabBar().setExpanding(False)
         # Agent Link's tabs and the add-ons' (hooks.register_tab) in one
-        # order: fill() on an add-on's widget, if it has one, each time its
-        # tab comes up.
+        # order, each built once: fill() on an add-on's widget, if it has
+        # one, each time its tab comes up. Only the tabs that matter in the
+        # workbench in front are in the bar (filter_tabs, at each switch).
         own = {"Notes": self._notes_tab, "Steps": self._steps_tab, "Review": self._review_tab, "Activity": self._activity_tab}
         factories = {t["title"]: t["factory"] for t in hooks.TABS}
         self.addon_tabs = {}
-        for title, _order, addon in tab_order(list(hooks.TABS)):
+        self.pages = {}
+        self.rows = []
+        for title, order, addon in tab_order(list(hooks.TABS)):
             if not addon:
-                tabs.addTab(own[title](), title)
-                continue
-            try:
-                wdg = factories[title](self)
-                tabs.addTab(wdg, title)
+                self.pages[title] = own[title]()
+            else:
+                try:
+                    wdg = factories[title](self)
+                except Exception as e:
+                    FreeCAD.Console.PrintLog(f"Agent Link panel: the {title} tab of an add-on was left out ({e})\n")
+                    continue
+                self.pages[title] = wdg
                 self.addon_tabs[title] = wdg
-            except Exception as e:
-                FreeCAD.Console.PrintLog(f"Agent Link panel: the {title} tab of an add-on was left out ({e})\n")
-        tabs.currentChanged.connect(lambda k: self.fill_tab(tabs.tabText(k)))
+            self.rows.append((title, order, addon))
+        # Pages not in the bar stay children of the panel, hidden (never a
+        # window of their own).
+        self._shelf = QtWidgets.QWidget(self)
+        self._shelf.hide()
+        for page in self.pages.values():
+            page.setParent(self._shelf)
+        self.extra = set()
         self.tabs = tabs
+        tabs.currentChanged.connect(self._tab_changed)
+        self.filter_tabs(layout.active_workbench())
         box = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(box)
         lay.setContentsMargins(6, 6, 6, 6)
@@ -261,7 +276,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.usage.clicked.connect(self.usage_breakdown)
         lay.addWidget(self.usage)
         self._usage_seen = 0.0
-        credit = QtWidgets.QLabel(credit_text())
+        credit = self.credit = QtWidgets.QLabel(credit_text())
         credit.setObjectName("AgentLinkCredit")
         credit.setWordWrap(True)
         credit.setStyleSheet("font-size: 10px;")
@@ -272,7 +287,64 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         from . import theme
 
         theme.follow(self, panel_qss)
+        self._tab_changed(tabs.currentIndex())
         self.refresh()
+
+    def filter_tabs(self, active, extra=()):
+        """The tab bar for the workbench active: tabs_for's titles in order,
+        the tab in front kept when it stays. extra: titles asked for by name
+        (until the next switch)."""
+        from . import hooks
+
+        self.extra = set(extra)
+        want = tabs_for(self.rows, active, hooks.TAB_WORKBENCHES, self.extra)
+        t = self.tabs
+        have = [t.tabText(i) for i in range(t.count())]
+        if have == want:
+            return want
+        cur = t.tabText(t.currentIndex()) if t.count() else None
+        t.blockSignals(True)
+        while t.count():
+            t.removeTab(0)
+        for title in want:
+            t.addTab(self.pages[title], title)
+        if cur in want:
+            t.setCurrentIndex(want.index(cur))
+        t.blockSignals(False)
+        self._tab_changed(t.currentIndex())
+        return want
+
+    def show_tab(self, title):
+        """title's tab in front, put in the bar for now if this workbench
+        does not show it. False when no such tab was built."""
+        if title not in self.pages:
+            return False
+        if self.tabs.indexOf(self.pages[title]) < 0:
+            self.filter_tabs(layout.active_workbench(), self.extra | {title})
+        self.tabs.setCurrentWidget(self.pages[title])
+        return True
+
+    def fronts(self):
+        """The workbenches whose own content this panel holds: Agent Link's,
+        and those an add-on's tab is registered for."""
+        from . import hooks
+
+        out = {HOME}
+        for title in self.addon_tabs:
+            out |= set(hooks.TAB_WORKBENCHES.get(title, ()))
+        return out
+
+    def _tab_changed(self, k):
+        title = self.tabs.tabText(k) if k >= 0 else ""
+        if hasattr(self, "credit"):
+            self.credit.setVisible(credit_shown(title, self.pages.get(title)))
+        if title:
+            self.fill_tab(title)
+
+    def showEvent(self, e):
+        if not self.timer.isActive():  # closed with its X before
+            self.timer.start(1000)
+        super().showEvent(e)
 
     def _empty(self, tab):
         """The tab's plain line on what it is for, shown while it is empty."""
@@ -803,27 +875,41 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
 
 
 _panel = None
+KEY = "AgentLinkPanel"
 
 
-def show():
-    """Open the panel as a tab beside the tree; a second call brings it forward."""
+def _switched(name):
+    """A workbench switch: the tabs that matter there, then the panel placed
+    by the layout setting (agentlink/layout.py)."""
+    if _panel is None:
+        return
+    try:
+        _panel.filter_tabs(str(name))
+        e = layout.own().entries.get(KEY)
+        if e is not None:
+            e["fronts"] = _panel.fronts()
+    except RuntimeError:  # the panel was deleted
+        pass
+
+
+def show(tab=None):
+    """Open the panel where the layout setting puts it (right by default);
+    a second call brings it forward. tab: that tab in front, put in the bar
+    for now if this workbench does not show it."""
     global _panel
     mw = FreeCADGui.getMainWindow()
-    if _panel is None:
+    first = _panel is None
+    if first:
         _panel = Panel()
-        # Beside the tree, as a tab of the left side panel (Model, Tasks):
-        # the 3D view keeps its width, as in ScanRuler's side panels.
-        docks = [d for d in mw.findChildren(QtWidgets.QDockWidget) if d is not _panel and d.isVisible()]
-        left = next((d for d in docks if mw.dockWidgetArea(d) == QtCore.Qt.LeftDockWidgetArea), None)
-        if left is not None:
-            mw.addDockWidget(QtCore.Qt.LeftDockWidgetArea, _panel)
-            mw.tabifyDockWidget(left, _panel)
-        else:
-            mw.addDockWidget(QtCore.Qt.LeftDockWidgetArea, _panel)
-        # Frame the part in the view as it now stands.
+        # Before the placer's own handler, so the tabs are right when it
+        # places the panel.
+        mw.workbenchActivated.connect(_switched)
         from .echo import fit
 
         QtCore.QTimer.singleShot(400, fit)
-    _panel.show()
-    _panel.raise_()
+    p = layout.own()
+    p.show(KEY, _panel, layout.EVERYWHERE, "Agent Link", force=True, fronts=_panel.fronts())
+    if tab:
+        _panel.show_tab(tab)
+    p.reveal(KEY)
     return _panel

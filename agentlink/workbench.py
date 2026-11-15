@@ -51,10 +51,22 @@ def add(Gui=None):
     Gui.addIconPath(ICONS)
     cls = make_class(Gui)
     Gui.addWorkbench(cls())
+    # One place for every add-on's panel (the PanelLayout setting): add-ons
+    # place theirs through this placer when Agent Link is installed.
+    from . import hooks, layout
+
+    hooks.provide(layout.SERVICE, layout.own())
     try:
         from PySide import QtCore
 
         QtCore.QTimer.singleShot(1500, _autostart)
+        QtCore.QTimer.singleShot(1500, _report_auto)
     except Exception:
         pass
     return cls
+
+
+def _report_auto():
+    from . import report_watch
+
+    report_watch.start_auto()

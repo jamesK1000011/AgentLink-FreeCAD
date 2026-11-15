@@ -425,7 +425,7 @@ def make_tools(session):
 
 GROUP_OF = {
     "session_state": "core", "body_check": "core", "export_file": "core", "history_diff": "core",
-    "app_force_restart": "core", "dialog_answer": "core", "report_read": "core",
+    "app_force_restart": "core", "dialog_answer": "core", "report_read": "core", "crash_collect": "core",
 }
 GROUP_INFO = {
     "core": "The session, groups, guides, batches, undo, soundness, export. Always listed.",
