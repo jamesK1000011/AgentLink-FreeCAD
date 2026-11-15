@@ -107,19 +107,32 @@ def coloured(lines_with_colour, colours):
 
 def _blocks(w, start):
     """[(text, colour)] for the Report view's blocks from number start, and
-    the block count; colour from each block's first character."""
+    the block count. A line's colour is the first problem colour among its
+    runs of text: FreeCAD writes the time stamp in the normal colour and the
+    message after it in the warning or error colour, so the first run alone
+    missed every orange and red line live."""
     doc = w.document()
     n = doc.blockCount()
     if start > n:
         start = 0
+    colours = _problem_colours()
     rows = []
     b = doc.findBlockByNumber(start)
     while b.isValid():
         colour = None
         try:
-            it = b.begin()
-            if not it.atEnd():
-                colour = it.fragment().charFormat().foreground().color().name()
+            from PySide import QtGui
+
+            cur = QtGui.QTextCursor(b)
+            start_pos, length = b.position(), max(0, b.length() - 1)
+            step = max(1, length // 24)
+            for off in range(1, length + 1, step):
+                cur.setPosition(start_pos + off)
+                c = cur.charFormat().foreground().color().name()
+                if colour is None or c.lower() in colours:
+                    colour = c
+                if c.lower() in colours:
+                    break
         except Exception:
             pass
         rows.append((b.text(), colour))
