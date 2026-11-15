@@ -765,10 +765,9 @@ def tools(session):
         ext.restarting(s)
 
         def changed(d):
-            # "Modified" is the window's own flag (the * on the tab); isTouched
-            # clears at each recompute, so it misses most changes.
-            gd = gui.getDocument(d.Name)
-            return bool(getattr(gd, "Modified", False)) or d.isTouched()
+            from ..store import is_changed
+
+            return is_changed(d)
 
         # What is saved (unattended use, L): by default only the documents
         # this session changed, each checkpointed first. Anything else that

@@ -62,9 +62,11 @@ def ours(mod=None):
 def _modified(d):
     from .doc import modified_state
 
-    st = modified_state(d)
-    if not (st.get("modified") or st.get("touched")):
+    from ..store import is_changed
+
+    if not is_changed(d):
         return {}
+    st = modified_state(d)
     # Which flag: FreeCAD's document touched (an object changed) or only
     # the window's mark (a view setting changed), and which objects.
     out = {k: st[k] for k in ("touched", "modified", "touchedObjects") if st.get(k)}

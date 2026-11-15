@@ -350,14 +350,10 @@ def tools(session):
                 picked.append(d)
 
         def changed(d):
-            try:
-                import FreeCADGui
-
-                gd = FreeCADGui.getDocument(d.Name) if FreeCAD.GuiUp else None
-            except Exception:
-                gd = None
             # Never saved and not empty counts too: headless has no * on a tab.
-            return bool(getattr(gd, "Modified", False)) or d.isTouched() or (not d.FileName and len(d.Objects) > 0)
+            from ..store import is_changed
+
+            return is_changed(d) or (not d.FileName and len(d.Objects) > 0)
 
         unsaved = [d.Label for d in picked if changed(d)]
         if unsaved and not a.get("discard"):
