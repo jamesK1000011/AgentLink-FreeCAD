@@ -142,8 +142,10 @@ def _register_guides(mod):
         from .. import tools
 
         here = os.path.dirname(os.path.abspath(mod.__file__))
-        for name in ("guides", "freecad_guides"):
-            tools.register_guides(os.path.join(here, name))
+        # freecad_guides/ is the add-on's guides for FreeCAD when its plain
+        # guides/ serve its own server elsewhere: then only it is read.
+        mine = os.path.join(here, "freecad_guides")
+        tools.register_guides(mine if os.path.isdir(mine) else os.path.join(here, "guides"))
     except Exception as e:  # noqa: BLE001
         sys.stderr.write(f"Agent Link: {getattr(mod, '__name__', '?')}'s guides not registered — {e}\n")
 

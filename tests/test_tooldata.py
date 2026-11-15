@@ -85,5 +85,27 @@ class ToolData(unittest.TestCase):
         self.assertEqual(datafiles.check_folder(here), [])
 
 
+class Guides(unittest.TestCase):
+    def test_freecad_guides_win_over_guides(self):
+        import types
+
+        try:
+            from agentlink import families, tools
+        except ImportError:
+            self.skipTest("FreeCAD is not importable here")
+
+        d = tempfile.mkdtemp()
+        for n in ("guides", "freecad_guides"):
+            os.makedirs(os.path.join(d, n))
+        mod = types.SimpleNamespace(__file__=os.path.join(d, "agentlink_families.py"), __name__="x")
+        before = list(tools.GUIDE_DIRS)
+        try:
+            families._register_guides(mod)
+            added = [g for g in tools.GUIDE_DIRS if g not in before]
+            self.assertEqual(added, [os.path.join(d, "freecad_guides")])
+        finally:
+            tools.GUIDE_DIRS[:] = before
+
+
 if __name__ == "__main__":
     unittest.main()
