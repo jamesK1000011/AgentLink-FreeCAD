@@ -394,9 +394,7 @@ def tools(session):
 
     def measure_keep(a):
         """A measurement kept in the document (FreeCAD's Measure objects): it follows the model."""
-        kind = a.get("kind", "distance")
-        if kind not in KEEP:
-            raise ToolError("invalid_input", f"kind: {', '.join(KEEP)}.")
+        kind = picks.choice(a, "kind", KEEP, f"kind: {', '.join(KEEP)}.", "distance")
         tid, n, out_prop = KEEP[kind]
         refs = a.get("of") or []
         refs = picks.ref_list(refs)

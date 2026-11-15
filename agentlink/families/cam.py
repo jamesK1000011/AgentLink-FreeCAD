@@ -468,9 +468,7 @@ def tools(session):
     def cam_post(a):
         d = doc()
         job = _job(d, a.get("job"))
-        name = a.get("post", "grbl")
-        if name not in POSTS:
-            raise ToolError("invalid_input", f"post: one of {', '.join(POSTS)} — the person's machine's controller.")
+        name = picks.choice(a, "post", POSTS, f"post: one of {', '.join(POSTS)} — the person's machine's controller.", "grbl")
         ops = [op for op in job.Operations.Group if getattr(op, "Active", True)]
         if not ops:
             raise ToolError("invalid_state", "No operations in the job: cam_op first.")
@@ -564,9 +562,7 @@ def tools(session):
     def cam_tool_add(a):
         d = doc()
         job = _job(d, a.get("job"))
-        shape = a.get("shape", "endmill")
-        if shape not in SHAPES:
-            raise ToolError("invalid_input", f"shape: one of {', '.join(SHAPES)}.")
+        shape = picks.choice(a, "shape", SHAPES, f"shape: one of {', '.join(SHAPES)}.", "endmill")
         if a.get("diameter") is None:
             raise ToolError("invalid_input", "diameter: the tool's, mm — ask the person which tool.")
         name = a.get("name") or f"{shape} {a['diameter']} mm"
@@ -678,9 +674,7 @@ def tools(session):
         if top is None:
             raise ToolError("not_found", f"op {want!r}: cam_list lists them.")
         op = top
-        kind = a.get("kind")
-        if kind not in DRESSUPS:
-            raise ToolError("invalid_input", f"kind: {', '.join(DRESSUPS)} — tags (holding tabs: count, width, height), dogbone (inside corners cleared), boundary (moves kept inside the stock), array (copies), ramp (entry instead of plunging), leadinout.")
+        kind = picks.choice(a, "kind", DRESSUPS, f"kind: {', '.join(DRESSUPS)} — tags (holding tabs: count, width, height), dogbone (inside corners cleared), boundary (moves kept inside the stock), array (copies), ramp (entry instead of plunging), leadinout.")
         try:
             mod = importlib.import_module(DRESSUPS[kind])
         except ImportError as e:

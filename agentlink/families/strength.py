@@ -433,9 +433,7 @@ def tools(session):
         if not isinstance(refs, list) or len(refs) < 2:
             raise ToolError("invalid_input", "bodies: two or more parts to study together.")
         objs = [s.body(r) for r in refs]
-        how = a.get("join", "tie")
-        if how not in ("tie", "contact", "none"):
-            raise ToolError("invalid_input", "join: tie (bonded where they touch) | contact (pushing, not pulling; friction) | none.")
+        how = picks.choice(a, "join", ("tie", "contact", "none"), "join: tie (bonded where they touch) | contact (pushing, not pulling; friction) | none.", "tie")
         mats = a.get("materials") or {}
         parts = []
         for o in objs:
@@ -1074,9 +1072,7 @@ def tools(session):
         if not r or "field" not in r:
             raise ToolError("not_found", "No solve to read: fea_solve first.")
         kind = a.get("kind", "histogram")
-        field = a.get("field", "vonMises")
-        if field not in ("vonMises", "displacement"):
-            raise ToolError("invalid_input", "field: vonMises (MPa) or displacement (mm, its size).")
+        field = picks.choice(a, "field", ("vonMises", "displacement"), "field: vonMises (MPa) or displacement (mm, its size).", "vonMises")
         unit = "MPa" if field == "vonMises" else "mm"
         f = r["field"]
         vals = np.asarray(f["vonMises"], float) if field == "vonMises" else np.linalg.norm(np.asarray(f["displacement"], float), axis=1)

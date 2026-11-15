@@ -1716,12 +1716,8 @@ def tools(session):
         refs = a.get("refs") or []
         if len(refs) < 3:
             raise bad("refs: three or more points along the part, in order (td_dim takes two).")
-        typ = a.get("type", "horizontal")
-        if typ not in ("horizontal", "vertical"):
-            raise bad("type: horizontal | vertical.")
-        style = a.get("style", "chain")
-        if style not in ("chain", "baseline"):
-            raise bad("style: chain (each to the next) | baseline (each from the first).")
+        typ = picks.choice(a, "type", ("horizontal", "vertical"), "type: horizontal | vertical.", "horizontal")
+        style = picks.choice(a, "style", ("chain", "baseline"), "style: chain (each to the next) | baseline (each from the first).", "chain")
         v = view_of(doc(), a.get("view"))
         X, Y = abs_xy(v)
         off = float(a.get("offset", 10.0))  # page mm from the view's edge to the first line
@@ -2573,9 +2569,7 @@ def tools(session):
             return done("td_lines", {"view": v.Label, "rotation": num(v.Rotation, 3), "turned": num(turn, 3)})
         if act == "style":
             STY = {"solid": 1, "dashed": 2, "dotted": 3, "dashdot": 4, "dashdotdot": 5, "none": 0}
-            st = a.get("style", "solid")
-            if st not in STY:
-                raise bad(f"style: {' | '.join(STY)}.")
+            st = picks.choice(a, "style", STY, f"style: {' | '.join(STY)}.", "solid")
             col = a.get("color")
             from .doc import colour as _colour
 

@@ -63,9 +63,7 @@ def tools(session):
 
     def pd_primitive(a):
         b = pc.pd_body(doc(), a.get("body"))
-        kind = a.get("kind")
-        if kind not in PRIMS:
-            raise bad(f"kind: one of {', '.join(PRIMS)}.")
+        kind = picks.choice(a, "kind", PRIMS, f"kind: one of {', '.join(PRIMS)}.")
         sub = bool(a.get("subtractive"))
         before = pc.volume(b)
         if sub and before <= 0:

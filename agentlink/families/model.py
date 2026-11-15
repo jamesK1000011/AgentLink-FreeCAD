@@ -150,9 +150,7 @@ def tools(session):
     # ---- primitives ----
 
     def part_primitive(a):
-        kind = a.get("kind")
-        if kind not in PRIMS:
-            raise ToolError("invalid_input", f"kind: one of {', '.join(PRIMS)}.")
+        kind = picks.choice(a, "kind", PRIMS, f"kind: one of {', '.join(PRIMS)}.")
         pl = picks.placement(a)
         label = s.unique(a.get("name") or kind.capitalize())
         d = doc()
@@ -222,9 +220,7 @@ def tools(session):
     # ---- booleans ----
 
     def part_boolean(a):
-        op = a.get("op")
-        if op not in ("fuse", "cut", "common"):
-            raise ToolError("invalid_input", "op: fuse, cut or common.")
+        op = picks.choice(a, "op", ("fuse", "cut", "common"), "op: fuse, cut or common.")
         base = picks.solid_body(s, a.get("base"))
         names = a.get("tools")
         names = picks.ref_list(names, "tools: the bodies to fuse, cut away or keep in common with base.")
