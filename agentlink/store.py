@@ -181,14 +181,26 @@ def undo_on(doc):
         _unchanged(doc)
 
 
-def _changed(doc):
-    try:
-        if doc.isTouched():
-            return True
-    except Exception:
-        pass
+def is_changed(doc):
+    """Whether doc has changes since it was saved. With the window up, its
+    own modified mark (the "*") says so: FreeCAD 1.1 reports a document
+    touched as soon as it is opened, with no change at all (seen on the
+    Mac after each restart), so touched alone kept a recovered copy each
+    time. Headless, touched is all there is."""
     g = _gui_doc(doc)
-    return bool(getattr(g, "Modified", False)) if g is not None else False
+    if g is not None:
+        try:
+            return bool(g.Modified)
+        except Exception:
+            pass
+    try:
+        return bool(doc.isTouched())
+    except Exception:
+        return False
+
+
+def _changed(doc):
+    return is_changed(doc)
 
 
 def _unchanged(doc):
