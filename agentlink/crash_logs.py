@@ -35,12 +35,26 @@ def _user_dir():
         return ""
 
 
+def _cache_dir():
+    try:
+        import FreeCAD
+
+        return FreeCAD.getUserCachePath()
+    except Exception:
+        return ""
+
+
 def recovery_dirs(temp=None, skip_pid=None):
     """FreeCAD's transient document folders that hold a recovery file,
-    except this process's own (its open documents are not crashed)."""
-    temp = temp or _temp_dir()
+    except this process's own (its open documents are not crashed). FreeCAD
+    1.x keeps them in its cache folder (~/Library/Caches/FreeCAD/… on a Mac),
+    older releases in the temporary folder: both are looked in."""
+    roots = [temp] if temp else [r for r in (_cache_dir(), _temp_dir()) if r]
+    found = []
+    for root in roots:
+        found += glob.glob(os.path.join(root, "*_Doc_*")) + glob.glob(os.path.join(root, "*", "*_Doc_*"))
     out = []
-    for d in sorted(glob.glob(os.path.join(temp, "*_Doc_*"))):
+    for d in sorted(set(found)):
         if not os.path.isdir(d):
             continue
         if skip_pid is not None and d.rstrip(os.sep).endswith("_" + str(skip_pid)):
