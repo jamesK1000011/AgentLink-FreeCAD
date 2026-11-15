@@ -12,6 +12,7 @@ import os
 import FreeCAD
 import Draft
 
+from .. import runners
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import picks
@@ -406,14 +407,6 @@ def tools(session):
 
     # ---- Draft and Sketch, 2D views, facebinders ----
 
-    def draft_to_sketch(a):
-        active()
-        objs = objs_of(a.get("objects"))
-        sk = Draft.make_sketch(objs, autoconstraints=bool(a.get("constrain", True)), delete=bool(a.get("delete")))
-        if sk is None:
-            raise ToolError("failed", "Draft could not make a sketch of those (they must be flat, in one plane).")
-        return finish(named(sk, a.get("name"), "Sketch"), "draft_to_sketch", {"geometry": len(sk.Geometry), "constraints": len(sk.Constraints)})
-
     def draft_from_sketch(a):
         active()
         objs = objs_of(a.get("objects"))
@@ -546,7 +539,9 @@ def tools(session):
             return {"style": name, "applied": done, **({"recorded": later, "note": "No window here to show styles: recorded on them for when the file opens in FreeCAD."} if later else {})}
         raise ToolError("invalid_input", "action: list | set (name, values) | apply (name, objects) | delete (name).")
 
-    return [
+    # The wrappers kept as data (agentlink/data/tools.json) run on these.
+    helpers = {"doc": doc, "active": active, "named": named, "finish": finish, "objs_of": objs_of}
+    return runners.tools(GROUP, s, helpers) + [
         Tool("draft_plane", "A saved working plane (Draft's working-plane proxy): at [x,y,z] with normal, or on a flat face (\"Box.Face6\"); rotate degrees about its normal; name. Records a plane to draw and sketch on.",
              obj({"at": {"type": "array", "items": {"type": "number"}}, "normal": {"type": "array", "items": {"type": "number"}}, "face": {"type": "string"}, "rotate": {"type": "number"}, "name": {"type": "string"}}), draft_plane, changes=True),
         Tool("draft_style", "Draft annotation styles, kept in the document as Draft keeps them: action list | set (name, values { FontSize, FontName, ArrowSize, ArrowType, Decimals, ShowUnit, UnitOverride, LineWidth, TextColor, ScaleMultiplier, ExtLines, ExtOvershoot, DimOvershoot, LineSpacing, TextSpacing, ShowLine, LineColor }) | apply (name, objects: dimensions, labels, texts) | delete.",
@@ -570,8 +565,6 @@ def tools(session):
              obj({"name": {"type": "string"}, "objects": {"type": "array", "items": {"type": "string"}}, "lineWidth": {"type": "number"}}, ["name"]), draft_layer, changes=True),
         Tool("draft_hatch", "Hatch a face or a 2D view with a PAT pattern: object, pattern (default Diagonal4; FreeCAD's FCPAT.pat lists them, or file: your own .pat), scale, rotation.",
              obj({"object": {"type": "string"}, "pattern": {"type": "string"}, "file": {"type": "string"}, "scale": {"type": "number"}, "rotation": {"type": "number"}, "name": {"type": "string"}}, ["object"]), draft_hatch, changes=True),
-        Tool("draft_to_sketch", "Draft shapes made into one sketch (constrain: true adds the obvious constraints; delete: true removes the originals).",
-             obj({"objects": {"type": "array", "items": {"type": "string"}}, "constrain": {"type": "boolean"}, "delete": {"type": "boolean"}, "name": {"type": "string"}}, ["objects"]), draft_to_sketch, changes=True),
         Tool("draft_from_sketch", "Sketches or shapes made Draft wires (Draft's draftify): objects, block, delete.",
              obj({"objects": {"type": "array", "items": {"type": "string"}}, "block": {"type": "boolean"}, "delete": {"type": "boolean"}}, ["objects"]), draft_from_sketch, changes=True),
         Tool("draft_2d_view", "A 2D view of a body projected along direction (Draft's Shape2DView, parametric): hidden: true adds hidden lines, section: true draws only cut faces.",
