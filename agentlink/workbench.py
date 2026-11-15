@@ -61,6 +61,10 @@ def add(Gui=None):
 
         QtCore.QTimer.singleShot(1500, _autostart)
         QtCore.QTimer.singleShot(1500, _report_auto)
+        # macOS: quitting crashed in PySide's teardown (quit_guard.py).
+        from . import quit_guard
+
+        QtCore.QTimer.singleShot(1500, quit_guard.install)
     except Exception:
         pass
     return cls

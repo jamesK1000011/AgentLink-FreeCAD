@@ -121,6 +121,7 @@ agentlink/panel.py
 agentlink/panel_tabs.py
 agentlink/paths.py
 agentlink/protocol.py
+agentlink/quit_guard.py
 agentlink/refusal.py
 agentlink/render.py
 agentlink/report_watch.py
@@ -217,6 +218,7 @@ tests/test_param.py
 tests/test_paths.py
 tests/test_pref_import.py
 tests/test_protocol.py
+tests/test_quit_guard.py
 tests/test_release.py
 tests/test_report_watch.py
 tests/test_restart_temp_copy.py
