@@ -531,11 +531,15 @@ class Link:
             self._draining = False
 
     def _handle_inbox(self):
-        if not self.inbox.empty() and not self._back():
-            return
         if self.inbox.empty():
             return
         d = modal_info()
+        # While documents reopen after a restart, calls wait — except with a
+        # dialog up: FreeCAD's Document Recovery comes up at start and holds
+        # the reopening, so the dialog_answer that clears it must not wait
+        # behind it (a deadlock seen live after an update).
+        if d is None and not self._back():
+            return
         if d is not None and self.in_call:
             mark_agent_opened(d)
         if d is not None or self.in_call:
