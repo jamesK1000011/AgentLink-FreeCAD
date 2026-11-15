@@ -67,7 +67,14 @@ def _modified(d):
         return {}
     # Which flag: FreeCAD's document touched (an object changed) or only
     # the window's mark (a view setting changed), and which objects.
-    return {"modified": True, "changed": {k: st[k] for k in ("touched", "modified", "touchedObjects") if st.get(k)}}
+    out = {k: st[k] for k in ("touched", "modified", "touchedObjects") if st.get(k)}
+    try:
+        names = list(d.UndoNames or [])
+        if names:
+            out["lastSteps"] = names[:3]
+    except Exception:
+        pass
+    return {"modified": True, "changed": out}
 
 
 def tools(s):
