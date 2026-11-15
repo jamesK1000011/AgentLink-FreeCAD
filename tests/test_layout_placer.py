@@ -67,6 +67,9 @@ class W:
     def widget(self):
         return self._w
 
+    def parentWidget(self):  # noqa: N802
+        return self.parent
+
     def takeWidget(self):  # noqa: N802
         w, self._w = self._w, None
         return w
@@ -326,6 +329,17 @@ class Placer(unittest.TestCase):
     def test_combo_view_found_by_its_class(self):
         self.mw = Main(name="SomethingElse", cls="Gui::DockWnd::ComboView")
         self.assertIs(layout.combo_tabs(self.mw), self.mw.combo)
+
+    def test_outer_tabs_chosen_over_the_property_editors(self):
+        # FreeCAD 1.1: no "combiTab" by name, and the property editor's
+        # View/Data tabs (inside the Model tab) can come first.
+        c = self.mw.combo_dock
+        outer = c.tabs
+        inner = Tabs()
+        inner.parent = W(parent=outer)
+        c.findChild = lambda cls, name=None: None
+        c.findChildren = lambda cls: [inner, outer]
+        self.assertIs(layout.combo_tabs(self.mw), outer)
 
     def test_empty_tasks_gives_way(self):
         self.params.v["PanelLayout"] = "right"
