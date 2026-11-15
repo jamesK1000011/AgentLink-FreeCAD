@@ -44,6 +44,13 @@ class ReportWatch(unittest.TestCase):
         self.assertEqual(len(out), report_watch.MAX_LINES)
         self.assertIn("more lines", out[-1])
 
+    def test_a_red_line_without_words_is_a_problem(self):
+        rows = [("13:22:03  Workshop Make · Pauses: box is in no print setup", "#ff0000"),
+                ("13:21:49  Agent Link: listening", "#ffffff"), ("", None)]
+        out = report_watch.coloured(rows, {"#ff0000", "#ffaa00"})
+        self.assertEqual(len(out), 1)
+        self.assertIn("Pauses", out[0])
+
     def test_onto_the_answer(self):
         reply = {"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": json.dumps({"ok": True})}]}}
         add_report(reply, ["Error: x"])

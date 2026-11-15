@@ -64,16 +64,83 @@ def read(last=40, problems_only=False):
     if text is None:
         return {"found": False, "lines": [], "note": "The Report view could not be found in this window."}
     lines = [l for l in text.splitlines() if l.strip()]
-    probs = [l for l in lines if MARK.search(l)]
+    try:
+        rows, _n = _blocks(_report_widget(), 0)
+        probs = coloured(rows, _problem_colours())
+    except Exception:
+        probs = [l for l in lines if MARK.search(l)]
     pick = probs if problems_only else lines
     return {"found": True, "count": len(lines), "problems": len(probs), "lines": pick[-max(1, min(int(last), 200)):]}
 
 
+PARAM = "User parameter:BaseApp/Preferences/OutputWindow"
+
+
+def _problem_colours():
+    """FreeCAD's own warning and error colours for the Report view (#rrggbb),
+    with its defaults: a line in one of them is a warning or an error
+    whatever its words say ("Pauses: … is in no print setup" is red)."""
+    out = {"#ffaa00", "#ff0000"}
+    try:
+        import FreeCAD
+
+        g = FreeCAD.ParamGet(PARAM)
+        for name in ("colorWarning", "colorError", "colorCritical"):
+            v = g.GetUnsigned(name, 0)
+            if v:
+                out.add("#%06x" % ((v >> 8) & 0xFFFFFF))
+    except Exception:
+        pass
+    return out
+
+
+def coloured(lines_with_colour, colours):
+    """The lines whose colour is a warning or error colour, or whose words
+    say so (MARK): lines_with_colour is [(text, "#rrggbb" or None)]."""
+    out = []
+    for text, colour in lines_with_colour:
+        t = text.strip()
+        if t and ((colour or "").lower() in colours or MARK.search(t)):
+            out.append(t[:MAX_CHARS])
+    return out
+
+
+def _blocks(w, start):
+    """[(text, colour)] for the Report view's blocks from number start, and
+    the block count; colour from each block's first character."""
+    doc = w.document()
+    n = doc.blockCount()
+    if start > n:
+        start = 0
+    rows = []
+    b = doc.findBlockByNumber(start)
+    while b.isValid():
+        colour = None
+        try:
+            it = b.begin()
+            if not it.atEnd():
+                colour = it.fragment().charFormat().foreground().color().name()
+        except Exception:
+            pass
+        rows.append((b.text(), colour))
+        b = b.next()
+    return rows, n
+
+
 def take():
-    """New problem lines in the Report view since the last take(); [] when
-    there are none or the view cannot be read."""
-    text = _report_text()
-    if text is None:
+    """New problem lines in the Report view since the last take(), by
+    colour and by words; [] when there are none or it cannot be read."""
+    try:
+        w = _report_widget()
+    except Exception:
+        w = None
+    if w is None:
         return []
-    out, _state["seen"] = problems(text, _state["seen"])
+    try:
+        rows, _state["seen"] = _blocks(w, _state["seen"])
+    except Exception:
+        return []
+    out = coloured(rows, _problem_colours())
+    if len(out) > MAX_LINES:
+        out = out[:MAX_LINES - 1] + [f"… and {len(out) - MAX_LINES + 1} more lines (report_read problems: true)"]
     return out
