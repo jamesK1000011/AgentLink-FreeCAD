@@ -293,7 +293,7 @@ class Session:
                 raise ToolError("unavailable", f"since {since!r}: a checkpoint needs SafetyNet, which is not installed here — since: a step of this session (session_state gives the step now).")
             cp = svc.find(self, since)
             if not cp:
-                raise ToolError("not_found", f"since {since!r}: no such checkpoint — history_checkpoint {{ list: true }} lists them.")
+                raise ToolError("not_found", f"since {since!r}: no such checkpoint — the add-on that keeps checkpoints lists them.")
             last = len(self.steps)
             if cp.get("session") == id(self) and int(cp.get("step", -1)) <= last and last:
                 since = int(cp["step"])
@@ -352,8 +352,8 @@ WORKING = (
     "## sections can be read one at a time. "
     "Lengths are millimetres, angles degrees, masses grams. A body is named by its label; a face or edge by what it "
     "is (shape_query: normal, radius, near a point) rather than by FreeCAD's Face12, which changes with the model. "
-    "Every tool that changes the document is one undo step: history_undo and history_redo (history_checkpoint and "
-    "history_restore where they are installed); history_diff says what changed. batch runs calls in order and rolls back whole when one is "
+    "Every tool that changes the document is one undo step: history_undo and history_redo (and checkpoints "
+    "where an add-on offers them); history_diff says what changed. batch runs calls in order and rolls back whole when one is "
     "refused. A refusal is { error: { code, message } }: the code (invalid_input, invalid_state, not_found, "
     "unavailable, failed) and a message saying what to change — correct the call and go on. "
     "Look at the work after each change that matters: view_render draws the parts from any view, cut open, zoomed "

@@ -440,7 +440,7 @@ def tools(session):
         b = pc.pd_body(doc(), a.get("body"))
         f = pc.in_body(b, a.get("feature"), ["PartDesign::"])
         if not has(f, "Suppressed"):
-            raise ToolError("unavailable", f"This FreeCAD ({'.'.join(FreeCAD.Version()[:3])}) has no Suppressed property on features: feature_remove it, or history_checkpoint then remove and history_restore.")
+            raise ToolError("unavailable", f"This FreeCAD ({'.'.join(FreeCAD.Version()[:3])}) has no Suppressed property on features: feature_remove it, or remove it and history_undo to bring it back.")
         before = pc.volume(b)
         f.Suppressed = bool(a.get("suppressed", True))
         out = pc.settle(s, b, f, "feature_suppress", before)
