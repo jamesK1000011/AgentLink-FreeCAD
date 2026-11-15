@@ -43,7 +43,7 @@ class Guides(unittest.TestCase):
         named = re.search(r"\(([a-z, ]+) …\)", text)
         self.assertIsNotNone(named, text)
         for g in [x.strip() for x in named.group(1).split(",")]:
-            self.assertIn(g, groups | {"scan", "align"}, g)
+            self.assertIn(g, groups, g)
         for t in re.findall(r"\b([a-z]+_[a-z_]+)\b", text):
             if t.split("_")[0] in {n.split("_")[0] for n in self.srv.tools} and t not in ("ToolError",):
                 self.assertIn(t, self.srv.tools, t)

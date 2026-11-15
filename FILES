@@ -14,6 +14,8 @@ agentlink/charts.py
 agentlink/commands.py
 agentlink/data/filaments.json
 agentlink/data/filaments.schema.json
+agentlink/data/stock.json
+agentlink/data/stock.schema.json
 agentlink/data/tools.schema.json
 agentlink/datafiles.py
 agentlink/echo.py
@@ -133,6 +135,7 @@ tests/test_cells.py
 tests/test_charts.py
 tests/test_core_guards.py
 tests/test_core_guards_fc.py
+tests/test_declared.py
 tests/test_doc.py
 tests/test_draft.py
 tests/test_echo_map.py

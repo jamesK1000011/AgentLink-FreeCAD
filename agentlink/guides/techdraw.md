@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 # TechDraw, piece by piece
 
-`drawing_make` makes a whole sheet in one call. These tools build a TechDraw page one object at a time, so the drawing says exactly what the person asks and they can carry on with it in the GUI.
+These tools build a TechDraw page one object at a time, so the drawing says exactly what the person asks and they can carry on with it in the GUI.
 
 ## workflow
 1. Ask about the projection first: first angle (ISO, Europe) or third angle (ASME, North America). Then `td_page { action: "new", paper: "A3", projection: "first" }`. `td_page { action: "templates" }` lists the build's templates; `template` takes any SVG.

@@ -136,10 +136,13 @@ def load():
 def declared(fams):
     """What each family says of its own tools, so no list here names them:
     HEAVY (queued, timed, given a deadline), WRITERS (their path is written,
-    not read) and GEOMETRIC (their path is a curve, not a file)."""
-    from .. import keep, paths
+    not read), GEOMETRIC (their path is a curve, not a file), and for the
+    live echo in the window SHOWN, AREAS, WORKBENCHES and PAGES
+    (agentlink/echo.py declare())."""
+    from .. import echo, keep, paths
 
     for f in fams:
         keep.declare_heavy(getattr(f, "HEAVY", ()) or ())
         paths.WRITERS.update(getattr(f, "WRITERS", ()) or ())
         paths.GEOMETRIC.update(getattr(f, "GEOMETRIC", ()) or ())
+        echo.declare(f)

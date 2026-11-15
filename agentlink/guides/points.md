@@ -20,4 +20,4 @@
 
 ## traps
 - A cylinder fit needs the points of that cylinder only. A floor or a chamfer left in pulls it off.
-- A scan from ScanRuler for FreeCAD lives in the session, not in the document. Its own tools measure it; export it as a cloud to use these.
+- A scan kept in an add-on's session, not in the document, is measured with that add-on's tools; export it as a cloud to use these.

@@ -227,7 +227,7 @@ def tools(session):
         if not all(shape_mat.values()):
             out["shapeMaterialNote"] = "Not every body's ShapeMaterial was set: only FreeCAD library cards go there; the material is kept with the document either way."
         if c["id"] not in DENSITY:
-            out["note"] = "part_review and slice know the filament keys only (pla, petg, abs, asa, pa6-cf, tpu-95a); mass_properties and fea_* read this material."
+            out["note"] = "Add-ons for printing read the filament keys only (pla, petg, abs, asa, pa6-cf, tpu-95a); measure_mass and fea_* read this material."
         missing = [k for k in ("E", "yield") if c.get(k) is None]
         if missing:
             out["missing"] = missing

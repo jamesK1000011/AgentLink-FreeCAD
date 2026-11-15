@@ -48,11 +48,17 @@ class CoreGuards(unittest.TestCase):
         link.inbox.get(timeout=5)
 
     def test_settings_the_person_sets(self):
-        for path, name, value in (("BaseApp/Preferences/Mod/AgentLink", "CollabAllow", "live"), ("BaseApp/Preferences/Mod/AgentLink", "ExtensionRepos", "x/y"),
-                                  ("BaseApp/Preferences/Mod/Fem/Ccx", "ccxBinaryPath", "/tmp/evil")):
-            err, e = self.call("pref_set", {"path": path, "name": name, "value": value})
-            self.assertTrue(err, name)
-            self.assertEqual(e["error"]["code"], "not_allowed")
+        from agentlink import hooks
+
+        hooks.guard_setting("Mod/AgentLinkTest", "AgentsAllow")  # as an add-on guards its own switch
+        try:
+            for path, name, value in (("BaseApp/Preferences/Mod/AgentLinkTest", "AgentsAllow", "live"), ("BaseApp/Preferences/Mod/AgentLink", "ExtensionRepos", "x/y"),
+                                      ("BaseApp/Preferences/Mod/Fem/Ccx", "ccxBinaryPath", "/tmp/evil")):
+                err, e = self.call("pref_set", {"path": path, "name": name, "value": value})
+                self.assertTrue(err, name)
+                self.assertEqual(e["error"]["code"], "not_allowed")
+        finally:
+            hooks.GUARDED.discard(("Mod/AgentLinkTest", "AgentsAllow"))
 
     def test_bool_text_is_read_as_said(self):
         p = "BaseApp/Preferences/Mod/AgentLinkTest"

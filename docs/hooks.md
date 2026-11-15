@@ -33,6 +33,11 @@ LEAN = False                         # True: listed by default (keep it small)
 HEAVY = {"mine_solve"}               # optional: queued, timed, given a deadline
 WRITERS = {"mine_export"}            # optional: their "path" is written, not read
 GEOMETRIC = set()                    # optional: their "path" is a curve, not a file
+# Optional, for the live echo in the FreeCAD window (any family, data or code):
+SHOWN = ("mine_check",)              # read-only tools (names or prefixes) still shown as they run
+AREAS = {"mine": "Mine"}             # prefix → the name the Activity list gives its calls
+WORKBENCHES = {"mine_": "PartDesignWorkbench"}  # prefix → the workbench brought up for them
+PAGES = ("mine_page_",)              # prefixes of tools working on a drawing page (opened, view not reframed)
 
 def tools(session):
     from agentlink.protocol import Tool, ToolError
@@ -94,7 +99,7 @@ All optional. Every hook catches and logs your exceptions.
 | `extend_tool(name, properties, before, after, describe)` | Add arguments to a tool another family owns. `before(args, session)` may return changed arguments; `after(args, answer, session)` may return a fuller answer; `describe` is a sentence added to the tool's description. The owner never sees your arguments. |
 | `register_tab(title, factory, order)` | A tab in Agent Link's panel: `factory(panel)` returns a QWidget. |
 | `register_reviewer(fn)` | `fn(session, body)` gives the Review tab its verdict. |
-| `guard_setting(path, name)` | A setting `pref_set` must not change. |
+| `guard_setting(path, name)` | A setting `pref_set` must not change (`path` as `pref_set` takes it, e.g. `"Mod/MyAddon"`): one that widens what the agent may do or which code FreeCAD loads. |
 | `remember(session, kind, value)` / `analysis(session, kind)` | Last results by kind, for example the last FEA solve. |
 | `agentlink.tools.register_guides(folder)` | Markdown guides the agent can read with `guide_read`. |
 | `agentlink.render.register_layer` / `register_map` | Layers and colour maps for `view_render`. |

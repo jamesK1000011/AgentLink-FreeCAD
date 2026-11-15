@@ -16,15 +16,6 @@ from ..protocol import ToolError
 V = FreeCAD.Vector
 SUB = re.compile(r"^(Face|Edge|Vertex)(\d+)$")
 
-# g/cm³: the printing plastics the core knows, and the usual stock.
-MATERIALS = {
-    "pla": 1.24, "petg": 1.27, "abs": 1.04, "asa": 1.07, "pa6-cf": 1.12, "tpu-95a": 1.21,
-    "nylon": 1.14, "pc": 1.20, "pom": 1.41, "acrylic": 1.18, "hdpe": 0.95,
-    "steel": 7.85, "stainless": 8.00, "aluminium": 2.70, "aluminum": 2.70, "brass": 8.50,
-    "copper": 8.96, "titanium": 4.43, "cast-iron": 7.20, "oak": 0.75, "pine": 0.50, "plywood": 0.60,
-}
-
-
 def num(v, name):
     if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
         raise ToolError("invalid_input", f"{name}: a number.")

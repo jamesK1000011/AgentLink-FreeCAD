@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 # Meshes in the document
 
-These tools work on FreeCAD's mesh objects: an imported STL, a body meshed with `meshobj_from_shape`, a split piece. A scan in ScanRuler for FreeCAD's session has its own tools (`mesh-tools`).
+These tools work on FreeCAD's mesh objects: an imported STL, a body meshed with `meshobj_from_shape`, a split piece. A scan kept in an add-on's session is measured with that add-on's own tools.
 
 ## workflow
 1. Get a mesh: `import_file` an STL/OBJ/PLY, or `meshobj_from_shape { body, method }`. Use `mefisto` for even triangles (for FEM or textures), `standard` for a close fit.

@@ -6,7 +6,7 @@
 2. Add and remove material: `part_boolean { op, base, tools }`, or in one call `part_extrude { profile, into, op: "cut" }` for a pocket or `op: "fuse"` for a boss.
 3. Repeat and mirror with `part_transform` (linear, polar, mirror { fuse: true }).
 4. Shell with `part_thickness`, then round and bevel last: `part_fillet` / `part_chamfer` with edges picked by `shape_query` or a `query`.
-5. `body_check` or `part_review` after each change; `history_diff` says what it did.
+5. `body_check` after each change; `history_diff` says what it did.
 
 ## traps
 - Face and edge numbers change after every modelling step: query again (`shape_query`) rather than reuse old references.

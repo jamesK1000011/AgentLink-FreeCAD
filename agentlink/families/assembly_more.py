@@ -503,7 +503,7 @@ def tools(session):
         doc().recompute()
         s.snapshot("asm_explode")
         return {"assembly": asm.Label, "exploded": {o.Label: vec(moves[o.Name]) for o in which}, "step": len(s.steps),
-                "jointsOff": len(off), "note": "Its joints are off while exploded, so no solve pulls the parts back: view_render to look, drawing_exploded for a manual, then asm_explode { collapse: true }. Kept in the file, so it collapses after reopening too."}
+                "jointsOff": len(off), "note": "Its joints are off while exploded, so no solve pulls the parts back: view_render to look, a drawing of it (td_page, td_view), then asm_explode { collapse: true }. Kept in the file, so it collapses after reopening too."}
 
     # ---- bill of materials ----
 
@@ -570,7 +570,7 @@ def tools(session):
         out = {"bom": bom.Label, "sheet": bom.Name, "native": native, "parts": rows, "step": len(s.steps),
                "next": "td_table { sheet } puts it on a drawing; sheet_read reads it."}
         if any(not r["material"] for r in rows):
-            out["note"] = "Parts with no material recorded have no mass: part_spec { material, bodies } records one."
+            out["note"] = "Parts with no material recorded have no mass: material_set records one."
         return out
 
     # ---- sub-assemblies ----
@@ -716,6 +716,6 @@ def tools(session):
              obj({"assembly": asm_ref, "factor": {"type": "number"}, "axis": {"type": ["string", "array"]}, "gap": {"type": "number"}, "parts": {"type": "array", "items": {"type": "string"}}, "collapse": {"type": "boolean"}}), asm_explode, changes=True),
         Tool("asm_sub", "Put an assembly into another as a sub-assembly: sub (the assembly to put in), assembly (the one it goes into), rigid (true: one part; false: its own joints still move, where this FreeCAD allows), name.",
              obj({"assembly": asm_ref, "sub": {"type": "string"}, "rigid": {"type": "boolean"}, "name": {"type": "string"}}, ["assembly", "sub"]), asm_sub, changes=True),
-        Tool("asm_bom", "The bill of materials: FreeCAD's own BOM object (a spreadsheet the Assembly workbench keeps up to date) with Index, Name, Quantity, and Material, mass and volume from part_spec's materials; columns adds more (\".Label2\" reads a property). td_table puts it on a drawing.",
+        Tool("asm_bom", "The bill of materials: FreeCAD's own BOM object (a spreadsheet the Assembly workbench keeps up to date) with Index, Name, Quantity, and Material, mass and volume from the materials recorded (material_set); columns adds more (\".Label2\" reads a property). td_table puts it on a drawing.",
              obj({"assembly": asm_ref, "columns": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}}), asm_bom, changes=True),
     ]

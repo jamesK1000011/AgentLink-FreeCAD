@@ -1,0 +1,104 @@
+{
+ "$schema": "stock.schema.json",
+ "dataVersion": "1.0.0",
+ "licence": "CC-BY-4.0",
+ "about": "The usual stock that is not printed (plastics as sheet or rod, metals, woods): density g/cm³. Typical figures; the supplier's sheet is the authority. Printing filaments are in filaments.json.",
+ "entries": {
+  "nylon": {
+   "name": "Nylon (PA6/PA66)",
+   "density": 1.14,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "pc": {
+   "name": "Polycarbonate",
+   "density": 1.2,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "pom": {
+   "name": "Acetal (POM)",
+   "density": 1.41,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "acrylic": {
+   "name": "Acrylic (PMMA)",
+   "density": 1.18,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "hdpe": {
+   "name": "HDPE",
+   "density": 0.95,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "steel": {
+   "name": "Steel (carbon)",
+   "density": 7.85,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "stainless": {
+   "name": "Stainless steel",
+   "density": 8.0,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "aluminium": {
+   "name": "Aluminium",
+   "density": 2.7,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "aluminum": {
+   "name": "Aluminum (as aluminium)",
+   "density": 2.7,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "brass": {
+   "name": "Brass",
+   "density": 8.5,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "copper": {
+   "name": "Copper",
+   "density": 8.96,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "titanium": {
+   "name": "Titanium (Ti-6Al-4V)",
+   "density": 4.43,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "cast-iron": {
+   "name": "Cast iron (grey)",
+   "density": 7.2,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "oak": {
+   "name": "Oak (dry)",
+   "density": 0.75,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "pine": {
+   "name": "Pine (dry)",
+   "density": 0.5,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  },
+  "plywood": {
+   "name": "Plywood",
+   "density": 0.6,
+   "source": "Typical density at room temperature, g/cm³ (engineering handbook values; Agent Link's table)",
+   "date": "2026-11-14"
+  }
+ }
+}
