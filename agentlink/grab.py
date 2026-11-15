@@ -40,10 +40,12 @@ def grab_window(target=None):
             img = QtGui.QImage(tmp)
             painter = QtGui.QPainter(pix)
             painter.drawImage(QtCore.QRect(gl.mapTo(target, QtCore.QPoint(0, 0)), gl.size()), img)
-            # What floats over the view (the agent's caption) goes back on top.
-            for lbl in target.findChildren(QtW.QLabel):
-                if lbl.isVisible() and lbl.text().startswith("✦"):
-                    painter.drawPixmap(lbl.mapTo(target, QtCore.QPoint(0, 0)), lbl.grab())
+            # What floats over the view goes back on top: the agent's caption,
+            # and widgets an add-on put on the view (a number field on a grip).
+            over = [lbl for lbl in target.findChildren(QtW.QLabel) if lbl.isVisible() and lbl.text().startswith("✦")]
+            over += [w for w in gl.findChildren(QtW.QWidget) if w.isVisible() and w.parentWidget() is gl and w not in over]
+            for w in over:
+                painter.drawPixmap(w.mapTo(target, QtCore.QPoint(0, 0)), w.grab())
             painter.end()
     except Exception as e:
         FreeCAD.Console.PrintLog(f"Agent Link window_snapshot: 3D view not painted in ({e})\n")
