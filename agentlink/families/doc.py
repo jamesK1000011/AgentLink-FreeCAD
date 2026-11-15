@@ -305,7 +305,9 @@ def tools(session):
     s = session
 
     def switch(doc):
-        doc.UndoMode = 1
+        from ..store import undo_on
+
+        undo_on(doc)
         s.doc = doc
         s.meta = {}
         if FreeCAD.GuiUp:

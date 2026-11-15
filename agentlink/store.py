@@ -63,7 +63,8 @@ def _set(o, name, raw):
             o.setEditorMode(p, 2)
         except Exception:
             pass
-    setattr(o, p, raw)
+    if getattr(o, p, None) != raw:
+        setattr(o, p, raw)
 
 
 def _raw(doc, name):
@@ -88,6 +89,10 @@ def read(doc, name, default):
 
 def write(doc, name, value):
     raw = json.dumps(value, separators=(",", ":"))
+    # The same value again changes nothing: the document is not touched (nor
+    # the records object made) by a write that would leave it as it was.
+    if _raw(doc, name) == raw:
+        return
     o = holder(doc, make=True)
     if o is None:
         m = dict(doc.Meta or {})
@@ -157,3 +162,13 @@ def materials(doc):
     return read(doc, "materials", {})
 
 
+def undo_on(doc):
+    """FreeCAD's undo on in doc, set only when it is off: setting the
+    document's UndoMode, even to the value it has, marks a saved document
+    changed (opening an add-on's panel made the session, and the "*"
+    and a recovered copy each time)."""
+    try:
+        if doc.UndoMode != 1:
+            doc.UndoMode = 1
+    except AttributeError:  # a stand-in document without the property
+        doc.UndoMode = 1

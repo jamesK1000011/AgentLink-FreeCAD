@@ -266,7 +266,9 @@ class Link:
                 gone = getattr(s, "pinned_label", None) or "The agent's document"
                 s.closed_doc = gone
                 s.doc = active or FreeCAD.newDocument("AgentLink")
-                s.doc.UndoMode = 1
+                from .store import undo_on
+
+                undo_on(s.doc)
                 s.steps, s.meta = [], {}
         try:
             self.session.pinned_label = self.session.doc.Label
