@@ -30,7 +30,7 @@ def bad(msg):
 
 
 class Tool:
-    def __init__(self, name, description, schema, fn, changes=False, group="core"):
+    def __init__(self, name, description, schema, fn, changes=False, group="core", reads=None):
         self.name = name
         self.description = description
         self.schema = schema
@@ -38,9 +38,36 @@ class Tool:
         # A change runs as one undo step (the session wraps it in a
         # transaction); a read changes nothing.
         self.changes = changes
+        # The calls of a changing tool that only read: {argument: [values]}
+        # (setup's action list or of). Such a call is no undo step, marks
+        # nothing changed and is not shown as a change (for_call).
+        self.reads = dict(reads or {})
         # Its group: listed when the group is on (tool_groups), callable
         # by name whether listed or not.
         self.group = group
+
+    def changes_for(self, args):
+        """Whether this call changes the document."""
+        if not self.changes:
+            return False
+        a = args if isinstance(args, dict) else {}
+        for k, values in self.reads.items():
+            # An argument left out takes its schema's default, if it has one.
+            v = a.get(k, ((self.schema or {}).get("properties") or {}).get(k, {}).get("default"))
+            if v in values:
+                return False
+        return True
+
+    def for_call(self, args):
+        """This tool as this call sees it: a read-only view when the call
+        only reads."""
+        if self.changes and not self.changes_for(args):
+            import copy
+
+            view = copy.copy(self)
+            view.changes = False
+            return view
+        return self
 
     def listing(self):
         return {"name": self.name, "description": self.description, "inputSchema": self.schema}
@@ -291,6 +318,7 @@ class Server:
                 hint = f"near: {', '.join(near)}" if near else (f"its family: {', '.join(same)}" if same else "tool_groups lists them all")
             return self.refusal("not_found", f"{name}: no such tool — {hint}.")
         t0 = time.time()
+        tool = tool.for_call(args)
         try:
             check_input(tool.schema, args)
             if self.guard is not None:
