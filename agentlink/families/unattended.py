@@ -128,6 +128,27 @@ def tools(s):
         got = crash_logs.collect()
         return got or {"note": "No recovery files from another FreeCAD and no new crash reports."}
 
+    def _bring_front(nd):
+        """The document's 3D view made the window's active tab: the GUI's own
+        setActiveDocument leaves another document's tab in front (a recovered
+        copy that opened last, say)."""
+        import FreeCADGui
+
+        FreeCAD.setActiveDocument(nd.Name)
+        FreeCADGui.setActiveDocument(nd.Name)
+        try:
+            from PySide import QtGui
+
+            QtW = getattr(__import__("PySide", fromlist=["QtWidgets"]), "QtWidgets", QtGui)
+            area = FreeCADGui.getMainWindow().findChild(QtW.QMdiArea)
+            want = nd.Label + " : "
+            sub = next((w for w in area.subWindowList() if w.windowTitle().replace("[*]", "").startswith(want)), None)
+            if sub is not None and area.activeSubWindow() is not sub:
+                area.setActiveSubWindow(sub)
+        except Exception:
+            pass
+        return True
+
     def doc_switch(a):
         ref = a.get("document")
         if not ref:
@@ -138,19 +159,16 @@ def tools(s):
         if nd is None:
             raise ToolError("not_found", f"{ref}: not open — " + (", ".join(d.Label for d in FreeCAD.listDocuments().values()) or "no documents are open") + ". doc_open opens a file.")
         if s.doc is not None and nd.Name == s.doc.Name:
-            return {"document": nd.Name, "label": nd.Label, "note": "Already on it."}
+            out = {"document": nd.Name, "label": nd.Label, "note": "Already on it."}
+            if a.get("front") and getattr(FreeCAD, "GuiUp", False):
+                out["front"] = _bring_front(nd)
+            return out
         s.switch(nd)
         try:
             s.pinned_label = nd.Label
         except Exception:
             pass
-        front = False
-        if a.get("front") and getattr(FreeCAD, "GuiUp", False):
-            import FreeCADGui
-
-            FreeCAD.setActiveDocument(nd.Name)
-            FreeCADGui.setActiveDocument(nd.Name)
-            front = True
+        front = bool(a.get("front") and getattr(FreeCAD, "GuiUp", False) and _bring_front(nd))
         return {"document": nd.Name, "label": nd.Label, "front": front, "bodies": [o.Label for o in s.bodies()],
                 "note": "The agent works here from now on, whatever is in front of the window." + ("" if front else " front: true also brings it to the front.")}
 
