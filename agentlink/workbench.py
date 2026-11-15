@@ -56,6 +56,14 @@ def add(Gui=None):
     from . import hooks, layout
 
     hooks.provide(layout.SERVICE, layout.own())
+    # An add-on's own dock runs its clicks through Agent Link with this, so they are shown and
+    # logged as the agent's are, without a tab in Agent Link's panel.
+    try:
+        from .panel import CallerService
+
+        hooks.provide("panel_caller", CallerService())
+    except Exception:  # noqa: BLE001 — no Qt (FreeCADCmd)
+        pass
     try:
         from PySide import QtCore
 
