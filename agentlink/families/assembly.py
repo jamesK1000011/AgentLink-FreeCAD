@@ -47,17 +47,8 @@ def _assemblies(doc):
 
 
 def _assembly(doc, ref):
-    asms = _assemblies(doc)
-    if not asms:
-        raise ToolError("not_found", "No assembly in the document: asm_new { parts } makes one.")
-    if ref is None:
-        if len(asms) == 1:
-            return asms[0]
-        raise ToolError("invalid_input", f"assembly: say which — {', '.join(a.Label for a in asms)}.")
-    for a in asms:
-        if ref in (a.Label, a.Name) or str(ref).lower() == a.Label.lower():
-            return a
-    raise ToolError("not_found", f"assembly {ref!r}: the assemblies are {', '.join(a.Label for a in asms)}.")
+    return picks.one_of(_assemblies(doc), ref, "assembly: say which — {labels}.", "assembly {ref}: the assemblies are {labels}.",
+                        none="No assembly in the document: asm_new { parts } makes one.", nocase=True)
 
 
 def _joints(asm):

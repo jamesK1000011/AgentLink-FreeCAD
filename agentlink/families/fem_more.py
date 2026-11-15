@@ -94,16 +94,8 @@ def tools(s):
 
     def analysis(ref):
         ans = [o for o in d().Objects if o.TypeId == "Fem::FemAnalysis" or o.isDerivedFrom("Fem::FemAnalysis")]
-        if not ans:
-            raise ToolError("not_found", "No FEM analysis: fea_native makes one (or kind solver_* with a new analysis: true).")
-        if ref is None:
-            if len(ans) == 1:
-                return ans[0]
-            raise bad(f"analysis: which — {', '.join(x.Label for x in ans)}.")
-        for x in ans:
-            if ref in (x.Label, x.Name):
-                return x
-        raise ToolError("not_found", f"analysis {ref!r}: they are {', '.join(x.Label for x in ans)}.")
+        return picks.one_of(ans, ref, "analysis: which — {labels}.", "analysis {ref}: they are {labels}.",
+                            none="No FEM analysis: fea_native makes one (or kind solver_* with a new analysis: true).")
 
     def refs_of(a):
         """refs: ["Body.Face3", …], or { body, faces: [queries as facepick takes] }."""

@@ -47,17 +47,8 @@ def pd_bodies(doc):
 
 
 def pd_body(doc, ref):
-    bs = pd_bodies(doc)
-    if not bs:
-        raise ToolError("not_found", "No PartDesign body in the document: pd_body_new makes one.")
-    if ref is None:
-        if len(bs) == 1:
-            return bs[0]
-        raise ToolError("invalid_input", f"body: say which — {', '.join(o.Label for o in bs)}.")
-    for o in bs:
-        if ref in (o.Label, o.Name) or o.Label.lower() == str(ref).lower():
-            return o
-    raise ToolError("not_found", f"body {ref!r}: no such PartDesign body — they are: {', '.join(o.Label for o in bs)}.")
+    return picks.one_of(pd_bodies(doc), ref, "body: say which — {labels}.", "body {ref}: no such PartDesign body — they are: {labels}.",
+                        none="No PartDesign body in the document: pd_body_new makes one.", nocase=True)
 
 
 def body_of(o):
