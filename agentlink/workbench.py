@@ -60,7 +60,7 @@ def add(Gui=None):
         from PySide import QtCore
 
         QtCore.QTimer.singleShot(1500, _autostart)
-        QtCore.QTimer.singleShot(1500, _report_auto)
+        QtCore.QTimer.singleShot(0, _report_auto)  # hidden from the start
         # macOS: quitting crashed in PySide's teardown (quit_guard.py).
         from . import quit_guard
 

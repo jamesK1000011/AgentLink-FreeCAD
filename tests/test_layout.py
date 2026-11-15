@@ -27,10 +27,10 @@ class Params:
 
 
 class Setting(unittest.TestCase):
-    def test_default_is_right(self):
-        self.assertEqual(layout.read(Params()), "right")
-        self.assertEqual(layout.read(Params(PanelLayout="nonsense")), "right")
-        self.assertEqual(layout.read(), "right")  # no FreeCAD here
+    def test_default_is_left_tab(self):
+        self.assertEqual(layout.read(Params()), "left-tab")
+        self.assertEqual(layout.read(Params(PanelLayout="nonsense")), "left-tab")
+        self.assertEqual(layout.read(), "left-tab")  # no FreeCAD here
         self.assertFalse(layout.is_set(Params()))
 
     def test_values(self):
@@ -42,7 +42,22 @@ class Setting(unittest.TestCase):
     def test_widths(self):
         self.assertEqual(layout.width_cap("right"), 360)
         self.assertEqual(layout.width_cap("left-tab"), 300)
-        self.assertLessEqual(layout.width_cap("left-slide"), 360)
+        self.assertEqual(layout.width_cap("left-slide"), 300)
+        # The slide-out at most 300 px over the 3D view, half of a narrow one.
+        self.assertEqual(layout.slide_width(1000), 300)
+        self.assertEqual(layout.slide_width(500), 250)
+        self.assertLessEqual(layout.CONTENT_MIN, layout.SLIDE_MAX)
+
+    def test_combo_view_found_by_name_or_class(self):
+        self.assertTrue(layout.is_combo("Std_ComboView"))  # FreeCAD 1.x
+        self.assertTrue(layout.is_combo("Combo View"))
+        self.assertTrue(layout.is_combo("", "Gui::DockWnd::ComboView"))
+        self.assertFalse(layout.is_combo("Std_ReportView", "QDockWidget"))
+
+    def test_an_empty_tasks_tab_gives_way_to_model(self):
+        self.assertEqual(layout.unstick(["Model", "Tasks"], "Tasks", False), "Model")
+        self.assertIsNone(layout.unstick(["Model", "Tasks"], "Tasks", True))  # a task runs: FreeCAD's
+        self.assertIsNone(layout.unstick(["Model", "Tasks", "ScanRuler"], "ScanRuler", False))
 
     def test_window_size_kept(self):
         self.assertEqual(layout.size_to_restore((856, 900), (1414, 900), False), (856, 900))
@@ -124,6 +139,20 @@ class AgentLinkTabs(unittest.TestCase):
             hooks.restore(state)
 
 
+class Caption(unittest.TestCase):
+    def test_bottom_right_clear_of_the_slide_out(self):
+        from agentlink import echo
+
+        most, x, y = echo.caption_box(856 - 270, 900, 260, 40)
+        self.assertGreater(x, 300)  # right of a 300 px slide-out
+        self.assertEqual(y, 900 - 40 - 14)
+        self.assertEqual(x + min(260, most), 586 - 14)  # its right edge at the view's
+        self.assertLessEqual(most, 420)
+        most, x, _y = echo.caption_box(1400, 900, 1000, 40)
+        self.assertEqual(most, 420)
+        self.assertGreater(x, 300)
+
+
 class Doc:
     def __init__(self):
         self.n = 2
@@ -165,12 +194,36 @@ class ReportView(unittest.TestCase):
     def make(self, **params):
         self.w, self.d = Widget(), Dock()
         self.p = Params(**params)
+        self.now = [100.0]
 
         def blocks(w, start):
             return w.lines[start:], len(w.lines)
 
         return report_watch.AutoOpen(self.p, dock=lambda: self.d, widget=lambda: self.w,
-                                     colours=lambda: {"#ff0000", "#ffaa00"}, blocks=blocks)
+                                     colours=lambda: {"#ff0000", "#ffaa00"}, blocks=blocks, clock=lambda: self.now[0])
+
+    def test_shown_again_by_freecad_is_hidden_again(self):
+        """FreeCAD shows the Report view again as it starts and at a
+        workbench switch: hidden again then; later the person's choice."""
+        a = self.make(PanelLayout="left-tab")
+        a.tick()
+        self.d.show()  # FreeCAD's saved layout, at start
+        self.assertEqual(a.tick(), "hidden")
+        self.now[0] += 60
+        self.d.show()  # the person opens it
+        self.assertIsNone(a.tick())
+        self.assertTrue(self.d.shown)
+        a.switched("ScanRulerWorkbench")
+        self.assertEqual(a.tick(), "hidden")
+
+    def test_noise_does_not_open_it(self):
+        a = self.make(PanelLayout="left-tab")
+        a.tick()
+        self.now[0] += 60
+        self.write("12:00  (qt.qpa.fonts) Populating font family aliases took 147 ms. Replace uses of missing font family", None)
+        self.write("12:00  Cannot find icon: Std_DlgMacroExecute", "#ffaa00")
+        self.assertIsNone(a.tick())
+        self.assertFalse(self.d.shown)
 
     def write(self, text, colour):
         self.w.lines[-1:] = [(text, colour), ("", None)]
