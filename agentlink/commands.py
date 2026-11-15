@@ -45,8 +45,13 @@ class _Panel:
         return True
 
     def Activated(self):
-        from agentlink import panel
+        from agentlink import layout, panel
 
+        # Slid out over the 3D view (PanelLayout left-slide): this button
+        # opens and closes it.
+        if panel._panel is not None and layout.read() == layout.LEFT_SLIDE:
+            layout.own().toggle()
+            return
         panel.show()
 
 

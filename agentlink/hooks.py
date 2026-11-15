@@ -21,9 +21,13 @@ Readers                       register_reader(kind, fn); readers(kind)
 Services                      provide(name, obj); service(name)
 Events                        on(event, fn); emit(event, *args)
 Tool extensions               extend_tool(name, properties, before, after, describe)
-Panel                         register_tab(title, factory, order) (the widget's
-                              fill(), if any, runs as its tab comes up);
-                              register_reviewer(fn)
+Panel                         register_tab(title, factory, order, workbench)
+                              (the widget's fill(), if any, runs as its tab
+                              comes up; the tab shows only while workbench
+                              is active); tab_in(title, *workbenches);
+                              register_reviewer(fn); the service
+                              "panel_layout" (agentlink/layout.py) places
+                              an add-on's own panel beside Agent Link's
 Protected settings            guard_setting(path, name)
 Last results                  remember(session, kind, value); analysis(session, kind)
 Tools as data                 tools_from_data(folder, group, handlers):
@@ -259,12 +263,25 @@ def apply_extensions(tools, session):
 # ---- the panel: tabs from add-ons, and who reviews a part for the Review tab.
 TABS = []
 REVIEWERS = []
+# Tab title -> the workbenches (their names, as FreeCADGui.activeWorkbench()
+# .name() gives them) in which the tab shows. A tab named nowhere here
+# shows in every workbench (an add-on written before tab_in).
+TAB_WORKBENCHES = {}
 
 
-def register_tab(title, factory, order=50):
-    """factory(panel) -> a QWidget, built when the panel is."""
+def register_tab(title, factory, order=50, workbench=None):
+    """factory(panel) -> a QWidget, built when the panel is. workbench: a
+    workbench name, or several, in which the tab shows (tab_in)."""
     TABS.append({"title": title, "factory": factory, "order": order})
     TABS.sort(key=lambda x: x["order"])
+    if workbench:
+        tab_in(title, *((workbench,) if isinstance(workbench, str) else workbench))
+
+
+def tab_in(title, *workbenches):
+    """Show the tab title (an add-on's, or Agent Link's Review) while one
+    of workbenches is active."""
+    TAB_WORKBENCHES.setdefault(title, set()).update(w for w in workbenches if w)
 
 
 def register_reviewer(fn):
@@ -314,12 +331,14 @@ def analysis(session, kind):
 def saved():
     """For tests: every registration as it stands, for restore()."""
     return ({k: list(v) for k, v in _READERS.items()}, dict(_SERVICES), {k: list(v) for k, v in _EVENTS.items()},
-            {k: list(v) for k, v in _EXTENSIONS.items()}, list(TABS), list(REVIEWERS), set(GUARDED))
+            {k: list(v) for k, v in _EXTENSIONS.items()}, list(TABS), list(REVIEWERS), set(GUARDED),
+            {k: set(v) for k, v in TAB_WORKBENCHES.items()})
 
 
 def restore(state):
-    readers_, services, events, exts, tabs, reviewers, guarded = state
+    readers_, services, events, exts, tabs, reviewers, guarded = state[:7]
     reset()
+    TAB_WORKBENCHES.update(state[7] if len(state) > 7 else {})
     for k, v in readers_.items():
         readers(k)[:] = v
     _SERVICES.update(services)
@@ -340,4 +359,5 @@ def reset():
     _EXTENSIONS.clear()
     del TABS[:]
     del REVIEWERS[:]
+    TAB_WORKBENCHES.clear()
     GUARDED.clear()

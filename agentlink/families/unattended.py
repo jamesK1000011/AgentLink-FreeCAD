@@ -87,10 +87,26 @@ def tools(s):
         # the answer, so the person can see it.
         if btn.lower() not in [b.lower() for b in d["buttons"]] and btn.lower() not in gui_link.BACK_OUT:
             raise bad(f"button: one of {', '.join(d['buttons']) or 'none (Cancel closes it)'}.")
+        kept = None
+        if btn.lower() == "cleanup" and "DocumentRecovery" in str(d.get("class")):
+            # Cleanup deletes FreeCAD's recovery files: they are copied into
+            # ~/AgentLink/crash first, so the crash can still be looked into.
+            from .. import crash_logs
+
+            kept = crash_logs.collect()
         if not gui_link.press(d, btn):
             raise ToolError("failed", f"Could not press {btn}.")
         keep.log_watchdog({"event": "dialog", "title": d["title"], "pressed": btn, "by": "dialog_answer"})
-        return {"pressed": btn, "dialog": info}
+        out = {"pressed": btn, "dialog": info}
+        if kept is not None:
+            out["kept"] = kept or {"note": "No recovery files or crash reports were found to keep."}
+        return out
+
+    def crash_collect(a):
+        from .. import crash_logs
+
+        got = crash_logs.collect()
+        return got or {"note": "No recovery files from another FreeCAD and no new crash reports."}
 
     def doc_switch(a):
         ref = a.get("document")
@@ -338,6 +354,7 @@ def tools(s):
              obj({"action": {"type": "string", "enum": ["list", "search", "install", "update", "remove"]}, "name": st, "query": st, "url": st, "branch": st, "confirm": st}), addon),
         Tool("doc_switch", "Which open document the agent works in: document (name, label or file) switches to it — the session stays on it whatever the person brings to the front of the window; front: true also brings it to the front. No document: the agent's one and those open.",
              obj({"document": st, "front": {"type": "boolean"}}), doc_switch),
-        Tool("dialog_answer", "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one by its text (Cancel also closes a file picker). With no dialog, the open task panel and its buttons (OK, Cancel …). You operate FreeCAD as the person would: read it and press what the job needs (Cancel backs out of anything you did not mean to open); say what you pressed. A stuck window: app_force_restart.",
+        Tool("crash_collect", "Copy crash evidence into ~/AgentLink/crash/<time>/: FreeCAD's document-recovery folders (from a FreeCAD that crashed or was stopped), its crash.log and the system's crash reports for FreeCAD (new ones only). Copies only, never removes. dialog_answer runs it by itself before Document Recovery's Cleanup.", obj({}), crash_collect),
+        Tool("dialog_answer", "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one by its text (Cancel also closes a file picker; Document Recovery's Cleanup keeps a copy in ~/AgentLink/crash first). With no dialog, the open task panel and its buttons (OK, Cancel …). You operate FreeCAD as the person would: read it and press what the job needs (Cancel backs out of anything you did not mean to open); say what you pressed. A stuck window: app_force_restart.",
              obj({"button": st}), dialog_answer),
     ]
