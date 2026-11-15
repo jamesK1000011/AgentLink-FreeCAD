@@ -25,7 +25,14 @@ def grab_window(target=None):
         QtW = getattr(__import__("PySide", fromlist=["QtWidgets"]), "QtWidgets", QtGui)
         gd = gui.ActiveDocument
         view = gd.activeView() if gd else None
-        gl = next((w for w in target.findChildren(QtW.QWidget) if w.isVisible() and type(w).__name__ in ("QuarterWidget", "QOpenGLWidget", "QGLWidget")), None)
+        gl = None
+        try:  # FreeCAD 1.x: the view's own QGraphicsView and its viewport
+            gv = view.graphicsView() if view is not None else None
+            gl = gv.viewport() if gv is not None and gv.viewport() is not None else gv
+        except Exception:
+            gl = None
+        if gl is None or not gl.isVisible() or not (gl is target or target.isAncestorOf(gl)):
+            gl = next((w for w in target.findChildren(QtW.QWidget) if w.isVisible() and (type(w).__name__ in ("QuarterWidget", "QOpenGLWidget", "QGLWidget") or any(n in w.metaObject().className() for n in ("Quarter", "View3DInventor")))), None)
         if view is not None and gl is not None and hasattr(view, "saveImage"):
             tmp = os.path.join(tempfile.gettempdir(), "agentlink_view.png")
             ratio = getattr(pix, "devicePixelRatio", lambda: 1.0)()
