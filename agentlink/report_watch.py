@@ -7,7 +7,10 @@
 
 import re
 
-MARK = re.compile(r"(Traceback|Error|error:|Exception|Warning|warning:|failed|Failed|cannot|could not|Could not)")
+# Case does not matter: FreeCAD writes "Cannot find icon", Qt "(qt.qpa.fonts)
+# … missing font family", and both were missed with a case-sensitive list
+# (live on the Mac).
+MARK = re.compile(r"(traceback|error|exception|warning|failed|cannot|could not|not found|missing|\(qt\.[a-z.]+\)|^qt\.[a-z.]+:)", re.I)
 MAX_LINES, MAX_CHARS = 6, 300
 _state = {"seen": 0}
 
