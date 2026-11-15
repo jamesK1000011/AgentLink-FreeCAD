@@ -29,6 +29,10 @@ Each family module has:
 GROUP = "mine"                       # its tool group's name
 INFO = "One line on what the group holds."
 LEAN = False                         # True: listed by default (keep it small)
+# For tools built in code only (tools as data carry these per tool):
+HEAVY = {"mine_solve"}               # optional: queued, timed, given a deadline
+WRITERS = {"mine_export"}            # optional: their "path" is written, not read
+GEOMETRIC = set()                    # optional: their "path" is a curve, not a file
 
 def tools(session):
     from agentlink.protocol import Tool, ToolError
@@ -45,6 +49,38 @@ def tools(session):
   add-on is left out with the reason in the log, never a crash.
 - **Names.** A tool can't take a name Agent Link already has; yours is left
   out instead.
+
+## Tools as data (the usual way)
+
+Keep your tools in `yourpkg/data/tools.json` and bind handlers by name. The
+format is Agent Link's (`agentlink/tooldata.py`, `agentlink/data/tools.schema.json`):
+
+```json
+{"dataVersion": "1.0.0", "licence": "CC-BY-4.0", "about": "My add-on's tools.",
+ "entries": {"mine_do": {"group": "mine", "description": "What it does, when to use it.",
+   "inputSchema": {"type": "object", "properties": {"body": {"type": "string"}}, "required": []},
+   "changes": true, "source": "written for mine", "date": "2026-11-14",
+   "heavy": false, "writes": false, "pathIsCurve": false}}}
+```
+
+```python
+# yourpkg/fam_mine.py — the only module besides agentlink_families that sees Agent Link
+from agentlink import hooks
+from . import api, DATA
+
+GROUP = "mine"
+INFO = "One line on what the group holds."
+
+def tools(session):
+    return hooks.tools_from_data(DATA, GROUP, {"mine_do": lambda a: api.do_it(session, a)}, "My add-on")
+```
+
+- Every tool in the group needs a handler and every handler a tool, or the
+  family is left out with the reason in the log.
+- A handler refuses by raising any exception with `code` (`invalid_input`,
+  `not_found`, `invalid_state`, `unavailable`, `failed`) and `message`; your
+  API defines its own such exception and never imports Agent Link.
+- README tool tables are generated from the same file.
 
 ## Hooks (`agentlink.hooks`)
 
@@ -63,18 +99,14 @@ All optional. Every hook catches and logs your exceptions.
 | `agentlink.tools.register_guides(folder)` | Markdown guides the agent can read with `guide_read`. |
 | `agentlink.render.register_layer` / `register_map` | Layers and colour maps for `view_render`. |
 
-## Shared library
+## Nothing shared to install
 
-Records kept in the document, shape helpers, fits, versioned data files and
-dialog pieces come from **AddonKit for FreeCAD** (`addonkit`), which Agent
-Link uses too. Depend on it with a range:
-
-```python
-import addonkit
-addonkit.require(">=1.0,<2", "My add-on")
-```
-
-and in `package.xml`: `<depend>AddonKit</depend>`.
+Each add-on installs and runs on its own: it carries its own copy of any
+helper it needs (a document-records reader, shape helpers, a data-file
+loader), and needs no other add-on and no shared library. The notes kept in
+the FreeCAD document follow one written format (`docs/records.md`), so each
+add-on reads and writes them on its own. Agent Link owns one format only:
+the tool data above.
 
 ## Testing
 

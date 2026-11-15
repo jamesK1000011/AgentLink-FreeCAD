@@ -554,7 +554,7 @@ def macro_calls(text):
 HEAVY = {
     "fea_native", "fea_buckle", "fea_shell", "fea_frame", "fem_mesh", "fea_refine", "fea_solve", "fea_heat", "strength_check",
     "asm_motion", "asm_sweep", "slice", "slice_with", "view_render", "dfm_check", "part_review", "cam_sim",
-    "meshobj_boolean", "meshobj_offset", "meshobj_decimate", "points_mesh", "part_extract", "texture_prepare",
+    "meshobj_boolean", "meshobj_offset", "meshobj_decimate", "points_mesh", "part_extract",
     "deviation_map", "deviation_align", "scan_check", "section_fit", "manual_render", "steps_render",
 }
 SYSCTL_KEYS = ("machdep.cpu.brand_string", "hw.perflevel0.physicalcpu", "hw.physicalcpu", "hw.ncpu", "hw.memsize", "hw.model")

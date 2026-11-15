@@ -19,7 +19,7 @@ PATH_KEYS_FOR = {"ifc_diff": {"a", "b"}}
 GEOMETRIC = {"part_sweep", "pd_pipe", "draft_link_array", "draft_array", "bim_frame", "bim_fence", "printed_channel", "hw_hole", "bim_truss"}
 # Tools that write their path (the rest read theirs).
 WRITERS = {"export", "export_file", "bim_export", "doc_save", "robot_export", "meshobj_unwrap", "meshobj_export", "cam_sim", "cam_post",
-           "sheet_export", "sheet_chart", "scad_export", "texture_prepare", "view_render", "view_snapshot", "points_export", "drawing_make",
+           "sheet_export", "sheet_chart", "scad_export", "view_render", "view_snapshot", "points_export", "drawing_make",
            "td_export", "fea_export", "cam_template_export", "fea_chart", "insp_export", "mill_export", "code_packet", "ifc_save", "asm_export", "asm_motion", "steps_render", "window_snapshot", "doc_graph"}
 SECRET_PARTS = {".ssh", ".aws", ".gnupg", ".kube", ".docker", ".config", ".netrc", ".git", ".password-store", "keychains", "Keychains",
                 ".zshrc", ".bashrc", ".profile", ".bash_profile", ".zprofile", ".env"}

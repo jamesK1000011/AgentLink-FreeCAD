@@ -1,0 +1,78 @@
+{
+ "$comment": "The tool-data format Agent Link reads (agentlink/tooldata.py). One file per add-on: <package>/data/tools.json.",
+ "type": "object",
+ "required": [
+  "dataVersion",
+  "entries"
+ ],
+ "properties": {
+  "dataVersion": {
+   "type": "string",
+   "pattern": "^1\\.\\d+\\.\\d+$"
+  },
+  "licence": {
+   "type": "string"
+  },
+  "about": {
+   "type": "string"
+  },
+  "entries": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "group",
+     "description",
+     "inputSchema",
+     "changes",
+     "source",
+     "date"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "group": {
+      "type": "string",
+      "pattern": "^[a-z_]+$"
+     },
+     "description": {
+      "type": "string",
+      "minLength": 20
+     },
+     "inputSchema": {
+      "type": "object",
+      "required": [
+       "type",
+       "properties"
+      ]
+     },
+     "changes": {
+      "type": "boolean"
+     },
+     "title": {
+      "type": "string"
+     },
+     "source": {
+      "type": "string",
+      "minLength": 1
+     },
+     "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+     },
+     "heavy": {
+      "type": "boolean",
+      "description": "A long job: queued, timed, given a deadline."
+     },
+     "writes": {
+      "type": "boolean",
+      "description": "Its path is a file it writes, not reads."
+     },
+     "pathIsCurve": {
+      "type": "boolean",
+      "description": "Its path is a curve in the model, not a file."
+     }
+    }
+   }
+  }
+ }
+}
