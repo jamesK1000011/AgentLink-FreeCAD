@@ -1,4 +1,5 @@
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+<!-- mcp-name: io.github.jamesK1000011/agentlink-freecad -->
 # Agent Link for FreeCAD
 
 > Not affiliated with or endorsed by the FreeCAD project or the FreeCAD project association (FPA); FreeCAD is the FPA's trademark. Get FreeCAD itself from [freecad.org](https://freecad.org).
@@ -17,6 +18,7 @@ in your own FreeCAD window. Every change is one FreeCAD undo step.
 - [What the agent can do](#what-the-agent-can-do)
 - [Platforms](#platforms)
 - [Token usage](#token-usage)
+- [Privacy](#privacy)
 - [Troubleshooting](#troubleshooting)
 - [Uninstall](#uninstall)
 - [Credits and licence](#credits-and-licence)
@@ -208,6 +210,25 @@ list starts lean, and add-ons that aren't installed cost nothing: their tools ar
 never listed. `usage_report` gives the agent the same figures; they are kept
 in `~/AgentLink/usage`. `AGENTLINK_USAGE=off` turns the meter off.
 
+## Privacy
+
+Agent Link has no telemetry and sends nothing anywhere on its own. What the
+agent reads from FreeCAD (answers, pictures) goes to the AI provider your MCP
+client uses, under that provider's terms; Agent Link adds no other recipient.
+
+- **The window link** listens on 127.0.0.1 only and pairs with the server
+  before it takes a call; nothing outside your computer can reach it.
+- **Token usage** figures are estimates kept on your computer
+  (`~/AgentLink/usage`); `AGENTLINK_USAGE=off` turns them off.
+- **The network** is used only when you or the agent ask for something that
+  needs it: installing or updating FreeCAD (`app_install`, from FreeCAD's
+  GitHub releases, SHA-256 checked), add-ons fetched from GitHub
+  (`app_extensions`, `agentlink_update`, the Claude extension's updates), and
+  FreeCAD's add-on catalog read from addons.freecad.org. Each request names
+  itself `AgentLink-FreeCAD` and carries no personal details.
+- **Your files** stay where you put them: exports, drawings and pictures go
+  to `~/AgentLink` (or the folder you chose).
+
 ## Troubleshooting
 
 Run the setup check first (`agentlink-freecad --check`); it names what is
@@ -224,7 +245,7 @@ missing and how to get it.
 Read the log above: the last lines say why. Most often FreeCAD was not found
 (install it, or set `FREECAD_APP` to the app or `FREECAD_LIB` to its `lib`
 folder), `uvx` was not on the client's PATH (give its full path, e.g.
-`~/.local/bin/uvx`), or FreeCAD is older than 1.1. Restart the client after
+`~/.local/bin/uvx`), or FreeCAD is older than 1.0. Restart the client after
 a fix.
 
 **"Open FreeCAD once".** A FreeCAD that has never been opened has no user

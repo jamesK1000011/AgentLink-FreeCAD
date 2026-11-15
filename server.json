@@ -1,0 +1,37 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.jamesK1000011/agentlink-freecad",
+  "title": "Agent Link for FreeCAD",
+  "description": "Drive FreeCAD from an agent: model, measure, check, draw and export parts, headless or live.",
+  "repository": {
+    "url": "https://github.com/jamesK1000011/AgentLink-FreeCAD",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/jamesK1000011/AgentLink-FreeCAD#readme",
+  "version": "0.3.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "agentlink-freecad",
+      "version": "0.3.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "FREECAD_APP",
+          "description": "Only if FreeCAD is not where its installer puts it: the path to the FreeCAD app or folder.",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "AGENTLINK_TOOLS",
+          "description": "\"full\" lists every tool at the start; by default the list starts lean and grows by group.",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}

@@ -157,6 +157,7 @@ package.xml
 pyproject.toml
 scripts/tool_summary.py
 scripts/tool_tables.py
+server.json
 tests/_fc.py
 tests/_pd_base.py
 tests/test_app_install.py
