@@ -10,6 +10,7 @@ import FreeCAD
 import Part
 
 from .. import geometry as geo
+from .. import paths
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
@@ -345,9 +346,7 @@ def tools(session):
         if a.get("file"):
             import os
 
-            p = os.path.expanduser(a["file"])
-            if not os.path.isabs(p):
-                p = os.path.join(s.out_dir, p)
+            p = paths.local(s, a["file"])
             if not os.path.isfile(p):
                 raise ToolError("not_found", f"{p}: no such file.")
             m = Mesh.Mesh(p)

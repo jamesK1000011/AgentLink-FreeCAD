@@ -12,6 +12,7 @@ import numpy as np
 import Part
 
 from .. import geometry as geo
+from .. import paths
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import picks
@@ -274,9 +275,7 @@ def tools(session):
     def where(path, ext=None):
         if not isinstance(path, str) or not path:
             raise ToolError("invalid_input", "path: a file path (relative ones go in the session's folder).")
-        p = os.path.expanduser(path)
-        if not os.path.isabs(p):
-            p = os.path.join(s.out_dir, p)
+        p = paths.local(s, path)
         if ext and not p.lower().endswith(ext.lower()):
             p += ext
         return p

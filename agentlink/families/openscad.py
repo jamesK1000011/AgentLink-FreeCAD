@@ -10,6 +10,7 @@ import os
 import FreeCAD
 import Part
 
+from .. import paths
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
@@ -110,7 +111,7 @@ def tools(session):
     def where(p):
         if not p:
             raise bad("path: a file.")
-        return p if os.path.isabs(p) else os.path.join(s.out_dir, p)
+        return paths.local(s, p, expand=False)
 
     def made_since(before):
         out = []

@@ -14,6 +14,7 @@ import Draft
 
 from .. import runners
 from .. import geometry as geo
+from .. import paths
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
@@ -369,9 +370,7 @@ def tools(session):
         base = picks.find(doc(), a.get("object"))
         pat = a.get("file")
         if pat:
-            pat = os.path.expanduser(pat)
-            if not os.path.isabs(pat):
-                pat = os.path.join(s.out_dir, pat)
+            pat = paths.local(s, pat)
         else:
             pat = os.path.join(FreeCAD.getResourceDir(), "Mod", "TechDraw", "PAT", "FCPAT.pat")
         if not os.path.isfile(pat):

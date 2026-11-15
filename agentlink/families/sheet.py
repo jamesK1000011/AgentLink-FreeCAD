@@ -10,6 +10,7 @@ import os
 import re
 
 from .. import cells as C
+from .. import paths
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import pd_common as pc
@@ -493,9 +494,7 @@ def tools(session):
         return done("sheet_rows", {act + "ed" if act == "insert" else "removed": what, "note": "References and aliases moved with the cells, as FreeCAD does by hand."}, ss)
 
     def path_of(p, ext):
-        p = os.path.expanduser(str(p))
-        if not os.path.isabs(p):
-            p = os.path.join(s.out_dir, p)
+        p = paths.local(s, str(p))
         if not os.path.splitext(p)[1]:
             p += ext
         return p

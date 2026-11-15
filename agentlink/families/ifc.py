@@ -9,6 +9,7 @@
 
 import os
 
+from .. import paths
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 
@@ -110,8 +111,7 @@ def tools(session):
         return m
 
     def where(p):
-        p = os.path.expanduser(p)
-        return p if os.path.isabs(p) else os.path.join(s.out_dir, p)
+        return paths.local(s, p)
 
     def ifc_open(a):
         p = a.get("path")

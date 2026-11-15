@@ -40,6 +40,25 @@ class Paths(unittest.TestCase):
         self.refused("td_title", {"export": "~/.config/x.json"})
         self.refused("cam_library", {"action": "export", "path": "tools.py"})
 
+    def test_session_files(self):
+        # Relative paths, given or made from a default, land in the session's
+        # folder; in_file and out_file refuse what guard refuses.
+        s = type("S", (), {"out_dir": self.out})()
+        out = os.path.realpath(self.out)
+        for rel in ("part.stl", "sub/part.stl", "render_iso"):
+            for p in (paths.local(s, rel), paths.out_file(s, "view_render", rel, ".png"), paths.in_file(s, "insp_run", rel, "file")):
+                self.assertTrue(os.path.realpath(p).startswith(out + os.sep), p)
+        self.assertEqual(paths.out_file(s, "view_render", "a.PNG", ".png"), os.path.join(self.out, "a.PNG"))
+        self.assertEqual(paths.out_file(s, "view_render", "a", ".png"), os.path.join(self.out, "a.png"))
+        self.assertEqual(paths.local(s, "~/x.stl"), os.path.expanduser("~/x.stl"))
+        self.assertEqual(paths.local(s, "~/x.stl", expand=False), os.path.join(self.out, "~/x.stl"))
+        with self.assertRaises(ToolError):
+            paths.out_file(s, "view_render", "~/.ssh/x", ".png")
+        with self.assertRaises(ToolError):
+            paths.in_file(s, "insp_run", "~/.aws/credentials", "file")
+        with self.assertRaises(ToolError):
+            paths.out_file(s, "meshobj_export", "/etc/x.stl")
+
     def test_reads(self):
         self.fine("import_file", {"path": "/Volumes/scans/part.stl"})
         self.fine("draft_text", {"font": "/System/Library/Fonts/Helvetica.ttc"})

@@ -11,6 +11,7 @@ import os
 import numpy as np
 
 from .. import render
+from .. import paths
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import picks
@@ -127,14 +128,6 @@ render.register_map("heat", _heat, "Temperature of the last fea_heat (red hot)."
 def tools(session):
     s = session
 
-    def where(path, ext):
-        p = os.path.expanduser(path)
-        if not os.path.isabs(p):
-            p = os.path.join(s.out_dir, p)
-        if not p.lower().endswith(ext):
-            p += ext
-        return p
-
     def view_render(a):
         views = _views(a)
         w, h = int(a.get("width", 900 if len(views) > 1 else 800)), int(a.get("height", 700 if len(views) > 1 else 600))
@@ -223,7 +216,7 @@ def tools(session):
 
         img, across, drawn = render.compose(layers, views, w, h, frame=frame, section=section, mapinfo=mapinfo)
         data = render.png(img)
-        p = where(a.get("path") or f"render_{'_'.join(views)}{'_' + mapname if mapname else ''}.png", ".png")
+        p = paths.out_file(s, "view_render", a.get("path") or f"render_{'_'.join(views)}{'_' + mapname if mapname else ''}.png", ".png")
         os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
         with open(p, "wb") as f:
             f.write(data)
@@ -268,7 +261,7 @@ def tools(session):
         w, h = int(a.get("width", 800)), int(a.get("height", 600))
         if not (16 <= w <= 4096 and 16 <= h <= 4096):
             raise ToolError("invalid_input", "width and height: 16 to 4096 px.")
-        p = where(a.get("path") or f"snapshot_{which or 'current'}.png", ".png")
+        p = paths.out_file(s, "view_snapshot", a.get("path") or f"snapshot_{which or 'current'}.png", ".png")
         view.saveImage(p, w, h, a.get("background", "Current"))
         out = {"path": p, "view": which or "as the person left it", "width": w, "height": h, "bytes": os.path.getsize(p)}
         if a.get("inline", True):

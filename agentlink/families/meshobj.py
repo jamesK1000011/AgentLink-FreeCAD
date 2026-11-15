@@ -20,6 +20,7 @@ from .. import geometry as geo
 from .. import render
 from .. import store
 from .. import runners
+from .. import paths
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
@@ -530,9 +531,7 @@ def tools(session):
 
     def meshobj_export(a):
         o = mesh_of(a.get("mesh"))
-        p = os.path.expanduser(a.get("path") or f"{o.Label}.stl")
-        if not os.path.isabs(p):
-            p = os.path.join(s.out_dir, p)
+        p = paths.out_file(s, "meshobj_export", a.get("path") or f"{o.Label}.stl")
         try:
             o.Mesh.write(p)
         except Exception as e:

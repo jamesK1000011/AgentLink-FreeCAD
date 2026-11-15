@@ -72,6 +72,29 @@ def check(tool, key, value, out_dir, write):
     return value
 
 
+def local(session, p, expand=True):
+    """p in the session's folder when relative (~ expanded first, when expand)."""
+    q = os.path.expanduser(p) if expand else p
+    return q if os.path.isabs(q) else os.path.join(session.out_dir, q)
+
+
+def in_file(session, tool, p, key="path", expand=True):
+    """A file a tool reads: local, then checked as guard checks a read."""
+    p = local(session, p, expand)
+    check(tool, key, p, session.out_dir, False)
+    return p
+
+
+def out_file(session, tool, p, ext=None, key="path", expand=True):
+    """A file a tool writes: local, ext added when it does not end so (any
+    case), then checked as guard checks that tool's writes."""
+    p = local(session, p, expand)
+    if ext and not p.lower().endswith(ext.lower()):
+        p += ext
+    check(tool, key, p, session.out_dir, tool in WRITERS)
+    return p
+
+
 def guard(tool, args, out_dir):
     """Every path-like field of a call checked; raises on the first refusal."""
     name = tool.name
