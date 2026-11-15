@@ -21,7 +21,8 @@ Readers                       register_reader(kind, fn); readers(kind)
 Services                      provide(name, obj); service(name)
 Events                        on(event, fn); emit(event, *args)
 Tool extensions               extend_tool(name, properties, before, after, describe)
-Panel                         register_tab(title, factory, order);
+Panel                         register_tab(title, factory, order) (the widget's
+                              fill(), if any, runs as its tab comes up);
                               register_reviewer(fn)
 Protected settings            guard_setting(path, name)
 Last results                  remember(session, kind, value); analysis(session, kind)
@@ -30,6 +31,7 @@ Tools as data                 tools_from_data(folder, group, handlers):
                               is the format) bound to its handlers
 Guides                        tools.register_guides(folder)
 Render layers and maps        render.register_layer / render.register_map
+Tools from Python             agentlink.run(tool, args); agentlink.serving(server)
 """
 
 import sys
@@ -104,8 +106,16 @@ def read(kind, *args, **kw):
 
 
 # ---- services: one named object an add-on offers (process_of, checkpoints,
-# material_cards, frame_solver, encased …); absent gives None, and whoever
-# asks says what is missing.
+# reopen, material_cards, frame_solver, encased …); absent gives None, and
+# whoever asks says what is missing.
+#   checkpoints   take(session, name=None, auto=False, doc=None) -> (entry, dropped);
+#                 find(session, ref) -> entry or None; index(doc_name) -> [entry];
+#                 restore(session, ref) -> answer. An entry: { id, name, file,
+#                 step, tx, session, … }. Used by history_diff { since: "cp3" },
+#                 before heavy jobs and before app_restart saves.
+#   reopen        keep([doc]) -> [{ name, label, file, copy, t }]: before
+#                 app_restart, copies of the changed documents it does not
+#                 save, reopened beside their files once FreeCAD is back.
 _SERVICES = {}
 
 
@@ -118,8 +128,11 @@ def service(name):
     return _SERVICES.get(name)
 
 
-# ---- events: after_change(session, tool_name), setting_changed(path, name,
-# old, new), docs_changed(session), call_done(session, tool_name, ok).
+# ---- events: after_change(session, tool_name); setting_changing(tool, path)
+# before a settings change and setting_changed(path, name, old, new, tool=,
+# restart=, applies=) after each value (pref_set, pref_reset, pref_pack,
+# pref_import); reply_written(session) after each reply of the stdio server;
+# docs_changed(session); call_done(session, tool_name, ok).
 _EVENTS = {}
 
 

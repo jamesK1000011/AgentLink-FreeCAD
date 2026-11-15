@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # What Agent Link keeps on disk so the work survives with no one at the Mac
-# (unattended use): checkpoints and auto-saves as saved copies of a document,
-# settings snapshots and their change log, the versions before an update,
-# approved macros, the machine preset, the heavy-job queue, the launch mark
-# and the watchdog's log. All of it under ~/AgentLink, all of it local.
+# (unattended use): the versions before an update, the machine preset, the
+# heavy-job queue, the launch mark and the watchdog's log. All of it under
+# ~/AgentLink, all of it local. Saved copies of documents (checkpoints,
+# auto-saves, recovery), the settings log and approved macros are an
+# add-on's, through agentlink/hooks.py; they live under ~/AgentLink too.
 #
 # No FreeCAD here: the supervisor, the window's link and the hidden FreeCAD
 # all read it, and the rules (what to keep, what is due, what to answer) are
@@ -13,10 +14,7 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import time
-
-MB = 1024 * 1024
 
 
 def home():
@@ -25,12 +23,6 @@ def home():
 
 def path(*parts):
     return os.path.join(home(), *parts)
-
-
-def safe(name):
-    """A document's name as a folder: letters, digits, - _ . only."""
-    s = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name or "doc")).strip("._") or "doc"
-    return s[:80]
 
 
 def stamp(t=None):
@@ -53,224 +45,7 @@ def _save(p, value):
     os.replace(tmp, p)
 
 
-def _size(p):
-    try:
-        return os.path.getsize(p)
-    except OSError:
-        return 0
-
-
-def free_bytes(where=None):
-    p = where or home()
-    while p and not os.path.isdir(p) and os.path.dirname(p) != p:
-        p = os.path.dirname(p)
-    try:
-        return shutil.disk_usage(p or "/").free
-    except OSError:
-        return 0
-
-
-# ---- A. checkpoints as saved copies ------------------------------------------------------
-
-KEEP_UNNAMED = 10
-
-
-def cap_bytes(free, setting_mb=0):
-    """A document's checkpoint cap: the person's setting (MB) when set, else
-    the larger of 500 MB and 2% of the free disk."""
-    if setting_mb and setting_mb > 0:
-        return int(setting_mb * MB)
-    return max(500 * MB, int(0.02 * max(0, free)))
-
-
-def cp_dir(doc):
-    return path("checkpoints", safe(doc))
-
-
-def cp_index(doc):
-    return _load(os.path.join(cp_dir(doc), "index.json"), [])
-
-
-def cp_save_index(doc, entries):
-    _save(os.path.join(cp_dir(doc), "index.json"), entries)
-
-
-def cp_new(doc, name=None, step=0, undo=0, tx=0, auto=False):
-    """A new checkpoint's entry and the file it is to be written to (the
-    caller saves the copy there, then cp_add)."""
-    entries = cp_index(doc)
-    n = max([e.get("n", 0) for e in entries] or [0]) + 1
-    tag = safe(name) if name else ("auto" if auto else "cp")
-    f = os.path.join(cp_dir(doc), f"{n}-{tag}.FCStd")
-    return {"id": f"cp{n}", "n": n, "name": name, "auto": bool(auto), "file": f, "step": step, "undo": undo, "tx": tx, "t": time.time()}
-
-
-def cp_add(doc, entry, cap):
-    """Record a written checkpoint and keep within the cap: the last 10
-    unnamed and every named one, the oldest unnamed going first. Answers
-    the entries dropped."""
-    entry["bytes"] = _size(entry["file"])
-    entries = cp_index(doc) + [entry]
-    kept, dropped = cp_prune(entries, cap)
-    for e in dropped:
-        try:
-            os.remove(e["file"])
-        except OSError:
-            pass
-    cp_save_index(doc, kept)
-    return dropped
-
-
-def cp_prune(entries, cap, keep=KEEP_UNNAMED):
-    """(kept, dropped): unnamed ones past the newest `keep`, then the oldest
-    unnamed while the total is over cap. Named ones stay — the person's or
-    the agent's own; the automatic ones ("before restore …") go like
-    unnamed ones."""
-    entries = sorted(entries, key=lambda e: e.get("n", 0))
-    unnamed = [e for e in entries if not e.get("name") or e.get("auto")]
-    drop = {id(e) for e in unnamed[:-keep]} if len(unnamed) > keep else set()
-    total = sum(e.get("bytes", 0) for e in entries if id(e) not in drop)
-    for e in unnamed:
-        if total <= cap:
-            break
-        if id(e) in drop or e is unnamed[-1]:
-            continue
-        drop.add(id(e))
-        total -= e.get("bytes", 0)
-    return [e for e in entries if id(e) not in drop], [e for e in entries if id(e) in drop]
-
-
-def cp_find(doc, ref):
-    """A checkpoint by id (cp3), number, or name; the newest of a name."""
-    entries = cp_index(doc)
-    for e in reversed(entries):
-        if ref in (e.get("id"), e.get("name"), str(e.get("n"))) or (isinstance(ref, int) and e.get("n") == ref):
-            return e
-    return None
-
-
-def can_undo_back(entry, tx_now, undo_now, undo_limit=20):
-    """Whether the undo stack still reaches a checkpoint: as many steps on it
-    as transactions since, none of them fallen off the bottom."""
-    since = tx_now - int(entry.get("tx", 0))
-    if since < 0:
-        return False
-    if since == 0:
-        return True
-    expect = int(entry.get("undo", 0)) + since
-    return expect <= undo_limit and undo_now == expect
-
-
-# ---- C. auto-save -------------------------------------------------------------------------
-
-AUTOSAVE_SECONDS = 300
-AUTOSAVE_STEPS = 10
-AUTOSAVE_KEEP = 5
-
-
-def autosave_due(last_t, last_tx, now, tx):
-    """A copy is due 5 minutes or 10 changes after the last one."""
-    if tx <= last_tx:
-        return False
-    return (now - last_t) >= AUTOSAVE_SECONDS or (tx - last_tx) >= AUTOSAVE_STEPS
-
-
-def autosave_dir(doc):
-    return path("autosave", safe(doc))
-
-
-def autosave_file(doc, t=None):
-    return os.path.join(autosave_dir(doc), f"{stamp(t)}.FCStd")
-
-
-def autosave_prune(doc, keep=AUTOSAVE_KEEP):
-    d = autosave_dir(doc)
-    try:
-        files = sorted(f for f in os.listdir(d) if f.endswith(".FCStd"))
-    except OSError:
-        return []
-    gone = files[:-keep] if len(files) > keep else []
-    for f in gone:
-        try:
-            os.remove(os.path.join(d, f))
-        except OSError:
-            pass
-    return gone
-
-
-def saving_flag():
-    return path(".saving")
-
-
-def set_saving(on):
-    p = saving_flag()
-    if on:
-        os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "w") as f:
-            f.write(str(time.time()))
-    else:
-        try:
-            os.remove(p)
-        except OSError:
-            pass
-
-
-def saving(limit=120.0):
-    """A save in progress (the watchdog waits for it); a stale flag is not."""
-    try:
-        return time.time() - os.path.getmtime(saving_flag()) < limit
-    except OSError:
-        return False
-
-
-# ---- D. recovery --------------------------------------------------------------------------
-
-def recovery_sources(doc, freecad_recovery=()):
-    """What a document could come back from, newest first: our auto-saves,
-    checkpoints, and FreeCAD's own recovery files ([(path, t)] passed in).
-    Each { source, path, t }."""
-    out = []
-    d = autosave_dir(doc)
-    try:
-        for f in os.listdir(d):
-            if f.endswith(".FCStd"):
-                p = os.path.join(d, f)
-                out.append({"source": "autosave", "path": p, "t": os.path.getmtime(p)})
-    except OSError:
-        pass
-    for e in cp_index(doc):
-        if os.path.isfile(e.get("file", "")):
-            out.append({"source": "checkpoint", "path": e["file"], "t": os.path.getmtime(e["file"]), "checkpoint": e.get("id")})
-    for p, t in freecad_recovery:
-        out.append({"source": "freecad", "path": p, "t": t})
-    return sorted(out, key=lambda x: -x["t"])
-
-
-def freecad_recovery_files(cache_dirs, doc_label=None):
-    """FreeCAD's own recovery copies under its cache folders: each holds
-    fc_recovery_file.fcstd and an .xml naming the document. [(path, t, label)]"""
-    found = []
-    for root in cache_dirs:
-        try:
-            names = os.listdir(root)
-        except OSError:
-            continue
-        for n in names:
-            d = os.path.join(root, n)
-            f = os.path.join(d, "fc_recovery_file.fcstd")
-            if not os.path.isfile(f):
-                continue
-            label = None
-            try:
-                with open(os.path.join(d, "fc_recovery_file.xml"), encoding="utf-8", errors="replace") as fh:
-                    m = re.search(r"<Label>([^<]*)</Label>", fh.read())
-                    label = m.group(1) if m else None
-            except OSError:
-                pass
-            if doc_label is None or label in (None, doc_label):
-                found.append((f, os.path.getmtime(f), label))
-    return sorted(found, key=lambda x: -x[1])
-
+# ---- D. after a crash: the supervisor names the newest crash report -----------------------
 
 def crash_reports(limit=1, folder=None):
     d = folder or os.path.expanduser("~/Library/Logs/DiagnosticReports")
@@ -304,6 +79,21 @@ def hung(now, started, last_ping, limit):
 
 def call_key(tool, args):
     return tool + ":" + hashlib.sha256(json.dumps(args or {}, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+def saving_flag():
+    """Written by whoever is saving a copy of a document (an add-on's
+    auto-save): the watchdog waits for it rather than call a long save a
+    hang."""
+    return path(".saving")
+
+
+def saving(limit=120.0):
+    """A save in progress; a stale flag is not."""
+    try:
+        return time.time() - os.path.getmtime(saving_flag()) < limit
+    except OSError:
+        return False
 
 
 def log_watchdog(event):
@@ -363,71 +153,6 @@ def harmless(d):
     return len(buttons) <= 1 and all(b in HARMLESS for b in buttons) and (d.get("class") or "").endswith("MessageBox")
 
 
-# ---- H. settings --------------------------------------------------------------------------
-
-SETTINGS_KEEP = 20
-
-
-def settings_snapshot(cfg):
-    """Copy user.cfg before a change; the last 20 kept. The copy's path."""
-    d = path("settings")
-    os.makedirs(d, exist_ok=True)
-    t = time.time()
-    base = f"{stamp(t)}-{int((t % 1) * 1000):03d}"
-    dest, k = os.path.join(d, base + ".cfg"), 1
-    while os.path.exists(dest):
-        dest, k = os.path.join(d, f"{base}-{k:02d}.cfg"), k + 1
-    shutil.copy2(cfg, dest)
-    fs = sorted(f for f in os.listdir(d) if f.endswith(".cfg"))
-    for f in fs[:-SETTINGS_KEEP] if len(fs) > SETTINGS_KEEP else []:
-        try:
-            os.remove(os.path.join(d, f))
-        except OSError:
-            pass
-    return dest
-
-
-def settings_log(entry):
-    p = path("settings-log.jsonl")
-    os.makedirs(os.path.dirname(p), exist_ok=True)
-    with open(p, "a", encoding="utf-8") as f:
-        f.write(json.dumps({"t": time.time(), **entry}, default=str) + "\n")
-
-
-def settings_history(limit=20):
-    out = []
-    try:
-        with open(path("settings-log.jsonl"), encoding="utf-8") as f:
-            for i, line in enumerate(f):
-                try:
-                    e = json.loads(line)
-                except ValueError:
-                    continue
-                e["change"] = i + 1
-                out.append(e)
-    except OSError:
-        pass
-    return out[-limit:][::-1] if limit else out[::-1]
-
-
-def settings_snapshot_for(ref):
-    """The snapshot taken before a change (its number) or at a time stamp:
-    the newest whose name is at or before it."""
-    d = path("settings")
-    try:
-        fs = sorted(f for f in os.listdir(d) if f.endswith(".cfg"))
-    except OSError:
-        return None
-    if isinstance(ref, int) or (isinstance(ref, str) and ref.isdigit() and len(ref) < 8):
-        e = next((x for x in settings_history(0) if x["change"] == int(ref)), None)
-        if not e or not e.get("snapshot"):
-            return None
-        return e["snapshot"] if os.path.isfile(e["snapshot"]) else None
-    ref = str(ref)
-    pick = [f for f in fs if f[: len(ref)] <= ref or f.startswith(ref)]
-    return os.path.join(d, pick[-1]) if pick else None
-
-
 # ---- G. versions --------------------------------------------------------------------------
 
 def versions():
@@ -440,110 +165,6 @@ def record_versions(before, after=None, outcome=None, keep=2):
     v["history"] = v["history"][-(keep * 3):]
     _save(path("versions.json"), v)
     return v
-
-
-# ---- J. macros ----------------------------------------------------------------------------
-
-def sha256_file(p):
-    h = hashlib.sha256()
-    with open(p, "rb") as f:
-        for b in iter(lambda: f.read(65536), b""):
-            h.update(b)
-    return h.hexdigest()
-
-
-def approvals():
-    return _load(path("macros-approved.json"), {})
-
-
-def approve(name, p):
-    a = approvals()
-    a[name] = {"sha256": sha256_file(p), "path": p, "t": time.time()}
-    _save(path("macros-approved.json"), a)
-    return a[name]
-
-
-def unapprove(name):
-    a = approvals()
-    gone = a.pop(name, None)
-    _save(path("macros-approved.json"), a)
-    return gone
-
-
-def approval_state(name, p):
-    """approved | changed (its code moved since the OK) | no."""
-    e = approvals().get(name)
-    if not e:
-        return "no"
-    try:
-        return "approved" if sha256_file(p) == e["sha256"] else "changed"
-    except OSError:
-        return "no"
-
-
-def macro_name_ok(name):
-    return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,60}", str(name or "")))
-
-
-def _ident(k):
-    s = re.sub(r"\W+", "_", str(k)).strip("_").upper() or "P"
-    return s if not s[0].isdigit() else "P_" + s
-
-
-def macro_text(name, calls, params, header):
-    """A .FCMacro replaying Agent Link calls in order, with the listed sizes
-    as named constants at the top: each place a listed value appears in the
-    calls' arguments is replaced by its name."""
-    consts = {_ident(k): v for k, v in (params or {}).items()}
-    by_value = {}
-    for k, v in consts.items():
-        if isinstance(v, (int, float)) and not isinstance(v, bool):
-            by_value.setdefault(float(v), k)
-        elif isinstance(v, str):
-            by_value.setdefault(v, k)
-
-    def lit(x):
-        if isinstance(x, bool) or x is None:
-            return repr(x)
-        if isinstance(x, (int, float)):
-            k = by_value.get(float(x))
-            return k if k else repr(x)
-        if isinstance(x, str):
-            k = by_value.get(x)
-            return k if k else repr(x)
-        if isinstance(x, list):
-            return "[" + ", ".join(lit(y) for y in x) + "]"
-        if isinstance(x, dict):
-            return "{" + ", ".join(f"{k!r}: {lit(v)}" for k, v in x.items()) + "}"
-        return repr(x)
-
-    lines = ["# -*- coding: utf-8 -*-"] + [f"# {h}" for h in header] + ["", "# Key sizes: change them here."]
-    for k, v in consts.items():
-        lines.append(f"{k} = {v!r}")
-    lines += ["", "import agentlink", ""]
-    for c in calls:
-        lines.append(f"agentlink.run({c['tool']!r}, {lit(c.get('args') or {})})")
-    return "\n".join(lines) + "\n"
-
-
-def macro_calls(text):
-    """The calls and constants a macro written by macro_text holds, read
-    without running it (it is Python: only literals are taken)."""
-    import ast
-
-    tree = ast.parse(text)
-    consts, calls = {}, []
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-            try:
-                consts[node.targets[0].id] = ast.literal_eval(node.value)
-            except ValueError:
-                pass
-        elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
-            f = node.value.func
-            if isinstance(f, ast.Attribute) and f.attr == "run" and len(node.value.args) == 2:
-                calls.append(node.value)
-    return consts, calls
 
 
 # ---- N. the machine and heavy jobs --------------------------------------------------------

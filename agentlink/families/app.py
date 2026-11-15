@@ -11,7 +11,6 @@
 
 import json
 import os
-import time
 import re
 import xml.etree.ElementTree as ET
 
@@ -441,31 +440,25 @@ def _user_cfg():
     return os.path.join(FreeCAD.getUserConfigDir(), "user.cfg")
 
 
-def _settings_snapshot():
-    """user.cfg as it is now, copied before a change (unattended use, H)."""
-    from .. import keep
+def _settings_changing(tool, path):
+    """Before a settings change: an add-on keeping a settings log snapshots
+    them now (the setting_changing event)."""
+    from .. import hooks
 
-    try:
-        FreeCAD.saveParameter()
-        if os.path.isfile(_user_cfg()):
-            return keep.settings_snapshot(_user_cfg())
-    except Exception:
-        pass
-    return None
+    hooks.emit("setting_changing", tool, path)
 
 
-def _settings_log(tool, path, name, before, after, snap):
-    from .. import keep
+def _settings_changed(tool, path, name, before, after):
+    """After a settings change: whether it needs a restart, said to the
+    add-ons listening (the setting_changed event)."""
+    from .. import hooks
 
     restart = name in RESTART_KEYS or "MainWindow" in (path or "")
     gui = getattr(FreeCAD, "GuiUp", False)
-    entry = {"tool": tool, "path": path, "name": name, "from": before, "to": after, "restart": restart, "snapshot": snap}
+    entry = {"tool": tool, "path": path, "name": name, "from": before, "to": after, "restart": restart}
     if restart and not gui:
         entry["applies"] = "at next launch"
-    try:
-        keep.settings_log(entry)
-    except Exception:
-        pass
+    hooks.emit("setting_changed", path, name, before, after, tool=tool, restart=restart, applies=entry.get("applies"))
     return entry
 
 
@@ -496,16 +489,16 @@ def tools(session):
         hit = [k for k in values if guarded(path, k)]
         if hit:
             raise ToolError("not_allowed", f"{', '.join(hit)}: the person's to set (Edit > Preferences, or Agent Link's panel) — they decide what an agent may do, what code FreeCAD loads and what programs it runs. Nothing was changed.")
-        snap = _settings_snapshot()
+        _settings_changing("pref_set", path)
         done = {}
         later = []
         for k, v in values.items():
             before = _contents(g).get(k, {}).get("value")
             kind = _set(g, k, v, a.get("type"))
             done[k] = {"was": before, "now": _contents(g).get(k, {}).get("value"), "type": kind}
-            if _settings_log("pref_set", path, k, before, done[k]["now"], snap).get("applies"):
+            if _settings_changed("pref_set", path, k, before, done[k]["now"]).get("applies"):
                 later.append(k)
-        out = {"path": path, "set": done, "note": "Most settings take effect at once; a few (the theme, the stylesheet, toolbars) only after FreeCAD restarts. pref_history lists the changes; pref_rollback takes them back."}
+        out = {"path": path, "set": done, "note": "Most settings take effect at once; a few (the theme, the stylesheet, toolbars) only after FreeCAD restarts. pref_history lists the changes and pref_rollback takes them back, where they are installed."}
         if later:
             out["appliesAtNextLaunch"] = later
         return out
@@ -518,12 +511,12 @@ def tools(session):
         hit = [k for k in names if guarded(path, k)]
         if hit:
             raise ToolError("not_allowed", f"{', '.join(hit)}: the person's to reset (Edit > Preferences, or Agent Link's panel). Nothing was changed.")
-        snap = _settings_snapshot()
+        _settings_changing("pref_reset", path)
         for k in names:
             kind = _contents(g).get(k, {}).get("type", "")
             before = _contents(g).get(k, {}).get("value")
             {"Boolean": g.RemBool, "Integer": g.RemInt, "Unsigned": g.RemUnsigned, "Float": g.RemFloat, "String": g.RemString}.get(kind, lambda _n: None)(k)
-            _settings_log("pref_reset", path, k, before, None, snap)
+            _settings_changed("pref_reset", path, k, before, None)
         return {"path": path, "reset": names}
 
     def pref_pack(a):
@@ -533,52 +526,10 @@ def tools(session):
             return {"packs": sorted(have), "next": "pref_pack { apply: name } sets its values; restart FreeCAD for the theme and stylesheet."}
         if name not in have:
             raise ToolError("not_found", f"No preference pack '{name}': " + ", ".join(sorted(have)))
-        snap = _settings_snapshot()
+        _settings_changing("pref_pack", "BaseApp/Preferences")
         n = apply_cfg(have[name])
-        _settings_log("pref_pack", "BaseApp/Preferences", f"pack {name}", None, f"{n} values", snap)
+        _settings_changed("pref_pack", "BaseApp/Preferences", f"pack {name}", None, f"{n} values")
         return {"applied": name, "values": n, "note": "Restart FreeCAD for the stylesheet and theme to take hold; navigation and colours change now."}
-
-    def pref_history(a):
-        from .. import keep
-
-        rows = keep.settings_history(int(a.get("limit", 20) or 20))
-        out = []
-        for r in rows:
-            row = {"change": r["change"], "time": keep.stamp(r.get("t")), "tool": r.get("tool")}
-            for k in ("path", "name", "from", "to", "applies"):
-                if r.get(k) is not None:
-                    row[k] = r[k]
-            if r.get("restart"):
-                row["restart"] = True
-            out.append(row)
-        return {"changes": out, "note": "Newest first. pref_rollback { to: change } puts the settings back as they were before that change (a snapshot of the whole settings file)."}
-
-    def pref_rollback(a):
-        import shutil
-
-        from .. import keep
-
-        to = a.get("to")
-        if to in (None, ""):
-            raise ToolError("invalid_input", "to: a change's number (pref_history) or a time, YYYYMMDD-HHMMSS.")
-        snap = keep.settings_snapshot_for(to)
-        if not snap:
-            raise ToolError("not_found", f"to {to!r}: no settings snapshot for it — pref_history lists the changes with theirs.")
-        if not getattr(FreeCAD, "GuiUp", False):
-            hb = keep._load(keep.path("heartbeat.json"), {}) or {}
-            if time.time() - float(hb.get("t") or 0) < 10:
-                raise ToolError("invalid_state", "The FreeCAD window is open with its link off: it would write its own settings over the rollback as it quits. Turn its link on (the rollback then restarts it) or close it, then pref_rollback again. Nothing was changed.")
-        if not getattr(FreeCAD, "GuiUp", False) and not os.environ.get("AGENTLINK_SUPERVISED"):
-            raise ToolError("unavailable", "Rolling settings back needs FreeCAD to start again around the file: through the window's link, or the supervised server the launcher runs. Nothing was changed.")
-        current = _settings_snapshot()
-        keep.settings_log({"tool": "pref_rollback", "to": str(to), "restoredFrom": snap, "snapshot": current, "restart": True})
-        if getattr(FreeCAD, "GuiUp", False):
-            out = app_restart({"_cfg_from": snap, "save": a.get("save", "agent")})
-            out.update({"rolledBackTo": os.path.basename(snap), "note": "FreeCAD quits, its settings file is put back, and it opens again in the background with its documents. pref_rollback again with the newest change undoes this."})
-            return out
-        shutil.copy2(snap, _user_cfg())
-        s.exit_after_reply = "nosave"
-        return {"rolledBackTo": os.path.basename(snap), "restarting": "the hidden FreeCAD, at once (the window is closed: it reads these settings when it next opens)"}
 
     def cmd_list(a):
         gui = _gui()
@@ -823,34 +774,41 @@ def tools(session):
         if rule == "all" and (a.get("confirm") or "").strip() != "save all":
             raise ToolError("not_allowed", "save: all saves documents the person may not want saved: confirm: \"save all\", typed by them. Nothing was changed.")
         s.restart_save = rule
-        from .. import keep
+        from .. import hooks
 
+        # Saved copies are an add-on's: "checkpoints" (take) before a save,
+        # "reopen" (keep) for the documents not saved, reopened from their
+        # copies beside their files once FreeCAD is back.
+        cps, reopener = hooks.service("checkpoints"), hooks.service("reopen")
         mine = set(getattr(s, "agent_docs", ()) or ())
-        saved, copied, dropped = [], [], []
+        plan = []
         for d in list(FreeCAD.listDocuments().values()):
             if not changed(d):
                 continue
             save = d.FileName and (rule == "all" or (rule == "agent" and d.Name in mine))
-            if save:
-                try:
-                    s.checkpoint(f"before restart", auto=True, doc=d)
-                except Exception:
-                    pass
+            plan.append((d, "save" if save else ("drop" if a.get("discard") and not d.FileName else "copy")))
+        lost = [d.Label for d, how in plan if how == "copy"]
+        if lost and reopener is None:
+            raise ToolError("invalid_state", f"{', '.join(lost)}: changed and not being saved, and nothing here keeps a copy to reopen them from (that needs SafetyNet). doc_save them first, save: all (with the person's confirm), or discard: true for never-saved ones. Nothing was changed.")
+        saved, dropped = [], []
+        for d, how in plan:
+            if how == "save":
+                if cps is not None:
+                    try:
+                        cps.take(s, "before restart", auto=True, doc=d)
+                    except Exception:
+                        pass
                 d.save()
                 saved.append(d.FileName)
-            elif a.get("discard") and not d.FileName:
+            elif how == "drop":
                 dropped.append(d.Label)
-            else:
-                f = keep.autosave_file(d.Name)
-                os.makedirs(os.path.dirname(f), exist_ok=True)
-                d.saveCopy(f)
-                copied.append({"name": d.Name, "label": d.Label, "file": d.FileName or "", "copy": f, "t": time.time()})
+        copied = reopener.keep([d for d, how in plan if how == "copy"]) if lost else []
         reopen = [d.FileName for d in FreeCAD.listDocuments().values() if d.FileName]
         # Calls wait for the window (and these documents) instead of going to
         # the hidden FreeCAD meanwhile; the one in front is in front again.
         from .. import restart_mark
 
-        restart_mark.write(reopen, active=getattr(s.doc, "FileName", None) or None, recover=copied)
+        restart_mark.write(reopen, active=getattr(s.doc, "FileName", None) or None)
         FreeCAD.saveParameter()
         exe = sys.executable
         bundle = exe.split(".app/")[0] + ".app" if ".app/" in exe else None
@@ -862,7 +820,7 @@ def tools(session):
             bundle = target
             # A fresh time on the mark: the carrying-over took a while, and a
             # stale mark is ignored (M5's second half).
-            restart_mark.write(reopen, active=getattr(s.doc, "FileName", None) or None, recover=copied)
+            restart_mark.write(reopen, active=getattr(s.doc, "FileName", None) or None)
         # The app and the files go to the shell as arguments, never into the
         # command's text: a path is not shell code, whatever it holds.
         # Waits for this FreeCAD to be gone (it writes its settings as it
@@ -964,6 +922,7 @@ def tools(session):
         mine = os.path.join(FreeCAD.getUserConfigDir(), "user.cfg")
         if os.path.exists(mine):
             shutil.copy2(mine, backup)
+        _settings_changing("pref_import", "BaseApp/Preferences")
         keep = {}
         for path, name in _KEEP:
             g = FreeCAD.ParamGet(ROOT + path)
@@ -985,12 +944,7 @@ def tools(session):
                     if os.path.isfile(os.path.join(old_mac, n)) and not os.path.exists(os.path.join(new_mac, n)):
                         shutil.copy2(os.path.join(old_mac, n), os.path.join(new_mac, n))
                         copied.append(n)
-        from .. import keep as _store
-
-        # The backup is this FreeCAD's settings before the merge: the snapshot
-        # pref_rollback goes back to.
-        snap = _store.settings_snapshot(backup) if os.path.exists(backup) else None
-        _settings_log("pref_import", "BaseApp/Preferences", f"import {os.path.basename(src)}", None, f"{len(merged)} groups", snap)
+        _settings_changed("pref_import", "BaseApp/Preferences", f"import {os.path.basename(src)}", None, f"{len(merged)} groups")
         return {"from": src, "groups": merged, "backup": backup if os.path.exists(backup) else None, "kept": {"/".join(k): v for k, v in keep.items()}, "macros": copied, **({"guardedKept": put_back} if put_back else {}), "note": "Merged: the file's values win, this one's other settings stay — except the guarded ones (what an agent may do, extension repositories, the macro folder, program paths), which stay as they were. Some (theme, toolbars) show after app_restart. To undo, the backup is a whole settings file: a merge of it puts back the values it held but leaves keys the import added."}
 
     return [
@@ -1021,10 +975,6 @@ def tools(session):
         Tool("snapshot_latest", "The person's newest screenshot (index 2, 3 … older ones) as a picture with their marks (original: true without), with its note, numbered pins and their comments, workbench and time. Only the person takes them (camera button, Alt+Shift+S).",
              obj({"index": {"type": "integer"}, "original": {"type": "boolean"}}), snapshot_latest),
         Tool("snapshot_list", "The person's screenshots, newest first, without pictures: time, note, pins, saved path.", obj({}), snapshot_list),
-        Tool("pref_history", "The settings changes Agent Link made, newest first: change number, time, tool, path, name, from, to, and whether a restart is needed (limit, 20 by default). Changes nothing.",
-             obj({"limit": {"type": "integer"}}), pref_history),
-        Tool("pref_rollback", "Put FreeCAD's settings back as they were before a change (to: its number from pref_history, or a time YYYYMMDD-HHMMSS): the whole settings file from its snapshot, written while FreeCAD is down — the window restarts around it in the background (save as app_restart's); the state before is snapshotted too.",
-             obj({"to": {"type": ["integer", "string"]}, "save": {"type": "string", "enum": ["agent", "none"]}}, ["to"]), pref_rollback),
         Tool("app_restart", "Quit this FreeCAD window and open it again (new add-ons, a theme, settings that need a restart): settings written; save agent (default: the documents this session changed, each checkpointed first) | none | all (confirm: \"save all\" typed by the person) — any other changed document reopens from a copy beside its file, never saved over it (discard: true drops never-saved ones); app: another FreeCAD .app (app_install's) opens that one instead, this one's settings and add-ons carried into its folders first. Window only.",
              obj({"discard": {"type": "boolean"}, "app": {"type": "string"}, "save": {"type": "string", "enum": ["agent", "none", "all"]}, "confirm": {"type": "string"}}), app_restart),
         Tool("workbench", "The workbenches, the active one, and activate: a name (Part Design, BIM, FEM …). Window only.", obj({"activate": {"type": "string"}}), workbench),

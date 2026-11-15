@@ -103,20 +103,11 @@ def main(argv=None):
     def write(text):
         out.write(text)
         out.flush()
-        if supervised:
-            # Which documents this hidden FreeCAD holds, for the supervisor
-            # to recover if it dies (unattended use, D).
-            try:
-                import time
+        # After each reply: an add-on keeping what this FreeCAD holds (for the
+        # one started again after a crash to recover) writes it now.
+        from . import hooks
 
-                import FreeCAD
-
-                from . import keep
-
-                keep._save(keep.path("hidden.json"), {"pid": os.getpid(), "t": time.time(),
-                                                      "docs": [{"name": d.Name, "label": d.Label, "file": d.FileName or ""} for d in FreeCAD.listDocuments().values()]})
-            except Exception:
-                pass
+        hooks.emit("reply_written", session)
 
         how = getattr(session, "exit_after_reply", None)
         if how and supervised:
