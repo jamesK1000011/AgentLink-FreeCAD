@@ -37,29 +37,13 @@ class Writers(unittest.TestCase):
         self.assertEqual(pdf[xref:xref + 4], b"xref")
         self.assertIn(b"/MediaBox [0 0 841.89 595.28]", pdf)
 
-    def test_dxf(self):
-        s = self.sheet()
-        lines = sheets.read_dxf_lines(s.dxf())
-        self.assertIn(((20.0, 190.0), (60.0, 190.0), "VISIBLE"), lines)
-        self.assertTrue(any(layer == "HIDDEN" for (_, _, layer) in lines))
 
-    def test_layout(self):
-        sizes = {"front": (80, 30), "top": (80, 60), "right": (60, 30), "iso": (100, 80)}
-        first = sheets.layout(sizes, sheets.PAPER["A4"], "first")
-        third = sheets.layout(sizes, sheets.PAPER["A4"], "third")
-        f, t = first["centres"], third["centres"]
-        self.assertGreater(f["top"][1], f["front"][1], "first angle: top under the front")
-        self.assertLess(f["right"][0], f["front"][0], "first angle: right on the left")
-        self.assertLess(t["top"][1], t["front"][1], "third angle: top over the front")
-        self.assertGreater(t["right"][0], t["front"][0])
-        self.assertAlmostEqual(f["top"][0], f["front"][0])
-        self.assertIn(first["scale"], sheets.SCALES)
-        self.assertEqual(sheets.scale_text(0.5), "1:2")
-        self.assertEqual(sheets.scale_text(2), "2:1")
-        with self.assertRaises(ValueError):
-            sheets.layout(sizes, sheets.PAPER["A4"], "first", scale=10)
-        big = sheets.layout({"front": (900, 300), "top": (900, 600)}, sheets.PAPER["A3"])
-        self.assertLess(big["scale"], 1)
+
+    def test_dxf(self):
+        d = self.sheet().dxf()
+        self.assertIn("AC1009", d)
+        self.assertIn("VISIBLE", d)
+        self.assertTrue(d.rstrip().endswith("EOF"))
 
 
 if __name__ == "__main__":

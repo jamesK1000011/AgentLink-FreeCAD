@@ -146,10 +146,6 @@ def setup_of(doc, body, kind=None):
     return None
 
 
-def save_setups(doc, value):
-    write(doc, "setups", value)
-
-
 # ---- per-part records ---------------------------------------------------------------------
 
 def spec(doc):
@@ -161,7 +157,3 @@ def materials(doc):
     return read(doc, "materials", {})
 
 
-def waivers(doc):
-    """[{ body, rule, at, reason }]: a finding of that rule at that place
-    (to the millimetre and a half) comes back waived."""
-    return read(doc, "waivers", [])

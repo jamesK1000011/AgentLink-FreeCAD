@@ -101,7 +101,7 @@ All optional. Every hook catches and logs your exceptions.
 | `register_reviewer(fn)` | `fn(session, body)` gives the Review tab its verdict. |
 | `guard_setting(path, name)` | A setting `pref_set` must not change (`path` as `pref_set` takes it, e.g. `"Mod/MyAddon"`): one that widens what the agent may do or which code FreeCAD loads. |
 | `remember(session, kind, value)` / `analysis(session, kind)` | Last results by kind, for example the last FEA solve. |
-| `agentlink.tools.register_guides(folder)` | Markdown guides the agent can read with `guide_read`. |
+| `agentlink.tools.register_guides(folder)` | Markdown guides the agent can read with `guide_read`. A `guides/` (or `freecad_guides/`) folder beside your `agentlink_families.py` is registered for you. |
 | `agentlink.render.register_layer` / `register_map` | Layers and colour maps for `view_render`. |
 
 ## Nothing shared to install

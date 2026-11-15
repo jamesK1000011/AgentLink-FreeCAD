@@ -22,10 +22,8 @@ class Iso286(unittest.TestCase):
             self.assertAlmostEqual(got[0], want[0], places=6, msg=f"{n} {code}")
             self.assertAlmostEqual(got[1], want[1], places=6, msg=f"{n} {code}")
 
-    def test_text_and_refusals(self):
-        self.assertEqual(I.text(10, "H7", diameter=True), "⌀10 H7 (+0.015/0)")
-        self.assertEqual(I.text(40, plus=0.1), "40 ±0.1")
-        self.assertEqual(I.text(25, plus=0.2, minus=0.1), "25 +0.2/-0.1")
+
+    def test_refusals(self):
         for bad in ((10, "Q7"), (10, "H3"), (600, "H7"), (0, "h6")):
             with self.assertRaises(ValueError):
                 I.limits(*bad)

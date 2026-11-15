@@ -121,6 +121,7 @@ def load():
             sys.stderr.write(f"Agent Link: extension {n} left out — it needs Agent Link API {need}, this is API {hooks.API}; update one or the other\n")
             SKIPPED.append({"module": n, "needs": need, "api": hooks.API})
             continue
+        _register_guides(mod)
         credit, lic = getattr(mod, "CREDIT", None), getattr(mod, "LICENSE", None)
         for f in fams:
             f.EXTERNAL = True
@@ -131,6 +132,20 @@ def load():
         out.extend(fams)
     declared(out)
     return out
+
+
+def _register_guides(mod):
+    """An add-on's guides/ (or freecad_guides/) folder beside its
+    agentlink_families module, registered for guide_read: no code needed in
+    the add-on."""
+    try:
+        from .. import tools
+
+        here = os.path.dirname(os.path.abspath(mod.__file__))
+        for name in ("guides", "freecad_guides"):
+            tools.register_guides(os.path.join(here, name))
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write(f"Agent Link: {getattr(mod, '__name__', '?')}'s guides not registered — {e}\n")
 
 
 def declared(fams):
