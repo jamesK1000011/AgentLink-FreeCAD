@@ -287,8 +287,15 @@ def _gui_saved(d):
     try:
         import FreeCADGui
 
+        # The file now holds what is in memory. FreeCAD 1.1 leaves the
+        # document touched after a save from App with no object touched
+        # (seen on the Mac), so the save itself decides here.
+        try:
+            d.purgeTouched()
+        except Exception:
+            pass
         g = FreeCADGui.getDocument(d.Name)
-        if g is not None and not d.isTouched():
+        if g is not None:
             g.Modified = False
     except Exception:
         pass
