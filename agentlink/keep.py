@@ -178,10 +178,10 @@ HEAVY = {
     "meshobj_boolean", "meshobj_offset", "meshobj_decimate", "points_mesh", "part_extract",
     "steps_render", "addon_test",
 }
-# Heavy tools that take their own "timeout" (seconds), and its default: the
-# watchdog gives such a call that long and a minute (call_deadline), so a
-# long test run is not taken for a hang.
-TIMEOUT_DEFAULTS = {"addon_test": 600.0}
+# Heavy tools that take their own "timeout" (seconds), and its default where
+# a call may leave it out: the watchdog gives such a call that long and a
+# minute (call_deadline), so a long run is not taken for a hang.
+TIMEOUT_DEFAULTS = {}
 
 
 def call_deadline(tool, args):

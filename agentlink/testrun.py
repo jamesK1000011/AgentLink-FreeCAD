@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """addon_test's two halves, with no FreeCAD in them.
 
-The tool's side (root_for, find_cmd, child_env, run): which add-on may be
-tested, the FreeCAD command-line binary beside the running FreeCAD, the
-environment, the compact answer and the full log. Running an add-on's
+The tool's side (root_for, find_cmd, child_env, start, wait, listing):
+which add-on may be tested, the FreeCAD command-line binary beside the
+running FreeCAD, the environment, the job running in the background, the
+compact answer and the full log, whose last line says how the run ended. Running an add-on's
 tests is running its code: only Agent Link and the add-ons the launcher
 installed are allowed.
 
@@ -24,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 from .protocol import ToolError, bad
@@ -154,73 +156,193 @@ def summarize(rows, addon, runner, seconds, log, timed_out=None):
     return out
 
 
-def run(cmd, addon, root, own_root, roots, lib, log, pattern="test_*.py", select=None, timeout=TIMEOUT, pump=None):
-    """Run root's tests in a separate process (cmd: freecadcmd, or any
-    Python for the tests here) and answer as summarize() does; the full
-    output and every traceback go to log."""
-    tests = os.path.join(root, "tests")
-    if not os.path.isdir(tests):
-        raise ToolError("not_found", f"{addon} has no tests/ folder at {root}.")
-    tmp = tempfile.mkdtemp(prefix="agentlink-test-")
-    try:
-        env = child_env(own_root, roots, lib, tmp)
-        result = os.path.join(tmp, "results.jsonl")
-        env.update(AGENTLINK_TEST_ROOT=root, AGENTLINK_TEST_DIR=tests, AGENTLINK_TEST_PATTERN=pattern,
-                   AGENTLINK_TEST_SELECT=select or "", AGENTLINK_TEST_RESULT=result)
-        boot = os.path.join(tmp, "agentlink_test_boot.py")
-        with open(boot, "w", encoding="utf-8") as f:
-            f.write(f"import sys\nsys.path.insert(0, {own_root!r})\nfrom agentlink import testrun\ntestrun.main()\n")
-        os.makedirs(os.path.dirname(log), exist_ok=True)
-        t0 = time.time()
-        timed_out = None
-        with open(log, "w", encoding="utf-8", errors="replace") as lf:
-            lf.write(f"addon_test {addon}: {root}\ncommand: {cmd} {boot}\npattern: {pattern}  select: {select or '-'}\n"
-                     f"PYTHONPATH: {env['PYTHONPATH']}\n\n")
-            lf.flush()
-            p = subprocess.Popen([cmd, boot], stdout=lf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, cwd=tmp,
-                                 start_new_session=(os.name != "nt"))
-            while p.poll() is None:
-                if time.time() - t0 > timeout:
-                    timed_out = timeout
-                    _stop(p)
-                    break
-                (pump or (lambda: time.sleep(0.2)))()
-        secs = time.time() - t0
-        rows, runner = [], None
+# Jobs: the run goes on in its own process after the call that started it
+# returns (a remote client drops a call after about 80 s); addon_test
+# { job } reads how far it is. Kept in this FreeCAD only: a job's process
+# is killed when FreeCAD quits.
+JOBS = {}
+_LOCK = threading.Lock()
+START_WAIT, STATUS_WAIT = 20.0, 30.0
+KEEP_JOBS = 20
+
+
+class Job:
+    def __init__(self, job, addon, cmd, root, log, pattern, select, timeout):
+        self.job, self.addon, self.cmd, self.root, self.log = job, addon, cmd, root, log
+        self.pattern, self.select, self.timeout = pattern, select, timeout
+        self.tmp = tempfile.mkdtemp(prefix="agentlink-test-")
+        self.result = os.path.join(self.tmp, "results.jsonl")
+        self.t0 = time.time()
+        self.ended = threading.Event()
+        self.how = None  # done | timed out | killed (…)
+        self.seconds = None
+        self.rows, self.runner = [], None
+        self.p = None
+        self._lock = threading.Lock()
+
+    def read(self):
+        """The rows written so far, and the runner."""
+        rows, runner, end = [], None, False
         try:
-            with open(result, encoding="utf-8") as f:
+            with open(self.result, encoding="utf-8") as f:
                 for line in f:
                     try:
                         r = json.loads(line)
                     except ValueError:
                         continue
-                    if "runner" in r and "outcome" not in r:
-                        runner = r["runner"]
-                    elif "outcome" in r:
+                    if "outcome" in r:
                         rows.append(r)
+                    elif "runner" in r:
+                        runner = r["runner"]
+                    elif r.get("end"):
+                        end = True
         except OSError:
             pass
-        with open(log, "a", encoding="utf-8", errors="replace") as lf:
-            lf.write(f"\n== exit {p.returncode}, {secs:.1f} s ==\n")
-            for r in rows:
-                if r["outcome"] in ("failed", "error"):
-                    lf.write(f"\n== {r['outcome']}: {r.get('id')}\n{r.get('trace', '')}\n")
-        if not rows and runner is None:
-            with open(log, encoding="utf-8", errors="replace") as lf:
+        return rows, runner, end
+
+    def _watch(self):
+        try:
+            self.p.wait(self.timeout)
+        except subprocess.TimeoutExpired:
+            self.finish(f"timed out after {self.timeout:g} s")
+            return
+        self.finish(None)
+
+    def finish(self, how):
+        """Stop the process group if it runs, write how it ended as the log's
+        last line, and keep the rows; once only."""
+        with self._lock:
+            if self.ended.is_set():
+                return
+            if how is not None:
+                _stop(self.p)
+            rows, runner, end = self.read()
+            code = self.p.poll()
+            self.how = how or ("done" if end else f"killed (exit {code} before the tests finished)")
+            self.rows, self.runner, self.seconds = rows, runner, time.time() - self.t0
+            try:
+                with open(self.log, "a", encoding="utf-8", errors="replace") as lf:
+                    lf.write(f"\n== exit {code}, {self.seconds:.1f} s ==\n")
+                    for r in rows:
+                        if r["outcome"] in ("failed", "error"):
+                            lf.write(f"\n== {r['outcome']}: {r.get('id')}\n{r.get('trace', '')}\n")
+                    n = summarize(rows, self.addon, runner, self.seconds, self.log)
+                    lf.write(f"\naddon_test: {self.how} — {n['passed']} passed, {n['failed']} failed, {n['errors']} errors, {n['skipped']} skipped\n")
+            except OSError:
+                pass
+            shutil.rmtree(self.tmp, ignore_errors=True)
+            self.ended.set()
+
+    def state(self):
+        return "running" if not self.ended.is_set() else ("done" if self.how == "done" else self.how)
+
+    def answer(self):
+        if not self.ended.is_set():
+            rows, runner, _ = self.read()
+            n = {k: sum(1 for r in rows if r.get("outcome") == k) for k in ("passed", "failed", "error", "skipped")}
+            return {"job": self.job, "addon": self.addon, "state": "running", "seconds": round(time.time() - self.t0, 1),
+                    "passed": n["passed"], "failed": n["failed"], "errors": n["error"], "skipped": n["skipped"], "log": self.log,
+                    "note": f"Still running (stopped at {self.timeout:g} s): addon_test {{ job: \"{self.job}\" }} again for the result."}
+        if not self.rows and self.runner is None:
+            with open(self.log, encoding="utf-8", errors="replace") as lf:
                 tail = _tail(lf.read(), chars=1200)
-            how = f"stopped after {timeout:g} s" if timed_out else f"exit {p.returncode}"
-            raise ToolError("failed", f"The tests did not start ({how}): {tail}\nFull log: {log}")
-        out = summarize(rows, addon, runner, secs, log, timed_out)
-        if not rows:
-            out["note"] = f"No tests matched (pattern {pattern}" + (f", select {select}" if select else "") + ")."
+            raise ToolError("failed", f"The tests of {self.addon} did not start ({self.how}): {tail}\nFull log: {self.log}")
+        out = {"job": self.job, "state": self.state(), **summarize(self.rows, self.addon, self.runner, self.seconds, self.log,
+                                                                   self.timeout if self.how.startswith("timed out") else None)}
+        if not self.rows:
+            out["note"] = f"No tests matched (pattern {self.pattern}" + (f", select {self.select}" if self.select else "") + ")."
         return out
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def start(cmd, addon, root, own_root, roots, lib, log, pattern="test_*.py", select=None, timeout=TIMEOUT):
+    """Start root's tests in a separate process (cmd: freecadcmd, or any
+    Python for the tests here) in its own process group, and a thread that
+    stops it at timeout and writes how it ended. The Job; one at a time
+    per add-on."""
+    tests = os.path.join(root, "tests")
+    if not os.path.isdir(tests):
+        raise ToolError("not_found", f"{addon} has no tests/ folder at {root}.")
+    with _LOCK:
+        busy = next((j for j in JOBS.values() if j.addon == addon and not j.ended.is_set()), None)
+        if busy:
+            return busy
+        jid = os.path.splitext(os.path.basename(log))[0]
+        while jid in JOBS:
+            jid += "x"
+        j = Job(jid, addon, cmd, root, log, pattern, select, timeout)
+        env = child_env(own_root, roots, lib, j.tmp)
+        env.update(AGENTLINK_TEST_ROOT=root, AGENTLINK_TEST_DIR=tests, AGENTLINK_TEST_PATTERN=pattern,
+                   AGENTLINK_TEST_SELECT=select or "", AGENTLINK_TEST_RESULT=j.result)
+        boot = os.path.join(j.tmp, "agentlink_test_boot.py")
+        with open(boot, "w", encoding="utf-8") as f:
+            f.write(f"import sys\nsys.path.insert(0, {own_root!r})\nfrom agentlink import testrun\ntestrun.main()\n")
+        os.makedirs(os.path.dirname(log), exist_ok=True)
+        with open(log, "w", encoding="utf-8", errors="replace") as lf:
+            lf.write(f"addon_test {addon} (job {jid}): {root}\ncommand: {cmd} {boot}\npattern: {pattern}  select: {select or '-'}  timeout: {timeout:g} s\n"
+                     f"PYTHONPATH: {env['PYTHONPATH']}\n\n")
+            lf.flush()
+            j.p = subprocess.Popen([cmd, boot], stdout=lf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, cwd=j.tmp,
+                                   start_new_session=(os.name != "nt"))
+        JOBS[jid] = j
+        for old in [k for k, v in JOBS.items() if v.ended.is_set()][:-KEEP_JOBS]:
+            JOBS.pop(old, None)
+        _quit_hook()
+    threading.Thread(target=j._watch, name=f"addon_test {jid}", daemon=True).start()
+    return j
+
+
+def wait(j, seconds, pump=None):
+    """Wait up to seconds for the job to end (the window painting meanwhile
+    through pump), then its answer."""
+    end = time.time() + seconds
+    while not j.ended.is_set() and time.time() < end:
+        if pump:
+            pump()
+        else:
+            j.ended.wait(min(0.2, max(0.0, end - time.time())))
+    return j.answer()
+
+
+def find(job):
+    j = JOBS.get(job) if isinstance(job, str) else None
+    if j is None:
+        raise ToolError("not_found", f"{job}: no such test job in this FreeCAD — " + (", ".join(JOBS) or "none have run since it started") + ".")
+    return j
+
+
+def listing():
+    rows = []
+    for j in reversed(list(JOBS.values())):
+        r = {"job": j.job, "addon": j.addon, "state": j.state(), "seconds": round((j.seconds if j.seconds is not None else time.time() - j.t0), 1)}
+        if j.ended.is_set():
+            r.update({k: sum(1 for x in j.rows if x.get("outcome") == o) for k, o in (("passed", "passed"), ("failed", "failed"), ("errors", "error"))})
+        rows.append(r)
+    return {"jobs": rows, "note": "addon_test { addon } starts one; addon_test { job } answers how it stands." if rows else "No test jobs since this FreeCAD started: addon_test { addon } starts one."}
+
+
+_HOOKED = []
+
+
+def _quit_hook():
+    if not _HOOKED:
+        import atexit
+
+        atexit.register(stop_all)
+        _HOOKED.append(True)
+
+
+def stop_all(why="killed (FreeCAD quit)"):
+    """Every running job's process group stopped (FreeCAD quitting)."""
+    for j in list(JOBS.values()):
+        if not j.ended.is_set():
+            j.finish(why)
 
 
 def _stop(p):
     import signal
 
+    if p is None or p.poll() is not None:
+        return
     try:
         if os.name != "nt":
             os.killpg(p.pid, signal.SIGKILL)
@@ -283,6 +405,7 @@ def main():
         with open(out, "a", encoding="utf-8") as f:
             f.write(json.dumps(row) + "\n")
 
+    _orphan_guard()
     t0 = time.time()
     runner = "agentlink"
     if os.environ.get("AGENTLINK_TEST_RUNNER") != "agentlink":  # set: the small runner even with pytest there
@@ -302,37 +425,63 @@ def main():
         import traceback
 
         emit({"id": "(runner)", "outcome": "error", "trace": "".join(traceback.format_exception(type(e), e, e.__traceback__))})
-    sys.stdout.write(f"\naddon_test: done in {time.time() - t0:.1f} s\n")
+    emit({"end": True})
+    sys.stdout.write(f"\naddon_test: the tests finished in {time.time() - t0:.1f} s\n")
     sys.stdout.flush()
     sys.stderr.flush()
     os._exit(0)
 
 
-def _with_pytest(root, tests, pattern, select, emit):
+def _orphan_guard():
+    """FreeCAD gone (this process handed to another parent): say so in the
+    log and stop this process group, tests' own children with it."""
     import os
-    import xml.etree.ElementTree as ET
+    import threading
+    import time
 
+    if os.name == "nt":
+        return
+    parent = os.getppid()
+
+    def watch():
+        while True:
+            time.sleep(2)
+            if os.getppid() != parent:
+                import signal
+                import sys
+
+                sys.stdout.write("\naddon_test: killed (FreeCAD quit)\n")
+                sys.stdout.flush()
+                os.killpg(os.getpgrp(), signal.SIGKILL)
+
+    threading.Thread(target=watch, daemon=True).start()
+
+
+def _with_pytest(root, tests, pattern, select, emit):
+    """pytest, each result written as it comes."""
     import pytest
 
-    xml = os.path.join(os.path.dirname(os.environ["AGENTLINK_TEST_RESULT"]), "junit.xml")
-    args = [tests, "-q", "-p", "no:cacheprovider", "--rootdir", root, "--continue-on-collection-errors", "-o", f"python_files={pattern}", f"--junitxml={xml}"]
+    class Rows:
+        def pytest_collectreport(self, report):
+            if report.failed:
+                emit({"id": report.nodeid or "(collection)", "outcome": "error", "trace": str(report.longrepr)})
+
+        def pytest_runtest_logreport(self, report):
+            if hasattr(report, "wasxfail"):
+                if report.when == "call" or report.skipped:
+                    emit({"id": report.nodeid, "outcome": "skipped" if report.skipped else "passed", "reason": "xfail"})
+            elif report.failed:
+                emit({"id": report.nodeid, "outcome": "failed" if report.when == "call" else "error", "trace": str(report.longrepr)})
+            elif report.skipped:
+                lr = report.longrepr
+                emit({"id": report.nodeid, "outcome": "skipped", "reason": str(lr[2] if isinstance(lr, tuple) and len(lr) == 3 else lr)})
+            elif report.when == "call":
+                emit({"id": report.nodeid, "outcome": "passed"})
+
+    args = [tests, "-q", "-p", "no:cacheprovider", "--rootdir", root, "--continue-on-collection-errors", "-o", f"python_files={pattern}"]
     if select:
         args += ["-k", select]
-    pytest.main(args)
-    try:
-        cases = ET.parse(xml).getroot().iter("testcase")
-    except (OSError, ET.ParseError):
-        return
-    for tc in cases:
-        tid = f"{tc.get('classname', '')}::{tc.get('name', '')}"
-        kids = {k.tag: k for k in tc}
-        if "failure" in kids or "error" in kids:
-            k = kids.get("failure", kids.get("error"))
-            emit({"id": tid, "outcome": "failed" if k.tag == "failure" else "error", "trace": (k.text or k.get("message") or "")})
-        elif "skipped" in kids:
-            emit({"id": tid, "outcome": "skipped", "reason": kids["skipped"].get("message") or ""})
-        else:
-            emit({"id": tid, "outcome": "passed"})
+    pytest.main(args, plugins=[Rows()])
 
 
 class Mini:

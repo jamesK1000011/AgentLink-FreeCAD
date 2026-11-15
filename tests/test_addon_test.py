@@ -10,6 +10,7 @@ import shutil
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
@@ -177,17 +178,26 @@ class Runner(unittest.TestCase):
         self.root = make_addon(self.d)
         self.log = os.path.join(self.d, "logs", "Mine.log")
 
-    def run_(self, small=True, **k):
+    def start(self, small=True, **k):
         # python3 stands in for freecadcmd; small: the runner used when
         # FreeCAD's Python has no pytest, whether this one has it or not.
         old = os.environ.get("AGENTLINK_TEST_RUNNER")
         os.environ["AGENTLINK_TEST_RUNNER"] = "agentlink" if small else "auto"
+        self.n = getattr(self, "n", 0) + 1
+        log = os.path.join(self.d, "logs", f"Mine-{self.n}.log")
         try:
-            return testrun.run(sys.executable, "Mine", self.root, HERE, [self.root], None, self.log, **k)
+            return testrun.start(sys.executable, "Mine", self.root, HERE, [self.root], None, log, **k)
         finally:
             os.environ.pop("AGENTLINK_TEST_RUNNER")
             if old is not None:
                 os.environ["AGENTLINK_TEST_RUNNER"] = old
+
+    def run_(self, small=True, **k):
+        return testrun.wait(self.start(small, **k), 120)
+
+    def last_line(self, log):
+        with open(log) as f:
+            return f.read().rstrip().splitlines()[-1]
 
     def test_with_pytest_when_there(self):
         if not _has_pytest():
@@ -227,12 +237,75 @@ class Runner(unittest.TestCase):
         self.assertEqual(out["passed"] + out["failed"], 0)
         self.assertIn("note", out)
 
-    def test_timeout(self):
+    def slow_addon(self, sleep=30):
         shutil.rmtree(self.root)
-        self.root = make_addon(self.d, {"test_slow.py": "import time\n\ndef test_ok():\n    pass\n\ndef test_slow():\n    time.sleep(30)\n"})
-        out = self.run_(timeout=3)
+        self.root = make_addon(self.d, {"test_slow.py": f"import time\n\ndef test_ok():\n    pass\n\ndef test_slow():\n    time.sleep({sleep})\n"})
+
+    def test_start_poll_finish(self):
+        self.slow_addon(sleep=3)
+        j = self.start()
+        out = testrun.wait(j, 0.5)
+        self.assertEqual(out["state"], "running")
+        self.assertEqual(out["job"], j.job)
+        deadline = time.time() + 10
+        while out["state"] == "running" and out["passed"] < 1 and time.time() < deadline:
+            out = testrun.wait(j, 0.2)
+        self.assertEqual((out["state"], out["passed"]), ("running", 1))  # counts so far
+        self.assertIs(self.start(), j)  # one run at a time per add-on
+        out = testrun.wait(testrun.find(j.job), 30)
+        self.assertEqual((out["state"], out["passed"], out["failed"]), ("done", 2, 0))
+        self.assertTrue(self.last_line(j.log).startswith("addon_test: done — 2 passed"))
+
+    def test_timeout(self):
+        self.slow_addon()
+        j = self.start(timeout=3)
+        out = testrun.wait(j, 20)
+        self.assertEqual(out["state"], "timed out after 3 s")
         self.assertIn("timedOut", out)
-        self.assertLess(out["seconds"], 20)
+        self.assertEqual(out["passed"], 1)
+        self.assertLess(out["seconds"], 15)
+        self.assertTrue(self.last_line(j.log).startswith("addon_test: timed out after 3 s"))
+        self.assertIsNotNone(j.p.poll())  # the process is gone
+
+    def test_killed_on_quit(self):
+        self.slow_addon()
+        j = self.start()
+        testrun.wait(j, 1)
+        testrun.stop_all()
+        self.assertTrue(j.ended.is_set())
+        self.assertIsNotNone(j.p.poll())
+        self.assertTrue(self.last_line(j.log).startswith("addon_test: killed (FreeCAD quit)"))
+
+    @unittest.skipIf(os.name == "nt", "process groups")
+    def test_no_orphan_when_freecad_is_gone(self):
+        # FreeCAD ending without its exit handlers (a crash, os._exit): the
+        # run sees its parent gone, says so and stops its process group.
+        import subprocess
+
+        self.slow_addon(sleep=60)
+        log = os.path.join(self.d, "orphan.log")
+        code = (f"import os, sys, time; sys.path.insert(0, {HERE!r}); from agentlink import testrun; "
+                f"j = testrun.start(sys.executable, 'Mine', {self.root!r}, {HERE!r}, [], None, {log!r}, timeout=100); "
+                "print(j.p.pid, flush=True); time.sleep(1); os._exit(0)")
+        pid = int(subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True, env={**os.environ, "AGENTLINK_TEST_RUNNER": "agentlink"}).stdout)
+        deadline = time.time() + 10
+        while time.time() < deadline and not self.last_line(log).startswith("addon_test: killed"):
+            time.sleep(0.2)
+        self.assertEqual(self.last_line(log), "addon_test: killed (FreeCAD quit)")
+        deadline = time.time() + 5
+        while time.time() < deadline and _alive(pid):
+            time.sleep(0.2)
+        self.assertFalse(_alive(pid))
+
+    def test_job_list_and_unknown_job(self):
+        j = self.start(pattern="test_case*.py")
+        testrun.wait(j, 30)
+        rows = testrun.listing()["jobs"]
+        self.assertEqual(rows[0]["job"], j.job)
+        self.assertEqual((rows[0]["state"], rows[0]["passed"], rows[0]["failed"]), ("done", 2, 1))
+        with self.assertRaises(ToolError) as e:
+            testrun.find("nothing-like-it")
+        self.assertEqual(e.exception.code, "not_found")
 
     def test_no_tests_folder(self):
         shutil.rmtree(os.path.join(self.root, "tests"))
@@ -250,6 +323,19 @@ class Runner(unittest.TestCase):
         self.assertTrue(env["AGENTLINK_HOME"].startswith(tmp))
         self.assertTrue(env["FREECAD_USER_HOME"].startswith(tmp))
         self.assertNotIn("AGENTLINK_SUPERVISED", env)
+
+
+def _alive(pid):
+    """Running (a zombie waiting to be reaped is not)."""
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[0] != "Z"
+    except OSError:
+        return True
 
 
 def _has_pytest():
@@ -284,8 +370,8 @@ class Group(unittest.TestCase):
 
     def test_heavy_and_deadline(self):
         self.assertTrue(keep.is_heavy("addon_test"))
-        self.assertEqual(keep.call_deadline("addon_test", {}), 660.0)
-        self.assertEqual(keep.call_deadline("addon_test", {"timeout": 1800}), 1860.0)
+        self.assertIsNone(keep.call_deadline("addon_test", {}))  # answers within half a minute
+        self.assertEqual(keep.call_deadline("addon_test", {"timeout": 900}), 960.0)
         self.assertIsNone(keep.call_deadline("view_render", {}))
 
 
