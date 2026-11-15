@@ -71,5 +71,55 @@ class Quiet(unittest.TestCase):
         self.assertEqual(len(echo.log()), before + 1)
 
 
+class Writes:
+    """A stand-in saved document: every property set is recorded, and set
+    marks it touched, as FreeCAD's does even for the same value."""
+
+    def __init__(self):
+        object.__setattr__(self, "log", [])
+        object.__setattr__(self, "touched", False)
+        object.__setattr__(self, "UndoMode", 1)
+        object.__setattr__(self, "Meta", {})
+        object.__setattr__(self, "objects", {})
+
+    def __setattr__(self, k, v):
+        self.log.append(k)
+        object.__setattr__(self, "touched", True)
+        object.__setattr__(self, k, v)
+
+    def isTouched(self):  # noqa: N802
+        return self.touched
+
+
+class Untouched(unittest.TestCase):
+    """Opening a panel and refreshing it leave a saved document untouched:
+    the session sets undo on only when it is off (the "*" after opening
+    Workshop Make's panel on the Mac), and a record written with the value
+    it has changes nothing."""
+
+    def test_undo_set_only_when_off(self):
+        from agentlink.store import undo_on
+
+        d = Writes()
+        undo_on(d)
+        self.assertEqual(d.log, [])
+        self.assertFalse(d.isTouched())
+        object.__setattr__(d, "UndoMode", 0)
+        undo_on(d)
+        self.assertEqual(d.log, ["UndoMode"])
+
+    def test_same_record_again_writes_nothing(self):
+        from agentlink import store
+
+        d = Writes()  # no objects: the records go in Meta
+        store.write(d, "notes", {"next": 1, "notes": []})
+        self.assertEqual(d.log, ["Meta"])
+        store.write(d, "notes", {"next": 1, "notes": []})
+        self.assertEqual(d.log, ["Meta"])
+        self.assertEqual(store.read(d, "notes", None), {"next": 1, "notes": []})
+        self.assertEqual(store.read(d, "steps", "none"), "none")  # a read makes nothing
+        self.assertEqual(d.log, ["Meta"])
+
+
 if __name__ == "__main__":
     unittest.main()

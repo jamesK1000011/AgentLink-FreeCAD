@@ -54,12 +54,15 @@ def _launcher():
         return {"error": str(e)}
 
 
+from .store import undo_on  # noqa: E402
+
+
 class Session:
     def __init__(self, doc=None, out_dir=None):
         """doc: the document to work in — the GUI's open one — or None for a
         new one of its own (headless)."""
         self.doc = doc or FreeCAD.newDocument("AgentLink")
-        self.doc.UndoMode = 1
+        undo_on(self.doc)
         # Each family's own state for the session, under its group's name.
         self.family_state = {}
         self.out_dir = out_dir or os.getcwd()
@@ -153,7 +156,7 @@ class Session:
         """Work in another document from now on: its own undo, steps and
         families' state."""
         self.doc = doc
-        self.doc.UndoMode = 1
+        undo_on(self.doc)
         # Each family's own state for the session, under its group's name.
         self.family_state = {}
         self.steps = []
