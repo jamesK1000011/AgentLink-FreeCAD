@@ -33,5 +33,39 @@ class Later(unittest.TestCase):
         self.assertEqual(h.font, "old")
 
 
+class GoneLabel:
+    def isVisible(self):
+        raise RuntimeError("Internal C++ object (PySide6.QtWidgets.QLabel) already deleted.")
+
+
+class Label:
+    def __init__(self, text):
+        self.t, self.shown = text, True
+
+    def isVisible(self):
+        return self.shown
+
+    def text(self):
+        return self.t
+
+    def hide(self):
+        self.shown = False
+
+
+class CaptionLater(unittest.TestCase):
+    def test_deleted_label_is_skipped(self):
+        echo._hide_later(GoneLabel(), "done")
+
+    def test_label_hidden(self):
+        lbl = Label("✦ Agent: done")
+        echo._hide_later(lbl, "done")
+        self.assertFalse(lbl.shown)
+
+    def test_newer_words_stay(self):
+        lbl = Label("✦ Agent: next")
+        echo._hide_later(lbl, "done")
+        self.assertTrue(lbl.shown)
+
+
 if __name__ == "__main__":
     unittest.main()
