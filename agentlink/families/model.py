@@ -28,10 +28,7 @@ WEDGE = {"xmin": 0, "ymin": 0, "zmin": 0, "x2min": 2, "z2min": 2, "xmax": 10, "y
 
 
 def positive(a, key, default):
-    v = picks.num(a.get(key, default), key)
-    if v <= 0:
-        raise ToolError("invalid_input", f"{key}: above 0, mm.")
-    return v
+    return picks.number(a, key, default, gt=0, msg=f"{key}: above 0, mm.")
 
 
 def changed(before, after):
@@ -66,9 +63,7 @@ def profile(session, spec, body=None, what="profile", closed_default=True):
         return Part.makePolygon(pts), None
     if isinstance(spec, dict) and "circle" in spec:
         c = spec["circle"] or {}
-        rad = picks.num(c.get("radius"), f"{what}.circle.radius")
-        if rad <= 0:
-            raise ToolError("invalid_input", f"{what}.circle.radius: above 0.")
+        rad = picks.number(c, "radius", what=f"{what}.circle.radius", gt=0, msg=f"{what}.circle.radius: above 0.")
         return Part.Wire([Part.makeCircle(rad, picks.vec3(c.get("center"), f"{what}.circle.center", (0, 0, 0)), picks.direction(c.get("normal"), f"{what}.circle.normal", (0, 0, 1)))]), None
     if not isinstance(spec, str):
         raise ToolError("invalid_input", f"{what}: a sketch or wire's name, a face or edge (\"Box.Face6\"), {{ points: [[x,y,z] …], closed }} or {{ circle: {{ center, radius, normal }} }}.")

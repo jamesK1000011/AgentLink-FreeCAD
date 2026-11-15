@@ -164,9 +164,7 @@ def tools(session):
 
     def set_tool(tc, t):
         if t.get("diameter") is not None:
-            d = picks.num(t["diameter"], "tool.diameter")
-            if d <= 0:
-                raise ToolError("invalid_input", "tool.diameter: the end mill's, mm, over 0.")
+            d = picks.number(t, "diameter", what="tool.diameter", gt=0, msg="tool.diameter: the end mill's, mm, over 0.")
             tc.Tool.Diameter = d
         if t.get("feed") is not None:
             tc.HorizFeed = f"{picks.num(t['feed'], 'tool.feed')} mm/min"

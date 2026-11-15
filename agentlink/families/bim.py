@@ -40,10 +40,7 @@ def vec(p, what):
 
 
 def pos(a, k, default):
-    x = picks.num(a.get(k, default), k)
-    if x <= 0:
-        raise bad(f"{k}: above 0 mm.")
-    return x
+    return picks.number(a, k, default, gt=0, msg=f"{k}: above 0 mm.")
 
 
 def frame(x, y):

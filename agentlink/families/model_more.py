@@ -76,9 +76,7 @@ def tools(session):
             o.X1, o.Y1, o.Z1 = p.x, p.y, p.z
             o.X2, o.Y2, o.Z2 = q.x, q.y, q.z
         elif kind in ("circle", "arc"):
-            r = picks.num(a.get("radius"), "radius")
-            if r <= 0:
-                raise bad("radius: above 0.")
+            r = picks.number(a, "radius", gt=0, msg="radius: above 0.")
             o = new_obj("Part::Circle", name)
             o.Radius = r
             if kind == "arc":
