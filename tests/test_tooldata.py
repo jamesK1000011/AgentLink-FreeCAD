@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+os.environ["AGENTLINK_HOME"] = tempfile.mkdtemp()  # declared heavy tools are written there
 
 from agentlink import datafiles, hooks, keep, paths, tooldata  # noqa: E402
 from agentlink.protocol import ToolError  # noqa: E402
@@ -44,9 +45,16 @@ class ToolData(unittest.TestCase):
             made[1].fn({})
         self.assertEqual(e.exception.code, "invalid_state")
         self.assertIn("t_no", keep.HEAVY)
+        self.assertTrue(keep.is_heavy("t_no"))
         self.assertIn("t_no", paths.WRITERS)
         keep.HEAVY.discard("t_no")
         paths.WRITERS.discard("t_no")
+
+    def test_the_supervisor_learns_heavy_tools_from_the_file(self):
+        keep.declare_heavy({"addon_solve"})
+        keep.HEAVY.discard("addon_solve")
+        self.assertTrue(keep.is_heavy("addon_solve"))
+        self.assertFalse(keep.is_heavy("addon_read"))
 
     def test_every_tool_needs_a_handler(self):
         d = folder({"t_ok": ENTRY, "t_no": ENTRY})

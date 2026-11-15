@@ -133,6 +133,6 @@ def declared(fams):
     from .. import keep, paths
 
     for f in fams:
-        keep.HEAVY.update(getattr(f, "HEAVY", ()) or ())
+        keep.declare_heavy(getattr(f, "HEAVY", ()) or ())
         paths.WRITERS.update(getattr(f, "WRITERS", ()) or ())
         paths.GEOMETRIC.update(getattr(f, "GEOMETRIC", ()) or ())

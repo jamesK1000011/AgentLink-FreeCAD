@@ -112,9 +112,8 @@ def build(folder, group, handlers, who="this add-on"):
     missing, extra = set(mine) - set(handlers), set(handlers) - set(mine)
     if missing or extra:
         raise FormatError(f"{who}'s {group} tools: no handler for {sorted(missing)}, no definition for {sorted(extra)}")
+    keep.declare_heavy(k for k, v in mine.items() if v.get("heavy"))
     for k, v in mine.items():
-        if v.get("heavy"):
-            keep.HEAVY.add(k)
         if v.get("writes"):
             paths.WRITERS.add(k)
         if v.get("pathIsCurve"):

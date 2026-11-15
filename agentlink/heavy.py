@@ -76,7 +76,7 @@ class Gate:
         return gui or bool(os.environ.get("AGENTLINK_SUPERVISED")) or bool(os.environ.get("AGENTLINK_GATE"))
 
     def before(self, tool, args):
-        if tool.name not in keep.HEAVY:
+        if not keep.is_heavy(tool.name):
             return
         if not self.live():
             self.start = (time.time(), size_of(self.s), _maxrss_mb())
@@ -106,7 +106,7 @@ class Gate:
         self.start = (now, size, _maxrss_mb())
 
     def after(self, tool, args, ok):
-        if tool.name not in keep.HEAVY or self.start is None:
+        if not keep.is_heavy(tool.name) or self.start is None:
             return
         t0, size, (a0, b0) = self.start
         self.start = None

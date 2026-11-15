@@ -552,11 +552,43 @@ def macro_calls(text):
 # slicing, renders and big booleans. They go through the queue, are timed
 # for estimates, and get their estimate times three as a deadline.
 HEAVY = {
-    "fea_native", "fea_buckle", "fea_shell", "fea_frame", "fem_mesh", "fea_refine", "fea_solve", "fea_heat", "strength_check",
-    "asm_motion", "asm_sweep", "slice", "slice_with", "view_render", "dfm_check", "part_review", "cam_sim",
+    "fea_native", "fea_buckle", "fea_shell", "fem_mesh", "fea_refine", "fea_solve", "fea_heat", "strength_check",
+    "asm_motion", "asm_sweep", "view_render", "cam_sim",
     "meshobj_boolean", "meshobj_offset", "meshobj_decimate", "points_mesh", "part_extract",
-    "deviation_map", "deviation_align", "scan_check", "section_fit", "manual_render", "steps_render",
+    "steps_render",
 }
+# Heavy tools of add-ons (their tools.json "heavy", or a family's HEAVY) are
+# known only where the families load: the serving child. It writes them
+# here, so the supervising parent gives them a heavy job's deadline too.
+_ADDON_HEAVY = {"mtime": None, "names": frozenset()}
+
+
+def declare_heavy(names):
+    names = set(names or ())
+    if not names or names <= HEAVY:
+        return
+    HEAVY.update(names)
+    try:
+        have = set(_load(path("heavy-tools.json"), []))
+        if not names <= have:
+            _save(path("heavy-tools.json"), sorted(have | names))
+    except Exception:  # noqa: BLE001 — a read-only home: this process still knows them
+        pass
+
+
+def is_heavy(tool):
+    if tool in HEAVY:
+        return True
+    p = path("heavy-tools.json")
+    try:
+        m = os.path.getmtime(p)
+    except OSError:
+        return False
+    if m != _ADDON_HEAVY["mtime"]:
+        _ADDON_HEAVY.update(mtime=m, names=frozenset(_load(p, [])))
+    return tool in _ADDON_HEAVY["names"]
+
+
 SYSCTL_KEYS = ("machdep.cpu.brand_string", "hw.perflevel0.physicalcpu", "hw.physicalcpu", "hw.ncpu", "hw.memsize", "hw.model")
 
 
