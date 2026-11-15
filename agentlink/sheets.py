@@ -8,25 +8,15 @@
 import math
 import zlib
 
-PAPER = {"A4": (297.0, 210.0), "A3": (420.0, 297.0), "A4P": (210.0, 297.0)}
 # Line weights, mm, by kind (ISO 128: thick 0.5, thin 0.25).
 WEIGHT = {"visible": 0.5, "hidden": 0.25, "thin": 0.25, "dim": 0.18, "frame": 0.7, "cut": 0.7, "center": 0.18}
 DASH = {"hidden": (3.0, 1.5), "trail": (6.0, 1.5, 1.0, 1.5), "center": (8.0, 1.5, 1.5, 1.5)}
-SCALES = [10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01]
 
 
 def scale_text(s):
     if s >= 1:
         return f"{s:g}:1"
     return f"1:{1 / s:g}"
-
-
-def best_scale(fit):
-    """The largest standard scale not over `fit`."""
-    for s in SCALES:
-        if s <= fit + 1e-9:
-            return s
-    return None
 
 
 def hatch(polys, spacing=2.5, angle=45.0):
@@ -210,70 +200,6 @@ class Sheet:
 
 # ---- laying views out ---------------------------------------------------------------------
 
-# Where each view goes in the grid, front at (0, 0), rows counted down the
-# page. First angle (ISO): the top view under the front, the right view on
-# its left. Third angle (ASME): the top view over it, the right on its right.
-GRID = {
-    "first": {"front": (0, 0), "top": (0, 1), "bottom": (0, -1), "right": (-1, 0), "left": (1, 0), "back": (2, 0)},
-    "third": {"front": (0, 0), "top": (0, -1), "bottom": (0, 1), "right": (1, 0), "left": (-1, 0), "back": (2, 0)},
-}
-ISO_CELLS = [(1, -1), (-1, -1), (1, 1), (-1, 1), (2, -1), (2, 1)]
-
-
-def layout(sizes, paper, projection="first", scale=None, margin=10.0, title_h=18.0, gap=20.0):
-    """Views in their places on the paper: sizes {view: (w, h)} in model mm;
-    paper (W, H). Gives {scale, centres: {view: (x, y)}} in paper mm (y down)
-    at the largest standard scale that fits, or the scale given. A
-    ValueError says when it cannot fit."""
-    cells = {}
-    taken = set()
-    for v in sizes:
-        if v != "iso":
-            cells[v] = GRID[projection][v]
-            taken.add(cells[v])
-    if "iso" in sizes:
-        cells["iso"] = next(c for c in ISO_CELLS if c not in taken)
-    cols = sorted({c for (c, _) in cells.values()})
-    rows = sorted({r for (_, r) in cells.values()})
-    cw = {c: max(sizes[v][0] for v in cells if cells[v][0] == c) for c in cols}
-    rh = {r: max(sizes[v][1] for v in cells if cells[v][1] == r) for r in rows}
-    W, H = paper
-    aw = W - 2 * margin - 2 * gap
-    ah = H - 2 * margin - title_h - 2 * gap
-    sw, sh = sum(cw.values()), sum(rh.values())
-    if sw <= 0 or sh <= 0:
-        raise ValueError("The views are empty: nothing to draw.")
-    fit = min((aw - gap * (len(cols) - 1)) / sw, (ah - gap * (len(rows) - 1)) / sh)
-    if scale is None:
-        scale = best_scale(fit)
-        if scale is None:
-            raise ValueError("Too big for the paper even at 1:100 — A3, or fewer views.")
-    elif scale > fit + 1e-9:
-        raise ValueError(f"scale: at most {fit:.3g} fits this paper ({best_scale(fit) and scale_text(best_scale(fit))} the largest standard one).")
-    tw = sum(cw.values()) * scale + gap * (len(cols) - 1)
-    th = sum(rh.values()) * scale + gap * (len(rows) - 1)
-    x0 = margin + gap + (aw - tw) / 2
-    y0 = margin + gap + (ah - th) / 2
-    cx, x = {}, x0
-    for c in cols:
-        cx[c] = x + cw[c] * scale / 2
-        x += cw[c] * scale + gap
-    cy, y = {}, y0
-    for r in rows:
-        cy[r] = y + rh[r] * scale / 2
-        y += rh[r] * scale + gap
-    return {"scale": scale, "fit": fit, "centres": {v: (cx[c], cy[r]) for v, (c, r) in cells.items()}}
-
-
-def title_block(sheet, lines, margin=10.0, width=110.0, height=18.0):
-    """A box in the bottom-right corner with a line of text per row."""
-    x1, y1 = sheet.w - margin, sheet.h - margin
-    x0, y0 = x1 - width, y1 - height
-    sheet.line([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], "thin", closed=True)
-    step = height / max(1, len(lines))
-    for i, t in enumerate(lines):
-        sheet.text(x0 + 2, y0 + step * (i + 1) - step * 0.3, 3.0 if i == 0 else 2.5, t)
-
 
 def _esc(s):
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
@@ -285,20 +211,3 @@ def _pdfstr(s):
     return s.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
-def read_dxf_lines(text):
-    """The LINE entities of a DXF, [((x0, y0), (x1, y1), layer)]: for checking
-    what was written."""
-    rows = text.splitlines()
-    pairs = list(zip(rows[0::2], rows[1::2]))
-    out, cur = [], None
-    for code, val in pairs:
-        code = code.strip()
-        if code == "0":
-            if cur and cur.get("type") == "LINE":
-                out.append(((cur["10"], cur["20"]), (cur["11"], cur["21"]), cur.get("8")))
-            cur = {"type": val.strip()}
-        elif cur is not None and code in ("10", "20", "11", "21"):
-            cur[code] = float(val)
-        elif cur is not None and code == "8":
-            cur["8"] = val.strip()
-    return out

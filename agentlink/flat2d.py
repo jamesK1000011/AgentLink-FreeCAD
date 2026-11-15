@@ -36,7 +36,7 @@ def _g(code, val):
 def dxf(items):
     """DXF R12 text: one LAYER table entry per layer used, entities after."""
     layers = sorted({it.get("layer", "visible") for it in items})
-    out = [_g(0, "SECTION"), _g(2, "HEADER"), _g(9, "$INSUNITS"), _g(70, 4), _g(9, "$MEASUREMENT"), _g(70, 1), _g(0, "ENDSEC")]
+    out = [_g(0, "SECTION"), _g(2, "HEADER"), _g(9, "$ACADVER"), _g(1, "AC1009"), _g(9, "$INSUNITS"), _g(70, 4), _g(9, "$MEASUREMENT"), _g(70, 1), _g(0, "ENDSEC")]
     out += [_g(0, "SECTION"), _g(2, "TABLES"), _g(0, "TABLE"), _g(2, "LTYPE"), _g(70, 2)]
     out += [_g(0, "LTYPE"), _g(2, "CONTINUOUS"), _g(70, 0), _g(3, "Solid line"), _g(72, 65), _g(73, 0), _g(40, 0.0)]
     out += [_g(0, "LTYPE"), _g(2, "DASHED"), _g(70, 0), _g(3, "__ __ __"), _g(72, 65), _g(73, 2), _g(40, 4.5), _g(49, 3.0), _g(49, -1.5)]

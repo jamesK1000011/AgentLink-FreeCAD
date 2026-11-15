@@ -68,22 +68,6 @@ def limits(nominal, code):
     raise ValueError(f"{code}: the holes F, G, H, JS and the shafts f, g, h, js, k, n, p are tabled here.")
 
 
-def text(nominal, code=None, plus=None, minus=None, diameter=False):
-    """The callout as a drawing writes it: "⌀10 H7 (+0.015/0)", "40 ±0.1",
-    "25 +0.2/-0.1"."""
-    head = ("⌀" if diameter else "") + _num(nominal)
-    if code:
-        up, lo = limits(nominal, code)
-        return f"{head} {code} ({_dev(up)}/{_dev(lo)})"
-    if plus is not None or minus is not None:
-        p, m = float(plus or 0), float(minus if minus is not None else plus or 0)
-        if abs(p - abs(m)) < 1e-9 and m >= 0:
-            return f"{head} ±{_num(p)}"
-        lo = -abs(m) if minus is not None and m > 0 else m
-        return f"{head} {_dev(p)}/{_dev(lo)}"
-    return head
-
-
 def _num(v):
     s = f"{float(v):.3f}".rstrip("0").rstrip(".")
     return s or "0"
