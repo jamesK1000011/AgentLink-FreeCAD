@@ -84,6 +84,14 @@ SKIPPED = []
 
 
 def load():
+    # Add-ons installed beside Agent Link by app_extensions go on the path
+    # first, so their agentlink_families are found below.
+    try:
+        from .. import ext
+
+        ext._paths()
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write(f"Agent Link: extension folders not put on the path — {e}\n")
     out = []
     del EXTENSIONS[:]
     del SKIPPED[:]
