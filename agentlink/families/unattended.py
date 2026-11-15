@@ -59,6 +59,13 @@ def ours(mod=None):
 
 
 
+def _modified(d):
+    from .doc import modified_state
+
+    st = modified_state(d)
+    return {"modified": True} if st.get("modified") or st.get("touched") else {}
+
+
 def tools(s):
     def dialog_answer(a):
         from .. import gui_link
@@ -112,7 +119,7 @@ def tools(s):
         ref = a.get("document")
         if not ref:
             return {"document": s.doc.Name if s.doc else None, "label": s.doc.Label if s.doc else None,
-                    "open": [{"name": d.Name, "label": d.Label, "file": d.FileName or None} for d in FreeCAD.listDocuments().values()]}
+                    "open": [{"name": d.Name, "label": d.Label, "file": d.FileName or None, **_modified(d)} for d in FreeCAD.listDocuments().values()]}
         want = os.path.abspath(os.path.expanduser(ref)) if (os.sep in ref or ref.lower().endswith(".fcstd")) else None
         nd = next((d for d in FreeCAD.listDocuments().values() if ref in (d.Name, d.Label) or (want and d.FileName and os.path.abspath(d.FileName) == want)), None)
         if nd is None:
