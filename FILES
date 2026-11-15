@@ -11,15 +11,6 @@ agentlink/__init__.py
 agentlink/ccx_io.py
 agentlink/cells.py
 agentlink/charts.py
-agentlink/code/__init__.py
-agentlink/code/beamfem.py
-agentlink/code/engine.py
-agentlink/code/findings.py
-agentlink/code/framing.py
-agentlink/code/ids.py
-agentlink/code/packs.py
-agentlink/code/packs_shipped/example.demo.json
-agentlink/code/units.py
 agentlink/commands.py
 agentlink/data/filaments.json
 agentlink/data/filaments.schema.json
@@ -41,7 +32,6 @@ agentlink/families/bim_gaps.py
 agentlink/families/bim_more.py
 agentlink/families/cam.py
 agentlink/families/cam_more.py
-agentlink/families/code.py
 agentlink/families/doc.py
 agentlink/families/draft.py
 agentlink/families/draft_more.py
@@ -82,7 +72,6 @@ agentlink/gui_link.py
 agentlink/guides/assembly.md
 agentlink/guides/bim.md
 agentlink/guides/cam.md
-agentlink/guides/code.md
 agentlink/guides/doc.md
 agentlink/guides/draft.md
 agentlink/guides/feature.md
@@ -147,8 +136,6 @@ tests/test_cam_more.py
 tests/test_ccx.py
 tests/test_cells.py
 tests/test_charts.py
-tests/test_code_engine.py
-tests/test_code_redteam.py
 tests/test_core_guards.py
 tests/test_core_guards_fc.py
 tests/test_doc.py
