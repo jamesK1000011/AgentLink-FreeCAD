@@ -75,6 +75,7 @@ agentlink/flat2d.py
 agentlink/gdt.py
 agentlink/geometry.py
 agentlink/grab.py
+agentlink/gui_input.py
 agentlink/gui_link.py
 agentlink/guides/assembly.md
 agentlink/guides/bim.md
@@ -192,6 +193,7 @@ tests/test_files.py
 tests/test_fitting.py
 tests/test_flat2d.py
 tests/test_gaps_redteam.py
+tests/test_gui_input.py
 tests/test_gui_link_dialog.py
 tests/test_gui_saved.py
 tests/test_gui_shell.py
