@@ -12,6 +12,7 @@ import re
 from .. import cells as C
 from ..protocol import Tool, ToolError
 from . import pd_common as pc
+from . import picks
 
 GROUP = "sheet"
 INFO = "Spreadsheets: any cell read and written (values, expressions, aliases, units), formatting, rows and columns, CSV import and export, and design tables (configurations) that drive a part."
@@ -277,8 +278,7 @@ def tools(session):
         return [pc.body_reading(b) for b in pc.pd_bodies(doc())]
 
     def done(tool, out, ss=None):
-        s.snapshot(tool)
-        out["step"] = len(s.steps)
+        out = picks.finish(s, tool, out, recompute=False)
         if ss is not None:
             out.setdefault("sheet", ss.Label)
         return out

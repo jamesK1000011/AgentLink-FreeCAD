@@ -13,6 +13,7 @@ import Part
 
 from .. import geometry as geo
 from ..protocol import ToolError
+from . import picks
 
 V = FreeCAD.Vector
 PLANES = {"XY": "XY_Plane", "XZ": "XZ_Plane", "YZ": "YZ_Plane"}
@@ -301,9 +302,7 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
             raise ToolError("failed", f"{feat.Label} added no material — it lies inside the body already. Nothing was kept. {hint}".strip())
         if must_change == "cut" and delta >= -1e-6:
             raise ToolError("failed", f"{feat.Label} cut nothing — the profile does not meet the body that way. Nothing was kept. {hint}".strip())
-    session.snapshot(tool)
-    out["step"] = len(session.steps)
-    return out
+    return picks.finish(session, tool, out, recompute=False)
 
 
 def volume(body):

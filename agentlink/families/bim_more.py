@@ -10,6 +10,7 @@ import Part
 
 import Arch  # the family is left out without BIM
 
+from .. import geometry as geo
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import picks
@@ -57,12 +58,13 @@ def tools(session):
     doc = lambda: s.doc  # noqa: E731
 
     def finish(o, tool, extra=None):
-        doc().recompute()
+        return picks.finish(s, tool, lambda: reading(o), extra=extra)
+
+    def reading(o):
         sh = getattr(o, "Shape", None)
         out = {"object": o.Label, "ifc": ifc_type(o)}
         if isinstance(sh, Part.Shape) and not sh.isNull():
-            bb = sh.BoundBox
-            out["box"] = [round(bb.XLength, 1), round(bb.YLength, 1), round(bb.ZLength, 1)]
+            out["box"] = geo.box_json(sh)["size"]
             if sh.Solids:
                 out["volume_m3"] = round(sh.Volume / 1e9, 4)
                 out["solids"] = len(sh.Solids)
@@ -71,8 +73,7 @@ def tools(session):
         st = o.getStatusString() if hasattr(o, "getStatusString") else ""
         if st and st not in ("Valid", "Touched"):
             out["status"] = st
-        s.snapshot(tool)
-        return {**out, **(extra or {}), "step": len(s.steps)}
+        return out
 
     def path_obj(a, label):
         if a.get("path"):

@@ -15,6 +15,7 @@ import Sketcher
 from .. import geometry as geo
 from ..protocol import Tool, ToolError
 from . import pd_common as pc
+from . import picks
 
 GROUP = "sketch"
 INFO = "PartDesign bodies and sketches: geometry, constraints, the solver's reading (DoF, conflicts, closed wires) and edits."
@@ -499,9 +500,7 @@ def tools(session):
         label = s.unique(a.get("name") or "Body")
         b = doc().addObject("PartDesign::Body", "Body")
         b.Label = label
-        doc().recompute()
-        s.snapshot("pd_body_new")
-        return {"body": b.Label, "planes": ["XY", "XZ", "YZ"], "axes": ["x", "y", "z"], "next": "sketch_new { body, plane: \"XY\" }", "step": len(s.steps)}
+        return picks.finish(s, "pd_body_new", lambda: {"body": b.Label, "planes": ["XY", "XZ", "YZ"], "axes": ["x", "y", "z"], "next": "sketch_new { body, plane: \"XY\" }"})
 
     def sketch_new(a):
         b = pc.pd_body(doc(), a.get("body"))
@@ -538,8 +537,7 @@ def tools(session):
             doc().recompute()
         if not sk.isValid():
             raise ToolError("failed", f"The sketch would not attach to {what}: {sk.getStatusString()}.")
-        s.snapshot("sketch_new")
-        return {"sketch": sk.Label, "body": b.Label, "on": what, **({"offset": off} if off else {}), "frame": frame(sk.Placement), "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm).", "step": len(s.steps)}
+        return picks.finish(s, "sketch_new", lambda: {"sketch": sk.Label, "body": b.Label, "on": what, **({"offset": off} if off else {}), "frame": frame(sk.Placement), "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}, recompute=False)
 
     def sketch_add(a):
         sk = pc.sketch_of(doc(), a.get("sketch"))
@@ -576,8 +574,7 @@ def tools(session):
             out.append(r)
         doc().recompute()
         st = state_of(sk)
-        s.snapshot("sketch_add")
-        return {"sketch": sk.Label, "added": out, "state": st, "step": len(s.steps)}
+        return picks.finish(s, "sketch_add", lambda: {"sketch": sk.Label, "added": out, "state": st}, recompute=False)
 
     def _geo_of_edge(e):
         """An edge as sketch geometry: a segment, an arc or circle, else a
@@ -710,9 +707,7 @@ def tools(session):
                 sk.delConstraint(ci)
             sk.solve()
             raise
-        doc().recompute()
-        s.snapshot("sketch_constrain")
-        return {"sketch": sk.Label, "added": added, "state": st, "step": len(s.steps)}
+        return picks.finish(s, "sketch_constrain", lambda: {"sketch": sk.Label, "added": added, "state": st})
 
     def sketch_state(a):
         sk = pc.sketch_of(doc(), a.get("sketch"))

@@ -21,6 +21,7 @@ from .. import render
 from .. import store
 from .. import runners
 from ..protocol import Tool, ToolError
+from . import picks
 
 GROUP = "mesh"
 INFO = ("FreeCAD's Mesh workbench on document meshes: mesh a body, evaluate and repair, decimate, refine, smooth, offset, trim, transform, "
@@ -42,9 +43,8 @@ def meshes(doc):
 
 
 def reading(m):
-    bb = m.BoundBox
     out = {"points": m.CountPoints, "facets": m.CountFacets, "solid": bool(m.isSolid()), "components": int(m.countComponents()),
-           "area": round(m.Area, 3), "box": [round(bb.XLength, 3), round(bb.YLength, 3), round(bb.ZLength, 3)]}
+           "area": round(m.Area, 3), "box": geo.box_json(m, 3)["size"]}
     if out["solid"]:
         out["volume"] = round(m.Volume, 3)
     return out
@@ -416,9 +416,7 @@ def tools(session):
             res = MeshPart.meshFromShape(Shape=r, LinearDeflection=float(a.get("deflection", 0.05)), AngularDeflection=0.3, Relative=False)
             how = "through solids (the mesh boolean came out broken)"
         n = new_mesh(res, a.get("name") or f"{x.Label} {op} {y.Label}")
-        doc().recompute()
-        s.snapshot("meshobj_boolean")
-        return {"mesh": n.Label, "op": op, "how": how, **reading(res), "step": len(s.steps)}
+        return picks.finish(s, "meshobj_boolean", lambda: {"mesh": n.Label, "op": op, "how": how, **reading(res)})
 
     # ---- sections, pieces, segments, curvature ----
 
@@ -454,9 +452,7 @@ def tools(session):
         c = doc().addObject("Part::Feature", "Sections")
         c.Label = s.unique(a.get("name") or f"{o.Label} sections")
         c.Shape = Part.Compound(wires)
-        doc().recompute()
-        s.snapshot("meshobj_sections")
-        return {"sections": c.Label, "normal": geo.vec(n), "slices": rows, "use": "section_to_sketch or cut_export takes them; part_face makes one a face.", "step": len(s.steps)}
+        return picks.finish(s, "meshobj_sections", lambda: {"sections": c.Label, "normal": geo.vec(n), "slices": rows, "use": "section_to_sketch or cut_export takes them; part_face makes one a face."})
 
     def meshobj_split(a):
         o = mesh_of(a.get("mesh"))
@@ -470,9 +466,7 @@ def tools(session):
             made.append(new_mesh(p, f"{o.Label} {i}").Label)
         if hasattr(o, "Visibility"):
             o.Visibility = False
-        doc().recompute()
-        s.snapshot("meshobj_split")
-        return {"from": o.Label, "pieces": made, "step": len(s.steps)}
+        return picks.finish(s, "meshobj_split", lambda: {"from": o.Label, "pieces": made})
 
     def meshobj_segments(a):
         o = mesh_of(a.get("mesh"))
@@ -503,10 +497,8 @@ def tools(session):
             made = []
             for i, seg in enumerate(segs[: int(a.get("top", 12))], 1):
                 made.append(new_mesh(m.meshFromSegment(list(seg)), f"{o.Label} segment {i}").Label)
-            doc().recompute()
-            s.snapshot("meshobj_segments")
             out["kept"] = made
-            out["step"] = len(s.steps)
+            picks.finish(s, "meshobj_segments", out)
         out["use"] = "A flat segment's normal and centre place a sketch (sketch_new { face }) or a datum plane on a scan."
         return out
 
@@ -541,9 +533,7 @@ def tools(session):
         c = doc().addObject("Part::Feature", "Projection")
         c.Label = s.unique(a.get("name") or f"{src.Label} on {o.Label}")
         c.Shape = Part.Compound(wires)
-        doc().recompute()
-        s.snapshot("meshobj_project")
-        return {"projection": c.Label, "wires": len(wires), "length": round(sum(w.Length for w in wires), 3), "step": len(s.steps)}
+        return picks.finish(s, "meshobj_project", lambda: {"projection": c.Label, "wires": len(wires), "length": round(sum(w.Length for w in wires), 3)})
 
     def meshobj_export(a):
         o = mesh_of(a.get("mesh"))
@@ -746,9 +736,7 @@ def tools(session):
             raise bad(f"{kind}: {e}")
         m.translate(at.x, at.y, at.z)
         o = new_mesh(m, a.get("name") or f"Mesh {kind}")
-        doc().recompute()
-        s.snapshot("meshobj_primitive")
-        return {"mesh": o.Label, "kind": kind, **reading(m), "step": len(s.steps)}
+        return picks.finish(s, "meshobj_primitive", lambda: {"mesh": o.Label, "kind": kind, **reading(m)})
 
     def meshobj_merge(a):
         refs = a.get("meshes")
@@ -762,9 +750,7 @@ def tools(session):
         if a.get("remove"):
             for o in objs:
                 doc().removeObject(o.Name)
-        doc().recompute()
-        s.snapshot("meshobj_merge")
-        return {"mesh": n.Label, **reading(m), "step": len(s.steps)}
+        return picks.finish(s, "meshobj_merge", lambda: {"mesh": n.Label, **reading(m)})
 
     def meshobj_boundary(a):
         o = mesh_of(a.get("mesh"))

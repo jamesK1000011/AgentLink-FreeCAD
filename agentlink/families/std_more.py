@@ -49,9 +49,7 @@ def tools(s):
         return [picks.find(d(), r, what) for r in refs]
 
     def done(tool, out):
-        d().recompute()
-        s.snapshot(tool)
-        return out
+        return picks.finish(s, tool, out, doc=d(), step=False)
 
     # ---- links ---------------------------------------------------------------------------
 

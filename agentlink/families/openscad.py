@@ -155,8 +155,7 @@ def tools(session):
         objs, tops = made_since(before)
         if not objs:
             raise ToolError("failed", f"{os.path.basename(p)}: nothing came in.")
-        s.snapshot("scad_import")
-        return {"path": p, "objects": len(objs), "top": tops, "made": objs[:40], "step": len(s.steps)}
+        return picks.finish(s, "scad_import", lambda: {"path": p, "objects": len(objs), "top": tops, "made": objs[:40]}, recompute=False)
 
     def scad_code(a):
         code = a.get("code")
@@ -189,8 +188,7 @@ def tools(session):
             top = next(o for o in doc().Objects if o.Label == tops[0])
             top.Label = s.unique(a["name"], top)
             tops = [top.Label]
-        s.snapshot("scad_code")
-        return {"top": tops, "objects": len(objs), "made": objs[:40], "step": len(s.steps)}
+        return picks.finish(s, "scad_code", lambda: {"top": tops, "objects": len(objs), "made": objs[:40]}, recompute=False)
 
     def scad_export(a):
         names = a.get("objects") or []

@@ -42,8 +42,7 @@ def changed(before, after):
 
 def report(session, o, tool, extra=None):
     s = geo.soundness(o.Shape)
-    session.snapshot(tool)
-    out = {"body": o.Label, **geo.stats(o.Shape), "sound": s["ok"], **(extra or {}), "step": len(session.steps)}
+    out = picks.finish(session, tool, lambda: {"body": o.Label, **geo.stats(o.Shape), "sound": s["ok"]}, recompute=False, extra=extra)
     if not s["ok"]:
         out["problems"] = s["problems"]
     return out

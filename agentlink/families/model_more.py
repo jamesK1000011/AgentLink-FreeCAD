@@ -55,13 +55,7 @@ def tools(session):
     doc = lambda: s.doc  # noqa: E731
 
     def added(o, tool, extra=None):
-        doc().recompute()
-        if not o.isValid():
-            msg = o.getStatusString()
-            doc().removeObject(o.Name)
-            raise ToolError("failed", f"FreeCAD refused it: {msg} — nothing was kept.")
-        s.snapshot(tool)
-        return {"object": o.Label, "type": o.TypeId.split("::")[-1], **stats_of(o.Shape), **(extra or {}), "step": len(s.steps)}
+        return picks.finish(s, tool, lambda: {"object": o.Label, "type": o.TypeId.split("::")[-1], **stats_of(o.Shape)}, objs=[o], refuse="FreeCAD refused it: {msg} — nothing was kept.", extra=extra)
 
     def new_obj(kind, label):
         lab = s.unique(label)
@@ -174,8 +168,7 @@ def tools(session):
         for o in objs + (tl if mode == "slice" else []):
             if hasattr(o, "Visibility"):
                 o.Visibility = False
-        s.snapshot("part_split")
-        out["step"] = len(s.steps)
+        picks.finish(s, "part_split", out, recompute=False)
         if not a.get("explode"):
             out["next"] = "explode: true (or part_compound { explode }) makes each piece a body of its own."
         return out
@@ -198,8 +191,7 @@ def tools(session):
             if len(o.Shape.Solids) < 2:
                 raise bad(f"{o.Label} is one solid: nothing to take apart.")
             made = explode_into(o, a.get("name") or o.Label)
-            s.snapshot("part_compound")
-            return {"from": o.Label, "bodies": made, "step": len(s.steps)}
+            return picks.finish(s, "part_compound", lambda: {"from": o.Label, "bodies": made}, recompute=False)
         objs = [picks.shaped(doc(), r) for r in (a.get("bodies") or [])]
         if len(objs) < 2:
             raise bad("bodies: two or more to group into one compound, or explode: a body of several solids.")
@@ -242,8 +234,7 @@ def tools(session):
         ref = fixed.removeSplitter()
         o2 = picks.bake(s, o, ref, a.get("name"))
         snd = geo.soundness(o2.Shape)
-        s.snapshot("part_refine")
-        return {"body": o2.Label, "faces": {"before": before, "after": len(o2.Shape.Faces)}, "done": notes + ["coplanar faces merged"], "sound": snd["ok"], **({"problems": snd["problems"]} if not snd["ok"] else {}), "step": len(s.steps)}
+        return picks.finish(s, "part_refine", lambda: {"body": o2.Label, "faces": {"before": before, "after": len(o2.Shape.Faces)}, "done": notes + ["coplanar faces merged"], "sound": snd["ok"], **({"problems": snd["problems"]} if not snd["ok"] else {})}, recompute=False)
 
     def part_attach(a):
         o = picks.find(doc(), a.get("body"))
@@ -263,8 +254,7 @@ def tools(session):
         doc().recompute()
         if not o.isValid():
             raise ToolError("failed", f"{o.Label} would not attach to {ref}: {o.getStatusString()} — nothing was kept (mode: FlatFace for a flat face; NormalToEdge, Concentric for edges).")
-        s.snapshot("part_attach")
-        return {"body": o.Label, "attachedTo": ref, "mode": o.MapMode, "placement": picks.placement_json(o.Placement), "note": f"It follows {tgt.Label} from now on.", "step": len(s.steps)}
+        return picks.finish(s, "part_attach", lambda: {"body": o.Label, "attachedTo": ref, "mode": o.MapMode, "placement": picks.placement_json(o.Placement), "note": f"It follows {tgt.Label} from now on."}, recompute=False)
 
     # ---- faces, ruled surfaces, projection, sections ----
 
