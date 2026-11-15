@@ -176,8 +176,21 @@ HEAVY = {
     "fea_native", "fea_buckle", "fea_shell", "fem_mesh", "fea_refine", "fea_solve", "fea_heat", "strength_check",
     "asm_motion", "asm_sweep", "view_render", "cam_sim",
     "meshobj_boolean", "meshobj_offset", "meshobj_decimate", "points_mesh", "part_extract",
-    "steps_render",
+    "steps_render", "addon_test",
 }
+# Heavy tools that take their own "timeout" (seconds), and its default: the
+# watchdog gives such a call that long and a minute (call_deadline), so a
+# long test run is not taken for a hang.
+TIMEOUT_DEFAULTS = {"addon_test": 600.0}
+
+
+def call_deadline(tool, args):
+    """Seconds the watchdog gives a call that says how long it may run, or
+    None when it does not."""
+    t = (args or {}).get("timeout", TIMEOUT_DEFAULTS.get(tool)) if isinstance(args, dict) else TIMEOUT_DEFAULTS.get(tool)
+    if isinstance(t, bool) or not isinstance(t, (int, float)) or t <= 0:
+        return None
+    return float(t) + 60.0
 # Heavy tools of add-ons (their tools.json "heavy", or a family's HEAVY) are
 # known only where the families load: the serving child. It writes them
 # here, so the supervising parent gives them a heavy job's deadline too.
