@@ -70,6 +70,39 @@
      "pathIsCurve": {
       "type": "boolean",
       "description": "Its path is a curve in the model, not a file."
+     },
+     "runner": {
+      "type": "string",
+      "enum": [
+       "make",
+       "apply",
+       "command",
+       "read"
+      ],
+      "description": "Agent Link's own tools only: the runner (agentlink/runners.py) that runs this wrapper. Add-ons bind handlers instead."
+     },
+     "target": {
+      "type": "object",
+      "description": "Agent Link only: what the runner runs (maker or type, method, command, or what to read)."
+     },
+     "args": {
+      "type": "object",
+      "description": "Agent Link only: each argument's default, conversion, family helper, property or step after the object is made."
+     },
+     "rules": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "check",
+        "message"
+       ]
+      },
+      "description": "Agent Link only: the checks the handler made, each with its refusal message word for word."
+     },
+     "answer": {
+      "type": "object",
+      "description": "Agent Link only: the answer's fields and the family helper that finishes it."
      }
     }
    }

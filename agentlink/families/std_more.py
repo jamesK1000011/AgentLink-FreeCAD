@@ -14,6 +14,7 @@ import random
 import FreeCAD
 import Part
 
+from .. import runners
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import pd_common as pdc
@@ -325,18 +326,6 @@ def tools(s):
         return done("part_import_curves", {"curves": o.Label, "edges": len(edges), "note": "Edges only, as Part's curve-network import: surface_filling or surface_sections builds faces from them."})
 
     # ---- PartDesign ------------------------------------------------------------------------
-
-    def pd_clone(a):
-        src = picks.shaped(d(), a.get("from"), "from")
-        b = d().addObject("PartDesign::Body", "Body")
-        b.Label = s.unique(a.get("name") or f"{src.Label} clone", b)
-        b.BaseFeature = src
-        if picks.placed(a):
-            b.Placement = picks.placement(a)
-        d().recompute()
-        s.snapshot("pd_clone")
-        return {"body": b.Label, "from": src.Label, "volume": round(b.Shape.Volume, 3) if b.Shape.Solids else None,
-                "note": "A body built on the other's shape: it follows the original; add features on top."}
 
     def pd_move_feature(a):
         f = picks.find(d(), a.get("feature"), "feature")
@@ -746,11 +735,15 @@ def tools(s):
             out["note"] = "Moved only: three or more pairs (not in a line) set its turn too."
         return done("object_align", out)
 
+    # The wrappers kept as data (agentlink/data/tools.json) run on these.
+    helpers = {"doc": d, "done": done, "unique": s.unique, "placed": picks.placed, "placement": picks.placement,
+               "shaped": lambda ref, what: picks.shaped(d(), ref, what)}
+
     st = {"type": "string"}
     arr = {"type": "array", "items": {"type": "string"}}
     num = {"type": "number"}
     v3 = {"type": "array", "items": num}
-    return [
+    return runners.tools(GROUP, s, helpers) + [
         Tool("doc_graph", "What is built from what in the document (Std Dependency graph): roots and each object's inputs; path writes a GraphViz .dot (svg: true draws it when GraphViz is here). Changes nothing.",
              obj({"path": st, "svg": {"type": "boolean"}}), doc_graph),
         Tool("object_freeze", "Freeze objects (frozen: false thaws) so recomputes leave their shapes as they are (Std Toggle freeze); skipRecompute: true | false for the document (Std Toggle skip recompute).",
@@ -782,7 +775,6 @@ def tools(s):
         Tool("part_join", "Join walled objects (Part join features): kind connect { objects } fuses walls keeping the insides; embed { base, tool } sets tool into base; cutout { base, tool } cuts base to fit tool's wall. Pipes and tanks.",
              obj({"kind": {"type": "string", "enum": ["connect", "embed", "cutout"]}, "objects": arr, "base": st, "tool": st, "name": st}, ["kind"]), part_join, changes=True),
         Tool("part_import_curves", "Import a curve network (the edges of a STEP, IGES or BREP) as one object, for surfacing.", obj({"path": st, "name": st}, ["path"]), part_import_curves, changes=True),
-        Tool("pd_clone", "A new PartDesign body on another object's shape (PartDesign Clone): it follows the original; features go on top.", obj({"from": st, "at": v3, "axis": v3, "angle": num, "name": st}, ["from"]), pd_clone, changes=True),
         Tool("pd_move_feature", "Move a PartDesign feature (with its sketch) to another body.", obj({"feature": st, "to": st}, ["feature", "to"]), pd_move_feature, changes=True),
         Tool("pd_reorder", "Move a feature in its body's tree: after or before another feature.", obj({"feature": st, "after": st, "before": st}, ["feature"]), pd_reorder, changes=True),
         Tool("pd_tip", "Read or set a body's tip (the feature its shape stops at): feature.", obj({"body": st, "feature": st}), pd_tip, changes=True),

@@ -87,6 +87,18 @@ def tools(session):
   API defines its own such exception and never imports Agent Link.
 - README tool tables are generated from the same file.
 
+### Agent Link's own fields (add-ons don't need them)
+
+Agent Link keeps its own one-command wrappers in `agentlink/data/tools.json`
+with five more fields, run by `agentlink/runners.py` instead of a handler:
+`runner` (`make`, `apply`, `command` or `read`), `target` (the maker or
+TypeId, method, command, or what to read), `args` (each argument's default,
+conversion, family helper, property, or step once the object is made),
+`rules` (the checks, each with its refusal message word for word) and
+`answer` (its fields and the family helper that finishes it). They are
+accepted in an add-on's file only as part of a valid runner entry, and an
+add-on's tools are still bound to its handlers; leave them out.
+
 ## Hooks (`agentlink.hooks`)
 
 All optional. Every hook catches and logs your exceptions.

@@ -27,6 +27,10 @@ import re
 ACCEPTS_MAJOR = 1
 REQUIRED = {"group": str, "description": str, "inputSchema": dict, "changes": bool, "source": str, "date": str}
 OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool}
+# Agent Link's own tools only (agentlink/data/tools.json): a tool that wraps
+# one FreeCAD command, run by one of agentlink/runners.py's runners. An
+# add-on binds handlers instead and never needs these.
+RUNNER = {"runner": str, "target": dict, "args": dict, "rules": list, "answer": dict}
 CODES = {"invalid_input", "not_found", "invalid_state", "unavailable", "failed"}
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -69,7 +73,16 @@ def check(doc):
         for k, t in OPTIONAL.items():
             if k in e and not isinstance(e[k], t):
                 out.append(f"{name}.{k}: {t.__name__}")
-        extra = set(e) - set(REQUIRED) - set(OPTIONAL)
+        for k, t in RUNNER.items():
+            if k in e and not isinstance(e[k], t):
+                out.append(f"{name}.{k}: {t.__name__}")
+        if "runner" in e:
+            from . import runners
+
+            out += runners.check_entry(name, e)
+        elif set(e) & set(RUNNER):
+            out.append(f"{name}: {sorted(set(e) & set(RUNNER))} without a runner")
+        extra = set(e) - set(REQUIRED) - set(OPTIONAL) - set(RUNNER)
         if extra:
             out.append(f"{name}: unknown fields {sorted(extra)}")
         s = e.get("inputSchema")

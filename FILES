@@ -16,6 +16,7 @@ agentlink/data/filaments.json
 agentlink/data/filaments.schema.json
 agentlink/data/stock.json
 agentlink/data/stock.schema.json
+agentlink/data/tools.json
 agentlink/data/tools.schema.json
 agentlink/datafiles.py
 agentlink/echo.py
@@ -106,6 +107,7 @@ agentlink/protocol.py
 agentlink/refusal.py
 agentlink/render.py
 agentlink/restart_mark.py
+agentlink/runners.py
 agentlink/server.py
 agentlink/sheets.py
 agentlink/shots.py
@@ -121,6 +123,7 @@ agentlink_state.py
 docs/hooks.md
 docs/records.md
 package.xml
+scripts/tool_tables.py
 tests/_fc.py
 tests/_pd_base.py
 tests/test_app_install.py
@@ -172,6 +175,7 @@ tests/test_param.py
 tests/test_paths.py
 tests/test_pref_import.py
 tests/test_protocol.py
+tests/test_runners.py
 tests/test_sheet.py
 tests/test_sheets.py
 tests/test_sketch.py
