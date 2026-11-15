@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The panel's Setups and Manual tabs, the parts that need no window: a
-# setup's settings in a line, and the manual's rows as drawing_exploded steps.
+# The panel's tab helpers, the parts that need no window: add-ons' tabs
+# filled through their own fill(), and the narrow-dock row and colour.
 import os
 import sys
 import unittest
@@ -18,22 +18,27 @@ from agentlink import panel_tabs  # noqa: E402
 
 
 class PanelTabs(unittest.TestCase):
-    def test_summary(self):
-        self.assertEqual(panel_tabs.summary({"printer": "h2d", "nozzle": 0.4, "layerHeight": 0.2, "infill": 15}), "h2d, 0.4 nozzle, 0.2 layers, 15% infill")
-        self.assertEqual(panel_tabs.summary({}), "")
-        self.assertNotIn("fit", panel_tabs.summary({"fit": {"hole": 0.2}}))
+    """Setups, Materials, Fits and Manual are the add-ons' tabs now
+    (register_tab): the panel keeps no copy, and fills theirs through their
+    own fill()."""
 
-    def test_manual_steps(self):
-        rows = [("Base", ["Base"], ""), ("", [], "skipped"), ("Lid on", ["Lid", "Screw"], "Snug, not tight")]
-        self.assertEqual(panel_tabs.manual_steps(rows), [{"title": "Base", "add": ["Base"]}, {"title": "Lid on", "add": ["Lid", "Screw"], "note": "Snug, not tight"}])
+    def test_no_own_copies(self):
+        for name in ("_setups_tab", "_materials_tab", "_fits_tab", "_manual_tab", "summary", "manual_steps", "manual_plan_steps", "missing_tool"):
+            self.assertFalse(hasattr(panel_tabs.Tabs, name) or hasattr(panel_tabs, name), name)
 
-    def test_manual_plan_steps(self):
-        rows = [("Base", ["Base"], ""), ("Lid on", ["Lid", "Screw"], "Snug, not tight"), ("Empty", [], "")]
-        self.assertEqual(panel_tabs.manual_plan_steps(rows), [
-            {"id": "s1", "place": [{"part": "Base"}], "text": "Base"},
-            {"id": "s2", "place": [{"part": "Lid"}, {"part": "Screw"}], "text": "Snug, not tight", "notes": "Lid on"}])
-        self.assertTrue(panel_tabs.missing_tool({"error": {"code": "not_found", "message": "manual_plan: no such tool — x."}}, "manual_plan"))
-        self.assertFalse(panel_tabs.missing_tool({"error": {"code": "not_found", "message": "body Lid: none."}}, "manual_plan"))
+    def test_fill_tab_asks_the_addon(self):
+        seen = []
+
+        class Wdg:
+            def fill(self):
+                seen.append("Setups")
+
+        t = panel_tabs.Tabs()
+        t.addon_tabs = {"Setups": Wdg(), "Plain": object()}
+        t.fill_tab("Setups")
+        t.fill_tab("Plain")
+        t.fill_tab("Manual")  # no add-on: nothing to fill
+        self.assertEqual(seen, ["Setups"])
 
 
 if __name__ == "__main__":
