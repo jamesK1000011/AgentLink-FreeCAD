@@ -15,10 +15,12 @@ from agentlink import echo, hooks  # noqa: E402
 class EchoDeclared(unittest.TestCase):
     def setUp(self):
         self.saved = (echo.SHOWN, dict(echo.PREFIX_NAME), list(echo.WORKBENCH), list(echo.PAGES),
-                      dict(echo.COMMANDS), list(echo.COMMAND_FNS), set(echo.UNKNOWN_BENCHES))
+                      dict(echo.COMMANDS), list(echo.COMMAND_FNS), set(echo.UNKNOWN_BENCHES), set(echo.NO_BUTTON))
 
     def tearDown(self):
-        echo.SHOWN, names, wb, pages, cmds, fns, unknown = self.saved
+        echo.SHOWN, names, wb, pages, cmds, fns, unknown, quiet = self.saved
+        echo.NO_BUTTON.clear()
+        echo.NO_BUTTON.update(quiet)
         echo.PREFIX_NAME.clear()
         echo.PREFIX_NAME.update(names)
         echo.WORKBENCH[:] = wb
@@ -28,6 +30,15 @@ class EchoDeclared(unittest.TestCase):
         echo.COMMAND_FNS[:] = fns
         echo.UNKNOWN_BENCHES.clear()
         echo.UNKNOWN_BENCHES.update(unknown)
+
+    def test_no_button_wins(self):
+        echo.declare(types.SimpleNamespace(COMMANDS={"mine_": "Mine_Any", "mine_do": "Mine_Do"}, NO_BUTTON={"mine_do_quiet", "mine_peek_"},
+                                           command_for=lambda n, a: "Mine_Fn"))
+        self.assertIsNone(echo.command_for("mine_do_quiet", {}))  # exact name, though mine_do matches
+        self.assertIsNone(echo.command_for("mine_peek_at", {}))   # prefix, though mine_ matches and command_for answers
+        self.assertEqual(echo.command_for("mine_do", {}), "Mine_Fn")
+        echo.declare(types.SimpleNamespace(NO_BUTTON=None))  # nothing declared: nothing changes
+        self.assertEqual(echo.NO_BUTTON & {"mine_do_quiet", "mine_peek_"}, {"mine_do_quiet", "mine_peek_"})
 
     def test_longest_prefix_and_exact_names(self):
         echo.declare(types.SimpleNamespace(WORKBENCHES={"part_check": "MineWorkbench", "mine_": "MineWorkbench"}))
