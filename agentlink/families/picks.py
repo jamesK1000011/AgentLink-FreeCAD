@@ -71,6 +71,44 @@ def placement_json(p):
     return {"at": geo.vec(p.Base), "axis": geo.vec(ax), "angle": round(math.degrees(p.Rotation.Angle), 4)}
 
 
+# ---- finishing a change ------------------------------------------------------------------
+
+def _invalid(o):
+    return hasattr(o, "isValid") and not o.isValid()
+
+
+def finish(session, tool, read=None, *, objs=(), refuse=None, broken=_invalid, check=None, doc=None, recompute=True, extra=None, step=True):
+    """The tail every changing tool shares. Recompute (doc, the session's by
+    default), refuse a broken result with nothing kept, one snapshot, then
+    the answer and the step. read: the answer, a dict or a callable run after
+    the snapshot so it reads the recomputed model. refuse: when broken(o) for
+    any of objs, each of objs is removed and the refusal is refuse with {msg}
+    the first broken one's status and {kind} its type. check: a callable run
+    after the recompute that refuses by itself."""
+    d = session.doc if doc is None else doc
+    if recompute:
+        d.recompute()
+    if refuse is not None:
+        bad_ = [o for o in objs if broken(o)]
+        if bad_:
+            msg, kind = bad_[0].getStatusString(), bad_[0].TypeId.split("::")[-1]
+            for o in objs:
+                try:
+                    d.removeObject(o.Name)
+                except Exception:
+                    pass
+            raise ToolError("failed", refuse.replace("{kind}", kind).replace("{msg}", msg))
+    if check is not None:
+        check()
+    session.snapshot(tool)
+    out = read() if callable(read) else ({} if read is None else read)
+    if extra:
+        out.update(extra)
+    if step:
+        out["step"] = len(session.steps)
+    return out
+
+
 # ---- objects ----------------------------------------------------------------------------
 
 def find(doc, ref, what="object"):

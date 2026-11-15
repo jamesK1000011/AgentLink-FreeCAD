@@ -13,6 +13,7 @@ import FreeCAD
 import Draft
 
 from .. import runners
+from .. import geometry as geo
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import picks
@@ -47,8 +48,7 @@ def reading(o):
             out["area"] = round(sh.Area, 4)
         if sh.Solids:
             out["volume"] = round(sh.Volume, 4)
-        bb = sh.BoundBox
-        out["box"] = [round(bb.XLength, 3), round(bb.YLength, 3), round(bb.ZLength, 3)]
+        out["box"] = geo.box_json(sh, 3)["size"]
     return out
 
 
@@ -74,24 +74,12 @@ def tools(session):
         return o
 
     def finish(objs, tool, extra=None):
-        doc().recompute()
         objs = [o for o in (objs if isinstance(objs, list) else [objs]) if o is not None]
         if not objs:
+            doc().recompute()
             raise ToolError("failed", "Draft made nothing from that.")
-        bad_ = [o for o in objs if hasattr(o, "isValid") and not o.isValid()]
-        if bad_:
-            msg = bad_[0].getStatusString()
-            for o in objs:
-                try:
-                    doc().removeObject(o.Name)
-                except Exception:
-                    pass
-            raise ToolError("failed", f"Draft refused it: {msg} — nothing was kept.")
-        s.snapshot(tool)
-        out = reading(objs[0]) if len(objs) == 1 else {"objects": [reading(o) for o in objs]}
-        out.update(extra or {})
-        out["step"] = len(s.steps)
-        return out
+        return picks.finish(s, tool, lambda: reading(objs[0]) if len(objs) == 1 else {"objects": [reading(o) for o in objs]},
+                            objs=objs, refuse="Draft refused it: {msg} — nothing was kept.", extra=extra)
 
     def objs_of(refs, what="objects"):
         if isinstance(refs, str):
@@ -381,9 +369,7 @@ def tools(session):
                 if o not in grp:
                     grp.append(o)
             lay.Group = grp
-        doc().recompute()
-        s.snapshot("draft_layer")
-        return {"layer": lay.Label, "made": made, "objects": [o.Label for o in lay.Group], "step": len(s.steps)}
+        return picks.finish(s, "draft_layer", lambda: {"layer": lay.Label, "made": made, "objects": [o.Label for o in lay.Group]})
 
     def draft_hatch(a):
         active()

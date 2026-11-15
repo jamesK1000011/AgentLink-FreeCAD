@@ -480,9 +480,7 @@ def tools(session):
         labels = [o.Label for o in objs]
         for o in objs:
             s.doc.removeObject(o.Name)
-        s.doc.recompute()
-        s.snapshot("object_delete")
-        return {"deleted": labels, "errors": errors(s.doc), "step": len(s.steps)}
+        return picks.finish(s, "object_delete", lambda: {"deleted": labels, "errors": errors(s.doc)})
 
     def object_rename(a):
         o = picks.find(s.doc, a.get("object"))

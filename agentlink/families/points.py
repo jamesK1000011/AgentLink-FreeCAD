@@ -331,8 +331,7 @@ def tools(session):
             raise bad("every: keep every n-th point, 1 or more.")
         P = P[::k] * float(a.get("scale", 1.0))
         o = make(P, a.get("name") or os.path.splitext(os.path.basename(p))[0])
-        s.snapshot("points_import")
-        return {**reading(o, P), "read": total, "step": len(s.steps)}
+        return picks.finish(s, "points_import", lambda: {**reading(o, P), "read": total}, recompute=False)
 
     def points_sample(a):
         o = picks.find(doc(), a.get("object"))
@@ -353,8 +352,7 @@ def tools(session):
         if noise > 0:
             P = P + np.random.default_rng(int(a.get("seed", 1)) + 1).normal(0, noise, P.shape)
         c = make(P, a.get("name") or f"{o.Label} points")
-        s.snapshot("points_sample")
-        return {**reading(c, P), "from": o.Label, **({"noise": noise} if noise else {}), "step": len(s.steps)}
+        return picks.finish(s, "points_sample", lambda: {**reading(c, P), "from": o.Label, **({"noise": noise} if noise else {})}, recompute=False)
 
     def points_info(a):
         o = cloud(a.get("points"))
@@ -413,8 +411,7 @@ def tools(session):
             c = o
         else:
             c = make(Q, a.get("name") or f"{o.Label} cropped")
-        s.snapshot("points_crop")
-        return {**reading(c, Q), "from": int(len(P)), "kept": int(len(Q)), **({"specksDropped": dropped} if a.get("specks") else {}), "step": len(s.steps)}
+        return picks.finish(s, "points_crop", lambda: {**reading(c, Q), "from": int(len(P)), "kept": int(len(Q)), **({"specksDropped": dropped} if a.get("specks") else {})}, recompute=False)
 
     def points_fit(a):
         o = cloud(a.get("points"))
@@ -513,10 +510,8 @@ def tools(session):
             b = doc().addObject("Part::Feature", "Fit")
             b.Label = s.unique(a.get("name") or f"{o.Label} {kind}")
             b.Shape = body
-            doc().recompute()
             out["body"] = b.Label
-            s.snapshot("points_fit")
-            out["step"] = len(s.steps)
+            picks.finish(s, "points_fit", out)
         return out
 
     def points_export(a):
@@ -540,8 +535,7 @@ def tools(session):
         if a.get("remove"):
             for r in refs:
                 doc().removeObject(cloud(r).Name)
-        s.snapshot("points_merge")
-        return {"points": o.Label, "count": int(len(P)), "step": len(s.steps)}
+        return picks.finish(s, "points_merge", lambda: {"points": o.Label, "count": int(len(P))}, recompute=False)
 
     def points_mesh(a):
         o = cloud(a.get("points"))

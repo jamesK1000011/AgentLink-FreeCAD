@@ -38,6 +38,14 @@ def box_of(shape):
     return {"min": [r3(b.XMin), r3(b.YMin), r3(b.ZMin)], "max": [r3(b.XMax), r3(b.YMax), r3(b.ZMax)], "size": [r3(b.XLength), r3(b.YLength), r3(b.ZLength)]}
 
 
+def box_json(b, nd=1):
+    """A bounding box (or a shape's) as lists rounded to nd places: min,
+    max and size (the lengths along x, y, z)."""
+    b = getattr(b, "BoundBox", b)
+    return {"min": [round(b.XMin, nd), round(b.YMin, nd), round(b.ZMin, nd)], "max": [round(b.XMax, nd), round(b.YMax, nd), round(b.ZMax, nd)],
+            "size": [round(b.XLength, nd), round(b.YLength, nd), round(b.ZLength, nd)]}
+
+
 def stats(shape):
     """What a body is, in a few numbers: what a diff compares."""
     return {

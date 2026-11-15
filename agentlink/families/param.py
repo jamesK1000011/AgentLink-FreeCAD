@@ -8,6 +8,7 @@ import re
 
 from ..protocol import Tool, ToolError
 from . import pd_common as pc
+from . import picks
 
 GROUP = "param"
 INFO = "Named parameters in a Params spreadsheet, and properties or named sketch constraints bound to expressions over them."
@@ -151,8 +152,7 @@ def tools(session):
         ss.setAlias(f"B{r}", "")
         ss.removeRows(str(r), 1)
         check(doc(), f"Removing {name}")
-        s.snapshot("param_remove")
-        return {"removed": name, "left": [n for _, n in rows(ss)], "step": len(s.steps)}
+        return picks.finish(s, "param_remove", lambda: {"removed": name, "left": [n for _, n in rows(ss)]}, recompute=False)
 
     def param_bind(a):
         target = a.get("target")
@@ -175,8 +175,7 @@ def tools(session):
         if expr in (None, ""):
             o.setExpression(path, None)
             check(doc(), f"Unbinding {target}")
-            s.snapshot("param_bind")
-            return {"target": target, "expression": None, "bodies": bodies_now(), "step": len(s.steps)}
+            return picks.finish(s, "param_bind", lambda: {"target": target, "expression": None, "bodies": bodies_now()}, recompute=False)
         try:
             o.evalExpression(str(expr))
         except Exception as e:
@@ -190,8 +189,7 @@ def tools(session):
             now = pc.num(o.getDatum(path.split(".", 1)[1])) if path.startswith("Constraints.") else pc.num(getattr(o, path))
         except Exception:
             now = None
-        s.snapshot("param_bind")
-        return {"target": target, "expression": expr, "value": now, "bodies": bodies_now(), "step": len(s.steps)}
+        return picks.finish(s, "param_bind", lambda: {"target": target, "expression": expr, "value": now, "bodies": bodies_now()}, recompute=False)
 
     return [
         Tool("param_set", "Set a named parameter in the Params spreadsheet (made when first needed): name, value (a number with unit mm | deg | \"\", or an expression over others, \"width / 2\"), note. Everything bound to it recomputes; a value that breaks a feature is refused with FreeCAD's error and nothing kept. Answers its reference (Params.<name>) and who uses it.",

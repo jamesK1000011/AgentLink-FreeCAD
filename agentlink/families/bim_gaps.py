@@ -14,6 +14,7 @@ import Part
 import Arch  # the family is left out without BIM
 
 from .. import runners
+from .. import geometry as geo
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import picks
@@ -43,9 +44,7 @@ def tools(s):
         return [picks.find(d(), r, what) for r in refs]
 
     def done(tool, out):
-        d().recompute()
-        s.snapshot(tool)
-        return out
+        return picks.finish(s, tool, out, doc=d(), step=False)
 
     def named(o, name):
         if name:
@@ -57,7 +56,7 @@ def tools(s):
         sh = getattr(o, "Shape", None)
         if sh is None or sh.isNull():
             return {}
-        return {"volume": round(sh.Volume, 3) if sh.Solids else None, "box": [round(sh.BoundBox.XLength, 3), round(sh.BoundBox.YLength, 3), round(sh.BoundBox.ZLength, 3)]}
+        return {"volume": round(sh.Volume, 3) if sh.Solids else None, "box": geo.box_json(sh, 3)["size"]}
 
     def bim_component(a):
         kind = a.get("kind", "component")

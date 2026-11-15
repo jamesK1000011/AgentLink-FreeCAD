@@ -74,13 +74,7 @@ def tools(session):
         return o
 
     def done(o, tool, extra=None):
-        doc().recompute()
-        if not o.isValid() or o.Shape.isNull():
-            msg, kind = o.getStatusString(), o.TypeId.split("::")[-1]
-            doc().removeObject(o.Name)
-            raise ToolError("failed", f"{kind} failed: {msg} — nothing was kept.")
-        s.snapshot(tool)
-        return {**reading(o), **(extra or {}), "step": len(s.steps)}
+        return picks.finish(s, tool, lambda: reading(o), objs=[o], broken=lambda o: not o.isValid() or o.Shape.isNull(), refuse="{kind} failed: {msg} — nothing was kept.", extra=extra)
 
     def edge_ref(r, what):
         """"Body.Edge3", or a whole wire/sketch by name (all its edges)."""

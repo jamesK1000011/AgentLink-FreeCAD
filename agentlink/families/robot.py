@@ -116,9 +116,7 @@ def tools(session):
         if a.get("tool") is not None:
             # the tool's point from the flange (a gripper's fingertips, a torch's tip)
             o.Tool = placement(a["tool"], "tool")
-        doc().recompute()
-        s.snapshot("robot_new")
-        return {**state(o), "model": how, "step": len(s.steps)}
+        return picks.finish(s, "robot_new", lambda: {**state(o), "model": how})
 
     def robot_move(a):
         o = robot(a.get("robot"))
@@ -148,8 +146,7 @@ def tools(session):
             out["reached"] = miss < 0.1 and not getattr(o, "Error", "")
             if not out["reached"]:
                 out["off_mm"] = round(miss, 3)
-        s.snapshot("robot_move")
-        return {**out, "step": len(s.steps)}
+        return picks.finish(s, "robot_move", lambda: {**out}, recompute=False)
 
     def robot_path(a):
         name = a.get("name") or "Trajectory"
@@ -185,8 +182,7 @@ def tools(session):
         o.Label = s.unique(name, o)
         doc().recompute()
         tr = o.Trajectory
-        s.snapshot("robot_path")
-        return {"trajectory": o.Label, "waypoints": len(tr.Waypoints), "length": round(tr.Length, 2), "seconds": round(tr.Duration, 3), "step": len(s.steps)}
+        return picks.finish(s, "robot_path", lambda: {"trajectory": o.Label, "waypoints": len(tr.Waypoints), "length": round(tr.Length, 2), "seconds": round(tr.Duration, 3)}, recompute=False)
 
     def robot_run(a):
         o = robot(a.get("robot"))

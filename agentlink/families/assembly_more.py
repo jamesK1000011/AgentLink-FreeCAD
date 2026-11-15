@@ -20,6 +20,7 @@ from ..materials import DENSITY
 
 from ..tools import obj
 from . import assembly as A
+from . import picks
 
 GROUP = "assembly"
 INFO = ("Assemblies (FreeCAD's Assembly workbench): parts put together, one grounded, joints solved; overlaps, sweeps, "
@@ -323,8 +324,7 @@ def tools(session):
         code, said = A._status(asm)
         if code != 0:
             raise ToolError("failed", f"With those limits {asm.Label} does not solve: {said} — nothing was kept. The parts may sit outside them now: asm_pose them in first.")
-        s.snapshot("asm_limits")
-        return {"joint": j.Label, "kind": kind, "limits": limits_of(j)[1], "unit": "degrees" if turning else "mm", "solve": said, "step": len(s.steps)}
+        return picks.finish(s, "asm_limits", lambda: {"joint": j.Label, "kind": kind, "limits": limits_of(j)[1], "unit": "degrees" if turning else "mm", "solve": said}, recompute=False)
 
     def moving_group(asm, j):
         p1, e1, _ = ref_element(doc(), j.Reference1)
@@ -446,8 +446,7 @@ def tools(session):
             setattr(asm, EXPLODED, "")
             doc().recompute()
             code, said = A._status(asm)
-            s.snapshot("asm_explode")
-            return {"assembly": asm.Label, "collapsed": True, "solve": said, "step": len(s.steps)}
+            return picks.finish(s, "asm_explode", lambda: {"assembly": asm.Label, "collapsed": True, "solve": said}, recompute=False)
         if EXPLODED in asm.PropertiesList and asm.getPropertyByName(EXPLODED):
             raise ToolError("invalid_state", f"{asm.Label} is already exploded: collapse: true first.")
         grounded = A._grounded(asm)

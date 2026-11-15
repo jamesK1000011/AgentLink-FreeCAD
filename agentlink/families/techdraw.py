@@ -1200,9 +1200,7 @@ def tools(session):
             time.sleep(0.01)
 
     def done(tool, out):
-        s.snapshot(tool)
-        out["step"] = len(s.steps)
-        return out
+        return picks.finish(s, tool, out, recompute=False)
 
     def place_xy(page, at, default):
         if at is None:

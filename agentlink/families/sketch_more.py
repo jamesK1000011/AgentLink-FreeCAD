@@ -13,6 +13,7 @@ import Part
 
 from ..protocol import Tool, ToolError
 from . import pd_common as pc
+from . import picks
 
 GROUP = "sketch"
 INFO = ("Sketches: bodies, sketches on planes and faces, geometry and constraints, offset, external edges, fillet/trim/split/mirror, "
@@ -89,12 +90,11 @@ def tools(session):
             pass
 
     def done(sk, tool, extra=None):
-        doc().recompute()
-        b = pc.broken(doc())
-        if b:
-            raise ToolError("failed", f"That breaks {b[0]['object']}: {b[0]['error']} — nothing was kept.")
-        s.snapshot(tool)
-        return {**state(sk), **(extra or {}), "step": len(s.steps)}
+        def check():
+            b = pc.broken(doc())
+            if b:
+                raise ToolError("failed", f"That breaks {b[0]['object']}: {b[0]['error']} — nothing was kept.")
+        return picks.finish(s, tool, lambda: state(sk), check=check, extra=extra)
 
     def new_ids(sk, before):
         return list(range(before, len(sk.Geometry)))

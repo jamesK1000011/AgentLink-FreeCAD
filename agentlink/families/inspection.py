@@ -19,6 +19,7 @@ import numpy as np
 
 from .. import render
 from ..protocol import Tool, ToolError
+from . import picks
 
 GROUP = "inspection"
 INFO = "FreeCAD's Inspection: an actual (mesh, points, body or scan file) against nominals, point by point, with tolerance, statistics, worst spots, a colour map and a report."
@@ -318,11 +319,7 @@ def tools(session):
         if a.get("nominals"):
             o.Nominals = [find(n, "nominal") for n in a["nominals"]]
         o.touch()
-        doc().recompute()
-        s.snapshot("insp_update")
-        out = reading(o, int(a.get("worst", 5)))
-        out["step"] = len(s.steps)
-        return out
+        return picks.finish(s, "insp_update", lambda: reading(o, int(a.get("worst", 5))))
 
     def insp_list(a):
         out = []

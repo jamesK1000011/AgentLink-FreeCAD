@@ -13,6 +13,7 @@ import Part
 
 import Arch  # FreeCAD's BIM workbench; the family is left out without it
 
+from .. import geometry as geo
 from .. import runners
 from ..protocol import Tool, ToolError
 from ..tools import obj
@@ -96,13 +97,14 @@ def tools(session):
     doc = lambda: s.doc  # noqa: E731
 
     def finish(o, tool, extra=None):
-        doc().recompute()
+        return picks.finish(s, tool, lambda: reading(o), extra=extra)
+
+    def reading(o):
         sh = getattr(o, "Shape", None)
         out = {"object": o.Label, "ifc": ifc_type(o)}
         if isinstance(sh, Part.Shape) and not sh.isNull():
-            bb = sh.BoundBox
-            out["box"] = [round(bb.XLength, 1), round(bb.YLength, 1), round(bb.ZLength, 1)]
-            out["min"] = [round(bb.XMin, 1), round(bb.YMin, 1), round(bb.ZMin, 1)]
+            b = geo.box_json(sh)
+            out["box"], out["min"] = b["size"], b["min"]
             if sh.Solids:
                 out["volume_m3"] = round(sh.Volume / 1e9, 4)
         elif not getattr(o, "Group", None):
@@ -110,8 +112,7 @@ def tools(session):
         st = o.getStatusString() if hasattr(o, "getStatusString") else ""
         if st and st not in ("Valid", "Touched"):
             out["status"] = st
-        s.snapshot(tool)
-        return {**out, **(extra or {}), "step": len(s.steps)}
+        return out
 
     def named(o, label):
         o.Label = s.unique(label, o)
@@ -483,10 +484,8 @@ def tools(session):
                     if c in r and r[c] != "":
                         v = r[c]
                         sh.set(f"{chr(65 + j)}{i}", str(v) if isinstance(v, (int, float)) else f"'{v}")
-            doc().recompute()
-            s.snapshot("bim_schedule")
             out["sheet"] = sh.Label
-            out["step"] = len(s.steps)
+            picks.finish(s, "bim_schedule", out)
         return out
 
     # ---- IFC -------------------------------------------------------------------------
@@ -605,8 +604,7 @@ def tools(session):
         kinds = {}
         for o in made:
             kinds[ifc_type(o)] = kinds.get(ifc_type(o), 0) + 1
-        s.snapshot("bim_import")
-        return {"path": p, "objects": len(made), "byType": kinds, "read": how, "step": len(s.steps)}
+        return picks.finish(s, "bim_import", lambda: {"path": p, "objects": len(made), "byType": kinds, "read": how}, recompute=False)
 
     # ---- more building elements ---------------------------------------------------
 
@@ -741,9 +739,7 @@ def tools(session):
             made.append(ax.Label)
         if not made:
             raise bad("spacing (or xSpacing / ySpacing): mm between grid lines, one number or a list.")
-        doc().recompute()
-        s.snapshot("bim_grid")
-        return {"axes": made, "step": len(s.steps)}
+        return picks.finish(s, "bim_grid", lambda: {"axes": made})
 
     def bim_section(a):
         mk = getattr(Arch, "makeSectionPlane", None)
@@ -754,9 +750,7 @@ def tools(session):
         n = vec(a.get("normal", [0, 0, 1]), "normal")
         o.Placement = FreeCAD.Placement(vec(a.get("at", [0, 0, 1200]), "at"), FreeCAD.Rotation(V(0, 0, 1), n))
         named(o, a.get("name") or "Section")
-        doc().recompute()
-        s.snapshot("bim_section")
-        return {"object": o.Label, "cuts": [x.Label for x in objs], "note": "A section plane for TechDraw (td_view of it) and the FreeCAD window; export { section: z } writes a plan cut as DXF/SVG headless.", "step": len(s.steps)}
+        return picks.finish(s, "bim_section", lambda: {"object": o.Label, "cuts": [x.Label for x in objs], "note": "A section plane for TechDraw (td_view of it) and the FreeCAD window; export { section: z } writes a plan cut as DXF/SVG headless."})
 
     def bim_material(a):
         mk = getattr(Arch, "makeMaterial", None)
@@ -776,9 +770,7 @@ def tools(session):
         for o in objs:
             if hasattr(o, "Material"):
                 o.Material = mat
-        doc().recompute()
-        s.snapshot("bim_material")
-        return {"material": mat.Label, "data": data, "on": [o.Label for o in objs if hasattr(o, "Material")], "step": len(s.steps)}
+        return picks.finish(s, "bim_material", lambda: {"material": mat.Label, "data": data, "on": [o.Label for o in objs if hasattr(o, "Material")]})
 
     # The wrappers kept as data (agentlink/data/tools.json) run on these.
     helpers = {"doc": doc, "finish": finish, "named": named, "baseline": baseline, "setprops": setprops, "headless_call": headless_call,
