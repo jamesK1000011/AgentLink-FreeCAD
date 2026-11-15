@@ -19,6 +19,14 @@ TEXT = ("FreeCAD 1.1.3 started\n"
 
 
 class ReportWatch(unittest.TestCase):
+    def test_what_the_mac_showed(self):
+        text = ("12:53:59  Agent Link: listening on 127.0.0.1:7318\n"
+                "12:54:24  Cannot find icon: Std_DlgMacroExecute\n"
+                "12:54:24  (qt.qpa.fonts) Populating font family aliases took 147 ms. Replace uses of missing font family \"Sans-serif\"\n")
+        out, _ = report_watch.problems(text, 0)
+        self.assertEqual(len(out), 2)
+        self.assertTrue(out[0].endswith("Std_DlgMacroExecute"))
+
     def test_problems_since_start(self):
         out, end = report_watch.problems(TEXT, 0)
         self.assertEqual(end, len(TEXT))
