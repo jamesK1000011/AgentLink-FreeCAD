@@ -308,8 +308,15 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             t.removeTab(0)
         for title in want:
             t.addTab(self.pages[title], title)
-        if cur in want:
+        # The first time a workbench with its own tab opens, that tab comes
+        # forward; after that the tab in front stays.
+        seen = self.__dict__.setdefault("seen_wb", set())
+        own = [x for x in want if x in self.addon_tabs and active in hooks.TAB_WORKBENCHES.get(x, ())]
+        if own and active not in seen:
+            t.setCurrentIndex(want.index(own[0]))
+        elif cur in want:
             t.setCurrentIndex(want.index(cur))
+        seen.add(active)
         t.blockSignals(False)
         self._tab_changed(t.currentIndex())
         return want
