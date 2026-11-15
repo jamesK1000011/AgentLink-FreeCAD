@@ -206,9 +206,7 @@ def tools(session):
         depth = picks.num(a.get("depth", 0.6), "depth")
         if size <= 0 or depth <= 0:
             raise ToolError("invalid_input", "size (letter height) and depth: mm, over 0.")
-        mode = a.get("mode", "emboss")
-        if mode not in ("emboss", "engrave"):
-            raise ToolError("invalid_input", "mode: emboss (raised) or engrave (cut in).")
+        mode = picks.choice(a, "mode", ("emboss", "engrave"), "mode: emboss (raised) or engrave (cut in).", "emboss")
         face = pick_face(o, a.get("face") or {"normal": [0, 0, 1]})
         at = picks.vec3(a["at"], "at") if a.get("at") is not None else None
         pl, n = face_frame(face, at)
@@ -268,9 +266,7 @@ def tools(session):
             flat = flat.mirror(V(0, 0, 0), V(1, 0, 0))
         bb = flat.BoundBox
         depth = picks.number(a, "depth", 0.6, gt=0, msg="depth: mm, over 0.")
-        mode = a.get("mode", "emboss" if a.get("body") else "extrude")
-        if mode not in ("emboss", "engrave", "extrude"):
-            raise ToolError("invalid_input", "mode: emboss (raised on a face), engrave (cut in), or extrude (a part of its own).")
+        mode = picks.choice(a, "mode", ("emboss", "engrave", "extrude"), "mode: emboss (raised on a face), engrave (cut in), or extrude (a part of its own).", "emboss" if a.get("body") else "extrude")
         out = {"outlines": len(flat.Faces), "size": [round(bb.XLength, 2), round(bb.YLength, 2)], "scale": round(k, 5), "mode": mode, "depth": depth}
         if open_:
             out["openCurvesLeftOut"] = open_

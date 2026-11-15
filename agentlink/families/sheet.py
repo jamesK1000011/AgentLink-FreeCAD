@@ -470,9 +470,7 @@ def tools(session):
 
     def sheet_rows(a):
         ss = find(doc(), a.get("sheet"))
-        act = a.get("action")
-        if act not in ("insert", "remove"):
-            raise bad("action: insert or remove.")
+        act = picks.choice(a, "action", ("insert", "remove"), "action: insert or remove.")
         n = int(a.get("count", 1))
         if not 1 <= n <= 1000:
             raise bad("count: 1 … 1000.")
@@ -663,9 +661,7 @@ def tools(session):
     def table_use(a):
         ss, t = table_of(a)
         names = [n for _, n in t["configs"]]
-        want = a.get("config")
-        if want not in names:
-            raise bad(f"config: one of {', '.join(names)}.")
+        want = picks.choice(a, "config", names, f"config: one of {', '.join(names)}.")
         before = t["active"]
         setattr(t["owner"], t["property"], want)
         check(f"Configuration {want}")

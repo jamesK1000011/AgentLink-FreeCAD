@@ -156,9 +156,7 @@ def tools(s):
 
     def fem_add(a):
         F = _fem()
-        kind = a.get("kind")
-        if kind not in KINDS:
-            raise bad("kind: " + ", ".join(KINDS) + ".")
+        kind = picks.choice(a, "kind", KINDS, "kind: " + ", ".join(KINDS) + ".")
         fn, need = KINDS[kind]
         if not hasattr(F, fn):
             raise ToolError("unavailable", f"{kind} is not in FreeCAD {'.'.join(FreeCAD.Version()[:3])}'s FEM.")

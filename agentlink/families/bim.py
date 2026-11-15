@@ -234,9 +234,7 @@ def tools(session):
     # ---- structure -------------------------------------------------------------
 
     def bim_structure(a):
-        kind = a.get("kind", "column")
-        if kind not in ROLES:
-            raise bad(f"kind: {', '.join(ROLES)}.")
+        kind = picks.choice(a, "kind", ROLES, f"kind: {', '.join(ROLES)}.", "column")
         name = a.get("name") or kind.capitalize()
         if kind in ("slab", "footing"):
             t = pos(a, "thickness", 200 if kind == "slab" else 500)

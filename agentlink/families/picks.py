@@ -32,6 +32,15 @@ def num_json(v, nd=4):
     return v
 
 
+def choice(a, key, options, msg, default=None):
+    """a[key] (default when it is absent), one of options; else the site's
+    refusal msg (invalid_input)."""
+    v = a.get(key, default)
+    if v not in options:
+        raise ToolError("invalid_input", msg)
+    return v
+
+
 def ref_list(v, msg=None):
     """One name or a list of them, as a list. msg: the refusal
     (invalid_input) when there is none; without it, none passes through."""

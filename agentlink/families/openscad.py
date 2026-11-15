@@ -210,9 +210,7 @@ def tools(session):
         return out
 
     def scad_op(a):
-        op = a.get("op", "hull")
-        if op not in ("hull", "minkowski"):
-            raise bad("op: hull | minkowski.")
+        op = picks.choice(a, "op", ("hull", "minkowski"), "op: hull | minkowski.", "hull")
         objs = [picks.find(doc(), n) for n in (a.get("objects") or [])]
         if len(objs) < (1 if op == "hull" else 2):
             raise bad("objects: " + ("one or more bodies" if op == "hull" else "two bodies (the shape, then what sweeps round it)") + ".")
