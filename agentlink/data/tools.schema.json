@@ -71,6 +71,11 @@
       "type": "boolean",
       "description": "Its path is a curve in the model, not a file."
      },
+     "reads": {
+      "type": "object",
+      "description": "For a changing tool, the calls that only read: an argument and the values that make a call a read, e.g. {\"action\": [\"list\"]}. Such a call is no undo step, marks nothing changed and is not shown as a change.",
+      "additionalProperties": {"type": "array"}
+     },
      "runner": {
       "type": "string",
       "enum": [

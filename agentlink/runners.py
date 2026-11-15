@@ -374,7 +374,8 @@ RUN = {"make": run_make, "apply": run_apply, "command": run_command, "read": run
 
 def tool(name, e, helpers):
     run = RUN[e["runner"]]
-    return Tool(name, e["description"], e["inputSchema"], lambda a: run(name, e, a, helpers), changes=e["changes"], group=e["group"])
+    return Tool(name, e["description"], e["inputSchema"], lambda a: run(name, e, a, helpers), changes=e["changes"], group=e["group"],
+                reads=e.get("reads"))
 
 
 def tools(group, session, helpers, data=None):

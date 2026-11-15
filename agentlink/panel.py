@@ -602,13 +602,28 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         lay.addWidget(self.figures)
         return w
 
-    def _call(self, name, args):
-        """A tool, run as the agent's would be (so it is shown and logged)."""
+    def _call(self, name, args, quiet=False):
+        """A tool, run as the agent's would be (so it is shown and logged).
+        quiet: a panel's own refresh, not a click: nothing shown, nothing in
+        Activity (the session's quiet_call, read by echo)."""
         import json
 
-        server = self._server()[1]
-        r = server.call({"name": name, "arguments": args})
+        import agentlink_state
+
+        if quiet and agentlink_state.link is None and _doc() is None:
+            # A refresh with no document open makes none (a new "AgentLink"
+            # document appeared just from opening a panel).
+            return False, {"error": {"code": "invalid_state", "message": "No document open."}}
+        session, server = self._server()
+        was = getattr(session, "quiet_call", False)
+        session.quiet_call = bool(quiet)
+        try:
+            r = server.call({"name": name, "arguments": args})
+        finally:
+            session.quiet_call = was
         return not r.get("isError"), json.loads(r["content"][0]["text"])
+
+    _call.quiet_ok = True  # an add-on may pass quiet=True
 
     def _server(self):
         """(session, server): the link's, or with no link on the panel's own."""
@@ -906,18 +921,16 @@ class CallerService:
     through Agent Link with it (_call), and reads the session the panel's
     own server works in (_own) when no link is on."""
 
-    def _call(self, tool, args):
-        return caller()._call(tool, args)
+    def _call(self, tool, args, quiet=False):
+        return caller()._call(tool, args, quiet=quiet)
+
+    _call.quiet_ok = True
 
     @property
     def _own(self):
-        c = caller()
-        if getattr(c, "_own", None) is None:
-            try:
-                c._server()
-            except Exception:  # noqa: BLE001 — no document yet
-                return None
-        return getattr(c, "_own", None)
+        # Only what is there: reading it never makes a session (nor, with
+        # no document open, a new "AgentLink" document).
+        return getattr(caller(), "_own", None)
 
 
 _panel = None

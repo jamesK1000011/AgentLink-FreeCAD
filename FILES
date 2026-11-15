@@ -223,6 +223,7 @@ tests/test_param.py
 tests/test_paths.py
 tests/test_pref_import.py
 tests/test_protocol.py
+tests/test_quiet_reads.py
 tests/test_quit_guard.py
 tests/test_release.py
 tests/test_report_watch.py

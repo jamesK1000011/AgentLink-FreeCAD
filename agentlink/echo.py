@@ -445,8 +445,15 @@ class Echo:
         be left alone (session.window_quiet, agentlink/ext.py)."""
         return not getattr(self.s, "window_quiet", False)
 
+    def quiet(self):
+        """A panel's own refresh (Panel._call quiet=True): not the agent's
+        work, so nothing shown and nothing in Activity."""
+        return bool(getattr(self.s, "quiet_call", False))
+
     def before(self, tool, args):
         self.t0 = time.time()
+        if self.quiet():
+            return
         if tool is None or tool.name in ("batch", "session_state", "tool_groups", "guide_read"):
             return
         if not enabled() or not self.live():
@@ -612,6 +619,8 @@ class Echo:
             gd.resetEdit()
 
     def after(self, tool, args, reply):
+        if self.quiet():
+            return
         name = tool.name if tool is not None else "?"
         ok = not (reply or {}).get("isError")
         summary = ""
@@ -675,6 +684,8 @@ def wrap(server, session):
         name = params.get("name")
         args = params.get("arguments") or {}
         tool = server.tools.get(name)
+        if tool is not None:
+            tool = tool.for_call(args)  # a changing tool's read shows as a read
         echo.before(tool, args)
         reply = plain(params)
         echo.after(tool, args, reply)
