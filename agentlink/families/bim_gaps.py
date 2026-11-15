@@ -13,6 +13,7 @@ import Part
 
 import Arch  # the family is left out without BIM
 
+from .. import runners
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import picks
@@ -100,28 +101,6 @@ def tools(s):
         s.snapshot("bim_reference")
         return {"reference": o.Label, "file": os.path.basename(p), "part": getattr(o, "Part", None) or None, **reading(o),
                 "note": "Shown from the other file and kept up to date with it; not copied in."}
-
-    def bim_remove_shape(a):
-        targets = objs(a.get("objects"))
-        headless_call(Arch.removeShape, targets)
-        d().recompute()
-        s.snapshot("bim_remove_shape")
-        return {"turned": [o.Label for o in targets], "note": "Shape-only BIM objects rebuilt from what they are (a box as a structure's profile and height) where Arch can read them."}
-
-    def bim_structural_system(a):
-        structs = objs(a.get("structures"), "structures")
-        axes = objs(a.get("axes"), "axes")
-        o = headless_call(Arch.makeStructuralSystem, structs, axes)
-        named(o, a.get("name"))
-        return done("bim_structural_system", {"system": o.Label, "copies": len(o.Shape.Solids) if not o.Shape.isNull() else 0, **reading(o)})
-
-    def bim_pipe_connector(a):
-        pipes = objs(a.get("pipes"), "pipes")
-        if not 2 <= len(pipes) <= 3:
-            raise bad("pipes: two (an elbow) or three (a tee) that meet.")
-        o = headless_call(Arch.makePipeConnector, pipes, float(a.get("radius", 0)))
-        named(o, a.get("name"))
-        return done("bim_pipe_connector", {"connector": o.Label, "pipes": [p.Label for p in pipes], **reading(o)})
 
     def bim_panel_out(a):
         kind = a.get("kind", "cut")
@@ -377,17 +356,17 @@ def tools(s):
         g.Group = new
         return done("bim_reorder", {"group": g.Label, "order": [o.Label for o in g.Group]})
 
+    # The wrappers kept as data (agentlink/data/tools.json) run on these.
+    helpers = {"doc": d, "objs": objs, "done": done, "named": named, "reading": reading, "headless_call": headless_call}
+
     st = {"type": "string"}
     arr = {"type": "array", "items": {"type": "string"}}
     num = {"type": "number"}
     v3 = {"type": "array", "items": num}
-    return [
+    return runners.tools(GROUP, s, helpers) + [
         Tool("bim_component", "A generic BIM component: kind component { from (a shape), ifcType } | clone { from, at } (follows the original) | unclone { from } (an independent copy of what it cloned).",
              obj({"kind": {"type": "string", "enum": ["component", "clone", "unclone"]}, "from": st, "ifcType": st, "at": v3, "axis": v3, "angle": num, "name": st}, ["from"]), bim_component, changes=True),
         Tool("bim_reference", "An external reference: another file's objects shown here (part: one of its parts), updated when it changes.", obj({"path": st, "part": st, "name": st}, ["path"]), bim_reference, changes=True),
-        Tool("bim_remove_shape", "Turn shape-only BIM objects into what they are (Remove Shape from BIM): a cubic shape becomes a structure with a profile and height.", obj({"objects": arr}, ["objects"]), bim_remove_shape, changes=True),
-        Tool("bim_structural_system", "A structural system: structures repeated on the axes' crossings (a column on every grid node).", obj({"structures": arr, "axes": arr, "name": st}, ["structures", "axes"]), bim_structural_system, changes=True),
-        Tool("bim_pipe_connector", "A pipe connector where two pipes meet (an elbow) or three (a tee); radius of the bend.", obj({"pipes": arr, "radius": num, "name": st}, ["pipes"]), bim_pipe_connector, changes=True),
         Tool("bim_panel_out", "Panels for the cutter: kind cut (each panel's flat outline with its tag) | sheet { width, height } (the cuts laid on a stock sheet).",
              obj({"kind": {"type": "string", "enum": ["cut", "sheet"]}, "panels": arr, "width": num, "height": num, "name": st}, ["panels"]), bim_panel_out, changes=True),
         Tool("bim_nest", "Nest flat pieces into a container face (a sheet): rotations [0, 90, …], margin mm; the pieces are moved into place.", obj({"container": st, "pieces": arr, "rotations": {"type": "array", "items": num}, "margin": num}, ["container", "pieces"]), bim_nest, changes=True),

@@ -26,6 +26,7 @@ Values in an entry ("expressions"):
   {"len": e}  {"round": [e, n]}  {"or": [e, …]} (the first truthy)
   {"if": [cond, then, else]}  {"not": e}  {"vec": [x, y, z]}
   {"set": [object, "Property", e]}  sets it (in an argument's "then")
+  {"do": [object, "method", e, …]}  calls one of its methods
   {"call": "helper", "with": [e, …]}  a family helper's answer
   {"when": e, "value": e}  in an answer: the field only when e is truthy
   anything else    itself (lists and objects element by element)
@@ -103,6 +104,9 @@ def value(e, env, helpers):
                 o, prop, v = (value(x, env, helpers) for x in arg)
                 setattr(o, prop, v)
                 return v
+            if op == "do":
+                o, meth, *rest = arg
+                return getattr(value(o, env, helpers), meth)(*[value(x, env, helpers) for x in rest])
             if op == "not":
                 return not value(arg, env, helpers)
             if op == "vec":

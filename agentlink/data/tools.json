@@ -469,6 +469,238 @@
      }
     }
    }
+  },
+  "bim_remove_shape": {
+   "group": "bim_gaps",
+   "description": "Turn shape-only BIM objects into what they are (Remove Shape from BIM): a cubic shape becomes a structure with a profile and height.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "objects"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/bim_gaps.py)",
+   "date": "2026-11-14",
+   "runner": "make",
+   "target": {
+    "maker": "Arch.removeShape",
+    "headless": "headless_call",
+    "call": [
+     "$objects"
+    ]
+   },
+   "args": {
+    "objects": {
+     "helper": "objs"
+    }
+   },
+   "answer": {
+    "first": [
+     {
+      "call": "done",
+      "with": [
+       "$tool",
+       null
+      ]
+     }
+    ],
+    "fields": {
+     "turned": "$objects[].Label",
+     "note": "Shape-only BIM objects rebuilt from what they are (a box as a structure's profile and height) where Arch can read them."
+    }
+   }
+  },
+  "bim_structural_system": {
+   "group": "bim_gaps",
+   "description": "A structural system: structures repeated on the axes' crossings (a column on every grid node).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "structures": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "axes": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "structures",
+     "axes"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/bim_gaps.py)",
+   "date": "2026-11-14",
+   "runner": "make",
+   "target": {
+    "maker": "Arch.makeStructuralSystem",
+    "headless": "headless_call",
+    "call": [
+     "$structures",
+     "$axes"
+    ]
+   },
+   "args": {
+    "structures": {
+     "helper": "objs",
+     "with": [
+      "$value",
+      "$key"
+     ]
+    },
+    "axes": {
+     "helper": "objs",
+     "with": [
+      "$value",
+      "$key"
+     ]
+    },
+    "name": {
+     "then": {
+      "call": "named",
+      "with": [
+       "$o",
+       "$a.name"
+      ]
+     }
+    }
+   },
+   "answer": {
+    "via": "done",
+    "with": [
+     "$tool",
+     "$fields"
+    ],
+    "fields": {
+     "system": "$o.Label",
+     "copies": {
+      "if": [
+       {
+        "do": [
+         "$o.Shape",
+         "isNull"
+        ]
+       },
+       0,
+       {
+        "len": "$o.Shape.Solids"
+       }
+      ]
+     },
+     "...reading": {
+      "call": "reading",
+      "with": [
+       "$o"
+      ]
+     }
+    }
+   }
+  },
+  "bim_pipe_connector": {
+   "group": "bim_gaps",
+   "description": "A pipe connector where two pipes meet (an elbow) or three (a tee); radius of the bend.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "pipes": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "radius": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "pipes"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/bim_gaps.py)",
+   "date": "2026-11-14",
+   "runner": "make",
+   "target": {
+    "maker": "Arch.makePipeConnector",
+    "headless": "headless_call",
+    "call": [
+     "$pipes",
+     "$radius"
+    ]
+   },
+   "rules": [
+    {
+     "check": "count",
+     "of": "$pipes",
+     "min": 2,
+     "max": 3,
+     "after": "pipes",
+     "message": "pipes: two (an elbow) or three (a tee) that meet."
+    }
+   ],
+   "args": {
+    "pipes": {
+     "helper": "objs",
+     "with": [
+      "$value",
+      "$key"
+     ]
+    },
+    "radius": {
+     "default": 0,
+     "as": "float"
+    },
+    "name": {
+     "then": {
+      "call": "named",
+      "with": [
+       "$o",
+       "$a.name"
+      ]
+     }
+    }
+   },
+   "answer": {
+    "via": "done",
+    "with": [
+     "$tool",
+     "$fields"
+    ],
+    "fields": {
+     "connector": "$o.Label",
+     "pipes": "$pipes[].Label",
+     "...reading": {
+      "call": "reading",
+      "with": [
+       "$o"
+      ]
+     }
+    }
+   }
   }
  }
 }
