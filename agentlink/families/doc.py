@@ -255,6 +255,29 @@ def to_value(o, p, v):
     raise ToolError("invalid_input", f"values.{p}: a {t} is not set here — set it in FreeCAD, or another tool makes it.")
 
 
+def modified_state(d):
+    """Whether the document has changes since its save: FreeCAD's own flags
+    (App touched, the window's "*"), and the objects still marked touched."""
+    out = {}
+    try:
+        out["touched"] = bool(d.isTouched())
+        objs = [o.Name for o in d.Objects if o.isTouched()]
+        if objs:
+            out["touchedObjects"] = objs[:10]
+    except Exception:
+        pass
+    if getattr(FreeCAD, "GuiUp", False):
+        try:
+            import FreeCADGui
+
+            g = FreeCADGui.getDocument(d.Name)
+            if g is not None:
+                out["modified"] = bool(g.Modified)
+        except Exception:
+            pass
+    return out
+
+
 def _gui_saved(d):
     """A save through App's document leaves the window's own modified mark
     (the "*" on its tab) set: FreeCAD clears it only for a save made through
@@ -391,7 +414,7 @@ def tools(session):
                 p = f"{base} {k}.FCStd"
             d.saveAs(p)
         _gui_saved(d)
-        return {"document": d.Name, "path": p, "bytes": os.path.getsize(p)}
+        return {"document": d.Name, "path": p, "bytes": os.path.getsize(p), **modified_state(d)}
 
     def object_list(a):
         kind = (a.get("type") or "").lower()
