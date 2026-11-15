@@ -478,7 +478,7 @@ def tools(session):
                 near = difflib.get_close_matches(p, list(props), 3)
                 raise ToolError("not_found", f"values.{p}: {o.Label} has no such property{' — did you mean ' + ', '.join(near) if near else ''}. object_get lists them.")
             if readonly(o, p):
-                raise ToolError("invalid_input", f"values.{p}: read-only on {o.Label} (FreeCAD computes it).")
+                raise ToolError("invalid_input", f"values.{p}: read-only on {o.Label} (FreeCAD computes it)." + (" show { objects, visible } shows or hides it." if p == "Visibility" else ""))
         before = {p: picks.json_safe(getattr(o, p)) for p in vals}
         # Refused only for what this change broke (M4): the object and what
         # is built from it, not already broken before. Other objects failing
