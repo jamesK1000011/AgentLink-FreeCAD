@@ -135,6 +135,7 @@ agentlink/theme.py
 agentlink/tooldata.py
 agentlink/tools.py
 agentlink/usage.py
+agentlink/workbench.py
 agentlink_headless.py
 agentlink_state.py
 docs/clients/README.md

@@ -5,7 +5,6 @@
 # usage strip), and the theme's accents read from parameters or a .cfg and
 # put only on Agent Link's own widgets. Qt-only checks skip without PySide.
 import os
-import runpy
 import sys
 import tempfile
 import types
@@ -145,19 +144,27 @@ class Commands(unittest.TestCase):
 
 
 class InitGuiLoads(unittest.TestCase):
-    """InitGui.py under stand-in FreeCAD and FreeCADGui: the workbench is
-    added, its commands registered by name, and toolbar and menu name only
-    registered commands."""
+    """InitGui.py run as FreeCAD runs it, exec(code, FreeCAD's globals, {}):
+    a class or method body there sees FreeCAD's globals only, never
+    InitGui's own names. Under stand-in FreeCAD and FreeCADGui the workbench
+    is added, its commands registered by name, and toolbar and menu name
+    only registered commands."""
 
     def test_loads(self):
         added, cmds, bars, menus, paths = [], {}, {}, {}, []
 
-        class Workbench:
+        class Workbench:  # FreeCAD's own base: Activated and Deactivated do nothing
             def appendToolbar(self, name, items):
                 bars[name] = items
 
             def appendMenu(self, name, items):
                 menus[name] = items
+
+            def Activated(self):
+                pass
+
+            def Deactivated(self):
+                pass
 
         gui = types.ModuleType("FreeCADGui")
         gui.Workbench = Workbench
@@ -166,15 +173,23 @@ class InitGuiLoads(unittest.TestCase):
         gui.addIconPath = paths.append
         app = types.ModuleType("FreeCAD")
         pyside = types.ModuleType("PySide")  # no QtCore: autostart's timer is skipped
+        with open(os.path.join(ROOT, "InitGui.py"), encoding="utf-8") as f:
+            code = compile(f.read(), "InitGui.py", "exec")
+        fc_globals = {"__builtins__": __builtins__, "FreeCAD": app, "FreeCADGui": gui, "App": app, "Gui": gui}
         with mock.patch.dict(sys.modules, {"FreeCADGui": gui, "FreeCAD": app, "PySide": pyside}):
-            runpy.run_path(os.path.join(ROOT, "InitGui.py"))
+            exec(code, fc_globals, {})
             self.assertEqual(len(added), 1)
             wb = added[0]
             self.assertEqual(wb.MenuText, "Agent Link")
+            self.assertEqual(wb.ToolTip, "Drive FreeCAD from an agent")
             self.assertTrue(os.path.isfile(wb.Icon))
-            self.assertEqual(paths, [os.path.join(os.path.dirname(commands.__file__), "icons")])
+            self.assertEqual(os.path.basename(wb.Icon), "AgentLink_Workbench.svg")
+            self.assertEqual([os.path.normpath(p) for p in paths], [os.path.normpath(os.path.join(os.path.dirname(commands.__file__), "icons"))])
             wb.Initialize()
+            wb.Activated()
+            self.assertEqual(wb.GetClassName(), "Gui::PythonWorkbench")
         self.assertEqual(list(cmds), [n for n, _ in commands.COMMANDS])
+        self.assertEqual(bars, {"Agent Link": ["AgentLink_Start", "AgentLink_Stop", "AgentLink_Panel", "AgentLink_Shot"]})
         for items in list(bars.values()) + list(menus.values()):
             for i in items:
                 self.assertTrue(i == "Separator" or i in cmds, i)

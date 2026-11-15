@@ -186,11 +186,14 @@ class PackageXml(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(ROOT, self.one("icon").text.strip())))
         wbs = self.root.findall("p:content/p:workbench", NS)
         self.assertEqual(len(wbs), 1)
+        # InitGui.py only calls workbench.add(); the class lives in the module
+        # (FreeCAD's exec() hides InitGui's own names from a class body).
         initgui = _read("InitGui.py")
+        built = _read(os.path.join("agentlink", "workbench.py"))
         wb = wbs[0]
         cls = self.one("classname", wb).text.strip()
-        self.assertRegex(initgui, r"(?m)^class %s\(FreeCADGui\.Workbench\)" % re.escape(cls))
-        self.assertRegex(initgui, r"addWorkbench\(%s\(\)\)" % re.escape(cls))
+        self.assertRegex(built, r"(?m)^    class %s\(Gui\.Workbench\)" % re.escape(cls))
+        self.assertRegex(initgui, r"(?m)^_agentlink_workbench\.add\(FreeCADGui\)")
         self.assertTrue(os.path.isfile(os.path.join(ROOT, self.one("subdirectory", wb).text.strip(), "InitGui.py")))
         self.assertTrue(os.path.isfile(os.path.join(ROOT, self.one("icon", wb).text.strip())))
         self.one("name", wb)
