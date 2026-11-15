@@ -1,4 +1,8 @@
 CHANGELOG.md
+Dark.cfg
+Dark.yaml
+Dark/Studio
+Dark/parameters/Studio
 Init.py
 InitGui.py
 LICENSE
@@ -7,13 +11,14 @@ LICENSES/Apache-2.0.txt
 LICENSES/CC-BY-4.0.txt
 LICENSES/LGPL-2.1-or-later.txt
 LICENSES/MIT.txt
+Light.cfg
+Light.yaml
+Light/Studio
+Light/parameters/Studio
 README.md
 REUSE.toml
 SETUP.md
-Studio Dark/Studio Dark.cfg
-Studio Dark/parameters/Studio Dark.yaml
-Studio Light/Studio Light.cfg
-Studio Light/parameters/Studio Light.yaml
+Studio
 agentlink/__init__.py
 agentlink/ccx_io.py
 agentlink/cells.py
@@ -215,6 +220,7 @@ tests/test_pref_import.py
 tests/test_protocol.py
 tests/test_release.py
 tests/test_report_watch.py
+tests/test_restart_temp_copy.py
 tests/test_runners.py
 tests/test_sheet.py
 tests/test_sheets.py
