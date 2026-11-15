@@ -229,10 +229,14 @@ def coin_project(view, p):
     vv = cam.getViewVolume(a)
     if 0 < a < 1.0:
         vv.scale(1.0 / a)
-    out = coin.SbVec3f()
-    vv.projectToScreen(coin.SbVec3f(*[float(c) for c in p]), out)
+    src = coin.SbVec3f(*[float(c) for c in p])
+    try:
+        out = vv.projectToScreen(src)  # pivy returns the screen point
+    except TypeError:
+        out = coin.SbVec3f()
+        vv.projectToScreen(src, out)
     w, h = vp.getViewportSizePixels().getValue()
-    x, y = out.getValue()[:2]
+    x, y = (out.getValue() if hasattr(out, "getValue") else tuple(out))[:2]
     return float(x) * w, float(y) * h, (w, h)
 
 
@@ -621,10 +625,11 @@ class Run:
             if kind == "view":
                 x, y = v
             else:
-                coin = None
+                coin, fallback = None, None
                 try:
                     px, py, coin = coin_project(view, v)
-                except Exception:  # no Coin render manager: FreeCAD's own call (off in tall views)
+                except Exception as e:  # no Coin render manager: FreeCAD's own call (off in tall views)
+                    fallback = f"{type(e).__name__}: {e}"
                     px, py = view.getPointOnViewport(self.vector(*v))[:2]
                     try:
                         coin = tuple(view.getSize())[:2]
@@ -632,7 +637,8 @@ class Run:
                         coin = None
                 x, y = view_point(px, py, w, h, coin, self._dpr(vp))
                 self.last_point = {"world": list(v), "viewport": [round(px, 1), round(py, 1)], "coinSize": list(coin) if coin else None,
-                                   "widget": [w, h], "dpr": self._dpr(vp), "at": [round(x, 1), round(y, 1)]}
+                                   "widget": [w, h], "dpr": self._dpr(vp), "at": [round(x, 1), round(y, 1)],
+                                   **({"fallback": fallback} if fallback else {})}
             if not inside(x, y, w, h):
                 raise ToolError("invalid_input", f"{kind} {v} is at ({x:.0f}, {y:.0f}), outside the 3D view ({w}×{h} logical pixels).")
             return self._deepest(vp, x, y)
