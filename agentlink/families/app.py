@@ -16,6 +16,7 @@ import xml.etree.ElementTree as ET
 
 import FreeCAD
 
+from .. import paths
 from ..protocol import Tool, ToolError
 from ..tools import obj
 
@@ -682,9 +683,7 @@ def tools(session):
         from ..grab import grab_window
 
         pix = grab_window(target)
-        out = os.path.expanduser(a.get("path") or os.path.join(s.out_dir, "window.png"))
-        if not os.path.isabs(out):
-            out = os.path.join(s.out_dir, out)
+        out = paths.local(s, a.get("path") or os.path.join(s.out_dir, "window.png"))
         if not pix.save(out, "PNG"):
             raise ToolError("failed", f"Could not write {out}")
         res = {"path": out, "width": pix.width(), "height": pix.height()}
