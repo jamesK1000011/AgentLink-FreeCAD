@@ -39,7 +39,7 @@ class _StopLink:
 
 class _Panel:
     def GetResources(self):
-        return {"Pixmap": "AgentLink_Panel", "MenuText": "Notes and steps", "ToolTip": "Notes pinned to the parts, and the build played step by step"}
+        return {"Pixmap": "AgentLink_Panel", "MenuText": "Agent Link panel", "ToolTip": "Notes pinned to the parts, the build played step by step, the part's review and what the agent did"}
 
     def IsActive(self):
         return True
@@ -61,6 +61,103 @@ class _Shot:
         from agentlink import shots
 
         shots.take()
+
+
+def _widgets():
+    """FreeCAD's PySide widgets module (QtWidgets on Qt 6 builds, QtGui on Qt 5)."""
+    try:
+        from PySide import QtWidgets
+    except ImportError:
+        from PySide import QtGui as QtWidgets
+    return QtWidgets
+
+
+class _Check:
+    def GetResources(self):
+        return {"Pixmap": "AgentLink_Check", "MenuText": "Setup check", "ToolTip": "Whether the Claude extension's launcher is here and can load, and its log's last lines"}
+
+    def IsActive(self):
+        return True
+
+    def Activated(self):
+        import FreeCADGui
+
+        from agentlink import launcher_check
+
+        QtWidgets = _widgets()
+        r = launcher_check.report()
+        box = QtWidgets.QMessageBox(FreeCADGui.getMainWindow())
+        box.setWindowTitle("Agent Link — setup check")
+        box.setText(launcher_check.summary(r))
+        mend = box.addButton("Mend", QtWidgets.QMessageBox.AcceptRole) if launcher_check.can_mend(r) else None
+        box.addButton(QtWidgets.QMessageBox.Close)
+        box.exec_() if hasattr(box, "exec_") else box.exec()
+        if mend is not None and box.clickedButton() is mend:
+            done = launcher_check.mend()
+            QtWidgets.QMessageBox.information(box.parent(), "Agent Link", f"Mended: {done}." if done else "Nothing was changed.")
+
+
+def _here():
+    import os
+
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def installed_version(root=None):
+    """(version from package.xml, short commit or None) of this copy."""
+    import os
+    import re
+
+    root = root or _here()
+    ver = "?"
+    try:
+        with open(os.path.join(root, "package.xml"), encoding="utf-8") as f:
+            m = re.search(r"<version>([^<]+)</version>", f.read())
+            ver = m.group(1).strip() if m else ver
+    except OSError:
+        pass
+    sha = None
+    try:
+        with open(os.path.join(root, ".git", "HEAD"), encoding="utf-8") as f:
+            head = f.read().strip()
+        if head.startswith("ref: "):
+            with open(os.path.join(root, ".git", *head[5:].split("/")), encoding="utf-8") as f:
+                head = f.read().strip()
+        sha = head[:7] if re.fullmatch(r"[0-9a-f]{40}", head) else None
+    except OSError:
+        pass
+    return ver, sha
+
+
+def updates_text(version, sha=None):
+    """The Updates command's words: which Agent Link this is and how it is
+    kept up to date."""
+    this = f"Agent Link {version}" + (f" (commit {sha})" if sha else "")
+    return "\n".join((
+        f"This is {this}.",
+        "",
+        "The Claude extension updates Agent Link each time it starts. To update now, ask the agent to run agentlink_update; this window runs the new code once FreeCAD restarts.",
+        "Other add-ons update from Tools ▸ Addon Manager, or ask the agent.",
+    ))
+
+
+class _Updates:
+    def GetResources(self):
+        return {"Pixmap": "AgentLink_Update", "MenuText": "Updates", "ToolTip": "Which Agent Link this is, and how it is kept up to date"}
+
+    def IsActive(self):
+        return True
+
+    def Activated(self):
+        import FreeCADGui
+
+        QtWidgets = _widgets()
+        QtWidgets.QMessageBox.information(FreeCADGui.getMainWindow(), "Agent Link — updates", updates_text(*installed_version()))
+
+
+# Every command of the workbench, by name, in toolbar order.
+COMMANDS = (("AgentLink_Start", _StartLink), ("AgentLink_Stop", _StopLink), ("AgentLink_Panel", _Panel),
+            ("AgentLink_Shot", _Shot), ("AgentLink_Check", _Check), ("AgentLink_Update", _Updates))
 
 
 def autostart():

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The Agent Link workbench: Start link and Stop link. While the link is on,
+# The Agent Link workbench: Start link, Stop link, the panel, a screenshot
+# for the agent, and Setup check and Updates in its menu. While the link is on,
 # an agent's calls arrive in the document open in this window.
 
 import os
@@ -18,14 +19,14 @@ class AgentLinkWorkbench(FreeCADGui.Workbench):
     Icon = os.path.join(_ICONS, "AgentLink_Workbench.svg")
 
     def Initialize(self):
-        from agentlink.commands import _Panel, _Shot, _StartLink, _StopLink
+        from agentlink.commands import COMMANDS
 
-        FreeCADGui.addCommand("AgentLink_Start", _StartLink())
-        FreeCADGui.addCommand("AgentLink_Stop", _StopLink())
-        FreeCADGui.addCommand("AgentLink_Panel", _Panel())
-        FreeCADGui.addCommand("AgentLink_Shot", _Shot())
-        self.appendToolbar("Agent Link", ["AgentLink_Start", "AgentLink_Stop", "AgentLink_Panel", "AgentLink_Shot"])
-        self.appendMenu("Agent Link", ["AgentLink_Start", "AgentLink_Stop", "AgentLink_Panel", "AgentLink_Shot"])
+        for name, cls in COMMANDS:
+            FreeCADGui.addCommand(name, cls())
+        link = ["AgentLink_Start", "AgentLink_Stop", "AgentLink_Panel", "AgentLink_Shot"]
+        setup = ["AgentLink_Check", "AgentLink_Update"]
+        self.appendToolbar("Agent Link", link)
+        self.appendMenu("Agent Link", link + ["Separator"] + setup)
 
     def GetClassName(self):
         return "Gui::PythonWorkbench"

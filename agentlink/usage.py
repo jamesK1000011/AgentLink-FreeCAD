@@ -189,19 +189,25 @@ def _k(n):
     return f"{n / 1000:.1f}k" if n < 1_000_000 else f"{n / 1_000_000:.2f}M"
 
 
+# Said on the strip itself: the figures are Agent Link's own estimate.
+NOT_BILLING = "estimate, not billing"
+
+
 def strip(r):
-    """'Today 41.2k · week 310.5k tokens (est.)' from usage.report."""
+    """'Today ~41.2k · week ~310.5k tokens (estimate, not billing)' from
+    usage.report."""
     import time
 
     today = time.strftime("%Y-%m-%d")
     t = sum(d["tokens"] for d in r.get("perDay", []) if d["day"] == today)
-    return f"Today {_k(t)} · week {_k(r.get('tokens', 0))} tokens (est.)"
+    return f"Today ~{_k(t)} · week ~{_k(r.get('tokens', 0))} tokens ({NOT_BILLING})"
 
 
 def text(r):
     if r.get("error"):
         return f"No usage to show: {r['error']}"
-    lines = [f"Last {r['days']} days: {r['calls']} calls, ~{_k(r['tokens'])} tokens (tool lists ~{_k(r['toolListTokens'])}, pictures ~{_k(r['imageTokens'])}).", ""]
+    lines = ["Estimates made by Agent Link, not billing: your plan's usage page has the real totals.", ""]
+    lines += [f"Last {r['days']} days: {r['calls']} calls, ~{_k(r['tokens'])} tokens (tool lists ~{_k(r['toolListTokens'])}, pictures ~{_k(r['imageTokens'])}).", ""]
     lines += [f"{d['day']}: {d['calls']} calls, ~{_k(d['tokens'])}" for d in r.get("perDay", [])[-7:]]
     lines += ["", "Most costly tools:"] + [f"  {b['tool']}: {b['calls']} calls, ~{_k(b['tokens'])}" for b in r.get("topTools", [])[:8]]
     lines += [""] + r.get("tips", []) + ["", r.get("note", "")]

@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Helpers for the Agent Link panel's widgets (a quiet colour, a row that
-# wraps), and filling a tab as it comes up: an add-on's tab
-# (hooks.register_tab) fills through its widget's own fill().
+# wraps), the panel's plain words (tab order, what each tab says when it is
+# empty, the link line, the theme rules), and filling a tab as it comes up:
+# an add-on's tab (hooks.register_tab) fills through its widget's own fill().
+# The words and the order need no window, so they are tested headless.
 
 try:
     from PySide import QtCore, QtGui
@@ -15,14 +17,63 @@ except ImportError:  # pragma: no cover
     QtCore = QtGui = QtWidgets = None
 
 
-def muted(widget):
-    """A quiet colour that still reads in light and dark themes: the text
-    colour blended two thirds of the way towards the background (palette's
-    mid is near the background in some dark themes)."""
-    pal = widget.palette()
-    t, b = pal.color(QtGui.QPalette.WindowText), pal.color(QtGui.QPalette.Window)
-    mix = [int(t.red() * 0.6 + b.red() * 0.4), int(t.green() * 0.6 + b.green() * 0.4), int(t.blue() * 0.6 + b.blue() * 0.4)]
-    return "#%02x%02x%02x" % tuple(mix)
+from .theme import muted  # noqa: F401  (one copy: the theme's)
+
+# Agent Link's own tabs and their places. Add-ons' tabs (register_tab, with
+# their own order) fall between: 30-40 after Steps, 60-90 after Review, and
+# Activity stays last.
+CORE_TABS = (("Notes", 10), ("Steps", 20), ("Review", 50), ("Activity", 95))
+
+NO_REVIEWER = "No reviewer installed."
+
+# What each of Agent Link's tabs is for, said where its list is empty.
+EMPTY = {
+    "Notes": "No notes yet. Pin a note to the part to leave it for the agent; the agent's questions to you show here too.",
+    "Steps": "No PartDesign body in this document. Steps plays a body's build back, one feature at a time.",
+    "Review": "Pick a body and press Check for the reviewer's verdict.",
+    "Activity": "Nothing yet. Each thing the agent does in this window shows here as it happens.",
+}
+
+
+def tab_order(addon_tabs):
+    """[(title, order, addon)] for the whole tab bar: Agent Link's own and
+    the add-ons' (hooks.TABS rows) by order; at the same order Agent Link's
+    comes first. An add-on tab with a core tab's title is left out."""
+    core = {t for t, _ in CORE_TABS}
+    rows = [(t, o, False) for t, o in CORE_TABS]
+    rows += [(a["title"], a.get("order", 50), True) for a in addon_tabs if a.get("title") not in core]
+    return sorted(rows, key=lambda r: (r[1], r[2]))
+
+
+def review_hint(has_reviewer):
+    """The Review tab's line before any verdict."""
+    if has_reviewer:
+        return EMPTY["Review"]
+    return NO_REVIEWER + " Body check gives the core soundness check: valid, closed, one solid."
+
+
+def link_status(on, doc_label=None):
+    """The line above the tabs: whether the link is on and which document
+    the agent works in."""
+    if not on:
+        return "Link off. Start link lets an agent drive this window."
+    if doc_label:
+        return f"Link on. The agent works in {doc_label}."
+    return "Link on. The agent works in the document in front when it starts."
+
+
+def panel_qss(r):
+    """The panel's accents (theme.roles) as rules on Agent Link's own
+    widgets only, each scoped to the panel's object name. Colours only:
+    shapes, fonts and surfaces stay FreeCAD's theme's."""
+    return "\n".join((
+        f"#AgentLinkPanel QLabel#AgentLinkStatus {{ color: {r['muted']}; }}",
+        f"#AgentLinkPanel QLabel#AgentLinkStatus[on=\"true\"] {{ color: {r['accent']}; }}",
+        f"#AgentLinkPanel QLabel#AgentLinkEmpty {{ color: {r['muted']}; }}",
+        f"#AgentLinkPanel QLabel#AgentLinkCaption {{ color: {r['accent']}; }}",
+        f"#AgentLinkPanel QPushButton#AgentLinkUsage {{ color: {r['muted']}; }}",
+        f"#AgentLinkPanel QLabel#AgentLinkCredit {{ color: {r['muted']}; }}",
+    ))
 
 
 class FlowRow(QtWidgets.QWidget if QtWidgets else object):

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+<title>AgentLink_Update</title>
+<path d="M50,24 A20,20 0 0 0 14,22" fill="none" stroke="#06989a" stroke-width="10" stroke-linecap="round"/>
+<path d="M50,24 A20,20 0 0 0 14,22" fill="none" stroke="#34e0e2" stroke-width="4" stroke-linecap="round"/>
+<path d="M14,40 A20,20 0 0 0 50,42" fill="none" stroke="#06989a" stroke-width="10" stroke-linecap="round"/>
+<path d="M14,40 A20,20 0 0 0 50,42" fill="none" stroke="#34e0e2" stroke-width="4" stroke-linecap="round"/>
+<path d="M56,12 L54,28 L39,23 Z" fill="#34e0e2" stroke="#06989a" stroke-width="2" stroke-linejoin="round"/>
+<path d="M8,52 L10,36 L25,41 Z" fill="#34e0e2" stroke="#06989a" stroke-width="2" stroke-linejoin="round"/>
+</svg>
