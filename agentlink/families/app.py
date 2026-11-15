@@ -202,6 +202,13 @@ def _clean_env():
     return env
 
 
+def _temp_copy(file):
+    """True for a file in a temporary folder an add-on opened a copy from
+    (agentlink-recovered-…, agentlink-restore-…)."""
+    folder = os.path.basename(os.path.dirname(str(file or "")))
+    return folder.startswith(("agentlink-recovered-", "agentlink-restore-"))
+
+
 def _carry_settings(app):
     """Run the other release headless to copy this one's settings and
     add-ons into its versioned folders (and, on a Mac, turn off the pop-up
@@ -802,7 +809,10 @@ def tools(session):
             elif how == "drop":
                 dropped.append(d.Label)
         copied = reopener.keep([d for d, how in plan if how == "copy"]) if lost else []
-        reopen = [d.FileName for d in FreeCAD.listDocuments().values() if d.FileName]
+        # A copy opened from an add-on's temporary folder is not reopened by
+        # path: the add-on reopens what it keeps, and reopening the copy too
+        # chained "_recovered" copies on every restart.
+        reopen = [d.FileName for d in FreeCAD.listDocuments().values() if d.FileName and not _temp_copy(d.FileName)]
         # Calls wait for the window (and these documents) instead of going to
         # the hidden FreeCAD meanwhile; the one in front is in front again.
         from .. import restart_mark
