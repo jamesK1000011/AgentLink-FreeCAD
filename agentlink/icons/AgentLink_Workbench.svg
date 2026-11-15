@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
 <title>AgentLink_Workbench</title>
-<defs><linearGradient id="AgentLink_Workbench_g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#729fcf"/><stop offset="1" stop-color="#3465a4"/></linearGradient><linearGradient id="AgentLink_Workbench_g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3465a4"/><stop offset="1" stop-color="#204a87"/></linearGradient><linearGradient id="AgentLink_Workbench_g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eeeeec"/><stop offset="1" stop-color="#babdb6"/></linearGradient><linearGradient id="AgentLink_Workbench_g4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eeeeec"/><stop offset="1" stop-color="#babdb6"/></linearGradient><linearGradient id="AgentLink_Workbench_g5" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#babdb6"/><stop offset="1" stop-color="#888a85"/></linearGradient></defs>
-<path d="M16,16 h30 v30 h-30 Z" fill="url(#AgentLink_Workbench_g1)" stroke="#204a87" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<path d="M16,16 L28,4 L58,4 L46,16 Z" fill="#729fcf" stroke="#204a87" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<path d="M46,16 L58,4 L58,34 L46,46 Z" fill="url(#AgentLink_Workbench_g2)" stroke="#204a87" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<path d="M18,44 V18 H44" fill="none" stroke="#729fcf" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.8"/>
-<path d="M24,26 h14 M24,32 h10" fill="none" stroke="#729fcf" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>
+<defs><linearGradient id="AgentLink_Workbench_g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#34e0e2"/><stop offset="1" stop-color="#16d0d2"/></linearGradient><linearGradient id="AgentLink_Workbench_g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#16d0d2"/><stop offset="1" stop-color="#06989a"/></linearGradient><linearGradient id="AgentLink_Workbench_g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eeeeec"/><stop offset="1" stop-color="#babdb6"/></linearGradient><linearGradient id="AgentLink_Workbench_g4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eeeeec"/><stop offset="1" stop-color="#babdb6"/></linearGradient><linearGradient id="AgentLink_Workbench_g5" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#babdb6"/><stop offset="1" stop-color="#888a85"/></linearGradient></defs>
+<path d="M16,16 h30 v30 h-30 Z" fill="url(#AgentLink_Workbench_g1)" stroke="#06989a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M16,16 L28,4 L58,4 L46,16 Z" fill="#34e0e2" stroke="#06989a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M46,16 L58,4 L58,34 L46,46 Z" fill="url(#AgentLink_Workbench_g2)" stroke="#06989a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M18,44 V18 H44" fill="none" stroke="#34e0e2" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.8"/>
+<path d="M24,26 h14 M24,32 h10" fill="none" stroke="#34e0e2" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>
 <g transform="rotate(-35 20 46)">
 <rect x="22" y="41" width="12" height="5" rx="1" fill="url(#AgentLink_Workbench_g3)" stroke="#2e3436" stroke-width="2" stroke-linejoin="round"/>
 <rect x="22" y="46" width="12" height="5" rx="1" fill="url(#AgentLink_Workbench_g4)" stroke="#2e3436" stroke-width="2" stroke-linejoin="round"/>
