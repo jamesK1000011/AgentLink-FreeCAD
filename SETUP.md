@@ -69,7 +69,7 @@ The person restarts the client. Done when the client lists the
 Call `session_state`: it answers with what the document holds and where
 files go. Then `guide_read` with topic `start` for how to work. To watch,
 the person opens FreeCAD, picks the Agent Link workbench and presses
-**Start link**; the next calls show in their window.
+**Start Link**; the next calls show in their window.
 
 ## If it fails
 

@@ -6,7 +6,7 @@
 
 class _StartLink:
     def GetResources(self):
-        return {"Pixmap": "AgentLink_Start", "MenuText": "Start link", "ToolTip": "Let an agent drive this window (local only)"}
+        return {"Pixmap": "AgentLink_Start", "MenuText": "Start Link", "ToolTip": "Let an agent drive this window (local only)"}
 
     def IsActive(self):
         import agentlink_state
@@ -23,7 +23,7 @@ class _StartLink:
 
 class _StopLink:
     def GetResources(self):
-        return {"Pixmap": "AgentLink_Stop", "MenuText": "Stop link", "ToolTip": "Close the agent's link"}
+        return {"Pixmap": "AgentLink_Stop", "MenuText": "Stop Link", "ToolTip": "Close the agent's link"}
 
     def IsActive(self):
         import agentlink_state
@@ -39,7 +39,7 @@ class _StopLink:
 
 class _Panel:
     def GetResources(self):
-        return {"Pixmap": "AgentLink_Panel", "MenuText": "Agent Link panel", "ToolTip": "Notes pinned to the parts, the build played step by step, the part's review and what the agent did"}
+        return {"Pixmap": "AgentLink_Panel", "MenuText": "Agent Link Panel", "ToolTip": "Notes pinned to the parts, the build played step by step, the part's review and what the agent did"}
 
     def IsActive(self):
         return True
@@ -52,7 +52,7 @@ class _Panel:
 
 class _Shot:
     def GetResources(self):
-        return {"Pixmap": "AgentLink_Shot", "MenuText": "Screenshot for the agent", "ToolTip": "Take the window as you see it, mark it up and leave it for the agent (Alt+Shift+S)", "Accel": "Alt+Shift+S"}
+        return {"Pixmap": "AgentLink_Shot", "MenuText": "Screenshot for Agent", "ToolTip": "Take the window as you see it, mark it up and leave it for the agent (Alt+Shift+S)", "Accel": "Alt+Shift+S"}
 
     def IsActive(self):
         return True
@@ -74,7 +74,7 @@ def _widgets():
 
 class _Check:
     def GetResources(self):
-        return {"Pixmap": "AgentLink_Check", "MenuText": "Setup check", "ToolTip": "Whether the Claude extension's launcher is here and can load, and its log's last lines"}
+        return {"Pixmap": "AgentLink_Check", "MenuText": "Setup Check", "ToolTip": "Whether the Claude extension's launcher is here and can load, and its log's last lines"}
 
     def IsActive(self):
         return True
@@ -87,14 +87,14 @@ class _Check:
         QtWidgets = _widgets()
         r = launcher_check.report()
         box = QtWidgets.QMessageBox(FreeCADGui.getMainWindow())
-        box.setWindowTitle("Agent Link — setup check")
-        box.setText(launcher_check.summary(r))
+        box.setWindowTitle("Agent Link Setup Check")
+        set_box_text(box, "Agent Link Setup Check", launcher_check.summary(r))
         mend = box.addButton("Mend", QtWidgets.QMessageBox.AcceptRole) if launcher_check.can_mend(r) else None
         box.addButton(QtWidgets.QMessageBox.Close)
         box.exec_() if hasattr(box, "exec_") else box.exec()
         if mend is not None and box.clickedButton() is mend:
             done = launcher_check.mend()
-            QtWidgets.QMessageBox.information(box.parent(), "Agent Link", f"Mended: {done}." if done else "Nothing was changed.")
+            info(box.parent(), "Agent Link", f"Mended: {done}." if done else "Nothing was changed.")
 
 
 def _here():
@@ -152,7 +152,7 @@ class _Updates:
         import FreeCADGui
 
         QtWidgets = _widgets()
-        QtWidgets.QMessageBox.information(FreeCADGui.getMainWindow(), "Agent Link — updates", updates_text(*installed_version()))
+        info(FreeCADGui.getMainWindow(), "Agent Link Updates", updates_text(*installed_version()))
 
 
 # Every command of the workbench, by name, in toolbar order.
@@ -191,3 +191,32 @@ def autostart():
             panel.show()
     except OSError as e:
         FreeCAD.Console.PrintLog(f"Agent Link: link not started ({e})\n")
+
+
+def split_text(text):
+    """(the lines a person reads, the log lines): a launcher log line starts
+    with a [time stamp] and belongs under Show Details, not in the box."""
+    lines = (text or "").splitlines()
+    log = [l for l in lines if l.lstrip().startswith("[") and "]" in l[:40]]
+    rest = [l for l in lines if l not in log]
+    return "\n".join(rest).strip(), "\n".join(log).strip()
+
+
+def set_box_text(box, title, text):
+    """A message box that reads on macOS too, where a box has no title bar:
+    the title as its bold first line, the message under it, the log lines
+    under Show Details."""
+    body, log = split_text(text)
+    box.setWindowTitle(title)
+    box.setText(f"<b>{title}</b>")
+    box.setInformativeText(body)
+    if log:
+        box.setDetailedText(log)
+
+
+def info(parent, title, text):
+    QtWidgets = _widgets()
+    box = QtWidgets.QMessageBox(parent)
+    set_box_text(box, title, text)
+    box.addButton(QtWidgets.QMessageBox.Ok)
+    box.exec_() if hasattr(box, "exec_") else box.exec()

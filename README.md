@@ -33,7 +33,7 @@ uvx --from git+https://github.com/jamesK1000011/AgentLink-FreeCAD agentlink-free
 ```
 
 or, from a copy of this folder, `python3 agentlink_headless.py --check`. In
-FreeCAD, **Agent Link > Setup check** does the same for the Claude extension.
+FreeCAD, **Agent Link > Setup Check** does the same for the Claude extension.
 
 | | macOS | Linux | Windows |
 |---|---|---|---|
@@ -107,17 +107,17 @@ It finds FreeCAD, serves in FreeCAD's own Python, and writes files to
 `~/AgentLink` (`--out DIR` for another folder).
 
 **To watch the agent work**, open FreeCAD, pick the **Agent Link** workbench
-and press **Start link**. Calls then arrive in the document open in your
+and press **Start Link**. Calls then arrive in the document open in your
 window; with the link off they run headless. The link listens on 127.0.0.1
 only and pairs with the server before it takes a call.
 
 ## Where everything lives
 
 - **The workbench**: pick *Agent Link* from FreeCAD's workbench list.
-- **The toolbar**: *Start link*, *Stop link*, *Agent Link panel*, and
-  *Screenshot for the agent* (Alt+Shift+S: take the window, mark it up, leave
+- **The toolbar**: *Start Link*, *Stop Link*, *Agent Link panel*, and
+  *Screenshot for Agent* (Alt+Shift+S: take the window, mark it up, leave
   it for the agent).
-- **The Agent Link menu**: the same, plus *Setup check* and *Updates* (which
+- **The Agent Link menu**: the same, plus *Setup Check* and *Updates* (which
   Agent Link this is and how it is kept up to date).
 - **The panel**, docked beside the model tree, in tabs:
   - *Notes*: notes pinned to the parts, between you and the agent; the agent's questions to you;
@@ -195,7 +195,7 @@ The table is generated: `python3 scripts/tool_summary.py` rewrites it, and
 | Core tools, headless and in the window | supported | CI-tested | expected to work, untested |
 | Claude Desktop extension (`.mcpb`) | supported | Mac only | Mac only |
 | Unattended features: a hidden FreeCAD kept running, restarts after a crash, app updates, harmless dialogs answered | supported | not yet | not yet |
-| Launcher log and Setup check's launcher report | supported | Mac only | Mac only |
+| Launcher log and Setup Check's launcher report | supported | Mac only | Mac only |
 
 Windows reports are welcome: open an issue saying what worked and what did not.
 
@@ -232,9 +232,9 @@ folder, so nothing can be installed into it. Open FreeCAD, close it, and try
 again.
 
 **The window shows nothing.** Pick the Agent Link workbench and press
-*Start link*; calls go headless while the link is off.
+*Start Link*; calls go headless while the link is off.
 
-**The Claude extension cannot load** (Mac): **Agent Link > Setup check** in
+**The Claude extension cannot load** (Mac): **Agent Link > Setup Check** in
 FreeCAD reports the launcher and offers *Mend* when it can fix it.
 
 ## Uninstall
