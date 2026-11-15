@@ -255,6 +255,17 @@ class WindowSide(Sup):
         self.assertIn("Save changes?", out["error"]["message"])
         self.assertEqual(self.call("ping")[1]["ok"], "ping")
 
+    def test_force_restart_frees_a_window_stuck_behind_a_dialog(self):
+        first = self.call("ping")[1]["pid"]
+        err, out = self.call("behind_dialog")
+        self.assertTrue(err)
+        err, out = self.call("app_force_restart", timeout=90)
+        self.assertFalse(err, out)
+        self.assertTrue(out["restarted"])
+        self.assertIn("started in the background", out["note"])
+        again = self.call("ping")[1]["pid"]
+        self.assertNotEqual(first, again)
+
     def test_hang_stops_relaunches_and_recovers(self):
         first = self.call("ping")[1]["pid"]
         err, out = self.call("hang", timeout=90)

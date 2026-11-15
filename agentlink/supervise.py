@@ -84,6 +84,13 @@ def _answer(mid, code, message):
     return json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
 
 
+def _result(mid, body):
+    return json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": json.dumps(body)}]}})
+
+
+FREECAD_APP = "/Applications/FreeCAD.app"
+
+
 def _call_info(line):
     try:
         m = json.loads(line)
@@ -309,6 +316,25 @@ class Window:
             c["abandoned"] = True
         self._drop()
         return True
+
+    def force_restart(self):
+        """app_force_restart, run here outside FreeCAD so it works whatever
+        holds the window (a dialog, a hang, a crash half-way): the window's
+        process stopped (TERM, then KILL), the call in hand answered, FreeCAD
+        started again in the background and its documents recovered, as after
+        a crash. The words for the answer."""
+        hb = self.last_hb or heartbeat() or {}
+        pid, t0 = hb.get("pid"), time.time()
+        if keep is not None:
+            keep.log_watchdog({"event": "force_restart", "pid": pid})
+        self.abandon("FreeCAD was force-restarted (app_force_restart) while this call waited; it did not finish.", code="failed")
+        if pid:
+            stop_pid(int(pid), grace=3.0)
+        self.f = None
+        if not hb.get("app"):
+            hb = dict(hb, app=FREECAD_APP if os.path.isdir(FREECAD_APP) else None)
+            self.last_hb = hb
+        return self.recover("forced restart", "app_force_restart", t0)
 
     def recover(self, why, tool, t_crash):
         """After the window died (a crash or the watchdog): started again in
@@ -564,7 +590,7 @@ def run(script, argv):
                     dlg = (hb or {}).get("dialog")
                     if dlg and not dlg.get("pressed") and now - float(dlg.get("since") or now) > DIALOG_WAIT and not _answers_dialog(c):
                         window.abandon(f"Blocked by a dialog in the FreeCAD window: \"{dlg.get('title')}\" — {str(dlg.get('text'))[:300]} (buttons: {', '.join(dlg.get('buttons') or []) or 'none'}). "
-                                       f"{c['tool']} is waiting behind it. dialog_answer {{ button }} presses one if it is a harmless information box; anything else is the person's: ask them in chat.")
+                                       f"{c['tool']} is waiting behind it. dialog_answer {{ button }} presses one of its buttons: read it and press what the job needs (Cancel backs out); app_force_restart if the window is stuck.")
                         continue
                     last = float((hb or {}).get("t") or c["start"])
                     limit = deadline_for(c["tool"])
@@ -610,6 +636,20 @@ def run(script, argv):
                 pending.pop(mid, None)
                 write(_answer(mid, "invalid_state", f"{tool} with these arguments hung FreeCAD twice this session: refused for the rest of it. Try another way (other sizes, a rough pass, fewer objects)."))
                 continue
+        if msg and msg.get("method") == "tools/call" and _call_info(line)[1] == "app_force_restart":
+            # Answered here, never inside FreeCAD: the window may be the thing stuck.
+            fid = msg.get("id")
+            pending.pop(fid, None)
+
+            def _force(fid=fid):
+                try:
+                    words = window.force_restart()
+                    write(_result(fid, {"restarted": True, "note": words}))
+                except Exception as e:  # noqa: BLE001
+                    write(_answer(fid, "failed", f"Force restart failed: {e}"))
+
+            threading.Thread(target=_force, daemon=True).start()
+            continue
         heavy_tool = None
         if msg and msg.get("method") == "tools/call":
             mid, tool, args = _call_info(line)

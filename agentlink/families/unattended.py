@@ -22,7 +22,7 @@ from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 
 GROUP = "unattended"
-INFO = "Unattended use: answer harmless dialogs, the pinned document, the heavy-job queue, the Addon Manager."
+INFO = "Unattended use: the pinned document, the heavy-job queue, the Addon Manager (dialog_answer and app_force_restart are in core)."
 
 # Used when the launcher's list is missing or unreadable (an install from
 # before it wrote one): Agent Link itself and the Addon Manager, no add-on
@@ -70,14 +70,10 @@ def tools(s):
         btn = a.get("button")
         if not btn:
             return {"dialog": info}
-        # Cancel on a dialog the agent's own call opened (cmd_run of a command
-        # that shows Preferences, say) changes nothing and frees the window;
-        # any other button there, and any button on a dialog the person
-        # opened, stays theirs.
-        own_cancel = btn.lower() == "cancel" and gui_link.agent_opened(d)
-        if not keep.harmless(d) and not own_cancel:
-            raise ToolError("not_allowed", f"\"{d['title']}\" is not a plain information box ({', '.join(d['buttons'])}): which button is the person's call — ask them in chat, quoting it."
-                            + (" Cancel is yours to press on it: the agent's call opened it." if gui_link.agent_opened(d) else ""))
+        # The agent operates FreeCAD as the person would, whoever opened the
+        # dialog: it reads it and presses the button the job needs, as if the
+        # person were just watching. What was pressed is logged and said in
+        # the answer, so the person can see it.
         if btn.lower() not in [b.lower() for b in d["buttons"]]:
             raise bad(f"button: one of {', '.join(d['buttons'])}.")
         if not gui_link.press(d, btn):
@@ -331,6 +327,6 @@ def tools(s):
              obj({"action": {"type": "string", "enum": ["list", "search", "install", "update", "remove"]}, "name": st, "query": st, "url": st, "branch": st, "confirm": st}), addon),
         Tool("doc_switch", "Which open document the agent works in: document (name, label or file) switches to it — the session stays on it whatever the person brings to the front of the window; front: true also brings it to the front. No document: the agent's one and those open.",
              obj({"document": st, "front": {"type": "boolean"}}), doc_switch),
-        Tool("dialog_answer", "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one — only on a plain information box (OK), or Cancel on a dialog your own call opened. Any other dialog is the person's: quote it to them in chat.",
+        Tool("dialog_answer", "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one by its text. You operate FreeCAD as the person would: read the dialog and press what the job needs (Cancel backs out of anything you did not mean to open); say what you pressed. A stuck window: app_force_restart.",
              obj({"button": st}), dialog_answer),
     ]

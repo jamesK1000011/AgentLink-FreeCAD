@@ -143,13 +143,13 @@ licence.
 ## What the agent can do
 
 <!-- tools:begin (scripts/tool_summary.py) -->
-Agent Link itself declares 392 tools in 29 groups; a FreeCAD build without a workbench (FEM, CAM …)
+Agent Link itself declares 393 tools in 29 groups; a FreeCAD build without a workbench (FEM, CAM …)
 serves fewer, and each installed add-on adds its own groups.
 Groups marked *lean* are listed from the start; the agent turns on the rest with `tool_groups`.
 
 | Group | Tools | What it holds |
 |---|---:|---|
-| `core` *lean* | 10 | The session, groups, guides, batches, undo, soundness, export. Always listed. |
+| `core` *lean* | 11 | The session, groups, guides, batches, undo, soundness, export. Always listed. |
 | `doc` | 13 | The document: new, open, save; objects listed, read, set, renamed, deleted; recompute; import and export files. |
 | `model` | 27 | Part modelling: primitives, booleans, move/rotate/mirror/scale/arrays, fillets and chamfers, offset and shell, extrude, revolve, loft, sweep. |
 | `measure` | 6 | Find faces and edges (the references other tools take), measure between them, sections, mass properties, clearance. |
@@ -177,7 +177,7 @@ Groups marked *lean* are listed from the start; the agent turns on the rest with
 | `cam_more` | 6 | CAM paths from areas and shapes, compound, array, stop, fixture offsets, property bags, job templates; Draft dimension flip and heal; Assembly rigid groups and new parts. |
 | `bim_gaps` | 16 | BIM components, clones, references, structural systems, pipe connectors, panel cuts and sheets, nesting, IFC B-rep flag, 2D level views, image planes, library, re-extrude, rewire, glue, trash, reorder. |
 | `fem_more` | 3 | FEM: every boundary condition, material, element, equation, solver and mesh refinement by kind; Netgen meshes, FEM mesh to mesh, mesh groups cleared; stress linearization. |
-| `unattended` | 4 | Unattended use: answer harmless dialogs, the pinned document, the heavy-job queue, the Addon Manager. |
+| `unattended` | 4 | Unattended use: the pinned document, the heavy-job queue, the Addon Manager (dialog_answer and app_force_restart are in core). |
 <!-- tools:end -->
 
 Each group has a guide the agent reads (`guide_read`). Any tool runs by name
