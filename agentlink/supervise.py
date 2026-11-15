@@ -588,7 +588,11 @@ def run(script, argv):
                     if hb:
                         window.last_hb = hb
                     dlg = (hb or {}).get("dialog")
-                    if dlg and not dlg.get("pressed") and now - float(dlg.get("since") or now) > DIALOG_WAIT and not _answers_dialog(c):
+                    # A dialog answer gets its own while to run (not the
+                    # dialog's age), but not for ever: a window that never
+                    # answers it must not hold every call behind it.
+                    waited = now - (c["start"] if _answers_dialog(c) else float(dlg.get("since") or now)) if dlg else 0
+                    if dlg and not dlg.get("pressed") and waited > DIALOG_WAIT:
                         window.abandon(f"Blocked by a dialog in the FreeCAD window: \"{dlg.get('title')}\" — {str(dlg.get('text'))[:300]} (buttons: {', '.join(dlg.get('buttons') or []) or 'none'}). "
                                        f"{c['tool']} is waiting behind it. dialog_answer {{ button }} presses one of its buttons: read it and press what the job needs (Cancel backs out); app_force_restart if the window is stuck.")
                         continue

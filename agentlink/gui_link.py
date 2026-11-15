@@ -224,6 +224,15 @@ class Link:
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self._drain)
         self.timer.start(30)
+        # Qt never fires a timer again while its own handler is still on the
+        # stack: a call that opened a modal dialog sits inside _drain until
+        # the dialog closes, so _drain cannot take the dialog_answer that
+        # would close it (FreeCAD's Preferences, opened by a command, held
+        # the window this way). A second timer takes calls while that is so.
+        self._draining = False
+        self.nested = QtCore.QTimer()
+        self.nested.timeout.connect(self._drain_nested)
+        self.nested.start(60)
         # The heartbeat: written from the GUI's own thread every 2 s, so a
         # stuck event loop shows as a stale file to the supervisor's
         # watchdog; it also reads (and, where the rule says, answers) a modal
@@ -442,7 +451,23 @@ class Link:
         except OSError:
             pass
 
-    def _drain(self):
+    def _drain_nested(self):
+        """Only while _drain is on the stack (a call in hand inside a dialog's
+        loop): the same handling as there, so dialog_answer runs."""
+        if self._draining and not self.inbox.empty():
+            self._drain(nested=True)
+
+    def _drain(self, nested=False):
+        if nested:
+            self._handle_inbox()
+            return
+        self._draining = True
+        try:
+            self._handle_inbox()
+        finally:
+            self._draining = False
+
+    def _handle_inbox(self):
         if not self.inbox.empty() and not self._back():
             return
         if self.inbox.empty():
