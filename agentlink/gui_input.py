@@ -480,6 +480,7 @@ class Run:
         self.cur = None
         self.answered = False
         self.pressed = None
+        self.focus_at_press = None
         self.last_point = None
         self.shots = []
         self.level = 0
@@ -692,11 +693,16 @@ class Run:
         # in the background and Qt keeps no focus widget for it.
         self.pressed = w
         p = w
+        try:
+            self.focus_at_press = self.app().focusWidget() or self.mw().focusWidget()
+        except Exception:
+            self.focus_at_press = None
         while p is not None:
             try:
                 if p.isEnabled() and _int(p.focusPolicy()) & click == click:
                     p.setFocus(_enum(Qt, "FocusReason", "MouseFocusReason"))
                     self.pressed = p
+                    self.focus_at_press = self.app().focusWidget() or self.mw().focusWidget()
                     return
                 if p.isWindow():
                     return
@@ -718,10 +724,13 @@ class Run:
             if self.app().activePopupWidget() is b:
                 return b
             return b.focusWidget() or b
-        if self.pressed is not None and _alive(self.pressed) and self.pressed.isVisible():
-            return self.pressed
         app = self.app()
-        return app.focusWidget() or self.mw().focusWidget() or self.mw()
+        f = app.focusWidget() or self.mw().focusWidget()
+        # The press's widget, unless focus moved on since (a field the
+        # press opened and focused takes the typing).
+        if self.pressed is not None and _alive(self.pressed) and self.pressed.isVisible() and (f is None or f is self.focus_at_press):
+            return self.pressed
+        return f or self.mw()
 
     # -- mouse --
 
