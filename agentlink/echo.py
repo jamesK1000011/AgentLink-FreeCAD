@@ -322,7 +322,7 @@ def flash_command(cmd, ms=1300, settle=False):
             if isinstance(w, QtW.QToolButton):
                 old = w.styleSheet()
                 w.setStyleSheet("QToolButton { background: rgba(255,150,40,0.55); border: 1px solid #ff9628; border-radius: 4px; }")
-                QtCore.QTimer.singleShot(ms, lambda w=w, old=old: w.setStyleSheet(old))
+                QtCore.QTimer.singleShot(ms, lambda w=w, old=old: _later(w, "setStyleSheet", old))
             elif isinstance(w, QtW.QMenu):
                 # The menu item and its menu's title in bold for a moment
                 # (no menu is opened: that would take the person's input).
@@ -332,7 +332,18 @@ def flash_command(cmd, ms=1300, settle=False):
             f = QtGui.QFont(old)
             f.setBold(True)
             a.setFont(f)
-            QtCore.QTimer.singleShot(ms, lambda a=a, old=old: a.setFont(old))
+            QtCore.QTimer.singleShot(ms, lambda a=a, old=old: _later(a, "setFont", old))
+
+
+def _later(obj, method, value):
+    """Put a button or menu item back after its moment lit, unless it is gone:
+    a workbench switch in the meantime deletes its toolbars' actions, and
+    calling into one raised "Internal C++ object already deleted" in the
+    Report view (GUI pass on the Mac)."""
+    try:
+        getattr(obj, method)(value)
+    except RuntimeError:
+        pass
 
 
 def fit():
