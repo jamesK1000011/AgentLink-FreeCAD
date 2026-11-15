@@ -23,3 +23,10 @@ Look at the part after every change that matters, as a person would.
 - Grey on a map is unread: an open mesh, a scan past the max distance.
 - The picture is the tessellation: a fine curve shows facets; `tolerance` sets the chord.
 - Big pictures are big answers: `inline: false` writes the file only.
+
+## Driving the window (`gui_input`, group dev)
+- Panel buttons by `{widget:{text}}`; points on the part by `{view_world:[x,y,z]}` (each step answers its `point`: where it landed, and why if FreeCAD's own projection was used). Look with `shot`, then trust a headless read-back over the picture.
+- The live camera by `cmd_run { name: "Std_ViewIsometric" }` and `"Std_ViewFitAll"`: `view_snapshot` renders apart and leaves it where it was.
+- Keys go where the call's last press went; with none, to the window's focus.
+- Toggle buttons flip on each click and keep their state over a restart: check before clicking twice.
+- Save before `agentlink_update`: unsaved changes come back as a "(recovered …)" copy in front; `doc_switch { front: true }` brings the right tab back.
