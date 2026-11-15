@@ -22,17 +22,17 @@ def _fn(gui_up, gui_doc):
 
 class GuiSaved(unittest.TestCase):
     def doc(self, touched=False):
-        return types.SimpleNamespace(Name="Part", isTouched=lambda: touched)
+        return types.SimpleNamespace(Name="Part", isTouched=lambda: touched, purgeTouched=lambda: None)
 
     def test_mark_cleared_after_a_save(self):
         g = types.SimpleNamespace(Modified=True)
         _fn(True, g)(self.doc())
         self.assertFalse(g.Modified)
 
-    def test_left_alone_when_still_touched(self):
+    def test_cleared_even_when_freecad_still_says_touched(self):
         g = types.SimpleNamespace(Modified=True)
         _fn(True, g)(self.doc(touched=True))
-        self.assertTrue(g.Modified)
+        self.assertFalse(g.Modified)
 
     def test_headless_does_nothing(self):
         g = types.SimpleNamespace(Modified=True)
