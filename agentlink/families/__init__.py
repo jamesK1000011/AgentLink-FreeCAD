@@ -39,7 +39,6 @@ NAMES = [
     "bim",
     "bim_more",
     "ifc",
-    "code",
     "openscad",
     "robot",
     "std_more",
