@@ -84,6 +84,7 @@ class Forward(unittest.TestCase):
     def test_tasks_win_then_hand_back(self):
         m = layout.Memory()
         m.opened("wb", "Texturizer")
+        self.assertEqual(m.task(True, "wb"), "Tasks")  # a task starts: Tasks forward
         self.assertIsNone(m.task(True, "wb"))
         m.chose("wb", "Tasks")
         m.chose("wb", "Model")  # FreeCAD turning to Model as the task closes
