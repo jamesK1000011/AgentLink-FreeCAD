@@ -255,6 +255,22 @@ def to_value(o, p, v):
     raise ToolError("invalid_input", f"values.{p}: a {t} is not set here — set it in FreeCAD, or another tool makes it.")
 
 
+def _gui_saved(d):
+    """A save through App's document leaves the window's own modified mark
+    (the "*" on its tab) set: FreeCAD clears it only for a save made through
+    the GUI. Cleared here so a saved document reads as saved."""
+    if not getattr(FreeCAD, "GuiUp", False):
+        return
+    try:
+        import FreeCADGui
+
+        g = FreeCADGui.getDocument(d.Name)
+        if g is not None and not d.isTouched():
+            g.Modified = False
+    except Exception:
+        pass
+
+
 def tools(session):
     s = session
 
@@ -374,6 +390,7 @@ def tools(session):
                     k += 1
                 p = f"{base} {k}.FCStd"
             d.saveAs(p)
+        _gui_saved(d)
         return {"document": d.Name, "path": p, "bytes": os.path.getsize(p)}
 
     def object_list(a):

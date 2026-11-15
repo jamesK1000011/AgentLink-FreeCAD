@@ -180,6 +180,9 @@ def tools(s):
         for name, dd in FreeCAD.listDocuments().items():
             if dd.FileName:
                 dd.save()
+                from .doc import _gui_saved
+
+                _gui_saved(dd)
                 saved.append(dd.FileName)
             else:
                 unsaved.append(dd.Label)
