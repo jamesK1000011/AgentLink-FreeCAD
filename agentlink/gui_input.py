@@ -751,6 +751,22 @@ class Run:
         if kind == "MouseButtonRelease" and not HELD["buttons"]:
             HELD["widget"] = None
 
+    def _wheel(self, w, x, y, dy, mods):
+        """The wheel on w, passed up to its parents while it is not taken (a
+        button in a scroll area leaves it to the area), as the window does
+        with a real wheel; a sent event is not passed on by Qt."""
+        while w is not None:
+            ev = wheel_event(self.qt, w, x, y, dy, qt_buttons(self.qt, HELD["buttons"]), qt_mods(self.qt, mods))
+            ev.ignore()
+            self._send(w, ev)
+            try:
+                if ev.isAccepted() or w.isWindow():
+                    return
+                p = w.mapToParent(self.qt.QtCore.QPoint(int(x), int(y)))
+                x, y, w = p.x(), p.y(), w.parentWidget()
+            except Exception:
+                return
+
     def _arrive(self, w, x, y, mods):
         """The pointer moved onto the spot before a press, as a real hand's
         does: what lights up under a hover (a grip, a pre-selection) is lit
@@ -813,7 +829,7 @@ class Run:
                 gw, gx, gy = self._grabbed(w, x, y)
                 self._mouse("MouseButtonRelease", gw, gx, gy, st["button"], st["mods"])
             else:
-                self._send(w, wheel_event(self.qt, w, x, y, st["dy"], qt_buttons(self.qt, HELD["buttons"]), qt_mods(self.qt, st["mods"])))
+                self._wheel(w, x, y, st["dy"], st["mods"])
         elif do == "drag":
             w, x, y = self._target(st["from"])
             tw, tx, ty = self._target(st["to"])
