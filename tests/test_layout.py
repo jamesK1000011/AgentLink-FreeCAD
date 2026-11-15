@@ -154,6 +154,26 @@ class Caption(unittest.TestCase):
         self.assertGreater(x, 300)
 
 
+class AddonPages(unittest.TestCase):
+    def test_own_dock_beside_agent_link(self):
+        """With Agent Link's placer an add-on's page is its own dock; an
+        Agent Link without it hosts the page as a tab."""
+        state = hooks.saved()
+        try:
+            hooks.reset()
+            self.assertTrue(layout.hosted_tabs(hooks))
+            hooks.provide(layout.SERVICE, object())
+            self.assertFalse(layout.hosted_tabs(hooks))
+            self.assertIsNone(layout.caller())
+            hooks.provide("panel_caller", "c")
+            self.assertEqual(layout.caller(), "c")
+            self.assertFalse(layout.in_agentlink_panel("Setups"))
+            hooks.register_tab("Setups", lambda p: None, 30)
+            self.assertTrue(layout.in_agentlink_panel("Setups"))
+        finally:
+            hooks.restore(state)
+
+
 class Doc:
     def __init__(self):
         self.n = 2

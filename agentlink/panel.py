@@ -881,6 +881,45 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         super().closeEvent(e)
 
 
+class _Caller:
+    """Runs a tool as the panel does (shown and logged as the agent's are)
+    with no panel built: Panel's own _call and _server."""
+
+
+_Caller._call = Panel.__dict__["_call"]
+_Caller._server = Panel.__dict__["_server"]
+_CALLER = []
+
+
+def caller():
+    """What runs an add-on's clicks through Agent Link: the panel, once it is
+    built (its session shared), else a caller of its own."""
+    if _panel is not None:
+        return _panel
+    if not _CALLER:
+        _CALLER.append(_Caller())
+    return _CALLER[0]
+
+
+class CallerService:
+    """The service "panel_caller": an add-on's own dock runs its tools
+    through Agent Link with it (_call), and reads the session the panel's
+    own server works in (_own) when no link is on."""
+
+    def _call(self, tool, args):
+        return caller()._call(tool, args)
+
+    @property
+    def _own(self):
+        c = caller()
+        if getattr(c, "_own", None) is None:
+            try:
+                c._server()
+            except Exception:  # noqa: BLE001 — no document yet
+                return None
+        return getattr(c, "_own", None)
+
+
 _panel = None
 KEY = "AgentLinkPanel"
 
