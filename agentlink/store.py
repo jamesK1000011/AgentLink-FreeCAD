@@ -168,7 +168,50 @@ def undo_on(doc):
     changed (opening an add-on's panel made the session, and the "*"
     and a recovered copy each time)."""
     try:
-        if doc.UndoMode != 1:
-            doc.UndoMode = 1
+        if doc.UndoMode == 1:
+            return
     except AttributeError:  # a stand-in document without the property
         doc.UndoMode = 1
+        return
+    # Turning undo on is no change to the model: a saved document (one
+    # reopened after a restart has undo off) stays saved.
+    was = _changed(doc)
+    doc.UndoMode = 1
+    if not was:
+        _unchanged(doc)
+
+
+def _changed(doc):
+    try:
+        if doc.isTouched():
+            return True
+    except Exception:
+        pass
+    g = _gui_doc(doc)
+    return bool(getattr(g, "Modified", False)) if g is not None else False
+
+
+def _unchanged(doc):
+    try:
+        doc.purgeTouched()
+    except Exception:
+        pass
+    g = _gui_doc(doc)
+    if g is not None:
+        try:
+            g.Modified = False
+        except Exception:
+            pass
+
+
+def _gui_doc(doc):
+    try:
+        import FreeCAD
+
+        if not getattr(FreeCAD, "GuiUp", False):
+            return None
+        import FreeCADGui
+
+        return FreeCADGui.getDocument(doc.Name)
+    except Exception:
+        return None
