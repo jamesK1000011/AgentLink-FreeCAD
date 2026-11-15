@@ -751,6 +751,13 @@ class Run:
         if kind == "MouseButtonRelease" and not HELD["buttons"]:
             HELD["widget"] = None
 
+    def _arrive(self, w, x, y, mods):
+        """The pointer moved onto the spot before a press, as a real hand's
+        does: what lights up under a hover (a grip, a pre-selection) is lit
+        when the button goes down."""
+        self._mouse("MouseMove", w, x, y, None, mods)
+        self.pump(MOVE_GAP_MS)
+
     def _grabbed(self, w, x, y):
         """While a button is held, the press's widget takes the moves and the
         release (Qt's implicit grab), at the same point on the screen."""
@@ -784,6 +791,8 @@ class Run:
         if do in ("click", "press", "release", "move", "scroll"):
             w, x, y = self._target(st["target"])
             out["hit"] = self.hit(w, x, y)
+            if do in ("click", "press") and not HELD["buttons"]:
+                self._arrive(w, x, y, st["mods"])
             if do == "click":
                 self._mouse("MouseButtonPress", w, x, y, st["button"], st["mods"])
                 if self.answered:
@@ -810,6 +819,8 @@ class Run:
             tw, tx, ty = self._target(st["to"])
             out["hit"] = self.hit(w, x, y)
             out["to"] = self.hit(tw, tx, ty)
+            if not HELD["buttons"]:
+                self._arrive(w, x, y, st["mods"])
             self._mouse("MouseButtonPress", w, x, y, st["button"], st["mods"])
             a = global_point(self.qt, w, x, y)
             b = global_point(self.qt, tw, tx, ty)
