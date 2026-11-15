@@ -143,6 +143,25 @@ def finish(session, tool, read=None, *, objs=(), refuse=None, broken=_invalid, c
     return out
 
 
+def one_of(pool, ref, which, missing, none=None, nocase=False):
+    """The one of pool that ref names (its label or name; nocase: the label in
+    any case too), or the only one when ref is None. Each site keeps its own
+    words: none (not_found) when pool is empty, which (invalid_input) when
+    ref is None and there are several, missing (not_found) when ref names
+    none of them; {labels} in them is the labels, {ref} ref's repr."""
+    if none is not None and not pool:
+        raise ToolError("not_found", none)
+    labels = ", ".join(o.Label for o in pool)
+    if ref is None:
+        if len(pool) == 1:
+            return pool[0]
+        raise ToolError("invalid_input", which.replace("{labels}", labels))
+    for o in pool:
+        if ref in (o.Label, o.Name) or (nocase and o.Label.lower() == str(ref).lower()):
+            return o
+    raise ToolError("not_found", re.sub(r"\{(ref|labels)\}", lambda m: repr(ref) if m[1] == "ref" else labels, missing))
+
+
 # ---- objects ----------------------------------------------------------------------------
 
 def find(doc, ref, what="object"):

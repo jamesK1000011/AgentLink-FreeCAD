@@ -54,17 +54,7 @@ def _jobs(doc):
 
 
 def _job(doc, ref):
-    jobs = _jobs(doc)
-    if not jobs:
-        raise ToolError("not_found", "No CAM job: cam_job { body, tool } makes one.")
-    if ref is None:
-        if len(jobs) == 1:
-            return jobs[0]
-        raise ToolError("invalid_input", f"job: say which — {', '.join(j.Label for j in jobs)}.")
-    for j in jobs:
-        if ref in (j.Label, j.Name):
-            return j
-    raise ToolError("not_found", f"job {ref!r}: the jobs are {', '.join(j.Label for j in jobs)}.")
+    return picks.one_of(_jobs(doc), ref, "job: say which — {labels}.", "job {ref}: the jobs are {labels}.", none="No CAM job: cam_job { body, tool } makes one.")
 
 
 def _q(v, unit):
