@@ -160,8 +160,8 @@ def take():
 
 
 # ---- the Report view kept out of the way -------------------------------------
-# While the panel layout is set (Mod/AgentLink PanelLayout), the Report view
-# is hidden: it took a quarter of the window's height to say "listening".
+# The Report view is hidden by default: it took a quarter of the window's
+# height to say "listening".
 # It opens itself when a warning or error line arrives (by FreeCAD's colours
 # or the words, as above). ReportAuto (on by default) turns this off; then
 # the Report view is shown or hidden again as the person last had it.
@@ -173,9 +173,9 @@ AUTO_MS = 700
 
 
 def auto_on(params):
-    """Whether the Report view is kept hidden until a problem: the layout
-    setting set and ReportAuto on."""
-    return bool(params.GetString("PanelLayout", "").strip()) and params.GetBool(AUTO, True)
+    """Whether the Report view is kept hidden until a problem: ReportAuto
+    on (the default, with or without a PanelLayout setting)."""
+    return params.GetBool(AUTO, True)
 
 
 def _report_dock():

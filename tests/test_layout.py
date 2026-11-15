@@ -229,8 +229,13 @@ class ReportView(unittest.TestCase):
         self.w.lines[-1:] = [(text, colour), ("", None)]
         self.w.doc.n = len(self.w.lines)
 
-    def test_left_alone_when_the_layout_is_not_set(self):
+    def test_hidden_by_default_without_a_layout_setting(self):
         a = self.make()
+        self.assertEqual(a.tick(), "hidden")
+        self.assertFalse(self.d.shown)
+
+    def test_left_alone_when_report_auto_is_off(self):
+        a = self.make(ReportAuto=False)
         self.assertIsNone(a.tick())
         self.assertTrue(self.d.shown)
 
