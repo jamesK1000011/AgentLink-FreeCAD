@@ -2,12 +2,20 @@
 # The Agent Link workbench: Start link and Stop link. While the link is on,
 # an agent's calls arrive in the document open in this window.
 
+import os
+
 import FreeCADGui
+import agentlink
+
+# The add-on's own SVGs, found by name ("AgentLink_Start", ...) by its commands.
+_ICONS = os.path.join(os.path.dirname(agentlink.__file__), "icons")
+FreeCADGui.addIconPath(_ICONS)
 
 
 class AgentLinkWorkbench(FreeCADGui.Workbench):
     MenuText = "Agent Link"
     ToolTip = "Drive FreeCAD from an agent"
+    Icon = os.path.join(_ICONS, "AgentLink_Workbench.svg")
 
     def Initialize(self):
         from agentlink.commands import _Panel, _Shot, _StartLink, _StopLink

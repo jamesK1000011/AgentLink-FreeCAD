@@ -2,7 +2,10 @@ Init.py
 InitGui.py
 LICENSE
 LICENSE-DATA
+LICENSES/Apache-2.0.txt
+LICENSES/MIT.txt
 README.md
+REUSE.toml
 Studio Dark/Studio Dark.cfg
 Studio Dark/parameters/Studio Dark.yaml
 Studio Light/Studio Light.cfg
@@ -90,6 +93,12 @@ agentlink/guides/view.md
 agentlink/heavy.py
 agentlink/hooks.py
 agentlink/hull3d.py
+agentlink/icons/AgentLink_Panel.svg
+agentlink/icons/AgentLink_Shot.svg
+agentlink/icons/AgentLink_Start.svg
+agentlink/icons/AgentLink_Stop.svg
+agentlink/icons/AgentLink_Workbench.svg
+agentlink/icons/CREDITS.md
 agentlink/install_job.py
 agentlink/iso286.py
 agentlink/keep.py

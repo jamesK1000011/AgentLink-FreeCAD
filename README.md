@@ -76,3 +76,7 @@ specification.
 
 FreeCAD's `AI_POLICY.md` does not accept AI-generated pull requests. This
 add-on is not for upstreaming as it is.
+
+## Icons
+
+Icons adapted from Tabler Icons (MIT, tabler.io) and Pictogrammers Material Design Icons (Apache-2.0, pictogrammers.com). FreeCAD's own icons are used by name from FreeCAD. See `agentlink/icons/CREDITS.md`.
