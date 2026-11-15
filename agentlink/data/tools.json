@@ -769,6 +769,100 @@
      "offset": "$distance"
     }
    }
+  },
+  "draft_to_sketch": {
+   "group": "draft",
+   "description": "Draft shapes made into one sketch (constrain: true adds the obvious constraints; delete: true removes the originals).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "constrain": {
+      "type": "boolean"
+     },
+     "delete": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "objects"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-14",
+   "runner": "make",
+   "target": {
+    "maker": "Draft.make_sketch",
+    "call": [
+     "$objects"
+    ],
+    "kw": {
+     "autoconstraints": "$constrain",
+     "delete": "$delete"
+    }
+   },
+   "args": {
+    "=active": {
+     "value": {
+      "call": "active"
+     }
+    },
+    "objects": {
+     "helper": "objs_of"
+    },
+    "constrain": {
+     "default": true,
+     "as": "bool"
+    },
+    "delete": {
+     "as": "bool"
+    },
+    "name": {
+     "then": {
+      "call": "named",
+      "with": [
+       "$o",
+       "$a.name",
+       "Sketch"
+      ]
+     }
+    }
+   },
+   "rules": [
+    {
+     "check": "given",
+     "of": "$o",
+     "after": "made",
+     "code": "failed",
+     "message": "Draft could not make a sketch of those (they must be flat, in one plane)."
+    }
+   ],
+   "answer": {
+    "via": "finish",
+    "with": [
+     "$o",
+     "$tool",
+     "$fields"
+    ],
+    "fields": {
+     "geometry": {
+      "len": "$o.Geometry"
+     },
+     "constraints": {
+      "len": "$o.Constraints"
+     }
+    }
+   }
   }
  }
 }

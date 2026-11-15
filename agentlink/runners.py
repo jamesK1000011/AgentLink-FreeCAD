@@ -158,8 +158,8 @@ def resolve(k, spec, a, env, helpers):
     v = a.get(k, spec["default"]) if "default" in spec else a.get(k)
     if "map" in spec:
         v = spec["map"].get(v) if isinstance(v, str) else None
-    if spec.get("as") and v is not None:
-        v = AS[spec["as"]](v)
+    if spec.get("as") and (v is not None or spec["as"] == "bool"):
+        v = AS[spec["as"]](v)  # bool(None) is False, as bool(a.get(k)) is
     return v
 
 
@@ -204,7 +204,8 @@ def _maker(dotted):
 def _start(name, e, a, helpers):
     """The run's values with the arguments resolved in order, each rule
     checked as soon as what it checks is there (after: an argument's name;
-    "start" before any; the rest once all are resolved)."""
+    "start" before any; "made" once make's object is there; the rest once
+    all are resolved)."""
     env = {"a": a, "tool": name}
     rules = list(e.get("rules") or [])
     target = e.get("target")
@@ -302,12 +303,15 @@ def run_make(name, e, a, helpers):
     _finish_rules(rules, env, helpers)
     t = e["target"]
     args = [value(x, env, helpers) for x in t.get("call", [])]
+    kw = {k: value(x, env, helpers) for k, x in (t.get("kw") or {}).items()}
     if t.get("maker"):
         fn = env["maker"]
-        o = helpers[t["headless"]](fn, *args) if t.get("headless") else fn(*args)
+        o = helpers[t["headless"]](fn, *args, **kw) if t.get("headless") else fn(*args, **kw)
     else:
         o = helpers["doc"]().addObject(t["type"], t.get("base", t["type"].split("::")[-1]))
     env["o"] = o
+    for r in [r for r in rules if r.get("after") == "made"]:
+        check(r, env, helpers)  # what the maker gave back (None: it made nothing)
     _after(e, a, env, helpers)
     return _answer(e, env, helpers)
 
