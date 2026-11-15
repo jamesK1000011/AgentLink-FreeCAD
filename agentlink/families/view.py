@@ -13,6 +13,7 @@ import numpy as np
 from .. import render
 from ..protocol import Tool, ToolError
 from ..tools import obj
+from . import picks
 
 GROUP = "view"
 INFO = "Pictures: the parts drawn from any view, cut open, zoomed, with maps (wall, stress, a scan's deviation) — headless; the FreeCAD window's own view."
@@ -47,8 +48,7 @@ def _bodies(s, a):
     refs = a.get("objects")
     if refs is None:
         return s.bodies() if s.doc else []
-    if isinstance(refs, str):
-        refs = [refs]
+    refs = picks.ref_list(refs)
     return [s.body(r) for r in refs]
 
 

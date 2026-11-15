@@ -291,8 +291,7 @@ def tools(session):
 
     def doc_close(a):
         refs = a.get("documents") or [s.doc.Name]
-        if isinstance(refs, str):
-            refs = [refs]
+        refs = picks.ref_list(refs)
         docs = FreeCAD.listDocuments().values()
         picked = []
         for r in refs:
@@ -465,10 +464,7 @@ def tools(session):
 
     def object_delete(a):
         names = a.get("objects")
-        if isinstance(names, str):
-            names = [names]
-        if not names:
-            raise ToolError("invalid_input", "objects: the names or labels to delete.")
+        names = picks.ref_list(names, "objects: the names or labels to delete.")
         objs = [picks.find(s.doc, n) for n in names]
         going = {o.Name for o in objs}
         for o in objs:
@@ -685,8 +681,7 @@ def tools(session):
 
     def export(a):
         names = a.get("objects")
-        if isinstance(names, str):
-            names = [names]
+        names = picks.ref_list(names)
         objs = [picks.shaped(s.doc, n) for n in names] if names else [s.body(None)]
         fmt = (a.get("format") or "").lower()
         if not fmt and a.get("path"):

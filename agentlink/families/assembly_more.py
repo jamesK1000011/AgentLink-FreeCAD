@@ -89,24 +89,6 @@ def _is_suppressed(j):
 # ---- elements and axes ----
 
 
-def ref_element(doc, r):
-    """A joint reference's part and element, either form: [asm,
-    ["Part.Face6", …]] (1.0) or [part, ["Face6", …]]."""
-    if not r:
-        return None, None, None
-    o, subs = r[0], (r[1] if len(r) > 1 else [])
-    sub = subs[0] if subs else ""
-    path = sub.split(".")
-    part = o
-    if o.TypeId == "Assembly::AssemblyObject" and len(path) > 1:
-        part = doc.getObject(path[0])
-    name = path[-1]
-    try:
-        return part, part.Shape.getElement(name), name
-    except Exception:
-        return part, None, name
-
-
 def axis_of(el):
     """(point, direction) of a round element: a cylindrical face, a circle
     edge; for a flat face its middle and normal."""
@@ -260,8 +242,8 @@ def tools(session):
         else:
             js = [joint_of(asm, a["joint"])] if a.get("joint") else [j for j in A._joints(asm).Group if getattr(j, "ObjectToGround", None) is None]
             for j in js:
-                pa, ea, _ = ref_element(doc(), getattr(j, "Reference1", None))
-                pb, eb, _ = ref_element(doc(), getattr(j, "Reference2", None))
+                pa, ea, _ = A.ref_element(doc(), getattr(j, "Reference1", None))
+                pb, eb, _ = A.ref_element(doc(), getattr(j, "Reference2", None))
                 if pa is None or pb is None:
                     continue
                 try:
@@ -320,8 +302,8 @@ def tools(session):
         return picks.finish(s, "asm_limits", lambda: {"joint": j.Label, "kind": kind, "limits": limits_of(j)[1], "unit": "degrees" if turning else "mm", "solve": said}, recompute=False)
 
     def moving_group(asm, j):
-        p1, e1, _ = ref_element(doc(), j.Reference1)
-        p2, e2, _ = ref_element(doc(), j.Reference2)
+        p1, e1, _ = A.ref_element(doc(), j.Reference1)
+        p2, e2, _ = A.ref_element(doc(), j.Reference2)
         grounded = A._grounded(asm)
         fixed_side, moving, el = (p1, p2, e2) if p2 not in grounded else (p2, p1, e1)
         ax = axis_of(el) if el is not None else None
@@ -334,8 +316,8 @@ def tools(session):
         while todo:
             cur = todo.pop()
             for x in others:
-                q1, _, _ = ref_element(doc(), getattr(x, "Reference1", None))
-                q2, _, _ = ref_element(doc(), getattr(x, "Reference2", None))
+                q1, _, _ = A.ref_element(doc(), getattr(x, "Reference1", None))
+                q2, _, _ = A.ref_element(doc(), getattr(x, "Reference2", None))
                 for here, there in ((q1, q2), (q2, q1)):
                     if here is not None and there is not None and here.Name == cur.Name and there.Name not in group and there not in grounded and there is not fixed_side:
                         group[there.Name] = there
@@ -384,7 +366,7 @@ def tools(session):
             # Along JCS1's z, the axis the value is read on; a part on the
             # first reference's side moves the other way.
             centre, axis = fr[0].Base, fr[0].Rotation.multVec(V(0, 0, 1))
-            p1, _, _ = ref_element(doc(), j.Reference1)
+            p1, _, _ = A.ref_element(doc(), j.Reference1)
             if p1 is not None and p1.Name in group:
                 sign = -1.0
         axis = V(axis)

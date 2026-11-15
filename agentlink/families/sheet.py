@@ -743,10 +743,7 @@ def tools(session):
 
         kind = a.get("kind", "line")
         ys = a.get("y") or []
-        if isinstance(ys, str):
-            ys = [ys]
-        if not ys:
-            raise bad("y: one or more ranges of values, \"B2:B20\".")
+        ys = picks.ref_list(ys, "y: one or more ranges of values, \"B2:B20\".")
         names = a.get("names") or []
         x = column(a["x"]) if a.get("x") else None
         series = []

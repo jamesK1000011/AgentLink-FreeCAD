@@ -116,8 +116,7 @@ def query(session, a, default_kind="face"):
     if kind not in KIND_ATTR:
         raise ToolError("invalid_input", "kind: face, edge or vertex.")
     types = a.get("type")
-    if isinstance(types, str):
-        types = [types]
+    types = picks.ref_list(types)
     within = picks.num(a.get("within", 1.0), "within")
     normal = picks.direction(a["normal"], "normal") if a.get("normal") is not None else None
     axis = picks.direction(a["axis"], "axis") if a.get("axis") is not None else None
@@ -400,8 +399,7 @@ def tools(session):
             raise ToolError("invalid_input", f"kind: {', '.join(KEEP)}.")
         tid, n, out_prop = KEEP[kind]
         refs = a.get("of") or []
-        if isinstance(refs, str):
-            refs = [refs]
+        refs = picks.ref_list(refs)
         if (n and len(refs) != n) or (not n and not refs):
             raise ToolError("invalid_input", f"of: {n or 'one or more'} element(s), \"Body.Face3\" / \"Body.Edge2\" / \"Body.Vertex1\".")
         links = []

@@ -1449,8 +1449,7 @@ def tools(session):
         """Hatching on faces of the part, seen in a view (a section's cut is hatched by itself)."""
         v = view_of(doc(), a.get("view"))
         faces = a.get("faces") or []
-        if isinstance(faces, str):
-            faces = [faces]
+        faces = picks.ref_list(faces)
         src = source_shapes(v)
         if src is None:
             raise bad(f"{v.Label} shows no shape.")
@@ -2253,10 +2252,7 @@ def tools(session):
     # ---- the rest of TechDraw's commands, headless ----------------------------------------
 
     def dims_of(refs):
-        if isinstance(refs, str):
-            refs = [refs]
-        if not refs:
-            raise bad("dims: one or more dimensions by label.")
+        refs = picks.ref_list(refs, "dims: one or more dimensions by label.")
         return [obj_of(doc(), r, ["TechDraw::DrawViewDimension"], "dimension") for r in refs]
 
     def td_dim_format(a):
