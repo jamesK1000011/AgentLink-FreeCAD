@@ -5,11 +5,13 @@
 # plainly, and the next call must go through.
 import json
 import os
+import queue
 import socket
 import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import time
 import unittest
 
@@ -28,6 +30,8 @@ FAKE_HIDDEN = textwrap.dedent('''
         name = (m.get("params") or {}).get("name")
         if name == "hang":
             time.sleep(3600)
+        if name == "app_recover" and os.environ.get("FAKE_SLOW_RECOVER"):
+            time.sleep(float(os.environ["FAKE_SLOW_RECOVER"]))
         if name == "crash":
             os._exit(3)
         if name == "settings_restart":
@@ -133,20 +137,39 @@ class Sup(unittest.TestCase):
             p.kill()
         subprocess.run(["pkill", "-f", os.path.join(self.tmp, "fake_window.py")], capture_output=True)
 
+    def _lines(self):
+        """The supervisor's stdout, read on a thread: a call's timeout holds
+        even when no line ever comes (a blocking readline would wait for
+        ever and hang the run instead of failing it)."""
+        if getattr(self, "_reader_of", None) is not self.sup:
+            q = queue.Queue()
+
+            def read(out=self.sup.stdout):
+                for line in out:
+                    q.put(line)
+                q.put(None)
+            threading.Thread(target=read, daemon=True).start()
+            self._reader_of, self._q = self.sup, q
+        return self._q
+
     def call(self, name, timeout=60):
         self.n += 1
+        q = self._lines()
         self.sup.stdin.write(json.dumps({"jsonrpc": "2.0", "id": self.n, "method": "tools/call", "params": {"name": name, "arguments": {}}}) + "\n")
         self.sup.stdin.flush()
-        t0 = time.time()
-        while time.time() - t0 < timeout:
-            line = self.sup.stdout.readline()
-            if not line:
+        end = time.time() + timeout
+        while True:
+            try:
+                line = q.get(timeout=max(0.0, end - time.time()))
+            except queue.Empty:
+                break
+            if line is None:
                 break
             m = json.loads(line)
             if m.get("id") == self.n:
                 r = m["result"]
                 return r.get("isError", False), json.loads(r["content"][0]["text"])
-        self.fail(f"no answer to {name}")
+        self.fail(f"no answer to {name} within {timeout} s")
 
 
 class Hidden(Sup):
@@ -162,11 +185,31 @@ class Hidden(Sup):
         self.assertIn('"hang"', log)
 
     def test_twice_hung_is_refused(self):
-        self.call("hang")
-        self.call("hang")
+        for _ in range(2):
+            err, out = self.call("hang")
+            self.assertIn("stopped responding during hang", out["error"]["message"])
         err, out = self.call("hang", timeout=5)
         self.assertTrue(err)
         self.assertIn("hung FreeCAD twice", out["error"]["message"])
+
+    def _hangs_logged(self):
+        log = open(os.path.join(self.home, "watchdog.log")).read()
+        return sum(1 for ln in log.splitlines() if ln.strip() and json.loads(ln).get("event") == "hang")
+
+    def test_slow_recovery_is_one_hang(self):
+        # The fresh FreeCAD takes longer to recover than the watchdog's
+        # period plus the deadline: the dead child's call must not be taken
+        # for a second hang (counted, and the fresh child stopped mid-recovery).
+        self.sup.kill()
+        self.env["FAKE_SLOW_RECOVER"] = "4.5"
+        code = f"import sys; sys.path.insert(0, {AL!r}); from agentlink import supervise; supervise.run({os.path.join(self.tmp, 'fake_hidden.py')!r}, [])"
+        self.sup = subprocess.Popen([sys.executable, "-c", code], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=self.env, text=True, bufsize=1)
+        err, out = self.call("hang")
+        self.assertIn("Bracket recovered from autosave", out["error"]["message"])
+        self.assertEqual(self._hangs_logged(), 1)
+        self.assertEqual(self.call("ping")[1], {"ok": "ping"})
+        err, out = self.call("hang")
+        self.assertIn("stopped responding during hang", out["error"]["message"])
 
     def test_settings_restart_is_quiet(self):
         self.assertEqual(self.call("settings_restart")[1], {"rolledBackTo": "x"})

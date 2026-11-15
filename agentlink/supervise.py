@@ -385,7 +385,7 @@ def run(script, argv):
     inflight = {}  # hidden: id -> {tool, args, start}
     hangs = {}  # call key -> times it hung
     deaths = []
-    state = {"child": None, "ending": False, "hang": None, "recover": None}
+    state = {"child": None, "ending": False, "hang": None, "recover": None, "restarting": False}
     env = {**os.environ, FLAG: "1"}
 
     def write(line):
@@ -456,6 +456,16 @@ def run(script, argv):
             except OSError:
                 pass
             return
+        # While this restart is under way the dead child's calls are still
+        # in inflight: the watchdog leaves them alone (else it takes them for
+        # a second hang, counts it and stops the fresh child mid-recovery).
+        state["restarting"] = True
+        try:
+            _restart(code)
+        finally:
+            state["restarting"] = False
+
+    def _restart(code):
         hang = state.pop("hang", None)
         state["hang"] = None
         why = f"stopped by signal {-code}" if code < 0 else f"exited with code {code}"
@@ -494,19 +504,24 @@ def run(script, argv):
             tail = (" " + "; ".join(parts) + ".") if parts else ""
         elif docs:
             tail = " app_recover lists the saved copies of " + ", ".join(d.get("label", "?") for d in docs) + "."
+        # Only the calls in hand now are answered and forgotten, and they are
+        # forgotten before the answers go out: a call that comes in once an
+        # answer is out goes to the fresh child, and clearing everything here
+        # used to drop it from inflight, so nothing ever answered or timed it.
+        answers = []
         for mid, method in list(pending.items()):
-            c = inflight.get(mid) or {}
+            c = inflight.pop(mid, None) or {}
+            pending.pop(mid, None)
+            lines.pop(mid, None)
+            if mid in heavy_ids:
+                queue_done(heavy_ids.pop(mid))
             if hang and mid == hang.get("id"):
                 msg = f"FreeCAD stopped responding during {hang['tool']} after {int(hang['after'])} s; it was stopped and started again.{tail or ' Its documents are gone from memory: app_recover lists the saved copies.'}"
             else:
                 msg = f"FreeCAD {why} during this call ({c.get('tool') or method}) and has been started again.{tail or ' The document and everything not saved in it is gone: session_state shows the fresh one; doc_open what was saved.'} If the same call does this again, it is the call — try another way."
-            write(json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": json.dumps({"error": {"code": "failed", "message": msg}})}], "isError": True} if method == "tools/call" else {}}))
-        pending.clear()
-        inflight.clear()
-        lines.clear()
-        for tool_ in set(heavy_ids.values()):
-            queue_done(tool_)
-        heavy_ids.clear()
+            answers.append(json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": json.dumps({"error": {"code": "failed", "message": msg}})}], "isError": True} if method == "tools/call" else {}}))
+        for line in answers:
+            write(line)
 
     window = Window(write)
 
@@ -555,7 +570,8 @@ def run(script, argv):
                 for mid, h in [first] if first else []:
                     began = max(h["start"], state.get("last_reply") or 0)
                     limit = deadline_for(h["tool"])
-                    if keep.hung(now, began, began + limit, limit) and not keep.saving() and state["hang"] is None:
+                    if (keep.hung(now, began, began + limit, limit) and not keep.saving() and state["hang"] is None
+                            and not state.get("restarting")):
                         child = state["child"]
                         state["hang"] = {"id": mid, "tool": h["tool"], "after": now - began}
                         keep.log_watchdog({"event": "hang", "where": "hidden", "tool": h["tool"], "after": now - began, "pid": child.pid})
