@@ -11,7 +11,7 @@ import types
 
 import FreeCAD
 
-from .. import keep, testrun
+from .. import keep, paths, testrun
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from .unattended import installed_names, mod_dir
@@ -83,8 +83,14 @@ def tools(s):
         from PySide import QtCore
 
         qt = types.SimpleNamespace(QtCore=QtCore, QtGui=QtGui, QtWidgets=QtWidgets)
+        shot_dir = os.path.join(s.out_dir, "gui_input")
         run = gi.Run(qt, FreeCADGui, FreeCAD.Vector, gui_link.modal_info, report_watch.take, grab_window,
-                     lambda body: gui_link.answer_now("gui_input", body), os.path.join(s.out_dir, "gui_input"))
+                     lambda body: gui_link.answer_now("gui_input", body), shot_dir)
+        # Its shots noted as the call's outputs (agentlink/outputs.py).
+        for st in steps:
+            if st.get("do") == "shot":
+                for n in (st["name"] + ".png", st["name"] + "-front.png"):
+                    paths.made(s, os.path.join(shot_dir, n), "shot")
         out = run.run(steps)
         if run.shots and a.get("inline", True) and not run.answered:
             try:

@@ -587,7 +587,7 @@ def tools(session):
             out["radii"] = [round(r0, 3), round(r1, 3)]
             out["angle"] = round(math.degrees(span), 3)
         if a.get("path"):
-            pth = a["path"] if os.path.isabs(a["path"]) else os.path.join(s.out_dir, a["path"])
+            pth = paths.made(s, a["path"] if os.path.isabs(a["path"]) else os.path.join(s.out_dir, a["path"]))
             os.makedirs(os.path.dirname(pth), exist_ok=True)
             with open(pth, "w", encoding="utf-8") as f:
                 f.write(flat2d.dxf(items) if pth.lower().endswith(".dxf") else flat2d.svg(items))
@@ -683,7 +683,7 @@ def tools(session):
         x0, y0, x1, y1 = flat2d.bounds(items)
         out["size"] = [round(x1 - x0, 3), round(y1 - y0, 3)]
         if a.get("path"):
-            pth = a["path"] if os.path.isabs(a["path"]) else os.path.join(s.out_dir, a["path"])
+            pth = paths.made(s, a["path"] if os.path.isabs(a["path"]) else os.path.join(s.out_dir, a["path"]))
             os.makedirs(os.path.dirname(pth), exist_ok=True)
             with open(pth, "w", encoding="utf-8") as f:
                 f.write(flat2d.dxf(items) if pth.lower().endswith(".dxf") else flat2d.svg(items))

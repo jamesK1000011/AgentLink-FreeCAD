@@ -495,7 +495,7 @@ def tools(session):
         p = paths.local(s, str(p))
         if not os.path.splitext(p)[1]:
             p += ext
-        return p
+        return paths.made(s, p)
 
     DELIM = {"comma": ",", "tab": "\t", "semicolon": ";", ",": ",", "\t": "\t", ";": ";"}
 
@@ -762,6 +762,7 @@ def tools(session):
         p = p if os.path.isabs(p) else os.path.join(s.out_dir, p)
         if not p.lower().endswith(".svg"):
             p += ".svg"
+        paths.made(s, p)
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w", encoding="utf-8") as f:
             f.write(text)

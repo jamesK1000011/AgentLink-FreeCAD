@@ -457,7 +457,7 @@ def tools(session):
         canvas[:h, :w] = img
         render.legend(canvas, -span, span, "mm", "jet", "LEFT ON THE PART", h + 40)
         data = render.png(canvas)
-        path = a.get("path") or os.path.join(s.out_dir, f"{job.Label}_sim.png")
+        path = paths.made(s, a.get("path") or os.path.join(s.out_dir, f"{job.Label}_sim.png"), None if a.get("path") else "shot")
         with open(path, "wb") as f:
             f.write(data)
         out["picture"] = path
@@ -616,7 +616,7 @@ def tools(session):
         job = _job(d, a.get("job"))
         act = a.get("action", "export")
         p = a.get("path") or "cam-tools.json"
-        p = p if os.path.isabs(p) else os.path.join(s.out_dir, p)
+        p = paths.made(s, p if os.path.isabs(p) else os.path.join(s.out_dir, p))
         if act == "export":
             tools_ = [bit_of(tc) for tc in job.Tools.Group]
             os.makedirs(os.path.dirname(p), exist_ok=True)

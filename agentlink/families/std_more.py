@@ -617,6 +617,7 @@ def tools(s):
             p = paths.local(s, a.get("path") or f"{dd.Label}_graph.dot")
             if not p.lower().endswith(".dot"):
                 p += ".dot"
+                paths.made(s, p)
             os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
             with open(p, "w") as f:
                 f.write("\n".join(dot) + "\n")
