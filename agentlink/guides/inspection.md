@@ -5,7 +5,7 @@ FreeCAD's own Inspection feature measures an actual against nominals, point by p
 
 ## workflow
 1. Get the actual into the document. That is a mesh, a point cloud, or a body (meshed for the purpose and kept hidden), or `file:` reads a scan (STL, OBJ, PLY, ASC, PCD …).
-2. Put it where the nominal is first. Inspection does not align anything. With ScanRuler for FreeCAD, `align_auto` does it; a scan straight off a scanner is in its own frame.
+2. Put it where the nominal is first. Inspection does not align anything: `object_align` does, or an add-on's alignment; a scan straight off a scanner is in its own frame.
 3. Run `insp_run { actual, nominals: ["Plate"], search_radius: 1, tolerance: 0.1 }`. Ask the person for the tolerance; don't assume one.
 4. Read the answer: `rms`, `min` and `max`, `inTolerancePercent`, `verdict`, and the `worst` spots by position. Then look with `view_render { map: "inspection" }`.
 5. `insp_update` changes the radius or the tolerance and measures again. `insp_export` writes a CSV of every point plus a JSON report.

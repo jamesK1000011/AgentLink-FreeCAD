@@ -374,7 +374,7 @@ def tools(session):
                 raise bad(f"{src.Label} is not a mesh: mesh or file.")
             m, label = src.Mesh, src.Label
         if m.CountFacets > int(a.get("maxFacets", 60000)):
-            raise ToolError("invalid_input", f"{m.CountFacets} triangles: a solid of every one is slow and heavy — reduce it first (mesh_reduce with ScanRuler for FreeCAD), or raise maxFacets.")
+            raise ToolError("invalid_input", f"{m.CountFacets} triangles: a solid of every one is slow and heavy — reduce it first (meshobj_decimate), or raise maxFacets.")
         tol = float(a.get("tolerance", 0.05))
         sh = Part.Shape()
         sh.makeShapeFromMesh(m.Topology, tol)
@@ -391,7 +391,7 @@ def tools(session):
         o.Shape = sol
         snd = geo.soundness(sol)
         return added(o, "part_from_mesh", {"triangles": m.CountFacets, "sound": snd["ok"], **({"problems": snd["problems"]} if not snd["ok"] else {}),
-                                           "note": "Flat triangles merged where they lie in one plane (refine); curved areas stay faceted — for a clean model, fit features instead (ScanRuler's element_fit)."})
+                                           "note": "Flat triangles merged where they lie in one plane (refine); curved areas stay faceted — for a clean model, fit features instead."})
 
     at_n = {"at": {"type": "array", "items": {}}, "normal": {"type": "array", "items": {}}}
     return [

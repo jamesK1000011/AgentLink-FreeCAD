@@ -81,12 +81,13 @@ def _freecad_bundle(target):
     return t
 
 
-# Settings the agent may not change: who decides how far an agent goes
-# (Collab's cap and merge gate), the code FreeCAD loads (extension
-# repositories, the macro folder) and the programs it runs (solver and
-# mesher paths). Set by the person in Preferences or the panel; an agent
-# that could set them could raise its own rights or have its code run.
-_GUARDED = {("Mod/AgentLink", "ExtensionRepos"), ("Mod/AgentLink", "CollabAllow"), ("Mod/AgentLink", "AgentsMayMerge"), ("Macro", "MacroPath")}
+# Settings the agent may not change: the code FreeCAD loads (extension
+# repositories, the macro folder), the programs it runs (solver and mesher
+# paths), and what add-ons guard of their own (hooks.guard_setting: an
+# add-on's switch for how far an agent goes). Set by the person in
+# Preferences or the panel; an agent that could set them could raise its
+# own rights or have its code run.
+_GUARDED = {("Mod/AgentLink", "ExtensionRepos"), ("Macro", "MacroPath")}
 _GUARDED_WORDS = ("binarypath", "executable", "exepath", "binpath")
 
 
@@ -101,7 +102,10 @@ def guarded(path, name):
         p = p[len(ROOT):]
     if any(p == g or p.endswith("/" + g) or p.startswith(g + "/") or ("/" + g + "/") in ("/" + p + "/") for g in _GUARDED_GROUPS):
         return True
-    for gp, gn in _GUARDED:
+    from .. import hooks
+
+    for gp, gn in _GUARDED | set(hooks.GUARDED):
+        gp = (gp or "").strip("/")
         if name == gn and (p.endswith(gp) or p == gp):
             return True
     return any(w in (name or "").lower() for w in _GUARDED_WORDS)
@@ -994,7 +998,7 @@ def tools(session):
              obj({"version": {"type": "string"}, "open": {"type": "string"}}), app_install, changes=False),
         Tool("pref_get", "Read FreeCAD's settings: a parameter group (path, e.g. \"BaseApp/Preferences/View\") with its values and subgroups, or one setting (name). Anything Edit > Preferences shows lives here.",
              obj({"path": {"type": "string"}, "name": {"type": "string"}}), pref_get),
-        Tool("pref_set", "Change FreeCAD's settings: path, then name + value or values { name: value }; the type follows the setting's own (or type: bool, int, uint, float, string). Says what each was. Refused for the person's own: Agent Link's CollabAllow, AgentsMayMerge and ExtensionRepos, the macro folder, and program paths (…BinaryPath, …Executable).",
+        Tool("pref_set", "Change FreeCAD's settings: path, then name + value or values { name: value }; the type follows the setting's own (or type: bool, int, uint, float, string). Says what each was. Refused for the person's own: Agent Link's ExtensionRepos, the switches add-ons guard, the macro folder, and program paths (…BinaryPath, …Executable).",
              obj({"path": {"type": "string"}, "name": {"type": "string"}, "value": {}, "values": {"type": "object"}, "type": {"type": "string"}}), pref_set, changes=True),
         Tool("pref_import", "Bring settings over from another file: by default the release before this one's user.cfg (after a FreeCAD upgrade), or path. Merged in, the file's values winning; this FreeCAD's settings exported to a backup first; macros the new one lacks copied too (macros: false not).",
              obj({"path": {"type": "string"}, "macros": {"type": "boolean"}}), pref_import),

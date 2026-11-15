@@ -11,4 +11,4 @@
 
 ## Where it is kept
 - With the document (`materials`, body → id) and, for a library card, on the object's ShapeMaterial.
-- part_review and slice read the filament keys only; a library or custom id is read by mass_properties and fea_*.
+- Add-ons for printing read the filament keys only; a library or custom id is read by `measure_mass` and `fea_*`.

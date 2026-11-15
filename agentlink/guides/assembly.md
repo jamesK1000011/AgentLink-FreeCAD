@@ -8,7 +8,7 @@ FreeCAD's own Assembly workbench, its solver and its joints. Parts are bodies al
 2. `asm_joint` between two parts, one at a time, each solved as it is made. Read `moved` (which part went where) and `overlaps` after every joint.
 3. `view_render { views: "all" }` — look. A part upside down or inside another is a face picked the wrong way: `history_undo`, then the joint again with `reverse: true`.
 4. `asm_check { clearance }` at the end: solves, overlaps (volume and where), pairs closer than the clearance, parts joined to nothing. **verdict clear** is the goal.
-5. `drawing_exploded` makes the assembly manual from where the parts now sit; `export_file` each part.
+5. Draw it from where the parts now sit (`td_page`, `td_view`); `export_file` each part.
 
 ## Joints
 - `fixed` — no motion between them: a lid screwed down, a bracket bolted on.
@@ -45,8 +45,8 @@ FreeCAD's own Assembly workbench, its solver and its joints. Parts are bodies al
 - `asm_pose { joint, to }` moves a joint and leaves it there: the lid open at 90° for a render or a drawing. Values count from where the joint was made, as in `asm_sweep`. `home: true` returns it.
 
 ## Exploded layout and parts list
-- `asm_explode { factor }` spreads the parts out from the middle; `axis: "z"` stacks them along an axis in the order they sit. Then render it, or make `drawing_exploded`, and `asm_explode { collapse: true }` puts them back. Don't solve or add joints while exploded: the solver pulls the parts home.
-- `asm_bom` is FreeCAD's own bill of materials, with material, mass and volume from `part_spec`. `td_table { sheet }` puts it on a drawing.
+- `asm_explode { factor }` spreads the parts out from the middle; `axis: "z"` stacks them along an axis in the order they sit. Then render it, or draw it (`td_view`), and `asm_explode { collapse: true }` puts them back. Don't solve or add joints while exploded: the solver pulls the parts home.
+- `asm_bom` is FreeCAD's own bill of materials, with material, mass and volume from the materials recorded (`material_set`). `td_table { sheet }` puts it on a drawing.
 
 ## Sub-assemblies
 - Build the sub-assembly as an assembly of its own, then `asm_sub { assembly: "Machine", sub: "Hinge" }` puts it in. It is rigid by default (one part to the parent); `rigid: false` lets its own joints keep moving.

@@ -12,7 +12,10 @@
 import datetime
 import time
 
-import FreeCAD
+try:
+    import FreeCAD
+except ImportError:  # the tables below are read without FreeCAD (tests)
+    FreeCAD = None
 
 PREFS = "User parameter:BaseApp/Preferences/Mod/AgentLink"
 
@@ -20,12 +23,15 @@ PREFS = "User parameter:BaseApp/Preferences/Mod/AgentLink"
 WORKBENCH = [
     ("pd_", "PartDesignWorkbench"), ("sketch_", "SketcherWorkbench"), ("feature_", "PartDesignWorkbench"),
     ("part_", "PartWorkbench"), ("bim_", "BIMWorkbench"), ("ifc_", "BIMWorkbench"), ("fea_", "FemWorkbench"),
-    ("td_", "TechDrawWorkbench"), ("drawing_", "TechDrawWorkbench"), ("draft_", "DraftWorkbench"),
+    ("td_", "TechDrawWorkbench"), ("draft_", "DraftWorkbench"),
     ("asm_", "AssemblyWorkbench"), ("cam_", "CAMWorkbench"), ("meshobj_", "MeshWorkbench"),
     ("sheet_", "SpreadsheetWorkbench"), ("insp_", "InspectionWorkbench"), ("points_", "PointsWorkbench"),
     ("surface_", "SurfaceWorkbench"), ("robot_", "RobotWorkbench"), ("scad_", "OpenSCADWorkbench"),
     ("material_", "MaterialWorkbench"),
 ]
+# Tools that work on a drawing page: the page opens in its tab and the 3D
+# view is not reframed after them.
+PAGES = ["td_"]
 
 # Tools → the FreeCAD command whose button does the same job.
 COMMAND = {
@@ -86,7 +92,7 @@ def command_for(name, args):
 
 
 # Read-only tools that still show something (a view, a picture).
-SHOWN = ("view_", "measure", "clearance", "section", "body_check", "dfm_check", "part_review", "steps_render", "note_")
+SHOWN = ("view_", "measure", "clearance", "section", "body_check", "steps_render", "note_")
 
 # What a tool's arguments and answer name: the objects to select.
 ARG_KEYS = ("body", "sketch", "object", "base", "target", "feature", "page", "op", "joint")
@@ -167,7 +173,30 @@ def _wait(ms):
 PREFIX_NAME = {"pd": "Part Design", "part": "Part", "sketch": "Sketch", "bim": "BIM", "ifc": "IFC", "fea": "FEM",
                "td": "TechDraw", "draft": "Draft", "asm": "Assembly", "cam": "CAM", "meshobj": "Mesh", "sheet": "Spreadsheet",
                "insp": "Inspection", "points": "Points", "surface": "Surface", "note": "Note", "steps": "Steps", "view": "View",
-               "doc": "Document", "object": "Object", "material": "Material", "code": "Code check", "slice": "Slice"}
+               "doc": "Document", "object": "Object", "material": "Material"}
+
+
+def declare(fam):
+    """What an add-on's family says of its own tools, so no table here names
+    them (read where families load: agentlink/families/__init__.py
+    declared()). All optional, on the family module: SHOWN, names or name
+    prefixes of read-only tools that still show something; AREAS, {prefix:
+    name} for the Activity list ('slice' gives 'Slice › …'); WORKBENCHES,
+    {prefix: workbench} to bring up for its tools; PAGES, prefixes of its
+    tools that work on a drawing page."""
+    global SHOWN
+    shown = tuple(x for x in (getattr(fam, "SHOWN", ()) or ()) if isinstance(x, str) and x not in SHOWN)
+    SHOWN = SHOWN + shown
+    for k, v in dict(getattr(fam, "AREAS", None) or {}).items():
+        PREFIX_NAME.setdefault(k, v)
+    for k, v in dict(getattr(fam, "WORKBENCHES", None) or {}).items():
+        if not any(k == p for p, _ in WORKBENCH):
+            WORKBENCH.append((k, v))
+    for k in getattr(fam, "PAGES", ()) or ():
+        if isinstance(k, str) and k not in PAGES:
+            PAGES.append(k)
+
+
 SKIP_ARGS = ("calls", "body", "inline", "name", "rollback", "stopOnError")
 
 
@@ -356,7 +385,7 @@ class Echo:
         QtCore, _QtGui, QtW = _qt()
         doc = self.s.doc
         page_ref = (body or {}).get("page") or (args or {}).get("page")
-        if name.startswith(("td_", "drawing_")) and isinstance(page_ref, str):
+        if name.startswith(tuple(PAGES)) and isinstance(page_ref, str):
             page = _objects(doc, [page_ref])
             if page and page[0].ViewObject:
                 try:
@@ -525,7 +554,7 @@ class Echo:
                     gv.setActiveObject("pdbody", body_obj)
             # Follow the work: the view framed on the part after each change
             # (Mod/AgentLink Follow; the Activity tab's check box).
-            if FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and not name.startswith(("td_", "drawing_")):
+            if FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and not name.startswith(tuple(PAGES)):
                 fit()
             _paint()
         except Exception as e:

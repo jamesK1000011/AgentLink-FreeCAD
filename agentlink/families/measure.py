@@ -10,6 +10,7 @@ import Part
 
 from .. import geometry as geo
 from .. import store
+from ..materials import MASS_DENSITY
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import picks
@@ -339,10 +340,10 @@ def tools(session):
                 # strength study assume — and said so.
                 mat, assumed = "pla", True
             if not mat:
-                raise ToolError("invalid_input", f"material or density: what {o.Label} is made of — {', '.join(picks.MATERIALS)} — or density in g/cm³ (material_set records it with the part).")
-            if mat not in picks.MATERIALS:
-                raise ToolError("invalid_input", f"material {mat!r}: one of {', '.join(picks.MATERIALS)}, or give density in g/cm³.")
-            rho, src = picks.MATERIALS[mat], (f"assumed {mat}: printed, and no material_set" if assumed else mat)
+                raise ToolError("invalid_input", f"material or density: what {o.Label} is made of — {', '.join(MASS_DENSITY)} — or density in g/cm³ (material_set records it with the part).")
+            if mat not in MASS_DENSITY:
+                raise ToolError("invalid_input", f"material {mat!r}: one of {', '.join(MASS_DENSITY)}, or give density in g/cm³.")
+            rho, src = MASS_DENSITY[mat], (f"assumed {mat}: printed, and no material_set" if assumed else mat)
         if rho <= 0:
             raise ToolError("invalid_input", "density: above 0, g/cm³.")
         m, c, I = inertia(o.Shape, rho)
@@ -450,7 +451,7 @@ def tools(session):
         ),
         Tool(
             "measure_mass",
-            "Volume, area, mass, centre of mass and inertia (g·mm² about the centre of mass; principal moments and axes for one solid) of a body solid through: material (" + ", ".join(picks.MATERIALS) + ") or density g/cm³; the part_spec material when neither is given. Trap: a printed part is not solid — part_review estimates its printed mass.",
+            "Volume, area, mass, centre of mass and inertia (g·mm² about the centre of mass; principal moments and axes for one solid) of a body solid through: material (" + ", ".join(MASS_DENSITY) + ") or density g/cm³; the material recorded (material_set) when neither is given. Trap: a printed part is not solid — an add-on for printing may estimate its printed mass.",
             obj({"body": body, "material": {"type": "string"}, "density": {"type": "number"}}),
             mass_properties,
         ),

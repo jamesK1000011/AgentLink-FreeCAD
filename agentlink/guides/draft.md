@@ -17,7 +17,7 @@
 - `surface_loft { curves, thickness, side }` — a surface through curves in order: edges, sketches, or `{ points: [[x,y,z] …] }` for a smooth curve through them. Open curves make a sheet (a curved panel), closed ones a tube (a duct between two outlines). `ruled` for straight lines between them.
 - `surface_points { rows, tolerance }` — a smooth surface through a grid of points, row by row: points measured off something, or a shape worked out from numbers. `farthestPoint` says how close it came; `tolerance` trades closeness for smoothness.
 - `surface_thicken { surface, thickness, side }` — any surface (or a body's face) as a solid: `side` out along its normal, in, or both. At least 0.8 mm for a 0.4 mm nozzle; a surface bent tighter than the thickness cannot be thickened that way.
-- A surface alone does not print: thicken it, then `part_review` it like any part.
+- A surface alone does not print: thicken it, then `body_check` it like any part.
 
 ## Copies of a part
 - `draft_array { body, kind: "grid", count: [3, 2] }` — copies side by side with a `gap` (2 mm) between, or `spacing [dx, dy, dz]`; `polar { count, center, axis, angle }` round a circle; `path { path, count, align }` along a curve.

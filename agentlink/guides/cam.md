@@ -1,7 +1,7 @@
 # Toolpaths and G-code (CAM)
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
-FreeCAD's CAM workbench makes the paths; these tools set it up, read each path back and write the G-code. `mill_check` first says whether the part can be milled at all (reach, inside corners, the least tool).
+FreeCAD's CAM workbench makes the paths; these tools set it up, read each path back and write the G-code.
 
 ## The workflow
 1. Ask the person: the machine's controller (grbl, linuxcnc …), the end mill (diameter), feeds and speeds for the material, how the stock is held and where it is zeroed.

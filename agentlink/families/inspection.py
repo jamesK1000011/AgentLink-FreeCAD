@@ -219,7 +219,7 @@ def tools(session):
             out["worst"] = worst(P, d, n_worst, lo, hi)
         if out.get("outOfReachPercent", 0) > 5:
             out["note"] = (f"{out['outOfReachPercent']:g}% of the points are further than the search radius ({r4(o.SearchRadius)} mm) from every nominal: "
-                           "a larger search_radius, or align the actual first (align_auto with ScanRuler for FreeCAD).")
+                           "a larger search_radius, or align the actual first (object_align, or an add-on's alignment).")
         return out
 
     def insp_run(a):

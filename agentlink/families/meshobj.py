@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # FreeCAD's Mesh and MeshPart workbenches on the document's mesh objects
-# (ScanRuler for FreeCAD's mesh tools work on the session's scan instead):
+# (an add-on's scan tools work on the scan in its own session instead):
 # a body meshed three ways, a mesh evaluated and repaired as the Mesh
 # workbench's Evaluate & Repair does, decimated, refined, smoothed, offset,
 # trimmed by a plane, transformed, joined by booleans, cut into

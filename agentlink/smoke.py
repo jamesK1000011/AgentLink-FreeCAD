@@ -97,7 +97,7 @@ def app_python(app):
 def against(app=None, addon_dirs=(), python=None, lib=None, timeout=600):
     """Run this smoke test in another process: a FreeCAD.app (its own Python)
     or a Python with FreeCAD's lib, with addon_dirs (folders holding
-    AgentLink, ScanRulerFC …) first on the path. The parsed result."""
+    AgentLink and the add-ons to try with it) first on the path. The parsed result."""
     import subprocess
 
     cmd = None
