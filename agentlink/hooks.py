@@ -116,6 +116,8 @@ def read(kind, *args, **kw):
 #   reopen        keep([doc]) -> [{ name, label, file, copy, t }]: before
 #                 app_restart, copies of the changed documents it does not
 #                 save, reopened beside their files once FreeCAD is back.
+#   notice        fn() -> a short line or None, asked after every tool call;
+#                 a line rides once on that answer as "notice" (notice() below).
 _SERVICES = {}
 
 
@@ -126,6 +128,50 @@ def provide(name, obj):
 
 def service(name):
     return _SERVICES.get(name)
+
+
+# The notice provider is asked with a short wait: a slow one never holds an
+# answer up, and the line it gives late rides on the next answer instead.
+NOTICE_WAIT = 0.2
+_notice = {"late": [], "busy": False}
+
+
+def notice():
+    """The line the notice service has for the agent now, or None. A provider
+    that raises is logged and skipped."""
+    fn = _SERVICES.get("notice")
+    if fn is None:
+        return None
+    if _notice["late"]:
+        return _notice["late"].pop(0)
+    if _notice["busy"]:
+        return None
+    import threading
+
+    box, lock, done = {}, threading.Lock(), threading.Event()
+
+    def ask():
+        try:
+            line = fn()
+            line = str(line) if line else None
+        except Exception as e:  # noqa: BLE001
+            _log("the notice service failed", e)
+            line = None
+        with lock:
+            box["line"] = line
+            if box.get("late") and line:
+                _notice["late"].append(line)
+            _notice["busy"] = False
+            done.set()
+
+    _notice["busy"] = True
+    threading.Thread(target=ask, name="agentlink-notice", daemon=True).start()
+    done.wait(NOTICE_WAIT)
+    with lock:
+        if done.is_set():
+            return box["line"]
+        box["late"] = True
+    return None
 
 
 # ---- events: after_change(session, tool_name); setting_changing(tool, path)
@@ -289,6 +335,7 @@ def reset():
     for lst in _READERS.values():
         del lst[:]
     _SERVICES.clear()
+    del _notice["late"][:]
     _EVENTS.clear()
     _EXTENSIONS.clear()
     del TABS[:]
