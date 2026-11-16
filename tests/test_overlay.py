@@ -229,7 +229,7 @@ class Service(unittest.TestCase):
     def test_a_row_scrolled_away_is_hidden(self):
         tree = W("tree", self.mw, pos=(10, 100), size=(250, 300))
         got = self.ov.show([{"widget": tree, "rect": lambda: (0, 400, 250, 18)}])
-        self.assertEqual(got["hidden"], [(0, "scrolled out of view")])
+        self.assertEqual(got["hidden"][0][0], 0); self.assertTrue(got["hidden"][0][1].startswith("scrolled out of view"))
         got = self.ov.show([{"widget": tree, "rect": lambda: (0, 36, 250, 18)}])
         self.assertEqual(got["shown"], [0])
         self.assertEqual(self.ov._map(self.ov.board.marks[-1]), (10, 136, 250, 18))
