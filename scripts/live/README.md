@@ -13,7 +13,7 @@ They are data, not code: an agent connected to Agent Link replays them with the 
 | `scanruler.json` | ScanRuler: workspaces, Create Feature labels, Fillet edge picks and Create Fillet, Split View's reason, the panel's width, state saved with the document. |
 | `texturizer.json` | Texturizer: the sidebar's part choice, a texture tile, FreeCAD's own Undo and Redo of it, the rotate ring, Add to Document and the linked result following a pad change. |
 
-Workshop and SafetyNet scripts come after they are combined into one add-on (roadmap v19, items 9–12).
+`workshop.json` covers Workshop, which now holds SafetyNet too.
 
 ## Format
 
