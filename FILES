@@ -178,6 +178,7 @@ tests/test_charts.py
 tests/test_core_check.py
 tests/test_core_guards.py
 tests/test_core_guards_fc.py
+tests/test_core_readers.py
 tests/test_crash_logs.py
 tests/test_declared.py
 tests/test_doc.py
