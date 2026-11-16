@@ -29,5 +29,37 @@ class Iso286(unittest.TestCase):
                 I.limits(*bad)
 
 
+class CoreFirst(unittest.TestCase):
+    """TechDraw's own Hole/Shaft Fit first where it tables the code; this
+    table where it does not, or where the two disagree (and said)."""
+
+    def test_techdraw_when_it_agrees(self):
+        up, lo = I.limits(10, "H7")
+        self.assertEqual(I.limits_from(10, "H7", core=lambda n, c: (up, lo)), (up, lo, I.TECHDRAW))
+
+    def test_own_where_techdraw_has_none(self):
+        up, lo = I.limits(10, "js6")
+        self.assertEqual(I.limits_from(10, "js6", core=lambda n, c: None), (up, lo, I.OWN))
+
+    def test_techdraw_only(self):
+        self.assertEqual(I.limits_from(10, "D10", core=lambda n, c: (0.098, 0.040)), (0.098, 0.040, I.TECHDRAW))
+
+    def test_disagreement_said(self):
+        up, lo, src = I.limits_from(10, "H7", core=lambda n, c: (0.020, 0.0))
+        self.assertEqual((up, lo), I.limits(10, "H7"))
+        self.assertIn("gave +0.02/0", src)
+
+    def test_neither(self):
+        with self.assertRaises(ValueError):
+            I.limits_from(10, "Q7", core=lambda n, c: None)
+
+    def test_techdraw_absent_here(self):
+        try:
+            import TechDrawTools  # noqa: F401
+            self.skipTest("TechDraw's tools are here")
+        except ImportError:
+            self.assertIsNone(I.techdraw_limits(10, "H7"))
+
+
 if __name__ == "__main__":
     unittest.main()

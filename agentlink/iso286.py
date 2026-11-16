@@ -68,6 +68,52 @@ def limits(nominal, code):
     raise ValueError(f"{code}: the holes F, G, H, JS and the shafts f, g, h, js, k, n, p are tabled here.")
 
 
+# Where a fit's limits came from (limits_from's third value).
+TECHDRAW = "TechDraw's Hole/Shaft Fit"
+OWN = "Agent Link's ISO 286 table"
+
+
+def techdraw_limits(nominal, code):
+    """(upper, lower), mm, from TechDraw's own Hole/Shaft Fit table
+    (TechDrawTools.TaskHoleShaftFit.ISO286: one-letter fields c f g h k n r
+    s and D E F G H K N R S, IT6 to IT11, up to 500 mm), or None where it
+    is not here (no TechDraw tools, a code it does not table)."""
+    code = str(code).strip()
+    letter, grade = code[:1], code[1:]
+    if len(code) < 2 or not letter.isalpha() or not grade.isdigit():
+        return None
+    try:
+        from TechDrawTools.TaskHoleShaftFit import ISO286
+
+        iso = ISO286()
+        iso.calculate(float(nominal), letter, int(grade))
+        vals = [float(v) for v in iso.getValues()][:2]
+    except Exception:  # noqa: BLE001 - not here, or not a field it tables
+        return None
+    if len(vals) != 2 or abs(vals[0] - vals[1]) < 1e-9:
+        return None
+    return max(vals), min(vals)
+
+
+def limits_from(nominal, code, core=techdraw_limits):
+    """(upper, lower, source): TechDraw's own Hole/Shaft Fit where it tables
+    the code, else this table. Where both table it and they differ by more
+    than half a micrometre, this table's (checked against ISO 286) is
+    given and the source says so."""
+    try:
+        own = limits(nominal, code)
+    except ValueError as e:
+        own, why = None, e
+    td = core(nominal, code)
+    if td is not None:
+        if own is not None and max(abs(td[0] - own[0]), abs(td[1] - own[1])) > 0.0005:
+            return own[0], own[1], f"{OWN} (TechDraw's Hole/Shaft Fit gave {_dev(td[0])}/{_dev(td[1])})"
+        return td[0], td[1], TECHDRAW
+    if own is None:
+        raise why
+    return own[0], own[1], OWN
+
+
 def _num(v):
     s = f"{float(v):.3f}".rstrip("0").rstrip(".")
     return s or "0"
