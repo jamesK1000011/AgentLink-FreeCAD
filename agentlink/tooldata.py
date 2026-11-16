@@ -40,6 +40,70 @@ long run is not, so declare what you know is slow. A tool that changes the
 document cannot run as a job: if it can be long, declare it heavy so it is
 estimated, queued and given a deadline of three times its estimate.
 
+Agent Link's own tools (agentlink/data/tools.json) carry no handler: the
+entry is the whole tool, run by agentlink/runners.py (docs/data-tools.md
+has what each construct is for, with an example of each). An add-on binds
+handlers and needs none of this.
+
+  runner   make | apply | command | read: a wrapper of one FreeCAD command,
+           with target (what it runs), args (each argument's default,
+           conversion, helper, property or later step), rules (its checks,
+           each with its refusal word for word) and answer.
+           steps: a tool that is more than one command, with steps and
+           answer:
+
+    "steps": [
+      {"let": {"length": "=pos(a, 'length', 4500)", "steps": "=int(a.get('steps', max(3, round(height / 175))))"}},
+      {"refuse": "steps: 2 or more.", "when": "=steps < 2"},
+      {"make": "Arch.makeStairs", "call": [null], "kw": {"length": "=length", "steps": "=steps"}},
+      {"set": {"o.Placement": "=placement(vec(a.get('at', [0, 0, 0]), 'at'), frame(d, V(0, 0, 1).cross(d)))"}},
+      {"do": "=named(o, a.name or 'Stairs')"}],
+    "answer": {"via": "finish", "with": ["=o", "=tool", "$fields"],
+               "fields": {"riser": "=round(height / steps, 1)"},
+               "then": [{"put": {"note": "…"}, "when": "=not 600 <= 2 * riser + going <= 650"}]}
+
+  A step is one object with one action; "when": e on any step runs it only
+  when e is truthy.
+    let      {"name": e, …} values in order; "p, q": e unpacks
+    refuse   the refusal's message, in its place in the order; with when,
+             code (invalid_input when left out) and first (steps that undo
+             what the call already made). {"fmt": "…{field}…"} fills it.
+    make     a maker by dotted name ("Arch.makeStairs"; "=expression" for
+             one chosen by input) with call, kw, as ("o"), headless
+    add      a document object of a TypeId, with name and as
+    set      {"o.Label": e, "o.Placement.Base": e} properties in order
+    do       one expression or a list, for what they do
+    put      {"field": e} into the answer ("into": another dict)
+    push     {"list": e} one more on a list
+    each     a name (or "k, v"), in, index, steps: a loop
+    then     with when and else: one branch or the other
+    choose   an expression, of {"value": [steps]}, else: a branch by value
+    try      steps, on (error | refusal | ["ValueError", …]), except
+             (steps; "error" there is what was caught)
+    answer   {"via", "with", "fields", "late", "then"}: ends the run with
+             this answer. via: the family helper that finishes (recompute,
+             snapshot, step); fields: the answer's own fields in order
+             ("...": e spreads a dict, {"when": e, "value": e} only then);
+             late: the helper reads the fields itself, after its recompute;
+             then: steps after the answer is made ("out"), for what is read
+             or made after it. The entry's own "answer" is the one a run
+             reaches the end with.
+
+  Expressions ("=…", agentlink/expr.py): arithmetic, comparisons, and / or
+  / not, "x if c else y", lists, dicts and comprehensions, a value's
+  attributes and methods, the listed functions and the family's helpers by
+  name. Nothing is given to eval or exec: the text is parsed and walked by
+  an evaluator that knows only these, and an entry that holds anything
+  else is refused when it is loaded.
+
+  Helpers: each family module declares a dict of named functions and hands
+  it to runners.tools(group, session, helpers): its finishing code, FreeCAD's
+  own makers of geometry, and the small functions that are real geometry or
+  FreeCAD-API logic (a wall's side, a built roof's ridge). An entry calls
+  them by name with data arguments; the entry stays the tool's definition.
+  family: where two family modules share a group, the module whose helpers
+  the entry calls ("bim_more").
+
 A handler refuses by raising any exception with `code` (invalid_input,
 not_found, invalid_state, unavailable, failed) and `message`: the agent gets
 it as a refusal, never a crash.
@@ -53,9 +117,9 @@ REQUIRED = {"group": str, "description": str, "inputSchema": dict, "changes": bo
 OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "reads": dict, "activity": str,
             "workbench": str, "commands": list, "words": list}
 # Agent Link's own tools only (agentlink/data/tools.json): a tool that wraps
-# one FreeCAD command, run by one of agentlink/runners.py's runners. An
-# add-on binds handlers instead and never needs these.
-RUNNER = {"runner": str, "target": dict, "args": dict, "rules": list, "answer": dict}
+# one FreeCAD command, or a list of steps, run by one of agentlink/runners.py's
+# runners. An add-on binds handlers instead and never needs these.
+RUNNER = {"runner": str, "target": dict, "args": dict, "rules": list, "answer": dict, "steps": list, "family": str}
 CODES = {"invalid_input", "not_found", "invalid_state", "unavailable", "failed"}
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
