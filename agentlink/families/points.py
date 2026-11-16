@@ -631,7 +631,10 @@ def tools(session):
                     m = RE.poissonReconstruction(pk)
             except Exception as e:
                 raise ToolError("unavailable", f"Poisson reconstruction is not in this FreeCAD build ({e}): it needs a FreeCAD compiled with the Point Cloud Library. method height or hull instead.") from None
-            note = "Poisson reconstruction: a closed surface through the cloud."
+            # PCL's surface is meant closed, but it came back with a triangle or two
+            # missing or doubled on a clean cylinder cloud (closed false under a note saying closed).
+            note = ("Poisson reconstruction: a closed surface through the cloud." if m.isSolid() else
+                    "Poisson reconstruction: a surface through the cloud that did not come back closed — meshobj_info says why, meshobj_repair { fix: [\"duplicates\", \"degenerate\", \"holes\"] } usually closes it.")
         else:
             raise bad("method: height (one side, gridded) | hull (convex) | poisson (needs FreeCAD built with PCL).")
         mo = doc().addObject("Mesh::Feature", "Mesh")

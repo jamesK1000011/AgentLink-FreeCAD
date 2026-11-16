@@ -568,12 +568,29 @@ def dxf_close(made, parsed):
                 break
     return fixed
 
+def went_from(session, doc):
+    """Note the document the session is leaving: when the one it moves to is
+    closed, the session goes back there (doc_new's "previous"), not to
+    whichever open document FreeCAD lists last."""
+    try:
+        name = doc.Name
+    except Exception:  # noqa: BLE001 - no document, or one already gone
+        return
+    trail = session.__dict__.setdefault("doc_trail", [])
+    if name in trail:
+        trail.remove(name)
+    trail.append(name)
+    del trail[:-20]
+
+
 def tools(session):
     s = session
 
     def switch(doc):
         from ..store import undo_on
 
+        if getattr(s, "doc", None) is not None and doc is not s.doc:
+            went_from(s, s.doc)
         undo_on(doc)
         s.doc = doc
         s.meta = {}
@@ -657,9 +674,14 @@ def tools(session):
         for d in picked:
             closed.append(d.Label)
             FreeCAD.closeDocument(d.Name)
-        left = list(FreeCAD.listDocuments().values())
-        if current not in FreeCAD.listDocuments():
-            switch(left[-1] if left else FreeCAD.newDocument("Unnamed"))
+        still = FreeCAD.listDocuments()
+        left = list(still.values())
+        if current not in still:
+            # Back to the document the session came from (the latest one still
+            # open), as doc_new's "previous" promised: FreeCAD's list is by name,
+            # and its last entry was a document this work never touched.
+            back = next((still[n] for n in reversed(s.__dict__.get("doc_trail", [])) if n in still), None)
+            switch(back or (left[-1] if left else FreeCAD.newDocument("Unnamed")))
         out = {"closed": closed, "document": s.doc.Name, "label": s.doc.Label, "open": [d.Label for d in FreeCAD.listDocuments().values()]}
         if unsaved:
             out["discarded"] = unsaved

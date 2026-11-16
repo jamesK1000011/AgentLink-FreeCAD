@@ -259,6 +259,36 @@ class MeshHardening(unittest.TestCase):
         self.assertEqual(len(sp["pieces"]), 2)
         self.assertEqual(sp["facets"], [12, 12])
 
+    def test_8_live_run_findings(self):
+        # Trim counts what went, not the triangle count's difference: a cube cut in
+        # half has 14 triangles where it had 12 (the reply said removed -2).
+        self.ok("meshobj_primitive", {"kind": "box", "size": [10, 10, 10], "at": [200, 0, 0], "name": "L cube"})
+        p = self.ok("meshobj_trim", {"mesh": "L cube", "at": [0, 0, 5], "normal": [0, 0, 1], "preview": True})
+        self.assertEqual((p["wouldRemove"], p["wouldCut"]), (2, 8))
+        t = self.ok("meshobj_trim", {"mesh": "L cube", "at": [0, 0, 5], "normal": [0, 0, 1], "copy": True, "name": "L half"})
+        self.assertEqual((t["removed"], t["cut"]), (2, 8))
+        self.assertAlmostEqual(t["area"], 300, delta=0.01)
+        # A slice through a row of the mesh's own edges is one loop once round
+        # (a sphere's equator came back 125.6 long for a 62.8 circle).
+        self.ok("part_primitive", {"kind": "sphere", "radius": 10, "at": [250, 0, 0], "name": "L globe"})
+        self.ok("meshobj_from_shape", {"body": "L globe", "deflection": 0.01, "angle": 5, "name": "L globe mesh"})
+        sl = self.ok("meshobj_sections", {"mesh": "L globe mesh", "normal": [0, 0, 1], "at": [-5, 0, 5]})["slices"]
+        for row, want in zip(sl, (54.41, 62.83, 54.41)):
+            self.assertEqual(row["loops"], 1)
+            self.assertAlmostEqual(row["length"], want, delta=0.3)
+        # A line thrown onto the mesh keeps its length where a sample lands on a mesh
+        # edge (6 mm over the cube's diagonal came back 16).
+        self.ok("part_wire", {"kind": "line", "from": [202, 5, 20], "to": [208, 5, 20], "name": "L stripe"})
+        pr = self.ok("meshobj_project", {"mesh": "L cube", "shape": "L stripe", "direction": [0, 0, -1]})
+        self.assertAlmostEqual(pr["length"], 6.0, delta=0.01)
+        # Smoothing a coarse mesh says how far it pulled it in.
+        self.ok("meshobj_from_shape", {"body": "L globe", "deflection": 0.5, "angle": 30, "name": "L globe coarse"})
+        sm = self.ok("meshobj_smooth", {"mesh": "L globe coarse", "method": "taubin", "iterations": 5, "copy": True})
+        if abs(sm["volumeChange"]) > 0.02 * 4188.79:
+            self.assertIn("volume changed", sm["warning"])
+        else:
+            self.assertNotIn("warning", sm)
+
 
 if __name__ == "__main__":
     unittest.main()

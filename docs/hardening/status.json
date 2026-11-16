@@ -1,4 +1,1330 @@
 {
+ "asm_add": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_bom": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_check": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_explode": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_fits": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_ground": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_joint": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_joint_remove": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_limits": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_motion": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_new": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_new_part": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_pose": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_rigid_group": {
+  "description": true,
+  "docs": true,
+  "note": "unavailable on FreeCAD 1.1.3 (the refusal is what ran): not proven"
+ },
+ "asm_sub": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "asm_sweep": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+ },
+ "bim_building": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_component": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_covering": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_curtain_wall": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_edit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_equipment": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_fence": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_frame": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_grid": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_ifc": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "type, properties; the classification form was fixed in 527316d and shows right in the exported file"
+ },
+ "bim_ifc_brep": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_import": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "read product by product with IfcOpenShell (FreeCAD's importer failed: USE_BREP_DATA)"
+ },
+ "bim_layers": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "its note about IFC was corrected after the run (text only)"
+ },
+ "bim_level": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_material": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_member": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_opening": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "doors and windows; wallCut_m3 is in every reply"
+ },
+ "bim_panel": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_panel_out": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_pipe": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_pipe_connector": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_preflight": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_profiles": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_rebar": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_reorder": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_schedule": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_section": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_space": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_stairs": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "the flight tops out one riser below the height (FreeCAD counts risers)"
+ },
+ "bim_structural_system": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_structure": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_trash": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_truss": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_views": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_wall": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "cam_dressup": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+ },
+ "cam_job": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+ },
+ "cam_library": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+ },
+ "cam_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+ },
+ "cam_op": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)",
+  "note": "profile, pocket, drill (the drill came out labelled Drill001 for \"Drill\": undecided)"
+ },
+ "cam_path": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+ },
+ "cam_post": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)",
+  "note": "linuxcnc and grbl"
+ },
+ "cam_property_bag": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+ },
+ "cam_remove": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+ },
+ "cam_sim": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+ },
+ "cam_template_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+ },
+ "cam_tool": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+ },
+ "cam_tool_add": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+ },
+ "clearance": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "compound_explode": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "compound_filter": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "doc_graph": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "doc_info": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "doc_new": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "doc_open": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "open and recent"
+ },
+ "doc_save": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "doc_save_all": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "draft_2d_view": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_array": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_clone": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_dimension": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_facebinder": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_fix": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_fonts": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_from_sketch": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_hatch": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_label": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "area shown as FreeCAD formats it (64.95 cm\u00b2)"
+ },
+ "draft_layer": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_link_array": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "polar, ortho, circular, path, points"
+ },
+ "draft_modify": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "14 ops ran; upgrade left two wires where ends were 1.1e-7 mm apart (FreeCAD's tolerance; the note for it was added after and not run)"
+ },
+ "draft_plane": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_shape": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_style": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "draft_to_sketch": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+ },
+ "export": {
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "fea_buckle": {
+  "description": true,
+  "headless": true,
+  "health": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
+  "note": "docs: body not read line by line in the FEM pass"
+ },
+ "fea_chart": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+ },
+ "fea_clear": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+ },
+ "fea_heat": {
+  "description": true,
+  "headless": true,
+  "health": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
+  "note": "docs: body not read line by line in the FEM pass"
+ },
+ "fea_hold": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+ },
+ "fea_load": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+ },
+ "fea_modes": {
+  "description": true,
+  "headless": true,
+  "health": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
+  "note": "docs: body not read line by line in the FEM pass"
+ },
+ "fea_native": {
+  "description": true,
+  "headless": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
+  "note": "docs: Elmer half not checked"
+ },
+ "fea_parts": {
+  "description": true,
+  "headless": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
+  "note": "docs: body not read line by line in the FEM pass"
+ },
+ "fea_probe": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
+  "note": "nearest-node readings"
+ },
+ "fea_refine": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+ },
+ "fea_setup": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+ },
+ "fea_shell": {
+  "description": true,
+  "headless": true,
+  "health": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
+  "note": "von Mises 2.69 MPa is right (the model compared it with the larger bending stress, 3.0); docs: body not read line by line in the FEM pass"
+ },
+ "feature_edit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "feature_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "feature_remove": {
+  "description": true,
+  "docs": true,
+  "note": "only its refusal path ran in the Part Design model: not proven"
+ },
+ "feature_suppress": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "fem_add": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+ },
+ "fem_linearize": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+ },
+ "fem_mesh": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+ },
+ "ifc_diff": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "ifc_edit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "ifc_find": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "a layered wall has no material in the file: FreeCAD 1.1 exports single materials only"
+ },
+ "ifc_open": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "a storey at 0 reads elevation null: FreeCAD's exporter leaves a zero out"
+ },
+ "ifc_remove": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "ran by hand with a real id (not in the files read here)"
+ },
+ "ifc_save": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "import_file": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
+  "note": "stl as a mesh, step as a body"
+ },
+ "insp_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "insp_faces": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "insp_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "insp_read": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "insp_run": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "insp_update": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "link_edit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "link_make": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "material_clear": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "answered by the installed add-on's service"
+ },
+ "material_get": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "material_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "measure": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "measure_keep": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "measure_mass": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "with density or material given; with neither the installed add-on answers in its own form"
+ },
+ "meshobj_boolean": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_boundary": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_decimate": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_edit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
+  "note": "background: true was refused in the batch (known)"
+ },
+ "meshobj_from_shape": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_info": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
+  "note": "background: true was refused in the batch (known)"
+ },
+ "meshobj_merge": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_offset": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_primitive": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_refine": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_repair": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_segments": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_split": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_transform": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "object_align": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "object_appearance": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "object_delete": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "the delete ran; the in-use refusal was not reached (wrong document after doc_close)"
+ },
+ "object_duplicate": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "object_freeze": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "object_get": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "object_group": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "object_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "object_rename": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "object_set": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "param_bind": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "param_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "param_remove": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "param_set": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "part_attach": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_boolean": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_chamfer": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_compound": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_container": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_datum": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_defeature": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_extract": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_extrude": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_face": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_fillet": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_fix": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_from_mesh": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_import_curves": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_join": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_loft": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_offset": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_offset2d": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_primitive": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_project": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_refine": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_revolve": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_ruled": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_section": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_slices": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_split": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_sweep": {
+  "description": true,
+  "docs": true,
+  "note": "failed in the Part model, fixed after, not re-run: not proven"
+ },
+ "part_thickness": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_transform": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_wire": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "pd_binder": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
  "pd_body_new": {
   "description": true,
   "docs": true,
@@ -6,11 +1332,403 @@
   "health": true,
   "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
  },
+ "pd_boolean": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_chamfer": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_clone": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_datum": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_datum_plane": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_draft": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_fillet": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_gear": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_groove": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_helix": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_hole": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_linear_pattern": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_loft": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_mirrored": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_move_feature": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_multitransform": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
  "pd_pad": {
+  "description": true,
+  "docs": true,
   "headless": true,
   "health": true,
   "model": "SketcherTutorial (star 24247.47 mm3; plate 9442.92 mm3 = example 1's own)",
-  "note": "docs and description wait for the Part Design pass"
+  "note": "docs and description from the Part Design pass"
+ },
+ "pd_pipe": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_pocket": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_polar_pattern": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_primitive": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_reorder": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_revolution": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_shaft": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_thickness": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "pd_tip": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+ },
+ "points_crop": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)",
+  "note": "box and plane; specks and thin not run (no bunny file)"
+ },
+ "points_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
+ },
+ "points_fit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
+ },
+ "points_import": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
+ },
+ "points_info": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)",
+  "note": "spacing is the median gap to the nearest neighbour (0.34 here; the model expected the grid pitch)"
+ },
+ "points_merge": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
+ },
+ "points_mesh": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)",
+  "note": "height and hull; poisson ran (PCL present) but came back open"
+ },
+ "points_sample": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
+ },
+ "points_structure": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
+ },
+ "recompute": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "robot_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "robot_move": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "axes (by hand) and an out-of-reach refusal; a 100 mm tcp move from the wrist-singular pose was not reached"
+ },
+ "robot_path": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "seconds follow FreeCAD's acceleration (3.0 s for 200 mm at 100 mm/s)"
+ },
+ "robot_run": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "out-of-reach trajectory reported right; the 200 mm stroke from the singular pose missed 13 of 20"
+ },
+ "robot_tool": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "robot_trajectory": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "scad_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "scad_status": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "section": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "shape_query": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "sheet_cells": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "sheet_chart": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "sheet_clear": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "sheet_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "sheet_format": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "sheet_import": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "sheet_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "sheet_new": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "sheet_read": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "sheet_rows": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "sheet_set": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "sheet_table": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
  },
  "sketch_add": {
   "description": true,
@@ -147,5 +1865,320 @@
   "headless": true,
   "health": true,
   "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "surface_blend": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)",
+  "note": "size 5 swings wide (242.7 mm for a 53 mm chord): FreeCAD's own"
+ },
+ "surface_boundary": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+ },
+ "surface_cut": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+ },
+ "surface_extend": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+ },
+ "surface_fill": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+ },
+ "surface_loft": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+ },
+ "surface_points": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+ },
+ "surface_polynomial": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+ },
+ "surface_sections": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+ },
+ "surface_sew": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+ },
+ "surface_thicken": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+ },
+ "td_area": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_balloon": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_bim": {
+  "description": true,
+  "docs": true,
+  "note": "not run (needs a BIM section plane): not proven"
+ },
+ "td_centermarks": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_cosmetic": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_datum": {
+  "description": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "docs: inputs only"
+ },
+ "td_detail": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_dim": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_dim_align": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_dim_format": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_dim_repair": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_dim_special": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_dimset": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_export": {
+  "description": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "docs: drawing code not reviewed"
+ },
+ "td_finish": {
+  "description": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "docs: inputs only"
+ },
+ "td_gdt": {
+  "description": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "docs: inputs only"
+ },
+ "td_geometry": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_hatch": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_leader": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_lines": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_list": {
+  "description": true,
+  "docs": true,
+  "health": true,
+  "note": "fixed after the TechDraw run, not re-run: not proven"
+ },
+ "td_note": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_page": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_projection": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_section": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_section_position": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_table": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_title": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_tolerance": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_view": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+ },
+ "td_view_more": {
+  "description": true,
+  "docs": true,
+  "note": "stack fixed after the TechDraw run, not re-run: not proven"
+ },
+ "td_weld": {
+  "headless": true,
+  "health": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "docs: inputs only; description: one clause only"
+ },
+ "text_document": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "units_convert": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "varset_new": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "varset_set": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
  }
 }

@@ -177,6 +177,12 @@ class BimHardening(unittest.TestCase):
         self.assertEqual(a["box"], b["box"])
         # ridge midway: run 2000 at 30 degrees
         self.assertAlmostEqual(a["ridge"], 2000 * 0.57735, delta=2)
+        # A hipped roof (one angle all round): the panes over the 4000 span meet at
+        # 2000 x tan 30 and cut the end panes off there, whatever the end panes' own
+        # run says (live run: ridge 1732.1 reported on a roof 1501 high in all).
+        h = self.ok("bim_roof", {"points": [[40000, 0], [40000, 4000], [46000, 4000], [46000, 0]], "angle": 30, "thickness": 150, "overhang": 300, "name": "H roof hip"})
+        self.assertAlmostEqual(h["ridge"], 2000 * 0.57735, delta=2)
+        self.assertLess(h["ridge"], h["box"][2])
         self.assertIn("gable", self.refused("bim_roof", {"points": ccw, "angle": 90}))
         self.assertIn("one per edge", self.refused("bim_roof", {"points": ccw, "angle": [30, 30]}))
 
@@ -280,6 +286,22 @@ class BimHardening(unittest.TestCase):
         sh = self.ok("bim_schedule", {"sheet": "H schedule"})
         self.assertEqual(sh["sheet"], "H schedule")
         self.assertEqual(len(self.session.steps), before + 1)
+
+    def test_13_quantities_count_each_member_once(self):
+        # A level and a building carry their members' solids as their own shape
+        # (live run: 143 m3 with no material in a 37 m3 house).
+        self.ok("bim_structure", {"kind": "slab", "points": [[50000, 0], [52000, 0], [52000, 1000], [50000, 1000]], "thickness": 100, "name": "H q slab"})
+        before = self.ok("bim_quantities", {"by": "type", "detail": True})
+        self.ok("bim_level", {"objects": ["H q slab"], "name": "H q level"})
+        self.ok("bim_building", {"levels": ["H q level"], "name": "H q house"})
+        after = self.ok("bim_quantities", {"by": "type", "detail": True})
+        self.assertEqual(after["objects"], before["objects"])
+        self.assertEqual(after["groups"]["Slab"], before["groups"]["Slab"])
+        names = [r["object"] for r in after["rows"]]
+        self.assertNotIn("H q level", names)
+        self.assertNotIn("H q house", names)
+        self.assertNotIn("Building Storey", after["groups"])
+        self.assertNotIn("Building", after["groups"])
 
 
 if __name__ == "__main__":

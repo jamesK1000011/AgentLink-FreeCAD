@@ -906,7 +906,11 @@ def tools(session):
             if mode is None:
                 raise ToolError("invalid_input", "coolant: none, flood or mist.")
             n = 0
-            for op in job.Operations.Group:
+            # The job lists the outermost of each stack: under a dressup it is the
+            # operation that carries CoolantMode (a dressup has none, and the
+            # post reads the base operation's).
+            for top in job.Operations.Group:
+                op = base_op(top)
                 if "CoolantMode" in op.PropertiesList:
                     op.CoolantMode = mode
                     n += 1
@@ -956,7 +960,23 @@ def tools(session):
                 from Path.Op import Custom
             except ImportError:
                 raise ToolError("unavailable", "This FreeCAD's CAM has no custom G-code operation.") from None
-            o = Custom.Create(label, parentJob=job) if "parentJob" in Custom.Create.__code__.co_varnames else Custom.Create(label)
+            # A stop or comment runs with the tool of the operation it follows (the
+            # job's last, or first tool, when none is named). Left to FreeCAD it takes
+            # the controller selected in the window or asks in a dialog: a stop after
+            # the pocket took the drill's, and the posted file changed tools for it.
+            ops_now = list(job.Operations.Group)
+            lead = after if after is not None else (ops_now[-1] if ops_now else None)
+            tc0 = (tc_for(lead) if lead is not None else None) or next(iter(job.Tools.Group), None)
+            import PathScripts.PathUtils as PathUtils
+
+            orig_find = PathUtils.findToolController
+            PathUtils.findToolController = lambda *args, **kw: tc0
+            try:
+                o = Custom.Create(label, parentJob=job) if "parentJob" in Custom.Create.__code__.co_varnames else Custom.Create(label)
+            finally:
+                PathUtils.findToolController = orig_find
+            if tc0 is not None and "ToolController" in o.PropertiesList:
+                o.ToolController = tc0
             if o not in job.Operations.Group:
                 job.Operations.addObject(o)
             o.Gcode = lines

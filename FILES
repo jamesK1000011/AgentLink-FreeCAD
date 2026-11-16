@@ -202,6 +202,7 @@ docs/hardening/partdesign-findings.md
 docs/hardening/scad-findings.md
 docs/hardening/sheetfem-findings.md
 docs/hardening/sketcher-findings.md
+docs/hardening/status-findings.md
 docs/hardening/status.json
 docs/hooks.md
 docs/packaging.md

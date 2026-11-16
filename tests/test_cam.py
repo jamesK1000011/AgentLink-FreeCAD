@@ -194,6 +194,22 @@ class CamHardening(unittest.TestCase):
         self.assertAlmostEqual(float(dr.Width), 5, delta=0.001)
         self.assertAlmostEqual(float(dr.Height), 2, delta=0.001)
         self.assertIn("no such property", self.refused("cam_dressup", {"op": "HOutline", "kind": "dogbone", "props": {"NotAProperty": 1}}))
+        # A stop runs with the tool of the operation it follows, not the one selected in the
+        # window (a stop after the pocket took the drill's controller: a tool change posted for it).
+        st = self.ok("cam_edit", {"action": "stop", "optional": True, "after": "HOutline"})
+        stop = next(o for o in self.session.doc.Objects if o.Label == st["op"])
+        outline = next(o for o in self.session.doc.Objects if o.Label == "HOutline")
+        if "ToolController" in stop.PropertiesList:
+            self.assertEqual(stop.ToolController.Name, outline.ToolController.Name)
+        # Coolant goes on the operation under a dressup (the job lists the dressup, which has
+        # no coolant mode: a job of one dressed profile answered ops 0 and stayed dry).
+        base = next(o for o in self.session.doc.Objects if o.Label == "HTagged")
+        if "CoolantMode" in base.PropertiesList:
+            c = self.ok("cam_setup", {"coolant": "flood"})
+            self.assertGreaterEqual(c["coolant"]["ops"], 2)
+            self.assertEqual(str(base.CoolantMode), "Flood")
+            self.ok("cam_setup", {"coolant": "none"})
+            self.assertEqual(str(base.CoolantMode), "None")
         r = self.ok("cam_remove", {"op": "HTagged"})
         self.assertEqual(sorted(r["removed"]), sorted([d["dressup"], "HTagged"]))
         self.assertEqual([o.Label for o in self.session.doc.Objects if o.Label in (d["dressup"], "HTagged")], [])

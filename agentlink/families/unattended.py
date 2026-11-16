@@ -182,6 +182,9 @@ def tools(s):
             if a.get("front") and getattr(FreeCAD, "GuiUp", False):
                 out["front"] = _bring_front(nd)
             return out
+        from .doc import went_from
+
+        went_from(s, s.doc)
         s.switch(nd)
         try:
             s.pinned_label = nd.Label

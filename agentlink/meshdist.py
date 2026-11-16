@@ -119,3 +119,84 @@ def nearest(P, V, F, reach):
         signed[p_sel] = np.where(side < 0, -d_sel, d_sel)
         s = e
     return best, dist, signed
+
+
+# ---- polylines FreeCAD's mesh cuts hand back -------------------------------------------------
+
+def once_each(polylines, digits=5):
+    """Polylines with every segment kept once, and how many repeats were
+    dropped. A plane that passes through a row of a mesh's own edges is cut
+    by the triangle on each side of every such edge, so FreeCAD's
+    crossSections answers that loop twice over (a sphere's equator: one
+    loop of twice the length). With no repeat the polylines come back as
+    given; with one, the segments left are chained end to end again."""
+    def key(q):
+        return (round(float(q[0]), digits), round(float(q[1]), digits), round(float(q[2]), digits))
+
+    segs, order, dropped = {}, [], 0
+    for pl in polylines:
+        for a, b in zip(pl, pl[1:]):
+            ka, kb = key(a), key(b)
+            if ka == kb:
+                continue
+            k = (ka, kb) if ka <= kb else (kb, ka)
+            if k in segs:
+                dropped += 1
+                continue
+            segs[k] = (a, b)
+            order.append(k)
+    if not dropped:
+        return [list(pl) for pl in polylines], 0
+    ends = {}
+    for k in order:
+        for e in k:
+            ends.setdefault(e, []).append(k)
+    used, out = set(), []
+    for k in order:
+        if k in used:
+            continue
+        used.add(k)
+        chain = list(segs[k])
+        for forward in (True, False):
+            while True:
+                tip = key(chain[-1] if forward else chain[0])
+                nxt = next((x for x in ends[tip] if x not in used), None)
+                if nxt is None:
+                    break
+                used.add(nxt)
+                p, q = segs[nxt]
+                other = q if key(p) == tip else p
+                if forward:
+                    chain.append(other)
+                else:
+                    chain.insert(0, other)
+        out.append(chain)
+    return out, dropped
+
+
+def no_spurs(points, tol=1e-4):
+    """A polyline without repeated points and without spurs: a stretch that
+    runs out and straight back along itself. FreeCAD's projection of a curve
+    onto a mesh adds one where a sample point lands exactly on a mesh edge
+    (the start triangle's whole chord is taken, backwards: a 6 mm line over
+    a cube's diagonal came back 16 mm long)."""
+    out = []
+    for q in points:
+        q = (float(q[0]), float(q[1]), float(q[2]))
+        out.append(q)
+        while True:
+            if len(out) >= 2 and sum((a - b) ** 2 for a, b in zip(out[-1], out[-2])) <= tol * tol:
+                out.pop()
+                continue
+            if len(out) >= 3:
+                u = [b - a for a, b in zip(out[-3], out[-2])]
+                v = [b - a for a, b in zip(out[-2], out[-1])]
+                lu, lv = sum(x * x for x in u) ** 0.5, sum(x * x for x in v) ** 0.5
+                # straight back: the angle between the two steps is 180 degrees
+                cross = ((u[1] * v[2] - u[2] * v[1]) ** 2 + (u[2] * v[0] - u[0] * v[2]) ** 2 + (u[0] * v[1] - u[1] * v[0]) ** 2) ** 0.5
+                if sum(x * y for x, y in zip(u, v)) < 0 and cross <= tol * max(lu, lv):
+                    del out[-2]
+                    continue
+            break
+    return out
+

@@ -238,6 +238,8 @@ class MoreFamilies(Base):
         self.have("robot_new")
         n = self.ok("robot_new", {"model": "puma", "name": "Rh"})
         self.assertIn("default", n["model"])
+        # the tool point at the home pose, not [0, 0, 0] until the first move (live finding)
+        self.assertGreater(n["tcp"]["at"][0], 1000)
         fwd = self.ok("robot_move", {"robot": "Rh", "axes": [0, -90, 90, 0, 0, 0]})
         for got, want in zip(fwd["tcp"]["at"], [1825, 0, 2400]):
             self.assertAlmostEqual(got, want, delta=0.5)

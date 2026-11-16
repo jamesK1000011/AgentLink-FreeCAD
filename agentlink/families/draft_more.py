@@ -511,7 +511,23 @@ def tools(session):
         res = [(x[0] if x else None) if isinstance(x, (list, tuple)) else x for x in res if x is not None]
         res = [x for x in res if x is not None]
         res = [x for x in res if alive(x) and hasattr(x, "Label")]
-        return finish(res or [o for o in objs if alive(o)], "draft_modify", {"op": op})
+        extra = {"op": op}
+        if op == "upgrade" and len(res) >= 2:
+            # Edges are joined where their ends meet within FreeCAD's 1e-7 mm: ends a
+            # hair further apart (points typed to six decimals) stay two wires, and
+            # nothing else says why.
+            ends = []
+            for x in res:
+                sh = getattr(x, "Shape", None)
+                for w in (getattr(sh, "Wires", None) or []) if sh is not None and not sh.Faces else []:
+                    if not w.isClosed():
+                        vs = w.OrderedVertexes
+                        ends += [(x.Label, vs[0].Point), (x.Label, vs[-1].Point)]
+            near = min(((p.distanceToPoint(q), la, lb) for i, (la, p) in enumerate(ends) for lb, q in ends[i + 1:] if la != lb), default=None)
+            if near and 1e-7 < near[0] <= 0.01:
+                extra["note"] = (f"{near[1]} and {near[2]} end {near[0]:.2g} mm apart and were not joined: FreeCAD joins ends that meet within 1e-7 mm. "
+                                 "Give their points with every decimal (or move one end onto the other), then upgrade again.")
+        return finish(res or [o for o in objs if alive(o)], "draft_modify", extra)
 
     # ---- layers, hatches ----
 

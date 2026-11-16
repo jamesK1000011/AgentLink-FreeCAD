@@ -173,6 +173,13 @@ def tools(s):
             d().mergeProject(p)
         except Exception as e:  # noqa: BLE001 - not a document FreeCAD reads
             raise ToolError("failed", f"FreeCAD could not merge {os.path.basename(p)}: {e} — doc_open {{ path }} shows whether the file opens at all.") from None
+        # The other file's own hidden records object (its steps, materials and
+        # setups) is not part of the model: left in, it showed as an object that
+        # came in ("Agent Link records001"), or stood in as this document's records.
+        from ..store import HOLDER
+
+        for o in [o for o in d().Objects if o.Name not in before and o.Name.startswith(HOLDER)]:
+            d().removeObject(o.Name)
         d().recompute()
         new = [o for o in d().Objects if o.Name not in before]
         if not new:

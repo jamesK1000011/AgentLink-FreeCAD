@@ -55,6 +55,9 @@ class StdMore(Base):
         self.assertIn(path, self.ok("doc_save_all")["saved"])
         m = self.ok("doc_merge", {"path": path})
         self.assertTrue(any(x.startswith("D keep") for x in m["objects"]))
+        # the file's own records object stays behind (it came in as "Agent Link records001")
+        self.assertFalse([x for x in m["objects"] if x.startswith("Agent Link records")], m)
+        self.assertEqual(len([o for o in self.session.doc.Objects if o.Name.startswith("AgentLinkRecords")]), 1)
 
     def test_4_appearance(self):
         self.box("A box", [10, 10, 10])
