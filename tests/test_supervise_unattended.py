@@ -53,7 +53,12 @@ FAKE_HIDDEN = textwrap.dedent('''
 FAKE_WINDOW = textwrap.dedent('''
     import json, os, socket, sys, threading, time
     home, port = os.environ["AGENTLINK_HOME"], int(os.environ["AGENTLINK_WINDOW_PORT"])
-    state = {"beat": True, "dialog": None, "popup": None, "docs": [{"name": "Plate", "label": "Plate", "file": "/tmp/Plate.FCStd"}]}
+    state = {"beat": True, "dialog": None, "popup": None, "docs": [{"name": "Plate", "label": "Plate", "file": "/tmp/Plate.FCStd", "modified": True}]}
+    if os.environ.get("FAKE_DOCS") and "--stray" not in sys.argv and not os.path.exists(os.path.join(home, "first-window")):
+        state["docs"] = json.loads(os.environ["FAKE_DOCS"])
+        open(os.path.join(home, "first-window"), "w").write("1")
+    elif os.environ.get("FAKE_DOCS"):
+        state["docs"] = []
     if "--stray" in sys.argv:
         # Started again after a hang: the copy just recovered, and an old
         # recovered copy opened again from its temporary folder.
@@ -107,6 +112,21 @@ FAKE_WINDOW = textwrap.dedent('''
                 time.sleep(4)
                 os.remove(mark)
                 state["beat"] = True
+            if name == "doc_open":
+                path = (m.get("params") or {}).get("arguments", {}).get("path")
+                with open(os.path.join(home, "opened.log"), "a") as lg:
+                    lg.write(path + "\\n")
+                state["docs"] = state["docs"] + [{"name": os.path.basename(path)[:-6], "label": os.path.basename(path)[:-6], "file": path}]
+            if name == "app_recover" and os.environ.get("FAKE_DOCS"):
+                args_ = (m.get("params") or {}).get("arguments", {})
+                with open(os.path.join(home, "recover.log"), "a") as lg:
+                    lg.write(json.dumps(args_) + "\\n")
+                if args_.get("action") == "list":
+                    body = {"documents": []}
+                else:
+                    body = {"recovered": [{"label": d["label"], "document": d["name"] + "_recovered", "source": "autosave", "time": "now", "lost": "nothing after it lost"} for d in args_.get("documents") or []]}
+                f.write(json.dumps({"jsonrpc": "2.0", "id": m["id"], "result": {"content": [{"type": "text", "text": json.dumps(body)}]}}) + "\\n"); f.flush()
+                continue
             if name == "doc_close":
                 gone = (m.get("params") or {}).get("arguments", {}).get("documents") or []
                 state["docs"] = [d for d in state["docs"] if d["name"] not in gone]
@@ -489,6 +509,44 @@ class RestartOnlyWhatWasOpen(Sup):
         self.assertEqual([d["name"] for d in hb["docs"]], ["Plate_recovered"])
 
 
+# Live: after a watchdog restart every open document came back as a
+# "(recovered HH:MM)" copy, saved and unchanged ones too, and the hang
+# record named copies twice. Saved, unchanged documents open again from
+# their own files; only changed ones are recovered; an unchanged copy is
+# left; the record names each document once.
+class RestartSavedReopened(Sup):
+    window = True
+    extra_env = {"FAKE_DOCS": json.dumps([
+        {"name": "StemV2", "label": "StemV2", "file": "/srv/parts/StemV2.FCStd"},
+        {"name": "StemV2", "label": "StemV2", "file": "/srv/parts/StemV2.FCStd"},
+        {"name": "Drum", "label": "Drum", "file": "/srv/parts/Drum.FCStd", "modified": True},
+        {"name": "Enc_recovered", "label": "Enclosure (recovered 10:00)", "file": "/tmp/agentlink-recovered-q/Enc_recovered.FCStd"},
+        {"name": "Fresh", "label": "Fresh", "file": ""},
+    ])}
+
+    def test_saved_reopened_changed_recovered_copy_left(self):
+        self.call("ping")
+        err, out = self.call("hang", timeout=90)
+        self.assertTrue(err)
+        msg = out["error"]["message"]
+        self.assertIn("opened again from their own files (saved, unchanged): StemV2", msg)
+        self.assertIn("Drum recovered from autosave", msg)
+        self.assertIn("Fresh recovered from autosave", msg)
+        self.assertNotIn("StemV2 recovered", msg)
+        self.assertNotIn("Enclosure recovered", msg)
+        self.assertEqual(open(os.path.join(self.home, "opened.log")).read().split(), ["/srv/parts/StemV2.FCStd"])
+        auto = [json.loads(ln) for ln in open(os.path.join(self.home, "recover.log")) if '"auto"' in ln]
+        self.assertEqual(len(auto), 1)
+        sent = {d["label"]: d["modified"] for d in auto[0]["documents"]}
+        self.assertEqual(sent, {"Drum": True, "Fresh": False})
+        log = [json.loads(ln) for ln in open(os.path.join(self.home, "watchdog.log")) if ln.strip()]
+        rec = [e for e in log if isinstance(e.get("docs"), list)]
+        self.assertTrue(rec, log)
+        for e in rec:
+            self.assertEqual(len(e["docs"]), len(set(e["docs"])), e)
+        self.assertEqual(rec[-1]["docs"].count("StemV2"), 1)
+
+
 class RestartHelpers(unittest.TestCase):
     def setUp(self):
         sys.path.insert(0, AL)
@@ -526,6 +584,34 @@ class RestartHelpers(unittest.TestCase):
                {"name": "AgentLink_recovered", "label": "AgentLink (recovered 16:40)", "file": "/tmp/agentlink-recovered-z/AgentLink.FCStd"}]
         rec = [{"label": "AgentLink", "document": "AgentLink_recovered", "as": "AgentLink (recovered 16:40)"}]
         self.assertEqual([d["name"] for d in self.sv.strays(kept, rec, now)], ["AgentLink_r"])
+
+    def test_restart_split(self):
+        tmp = tempfile.gettempdir()
+        docs = [{"name": "A", "label": "A", "file": "/Users/x/A.FCStd"},
+                {"name": "A", "label": "A", "file": "/Users/x/A.FCStd"},
+                {"name": "B", "label": "B", "file": "/Users/x/B.FCStd", "modified": True},
+                {"name": "C", "label": "C", "file": ""},
+                {"name": "D_r", "label": "D (recovered 10:00)", "file": "", "modified": True},
+                {"name": "E_r", "label": "E (recovered 09:00)", "file": os.path.join(tmp, "agentlink-recovered-e", "E_recovered.FCStd")},
+                {"name": "F_r", "label": "F", "file": os.path.join(tmp, "agentlink-recovered-f", "F_recovered.FCStd")}]
+        reopen, rec, left = self.sv.restart_split(docs)
+        self.assertEqual([d["name"] for d in reopen], ["A"])
+        self.assertEqual([(d["name"], d["modified"]) for d in rec], [("B", True), ("C", False), ("D_r", True)])
+        self.assertEqual([d["name"] for d in left], ["E_r", "F_r"])
+        self.assertEqual(self.sv.once(["X (recovered)", "X (recovered)", "Y"]), ["X (recovered)", "Y"])
+
+    def test_newer_copies(self):
+        d = tempfile.mkdtemp()
+        old, new = os.path.join(d, "old.FCStd"), os.path.join(d, "new.FCStd")
+        for p in (old, new):
+            open(p, "w").write("x")
+        os.utime(old, (1000, 1000))
+        os.utime(new, (5000, 5000))
+        lst = {"documents": [{"document": "A", "label": "A", "copies": [{"path": old}]},
+                             {"document": "B", "label": "Bee", "copies": [{"path": old}, {"path": new}]}]}
+        self.assertEqual(self.sv.newer_copies(lst, 3000), {"B", "Bee"})
+        self.assertEqual(self.sv.newer_copies(lst, 9000), set())
+        self.assertEqual(self.sv.newer_copies(None, 3000), set())
 
     def test_strays(self):
         tmp = tempfile.gettempdir()

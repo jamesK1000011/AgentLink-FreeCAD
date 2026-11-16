@@ -22,6 +22,8 @@ Look at the part after every change that matters, as a person would.
 
 ## traps
 - `view_render` runs on the first call: it is not held back on a time estimate. Its answer's `time` says what it took and what to expect at the same triangles and views, from past renders here.
+- Big renders are sized before they draw: every layer's triangles times the views, timed from past renders here. Past about 40 s the big layers (a fine body's inspection mesh, a scan) are drawn thinned — `thinned` gives each layer's triangles from and to; the map's `min`, `max` and `worst` are still read on every point — and a `detail` larger than fits is capped (`detailCapped`). A zoom or fewer views draws finer.
+- A long render marks itself heavy for the watchdog, inside a `batch` too, and stops drawing 90 s into the call (a batch's start), naming the views it left in `cut`: it is never taken for hung.
 - Left without `objects`, every shown body is drawn: a Body of several solids, screws and other parts attached to it, each in its own colour.
 - `view_snapshot` `width` and `height` are the whole picture. With several `views` they are split among the grid; `cell: true` makes them each view's size. The answer gives the sizes as saved.
 - Grey on a map is unread: an open mesh, a scan past the max distance.
@@ -37,3 +39,4 @@ Look at the part after every change that matters, as a person would.
 - Dev only, two agents on one link (a teacher and a student who stands in for the person): the student adds `as: "person"` to each `gui_input`. The window events of that call and its `call_done` are the person's; the calls of the teacher stay the agent's, also when they come between or during the calls of the student. The answer shows `as: "person"`.
 - Toggle buttons flip on each click and keep their state over a restart: check before clicking twice.
 - Save before `agentlink_update`: the person's unsaved changes come back as a "(recovered …)" copy in front; `doc_switch { front: true }` brings the right tab back. The agent's never-saved documents come back once, from ~/AgentLink/unsaved.
+- After the watchdog or a crash restarts FreeCAD, saved documents with no changes open again from their own files, as themselves; only changed or never-saved ones come back as "(recovered …)" copies, and a recovered copy nobody changed is not recovered again.

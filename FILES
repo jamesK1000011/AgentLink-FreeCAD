@@ -277,10 +277,12 @@ tests/test_quiet_reads.py
 tests/test_quit_guard.py
 tests/test_release.py
 tests/test_release_tools.py
+tests/test_render_sizing.py
 tests/test_report_watch.py
 tests/test_restart_temp_copy.py
 tests/test_rider_calldone.py
 tests/test_runners.py
+tests/test_settle_copies.py
 tests/test_sheet.py
 tests/test_sheets.py
 tests/test_sketch.py
