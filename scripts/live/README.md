@@ -33,7 +33,8 @@ Workshop and SafetyNet scripts come after they are combined into one add-on (roa
 ```
 
 - `calls` go to `batch` as they are (`rollback: false`, `stopOnError: false`).
-- `expect` checks one value of one call's answer. `path` walks the answer with dots, numbers for list items. Checks: `equals`, `contains` (text or list), `atLeast` / `atMost` (numbers), `exists: true|false`, and `noneContain: [words]` for a list of lines, with `ignoreLinesWith: [texts]` to skip lines that aren't ours.
+- `expect` checks one value of one call's answer. `path` walks the answer with dots, numbers for list items. Paths: dots for keys and list indices; `[*]` means any item of a list, `[-1]` the last.
+- Checks: `equals`, `contains` (text or list), `atLeast` / `atMost` (numbers), `exists: true|false`, and `noneContain: [words]` for a list of lines, with `ignoreLinesWith: [texts]` to skip lines that aren't ours.
 - FreeCAD itself logs `(qt.qpa.fonts) … missing font family "Sans" / "Sans-serif"` (seen when a sketch is made and when TechDraw draws its own templates; none of the add-ons name those families any more): Report view checks ignore those lines.
 - `shot`: a `gui_input` shot of the window after the step, to look at when a check fails.
 - Waits: `gui_input` takes at most 3000 ms per wait; repeat waits for longer.

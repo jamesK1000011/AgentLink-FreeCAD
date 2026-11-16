@@ -1,0 +1,82 @@
+{
+  "name": "Workshop: Make panel, placed commands, SafetyNet",
+  "about": "Run reset.json first. Workshop is one add-on (Parts, Make, Electronics, Documents and SafetyNet). Checks the Make workbench as a person uses it (a print setup, Review), that its commands sit in FreeCAD's own menus, and Tools > SafetyNet > Checkpoint Now.",
+  "needs": ["AgentLink-FreeCAD", "Workshop-FreeCAD"],
+  "steps": [
+    {
+      "name": "one Make workbench, no old Workshop or SafetyNet workbenches",
+      "calls": [
+        { "tool": "workbench", "arguments": { "activate": "Make" } },
+        { "tool": "report_read", "arguments": { "problems": true } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.active", "equals": "WorkshopMakeWorkbench" },
+        { "call": 0, "path": "result.workbenches", "contains": "Make" },
+        { "call": 0, "path": "result.workbenches", "noneContain": ["SafetyNet", "Workshop Parts", "Workshop Make", "Workshop Documents", "Workshop Electronics"] },
+        { "call": 1, "path": "result.lines", "noneContain": ["Error", "Traceback", "Exception", "already deleted"], "ignoreLinesWith": ["(qt.qpa.fonts)"] }
+      ]
+    },
+    {
+      "name": "Setups: New makes a print setup holding the part",
+      "calls": [
+        { "tool": "cmd_run", "arguments": { "name": "Std_ViewIsometric" } },
+        { "tool": "cmd_run", "arguments": { "name": "Std_ViewFitAll" } },
+        { "tool": "gui_input", "arguments": { "steps": [ { "wait": 1000 }, { "click": { "tab": { "text": "Setups" } } }, { "click": { "widget": { "text": "New", "class": "QPushButton" } } }, { "wait": 800 }, { "shot": "make_new" } ] } },
+        { "tool": "setup", "arguments": { "action": "list" } }
+      ],
+      "expect": [
+        { "call": 3, "path": "result.setups.0.type", "equals": "print" },
+        { "call": 3, "path": "result.setups.0.bodies", "equals": ["Body"] }
+      ]
+    },
+    {
+      "name": "Review: the button gives the verdict",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "steps": [ { "click": { "tab": { "text": "Review" } } }, { "wait": 800 }, { "click": { "widget": { "text": "Review", "class": "QPushButton" } } }, { "wait": 3000 }, { "shot": "make_review" } ] } },
+        { "tool": "part_review", "arguments": { "body": "Body" } }
+      ],
+      "expect": [
+        { "call": 1, "path": "result.verdict", "equals": "pass" }
+      ],
+      "look": "\"PASS — Body, printed\" above the findings table, \"Nothing found\"."
+    },
+    {
+      "name": "commands placed in FreeCAD's own menus (top level only on 1.1.3)",
+      "calls": [
+        { "tool": "workbench", "arguments": { "activate": "Part Design" } },
+        { "tool": "menu_list", "arguments": { "menu": "Part Design" } },
+        { "tool": "menu_list", "arguments": { "menu": "Tools" } },
+        { "tool": "menu_list", "arguments": { "menu": "File" } },
+        { "tool": "workbench", "arguments": { "activate": "TechDraw" } },
+        { "tool": "menu_list", "arguments": { "menu": "TechDraw" } },
+        { "tool": "workbench", "arguments": { "activate": "Part" } },
+        { "tool": "menu_list", "arguments": { "menu": "Part" } }
+      ],
+      "expect": [
+        { "call": 1, "path": "result.items[*].command", "contains": "Workshop_Make_Hole" },
+        { "call": 1, "path": "result.items[*].command", "contains": "Workshop_Make_ThreadLookup" },
+        { "call": 2, "path": "result.items[*].path.1", "contains": "SafetyNet" },
+        { "call": 2, "path": "result.items[*].command", "contains": "Workshop_Make_MassProperties" },
+        { "call": 3, "path": "result.items[*].command", "contains": "SafetyNet_Recover" },
+        { "call": 3, "path": "result.items[*].command", "contains": "Workshop_Electronics_ImportBoard" },
+        { "call": 3, "path": "result.items[*].command", "contains": "Workshop_Documents_LibraryPack" },
+        { "call": 5, "path": "result.items[*].command", "contains": "Workshop_Documents_Drawing" },
+        { "call": 7, "path": "result.items[*].command", "contains": "Workshop_Parts_GridfinityBin" }
+      ],
+      "note": "`items[*]` means any item of the list."
+    },
+    {
+      "name": "Tools > SafetyNet > Checkpoint Now makes the person's checkpoint",
+      "calls": [
+        { "tool": "menu_run", "arguments": { "path": ["Tools", "SafetyNet", "Checkpoint Now"] } },
+        { "tool": "history_checkpoint", "arguments": { "list": true } },
+        { "tool": "report_read", "arguments": { "problems": true } }
+      ],
+      "expect": [
+        { "call": 1, "path": "result.checkpoints[-1].by", "equals": "person" },
+        { "call": 2, "path": "result.lines", "noneContain": ["Error", "Traceback", "Exception", "already deleted"], "ignoreLinesWith": ["(qt.qpa.fonts)"] }
+      ],
+      "note": "`[-1]` is the newest."
+    }
+  ]
+}
