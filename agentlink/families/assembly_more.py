@@ -145,6 +145,47 @@ def fit_of(code):
     return hole.strip(), shaft.strip()
 
 
+def _exploded_view(asm, which, moves):
+    """FreeCAD's own Exploded View of the assembly (CommandCreateView's
+    ExplodedView with a Normal move step a part), its moves applied:
+    (the view object, None), or (None, why) where it cannot be made here —
+    nothing it made is left behind then."""
+    try:
+        import CommandCreateView as CV
+        import UtilsAssembly as UA
+    except Exception as e:  # noqa: BLE001 - an older FreeCAD, or no pivy headless
+        return None, f"Assembly's exploded views are not here ({type(e).__name__}: {e})"
+    made = []
+    before = {o.Name: FreeCAD.Vector(o.Placement.Base) for o in which}
+    try:
+        view = UA.getViewGroup(asm).newObject("App::FeaturePython", "Exploded View")
+        made.append(view)
+        CV.ExplodedView(view)
+        steps = []
+        for o in which:
+            st = asm.newObject("App::FeaturePython", "Move")
+            made.append(st)
+            CV.ExplodedViewStep(st, 0)
+            st.References = [asm, [o.Name + "."]]
+            st.MovementTransform = FreeCAD.Placement(moves[o.Name], FreeCAD.Rotation())
+            steps.append(st)
+        view.Group = steps
+        view.Proxy.saveAssemblyAndExplode(view)
+        off = [o.Label for o in which if (o.Placement.Base - (before[o.Name] + moves[o.Name])).Length > 1e-6]
+        if off:
+            raise RuntimeError(f"its steps did not move {', '.join(off[:3])}")
+        return view, None
+    except Exception as e:  # noqa: BLE001 - put back as it was
+        for o in which:
+            o.Placement = FreeCAD.Placement(before[o.Name], o.Placement.Rotation)
+        for x in reversed(made):
+            try:
+                x.Document.removeObject(x.Name)
+            except Exception:
+                pass
+        return None, f"FreeCAD's Exploded View could not be made here: {e}"
+
+
 def tools(session):
     s = session
 
@@ -461,8 +502,15 @@ def tools(session):
                 if v.Length < 1e-6:
                     v = V(0, 0, 1) * (bb.ZLength * 0.5 + 1)
                 moves[o.Name] = v * (factor - 1)
-        for o in which:
-            o.Placement = FreeCAD.Placement(o.Placement.Base + moves[o.Name], o.Placement.Rotation)
+        # FreeCAD's own Exploded View (Assembly ▸ Create Exploded View): a
+        # move step a part, applied by it; the placements moved here only
+        # where it is not (an older FreeCAD, or a step it would not take).
+        view, why = _exploded_view(asm, which, moves)
+        if view is None:
+            for o in which:
+                o.Placement = FreeCAD.Placement(o.Placement.Base + moves[o.Name], o.Placement.Rotation)
+        else:
+            kept["__view__"] = view.Name
         # The joints are left out of the solve while exploded (and put back
         # on collapse): otherwise the next solve, from any assembly tool,
         # pulls the parts back together.
@@ -478,6 +526,7 @@ def tools(session):
         doc().recompute()
         s.snapshot("asm_explode")
         return {"assembly": asm.Label, "exploded": {o.Label: vec(moves[o.Name]) for o in which}, "step": len(s.steps),
+                **({"view": view.Label, "by": "FreeCAD's Exploded View (Assembly)"} if view is not None else {"by": "placements moved here", "whyNotFreeCADs": why}),
                 "jointsOff": len(off), "note": "Its joints are off while exploded, so no solve pulls the parts back: view_render to look, a drawing of it (td_page, td_view), then asm_explode { collapse: true }. Kept in the file, so it collapses after reopening too."}
 
     # ---- bill of materials ----
@@ -687,7 +736,7 @@ def tools(session):
              obj({"assembly": asm_ref, "joint": {"type": "string"}, "to": {"type": "number"}, "by": {"type": "number"}, "home": {"type": "boolean"}, "turn": {"type": "boolean"}, "allowOverlap": {"type": "boolean"}}, ["joint"]), asm_pose, changes=True),
         Tool("asm_limits", "A joint's limits, FreeCAD's own: min and max (degrees for revolute, mm for slider; turn: true for a cylindrical's angle); null clears one. asm_sweep sweeps between them when from/to are left out.",
              obj({"assembly": asm_ref, "joint": {"type": "string"}, "min": {"type": ["number", "null"]}, "max": {"type": ["number", "null"]}, "turn": {"type": "boolean"}}, ["joint"]), asm_limits, changes=True),
-        Tool("asm_explode", "Spread an assembly's parts out to see how it goes together: factor (1.6: 60% further from the middle), or along an axis \"z\" | [x,y,z] stacked in order with gap mm; parts (default every one not grounded). collapse: true puts them back and turns the joints on again (kept in the file). Its joints are off while exploded.",
+        Tool("asm_explode", "Spread an assembly's parts out to see how it goes together: factor (1.6: 60% further from the middle), or along an axis \"z\" | [x,y,z] stacked in order with gap mm; parts (default every one not grounded). Made as FreeCAD's own Exploded View (Assembly) where this FreeCAD has it. collapse: true puts them back and turns the joints on again (kept in the file). Its joints are off while exploded.",
              obj({"assembly": asm_ref, "factor": {"type": "number"}, "axis": {"type": ["string", "array"]}, "gap": {"type": "number"}, "parts": {"type": "array", "items": {"type": "string"}}, "collapse": {"type": "boolean"}}), asm_explode, changes=True),
         Tool("asm_sub", "Put an assembly into another as a sub-assembly: sub (the assembly to put in), assembly (the one it goes into), rigid (true: one part; false: its own joints still move, where this FreeCAD allows), name.",
              obj({"assembly": asm_ref, "sub": {"type": "string"}, "rigid": {"type": "boolean"}, "name": {"type": "string"}}, ["assembly", "sub"]), asm_sub, changes=True),
