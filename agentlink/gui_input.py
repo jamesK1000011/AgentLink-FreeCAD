@@ -674,16 +674,50 @@ class Run:
                 except Exception:
                     pass
 
+    def _active_doc_label(self):
+        try:
+            gd = self.gui.ActiveDocument
+            return str(gd.Document.Label) if gd is not None else None
+        except Exception:
+            return None
+
+    def _ancestors(self, m, ix, role):
+        """[(index, text)] of a row's parents, nearest first."""
+        out, p = [], ix.parent()
+        while p is not None and p.isValid() and len(out) < 16:
+            out.append((p, _norm(m.data(p, role)) if m is not None else ""))
+            p = p.parent()
+        return out
+
+    def _on_screen(self, v, ix, ups):
+        """The row shows now: every parent unfolded and its rect inside the
+        view's viewport."""
+        try:
+            if hasattr(v, "isExpanded") and any(not v.isExpanded(p) for p, _t in ups):
+                return False
+            r = v.visualRect(ix)
+            vp = v.viewport()
+            return r.height() > 0 and r.y() + r.height() > 0 and r.y() < vp.height() and r.x() < vp.width()
+        except Exception:
+            return False
+
     def find_item(self, spec):
-        """(view, index, text) of the first row of a visible list, tree or
-        table whose shown text is spec's (whole before a part), in column
-        (any column when left out)."""
+        """(view, index, text) of the row of a visible list, tree or table
+        whose shown text is spec's (whole before a part), in column (any
+        column when left out). Several rows match (two documents each with a
+        Sketch): the active document's rows first, then a row that shows now
+        (its branch unfolded, inside the view) before one that must be
+        unfolded or scrolled to, then the first. self.found_in says where."""
         Qt = self.qt.QtCore.Qt
         role = _enum(Qt, "ItemDataRole", "DisplayRole")
         views = [(w, p) for w, p in self._visible() if self._is(p, "QAbstractItemView") and self._under(p, spec)]
         want = _norm(spec["text"])
         col = spec.get("column")
+        active = _norm(self._active_doc_label() or "")
+        self.found_in = None
         for loose in (False, True):
+            best = None
+            n = 0
             for v, _p in views:
                 m = v.model()
                 if m is None:
@@ -699,8 +733,19 @@ class Run:
                         except TypeError:
                             pass
                         have = _norm(m.data(cix, role))
-                        if have and (want in have if loose else want == have):
-                            return v, cix, str(m.data(cix, role))
+                        if not (have and (want in have if loose else want == have)):
+                            continue
+                        ups = self._ancestors(m, ix, role)
+                        texts = [t for _p, t in ups]
+                        score = (0 if active and active in texts else 1, 0 if self._on_screen(v, ix, ups) else 1, n)
+                        n += 1
+                        if best is None or score < best[0]:
+                            path = [str(m.data(p, role)) for p, _t in reversed(ups)]
+                            best = (score, v, cix, str(m.data(cix, role)), path)
+            if best is not None:
+                _s, v, cix, text, path = best
+                self.found_in = {"path": path[-3:], **({"document": path[0]} if path else {}), "matches": n}
+                return v, cix, text
         raise ToolError("not_found", f"No visible list, tree or table row {json.dumps(spec, ensure_ascii=False)}: window_snapshot shows what is there.")
 
     def _check_state(self, v, ix):
@@ -779,6 +824,13 @@ class Run:
             vp = view.viewport()
             y = r.y() + r.height() / 2.0
             extra = {"class": self._props(view)["classes"][0], "item": text, "row": ix.row()}
+            found = getattr(self, "found_in", None) or {}
+            if found.get("path"):
+                extra["under"] = " › ".join(found["path"])
+            if found.get("document"):
+                extra["document"] = found["document"]
+            if found.get("matches", 1) > 1:
+                extra["matches"] = found["matches"]
             if t.get("check"):
                 x = r.x() + CHECK_INSET + min(r.height(), 20) / 2.0
                 self.checking = (view, ix, self._check_state(view, ix))
