@@ -500,7 +500,22 @@ def tools(session):
         except (TypeError, ValueError):
             hs = []
         if hs:
+            # Heights are each pane's own run × tan(angle): on a hipped roof the
+            # panes over the shorter span meet lower and cut the others off, so
+            # the ridge is read from the roof as built — the highest point of
+            # its underside above the eaves' line.
             out["ridge"] = round(max(hs), 1)
+            under = []
+            for f in getattr(o.Shape, "Faces", []):
+                try:
+                    u0, u1, v0, v1 = f.ParameterRange
+                    if f.normalAt((u0 + u1) / 2, (v0 + v1) / 2).z < -1e-6:
+                        under.append(max(v.Point.z for v in f.Vertexes))
+                except Exception:
+                    continue
+            built = max(under) - verts[0].z if under else 0
+            if 1e-6 < built < max(hs) - 0.05:
+                out["ridge"] = round(built, 1)
         if flip:
             out["flipped"] = True
         return out

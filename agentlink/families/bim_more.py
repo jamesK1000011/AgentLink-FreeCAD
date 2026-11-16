@@ -329,7 +329,7 @@ def tools(session):
         s.snapshot("bim_layers")
         return {"layers": mm.Label, "total_mm": round(total, 1), "build-up": [{"material": m.Label, "thickness": float(x["thickness"])} for m, x in zip(mats, layers)],
                 "on": on, **({"skipped": skipped, "skippedWhy": "not BIM components (no Material): bim_component { from } makes a shape one"} if skipped else {}),
-                "note": "Walls on it take its total as their width; IFC export writes the layer set.", "step": len(s.steps)}
+                "note": "Walls on it take its total as their width. FreeCAD 1.1's IFC export writes single materials only: an object on a build-up goes out with no material (ifc_edit { material } names one in the file).", "step": len(s.steps)}
 
     # ---- IFC data ---------------------------------------------------------------
 
@@ -390,6 +390,10 @@ def tools(session):
                 continue
             if getattr(o, "Group", None) and not o.Shape.Solids:
                 continue  # a container
+            # A level, building or site carries its members' solids as its own
+            # shape in FreeCAD 1.1: counted, every member would be counted again.
+            if proxy_name(o) in ("_Building", "_Floor", "_Site", "BuildingPart") or ifc_type(o) in ("Building", "Building Storey", "Site", "Project"):
+                continue
             sh = o.Shape
             vol = sh.Volume / 1e9 if sh.Solids else 0.0
             if vol <= 0 and ifc_type(o) not in ("Space",):
@@ -557,7 +561,7 @@ def tools(session):
              obj({"path": s_, "points": {"type": "array", "items": pt}, "height": {"type": "number"}, "post": {"type": "number"}, "spacing": {"type": "number"}, "panel": {"type": "number"}, "name": s_}), bim_fence, changes=True),
         Tool("bim_covering", "Cover a flat face (\"Slab.Face6\") with a finish thickness mm (10): finish tiles (tile [length, width] 300 × 300, joint 3; counted whole and cut) | solid. FreeCAD 1.1 has no covering object: tiles are solids made here (a boolean each, so thousands are slow; refused past 20000) and pattern / hatch become solid. Face numbers change when an object is rebuilt.",
              obj({"face": s_, "finish": {"type": "string", "enum": ["tiles", "solid", "pattern", "hatch"]}, "tile": pt, "thickness": {"type": "number"}, "joint": {"type": "number"}, "name": s_}, ["face"]), bim_covering, changes=True),
-        Tool("bim_layers", "A layered build-up (multi-material): layers [{ material (name), thickness mm, density kg/m³ }] in order across the wall, put on objects (a wall takes the total as its width). Answers layers (its label), total_mm, on, skipped.",
+        Tool("bim_layers", "A layered build-up (multi-material): layers [{ material (name), thickness mm, density kg/m³ }] in order across the wall, put on objects (a wall takes the total as its width). Not written by FreeCAD 1.1's IFC export (the object goes out with no material). Answers layers (its label), total_mm, on, skipped.",
              obj({"layers": {"type": "array", "items": {"type": "object"}}, "objects": {"type": "array", "items": s_}, "name": s_}, ["layers"]), bim_layers, changes=True),
         Tool("bim_ifc", "Read or set BIM objects' IFC data (objects alone reads): type (FreeCAD's spaced names: Wall, Covering, \"Building Element Proxy\"; IfcWall is understood), classification (\"<system> <code>\", e.g. \"Uniclass Ss_25_10_30\": FreeCAD's IFC export needs the system's name, a space and the code, and a bare code is refused; \"\" clears it), properties { \"Pset_WallCommon.FireRating\": \"REI60\" } (set.property). Answers objects [{ object, ifc, classification, properties }].",
              obj({"objects": {"type": "array", "items": s_}, "type": s_, "classification": s_, "properties": {"type": "object"}}, ["objects"]), bim_ifc, changes=True),

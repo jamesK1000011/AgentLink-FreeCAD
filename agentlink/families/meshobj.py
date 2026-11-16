@@ -18,6 +18,7 @@ import numpy as np
 
 from .. import geometry as geo
 from .. import meshbool
+from .. import meshdist
 from .. import render
 from .. import store
 from .. import runners
@@ -427,11 +428,17 @@ def tools(session):
         elif meth == "taubin":
             m.smooth(Method="Taubin", Iteration=it, Lambda=float(a.get("lambda", 0.6307)), Micro=float(a.get("mu", 0.0424)))
         else:
-            raise bad("method: taubin (keeps the volume) or laplace (shrinks).")
+            raise bad("method: taubin (shrinks far less) or laplace (shrinks).")
         vol0 = o.Mesh.Volume if o.Mesh.isSolid() else None
         extra = {"method": meth, "iterations": it}
         if vol0:
             extra["volumeChange"] = round(m.Volume - vol0, 3)
+            # FreeCAD's Taubin moves each point towards its neighbours' mean and
+            # back out, point after point: on a coarse mesh the two do not cancel
+            # (a 150-point sphere lost a fifth of its volume in 5 iterations).
+            if abs(m.Volume - vol0) > 0.02 * abs(vol0):
+                extra["warning"] = (f"The volume changed by {100 * (m.Volume - vol0) / vol0:.1f}%: smoothing pulls a coarse mesh in (taubin less than laplace). "
+                                    "Fewer iterations, or meshobj_refine first; history_undo takes it back.")
         return keep(o, m, "meshobj_smooth", a, extra)
 
     def meshobj_trim(a):
@@ -441,7 +448,13 @@ def tools(session):
         n = vec(a.get("normal"), "normal", (0, 0, 1))
         if n.Length < 1e-9:
             raise bad("normal: not zero — the side it points to is removed.")
-        n0 = m.CountFacets
+        # Triangles wholly on the side taken away, and those the plane crosses
+        # (each cut one comes back as one or two: the count after is no measure
+        # of what went — a cube cut in half has 14 triangles where it had 12).
+        P0, F0 = arrays(m)
+        side = ((P0 - np.array([p.x, p.y, p.z])) @ np.array([n.x, n.y, n.z]) / n.Length)[F0] if len(F0) else np.zeros((0, 3))
+        gone = int(np.sum((side >= -1e-7).all(axis=1) & (side > 1e-7).any(axis=1)))
+        crossed = int(np.sum((side > 1e-7).any(axis=1) & (side < -1e-7).any(axis=1)))
         m.trimByPlane(p, n)
         # trimByPlane adds the split triangles with points of their own, so the
         # strip along the cut came back as a second component, its seam as two
@@ -454,9 +467,9 @@ def tools(session):
             raise ToolError("failed", f"The plane leaves nothing of {o.Label}: all of it lies on the side normal points to. Turn normal round, or move at. Nothing was changed.")
         if a.get("preview"):
             bb = m.BoundBox
-            return {"mesh": o.Label, "preview": True, "wouldRemove": n0 - m.CountFacets, "wouldKeep": m.CountFacets,
+            return {"mesh": o.Label, "preview": True, "wouldRemove": gone, "wouldCut": crossed, "wouldKeep": m.CountFacets,
                     "keptBox": [round(bb.XLength, 2), round(bb.YLength, 2), round(bb.ZLength, 2)], "note": "Nothing changed: the same call without preview cuts."}
-        extra = {"removed": n0 - m.CountFacets}
+        extra = {"removed": gone, "cut": crossed}
         if a.get("close") and not m.isSolid():
             m.fillupHoles(int(a.get("maxHoleEdges", 1000)))
             m.harmonizeNormals()
@@ -600,8 +613,10 @@ def tools(session):
         wires, rows = [], []
         for d, sec in zip(ds, polys):
             ws = []
+            # a plane through a row of the mesh's own edges is answered twice over
+            sec, _twice = meshdist.once_each([[(q.x, q.y, q.z) for q in map(V, pl)] for pl in sec])
             for pl in sec:
-                pts = [V(p) for p in pl]
+                pts = [V(*p) for p in pl]
                 if len(pts) >= 2:
                     try:
                         ws.append(Part.makePolygon(pts))
@@ -715,7 +730,10 @@ def tools(session):
             polys = MeshPart.projectShapeOnMesh(src.Shape, o.Mesh, d)
         except Exception as e:
             raise ToolError("failed", f"The projection failed: {e}")
-        wires = [Part.makePolygon([V(p) for p in pl]) for pl in polys if len(pl) >= 2]
+        # FreeCAD's polyline repeats the points where its stretches join, and
+        # runs out and back along a triangle's chord where a sample lands on a mesh edge.
+        clean = [meshdist.no_spurs([(q.x, q.y, q.z) for q in map(V, pl)]) for pl in polys]
+        wires = [Part.makePolygon([V(*q) for q in pl]) for pl in clean if len(pl) >= 2]
         if not wires:
             raise ToolError("failed", f"Nothing of {src.Label} landed on {o.Label} along {geo.vec(d)}: the shape must lie over the mesh seen along direction (turn direction round if it is on the other side).")
         c = doc().addObject("Part::Feature", "Projection")
@@ -829,7 +847,14 @@ def tools(session):
         env["PYTHONPATH"] = os.pathsep.join([x for x in sys.path if x])
         exe = sys.executable if sys.executable and "python" in os.path.basename(sys.executable).lower() else None
         if exe is None:
-            raise ToolError("unavailable", "No Python to run the unwrapping in apart from FreeCAD here.")
+            # FreeCAD's window is its own program, not a Python: the one shipped
+            # with it (beside it, or in the Mac bundle's Resources/bin) runs it.
+            from .. import testrun
+            from .app import _bundle_python
+
+            exe = testrun.real_python(sys.executable) or _bundle_python()
+        if exe is None:
+            raise ToolError("unavailable", "No Python to run the unwrapping in apart from FreeCAD here (none beside FreeCAD's program or in its bundle): unwrap a cylinder, cone or flat face (\"Body.Face3\") instead — those are laid flat exactly, without it.")
         try:
             r = subprocess.run([exe, "-c", code, src, dst], env=env, capture_output=True, text=True, timeout=300)
         except subprocess.TimeoutExpired:
@@ -1065,11 +1090,11 @@ def tools(session):
         Tool("meshobj_decimate", "Fewer triangles: reduction (share to remove, 0.5) or facets (how many to keep); tolerance (0.1) caps the error one collapse may add, so it can stop short of the count (the reply's note says so: raise tolerance). Reply: reduced \"n → m triangles\", the mesh's reading, before.",
              obj({"mesh": mref, "reduction": {"type": "number"}, "facets": {"type": "integer"}, "tolerance": {"type": "number"}, **cp}), meshobj_decimate, changes=True),
         Tool("meshobj_refine", "More triangles: rounds 1 … 3, each putting a point in the middle of every triangle (about three times as many; refused past 2,000,000); optimize: true swaps edges to even their shapes. The surface does not change. Reply: refined \"n → m triangles\".", obj({"mesh": mref, "rounds": {"type": "integer"}, "optimize": {"type": "boolean"}, **cp}), meshobj_refine, changes=True),
-        Tool("meshobj_smooth", "Smooth a mesh: method taubin (default; keeps its size; lambda 0.6307, mu 0.0424) | laplace (lambda; shrinks), iterations (3). Reply: volumeChange mm³ on a closed mesh.",
+        Tool("meshobj_smooth", "Smooth a mesh: method taubin (default; shrinks far less than laplace, but a coarse mesh still loses volume; lambda 0.6307, mu 0.0424) | laplace (lambda; shrinks), iterations (3). Reply: volumeChange mm³ on a closed mesh, warning past 2%.",
              obj({"mesh": mref, "method": {"type": "string"}, "iterations": {"type": "integer"}, "lambda": {"type": "number"}, "mu": {"type": "number"}, **cp}), meshobj_smooth, changes=True),
         Tool("meshobj_edit", "Edit a mesh on a copy, as ScanRuler's Mesh Tools do: action begin { mesh } (a copy made, the original hidden; every meshobj tool given the original's name then changes the copy) | use (the copy put in place of the original) | discard (the copy dropped) | state (default: what is being edited).",
              obj({"action": {"type": "string", "enum": ["begin", "use", "discard", "state"]}, "mesh": mref}), meshobj_edit, changes=True),
-        Tool("meshobj_trim", "Cut a mesh with a plane: at [x,y,z] on it, normal (the side it points to is removed); close: true caps the cut flat (loops up to maxHoleEdges, 1000); preview: true answers wouldRemove / wouldKeep and changes nothing. Refused when nothing would be left. Reply: removed (triangles), solid, warning when the cap did not close it.",
+        Tool("meshobj_trim", "Cut a mesh with a plane: at [x,y,z] on it, normal (the side it points to is removed); close: true caps the cut flat (loops up to maxHoleEdges, 1000); preview: true answers wouldRemove / wouldCut / wouldKeep and changes nothing. Refused when nothing would be left. Reply: removed (triangles wholly on that side), cut (triangles the plane crossed, each kept in part), solid, warning when the cap did not close it.",
              obj({"mesh": mref, "at": {"type": "array", "items": {}}, "normal": {"type": "array", "items": {}}, "close": {"type": "boolean"}, "maxHoleEdges": {"type": "integer"}, "preview": {"type": "boolean"}, **cp}), meshobj_trim, changes=True),
         Tool("meshobj_transform", "Scale (a factor or [x,y,z]), rotate { axis, angle degrees }, move [x,y,z], mirror \"x\" | \"y\" | \"z\" a mesh's points, in that order, about the document's origin and axes. A mirror keeps the triangles facing out. In place; copy: true makes a new mesh.",
              obj({"mesh": mref, "scale": {"type": ["number", "array"]}, "rotate": {"type": "object"}, "move": {"type": "array", "items": {}}, "mirror": {"type": "string"}, **cp}), meshobj_transform, changes=True),

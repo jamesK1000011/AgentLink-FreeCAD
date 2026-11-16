@@ -222,6 +222,9 @@ def tools(session):
         letters.transformShape(pl.toMatrix())
         lb = letters.BoundBox
         solid = letters.extrude(n * (depth if mode == "emboss" else -depth))
+        # The lettering's real extent: its outline on the face and its depth out of (or into) it.
+        eb = solid.BoundBox
+        eb = ([eb.XMin, eb.YMin, eb.ZMin], [eb.XMax, eb.YMax, eb.ZMax])
         if mode == "engrave":
             # Started a hair above the face, so the cut opens cleanly.
             solid.translate(n * 0.01)
@@ -239,7 +242,7 @@ def tools(session):
         s.doc.recompute()
         s.snapshot("draft_text")
         out = {"body": done.Label, "text": text, "mode": mode, "font": os.path.basename(font), "size": size, "depth": depth,
-               "volumeChange": round(done.Shape.Volume - before, 2), "box": {"min": [round(v, 2) for v in (lb.XMin, lb.YMin, lb.ZMin)], "max": [round(v, 2) for v in (lb.XMax, lb.YMax, lb.ZMax)]},
+               "volumeChange": round(done.Shape.Volume - before, 2), "box": {"min": [round(v, 2) for v in eb[0]], "max": [round(v, 2) for v in eb[1]]},
                "step": len(s.steps)}
         if out_of_face:
             out["warning"] = "The lettering runs past the face's edge: smaller size, or shorter text."

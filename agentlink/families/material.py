@@ -275,6 +275,10 @@ def tools(session):
             else:
                 shape_mat[b] = False
         store.write(s.doc, "materials", mats)
+        if any(shape_mat.values()):
+            # A new ShapeMaterial leaves the object marked for recompute (the next
+            # call's health said "not recomputed yet"): brought up to date here.
+            s.doc.recompute()
         s.snapshot("material_set")
         out = {"bodies": bodies, "material": _brief(c), "shapeMaterial": shape_mat}
         if c.get("density"):

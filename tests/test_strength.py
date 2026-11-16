@@ -123,6 +123,9 @@ class Strength(unittest.TestCase):
         # the bending stress at the root 6 MPa (higher in the hold's corners).
         self.assertGreater(r["displacementMax"]["mm"], 0.95)
         self.assertLess(r["displacementMax"]["mm"], 1.35)
+        # The loaded area is the flat end face's own 100 mm² on either route (through FreeCAD's
+        # FEM its elements were read in FreeCAD's node order: 4.5% over on the live cantilever).
+        self.assertAlmostEqual(r["loads"][0]["area"], 100.0, delta=0.01)
         self.assertGreater(r["displacementMax"]["at"][0], 99)
         self.assertGreater(r["vonMisesMax"]["MPa"], 4.5)
         self.assertLess(r["vonMisesMax"]["MPa"], 30)

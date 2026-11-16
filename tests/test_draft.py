@@ -37,9 +37,13 @@ class Draft(unittest.TestCase):
         self.assertGreater(e["volumeChange"], 5)
         bb = self.session.body("Tag").Shape.BoundBox
         self.assertAlmostEqual(bb.ZMax, 11, delta=1e-3)
+        # box is the lettering's real extent: raised 1 mm off the top face (it was the flat outline, z 10 … 10)
+        self.assertAlmostEqual(e["box"]["min"][2], 10, delta=0.01)
+        self.assertAlmostEqual(e["box"]["max"][2], 11, delta=0.01)
         err, g = self.call("draft_text", {"body": "Tag", "text": "B", "size": 6, "depth": 0.5, "mode": "engrave", "face": {"normal": [0, -1, 0]}})
         self.assertFalse(err, g)
         self.assertLess(g["volumeChange"], -1)
+        self.assertAlmostEqual(g["box"]["max"][1] - g["box"]["min"][1], 0.5, delta=0.01)  # cut 0.5 into the front face
         self.assertNotIn("warning", g)
         err, w = self.call("draft_text", {"body": "Tag", "text": "MUCH TOO LONG FOR THIS FACE", "size": 8, "depth": 0.4, "mode": "engrave", "face": {"normal": [1, 0, 0]}})
         self.assertFalse(err, w)
@@ -316,6 +320,20 @@ class DraftHardening(unittest.TestCase):
         hl = self.ok("draft_fix", {"action": "heal", "objects": ["Old"]})
         self.assertEqual(hl["healed"], ["Old"])
         self.assertEqual(hl["rebuilt"], 1)
+
+    def test_6_upgrade_says_which_ends_do_not_meet(self):
+        # The live model's tie lines, their ends typed to six decimals: 1.1e-7 mm off
+        # the outer arc's ends (not joined) and 9.5e-8 mm off the inner arc's (joined).
+        self.ok("draft_shape", {"kind": "arc", "radius": 30, "start": 60, "end": 120, "at": [0, 600, 0], "name": "G30"})
+        self.ok("draft_shape", {"kind": "arc", "radius": 25, "start": 60, "end": 120, "at": [0, 600, 0], "name": "G25"})
+        self.ok("draft_shape", {"kind": "wire", "points": [[15.0, 625.980762, 0], [12.5, 621.650635, 0]], "name": "GR"})
+        self.ok("draft_shape", {"kind": "wire", "points": [[-15.0, 625.980762, 0], [-12.5, 621.650635, 0]], "name": "GL"})
+        up = self.ok("draft_modify", {"op": "upgrade", "objects": ["G30", "G25", "GR", "GL"]})
+        if len(up.get("objects") or []) >= 2:  # one wire where this FreeCAD's tolerance takes the hair in
+            self.assertIn("not joined", up["note"])
+            self.assertIn("1e-7", up["note"])
+        else:
+            self.assertNotIn("note", up)
 
 
 if __name__ == "__main__":

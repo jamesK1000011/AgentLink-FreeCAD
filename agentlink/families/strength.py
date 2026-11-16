@@ -1257,7 +1257,16 @@ def tools(session):
         except Exception:
             pass
         nodes = {int(n): (float(p.x), float(p.y), float(p.z)) for n, p in femmesh.Nodes.items()}
-        elems = {int(e): tuple(femmesh.getElementNodes(e)) for e in femmesh.Volumes}
+        # A ten-node tetrahedron's nodes in CalculiX's order, as FreeCAD's deck
+        # writer puts them (FemMesh.cpp: 1, 0, 2, 3, 4, 6, 5, 8, 7, 9 of its own):
+        # the face numbers of getccxVolumesByFace, the loaded area and the VTU
+        # written from these all count in that order (in FreeCAD's own, a 1e6 mm²
+        # face read 1045519 mm²).
+        ccx_order = (1, 0, 2, 3, 4, 6, 5, 8, 7, 9)
+        elems = {}
+        for e in femmesh.Volumes:
+            ns = tuple(femmesh.getElementNodes(e))
+            elems[int(e)] = tuple(ns[i] for i in ccx_order) if len(ns) == 10 else ns
         # The verdict reads job.frd beside the deck, as the own route writes it.
         try:
             import shutil

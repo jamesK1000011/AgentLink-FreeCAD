@@ -68,6 +68,21 @@ class Doc(unittest.TestCase):
         self.assertEqual(len(out["closed"]), 1)
         self.assertNotIn(n["document"], FreeCAD.listDocuments())
 
+    def test_close_goes_back_to_the_document_before(self):
+        # Live finding: after doc_new + doc_save + doc_close the session landed on the
+        # last document FreeCAD lists (by name), not the one doc_new answered as previous,
+        # and the next calls changed the wrong document.
+        home = self.call("doc_new", {"name": "Aaa home"})
+        other = FreeCAD.newDocument("Zzz_other")  # open, never worked in: listed last
+        try:
+            side = self.call("doc_new", {"name": "Mmm side"})
+            self.assertEqual(side["previous"], home["document"])
+            out = self.call("doc_close", {"documents": [side["document"]]})
+            self.assertEqual(out["document"], home["document"])
+            self.assertEqual(self.session.doc.Name, home["document"])
+        finally:
+            FreeCAD.closeDocument(other.Name)
+
     def test_close_by_name_and_shared_label(self):
         # Hardening (live finding): a document is found by its internal Name
         # also when its label differs, and two documents sharing a label are
