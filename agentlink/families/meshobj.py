@@ -17,6 +17,7 @@ import Part
 import numpy as np
 
 from .. import geometry as geo
+from .. import meshbool
 from .. import render
 from .. import store
 from .. import runners
@@ -42,6 +43,47 @@ def reading(m):
     if out["solid"]:
         out["volume"] = round(m.Volume, 3)
     return out
+
+
+def arrays(m):
+    """A Mesh's points (where they stand, its Placement applied) and facets."""
+    pts, tris = m.Topology
+    V = np.array([[p.x, p.y, p.z] for p in pts], dtype=float).reshape(-1, 3)
+    return V, np.array(tris, dtype=np.int64).reshape(-1, 3)
+
+
+def from_arrays(V, F):
+    """A Mesh of points V and facets F as they are: given as (points,
+    facets), so no point is merged with a near one; as triangles of points
+    where this FreeCAD does not take that form."""
+    F = np.asarray(F, dtype=np.int64).reshape(-1, 3)
+    try:
+        m = Mesh.Mesh()
+        m.addFacets(([FreeCAD.Vector(*p) for p in np.asarray(V, dtype=float).tolist()], [tuple(t) for t in F.tolist()]))
+        if m.CountFacets == len(F):
+            return m
+    except Exception:
+        pass
+    m = Mesh.Mesh()
+    m.addFacets([[tuple(V[i]) for i in t] for t in F.tolist()])
+    return m
+
+
+def edges_state(m):
+    """open: edges one facet has; bad: edges more than two share."""
+    F = np.array(m.Topology[1], dtype=np.int64).reshape(-1, 3)
+    if len(F) == 0:
+        return {"open": 0, "bad": 0, "facets": 0}
+    a, b = F.reshape(-1), F[:, [1, 2, 0]].reshape(-1)
+    n = int(F.max()) + 1
+    _, c = np.unique(np.minimum(a, b) * n + np.maximum(a, b), return_counts=True)
+    return {"open": int((c == 1).sum()), "bad": int((c > 2).sum()), "facets": int(len(F))}
+
+
+def worse(after, before):
+    """Whether a repair step left the mesh worse than it found it: more open
+    or overloaded edges, or nothing left."""
+    return after["facets"] == 0 or after["open"] > before["open"] or after["bad"] > before["bad"]
 
 
 def evaluation(m):
@@ -227,7 +269,7 @@ def tools(session):
 
     # ---- repair ----
 
-    REPAIRS = ("normals", "duplicates", "nonmanifolds", "selfintersections", "degenerate", "folds", "indices", "holes", "islands")
+    REPAIRS = ("normals", "duplicates", "nonmanifolds", "selfintersections", "degenerate", "folds", "indices", "pointsonedges", "holes", "islands")
 
     def meshobj_repair(a):
         o = mesh_of(a.get("mesh"))
@@ -237,8 +279,15 @@ def tools(session):
         unknown = [w for w in want if w not in REPAIRS]
         if unknown:
             raise bad(f"fix: any of {', '.join(REPAIRS)}.")
-        did = []
+        did, undone = [], []
+        state = edges_state(m)
+        start = dict(state)
         for w in want:
+            # Each step on its own, kept only if it leaves the mesh no worse:
+            # FreeCAD's removeNeedles, fixSelfIntersections and
+            # removeFoldsOnSurface delete facets, and on a closed mesh that
+            # opens holes (a closed solid came back open).
+            prev = m.copy()
             try:
                 if w == "indices":
                     m.fixIndices()
@@ -264,11 +313,26 @@ def tools(session):
                     m.fillupHoles(int(a.get("maxHoleEdges", 50)))
                 elif w == "islands":
                     m.removeComponents(int(a.get("minFacets", 10)))
-                did.append(w)
+                elif w == "pointsonedges":
+                    m.removePointsOnEdge(False)
             except Exception as ex:
-                did.append(f"{w}: failed ({ex})")
+                m = prev
+                undone.append(f"{w}: failed ({ex})")
+                continue
+            now = edges_state(m)
+            if worse(now, state):
+                m = prev
+                undone.append(f"{w}: undone — it left {now['open']} open and {now['bad']} overloaded edges, {now['facets']} facets (before: {state['open']}, {state['bad']}, {state['facets']})")
+                continue
+            state = now
+            did.append(w)
         e1, p1 = evaluation(m)
-        return keep(o, m, "meshobj_repair", a, {"did": did, "problems": p1, "fixed": [p for p in p0 if p not in p1]}, before={"problems": p0, "facets": o.Mesh.CountFacets})
+        out = {"did": did, "problems": p1, "fixed": [p for p in p0 if p not in p1], "edges": {"open": state["open"], "overloaded": state["bad"]}}
+        if undone:
+            out["undone"] = undone
+        if not did:
+            return {"mesh": o.Label, **reading(o.Mesh), **out, "changed": False, "note": "No step left the mesh better without making it worse; it is unchanged."}
+        return keep(o, m, "meshobj_repair", a, out, before={"problems": p0, "facets": o.Mesh.CountFacets, "edges": {"open": start["open"], "overloaded": start["bad"]}})
 
     # ---- reshape ----
 
@@ -375,40 +439,57 @@ def tools(session):
             m.flipNormals()
         return keep(o, m, "meshobj_transform", a)
 
+    BOOL_OPS = {"union": "add", "intersection": "intersect", "difference": "subtract"}
+
     def meshobj_boolean(a):
         x, y = mesh_of(a.get("a")), mesh_of(a.get("b"))
         op = a.get("op", "union")
         if not (x.Mesh.isSolid() and y.Mesh.isSolid()):
             raise ToolError("invalid_state", "Mesh booleans need closed meshes: meshobj_repair { fix: [\"holes\"] } first.")
-        if op not in ("union", "intersection", "difference"):
+        if op not in BOOL_OPS:
             raise bad("op: union, intersection or difference.")
-        mx = x.Mesh.copy()
-        how = "mesh"
+        # Agent Link's own boolean first (numpy, any density): only the
+        # triangles the other mesh crosses are cut, the rest kept as they
+        # are, the result closed or refused. FreeCAD's Mesh booleans come
+        # back open on dense meshes (a 140,698-triangle scan minus a
+        # 5,212-triangle cutter: 2,607 open edges), so they and the trip
+        # through solids are only what is left when it refuses.
+        res, how, why = None, "mesh (Agent Link's boolean: only the triangles the other mesh crosses are cut)", None
         try:
-            res = {"union": mx.unite, "intersection": mx.intersect, "difference": mx.difference}[op](y.Mesh)
-        except Exception:
-            res = None
-        # The Mesh module's own booleans often leave an open, broken mesh:
-        # then through solids (OpenCASCADE) and meshed again.
-        if res is None or res.CountFacets == 0 or not res.isSolid() or evaluation(res)[1]:
-            if max(x.Mesh.CountFacets, y.Mesh.CountFacets) > int(a.get("maxFacets", 60000)):
-                raise ToolError("failed", f"The mesh {op} came out broken, and the meshes are too dense to go through solids (maxFacets): meshobj_decimate them first.")
-            import MeshPart
-
-            def solid(m):
-                sh = Part.Shape()
-                sh.makeShapeFromMesh(m.Topology, 0.01)
-                return Part.makeSolid(Part.makeShell(sh.Faces))
-
-            try:
-                sa, sb = solid(x.Mesh), solid(y.Mesh)
-                r = {"union": sa.fuse, "intersection": sa.common, "difference": sa.cut}[op](sb)
-            except Exception as e:
-                raise ToolError("failed", f"The {op} failed both as meshes and as solids: {e}")
-            if r.isNull() or not r.Solids or r.Volume < 1e-9:
+            V, F, _, _ = meshbool.boolean(*arrays(x.Mesh), *arrays(y.Mesh), BOOL_OPS[op])
+            if len(F) == 0:
                 raise ToolError("failed", f"The {op} left nothing: the meshes do not overlap that way.")
-            res = MeshPart.meshFromShape(Shape=r, LinearDeflection=float(a.get("deflection", 0.05)), AngularDeflection=0.3, Relative=False)
-            how = "through solids (the mesh boolean came out broken)"
+            res = from_arrays(V, F)
+            if not res.isSolid():
+                why, res = "its result did not read back closed", None
+        except meshbool.BooleanError as e:
+            why = str(e)
+        if res is None:
+            mx = x.Mesh.copy()
+            how = f"FreeCAD's mesh boolean (Agent Link's refused: {why})"
+            try:
+                res = {"union": mx.unite, "intersection": mx.intersect, "difference": mx.difference}[op](y.Mesh)
+            except Exception:
+                res = None
+            if res is None or res.CountFacets == 0 or not res.isSolid() or evaluation(res)[1]:
+                if max(x.Mesh.CountFacets, y.Mesh.CountFacets) > int(a.get("maxFacets", 60000)):
+                    raise ToolError("failed", f"The mesh {op} came out broken ({why}), and the meshes are too dense to go through solids (maxFacets).")
+                import MeshPart
+
+                def solid(m):
+                    sh = Part.Shape()
+                    sh.makeShapeFromMesh(m.Topology, 0.01)
+                    return Part.makeSolid(Part.makeShell(sh.Faces))
+
+                try:
+                    sa, sb = solid(x.Mesh), solid(y.Mesh)
+                    r = {"union": sa.fuse, "intersection": sa.common, "difference": sa.cut}[op](sb)
+                except Exception as e:
+                    raise ToolError("failed", f"The {op} failed both as meshes and as solids: {e}")
+                if r.isNull() or not r.Solids or r.Volume < 1e-9:
+                    raise ToolError("failed", f"The {op} left nothing: the meshes do not overlap that way.")
+                res = MeshPart.meshFromShape(Shape=r, LinearDeflection=float(a.get("deflection", 0.05)), AngularDeflection=0.3, Relative=False)
+                how = f"through solids (Agent Link's boolean refused: {why}; FreeCAD's mesh boolean came out broken)"
         n = new_mesh(res, a.get("name") or f"{x.Label} {op} {y.Label}")
         return picks.finish(s, "meshobj_boolean", lambda: {"mesh": n.Label, "op": op, "how": how, **reading(res)})
 
@@ -816,7 +897,7 @@ def tools(session):
         Tool("meshobj_from_shape", "Mesh a body (MeshPart): method standard (deflection mm, angle deg) | mefisto (maxLength: even triangles, but it can leave faces with small holes open — the answer warns) | netgen (fineness verycoarse … veryfine). Kept as a mesh object.",
              obj({"body": {"type": "string"}, "method": {"type": "string"}, "deflection": {"type": "number"}, "angle": {"type": "number"}, "maxLength": {"type": "number"}, "fineness": {"type": "string"}, "name": {"type": "string"}}), meshobj_from_shape, changes=True),
         Tool("meshobj_info", "A mesh's size and the Mesh workbench's evaluation: closed or open, components, non-manifolds, self-intersections, flipped normals, corrupt facets. Changes nothing.", obj({"mesh": mref}), meshobj_info),
-        Tool("meshobj_repair", "Repair a mesh as Evaluate & Repair does: fix any of normals, duplicates, nonmanifolds, selfintersections, degenerate, folds, indices (default those), holes (maxHoleEdges), islands (minFacets); answers what it fixed and what is left. copy: true leaves the original.",
+        Tool("meshobj_repair", "Repair a mesh as Evaluate & Repair does: fix any of normals, duplicates, nonmanifolds, selfintersections, degenerate, folds, indices, pointsonedges (default those), holes (maxHoleEdges), islands (minFacets); answers what it fixed and what is left. A step that leaves more open or overloaded edges is undone (undone says which). copy: true leaves the original.",
              obj({"mesh": mref, "fix": {"type": "array", "items": {"type": "string"}}, "tolerance": {"type": "number"}, "maxHoleEdges": {"type": "integer"}, "minFacets": {"type": "integer"}, **cp}), meshobj_repair, changes=True),
         Tool("meshobj_decimate", "Fewer triangles: reduction (share to remove) or facets (how many to keep), tolerance mm it may move the surface.",
              obj({"mesh": mref, "reduction": {"type": "number"}, "facets": {"type": "integer"}, "tolerance": {"type": "number"}, **cp}), meshobj_decimate, changes=True),
@@ -829,7 +910,7 @@ def tools(session):
              obj({"mesh": mref, "at": {"type": "array", "items": {}}, "normal": {"type": "array", "items": {}}, "close": {"type": "boolean"}, "maxHoleEdges": {"type": "integer"}, "preview": {"type": "boolean"}, **cp}), meshobj_trim, changes=True),
         Tool("meshobj_transform", "Scale (a factor or [x,y,z]), rotate { axis, angle }, move [x,y,z] or mirror \"x\" | \"y\" | \"z\" a mesh's points, in that order.",
              obj({"mesh": mref, "scale": {"type": ["number", "array"]}, "rotate": {"type": "object"}, "move": {"type": "array", "items": {}}, "mirror": {"type": "string"}, **cp}), meshobj_transform, changes=True),
-        Tool("meshobj_boolean", "A boolean of two closed meshes: a, b, op union | intersection | difference; a new mesh.",
+        Tool("meshobj_boolean", "A boolean of two closed meshes: a, b, op union | intersection | difference; a new mesh. Dense scans as they are (no decimating): only the triangles the other mesh crosses are cut.",
              obj({"a": {"type": "string"}, "b": {"type": "string"}, "op": {"type": "string"}, "name": {"type": "string"}}, ["a", "b"]), meshobj_boolean, changes=True),
         Tool("meshobj_sections", "Cross-sections of a mesh: normal (default z), count or at [distances]; each slice's loops and length, kept as wires.",
              obj({"mesh": mref, "normal": {"type": "array", "items": {}}, "count": {"type": "integer"}, "at": {"type": "array", "items": {}}, "tolerance": {"type": "number"}, "name": {"type": "string"}}), meshobj_sections, changes=True),

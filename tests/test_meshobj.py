@@ -36,6 +36,7 @@ class MeshObj(unittest.TestCase):
     def test_2_boolean_and_shape(self):
         d = self.ok("meshobj_boolean", {"a": "Brick mesh", "b": "Ball mesh", "op": "difference"})
         self.assertTrue(d["solid"])
+        self.assertIn("Agent Link's boolean", d["how"])
         self.assertAlmostEqual(d["volume"], 24000 - 7238.23 / 4, delta=40)
         t = self.ok("meshobj_trim", {"mesh": "Ball mesh", "at": [40, 15, 20], "normal": [0, 0, 1], "close": True, "copy": True})
         self.assertAlmostEqual(t["volume"], 7195.55 / 2, delta=20)
@@ -76,6 +77,40 @@ class MeshObj(unittest.TestCase):
         self.ok("meshobj_edit", {"action": "begin", "mesh": "Brick mesh"})
         self.ok("meshobj_edit", {"action": "discard"})
         self.assertEqual(self.ok("meshobj_edit", {})["editing"], [])
+
+
+    def test_5_repair_never_leaves_it_worse(self):
+        # A closed box with a point on an edge: one side's edge a-b split at
+        # its middle m on the neighbouring face, closed by a flat triangle
+        # (b, a, m). FreeCAD's needle and degenerate fixes delete facets and
+        # opened such a mesh (a closed 5,212-triangle cutter came back open);
+        # a step that leaves more open or overloaded edges is undone.
+        P = [(0, 0, 0), (10, 0, 0), (10, 10, 0), (0, 10, 0), (0, 0, 10), (10, 0, 10), (10, 10, 10), (0, 10, 10)]
+        quads = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+        tris = []
+        for q in quads:
+            tris += [(q[0], q[1], q[2]), (q[0], q[2], q[3])]
+        # edge 0-1 (the bottom face walks it 1->0, the front face 0->1):
+        # split on the bottom at m, closed by the flat (0, m, 1)
+        P.append((5, 0, 0))
+        m = 8
+        tris.remove((0, 2, 1))
+        tris += [(0, 2, m), (m, 2, 1), (0, m, 1)]
+        mesh = Mesh.Mesh([[P[i] for i in t] for t in tris])
+        o = self.session.doc.addObject("Mesh::Feature", "Tee")
+        o.Label = "Tee mesh"
+        o.Mesh = mesh
+        self.session.doc.recompute()
+        r = self.ok("meshobj_repair", {"mesh": "Tee mesh", "copy": True})
+        before = r.get("before", {}).get("edges") or r.get("edges")
+        self.assertLessEqual(r["edges"]["open"], before["open"], r)
+        self.assertLessEqual(r["edges"]["overloaded"], before["overloaded"], r)
+        if mesh.isSolid():
+            self.assertTrue(r["solid"], r)
+        # On a mesh made closed and clean, every default step keeps it so.
+        b = self.ok("meshobj_repair", {"mesh": "Brick mesh", "copy": True})
+        self.assertTrue(b["solid"], b)
+        self.assertEqual(b["edges"], {"open": 0, "overloaded": 0})
 
 
 if __name__ == "__main__":
