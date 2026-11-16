@@ -272,8 +272,8 @@ def tools(s):
              "what is still open (dialog_answer presses a named button instead; a window that stays stuck: app_force_restart). Window only.",
              obj({"all": {"type": "boolean"}}), gui_unstick),
         Tool("live_run",
-             "Replay a live window script (scripts/live, its README's format) and check it: script is a name (reset, agentlink, or another found in the installed add-ons' scripts/live folders; a wrong name lists them) or a .json file's path; "
-             "Every script starts from live_run { script: \"reset\" } (it rebuilds the WindowTest document and brings it to the front): run that first, each time. "
+             "Replay a live window script (scripts/live, its README's format) and check every step's answers. Reset the test document first, every time: live_run { script: \"reset\" } closes what earlier runs left, rebuilds the WindowTest document and brings it to the front, and every other script is written to start from exactly that; run without it, a script acts on whatever document is in front and its checks fail for reasons that are not the tools'. "
+             "script: a name (reset, agentlink, or another found in the installed add-ons' scripts/live folders; a wrong name is refused with the names there are) or a .json file's path. "
              "steps: only these (names or numbers from 0; all by default) — a later step run alone acts on whatever document is in front, with what the steps before it would have made missing. Each step's calls go to batch (rollback: false, stopOnError: false), or one by one when the step is direct; "
              "$names are filled in from vars { name: value } and from earlier answers (a $name the script declares, kept from the latest answer that has that key: $next); a step that needs one not known yet is skipped and says which. "
              "Two-role steps (role: student, parallel) are skipped: they need two agents (ROLES.md). Every expect is checked (equals, contains, atLeast, atMost, exists, noneContain with ignoreLinesWith; paths with dots, [*] any item, [-1] the last). "

@@ -10,6 +10,8 @@
 - Every change is one undo step: `history_undo`, `history_redo` (and checkpoints where an add-on offers them). `history_diff` says what a change did, so you don't have to describe the part again.
 - `batch` runs several calls in one, rolled back whole if one is refused: every object it made is taken away too. Use it for a run of edits you can predict.
 - A long read (a heavy one, one slow here before, or any read with `background: true`) runs as a job: its answer comes back as usual when it ends within 45 s, else a job id — `job_status { job, wait: 25 }` gives the answer when it is done. A client drops a call after about 80 s, so never just call a long read again. While a job reads the document, changes to it are refused until it ends.
+- Answers can stay out of the conversation. In a batch, a call with `to` — `{ tool, arguments, to: "outline.json" }` — writes its whole answer to that file in the session's folder, and the reply keeps only where it is and its keys. A later call takes what it needs from it: `{ "$file": "outline.json", "$at": "loops.0.points" }` anywhere inside its arguments is replaced by that part of the file (a dotted path of keys and list indices from 0) as the call is about to run. `{ "$from": 2, "$at": "bodies.0.name" }` does the same from the answer of call 2 of the same batch. A reference that cannot be followed refuses that call and says what is there.
+- `batch { build: "end" }` recomputes once for a run of `sketch_add`, `sketch_constrain`, `sketch_edit`, `sketch_offset` and `object_set` calls instead of after each. Their answers say `build: "held"` and leave out what only the rebuilt shape tells (a sketch's wires and `readyForFeature`); the batch's `builds` carries the one health reading after the recompute. Any other tool builds first and runs as always.
 - A long batch (many points, many calls) can live in a file: write the list of `{ tool, arguments }` to a .json in the session's folder and send `batch { file }`. It is read on this side, so it costs a few tokens instead of the whole list each time.
 - Answers are in millimetres, grams and degrees. A refusal names what to change.
 
@@ -59,3 +61,5 @@ Every refusal is `{ error: { code, message } }`; the message says what to change
 - `view_render` pictures at the default size; `inline: false` writes the file only.
 - `object_get` with `filter`.
 - `batch` for runs of predictable calls: one answer instead of many.
+- In a batch, `to` on a call and `$file` / `$from` in a later one pass an answer from call to call without it being sent here and back; `batch { to }` keeps a whole run's answers in a file.
+- `guide_read` with no topic gives what each guide and section costs. Read a guide's `Start here` section first where it has one, and the sections it lists under `later` only when their moment comes; `section` takes a list, and `topic` a list to read several guides in one call.

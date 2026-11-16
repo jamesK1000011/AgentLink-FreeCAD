@@ -845,12 +845,12 @@ WORKING = (
     "Start with session_state: the document, its bodies with their sizes, the step count and the folder files go to. "
     "Before a task's first step read its guide: guide_read with no topic lists them (start, model, sketch, "
     "draft, measure, strength, techdraw, assembly, cam, view, and those of the add-ons installed); a guide's "
-    "## sections can be read one at a time. "
+    "## sections can be read one at a time (the index gives what each costs; where a guide has a Start here section, read that first). "
     "Lengths are millimetres, angles degrees, masses grams. A body is named by its label; a face or edge by what it "
     "is (shape_query: normal, radius, near a point) rather than by FreeCAD's Face12, which changes with the model. "
     "Every tool that changes the document is one undo step: history_undo and history_redo (and checkpoints "
     "where an add-on offers them); history_diff says what changed. batch runs calls in order and rolls back whole when one is "
-    "refused. A refusal is { error: { code, message } }: the code (invalid_input, invalid_state, not_found, "
+    "refused; in it a call's answer can go to a file (to) and feed a later call ($file, $from) without passing through the conversation, and build: \"end\" recomputes once for a run of sketch edits. A refusal is { error: { code, message } }: the code (invalid_input, invalid_state, not_found, "
     "unavailable, failed) and a message saying what to change — correct the call and go on. "
     "Look at the work after each change that matters: view_render draws the parts from any view, cut open, zoomed "
     "to a spot, or with a map (wall, stress, and those add-ons add), and gives the worst place; body_check says "
@@ -1250,13 +1250,12 @@ class Resources:
 
 
 def _guide_index():
+    from . import guideidx
+
     out = []
     for topic, p in _guide_files().items():
         with open(p, encoding="utf-8") as f:
-            text = f.read()
-        first = next((l.lstrip("# ").strip() for l in text.splitlines() if l.strip() and not l.lstrip().startswith("<!--")), topic)
-        sections = [l[3:].strip() for l in text.splitlines() if l.startswith("## ")]
-        out.append({"topic": topic, "title": first, "sections": sections, "chars": len(text)})
+            out.append(guideidx.entry(topic, f.read()))
     return out
 
 
@@ -1513,22 +1512,38 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                              linked=outputs.linked_paths(s.out_dir))
 
     def guide_read(a):
+        from . import guideidx
+
         topic = a.get("topic")
         if not topic:
-            return {"guides": _guide_index()}
-        p = _guide_files().get(topic)
-        if not p:
-            raise ToolError("not_found", f"{topic}: no such guide — they are: {', '.join(g['topic'] for g in _guide_index())}.")
-        with open(p, encoding="utf-8") as f:
-            text = f.read()
+            return {"guides": _guide_index(),
+                    "note": "tokens are approximate (characters / 4). Read a guide's start section first where it has one; later lists sections for one moment of a task (when says which): leave them until then. "
+                            "section takes a name or a list of names; topic takes a list to read several guides in one call."}
+        files = _guide_files()
+        topics = [topic] if isinstance(topic, str) else list(topic)
+        unknown = [t for t in topics if not isinstance(t, str) or t not in files]
+        if unknown:
+            raise ToolError("not_found", f"{', '.join(map(str, unknown))}: no such guide — they are: {', '.join(files)}.")
+        texts = {}
+        for t in dict.fromkeys(topics):
+            with open(files[t], encoding="utf-8") as f:
+                texts[t] = f.read()
         sec = a.get("section")
+        if isinstance(sec, list) and not sec:
+            sec = None
+        if not isinstance(topic, str):
+            # Several guides in order, up to what one reply holds; the rest named in next.
+            out = guideidx.read_many(texts, list(dict.fromkeys(topics)), sec)
+            if sec and not out["read"]:
+                raise ToolError("not_found", f"section {sec!r}: none of these guides has it — guide_read with no topic lists every guide's sections.")
+            return out
+        text = texts[topic]
         if sec:
-            parts = text.split("\n## ")
-            hit = [x for x in parts[1:] if x.lower().startswith(sec.lower())]
-            if not hit:
-                raise ToolError("not_found", f"section {sec!r}: the sections are: {', '.join(x.splitlines()[0] for x in parts[1:])}.")
-            text = "## " + hit[0]
-        return {"topic": topic, "text": text}
+            got, missing, names = guideidx.pick(text, sec)
+            if missing:
+                raise ToolError("not_found", f"section {', '.join(repr(m) for m in missing)}: the sections are: {', '.join(names)}.")
+            return {"topic": topic, "text": got}
+        return {"topic": topic, "text": guideidx.clean(text)}
 
     def job_status(a):
         from . import jobs
@@ -1550,8 +1565,53 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             raise ToolError("invalid_input", f"{name} cannot run as a job: only a read that leaves the window and the 3D view alone can (not a change, a picture, a window tool or a batch).")
         return server._as_job(t, args, wait=0 if a.get("wait") is False else None)
 
+    def _batch_path(p):
+        """A batch's own file (a call's to, a $file): in the session's
+        folder when relative."""
+        q = os.path.expanduser(p.strip())
+        return q if os.path.isabs(q) else os.path.join(s.out_dir, q)
+
+    def _batch_hold():
+        """The held run of a batch { build: "end" } (agentlink/hold.py),
+        with the shared health check round it: armed when the run starts
+        and read once after its one recompute, so it covers every object
+        the held calls made or changed."""
+        from . import hold as _hold
+
+        def mark(doc):
+            try:
+                from . import health
+
+                return health.mark(s)
+            except Exception:
+                return None
+
+        def check(m, tools):
+            from . import health
+
+            if tools is None:
+                health.drop(m)
+                return None
+            if m is None:
+                return {"ok": None, "verdict": "the health check is switched off or did not load: body_check and sketch_state read the result"}
+            # After sketch calls the sketches are read out as they stand.
+            t = server.tools.get(next((x for x in tools if x.startswith("sketch_")), "batch"))
+            return health.check(s, t, m)
+
+        def snapshot(doc):
+            # The step after the build: history_diff reads the rebuilt
+            # bodies, not the held calls' steps from before it.
+            if s.doc is doc:
+                s.snapshot("batch build")
+
+        return _hold.Hold(mark, check, snapshot)
+
     def batch(a):
         import json as _json
+
+        from . import chain as _chain
+        from . import hold as _hold
+        from . import paths as _paths_mod
 
         calls = a.get("calls") or []
         if a.get("calls") is None and a.get("file") is None:
@@ -1577,7 +1637,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             except ValueError as e:
                 raise ToolError("invalid_input", f"file: {f} is not JSON ({e}) — a list [{{ tool, arguments }} …], or {{ calls, rollback, stopOnError }}. Nothing was run.")
             if isinstance(data, dict):
-                a = {**{k: data[k] for k in ("rollback", "stopOnError", "budget") if k in data}, **{k: v for k, v in a.items() if k in ("rollback", "stopOnError", "budget", "from", "to", "file")}}
+                a = {**{k: data[k] for k in ("rollback", "stopOnError", "budget", "build") if k in data}, **{k: v for k, v in a.items() if k in ("rollback", "stopOnError", "budget", "from", "to", "file", "build")}}
                 data = data.get("calls")
             if not isinstance(data, list):
                 raise ToolError("invalid_input", f"file: {f} holds no list of calls — [{{ tool, arguments }} …], or {{ calls: [...] }}. Nothing was run.")
@@ -1609,8 +1669,22 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                     raise ToolError("invalid_input", f"calls.{i}.arguments ({c['tool']}) came as a string that is not JSON — give an object, {{}} for none. Nothing was run.")
             if not isinstance(args, dict):
                 raise ToolError("invalid_input", f"calls.{i}.arguments ({c['tool']}): an object. Nothing was run.")
-            fixed.append({"tool": c["tool"], "arguments": args})
+            one = {"tool": c["tool"], "arguments": args}
+            if c.get("to") is not None:
+                # This call's whole answer to a file of its own (chain.py).
+                words = _chain.to_name(c["to"], i)
+                if words:
+                    raise ToolError("invalid_input", words)
+                one["to"] = _batch_path(c["to"])
+                try:
+                    _paths_mod.check("batch", f"calls.{i}.to", one["to"], s.out_dir, True)
+                except ToolError as e:
+                    raise ToolError(e.code, f"{e.message} Nothing was run.") from None
+            fixed.append(one)
         calls = fixed
+        build_mode, words = _hold.mode(a.get("build"))
+        if words:
+            raise ToolError("invalid_input", words)
         unknown = [c["tool"] for c in calls if c["tool"] not in server.tools]
         if unknown:
             import difflib
@@ -1684,11 +1758,19 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 pass
         record.write({"running": True, "results": []})
         mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False, "names0": mine_mark[1], "t0": t_out,
-                              "budget": float(budget), "first": first, "total": total, "file": a.get("file"), "record": record}
+                              "budget": float(budget), "first": first, "total": total, "file": a.get("file"), "record": record,
+                              "hold": _batch_hold() if build_mode == "end" else None}
+        got = None
         try:
             got = _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine)
         finally:
             s.batch_now = prev
+            h = mine.get("hold")
+            if h is not None and h.active:
+                # Never left frozen: a way out of the run that built nothing.
+                h.build("end: the batch stopped early")
+                if isinstance(got, dict):
+                    got["builds"] = h.builds
         if isinstance(got, dict):
             record.write(got, final=True)
             if record.ok and record.path:
@@ -1726,73 +1808,174 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 row["error"] = f"{e.get('code')}: {e.get('message')}" if isinstance(e, dict) else str(e)
             else:
                 res = r.get("result")
-                h = res.get("health") if isinstance(res, dict) else None
+                h = res.get("health") if isinstance(res, dict) else r.get("health")
                 if isinstance(h, dict) and h.get("verdict"):
                     row["health"] = h["verdict"]
+                if isinstance(r.get("written"), dict):
+                    row["written"] = r["written"].get("path")
             lines.append(row)
         short = {k: v for k, v in got.items() if k != "results"}
         short.update({"results": lines, "written": {"path": path, "bytes": os.path.getsize(path)},
-                      "note": "Each call's whole answer is in the file (results[i].result); here: ok, a refusal's words and the health verdict."})
+                      "note": "Each call's whole answer is in the file (results[i].result; a call with a to of its own: in that file, written here); here: ok, a refusal's words and the health verdict."})
         return short
 
     def _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine):
         import json as _json
 
+        from . import chain as _chain
+        from . import hold as _hold
+        from . import paths as _paths_mod
+
+        first = mine.get("first", 0)
+        hold = mine.get("hold")
+        # Each call's answer while the batch runs, for a later call's $from;
+        # the JSON files $file named, parsed once while they stay the same.
+        answers, files = {}, {}
+
+        def read_file(name):
+            p = _batch_path(name)
+            try:
+                _paths_mod.check("batch", "$file", p, s.out_dir, False)
+            except ToolError as e:
+                raise _chain.Miss(e.code, e.message) from None
+            return _chain.read_json(p, name, files)
+
+        def ended(out):
+            """What every answer of a batch { build: "end" } carries."""
+            if hold is not None:
+                out["build"] = "end"
+                if hold.builds:
+                    out["builds"] = hold.builds
+                if hold.off:
+                    out["buildNote"] = hold.off
+            return out
+
+        def stopped(out):
+            """A batch stopped by a refusal (or a build that left something
+            failing): rolled back whole when it rolls back."""
+            nonlocal start
+            if hold is not None and hold.active:
+                if rollback and start is not None:
+                    hold.release()  # undone below, and recomputed there
+                else:
+                    hold.build("end: the batch stopped at a refusal, and what ran stays")
+            if rollback and start is not None and undo_count(start) is None:
+                start = None
+            if rollback and start is None:
+                out["undone"] = 0
+                out["warning"] = "The document the batch started in was closed during it: nothing to take back there."
+            elif rollback:
+                undone = 0
+                while undone < made and start.UndoCount > 0:
+                    start.undo()
+                    undone += 1
+                left = take_back(start, None, mine.get("names0"))
+                if left:
+                    out["removed"] = left
+                if s.doc is start:
+                    s.tx = max(0, s.tx - undone)
+                    s.calls = [x for x in s.calls if x["tx"] <= s.tx]
+                start.recompute()
+                if s.doc is start:
+                    s.snapshot("batch rolled back")
+                out["undone"] = undone
+                if any(isinstance(r.get("written"), dict) for r in results):
+                    out["writtenNote"] = "The files the calls wrote (written) stay: they hold answers from before the rollback."
+                if s.doc is not start:
+                    out["warning"] = f"The batch moved to another document ({s.doc.Label if s.doc else 'none'}): only {start.Label}'s steps were taken back; what was done there stays."
+                elif undone < made:
+                    out["warning"] = f"Only {undone} of {made} steps could be taken back (FreeCAD's undo stack): the rest stay."
+            return ended(out)
+
+        def build_broke(entry):
+            """A build that left objects failing which were not before the
+            held run: the batch stops there as at a refusal."""
+            last = (entry.get("calls") or [first])[-1] - first
+            return stopped({"results": results, "stopped": last, "buildFailed": True,
+                            "note": "The one recompute of the held calls left objects failing that were not before (builds, the last one's health names them): "
+                                    + ("the batch was rolled back whole. " if rollback else "what ran stays. ")
+                                    + "Run the calls with build left out to see which call breaks it: each then builds and refuses by itself."})
+
         for i, c in enumerate(calls):
             if i and time.time() - mine["t0"] > mine.get("budget", BATCH_BUDGET):
                 # Out of time: what ran stays (this is no failure, so nothing
                 # is rolled back), the rest is named with how to run it.
-                nxt = mine.get("first", 0) + i
+                nxt = first + i
                 how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else f"batch again with the calls from index {nxt} on (calls.{i} of this list)"
-                return {"results": results, "ran": len(results), "notRun": len(calls) - i, "next": nxt,
-                        "note": f"Stopped after {time.time() - mine['t0']:.0f} s (budget {mine.get('budget', BATCH_BUDGET):g} s): a client waits about 80 s for an answer, so a long batch is answered in parts. "
-                                f"The {len(results)} calls above ran and stay; {len(calls) - i} were not started: {how}."}
+                if hold is not None:
+                    hold.build("end: out of time")
+                return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": nxt,
+                              "note": f"Stopped after {time.time() - mine['t0']:.0f} s (budget {mine.get('budget', BATCH_BUDGET):g} s): a client waits about 80 s for an answer, so a long batch is answered in parts. "
+                                      f"The {len(results)} calls above ran and stay; {len(calls) - i} were not started: {how}."})
             doc = s.doc
-            u0 = undo_count(doc) or 0
             mine.update(i=i, tool=c["tool"])
             s.batch_now = mine
-            r = server.call({"name": c["tool"], "arguments": c["arguments"]})
-            if mine.get("answered"):
-                # Answered already, from inside this call: the batch stops here.
-                return {"results": results, "answered_early": True}
-
-            body = _json.loads(r["content"][0]["text"])
-            ok = not r.get("isError")
+            # References in the arguments ($file, $from) read now, as the
+            # call is about to run: an earlier call's answer or file is there.
+            args, miss = c["arguments"], None
+            if _chain.has_refs(args):
+                try:
+                    args = _chain.resolve(args, read_file, answers, first + i, first)
+                except _chain.Miss as e:
+                    miss = {"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."}
+            held = False
+            if hold is not None and miss is None:
+                t = server.tools.get(c["tool"])
+                try:
+                    changing = bool(t.changes_for(args))
+                except Exception:
+                    changing = bool(getattr(t, "changes", False))
+                plan = hold.plan(c["tool"], changing)
+                if hold.active and (plan == "build" or s.doc is not hold.doc):
+                    entry = hold.build(f"before call {first + i} ({c['tool']})")
+                    if _hold.build_failed(entry) and stop:
+                        return build_broke(entry)
+                if plan == "hold":
+                    held = hold.active or hold.begin(s.doc)
+            u0 = undo_count(doc) or 0
+            if miss is None:
+                r = server.call({"name": c["tool"], "arguments": args})
+                if mine.get("answered"):
+                    # Answered already, from inside this call: the batch stops here.
+                    if hold is not None:
+                        hold.build("end: answered from inside a call")
+                    return ended({"results": results, "answered_early": True})
+                text = r["content"][0]["text"]
+                body = _json.loads(text)
+                ok = not r.get("isError")
+            else:
+                text, body, ok = "", {"error": miss}, False
             u1 = undo_count(start)
             if u1 is None:
                 start = None
             if ok and start is not None and doc is start and s.doc is start:
                 d = u1 - u0
                 made += d if d > 0 else (1 if u0 >= limit and getattr(server.tools.get(c["tool"]), "changes", False) else 0)
-            results.append({"tool": c.get("tool"), "ok": ok, **({"result": body} if ok else {"error": body.get("error")})})
+            if held and ok:
+                hold.note(first + i, c["tool"])
+                body = _hold.held_answer(c["tool"], body)
+            answers[first + i] = {"ok": ok, "tool": c["tool"], "size": len(text), **({"answer": body} if ok else {"error": (body.get("error") or {}).get("message")})}
+            row = {"tool": c.get("tool"), "ok": ok, **({"result": body} if ok else {"error": body.get("error")})}
+            if ok and c.get("to"):
+                # The answer to its own file; the reply keeps where and its shape.
+                try:
+                    row = _chain.written_row(c["tool"], body, _chain.write_answer(c["to"], body))
+                except Exception as e:
+                    row["toError"] = f"to: not written ({e}). The answer is here in full instead."
+            results.append(row)
             if mine.get("record") is not None:
                 mine["record"].write({"running": True, "ran": len(results), "results": results})
+            if hold is not None and hold.active and s.doc is not hold.doc:
+                entry = hold.build(f"after call {first + i} ({c['tool']}): it moved to another document")
+                if _hold.build_failed(entry) and stop and ok:
+                    return build_broke(entry)
             if not ok and stop:
-                out = {"results": results, "stopped": i}
-                if rollback and start is None:
-                    out["undone"] = 0
-                    out["warning"] = "The document the batch started in was closed during it: nothing to take back there."
-                elif rollback:
-                    undone = 0
-                    while undone < made and start.UndoCount > 0:
-                        start.undo()
-                        undone += 1
-                    left = take_back(start, None, mine.get("names0"))
-                    if left:
-                        out["removed"] = left
-                    if s.doc is start:
-                        s.tx = max(0, s.tx - undone)
-                        s.calls = [x for x in s.calls if x["tx"] <= s.tx]
-                    start.recompute()
-                    if s.doc is start:
-                        s.snapshot("batch rolled back")
-                    out["undone"] = undone
-                    if s.doc is not start:
-                        out["warning"] = f"The batch moved to another document ({s.doc.Label if s.doc else 'none'}): only {start.Label}'s steps were taken back; what was done there stays."
-                    elif undone < made:
-                        out["warning"] = f"Only {undone} of {made} steps could be taken back (FreeCAD's undo stack): the rest stay."
-                return out
-        return {"results": results, "ran": len(results)}
+                return stopped({"results": results, "stopped": i})
+        if hold is not None and hold.active:
+            entry = hold.build("end")
+            if _hold.build_failed(entry) and stop:
+                return build_broke(entry)
+        return ended({"results": results, "ran": len(results)})
 
     def history(action):
         def run(a):
@@ -1823,14 +2006,22 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         Tool("usage_report", "What working through Agent Link has cost the agent, estimated on this side: calls, tokens (text at ~3.5 characters a token, pictures by size) and the tool list each session loads up front — per day over days (7), per session, the costliest tools, and tips to cut it. session: true gives this session alone. Not Claude's own count: the plan's usage page has that. Changes nothing.",
              obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}}), usage_report),
         Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools, each with one line of what it does); detail: true gives every group's whole about. The cheap way to a tool that is not listed is find, card, call: find: \"words\" searches every tool (best first; group narrows it, limit 1-40, 10 by default) by its name, FreeCAD's own names for its commands and workbench (\"PartDesign_Fillet\", \"techdraw\", \"drawing\"), search words and description — tools matching every word come before those matching some — and answers name, group and what it does; tool: name (or up to 20 names) answers that tool's whole description and inputSchema; then call it by name. now: true (alone or with find) answers the tools that fit the present state, best first, each with fits (why): the active workbench, a sketch open in edit, the selection, and whether the tool's FreeCAD command reports itself active — without a window it goes by the document's objects only and says so. None of these lists anything, so a group's other descriptions are not loaded: enable a group only when a task uses most of it. Every tool is callable by name either way. Changes nothing but which tools are listed.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}}), tool_groups),
-        Tool("guide_read", "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry. No topic: the index. topic: a guide whole; section: one of its ## sections.", obj({"topic": {"type": "string"}, "section": {"type": "string"}}), guide_read),
+        Tool("guide_read", "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry. No topic: the index — per guide its sections, what the guide and each section cost to read (tokens and sectionTokens: approximate, characters / 4), start (its \"Start here\" section, where it has one: a short map of what to read first; named first in sections) and later (sections meant for one moment of a task, each with when; firstReadTokens is the guide without them). "
+             "topic: a guide whole; section: one of its ## sections by the start of its name, or a list of them in one answer (section: [\"Start here\", \"traps\"]). The cheap way through a long guide: its Start here section, then the sections it names, the later ones when their moment comes. "
+             "topic as a list reads several guides in order in one call (with section: that section of each guide that has it; missing names the rest), up to about 55 000 characters — the answer is read [{ topic, text }], with next: the topics not reached; guide_read { topic: next } reads on. Changes nothing.",
+             obj({"topic": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "section": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}}), guide_read),
         Tool("job_status", "A long read run as a job: job (its id) answers its status — running (seconds so far, the time expected from past runs here) or done with the tool's own answer (or its error); wait: seconds (up to 30) to wait for it first. No job: every job kept (an hour after it ends). Answered at once even while FreeCAD is busy. Changes nothing.",
              obj({"job": {"type": "string"}, "wait": {"type": "number"}}), job_status),
         Tool("job_start", "Run a read as a job: tool and its arguments. The answer comes back as the tool's own when it ends within 45 s, else a job id for job_status (wait: false answers with the id at once). Reads that are heavy or were slow here (over 20 s) go to a job on their own, and any read takes background: true for the same; a client drops a call after about 80 s, so a long read's answer would be lost. Only reads that leave the window and the 3D view alone (not changes, pictures or window tools); while one runs, changes to its document wait (refused, saying which job).",
              obj({"tool": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["tool"]), job_start),
         Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }], or file: a .json file holding that list (or { calls, rollback, stopOnError }), read on this side so a long run of calls (many profiles' points) is not sent through the conversation; a relative path is in the session's folder, and files are read where other tools may read. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it and removes every object it made (removed lists any undo did not reach), so it stands or falls whole. "
-             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch. to: a .json file the whole answer is written to (relative: in the session's folder); the reply is then a line per call — ok, a refusal's words, the health verdict — so a long run's answers stay out of the conversation; read a call's result from the file when its line needs it. Every batch also keeps what ran in a record of its own, batches/<date>-<time>.json in the session's folder (the reply's record is its path; the newest 20 are kept), rewritten as each call ends: when a batch's answer never arrives — a call the client dropped, FreeCAD stopped and started again — read the newest record to see which calls ran (running: true and ran: n while it was under way, each call's whole result in results) before running anything again.",
-             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}}), batch),
+             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch. to: a .json file the whole answer is written to (relative: in the session's folder); the reply is then a line per call — ok, a refusal's words, the health verdict — so a long run's answers stay out of the conversation; read a call's result from the file when its line needs it. Every batch also keeps what ran in a record of its own, batches/<date>-<time>.json in the session's folder (the reply's record is its path; the newest 20 are kept), rewritten as each call ends: when a batch's answer never arrives — a call the client dropped, FreeCAD stopped and started again — read the newest record to see which calls ran (running: true and ran: n while it was under way, each call's whole result in results) before running anything again. "
+             "Chaining, so an answer one call needs from another does not pass through the conversation: (1) a call may carry to — { tool, arguments, to: \"outline.json\" } writes that call's whole answer to the .json file (relative: in the session's folder; written where tools may write) and its result here is only { written: { path, bytes }, keys (an object's) or length (a list's), and health when it had a verdict }; a refused call writes nothing, and a rollback leaves the files. "
+             "(2) Anywhere inside a call's arguments, { \"$file\": \"outline.json\" } is replaced by that JSON file's contents and { \"$file\": \"outline.json\", \"$at\": \"loops.0.points\" } by the part at that dotted path of keys and list indices (from 0; -1 is the last); the file is read as the call is about to run, so it may be one an earlier call of this batch wrote, and is read where tools may read. "
+             "(3) { \"$from\": 2, \"$at\": \"bodies.0.name\" } takes the same from the answer of call 2 of this batch (calls are numbered from 0 through the whole list, as from and next count; only an earlier call, and only one run in this part of the batch — across parts use to and $file). A reference stands alone as the value ($file or $from, with $at); one that cannot be followed — no file, no key, no index, a refused call — refuses that call, saying what is there (the keys or the length at the deepest level reached), and counts as a refusal for stopOnError and rollback; a file or answer over 20 MB is refused. The arguments are checked after the references are filled in. "
+             "build: \"end\" recomputes once for a run of changes instead of after each: while consecutive calls are sketch_add, sketch_constrain, sketch_edit, sketch_offset or object_set on one document (and any tools an add-on declares safe), FreeCAD's recompute is held (its own Skip recomputes switch), and the document is built once — at the end, before the first call that is none of these (a read that needs geometry, a pad: they build first and run as always), or when a call moves to another document. A held call's answer carries build: \"held\" and a health that says the reading is held; the parts of its answer read from the rebuilt shape (a sketch's wires, closedWires, openVertices and readyForFeature, sketch_edit's bodyAfter) are left out and named in health.leftOut — a sketch's solver, dof, conflicting and redundant are still fresh. "
+             "builds [{ when, held, calls: [first, last], recomputed, ms, health }] in the batch's answer carries the one health reading for everything the held calls made or changed. A held call cannot refuse for what only a rebuild shows (an edit that breaks a later feature): when a build leaves an object failing that was not before, the batch stops there as at a refusal (buildFailed: true) and, with rollback, is taken back whole. guide_read, tool_groups, usage_report and job_status run inside a held run without a build. If the person has Skip recomputes on already, nothing is held or built and buildNote says so. Use it for a sketch drawn and constrained in many calls or many properties set; leave it out when each call's own reading matters.",
+             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}, "build": {"type": "string", "enum": ["end", "each"]}}), batch),
         Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded making): shots past the last 50 and 3 days, solver and job runs past 14 days, FreeCAD backups past 7; exports only listed. To the Trash. Dry run unless dry_run: false; kinds, older_than_days narrow it. Runs on its own daily.",
              obj({"dry_run": {"type": "boolean"}, "kinds": {"type": "array", "items": {"type": "string", "enum": list(outputs.KINDS)}}, "older_than_days": {"type": "number"}}), outputs_clean),
         Tool("history_undo", "Undo the last change (steps: how many), as FreeCAD's Edit › Undo does.", obj({"steps": {"type": "integer"}}), history("undo")),

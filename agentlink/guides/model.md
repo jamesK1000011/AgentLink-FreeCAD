@@ -1,6 +1,12 @@
 # Modelling with Part
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
+## Start here
+A map of this guide. `guide_read { topic: "model", section: [...] }` reads the sections named.
+- Before the first step: `workflow` (the order: block out, add and remove material, repeat and mirror, shell, round and bevel last) and `Parametric or plain` (which tools leave an object whose properties `object_set` can still change, how elements are numbered, where each primitive sits on `at`).
+- Before the first boolean, fillet, shell or loft: `traps`. It is the longest section; most of it is about `part_loft`.
+- At their own moment (the index lists them under later): `Wires, splitting, repair`, `Attachment`, `Heavy steps`, `Compounds`.
+
 ## workflow
 1. Block the part out with `part_primitive` (box, cylinder …; `at` and `rotate` place it; `direction [x,y,z]` points the axis of a cylinder, cone, prism or tube) or `part_extrude` / `part_revolve` a profile (`{ points }`, `{ circle }`, a sketch, or a body's face "Box.Face6").
 2. Add and remove material: `part_boolean { op, base, tools }`, or in one call `part_extrude { profile, into, op: "cut" }` for a pocket or `op: "fuse"` for a boss.
@@ -25,6 +31,7 @@
 - A boolean of many faces (a mesh made a solid) can take minutes, and the window does not respond until it is done. The first call gives the time and runs nothing; the same call again runs it. Use fewer faces first (`part_refine`), or do the boolean on the meshes (`meshobj_boolean`).
 
 ## Wires, splitting, repair
+<!-- later: when the part needs a curve or a path (part_wire), a split, a section, slices, a repair or a solid from a mesh -->
 - `part_wire` makes FreeCAD's own parametric curves: a helix as a sweep path (a spring, a thread), a spiral, a regular polygon (`polygon`: sides and radius), a polyline through your corners (`polyline`: points, closed), a plane to slice with, a B-spline through points. For a solid from corner points in one step, use `part_extrude { profile: { points } }`.
 - `part_split { mode: "slice", bodies: [one], tools: [a plane or bodies] }` cuts a body into pieces; `explode: true` makes each its own body. `fragments` keeps every overlap region apart (for multi-material prints); `xor` keeps what is in an odd number.
 - `part_compound` groups bodies without fusing them, or `explode`s a multi-solid body.
@@ -40,17 +47,20 @@
 - Where things sit: a box has a corner at `at`; a cylinder, cone, prism and tube stand on `at` (base centre) along +z or `direction`; a sphere and torus are centred on it; a `part_wire` plane has a corner at `at`, its other curves their centre. `rotate` turns about `at`.
 
 ## Attachment
+<!-- later: when using part_attach or part_datum { to } -->
 - `part_attach` and `part_datum { to }` take one reference. The modes FreeCAD's attacher has for one reference: a flat face `FlatFace`; an edge `NormalToEdge`, `FrenetNB`, `Concentric` (a circle or arc); a vertex `Translate`; a whole object `ObjectXY`, `ObjectXZ`, `ObjectYZ`. A datum line takes `TwoPointLine` (a straight edge) or `AxisOfCurvature` (a circle or arc); a datum point `Vertex`, `CenterOfCurvature`, `CenterOfMass`.
 - Modes that need two or three references (`TangentPlane` and a line's `FaceNormal`: a face and a vertex; `ThreePointsPlane`) cannot be reached with one `to`. A line datum on a face therefore needs a `mode` of its own (`AxisOfInertia1` …) or no attachment (`at` and `normal`).
 - An attachment names a face or edge by number. A boolean or fillet on the support renumbers it, and the attached object then follows another element: attach to datums or to primitives that stay parametric.
 
 ## Heavy steps
+<!-- later: before a boolean of many faces, a loft of many profiles, part_from_mesh, or a fused array of many copies -->
 - These freeze FreeCAD's window while OCC works and cannot run as a background job (jobs are for reads): booleans of many faces, lofts of many profiles and points, `part_from_mesh`, fused arrays of many copies, offsets and shells of free-form bodies.
 - `part_boolean` and `part_loft` are estimated first; past a minute the first call answers with the estimate and runs nothing, and the same call again runs it.
 - `part_from_mesh` makes a face of every triangle: it refuses a mesh over `maxFacets` (60000 by default), and far smaller ones are already slow in every later boolean. Reduce the mesh first (`meshobj_decimate`), do the boolean on the meshes (`meshobj_boolean`), or fit features to the scan instead.
 - `part_transform` arrays: `fuse: false` keeps the copies apart in one body and is far quicker than fusing many.
 
 ## Compounds
+<!-- later: when exploding or filtering a compound, or reading part_slices -->
 - `part_compound { explode }` copies each solid out as a plain body. `compound_explode` is FreeCAD's Explode compound: filter objects that follow the compound.
 - `compound_filter` keeps pieces by number from 0 (`items`), by touching a stencil or not (`collision-pass`, `collision-fail`), or by size as a percent of the largest piece (`window-volume`, `window-area`, `window-length`) or distance from a stencil (`window-distance`).
 - `part_slices` measures `at` from the origin along the normal; `range` in its answer is the body's reach along it. Each slice's `area` is the material's: loops inside loops are holes.
