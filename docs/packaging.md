@@ -7,7 +7,7 @@ Agent Link ships three ways from this one folder:
 |---|---|---|
 | FreeCAD add-on | the folder as it is (`package.xml`, `Init.py`, `InitGui.py`) | the Addon Manager, or a copy in `Mod` |
 | Python package `agentlink-freecad` | `pyproject.toml` | `uvx` and any MCP client's config |
-| Claude Desktop extension (`.mcpb`, Mac) | ScanRuler's `scripts/freecad/mcpb` | double-click install in Claude Desktop |
+| Claude Desktop extension (`.mcpb`, Mac) | `packaging/mcpb` (launcher, manifest, build), `packaging/addons.json`, `packaging/pins` | double-click install in Claude Desktop |
 
 ## The Python package
 
@@ -67,14 +67,38 @@ step with `pyproject.toml`.
 
 ## The Claude Desktop extension
 
-Built and released from ScanRuler's repository (tag `agentlink-v*`,
-workflow `mcpb-release.yml`), with a privacy and identity check of the built
-file before upload. Its icon is kept here, `packaging/mcpb/icon.png` (the
-workbench icon at 512 px), and goes into the bundle when the pinned Agent
-Link has it. Building it from this repository instead is planned; until
-then the launcher's self-update channel stays ScanRuler's `freecad-spike`. Its Node launcher finds FreeCAD in Applications,
-installs Agent Link and the pinned add-ons into FreeCAD's `Mod` folder, and
-starts the server in FreeCAD's Python. It is macOS-only for now.
+Built and released from this repository: tag `agentlink-v*` runs
+`.github/workflows/mcpb-release.yml`, which checks out every add-on at its
+pin, builds with `packaging/mcpb/build.sh`, runs the privacy and identity
+check on the built file, and only then attaches it to the tag's
+[release](https://github.com/jamesK1000011/AgentLink-FreeCAD/releases). Its Node launcher (`packaging/mcpb/server/index.js`) finds
+FreeCAD in Applications, installs Agent Link and the pinned add-ons into
+FreeCAD's `Mod` folder, and starts the server in FreeCAD's Python. It is
+macOS-only for now.
+
+What it installs is `packaging/addons.json` (the add-ons, each a repository
+and the Mod folder it goes in) at the commits in `packaging/pins/<name>-ref`:
+Agent Link, Workshop for FreeCAD, ScanRuler for FreeCAD (ported from
+ScanRuler by Stefan Hermann, CNC Kitchen; AGPL-3.0-only), Texturizer (from
+Stefan Hermann's BumpMesh, CNC Kitchen; AGPL-3.0-only), Tutor and Agent Link
+for OrcaSlicer. Each keeps its own licence; the launcher, manifest and build
+script are LGPL-2.1-or-later. `packaging/` is not in `FILES`, so the add-on
+copy the launcher installs does not carry it.
+
+**Updates.** The installed launcher updates itself and the add-ons
+(`agentlink_update`, and at each start) from this repository's `main`: the
+manifest, the pins and the launcher of one commit. If that cannot be read
+(manifest or a pin missing), it reads the channel used before 16 Nov 2026,
+ScanRuler's `freecad-spike` (`scripts/freecad/addons.json`,
+`scripts/bakeoff/*-ref`), which is kept in step until every installed copy
+has moved.
+
+**Pins.** A pin moves only once `.github/workflows/bakeoff.yml` is green:
+every add-on at its pin, their tests together, the launcher test, the
+extension built and checked, and the bake-off brief. Bump on a `pins-*`
+branch, then fast-forward `main`; a push to `main` is installed at the next
+update. The launcher test checks that every pin the manifest names is here
+and holds a commit.
 
 ## Releasing
 

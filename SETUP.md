@@ -44,7 +44,9 @@ or `FREECAD_LIB` (its `lib` folder) in the client's `env`.
 
 Headless use needs no add-on. To let the person watch, install it one way:
 
-- macOS with Claude Desktop: the `.mcpb` extension does it (step 5).
+- macOS with Claude Desktop: the `.mcpb` extension does it (step 5); it
+  is attached to this repository's `agentlink-v…` releases
+  (https://github.com/jamesK1000011/AgentLink-FreeCAD/releases).
 - Addon Manager: Preferences > Addon Manager > Custom repositories, add
   `https://github.com/jamesK1000011/AgentLink-FreeCAD` branch `main`, then
   install **Agent Link** from Tools > Addon manager.
