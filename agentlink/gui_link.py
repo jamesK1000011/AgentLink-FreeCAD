@@ -241,8 +241,24 @@ def expect(tool, seconds):
     import agentlink_state
 
     link = getattr(agentlink_state, "link", None)
-    if link is not None and hasattr(link, "expect"):
+    if link is not None and hasattr(link, "expect") and not _live_now():
         link.expect(tool, seconds)
+
+
+def expect_done(tool):
+    """The call (tool) that set a deadline with expect returned on its own:
+    the deadline is lifted, so a batch going on after it (or a live_run) is
+    not answered busy when it runs past it. A live add-on replay was
+    answered busy twice, nothing open, from a shot's gui_input inside it."""
+    import agentlink_state
+
+    link = getattr(agentlink_state, "link", None)
+    calls = getattr(link, "calls", None) if link is not None else None
+    if calls:
+        c = calls[-1]
+        if c.get("expected") == tool and not c.get("answered"):
+            c.pop("deadline", None)
+            c.pop("expected", None)
 
 
 def close_front(all_=False):
@@ -332,14 +348,54 @@ def blocked_words(d):
             "dialog_answer { button } presses one of its buttons: read it and press what the job needs (Cancel backs out); gui_unstick cancels it; app_force_restart if the window is stuck. This call was not run.")
 
 
+# Who takes a held gui_input's answer instead of the client: live_run's
+# replay (livescript.run's live.push), which then runs the step's calls
+# after it, and the steps after, inside the dialog's own loop. Innermost last.
+CONTINUE = []
+
+
+def _modified(d):
+    """A document changed since it was opened or saved (the window's own
+    flag), for the heartbeat: a recovered copy nobody changed is not
+    recovered again after the next restart."""
+    try:
+        import FreeCADGui
+
+        g = FreeCADGui.getDocument(d.Name)
+        if g is not None and hasattr(g, "Modified"):
+            return bool(g.Modified)
+    except Exception:
+        pass
+    try:
+        return bool(d.isTouched()) or bool(getattr(d, "UndoCount", 0))
+    except Exception:
+        return False
+
+
 def answer_now(tool, body):
     """The answer to the call in hand, sent before it returns (gui_input,
     whose step opened a dialog that holds it): True when it went out. Only
-    for that tool called on its own (not in a batch) through the link."""
+    for that tool called on its own (not in a batch) through the link — or
+    taken by a live_run replay in hand (CONTINUE), which goes on inside the
+    dialog's loop."""
+    if CONTINUE:
+        try:
+            return bool(CONTINUE[-1](tool, body))
+        except Exception:
+            return False
     import agentlink_state
 
     link = getattr(agentlink_state, "link", None)
     return bool(link is not None and link.answer_now(tool, body))
+
+
+def _live_now():
+    """A live_run replay is in hand: its own calls are not the client's
+    (no client deadline, no early batch answer from them)."""
+    import agentlink_state
+
+    link = getattr(agentlink_state, "link", None)
+    return bool(getattr(getattr(link, "session", None), "live_now", None)) or bool(CONTINUE)
 
 
 def mark_agent_opened(d):
@@ -653,7 +709,7 @@ class Link:
                     FreeCADGui.getMainWindow().statusBar().showMessage("Agent Link: " + q["notice"] + " (say go in chat).", 3000)
                 except Exception:
                     pass
-            docs = [{"name": x.Name, "label": x.Label, "file": x.FileName or ""} for x in FreeCAD.listDocuments().values()]
+            docs = [{"name": x.Name, "label": x.Label, "file": x.FileName or "", **({"modified": True} if _modified(x) else {})} for x in FreeCAD.listDocuments().values()]
             keep._save(keep.path("heartbeat.json"), {
                 "pid": os.getpid(), "t": time.time(), "pairing": 1, "app": _bundle(), "freecad": ".".join(FreeCAD.Version()[:3]), "port": self.port,
                 "docs": docs, "busy": self.busy, "pinned": getattr(self.session, "doc", None).Name if self.session and getattr(self.session, "doc", None) else None,
@@ -814,6 +870,10 @@ class Link:
 
         calls = list(getattr(self, "calls", []) or [])
         front = getattr(self, "front", None)
+        if isinstance(front, dict) and front.get("kind") == "progress":
+            # A progress dialog (a job's own, closing by itself) holds
+            # nothing: waited for, never answered busy for.
+            front = None
         if front or any(c.get("answered") for c in calls):
             return gi.front_words(front)
         now = time.time()
@@ -874,6 +934,7 @@ class Link:
         if call is None or call["name"] not in (tool, "batch"):
             return None
         call["deadline"] = time.time() + seconds
+        call["expected"] = tool
 
         def watch():
             while not call.get("finished"):
@@ -1043,6 +1104,8 @@ class Link:
         """A batch's early answer, from the batch in hand (session.batch_now:
         its results so far, the index and count) with tool running in it."""
         bn = getattr(getattr(self, "session", None), "batch_now", None)
+        if getattr(getattr(self, "session", None), "live_now", None):
+            return None  # a live_run's own batch, not the client's: its replay goes on
         if call["name"] != "batch" or not isinstance(bn, dict) or bn.get("answered") or bn.get("tool") != tool:
             return None
         i, n = bn.get("i", 0), bn.get("n", 0)

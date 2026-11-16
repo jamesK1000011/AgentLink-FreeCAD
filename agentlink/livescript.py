@@ -235,51 +235,60 @@ def load(path):
     return data
 
 
-def run(script, chosen, call, vars_=None, stop_on_fail=False, shot=None):
+BUSY_RETRY_WAIT = 2.0  # seconds before a step refused busy is run again, once
+
+
+def _busy(answers, rec):
+    """A call of the step answered busy (the window held, or seen as held):
+    the step is run again once after a short wait, not failed for it."""
+    bad = [a for a in answers if not a.get("ok") and isinstance(a.get("error"), dict) and a["error"].get("code") == "busy"]
+    be = rec.get("batchError")
+    return bool(bad) or (isinstance(be, dict) and be.get("code") == "busy")
+
+
+def run(script, chosen, call, vars_=None, stop_on_fail=False, shot=None, live=None):
     """Replay the chosen steps. call(tool, arguments) answers one call's
     entry ({tool, ok, result | error}); batch(calls) is call("batch", …).
-    shot(name) takes a window picture and answers its path or None."""
+    shot(name) takes a window picture and answers its path or None.
+
+    live (the window; None elsewhere) has push(fn) / pop() for the answer
+    of a gui_input whose step opened a dialog (fn(tool, body) is called
+    from inside the dialog's own loop: the step's calls after it and the
+    steps after that run there, so the step that answers the dialog does
+    run), batch_now() (the batch in hand: its results so far, its index),
+    front() (what is open in front, or None), unstick() and sleep(s).
+    Whatever is left open at the end is closed (gui_unstick) and said in
+    leftOpen. The answer is always this summary, never a bare batch."""
     vars_ = dict(vars_ or {})
     names = declared_vars(script)
-    out, passed, failed, skipped = [], 0, 0, 0
-    for i, st in chosen:
-        rec = {"step": i, "name": st.get("name")}
-        why = two_role(st)
-        calls, missing = substitute(st.get("calls") or [], vars_)
-        if why is None and missing:
-            conv = script.get("conventions") or {}
-            told = [f"{k}: {v}" for k, v in conv.items() if any(m in VAR.findall(k) for m in missing)]
-            why = "needs " + ", ".join("$" + m for m in missing) + " — give vars { " + ", ".join(f"{m}: …" for m in missing) + " }" + (" (" + "; ".join(told) + ")" if told else "")
-        if why:
-            rec.update(result="skipped", why=why)
-            skipped += 1
-            out.append(rec)
-            continue
-        answers = []
-        if st.get("direct"):
-            for c in calls:
-                ans = call(c.get("tool"), c.get("arguments") or {})
-                answers.append(ans)
-                capture(vars_, names, ans)
-        else:
-            b = call("batch", {"calls": calls, "rollback": False, "stopOnError": False})
-            answers = (b.get("result") or {}).get("results") or [] if b.get("ok") else []
-            if not b.get("ok"):
-                rec["batchError"] = b.get("error")
-            for ans in answers:
-                capture(vars_, names, ans)
+    state = {"k": 0, "out": [], "passed": 0, "failed": 0, "skipped": 0, "stop": False, "cur": None, "left": []}
+
+    def finish_step(i, st, rec, answers):
         checks = evaluate(answers, st.get("expect"))
         bad = [c for c in checks if not c["ok"]]
         refused = [{"call": k, "tool": a.get("tool"), "error": a.get("error")} for k, a in enumerate(answers) if not a.get("ok")]
-        # A refused call fails its step, unless the step checks the refusal.
+        # A refused call fails its step, unless the step checks the refusal
+        # or the call allows it (allow: ["not_found"]: a close of what is
+        # not open, in a reset).
         meant = any(str(e.get("path", "")).split(".")[0] in ("error", "ok") for e in st.get("expect") or [])
-        ok = not bad and "batchError" not in rec and (not refused or meant)
+        allowed = []
+        for r in refused:
+            c = (st.get("calls") or [])[r["call"]] if r["call"] < len(st.get("calls") or []) else {}
+            allow = c.get("allow") or []
+            allow = allow if isinstance(allow, list) else [allow]
+            code = r["error"].get("code") if isinstance(r.get("error"), dict) else None
+            if code and code in allow:
+                allowed.append(r)
+        hard = [r for r in refused if r not in allowed]
+        ok = not bad and "batchError" not in rec and (not hard or meant)
         rec["result"] = "pass" if ok else "fail"
         rec["checks"] = len(checks)
         if bad:
             rec["failed"] = bad
-        if refused:
-            rec["refused"] = refused
+        if hard:
+            rec["refused"] = hard
+        if allowed:
+            rec["allowedRefusals"] = allowed
         if st.get("then"):
             rec["then"] = st["then"]
         if st.get("look"):
@@ -288,9 +297,120 @@ def run(script, chosen, call, vars_=None, stop_on_fail=False, shot=None):
             p = shot(st["shot"])
             if p:
                 rec["shot"] = p
-        passed += ok
-        failed += not ok
-        out.append(rec)
+        state["passed" if ok else "failed"] += 1
+        state["out"].append(rec)
         if not ok and stop_on_fail:
-            break
-    return {"script": script.get("name"), "steps": out, "total": {"passed": passed, "failed": failed, "skipped": skipped, "run": passed + failed}, "vars": vars_}
+            state["stop"] = True
+
+    def close_left():
+        """Anything still open in front closed (gui_unstick), and said."""
+        if live is None:
+            return
+        try:
+            f = live.front()
+        except Exception:
+            f = None
+        if not f:
+            return
+        r = live.unstick()
+        state["left"].append({"open": f, "closed": bool(isinstance(r, dict) and r.get("ok"))})
+
+    def continued(tool, body):
+        """A gui_input in the step in hand opened a dialog that holds its
+        call: the step's answers so far and this one, then its calls after
+        it and the steps after, run here inside the dialog's loop."""
+        cur = state["cur"]
+        if cur is None or cur.get("taken"):
+            return False
+        cur["taken"] = True
+        if cur["direct"]:
+            done = list(cur["answers"]) + [{"tool": tool, "ok": True, "result": body}]
+            at = cur["j"]
+        else:
+            bn = live.batch_now() if live is not None else None
+            if not isinstance(bn, dict):
+                return False
+            done = list(bn.get("results") or []) + [{"tool": tool, "ok": True, "result": body}]
+            at = int(bn.get("i", len(done) - 1))
+            bn["answered"] = True  # the batch stops when its call returns
+        for c in cur["calls"][at + 1:]:
+            ans = call(c.get("tool"), c.get("arguments") or {})
+            done.append(ans)
+            capture(vars_, names, ans)
+        cur["rec"]["dialog"] = f"{tool} (call {at}) opened a dialog that held its call: the calls after it ran inside the dialog's loop"
+        finish_step(cur["i"], cur["st"], cur["rec"], done)
+        state["k"] = cur["pos"] + 1
+        state["cur"] = None
+        advance()
+        close_left()
+        return True
+
+    def run_calls(cur):
+        st, calls = cur["st"], cur["calls"]
+        if live is not None:
+            live.push(continued)
+        try:
+            if st.get("direct"):
+                for j, c in enumerate(calls):
+                    cur["j"] = j
+                    ans = call(c.get("tool"), c.get("arguments") or {})
+                    if cur.get("taken"):
+                        return None
+                    cur["answers"].append(ans)
+                    capture(vars_, names, ans)
+                return cur["answers"]
+            b = call("batch", {"calls": calls, "rollback": False, "stopOnError": False})
+            if cur.get("taken"):
+                return None
+            answers = ((b.get("result") or {}).get("results") or []) if b.get("ok") else []
+            if not b.get("ok"):
+                cur["rec"]["batchError"] = b.get("error")
+            for ans in answers:
+                capture(vars_, names, ans)
+            return answers
+        finally:
+            if live is not None:
+                live.pop()
+
+    def advance():
+        while state["k"] < len(chosen) and not state["stop"]:
+            pos = state["k"]
+            i, st = chosen[pos]
+            rec = {"step": i, "name": st.get("name")}
+            why = two_role(st)
+            calls, missing = substitute(st.get("calls") or [], vars_)
+            if why is None and missing:
+                conv = script.get("conventions") or {}
+                told = [f"{k}: {v}" for k, v in conv.items() if any(m in VAR.findall(k) for m in missing)]
+                why = "needs " + ", ".join("$" + m for m in missing) + " — give vars { " + ", ".join(f"{m}: …" for m in missing) + " }" + (" (" + "; ".join(told) + ")" if told else "")
+            if why:
+                rec.update(result="skipped", why=why)
+                state["skipped"] += 1
+                state["out"].append(rec)
+                state["k"] = pos + 1
+                continue
+            answers = None
+            for attempt in (0, 1):
+                cur = state["cur"] = {"i": i, "pos": pos, "st": st, "calls": calls, "rec": rec, "direct": bool(st.get("direct")), "answers": [], "j": 0}
+                answers = run_calls(cur)
+                if answers is None:
+                    return  # finished inside a dialog's loop (continued)
+                if attempt == 0 and _busy(answers, rec):
+                    # Seen as held (a progress dialog, a pop-up closing): once more.
+                    rec.pop("batchError", None)
+                    rec["retried"] = "a call was answered busy: the step was run again after a short wait"
+                    if live is not None:
+                        live.sleep(BUSY_RETRY_WAIT)
+                    continue
+                break
+            state["cur"] = None
+            finish_step(i, st, rec, answers)
+            state["k"] = pos + 1
+
+    advance()
+    close_left()
+    out = {"script": script.get("name"), "steps": state["out"], "total": {"passed": state["passed"], "failed": state["failed"], "skipped": state["skipped"], "run": state["passed"] + state["failed"]}, "vars": vars_}
+    if state["left"]:
+        out["leftOpen"] = state["left"]
+        out["note"] = "Something was left open in front at the end: gui_unstick closed it (leftOpen says what)."
+    return out

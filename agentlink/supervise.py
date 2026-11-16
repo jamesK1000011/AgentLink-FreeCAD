@@ -16,6 +16,7 @@
 import json
 import os
 import queue
+import re
 import signal
 import subprocess
 import sys
@@ -208,6 +209,25 @@ def temp_copy(file):
         return False
 
 
+RECOVERED_LABEL = re.compile(r"\(recovered[^)]*\)\s*$")
+
+
+def recoverable(docs):
+    """The documents open at the stop that are recovered after the restart,
+    and those left out: a "(recovered …)" copy from an earlier restart that
+    nobody changed (the heartbeat's modified) is not recovered again — each
+    restart reopened every old copy as well (live: "AgentLink (recovered
+    15:55)" and "M18TestDrive-v3 (recovered 03:59)" came back again).
+    (kept, left out)."""
+    keep_, left = [], []
+    for d in docs or []:
+        if isinstance(d, dict) and RECOVERED_LABEL.search(str(d.get("label") or "")) and not d.get("modified"):
+            left.append(d)
+        else:
+            keep_.append(d)
+    return keep_, left
+
+
 def strays(before, recovered, now_docs):
     """Documents open in the FreeCAD just started that were not open when it
     stopped: copies opened again from temporary folders (old recovered
@@ -222,7 +242,11 @@ def strays(before, recovered, now_docs):
         if d.get("name") in fresh or d.get("label") in fresh:
             continue
         f = d.get("file") or ""
-        if not temp_copy(f) or os.path.abspath(f) in files:
+        if f and os.path.abspath(f) in files:
+            continue
+        # A copy from a temporary folder, or an earlier "(recovered …)" copy
+        # reopened from wherever it was kept, not open at the stop.
+        if not temp_copy(f) and not RECOVERED_LABEL.search(str(d.get("label") or "")):
             continue
         out.append(d)
     return out
@@ -494,6 +518,7 @@ class Window:
             reports = keep.crash_reports() if keep else []
             return ("FreeCAD was started again in the background but its link did not come up within 2 minutes" +
                     (f" (newest crash report: {reports[0]})" if reports else "") + ". The hidden FreeCAD takes the next calls: app_recover lists the saved copies.")
+        docs, old_copies = recoverable(docs)
         got = self.ask("app_recover", {"action": "auto", "documents": docs, "since": t_crash}) if docs else {"recovered": []}
         if not got:
             return "FreeCAD is back (started in the background); recovering its documents did not answer — app_recover lists the saved copies."
@@ -502,6 +527,8 @@ class Window:
             parts.append(f"{r.get('label')} recovered from {r.get('source')} ({r.get('time')}, {r.get('lost')})")
         for r in got.get("failed") or []:
             parts.append(f"{r.get('label')}: no copy opened ({r.get('why')})")
+        if old_copies:
+            parts.append("not recovered again (earlier recovered copies nobody changed): " + ", ".join(d.get("label") or d.get("name") for d in old_copies))
         shut, left = self.close_strays(docs, got.get("recovered") or [], hb.get("pid"), t0)
         if shut:
             parts.append("closed again as they were not open before the restart: " + ", ".join(shut))
@@ -674,7 +701,7 @@ def run(script, argv):
         sys.stderr.write(f"Agent Link: FreeCAD {why}; starting it again\n")
         hidden = (keep._load(keep.path("hidden.json"), {}) if keep else {}) or {}
         dead = state.get("child")
-        docs = hidden_docs(hidden, getattr(dead, "pid", None))
+        docs, _old_copies = recoverable(hidden_docs(hidden, getattr(dead, "pid", None)))
         t_crash = time.time()
         now = time.time()
         deaths[:] = [t for t in deaths if now - t < 60] + [now]

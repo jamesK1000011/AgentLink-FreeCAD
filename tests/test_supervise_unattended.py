@@ -474,6 +474,21 @@ class RestartHelpers(unittest.TestCase):
         self.assertEqual(self.sv.hidden_docs({"docs": [{"name": "A"}]}, 12), [{"name": "A"}])
         self.assertEqual(self.sv.hidden_docs(None, 1), [])
 
+    def test_old_recovered_copies_are_not_recovered_again(self):
+        # Live: after a watchdog restart "AgentLink (recovered 15:55)" and
+        # "M18TestDrive-v3 (recovered 03:59)" came back again.
+        docs = [{"name": "AgentLink", "label": "AgentLink", "file": "/Users/x/AgentLink.FCStd"},
+                {"name": "AgentLink_r", "label": "AgentLink (recovered 15:55)", "file": "/Users/x/AgentLink/unsaved/AgentLink.FCStd"},
+                {"name": "M18_r", "label": "M18TestDrive-v3 (recovered 03:59)", "file": "", "modified": True}]
+        kept, left = self.sv.recoverable(docs)
+        self.assertEqual([d["name"] for d in kept], ["AgentLink", "M18_r"])  # a copy someone changed stays
+        self.assertEqual([d["name"] for d in left], ["AgentLink_r"])
+        # reopened anyway (from wherever it was kept): a stray, closed again
+        now = [{"name": "AgentLink_r", "label": "AgentLink (recovered 15:55)", "file": "/Users/x/AgentLink/unsaved/AgentLink.FCStd"},
+               {"name": "AgentLink_recovered", "label": "AgentLink (recovered 16:40)", "file": "/tmp/agentlink-recovered-z/AgentLink.FCStd"}]
+        rec = [{"label": "AgentLink", "document": "AgentLink_recovered", "as": "AgentLink (recovered 16:40)"}]
+        self.assertEqual([d["name"] for d in self.sv.strays(kept, rec, now)], ["AgentLink_r"])
+
     def test_strays(self):
         tmp = tempfile.gettempdir()
         cp = lambda d, n: os.path.join(tmp, d, n)  # noqa: E731

@@ -133,5 +133,155 @@ class ShippedScripts(unittest.TestCase):
                     self.assertTrue(any(k in e for k in ls.CHECKS), f"{os.path.basename(f)} {st.get('name')}: {json.dumps(e)}")
 
 
+
+# Live: live_run { script: "agentlink" } came back as a bare batch result
+# when a gui_input step left a "Note" dialog open (the step typing into it
+# never ran); reset failed on doc_close not_found; texturizer was answered
+# busy with nothing open.
+class FakeWindow:
+    """A batch and a window: gui_input with open: true opens a dialog that
+    holds its call — its answer goes to the replay (live.push) from inside
+    the dialog's loop, and the call returns only once the dialog is closed."""
+
+    def __init__(self, busy_first=0):
+        self.cont, self.dialog, self.log, self.batch_now = [], None, [], None
+        self.busy_first = busy_first
+        self.unstuck = 0
+
+    def call(self, tool, args):
+        if tool == "batch":
+            mine = {"results": [], "i": 0, "answered": False}
+            prev, self.batch_now = self.batch_now, mine
+            try:
+                for i, c in enumerate(args["calls"]):
+                    mine["i"] = i
+                    r = self.call(c["tool"], c.get("arguments") or {})
+                    if mine["answered"]:
+                        return {"tool": "batch", "ok": True, "result": {"results": mine["results"], "answered_early": True}}
+                    mine["results"].append(r)
+                return {"tool": "batch", "ok": True, "result": {"results": mine["results"]}}
+            finally:
+                self.batch_now = prev
+        self.log.append(tool)
+        if tool == "gui_unstick":
+            self.dialog = None
+            self.unstuck += 1
+            return {"tool": tool, "ok": True, "result": {"closed": ["Note"]}}
+        if tool == "flaky" and self.busy_first:
+            self.busy_first -= 1
+            return {"tool": tool, "ok": False, "error": {"code": "busy", "message": "held"}}
+        if tool == "doc_close":
+            return {"tool": tool, "ok": False, "error": {"code": "not_found", "message": "no such document"}}
+        if tool == "gui_input" and args.get("open"):
+            self.dialog = "Note"
+            body = {"steps": [{"i": 0, "dialog": "Note"}], "open": {"kind": "dialog", "title": "Note"}}
+            taken = bool(self.cont) and self.cont[-1]("gui_input", body)
+            assert taken, "the replay should take a held gui_input's answer"
+            assert self.dialog is None, "the dialog is still open when its loop ends"
+            return {"tool": tool, "ok": True, "result": body}
+        if tool == "dialog_answer":
+            self.dialog = None
+            return {"tool": tool, "ok": True, "result": {"pressed": "OK"}}
+        return {"tool": tool, "ok": True, "result": {"done": tool}}
+
+    def live(self):
+        import types
+
+        return types.SimpleNamespace(push=self.cont.append, pop=self.cont.pop, batch_now=lambda: self.batch_now,
+                                     front=lambda: ({"kind": "dialog", "title": self.dialog} if self.dialog else None),
+                                     unstick=lambda: self.call("gui_unstick", {"all": True}), sleep=lambda s: None)
+
+
+class LiveReplay(unittest.TestCase):
+    def script(self, steps):
+        return {"name": "t", "steps": steps}
+
+    def test_a_dialog_does_not_end_the_replay(self):
+        w = FakeWindow()
+        sc = self.script([
+            {"name": "open the note", "calls": [{"tool": "cmd_run"}, {"tool": "gui_input", "arguments": {"open": True}}, {"tool": "after_in_step"}],
+             "expect": [{"call": 1, "path": "result.open.title", "equals": "Note"}, {"call": 2, "path": "result.done", "equals": "after_in_step"}]},
+            {"name": "type into it", "calls": [{"tool": "dialog_answer"}], "expect": [{"call": 0, "path": "result.pressed", "equals": "OK"}]},
+            {"name": "after", "calls": [{"tool": "session_state"}]},
+        ])
+        out = ls.run(sc, list(enumerate(sc["steps"])), w.call, live=w.live())
+        self.assertEqual(out["total"], {"passed": 3, "failed": 0, "skipped": 0, "run": 3}, out)
+        self.assertEqual([s["step"] for s in out["steps"]], [0, 1, 2])
+        self.assertIn("dialog", out["steps"][0])
+        self.assertNotIn("leftOpen", out)
+        self.assertEqual(w.log, ["cmd_run", "gui_input", "after_in_step", "dialog_answer", "session_state"])
+        self.assertEqual(w.cont, [])
+
+    def test_left_open_is_closed_and_said(self):
+        w = FakeWindow()
+        sc = self.script([{"name": "open", "calls": [{"tool": "gui_input", "arguments": {"open": True}}]}, {"name": "next", "calls": [{"tool": "x"}]}])
+        out = ls.run(sc, list(enumerate(sc["steps"])), w.call, live=w.live())
+        self.assertEqual(out["total"]["passed"], 2)
+        self.assertEqual(out["leftOpen"][0]["open"]["title"], "Note")
+        self.assertEqual(w.unstuck, 1)
+
+    def test_direct_step_with_a_dialog(self):
+        w = FakeWindow()
+        sc = self.script([{"name": "d", "direct": True, "calls": [{"tool": "gui_input", "arguments": {"open": True}}, {"tool": "dialog_answer"}]}])
+        out = ls.run(sc, list(enumerate(sc["steps"])), w.call, live=w.live())
+        self.assertEqual(out["total"]["passed"], 1, out)
+        self.assertEqual(w.log, ["gui_input", "dialog_answer"])
+
+    def test_busy_is_retried_once(self):
+        w = FakeWindow(busy_first=1)
+        sc = self.script([{"name": "f", "calls": [{"tool": "flaky"}]}])
+        out = ls.run(sc, list(enumerate(sc["steps"])), w.call, live=w.live())
+        self.assertEqual(out["steps"][0]["result"], "pass", out)
+        self.assertIn("retried", out["steps"][0])
+        w = FakeWindow(busy_first=2)
+        out = ls.run(sc, list(enumerate(sc["steps"])), w.call, live=w.live())
+        self.assertEqual(out["steps"][0]["result"], "fail")
+
+    def test_allowed_refusal(self):
+        w = FakeWindow()
+        sc = self.script([{"name": "close", "calls": [{"tool": "doc_close", "allow": ["not_found"]}]},
+                          {"name": "close strict", "calls": [{"tool": "doc_close"}]}])
+        out = ls.run(sc, list(enumerate(sc["steps"])), w.call, live=w.live())
+        self.assertEqual([s["result"] for s in out["steps"]], ["pass", "fail"])
+        self.assertEqual(out["steps"][0]["allowedRefusals"][0]["error"]["code"], "not_found")
+
+    def test_reset_allows_closing_what_is_not_open(self):
+        with open(os.path.join(ROOT, "scripts", "live", "reset.json")) as f:
+            d = json.load(f)
+        closes = [c for st in d["steps"] for c in st["calls"] if c["tool"] == "doc_close"]
+        self.assertTrue(closes and all("not_found" in c.get("allow", []) for c in closes))
+
+
+class LinkDeadlines(unittest.TestCase):
+    def test_a_finished_gui_input_lifts_its_deadline_and_progress_holds_nothing(self):
+        import types
+
+        import agentlink_state
+
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from test_gui_link_dialog import gui_link
+
+        link = gui_link.Link.__new__(gui_link.Link)
+        link.calls = [{"id": 1, "name": "batch", "answered": False}]
+        link.session = types.SimpleNamespace(live_now=None)
+        old = getattr(agentlink_state, "link", None)
+        agentlink_state.link = link
+        try:
+            link.expect = types.MethodType(lambda self, tool, sec: self.calls[-1].update(deadline=1.0, expected=tool), link)
+            gui_link.expect("gui_input", 3)
+            self.assertIn("deadline", link.calls[-1])
+            self.assertIsNotNone(link._stuck())  # past it: busy
+            gui_link.expect_done("gui_input")
+            self.assertNotIn("deadline", link.calls[-1])
+            self.assertIsNone(link._stuck())
+            link.front = {"kind": "progress", "title": "Texturing"}
+            self.assertIsNone(link._stuck())
+            # inside a live_run its own gui_input sets no client deadline
+            link.session.live_now = True
+            gui_link.expect("gui_input", 3)
+            self.assertNotIn("deadline", link.calls[-1])
+        finally:
+            agentlink_state.link = old
+
 if __name__ == "__main__":
     unittest.main()
