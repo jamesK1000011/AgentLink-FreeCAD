@@ -361,3 +361,34 @@ def reset():
     del REVIEWERS[:]
     TAB_WORKBENCHES.clear()
     GUARDED.clear()
+
+
+# ---- who a call is for ----------------------------------------------------------------------
+
+PERSON, AGENT = "person", "agent"
+
+
+class as_person:
+    """A call the person made by a click in a panel (Agent Link's own, or an
+    add-on dock it hosts): session.by is "person" while it runs, then back
+    to what it was ("agent" for the agent's session). Add-ons read
+    session.by (SafetyNet labels a checkpoint "My checkpoint" by it)."""
+
+    def __init__(self, session):
+        self.s = session
+        self.was = None
+
+    def __enter__(self):
+        self.was = getattr(self.s, "by", AGENT)
+        try:
+            self.s.by = PERSON
+        except Exception:
+            pass
+        return self.s
+
+    def __exit__(self, *exc):
+        try:
+            self.s.by = self.was
+        except Exception:
+            pass
+        return False

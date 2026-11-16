@@ -82,5 +82,39 @@ class Hooks(unittest.TestCase):
         self.assertEqual(hooks.analysis(s, "fea"), {"safety": 2.0})
 
 
+
+class ByPerson(unittest.TestCase):
+    """A panel click runs as the person's call: session.by is "person" while
+    it runs (an add-on labels its checkpoint "My checkpoint" by it), and the
+    agent's again after, even when the call fails."""
+
+    def test_as_person(self):
+        import types
+
+        from agentlink import hooks
+
+        s = types.SimpleNamespace(by="agent")
+        seen = []
+        with hooks.as_person(s):
+            seen.append(s.by)
+        self.assertEqual((seen, s.by), (["person"], "agent"))
+        with self.assertRaises(ValueError):
+            with hooks.as_person(s):
+                raise ValueError("refused")
+        self.assertEqual(s.by, "agent")
+        bare = types.SimpleNamespace()
+        with hooks.as_person(bare):
+            self.assertEqual(bare.by, "person")
+        self.assertEqual(bare.by, "agent")
+
+    def test_session_is_the_agents(self):
+        import os
+
+        src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agentlink", "tools.py"), encoding="utf-8").read()
+        self.assertIn('self.by = "agent"', src)
+        panel = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agentlink", "panel.py"), encoding="utf-8").read()
+        self.assertIn("with as_person(session):", panel)
+
+
 if __name__ == "__main__":
     unittest.main()

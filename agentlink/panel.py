@@ -637,8 +637,12 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             session, server = self._server()
             was = getattr(session, "quiet_call", False)
             session.quiet_call = bool(quiet)
+            from .hooks import as_person
+
+            # A click here is the person's call, not the agent's.
             try:
-                r = server.call({"name": name, "arguments": args})
+                with as_person(session):
+                    r = server.call({"name": name, "arguments": args})
             finally:
                 session.quiet_call = was
         return not r.get("isError"), json.loads(r["content"][0]["text"])
