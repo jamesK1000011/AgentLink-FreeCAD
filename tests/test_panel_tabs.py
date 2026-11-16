@@ -41,6 +41,21 @@ class PanelTabs(unittest.TestCase):
         self.assertEqual(seen, ["Setups"])
 
 
+class StepsAndActivity(unittest.TestCase):
+    def test_step_caption_drops_the_repeated_name(self):
+        r = {"step": 1, "label": "Pad", "type": "Pad", "key": "Length 20.00 mm"}
+        self.assertEqual(panel_tabs.step_caption(r, 1, "added 24000 mm³"), "Step 1 of 1 — Pad (Length 20.00 mm): added 24000 mm³.")
+        r = {"step": 2, "label": "Lid", "type": "Pad", "key": "Length 2.00 mm"}
+        self.assertEqual(panel_tabs.step_caption(r, 3, "added 10 mm³"), "Step 2 of 3 — Lid (Pad, Length 2.00 mm): added 10 mm³.")
+        r = {"step": 3, "label": "Fillet", "type": "Fillet"}
+        self.assertEqual(panel_tabs.step_caption(r, 3, "no change to the volume"), "Step 3 of 3 — Fillet: no change to the volume.")
+
+    def test_activity_row(self):
+        cols, tip = panel_tabs.activity_row({"time": "10:01:02", "ok": False, "what": "Window › Input", "result": "No visible tab"})
+        self.assertEqual(cols, ["10:01:02", "✗ Window › Input", "No visible tab"])
+        self.assertEqual(tip, "10:01:02 — ✗ Window › Input — No visible tab")
+
+
 if __name__ == "__main__":
     unittest.main()
 

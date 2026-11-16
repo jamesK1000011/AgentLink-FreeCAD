@@ -205,7 +205,12 @@ def _wait(ms):
 PREFIX_NAME = {"pd": "Part Design", "part": "Part", "sketch": "Sketch", "bim": "BIM", "ifc": "IFC", "fea": "FEM",
                "td": "TechDraw", "draft": "Draft", "asm": "Assembly", "cam": "CAM", "meshobj": "Mesh", "sheet": "Spreadsheet",
                "insp": "Inspection", "points": "Points", "surface": "Surface", "note": "Note", "steps": "Steps", "view": "View",
-               "doc": "Document", "object": "Object", "material": "Material"}
+               "doc": "Document", "object": "Object", "material": "Material",
+               # Agent Link's own tools, by the part of FreeCAD they act on.
+               "gui": "Window", "window": "Window", "report": "Report", "session": "Session", "dialog": "Dialog",
+               "history": "History", "usage": "Usage", "tool": "Tools", "guide": "Guide", "batch": "Batch",
+               "crash": "Crash", "queue": "Queue", "addon": "Add-ons", "app": "FreeCAD", "cmd": "Command",
+               "menu": "Menu", "body": "Body", "export": "Export", "outputs": "Outputs", "measure": "Measure"}
 
 
 def declare(fam):
@@ -255,13 +260,39 @@ def _value(v):
     return s if len(s) <= 40 else s[:37] + "…"
 
 
+def _area(name):
+    """(area, what) for a tool's name: the longest declared key that fits
+    (a whole name an add-on declares, or a prefix: 'note_', 'gui'), else
+    its first word."""
+    best = None
+    for k in PREFIX_NAME:
+        stem = k.rstrip("_")
+        if name == stem or name.startswith(stem + "_"):
+            if best is None or len(stem) > len(best):
+                best = stem
+    if best is None:
+        head, _, rest = name.partition("_")
+        return head.replace("-", " ").title(), rest
+    key = best if best in PREFIX_NAME else best + "_"
+    rest = name[len(best):].lstrip("_") if name != best else ""
+    if not rest and "_" in name:  # a whole name declared: its verb is the last word
+        rest = name.partition("_")[2]
+    return PREFIX_NAME[key], rest
+
+
+def did_name(name):
+    """A tool's name as the Activity list shows it: 'Area › What', the
+    what with a capital, the same way for every tool ('Window › Input',
+    'Document › Save')."""
+    area, rest = _area(name)
+    what = rest.replace("_", " ").strip()
+    return f"{area} › {what[:1].upper() + what[1:]}" if what else area
+
+
 def _describe(name, args):
     """A tool call in words a person reads at a glance: 'Part Design ›
-    primitive — kind cylinder, size radius 6, height 8 (Panel test)'."""
-    head, _, rest = name.partition("_")
-    area = PREFIX_NAME.get(head)
-    what = (rest or head).replace("_", " ")
-    title = f"{area} › {what}" if area else name.replace("_", " ")
+    Primitive — kind cylinder, size radius 6, height 8 (Panel test)'."""
+    title = did_name(name)
     bits = [f"{k} {_value(v)}" for k, v in (args or {}).items() if k not in SKIP_ARGS and v not in (None, "", [], {})][:3]
     on = (args or {}).get("body")
     return title + (" — " + "; ".join(bits) if bits else "") + (f" ({on})" if isinstance(on, str) else "")

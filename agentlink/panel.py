@@ -15,8 +15,8 @@ import FreeCADGui
 
 from .families import notes as nf
 from . import layout
-from .panel_tabs import (EMPTY, HOME, NO_REVIEWER, PIN_HINT, FlowRow, Tabs, credit_shown, link_status, panel_qss, pin_event, review_hint,
-                         tab_order, tabs_for)
+from .panel_tabs import (EMPTY, HOME, NO_REVIEWER, PIN_HINT, FlowRow, Tabs, activity_row, credit_shown, link_status, panel_qss, pin_event,
+                         review_hint, step_caption, tab_order, tabs_for)
 
 try:
     from PySide import QtCore, QtGui
@@ -753,8 +753,8 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         lay = QtWidgets.QVBoxLayout(w)
         row = QtWidgets.QHBoxLayout()
         prefs = FreeCAD.ParamGet(echo.PREFS)
-        self.echo_on = QtWidgets.QCheckBox("Show the agent's steps")
-        self.echo_on.setToolTip("Workbench, button, selection and a caption for each thing the agent does")
+        self.echo_on = QtWidgets.QCheckBox("Agent's steps")
+        self.echo_on.setToolTip("Show the agent's steps: workbench, button, selection and a caption for each thing the agent does")
         self.echo_on.setChecked(prefs.GetBool("Echo", True))
         self.echo_on.toggled.connect(lambda on: prefs.SetBool("Echo", on))
         self.pace = QtWidgets.QComboBox()
@@ -780,6 +780,13 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.activity = QtWidgets.QTreeWidget()
         self.activity.setHeaderLabels(["Time", "Did", "Result"])
         self.activity.setRootIsDecorated(False)
+        # A narrow dock cuts the lines: cut in the middle (both ends read),
+        # the last column takes what is left, the whole line in the tooltip.
+        self.activity.setTextElideMode(QtCore.Qt.ElideMiddle)
+        head = self.activity.header()
+        head.setStretchLastSection(True)
+        self.activity.setColumnWidth(0, 64)
+        self.activity.setColumnWidth(1, 150)
         lay.addWidget(self.activity)
         for e in echo.log():
             self._add_activity(e)
@@ -787,9 +794,10 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         return w
 
     def _add_activity(self, e):
-        it = QtWidgets.QTreeWidgetItem([e["time"], ("" if e["ok"] else "✗ ") + e["what"], e.get("result", "")])
-        it.setToolTip(1, e["what"])
-        it.setToolTip(2, e.get("result", ""))
+        cols, whole = activity_row(e)
+        it = QtWidgets.QTreeWidgetItem(cols)
+        for c in range(3):
+            it.setToolTip(c, whole)
         self.activity.addTopLevelItem(it)
         self.activity.scrollToItem(it)
         self.activity_empty.setVisible(False)
@@ -821,14 +829,14 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             b.clicked.connect(fn)
             keys.addWidget(b)
         lay.addWidget(keys)
-        save = QtWidgets.QPushButton("Save as macro…")
+        save = QtWidgets.QPushButton("Save as Macro…")
         save.setToolTip("Keep this session's steps as a FreeCAD macro to run again (it runs once you approve it)")
         save.clicked.connect(self.save_macro)
         lay.addWidget(save)
         return w
 
     def save_macro(self):
-        name, ok = QtWidgets.QInputDialog.getText(self, "Save as macro", "Macro name:")
+        name, ok = QtWidgets.QInputDialog.getText(self, "Save as Macro", "Macro name:")
         if not ok or not name.strip():
             return
         done, r = self._call("macro_save", {"name": name.strip()})
@@ -882,7 +890,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.stage.show(b, _doc().getObject(r["name"]))
         did = r.get("change", 0)
         what = f"added {did:.0f} mm³" if did > 0.5 else f"took away {-did:.0f} mm³" if did < -0.5 else "no change to the volume"
-        self.caption.setText(f"Step {r['step']} of {len(self.steps)} — {r['label']} ({r['type']}{', ' + r['key'] if r.get('key') else ''}): {what}.")
+        self.caption.setText(step_caption(r, len(self.steps), what))
         FreeCADGui.updateGui()
 
     def play(self):

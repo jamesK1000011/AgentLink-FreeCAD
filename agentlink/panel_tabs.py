@@ -69,6 +69,21 @@ def tabs_for(rows, active, where, extra=()):
     return out
 
 
+def step_caption(r, count, what):
+    """The Steps tab's line for a step: 'Step 1 of 3 — Pad (Length 20.00
+    mm): added 24000 mm³.' — the type left out where the label is it."""
+    inside = [x for x in (r.get("type") if r.get("type") != r.get("label") else None, r.get("key")) if x]
+    return f"Step {r['step']} of {count} — {r['label']}" + (f" ({', '.join(inside)})" if inside else "") + f": {what}."
+
+
+def activity_row(e):
+    """(columns, tooltip) of an Activity entry: time, what was done
+    (✗ when refused) and its result; the tooltip the whole line."""
+    did = ("" if e.get("ok", True) else "✗ ") + e.get("what", "")
+    cols = [e.get("time", ""), did, e.get("result", "")]
+    return cols, " — ".join(c for c in cols if c)
+
+
 # Shown under Pin a Note while it waits for the click on the part.
 PIN_HINT = "Click the part where the note goes. Esc cancels."
 
