@@ -1,0 +1,49 @@
+{
+  "name": "ScanRuler Reverse engineer: Fillet by picking edges",
+  "about": "Run reset.json first. Imports the test box into ScanRuler's Reverse engineer as STEP, then makes a fillet as a person does: the Fillet button, two edge picks in the view, Create Fillet. Checks the picked-edge lines, grips and that nothing is left selected. ScanRuler by Stefan Hermann (CNC Kitchen), ported.",
+  "needs": ["AgentLink-FreeCAD", "ScanRuler-FreeCAD"],
+  "steps": [
+    {
+      "name": "the box into Reverse engineer",
+      "calls": [
+        { "tool": "export_file", "arguments": { "body": "Body", "format": "step", "path": "rev_box.step" } },
+        { "tool": "reverse_import_step", "arguments": { "path": "rev_box.step" } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.verify.volumeDiff", "equals": 0.0 },
+        { "call": 1, "path": "result.bodies.0.closed", "equals": true }
+      ],
+      "note": "reverse_import_step resolved its path from the out folder in the live run with the absolute path (/Users/<you>/AgentLink/rev_box.step); use export_file's answered path if a bare name is refused."
+    },
+    {
+      "name": "Fillet: the button, two top edges picked in the view",
+      "calls": [
+        { "tool": "workbench", "arguments": { "activate": "ScanRuler" } },
+        { "tool": "cmd_run", "arguments": { "name": "Std_ViewIsometric" } },
+        { "tool": "cmd_run", "arguments": { "name": "Std_ViewFitAll" } },
+        { "tool": "gui_input", "arguments": { "steps": [ { "wait": 1000 }, { "click": { "widget": { "text": "Fillet", "class": "QPushButton" } } }, { "wait": 800 }, { "click": { "view_world": [0, -15, 20] } }, { "wait": 400 }, { "click": { "view_world": [20, 0, 20] } }, { "wait": 600 }, { "shot": "sr_fillet_picks" } ] } },
+        { "tool": "selection", "arguments": {} }
+      ],
+      "expect": [
+        { "call": 3, "path": "result.steps.1.hit.text", "equals": "Fillet" },
+        { "call": 4, "path": "result.selected", "equals": [] }
+      ],
+      "look": "Both edges drawn as green lines on top of the body; grips white with a dark rim, readable on the ghost."
+    },
+    {
+      "name": "Create Fillet: the feature builds, nothing from the picks stays selected",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "steps": [ { "click": { "widget": { "text": "Create Fillet", "class": "QPushButton" } } }, { "wait": 2000 }, { "shot": "sr_fillet_done" } ] } },
+        { "tool": "selection", "arguments": {} },
+        { "tool": "reverse_feature_list", "arguments": {} },
+        { "tool": "report_read", "arguments": { "problems": true } }
+      ],
+      "expect": [
+        { "call": 1, "path": "result.selected", "equals": [] },
+        { "call": 2, "path": "result.features.1.kind", "equals": "fillet" },
+        { "call": 2, "path": "result.features.1.status", "equals": "ok" },
+        { "call": 3, "path": "result.lines", "noneContain": ["Error", "Traceback", "Exception"], "ignoreLinesWith": ["(qt.qpa.fonts)"] }
+      ]
+    }
+  ]
+}
