@@ -1,0 +1,1538 @@
+{
+ "tutorial": "Basic_Sketcher_Tutorial.md (the five-armed star, steps 2-12; Sketcher_tutorial.md redirects to it), then the older Sketcher tutorial's example 1 as the answer-key part, then a tour of the remaining sketch tools",
+ "reference": "github.com/FreeCAD/Examples: Sketcher_Tutorial_Example_Files/example 1.FCStd (part B: Sketch = 60 x 80 rectangle symmetric about both axes, circle r 5 at [0, 10]; Pad Length 2). The star (part A) has no answer-key file: its numbers are worked out from the tutorial's dimensions.",
+ "expected": {
+  "star": {
+   "geometry": 16,
+   "constraints": 42,
+   "dofSequence": [
+    20,
+    10,
+    63,
+    51,
+    38,
+    8,
+    7,
+    3,
+    0
+   ],
+   "dofFinal": 0,
+   "closedWires": 2,
+   "armLength_mm": 30,
+   "armAngle_deg": 72,
+   "outerArcRadius_mm": 8,
+   "innerArcRadius_mm": 11,
+   "hubRadius_mm": 8,
+   "innerArcCentreFromOrigin_mm": 31.3457,
+   "profileArea_mm2": 2625.81,
+   "hubHoleArea_mm2": 201.06,
+   "padLength_mm": 10,
+   "volume_mm3": 24247.5,
+   "boundingBox_mm": [
+    73.06,
+    70.27,
+    10
+   ]
+  },
+  "plate": {
+   "geometry": 5,
+   "dofFinal": 0,
+   "closedWires": 2,
+   "rectangle_mm": [
+    60,
+    80
+   ],
+   "holeRadius_mm": 5,
+   "holeCentre_mm": [
+    0,
+    10
+   ],
+   "padLength_mm": 2,
+   "volume_mm3": 9442.92,
+   "boundingBox_mm": [
+    60,
+    80,
+    2
+   ]
+  },
+  "refusals": 6,
+  "idBase": "all geometry and constraint ids in replies count from 0; outside geometry -3 down"
+ },
+ "calls": [
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Star"
+   },
+   "expect": "body: \"Star\""
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Star",
+    "plane": "XY",
+    "name": "StarSketch"
+   },
+   "expect": "sketch \"StarSketch\"; frame.normal [0,0,1], frame.origin [0,0,0] (tutorial step 2)"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "StarSketch",
+    "items": [
+     {
+      "kind": "line",
+      "from": [
+       0,
+       0
+      ],
+      "to": [
+       0.0,
+       30.0
+      ],
+      "construction": true
+     },
+     {
+      "kind": "line",
+      "from": [
+       0,
+       0
+      ],
+      "to": [
+       -28.5,
+       9.3
+      ],
+      "construction": true
+     },
+     {
+      "kind": "line",
+      "from": [
+       0,
+       0
+      ],
+      "to": [
+       -17.6,
+       -24.3
+      ],
+      "construction": true
+     },
+     {
+      "kind": "line",
+      "from": [
+       0,
+       0
+      ],
+      "to": [
+       17.6,
+       -24.3
+      ],
+      "construction": true
+     },
+     {
+      "kind": "line",
+      "from": [
+       0,
+       0
+      ],
+      "to": [
+       28.5,
+       9.3
+      ],
+      "construction": true
+     }
+    ]
+   },
+   "expect": "step 3: five construction lines, ids [0]..[4] one per item; state.dof 20, wires 0, readyForFeature false (no profile yet)"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "StarSketch",
+    "constraints": [
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        0,
+        1
+       ],
+       "origin"
+      ]
+     },
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        1,
+        1
+       ],
+       "origin"
+      ]
+     },
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        2,
+        1
+       ],
+       "origin"
+      ]
+     },
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        3,
+        1
+       ],
+       "origin"
+      ]
+     },
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        4,
+        1
+       ],
+       "origin"
+      ]
+     }
+    ]
+   },
+   "expect": "step 3.3 (the auto-constraints): added [0,1,2,3,4]; state.dof 10"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "StarSketch",
+    "items": [
+     {
+      "kind": "circle",
+      "center": [
+       0,
+       0
+      ],
+      "radius": 7.5
+     },
+     {
+      "kind": "arc",
+      "center": [
+       0.0,
+       30.0
+      ],
+      "radius": 8,
+      "start": -14.1,
+      "end": 194.1
+     },
+     {
+      "kind": "arc",
+      "center": [
+       -28.5,
+       9.3
+      ],
+      "radius": 8,
+      "start": 57.9,
+      "end": 266.1
+     },
+     {
+      "kind": "arc",
+      "center": [
+       -17.6,
+       -24.3
+      ],
+      "radius": 8,
+      "start": 129.9,
+      "end": 338.1
+     },
+     {
+      "kind": "arc",
+      "center": [
+       17.6,
+       -24.3
+      ],
+      "radius": 8,
+      "start": -158.1,
+      "end": 50.1
+     },
+     {
+      "kind": "arc",
+      "center": [
+       28.5,
+       9.3
+      ],
+      "radius": 8,
+      "start": -86.1,
+      "end": 122.1
+     },
+     {
+      "kind": "arc",
+      "center": [
+       -18.4,
+       25.4
+      ],
+      "radius": 11,
+      "start": -122.1,
+      "end": 14.1
+     },
+     {
+      "kind": "arc",
+      "center": [
+       -29.8,
+       -9.7
+      ],
+      "radius": 11,
+      "start": -50.1,
+      "end": 86.1
+     },
+     {
+      "kind": "arc",
+      "center": [
+       -0.0,
+       -31.3
+      ],
+      "radius": 11,
+      "start": 21.9,
+      "end": 158.1
+     },
+     {
+      "kind": "arc",
+      "center": [
+       29.8,
+       -9.7
+      ],
+      "radius": 11,
+      "start": 93.9,
+      "end": 230.1
+     },
+     {
+      "kind": "arc",
+      "center": [
+       18.4,
+       25.4
+      ],
+      "radius": 11,
+      "start": 165.9,
+      "end": 302.1
+     }
+    ]
+   },
+   "expect": "steps 4-6: circle id 5, O-arcs ids 6..10 (centred on the line ends), I-arcs ids 11..15 (between them, bulging towards the origin); state.dof 63 (10 + 3 + 10 x 5); the arcs are not joined yet, so openVertices are listed and readyForFeature is false"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "StarSketch",
+    "constraints": [
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        5,
+        3
+       ],
+       "origin"
+      ]
+     },
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        6,
+        3
+       ],
+       [
+        0,
+        2
+       ]
+      ]
+     },
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        7,
+        3
+       ],
+       [
+        1,
+        2
+       ]
+      ]
+     },
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        8,
+        3
+       ],
+       [
+        2,
+        2
+       ]
+      ]
+     },
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        9,
+        3
+       ],
+       [
+        3,
+        2
+       ]
+      ]
+     },
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        10,
+        3
+       ],
+       [
+        4,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "expect": "steps 4.2 and 5.2 (auto-constraints): 6 constraints added (ids 5..10); state.dof 51"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "StarSketch",
+    "constraints": [
+     {
+      "type": "equal",
+      "refs": [
+       0,
+       1
+      ]
+     },
+     {
+      "type": "equal",
+      "refs": [
+       1,
+       2
+      ]
+     },
+     {
+      "type": "equal",
+      "refs": [
+       2,
+       3
+      ]
+     },
+     {
+      "type": "equal",
+      "refs": [
+       3,
+       4
+      ]
+     },
+     {
+      "type": "equal",
+      "refs": [
+       6,
+       7
+      ]
+     },
+     {
+      "type": "equal",
+      "refs": [
+       7,
+       8
+      ]
+     },
+     {
+      "type": "equal",
+      "refs": [
+       8,
+       9
+      ]
+     },
+     {
+      "type": "equal",
+      "refs": [
+       9,
+       10
+      ]
+     },
+     {
+      "type": "equal",
+      "refs": [
+       11,
+       12
+      ]
+     },
+     {
+      "type": "equal",
+      "refs": [
+       12,
+       13
+      ]
+     },
+     {
+      "type": "equal",
+      "refs": [
+       13,
+       14
+      ]
+     },
+     {
+      "type": "equal",
+      "refs": [
+       14,
+       15
+      ]
+     },
+     {
+      "type": "vertical",
+      "refs": [
+       0
+      ]
+     }
+    ]
+   },
+   "expect": "step 7: 12 chained equal constraints (4 per set, as the tutorial notes) and vertical on line 0; 13 added (ids 11..23); state.dof 38"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "StarSketch",
+    "constraints": [
+     {
+      "type": "tangent",
+      "refs": [
+       [
+        6,
+        2
+       ],
+       [
+        11,
+        2
+       ]
+      ]
+     },
+     {
+      "type": "tangent",
+      "refs": [
+       [
+        7,
+        1
+       ],
+       [
+        11,
+        1
+       ]
+      ]
+     },
+     {
+      "type": "tangent",
+      "refs": [
+       [
+        7,
+        2
+       ],
+       [
+        12,
+        2
+       ]
+      ]
+     },
+     {
+      "type": "tangent",
+      "refs": [
+       [
+        8,
+        1
+       ],
+       [
+        12,
+        1
+       ]
+      ]
+     },
+     {
+      "type": "tangent",
+      "refs": [
+       [
+        8,
+        2
+       ],
+       [
+        13,
+        2
+       ]
+      ]
+     },
+     {
+      "type": "tangent",
+      "refs": [
+       [
+        9,
+        1
+       ],
+       [
+        13,
+        1
+       ]
+      ]
+     },
+     {
+      "type": "tangent",
+      "refs": [
+       [
+        9,
+        2
+       ],
+       [
+        14,
+        2
+       ]
+      ]
+     },
+     {
+      "type": "tangent",
+      "refs": [
+       [
+        10,
+        1
+       ],
+       [
+        14,
+        1
+       ]
+      ]
+     },
+     {
+      "type": "tangent",
+      "refs": [
+       [
+        10,
+        2
+       ],
+       [
+        15,
+        2
+       ]
+      ]
+     },
+     {
+      "type": "tangent",
+      "refs": [
+       [
+        6,
+        1
+       ],
+       [
+        15,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "expect": "step 8: ten end-point tangents (each joins two ends and makes them smooth: 3 DoF each); 10 added (ids 24..33); state.dof 8, closedWires 2 (the outline and the circle), no openVertices, readyForFeature true"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "StarSketch",
+    "constraints": [
+     {
+      "type": "distance_y",
+      "refs": [
+       0
+      ],
+      "value": 30,
+      "name": "arm"
+     }
+    ]
+   },
+   "expect": "step 9: line 0 (vertical, drawn upwards) 30 mm; added [34]; state.dof 7; every arm is now 30 mm (sketch_state geometry 0..4)"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "StarSketch",
+    "constraints": [
+     {
+      "type": "angle",
+      "refs": [
+       0,
+       1
+      ],
+      "value": 72
+     },
+     {
+      "type": "angle",
+      "refs": [
+       1,
+       2
+      ],
+      "value": 72
+     },
+     {
+      "type": "angle",
+      "refs": [
+       2,
+       3
+      ],
+      "value": 72
+     },
+     {
+      "type": "angle",
+      "refs": [
+       3,
+       4
+      ],
+      "value": 72
+     }
+    ]
+   },
+   "expect": "step 10: 72 deg between neighbouring arms, four times (the fifth pair would be redundant, as the tutorial warns); added [35..38]; state.dof 3"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "StarSketch",
+    "constraints": [
+     {
+      "type": "angle",
+      "refs": [
+       4,
+       0
+      ],
+      "value": 72
+     }
+    ]
+   },
+   "expect": "the fifth angle: REFUSED (invalid_state, over-constrain / redundant), naming the clashing constraints in words; nothing added"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "StarSketch",
+    "constraints": [
+     {
+      "type": "radius",
+      "refs": [
+       6
+      ],
+      "value": 8,
+      "name": "outer_r"
+     },
+     {
+      "type": "radius",
+      "refs": [
+       11
+      ],
+      "value": 11,
+      "name": "inner_r"
+     },
+     {
+      "type": "radius",
+      "refs": [
+       5
+      ],
+      "value": 8,
+      "name": "hub_r"
+     }
+    ]
+   },
+   "expect": "step 11: added [39,40,41]; state.dof 0, fullyConstrained true, solver \"solved\", closedWires 2, readyForFeature true; health.verdict says fully constrained"
+  },
+  {
+   "tool": "sketch_state",
+   "arguments": {
+    "sketch": "StarSketch"
+   },
+   "expect": "dof 0; 16 geometry (0..4 construction lines ending 30 mm from the origin at 90, 162, 234, 306, 18 deg; 5 circle r 8; 6..10 arcs r 8; 11..15 arcs r 11 with centres 31.346 mm from the origin); 42 constraints, ids 0..41, angles reported as 72 (degrees), names arm, outer_r, inner_r, hub_r"
+  },
+  {
+   "tool": "pd_pad",
+   "arguments": {
+    "body": "Star",
+    "sketch": "StarSketch",
+    "length": 10
+   },
+   "expect": "step 12 (default pad, 10 mm): volume 24247.5 mm3 (profile 2625.81 mm2 less the 201.06 mm2 hub hole), bounding box about 73.06 x 70.27 x 10 mm"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Plate"
+   },
+   "expect": "body: \"Plate\""
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Plate",
+    "plane": "XY",
+    "name": "PlateSketch"
+   },
+   "expect": "sketch \"PlateSketch\""
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "PlateSketch",
+    "items": [
+     {
+      "kind": "rectangle",
+      "center": [
+       0,
+       0
+      ],
+      "size": [
+       60,
+       80
+      ],
+      "dims": true,
+      "name": "plate"
+     },
+     {
+      "kind": "circle",
+      "center": [
+       1,
+       9
+      ],
+      "radius": 5,
+      "dims": true,
+      "name": "hole"
+     }
+    ]
+   },
+   "expect": "added[0].ids [0,1,2,3] with dims { plate_width, plate_height }; added[1].ids [4] with dims { hole_d }; state.dof 4 (rectangle 2, circle centre 2), closedWires 2"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "PlateSketch",
+    "constraints": [
+     {
+      "type": "symmetric",
+      "refs": [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ],
+       "origin"
+      ]
+     },
+     {
+      "type": "point_on_object",
+      "refs": [
+       [
+        4,
+        3
+       ],
+       -2
+      ]
+     },
+     {
+      "type": "distance_y",
+      "refs": [
+       [
+        4,
+        3
+       ]
+      ],
+      "value": 10,
+      "name": "hole_y"
+     }
+    ]
+   },
+   "expect": "3 added; state.dof 0; the circle centre moved to [0, 10] as in example 1 (its DistanceX 0 / DistanceY 10 from the origin)"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "PlateSketch",
+    "constraints": [
+     {
+      "type": "distance_x",
+      "refs": [
+       0
+      ],
+      "value": 50
+     }
+    ]
+   },
+   "expect": "REFUSED: over-constrains (conflicts with plate_width), the message names both in words; nothing added"
+  },
+  {
+   "tool": "sketch_edit",
+   "arguments": {
+    "sketch": "PlateSketch",
+    "set": [
+     {
+      "constraint": "plate_width",
+      "value": 70
+     }
+    ]
+   },
+   "expect": "done [\"set … = 70\"]; state.dof 0; geometry 0 now runs x -35 .. 35"
+  },
+  {
+   "tool": "sketch_edit",
+   "arguments": {
+    "sketch": "PlateSketch",
+    "set": [
+     {
+      "constraint": "plate_width",
+      "value": 60
+     }
+    ]
+   },
+   "expect": "back to 60: geometry 0 runs x -30 .. 30, y -40"
+  },
+  {
+   "tool": "pd_pad",
+   "arguments": {
+    "body": "Plate",
+    "sketch": "PlateSketch",
+    "length": 2
+   },
+   "expect": "volume 9442.92 mm3 = (60 x 80 - pi x 25) x 2, bounding box 60 x 80 x 2 — example 1.FCStd's Pad (Length 2)"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Plate",
+    "face": {
+     "at": [
+      0,
+      -20,
+      2
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ]
+    },
+    "name": "TopSketch"
+   },
+   "expect": "on the pad's top face: frame.origin [0,0,2], xAxis [1,0,0], yAxis [0,1,0], normal [0,0,1]"
+  },
+  {
+   "tool": "sketch_external",
+   "arguments": {
+    "sketch": "TopSketch",
+    "edges": [
+     {
+      "type": "circle",
+      "near": [
+       5,
+       10,
+       2
+      ]
+     },
+     {
+      "type": "line",
+      "near": [
+       0,
+       -40,
+       2
+      ]
+     }
+    ]
+   },
+   "expect": "ids [-3, -4]: the hole's top circle and the plate's bottom edge (two edges of the same feature must give two ids)"
+  },
+  {
+   "tool": "sketch_external",
+   "arguments": {
+    "sketch": "PlateSketch",
+    "edges": [
+     "Edge1"
+    ]
+   },
+   "expect": "REFUSED (invalid_state): the tip (Pad) is built from PlateSketch"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "TopSketch",
+    "items": [
+     {
+      "kind": "circle",
+      "center": [
+       2,
+       -18
+      ],
+      "radius": 3
+     }
+    ]
+   },
+   "expect": "ids [0]; state.dof 3"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "TopSketch",
+    "constraints": [
+     {
+      "type": "point_on_object",
+      "refs": [
+       [
+        0,
+        3
+       ],
+       -2
+      ]
+     },
+     {
+      "type": "distance",
+      "refs": [
+       [
+        0,
+        3
+       ],
+       [
+        -3,
+        3
+       ]
+      ],
+      "value": 30,
+      "name": "pitch"
+     },
+     {
+      "type": "radius",
+      "refs": [
+       0
+      ],
+      "value": 3
+     }
+    ]
+   },
+   "expect": "3 added; state.dof 0; circle centre at [0, -20] (30 mm below the outside circle's centre at [0, 10])"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "TopSketch",
+    "constraints": [
+     {
+      "type": "distance",
+      "refs": [
+       [
+        0,
+        3
+       ],
+       -9
+      ],
+      "value": 5
+     }
+    ]
+   },
+   "expect": "REFUSED (invalid_input): geometry -9 is not in TopSketch; outside edges are -3 to -4"
+  },
+  {
+   "tool": "sketch_offset",
+   "arguments": {
+    "sketch": "TopSketch",
+    "distance": 1,
+    "geometry": [
+     0
+    ],
+    "construction": true
+   },
+   "expect": "added [1]: a construction circle r 4 round the hole; state.closedWires 1 (construction is not profile)"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Plate",
+    "plane": "XY",
+    "name": "PlateCopy",
+    "offset": 10
+   },
+   "expect": "a sketch 10 mm above XY: frame.origin [0,0,10]"
+  },
+  {
+   "tool": "sketch_carbon",
+   "arguments": {
+    "sketch": "PlateCopy",
+    "from": "PlateSketch"
+   },
+   "expect": "new [0,1,2,3,4]; geometry 5; dof 0 (constraints came too; the dimensions are bound to PlateSketch's by expression)"
+  },
+  {
+   "tool": "sketch_edit",
+   "arguments": {
+    "sketch": "PlateCopy",
+    "set": [
+     {
+      "constraint": "plate_width",
+      "value": 65
+     }
+    ]
+   },
+   "expect": "REFUSED (invalid_state): bound to an expression — the carbon copy follows its source (if FreeCAD did not carry the name over, the refusal is not_found instead: then repeat with the constraint's id from sketch_state)"
+  },
+  {
+   "tool": "sketch_project",
+   "arguments": {
+    "sketch": "PlateCopy",
+    "from": "PlateSketch"
+   },
+   "expect": "edges 5, ids [-3,-4,-5,-6,-7]: PlateSketch's four sides and circle as outside geometry of PlateCopy; dof still 0"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Tour"
+   },
+   "expect": "body \"Tour\""
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Tour",
+    "plane": "XZ",
+    "name": "TourSketch"
+   },
+   "expect": "frame.normal [0,-1,0] or [0,1,0] (XZ), xAxis [1,0,0]"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "TourSketch",
+    "items": [
+     {
+      "kind": "line",
+      "from": [
+       0,
+       0
+      ],
+      "to": [
+       10,
+       0
+      ]
+     },
+     {
+      "kind": "line",
+      "from": [
+       10,
+       0
+      ],
+      "to": [
+       10,
+       8
+      ]
+     },
+     {
+      "kind": "circle",
+      "center": [
+       30,
+       0
+      ],
+      "radius": 2
+     },
+     {
+      "kind": "arc",
+      "center": [
+       0,
+       20
+      ],
+      "radius": 10,
+      "start": 0,
+      "end": 90
+     }
+    ]
+   },
+   "expect": "ids [0], [1], [2], [3]; separate items are not joined: no constraints yet, state.dof 16"
+  },
+  {
+   "tool": "sketch_validate",
+   "arguments": {
+    "sketch": "TourSketch"
+   },
+   "expect": "found.missingCoincidences 1 (line 0's end and line 1's start touch); solver \"solved\"; nothing changed"
+  },
+  {
+   "tool": "sketch_validate",
+   "arguments": {
+    "sketch": "TourSketch",
+    "fix": true
+   },
+   "expect": "fixed includes \"missing coincidences added\"; constraints 1; dof 14"
+  },
+  {
+   "tool": "sketch_array",
+   "arguments": {
+    "sketch": "TourSketch",
+    "geometry": [
+     2
+    ],
+    "rows": 2,
+    "cols": 3,
+    "spacing": [
+     10,
+     6
+    ]
+   },
+   "expect": "new [4,5,6,7,8]: circles r 2 centred [40,0], [50,0], [30,6], [40,6], [50,6] in some order — three columns along +x, two rows along +y (sketch_state to read them)"
+  },
+  {
+   "tool": "sketch_copy",
+   "arguments": {
+    "sketch": "TourSketch",
+    "geometry": [
+     2
+    ],
+    "by": [
+     0,
+     -10
+    ]
+   },
+   "expect": "new [9]: a circle r 2 at [30,-10]"
+  },
+  {
+   "tool": "sketch_copy",
+   "arguments": {
+    "sketch": "TourSketch",
+    "geometry": [
+     9
+    ],
+    "scale": {
+     "center": [
+      30,
+      -10
+     ],
+     "factor": 2
+    }
+   },
+   "expect": "new [10]: a circle r 4 at [30,-10]"
+  },
+  {
+   "tool": "sketch_extend",
+   "arguments": {
+    "sketch": "TourSketch",
+    "geo": 3,
+    "end": 2,
+    "by": 15.708
+   },
+   "expect": "extended 3 by 15.708 mm along the arc: the quarter arc is now a half (its end near [-10, 20])"
+  },
+  {
+   "tool": "sketch_extend",
+   "arguments": {
+    "sketch": "TourSketch",
+    "geo": 1,
+    "end": 2,
+    "by": 2
+   },
+   "expect": "line 1 now ends at [10, 10]"
+  },
+  {
+   "tool": "sketch_edit",
+   "arguments": {
+    "sketch": "TourSketch",
+    "mirror": {
+     "geos": [
+      10
+     ],
+     "about": "y"
+    }
+   },
+   "expect": "done: mirrored [10] about y: new [11] — a circle r 4 at [-30,-10]; no symmetric constraint is added"
+  },
+  {
+   "tool": "sketch_edit",
+   "arguments": {
+    "sketch": "TourSketch",
+    "construction": {
+     "geo": 11,
+     "on": true
+    },
+    "move": {
+     "geo": 10,
+     "vertex": 3,
+     "to": [
+      32,
+      -12
+     ]
+    }
+   },
+   "expect": "done lists the move then the construction change; circle 10's centre at [32,-12]; geometry 11 is construction"
+  },
+  {
+   "tool": "sketch_edit",
+   "arguments": {
+    "sketch": "TourSketch",
+    "delete": [
+     11
+    ]
+   },
+   "expect": "geometryCount 11 (ids 0..10)"
+  },
+  {
+   "tool": "sketch_edit",
+   "arguments": {
+    "sketch": "TourSketch",
+    "fillet": {
+     "at": [
+      0,
+      2
+     ],
+     "radius": 2
+    }
+   },
+   "expect": "done: fillet r2: arc 11 — the corner of lines 0 and 1 rounded, both trimmed to it"
+  },
+  {
+   "tool": "sketch_to_bspline",
+   "arguments": {
+    "sketch": "TourSketch",
+    "geometry": [
+     3
+    ]
+   },
+   "expect": "converted [3]; geometry 3 is now a BSplineCurve (sketch_state kind \"bsplinecurve\"), same id"
+  },
+  {
+   "tool": "sketch_bspline",
+   "arguments": {
+    "sketch": "TourSketch",
+    "geo": 3,
+    "op": "degree",
+    "by": 1
+   },
+   "expect": "degree one more than the converted arc's (3 if it was 2), with poles, knots and multiplicities listed"
+  },
+  {
+   "tool": "sketch_bspline",
+   "arguments": {
+    "sketch": "TourSketch",
+    "geo": 3,
+    "op": "knot",
+    "param": 0.5,
+    "multiplicity": 1
+   },
+   "expect": "either one more knot in knots, or a refusal saying the parameter must lie inside the knot range printed by the call before (use a value inside it and call again)"
+  },
+  {
+   "tool": "sketch_mirror",
+   "arguments": {
+    "sketch": "TourSketch",
+    "about": "x",
+    "name": "TourMirror"
+   },
+   "expect": "a new sketch \"TourMirror\" on the same plane, geometry flipped up-down (line 1 now goes down from y 0)"
+  },
+  {
+   "tool": "sketch_merge",
+   "arguments": {
+    "sketches": [
+     "TourSketch",
+     "TourMirror"
+    ],
+    "name": "TourBoth"
+   },
+   "expect": "sketch \"TourBoth\": geometry = TourSketch's count + TourMirror's count"
+  },
+  {
+   "tool": "sketch_attach",
+   "arguments": {
+    "sketch": "TourBoth",
+    "plane": "XY",
+    "offset": 3
+   },
+   "expect": "on \"XY\", offset 3; sketch_state TourBoth frame.origin [0,0,3], normal [0,0,1]"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Tour",
+    "plane": "YZ",
+    "name": "Cuts"
+   },
+   "expect": "sketch \"Cuts\""
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "Cuts",
+    "items": [
+     {
+      "kind": "circle",
+      "center": [
+       0,
+       0
+      ],
+      "radius": 10
+     },
+     {
+      "kind": "line",
+      "from": [
+       -15,
+       0
+      ],
+      "to": [
+       15,
+       0
+      ]
+     },
+     {
+      "kind": "line",
+      "from": [
+       20,
+       0
+      ],
+      "to": [
+       30,
+       0
+      ]
+     },
+     {
+      "kind": "line",
+      "from": [
+       30,
+       0
+      ],
+      "to": [
+       36,
+       8
+      ]
+     },
+     {
+      "kind": "line",
+      "from": [
+       40,
+       0
+      ],
+      "to": [
+       50,
+       0
+      ]
+     },
+     {
+      "kind": "line",
+      "from": [
+       50,
+       0
+      ],
+      "to": [
+       50,
+       8
+      ]
+     }
+    ]
+   },
+   "expect": "ids [0], [1], [2], [3], [4], [5]"
+  },
+  {
+   "tool": "sketch_edit",
+   "arguments": {
+    "sketch": "Cuts",
+    "fillet": {
+     "geos": [
+      4,
+      5
+     ],
+     "near": [
+      [
+       45,
+       0
+      ],
+      [
+       50,
+       4
+      ]
+     ],
+     "radius": 2
+    }
+   },
+   "expect": "done: fillet r2: arc 6 — the two-curve form (it used to fail on its arguments every time); lines 4 and 5 trimmed to an arc r 2 centred [48, 2]"
+  },
+  {
+   "tool": "sketch_edit",
+   "arguments": {
+    "sketch": "Cuts",
+    "trim": {
+     "geo": 1,
+     "at": [
+      -13,
+      0
+     ]
+    }
+   },
+   "expect": "done: trimmed 1 at [-13, 0] — the piece of the line left of the circle is gone"
+  },
+  {
+   "tool": "sketch_edit",
+   "arguments": {
+    "sketch": "Cuts",
+    "split": {
+     "geo": 0,
+     "at": [
+      0,
+      10
+     ]
+    }
+   },
+   "expect": "done: split 0 at [0, 10]"
+  },
+  {
+   "tool": "sketch_state",
+   "arguments": {
+    "sketch": "Cuts"
+   },
+   "expect": "read the ids again after trim and split: note the ids of the two free lines ([20,0]-[30,0] and [30,0]-[36,8]) for the join below (2 and 3 unless the trim or split renumbered them)"
+  },
+  {
+   "tool": "sketch_join",
+   "arguments": {
+    "sketch": "Cuts",
+    "a": [
+     2,
+     2
+    ],
+    "b": [
+     3,
+     1
+    ],
+    "continuity": 0
+   },
+   "expect": "joined; bspline: the new B-spline's id; the two lines are gone and ids changed (use the ids read just before if they are not 2 and 3)"
+  },
+  {
+   "tool": "sketch_join",
+   "arguments": {
+    "sketch": "Cuts",
+    "a": [
+     0,
+     2
+    ],
+    "b": [
+     0,
+     1
+    ]
+   },
+   "expect": "REFUSED (invalid_input): two different curves are needed"
+  }
+ ],
+ "notCovered": [
+  "sketch_add kinds polyline, arc3, circle3, ellipse, parabola, hyperbola, bspline, rounded_rectangle, polygon, slot, arc_slot, point: the two tutorials use only lines, arcs, circles and a rectangle (tests/test_sketch.py, test_sketch_gaps.py and test_more_families.py cover them)",
+  "sketch_constrain types horizontal, parallel, perpendicular, diameter (direct), fix/lock/block, distance point-to-line, tangent curve-to-curve: not used by either tutorial",
+  "sketch_edit rename, deleteConstraints, group (FreeCAD 1.2 only; 1.1.3 answers 'unavailable'), text, exposeInternal, removeAxesAlignment, chamfer",
+  "sketch_array polar and constrain/clone; sketch_copy rotate and move; sketch_extend to; sketch_project defining: true; sketch_validate autoconstrain; sketch_merge remove; sketch_attach onto a face (with the reorder)",
+  "sketch_bspline op degree by -1 and knot multiplicity: need a B-spline whose knot vector is known first (read the reply of the degree call)"
+ ]
+}

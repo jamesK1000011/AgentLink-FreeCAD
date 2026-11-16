@@ -1,1 +1,151 @@
-{}
+{
+ "pd_body_new": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "pd_pad": {
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial (star 24247.47 mm3; plate 9442.92 mm3 = example 1's own)",
+  "note": "docs and description wait for the Part Design pass"
+ },
+ "sketch_add": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "tutorial used line, arc, circle, rectangle; other kinds only in the test suite"
+ },
+ "sketch_array": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_attach": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_bspline": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_carbon": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_constrain": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_copy": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_edit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_extend": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_external": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_join": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_merge": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_mirror": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "circle arcs proven; elliptical, parabolic, hyperbolic arcs not"
+ },
+ "sketch_new": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_offset": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_project": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_state": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "a read: carries no health"
+ },
+ "sketch_to_bspline": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "sketch_validate": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ }
+}

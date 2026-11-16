@@ -745,7 +745,7 @@ def tools(session):
             raise ToolError("invalid_state", f"{body.Label} has no solid yet to take edges from: pd_pad a sketch first, or sketch_project from a datum or another sketch.")
         if sk in tip.OutListRecursive:
             # FreeCAD refuses a link that would loop (isExternalAllowed).
-            raise ToolError("invalid_state", f"{tip.Label}, the body's tip, is built from {sk.Label}: a sketch cannot take edges from a solid made after it. Make a new sketch for what follows the solid (sketch_new { face }), and bring the edges into that.")
+            raise ToolError("invalid_state", f"{tip.Label}, the body's tip, is built from {sk.Label}: a sketch cannot take edges from a solid made after it. Make a new sketch for what follows the solid (sketch_new {{ face: {{ at, normal }} }}), and bring the edges into that.")
         from . import measure as M
 
         qs = a.get("edges")
