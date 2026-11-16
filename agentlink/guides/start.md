@@ -3,7 +3,7 @@
 
 ## The shape of a session
 - `session_state` first: what the document holds and the step count.
-- Tools come in groups. `tool_groups` lists them and turns them on. Every tool can be called by name whether it is listed or not.
+- Tools come in groups. `tool_groups` lists them and turns them on. `tool_groups { group }` gives one group only, with its tools; `detail: true` gives the full text of each group. Every tool can be called by name whether it is listed or not.
 - Every change is one undo step: `history_undo`, `history_redo` (and checkpoints where an add-on offers them). `history_diff` says what a change did, so you don't have to describe the part again.
 - `batch` runs several calls in one, rolled back whole if one is refused. Use it for a run of edits you can predict.
 - Answers are in millimetres, grams and degrees. A refusal names what to change.
