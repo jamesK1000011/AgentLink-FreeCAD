@@ -230,6 +230,86 @@ def is_heavy(tool):
     return tool in _ADDON_HEAVY["names"]
 
 
+# Tools heavy only at some sizes: a Part boolean of faceted solids (a scan
+# made a solid) holds FreeCAD's GUI thread inside OCC with no heartbeat, and
+# an undo or a check of such a document takes long too. They are not queued
+# (a small boolean must not wait for the person's go); their size gives an
+# estimate, and the call in hand is marked (heavy-call.json) so the watchdog
+# gives it that estimate times three rather than stopping FreeCAD at 120 s.
+# The estimate: from this tool's past runs here (two or more), else the
+# prior below. A boolean's size is the face pairs OCC may intersect (base
+# faces x tool faces); the others' size is the document's faces.
+SIZED = {
+    "part_boolean": {"per_second": 30000.0, "ask": True},
+    "body_check": {"per_second": 100.0, "ask": False},
+    "history_undo": {"per_second": 100.0, "ask": False},
+    "history_redo": {"per_second": 100.0, "ask": False},
+}
+# A sized call estimated over this is asked about first (the same call again
+# runs it): the window is frozen until OCC finishes.
+SIZED_ASK_OVER = 60.0
+# A sized call estimated over this is marked for the watchdog.
+SIZED_MARK_OVER = 10.0
+
+
+def boolean_size(base_faces, tool_faces):
+    """Face pairs a boolean may intersect: base faces times all tool faces."""
+    return max(1, int(base_faces or 0)) * max(1, sum(int(n or 0) for n in tool_faces or ()))
+
+
+def sized_estimate(q, tool, size):
+    """Seconds a sized tool should take at this size: its past runs here
+    when there are two or more, else the prior. None for other tools."""
+    spec = SIZED.get(tool)
+    if spec is None or not size:
+        return None
+    pts = [p for p in (q.get("timings") or {}).get(tool, []) if p and p[0] > 0]
+    if len(pts) >= 2:
+        est = estimate(q, tool, size)
+        if est is not None:
+            return est
+    return float(size) / spec["per_second"]
+
+
+def heavy_call_mark():
+    return path("heavy-call.json")
+
+
+def mark_heavy_call(tool, estimate_s, size, pid=None, t=None):
+    """The call in hand is a heavy one: its tool, estimate and start, for the
+    supervisor's watchdog (any process may run it: the window or the hidden
+    FreeCAD)."""
+    _save(heavy_call_mark(), {"tool": tool, "estimate": float(estimate_s), "size": size, "pid": pid if pid is not None else os.getpid(), "t": t if t is not None else time.time()})
+
+
+def clear_heavy_call():
+    try:
+        os.remove(heavy_call_mark())
+    except OSError:
+        pass
+
+
+def heavy_call_limit(started, now=None):
+    """Seconds the watchdog gives the call that started at `started`, when a
+    heavy-call mark was written during it (by it or by a call inside its
+    batch): the estimate times three, never under a change's deadline. None
+    when there is no such mark (an older mark is a call that already ended
+    or a FreeCAD that was stopped)."""
+    m = _load(heavy_call_mark(), None)
+    if not isinstance(m, dict):
+        return None
+    try:
+        t, est = float(m.get("t") or 0), float(m.get("estimate") or 0)
+    except (TypeError, ValueError):
+        return None
+    if started is None or t < float(started) - 1.0:
+        return None
+    lim = deadline("heavy", est)
+    if now is not None and now - t > lim + 600.0:
+        return None
+    return lim
+
+
 SYSCTL_KEYS = ("machdep.cpu.brand_string", "hw.perflevel0.physicalcpu", "hw.physicalcpu", "hw.ncpu", "hw.memsize", "hw.model")
 
 

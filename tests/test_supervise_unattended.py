@@ -34,6 +34,12 @@ FAKE_HIDDEN = textwrap.dedent('''
             time.sleep(float(os.environ["FAKE_SLOW_RECOVER"]))
         if name == "crash":
             os._exit(3)
+        if name == "heavy_slow":
+            # A big Part boolean: marked heavy while OCC holds it, past the deadline.
+            mark = os.path.join(home, "heavy-call.json")
+            json.dump({"tool": "part_boolean", "estimate": 5, "size": 1, "pid": os.getpid(), "t": time.time()}, open(mark, "w"))
+            time.sleep(4)
+            os.remove(mark)
         if name == "settings_restart":
             json.dump({"why": "settings"}, open(os.path.join(home, ".hidden-restart"), "w"))
             sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": m["id"], "result": {"content": [{"type": "text", "text": json.dumps({"rolledBackTo": "x"})}]}}) + "\\n")
@@ -47,11 +53,18 @@ FAKE_HIDDEN = textwrap.dedent('''
 FAKE_WINDOW = textwrap.dedent('''
     import json, os, socket, sys, threading, time
     home, port = os.environ["AGENTLINK_HOME"], int(os.environ["AGENTLINK_WINDOW_PORT"])
-    state = {"beat": True, "dialog": None, "popup": None}
+    state = {"beat": True, "dialog": None, "popup": None, "docs": [{"name": "Plate", "label": "Plate", "file": "/tmp/Plate.FCStd"}]}
+    if "--stray" in sys.argv:
+        # Started again after a hang: the copy just recovered, and an old
+        # recovered copy opened again from its temporary folder.
+        import tempfile
+        tmp = tempfile.gettempdir()
+        state["docs"] = [{"name": "Plate_recovered", "label": "Plate (recovered 10:00)", "file": os.path.join(tmp, "agentlink-recovered-new", "Plate_recovered.FCStd")},
+                         {"name": "Old_recovered", "label": "Old (recovered 00:17)", "file": os.path.join(tmp, "agentlink-recovered-old", "Old_recovered.FCStd")}]
     def beat():
         while True:
             if state["beat"]:
-                hb = {"pid": os.getpid(), "t": time.time(), "pairing": 1, "app": "Fake.app", "docs": [{"name": "Plate", "label": "Plate", "file": "/tmp/Plate.FCStd"}], "dialog": state["dialog"], "popup": state["popup"]}
+                hb = {"pid": os.getpid(), "t": time.time(), "pairing": 1, "app": "Fake.app", "docs": state["docs"], "dialog": state["dialog"], "popup": state["popup"]}
                 tmp = os.path.join(home, "heartbeat.json.tmp")
                 json.dump(hb, open(tmp, "w")); os.replace(tmp, os.path.join(home, "heartbeat.json"))
             time.sleep(0.3)
@@ -76,6 +89,17 @@ FAKE_WINDOW = textwrap.dedent('''
             if name == "hang":
                 state["beat"] = False
                 time.sleep(3600)
+            if name == "heavy_slow":
+                # OCC holds the GUI thread: no heartbeat, past the deadline, but marked heavy.
+                mark = os.path.join(home, "heavy-call.json")
+                json.dump({"tool": "part_boolean", "estimate": 5, "size": 1, "pid": os.getpid(), "t": time.time()}, open(mark, "w"))
+                state["beat"] = False
+                time.sleep(4)
+                os.remove(mark)
+                state["beat"] = True
+            if name == "doc_close":
+                gone = (m.get("params") or {}).get("arguments", {}).get("documents") or []
+                state["docs"] = [d for d in state["docs"] if d["name"] not in gone]
             if name == "behind_dialog":
                 state["dialog"] = {"class": "QMessageBox", "title": "Unsaved", "text": "Save changes?", "buttons": ["Save", "Discard"], "since": time.time()}
                 time.sleep(3600)
@@ -95,7 +119,7 @@ FAKE_WINDOW = textwrap.dedent('''
                 # A window just started: its first call builds the session.
                 time.sleep(7)
                 state["dialog"] = None
-            body = {"recovered": [{"label": "Plate", "source": "checkpoint", "time": "now", "lost": "nothing after it lost"}]} if name == "app_recover" else {"ok": name, "pid": os.getpid()}
+            body = {"recovered": [{"label": "Plate", "document": "Plate_recovered", "source": "checkpoint", "time": "now", "lost": "nothing after it lost"}]} if name == "app_recover" else {"ok": name, "pid": os.getpid()}
             f.write(json.dumps({"jsonrpc": "2.0", "id": m["id"], "result": {"content": [{"type": "text", "text": json.dumps(body)}]}}) + "\\n"); f.flush()
     while True:
         c, _ = srv.accept()
@@ -132,7 +156,7 @@ class Sup(unittest.TestCase):
         if self.window:
             fw = os.path.join(self.tmp, "fake_window.py")
             open(fw, "w").write(FAKE_WINDOW)
-            self.env["AGENTLINK_RELAUNCH"] = json.dumps([sys.executable, fw])
+            self.env["AGENTLINK_RELAUNCH"] = json.dumps([sys.executable, fw, *getattr(self, "relaunch_args", [])])
             self.procs.append(subprocess.Popen([sys.executable, fw], env=self.env))
             for _ in range(50):
                 try:
@@ -371,6 +395,101 @@ class WindowMenu(Sup):
         self.assertEqual(out["results"][0]["result"]["closed"][0]["items"], ["New Sketch", "Attach sketch"])
         self.assertFalse(got[201][0])  # the menu closed, so the held call finished
         self.assertEqual(self.call("ping")[1]["pid"], first)
+
+
+# Live test drive, 16 Nov 2026: a fuse of three faceted solids held the
+# window's GUI thread inside OCC for over 80 s; the watchdog stopped FreeCAD
+# at its 120 s deadline. A call marked heavy (heavy-call.json) gets its
+# estimate times three instead.
+class HeavyMarkHidden(Sup):
+    def test_marked_heavy_call_is_not_stopped(self):
+        first = self.call("ping")
+        err, out = self.call("heavy_slow", timeout=30)
+        self.assertFalse(err, out)
+        self.assertEqual(out, {"ok": "heavy_slow"})
+        self.assertEqual(self.call("ping")[1], first[1])
+        log = os.path.join(self.home, "watchdog.log")
+        self.assertFalse(os.path.exists(log) and '"hang"' in open(log).read())
+
+
+class HeavyMarkWindow(Sup):
+    window = True
+
+    def test_marked_heavy_call_is_not_stopped(self):
+        first = self.call("ping")[1]["pid"]
+        err, out = self.call("heavy_slow", timeout=30)
+        self.assertFalse(err, out)
+        self.assertEqual(out["ok"], "heavy_slow")
+        self.assertEqual(self.call("ping")[1]["pid"], first)
+
+    def test_unmarked_hang_is_still_stopped(self):
+        first = self.call("ping")[1]["pid"]
+        err, out = self.call("hang", timeout=90)
+        self.assertTrue(err)
+        self.assertIn("stopped responding during hang", out["error"]["message"])
+        self.assertNotEqual(self.call("ping")[1]["pid"], first)
+
+
+# The same drive: after a watchdog restart the window opened old recovered
+# copies again from temporary folders beside the current document. Only
+# what was open at the restart comes back; the rest is closed again.
+class RestartOnlyWhatWasOpen(Sup):
+    window = True
+    relaunch_args = ["--stray"]
+
+    def test_old_copies_closed_again(self):
+        self.call("ping")
+        err, out = self.call("hang", timeout=90)
+        self.assertTrue(err)
+        msg = out["error"]["message"]
+        self.assertIn("Plate recovered from checkpoint", msg)
+        self.assertIn("closed again", msg)
+        self.assertIn("Old (recovered 00:17)", msg)
+        self.assertNotIn("Plate (recovered 10:00)", msg)
+        time.sleep(1.0)
+        hb = json.load(open(os.path.join(self.home, "heartbeat.json")))
+        self.assertEqual([d["name"] for d in hb["docs"]], ["Plate_recovered"])
+
+
+class RestartHelpers(unittest.TestCase):
+    def setUp(self):
+        sys.path.insert(0, AL)
+        from agentlink import supervise
+
+        self.sv = supervise
+
+    def test_newest_heartbeat_of_the_stopped_pid(self):
+        old = {"pid": 7, "t": 100.0, "docs": [{"name": "WindowTest_recovered"}]}
+        new = {"pid": 7, "t": 200.0, "docs": [{"name": "Grip"}]}
+        other = {"pid": 9, "t": 300.0, "docs": [{"name": "Else"}]}
+        self.assertIs(self.sv.docs_at_restart(old, new), new)
+        self.assertIs(self.sv.docs_at_restart(old, new, other, pid=7), new)
+        self.assertIs(self.sv.docs_at_restart(old, None, pid=3), old)
+        self.assertEqual(self.sv.docs_at_restart(None, {}), {})
+
+    def test_hidden_json_of_another_freecad_is_not_used(self):
+        h = {"pid": 11, "docs": [{"name": "Bracket"}, {"label": "no name"}]}
+        self.assertEqual(self.sv.hidden_docs(h, 11), [{"name": "Bracket"}])
+        self.assertEqual(self.sv.hidden_docs(h, 12), [])
+        self.assertEqual(self.sv.hidden_docs({"docs": [{"name": "A"}]}, 12), [{"name": "A"}])
+        self.assertEqual(self.sv.hidden_docs(None, 1), [])
+
+    def test_strays(self):
+        tmp = tempfile.gettempdir()
+        cp = lambda d, n: os.path.join(tmp, d, n)  # noqa: E731
+        before = [{"name": "Grip", "file": "/Users/x/Grip.FCStd"}, {"name": "Kept_recovered", "file": cp("agentlink-recovered-k", "Kept_recovered.FCStd")}]
+        recovered = [{"label": "Grip", "document": "Grip_recovered", "as": "Grip (recovered 10:00)"}]
+        now = [
+            {"name": "Grip_recovered", "label": "Grip (recovered 10:00)", "file": cp("agentlink-recovered-a", "Grip_recovered.FCStd")},
+            {"name": "Kept_recovered", "label": "Kept (recovered 09:00)", "file": cp("agentlink-recovered-k", "Kept_recovered.FCStd")},
+            {"name": "WindowTest_recovered", "label": "WindowTest (recovered 00:17)", "file": cp("agentlink-recovered-b", "WindowTest_recovered.FCStd")},
+            {"name": "Lesson", "label": "Lesson", "file": "/Users/x/Lesson.FCStd"},
+            {"name": "Unnamed", "label": "Unnamed", "file": ""},
+        ]
+        self.assertEqual([d["name"] for d in self.sv.strays(before, recovered, now)], ["WindowTest_recovered"])
+        self.assertTrue(self.sv.temp_copy("/x/fc_recovery_files/Doc/Document.xml"))
+        self.assertFalse(self.sv.temp_copy("/Users/x/Grip.FCStd"))
+        self.assertFalse(self.sv.temp_copy(""))
 
 
 

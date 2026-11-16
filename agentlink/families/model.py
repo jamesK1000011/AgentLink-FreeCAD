@@ -39,6 +39,42 @@ def changed(before, after):
     return abs(after.Volume - before.Volume) > tol or len(after.Faces) != len(before.Faces)
 
 
+def unsound_tool(sh):
+    """Why a boolean's tool is no sound solid, or None: OCC silently leaves
+    out a tool that is invalid, open or inside out."""
+    if sh.isNull() or not sh.Solids:
+        return "no solid in it"
+    if not sh.isValid():
+        return "not valid"
+    if not all(x.isClosed() for x in sh.Shells):
+        return "not closed: it has open edges"
+    if sh.Volume <= 1e-9:
+        return f"volume {sh.Volume:.3g} mm³, not above 0: inside out"
+    return None
+
+
+def _outside(inner, outer, tol):
+    """How far box inner reaches outside box outer (0 when inside)."""
+    return max(outer.XMin - inner.XMin, inner.XMax - outer.XMax, outer.YMin - inner.YMin, inner.YMax - outer.YMax,
+               outer.ZMin - inner.ZMin, inner.ZMax - outer.ZMax, 0.0) if inner.isValid() and outer.isValid() else 0.0
+
+
+def fuse_dropped(base_shape, tools, res):
+    """The tools a fuse left out: each that reaches clearly outside the
+    base's box (so it must add something) but whose box the result does not
+    hold, or whose volume the result does not reach."""
+    bb = base_shape.BoundBox
+    tol = max(1e-3, 1e-4 * (bb.DiagonalLength if bb.isValid() else 1.0))
+    lost = []
+    for t in tools:
+        tb = t.Shape.BoundBox
+        if _outside(tb, bb, tol) <= tol:
+            continue  # inside the base's box: it may add nothing and be right
+        if _outside(tb, res.BoundBox, tol) > tol or res.Volume < max(base_shape.Volume, t.Shape.Volume) * (1 - 1e-6) - 1e-6:
+            lost.append(t.Label)
+    return lost
+
+
 def report(session, o, tool, extra=None):
     s = geo.soundness(o.Shape)
     out = picks.finish(session, tool, lambda: {"body": o.Label, **geo.stats(o.Shape), "sound": s["ok"]}, recompute=False, extra=extra)
@@ -115,6 +151,204 @@ def profile_normal(sh):
     except Exception:
         pass
     return V(0, 0, 1)
+
+
+# ---- loft profiles lined up, and the loft checked -------------------------------------------
+
+def _pts(w, n=64):
+    try:
+        return list(w.discretize(Number=n))
+    except Exception:
+        return [v.Point for v in w.OrderedVertexes]
+
+
+def winding_normal(w):
+    """The way a closed wire runs round (right-hand rule), by Newell's sum
+    over points along it, in the order the wire runs; None when it has no
+    area to speak of."""
+    p = _pts(w)
+    if len(p) < 3:
+        return None
+    n = V(0, 0, 0)
+    for a, b in zip(p, p[1:] + p[:1]):
+        n = n + V((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y))
+    return n if n.Length > 1e-12 else None
+
+
+def centre(w):
+    p = _pts(w, 48)
+    c = V(0, 0, 0)
+    for x in p:
+        c = c + x
+    return c * (1.0 / len(p)) if p else V(0, 0, 0)
+
+
+def start_of(w):
+    return w.OrderedVertexes[0].Point
+
+
+def _one_curve(w):
+    """The curve of a wire of one closed edge (a periodic B-spline, a
+    circle), else None."""
+    es = w.Edges
+    if len(es) != 1:
+        return None
+    try:
+        return es[0].Curve
+    except Exception:
+        return None
+
+
+def reversed_wire(w):
+    """The same outline running the other way round, rebuilt (not a flag
+    a loft may read past)."""
+    c = _one_curve(w)
+    if c is not None and hasattr(c, "reverse"):
+        e = w.Edges[0]
+        try:
+            c2 = c.copy()
+            c2.reverse()
+            return Part.Wire([c2.toShape()])
+        except Exception:
+            try:
+                return Part.Wire([e.reversed()])
+            except Exception:
+                pass
+    vs = [v.Point for v in w.OrderedVertexes]
+    if all(isinstance(getattr(e, "Curve", None), Part.Line) for e in w.Edges) and len(vs) >= 2:
+        pts = list(reversed(vs))
+        if w.isClosed():
+            pts.append(pts[0])
+        return Part.makePolygon(pts)
+    return w.reversed()
+
+
+def started_at(w, target):
+    """A closed wire whose seam (start) is at its point nearest target: a
+    periodic B-spline re-parameterized there (a knot put in and made the
+    origin), a wire of several edges started at its nearest corner."""
+    c = _one_curve(w)
+    if c is not None and isinstance(c, Part.BSplineCurve) and c.isPeriodic():
+        try:
+            u = c.parameter(target)
+            c2 = c.copy()
+            knots = c2.getKnots()
+            near = min(range(len(knots)), key=lambda i: abs(knots[i] - u))
+            if abs(knots[near] - u) > 1e-9:
+                c2.insertKnot(u, 1, 1e-9)
+                knots = c2.getKnots()
+                near = min(range(len(knots)), key=lambda i: abs(knots[i] - u))
+            c2.setOrigin(near + 1)
+            nw = Part.Wire([c2.toShape()])
+            if (start_of(nw) - c.value(u)).Length < 1e-4 * max(1.0, w.BoundBox.DiagonalLength):
+                return nw
+        except Exception:
+            pass
+        try:
+            # Else the same curve sampled from that point round and drawn
+            # through again (a hair off the original, never a twist).
+            u = c.parameter(target)
+            f, per = c.FirstParameter, c.LastParameter - c.FirstParameter
+            n = max(48, 2 * c.NbPoles)
+            pts = [c.value(f + ((u - f) + per * k / n) % per) for k in range(n)]
+            c3 = Part.BSplineCurve()
+            c3.interpolate(pts, PeriodicFlag=True)
+            return Part.Wire([c3.toShape()])
+        except Exception:
+            return w
+    es = w.OrderedEdges
+    if len(es) < 2:
+        return w
+    vs = [v.Point for v in w.OrderedVertexes]
+    k = min(range(len(vs)), key=lambda i: (vs[i] - target).Length)
+    if k == 0:
+        return w
+    if all(isinstance(getattr(e, "Curve", None), Part.Line) for e in es):
+        pts = vs[k:] + vs[:k]
+        return Part.makePolygon(pts + [pts[0]])
+    try:
+        return Part.Wire(es[k:] + es[:k])
+    except Exception:
+        return w
+
+
+def align_profiles(wires):
+    """Profiles lined up for a loft: each closed one running round the same
+    way along the loft (reversed where its winding disagrees with the way
+    from the profile before to the next), and each seam at the point
+    nearest the previous profile's start. Open profiles are turned so each
+    starts at the end nearest the previous start. (wires, what was done)."""
+    done = []
+    if len(wires) < 2:
+        return wires, done
+    out = list(wires)
+    if all(w.isClosed() for w in out):
+        cs = [centre(w) for w in out]
+        for i, w in enumerate(out):
+            d = (cs[min(i + 1, len(cs) - 1)] - cs[max(i - 1, 0)])
+            n = winding_normal(w)
+            if n is None or d.Length < 1e-9:
+                continue
+            if n.dot(d) < 0:
+                out[i] = reversed_wire(w)
+                done.append(f"profiles.{i} reversed to run the same way round as the others")
+        for i in range(1, len(out)):
+            before = start_of(out[i])
+            out[i] = started_at(out[i], start_of(out[i - 1]))
+            if (start_of(out[i]) - before).Length > 1e-6:
+                done.append(f"profiles.{i} started at the point nearest profiles.{i - 1}'s start")
+    else:
+        for i in range(1, len(out)):
+            w, prev = out[i], start_of(out[i - 1])
+            vs = w.OrderedVertexes
+            if len(vs) >= 2 and (vs[-1].Point - prev).Length < (vs[0].Point - prev).Length:
+                out[i] = reversed_wire(w)
+                done.append(f"profiles.{i} reversed to start at the end nearest profiles.{i - 1}'s start")
+    return out, done
+
+
+# How far a loft may reach beyond the profiles' joint box, as a share of
+# that box (each way, never under a quarter of its longest side's share).
+LOFT_REACH = 0.15
+
+
+def loft_overshoot(res, wires):
+    """How far the loft reaches beyond the profiles' joint box, as a share
+    of the box (0 when inside the allowance), and the axis."""
+    bb = FreeCAD.BoundBox()
+    for w in wires:
+        bb.add(w.BoundBox)
+    rb = res.BoundBox
+    longest = max(bb.XLength, bb.YLength, bb.ZLength, 1e-9)
+    worst, axis = 0.0, None
+    for ax, lo, hi, rlo, rhi, ln in (("x", bb.XMin, bb.XMax, rb.XMin, rb.XMax, bb.XLength), ("y", bb.YMin, bb.YMax, rb.YMin, rb.YMax, bb.YLength),
+                                     ("z", bb.ZMin, bb.ZMax, rb.ZMin, rb.ZMax, bb.ZLength)):
+        allow = LOFT_REACH * max(ln, 0.25 * longest)
+        over = max(lo - rlo, rhi - hi, 0.0)
+        if over > allow + 1e-6:
+            share = over / max(ln, 0.25 * longest)
+            if share > worst:
+                worst, axis = share, ax
+    return worst, axis
+
+
+def loft_problem(res, wires, solid):
+    """Why a loft is not fit to keep, or None."""
+    if res.isNull():
+        return "it came out empty"
+    over, axis = loft_overshoot(res, wires)
+    if over:
+        return f"profiles twist: start points or orientation differ — it bulges {over * 100:.0f}% of the profiles' size beyond them along {axis}"
+    if not res.isValid():
+        return "it came out invalid"
+    if solid:
+        if not res.Solids:
+            return "it made no solid"
+        if not all(x.isClosed() for x in res.Shells):
+            return "not closed: it has open edges"
+        if res.Volume <= 1e-9:
+            return f"its volume is {res.Volume:.3g} mm³, not above 0"
+    return None
 
 
 def tools(session):
@@ -238,8 +472,21 @@ def tools(session):
             raise ToolError("invalid_input", "tools: base is among them — a body with itself changes nothing.")
         bs = base.Shape
         shapes = [t.Shape for t in tl]
+        for t in tl:
+            why = unsound_tool(t.Shape)
+            if why:
+                raise ToolError("failed", f"{op}: the tool {t.Label} is not a sound solid ({why}), so OCC would drop it and leave {base.Label} as it was. Nothing was changed; {t.Label} is kept. "
+                                f"body_check {t.Label} says more; part_fix or part_refine {{ fix: true }} may repair it, else rebuild it.")
         res = {"fuse": bs.fuse, "cut": bs.cut, "common": bs.common}[op](shapes if len(shapes) > 1 else shapes[0])
         res = geo.clean(res)
+        if not res.isNull() and res.Solids and not res.isValid():
+            raise ToolError("failed", f"{op}: OCC made an invalid result from {base.Label} and {', '.join(t.Label for t in tl)}. Nothing was changed; the tools are kept. "
+                            "Overlap the pieces clearly (not face on face), or fewer faces first (part_refine).")
+        if op == "fuse":
+            lost = fuse_dropped(bs, tl, res)
+            if lost:
+                raise ToolError("failed", f"fuse: nothing of {', '.join(lost)} was added to {base.Label} although it reaches outside {base.Label}'s box (volume change {res.Volume - bs.Volume:.2f} mm³): "
+                                "OCC dropped the tool. Nothing was changed; the tools are kept. Check each with body_check, overlap the pieces clearly (not face on face), or fewer faces first (part_refine).")
         if op == "common" and res.Volume < 1e-6:
             raise ToolError("failed", f"common: {base.Label} and {', '.join(t.Label for t in tl)} do not overlap (least distance {bs.distToShape(shapes[0])[0]:.3f} mm) — nothing would be left.")
         if not changed(bs, res):
@@ -491,11 +738,52 @@ def tools(session):
                 sh = sh.Wires[0]
             wires.append(sh)
             srcs.append(src)
-        try:
-            res = Part.makeLoft(wires, bool(a.get("solid", True)), bool(a.get("ruled", False)), bool(a.get("closed", False)))
-        except Exception as e:
-            raise ToolError("failed", f"The loft failed ({e}): profiles each closed (or each open), in order, not crossing; the same number of edges helps.")
-        return finish(res, a, "part_loft", srcs)
+        solid = bool(a.get("solid", True))
+        open_ = [i for i, w in enumerate(wires) if not w.isClosed()]
+        if solid and open_:
+            raise ToolError("invalid_input", f"not closed: profiles.{open_[0]} is an open edge or wire, so the loft has no inside. Close it (part_wire {{ kind: \"bspline\", closed: true }}), or solid: false for a surface.")
+        if open_ and len(open_) != len(wires):
+            raise ToolError("invalid_input", f"profiles: each closed or each open — profiles.{open_[0]} is open, the others closed.")
+        wires, aligned = align_profiles(wires)
+        ruled = bool(a.get("ruled", False))
+
+        def loft():
+            try:
+                r = Part.makeLoft(wires, solid, ruled, bool(a.get("closed", False)))
+            except Exception as e:
+                raise ToolError("failed", f"The loft failed ({e}): profiles each closed (or each open), in order, not crossing; the same number of edges helps.")
+            if solid and r.Solids and r.Volume < 0:
+                r.reverse()
+            return r
+
+        res = loft()
+        why = loft_problem(res, wires, solid)
+        fixed = False
+        if why and not why.startswith("profiles twist"):
+            try:
+                r2 = res.copy()
+                r2.fix(1e-7, 1e-7, 1e-3)
+                if solid and not r2.Solids and r2.Shells:
+                    r2 = Part.Solid(r2.Shells[0])
+                if solid and r2.Solids and r2.Volume < 0:
+                    r2.reverse()
+                if loft_problem(r2, wires, solid) is None:
+                    res, why, fixed = r2, None, True
+            except Exception:
+                pass
+        if why:
+            hint = (" Start each profile at the matching point and run each the same way round; more profiles where the shape turns; ruled: true for straight runs between them."
+                    if why.startswith("profiles twist") else " Each profile closed, in order along the loft, none crossing another.")
+            raise ToolError("failed", f"The loft is not kept: {why}.{hint} Nothing was added.")
+        extra = {}
+        if aligned:
+            extra["aligned"] = aligned
+        if fixed:
+            extra["fixed"] = "OCC's shape fix repaired the loft"
+        out = finish(res, a, "part_loft", srcs)
+        if extra and isinstance(out, dict):
+            out.update(extra)
+        return out
 
     def part_sweep(a):
         sh, src = profile(s, a.get("profile"), a.get("body"))
@@ -530,7 +818,7 @@ def tools(session):
         ),
         Tool(
             "part_boolean",
-            "fuse, cut or common base with tools (bodies). The result keeps base's name (name: a new one) as a plain shape, coplanar faces merged; the tools are removed (keep: true hides them — a hidden body is still a body to the other tools). Refused when nothing would change (not touching, or inside for fuse) and for common with no overlap. Answers whether the result is sound (no sliver faces).",
+            "fuse, cut or common base with tools (bodies). The result keeps base's name (name: a new one) as a plain shape, coplanar faces merged; the tools are removed (keep: true hides them — a hidden body is still a body to the other tools). Refused when nothing would change (not touching, or inside for fuse), for common with no overlap, when a tool is not a sound solid (invalid, open, inside out) and when a fuse drops a tool OCC could not join; the tools are kept then. A boolean of many faces (meshes made solids) is asked about first with its time: the window is frozen while OCC works. Answers whether the result is sound (valid, closed, volume above 0, no sliver faces).",
             obj({"op": {"type": "string", "enum": ["fuse", "cut", "common"]}, "base": body, "tools": {"description": "A body or a list of them."}, "keep": {"type": "boolean"}, "name": {"type": "string"}}, ["op", "tools"]),
             part_boolean,
             changes=True,
@@ -586,7 +874,7 @@ def tools(session):
         ),
         Tool(
             "part_loft",
-            "A solid through two or more profiles in order (each a sketch, face, { points } or { circle }); ruled: straight between them; closed: back to the first. Trap: profiles with the same number of edges, started at matching corners, loft without a twist. op / into as part_extrude.",
+            "A solid through two or more profiles in order (each a sketch, face, wire, { points } or { circle }); ruled: straight between them; closed: back to the first. The profiles are lined up first (each run the same way round, each seam at the point nearest the one before: aligned says what changed). The result is checked: valid, closed, volume above 0, and no further than 15% beyond the profiles' box; else repaired or refused with the reason. op / into as part_extrude.",
             obj({"profiles": {"type": "array", "items": {}}, "body": body, "ruled": {"type": "boolean"}, "closed": {"type": "boolean"}, "solid": {"type": "boolean"}, **common_in}, ["profiles"]),
             part_loft,
             changes=True,

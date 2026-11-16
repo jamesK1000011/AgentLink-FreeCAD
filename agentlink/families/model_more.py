@@ -129,12 +129,24 @@ def tools(session):
             o.Close = closed
         elif kind == "bspline":
             pts = [picks.vec3(p, "points") for p in (a.get("points") or [])]
-            if len(pts) < 2:
-                raise bad("points: two or more [x, y, z] it passes through.")
+            closed = bool(a.get("closed"))
+            if len(pts) > 3 and (pts[0] - pts[-1]).Length < 1e-9:
+                pts, closed = pts[:-1], True  # given closed: the last point repeats the first
+            if len(pts) < (3 if closed else 2):
+                raise bad("points: two or more [x, y, z] it passes through (three or more when closed).")
+            if any((pts[i] - pts[i + 1]).Length < 1e-9 for i in range(len(pts) - 1)):
+                raise bad("points: two in a row are the same point.")
             c = Part.BSplineCurve()
-            c.interpolate(pts, PeriodicFlag=bool(a.get("closed")))
+            try:
+                # Closed: a periodic curve, smooth through the seam too.
+                c.interpolate(pts, PeriodicFlag=closed)
+            except Exception as e:
+                raise bad(f"points: no smooth curve through them ({e}) — points far apart along it, in order, none doubled.")
             o = new_obj("Part::Feature", name)
-            o.Shape = c.toShape()
+            w = Part.Wire([c.toShape()])
+            if closed and not w.isClosed():
+                raise ToolError("failed", "The B-spline did not close — check the points run round in order.")
+            o.Shape = w
         else:
             raise bad("kind: line, circle, arc, ellipse, polygon, polyline, helix, spiral, plane or bspline.")
         return added(o, "part_wire", {"use": "A profile or path for part_extrude, part_revolve, part_loft, part_sweep (a helix as a path: a spring or thread), part_ruled."})
@@ -392,7 +404,7 @@ def tools(session):
 
     at_n = {"at": {"type": "array", "items": {}}, "normal": {"type": "array", "items": {}}}
     return [
-        Tool("part_wire", "A wire, curve or flat face as FreeCAD's own parametric object: kind line (from, to) | circle (radius) | arc (radius, start, end degrees) | ellipse (major, minor) | polygon (regular: sides, radius to corners) | polyline (points, the corners in place, closed) | helix (pitch, height, radius, taper, leftHanded) | spiral (growth per turn, turns, radius) | plane (length, width) | bspline (points it passes through, closed); at and normal place it. Profiles and paths for extrude, sweep, loft.",
+        Tool("part_wire", "A wire, curve or flat face as FreeCAD's own parametric object: kind line (from, to) | circle (radius) | arc (radius, start, end degrees) | ellipse (major, minor) | polygon (regular: sides, radius to corners) | polyline (points, the corners in place, closed) | helix (pitch, height, radius, taper, leftHanded) | spiral (growth per turn, turns, radius) | plane (length, width) | bspline (points it passes through; closed: a smooth periodic loop, one closed wire); at and normal place it. Profiles and paths for extrude, sweep, loft.",
              obj({"kind": {"type": "string"}, "from": {"type": "array", "items": {}}, "to": {"type": "array", "items": {}}, "radius": {"type": "number"}, "start": {"type": "number"}, "end": {"type": "number"}, "major": {"type": "number"}, "minor": {"type": "number"},
                   "sides": {"type": "integer"}, "pitch": {"type": "number"}, "height": {"type": "number"}, "taper": {"type": "number"}, "leftHanded": {"type": "boolean"}, "growth": {"type": "number"}, "turns": {"type": "number"},
                   "length": {"type": "number"}, "width": {"type": "number"}, "points": {"type": "array", "items": {}}, "closed": {"type": "boolean"}, "name": {"type": "string"}, **at_n}, ["kind"]), part_wire, changes=True),

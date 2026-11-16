@@ -341,6 +341,20 @@ def refused(name):
     return None
 
 
+def named_objects(doc, names):
+    """The objects named (by name or label), each once, and the names not
+    found: a call over several objects does the rest and lists those."""
+    objs, unknown = [], []
+    for n in names if isinstance(names, list) else [names]:
+        o = doc.getObject(n) if isinstance(n, str) else None
+        o = o or next((x for x in doc.Objects if x.Label == n), None)
+        if o is None:
+            unknown.append(n)
+        elif o not in objs:
+            objs.append(o)
+    return objs, unknown
+
+
 def _gui():
     if not FreeCAD.GuiUp:
         raise ToolError("unavailable", "This FreeCAD has no window: commands and menus run only in the window (the link on). Settings (pref_*) work here too.")
@@ -690,14 +704,11 @@ def tools(session):
         doc = s.doc
         names = a.get("objects")
         if names in (None, "all"):
-            objs = [o for o in doc.Objects if o.TypeId in ("PartDesign::Body",) or (hasattr(o, "Shape") and not o.InList and o.TypeId not in ("App::Origin", "App::Line", "App::Plane"))]
+            objs, unknown = [o for o in doc.Objects if o.TypeId in ("PartDesign::Body",) or (hasattr(o, "Shape") and not o.InList and o.TypeId not in ("App::Origin", "App::Line", "App::Plane"))], []
         else:
-            objs = []
-            for n in names if isinstance(names, list) else [names]:
-                o = doc.getObject(n) or next((x for x in doc.Objects if x.Label == n), None)
-                if o is None:
-                    raise ToolError("not_found", f"No object '{n}'.")
-                objs.append(o)
+            objs, unknown = named_objects(doc, names)
+            if unknown and not objs:
+                raise ToolError("not_found", f"No object {', '.join(repr(str(n)) for n in unknown)} in {doc.Label}.")
         on = bool(a.get("visible", True))
         done = []
         for o in objs:
@@ -710,7 +721,11 @@ def tools(session):
         import FreeCADGui
 
         FreeCADGui.updateGui()
-        return {"visible" if on else "hidden": done}
+        out = {"visible" if on else "hidden": done}
+        if unknown:
+            out["unknown"] = [str(n) for n in unknown]
+            out["note"] = "Not found, so left out; the rest done."
+        return out
 
     def selection(a):
         import FreeCADGui
@@ -1045,7 +1060,7 @@ def tools(session):
              obj({"menu": {"type": "string"}, "limit": {"type": "integer"}}), menu_list),
         Tool("menu_run", "Press a menu item by its path of titles ([\"View\", \"Standard views\", \"Fit all\"]); modal dialogs refused as cmd_run. Window only.",
              obj({"path": {"type": "array", "items": {"type": "string"}}}, ["path"]), menu_run, changes=True),
-        Tool("show", "Show or hide objects in the window as the tree's eye does (objects: names or labels, or all; visible: false hides); a PartDesign body shows its finished part. Window only.",
+        Tool("show", "Show or hide objects in the window as the tree's eye does (objects: names or labels, or all; visible: false hides); a PartDesign body shows its finished part. Names not found are listed (unknown) and the rest done. Window only.",
              obj({"objects": {}, "visible": {"type": "boolean"}}), show, changes=True),
         Tool("selection", "Select objects in the window (objects: names or labels) for a command to act on, or clear the selection (no objects). Window only.",
              obj({"objects": {"type": "array", "items": {"type": "string"}}, "clear": {"type": "boolean"}}), selection),

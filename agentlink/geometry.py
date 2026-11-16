@@ -96,7 +96,8 @@ def core_check(shape):
 
 
 def soundness(shape):
-    """Valid, closed, one solid, no slivers: as a body check reads it."""
+    """Valid, closed, one solid, a volume above 0, no slivers: as a body
+    check reads it, and what "sound" means wherever a tool reports it."""
     shells = shape.Shells
     closed = bool(shells) and all(s.isClosed() for s in shells)
     narrow = narrow_faces(shape)
@@ -108,6 +109,12 @@ def soundness(shape):
         problems.append("The shape is not closed: it has open edges, so it has no inside to print or weigh.")
     if len(shape.Solids) != 1:
         problems.append(f"{len(shape.Solids)} solids where one is meant: pieces that do not touch, or none.")
+    try:
+        volume = shape.Volume
+    except Exception:
+        volume = 0.0
+    if shape.Solids and volume <= 1e-9:
+        problems.append(f"The volume is {volume:.3g} mm³, not above 0: the solid is inside out or broken (a loft that twisted, a boolean that failed). Rebuild the last step.")
     if narrow:
         problems.append(
             f"{len(narrow)} face{'s' if len(narrow) != 1 else ''} under 0.01 mm wide — a sliver two faces a hair apart leave: "
@@ -118,6 +125,7 @@ def soundness(shape):
         "valid": shape.isValid(),
         "closed": closed,
         "solids": len(shape.Solids),
+        "volume": round(volume, 3),
         "narrow": narrow[:10],
         "shortEdges": short[:10],
         "problems": problems,
