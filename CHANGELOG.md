@@ -7,6 +7,10 @@ All notable changes to Agent Link for FreeCAD. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A family may declare `PINNED_FREE` (tool names answered after the person closed the document the agent worked in, as `doc_open` and `session_state` are), so the window link need not name an add-on's recovery tool; Agent Link's own list keeps it only until its add-on declares it.
+
 ### Changed
 
 - The panel names no add-on's tab: which pages carry their own credit line (Agent Link's then hidden while one is in front) is declared by the add-on — `hooks.register_tab(..., own_credit=True)` or its widget's `own_credit` — or read off a credit label on the page, instead of a list of two add-on tab titles in core. Same behaviour for the tabs that showed a credit before. Tests with stand-in pages.

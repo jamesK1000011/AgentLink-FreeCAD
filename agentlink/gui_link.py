@@ -30,7 +30,24 @@ FRONT_TOOLS = {"cmd_run", "menu_run", "view_snapshot"}
 # window (or past the call in hand's own time) is answered "busy" from the
 # socket thread, not left waiting for ever.
 BUSY_AFTER = 10.0
+# Calls answered after the person closed the document the agent worked in:
+# Agent Link's own, and those add-ons declare (a family's PINNED_FREE,
+# families.PINNED_FREE). The recovery tool's name stays here only until its
+# add-on declares it.
 PINNED_FREE = {"doc_open", "doc_new", "doc_switch", "session_state", "tool_groups", "guide_read", "app_recover", "dialog_answer", "usage_report", "doc_close", "report_read"}
+
+
+def pinned_free(name):
+    """True when name is answered without the pinned document: core's own
+    list or an add-on's declaration."""
+    if name in PINNED_FREE:
+        return True
+    try:
+        from . import families
+
+        return name in families.PINNED_FREE
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _tool_name(line):
@@ -1222,7 +1239,7 @@ class Link:
             self._ready()
             name = _tool_name(line)
             gone = getattr(self.session, "closed_doc", None) if self.session else None
-            if gone and name is not None and name not in PINNED_FREE:
+            if gone and name is not None and not pinned_free(name):
                 self.session.closed_doc = None
                 try:
                     mid = json.loads(line).get("id")
