@@ -794,7 +794,21 @@ def now_state(doc, commands=()):
                     state["selSubs"].add(m.group(0).lower())
     except Exception:  # noqa: BLE001
         pass
+    # Only the commands on the active workbench's own toolbars are asked:
+    # FreeCAD asks those itself all the time, so they answer safely. Asking
+    # every command known (some 550, most of workbenches not loaded) took
+    # FreeCAD 1.1.3 down outright on the Mac, twice.
+    shown = set()
+    try:
+        bars = gui.activeWorkbench().getToolbarItems() or {}
+        for names in bars.values():
+            shown.update(n for n in names if isinstance(n, str))
+    except Exception:  # noqa: BLE001
+        shown = set()
+    state["asked"] = len(shown)
     for name in dict.fromkeys(commands):
+        if name not in shown:
+            continue
         try:
             c = gui.Command.get(name)
             if c is not None:
