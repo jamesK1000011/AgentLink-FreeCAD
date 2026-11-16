@@ -162,7 +162,8 @@ def soundness(shape, solids_intended=False):
     narrow = narrow_faces(shape)
     short = short_edges(shape)
     problems = []
-    if not shape.isValid():
+    valid = shape.isValid()  # once: on thousands of faces it is the slow part
+    if not valid:
         problems.append("The shape is not valid: a boolean or loft left it broken. Rebuild the last step.")
     if not closed:
         problems.append("The shape is not closed: it has open edges, so it has no inside to print or weigh.")
@@ -181,7 +182,7 @@ def soundness(shape, solids_intended=False):
             + ". Overlap the pieces clearly, or carry a cutter on along its slope."
         )
     return {
-        "valid": shape.isValid(),
+        "valid": valid,
         "closed": closed,
         "solids": len(shape.Solids),
         "volume": round(volume, 3),

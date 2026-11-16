@@ -96,6 +96,34 @@ def saving(limit=120.0):
         return False
 
 
+def note_stopped(tool, after, keep_n=5):
+    """The watchdog stopped FreeCAD during a call of tool after so many
+    seconds: kept, so that tool runs as a job (a read) or with a longer
+    deadline, asked first (a change) from then on (heavy.Gate,
+    jobs.wanted)."""
+    try:
+        q = queue_state()
+        rows = q.setdefault("stopped", {}).setdefault(tool, [])
+        rows.append([time.time(), float(after)])
+        del rows[:-keep_n]
+        save_queue(q)
+    except Exception:  # noqa: BLE001 — a read-only home: nothing kept
+        pass
+
+
+def stopped_before(tool, within=30 * 86400.0, q=None):
+    """The longest a call of tool ran before the watchdog stopped FreeCAD,
+    within the last 30 days, or None."""
+    try:
+        q = q if q is not None else queue_state()
+        rows = (q.get("stopped") or {}).get(tool) or []
+        now = time.time()
+        got = [float(a) for t, a in rows if now - float(t) < within]
+        return max(got) if got else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def log_watchdog(event):
     p = path("watchdog.log")
     os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -241,6 +269,18 @@ def is_heavy(tool):
 # faces x tool faces); the others' size is the document's faces.
 SIZED = {
     "part_boolean": {"per_second": 30000.0, "ask": True},
+    # A loft's work grows far faster than its faces (spans x points per
+    # profile): 91 profiles of 36 points ruled took 9.7 s, of 80 points
+    # past 120 s (the watchdog stopped FreeCAD). Its size is (faces /
+    # 1000) cubed (heavy.loft_size), timed apart ruled and smooth
+    # (sized_key).
+    "part_loft": {"per_second": 3.5, "ask": True},
+    # Inspection of a free-form body: its tessellation and FreeCAD's
+    # Inspection on it grow with the B-spline poles (a lofted solid of 3
+    # faces ran past 120 s against a 140k-triangle scan; a 3242-face
+    # ruled one took under 1 s). Size: heavy.insp_size. Marked for the
+    # watchdog, not asked (a read the person wants).
+    "insp_run": {"per_second": 50.0, "ask": False},
     "body_check": {"per_second": 100.0, "ask": False},
     "history_undo": {"per_second": 100.0, "ask": False},
     "history_redo": {"per_second": 100.0, "ask": False},
@@ -257,15 +297,25 @@ def boolean_size(base_faces, tool_faces):
     return max(1, int(base_faces or 0)) * max(1, sum(int(n or 0) for n in tool_faces or ()))
 
 
-def sized_estimate(q, tool, size):
+def sized_key(tool, args):
+    """The timing key a sized call is logged and estimated under: a ruled
+    loft apart from a smooth one (their times differ)."""
+    if tool == "part_loft" and isinstance(args, dict) and args.get("ruled"):
+        return "part_loft ruled"
+    return tool
+
+
+def sized_estimate(q, tool, size, key=None):
     """Seconds a sized tool should take at this size: its past runs here
-    when there are two or more, else the prior. None for other tools."""
+    (under key, the tool's name by default) when there are two or more,
+    else the prior. None for other tools."""
     spec = SIZED.get(tool)
     if spec is None or not size:
         return None
-    pts = [p for p in (q.get("timings") or {}).get(tool, []) if p and p[0] > 0]
+    key = key or tool
+    pts = [p for p in (q.get("timings") or {}).get(key, []) if p and p[0] > 0]
     if len(pts) >= 2:
-        est = estimate(q, tool, size)
+        est = estimate(q, key, size)
         if est is not None:
             return est
     return float(size) / spec["per_second"]

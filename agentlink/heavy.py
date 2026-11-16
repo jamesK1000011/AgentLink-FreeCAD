@@ -100,6 +100,86 @@ def _faces(o):
         return 0
 
 
+def loft_counts(session, args):
+    """(profiles, points per profile) a part_loft call will loft: its
+    profiles (points given inline or in a points_file) or its
+    profiles_file, read as the tool reads them; a sketch or edge counts 48
+    points (sample_count's least). None when they cannot be read."""
+    from . import paths, pointfiles
+
+    if args.get("profiles_file") is not None:
+        outs = pointfiles.outlines(paths.in_file(session, "part_loft", args["profiles_file"], "profiles_file"), args.get("key"), "profiles_file")
+        counts = [len(pts) for _, pts in outs]
+    else:
+        counts = []
+        for p in args.get("profiles") or []:
+            n = 48
+            if isinstance(p, dict):
+                if isinstance(p.get("points"), list):
+                    n = len(p["points"])
+                elif p.get("points_file") is not None:
+                    n = len(pointfiles.one_outline(paths.in_file(session, "part_loft", p["points_file"], "points_file"), p.get("key"), "points_file"))
+            counts.append(n)
+    if len(counts) < 2:
+        return None
+    n = max(counts)
+    samples = args.get("samples")
+    if isinstance(samples, int) and not isinstance(samples, bool) and samples > 0 and (not args.get("ruled") or len(set(counts)) > 1):
+        n = samples  # rebuilt with that many points each
+    return len(counts), max(2, n)
+
+
+def insp_size(session, args):
+    """insp_run's size: the actual body's B-spline poles (a free-form face
+    is what tessellates and inspects slowly), a hundredth for each other
+    face, and mesh points / 20000 on both sides. None for a file (read
+    in the call)."""
+    doc = session.doc
+    n = 0.0
+    act = _obj(doc, args.get("actual"))
+    if act is None:
+        return None
+    for o in [act] + [_obj(doc, x) for x in (args.get("nominals") or []) if isinstance(x, str)]:
+        if o is None:
+            continue
+        sh = getattr(o, "Shape", None)
+        if o is act and sh is not None and not getattr(o, "Mesh", None):
+            try:
+                for f in sh.Faces:
+                    srf = f.Surface
+                    up, vp = getattr(srf, "NbUPoles", None), getattr(srf, "NbVPoles", None)
+                    n += float(up * vp) if up and vp else 0.01
+            except Exception:
+                pass
+        m = getattr(o, "Mesh", None)
+        if m is not None and hasattr(m, "CountPoints"):
+            n += int(m.CountPoints) / 20000.0
+    return max(1e-3, n)
+
+
+def loft_faces(profiles, points, loop=False):
+    """The faces a ruled loft of these makes along its way."""
+    return (profiles if loop else profiles - 1) * points
+
+
+def loft_size(faces):
+    """A loft's size for its estimate: (faces / 1000) cubed — its time grows
+    about so (36 points a profile 9.7 s, 80 points past 120 s, 91 profiles)."""
+    return max(1e-6, (float(faces) / 1000.0) ** 3)
+
+
+def loft_split(profiles, points, loop, est, target=40.0):
+    """How to bring a loft under target seconds: runs of so many profiles
+    (each sharing its end profile with the next), or so many points a
+    profile."""
+    k = max(1.0, (est / target) ** (1.0 / 3.0))  # time ~ faces cubed
+    spans = max(1, (profiles if loop else profiles - 1))
+    per_run = max(2, int(spans / k) + 1)
+    runs = max(2, -(-spans // max(1, per_run - 1)))
+    pts = max(8, int(points / k))
+    return per_run, runs, pts
+
+
 def sized_size(session, tool, args):
     """The size a sized tool (keep.SIZED) works at: a boolean's face pairs
     (base faces x tool faces), else the document's faces. None when it
@@ -119,6 +199,13 @@ def sized_size(session, tool, args):
             if base is None or not tf:
                 return None
             return keep.boolean_size(_faces(base), tf)
+        if tool == "insp_run":
+            return insp_size(session, args)
+        if tool == "part_loft":
+            c = loft_counts(session, args)
+            if c is None:
+                return None
+            return loft_size(loft_faces(c[0], c[1], bool(args.get("closed"))))
         return size_of(session)
     except Exception:
         return None
@@ -153,6 +240,8 @@ class Gate:
     def before(self, tool, args):
         if tool.name in keep.SIZED:
             self._sized_before(tool, args)
+        else:
+            self._stopped_before(tool, args)
         if not keep.is_heavy(tool.name):
             return
         try:
@@ -210,44 +299,106 @@ class Gate:
             q = keep.queue_state()
         except Exception:
             q = {}
-        est = keep.sized_estimate(q, tool.name, size)
+        tkey = keep.sized_key(tool.name, args)
+        est = keep.sized_estimate(q, tool.name, size, tkey)
         if est is None:
             return
+        after = keep.stopped_before(tool.name, q=q)
+        if after is not None:
+            # It stopped FreeCAD before: never estimated under what it ran then.
+            est = max(est, 1.5 * after)
         now = time.time()
         if keep.SIZED[tool.name]["ask"] and est > keep.SIZED_ASK_OVER and self.live():
             key = keep.call_key(tool.name, args)
             self.offers = {k: t for k, t in self.offers.items() if now - t < OFFER_KEEP}
             if key not in self.offers:
                 self.offers[key] = now
-                raise ToolError("invalid_state", f"{tool.name} here is heavy: about {_fmt(est)} at this size ({size:,} face pairs; from {'its past runs on this Mac' if len((q.get('timings') or {}).get(tool.name) or []) >= 2 else 'a rough rule'}), "
-                                "and FreeCAD's window is frozen until OCC finishes. Lighter first: fewer faces (part_refine merges coplanar facets; a coarser mesh before part_from_mesh), "
-                                "or meshobj_boolean on the meshes. The same call again runs it as asked; the watchdog waits for it. Nothing was run.")
-        self.sized = (now, size, est)
+                src = "its past runs on this Mac" if len((q.get("timings") or {}).get(tkey) or []) >= 2 else "a rough rule"
+                raise ToolError("invalid_state", self._sized_words(tool.name, args, size, est, src))
+        self.sized = (now, size, est, tkey)
         if est > keep.SIZED_MARK_OVER:
             try:
                 keep.mark_heavy_call(tool.name, est, size, t=now)
+                # The tool's own time budget (part_loft stops its tries and
+                # checks past it): twice the estimate, inside the watchdog's
+                # three times.
+                self.s.call_budget = 2.0 * est
             except Exception:
                 pass
+
+    def _stopped_before(self, tool, args):
+        """A change the watchdog stopped FreeCAD in before (it ran past its
+        deadline without answering): asked about once in the window with
+        what happened, then run with a deadline of three times as long as it
+        ran then (a read like it goes to a job instead: jobs.wanted)."""
+        try:
+            changes = tool.changes_for(args or {})
+        except Exception:
+            changes = getattr(tool, "changes", True)
+        if not changes or keep.is_heavy(tool.name) or getattr(self, "as_job", False):
+            return
+        after = keep.stopped_before(tool.name)
+        if after is None:
+            return
+        est = max(keep.SIZED_MARK_OVER + 1.0, 1.5 * after)
+        now = time.time()
+        if self.live() and not getattr(self.s, "batch_now", None):
+            key = keep.call_key(tool.name, args)
+            self.offers = {k: t for k, t in self.offers.items() if now - t < OFFER_KEEP}
+            if key not in self.offers:
+                self.offers[key] = now
+                raise ToolError("invalid_state", f"{tool.name} stopped FreeCAD before: a call of it ran {_fmt(after)} without answering and the watchdog took the window for hung. "
+                                f"A lighter call first (fewer points, a coarser mesh or deflection, a smaller part), or the same call again runs it with up to {_fmt(keep.deadline('heavy', est))} before the watchdog steps in. Nothing was run.")
+        self.sized = (now, None, est, None)
+        try:
+            keep.mark_heavy_call(tool.name, est, 0, t=now)
+            self.s.call_budget = 2.0 * est
+        except Exception:
+            pass
+
+    def _sized_words(self, tool, args, size, est, src):
+        """The refusal of a sized call estimated past SIZED_ASK_OVER: its
+        estimate, what it is from, and the lighter way."""
+        if tool == "part_loft":
+            loop = bool(args.get("closed"))
+            c = loft_counts(self.s, args) or (2, 48)
+            per_run, runs, pts = loft_split(c[0], c[1], loop, est)
+            how = "ruled" if args.get("ruled") else "smooth"
+            return (f"part_loft here is heavy: about {_fmt(est)} for {c[0]} profiles of {c[1]} points {how} ({loft_faces(c[0], c[1], loop):,} faces along the way; from {src}), "
+                    "and FreeCAD's window is frozen until OCC finishes — past its deadline the window is taken for hung and stopped. Lighter: "
+                    f"split it into {runs} lofts of about {per_run} profiles each (each run starting on the profile the last ended on), then part_boolean fuse them; "
+                    f"or fewer points a profile (samples: {pts}, the profiles rebuilt alike); or fewer profiles where the shape changes slowly. "
+                    "The same call again runs it as asked; the watchdog then waits its estimate times three. Nothing was run.")
+        return (f"{tool} here is heavy: about {_fmt(est)} at this size ({int(size):,} face pairs; from {src}), "
+                "and FreeCAD's window is frozen until OCC finishes. Lighter first: fewer faces (part_refine merges coplanar facets; a coarser mesh before part_from_mesh), "
+                "or meshobj_boolean on the meshes. The same call again runs it as asked; the watchdog waits for it. Nothing was run.")
 
     def _sized_after(self, tool, ok):
         got, self.sized = getattr(self, "sized", None), None
         if got is None:
             return
-        t0, size, est = got
+        t0, size, est, tkey = got
+        if tkey is None:  # a call stopped before (_stopped_before): not timed by size
+            keep.clear_heavy_call()
+            ok = False
         if est > keep.SIZED_MARK_OVER:
             keep.clear_heavy_call()
+            try:
+                self.s.call_budget = 0
+            except Exception:
+                pass
         secs = time.time() - t0
         # Timed where it says something: a run of a second or more.
         if ok and secs >= 1.0:
             try:
                 q = keep.queue_state()
-                keep.log_timing(q, tool.name, size, secs)
+                keep.log_timing(q, tkey, size, secs)
                 keep.save_queue(q)
             except Exception:
                 pass
 
     def after(self, tool, args, ok):
-        if tool.name in keep.SIZED:
+        if getattr(self, "sized", None) is not None:
             self._sized_after(tool, ok)
         if not keep.is_heavy(tool.name) or self.start is None:
             return

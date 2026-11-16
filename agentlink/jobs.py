@@ -11,7 +11,8 @@
 #
 # Which calls: a read (a tool that changes nothing) that is heavy
 # (keep.HEAVY, an add-on's declared heavy tools) or whose past runs here
-# took more than SLOW_READ; any read with background: true; job_start
+# took more than SLOW_READ, or that the watchdog stopped FreeCAD in before
+# (keep.stopped_before); any read with background: true; job_start
 # { tool, arguments } for any read. Never a picture or a window tool (Qt
 # and the 3D view are the GUI thread's), never a change. While a job runs,
 # changing calls on the document are refused (the worker reads it).
@@ -73,6 +74,10 @@ def wanted(tool, args, session, asked=False):
     if asked:
         return True
     if keep.is_heavy(tool.name):
+        return True
+    # A read the watchdog stopped FreeCAD in before (it never answered, so
+    # its time was never logged): a job from then on.
+    if keep.stopped_before(tool.name) is not None:
         return True
     from . import heavy
 
