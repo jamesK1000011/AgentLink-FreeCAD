@@ -24,6 +24,12 @@ OFFER_KEEP = 600.0
 # 6 min from an earlier slow run, and every render took two calls. They are
 # still queued, timed and given a heavy call's deadline.
 NO_OFFER = {"view_render", "steps_render"}
+# A heavy tool may say during its call what its work really was
+# (session.heavy_work = (timing key, size)): a render its triangles times
+# views, not the document's faces. Its time is then logged against that,
+# under that key, and the estimate it gives tracks what it drew. A render
+# logged against faces was put at 6 min and took 17 s.
+WORK = "heavy_work"
 
 
 def _maxrss_mb():
@@ -149,6 +155,10 @@ class Gate:
             self._sized_before(tool, args)
         if not keep.is_heavy(tool.name):
             return
+        try:
+            setattr(self.s, WORK, None)
+        except Exception:
+            pass
         if not self.live():
             self.start = (time.time(), size_of(self.s), _maxrss_mb())
             return
@@ -167,10 +177,15 @@ class Gate:
         # asked (a refused estimate stopped the batch and rolled back the
         # good steps before it).
         in_batch = bool(getattr(self.s, "batch_now", None))
-        if est and est > OFFER_OVER and key not in self.offers and tool.name not in NO_OFFER and not in_batch:
+        # A read sent to a job (agentlink/jobs.py) runs: its answer waits
+        # for it, the call does not.
+        as_job = bool(getattr(self, "as_job", False))
+        if est and est > OFFER_OVER and key not in self.offers and tool.name not in NO_OFFER and not in_batch and not as_job:
             self.offers[key] = now
             rough = keep.estimate(q, tool.name, max(1, size / 4.0)) or est / 4.0
-            raise ToolError("invalid_state", f"{tool.name} takes about {_fmt(est)} here at this size (from its past runs on this Mac); a rough pass (a coarser mesh, fewer points) takes about {_fmt(rough)} — run that first? The same call again runs it as asked. Nothing was run.")
+            rng = keep.estimate_range(q, tool.name, size)
+            span = f" ({_fmt(rng[0])} to {_fmt(rng[2])} over its runs)" if rng and _fmt(rng[0]) != _fmt(rng[2]) else ""
+            raise ToolError("invalid_state", f"{tool.name} takes about {_fmt(est)}{span} here at this size (from its past runs on this Mac); a rough pass (a coarser mesh, fewer points) takes about {_fmt(rough)} — run that first? The same call again runs it as asked. Nothing was run.")
         # A saved copy before a heavy change (an add-on's "checkpoints"
         # service): a crash or a hang in it loses nothing done before.
         if tool.changes:
@@ -241,15 +256,23 @@ class Gate:
         if not ok:
             return
         secs = time.time() - t0
+        key = tool.name
+        work = getattr(getattr(self, "s", None), WORK, None)
+        if isinstance(work, tuple) and len(work) == 2 and work[1]:
+            key, size = work
+            try:
+                setattr(self.s, WORK, None)
+            except Exception:
+                pass
         try:
             q = keep.queue_state()
-            keep.log_timing(q, tool.name, size, secs)
+            keep.log_timing(q, key, size, secs)
             a1, b1 = _maxrss_mb()
             # What this job added to the high-water mark, not the process's
             # lifetime peak (ru_maxrss never falls): a job that stayed under
             # an earlier peak adds nothing and is not logged.
             peak = max(a1 - a0, b1 - b0, 0.0)
-            if peak > 0:
+            if peak > 0 and key == tool.name:
                 mem = {"timings": q.get(MEMORY_KEY) or {}}
                 keep.log_timing(mem, tool.name, size, peak)
                 q[MEMORY_KEY] = mem["timings"]

@@ -244,6 +244,15 @@ def build(item):
             C.append(("Coincident", i, 2, i + 1, 1))
         if closed:
             C.append(("Coincident", len(G) - 1, 2, 0, 1))
+        # Axis-aligned sides held so, as a rectangle's are (the guide's
+        # promise: shapes come with their horizontal/vertical constraints).
+        for i, (a, b) in enumerate(segs):
+            if (b - a).Length < 1e-9:
+                continue
+            if abs(b.y - a.y) < 1e-9:
+                C.append(("Horizontal", i))
+            elif abs(b.x - a.x) < 1e-9:
+                C.append(("Vertical", i))
         return G, C, D
     if k == "circle":
         r = float(item.get("radius") or item.get("diameter", 0) / 2.0)

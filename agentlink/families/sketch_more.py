@@ -475,6 +475,7 @@ def tools(session):
         if ("plane" in a) == ("face" in a):
             raise bad("plane (XY, XZ, YZ, a datum plane) or face { at, normal }: one.")
         link, what = pc.plane_ref(b, a["plane"] if "plane" in a else a["face"], "plane")
+        moved = _order_after(b, sk, link[0])
         setattr(sk, pc.support_prop(sk), [(link[0], link[1][0])])
         sk.MapMode = "FlatFace"
         sk.MapReversed = bool(a.get("flip", False))
@@ -484,7 +485,32 @@ def tools(session):
         doc().recompute()
         if not sk.isValid():
             raise ToolError("failed", f"{sk.Label} would not attach to {what}: {sk.getStatusString()}.")
-        return done(sk, "sketch_attach", {"sketch": sk.Label, "on": what, "offset": off, "rotate": rot})
+        out = {"sketch": sk.Label, "on": what, "support": f"{link[0].Label}.{link[1][0]}" if link[1][0] else link[0].Label, "offset": off, "rotate": rot}
+        if moved:
+            out["moved"] = f"{sk.Label} now comes after {link[0].Label} in {b.Label}: its support is built before it."
+        return done(sk, "sketch_attach", out)
+
+    def _order_after(b, sk, owner):
+        """A sketch in the body attached to a feature built after it would
+        point forward (a cyclic support FreeCAD warns about on every
+        recompute): a sketch nothing is built from yet is moved after that
+        feature; one a feature uses is refused. True when it moved."""
+        if not hasattr(owner, "isDerivedFrom") or not owner.isDerivedFrom("PartDesign::Feature"):
+            return False
+        g = list(b.Group)
+        if sk not in g or owner not in g or g.index(owner) < g.index(sk):
+            return False
+        users = [o for o in sk.InList if o is not b and o is not owner and b.hasObject(o) and o.isDerivedFrom("PartDesign::Feature")]
+        if users or owner in sk.InListRecursive:
+            raise ToolError("invalid_state", f"{owner.Label} (whose face it is) is built after {sk.Label}"
+                            + (f", and {', '.join(u.Label for u in users)} is built from {sk.Label}" if users else "")
+                            + ": attaching would make the sketch hang on a later feature (a cyclic support). Attach to an earlier face or plane, or make a new sketch on that face (sketch_new { face }).")
+        try:
+            b.removeObject(sk)
+            b.insertObject(sk, owner, True)
+        except Exception as e:
+            raise ToolError("failed", f"{sk.Label} comes before {owner.Label} in {b.Label} and could not be moved after it ({e}): make a new sketch on that face (sketch_new {{ face }}).")
+        return True
 
     return [
         Tool("sketch_copy", "Copy geometry in a sketch (move: true moves it instead): geometry [ids] (default every non-construction one), and by [dx, dy] (clone: true keeps copies equal to the originals), rotate { center, angle } or scale { center, factor }.",
@@ -507,7 +533,7 @@ def tools(session):
              obj({"sketches": {"type": "array", "items": {"type": "string"}}, "remove": {"type": "boolean"}, "name": {"type": "string"}}, ["sketches"]), sketch_merge, changes=True),
         Tool("sketch_mirror", "A mirrored copy of a whole sketch as a new sketch on the same plane: about y (left-right) | x (up-down) | origin.",
              obj({"sketch": {"type": "string"}, "about": {"type": "string", "enum": ["x", "y", "origin"]}, "name": {"type": "string"}}), sketch_mirror, changes=True),
-        Tool("sketch_attach", "Move a sketch onto another plane (Sketcher's map/reorient): plane XY | XZ | YZ | a datum plane, or face { at, normal }; offset mm along its normal, rotate deg in it, flip.",
+        Tool("sketch_attach", "Move a sketch onto another plane (Sketcher's map/reorient): plane XY | XZ | YZ | a datum plane | \"Pad.Face3\", or face { at, normal, feature? }; offset mm along its normal, rotate deg in it, flip. A face is bound to the feature that made it (the earliest in the body that has it, or feature), not the tip; a sketch that sits before that feature is moved after it (refused when a feature is built from it).",
              obj({"sketch": {"type": "string"}, "plane": {"type": "string"}, "face": {"type": "object"}, "offset": {"type": "number"}, "rotate": {"type": "number"}, "flip": {"type": "boolean"}}), sketch_attach, changes=True),
         Tool("sketch_validate", "Check a sketch the way Sketcher's Validate does: degenerate geometry, ends that touch with no coincidence, invalid, redundant and conflicting constraints (precision mm). fix: true repairs what it can; autoconstrain: true also adds the obvious constraints.",
              obj({"sketch": sk_ref, "precision": {"type": "number"}, "fix": {"type": "boolean"}, "autoconstrain": {"type": "boolean"}, "angle": {"type": "number"}}), sketch_validate, changes=True),

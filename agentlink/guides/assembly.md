@@ -29,6 +29,7 @@ FreeCAD's own Assembly workbench, its solver and its joints. Parts are bodies al
 - Only `b`'s part moves. Make joints from the grounded part outwards.
 - A joint that holds what another already holds is **redundant** and the solve refuses it: nothing is kept. Fixed after a revolute on the same pair is the common one.
 - An assembly needs one grounded part: `asm_ground`.
+- Some workbenches relabel their objects on every recompute (Fasteners counts its screws' labels up): name such a part by its object name (session_state's `object`, asm_list), which stays. A label that differs only by that counter still finds the one part it fits.
 - The solve moves parts; it does not check they fit. `asm_check` does — a press fit reads as an overlap of its interference volume.
 
 ## Moving it through its range

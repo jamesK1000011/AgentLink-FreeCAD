@@ -118,6 +118,7 @@ agentlink/icons/AgentLink_Workbench.svg
 agentlink/icons/CREDITS.md
 agentlink/install_job.py
 agentlink/iso286.py
+agentlink/jobs.py
 agentlink/keep.py
 agentlink/launch.py
 agentlink/launcher_check.py
@@ -277,6 +278,7 @@ tests/test_sketch.py
 tests/test_sketch_gaps.py
 tests/test_std_more.py
 tests/test_stem_findings.py
+tests/test_stem_findings_more.py
 tests/test_strength.py
 tests/test_supervise_unattended.py
 tests/test_svg_fonts.py
