@@ -19,7 +19,55 @@ const here = path.dirname(new URL(import.meta.url).pathname)
   const data = JSON.parse(fs.readFileSync(path.join(here, '..', '..', 'addons.json'), 'utf8'))
   const literal = (name) => new Function(`return ${new RegExp(`const ${name} = (\\[[\\s\\S]*?\\n\\])`).exec(text)[1]}`)()
   assert.deepEqual(literal('SOURCES'), data.sources.map((s) => ({ repo: s.repo, branch: s.branch, folder: s.folder, dest: s.dest, pin: s.pin })), 'the built-in SOURCES are addons.json\'s sources')
-  assert.deepEqual(literal('COMPANIONS_DEFAULT'), data.companions, 'the built-in companions are addons.json\'s companions')
+  assert.ok(!/COMPANIONS_DEFAULT|bumpmesh/i.test(text.replace(/^\s*(\/\/|\*|\/\*\*).*$/gm, '')), 'the launcher names no companion: they come from addons.json')
+}
+// Companions are read from addons.json: the bundled copy (build.sh puts it
+// at the bundle's top; a checkout's packaging/addons.json), then the list
+// the last update kept, then the local setting; none when there is no list.
+{
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agentlink-companions-'))
+  const data = JSON.parse(fs.readFileSync(path.join(here, '..', '..', 'addons.json'), 'utf8'))
+  const bundle = path.join(home, 'bundle')
+  fs.mkdirSync(bundle)
+  const stand = [{ name: 'standin', dir: '~/src/standin', url: 'https://github.com/jamesK1000011/standin.git', branch: 'main', process: 'mcp/' }]
+  fs.writeFileSync(path.join(bundle, 'addons.json'), JSON.stringify({ sources: [], companions: stand }))
+  const kept = path.join(home, 'kept.json')
+  const local = path.join(home, 'local.json')
+  const script = `
+global.__agentlinkHandover = true
+const L = require(${JSON.stringify(path.join(here, '..', 'server', 'index.js'))})
+global.__agentlinkHandover = false
+const [checkout, bundle, kept, local, empty] = JSON.parse(process.env.T)
+const names = (l) => l.map((c) => c.name + '@' + c.branch)
+const fs = require('fs')
+const out = {}
+out.checkout = names(L.companions(checkout, kept, local))
+out.bundle = names(L.companions(bundle, kept, local))
+out.none = names(L.companions(empty, kept, local))
+fs.writeFileSync(kept, JSON.stringify([{ name: 'keptone', dir: '~/src/k', url: 'https://github.com/jamesK1000011/k.git', branch: 'b' }]))
+out.kept = names(L.companions(bundle, kept, local))
+fs.writeFileSync(kept, JSON.stringify([{ name: 'bad', dir: '/etc', url: 'https://example.com/x.git', branch: 'b' }]))
+out.badKept = names(L.companions(bundle, kept, local))
+fs.writeFileSync(local, JSON.stringify([{ name: 'mine', dir: '~/src/m', url: 'x', branch: 'dev' }]))
+out.local = names(L.companions(bundle, kept, local))
+out.dirExpanded = L.companions(bundle, kept, local)[0].dir.startsWith(require('os').homedir())
+process.stdout.write(JSON.stringify(out))
+`
+  try {
+    const empty = path.join(home, 'empty', 'deeper')
+    fs.mkdirSync(empty, { recursive: true })
+    const out = JSON.parse(execFileSync(process.execPath, ['-e', script], { env: { ...process.env, HOME: home, AGENTLINK_UPDATE: 'false', T: JSON.stringify([path.join(here, '..'), bundle, kept, local, empty]) }, encoding: 'utf8' }))
+    assert.deepEqual(out.checkout, data.companions.map((c) => c.name + '@' + c.branch), 'a checkout reads packaging/addons.json')
+    assert.deepEqual(out.bundle, ['standin@main'], 'a bundle reads its own addons.json')
+    assert.deepEqual(out.none, [], 'no addons.json: no companions')
+    assert.deepEqual(out.kept, ['keptone@b'], 'the list the last update kept wins over the bundled one')
+    assert.deepEqual(out.badKept, ['standin@main'], 'a kept list this launcher does not take is passed over')
+    assert.deepEqual(out.local, ['mine@dev'], 'the local setting wins over both')
+    assert.ok(out.dirExpanded, '~ is the home folder')
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+  console.log('launcher companions: from addons.json (bundled, then kept by the last update), the local setting over both')
 }
 // Every pin the manifest names is a file here holding one commit.
 {

@@ -707,17 +707,25 @@ async function main() {
 // The launcher's own tool: the newest add-ons from GitHub, and FreeCAD
 // started again on them, without Claude starting again.
 // Companions: other local MCP servers kept as git clones beside this one
-// (BumpMesh), brought up to their branch by the same update, and their
+// (the ones addons.json lists), brought up to their branch by the same update, and their
 // running copy stopped so Claude starts it again on the new code. The list
 // is a local setting (~/AgentLink/companions.json, a list like the default);
 // The list in force is the "companions" key of addons.json at the pinned
-// channel commit (kept by the last update, below), else the built-in one
-// here (kept equal to addons.json; the launcher test checks); a local
+// channel commit (kept by the last update, below), else the addons.json
+// that came with this launcher (bundledManifest: build.sh puts it at the
+// bundle's top, a checkout has it at packaging/addons.json); a local
 // setting (~/AgentLink/companions.json, a list of the same shape) wins over
-// both. A clone with work of its own is left as it is and said.
-const COMPANIONS_DEFAULT = [
-  { name: 'bumpmesh', dir: '~/src/bumpmesh', url: 'https://github.com/jamesK1000011/stlTexturizer.git', branch: 'agent-link', process: 'mcp/' },
-]
+// both. This file names no companion. A clone with work of its own is left
+// as it is and said.
+/** The addons.json this launcher came with, or {} when there is none. */
+function bundledManifest(here = HERE) {
+  for (const f of [path.join(here, 'addons.json'), path.join(here, '..', 'addons.json')]) {
+    try {
+      return JSON.parse(fs.readFileSync(f, 'utf8'))
+    } catch {}
+  }
+  return {}
+}
 const COMPANIONS_KEPT = path.join(CACHE, 'companions.json')
 
 /** A companions list from the manifest, each checked: a name, a folder
@@ -747,13 +755,16 @@ function keepCompanions(list) {
   } catch {}
 }
 
-function companions() {
-  let list = COMPANIONS_DEFAULT
+/** The companions in force: the local setting, else the list the last
+ *  update kept, else the bundled addons.json's, else none. kept and local
+ *  stand in for the files under test. */
+function companions(here = HERE, kept = COMPANIONS_KEPT, local = path.join(os.homedir(), 'AgentLink', 'companions.json')) {
+  let list = checkCompanions(bundledManifest(here).companions) || []
   try {
-    list = checkCompanions(JSON.parse(fs.readFileSync(COMPANIONS_KEPT, 'utf8'))) || list
+    list = checkCompanions(JSON.parse(fs.readFileSync(kept, 'utf8'))) || list
   } catch {}
   try {
-    list = JSON.parse(fs.readFileSync(path.join(os.homedir(), 'AgentLink', 'companions.json'), 'utf8'))
+    list = JSON.parse(fs.readFileSync(local, 'utf8'))
   } catch {}
   return (Array.isArray(list) ? list : []).map((c) => ({ ...c, dir: String(c.dir || '').replace(/^~(?=$|\/)/, os.homedir()) }))
 }
@@ -903,7 +914,7 @@ function recordVersions(before, after, outcome) {
 
 const UPDATE_TOOL = {
   name: 'agentlink_update',
-  description: 'Fetch the newest Agent Link and ScanRuler for FreeCAD from GitHub and start FreeCAD again on them, without restarting Claude: new tools and fixes from then on. Companion servers kept as git clones (BumpMesh) are brought up to their branch too and started again. The open document is lost unless saved (doc_save first). Answers the version before and after, and each companion\'s; the tool list is sent again.',
+  description: 'Fetch the newest Agent Link and ScanRuler for FreeCAD from GitHub and start FreeCAD again on them, without restarting Claude: new tools and fixes from then on. Companion servers kept as git clones (those addons.json lists under companions) are brought up to their branch too and started again. The open document is lost unless saved (doc_save first). Answers the version before and after, and each companion\'s; the tool list is sent again.',
   inputSchema: { type: 'object', properties: {} },
 }
 
@@ -1217,7 +1228,7 @@ function startHandedOver({ stdin, stdout, state = {} }) {
   log(`took over from the launcher in this process (add-ons ${state.version || '?'})`)
   return main()
 }
-module.exports = { startHandedOver, resolveChannel, checkSources, CHANNELS }
+module.exports = { startHandedOver, resolveChannel, checkSources, CHANNELS, companions, bundledManifest }
 
 /** No FreeCAD: still a server, so Claude shows why instead of a dead entry. */
 function serveError(message) {
