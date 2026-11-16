@@ -54,7 +54,8 @@ Test flag                     AGENTLINK_AS_USER=1 (as_user()): the agent's
                               calls run as the person's (session.by);
                               for tests only, off by default
 Tool extensions               extend_tool(name, properties, before, after, describe)
-Panel                         register_tab(title, factory, order, workbench)
+Panel                         register_tab(title, factory, order, workbench,
+                              own_credit)
                               (the widget's fill(), if any, runs as its tab
                               comes up; the tab shows only while workbench
                               is active); tab_in(title, *workbenches);
@@ -480,10 +481,13 @@ REVIEWERS = []
 TAB_WORKBENCHES = {}
 
 
-def register_tab(title, factory, order=50, workbench=None):
+def register_tab(title, factory, order=50, workbench=None, own_credit=False):
     """factory(panel) -> a QWidget, built when the panel is. workbench: a
-    workbench name, or several, in which the tab shows (tab_in)."""
-    TABS.append({"title": title, "factory": factory, "order": order})
+    workbench name, or several, in which the tab shows (tab_in).
+    own_credit: the tab's page carries its own credit line for the work it
+    builds on, so Agent Link's is hidden while it is in front (one credit,
+    not two)."""
+    TABS.append({"title": title, "factory": factory, "order": order, **({"own_credit": True} if own_credit else {})})
     TABS.sort(key=lambda x: x["order"])
     if workbench:
         tab_in(title, *((workbench,) if isinstance(workbench, str) else workbench))
