@@ -144,7 +144,19 @@ def card(doc, mid):
     if key.startswith("custom:"):
         d = defs(doc).get(key)
         return dict(d) if d else None
-    return _library().get(key)
+    lib = _library()
+    if key in lib:
+        return lib[key]
+    # A card's name works as well as its id ("Aluminum-6061-T6"), case and
+    # spaces aside, as material_set and the drawings take it.
+    norm = key.strip().lower().replace(" ", "")
+    for c in lib.values():
+        if str(c.get("name", "")).lower().replace(" ", "") == norm:
+            return c
+    for k, d in defs(doc).items():
+        if str(d.get("name", "")).lower().replace(" ", "") == norm:
+            return dict(d)
+    return None
 
 
 def of_body(doc, label, default="pla"):

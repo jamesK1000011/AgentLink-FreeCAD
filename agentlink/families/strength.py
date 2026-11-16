@@ -206,6 +206,30 @@ def _setup_said(old, keep, reset):
                         "why": "reset: true" if reset else f"the study was on {old.get('body')}"}}
 
 
+
+def _unheld_solids(st, shape):
+    """The solids of a multi-solid shape that touch none of the held faces:
+    [(number from 1, centre)]. One solid: none."""
+    sols = list(getattr(shape, "Solids", []) or [])
+    if len(sols) < 2:
+        return []
+    held = []
+    for h in st.get("holds", []):
+        try:
+            held += [f for _name, f in facepick.pick(shape, h["faces"], "faces")]
+        except Exception:
+            continue
+    if not held:
+        return []
+    out = []
+    for i, so in enumerate(sols, 1):
+        try:
+            if not any(so.distToShape(f)[0] < 1e-4 for f in held):
+                out.append((i, so.BoundBox.Center))
+        except Exception:
+            continue
+    return out
+
 def tools(session):
     s = session
 
@@ -225,7 +249,7 @@ def tools(session):
         if a.get("material"):
             c = matfam.card(s.doc, a["material"]) or matfam.card(s.doc, str(a["material"]).lower())
             if c is None:
-                raise ToolError("not_found", f"material {a['material']!r}: no such id — material_list finds one.")
+                raise ToolError("not_found", f"material {a['material']!r}: no such material by id or name — material_list {{ words }} finds one.")
             mid, said = c["id"], "given"
         else:
             c, set_ = matfam.of_body(s.doc, o.Label)
@@ -762,6 +786,9 @@ def tools(session):
         if c is None or not c.get("E"):
             raise ToolError("invalid_state", f"The study's material {st['material']!r} is gone or has no Young's modulus: fea_setup {{ material }} again.")
         shape = o.Shape
+        free = _unheld_solids(st, shape)
+        if free:
+            raise ToolError("invalid_state", f"{o.Label} is {len(shape.Solids)} separate solids and " + ", ".join(f"solid {i} (at {geo.vec(p)})" for i, p in free) + " touch no held face: a part held by nothing has no static answer, and solids that only touch are not joined in the study. Hold each solid too (fea_hold its faces), study the solids one at a time, or fuse them for a check of the whole.")
         t0 = time.time()
         timeout = float(a.get("timeout", 300))
         mesh = float(st["mesh"])
@@ -791,7 +818,7 @@ def tools(session):
         else:
             wd, femmesh, nodes, elems, disp, stress, fixed, held_faces, applied, groups, pairs, part_cards, frd = _solve_own(st, o, c, a, timeout)
         if not disp or not stress:
-            raise ToolError("failed", "CalculiX wrote no displacements or stresses: see the files in " + wd)
+            raise ToolError("failed", "CalculiX wrote no displacements or stresses — most often a part free to move (a solid or region no hold reaches, a hold on too few faces) or a mesh that failed; the files are in " + wd)
         vm = {n: ccx_io.von_mises(sv) for n, sv in stress.items()}
         n_max = max(vm, key=vm.get)
         dmag = {n: math.sqrt(sum(x * x for x in u[:3])) for n, u in disp.items()}
