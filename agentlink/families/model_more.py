@@ -10,7 +10,7 @@ import FreeCAD
 import Part
 
 from .. import geometry as geo
-from .. import paths
+from .. import paths, pointfiles
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
@@ -62,8 +62,28 @@ def tools(session):
 
     # ---- wires and curves ----
 
+    def wire_points(a):
+        """points, or points_file (+ key) read on this side."""
+        if a.get("points_file") is not None:
+            if a.get("points") is not None:
+                raise bad("points or points_file, not both.")
+            f = a["points_file"]
+            if not isinstance(f, str) or not f.strip():
+                raise bad("points_file: a file's path (.json or .csv).")
+            return pointfiles.one_outline(paths.in_file(s, "part_wire", f, "points_file"), a.get("key"), "points_file")
+        return a.get("points") or []
+
+    def fit_of(c, pts):
+        """How far the curve lies from the points it was drawn through."""
+        try:
+            worst = max((c.value(c.parameter(p)) - p).Length for p in pts)
+            return {"maxDistance": round(worst, 5)}
+        except Exception:
+            return None
+
     def part_wire(a):
         kind = a.get("kind")
+        fit = None
         name = a.get("name") or kind.capitalize() if kind else None
         if kind == "line":
             p, q = picks.vec3(a.get("from"), "from"), picks.vec3(a.get("to"), "to")
@@ -116,7 +136,7 @@ def tools(session):
             o.Length, o.Width = picks.num(a.get("length"), "length"), picks.num(a.get("width"), "width")
             o.Placement = frame(a)
         elif kind == "polyline":
-            pts = [picks.vec3(p, "points") for p in (a.get("points") or [])]
+            pts = [picks.vec3(p, "points") for p in wire_points(a)]
             closed = bool(a.get("closed"))
             if len(pts) > 2 and (pts[0] - pts[-1]).Length < 1e-9:
                 pts, closed = pts[:-1], True  # given closed: the last point repeats the first
@@ -128,7 +148,7 @@ def tools(session):
             o.Nodes = pts
             o.Close = closed
         elif kind == "bspline":
-            pts = [picks.vec3(p, "points") for p in (a.get("points") or [])]
+            pts = [picks.vec3(p, "points") for p in wire_points(a)]
             closed = bool(a.get("closed"))
             if len(pts) > 3 and (pts[0] - pts[-1]).Length < 1e-9:
                 pts, closed = pts[:-1], True  # given closed: the last point repeats the first
@@ -147,9 +167,13 @@ def tools(session):
             if closed and not w.isClosed():
                 raise ToolError("failed", "The B-spline did not close — check the points run round in order.")
             o.Shape = w
+            fit = fit_of(c, pts)
         else:
             raise bad("kind: line, circle, arc, ellipse, polygon, polyline, helix, spiral, plane or bspline.")
-        return added(o, "part_wire", {"use": "A profile or path for part_extrude, part_revolve, part_loft, part_sweep (a helix as a path: a spring or thread), part_ruled."})
+        extra = {"use": "A profile or path for part_extrude, part_revolve, part_loft, part_sweep (a helix as a path: a spring or thread), part_ruled."}
+        if fit:
+            extra["fit"] = fit
+        return added(o, "part_wire", extra)
 
     # ---- split, compounds ----
 
@@ -404,10 +428,10 @@ def tools(session):
 
     at_n = {"at": {"type": "array", "items": {}}, "normal": {"type": "array", "items": {}}}
     return [
-        Tool("part_wire", "A wire, curve or flat face as FreeCAD's own parametric object: kind line (from, to) | circle (radius) | arc (radius, start, end degrees) | ellipse (major, minor) | polygon (regular: sides, radius to corners) | polyline (points, the corners in place, closed) | helix (pitch, height, radius, taper, leftHanded) | spiral (growth per turn, turns, radius) | plane (length, width) | bspline (points it passes through; closed: a smooth periodic loop, one closed wire); at and normal place it. Profiles and paths for extrude, sweep, loft.",
+        Tool("part_wire", "A wire, curve or flat face as FreeCAD's own parametric object: kind line (from, to) | circle (radius) | arc (radius, start, end degrees) | ellipse (major, minor) | polygon (regular: sides, radius to corners) | polyline (points, the corners in place, closed) | helix (pitch, height, radius, taper, leftHanded) | spiral (growth per turn, turns, radius) | plane (length, width) | bspline (points it passes through; closed: a smooth periodic loop, one closed wire; the answer's fit.maxDistance is how far the curve lies from the points); at and normal place it. polyline and bspline take points_file (a .json list of [x,y,z], or a .csv of x,y,z rows, in the session's folder; key picks one list from a file of several) instead of points: read on this side, so long point lists need not be sent in the call. Profiles and paths for extrude, sweep, loft.",
              obj({"kind": {"type": "string"}, "from": {"type": "array", "items": {}}, "to": {"type": "array", "items": {}}, "radius": {"type": "number"}, "start": {"type": "number"}, "end": {"type": "number"}, "major": {"type": "number"}, "minor": {"type": "number"},
                   "sides": {"type": "integer"}, "pitch": {"type": "number"}, "height": {"type": "number"}, "taper": {"type": "number"}, "leftHanded": {"type": "boolean"}, "growth": {"type": "number"}, "turns": {"type": "number"},
-                  "length": {"type": "number"}, "width": {"type": "number"}, "points": {"type": "array", "items": {}}, "closed": {"type": "boolean"}, "name": {"type": "string"}, **at_n}, ["kind"]), part_wire, changes=True),
+                  "length": {"type": "number"}, "width": {"type": "number"}, "points": {"type": "array", "items": {}}, "points_file": {"type": "string"}, "key": {}, "closed": {"type": "boolean"}, "name": {"type": "string"}, **at_n}, ["kind"]), part_wire, changes=True),
         Tool("part_split", "Split bodies (Part's BOPTools, parametric): mode slice (bodies [one], tools [planes, faces or bodies that cut it]) | fragments (bodies: every piece where they overlap, kept apart) | xor (bodies: what is in an odd number of them); explode: true makes each piece a body.",
              obj({"mode": {"type": "string", "enum": ["slice", "fragments", "xor"]}, "bodies": {"type": "array", "items": {"type": "string"}}, "tools": {"type": "array", "items": {"type": "string"}}, "split": {"type": "boolean"}, "explode": {"type": "boolean"}, "name": {"type": "string"}}, ["bodies"]), part_split, changes=True),
         Tool("part_compound", "Group bodies into one compound (kept apart, not fused) — bodies [names]; or explode: a body of several solids into a body each.",

@@ -7,6 +7,7 @@
 - Every change is one undo step: `history_undo`, `history_redo` (and checkpoints where an add-on offers them). `history_diff` says what a change did, so you don't have to describe the part again.
 - `batch` runs several calls in one, rolled back whole if one is refused: every object it made is taken away too. Use it for a run of edits you can predict.
 - A long read (a heavy one, one slow here before, or any read with `background: true`) runs as a job: its answer comes back as usual when it ends within 45 s, else a job id — `job_status { job, wait: 25 }` gives the answer when it is done. A client drops a call after about 80 s, so never just call a long read again. While a job reads the document, changes to it are refused until it ends.
+- A long batch (many points, many calls) can live in a file: write the list of `{ tool, arguments }` to a .json in the session's folder and send `batch { file }`. It is read on this side, so it costs a few tokens instead of the whole list each time.
 - Answers are in millimetres, grams and degrees. A refusal names what to change.
 
 ## A part, made and judged

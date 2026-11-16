@@ -17,7 +17,7 @@ from ..tools import obj
 from .unattended import installed_names, mod_dir
 
 GROUP = "dev"
-INFO = "For add-on developers: an installed add-on's own test suite run in a separate FreeCAD process (addon_test); mouse and keyboard input to the window's own widgets for GUI checks (gui_input), and closing a menu or dialog that holds the window (gui_unstick)."
+INFO = "For add-on developers: an installed add-on's own test suite run in a separate FreeCAD process (addon_test); live window scripts replayed and checked (live_run); mouse and keyboard input to the window's own widgets for GUI checks (gui_input), and closing a menu or dialog that holds the window (gui_unstick)."
 
 OWN_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -135,6 +135,54 @@ def tools(s):
 
     hooks.register_thread_tool("gui_unstick")
 
+    def live_run(a):
+        import json as _json
+
+        from .. import livescript as ls
+
+        name = a.get("script")
+        if not isinstance(name, str) or not name.strip():
+            raise bad("script: a live script's name (reset, agentlink, or one an installed add-on ships in its scripts/live folder) or a .json file's path.")
+        roots = [OWN_ROOT]
+        try:
+            md = mod_dir()
+            roots += [os.path.join(md, d) for d in sorted(os.listdir(md)) if os.path.isdir(os.path.join(md, d))]
+        except Exception:
+            pass
+        p = None
+        if not any(c in name for c in "/\\") and not name.startswith("~"):
+            p = ls.find_script(name, roots)
+        if p is None:
+            q = paths.in_file(s, "live_run", name, "script")
+            if os.path.isfile(q):
+                p = q
+        if p is None:
+            have = sorted({f[:-5] for r in roots for f in (os.listdir(os.path.join(r, "scripts", "live")) if os.path.isdir(os.path.join(r, "scripts", "live")) else []) if f.endswith(".json")})
+            raise ToolError("not_found", f"script: {name} — no such live script. Installed: {', '.join(have) or 'none'}; or a .json file's path.")
+        script = ls.load(p)
+        chosen = ls.pick_steps(script["steps"], a.get("steps"))
+
+        def call(tool, args):
+            r = s.server.call({"name": tool, "arguments": args})
+            try:
+                body = _json.loads(r["content"][0]["text"])
+            except (KeyError, IndexError, ValueError):
+                body = {}
+            ok = not r.get("isError")
+            return {"tool": tool, "ok": ok, **({"result": body} if ok else {"error": body.get("error", body)})}
+
+        def shot(n):
+            r = call("gui_input", {"steps": [{"shot": n}], "inline": False})
+            f = os.path.join(s.out_dir, "gui_input", n + ".png")
+            return f if r.get("ok") and os.path.isfile(f) else None
+
+        vars_ = a.get("vars") or {}
+        if not isinstance(vars_, dict):
+            raise bad("vars: { name: value } for the script's $names (without the $).")
+        out = ls.run(script, chosen, call, vars_, bool(a.get("stopOnFail", False)), shot if getattr(FreeCAD, "GuiUp", False) else None)
+        out["file"] = p
+        return out
+
     st = {"type": "string"}
     return [
         Tool("gui_input",
@@ -159,6 +207,13 @@ def tools(s):
              "even while it holds every other call. all: true closes each one in front, dialogs under a menu too. Answers what was closed and "
              "what is still open. Window only.",
              obj({"all": {"type": "boolean"}}), gui_unstick),
+        Tool("live_run",
+             "Replay a live window script (scripts/live, its README's format) and check it: script is a name (reset, agentlink, or another found in the installed add-ons' scripts/live folders; a wrong name lists them) or a .json file's path; "
+             "steps: only these (names or numbers from 0; all by default; run reset first, as the scripts expect). Each step's calls go to batch (rollback: false, stopOnError: false), or one by one when the step is direct; "
+             "$names are filled in from vars { name: value } and from earlier answers (a $name the script declares, kept from the latest answer that has that key: $next); a step that needs one not known yet is skipped and says which. "
+             "Two-role steps (role: student, parallel) are skipped: they need two agents (ROLES.md). Every expect is checked (equals, contains, atLeast, atMost, exists, noneContain with ignoreLinesWith; paths with dots, [*] any item, [-1] the last). "
+             "Answers per step pass, fail or skipped, a failing check's call, path, wanted and got, refused calls, the step's shot (a window picture, in the window) and look (what it should show), and the totals. stopOnFail: true stops at the first failing step. It changes the document as the script does.",
+             obj({"script": st, "steps": {"type": "array", "items": {}}, "vars": {"type": "object"}, "stopOnFail": {"type": "boolean"}}, ["script"]), live_run),
         Tool("addon_test",
              "An installed add-on's own tests (its tests/ folder) run in the background in a separate FreeCAD command-line process, never this "
              "FreeCAD: documents, the window and settings are untouched, and the tests get a fresh ~/AgentLink. addon starts a run: its folder "

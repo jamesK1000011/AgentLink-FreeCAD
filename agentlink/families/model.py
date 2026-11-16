@@ -10,6 +10,8 @@ import FreeCAD
 import Part
 
 from .. import geometry as geo
+from .. import loftmath as lm
+from .. import paths, pointfiles
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import measure as ms
@@ -85,17 +87,55 @@ def report(session, o, tool, extra=None):
 
 # ---- profiles: what extrude, revolve, loft and sweep take ----------------------------------
 
+def spec_points(session, spec, what="profile"):
+    """The points a profile spec gives: { points: [[x,y,z] …] } or
+    { points_file: "<file>.json"|".csv", key } (read on this side, a
+    relative path in the session's folder); None for other specs."""
+    if not isinstance(spec, dict):
+        return None
+    if spec.get("points_file") is not None:
+        if spec.get("points") is not None:
+            raise ToolError("invalid_input", f"{what}: points or points_file, not both.")
+        f = spec["points_file"]
+        if not isinstance(f, str) or not f.strip():
+            raise ToolError("invalid_input", f"{what}.points_file: a file's path (.json or .csv).")
+        p = paths.in_file(session, "part_loft", f, "points_file")
+        return pointfiles.one_outline(p, spec.get("key"), f"{what}.points_file")
+    if "points" in spec:
+        if not isinstance(spec["points"], list):
+            raise ToolError("invalid_input", f"{what}.points: a list of [x, y, z].")
+        return spec["points"]
+    return None
+
+
+def bspline_through(pts, closed):
+    """A B-spline wire through the points: periodic (smooth through the
+    seam) when closed."""
+    if closed and len(pts) > 3 and (pts[0] - pts[-1]).Length < 1e-9:
+        pts = pts[:-1]
+    c = Part.BSplineCurve()
+    c.interpolate(pts, PeriodicFlag=bool(closed))
+    return Part.Wire([c.toShape()])
+
+
 def profile(session, spec, body=None, what="profile", closed_default=True):
     """A profile as a shape (a face or a wire) and the object it came from:
-    a reference ("Sketch", "Box.Face6", "Box.Edge3"), { points: [[x,y,z] …],
-    closed }, or { circle: { center, radius, normal } }."""
-    if isinstance(spec, dict) and "points" in spec:
-        pts = [picks.vec3(p, f"{what}.points") for p in spec["points"]]
+    a reference ("Sketch", "Box.Face6", "Box.Edge3"), { points: [[x,y,z] …]
+    or points_file, key, closed, smooth }, or { circle: { center, radius,
+    normal } }."""
+    raw = spec_points(session, spec, what)
+    if raw is not None:
+        pts = [picks.vec3(p, f"{what}.points") for p in raw]
         if len(pts) < 2:
             raise ToolError("invalid_input", f"{what}.points: two or more [x, y, z].")
         closed = spec.get("closed", closed_default)
         if closed and len(pts) < 3:
             raise ToolError("invalid_input", f"{what}.points: three or more for a closed outline.")
+        if spec.get("smooth"):
+            try:
+                return bspline_through(pts, closed), None
+            except Exception as e:
+                raise ToolError("invalid_input", f"{what}.points: no smooth curve through them ({e}) — points apart, in order, none doubled.")
         if closed and (pts[0] - pts[-1]).Length > 1e-9:
             pts.append(pts[0])
         return Part.makePolygon(pts), None
@@ -310,26 +350,160 @@ def align_profiles(wires):
 # How far a loft may reach beyond the profiles' joint box, as a share of
 # that box (each way, never under a quarter of its longest side's share).
 LOFT_REACH = 0.15
+# Seconds part_loft spends on tries (rebuilt profiles, lower degrees, span
+# by span) before it answers with what it has: past the watchdog's change
+# deadline a busy window is taken for a hung one.
+LOFT_BUDGET = 60.0
+
+
+def tight_box(sh):
+    """The shape's box from its geometry itself. Shape.BoundBox of a
+    B-spline face or edge not yet drawn is the box of its control points,
+    which stand off a smooth loft through many sections by far more than
+    the surface does: read that way, a sound loft looked like a 16–73%
+    bulge."""
+    try:
+        bb = sh.optimalBoundingBox(False, False)
+        if bb.isValid():
+            return bb
+    except Exception:
+        pass
+    try:
+        pts = sh.tessellate(max(1e-3, sh.BoundBox.DiagonalLength / 400.0))[0] if sh.Faces else sh.discretize(Number=256)
+        if pts:
+            bb = FreeCAD.BoundBox()
+            for p in pts:
+                bb.add(p)
+            return bb
+    except Exception:
+        pass
+    return sh.BoundBox
+
+
+def _box6(bb):
+    return (bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax)
 
 
 def loft_overshoot(res, wires):
     """How far the loft reaches beyond the profiles' joint box, as a share
-    of the box (0 when inside the allowance), and the axis."""
+    of the box (0 when inside the allowance), and the axis. Both boxes are
+    read from the geometry, not from control points."""
     bb = FreeCAD.BoundBox()
     for w in wires:
-        bb.add(w.BoundBox)
-    rb = res.BoundBox
-    longest = max(bb.XLength, bb.YLength, bb.ZLength, 1e-9)
-    worst, axis = 0.0, None
-    for ax, lo, hi, rlo, rhi, ln in (("x", bb.XMin, bb.XMax, rb.XMin, rb.XMax, bb.XLength), ("y", bb.YMin, bb.YMax, rb.YMin, rb.YMax, bb.YLength),
-                                     ("z", bb.ZMin, bb.ZMax, rb.ZMin, rb.ZMax, bb.ZLength)):
-        allow = LOFT_REACH * max(ln, 0.25 * longest)
-        over = max(lo - rlo, rhi - hi, 0.0)
-        if over > allow + 1e-6:
-            share = over / max(ln, 0.25 * longest)
-            if share > worst:
-                worst, axis = share, ax
-    return worst, axis
+        bb.add(tight_box(w))
+    return lm.reach_beyond(_box6(tight_box(res)), _box6(bb), LOFT_REACH)
+
+
+def loft_spans(res, wires):
+    """The spans (profiles i to i + 1) whose part of the loft reaches
+    beyond those two profiles' own box by more than LOFT_REACH, worst
+    first: [{span, share, axis}]."""
+    try:
+        pts = [lm.tup(p) for p in res.tessellate(max(1e-3, res.BoundBox.DiagonalLength / 300.0))[0]]
+    except Exception:
+        return []
+    return lm.span_bulges(pts, [_box6(tight_box(w)) for w in wires], [lm.tup(centre(w)) for w in wires], LOFT_REACH)
+
+
+def spans_said(spans, k=4):
+    return "; ".join(f"profiles {x['span'][0]}–{x['span'][1]} by {x['share'] * 100:.0f}% along {x['axis']}" for x in spans[:k]) + (f" (and {len(spans) - k} more)" if len(spans) > k else "")
+
+
+def outline_points(w, n):
+    """n points spread by arc length round (or along) a wire, from its start."""
+    dense = _pts(w, max(8 * n, 256))
+    closed = w.isClosed()
+    if closed and len(dense) > 2 and (dense[0] - dense[-1]).Length < 1e-9:
+        dense = dense[:-1]
+    return lm.resample(dense, n, closed)
+
+
+def is_polygon(w):
+    return all(isinstance(getattr(e, "Curve", None), Part.Line) for e in w.Edges)
+
+
+def sample_count(wires, asked=None):
+    """How many points each profile is rebuilt with: asked, else enough for
+    the finest profile (its corners or its B-spline's poles, twice), 48 or
+    more, 256 at most."""
+    if asked:
+        return asked
+    need = 24
+    for w in wires:
+        c = _one_curve(w)
+        if c is not None and hasattr(c, "NbPoles"):
+            need = max(need, 2 * c.NbPoles)
+        else:
+            need = max(need, len(w.OrderedVertexes) if is_polygon(w) else 2 * len(w.Edges) * 12)
+    return int(min(256, max(48, need)))
+
+
+def as_polygons(wires, n):
+    """Each profile a polygon of the same n points (arc length, seams lined
+    up), so a ruled loft pairs point with point. Profiles that are polygons
+    of one corner count already keep their corners."""
+    closed = wires[0].isClosed()
+    if all(is_polygon(w) for w in wires) and len({len(w.OrderedVertexes) for w in wires}) == 1:
+        outs = [[lm.tup(v.Point) for v in w.OrderedVertexes] for w in wires]
+        kept = True
+    else:
+        outs = [outline_points(w, n) for w in wires]
+        kept = False
+    if closed:
+        outs, _ = lm.line_up(outs)
+    ws = [Part.makePolygon([V(*p) for p in o] + ([V(*o[0])] if closed else [])) for o in outs]
+    return ws, kept, len(outs[0])
+
+
+def as_matching_bsplines(wires, n):
+    """Each profile rebuilt as a B-spline through the same n points (arc
+    length, seams lined up) with one and the same parameters, so every
+    section has the same knots and OCC has nothing to make compatible."""
+    closed = wires[0].isClosed()
+    outs = [outline_points(w, n) for w in wires]
+    if closed:
+        outs, _ = lm.line_up(outs)
+    m = len(outs[0]) + (1 if closed else 0)
+    params = [i / float(m - 1) for i in range(m)]
+    ws = []
+    for o in outs:
+        c = Part.BSplineCurve()
+        c.interpolate([V(*p) for p in o], PeriodicFlag=closed, Parameters=params)
+        ws.append(Part.Wire([c.toShape()]))
+    return ws
+
+
+def strays(res, sources, budget=2.0):
+    """How far the result strays from the points it was made from: the
+    largest and mean distance, and which profile; None if not measured."""
+    import time as _t
+
+    per = max(4, 480 // max(1, len(sources)))
+    worst, which, tot, cnt = 0.0, None, 0.0, 0
+    t0 = _t.time()
+    try:
+        shell = res.Faces[0] if len(res.Faces) == 1 else Part.Compound(res.Faces)
+    except Exception:
+        return None
+    for i, pts in enumerate(sources):
+        if not pts:
+            continue
+        step = max(1, len(pts) // per)
+        for p in pts[::step]:
+            try:
+                d = shell.distToShape(Part.Vertex(p))[0]
+            except Exception:
+                continue
+            tot, cnt = tot + d, cnt + 1
+            if d > worst:
+                worst, which = d, i
+            if _t.time() - t0 > budget:
+                break
+        if _t.time() - t0 > budget:
+            break
+    if not cnt:
+        return None
+    return {"maxDistance": round(worst, 4), "meanDistance": round(tot / cnt, 4), "profile": which, "points": cnt}
 
 
 def loft_problem(res, wires, solid):
@@ -338,7 +512,7 @@ def loft_problem(res, wires, solid):
         return "it came out empty"
     over, axis = loft_overshoot(res, wires)
     if over:
-        return f"profiles twist: start points or orientation differ — it bulges {over * 100:.0f}% of the profiles' size beyond them along {axis}"
+        return f"profiles twist or the smooth loft overshoots: it bulges {over * 100:.0f}% of the profiles' size beyond them along {axis}"
     if not res.isValid():
         return "it came out invalid"
     if solid:
@@ -355,7 +529,7 @@ def tools(session):
     s = session
     doc = lambda: s.doc  # noqa: E731 — doc_open may change the session's document
     body = {"type": "string", "description": "A body's name or label; may be left out when there is one."}
-    prof = {"description": "A sketch or wire's name, a face or edge (\"Box.Face6\"), { points: [[x,y,z] …], closed: true } or { circle: { center, radius, normal } }."}
+    prof = {"description": "A sketch or wire's name, a face or edge (\"Box.Face6\"), { points: [[x,y,z] …], closed: true, smooth }, { points_file: \"<file>.json\"|\".csv\", key } (points read from a file in the session's folder, not sent in the call) or { circle: { center, radius, normal } }."}
     common_in = {"into": body, "op": {"type": "string", "enum": ["new", "fuse", "cut", "common"]}, "name": {"type": "string"}}
 
     def finish(result, a, tool, consumed=()):
@@ -725,9 +899,17 @@ def tools(session):
 
     def part_loft(a):
         specs = a.get("profiles") or []
-        if len(specs) < 2:
-            raise ToolError("invalid_input", "profiles: two or more, in order.")
-        wires, srcs = [], []
+        if a.get("profiles_file") is not None:
+            if specs:
+                raise ToolError("invalid_input", "profiles or profiles_file, not both.")
+            f = a["profiles_file"]
+            if not isinstance(f, str) or not f.strip():
+                raise ToolError("invalid_input", "profiles_file: a file's path (.json or .csv) holding every profile's points.")
+            found = pointfiles.outlines(paths.in_file(s, "part_loft", f, "profiles_file"), a.get("key"), "profiles_file")
+            specs = [{"points": pts, "closed": True, "smooth": bool(a.get("smooth", False))} for _, pts in found]
+        if not isinstance(specs, list) or len(specs) < 2:
+            raise ToolError("invalid_input", "profiles: two or more, in order (or profiles_file with two or more outlines).")
+        wires, srcs, given = [], [], []
         for i, p in enumerate(specs):
             sh, src = profile(s, p, a.get("body"), f"profiles.{i}")
             if sh.ShapeType == "Face":
@@ -738,52 +920,195 @@ def tools(session):
                 sh = sh.Wires[0]
             wires.append(sh)
             srcs.append(src)
+            raw = spec_points(s, p, f"profiles.{i}") if isinstance(p, dict) else None
+            given.append([picks.vec3(q, "points") for q in raw] if raw is not None else _pts(sh, 48))
         solid = bool(a.get("solid", True))
         open_ = [i for i, w in enumerate(wires) if not w.isClosed()]
         if solid and open_:
             raise ToolError("invalid_input", f"not closed: profiles.{open_[0]} is an open edge or wire, so the loft has no inside. Close it (part_wire {{ kind: \"bspline\", closed: true }}), or solid: false for a surface.")
         if open_ and len(open_) != len(wires):
             raise ToolError("invalid_input", f"profiles: each closed or each open — profiles.{open_[0]} is open, the others closed.")
+        deg = a.get("maxDegree", 5)
+        if isinstance(deg, bool) or not isinstance(deg, int) or not 1 <= deg <= 8:
+            raise ToolError("invalid_input", "maxDegree: a whole number 1 to 8 (5 by default, FreeCAD's): the most the loft may bend along its way; lower is stiffer and overshoots less.")
+        samples = a.get("samples")
+        if samples is not None and (isinstance(samples, bool) or not isinstance(samples, int) or not 8 <= samples <= 512):
+            raise ToolError("invalid_input", "samples: how many points each profile is rebuilt with when it must be, 8 to 512.")
+        segments = a.get("segments")
+        loop = bool(a.get("closed", False))
+        if segments and loop:
+            raise ToolError("invalid_input", "segments: not with closed: true (a loft back to its first profile).")
         wires, aligned = align_profiles(wires)
         ruled = bool(a.get("ruled", False))
+        route, route_tries = [], []
 
-        def loft():
+        import time as _time
+
+        t0 = _time.monotonic()
+
+        def make(ws, rl, d):
+            """(result, why not kept) — why None when it is fit to keep."""
+            if route_tries and _time.monotonic() - t0 > LOFT_BUDGET:
+                return None, f"out of time: the tries so far took {_time.monotonic() - t0:.0f} s (a window that stops answering is taken for hung)"
+            route_tries.append(d)
             try:
-                r = Part.makeLoft(wires, solid, ruled, bool(a.get("closed", False)))
+                r = Part.makeLoft(ws, solid, rl, loop, d)
             except Exception as e:
-                raise ToolError("failed", f"The loft failed ({e}): profiles each closed (or each open), in order, not crossing; the same number of edges helps.")
+                return None, f"OCC could not build it ({e})"
             if solid and r.Solids and r.Volume < 0:
                 r.reverse()
-            return r
+            why = loft_problem(r, ws, solid)
+            if why and not why.startswith("profiles twist"):
+                try:
+                    r2 = r.copy()
+                    r2.fix(1e-7, 1e-7, 1e-3)
+                    if solid and not r2.Solids and r2.Shells:
+                        r2 = Part.Solid(r2.Shells[0])
+                    if solid and r2.Solids and r2.Volume < 0:
+                        r2.reverse()
+                    if loft_problem(r2, ws, solid) is None:
+                        route.append("OCC's shape fix repaired the loft")
+                        return r2, None
+                except Exception:
+                    pass
+            return r, why
 
-        res = loft()
-        why = loft_problem(res, wires, solid)
-        fixed = False
-        if why and not why.startswith("profiles twist"):
-            try:
-                r2 = res.copy()
-                r2.fix(1e-7, 1e-7, 1e-3)
-                if solid and not r2.Solids and r2.Shells:
-                    r2 = Part.Solid(r2.Shells[0])
-                if solid and r2.Solids and r2.Volume < 0:
-                    r2.reverse()
-                if loft_problem(r2, wires, solid) is None:
-                    res, why, fixed = r2, None, True
-            except Exception:
-                pass
-        if why:
-            hint = (" Start each profile at the matching point and run each the same way round; more profiles where the shape turns; ruled: true for straight runs between them."
-                    if why.startswith("profiles twist") else " Each profile closed, in order along the loft, none crossing another.")
+        n = sample_count(wires, samples)
+        res, why, spans, tried = None, None, [], []
+        used_deg = deg
+        if ruled:
+            # A ruled loft pairs edge with edge: B-splines (one closed edge
+            # each, knots apart) failed it outright, polygons of one point
+            # count never do.
+            pw, kept, cnt = as_polygons(wires, n)
+            res, why = make(pw, True, deg)
+            route.append(f"ruled: each profile as it was, a polygon of {cnt} corners, seams lined up" if kept
+                         else f"ruled: each profile made a polygon of the same {cnt} points, spread by arc length, seams lined up")
+        else:
+            rebuilt = {}
+
+            def profiles_for(which):
+                if which == "given":
+                    return wires
+                if "ws" not in rebuilt:
+                    try:
+                        rebuilt["ws"] = as_matching_bsplines(wires, n)
+                    except Exception as e:
+                        rebuilt["ws"] = None
+                        tried.append(f"rebuilt|err|the profiles could not be rebuilt ({e})")
+                return rebuilt["ws"]
+
+            refused, first = {}, {}
+            best = None  # (share, result, wires, degree, why)
+            for d in [deg] + [x for x in (3, 2) if x < deg]:
+                for which in ("given", "rebuilt"):
+                    ws = profiles_for(which)
+                    if ws is None or which in refused:
+                        continue
+                    r, w = make(ws, False, d)
+                    if w is None:
+                        res, used_deg = r, d
+                        if which == "rebuilt":
+                            said = f"OCC refused them as given ({refused['given']})" if "given" in refused else f"as given it bulged {first['given'] * 100:.0f}%"
+                            route.append(f"profiles rebuilt as B-splines through the same {n} points each (arc length, seams lined up, one set of knots): {said}")
+                        if d != deg:
+                            route.append(f"maxDegree lowered to {d}: at {deg} the loft bulged {min(first.values()) * 100:.0f}% beyond its profiles")
+                        break
+                    if r is None or not w.startswith("profiles twist"):
+                        refused[which] = w
+                        tried.append(f"{which}|err|{w}")
+                        continue
+                    share = loft_overshoot(r, ws)[0]
+                    first.setdefault(which, share)
+                    if best is None or share < best[0]:
+                        best = (share, r, ws, d, w)
+                if res is not None:
+                    break
+            if res is None and best is not None:
+                spans = loft_spans(best[1], best[2])
+                why = best[4]
+                if segments is not False and not loop and len(wires) >= 3 and _time.monotonic() - t0 < LOFT_BUDGET:
+                    seg = segmented(best[2], spans, best[3], solid)
+                    if seg is not None:
+                        res, why, used_deg = seg[0], None, best[3]
+                        route.append(f"segments: lofted span by span and joined — {seg[1]} ruled (they bulged smooth: {spans_said(spans)}), the rest smooth at maxDegree {best[3]}")
+            if res is None and best is None and len(wires) == 2:
+                # Two profiles: a smooth loft is straight between them anyway.
+                pw, kept, cnt = as_polygons(wires, n)
+                r, w = make(pw, True, deg)
+                if w is None:
+                    res, why = r, None
+                    route.append(f"OCC refused a smooth loft of the two profiles ({tried[0].split('|', 2)[-1] if tried else 'failed'}); between two profiles it is straight anyway, so it is ruled between polygons of {cnt} points each (arc length, seams lined up)")
+            if res is None and why is None:
+                why = tried[0].split("|", 2)[-1] if tried else "it failed"
+        if res is None or why:
+            if why and why.startswith("profiles twist"):
+                hint = ""
+                if spans:
+                    hint += f" Where: {spans_said(spans)}."
+                hint += (" Tried maxDegree " + ", ".join(str(d) for d in [deg] + [d for d in (3, 2) if d < deg]) + " and the profiles rebuilt alike." if not ruled else "")
+                hint += (" Lofted span by span with those spans ruled, it was not sound either." if segments is not False and spans and not ruled and not loop and len(wires) >= 3 else "")
+                hint += " ruled: true for straight runs; more profiles where the shape turns quickly; or loft the bulging span's neighbours apart and part_boolean fuse."
+            else:
+                hint = " Each profile closed (or each open), in order along the loft, none crossing another."
             raise ToolError("failed", f"The loft is not kept: {why}.{hint} Nothing was added.")
         extra = {}
         if aligned:
             extra["aligned"] = aligned
-        if fixed:
-            extra["fixed"] = "OCC's shape fix repaired the loft"
+        if route:
+            extra["route"] = route
+        if not ruled:
+            extra["maxDegree"] = used_deg
+        st = strays(res, given)
+        if st:
+            st["profile"] = f"profiles.{st['profile']}"
+            extra["strays"] = st
         out = finish(res, a, "part_loft", srcs)
         if extra and isinstance(out, dict):
             out.update(extra)
         return out
+
+    def segmented(ws, spans, d, solid):
+        """The loft span by span: the bulging spans ruled (each its own two
+        profiles), the runs between them smooth, sewn into one; checked as
+        a whole loft is. (shape, the ruled spans said) or None."""
+        bad = set()
+        for _ in range(3):
+            bad |= {x["span"][0] for x in spans} or set()
+            if not bad:
+                return None
+            faces = []
+            try:
+                for i, j, rl in lm.pieces(len(ws), bad):
+                    part = ws[i:j + 1]
+                    try:
+                        r = Part.makeLoft(part, False, rl, False, d)
+                    except Exception:
+                        if not rl:
+                            return None
+                        r = Part.makeLoft(part, False, False, False, d)
+                    faces.extend(r.Faces)
+                if solid:
+                    faces.append(Part.Face(ws[0]))
+                    faces.append(Part.Face(ws[-1]))
+                sewn = Part.Compound(faces)
+                sewn.sewShape()
+                if solid:
+                    if len(sewn.Shells) != 1 or not sewn.Shells[0].isClosed():
+                        return None
+                    res = Part.Solid(sewn.Shells[0])
+                    if res.Volume < 0:
+                        res.reverse()
+                else:
+                    res = sewn.Shells[0] if len(sewn.Shells) == 1 else sewn
+            except Exception:
+                return None
+            if loft_problem(res, ws, solid) is None and (not solid or geo.soundness(res)["ok"]):
+                return res, ", ".join(f"{i}–{i + 1}" for i in sorted(bad))
+            spans = loft_spans(res, ws)
+            if not spans or {x["span"][0] for x in spans} <= bad:
+                return None
+        return None
 
     def part_sweep(a):
         sh, src = profile(s, a.get("profile"), a.get("body"))
@@ -874,8 +1199,17 @@ def tools(session):
         ),
         Tool(
             "part_loft",
-            "A solid through two or more profiles in order (each a sketch, face, wire, { points } or { circle }); ruled: straight between them; closed: back to the first. The profiles are lined up first (each run the same way round, each seam at the point nearest the one before: aligned says what changed). The result is checked: valid, closed, volume above 0, and no further than 15% beyond the profiles' box; else repaired or refused with the reason. op / into as part_extrude.",
-            obj({"profiles": {"type": "array", "items": {}}, "body": body, "ruled": {"type": "boolean"}, "closed": {"type": "boolean"}, "solid": {"type": "boolean"}, **common_in}, ["profiles"]),
+            "A solid through two or more profiles in order (each a sketch, face, wire, { points }, { points_file, key } or { circle }; { points, smooth: true } is a B-spline through the points), or all at once from profiles_file (a .json list of point lists, or a .csv; key picks a list inside; smooth: true for B-splines): many sections read from a file, not sent in the call. "
+            "The profiles are lined up first (each run the same way round, each seam at the point nearest the one before: aligned says what changed). ruled: true is straight between them: each profile is made a polygon of the same number of points (spread by arc length, seams lined up; samples sets it; polygons of one corner count keep theirs), so it always pairs up, and route says so. "
+            "Smooth (the default): if OCC refuses the profiles as given, they are rebuilt as B-splines through the same points with one set of knots; if the loft bulges more than 15% beyond its profiles (read from the surface, not its control points), it is tried again at maxDegree 3 then 2 (maxDegree: 1–8, 5 by default; lower is stiffer); if it still bulges, it is lofted span by span with the bulging spans ruled and sewn into one, kept only if sound (segments: false turns that off). route says what was done; a refusal names the spans that bulge (profiles i–i+1, by how much) so ruled or more profiles can go there. "
+            "Two profiles that OCC will not loft smooth are ruled between matching polygons (straight between two anyway). closed: back to the first. The answer gives strays: how far the result lies from the points it was made from at most and on average, and the profile. Refused, with the reason, when invalid, open or inside out. op / into as part_extrude.",
+            obj({"profiles": {"type": "array", "items": {}, "description": "Each a sketch or wire's name, a face (\"Box.Face6\"), { points: [[x,y,z] …], closed, smooth }, { points_file: \"<file>.json\"|\".csv\", key, closed, smooth } or { circle }."},
+                 "profiles_file": {"type": "string", "description": "A .json (a list of [[x,y,z] …] lists, or an object of them) or .csv (x,y,z rows; outlines apart by blank lines or named in a first column) holding every profile, in order. A relative path is in the session's folder."},
+                 "key": {"description": "With profiles_file: the name (or number from 0) of the list in the file that holds the profiles."},
+                 "smooth": {"type": "boolean", "description": "With profiles_file: B-splines through the points (else polygons)."},
+                 "body": body, "ruled": {"type": "boolean"}, "closed": {"type": "boolean"}, "solid": {"type": "boolean"},
+                 "maxDegree": {"type": "integer", "minimum": 1, "maximum": 8}, "samples": {"type": "integer", "minimum": 8, "maximum": 512},
+                 "segments": {"type": "boolean", "description": "false: no span-by-span loft when a smooth one bulges."}, **common_in}),
             part_loft,
             changes=True,
         ),

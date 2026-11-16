@@ -966,6 +966,34 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         import json as _json
 
         calls = a.get("calls") or []
+        if a.get("calls") is None and a.get("file") is None:
+            raise ToolError("invalid_input", "calls: [{ tool, arguments } …], or file: a .json file holding them. Nothing was run.")
+        if a.get("file") is not None:
+            # The calls from a JSON file on this side: a long run (many
+            # profiles' points) need not pass through the agent's context.
+            if a.get("calls"):
+                raise ToolError("invalid_input", "calls or file, not both. Nothing was run.")
+            from . import paths as _paths
+
+            f = a["file"]
+            if not isinstance(f, str) or not f.strip():
+                raise ToolError("invalid_input", "file: a .json file's path holding [{ tool, arguments } …]. Nothing was run.")
+            p = _paths.in_file(s, "batch", f, "file")
+            if not os.path.isfile(p):
+                raise ToolError("not_found", f"file: {f} — no such file (a relative path is in the session's folder: {s.out_dir}). Nothing was run.")
+            if os.path.getsize(p) > 20 * 1024 * 1024:
+                raise ToolError("invalid_input", f"file: {f} is over 20 MB. Nothing was run.")
+            try:
+                with open(p, encoding="utf-8-sig") as fh:
+                    data = _json.load(fh)
+            except ValueError as e:
+                raise ToolError("invalid_input", f"file: {f} is not JSON ({e}) — a list [{{ tool, arguments }} …], or {{ calls, rollback, stopOnError }}. Nothing was run.")
+            if isinstance(data, dict):
+                a = {**{k: data[k] for k in ("rollback", "stopOnError") if k in data}, **{k: v for k, v in a.items() if k in ("rollback", "stopOnError")}}
+                data = data.get("calls")
+            if not isinstance(data, list):
+                raise ToolError("invalid_input", f"file: {f} holds no list of calls — [{{ tool, arguments }} …], or {{ calls: [...] }}. Nothing was run.")
+            calls = data
         # Some clients send a large value as a string of its JSON: the list,
         # a call, or a call's arguments.
         if isinstance(calls, str):
@@ -1129,7 +1157,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
              obj({"job": {"type": "string"}, "wait": {"type": "number"}}), job_status),
         Tool("job_start", "Run a read as a job: tool and its arguments. The answer comes back as the tool's own when it ends within 45 s, else a job id for job_status (wait: false answers with the id at once). Reads that are heavy or were slow here (over 20 s) go to a job on their own, and any read takes background: true for the same; a client drops a call after about 80 s, so a long read's answer would be lost. Only reads that leave the window and the 3D view alone (not changes, pictures or window tools); while one runs, changes to its document wait (refused, saying which job).",
              obj({"tool": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["tool"]), job_start),
-        Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }]. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it and removes every object it made (removed lists any undo did not reach), so it stands or falls whole.", obj({"calls": {"type": "array", "items": {"type": "object"}}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}}, ["calls"]), batch),
+        Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }], or file: a .json file holding that list (or { calls, rollback, stopOnError }), read on this side so a long run of calls (many profiles' points) is not sent through the conversation; a relative path is in the session's folder, and files are read where other tools may read. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it and removes every object it made (removed lists any undo did not reach), so it stands or falls whole.",
+             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}}), batch),
         Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded making): shots past the last 50 and 3 days, solver and job runs past 14 days, FreeCAD backups past 7; exports only listed. To the Trash. Dry run unless dry_run: false; kinds, older_than_days narrow it. Runs on its own daily.",
              obj({"dry_run": {"type": "boolean"}, "kinds": {"type": "array", "items": {"type": "string", "enum": list(outputs.KINDS)}}, "older_than_days": {"type": "number"}}), outputs_clean),
         Tool("history_undo", "Undo the last change (steps: how many), as FreeCAD's Edit › Undo does.", obj({"steps": {"type": "integer"}}), history("undo")),
