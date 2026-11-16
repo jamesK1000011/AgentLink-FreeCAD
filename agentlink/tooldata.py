@@ -20,6 +20,13 @@ reads: for a changing tool, the calls that only read, {"action": ["list"]}
 what a call did in the Activity tab's words, a template whose {fields} come
 from the call's arguments or answer ("Sliced {object}", agentlink/activity.py).
 
+workbench, commands, words: how the tool is found (tool_groups { find } and
+{ now: true }; agentlink/toolindex.py): FreeCAD's workbench class name it
+belongs to ("MeshWorkbench"), the FreeCAD commands it does the work of
+(["Mesh_Decimating"]), and a few search words its name lacks (["reduce",
+"simplify"]). All optional; Agent Link keeps nothing of an add-on's tools
+itself, so these travel with the add-on.
+
 Long reads, for add-on authors: a client drops a call after about 80 s, and
 the watchdog stops a FreeCAD that holds a call past its deadline. A read
 ("changes": false) that may run long should say "heavy": true (or be in its
@@ -43,7 +50,8 @@ import re
 
 ACCEPTS_MAJOR = 1
 REQUIRED = {"group": str, "description": str, "inputSchema": dict, "changes": bool, "source": str, "date": str}
-OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "reads": dict, "activity": str}
+OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "reads": dict, "activity": str,
+            "workbench": str, "commands": list, "words": list}
 # Agent Link's own tools only (agentlink/data/tools.json): a tool that wraps
 # one FreeCAD command, run by one of agentlink/runners.py's runners. An
 # add-on binds handlers instead and never needs these.
@@ -99,6 +107,9 @@ def check(doc):
             out += runners.check_entry(name, e)
         elif set(e) & set(RUNNER):
             out.append(f"{name}: {sorted(set(e) & set(RUNNER))} without a runner")
+        for k in ("commands", "words"):
+            if isinstance(e.get(k), list) and not all(isinstance(x, str) and x for x in e[k]):
+                out.append(f"{name}.{k}: a list of words")
         extra = set(e) - set(REQUIRED) - set(OPTIONAL) - set(RUNNER)
         if extra:
             out.append(f"{name}: unknown fields {sorted(extra)}")
@@ -143,7 +154,10 @@ def build(folder, group, handlers, who="this add-on"):
     if missing or extra:
         raise FormatError(f"{who}'s {group} tools: no handler for {sorted(missing)}, no definition for {sorted(extra)}")
     keep.declare_heavy(k for k, v in mine.items() if v.get("heavy"))
+    from . import toolindex
+
     for k, v in mine.items():
+        toolindex.declare(k, v)
         if v.get("writes"):
             paths.WRITERS.add(k)
         if v.get("pathIsCurve"):

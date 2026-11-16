@@ -707,9 +707,10 @@ WORKING = (
 LEAN_NOTE = (
     "Only the tools every task uses are listed at the start: the session, guides, undo, the checks "
     "and the pictures. The rest come in groups, Agent Link's and those of the add-ons installed (doc, model, sketch, "
-    "feature, draft, measure, strength, techdraw, assembly, cam …): tool_groups lists them. For one tool, do not load its group: tool_groups { find: \"words\" } searches every tool by what it does, "
-    "tool_groups { tool: name } gives its description and inputs, and it runs by name (or through batch) unlisted. "
-    "enable: [group] lists a whole group from then on — for a task that uses most of it; enable what the task's "
+    "feature, draft, measure, strength, techdraw, assembly, cam …): tool_groups lists them. The way to a tool is find, card, call: tool_groups { find: \"words\" } searches every tool by what it does "
+    "(FreeCAD's own command and workbench names work; now: true puts what fits the open workbench, sketch and selection first), "
+    "tool_groups { tool: name } gives its description and inputs, and it runs by name (or through batch) unlisted — do not load a group for one tool. "
+    "enable: [group] lists a whole group from then on — only for a task that uses most of it; enable what the task's "
     "guide names, not all. AGENTLINK_TOOLS=full "
     "lists every tool from the start."
 )
@@ -734,6 +735,73 @@ def _force_restart_here(_a):
     """Reached only with no supervisor in front (FreeCAD run by hand): the
     window that answered is not stuck."""
     raise ToolError("invalid_state", "This FreeCAD answered, so it is not stuck: app_restart quits and reopens it cleanly. (app_force_restart is run by Agent Link's supervisor, outside FreeCAD.)")
+
+
+def now_state(doc, commands=()):
+    """What tool_groups { now: true } goes by (agentlink/toolindex.py fits()):
+    the document's objects by workbench, and in the window the active
+    workbench, a sketch open in edit, the selection, and whether each of
+    commands reports itself active. Nothing here raises: what cannot be read
+    is left out, and a command this FreeCAD does not have counts for nothing."""
+    from . import toolindex
+
+    state = {"window": False, "workbench": None, "editing": None, "selected": 0, "selBenches": set(), "selSubs": set(), "docBenches": None, "active": {}}
+
+    def bench(o):
+        try:
+            proxy = getattr(o, "Proxy", None)
+            return toolindex.bench_of(o.TypeId, type(proxy).__module__ if proxy is not None else None)
+        except Exception:  # noqa: BLE001
+            return None
+
+    try:
+        state["docBenches"] = {b for b in (bench(o) for o in doc.Objects) if b}
+    except Exception:  # noqa: BLE001 - no document, or one that was closed
+        state["docBenches"] = None
+    try:
+        up = bool(FreeCAD.GuiUp)
+    except Exception:  # noqa: BLE001
+        up = False
+    if not up:
+        return state
+    try:
+        import FreeCADGui as gui
+    except Exception:  # noqa: BLE001
+        return state
+    state["window"] = True
+    try:
+        wb = gui.activeWorkbench()
+        state["workbench"] = str(wb.name()) if hasattr(wb, "name") else type(wb).__name__
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        gd = gui.ActiveDocument
+        vp = gd.getInEdit() if gd is not None else None
+        o = getattr(vp, "Object", None)
+        if o is not None:
+            state["editing"] = "sketch" if o.isDerivedFrom("Sketcher::SketchObject") else str(o.TypeId)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        for sx in gui.Selection.getSelectionEx():
+            state["selected"] += 1
+            b = bench(sx.Object)
+            if b:
+                state["selBenches"].add(b)
+            for sub in sx.SubElementNames or ():
+                m = re.match(r"[A-Za-z]+", str(sub).rsplit(".", 1)[-1])
+                if m:
+                    state["selSubs"].add(m.group(0).lower())
+    except Exception:  # noqa: BLE001
+        pass
+    for name in dict.fromkeys(commands):
+        try:
+            c = gui.Command.get(name)
+            if c is not None:
+                state["active"][name] = bool(c.isActive())
+        except Exception:  # noqa: BLE001 - a command that cannot say counts for nothing
+            pass
+    return state
 
 
 def make_tools(session):
@@ -977,16 +1045,24 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         def tools_of(g):
             return sorted(t.name for t in server.tools.values() if t.group == g and not getattr(t, "alias_of", None))
 
+        from . import toolindex
+
+        def echo_says(n):
+            # What a family declared for the live echo (an add-on's
+            # WORKBENCHES and COMMANDS), where the index has nothing.
+            from . import echo
+
+            return echo._workbench_for(n), echo.command_for(n, {})
+
+        def entry_of(t):
+            return toolindex.entry(t.name, echo_says)
+
         # One tool's card, or a search of the whole index, without listing
         # anything: an agent that knows what it wants to do finds the tool
         # and its inputs for a few hundred tokens, where enabling the
         # tool's group costs every description in it (the 600-odd tools
         # are an index to query, not a list to load).
-        def first_sentence(t, n=160):
-            t = (t or "").strip()
-            m = re.search(r"[.:;](\s|$)", t)
-            cut = t[:m.start() + 1] if m and m.start() < n else short(t, n)
-            return cut
+        first_sentence = toolindex.first_sentence
 
         def card(t):
             return {"tool": t.name, "group": t.group, "listed": server.groups is None or t.group in server.groups, "changes": bool(t.changes),
@@ -995,8 +1071,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         names = a.get("tool")
         if names:
             names = [names] if isinstance(names, str) else names
-            if not isinstance(names, list) or not all(isinstance(n, str) for n in names) or len(names) > 8:
-                raise ToolError("invalid_input", "tool: a tool's name, or up to 8 names — tool_groups { find: \"words\" } finds names by what they do.")
+            if not isinstance(names, list) or not all(isinstance(n, str) for n in names) or len(names) > 20:
+                raise ToolError("invalid_input", "tool: a tool's name, or up to 20 names — tool_groups { find: \"words\" } finds names by what they do.")
             cards = []
             for n in names:
                 t = server.tools.get(n)
@@ -1008,46 +1084,53 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 cards.append(card(t))
             return {"tools": cards, "note": "Callable by name as they are, listed or not: directly, or batch { calls: [{ tool, arguments }] } where the client only sends listed tools."}
         find = a.get("find")
-        if find is not None:
-            words = [w for w in re.findall(r"[a-z0-9]+", str(find).lower()) if len(w) > 1]
-            if not words:
+        now = a.get("now")
+        if now is not None and not isinstance(now, bool):
+            raise ToolError("invalid_input", "now: true (the tools that fit the workbench, sketch and selection in front) or left out.")
+        if find is not None or now:
+            if find is not None and not toolindex.query_words(find):
                 raise ToolError("invalid_input", "find: words for what the tool does (\"fillet edge\", \"mesh decimate\", \"drawing dimension\").")
             only = a.get("group")
             if only is not None and only not in groups:
                 raise ToolError("not_found", f"group {only!r}: not here. The groups: {', '.join(groups)}.")
-            hits = []
-            for t in server.tools.values():
-                if getattr(t, "alias_of", None) or (only and t.group != only):
-                    continue
-                name = t.name.lower()
-                name_words = set(re.findall(r"[a-z0-9]+", name))
-                text = (t.description or "").lower()
-                about = (info.get(t.group, "") or "").lower()
-                score = 0
-                for w in words:
-                    stem = w[:-1] if len(w) > 3 and w.endswith("s") else w
-                    if w in name_words or stem in name_words:
-                        score += 8
-                    elif stem in name:
-                        score += 5
-                    if stem in text[:160]:
-                        score += 3
-                    elif stem in text:
-                        score += 1
-                    if stem in t.group.lower():
-                        score += 2
-                    elif stem in about:
-                        score += 0.5
-                if score >= 3:
-                    hits.append((-score, t.name, t))
-            hits.sort(key=lambda h: h[:2])
             limit = a.get("limit", 10)
             if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 40:
                 raise ToolError("invalid_input", "limit: 1 to 40 (10 when left out).")
-            if not hits:
-                return {"find": find, "tools": [], "note": "Nothing by those words. Fewer or plainer words (FreeCAD's own name for the command works), or tool_groups with no arguments for the groups and what each holds."}
-            return {"find": find, "count": len(hits), "tools": [{"tool": t.name, "group": t.group, "does": first_sentence(t.description)} for _, _, t in hits[:limit]],
-                    "note": "tool_groups { tool: name } gives a tool's whole description and inputs; each is callable by name without enabling its group."}
+            rows = [{"name": t.name, "description": t.description or "", "group": t.group, "about": info.get(t.group, "") or "", "entry": entry_of(t), "tool": t}
+                    for t in server.tools.values() if not getattr(t, "alias_of", None) and not (only and t.group != only)]
+
+            def row(r, why=None):
+                out = {"tool": r["name"], "group": r["group"], "does": first_sentence(r["description"])}
+                if why:
+                    out["fits"] = ", ".join(why)
+                return out
+
+            card_note = "tool_groups { tool: name } gives a tool's whole description and inputs; each is callable by name without enabling its group."
+            if not now:
+                hits = toolindex.rank(rows, find)
+                if not hits:
+                    return {"find": find, "tools": [], "note": "Nothing by those words. Fewer or plainer words (FreeCAD's own name for the command or workbench works), or tool_groups with no arguments for the groups and what each holds."}
+                return {"find": find, "count": len(hits), "tools": [row(r) for r, _m, _s in hits[:limit]], "note": card_note}
+            # What fits the present state. With find: the search's hits,
+            # those that fit first; alone: every tool that fits.
+            hits = toolindex.rank(rows, find) if find is not None else [(r, 0, 0.0) for r in rows]
+            pool = hits[:max(60, limit)] if find is not None else hits
+            state = now_state(getattr(session, "doc", None), [c for r, _m, _s in pool for c in r["entry"]["commands"]])
+            scored = []
+            for r, m, sc in pool:
+                fit, why = toolindex.fits(r["entry"], state, ((r["tool"].schema or {}).get("properties") or {}))
+                if find is None and fit <= 0:
+                    continue
+                scored.append((-m, -(sc + 2 * fit), r["name"], r, why))
+            scored.sort(key=lambda h: h[:3])
+            seen_now = {"workbench": state["workbench"], "editing": state["editing"], "selected": state["selected"]} if state["window"] else {"window": False}
+            out = {**({"find": find} if find is not None else {}), "now": seen_now, "count": len(scored), "tools": [row(r, why) for _m, _s, _n, r, why in scored[:limit]]}
+            if not scored:
+                out["note"] = ("Nothing by those words. Fewer or plainer words, or leave find out for what fits now." if find is not None
+                               else "Nothing fits this state in particular: tool_groups { find: \"words\" } searches every tool, session_state says what the document holds.")
+            else:
+                out["note"] = (card_note if state["window"] else "No window here: went by the document's objects only (no workbench, selection or command state). " + card_note)
+            return out
 
         want = a.get("group")
         if want:
@@ -1056,7 +1139,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
 
                 near = difflib.get_close_matches(str(want), groups, 3)
                 raise ToolError("not_found", f"group {want!r}: not here{' — did you mean ' + ', '.join(near) if near else ''}. The groups: {', '.join(groups)}.")
-            ts = tools_of(want)
+            ts = [{"tool": n, "does": first_sentence(server.tools[n].description, 120)} for n in tools_of(want)]
             return {"group": want, "on": want in on, "count": len(ts), "about": info.get(want, ""), "tools": ts,
                     **({"note": f"Not listed: tool_groups {{ enable: [\"{want}\"] }} lists it; each tool is callable by name either way."} if want not in on else {})}
         rows = []
@@ -1069,7 +1152,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             else:
                 rows.append({"group": g, "on": False, "count": n, "about": short(info.get(g, ""))})
         return {"groups": rows, "listed": sum(1 for t in server.tools.values() if server.groups is None or t.group in server.groups),
-                "note": "Every tool is callable by name, listed or not. group: g gives one group's whole about and its tools; detail: true every group's whole about."}
+                "note": "Every tool is callable by name, listed or not. find: \"words\" searches them all; group: g gives one group's whole about and its tools, a line each; detail: true every group's whole about."}
 
     def outputs_clean(a):
         kinds = a.get("kinds")
@@ -1378,7 +1461,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
     core = [
         Tool("usage_report", "What working through Agent Link has cost the agent, estimated on this side: calls, tokens (text at ~3.5 characters a token, pictures by size) and the tool list each session loads up front — per day over days (7), per session, the costliest tools, and tips to cut it. session: true gives this session alone. Not Claude's own count: the plan's usage page has that. Changes nothing.",
              obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}}), usage_report),
-        Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools); detail: true gives every group's whole about. The cheap way to a tool that is not listed: find: \"words\" searches every tool by name and description (best first; group narrows it, limit 1-40, 10 by default) and answers name, group and what it does; tool: name (or up to 8 names) answers that tool's whole description and inputSchema. Neither lists anything, so a group's other descriptions are not loaded. Every tool is callable by name either way. Changes nothing but which tools are listed.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}}), tool_groups),
+        Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools, each with one line of what it does); detail: true gives every group's whole about. The cheap way to a tool that is not listed is find, card, call: find: \"words\" searches every tool (best first; group narrows it, limit 1-40, 10 by default) by its name, FreeCAD's own names for its commands and workbench (\"PartDesign_Fillet\", \"techdraw\", \"drawing\"), search words and description — tools matching every word come before those matching some — and answers name, group and what it does; tool: name (or up to 20 names) answers that tool's whole description and inputSchema; then call it by name. now: true (alone or with find) answers the tools that fit the present state, best first, each with fits (why): the active workbench, a sketch open in edit, the selection, and whether the tool's FreeCAD command reports itself active — without a window it goes by the document's objects only and says so. None of these lists anything, so a group's other descriptions are not loaded: enable a group only when a task uses most of it. Every tool is callable by name either way. Changes nothing but which tools are listed.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}}), tool_groups),
         Tool("guide_read", "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry. No topic: the index. topic: a guide whole; section: one of its ## sections.", obj({"topic": {"type": "string"}, "section": {"type": "string"}}), guide_read),
         Tool("job_status", "A long read run as a job: job (its id) answers its status — running (seconds so far, the time expected from past runs here) or done with the tool's own answer (or its error); wait: seconds (up to 30) to wait for it first. No job: every job kept (an hour after it ends). Answered at once even while FreeCAD is busy. Changes nothing.",
              obj({"job": {"type": "string"}, "wait": {"type": "number"}}), job_status),

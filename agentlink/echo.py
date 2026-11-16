@@ -47,8 +47,9 @@ COMMAND = {
     "part_chamfer": "Part_Chamfer", "part_extrude": "Part_Extrude", "part_revolve": "Part_Revolve",
     "part_loft": "Part_Loft", "part_sweep": "Part_Sweep", "part_offset": "Part_Offset", "part_thickness": "Part_Thickness",
     "part_section": "Part_Section", "part_mirror": "Part_Mirror", "part_compound": "Part_Compound",
-    "bim_wall": "BIM_Wall", "bim_structure": "BIM_Structure", "bim_roof": "BIM_Roof", "bim_stairs": "BIM_Stairs",
-    "bim_opening": "BIM_Window", "bim_space": "BIM_Space", "bim_level": "BIM_Level",
+    # BIM's makers kept their Arch_ command names (FreeCAD 1.1: src/Mod/BIM/bimcommands).
+    "bim_wall": "Arch_Wall", "bim_structure": "Arch_Structure", "bim_roof": "Arch_Roof", "bim_stairs": "Arch_Stairs",
+    "bim_opening": "Arch_Window", "bim_space": "Arch_Space", "bim_level": "Arch_Level",
     "fea_setup": "FEM_Analysis", "fea_hold": "FEM_ConstraintFixed", "fea_load": "FEM_ConstraintForce",
     "fea_solve": "FEM_SolverRun", "fea_native": "FEM_Analysis",
     "td_page": "TechDraw_PageDefault", "td_view": "TechDraw_View", "td_projection": "TechDraw_ProjectionGroup",
@@ -64,10 +65,11 @@ COMMAND = {
 
 COMMAND.update({
     "asm_ground": "Assembly_ToggleGrounded", "asm_sub": "Assembly_InsertLink", "asm_motion": "Assembly_CreateJointRevolute",
-    "bim_building": "BIM_Building", "bim_section": "BIM_SectionPlane", "bim_grid": "BIM_AxisSystem", "bim_member": "BIM_Beam",
-    "bim_frame": "BIM_Frame", "bim_equipment": "BIM_Equipment", "bim_panel": "BIM_Panel", "bim_rebar": "BIM_Rebar",
-    "bim_truss": "BIM_Truss", "bim_curtain_wall": "BIM_CurtainWall", "bim_fence": "BIM_Fence", "bim_pipe": "BIM_Pipe",
-    "bim_covering": "BIM_Covering", "bim_schedule": "BIM_Schedule", "bim_material": "BIM_Material",
+    "bim_building": "Arch_Building", "bim_section": "Arch_SectionPlane", "bim_grid": "Arch_AxisSystem", "bim_member": "BIM_Beam",
+    "bim_frame": "Arch_Frame", "bim_equipment": "Arch_Equipment", "bim_panel": "Arch_Panel", "bim_rebar": "Arch_Rebar",
+    "bim_truss": "Arch_Truss", "bim_curtain_wall": "Arch_CurtainWall", "bim_fence": "Arch_Fence", "bim_pipe": "Arch_Pipe",
+    # bim_covering: FreeCAD 1.1 has no covering command.
+    "bim_schedule": "Arch_Schedule", "bim_material": "BIM_Material",
     "cam_tool": "CAM_ToolController", "cam_tool_add": "CAM_ToolBitDock", "cam_setup": "CAM_Job",
 })
 

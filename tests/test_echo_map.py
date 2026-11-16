@@ -21,7 +21,7 @@ class EchoMap(unittest.TestCase):
         self.assertEqual(echo.command_for("cam_dressup", {"kind": "dogbone"}), "CAM_DressupDogbone")
 
     def test_plain(self):
-        self.assertEqual(echo.command_for("bim_wall", {}), "BIM_Wall")
+        self.assertEqual(echo.command_for("bim_wall", {}), "Arch_Wall")
         self.assertEqual(echo.command_for("asm_joint", {}), "Assembly_CreateJointFixed")
         self.assertIsNone(echo.command_for("session_state", {}))
 
