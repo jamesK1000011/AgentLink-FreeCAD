@@ -36,7 +36,7 @@ def save_notes(doc, data):
 
 def note_view(n):
     out = {"id": n["id"], "by": n["by"], "text": n["text"], "at": n["at"], "done": bool(n.get("done"))}
-    for k in ("body", "face", "answer", "made"):
+    for k in ("body", "face", "answer", "made", "lost"):
         if n.get(k):
             out[k] = n[k]
     return out
@@ -50,10 +50,195 @@ def add_note(doc, at, text, by, body=None, face=None):
         n["body"] = body
     if face:
         n["face"] = face
+        try:
+            shape = _shape_of(doc, body) if body else None
+            if shape is not None:
+                n["anchor"] = anchor(shape, face, n["at"])
+        except Exception:  # noqa: BLE001 - no anchor: the note keeps its face name
+            pass
     data["notes"].append(n)
     data["next"] += 1
     save_notes(doc, data)
     return n
+
+
+# ---- a note's face across recomputes --------------------------------------------------------
+# A later feature (a hole, a fillet) renumbers the faces: "Face6" may then be
+# a side. A note pinned on a face keeps FreeCAD 1.x's mapped (toponaming)
+# name of it, and its point and normal as the fallback; it is found again
+# after each change, and flagged (lost) rather than guessed when neither
+# finds it. The same approach as a linked texture mask's.
+
+POINT_TOL = 0.5      # mm from the old point to the face
+NORMAL_COS = 0.8     # within about 37 degrees of the old normal
+
+
+def mapped_name(shape, face):
+    """FreeCAD 1.x's mapped name of a face ("Face6" → its toponaming name), or None."""
+    try:
+        rev = shape.ElementReverseMap
+    except Exception:  # noqa: BLE001 - an older FreeCAD, a mesh, a stand-in
+        return None
+    got = rev.get(face) if isinstance(rev, dict) else None
+    if isinstance(got, (list, tuple)):
+        got = got[0] if got else None
+    return got or None
+
+
+def indexed_name(shape, mapped):
+    """The face ("Face9") a mapped name stands for now, or None."""
+    if not mapped:
+        return None
+    try:
+        m = shape.ElementMap
+    except Exception:  # noqa: BLE001
+        return None
+    got = m.get(mapped) if isinstance(m, dict) else None
+    return got if isinstance(got, str) and got.startswith("Face") else None
+
+
+def _sig(shape):
+    try:
+        return [round(float(shape.Volume), 4), round(float(shape.Area), 4), len(shape.Faces)]
+    except Exception:  # noqa: BLE001
+        return None
+
+
+class Geo:
+    """The geometry a note's face is found by (FreeCAD's Part); tests hand
+    in their own."""
+
+    @staticmethod
+    def face(shape, name):
+        try:
+            return shape.getElement(name)
+        except Exception:  # noqa: BLE001
+            return None
+
+    @staticmethod
+    def faces(shape):
+        return [(f"Face{i + 1}", f) for i, f in enumerate(shape.Faces)]
+
+    @staticmethod
+    def dist(face, p):
+        import FreeCAD
+        import Part
+
+        d, pairs, _info = face.distToShape(Part.Vertex(FreeCAD.Vector(*p)))
+        q = pairs[0][0] if pairs else FreeCAD.Vector(*p)
+        return d, [q.x, q.y, q.z]
+
+    @staticmethod
+    def normal(face, p):
+        import FreeCAD
+
+        u, v = face.Surface.parameter(FreeCAD.Vector(*p))
+        n = face.normalAt(u, v)
+        if getattr(face, "Orientation", "Forward") == "Reversed":
+            n = -n
+        return [n.x, n.y, n.z]
+
+
+def anchor(shape, face, at, geo=Geo):
+    """What finds a note's face again: its mapped name, its point and
+    normal, and the shape it was on (to skip unchanged shapes)."""
+    out = {"mapped": mapped_name(shape, face), "point": [round(float(x), 4) for x in at], "sig": _sig(shape)}
+    f = geo.face(shape, face)
+    if f is not None:
+        try:
+            out["normal"] = [round(float(x), 5) for x in geo.normal(f, at)]
+        except Exception:  # noqa: BLE001
+            pass
+    return out
+
+
+def _dot(a, b):
+    la = sum(x * x for x in a) ** 0.5
+    lb = sum(x * x for x in b) ** 0.5
+    return sum(x * y for x, y in zip(a, b)) / (la * lb) if la and lb else 0.0
+
+
+def refind(shape, n, geo=Geo):
+    """(face, how, point) for a note on this shape: by its mapped name, else
+    the face its point lies on facing the same way; (None, why, None) when
+    neither finds it."""
+    an = n.get("anchor") or {}
+    p = an.get("point") or n.get("at")
+    name = indexed_name(shape, an.get("mapped"))
+    if name:
+        f = geo.face(shape, name)
+        q = None
+        if f is not None and p:
+            try:
+                q = geo.dist(f, p)[1]
+            except Exception:  # noqa: BLE001
+                q = None
+        return name, "mapped", q
+    if not p:
+        return None, "no point to find it by", None
+    best = None
+    for nm, f in geo.faces(shape):
+        try:
+            d, q = geo.dist(f, p)
+        except Exception:  # noqa: BLE001
+            continue
+        if d > POINT_TOL:
+            continue
+        if an.get("normal"):
+            try:
+                if _dot(geo.normal(f, q), an["normal"]) < NORMAL_COS:
+                    continue
+            except Exception:  # noqa: BLE001
+                continue
+        if best is None or d < best[0]:
+            best = (d, nm, q)
+    if best is None:
+        return None, "no face is where it was, facing the same way", None
+    return best[1], "point", best[2]
+
+
+def _shape_of(doc, label):
+    objs = doc.getObjectsByLabel(label) if doc is not None and label else []
+    return objs[0].Shape if objs else None
+
+
+def follow(doc, shape_of=_shape_of, geo=Geo):
+    """Each note on a face found again on its body as it is now: the face
+    renamed (and the pin moved onto it) where a later step renumbered the
+    faces, lost (flagged, the face name left as it was) where it cannot be
+    found. Answers the notes it changed."""
+    data = notes_of(doc)
+    changed = []
+    for n in data["notes"]:
+        if not (n.get("face") and n.get("body") and n.get("anchor")):
+            continue
+        try:
+            shape = shape_of(doc, n["body"])
+        except Exception:  # noqa: BLE001
+            shape = None
+        if shape is None:
+            continue
+        sig = _sig(shape)
+        if sig is not None and sig == n["anchor"].get("sig") and not n.get("lost"):
+            continue
+        face, how, q = refind(shape, n, geo)
+        if face is None:
+            lost = f"{n['face']} is not found on {n['body']} any more ({how}): pin the note again"
+            if n.get("lost") != lost:
+                n["lost"] = lost
+                changed.append(n["id"])
+            continue
+        was = (n["face"], list(n["at"]), n.get("lost"))
+        n["face"] = face
+        n.pop("lost", None)
+        if q:
+            n["at"] = [round(float(x), 4) for x in q]
+        n["anchor"] = anchor(shape, face, n["at"], geo) if how == "point" else dict(n["anchor"], sig=sig, point=n["at"])
+        if (n["face"], list(n["at"]), n.get("lost")) != was:
+            changed.append(n["id"])
+    if changed:
+        save_notes(doc, data)
+    return changed
 
 
 def find_note(data, nid):
@@ -97,6 +282,13 @@ def steps_of(body, sketches=False):
     return out
 
 
+def _follow_after(session, _tool=None):
+    try:
+        follow(session.doc)
+    except Exception:  # noqa: BLE001 - never in the way of the change
+        pass
+
+
 def caption(step, total, row):
     """The caption a step carries: its number, what it is and what it did."""
     did = ""
@@ -108,6 +300,10 @@ def caption(step, total, row):
 
 def tools(session):
     s = session
+    from .. import hooks
+
+    # A note's face found again after every change (a hole renumbers faces).
+    hooks.on("after_change", _follow_after)
 
     def _body_pd(ref):
         if ref is None:
@@ -144,6 +340,10 @@ def tools(session):
         return {"note": note_view(n), "note_count": len(notes_of(s.doc)["notes"])}
 
     def note_list(a):
+        try:
+            follow(s.doc)
+        except Exception:  # noqa: BLE001 - the notes as they were
+            pass
         data = notes_of(s.doc)
         rows = [note_view(n) for n in data["notes"] if not (a.get("open") and n.get("done"))]
         waiting = [n["id"] for n in data["notes"] if n["by"] == "person" and not n.get("done") and not n.get("answer")]
