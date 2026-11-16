@@ -65,6 +65,7 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 
 ### Changed
 
+- `asm_explode` makes FreeCAD's own Exploded View (Assembly's Create Exploded View: a Normal move step a part, applied by it) and names it in the answer; it moves the placements itself only where that cannot be made here, saying why. `asm_motion` keeps its own keyed poses: Assembly's Simulation cannot be imported or run without the window (its module needs Qt at import, and its frames come from the task panel).
 - `import_file` reads glTF/GLB, Collada and 3DS with FreeCAD's own importers first (Import's glTF reader; BIM's `importDAE`, which needs pycollada, and `import3DS`); Agent Link's readers (meshformats) read them only where those are not here or read nothing, when `units` or `up` is given, or for `solid: true`, and VRML. The answer's `read.reader` says which ran and, on the fallback, why FreeCAD's did not.
 - DXF is written by FreeCAD's own writer (`Import.writeDXFShape`) for a one-layer drawing — `export` to DXF of a view or a section, `meshobj_unwrap` and the mesh flattening — and by Agent Link's R12 writer only where layers are kept apart (hidden lines on their own) or FreeCAD's is not here; the answer's `writer` says which.
 - A TechDraw dimension's ISO 286 fit (`td_dim`, `td_tolerance` with `fit`) takes its limits from TechDraw's own Hole/Shaft Fit table where it has the code; Agent Link's table covers the rest (js, p, IT5) and is given, with what TechDraw said, where the two disagree. The answer's `fitFrom` says which.
