@@ -227,6 +227,7 @@ tests/test_model.py
 tests/test_model_more.py
 tests/test_more_families.py
 tests/test_no_addon_names.py
+tests/test_note_faces.py
 tests/test_notice.py
 tests/test_outputs.py
 tests/test_owner_services.py

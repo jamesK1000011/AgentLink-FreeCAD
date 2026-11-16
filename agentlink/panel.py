@@ -577,6 +577,11 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             except Exception:
                 pass
         doc = _doc()
+        if doc is not None:
+            try:
+                nf.follow(doc)  # faces renumbered by the person's own steps too
+            except Exception:
+                pass
         notes = nf.notes_of(doc)["notes"] if doc else []
         key = (doc.Name if doc else None, repr(notes), self.show_pins.isChecked())
         if key == self.seen and not force:
@@ -586,8 +591,10 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.note_list.clear()
         for n in notes:
             who = "Agent: " if n["by"] == "agent" else ""
-            it = QtWidgets.QTreeWidgetItem([str(n["id"]), who + n["text"], n.get("answer", "")])
+            it = QtWidgets.QTreeWidgetItem([str(n["id"]), ("⚠ " if n.get("lost") else "") + who + n["text"], n.get("answer", "")])
             it.setData(0, QtCore.Qt.UserRole, n["id"])
+            if n.get("lost"):
+                it.setToolTip(1, n["lost"])
             it.setFlags(it.flags() | QtCore.Qt.ItemIsUserCheckable)
             it.setCheckState(0, QtCore.Qt.Checked if n.get("done") else QtCore.Qt.Unchecked)
             it.setToolTip(1, n["text"])
