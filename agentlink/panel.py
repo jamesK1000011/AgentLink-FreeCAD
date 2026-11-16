@@ -15,8 +15,8 @@ import FreeCADGui
 
 from .families import notes as nf
 from . import layout
-from .panel_tabs import (EMPTY, HOME, NO_REVIEWER, PIN_HINT, FlowRow, Tabs, activity_row, credit_shown, link_status, panel_qss, pin_event,
-                         review_hint, step_caption, tab_order, tabs_for)
+from .panel_tabs import (EMPTY, HOME, NO_REVIEWER, PIN_HINT, FlowRow, Tabs, activity_row, credit_shown, fit_activity, link_status,
+                         panel_qss, pin_event, review_hint, setup_activity, step_caption, tab_order, tabs_for)
 
 try:
     from PySide import QtCore, QtGui
@@ -190,6 +190,15 @@ class Stage:
             except Exception:
                 pass
         self.body = self.was = None
+
+
+class _ActivityTree(QtWidgets.QTreeWidget if QtWidgets else object):
+    """The Activity list: its Result column keeps its share of the width as
+    the dock is resized (panel_tabs.fit_activity)."""
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        fit_activity(self)
 
 
 class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
@@ -809,16 +818,8 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.activity_empty = self._empty("Activity")
         self.activity_empty.setVisible(True)
         lay.addWidget(self.activity_empty)
-        self.activity = QtWidgets.QTreeWidget()
-        self.activity.setHeaderLabels(["Time", "Did", "Result"])
-        self.activity.setRootIsDecorated(False)
-        # A narrow dock cuts the lines: cut in the middle (both ends read),
-        # the last column takes what is left, the whole line in the tooltip.
-        self.activity.setTextElideMode(QtCore.Qt.ElideMiddle)
-        head = self.activity.header()
-        head.setStretchLastSection(True)
-        self.activity.setColumnWidth(0, 64)
-        self.activity.setColumnWidth(1, 150)
+        self.activity = _ActivityTree()
+        setup_activity(self.activity, QtCore, QtWidgets)
         lay.addWidget(self.activity)
         for e in echo.log():
             self._add_activity(e)

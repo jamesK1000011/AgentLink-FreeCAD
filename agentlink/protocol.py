@@ -30,7 +30,7 @@ def bad(msg):
 
 
 class Tool:
-    def __init__(self, name, description, schema, fn, changes=False, group="core", reads=None):
+    def __init__(self, name, description, schema, fn, changes=False, group="core", reads=None, activity=None):
         self.name = name
         self.description = description
         self.schema = schema
@@ -45,6 +45,10 @@ class Tool:
         # Its group: listed when the group is on (tool_groups), callable
         # by name whether listed or not.
         self.group = group
+        # What a call did, in the Activity tab's words: a template or a list
+        # of them ("Sliced {object}"; agentlink/activity.py), or None for
+        # the shared table's.
+        self.activity = activity
 
     def changes_for(self, args):
         """Whether this call changes the document."""

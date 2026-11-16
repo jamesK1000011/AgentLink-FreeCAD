@@ -16,7 +16,9 @@ module does).
 heavy: a long job (queued, timed, given a deadline); writes: its "path" is a
 file it writes, not reads; pathIsCurve: its "path" is a curve in the model;
 reads: for a changing tool, the calls that only read, {"action": ["list"]}
-(no undo step, nothing marked changed, not shown as a change).
+(no undo step, nothing marked changed, not shown as a change); activity:
+what a call did in the Activity tab's words, a template whose {fields} come
+from the call's arguments or answer ("Sliced {object}", agentlink/activity.py).
 
 A handler refuses by raising any exception with `code` (invalid_input,
 not_found, invalid_state, unavailable, failed) and `message`: the agent gets
@@ -28,7 +30,7 @@ import re
 
 ACCEPTS_MAJOR = 1
 REQUIRED = {"group": str, "description": str, "inputSchema": dict, "changes": bool, "source": str, "date": str}
-OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "reads": dict}
+OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "reads": dict, "activity": str}
 # Agent Link's own tools only (agentlink/data/tools.json): a tool that wraps
 # one FreeCAD command, run by one of agentlink/runners.py's runners. An
 # add-on binds handlers instead and never needs these.
@@ -133,5 +135,6 @@ def build(folder, group, handlers, who="this add-on"):
             paths.WRITERS.add(k)
         if v.get("pathIsCurve"):
             paths.GEOMETRIC.add(k)
-    return [Tool(k, v["description"], v["inputSchema"], refusing(handlers[k]), changes=v["changes"], group=group, reads=v.get("reads"))
+    return [Tool(k, v["description"], v["inputSchema"], refusing(handlers[k]), changes=v["changes"], group=group, reads=v.get("reads"),
+                 activity=v.get("activity"))
             for k, v in mine.items()]

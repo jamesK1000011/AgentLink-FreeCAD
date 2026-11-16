@@ -36,7 +36,8 @@ GEOMETRIC = set()                    # optional: their "path" is a curve, not a 
 NOT_IN_MACROS = set()                # optional: changing calls a saved macro does not replay
 # Optional, for the live echo in the FreeCAD window (any family, data or code):
 SHOWN = ("mine_check",)              # read-only tools (names or prefixes) still shown as they run
-AREAS = {"mine": "Mine"}             # prefix → the name the Activity list gives its calls
+AREAS = {"mine": "Mine"}             # prefix → the area name in a call's fallback words ("Mine do on Lid")
+PHRASES = {"mine_do": ["Did it to {body}", "Did it"]}  # tool or prefix → what a call did, in the Activity tab's words
 WORKBENCHES = {"mine_": "MineWorkbench"}  # tool or prefix → the workbench brought up for them (longest match wins)
 COMMANDS = {"mine_do": "Mine_Do"}    # tool or prefix → the command whose button (and menu item) lights for them
 NO_BUTTON = {"mine_do_quiet"}        # tools or prefixes that light no button, even where a COMMANDS prefix matches
@@ -70,8 +71,16 @@ format is Agent Link's (`agentlink/tooldata.py`, `agentlink/data/tools.schema.js
  "entries": {"mine_do": {"group": "mine", "description": "What it does, when to use it.",
    "inputSchema": {"type": "object", "properties": {"body": {"type": "string"}}, "required": []},
    "changes": true, "source": "written for mine", "date": "2026-11-14",
-   "heavy": false, "writes": false, "pathIsCurve": false}}}
+   "heavy": false, "writes": false, "pathIsCurve": false,
+   "activity": "Did it to {body}"}}}
 ```
+
+`activity` is optional: what a call did, in the panel's Activity tab — a
+short plain sentence whose `{fields}` come from the call's arguments or its
+answer (a path shows as its file name). Without it the tab says the tool's
+friendly name and main argument. Templates in a list (PHRASES) are tried in
+order, the first whose fields are all given wins; `" if {field}"` or
+`" if {field=value}"` at the end makes one conditional.
 
 ```python
 # yourpkg/fam_mine.py — the only module besides agentlink_families that sees Agent Link

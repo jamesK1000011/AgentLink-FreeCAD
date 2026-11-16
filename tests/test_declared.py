@@ -27,7 +27,7 @@ class Declared(unittest.TestCase):
         fam = types.SimpleNamespace(SHOWN=("mine_check",), AREAS={"mine": "Mine"}, WORKBENCHES={"mine_": "PartDesignWorkbench"}, PAGES=("mine_page_",))
         echo.declare(fam)
         self.assertTrue("mine_check_all".startswith(echo.SHOWN))
-        self.assertTrue(echo._describe("mine_do", {}).startswith("Mine › Do"))
+        self.assertEqual(echo._describe("mine_do", {}), "Mine do")  # the caption in the Activity tab's words, its area named
         self.assertEqual(echo._workbench_for("mine_do"), "PartDesignWorkbench")
         self.assertIn("mine_page_", echo.PAGES)
         echo.declare(types.SimpleNamespace())  # nothing declared: nothing changes
