@@ -20,6 +20,7 @@ GROUP = "sheet"
 INFO = "Spreadsheets: any cell read and written (values, expressions, aliases, units), formatting, rows and columns, CSV import and export, and design tables (configurations) that drive a part."
 
 READ_CAP = 400  # cells one sheet_read answers
+RANGE_CAP = 20000  # cells one sheet_clear / sheet_format range may span (a whole column is 16384)
 STYLES = ("bold", "italic", "underline")
 H_ALIGN = ("left", "center", "right")
 V_ALIGN = ("top", "vcenter", "bottom")
@@ -41,8 +42,14 @@ def range_or_refuse(r, what="range"):
     try:
         a, b = C.parse_range(r)
     except C.AddressError as e:
-        raise bad(f"{what}: {e}.")
+        raise bad(f"{what}: {e} — \"A1\" or \"A1:C4\".")
     return C.range_text(a, b)
+
+
+def small_range(rng, tool):
+    if C.size(rng) > RANGE_CAP:
+        raise bad(f"range {rng}: {C.size(rng)} cells, more than {tool} takes at once ({RANGE_CAP}) — sheet_read gives the used range; work on that.")
+    return rng
 
 
 # ---- reading a sheet ----
@@ -94,6 +101,15 @@ def value_of(ss, a):
     except Exception as e:
         msg = str(e)
         return None, "", (msg or "does not evaluate")
+    if isinstance(v, str) and v.startswith("ERR: "):
+        # A cell whose expression failed holds FreeCAD's "ERR: <reason>" as
+        # its text (Sheet::recomputeCell): Sheet.get does not raise for it.
+        try:
+            raw = ss.getContents(a)
+        except Exception:
+            raw = ""
+        if raw.startswith("="):
+            return None, "", (v[5:].strip() or "does not evaluate")
     if hasattr(v, "Value") and hasattr(v, "Unit"):
         parts = str(v).split(" ", 1)
         return round(float(v.Value), 6) + 0.0, (parts[1] if len(parts) > 1 else ""), None
@@ -108,14 +124,19 @@ def value_of(ss, a):
 
 def cell_reading(ss, a, full=False):
     raw = ss.getContents(a)
-    val, unit, err = value_of(ss, a)
     e = {"cell": a, "content": raw}
-    if err:
-        e["error"] = err
+    if not raw:
+        # Nothing in it: Sheet.get raises for an empty cell (FreeCAD keeps no
+        # value for one), which is not an error of the cell's.
+        e["empty"] = True
     else:
-        e["value"] = val
-        if unit:
-            e["unit"] = unit
+        val, unit, err = value_of(ss, a)
+        if err:
+            e["error"] = err
+        else:
+            e["value"] = val
+            if unit:
+                e["unit"] = unit
     try:
         al = ss.getAlias(a)
     except Exception:
@@ -259,7 +280,8 @@ def tools(session):
             o = doc().getObject(next((o.Name for o in doc().Objects if o.Label == x["object"]), ""))
             if o is not None and o.TypeId == "Spreadsheet::Sheet":
                 bad_cells = [c for c in (cell_reading(o, a) for a in filled(o)) if "error" in c]
-                why.append(f"{x['object']} " + "; ".join(f"{c['cell']} ({c['content']}): {c['error']}" for c in bad_cells[:3]) if bad_cells else f"{x['object']}: {x['error']}")
+                why.append(f"{x['object']} " + "; ".join(f"{c['cell']} ({c['content']}): {c['error']}" for c in bad_cells[:3]) if bad_cells
+                           else f"{x['object']}: {x['error']} (no cell reads as an error: cells that depend on each other in a circle are left unevaluated — report_read has FreeCAD's line)")
             else:
                 why.append(f"{x['object']}: {x['error']}")
         # Undo here and recompute, so the sheet's values stand as they were
@@ -354,6 +376,26 @@ def tools(session):
                 ss.clear(addr)
             else:
                 ss.set(addr, body)
+                lit = body[1:].strip()
+                if body.startswith("=") and not (lit.startswith("<<") and lit.endswith(">>")) and ss.getContents(addr).startswith("'"):
+                    # Cell::setContent keeps what it cannot parse as text, and
+                    # the sheet stays valid: the formula would sit there as a string.
+                    raise bad(f"{addr}: FreeCAD cannot read {body!r} as an expression — check the brackets and operators, and that a function's arguments are separated by ; (text: true keeps it as text on purpose). Nothing was kept.")
+
+    def alias_or_refuse(ss, addr, al):
+        """FreeCAD's own rules for an alias (it answers only "Invalid alias"),
+        each with its reason."""
+        prob = C.alias_problem(al)
+        if prob:
+            raise bad(f"alias {al!r} for {addr}: {prob}.")
+        try:
+            other = ss.getCellFromAlias(al)
+        except Exception:
+            other = None
+        if other and other != addr:
+            raise bad(f"alias {al!r}: it already names {other} in {ss.Label} — take it off there first (aliases {{ \"{other}\": \"\" }}) or choose another name.")
+        if not other and al in ss.PropertiesList:
+            raise bad(f"alias {al!r}: the sheet has a property of that name itself — choose another name.")
 
     def sheet_set(a):
         ss = find(doc(), a.get("sheet"))
@@ -367,7 +409,7 @@ def tools(session):
                 raise bad(f"rows: {e}.")
         als = {addr_or_refuse(k): v for k, v in (a.get("aliases") or {}).items()}
         if not cells and not als:
-            raise bad("Nothing to set: cells { A1: value }, rows [[…]] from at, or aliases { B2: name }.")
+            raise bad("Nothing to set: cells { \"A1\": value }, rows [[…]] from at, or aliases { \"B2\": \"name\" }.")
         bound = [(f, t) for f, t, _ in bindings(ss)]
         for addr in cells:
             for f, t in bound:
@@ -375,12 +417,12 @@ def tools(session):
                     raise ToolError("invalid_state", f"{addr} is bound to another range (a design table's active row): change the table's rows, or switch it with sheet_table use.")
         write_cells(ss, cells, bool(a.get("text")))
         for addr, al in als.items():
-            if al not in (None, "") and (not C.NAME.match(str(al)) or C.is_cell(al)):
-                raise bad(f"alias {al!r}: letters, digits and _, starting with a letter, and not a cell address.")
+            if al not in (None, ""):
+                alias_or_refuse(ss, addr, al)
             try:
                 ss.setAlias(addr, al or "")
             except Exception as e:
-                raise bad(f"alias {al!r} for {addr}: FreeCAD refuses it ({e}) — it may be taken; sheet_read shows the aliases.")
+                raise bad(f"alias {al!r} for {addr}: FreeCAD refuses it ({e}) — sheet_read shows the aliases in use; choose another name.")
         check("That change")
         touched = sorted(set(cells) | set(als), key=C.sort_key)
         rows = [cell_reading(ss, x) for x in touched[:READ_CAP]]
@@ -398,11 +440,12 @@ def tools(session):
 
     def sheet_clear(a):
         ss = find(doc(), a.get("sheet"))
-        rng = range_or_refuse(a.get("range"))
-        hit = [x for x in filled(ss) if x in set(C.cells_in(rng))]
+        rng = small_range(range_or_refuse(a.get("range")), "sheet_clear")
+        inside = set(C.cells_in(rng))
+        hit = [x for x in filled(ss) if x in inside]
         used = sorted({u for al in aliases(ss, hit) for u in users_of(doc(), ss, al)})
         if used and not a.get("force"):
-            raise ToolError("invalid_state", f"{rng} holds aliases in use by {', '.join(used)}: unbind them (param_bind expression: null), or force: true to break them.")
+            raise ToolError("invalid_state", f"{rng} holds aliases in use by {', '.join(used)}: unbind each (param_bind {{ target, expression: null }}) first; force: true clears anyway, and is refused if a user then fails.")
         for x in C.cells_in(rng):
             ss.clear(x)
         check(f"Clearing {rng}")
@@ -410,7 +453,7 @@ def tools(session):
 
     def sheet_format(a):
         ss = find(doc(), a.get("sheet"))
-        rng = range_or_refuse(a.get("range"))
+        rng = small_range(range_or_refuse(a.get("range")), "sheet_format")
         addrs = C.cells_in(rng)
         changed = []
         if "style" in a:
@@ -452,7 +495,7 @@ def tools(session):
                 try:
                     ss.setDisplayUnit(x, u)
                 except Exception as e:
-                    raise bad(f"displayUnit {u!r}: FreeCAD refuses it ({e}) — a unit such as mm, cm, in, deg.")
+                    raise bad(f"displayUnit {u!r}: FreeCAD refuses it ({e}) — a unit as its expressions write it: mm, cm, m, in, ft, deg, rad, kg, N, MPa; null clears.")
             changed.append("displayUnit")
         (r0, c0), (r1, c1) = C.parse_range(rng)
         if a.get("width") is not None:
@@ -472,7 +515,14 @@ def tools(session):
         if "merge" in a:
             if a["merge"]:
                 if ":" not in rng:
-                    raise bad("merge: a range of more than one cell.")
+                    raise bad("merge: true needs a range of more than one cell (\"A1:C1\"); merge: false with any cell of a merged one splits it.")
+                # FreeCAD keeps the top-left cell and clears the others,
+                # aliases with them: one in use is not thrown away unasked.
+                rest = set(addrs[1:])
+                lost = [x for x in filled(ss) if x in rest]
+                used = sorted({u for al in aliases(ss, lost) for u in users_of(doc(), ss, al)})
+                if used:
+                    raise ToolError("invalid_state", f"Merging {rng} clears all but {addrs[0]}, and cells there hold aliases in use by {', '.join(used[:4])}: move those cells (sheet_set) or unbind them first.")
                 ss.mergeCells(rng)
             else:
                 ss.splitCell(rng.split(":")[0])
@@ -517,7 +567,7 @@ def tools(session):
     def sheet_import(a):
         p = path_of(a.get("path") or "", ".csv")
         if not os.path.isfile(p):
-            raise ToolError("not_found", f"{p}: no such file.")
+            raise ToolError("not_found", f"{p}: no such file — give the full path, or a name in the out folder (sheet_export writes there).")
         d = DELIM.get(a.get("delimiter") or ("tab" if p.lower().endswith((".tsv", ".tab")) else "comma"))
         if d is None:
             raise bad("delimiter: comma, tab or semicolon.")
@@ -529,7 +579,10 @@ def tools(session):
             raise ToolError("invalid_state", f"{ss.Label} already holds cells: replace: true clears it first, or leave sheet out for a new one.")
         else:
             ss.clearAll()
-        ss.importFile(p, d, '"', "\\")
+        if ss.importFile(p, d, '"', "\\") is False:
+            # Sheet::importFromFile answers False (no exception) for a file it
+            # cannot open or a line it cannot split.
+            raise ToolError("failed", f"FreeCAD could not read {os.path.basename(p)} as delimited text: check the delimiter (comma | tab | semicolon) and that every quote \" is closed. Nothing was kept.")
         check(f"Importing {os.path.basename(p)}")
         fl = filled(ss)
         return done("sheet_import", {"from": p, "cells": len(fl), "range": C.bounds(fl), "first": [cell_reading(ss, x) for x in fl[:6]]}, ss)
@@ -541,12 +594,11 @@ def tools(session):
         if d is None:
             raise bad("delimiter: comma, tab or semicolon.")
         os.makedirs(os.path.dirname(p), exist_ok=True)
-        ss.exportFile(p, d, '"', "\\")
-        if not os.path.isfile(p):
-            raise ToolError("failed", f"FreeCAD wrote nothing at {p}.")
+        if ss.exportFile(p, d, '"', "\\") is False or not os.path.isfile(p):
+            raise ToolError("failed", f"FreeCAD wrote nothing at {p}: give a path in a folder that can be written (default: the out folder).")
         with open(p, encoding="utf-8", errors="replace") as f:
             lines = f.read().splitlines()
-        return {"sheet": ss.Label, "file": p, "rows": len(lines), "bytes": os.path.getsize(p), "note": "Values as computed, not the expressions: the FreeCAD file keeps those."}
+        return {"sheet": ss.Label, "file": p, "rows": len(lines), "bytes": os.path.getsize(p), "note": "Values as computed, not the expressions (the FreeCAD file keeps those); a quantity is its bare number in FreeCAD's own units (mm, deg, kg, s)."}
 
     # ---- design tables ----
 
@@ -556,8 +608,12 @@ def tools(session):
             ss = doc().addObject("Spreadsheet::Sheet", "Spreadsheet")
             ss.Label = s.unique(a.get("name") or "DesignTable")
         params = a.get("params") or []
-        if not params or not all(isinstance(p, str) and C.NAME.match(p) and not C.is_cell(p) for p in params):
-            raise bad("params: their names, letters, digits and _, not cell addresses: [\"length\", \"width\"].")
+        if not params or not all(isinstance(p, str) for p in params):
+            raise bad("params: their names, [\"length\", \"width\"] — each becomes an alias expressions read as <Sheet>.<name>.")
+        for p in params:
+            prob = C.alias_problem(p)
+            if prob:
+                raise bad(f"params: {p!r} cannot be an alias — {prob}.")
         if len(set(params)) != len(params):
             raise bad("params: each name once.")
         confs = a.get("configs") or []
@@ -583,7 +639,8 @@ def tools(session):
         r0, c0 = C.parse(at)
         # header, the active row (r0 + 1), then one row per configuration
         span = C.range_text((r0, c0), (r0 + 1 + len(confs), c0 + len(params)))
-        busy = [x for x in filled(ss) if x in set(C.cells_in(span))]
+        inside = set(C.cells_in(span))
+        busy = [x for x in filled(ss) if x in inside]
         if busy:
             raise ToolError("invalid_state", f"{span} is not empty ({', '.join(busy[:4])}…): choose another at, or another sheet.")
         for p in params:
@@ -605,7 +662,7 @@ def tools(session):
         else:
             owner = next((o for o in doc().Objects if owner_ref in (o.Label, o.Name)), None)
             if owner is None:
-                raise ToolError("not_found", f"owner {owner_ref!r}: no such object.")
+                raise ToolError("not_found", f"owner {owner_ref!r}: no such object — an object's label or name (the Body), or leave owner out.")
         if owner is ss:
             raise bad("owner: another object than the sheet — the switch's names come from the sheet's cells.")
         prop = a.get("property") or CONF_PROP
@@ -635,6 +692,12 @@ def tools(session):
         # names column from the next recompute on (FreeCAD fills an
         # enumeration from its expression only then).
         setattr(owner, prop, list(names))
+        try:
+            # as FreeCAD's dialog does: a variant Link or binder of the owner
+            # copies it when its own switch is turned
+            owner.setPropertyStatus(prop, "CopyOnChange")
+        except Exception:
+            pass
         owner.setExpression(f"{prop}.Enum", f"{ss.Name}.cells[<<{conf_rng}>>]")
         doc().recompute()
         ss.set(C.name(r0 + 1, c0), f"=hiddenref({owner.Name}.{prop}.String)")
@@ -784,25 +847,25 @@ def tools(session):
         return {"sheet": ss.Label, "path": p, "kind": kind, "series": [sr["name"] for sr in series], "points": max(len(sr.get("values") or sr.get("points")) for sr in series)}
 
     return [
-        Tool("sheet_new", "Make an empty spreadsheet: name. Answers how expressions refer to its cells (Sheet.A1, Sheet.<alias>).", obj({"name": {"type": "string"}}), sheet_new, changes=True),
-        Tool("sheet_list", "The spreadsheets: cells used, their range, aliases and what uses them, design tables. Changes nothing.", obj({}), sheet_list),
-        Tool("sheet_read", "Read a sheet's cells: what each holds (content), its computed value and unit, alias and any error; range \"A1:D20\" or cells [..] to narrow; format: true adds style, alignment, colours and display unit. Shows bound ranges and design tables. Changes nothing.",
+        Tool("sheet_new", "Make an empty spreadsheet: name (its label). The reply's name is what expressions use: <name>.A1, <name>.<alias>, or <<label>>.<alias>.", obj({"name": {"type": "string"}}), sheet_new, changes=True),
+        Tool("sheet_list", "The spreadsheets (the Params sheet too): cells used, their range, aliases and what uses them, design tables. Changes nothing.", obj({}), sheet_list),
+        Tool("sheet_read", "Read a sheet's cells: content (\"=A1 * 2\"; text has a leading '), computed value and unit, alias, or error (FreeCAD's reason); empty: true for an empty cell. range \"A1:D20\" or cells [..] narrows (400 cells a call); format: true adds style, alignment, colours, display unit. Shows bound ranges and design tables. Changes nothing.",
              obj({"sheet": {"type": "string"}, "range": {"type": "string"}, "cells": {"type": "array", "items": {"type": "string"}}, "format": {"type": "boolean"}}), sheet_read),
-        Tool("sheet_set", "Write cells, as if typed in FreeCAD: cells { A1: 12, B1: \"=A1 * 2\", C1: \"10 mm\", D1: \"text\", E1: null (clears) }, or rows [[…], …] laid out from at (default A1); text: true keeps strings as text; aliases { B2: \"width\" } (\"\" removes) names cells for expressions elsewhere. Everything bound to them recomputes; an error anywhere is refused and nothing kept.",
+        Tool("sheet_set", "Write cells as if typed in FreeCAD, then recompute: cells { A1: 12, B1: \"=A1 * 2\", C1: \"10 mm\", D1: \"text\", E1: null (clears) }, or rows [[…], …] from at (default A1); text: true keeps strings as text. aliases { B2: \"width\" } (\"\" removes) names a cell for expressions (<Sheet>.width): a letter, then letters, digits, _; not a cell address, a unit (m, mm, s, N, A …) or e, pi. A formula FreeCAD cannot parse, a failing cell or a feature it breaks is refused, nothing kept. Reply: cells; drives and bodies when an alias is in use.",
              obj({"sheet": {"type": "string"}, "cells": {"type": "object", "additionalProperties": cell_val}, "at": {"type": "string"}, "rows": {"type": "array", "items": {"type": "array", "items": cell_val}}, "text": {"type": "boolean"}, "aliases": {"type": "object", "additionalProperties": {"type": "string"}}}), sheet_set, changes=True),
-        Tool("sheet_clear", "Clear a range of cells (contents, alias, format). Refused if an alias there is in use, unless force.", obj({"sheet": {"type": "string"}, "range": {"type": "string"}, "force": {"type": "boolean"}}, ["range"]), sheet_clear, changes=True),
-        Tool("sheet_format", "Format a range: style [bold, italic, underline] ([] clears), align [left|center|right, top|vcenter|bottom], color / background \"#rrggbb\" (null clears), displayUnit \"mm\" | \"in\" | \"deg\" …, width (column px), height (row px), merge true | false.",
+        Tool("sheet_clear", "Clear a range, \"A1:C4\" (contents, alias, format; up to 20000 cells). Refused if an alias there is in use, unless force (then refused only if a user fails).", obj({"sheet": {"type": "string"}, "range": {"type": "string"}, "force": {"type": "boolean"}}, ["range"]), sheet_clear, changes=True),
+        Tool("sheet_format", "Format a range: style [bold, italic, underline] ([] clears), align [left|center|right, top|vcenter|bottom], color / background \"#rrggbb\" (null clears), displayUnit \"mm\" | \"in\" | \"deg\" … (how it shows; the value stays), width (column px), height (row px), merge true (the top-left cell stays, the rest are cleared) | false.",
              obj({"sheet": {"type": "string"}, "range": {"type": "string"}, "style": {"type": "array", "items": {"type": "string"}}, "align": {"type": ["array", "string"], "items": {"type": "string"}}, "color": {"type": ["string", "null"]}, "background": {"type": ["string", "null"]}, "displayUnit": {"type": ["string", "null"]}, "width": {"type": "integer"}, "height": {"type": "integer"}, "merge": {"type": "boolean"}}, ["range"]), sheet_format, changes=True),
-        Tool("sheet_rows", "Insert or remove rows or columns: action insert | remove, rows (the first row number) or columns (the first column's letters), count. References move with the cells.",
+        Tool("sheet_rows", "Insert or remove rows or columns: action insert | remove, rows (the first row's number, from 1; new rows go above it) or columns (the first column's letters), count. References and aliases move with the cells; removing a cell in use is refused.",
              obj({"sheet": {"type": "string"}, "action": {"type": "string", "enum": ["insert", "remove"]}, "rows": {"type": "integer"}, "columns": {"type": "string"}, "count": {"type": "integer"}}, ["action"]), sheet_rows, changes=True),
-        Tool("sheet_import", "Read a CSV / TSV file into a sheet: path (in the out folder unless absolute), delimiter comma | tab | semicolon; sheet to fill one (replace: true if it holds cells), else a new sheet named after the file.",
+        Tool("sheet_import", "Read a CSV / TSV file into a sheet: path (in the out folder unless absolute), delimiter comma | tab | semicolon; sheet to fill one (replace: true if it holds cells: all of it goes), else a new sheet named after the file. Fields are taken as if typed (\"=…\" a formula).",
              obj({"path": {"type": "string"}, "sheet": {"type": "string"}, "delimiter": {"type": "string"}, "replace": {"type": "boolean"}}, ["path"]), sheet_import, changes=True),
-        Tool("sheet_export", "Write a sheet's computed values to a CSV / TSV file: path (default <sheet>.csv in the out folder), delimiter. Changes nothing in the document.",
+        Tool("sheet_export", "Write a sheet's computed values to a CSV / TSV file: path (default <sheet>.csv in the out folder), delimiter. No formulas, aliases or units (a quantity is its number in mm, deg, kg, s). Changes nothing in the document.",
              obj({"sheet": {"type": "string"}, "path": {"type": "string"}, "delimiter": {"type": "string"}}), sheet_export),
-        Tool("sheet_chart", "A chart of a sheet's columns, written as SVG: kind line | bar | scatter, x (a range of labels or numbers), y [ranges of values], names, title, xlabel, ylabel, path.",
+        Tool("sheet_chart", "A chart of a sheet's columns, written as SVG: kind line | bar | scatter (needs x), x (a range of labels or numbers), y [ranges of values, \"B2:B20\"], names, title, xlabel, ylabel, path. Reply: path, series, points.",
              obj({"sheet": {"type": "string"}, "kind": {"type": "string", "enum": ["line", "bar", "scatter"]}, "x": {"type": "string"}, "y": {}, "names": {"type": "array", "items": {"type": "string"}},
                   "title": {"type": "string"}, "xlabel": {"type": "string"}, "ylabel": {"type": "string"}, "path": {"type": "string"}}, ["y"]), sheet_chart),
-        Tool("sheet_table", "Design tables (configurations), FreeCAD's own kind: action make { params [names], configs [{ name, values [..] | { param: value } }], units { param: \"mm\" | \"deg\" | \"\" } (numbers default mm), sheet (else a new one), at, owner (the object carrying the switch; default the one Body, else a group holding the sheet), property (default Configuration), active } — then bind properties to <Sheet>.<param> with param_bind; use { config } switches and answers the bodies; add { config, values } adds a row; list.",
+        Tool("sheet_table", "Design tables (configurations), FreeCAD's own kind: action make { params [names; alias rules as sheet_set], configs [{ name, values [..] | { param: value } }], units { param: \"mm\" | \"deg\" | \"\" } (numbers default mm), sheet (else a new one), at (the header cell; the active row is under it), owner (the object carrying the switch; default the one Body, else a group holding the sheet), property (default Configuration), active } — then bind properties to <Sheet>.<param> with param_bind; use { config } switches and answers the bodies; add { config, values } adds a row; list. guide_read sheet.",
              obj({"action": {"type": "string", "enum": ["make", "use", "add", "list"]}, "sheet": {"type": "string"}, "name": {"type": "string"}, "at": {"type": "string"}, "params": {"type": "array", "items": {"type": "string"}},
                   "configs": {"type": "array", "items": {"type": "object"}}, "units": {"type": "object", "additionalProperties": {"type": "string"}}, "owner": {"type": "string"}, "property": {"type": "string"}, "active": {"type": "string"},
                   "config": {"type": "string"}, "values": {"type": ["array", "object"]}}), sheet_table, changes=True),

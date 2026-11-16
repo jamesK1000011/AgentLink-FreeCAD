@@ -79,6 +79,67 @@ class MoreFamilies(Base):
         self.assertTrue(out["closed"])
         self.assertAlmostEqual(out["solid"]["volume"], 8000, delta=0.5)
 
+    def test_surface_hardening(self):
+        """The hardening pass (16 Nov 2026), from FreeCAD 1.1's Surface sources:
+        a 40 x 30 frame of four lines, two of them drawn backwards."""
+        self.have("surface_sew")
+        y0 = 600
+        for name, p, q in (("Sh a", [0, y0, 0], [40, y0, 0]), ("Sh b", [40, y0 + 30, 0], [40, y0, 0]),
+                           ("Sh c", [40, y0 + 30, 0], [0, y0 + 30, 0]), ("Sh d", [0, y0, 0], [0, y0 + 30, 0])):
+            self.ok("part_wire", {"kind": "line", "from": p, "to": q, "name": name})
+        frame = ["Sh a", "Sh b", "Sh c", "Sh d"]
+        b = self.ok("surface_boundary", {"edges": frame, "name": "Sh patch"})
+        self.assertAlmostEqual(b["area"], 1200, delta=0.01)
+        self.assertEqual((b["fill"], b["sides"]), ("stretched", 4))
+        # Not going round: refused before FreeCAD is asked.
+        err, out = self.call("surface_boundary", {"edges": ["Sh a", "Sh c", "Sh b", "Sh d"]})
+        self.assertTrue(err)
+        self.assertIn("end to end", str(out))
+        self.ok("part_wire", {"kind": "line", "from": [100, y0, 0], "to": [110, y0, 0], "name": "Sh e"})
+        err, out = self.call("surface_boundary", {"edges": frame + ["Sh e"]})
+        self.assertTrue(err)
+        self.assertIn("these are 5", str(out))
+        # Through two opposite sides running the same way: the same rectangle (Sh c runs back, which would twist it).
+        self.ok("part_wire", {"kind": "line", "from": [0, y0 + 30, 0], "to": [40, y0 + 30, 0], "name": "Sh h"})
+        sec = self.ok("surface_sections", {"sections": ["Sh a", "Sh h"], "name": "Sh ruled"})
+        self.assertEqual(sec["sections"], 2)
+        self.assertAlmostEqual(sec["area"], 1200, delta=0.5)
+        # Filled across the four: one closed run. A fifth edge apart from it is a second run.
+        f = self.ok("surface_fill", {"edges": frame, "name": "Sh filled"})
+        self.assertAlmostEqual(f["area"], 1200, delta=0.01)
+        err, out = self.call("surface_fill", {"edges": frame + ["Sh e"]})
+        self.assertTrue(err)
+        self.assertIn("2 separate runs", str(out))
+        err, out = self.call("surface_fill", {"edges": frame[:3]})
+        self.assertTrue(err)
+        self.assertIn("mm apart", str(out))
+        # Run on 10% at each end, both ways: 48 x 36.
+        ex = self.ok("surface_extend", {"face": "Sh patch.Face1", "u": 0.1, "v": 0.1, "name": "Sh wider"})
+        self.assertAlmostEqual(ex["area"], 48 * 36, delta=1.0)
+        err, out = self.call("surface_extend", {"face": "Sh patch.Face1", "u": 20})
+        self.assertTrue(err)
+        # Cut by a solid over its right half: 20 x 30 left. By a surface: nothing removed, and said.
+        self.box("Sh block", [40, 60, 20], [20, y0 - 10, -10])
+        cut = self.ok("surface_cut", {"surface": "Sh patch", "by": "Sh block", "name": "Sh half"})
+        self.assertAlmostEqual(cut["area"], 600, delta=0.01)
+        self.assertNotIn("note", cut)
+        # Five of a cube's six faces: a shell, open, so no solid; the reason counts the free edges.
+        self.box("Sh cube", [20, 20, 20], [300, y0, 0])
+        op = self.ok("surface_sew", {"faces": [f"Sh cube.Face{i}" for i in range(1, 6)], "solid": True, "name": "Sh open"})
+        self.assertFalse(op["closed"])
+        self.assertIn("not made", op["solid"])
+        self.assertIn("4 edge(s)", op["solid"])
+        # A blend from the end of one line to the start of another at right angles: one edge, longer than the chord.
+        self.ok("part_wire", {"kind": "line", "from": [200, y0, 0], "to": [210, y0, 0], "name": "Sh f"})
+        self.ok("part_wire", {"kind": "line", "from": [220, y0 + 10, 0], "to": [220, y0 + 20, 0], "name": "Sh g"})
+        bl = self.ok("surface_blend", {"start": {"edge": "Sh f", "at": 1, "continuity": 1}, "end": {"edge": "Sh g", "at": 0, "continuity": 1}, "name": "Sh blend"})
+        self.assertEqual((bl["faces"], bl["edges"]), (0, 1))
+        self.assertGreater(bl["length"], 14.14)
+        self.assertLess(bl["length"], 40)
+        err, out = self.call("surface_blend", {"start": {"edge": "Sh f", "size": 0}, "end": {"edge": "Sh g"}})
+        self.assertTrue(err)
+        self.assertIn("size", str(out))
+
     def test_bim(self):
         self.have("bim_wall")
         w = self.ok("bim_wall", {"points": [[0, 1000], [5000, 1000]], "width": 200, "height": 3000, "name": "B wall"})
@@ -116,6 +177,53 @@ class MoreFamilies(Base):
         self.assertEqual(run["verdict"], "reaches all")
         k = self.ok("robot_export", {"robot": "R1", "trajectory": "R path", "path": "r.src"})
         self.assertEqual(k["moves"], 2)
+
+    def test_robot_hardening(self):
+        # From FreeCAD's Robot sources: a point the arm cannot reach leaves the
+        # axes as they were (robot_run said "reaches all" for any path, since
+        # the Tcp property keeps the value asked for); the dress-up's own name
+        # for adding an orientation is "AddOrintation"; the edge trajectory's
+        # type is Robot::Edge2TracObject; the robot with no kinematics file is
+        # FreeCAD's default, not a Puma.
+        self.have("robot_new")
+        n = self.ok("robot_new", {"model": "puma", "name": "Rh"})
+        self.assertIn("default", n["model"])
+        fwd = self.ok("robot_move", {"robot": "Rh", "axes": [0, -90, 90, 0, 0, 0]})
+        for got, want in zip(fwd["tcp"]["at"], [1825, 0, 2400]):
+            self.assertAlmostEqual(got, want, delta=0.5)
+        far = self.ok("robot_move", {"robot": "Rh", "tcp": {"at": [9000, 0, 0], "ypr": fwd["tcp"]["ypr"]}})
+        self.assertFalse(far["reached"])
+        self.assertGreater(far["off_mm"], 1000)
+        self.ok("robot_path", {"name": "Rh far", "waypoints": [{"at": [9000, 0, 0], "speed": 100}, {"at": [9000, 500, 0], "speed": 100}]})
+        run = self.ok("robot_run", {"robot": "Rh", "trajectory": "Rh far", "samples": 5})
+        self.assertTrue(run["verdict"].startswith("misses"), run)
+        self.ok("robot_path", {"name": "Rh near", "waypoints": [{"at": [1825, 0, 2400], "ypr": fwd["tcp"]["ypr"], "speed": 100}, {"at": [1825, 100, 2400], "ypr": fwd["tcp"]["ypr"], "speed": 100}]})
+        self.ok("robot_trajectory", {"op": "dress", "trajectory": "Rh near", "ypr": [10, 0, 0], "name": "Rh turned"})
+        add = self.ok("object_get", {"object": "Rh turned", "filter": ["AddType"]})["properties"]["AddType"]["value"]
+        self.assertEqual(add, "AddOrintation")
+        self.ok("robot_trajectory", {"op": "dress", "trajectory": "Rh near", "move": [0, 0, -50], "ypr": [10, 0, 0], "name": "Rh both"})
+        add = self.ok("object_get", {"object": "Rh both", "filter": ["AddType"]})["properties"]["AddType"]["value"]
+        self.assertEqual(add, "AddPositionAndOrientation")
+        self.refused("robot_trajectory", {"op": "dress", "trajectory": "Rh near", "move": [0, 0, 1], "add": "Sideways"})
+        self.box("Rh rail", [200, 10, 10], [1500, 0, 2000])
+        e = self.ok("robot_path", {"name": "Rh edge", "edges": ["Rh rail.Edge1"]})
+        self.assertGreaterEqual(e["waypoints"], 2)
+        err, out = self.call("robot_export", {"robot": "Rh", "trajectory": "Rh near", "path": "rh_full.src", "full": True})
+        if err:
+            self.assertEqual(out["error"]["code"], "unavailable", out)
+        self.refused("robot_move", {"robot": "Rh", "axes": [0, 0, 0, 0, 0, 0], "home": True})
+
+    def test_openscad_round_trip(self):
+        # CSG out and in again needs only FreeCAD: a 20 x 30 x 10 box keeps its volume.
+        self.have("scad_export")
+        self.box("Rt box", [20, 30, 10])
+        e = self.ok("scad_export", {"objects": ["Rt box"], "path": "rt_box.csg"})
+        err, out = self.call("scad_import", {"path": e["path"]})
+        if err and out["error"]["code"] == "unavailable":
+            self.skipTest(out["error"]["message"])
+        self.assertFalse(err, out)
+        self.assertAlmostEqual(max(m.get("volume", 0) for m in out["made"]), 6000, delta=0.01)
+        self.refused("scad_import", {"path": "rt_box.stl"})
 
     def test_gear(self):
         self.have("pd_gear")

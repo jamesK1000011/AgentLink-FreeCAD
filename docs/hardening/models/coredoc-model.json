@@ -1,0 +1,1202 @@
+{
+ "tutorial": "No single wiki tutorial covers the document, measure, material, inspection, OpenSCAD and Robot tools; the script follows the scripting pages instead: Robot_API_example.md (axes, Tcp, waypoints, trajectory), Document_structure.md / Object_name.md / App_Link.md / Std_LinkMake.md (names, labels, links), Inspection_Workbench.md, OpenSCAD_Workbench.md (CSG out and in), on one small part: a 40 x 30 x 20 box and a r5 x 20 cylinder.",
+ "reference": null,
+ "expected": {
+  "block": {
+   "size_mm": [
+    40,
+    30,
+    20
+   ],
+   "volume_mm3": 24000,
+   "topArea_mm2": 1200
+  },
+  "rod": {
+   "radius_mm": 5,
+   "height_mm": 20,
+   "volume_mm3": 1570.796
+  },
+  "objectCountAfterPrimitives": 2,
+  "units": {
+   "2 in -> mm": 50.8,
+   "45 deg -> rad": 0.7853981634
+  },
+  "linkPlacements": {
+   "Block link": [
+    0,
+    60,
+    0
+   ],
+   "Block link 2": [
+    50,
+    60,
+    0
+   ],
+   "Ghost": [
+    0,
+    -60,
+    0
+   ]
+  },
+  "clearanceBlockPin_mm": 15,
+  "massBlock_testBrass_g": 204.0,
+  "massPin_testBrass_g": 13.352,
+  "inspection": {
+   "offset_mm": 0.5,
+   "max": 0.5,
+   "min": -0.5,
+   "verdictAt0.6": "pass",
+   "verdictAt0.3": "fail"
+  },
+  "scadCubeVolume_mm3": 24000,
+  "robot": {
+   "default": "KUKA IR 500 (FreeCAD's built-in, Robot6Axis.cpp)",
+   "tcpAtZero_mm": [
+    3125,
+    0,
+    1100
+   ],
+   "tcpAt_0_-90_90_0_0_0_mm": [
+    1825,
+    0,
+    2400
+   ],
+   "from": "worked out here from the Denavit-Hartenberg table in FreeCAD 1.1 source: src/Mod/Robot/App/Robot6Axis.cpp — not run"
+  },
+  "refusals": 23
+ },
+ "conventions": "\"<YPR>\" stands for the tcp.ypr list answered by the robot_move { axes } call: put that list in its place. Face and edge numbers of a Part::Box / Part::Cylinder are stated as FreeCAD usually numbers them (Box: Face1 x-min, Face2 x-max, Face5 z-min, Face6 z-max); where an expect says so, take the ref from the shape_query before it instead.",
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "CoreDoc"
+   },
+   "expect": "document: \"CoreDoc\" (or CoreDoc1 … when one is open already: use the name it answers from here on), label \"CoreDoc\""
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     40,
+     30,
+     20
+    ],
+    "name": "Block"
+   },
+   "expect": "a Part::Box; volume 24000 (helper tool, not in this pass)"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 5,
+    "height": 20,
+    "at": [
+     60,
+     0,
+     0
+    ],
+    "name": "Rod"
+   },
+   "expect": "a Part::Cylinder; volume 1570.796"
+  },
+  {
+   "tool": "object_list",
+   "arguments": {},
+   "expect": "count 2; Block: type Part::Box, shape.volume 24000, shape.size [40,30,20]; Rod: shape.volume 1570.8"
+  },
+  {
+   "tool": "object_list",
+   "arguments": {
+    "type": "Cylinder"
+   },
+   "expect": "count 1, the Rod only"
+  },
+  {
+   "tool": "object_get",
+   "arguments": {
+    "object": "Block",
+    "filter": [
+     "Length",
+     "Width",
+     "Height",
+     "Placement"
+    ]
+   },
+   "expect": "properties.Length.value 40 type Length; Placement.value { at [0,0,0], angle 0 }; no readOnly on them"
+  },
+  {
+   "tool": "object_get",
+   "arguments": {
+    "object": "Block",
+    "filter": "NoSuchWord"
+   },
+   "expect": "REFUSED not_found: no property matches"
+  },
+  {
+   "tool": "object_set",
+   "arguments": {
+    "object": "Block",
+    "values": {
+     "Length": "2 in"
+    }
+   },
+   "expect": "set.Length { from 40, to 50.8 } (a unit string parsed by FreeCAD); health ok"
+  },
+  {
+   "tool": "object_set",
+   "arguments": {
+    "object": "Block",
+    "values": {
+     "Length": 40,
+     "Placement": {
+      "at": [
+       0,
+       0,
+       0
+      ]
+     }
+    }
+   },
+   "expect": "set.Length to 40; Placement in unchanged (same value); warning names Placement"
+  },
+  {
+   "tool": "object_set",
+   "arguments": {
+    "object": "Block",
+    "values": {
+     "Lenght": 5
+    }
+   },
+   "expect": "REFUSED not_found: did you mean Length"
+  },
+  {
+   "tool": "object_set",
+   "arguments": {
+    "object": "Block",
+    "values": {
+     "Shape": 1
+    }
+   },
+   "expect": "REFUSED invalid_input: a Part::PropertyPartShape is not set by object_set (or read-only)"
+  },
+  {
+   "tool": "units_convert",
+   "arguments": {
+    "value": "2 in",
+    "to": "mm"
+   },
+   "expect": "result 50.8"
+  },
+  {
+   "tool": "units_convert",
+   "arguments": {
+    "value": "45 deg",
+    "to": "rad"
+   },
+   "expect": "result 0.7853981634"
+  },
+  {
+   "tool": "units_convert",
+   "arguments": {
+    "value": "2 in",
+    "to": "kg"
+   },
+   "expect": "REFUSED invalid_input: measure different things"
+  },
+  {
+   "tool": "object_rename",
+   "arguments": {
+    "object": "Rod",
+    "label": "Pin"
+   },
+   "expect": "name: the internal name it was made with (unchanged), from \"Rod\", to \"Pin\""
+  },
+  {
+   "tool": "object_rename",
+   "arguments": {
+    "object": "Pin",
+    "label": "Block"
+   },
+   "expect": "REFUSED invalid_input: taken by <the Block's internal name> (Part::Box)"
+  },
+  {
+   "tool": "object_group",
+   "arguments": {
+    "action": "add",
+    "group": "Parts",
+    "kind": "folder",
+    "objects": [
+     "Block",
+     "Pin"
+    ]
+   },
+   "expect": "group \"Parts\", type App::DocumentObjectGroup, holds [Block, Pin]"
+  },
+  {
+   "tool": "object_group",
+   "arguments": {
+    "action": "remove",
+    "group": "Nowhere",
+    "objects": [
+     "Pin"
+    ]
+   },
+   "expect": "REFUSED not_found: no such group to remove; the groups: Parts"
+  },
+  {
+   "tool": "object_group",
+   "arguments": {
+    "action": "link",
+    "object": "Block",
+    "count": 2,
+    "at": [
+     0,
+     60,
+     0
+    ],
+    "step": [
+     50,
+     0,
+     0
+    ],
+    "name": "Block link"
+   },
+   "expect": "links [\"Block link\", \"Block link 2\"], of Block"
+  },
+  {
+   "tool": "object_get",
+   "arguments": {
+    "object": "Block link 2",
+    "filter": [
+     "Placement",
+     "LinkedObject",
+     "LinkTransform"
+    ]
+   },
+   "expect": "Placement.value.at [50,60,0]; LinkedObject.value \"Block\"; LinkTransform.value false"
+  },
+  {
+   "tool": "object_group",
+   "arguments": {
+    "action": "list"
+   },
+   "expect": "groups: Parts (holds Block, Pin) and the two App::Link rows with links: \"Block\""
+  },
+  {
+   "tool": "link_make",
+   "arguments": {
+    "to": "Block",
+    "at": [
+     0,
+     -60,
+     0
+    ],
+    "name": "Ghost"
+   },
+   "expect": "link \"Ghost\", to Block, placement.at [0,-60,0]"
+  },
+  {
+   "tool": "link_make",
+   "arguments": {
+    "to": "Block.Face99"
+   },
+   "expect": "REFUSED not_found: Block has 6 faces"
+  },
+  {
+   "tool": "link_edit",
+   "arguments": {
+    "action": "replace",
+    "link": "Ghost",
+    "to": "Pin"
+   },
+   "expect": "link Ghost, now Pin"
+  },
+  {
+   "tool": "link_edit",
+   "arguments": {
+    "action": "unlink",
+    "link": "Ghost",
+    "name": "Pin copy"
+   },
+   "expect": "copy \"Pin copy\", from Pin, volume 1570.796 — a Part::Feature where the link showed the Pin: centred on x 0, y -60 (the link's placement stands in for the Pin's own [60,0,0], per App_Link.md; if it sits at x 60 instead, the two were combined: report it)"
+  },
+  {
+   "tool": "object_duplicate",
+   "arguments": {
+    "objects": [
+     "Block"
+    ],
+    "simple": true,
+    "name": "Block moved"
+   },
+   "expect": "duplicated [{ from Block, copy \"Block moved\", simple true }]"
+  },
+  {
+   "tool": "object_align",
+   "arguments": {
+    "object": "Block moved",
+    "pairs": [
+     [
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0.5,
+       0,
+       0
+      ]
+     ]
+    ]
+   },
+   "expect": "pairs 1, rms 0, worst 0, placement.at [0.5,0,0]; note: moved only"
+  },
+  {
+   "tool": "object_align",
+   "arguments": {
+    "object": "Pin copy",
+    "pairs": [
+     [
+      [
+       -5,
+       -60,
+       0
+      ],
+      [
+       0,
+       100,
+       0
+      ]
+     ],
+     [
+      [
+       5,
+       -60,
+       0
+      ],
+      [
+       0,
+       110,
+       0
+      ]
+     ],
+     [
+      [
+       0,
+       -60,
+       20
+      ],
+      [
+       0,
+       105,
+       20
+      ]
+     ]
+    ]
+   },
+   "expect": "pairs 3, rms ≈ 0, worst ≈ 0 (a quarter turn about Z and a move); placement.angle 90"
+  },
+  {
+   "tool": "text_document",
+   "arguments": {
+    "name": "Build notes",
+    "text": "Block 40 x 30 x 20"
+   },
+   "expect": "text \"Build notes\", chars 18, lines 1"
+  },
+  {
+   "tool": "text_document",
+   "arguments": {
+    "name": "Build notes",
+    "text": "Rod r5 h20",
+    "append": true
+   },
+   "expect": "chars 29, lines 2"
+  },
+  {
+   "tool": "doc_info",
+   "arguments": {
+    "comment": "coredoc hardening model",
+    "company": "test"
+   },
+   "expect": "comment and company as given; objects 9 or so; file null (never saved)"
+  },
+  {
+   "tool": "doc_graph",
+   "arguments": {},
+   "expect": "objects ≥ 8; uses has \"Block link\": [\"Block\"], \"Parts\": [\"Block\", \"Pin\"]; roots include Parts"
+  },
+  {
+   "tool": "object_appearance",
+   "arguments": {
+    "objects": [
+     "Block"
+    ],
+    "color": "#3366cc",
+    "transparency": 30,
+    "faces": {
+     "Face6": "#ff0000"
+    }
+   },
+   "expect": "set[0] { object Block, color \"#3366cc\", transparency 30, faces 1 }; shown true in the window, false headless (then a note)"
+  },
+  {
+   "tool": "object_appearance",
+   "arguments": {
+    "objects": [
+     "Block"
+    ]
+   },
+   "expect": "REFUSED invalid_input: give at least one of color, transparency, faces"
+  },
+  {
+   "tool": "object_freeze",
+   "arguments": {
+    "skipRecompute": true
+   },
+   "expect": "skipRecompute true"
+  },
+  {
+   "tool": "recompute",
+   "arguments": {},
+   "expect": "recomputed 0; note says the skip-recompute switch is on"
+  },
+  {
+   "tool": "object_freeze",
+   "arguments": {
+    "skipRecompute": false
+   },
+   "expect": "skipRecompute false"
+  },
+  {
+   "tool": "recompute",
+   "arguments": {
+    "force": true
+   },
+   "expect": "recomputed ≥ 8 (every object), ok true, errors []"
+  },
+  {
+   "tool": "shape_query",
+   "arguments": {
+    "body": "Block",
+    "normal": "+z"
+   },
+   "expect": "found 1: a plane, area 1200, centroid [20,15,20], normal [0,0,1] — call its ref TOP (Face6 on a Part::Box)"
+  },
+  {
+   "tool": "shape_query",
+   "arguments": {
+    "body": "Block",
+    "normal": "-z"
+   },
+   "expect": "found 1: area 1200, centroid [20,15,0] — its ref BOTTOM (Face5)"
+  },
+  {
+   "tool": "shape_query",
+   "arguments": {
+    "body": "Pin",
+    "kind": "edge",
+    "type": "circle",
+    "radius": 5
+   },
+   "expect": "found 2 circles, radius 5, closed true — the first ref RIM"
+  },
+  {
+   "tool": "measure",
+   "arguments": {
+    "a": "Block.Face6",
+    "b": "Block.Face5"
+   },
+   "expect": "distance 20, angle 180, gap 20"
+  },
+  {
+   "tool": "measure",
+   "arguments": {
+    "a": "Block",
+    "b": "Pin"
+   },
+   "expect": "distance 15 (Block ends at x 40, the Pin's wall starts at x 55)"
+  },
+  {
+   "tool": "measure",
+   "arguments": {
+    "a": "Block.Face6",
+    "b": "Block.Face6"
+   },
+   "expect": "REFUSED invalid_input: the same"
+  },
+  {
+   "tool": "measure_keep",
+   "arguments": {
+    "kind": "length",
+    "of": [
+     "Block.Edge1"
+    ],
+    "name": "Edge length"
+   },
+   "expect": "measure \"Edge length\", value 20, 30 or 40 (whichever edge Edge1 is), unit mm; health ok"
+  },
+  {
+   "tool": "measure_keep",
+   "arguments": {
+    "kind": "radius",
+    "of": [
+     "Pin.Edge1"
+    ]
+   },
+   "expect": "value 5 if Edge1 is a rim circle; REFUSED invalid_input (\"an edge (line)\") if Edge1 is the seam: then use RIM from the shape_query above"
+  },
+  {
+   "tool": "measure_keep",
+   "arguments": {
+    "kind": "radius",
+    "of": [
+     "Pin.Face1"
+    ]
+   },
+   "expect": "REFUSED invalid_input: one circular edge, not a cylindrical face"
+  },
+  {
+   "tool": "measure_keep",
+   "arguments": {
+    "kind": "diameter",
+    "of": [
+     "Pin.Edge1"
+    ]
+   },
+   "expect": "REFUSED: unavailable (FreeCAD 1.1 has no Measure::MeasureDiameter) or invalid_input when Edge1 is the seam"
+  },
+  {
+   "tool": "section",
+   "arguments": {
+    "body": "Block",
+    "normal": "+z",
+    "offset": 10
+   },
+   "expect": "area 1200, regions 1, one outline (outer true) of 4–5 points, plane.origin [0,0,10]"
+  },
+  {
+   "tool": "section",
+   "arguments": {
+    "body": "Block",
+    "offset": 99
+   },
+   "expect": "REFUSED not_found: the plane misses Block"
+  },
+  {
+   "tool": "clearance",
+   "arguments": {
+    "a": "Block",
+    "b": "Pin",
+    "min": 10
+   },
+   "expect": "distance 15, state clear, meets true"
+  },
+  {
+   "tool": "clearance",
+   "arguments": {
+    "a": "Block",
+    "b": "Block moved"
+   },
+   "expect": "state interference, interference 23700 (39.5 × 30 × 20)"
+  },
+  {
+   "tool": "measure_mass",
+   "arguments": {
+    "body": "Block",
+    "density": 1.0
+   },
+   "expect": "mass 24.0 g, centerOfMass [20,15,10], inertia[0][0] 2600 (24·(30²+20²)/12)"
+  },
+  {
+   "tool": "material_list",
+   "arguments": {
+    "words": "pla"
+   },
+   "expect": "materials[0].id \"pla\", category Printing filament, density ≈ 1.24"
+  },
+  {
+   "tool": "material_get",
+   "arguments": {
+    "id": "pla"
+   },
+   "expect": "density, E, yield present; source: Agent Link's typical FDM filament figures; note on typical figures"
+  },
+  {
+   "tool": "material_set",
+   "arguments": {
+    "bodies": [
+     "Block"
+    ],
+    "custom": {
+     "name": "Test brass",
+     "density": 8.5,
+     "youngsMPa": 100000,
+     "yieldMPa": 200
+    }
+   },
+   "expect": "material.id \"custom:test-brass\", mass_g.Block 204.0, shapeMaterial.Block false (+ note)"
+  },
+  {
+   "tool": "measure_mass",
+   "arguments": {
+    "body": "Block"
+   },
+   "expect": "density 8.5, densityFrom contains \"Test brass\", mass 204.0 g (24000 mm³ × 8.5 / 1000) — this was refused before the pass"
+  },
+  {
+   "tool": "measure_mass",
+   "arguments": {
+    "body": "Pin",
+    "material": "Test brass"
+   },
+   "expect": "mass 13.352 g (1570.796 × 8.5 / 1000)"
+  },
+  {
+   "tool": "material_list",
+   "arguments": {
+    "category": "Custom"
+   },
+   "expect": "found 1: custom:test-brass"
+  },
+  {
+   "tool": "material_set",
+   "arguments": {
+    "bodies": [
+     "Pin"
+    ],
+    "id": "Aluminum-6061-T6"
+   },
+   "expect": "where FreeCAD's library has that card: material.name Aluminum-6061-T6, density ≈ 2.7, shapeMaterial.Pin true, mass_g.Pin ≈ 4.24; else REFUSED not_found (then material_list { words: \"aluminum\" } and use an id it gives)"
+  },
+  {
+   "tool": "material_clear",
+   "arguments": {
+    "bodies": [
+     "Block"
+    ]
+   },
+   "expect": "cleared [\"Block\"]; materials still lists Pin if the card was set"
+  },
+  {
+   "tool": "measure_mass",
+   "arguments": {
+    "body": "Block"
+   },
+   "expect": "REFUSED invalid_input: material or density"
+  },
+  {
+   "tool": "insp_run",
+   "arguments": {
+    "actual": "Block moved",
+    "nominals": [
+     "Block"
+    ],
+    "search_radius": 1,
+    "tolerance": 0.6,
+    "name": "Shift check"
+   },
+   "expect": "max 0.5 (±0.02), min -0.5 (±0.02), outOfReach 0, verdict pass, worst[0].distance ±0.5 at x ≈ 40.5 or 0.5; measuredOn names the hidden mesh; health ok"
+  },
+  {
+   "tool": "insp_read",
+   "arguments": {
+    "inspection": "Shift check",
+    "worst": 3
+   },
+   "expect": "the same numbers; 3 worst spots; tolerance [-0.6, 0.6]"
+  },
+  {
+   "tool": "insp_list",
+   "arguments": {},
+   "expect": "one row: Shift check, actual \"Block moved as inspected\", nominals [Block], verdict pass"
+  },
+  {
+   "tool": "insp_faces",
+   "arguments": {
+    "inspection": "Shift check"
+   },
+   "expect": "faces: Block.Face2 (x = 40) mean ≈ +0.5 and Block.Face1 (x = 0) mean ≈ -0.5 first; the other four near 0; failing []"
+  },
+  {
+   "tool": "insp_update",
+   "arguments": {
+    "inspection": "Shift check",
+    "tolerance": 0.3
+   },
+   "expect": "verdict fail, over > 0 and under > 0, inTolerancePercent < 100"
+  },
+  {
+   "tool": "insp_update",
+   "arguments": {
+    "inspection": "Shift check",
+    "tolerance": 2
+   },
+   "expect": "REFUSED invalid_input: tolerance reaches past search_radius (nothing changed: insp_read still shows tolerance [-0.3, 0.3])"
+  },
+  {
+   "tool": "insp_update",
+   "arguments": {
+    "inspection": "Shift check"
+   },
+   "expect": "REFUSED invalid_input: nothing to change"
+  },
+  {
+   "tool": "insp_export",
+   "arguments": {
+    "inspection": "Shift check"
+   },
+   "expect": "files.csv.rows = points; files.json.path exists; summary.verdict fail"
+  },
+  {
+   "tool": "scad_status",
+   "arguments": {},
+   "expect": "openscad: a path or null; csgParser true"
+  },
+  {
+   "tool": "scad_export",
+   "arguments": {
+    "objects": [
+     "Block"
+    ],
+    "path": "Block.csg"
+   },
+   "expect": "path ends Block.csg, lines ≥ 4, no polyhedra note (a Part::Box goes out as cube)"
+  },
+  {
+   "tool": "scad_import",
+   "arguments": {
+    "path": "Block.csg"
+   },
+   "expect": "made has a Part::Box of volume 24000 (the cube read back, FreeCAD only); top names it; health ok"
+  },
+  {
+   "tool": "scad_import",
+   "arguments": {
+    "path": "Block.stl"
+   },
+   "expect": "REFUSED: not_found (no such file) — with a real .stl, invalid_input naming import_file"
+  },
+  {
+   "tool": "scad_op",
+   "arguments": {
+    "op": "hull",
+    "objects": [
+     "Block",
+     "Pin"
+    ],
+    "name": "Wrap"
+   },
+   "expect": "object \"Wrap\", made says OpenSCAD or here; volume 35370 (±1%: the convex hull of the box and the cylinder; a little under when computed here from a faceted cylinder)"
+  },
+  {
+   "tool": "scad_op",
+   "arguments": {
+    "op": "minkowski",
+    "objects": [
+     "Block"
+    ]
+   },
+   "expect": "REFUSED invalid_input: two bodies"
+  },
+  {
+   "tool": "scad_code",
+   "arguments": {
+    "code": "cube([10, 20, 30]);",
+    "name": "Scad cube"
+   },
+   "expect": "with OpenSCAD installed: top [\"Scad cube\"], made volume 6000; without: REFUSED unavailable naming openscad.org"
+  },
+  {
+   "tool": "scad_tidy",
+   "arguments": {
+    "action": "color_code",
+    "objects": [
+     "Block",
+     "Pin"
+    ]
+   },
+   "expect": "coloured: both is \"Solid\", color \"#cccccc\"; key lists the palette"
+  },
+  {
+   "tool": "scad_tidy",
+   "arguments": {
+    "action": "tolerance",
+    "objects": [
+     "Pin"
+    ],
+    "vertex": 0.01,
+    "edge": 0.01,
+    "face": 0.01
+   },
+   "expect": "made [\"tolerance_Pin\"]; Pin hidden"
+  },
+  {
+   "tool": "scad_tidy",
+   "arguments": {
+    "action": "remove_subtree",
+    "objects": [
+     "tolerance_Pin"
+    ]
+   },
+   "expect": "removed [\"tolerance_Pin\"] only (Pin is still used by the folder and links, so it stays)"
+  },
+  {
+   "tool": "scad_tidy",
+   "arguments": {
+    "action": "explode",
+    "objects": [
+     "Block"
+    ]
+   },
+   "expect": "REFUSED invalid_input: not a fusion or compound (Part::Box)"
+  },
+  {
+   "tool": "robot_new",
+   "arguments": {
+    "model": "puma",
+    "name": "Arm"
+   },
+   "expect": "robot \"Arm\", axes [0,0,0,0,0,0], tcp.at [3125, 0, 1100], model: FreeCAD's built-in default robot (a KUKA IR 500)"
+  },
+  {
+   "tool": "robot_move",
+   "arguments": {
+    "robot": "Arm",
+    "axes": [
+     0,
+     -90,
+     90,
+     0,
+     0,
+     0
+    ]
+   },
+   "expect": "axes as given, tcp.at [1825, 0, 2400] (±0.5) — keep tcp.ypr as YPR for the next calls"
+  },
+  {
+   "tool": "robot_move",
+   "arguments": {
+    "robot": "Arm",
+    "tcp": {
+     "at": [
+      1825,
+      100,
+      2400
+     ],
+     "ypr": "<YPR>"
+    }
+   },
+   "expect": "reached true, tcp.at [1825,100,2400], every axis within ±180 — the waypoint"
+  },
+  {
+   "tool": "robot_move",
+   "arguments": {
+    "robot": "Arm",
+    "tcp": {
+     "at": [
+      9000,
+      0,
+      0
+     ],
+     "ypr": "<YPR>"
+    }
+   },
+   "expect": "reached false, off_mm ≈ 7500, axes unchanged from the call before"
+  },
+  {
+   "tool": "robot_path",
+   "arguments": {
+    "name": "Stroke",
+    "waypoints": [
+     {
+      "at": [
+       1825,
+       0,
+       2400
+      ],
+      "ypr": "<YPR>",
+      "speed": 100
+     },
+     {
+      "at": [
+       1825,
+       200,
+       2400
+      ],
+      "ypr": "<YPR>",
+      "speed": 100
+     }
+    ]
+   },
+   "expect": "trajectory \"Stroke\", waypoints 2, length 200, seconds ≈ 2 (FreeCAD's velocity profile adds a little)"
+  },
+  {
+   "tool": "robot_run",
+   "arguments": {
+    "robot": "Arm",
+    "trajectory": "Stroke",
+    "samples": 20
+   },
+   "expect": "verdict \"reaches all\"; axes[0] range spans a few degrees"
+  },
+  {
+   "tool": "robot_path",
+   "arguments": {
+    "name": "Too far",
+    "waypoints": [
+     {
+      "at": [
+       9000,
+       0,
+       0
+      ],
+      "speed": 100
+     },
+     {
+      "at": [
+       9000,
+       500,
+       0
+      ],
+      "speed": 100
+     }
+    ]
+   },
+   "expect": "waypoints 2, length 500"
+  },
+  {
+   "tool": "robot_run",
+   "arguments": {
+    "robot": "Arm",
+    "trajectory": "Too far",
+    "samples": 5
+   },
+   "expect": "verdict \"misses 5 of 5 points\", worst_mm in the thousands (before the pass: \"reaches all\")"
+  },
+  {
+   "tool": "robot_trajectory",
+   "arguments": {
+    "op": "dress",
+    "trajectory": "Stroke",
+    "ypr": [
+     10,
+     0,
+     0
+    ],
+    "name": "Turned"
+   },
+   "expect": "trajectory \"Turned\", waypoints 2; object_get { object: \"Turned\", filter: [\"AddType\"] } then reads \"AddOrintation\" (FreeCAD's spelling)"
+  },
+  {
+   "tool": "robot_trajectory",
+   "arguments": {
+    "op": "join",
+    "trajectories": [
+     "Stroke",
+     "Turned"
+    ],
+    "name": "Both"
+   },
+   "expect": "waypoints 4"
+  },
+  {
+   "tool": "robot_path",
+   "arguments": {
+    "name": "Along block",
+    "edges": [
+     "Block.Edge1"
+    ]
+   },
+   "expect": "waypoints ≥ 2, length = Edge1's length (Robot::Edge2TracObject; this type name failed before the pass)"
+  },
+  {
+   "tool": "robot_tool",
+   "arguments": {
+    "robot": "Arm",
+    "tool": "Pin"
+   },
+   "expect": "robot Arm, tool Pin; note: drawing only"
+  },
+  {
+   "tool": "robot_export",
+   "arguments": {
+    "robot": "Arm",
+    "trajectory": "Stroke",
+    "path": "stroke.src"
+   },
+   "expect": "path ends stroke.src, moves 2 (two LIN lines)"
+  },
+  {
+   "tool": "robot_export",
+   "arguments": {
+    "robot": "Arm",
+    "trajectory": "Stroke",
+    "path": "stroke_full.src",
+    "full": true
+   },
+   "expect": "REFUSED unavailable on 1.1 (FreeCAD's full export writes nothing); on a FreeCAD where it writes: a path"
+  },
+  {
+   "tool": "doc_save",
+   "arguments": {
+    "path": "CoreDoc.FCStd"
+   },
+   "expect": "path ends CoreDoc.FCStd, bytes > 0, label CoreDoc, touched false"
+  },
+  {
+   "tool": "export",
+   "arguments": {
+    "objects": "Block",
+    "format": "step",
+    "path": "Block.step"
+   },
+   "expect": "verify.volumeDiff < 0.01 (core tool, a helper here)"
+  },
+  {
+   "tool": "import_file",
+   "arguments": {
+    "path": "Block.step",
+    "name": "Block from step"
+   },
+   "expect": "format step, count 1, objects[0] { type Part::Feature, volume 24000 }"
+  },
+  {
+   "tool": "import_file",
+   "arguments": {
+    "path": "Block.step",
+    "name": "x",
+    "solid": true
+   },
+   "expect": "the same body (solid applies to meshes only)"
+  },
+  {
+   "tool": "import_file",
+   "arguments": {
+    "path": "CoreDoc.FCStd"
+   },
+   "expect": "REFUSED invalid_input: doc_open opens it"
+  },
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "MergeSrc"
+   },
+   "expect": "document MergeSrc; previous CoreDoc"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "sphere",
+    "radius": 4,
+    "name": "Ball"
+   },
+   "expect": "volume 268.083"
+  },
+  {
+   "tool": "doc_save",
+   "arguments": {
+    "path": "merge_src.FCStd"
+   },
+   "expect": "label \"merge_src\", labelWas \"MergeSrc\", note on the relabel; document still MergeSrc"
+  },
+  {
+   "tool": "doc_save_all",
+   "arguments": {},
+   "expect": "saved: both files"
+  },
+  {
+   "tool": "doc_close",
+   "arguments": {
+    "documents": [
+     "MergeSrc"
+    ]
+   },
+   "expect": "closed [\"merge_src\"] — found by its internal name though its label changed; document CoreDoc"
+  },
+  {
+   "tool": "doc_merge",
+   "arguments": {
+    "path": "merge_src.FCStd"
+   },
+   "expect": "merged merge_src.FCStd, count 1, objects [\"Ball\"], errors []"
+  },
+  {
+   "tool": "doc_merge",
+   "arguments": {
+    "path": "Block.step"
+   },
+   "expect": "REFUSED invalid_input: not a FreeCAD document; import_file"
+  },
+  {
+   "tool": "object_delete",
+   "arguments": {
+    "objects": [
+     "Block"
+    ]
+   },
+   "expect": "REFUSED invalid_state: used by Parts, Block link, Block link 2 (and the inspection's mesh is not a user); nothing deleted"
+  },
+  {
+   "tool": "object_delete",
+   "arguments": {
+    "objects": [
+     "Ball"
+    ]
+   },
+   "expect": "deleted [\"Ball\"], errors []"
+  },
+  {
+   "tool": "doc_revert",
+   "arguments": {},
+   "expect": "reverted: the CoreDoc file; objects as saved — Ball was never in the file, and the Block from step import is gone"
+  },
+  {
+   "tool": "doc_open",
+   "arguments": {
+    "path": "CoreDoc.FCStd"
+   },
+   "expect": "document CoreDoc, note: it was open already"
+  },
+  {
+   "tool": "doc_close",
+   "arguments": {
+    "documents": [
+     "CoreDoc"
+    ],
+    "save": false
+   },
+   "expect": "REFUSED by the schema (no save input): the description says discard"
+  },
+  {
+   "tool": "doc_close",
+   "arguments": {
+    "documents": [
+     "CoreDoc"
+    ]
+   },
+   "expect": "closed [\"CoreDoc\"] (unchanged since the revert, so no discard needed); open lists what is left"
+  },
+  {
+   "tool": "doc_open",
+   "arguments": {
+    "recent": true
+   },
+   "expect": "recent: a list with CoreDoc.FCStd's path and exists true (window settings; may be empty headless)"
+  }
+ ],
+ "notCovered": [
+  "object_freeze { objects }: freezing needs the window (Std_ToggleFreeze); it is in coredoc-gui-model.json. skipRecompute is covered here.",
+  "link_edit import / import_all: need a link into a second open document; make one by hand (two documents, a link across) if wanted.",
+  "import_file of DXF, SVG, mesh and image files: no such file is made by this script (export { format: stl } then import_file covers the mesh path in tests/test_doc.py).",
+  "insp_run { file }: needs a scan file on disk.",
+  "scad_code and scad_op minkowski need the OpenSCAD program: the calls are here, refused as unavailable without it.",
+  "robot_new { kinematics } and the KUKA model files: this FreeCAD may ship none (the reply's model says which robot was made).",
+  "material_set through an add-on's material_set service (marked from): only with that add-on installed.",
+  "doc_close of a document whose label two documents share: tests/test_doc.py covers it (it needs a label set to a duplicate, which no tool does)."
+ ]
+}

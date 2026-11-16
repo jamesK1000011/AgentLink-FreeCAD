@@ -1,0 +1,1185 @@
+{
+ "tutorial": "The scripting examples on Surface_GeomFillSurface.md, Surface_Sections.md and Surface_BlendCurve.md (their Draft B-splines made with draft_shape), Surface_ExtendFace.md's extend, and Surface_Workbench.md's sewing; before them a 40 x 30 frame of four lines whose areas and volumes are known exactly",
+ "reference": null,
+ "expected": {
+  "frame": {
+   "size": [
+    40,
+    30
+   ],
+   "boundaryArea": 1200,
+   "filledArea": 1200,
+   "sectionsArea": 1200,
+   "plateVolume": 2400,
+   "how": "derived: four lines round a 40 x 30 rectangle"
+  },
+  "extend": {
+   "u0.1_v0.1_area": 1728,
+   "defaults_area": 1452,
+   "how": "derived from FeatureExtend.cpp: each end runs on by the share of the u or v range; FreeCAD refits the surface, so within about 1 mm²"
+  },
+  "cut": {
+   "bySolidArea": 600
+  },
+  "sew": {
+   "fiveFaces": {
+    "closed": false,
+    "area": 2000,
+    "freeEdges": 4
+   },
+   "sixFaces": {
+    "closed": true,
+    "area": 2400,
+    "solidVolume": 8000
+   }
+  },
+  "thicken": {
+   "bothSidesVolume": 2400
+  },
+  "quadric": {
+   "z": "0.02 (x - 15)^2 - 0.01 (y - 10)^2",
+   "rmsUnder_mm": 0.1
+  },
+  "refusals": 10,
+  "guesses": "the wiki examples' areas and lengths (free-form splines: no closed form), the blend's length, whether Coons is made or replaced by a Filling, and whether a plane standing across the patch splits it into two faces"
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "SurfaceHardening"
+   },
+   "expect": "a new empty document"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "line",
+    "from": [
+     0,
+     0,
+     0
+    ],
+    "to": [
+     40,
+     0,
+     0
+    ],
+    "name": "La"
+   },
+   "expect": "a line; Lb and Ld are drawn backwards on purpose"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "line",
+    "from": [
+     40,
+     30,
+     0
+    ],
+    "to": [
+     40,
+     0,
+     0
+    ],
+    "name": "Lb"
+   },
+   "expect": "a line; Lb and Ld are drawn backwards on purpose"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "line",
+    "from": [
+     40,
+     30,
+     0
+    ],
+    "to": [
+     0,
+     30,
+     0
+    ],
+    "name": "Lc"
+   },
+   "expect": "a line; Lb and Ld are drawn backwards on purpose"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "line",
+    "from": [
+     0,
+     0,
+     0
+    ],
+    "to": [
+     0,
+     30,
+     0
+    ],
+    "name": "Ld"
+   },
+   "expect": "a line; Lb and Ld are drawn backwards on purpose"
+  },
+  {
+   "tool": "surface_boundary",
+   "arguments": {
+    "edges": [
+     "La",
+     "Lb",
+     "Lc",
+     "Ld"
+    ],
+    "name": "Patch"
+   },
+   "expect": "type GeomFillSurface, fill stretched, sides 4, faces 1, area 1200 (the 40 x 30 rectangle: derived), closed false"
+  },
+  {
+   "tool": "surface_boundary",
+   "arguments": {
+    "edges": [
+     "La",
+     "Lc",
+     "Lb",
+     "Ld"
+    ]
+   },
+   "expect": "REFUSAL: they do not meet end to end in the order given"
+  },
+  {
+   "tool": "surface_fill",
+   "arguments": {
+    "edges": [
+     "La",
+     "Lb",
+     "Lc",
+     "Ld"
+    ],
+    "name": "Filled"
+   },
+   "expect": "a plain filled face: area 1200, solid false"
+  },
+  {
+   "tool": "surface_fill",
+   "arguments": {
+    "edges": [
+     "La",
+     "Lb",
+     "Lc"
+    ]
+   },
+   "expect": "REFUSAL: do not close; its ends are 30 mm apart"
+  },
+  {
+   "tool": "surface_fill",
+   "arguments": {
+    "edges": [
+     "La",
+     "Lb",
+     "Lc",
+     "Ld"
+    ],
+    "thickness": 2,
+    "name": "Plate"
+   },
+   "expect": "solid true, area 1200, volume 2400"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "line",
+    "from": [
+     0,
+     30,
+     0
+    ],
+    "to": [
+     40,
+     30,
+     0
+    ],
+    "name": "Lh"
+   },
+   "expect": "Lc again, running the same way as La"
+  },
+  {
+   "tool": "surface_sections",
+   "arguments": {
+    "sections": [
+     "La",
+     "Lh"
+    ],
+    "name": "Ruled"
+   },
+   "expect": "type Sections, sections 2, area 1200"
+  },
+  {
+   "tool": "surface_sections",
+   "arguments": {
+    "sections": [
+     "La"
+    ]
+   },
+   "expect": "REFUSAL: two or more curves"
+  },
+  {
+   "tool": "surface_extend",
+   "arguments": {
+    "face": "Patch.Face1",
+    "u": 0.1,
+    "v": 0.1,
+    "name": "Wider"
+   },
+   "expect": "type Extend, area 1728 (48 x 36: 10% more at each of the four ends), within 1; u 0.1, v 0.1"
+  },
+  {
+   "tool": "surface_extend",
+   "arguments": {
+    "face": "Patch.Face1",
+    "name": "Wider5"
+   },
+   "expect": "defaults 0.05: area 1452 (44 x 33)"
+  },
+  {
+   "tool": "surface_extend",
+   "arguments": {
+    "face": "Patch.Face1",
+    "u": 20
+   },
+   "expect": "REFUSAL: u, v -0.5 … 10"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     40,
+     60,
+     20
+    ],
+    "at": [
+     20,
+     -10,
+     -10
+    ],
+    "name": "Block"
+   },
+   "expect": "a solid over the patch's right half"
+  },
+  {
+   "tool": "surface_cut",
+   "arguments": {
+    "surface": "Patch",
+    "by": "Block",
+    "name": "Half"
+   },
+   "expect": "type Cut, of Patch, by Block, faces 1, area 600 (x 0 … 20), no note"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "plane",
+    "length": 50,
+    "width": 50,
+    "at": [
+     20,
+     -10,
+     25
+    ],
+    "normal": [
+     1,
+     0,
+     0
+    ],
+    "name": "Knife"
+   },
+   "expect": "a plane face standing in the plane x = 20; with its corner at [20,-10,25] it should span y -10 … 40 and z 25 … -25 and so cross the whole patch (how part_wire turns a plane onto a normal is not verified: if it misses, the next reply's note says nothing was cut)"
+  },
+  {
+   "tool": "surface_cut",
+   "arguments": {
+    "surface": "Patch",
+    "by": "Knife",
+    "name": "Split"
+   },
+   "expect": "area still 1200; note: Knife is a surface, nothing removed, Patch came back split (faces 2) — or, if the plane missed, note: nothing was cut. Which of the two is the live check"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     20,
+     20,
+     20
+    ],
+    "at": [
+     100,
+     0,
+     0
+    ],
+    "name": "Cube"
+   },
+   "expect": "volume 8000"
+  },
+  {
+   "tool": "surface_sew",
+   "arguments": {
+    "faces": [
+     "Cube.Face1",
+     "Cube.Face2",
+     "Cube.Face3",
+     "Cube.Face4",
+     "Cube.Face5"
+    ],
+    "solid": true,
+    "name": "Open box"
+   },
+   "expect": "type Sewing, faces 5, shells 1, closed false, area 2000; solid: \"not made: the shell is open … (4 edge(s) with a face on one side only)\""
+  },
+  {
+   "tool": "surface_sew",
+   "arguments": {
+    "faces": [
+     "Cube"
+    ],
+    "solid": true,
+    "name": "Skin"
+   },
+   "expect": "the whole object brings its six faces: faces 6, shells 1, closed true, area 2400; solid { body \"Skin solid\", volume 8000 }"
+  },
+  {
+   "tool": "surface_sew",
+   "arguments": {
+    "faces": [
+     "Cube.Face1"
+    ]
+   },
+   "expect": "REFUSAL: two or more faces"
+  },
+  {
+   "tool": "surface_thicken",
+   "arguments": {
+    "surface": "Patch",
+    "thickness": 2,
+    "side": "both",
+    "name": "Slab"
+   },
+   "expect": "solid true, volume 2400 (1200 x 2), size [40,30,2], z from -1 to 1"
+  },
+  {
+   "tool": "surface_thicken",
+   "arguments": {
+    "surface": "Patch",
+    "thickness": 0.5
+   },
+   "expect": "solid true, volume 600; warnings: under two printed lines"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "line",
+    "from": [
+     200,
+     0,
+     0
+    ],
+    "to": [
+     210,
+     0,
+     0
+    ],
+    "name": "Bf"
+   },
+   "expect": "a line along +x"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "line",
+    "from": [
+     220,
+     10,
+     0
+    ],
+    "to": [
+     220,
+     20,
+     0
+    ],
+    "name": "Bg"
+   },
+   "expect": "a line along +y, off its end"
+  },
+  {
+   "tool": "surface_blend",
+   "arguments": {
+    "start": {
+     "edge": "Bf",
+     "at": 1,
+     "continuity": 1
+    },
+    "end": {
+     "edge": "Bg",
+     "at": 0,
+     "continuity": 1
+    },
+    "name": "Blend"
+   },
+   "expect": "type FeatureBlendCurve, faces 0, edges 1, length between 14.14 (the chord) and 20 (the corner path): about 15-16 (not derived)"
+  },
+  {
+   "tool": "surface_blend",
+   "arguments": {
+    "start": {
+     "edge": "Bf",
+     "size": 0
+    },
+    "end": {
+     "edge": "Bg"
+    }
+   },
+   "expect": "REFUSAL: start.size not 0"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "bspline",
+    "points": [
+     [
+      -140,
+      -100,
+      0
+     ],
+     [
+      -55,
+      -91,
+      65
+     ],
+     [
+      35,
+      -85,
+      -5
+     ],
+     [
+      175,
+      -108,
+      0
+     ]
+    ],
+    "face": false,
+    "name": "G1"
+   },
+   "expect": "Surface_GeomFillSurface.md's obj1"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "bspline",
+    "points": [
+     [
+      175,
+      -108,
+      0
+     ],
+     [
+      217,
+      -45,
+      55
+     ],
+     [
+      217,
+      35,
+      -15
+     ],
+     [
+      200,
+      101,
+      0
+     ]
+    ],
+    "face": false,
+    "name": "G2"
+   },
+   "expect": "obj2"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "bspline",
+    "points": [
+     [
+      200,
+      101,
+      0
+     ],
+     [
+      33,
+      121,
+      55
+     ],
+     [
+      0,
+      91,
+      15
+     ],
+     [
+      -80,
+      121,
+      -40
+     ],
+     [
+      -135,
+      107,
+      70
+     ]
+    ],
+    "face": false,
+    "name": "G3"
+   },
+   "expect": "obj3"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "bspline",
+    "points": [
+     [
+      -135,
+      107,
+      70
+     ],
+     [
+      -140,
+      0,
+      45
+     ],
+     [
+      -140,
+      -100,
+      0
+     ]
+    ],
+    "face": false,
+    "name": "G4"
+   },
+   "expect": "obj4"
+  },
+  {
+   "tool": "surface_boundary",
+   "arguments": {
+    "edges": [
+     "G1",
+     "G2",
+     "G3",
+     "G4"
+    ],
+    "name": "WikiPatch"
+   },
+   "expect": "the wiki example with FillType Stretched: faces 1; area somewhat over the flat 340 x 210 footprint (about 70000-85000: a guess)"
+  },
+  {
+   "tool": "surface_boundary",
+   "arguments": {
+    "edges": [
+     "G1",
+     "G2",
+     "G3",
+     "G4"
+    ],
+    "fill": "coons",
+    "name": "WikiCoons"
+   },
+   "expect": "either type GeomFillSurface with fill coons, or (FreeCAD refusing the unmatched curves) type Filling with a note saying so; area near WikiPatch's"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "arc",
+    "radius": 50,
+    "start": 0,
+    "end": 180,
+    "name": "S1"
+   },
+   "expect": "Surface_Sections.md's obj1: a half circle, length 157.08"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "arc",
+    "radius": 30,
+    "start": 0,
+    "end": 180,
+    "at": [
+     0,
+     0,
+     25
+    ],
+    "name": "S2"
+   },
+   "expect": "obj2 at z = 25: length 94.248"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "bspline",
+    "points": [
+     [
+      18,
+      -10,
+      50
+     ],
+     [
+      12,
+      10,
+      50
+     ],
+     [
+      -12,
+      10,
+      50
+     ],
+     [
+      -18,
+      -10,
+      50
+     ]
+    ],
+    "face": false,
+    "name": "S3"
+   },
+   "expect": "obj3 at z = 50"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "bspline",
+    "points": [
+     [
+      15,
+      -20,
+      100
+     ],
+     [
+      0,
+      6,
+      100
+     ],
+     [
+      -15,
+      -20,
+      100
+     ]
+    ],
+    "face": false,
+    "name": "S4"
+   },
+   "expect": "obj4 at z = 100"
+  },
+  {
+   "tool": "surface_sections",
+   "arguments": {
+    "sections": [
+     "S1",
+     "S2",
+     "S3",
+     "S4"
+    ],
+    "name": "WikiSections"
+   },
+   "expect": "the wiki example: type Sections, sections 4, faces 1, a surface 100 tall (box z 100); area not derived"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "bspline",
+    "points": [
+     [
+      -20,
+      -20,
+      0
+     ],
+     [
+      -20,
+      -8,
+      0
+     ],
+     [
+      -17,
+      7,
+      0
+     ],
+     [
+      -18,
+      25,
+      0
+     ]
+    ],
+    "face": false,
+    "name": "B1"
+   },
+   "expect": "Surface_BlendCurve.md's obj1"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "bspline",
+    "points": [
+     [
+      60,
+      26,
+      0
+     ],
+     [
+      37,
+      4,
+      0
+     ],
+     [
+      33,
+      -20,
+      0
+     ]
+    ],
+    "face": false,
+    "name": "B2"
+   },
+   "expect": "obj2"
+  },
+  {
+   "tool": "surface_blend",
+   "arguments": {
+    "start": {
+     "edge": "B1",
+     "at": 0,
+     "size": -5
+    },
+    "end": {
+     "edge": "B2",
+     "at": 1,
+     "size": -5
+    },
+    "name": "WikiBlend"
+   },
+   "expect": "the wiki example (EndParameter 1, both sizes -5, continuity 2): one edge from (-20,-20,0) to (33,-20,0), flat in z; length over the 53 mm chord"
+  },
+  {
+   "tool": "surface_fill",
+   "arguments": {
+    "edges": [
+     "B1",
+     "B2",
+     "WikiBlend"
+    ]
+   },
+   "expect": "REFUSAL: three curves that do not close (B1's far end and B2's start are apart): the gap in mm is given"
+  },
+  {
+   "tool": "surface_loft",
+   "arguments": {
+    "curves": [
+     {
+      "points": [
+       [
+        0,
+        100,
+        0.0
+       ],
+       [
+        10,
+        100,
+        3.0
+       ],
+       [
+        20,
+        100,
+        4.0
+       ],
+       [
+        30,
+        100,
+        3.0
+       ],
+       [
+        40,
+        100,
+        0.0
+       ]
+      ]
+     },
+     {
+      "points": [
+       [
+        0,
+        115,
+        0.0
+       ],
+       [
+        10,
+        115,
+        4.5
+       ],
+       [
+        20,
+        115,
+        6.0
+       ],
+       [
+        30,
+        115,
+        4.5
+       ],
+       [
+        40,
+        115,
+        0.0
+       ]
+      ]
+     },
+     {
+      "points": [
+       [
+        0,
+        130,
+        0.0
+       ],
+       [
+        10,
+        130,
+        3.0
+       ],
+       [
+        20,
+        130,
+        4.0
+       ],
+       [
+        30,
+        130,
+        3.0
+       ],
+       [
+        40,
+        130,
+        0.0
+       ]
+      ]
+     }
+    ],
+    "thickness": 2,
+    "side": "both",
+    "name": "Panel"
+   },
+   "expect": "through \"open curves (a sheet)\", curves 3, solid true, volume about area x 2"
+  },
+  {
+   "tool": "surface_loft",
+   "arguments": {
+    "curves": [
+     {
+      "points": [
+       [
+        0,
+        100,
+        0.0
+       ],
+       [
+        10,
+        100,
+        3.0
+       ],
+       [
+        20,
+        100,
+        4.0
+       ],
+       [
+        30,
+        100,
+        3.0
+       ],
+       [
+        40,
+        100,
+        0.0
+       ]
+      ]
+     },
+     {
+      "points": [
+       [
+        0,
+        100,
+        0
+       ],
+       [
+        10,
+        100,
+        0
+       ],
+       [
+        10,
+        110,
+        0
+       ]
+      ],
+      "closed": true
+     }
+    ]
+   },
+   "expect": "REFUSAL: all open or all closed"
+  },
+  {
+   "tool": "surface_points",
+   "arguments": {
+    "rows": [
+     [
+      [
+       0,
+       200,
+       3.5
+      ],
+      [
+       5,
+       200,
+       1.0
+      ],
+      [
+       10,
+       200,
+       -0.5
+      ],
+      [
+       15,
+       200,
+       -1.0
+      ],
+      [
+       20,
+       200,
+       -0.5
+      ],
+      [
+       25,
+       200,
+       1.0
+      ],
+      [
+       30,
+       200,
+       3.5
+      ]
+     ],
+     [
+      [
+       0,
+       205,
+       4.25
+      ],
+      [
+       5,
+       205,
+       1.75
+      ],
+      [
+       10,
+       205,
+       0.25
+      ],
+      [
+       15,
+       205,
+       -0.25
+      ],
+      [
+       20,
+       205,
+       0.25
+      ],
+      [
+       25,
+       205,
+       1.75
+      ],
+      [
+       30,
+       205,
+       4.25
+      ]
+     ],
+     [
+      [
+       0,
+       210,
+       4.5
+      ],
+      [
+       5,
+       210,
+       2.0
+      ],
+      [
+       10,
+       210,
+       0.5
+      ],
+      [
+       15,
+       210,
+       0.0
+      ],
+      [
+       20,
+       210,
+       0.5
+      ],
+      [
+       25,
+       210,
+       2.0
+      ],
+      [
+       30,
+       210,
+       4.5
+      ]
+     ],
+     [
+      [
+       0,
+       215,
+       4.25
+      ],
+      [
+       5,
+       215,
+       1.75
+      ],
+      [
+       10,
+       215,
+       0.25
+      ],
+      [
+       15,
+       215,
+       -0.25
+      ],
+      [
+       20,
+       215,
+       0.25
+      ],
+      [
+       25,
+       215,
+       1.75
+      ],
+      [
+       30,
+       215,
+       4.25
+      ]
+     ],
+     [
+      [
+       0,
+       220,
+       3.5
+      ],
+      [
+       5,
+       220,
+       1.0
+      ],
+      [
+       10,
+       220,
+       -0.5
+      ],
+      [
+       15,
+       220,
+       -1.0
+      ],
+      [
+       20,
+       220,
+       -0.5
+      ],
+      [
+       25,
+       220,
+       1.0
+      ],
+      [
+       30,
+       220,
+       3.5
+      ]
+     ]
+    ],
+    "name": "Fitted"
+   },
+   "expect": "grid [5,7], fitted \"through every point\", farthestPoint under 0.01, solid false, next names thickness"
+  },
+  {
+   "tool": "surface_points",
+   "arguments": {
+    "rows": [
+     [
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       1,
+       0,
+       0
+      ]
+     ],
+     [
+      [
+       0,
+       1,
+       0
+      ]
+     ]
+    ]
+   },
+   "expect": "REFUSAL: each row the same length"
+  },
+  {
+   "tool": "meshobj_from_shape",
+   "arguments": {
+    "body": "Fitted",
+    "deflection": 0.1,
+    "name": "Fitted mesh"
+   },
+   "expect": "the saddle as a mesh, to fit a quadric back onto (solid false: it is a sheet)"
+  },
+  {
+   "tool": "surface_polynomial",
+   "arguments": {
+    "from": "Fitted mesh",
+    "name": "Quadric"
+   },
+   "expect": "the points lie on z = 0.02 (x-15)² - 0.01 (y-10)²: rms and max small, under about 0.1 mm (exact only if the fit plane comes out level; not derived); surface \"Quadric\""
+  },
+  {
+   "tool": "surface_polynomial",
+   "arguments": {
+    "from": "Patch"
+   },
+   "expect": "REFUSAL: Patch is not a mesh or a point cloud"
+  }
+ ],
+ "notCovered": [
+  "Surface_Filling.md's own example (Surface::Filling with UnboundEdges and Points): no tool sets those; the feature is reached only as surface_boundary's fallback, and surface_fill uses Part's filled face",
+  "Surface_CurveOnMesh.md: a window-only command (drawn by clicking on a mesh); meshobj_project is the nearest tool",
+  "surface_extend on a trimmed or holed face (the outline is lost by design): needs a face with a hole to show it"
+ ]
+}

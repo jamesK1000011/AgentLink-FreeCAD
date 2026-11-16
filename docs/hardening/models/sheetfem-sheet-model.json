@@ -1,0 +1,627 @@
+{
+ "tutorial": "FreeCAD wiki Configuration_Tables.md (the M10 / M12 hex nut driven by a spreadsheet's configuration table), with Spreadsheet_Workbench.md (Scripting: set, alias, get), Spreadsheet_SetAlias.md (alias rules) and Std_VarSet.md (a variable set and its property types)",
+ "reference": null,
+ "referenceNote": "The tutorial's ConfigurationTableExample.FCStd is a forum download and is not in FreeCAD/Examples; the expected numbers below are worked from the tutorial's own table.",
+ "expected": {
+  "tutorialTable": {
+   "M10": {
+    "Diameter": 10,
+    "WidthAcrossCorners": 18.48,
+    "Thickness": 8.4
+   },
+   "M12": {
+    "Diameter": 12,
+    "WidthAcrossCorners": 20.78,
+    "Thickness": 10.8
+   }
+  },
+  "volumeFormula": "(3*sqrt(3)/2 * (WidthAcrossCorners/2)^2 - pi * Diameter^2 / 4) * Thickness, mm3",
+  "volumes": {
+   "M10": 1203.53,
+   "M12": 1807.6,
+   "sheet: hole 12, across 22.176, thick 8.4": 1733.09,
+   "varset: thick 10.8": 2228.25,
+   "with 0.5 clearance": 2124.35,
+   "M16 (test's own row)": 4405.48
+  },
+  "tolerance": "0.5 mm3",
+  "box": {
+   "M10": [
+    18.48,
+    16.0,
+    8.4
+   ],
+   "note": "across corners along x when the hexagon keeps its first corner on +x; the hexagon is free to turn (1 DoF), so compare the volume first"
+  },
+  "counts": {
+   "solids": 1,
+   "faces": 9,
+   "sketchDoFLeft": 1
+  },
+  "designTable": {
+   "sheet": "NutTable",
+   "header": "A1:D1",
+   "activeRow": "A2:D2",
+   "configs": "A3 down",
+   "switch": "Nut.Configuration"
+  }
+ },
+ "calls": [
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Nut"
+   },
+   "expect": "body: \"Nut\""
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Nut",
+    "plane": "XY",
+    "name": "NutSketch"
+   },
+   "expect": "sketch \"NutSketch\" on XY"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "NutSketch",
+    "items": [
+     {
+      "kind": "polygon",
+      "center": [
+       0,
+       0
+      ],
+      "radius": 9.24,
+      "sides": 6,
+      "dims": true,
+      "name": "hex"
+     },
+     {
+      "kind": "circle",
+      "center": [
+       0,
+       0
+      ],
+      "diameter": 10,
+      "dims": true,
+      "name": "hole"
+     }
+    ]
+   },
+   "expect": "tutorial step 2: hexagon ids 0..5 with its construction circle id 6, hole circle id 7; named dimensions hex_d (18.48, the width across corners) and hole_d (10)"
+  },
+  {
+   "tool": "sketch_constrain",
+   "arguments": {
+    "sketch": "NutSketch",
+    "constraints": [
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        6,
+        3
+       ],
+       "origin"
+      ]
+     },
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        7,
+        3
+       ],
+       "origin"
+      ]
+     }
+    ]
+   },
+   "expect": "both centres on the origin so the profile stays put when the sizes change; dof 1 left (the hexagon's turn)"
+  },
+  {
+   "tool": "pd_pad",
+   "arguments": {
+    "sketch": "NutSketch",
+    "length": 8.4
+   },
+   "expect": "tutorial step 3: volume about 1203.5 mm3 (hexagon across corners 18.48 less a 10 mm hole, 8.4 thick)"
+  },
+  {
+   "tool": "sheet_new",
+   "arguments": {
+    "name": "Dimensions"
+   },
+   "expect": "made \"Dimensions\", name \"Spreadsheet\"; refAs names Spreadsheet.<alias> and <<Dimensions>>.<alias> (wiki Spreadsheet_Workbench, Scripting)"
+  },
+  {
+   "tool": "sheet_set",
+   "arguments": {
+    "sheet": "Dimensions",
+    "cells": {
+     "A1": "thickness",
+     "B1": "8.4 mm",
+     "A2": "hole",
+     "B2": "10 mm",
+     "A3": "across",
+     "B3": "=B2 * 1.848"
+    },
+    "aliases": {
+     "B1": "Thickness",
+     "B2": "Diameter",
+     "B3": "WidthAcrossCorners"
+    }
+   },
+   "expect": "cells: B1 8.4 mm alias Thickness, B2 10 mm alias Diameter, B3 value 18.48 unit mm alias WidthAcrossCorners; A cells are text"
+  },
+  {
+   "tool": "sheet_set",
+   "arguments": {
+    "sheet": "Dimensions",
+    "cells": {
+     "C1": "=(B1 + 2"
+    }
+   },
+   "expect": "REFUSED: FreeCAD cannot read it as an expression (FreeCAD itself would keep it as text without an error); nothing kept"
+  },
+  {
+   "tool": "sheet_set",
+   "arguments": {
+    "sheet": "Dimensions",
+    "cells": {
+     "C1": "=nothere * 2"
+    }
+   },
+   "expect": "REFUSED naming C1 and FreeCAD's reason; nothing kept"
+  },
+  {
+   "tool": "sheet_set",
+   "arguments": {
+    "sheet": "Dimensions",
+    "aliases": {
+     "A1": "mm"
+    }
+   },
+   "expect": "REFUSED: mm is a unit in FreeCAD's expressions"
+  },
+  {
+   "tool": "sheet_set",
+   "arguments": {
+    "sheet": "Dimensions",
+    "cells": {
+     "C1": 5
+    }
+   },
+   "expect": "C1 value 5"
+  },
+  {
+   "tool": "sheet_set",
+   "arguments": {
+    "sheet": "Dimensions",
+    "cells": {
+     "C1": null
+    }
+   },
+   "expect": "cells [{ cell C1, content \"\", empty: true }] — a cleared cell is not an error"
+  },
+  {
+   "tool": "param_bind",
+   "arguments": {
+    "target": "Pad.Length",
+    "expression": "Spreadsheet.Thickness"
+   },
+   "expect": "tutorial step 11: value 8.4; bodies volume about 1203.5"
+  },
+  {
+   "tool": "param_bind",
+   "arguments": {
+    "target": "NutSketch.hole_d",
+    "expression": "Spreadsheet.Diameter"
+   },
+   "expect": "tutorial step 10: a named sketch constraint bound; value 10"
+  },
+  {
+   "tool": "param_bind",
+   "arguments": {
+    "target": "NutSketch.hex_d",
+    "expression": "<<Dimensions>>.WidthAcrossCorners"
+   },
+   "expect": "bound by the sheet's label; value 18.48; bodies volume about 1203.5"
+  },
+  {
+   "tool": "param_bind",
+   "arguments": {
+    "target": "NutSketch.Constraints[3]",
+    "expression": "Spreadsheet.Diameter"
+   },
+   "expect": "REFUSED: a constraint is bound by its name, not its number; lists hex_d, hole_d"
+  },
+  {
+   "tool": "sheet_set",
+   "arguments": {
+    "sheet": "Dimensions",
+    "cells": {
+     "B2": "12 mm"
+    }
+   },
+   "expect": "cells B2 12 mm; drives lists NutSketch.Constraints.hole_d; bodies volume about 1733.1 (hole 12, across 22.176, 8.4 thick)"
+  },
+  {
+   "tool": "sheet_read",
+   "arguments": {
+    "sheet": "Dimensions"
+   },
+   "expect": "range A1:B3, six cells; B3 content \"=B2 * 1.848\" value 22.176 unit mm alias WidthAcrossCorners; no errors"
+  },
+  {
+   "tool": "sheet_read",
+   "arguments": {
+    "sheet": "Dimensions",
+    "cells": [
+     "B1",
+     "D9"
+    ],
+    "format": true
+   },
+   "expect": "B1 with value 8.4; D9 { empty: true }"
+  },
+  {
+   "tool": "sheet_list",
+   "arguments": {},
+   "expect": "Dimensions: cells 6, range A1:B3, aliases [Diameter, Thickness, WidthAcrossCorners], usedBy Pad.Length and the two sketch constraints"
+  },
+  {
+   "tool": "sheet_format",
+   "arguments": {
+    "sheet": "Dimensions",
+    "range": "A1:A3",
+    "style": [
+     "bold"
+    ],
+    "background": "#eeeeee",
+    "align": [
+     "right"
+    ]
+   },
+   "expect": "changed [style, align, background]; cells show style [bold], background #eeeeee"
+  },
+  {
+   "tool": "sheet_format",
+   "arguments": {
+    "sheet": "Dimensions",
+    "range": "B1",
+    "displayUnit": "cm"
+   },
+   "expect": "changed [displayUnit]; B1 displayUnit cm, value still 8.4 unit mm"
+  },
+  {
+   "tool": "sheet_rows",
+   "arguments": {
+    "sheet": "Dimensions",
+    "action": "insert",
+    "rows": 1,
+    "count": 1
+   },
+   "expect": "inserted \"1 row at 1\"; the cells are now A2:B4 and the aliases moved with them; health ok (the part did not change)"
+  },
+  {
+   "tool": "sheet_read",
+   "arguments": {
+    "sheet": "Dimensions",
+    "range": "A1:B4"
+   },
+   "expect": "B4 content \"=B3 * 1.848\" (the reference moved), alias WidthAcrossCorners, value 22.176"
+  },
+  {
+   "tool": "sheet_rows",
+   "arguments": {
+    "sheet": "Dimensions",
+    "action": "remove",
+    "rows": 1,
+    "count": 1
+   },
+   "expect": "removed \"1 row at 1\"; back to A1:B3"
+  },
+  {
+   "tool": "sheet_cells",
+   "arguments": {
+    "sheet": "Dimensions",
+    "merge": "D5:E5"
+   },
+   "expect": "merged true, cell D5, range D5:E5"
+  },
+  {
+   "tool": "sheet_cells",
+   "arguments": {
+    "sheet": "Dimensions",
+    "split": "D5"
+   },
+   "expect": "merged false, cell D5"
+  },
+  {
+   "tool": "sheet_format",
+   "arguments": {
+    "sheet": "Dimensions",
+    "range": "A2:B2",
+    "merge": true
+   },
+   "expect": "REFUSED: merging clears B2, whose alias Diameter is in use by NutSketch"
+  },
+  {
+   "tool": "sheet_clear",
+   "arguments": {
+    "sheet": "Dimensions",
+    "range": "B1:B3"
+   },
+   "expect": "REFUSED: aliases in use by Pad.Length and the sketch constraints"
+  },
+  {
+   "tool": "sheet_export",
+   "arguments": {
+    "sheet": "Dimensions",
+    "path": "nut-dimensions.csv"
+   },
+   "expect": "file …/nut-dimensions.csv, rows 3; values only: thickness,8.4 / hole,12 / across,22.176 (no units, no formulas)"
+  },
+  {
+   "tool": "sheet_import",
+   "arguments": {
+    "path": "nut-dimensions.csv"
+   },
+   "expect": "a new sheet \"nut-dimensions\": cells 6, range A1:B3; B3 value 22.176 with no unit (a plain number now)"
+  },
+  {
+   "tool": "varset_new",
+   "arguments": {
+    "name": "NutVars",
+    "properties": {
+     "Thickness": "8.4 mm",
+     "Chamfer": "30 deg",
+     "Count": 2,
+     "mm": 1
+    }
+   },
+   "expect": "REFUSED: mm is a unit or constant in FreeCAD's expressions (the rule of FreeCAD 1.1's Add Property dialog); no VarSet left behind"
+  },
+  {
+   "tool": "varset_new",
+   "arguments": {
+    "name": "NutVars",
+    "properties": {
+     "Thickness": "8.4 mm",
+     "Chamfer": "30 deg",
+     "Count": 2
+    }
+   },
+   "expect": "varset NutVars, object VarSet; set: Thickness PropertyLength, Chamfer PropertyAngle, Count PropertyInteger (wiki Std_VarSet)"
+  },
+  {
+   "tool": "param_bind",
+   "arguments": {
+    "target": "Pad.Length",
+    "expression": "NutVars.Thickness"
+   },
+   "expect": "expression kept as VarSet.Thickness; value 8.4; bodies volume about 1733.1"
+  },
+  {
+   "tool": "varset_set",
+   "arguments": {
+    "varset": "NutVars",
+    "properties": {
+     "Thickness": "10.8 mm"
+    }
+   },
+   "expect": "usedBy [Pad.Length]; bodies volume about 2228.3 (hole 12, across 22.176, 10.8 thick)"
+  },
+  {
+   "tool": "varset_set",
+   "arguments": {
+    "varset": "NutVars",
+    "properties": {
+     "Thickness": "thick"
+    }
+   },
+   "expect": "REFUSED: Thickness is a PropertyLength"
+  },
+  {
+   "tool": "param_set",
+   "arguments": {
+    "name": "clearance",
+    "value": 0.5,
+    "note": "hole clearance"
+   },
+   "expect": "new true, value 0.5 unit mm, ref Params.clearance"
+  },
+  {
+   "tool": "param_set",
+   "arguments": {
+    "name": "W",
+    "value": 1
+   },
+   "expect": "REFUSED: W is a unit in FreeCAD's expressions"
+  },
+  {
+   "tool": "param_set",
+   "arguments": {
+    "name": "half",
+    "value": "(clearance /"
+   },
+   "expect": "REFUSED: FreeCAD cannot read it as an expression; param_list afterwards has no half"
+  },
+  {
+   "tool": "param_bind",
+   "arguments": {
+    "target": "NutSketch.hole_d",
+    "expression": "Spreadsheet.Diameter + clearance"
+   },
+   "expect": "expression \"Spreadsheet.Diameter + Params.clearance\" (read.as names the bare parameter); value 12.5; bodies volume about 2124.4"
+  },
+  {
+   "tool": "param_list",
+   "arguments": {},
+   "expect": "params [clearance 0.5 mm, usedBy NutSketch.Constraints.hole_d]; varsets [NutVars: Thickness 10.8 mm usedBy Pad.Length, Chamfer 30 deg, Count 2]"
+  },
+  {
+   "tool": "param_remove",
+   "arguments": {
+    "name": "clearance"
+   },
+   "expect": "REFUSED: used by NutSketch.Constraints.hole_d"
+  },
+  {
+   "tool": "sheet_table",
+   "arguments": {
+    "action": "make",
+    "name": "NutTable",
+    "params": [
+     "Diameter",
+     "WidthAcrossCorners",
+     "Thickness"
+    ],
+    "configs": [
+     {
+      "name": "M10",
+      "values": [
+       10,
+       18.48,
+       8.4
+      ]
+     },
+     {
+      "name": "M12",
+      "values": [
+       12,
+       20.78,
+       10.8
+      ]
+     }
+    ]
+   },
+   "expect": "wiki Configuration_Tables steps 1, 4-9: a new sheet NutTable; at A2, switch \"Nut.Configuration\", active M10, params as given, configs M10 and M12, current Diameter 10 mm, WidthAcrossCorners 18.48 mm, Thickness 8.4 mm"
+  },
+  {
+   "tool": "param_bind",
+   "arguments": {
+    "target": "NutSketch.hole_d",
+    "expression": "<<NutTable>>.Diameter"
+   },
+   "expect": "value 10"
+  },
+  {
+   "tool": "param_bind",
+   "arguments": {
+    "target": "NutSketch.hex_d",
+    "expression": "<<NutTable>>.WidthAcrossCorners"
+   },
+   "expect": "value 18.48"
+  },
+  {
+   "tool": "param_bind",
+   "arguments": {
+    "target": "Pad.Length",
+    "expression": "<<NutTable>>.Thickness"
+   },
+   "expect": "value 8.4; bodies volume about 1203.5 (the M10 nut)"
+  },
+  {
+   "tool": "param_remove",
+   "arguments": {
+    "name": "clearance"
+   },
+   "expect": "removed clearance; left []"
+  },
+  {
+   "tool": "sheet_table",
+   "arguments": {
+    "action": "use",
+    "sheet": "NutTable",
+    "config": "M12"
+   },
+   "expect": "tutorial step 16: active M12, was M10; current 12 / 20.78 / 10.8; bodies volume about 1807.6"
+  },
+  {
+   "tool": "sheet_set",
+   "arguments": {
+    "sheet": "NutTable",
+    "cells": {
+     "B2": 11
+    }
+   },
+   "expect": "REFUSED: B2 is bound (the design table's active row)"
+  },
+  {
+   "tool": "sheet_table",
+   "arguments": {
+    "action": "add",
+    "sheet": "NutTable",
+    "config": "M16",
+    "values": [
+     16,
+     27.71,
+     14.8
+    ]
+   },
+   "expect": "configs M10, M12, M16 (the M16 row is this test's own, not the tutorial's); active still M12"
+  },
+  {
+   "tool": "sheet_table",
+   "arguments": {
+    "action": "use",
+    "sheet": "NutTable",
+    "config": "M16"
+   },
+   "expect": "bodies volume about 4405.5"
+  },
+  {
+   "tool": "sheet_table",
+   "arguments": {
+    "action": "use",
+    "sheet": "NutTable",
+    "config": "M10"
+   },
+   "expect": "bodies volume about 1203.5"
+  },
+  {
+   "tool": "sheet_table",
+   "arguments": {
+    "action": "list"
+   },
+   "expect": "one design table, on NutTable at A2, switch Nut.Configuration"
+  },
+  {
+   "tool": "sheet_chart",
+   "arguments": {
+    "sheet": "NutTable",
+    "kind": "bar",
+    "x": "A3:A5",
+    "y": [
+     "B3:B5",
+     "C3:C5",
+     "D3:D5"
+    ],
+    "names": [
+     "Diameter",
+     "WidthAcrossCorners",
+     "Thickness"
+    ],
+    "title": "Hex nut variants",
+    "ylabel": "mm"
+   },
+   "expect": "path …/NutTable-chart.svg, series as named, points 3"
+  },
+  {
+   "tool": "sheet_clear",
+   "arguments": {
+    "sheet": "Dimensions",
+    "range": "A1:B3"
+   },
+   "expect": "cleared A1:B3, cells 6 — nothing uses the Dimensions sheet any more, so it is allowed without force"
+  }
+ ],
+ "notCovered": [
+  "Every one of the 18 tools is called. Not reached inside them: sheet_import with replace: true into a filled sheet; sheet_format width / height / color; a scatter chart; sheet_table with owner / property / at / units given; a cyclic dependency between cells (FreeCAD leaves such cells unevaluated and prints a console line; the refusal's wording for it is from source, not seen live); VarSet variables read through a variant Link (the CopyOnChange status now set on the switch as FreeCAD's dialog does, tutorial steps 12-19, needs a Link or SubShapeBinder made by other families' tools)."
+ ]
+}

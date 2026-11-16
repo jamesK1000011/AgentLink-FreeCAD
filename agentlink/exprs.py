@@ -7,11 +7,13 @@
 
 import re
 
+from .cells import CONSTANTS, UNITS
+
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-# FreeCAD's own words in an expression: never a parameter, whatever the
-# sheet holds (units after a number are caught by position as well).
-RESERVED = {"pi", "e", "True", "False", "true", "false", "mm", "cm", "m", "km", "um", "nm", "in", "ft", "thou", "mil", "yd", "mi",
-            "deg", "rad", "gon", "g", "kg", "s", "min", "h", "N", "kN", "Pa", "kPa", "MPa", "GPa", "W", "J", "K"}
+# FreeCAD's own words in an expression (its parser's units and constants):
+# never a parameter, whatever the sheet holds (units after a number are
+# caught by position as well).
+RESERVED = set(UNITS) | set(CONSTANTS)
 
 
 def qualify(expr, names, sheet, keep=()):

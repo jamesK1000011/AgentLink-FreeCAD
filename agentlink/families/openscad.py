@@ -109,8 +109,8 @@ def tools(session):
     doc = lambda: s.doc  # noqa: E731
 
     def where(p):
-        if not p:
-            raise bad("path: a file.")
+        if not isinstance(p, str) or not p.strip():
+            raise bad("path: a file's path (a relative one is in the session's folder).")
         return paths.local(s, p, expand=False)
 
     def made_since(before):
@@ -132,10 +132,10 @@ def tools(session):
     def scad_import(a):
         p = where(a.get("path"))
         if not os.path.isfile(p):
-            raise ToolError("not_found", f"{p}: no such file.")
+            raise ToolError("not_found", f"{p}: no such file — a relative path is looked for in the session's folder.")
         ext = os.path.splitext(p)[1].lower()
         if ext not in (".csg", ".scad"):
-            raise bad("path: a .csg or .scad file.")
+            raise bad(f"path: {ext or 'no extension'} is not OpenSCAD's — a .csg or .scad file (import_file reads STL, STEP and the rest).")
         if ext == ".scad":
             need_exe("A .scad file")
         before = {o.Name for o in doc().Objects}
@@ -147,11 +147,11 @@ def tools(session):
         except ImportError as e:
             raise ToolError("unavailable", f"FreeCAD's CSG importer is not loadable here ({e}).") from None
         except Exception as e:
-            raise ToolError("failed", f"{os.path.basename(p)} could not be read: {e}") from None
+            raise ToolError("failed", f"{os.path.basename(p)} could not be read: {e or type(e).__name__} — nothing was kept. scad_status says whether the CSG parser and OpenSCAD are here; a .scad that uses fonts or imports other files needs them beside it.") from None
         doc().recompute()
         objs, tops = made_since(before)
         if not objs:
-            raise ToolError("failed", f"{os.path.basename(p)}: nothing came in.")
+            raise ToolError("failed", f"{os.path.basename(p)}: nothing came in — the file has no geometry at its top level (modules only defined, never called?).")
         return picks.finish(s, "scad_import", lambda: {"path": p, "objects": len(objs), "top": tops, "made": objs[:40]}, recompute=False)
 
     def scad_code(a):
@@ -165,7 +165,7 @@ def tools(session):
             with console_mode():
                 out = U.callopenscadstring(code, "csg")
         except Exception as e:
-            raise ToolError("failed", f"OpenSCAD refused the code: {e}") from None
+            raise ToolError("failed", f"OpenSCAD refused the code: {e} — fix the line it names; nothing was made.") from None
         if not out or not os.path.isfile(out):
             raise ToolError("failed", "OpenSCAD made nothing from the code (an error in it, or no geometry at the top level).")
         before = {o.Name for o in doc().Objects}
@@ -174,6 +174,8 @@ def tools(session):
 
             with console_mode():
                 importCSG.insert(out, doc().Name)
+        except Exception as e:  # noqa: BLE001 - OpenSCAD ran, FreeCAD's CSG reader did not take its answer
+            raise ToolError("failed", f"OpenSCAD ran the code, but FreeCAD's CSG importer could not read the result: {e or type(e).__name__} — nothing was kept. Simpler code (no text(), surface() or import()) usually reads.") from None
         finally:
             try:
                 os.unlink(out)
@@ -181,6 +183,8 @@ def tools(session):
                 pass
         doc().recompute()
         objs, tops = made_since(before)
+        if not objs:
+            raise ToolError("failed", "The code made no geometry (modules only defined, or everything commented out).")
         if a.get("name") and len(tops) == 1:
             top = next(o for o in doc().Objects if o.Label == tops[0])
             top.Label = s.unique(a["name"], top)
@@ -189,7 +193,10 @@ def tools(session):
 
     def scad_export(a):
         names = a.get("objects") or []
-        objs = [picks.find(doc(), n) for n in names] if names else [s.body(None)]
+        objs = [picks.find(doc(), n, "objects") for n in picks.ref_list(names)] if names else [s.body(None)]
+        for o in objs:
+            if not isinstance(getattr(o, "Shape", None), Part.Shape) or o.Shape.isNull():
+                raise bad(f"objects: {o.Label} ({o.TypeId}) has no shape to write as CSG.")
         p = where(a.get("path") or (objs[0].Label.replace(" ", "_") + ".csg"))
         if not p.lower().endswith((".csg", ".scad")):
             p += ".csg"
@@ -200,7 +207,7 @@ def tools(session):
             with console_mode():
                 exportCSG.export(objs, p)
         except Exception as e:
-            raise ToolError("failed", f"CSG export failed: {e}") from None
+            raise ToolError("failed", f"CSG export failed: {e or type(e).__name__} — FreeCAD's exporter writes Part primitives, booleans, extrusions and placements itself and meshes the rest; export {{ format: \"stl\" }} gives OpenSCAD a mesh to import() instead.") from None
         with open(p, encoding="utf-8", errors="replace") as f:
             text = f.read()
         poly = text.count("polyhedron(")
@@ -211,9 +218,9 @@ def tools(session):
 
     def scad_op(a):
         op = picks.choice(a, "op", ("hull", "minkowski"), "op: hull | minkowski.", "hull")
-        objs = [picks.find(doc(), n) for n in (a.get("objects") or [])]
+        objs = [picks.shaped(doc(), n, "objects") for n in (picks.ref_list(a.get("objects")) or [])]
         if len(objs) < (1 if op == "hull" else 2):
-            raise bad("objects: " + ("one or more bodies" if op == "hull" else "two bodies (the shape, then what sweeps round it)") + ".")
+            raise bad("objects: " + ("one or more bodies" if op == "hull" else "two bodies (the shape, then what sweeps round it)") + " by name or label.")
         how = "OpenSCAD"
         if exe():
             import OpenSCADUtils as U
@@ -222,9 +229,9 @@ def tools(session):
                 with console_mode():
                     res = U.process_ObjectsViaOpenSCAD(doc(), objs, op)
             except Exception as e:
-                raise ToolError("failed", f"OpenSCAD's {op} failed: {e}") from None
+                raise ToolError("failed", f"OpenSCAD's {op} failed: {e or type(e).__name__} — nothing was made.") from None
             if res is None:
-                raise ToolError("failed", f"OpenSCAD's {op} made nothing: mix of 2D and 3D, or OpenSCAD's own error.")
+                raise ToolError("failed", f"OpenSCAD's {op} made nothing: the objects must be all solids or all flat (2D and 3D do not mix), or OpenSCAD gave an error of its own (report_read shows it).")
         elif op == "hull":
             res = doc().addObject("Part::Feature", "Hull")
             res.Shape = hull_here([o.Shape for o in objs])
@@ -260,13 +267,13 @@ def tools(session):
         return out
 
     return [
-        Tool("scad_status", "Whether the OpenSCAD program is installed (and which), and what works without it. Changes nothing.", obj({}), scad_status),
-        Tool("scad_import", "Read an OpenSCAD file: .csg (headless) or .scad (through OpenSCAD) as FreeCAD's parametric primitives and booleans where it can, meshes where not.",
+        Tool("scad_status", "Whether the OpenSCAD program is on this computer (openscad: its path or null; version), and whether FreeCAD's CSG parser (ply) loads. Without OpenSCAD: .csg import, CSG export and hull work; .scad files, scad_code and minkowski do not. Changes nothing.", obj({}), scad_status),
+        Tool("scad_import", "Read an OpenSCAD file into the document (path; relative: the session's folder): .csg needs only FreeCAD; .scad is run through the OpenSCAD program first (scad_status). Primitives, booleans, transforms and extrusions come in as FreeCAD's own parametric objects (Part::Box, Cut, Fuse …; one object per CSG node, so a small file makes many), hull and minkowski as meshes turned to shapes. Reply: objects (how many), top (the results nothing else uses — the bodies to work with), made [{ object, type, solids, volume }], health.",
              obj({"path": {"type": "string"}}, ["path"]), scad_import, changes=True),
-        Tool("scad_code", "Run OpenSCAD code into the document (code, e.g. \"difference() { cube(20, center=true); sphere(13); }\"): it comes in as FreeCAD objects. Needs OpenSCAD.",
+        Tool("scad_code", "Run OpenSCAD code into the document: code (e.g. \"difference() { cube(20, center=true); sphere(13); }\") goes through the OpenSCAD program to CSG and comes in as scad_import does. Needs OpenSCAD installed (scad_status); a syntax error is refused with OpenSCAD's message. name: the label of the result when there is one top object. Reply: top, objects, made.",
              obj({"code": {"type": "string"}, "name": {"type": "string"}}, ["code"]), scad_code, changes=True),
-        Tool("scad_export", "Write objects (the one body when left out) as OpenSCAD CSG (.csg or .scad): primitives and booleans as OpenSCAD's own, the rest as polyhedra.",
+        Tool("scad_export", "Write objects (the one body when left out) as OpenSCAD CSG (path: .csg or .scad, .csg added; relative: the session's folder): Part primitives, booleans, extrusions and placements as OpenSCAD's own, anything else (PartDesign bodies, fillets, imports) as polyhedra of triangles — the note counts them. Reply: path, bytes, lines. The document is not changed.",
              obj({"objects": {"type": "array", "items": {"type": "string"}}, "path": {"type": "string"}}), scad_export),
-        Tool("scad_op", "OpenSCAD's hull (the shape stretched round bodies, like shrink-wrap) or minkowski (a shape swept round another: rounded edges all over) of objects. Hull works without OpenSCAD.",
+        Tool("scad_op", "OpenSCAD's hull (the convex shape stretched round the objects, like shrink-wrap) or minkowski (the first shape swept round by the second: rounded edges all over; slow, minutes on curved shapes) of objects [names]. Hull works without OpenSCAD (computed here from the shapes' points, faceted on curves: made says which); minkowski needs OpenSCAD. The inputs are kept. name: the result's label. Reply: object, made, volume, faces, health.",
              obj({"op": {"type": "string", "enum": ["hull", "minkowski"]}, "objects": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}}, ["objects"]), scad_op, changes=True),
     ]

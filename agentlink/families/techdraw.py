@@ -1264,6 +1264,16 @@ def tools(session):
             pump(app)
             time.sleep(0.01)
 
+    def _own_data(o, prop):
+        # Agent Link's own notes on a view (what td_export draws): writing
+        # them is no change FreeCAD has to recompute, so it must not leave
+        # the view marked touched (td_hatch left eight objects "not
+        # recomputed yet").
+        try:
+            o.setPropertyStatus(prop, "NoRecompute")
+        except Exception:
+            pass
+
     def done(tool, out):
         return picks.finish(s, tool, out, recompute=False)
 
@@ -1512,6 +1522,7 @@ def tools(session):
         for v in views:
             if MARKS_PROP not in v.PropertiesList:
                 v.addProperty("App::PropertyFloat", MARKS_PROP, "AgentLink", "Centre marks on its circles: how far past each, mm (0: none)")
+                _own_data(v, MARKS_PROP)
             setattr(v, MARKS_PROP, ext)
             out.append({"view": v.Label, "circles": len(circle_centres(v))})
         return done("td_centermarks", {"views": out, "extend": ext, "note": "Drawn as thin chain lines by td_export."})
@@ -1535,6 +1546,7 @@ def tools(session):
                 raise bad(f"faces: {f} is not a face of {v.Label}'s part.") from None
         if HATCH_PROP not in v.PropertiesList:
             v.addProperty("App::PropertyString", HATCH_PROP, "AgentLink", "Faces hatched in the exported page (JSON)")
+            _own_data(v, HATCH_PROP)
         spec = {"faces": faces, "spacing": float(a.get("spacing", 2.5)), "angle": float(a.get("angle", 45))}
         setattr(v, HATCH_PROP, json.dumps(spec) if faces else "")
         X, Y = abs_xy(v)
@@ -1569,6 +1581,7 @@ def tools(session):
         ln = leader(v, p, to)
         ln.Label = s.unique(a.get("name") or f"Weld {spec['kind']}", ln)
         ln.addProperty("App::PropertyString", WELD_PROP, "AgentLink", "The weld symbol drawn at the leader's end (JSON)")
+        _own_data(ln, WELD_PROP)
         setattr(ln, WELD_PROP, json.dumps(spec))
         recompute()
         return done("td_weld", {"weld": ln.Label, "on": ref, **{k: spec[k] for k in ("kind", "size", "length", "side", "allAround", "field", "tail")},
@@ -1960,6 +1973,7 @@ def tools(session):
         sym.Label = s.unique(label)
         sym.Symbol = fig.svg() if not hasattr(fig, "origin") else shifted_svg(fig)
         sym.addProperty("App::PropertyString", GDT_PROP, "AgentLink", "What this symbol is, for export and editing")
+        _own_data(sym, GDT_PROP)
         setattr(sym, GDT_PROP, json.dumps(data))
         sym.X, sym.Y = at
         try:
@@ -2100,7 +2114,17 @@ def tools(session):
                 dims.append(dim_reading(o))
             elif o.isDerivedFrom("TechDraw::DrawViewSymbol") and GDT_PROP in o.PropertiesList:
                 data = json.loads(getattr(o, GDT_PROP))
-                syms.append({"symbol": o.Name, "kind": data["kind"], "reads": gdt.describe(data["rows"]) if data["kind"] == "frame" else f"datum {data['letter']}", "on": data.get("on")})
+                # Frames, datums and what else is kept as a symbol (a surface
+                # finish): each read by its own kind — a finish has no letter,
+                # and listing a page that held one failed on it.
+                k = data.get("kind")
+                if k == "frame":
+                    reads = gdt.describe(data.get("rows") or [])
+                elif k == "datum":
+                    reads = f"datum {data.get('letter', '?')}"
+                else:
+                    reads = " ".join(f"{key} {data[key]}" for key in ("ra", "removal", "lay", "text") if data.get(key) not in (None, "")) or str(k)
+                syms.append({"symbol": o.Name, "kind": k, "reads": reads, "on": data.get("on")})
             elif not o.isDerivedFrom("TechDraw::DrawViewPart") and not o.isDerivedFrom("TechDraw::DrawProjGroup"):
                 other.append({"object": o.Name, "type": o.TypeId.split("::")[-1]})
         out["views"] = [x for x in out["views"] if x["type"] not in ("DrawViewDimension", "DrawViewSymbol", "DrawLeaderLine", "DrawViewAnnotation", "DrawViewBalloon", "DrawViewSpreadsheet")]
@@ -2252,6 +2276,7 @@ def tools(session):
             native += len(p_["tags"])
         if COSMETIC_PROP not in v.PropertiesList:
             v.addProperty("App::PropertyString", COSMETIC_PROP, "AgentLink", "Cosmetic lines (JSON, paper mm), each with the tags of FreeCAD's own cosmetic edges that show it")
+            _own_data(v, COSMETIC_PROP)
         setattr(v, COSMETIC_PROP, json.dumps(prims))
         recompute()
         out = {"view": v.Label, "made": made, "total": len(prims), "native": native}
@@ -2466,6 +2491,7 @@ def tools(session):
             # kept on the dimension and re-read on every TechDraw change, so
             # the text follows the part and the view's scale
             d.addProperty("App::PropertyString", SPECIAL_PROP, "AgentLink", "What this special dimension measures (JSON), re-read when the drawing changes")
+            _own_data(d, SPECIAL_PROP)
             setattr(d, SPECIAL_PROP, json.dumps(spec))
             L = special_length(v, spec, frames)
             if L is None:
@@ -2560,22 +2586,29 @@ def tools(session):
                 v.LockPosition = bool(a.get("locked", True))
                 return done("td_view_more", {"kind": kind, "view": v.Label, "locked": bool(v.LockPosition)})
             if kind == "stack":
-                if not hasattr(v, "StackOrder"):
-                    raise ToolError("unavailable", "This FreeCAD's views have no stacking order (1.0 and newer have).")
+                # StackOrder is the view provider's (TechDraw's Gui side), not
+                # the view's own: looked for on the view, it was never found
+                # and every call answered "no stacking order" on 1.1.
+                def vp(x):
+                    g = getattr(x, "ViewObject", None)
+                    return g if g is not None and hasattr(g, "StackOrder") else None
+
+                mine = vp(v)
+                if mine is None:
+                    raise ToolError("unavailable", "A view's stacking order is kept by the window (its view provider's StackOrder): there is none here — headless, or this FreeCAD has no stacking order. In the window: td_view_more { kind: \"stack\", view, to: top | bottom | up | down }.")
                 to = a.get("to", "top")
-                others = [x for x in (here.Views if here else []) if x is not v and hasattr(x, "StackOrder")]
-                orders = [int(x.StackOrder) for x in others] or [0]
+                orders = [int(vp(x).StackOrder) for x in (here.Views if here else []) if x is not v and vp(x) is not None] or [0]
                 if to == "top":
-                    v.StackOrder = max(orders) + 1
+                    mine.StackOrder = max(orders) + 1
                 elif to == "bottom":
-                    v.StackOrder = min(orders) - 1
+                    mine.StackOrder = min(orders) - 1
                 elif to == "up":
-                    v.StackOrder = int(v.StackOrder) + 1
+                    mine.StackOrder = int(mine.StackOrder) + 1
                 elif to == "down":
-                    v.StackOrder = int(v.StackOrder) - 1
+                    mine.StackOrder = int(mine.StackOrder) - 1
                 else:
                     raise bad("to: top | bottom | up | down.")
-                return done("td_view_more", {"kind": kind, "view": v.Label, "stackOrder": int(v.StackOrder)})
+                return done("td_view_more", {"kind": kind, "view": v.Label, "stackOrder": int(mine.StackOrder)})
             dest = page_of(doc(), a.get("page"))
             mover = grp or v
             if here is dest:
@@ -2689,6 +2722,7 @@ def tools(session):
                 keep[n] = {"style": st, "weight": w, "color": col or "#000000"}
             if "AgentLinkEdgeStyles" not in v.PropertiesList:
                 v.addProperty("App::PropertyString", "AgentLinkEdgeStyles", "AgentLink", "Edge line styles set by Agent Link (JSON)")
+                _own_data(v, "AgentLinkEdgeStyles")
             v.AgentLinkEdgeStyles = json.dumps(keep)
             recompute([v])
             return done("td_lines", {"view": v.Label, "styled": out, "style": st, "weight": w})

@@ -1,0 +1,626 @@
+{
+ "tutorial": "FreeCAD wiki FEM_CalculiX_Cantilever_3D.md, whose model is FreeCAD's own example femexamples/ccx_cantilever_faceload.py (on ccx_cantilever_base_solid.py): an 8000 x 1000 x 1000 mm box, CalculiX-Steel (210000 MPa, 0.30), fixed on Face1 (x = 0), 9 MN on Face2 (x = 8000) along -z",
+ "reference": "FreeCAD 1.1 source: src/Mod/Fem/femexamples/ccx_cantilever_faceload.py and ccx_cantilever_base_solid.py; the input deck it writes is src/Mod/Fem/femtest/data/calculix/ccx_cantilever_faceload.inp. No .FCStd for it in FreeCAD/Examples.",
+ "expected": {
+  "box": [
+   8000,
+   1000,
+   1000
+  ],
+  "volume": 8000000000.0,
+  "faces": 6,
+  "material": {
+   "E_MPa": 210000,
+   "nu": 0.3
+  },
+  "fixed": "Face1 (x = 0, area 1e6 mm2)",
+  "load": "9000000 N on Face2 (x = 8000) along -z",
+  "documented": {
+   "zDisplacement_mm": -86.93,
+   "where": "wiki FEM_CalculiX_Cantilever_3D, 'Visualizing Results' step 4 (FreeCAD's example file, its own coarse Tet10 mesh)",
+   "tension500MN_xDisplacement_mm": 18.95,
+   "whereTension": "same page, 'the deformation in x-direction should be 18.95 mm'"
+  },
+  "vonMises": "Not documented on the wiki page or in the example. Beam theory gives 432 MPa bending stress at the root (M c / I = 9e6 * 8000 * 500 / 8.333e10); the solve reads higher at the rigid hold's corners. Treat 400 to 800 MPa as the plausible band, not an answer key.",
+  "beamTheory": {
+   "tipDeflection_mm": 87.77,
+   "withShear_mm": 88.8,
+   "rootBendingStress_MPa": 432,
+   "midSpanBendingStress_MPa": 216,
+   "firstBendingMode_Hz": 13.0,
+   "eulerBucklingFactorAt9MN": 75.0,
+   "tensionElongation500MN_mm": 19.05
+  },
+  "replyNote": "displacementMax.mm is the largest size of the displacement vector, so the bending case reads a little over the wiki's z figure (about 8 mm of x at the top and bottom fibres adds in quadrature): 86 to 90 mm",
+  "units": "mm, N, MPa"
+ },
+ "calls": [
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     8000,
+     1000,
+     1000
+    ],
+    "name": "Box"
+   },
+   "expect": "body Box, volume 8e9 mm3, 6 faces, box 8000 x 1000 x 1000 (femexamples/ccx_cantilever_base_solid.py: Part::Box Length 8000, Width 1000, Height 1000)"
+  },
+  {
+   "tool": "material_set",
+   "arguments": {
+    "bodies": [
+     "Box"
+    ],
+    "custom": {
+     "name": "CalculiX-Steel",
+     "density": 7.9,
+     "youngsMPa": 210000,
+     "poisson": 0.3,
+     "source": "FreeCAD femexamples ccx_cantilever_base_solid: CalculiX-Steel, 210000 MPa, 0.30"
+    }
+   },
+   "expect": "id custom:calculix-steel on Box"
+  },
+  {
+   "tool": "fea_setup",
+   "arguments": {
+    "body": "Box",
+    "solid": 2
+   },
+   "expect": "REFUSED (invalid_state): solid: 1 to 1 — Box has 1 solid: study the body itself (leave solid out)"
+  },
+  {
+   "tool": "fea_setup",
+   "arguments": {
+    "body": "Box"
+   },
+   "expect": "study { body Box, material custom:calculix-steel, mesh 333.33 }; material E 210000, nu 0.3, yield null, from \"the body's\"; no warning (333 mm is under half the least size); next names fea_hold"
+  },
+  {
+   "tool": "fea_solve",
+   "arguments": {},
+   "expect": "REFUSED: nothing holds the part — fea_hold"
+  },
+  {
+   "tool": "fea_hold",
+   "arguments": {
+    "faces": {
+     "normal": [
+      -1,
+      0,
+      0
+     ],
+     "x": 0
+    }
+   },
+   "expect": "held: one face, Face1, area 1000000, centre [0, 500, 500]; kind fixed; holds 1 (example: ConstraintFixed on Face1)"
+  },
+  {
+   "tool": "fea_hold",
+   "arguments": {
+    "faces": {
+     "normal": [
+      -1,
+      0,
+      0
+     ],
+     "x": 0
+    }
+   },
+   "expect": "REFUSED (invalid_state): that hold is already in the study"
+  },
+  {
+   "tool": "fea_load",
+   "arguments": {
+    "faces": {
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "x": 8000
+    },
+    "force": [
+     0,
+     0,
+     0
+    ]
+   },
+   "expect": "REFUSED (invalid_input): [0, 0, 0] loads nothing"
+  },
+  {
+   "tool": "fea_load",
+   "arguments": {
+    "faces": {
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "x": 8000
+    },
+    "force": [
+     0,
+     0,
+     -9000000
+    ]
+   },
+   "expect": "on: Face2, area 1000000; load { kind force, force [0, 0, -9000000] }; loads 1 (example: ConstraintForce 9000000 N on Face2, direction Edge5 reversed = -z)"
+  },
+  {
+   "tool": "fea_solve",
+   "arguments": {},
+   "expect": "solvedBy starts \"FreeCAD's FEM (Box strength (fea_solve)\"; displacementMax.mm 86 to 90 at x = 8000 (wiki: z-displacement -86.93 mm; the reply's figure is the size of the displacement, which adds about 8 mm of x at the top and bottom fibres in quadrature); vonMisesMax.MPa between 400 and 800 at x near 0, on the held face (beam theory 432 MPa at the root; a rigid hold reads higher); mesh.type C3D10; no safety (the card has no yield) and a warning saying so; warnings also name the coarse mesh (333 mm against a least size of 1000) and the peak on a held face; health: ok, with a line \"CalculiX ran clean\" or CalculiX's own warnings; no Report-view error about \"Only one material object\""
+  },
+  {
+   "tool": "fea_results",
+   "arguments": {},
+   "expect": "the same answer; stale false"
+  },
+  {
+   "tool": "fea_probe",
+   "arguments": {
+    "points": [
+     [
+      8000,
+      500,
+      500
+     ],
+     [
+      0,
+      500,
+      500
+     ]
+    ],
+    "line": {
+     "from": [
+      0,
+      500,
+      500
+     ],
+     "to": [
+      8000,
+      500,
+      500
+     ],
+     "samples": 9
+    },
+    "faces": {
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "x": 8000
+    }
+   },
+   "expect": "points[0].displacementMm 86 to 89, points[1] about 0; line: displacement rising from 0 to about 87 along x, vonMisesMPa small on the neutral axis (about 23 MPa from shear, away from the ends); no warning (samples are within a mesh size of a node); faces: Face2, displacementMm.max = displacementMax"
+  },
+  {
+   "tool": "fea_chart",
+   "arguments": {
+    "kind": "histogram",
+    "field": "displacement",
+    "bins": 10
+   },
+   "expect": "svg and csv paths; max = displacementMax.mm; nodes = mesh.nodes"
+  },
+  {
+   "tool": "fea_chart",
+   "arguments": {
+    "kind": "line",
+    "field": "vonMises",
+    "line": {
+     "from": [
+      0,
+      500,
+      1000
+     ],
+     "to": [
+      8000,
+      500,
+      1000
+     ],
+     "samples": 9
+    },
+    "name": "cantilever-top-fibre"
+   },
+   "expect": "samples 9; the top fibre's stress falls about linearly from roughly 432 MPa at the root to near 0 at the tip (M c / I = 9e6 * (8000 - x) * 500 / 8.333e10)"
+  },
+  {
+   "tool": "fea_chart",
+   "arguments": {
+    "kind": "table",
+    "points": [
+     [
+      4000,
+      500,
+      1000
+     ],
+     [
+      4000,
+      500,
+      500
+     ]
+    ]
+   },
+   "expect": "table rows: about 216 MPa at the top fibre mid-span, about 23 MPa on the neutral axis"
+  },
+  {
+   "tool": "fea_export",
+   "arguments": {
+    "formats": [
+     "vtu",
+     "csv"
+    ],
+    "name": "cantilever"
+   },
+   "expect": "files.vtu and files.csv in the out folder; nodes = mesh.nodes"
+  },
+  {
+   "tool": "fem_linearize",
+   "arguments": {
+    "result": "CCX_Results",
+    "from": [
+     4000,
+     500,
+     0
+    ],
+    "to": [
+     4000,
+     500,
+     1000
+    ],
+    "points": 21,
+    "field": "NodeStressXX"
+   },
+   "expect": "needs the FreeCAD FEM route (the result object it loaded). thickness 1000; membrane near 0 (within 30 MPa); bending 180 to 250 MPa (beam theory 216 at mid-span; nearest-node sampling on a 333 mm mesh is rough); peak about the same"
+  },
+  {
+   "tool": "fem_linearize",
+   "arguments": {
+    "result": "CCX_Results",
+    "from": [
+     4000,
+     500,
+     0
+    ],
+    "to": [
+     4000,
+     500,
+     5000
+    ],
+    "points": 21
+   },
+   "expect": "REFUSED: the line leaves the part"
+  },
+  {
+   "tool": "fem_mesh",
+   "arguments": {
+    "action": "to_mesh",
+    "mesh": "CCX_Results_Mesh",
+    "result": "CCX_Results",
+    "name": "Cantilever deformed"
+   },
+   "expect": "a plain mesh \"Cantilever deformed\", facets over 100, deformed CCX_Results"
+  },
+  {
+   "tool": "fem_add",
+   "arguments": {
+    "kind": "mesh_region",
+    "analysis": "Box strength (fea_solve)",
+    "refs": [
+     "Box.Face1"
+    ],
+    "props": {
+     "CharacteristicLength": 100
+    }
+   },
+   "expect": "REFUSED: props.CharacteristicLength wants a value with its unit, e.g. \"100 mm\""
+  },
+  {
+   "tool": "fem_add",
+   "arguments": {
+    "kind": "mesh_region",
+    "analysis": "Box strength (fea_solve)",
+    "refs": [
+     "Box.Face1"
+    ],
+    "props": {
+     "CharacteristicLength": "100 mm"
+    }
+   },
+   "expect": "added a MeshRegion on the analysis's Gmsh mesh; refs [Box.Face1]; props.CharacteristicLength \"100 mm\""
+  },
+  {
+   "tool": "fem_add",
+   "arguments": {
+    "kind": "displacement",
+    "analysis": "Box strength (fea_solve)",
+    "refs": {
+     "body": "Box",
+     "faces": [
+      {
+       "normal": [
+        1,
+        0,
+        0
+       ],
+       "x": 8000
+      }
+     ]
+    },
+    "name": "Tip displacement"
+   },
+   "expect": "added \"Tip displacement\" (Fem::ConstraintDisplacement), refs [Box.Face2]; props lists its properties"
+  },
+  {
+   "tool": "fem_add",
+   "arguments": {
+    "kind": "mesh_distance",
+    "analysis": "Box strength (fea_solve)"
+   },
+   "expect": "REFUSED (unavailable) on FreeCAD 1.1: ObjectsFem has no makeMeshDistance there"
+  },
+  {
+   "tool": "fem_mesh",
+   "arguments": {
+    "action": "clear_groups",
+    "mesh": "Mesh"
+   },
+   "expect": "the analysis's Gmsh mesh (object name Mesh): cleared = the number of groups it had, groups 0"
+  },
+  {
+   "tool": "fea_native",
+   "arguments": {
+    "name": "Box native"
+   },
+   "expect": "analysis \"Box native\" with a CalculiX solver, Material, Mesh (Gmsh), Fixed and Force; no skipped; not solved"
+  },
+  {
+   "tool": "fea_load",
+   "arguments": {
+    "faces": {
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "x": 8000
+    },
+    "force": [
+     500000000,
+     0,
+     0
+    ],
+    "replace": true
+   },
+   "expect": "loads 1: 500 MN pulling along +x (wiki, 'change the load value to 500 MN ... in x-direction')"
+  },
+  {
+   "tool": "fea_results",
+   "arguments": {},
+   "expect": "stale true; staleWhy names the study"
+  },
+  {
+   "tool": "fea_solve",
+   "arguments": {},
+   "expect": "displacementMax.mm 18.9 to 19.4 at x = 8000 (wiki: 'the deformation in x-direction should be 18.95 mm'; F L / E A = 19.05); vonMisesMax 500 MPa or a little over, at the hold; only one analysis \"Box strength (fea_solve)\" and one CCX_Results_Mesh in the document (the earlier ones, with the mesh region and displacement added above, were replaced)"
+  },
+  {
+   "tool": "fea_load",
+   "arguments": {
+    "faces": {
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "x": 8000
+    },
+    "force": [
+     -9000000,
+     0,
+     0
+    ],
+    "replace": true
+   },
+   "expect": "loads 1: 9 MN pushing the free end along -x"
+  },
+  {
+   "tool": "fea_buckle",
+   "arguments": {
+    "count": 2
+   },
+   "expect": "two near-equal factors about 70 to 76 (Euler, fixed-free: pi^2 E I / (4 L^2) = 6.75e8 N, over 9e6 N = 75; shear lowers it a little), bulging at the free end"
+  },
+  {
+   "tool": "fea_modes",
+   "arguments": {
+    "count": 3
+   },
+   "expect": "modes 1 and 2 near-equal, 11.5 to 13.5 Hz (beam theory first bending 13.0 Hz; a stocky beam reads a few percent lower), swinging most at x = 8000; mode 3 higher"
+  },
+  {
+   "tool": "fea_heat",
+   "arguments": {
+    "temperatures": [
+     {
+      "faces": {
+       "normal": [
+        -1,
+        0,
+        0
+       ],
+       "x": 0
+      },
+      "celsius": 100
+     },
+     {
+      "faces": {
+       "normal": [
+        1,
+        0,
+        0
+       ],
+       "x": 8000
+      },
+      "celsius": 20
+     }
+    ],
+    "air": false,
+    "conductivity": 50
+   },
+   "expect": "hottest 100 C at x = 0, coolest 20 C at x = 8000"
+  },
+  {
+   "tool": "fea_load",
+   "arguments": {
+    "faces": {
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "x": 8000
+    },
+    "force": [
+     0,
+     0,
+     -9000000
+    ],
+    "replace": true
+   },
+   "expect": "back to the example's load"
+  },
+  {
+   "tool": "fea_load",
+   "arguments": {
+    "gravity": [
+     0,
+     2,
+     0
+    ]
+   },
+   "expect": "loads 2: 2 g sideways added"
+  },
+  {
+   "tool": "fea_solve",
+   "arguments": {},
+   "expect": "solvedBy FreeCAD's FEM (not a fallback naming Gravity_x: FreeCAD 1.1's self-weight object has GravityAcceleration and GravityDirection); displacementMax a little over the force-only case (2 g of the bar's own 63.2 t adds about 1.24e6 N spread along it: about 4.5 mm in +y at the tip, in quadrature)"
+  },
+  {
+   "tool": "fea_load",
+   "arguments": {
+    "faces": {
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "x": 8000
+    },
+    "force": [
+     0,
+     0,
+     -9000000
+    ],
+    "replace": true
+   },
+   "expect": "the example's load alone again"
+  },
+  {
+   "tool": "fea_refine",
+   "arguments": {
+    "faces": {
+     "normal": [
+      -1,
+      0,
+      0
+     ],
+     "x": 0
+    },
+    "size": 150
+   },
+   "expect": "refine [{ faces, size 150 }], faces: Face1"
+  },
+  {
+   "tool": "fea_solve",
+   "arguments": {},
+   "expect": "solvedBy \"Agent Link's own CalculiX deck — refined mesh regions (fea_refine) are meshed by its own Gmsh script\"; displacementMax.mm 86 to 90 again (the two routes agree); more nodes than before"
+  },
+  {
+   "tool": "fea_refine",
+   "arguments": {
+    "clear": true
+   },
+   "expect": "refine []"
+  },
+  {
+   "tool": "fea_shell",
+   "arguments": {
+    "object": "Box",
+    "faces": [
+     "Face6"
+    ],
+    "thickness": 50,
+    "material": "custom:calculix-steel",
+    "holds": [
+     {
+      "edges": "boundary",
+      "kind": "pinned"
+     }
+    ],
+    "pressure": 0.01,
+    "mesh": 125
+   },
+   "expect": "the box's top face (8000 x 1000) as a 50 mm plate, simply supported all round, 0.01 MPa: largest deflection about 0.054 mm and stress about 3.0 MPa (long-plate theory: 0.01302 q a^4 / D with D = E t^3 / (12 (1 - nu^2)) = 2.404e9 N mm; 0.75 q a^2 / t^2), within 5 %. These two numbers are plate theory, not from the wiki"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     1000,
+     1000,
+     1000
+    ],
+    "at": [
+     8000,
+     0,
+     0
+    ],
+    "name": "Block"
+   },
+   "expect": "body Block against the beam's free end"
+  },
+  {
+   "tool": "fea_parts",
+   "arguments": {
+    "bodies": [
+     "Box",
+     "Block"
+    ],
+    "join": "tie"
+   },
+   "expect": "study \"FEA parts\"; parts Box (custom:calculix-steel) and Block (assumed PLA unless material_set); touching [{ a Box, b Block, area 1000000 }]; no overlap warning"
+  },
+  {
+   "tool": "fea_clear",
+   "arguments": {},
+   "expect": "cleared true; fea_results then answers not_found; the FEM analyses stay in the document"
+  }
+ ],
+ "notCovered": [
+  "fea_frame: not in this repo (no code in agentlink/; tests/test_no_addon_names.py lists it as an add-on's tool). Skipped as told.",
+  "fea_solve { nonlinear: true }, fea_hold kinds slide / pin / move, fea_load pressure / temperature / spin: reachable on this model but left out to keep the run short; each sends the solve to Agent Link's own deck (solvedBy says why).",
+  "fea_parts is set up but not solved: the tied solve of 9 m of steel and PLA is not a tutorial case.",
+  "fea_native { solver: elmer, write / run }: needs ElmerGrid / ElmerSolver.",
+  "fem_mesh { action: netgen }: needs Netgen installed with FreeCAD's Python; on the Mac expect the unavailable refusal.",
+  "fem_linearize on a post pipeline (Fem::FemPostPipeline): needs a FreeCAD built with VTK post-processing and a pipeline in the analysis.",
+  "The object name of the analysis's Gmsh mesh is taken to be Mesh in the clear_groups call: if FreeCAD numbered it (Mesh001), use the label fem_add's reply or session_state shows."
+ ]
+}

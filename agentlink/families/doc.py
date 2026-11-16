@@ -226,9 +226,31 @@ def readonly(o, p):
         pass
     try:
         st = o.getPropertyStatus(p)
-        return "ReadOnly" in st or "Output" in st
+        return "ReadOnly" in st or "Output" in st or "Immutable" in st
     except Exception:
         return False
+
+
+def hidden(o, p):
+    """Hidden in FreeCAD's property editor (the property is still there)."""
+    try:
+        if "Hidden" in (o.getEditorMode(p) or []):
+            return True
+    except Exception:
+        pass
+    try:
+        return "Hidden" in o.getPropertyStatus(p)
+    except Exception:
+        return False
+
+
+def doc_names(docs):
+    """Open documents for a refusal: "Label", or "Label (Name)" where the
+    internal name differs from the label or a label repeats, so two
+    documents with one label can be told apart."""
+    docs = list(docs)
+    labels = [d.Label for d in docs]
+    return ", ".join(d.Label if d.Name == d.Label and labels.count(d.Label) == 1 else f"{d.Label} ({d.Name})" for d in docs) or "none"
 
 
 def errors(doc):
@@ -299,11 +321,12 @@ def to_value(o, p, v):
             if not isinstance(v, bool):
                 raise ValueError("true or false")
             return v
-        if t.startswith("App::PropertyInteger"):
+        if t.startswith("App::PropertyInteger") or t == "App::PropertyPercent":
+            # PropertyPercent is an integer (0 … 100): FreeCAD refuses a float.
             if isinstance(v, bool) or not isinstance(v, (int, float)) or int(v) != v:
                 raise ValueError("a whole number")
             return int(v)
-        if t in ("App::PropertyFloat", "App::PropertyLength", "App::PropertyDistance", "App::PropertyAngle", "App::PropertyFloatConstraint", "App::PropertyPercent", "App::PropertyArea", "App::PropertyVolume", "App::PropertyQuantity", "App::PropertyQuantityConstraint", "App::PropertyPrecision") or t.startswith("App::PropertyFloat"):
+        if t in ("App::PropertyFloat", "App::PropertyLength", "App::PropertyDistance", "App::PropertyAngle", "App::PropertyFloatConstraint", "App::PropertyArea", "App::PropertyVolume", "App::PropertyQuantity", "App::PropertyQuantityConstraint", "App::PropertyPrecision") or t.startswith("App::PropertyFloat"):
             if isinstance(v, str):
                 return v  # "10 mm", "2 in": FreeCAD parses the unit
             return float(picks.num(v, p))
@@ -320,9 +343,11 @@ def to_value(o, p, v):
             return picks.vec3(v, p)
         if t == "App::PropertyPlacement":
             return to_placement(getattr(o, p), v, p)
-        if t in ("App::PropertyLink", "App::PropertyLinkGlobal", "App::PropertyLinkChild"):
+        if t in ("App::PropertyLink", "App::PropertyLinkGlobal", "App::PropertyLinkChild", "App::PropertyLinkHidden", "App::PropertyXLink"):
             return None if v is None else picks.find(o.Document, v)
         if t in ("App::PropertyLinkList", "App::PropertyLinkListGlobal", "App::PropertyLinkListChild"):
+            if not isinstance(v, list):
+                raise ValueError("a list of object names or labels")
             return [picks.find(o.Document, x) for x in v]
         if t in ("App::PropertyColor", "App::PropertyMaterialColor"):
             if isinstance(v, str) and v.startswith("#") and len(v) == 7:
@@ -338,7 +363,9 @@ def to_value(o, p, v):
         raise
     except (ValueError, TypeError) as e:
         raise ToolError("invalid_input", f"values.{p} ({t}): {e}.")
-    raise ToolError("invalid_input", f"values.{p}: a {t} is not set here — set it in FreeCAD, or another tool makes it.")
+    if "LinkSub" in t:
+        raise ToolError("invalid_input", f"values.{p}: a {t} (an object with its faces or edges) is not set by object_set — the tool that made the object sets it again (sketch_attach for a sketch's support, link_make / link_edit for a link, measure_keep for a measurement).")
+    raise ToolError("invalid_input", f"values.{p}: a {t} is not set by object_set — it takes numbers, text, true/false, enumerations, vectors, placements, object links and lists of them (object_get gives each property's type); the tool that made the object changes the rest.")
 
 
 def modified_state(d):
@@ -560,19 +587,39 @@ def tools(session):
         d.Label = name
         old = s.doc.Name
         switch(d)
-        return {"document": d.Name, "label": d.Label, "previous": old, "note": "The previous document stays open; doc_open { path } returns to it if saved."}
+        return {"document": d.Name, "label": d.Label, "previous": old, "note": "The previous document stays open: doc_switch { document } returns to it (doc_open { path } when it was saved and closed)."}
 
     def doc_close(a):
         refs = a.get("documents") or [s.doc.Name]
         refs = picks.ref_list(refs)
-        docs = FreeCAD.listDocuments().values()
+        if not isinstance(refs, list) or not all(isinstance(r, str) and r for r in refs):
+            raise ToolError("invalid_input", "documents: a list of open documents by name, label or .FCStd path (the current one when left out).")
+        # By the name FreeCAD lists it under, its Name, its Label, then the
+        # same in any case, then its file. A Name is unique; labels are not
+        # (two documents can both be labelled "Part"), so a label that
+        # names several is refused with their names.
+        listed = FreeCAD.listDocuments()
+        docs = list(listed.values())
         picked = []
         for r in refs:
-            rp = os.path.abspath(where(r)) if isinstance(r, str) and r.lower().endswith(".fcstd") else None
-            d = next((x for x in docs if x.Name == r or x.Label == r or (rp and os.path.abspath(x.FileName or "") == rp)), None)
+            rp = os.path.abspath(where(r)) if r.lower().endswith(".fcstd") else None
+            d = listed.get(r) or next((x for x in docs if x.Name == r), None)
             if d is None:
-                raise ToolError("not_found", f"{r!r}: no open document by that name, label or path — open: {', '.join(x.Label for x in docs)}.")
-            if d not in picked:
+                hits = [x for x in docs if x.Label == r] or [x for x in docs if r.lower() in (x.Name.lower(), x.Label.lower())] \
+                    or [x for x in docs if rp and os.path.abspath(x.FileName or "") == rp]
+                if len(hits) > 1:
+                    raise ToolError("invalid_input", f"{r!r}: {len(hits)} open documents have that label — give the name in brackets: {doc_names(hits)}.")
+                d = hits[0] if hits else None
+            if d is None:
+                # The session's own document under the name session_state gave.
+                try:
+                    if r in (s.doc.Name, s.doc.Label):
+                        d = s.doc
+                except Exception:  # noqa: BLE001 - the session's document is gone
+                    d = None
+            if d is None:
+                raise ToolError("not_found", f"{r!r}: no open document by that name, label or path — open, as label (name): {doc_names(docs)}. doc_switch with no arguments lists them with their files.")
+            if not any(d.Name == x.Name for x in picked):
                 picked.append(d)
 
         def changed(d):
@@ -583,7 +630,7 @@ def tools(session):
 
         unsaved = [d.Label for d in picked if changed(d)]
         if unsaved and not a.get("discard"):
-            raise ToolError("invalid_state", "Changed since saved: " + ", ".join(unsaved) + " — doc_save first, or discard: true to lose the changes.")
+            raise ToolError("invalid_state", "Changed since saved: " + ", ".join(unsaved) + " — nothing was closed. doc_save first (doc_switch { document } to each, then doc_save), or doc_close { documents, discard: true } closes without saving and the changes are lost.")
         closed = []
         try:
             current = s.doc.Name
@@ -595,7 +642,11 @@ def tools(session):
         left = list(FreeCAD.listDocuments().values())
         if current not in FreeCAD.listDocuments():
             switch(left[-1] if left else FreeCAD.newDocument("Unnamed"))
-        return {"closed": closed, "document": s.doc.Name, "open": [d.Label for d in FreeCAD.listDocuments().values()]}
+        out = {"closed": closed, "document": s.doc.Name, "label": s.doc.Label, "open": [d.Label for d in FreeCAD.listDocuments().values()]}
+        if unsaved:
+            out["discarded"] = unsaved
+            out["note"] = "Closed without saving (discard: true): the changes since each one's last save are gone."
+        return out
 
     def doc_open(a):
         if a.get("recent") and not a.get("path"):
@@ -607,9 +658,11 @@ def tools(session):
                 if f:
                     files.append({"path": f, "exists": os.path.isfile(f)})
             return {"recent": files, "note": "doc_open { path } opens one." if files else "No recent files."}
+        if not a.get("path"):
+            raise ToolError("invalid_input", "path: the .FCStd file to open (relative: in the session's folder), or recent: true to list the recent files.")
         p = where(a.get("path"))
         if not os.path.isfile(p):
-            raise ToolError("not_found", f"{p}: no such file.")
+            raise ToolError("not_found", f"{p}: no such file — doc_open {{ recent: true }} lists the recent files; a relative path is looked for in the session's folder.")
         if not p.lower().endswith(".fcstd"):
             raise ToolError("invalid_input", f"{os.path.basename(p)}: doc_open opens FreeCAD documents (.FCStd) — import_file brings STEP, STL and the rest into this one.")
         d = next((x for x in FreeCAD.listDocuments().values() if os.path.abspath(x.FileName or "") == os.path.abspath(p)), None)
@@ -629,10 +682,12 @@ def tools(session):
         if not was:
             _unchanged(d)
         switch(d)
-        return {"document": d.Name, "label": d.Label, "path": p, "objects": len(d.Objects), "bodies": [o.Label for o in s.bodies()], "errors": errors(d)}
+        return {"document": d.Name, "label": d.Label, "path": p, "objects": len(d.Objects), "bodies": [o.Label for o in s.bodies()], "errors": errors(d),
+                **({} if fresh else {"note": "It was open already: the open document is used as it stands (its unsaved changes kept), not read again from the file — doc_revert goes back to the file."})}
 
     def doc_save(a):
         d = s.doc
+        label_was = d.Label
         if a.get("path"):
             p = where(a["path"], ".FCStd")
             # Another model's file is not this document's to write over.
@@ -654,7 +709,12 @@ def tools(session):
                 p = f"{base} {k}.FCStd"
             d.saveAs(p)
         _gui_saved(d)
-        return {"document": d.Name, "path": p, "bytes": os.path.getsize(p), **modified_state(d)}
+        out = {"document": d.Name, "label": d.Label, "path": p, "bytes": os.path.getsize(p), **modified_state(d)}
+        if d.Label != label_was:
+            # FreeCAD's saveAs relabels the document after the file.
+            out["labelWas"] = label_was
+            out["note"] = f"Saved under a new file name, so FreeCAD relabelled the document {d.Label!r} (it was {label_was!r}); its name {d.Name!r} stays."
+        return out
 
     def object_list(a):
         kind = (a.get("type") or "").lower()
@@ -699,7 +759,16 @@ def tools(session):
             entry = {"value": v, "type": o.getTypeIdOfProperty(p).replace("App::Property", "")}
             if readonly(o, p):
                 entry["readOnly"] = True
+            if hidden(o, p):
+                entry["hidden"] = True
+            if entry["type"] == "Enumeration":
+                try:
+                    entry["choices"] = [str(c) for c in (o.getEnumerationsOfProperty(p) or [])][:40]
+                except Exception:  # noqa: BLE001
+                    pass
             props[p] = entry
+        if not props and flt:
+            raise ToolError("not_found", f"filter {flt!r}: no property of {o.Label} matches — object_get {{ object }} without filter lists them all.")
         return {"name": o.Name, "label": o.Label, "type": o.TypeId, "properties": props}
 
     def object_set(a):
@@ -799,7 +868,7 @@ def tools(session):
         for o in objs:
             users = [p.Label for p in o.InList if p.Name not in going]
             if users and not a.get("force"):
-                raise ToolError("invalid_state", f"{o.Label} is used by {', '.join(users)}: delete those too, or force: true leaves them broken.")
+                raise ToolError("invalid_state", f"{o.Label} is used by {', '.join(users)}: name those in objects too, or force: true deletes it and leaves them broken (FreeCAD removes it without asking; they fail at the next recompute). Nothing was deleted.")
         deleted = [o.Label for o in objs]
         along = [o.Label for o in extra]
         names_out = [o.Name for o in objs] + [o.Name for o in extra]
@@ -840,14 +909,16 @@ def tools(session):
         label = a.get("label")
         if not isinstance(label, str) or not label.strip():
             raise ToolError("invalid_input", "label: the new name.")
-        if any(x.Label == label for x in s.doc.Objects if x is not o):
-            raise ToolError("invalid_input", f"label {label!r}: taken — another name.")
+        other = next((x for x in s.doc.Objects if x is not o and x.Label == label), None)
+        if other is not None:
+            raise ToolError("invalid_input", f"label {label!r}: taken by {other.Name} ({other.TypeId}) — give another label (FreeCAD would otherwise change it itself to keep labels apart).")
         old = o.Label
         o.Label = label
         if old in s.meta:
             s.meta[label] = s.meta.pop(old)
         s.snapshot("object_rename")
-        return {"name": o.Name, "from": old, "to": o.Label, "note": "Setups, specs and waivers kept by the old label are not renamed with it." if old != o.Label else ""}
+        return {"name": o.Name, "from": old, "to": o.Label, **({"note": "Setups, specs and waivers kept by the old label are not renamed with it."} if old != o.Label else {"unchanged": True}),
+                **({"warning": f"FreeCAD changed the label to {o.Label!r} (not {label!r}) to keep it apart from another."} if o.Label != label else {})}
 
     def object_group(a):
         d = s.doc
@@ -865,29 +936,39 @@ def tools(session):
                     out.append(row)
             return {"groups": out}
         if action == "link":
-            src = picks.find(d, a.get("object"))
-            n = int(a.get("count", 1))
+            src = picks.find(d, a.get("object"), "object")
+            n = a.get("count", 1)
+            if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= 500:
+                raise ToolError("invalid_input", "count: how many links, 1 … 500.")
+            step_, at_ = picks.vec3(a.get("step"), "step", (0, 0, 0)), picks.vec3(a.get("at"), "at", (0, 0, 0))
             made = []
             for i in range(n):
                 ln = d.addObject("App::Link", "Link")
                 ln.setLink(src)
                 ln.Label = s.unique(a.get("name") or f"{src.Label} link")
-                step = a.get("step") or [0, 0, 0]
-                at = a.get("at") or [0, 0, 0]
-                ln.LinkPlacement = FreeCAD.Placement(FreeCAD.Vector(*[float(at[k]) + float(step[k]) * i for k in range(3)]), FreeCAD.Rotation())
+                ln.LinkPlacement = FreeCAD.Placement(at_ + step_ * i, FreeCAD.Rotation())
                 made.append(ln.Label)
             d.recompute()
             s.snapshot("object_group")
-            return {"links": made, "of": src.Label, "note": "Links show the original where placed and follow its edits; they weigh nothing in the file."}
+            return {"links": made, "of": src.Label, "note": "Links show the original where placed and follow its edits; they weigh nothing in the file. A link's placement stands in for the original's own (LinkTransform is false): at is where the link is, not an offset from the original."}
         name = a.get("group")
+        if action not in ("add", "remove", "dissolve"):
+            raise ToolError("invalid_input", "action: add | remove (objects to or from group) | dissolve (group) | link (object, count, at, step) | list.")
         if not name:
-            raise ToolError("invalid_input", "group: the group's name (made if new).")
+            raise ToolError("invalid_input", "group: the group's label (made if new for add) — object_group { action: \"list\" } names the ones there are.")
         g = next((x for x in d.Objects if x.Label == name and hasattr(x, "Group")), None)
         kind = a.get("kind", "folder")
+        if kind not in ("folder", "part"):
+            raise ToolError("invalid_input", "kind: folder (a plain group) | part (an App::Part that moves as one).")
+        objs = [picks.find(d, r, "objects") for r in (picks.ref_list(a.get("objects")) or [])]
         if g is None:
+            if action != "add":
+                have = ", ".join(x.Label for x in d.Objects if hasattr(x, "Group") and x.TypeId != "App::Origin") or "none"
+                raise ToolError("not_found", f"group {name!r}: no such group to {action} — the groups: {have}.")
             g = d.addObject("App::Part" if kind == "part" else "App::DocumentObjectGroup", "Group")
             g.Label = s.unique(name, g)
-        objs = [picks.find(d, r) for r in (a.get("objects") or [])]
+        if action == "remove" and not objs and a.get("visible") is None:
+            raise ToolError("invalid_input", "objects: the names or labels to take out of the group.")
         if action == "add":
             for o in objs:
                 if o is g:
@@ -898,16 +979,17 @@ def tools(session):
                 g.addObject(o)
         elif action == "remove":
             for o in objs:
+                if o not in g.Group:
+                    raise ToolError("invalid_input", f"{o.Label} is not in {g.Label} (it holds {', '.join(x.Label for x in g.Group) or 'nothing'}).")
                 g.removeObject(o)
         elif action == "dissolve":
-            for o in list(g.Group):
+            objs_kept = [o for o in g.Group if o.TypeId != "App::Origin"]
+            for o in objs_kept:
                 g.removeObject(o)
             d.removeObject(g.Name)
             d.recompute()
             s.snapshot("object_group")
-            return {"dissolved": name}
-        else:
-            raise ToolError("invalid_input", "action: add | remove (objects to or from group) | dissolve | link (object, count, at, step) | list.")
+            return {"dissolved": name, "kept": [o.Label for o in objs_kept]}
         if a.get("visible") is not None:
             for o in g.Group:
                 try:
@@ -919,18 +1001,33 @@ def tools(session):
         return {"group": g.Label, "type": g.TypeId, "holds": [x.Label for x in g.Group]}
 
     def recompute(a):
+        frozen = bool(getattr(s.doc, "RecomputesFrozen", False))
         if a.get("force"):
             for o in s.doc.Objects:
                 o.touch()
-        n = s.doc.recompute()
+            try:
+                # force also gets past the document's skip-recompute switch.
+                n = s.doc.recompute(None, True)
+            except TypeError:
+                n = s.doc.recompute()
+        else:
+            n = s.doc.recompute()
         errs = errors(s.doc)
         s.snapshot("recompute")
-        return {"recomputed": n, "ok": not errs, "errors": errs}
+        out = {"recomputed": n, "ok": not errs, "errors": errs}
+        still = [o.Label for o in s.doc.Objects if "Touched" in (getattr(o, "State", None) or [])][:10]
+        if still:
+            out["stillTouched"] = still
+        if n == 0 and frozen and not a.get("force"):
+            out["note"] = "Nothing was recomputed: the document's skip-recompute switch is on (object_freeze { skipRecompute: false } turns it off; force: true recomputes anyway)."
+        elif still:
+            out["note"] = "Some objects stay marked touched after the recompute (a frozen object does; so does one whose input failed): see errors."
+        return out
 
     def import_file(a):
         p = where(a.get("path"))
         if not os.path.isfile(p):
-            raise ToolError("not_found", f"{p}: no such file.")
+            raise ToolError("not_found", f"{p}: no such file — a relative path is looked for in the session's folder; give the whole path.")
         fmt = fmt_of(p)
         d = s.doc
         before = {o.Name for o in d.Objects}
@@ -1198,20 +1295,20 @@ def tools(session):
 
     objref = {"type": "string", "description": "An object's name or label."}
     return [
-        Tool("doc_new", "Start a new, empty FreeCAD document and work in it from now on; the one before stays open (save it first: doc_save). Not undoable, and not in a batch's rollback.", obj({"name": {"type": "string"}}), doc_new),
-        Tool("doc_close", "Close open documents (documents: names, labels or .FCStd paths; the current one when left out); one changed since saved is refused unless discard: true. Work moves to another open document. Not undoable.",
+        Tool("doc_new", "Start a new, empty FreeCAD document and work in it from now on. name becomes its label; FreeCAD makes the internal name from it (spaces and odd characters become _, a number is added when taken): the reply's document is that name, label the label. The document before stays open, unsaved changes and all (doc_switch returns to it). Not undoable, and not in a batch's rollback.", obj({"name": {"type": "string"}}), doc_new),
+        Tool("doc_close", "Close open documents. documents: each by internal name, label or .FCStd path (the current one when left out); a label two documents share is refused with their names. A document changed since its save (or never saved and not empty) is refused and nothing is closed: doc_save first, or discard: true closes WITHOUT saving and the changes are lost (there is no save input here). Work moves to another open document (reply: document, label, open; discarded lists what lost changes). Not undoable.",
              obj({"documents": {"type": "array", "items": {"type": "string"}}, "discard": {"type": "boolean"}}), doc_close),
-        Tool("doc_open", "Open a FreeCAD document (.FCStd, path) and work in it from now on — recomputed, with any object's error listed; a document just opened (or open with no changes) is left unchanged by that recompute, as its file. Other formats come in with import_file; recent: true lists the recent files. Not undoable.", obj({"path": {"type": "string"}, "recent": {"type": "boolean"}}), doc_open),
-        Tool("doc_save", "Save the document as .FCStd: path (relative goes in the session's folder), else where it was saved, else <label>.FCStd there (\"<label> 2.FCStd\" … when that name is taken by another file). Never over another document's file unless overwrite: true — ask the person first. What the tools recorded with the parts (materials, setups, notes) is saved with it.", obj({"path": {"type": "string"}, "overwrite": {"type": "boolean"}}), doc_save),
-        Tool("object_list", "Every object in the document: name, label, type, visible, parents (what uses it) and its shape (volume, area, faces, solids, size for a solid; faces and edges else) or mesh. type: a part of the type to keep (\"Part::\", \"Sketch\").", obj({"type": {"type": "string"}}), object_list),
-        Tool("object_get", "One object's properties: value (mm, degrees; placements as { at, axis, angle }; links by label; a shape as its stats), type, readOnly. filter: a word in the name or group (\"Placement\", \"Base\"), or a list of names.", obj({"object": objref, "filter": {}}, ["object"]), object_get),
-        Tool("object_set", "Set properties of an object by name: values { Length: 20, Placement: { at, axis, angle } (or FreeCAD's Base, Axis, Angle, Rotation; what is left out is kept), Refine: true, Base: \"Box\", Mode: \"…\" } — each converted to its type (numbers in mm and degrees, or strings with a unit \"1 in\"); enumerations checked; read-only ones refused; a value that did not change is marked unchanged. Recomputes; refused and undone when that fails. Trap: a plain shape (Part::Feature from a boolean) has no sizes to set — only placement.", obj({"object": objref, "values": {"type": "object"}}, ["object", "values"]), object_set, changes=True),
-        Tool("object_delete", "Delete objects (objects: names or labels). Refused while another object uses one (force: true deletes it anyway and the user breaks); recomputes and lists any error. A PartDesign Body goes with its own features and Origin, and a boolean's result with the helpers made for it alone (its base shape, the BaseFeature: alongWith names them); the inputs it hid are shown again and given their names back (shownAgain, renamed).", obj({"objects": {}, "force": {"type": "boolean"}}, ["objects"]), object_delete, changes=True),
-        Tool("object_rename", "Give an object a new label (its internal name stays). Trap: setups, specs and waivers keep the old label.", obj({"object": objref, "label": {"type": "string"}}, ["object", "label"]), object_rename, changes=True),
-        Tool("object_group", "Organise the document: action add | remove (objects into or out of group — made if new; kind folder (a plain group) | part (an App::Part container that moves as one)) | dissolve (the group, its objects kept) | link (count App::Link copies of object at, step [dx,dy,dz] apart — light copies that follow it) | list; visible: false hides a whole group's objects.",
+        Tool("doc_open", "Open a FreeCAD document (path, .FCStd; relative: the session's folder) and work in it from now on. It is recomputed and each object's error listed (errors); a file just opened is left unmodified by that. A file already open is not read again: the open document is used with its unsaved changes (doc_revert goes back to the file). Other formats: import_file. recent: true lists the recent files instead. Reply: document (internal name), label, objects, bodies, errors. Not undoable.", obj({"path": {"type": "string"}, "recent": {"type": "boolean"}}), doc_open),
+        Tool("doc_save", "Save the current document as .FCStd: path (relative goes in the session's folder; .FCStd added), else where it was saved, else <label>.FCStd there (\"<label> 2.FCStd\" … when taken). Saving under a new file name makes FreeCAD relabel the document after the file (reply: label, labelWas); its internal name stays. Never over another document's file unless overwrite: true — ask the person first. Materials, setups and notes the tools recorded are saved with it. Reply: path, bytes, touched / modified.", obj({"path": {"type": "string"}, "overwrite": {"type": "boolean"}}), doc_save),
+        Tool("object_list", "Every object in the document: name (internal, fixed for life, unique), label (what the person sees and may rename), type, visible, parents (what uses it) and its shape (volume mm³, area, faces, solids, size for a solid; faces and edges else) or mesh; error: true marks a failed one (recompute gives the reason). type: part of the type to keep (\"Part::\", \"Sketch\"). Tools take either name or label; the name wins when both match. Changes nothing.", obj({"type": {"type": "string"}}), object_list),
+        Tool("object_get", "One object's properties: value (mm, degrees; placements as { at, axis, angle }; links by label; a shape as its stats; lists cut at 50), type, readOnly (FreeCAD computes it: object_set refuses it), hidden (not shown in FreeCAD's property editor), choices for an enumeration. filter: a word in the property's name or group (\"Placement\", \"Base\"), or a list of exact names — use it, a feature has dozens. Changes nothing.", obj({"object": objref, "filter": {}}, ["object"]), object_get),
+        Tool("object_set", "Set properties of an object: values { Length: 20, Placement: { at, axis, angle } (or FreeCAD's Base, Axis, Angle, Rotation; what is left out is kept), Refine: true, Base: \"Box\" (a link, by name or label; null clears), Mode: \"…\" } — each converted to its type: numbers are mm and degrees, or a string with a unit (\"1 in\", \"30 deg\") for lengths, angles and other quantities (not plain floats); whole numbers for integers and percents; enumerations checked against their choices; vectors [x,y,z]. Read-only properties, links to faces or edges and property names it does not have are refused (object_get lists names, types, choices). Recomputes the object and what is built from it; refused with nothing kept when that fails. Reply: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement; Label is set with object_rename.", obj({"object": objref, "values": {"type": "object"}}, ["object", "values"]), object_set, changes=True),
+        Tool("object_delete", "Delete objects (objects: names or labels). Refused, nothing deleted, while another object uses one — FreeCAD itself deletes without asking and leaves the users broken, which force: true allows. Recomputes and lists any error. A PartDesign Body goes with its own features and Origin, and a boolean's result with the helpers made for it alone (alongWith names them); the inputs it hid are shown again and given their names back (shownAgain, renamed). Reply: deleted, errors, health.", obj({"objects": {}, "force": {"type": "boolean"}}, ["objects"]), object_delete, changes=True),
+        Tool("object_rename", "Give an object a new label; its internal name never changes (FreeCAD fixes it at creation), and both keep working as references. A label another object has is refused (FreeCAD would alter it to stay unique unless its duplicate-labels preference is on). Expressions that use the label follow it. Trap: setups, specs and waivers keep the old label. Reply: name, from, to.", obj({"object": objref, "label": {"type": "string"}}, ["object", "label"]), object_rename, changes=True),
+        Tool("object_group", "Organise the document: action add | remove (objects into or out of group — made if new for add; kind folder (App::DocumentObjectGroup, placement-less) | part (App::Part: its Placement moves everything in it)) — an object sits in one group, so add takes it out of the one before; dissolve (the group goes, its objects stay); link (count App::Link copies of object, the first at, each step [dx,dy,dz] further — light copies that follow the original; at is the link's whole placement, not an offset from the original's); list (groups, parts and links with what they hold). visible: false hides a group's objects. Reply: group, type, holds.",
              obj({"action": {"type": "string", "enum": ["add", "remove", "dissolve", "link", "list"]}, "group": {"type": "string"}, "kind": {"type": "string", "enum": ["folder", "part"]}, "objects": {"type": "array", "items": {"type": "string"}},
                   "object": {"type": "string"}, "count": {"type": "integer"}, "at": {"type": "array", "items": {}}, "step": {"type": "array", "items": {}}, "visible": {"type": "boolean"}, "name": {"type": "string"}}), object_group, changes=True),
-        Tool("recompute", "Recompute the document (force: true recomputes everything) and list each object that failed, with FreeCAD's reason.", obj({"force": {"type": "boolean"}}), recompute, changes=True),
-        Tool("import_file", "Bring a file into the document: STEP, IGES, BREP as bodies (split: true makes a body of each solid); STL, OBJ, 3MF, PLY, OFF, AMF — and glTF/GLB, Collada, VRML 2, 3DS, every mesh node flattened into one in mm, Z up (units and up override what the format says; read says what was taken) — as a mesh (Mesh::Feature) unless solid: true asks for a body made of its triangles (up to 200000); DXF as wires, arcs, circles and splines (Agent Link's reader; a drawing with blocks, text or dimensions through FreeCAD's) and SVG as Draft geometry — many objects come back counted, the first few listed; JT where this FreeCAD has its reader; PNG, JPG, BMP as an image plane width mm wide on XY, to trace over. PDF, DWG, IFC need the FreeCAD window; FBX: export it as glTF. .FCStd: doc_open.", obj({"path": {"type": "string"}, "name": {"type": "string"}, "split": {"type": "boolean"}, "solid": {"type": "boolean"}, "units": {"type": "string", "enum": ["mm", "cm", "m", "in"]}, "up": {"type": "string", "enum": ["x", "y", "z"]}, "width": {"type": "number"}}, ["path"]), import_file, changes=True),
+        Tool("recompute", "Recompute the document and list each object that failed, with FreeCAD's reason (errors). Only touched objects and what is built from them are redone; force: true marks everything touched and recomputes it all, also past the document's skip-recompute switch (slow on a big model). Reply: recomputed (how many objects FreeCAD ran; 0 with nothing touched or with skip-recompute on, said in note), ok, errors, stillTouched. Tools that change the model recompute by themselves: this is for after object_freeze, an import or a doubt.", obj({"force": {"type": "boolean"}}), recompute, changes=True),
+        Tool("import_file", "Bring a file into the current document (path; relative: the session's folder), by its extension. STEP, IGES, BREP: one body with the file's whole shape (split: true a body per solid); colours, part names and assembly structure are not read. STL, OBJ, 3MF, PLY, OFF, AMF and glTF/GLB, Collada, VRML 2, 3DS (every mesh node flattened into one, mm, Z up; units and up override what the format says; read says what was taken): a mesh (Mesh::Feature) unless solid: true asks for a body of its triangles (up to 200000; slow past a few tens of thousands). DXF: wires, arcs, circles, splines by layer (Agent Link's reader; a drawing with blocks, text or dimensions through FreeCAD's) and SVG as Draft geometry — many objects come back counted, the first few listed. JT where this FreeCAD has its reader. PNG, JPG, BMP: an image plane width mm wide on XY, to trace over. PDF, DWG, IFC need the FreeCAD window; FBX: export it as glTF; .FCStd: doc_open (doc_merge to bring its objects in). name: the label. Reply: format, count, objects (name, label, type, volume or mesh), health.", obj({"path": {"type": "string"}, "name": {"type": "string"}, "split": {"type": "boolean"}, "solid": {"type": "boolean"}, "units": {"type": "string", "enum": ["mm", "cm", "m", "in"]}, "up": {"type": "string", "enum": ["x", "y", "z"]}, "width": {"type": "number"}}, ["path"]), import_file, changes=True),
         Tool("export", "Write objects (the one body when left out; several go as one compound) and read it back (verify). Meshes (Mesh::Feature) go as they are to the mesh and scene formats (STL by default). Solids: STEP, IGES, BREP. One mesh: STL, OBJ, 3MF, PLY, OFF, VRML (wrl), X3D. A scene, a mesh per object with colors {label: \"#rrggbb\"}: glTF (glb, gltf), Collada (dae) — metres, Y up. 2D: DXF (R12) or SVG of a view (top | bottom | front | back | right | left | iso; hidden: true adds hidden lines on their own layer) or of a section at z mm (section) — circles and arcs kept as such, for laser and plasma cutting. format, or from path's extension; tolerance: the chord error, 0.01 mm.", obj({"objects": {}, "format": {"type": "string", "enum": list(EXPORTS)}, "path": {"type": "string"}, "tolerance": {"type": "number"}, "colors": {"type": "object"}, "view": {"type": "string", "enum": list(VIEWS)}, "hidden": {"type": "boolean"}, "section": {"type": "number"}}), export),
     ]

@@ -13,3 +13,5 @@
 ## Where it is kept
 - With the document (`materials`, body → id) and, for a library card, on the object's ShapeMaterial.
 - Add-ons for printing read the filament keys only; a library or custom id is read by `measure_mass` and `fea_*`.
+- The record is by the body's label: `object_rename` does not carry it over, so set it again after a rename.
+- A library card's id is its UUID; its exact name ("Aluminum-6061-T6") works wherever an id is asked. `material_get` lists what a card lacks (`missing`): mass needs density, a strength study E and yield.

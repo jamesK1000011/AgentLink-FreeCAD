@@ -1,0 +1,1194 @@
+{
+ "tutorial": "Draft_tutorial.md steps 3-13 (working plane, two arcs tied by two lines, upgrade to a wire, frame rectangle, circle, hexagon, polar array, four dimensions with font size 6 / ext lines 45 / no unit), then Draft_ShapeString_tutorial.md's lettering on a solid through draft_text, then a tour of the tools the tutorial does not use",
+ "reference": null,
+ "expected": {
+  "profile": {
+   "arc30_length": 31.4159,
+   "arc25_length": 26.1799,
+   "tie_length": 5.0,
+   "wire_length": 67.5959,
+   "area_if_faced": 143.99
+  },
+  "frame": {
+   "length": 780,
+   "area": 36000,
+   "corners": [
+    [
+     -100,
+     -60
+    ],
+    [
+     140,
+     90
+    ]
+   ]
+  },
+  "circle": {
+   "radius": 15,
+   "length": 94.2478,
+   "area": 706.8583
+  },
+  "hexagon": {
+   "radius": 50,
+   "side": 50,
+   "length": 300,
+   "area": 6495.19,
+   "topEdgeY": 43.3013
+  },
+  "polarArray": {
+   "count": 4,
+   "length": 270.383
+  },
+  "dimensions_mm": {
+   "ToHexTop": 43.3013,
+   "ToArc30": 30,
+   "ToArc25": 25,
+   "ToHubTop": 15,
+   "HubDia": 30,
+   "Sweep_deg": 60
+  },
+  "refusals": 9,
+  "derived": "every number above is worked out from the tutorial's dimensions; where a call's expect says 'not verified' or 'estimate' the number is a reading of Draft's source that was not run"
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "DraftTutorial"
+   },
+   "expect": "a new empty document"
+  },
+  {
+   "tool": "draft_plane",
+   "arguments": {
+    "at": [
+     0,
+     0,
+     0
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "name": "Top"
+   },
+   "expect": "tutorial step 3 (working plane Top/XY): plane \"Top\", origin [0,0,0], normal [0,0,1], xAxis [1,0,0]. Live: needs the 3D view tab in front; if a refusal says so, that is the documented GUI limit"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "arc",
+    "radius": 30,
+    "start": 60,
+    "end": 120,
+    "name": "Arc30"
+   },
+   "expect": "step 4: type Circle, length 31.4159 (30 x pi/3), no area (an arc is an edge)"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "arc",
+    "radius": 25,
+    "start": 60,
+    "end": 120,
+    "name": "Arc25"
+   },
+   "expect": "step 4.6: length 26.1799"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "wire",
+    "points": [
+     [
+      15.0,
+      25.980762,
+      0
+     ],
+     [
+      12.5,
+      21.650635,
+      0
+     ]
+    ],
+    "name": "TieR"
+   },
+   "expect": "step 5: a two-point wire (Draft names it Line), length 5.0"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "wire",
+    "points": [
+     [
+      -15.0,
+      25.980762,
+      0
+     ],
+     [
+      -12.5,
+      21.650635,
+      0
+     ]
+    ],
+    "name": "TieL"
+   },
+   "expect": "length 5.0"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "upgrade",
+    "objects": [
+     "Arc30",
+     "Arc25",
+     "TieR",
+     "TieL"
+    ]
+   },
+   "expect": "step 6a: the four become one plain wire (object \"Wire\", type Feature), length 67.5959; the four originals are gone (delete defaults true); no area yet"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "rectangle",
+    "length": 240,
+    "height": 150,
+    "at": [
+     -100,
+     -60,
+     0
+    ],
+    "name": "Frame"
+   },
+   "expect": "step 7 (corners (-100,-60) and (140,90)): length 780, area 36000 (Make Face on), box [240,150,0]"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "circle",
+    "radius": 15,
+    "name": "Hub"
+   },
+   "expect": "step 8: length 94.2478, area 706.8583"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "polygon",
+    "sides": 6,
+    "radius": 50,
+    "name": "Hex"
+   },
+   "expect": "step 9: length 300, area 6495.19, box [100, 86.603, 0] (corners on the radius, the first at +x, so the top edge is flat at y = 43.3013)"
+  },
+  {
+   "tool": "draft_link_array",
+   "arguments": {
+    "object": "Wire",
+    "kind": "polar",
+    "count": 4,
+    "angle": 360,
+    "center": [
+     0,
+     0,
+     0
+    ],
+    "name": "Ring"
+   },
+   "expect": "step 10: count 4, of \"Wire\", length 270.383 (4 x the profile), box about [60, 60, 0]; Wire is hidden in the window"
+  },
+  {
+   "tool": "draft_dimension",
+   "arguments": {
+    "kind": "linear",
+    "from": [
+     0,
+     0,
+     0
+    ],
+    "to": [
+     0,
+     43.30127,
+     0
+    ],
+    "at": [
+     100,
+     20,
+     0
+    ],
+    "name": "ToHexTop"
+   },
+   "expect": "step 11: measures 43.3013, unit mm. Live: needs the 3D view tab in front"
+  },
+  {
+   "tool": "draft_dimension",
+   "arguments": {
+    "kind": "linear",
+    "from": [
+     0,
+     0,
+     0
+    ],
+    "to": [
+     0,
+     30,
+     0
+    ],
+    "at": [
+     -40,
+     15,
+     0
+    ],
+    "name": "ToArc30"
+   },
+   "expect": "step 12: measures 30.0"
+  },
+  {
+   "tool": "draft_dimension",
+   "arguments": {
+    "kind": "linear",
+    "from": [
+     0,
+     0,
+     0
+    ],
+    "to": [
+     0,
+     25,
+     0
+    ],
+    "at": [
+     -60,
+     12,
+     0
+    ],
+    "name": "ToArc25"
+   },
+   "expect": "measures 25.0"
+  },
+  {
+   "tool": "draft_dimension",
+   "arguments": {
+    "kind": "linear",
+    "from": [
+     0,
+     0,
+     0
+    ],
+    "to": [
+     0,
+     15,
+     0
+    ],
+    "at": [
+     -20,
+     7,
+     0
+    ],
+    "name": "ToHubTop"
+   },
+   "expect": "step 13: measures 15.0"
+  },
+  {
+   "tool": "draft_style",
+   "arguments": {
+    "action": "set",
+    "name": "Tutorial",
+    "values": {
+     "FontSize": 6,
+     "ExtLines": 45,
+     "ShowUnit": false
+    }
+   },
+   "expect": "step 11.5 as a style: values FontSize 6.0, ExtLines 45.0, ShowUnit false"
+  },
+  {
+   "tool": "draft_style",
+   "arguments": {
+    "action": "apply",
+    "name": "Tutorial",
+    "objects": [
+     "ToHexTop",
+     "ToArc30",
+     "ToArc25",
+     "ToHubTop"
+    ]
+   },
+   "expect": "live in the window: applied lists all four (their FontSize reads 6 mm in object_get); headless: recorded lists them with a note"
+  },
+  {
+   "tool": "draft_style",
+   "arguments": {
+    "action": "list"
+   },
+   "expect": "styles has Tutorial with those three values"
+  },
+  {
+   "tool": "draft_dimension",
+   "arguments": {
+    "kind": "diameter",
+    "object": "Hub",
+    "edge": 1,
+    "at": [
+     25,
+     -25,
+     0
+    ],
+    "name": "HubDia"
+   },
+   "expect": "measures 30.0 (the diameter); follows Hub"
+  },
+  {
+   "tool": "draft_dimension",
+   "arguments": {
+    "kind": "radius",
+    "object": "Hub",
+    "edge": 1,
+    "name": "HubRad"
+   },
+   "expect": "measures 15.0"
+  },
+  {
+   "tool": "draft_dimension",
+   "arguments": {
+    "kind": "angular",
+    "center": [
+     0,
+     0,
+     0
+    ],
+    "angles": [
+     60,
+     120
+    ],
+    "at": [
+     0,
+     40,
+     0
+    ],
+    "name": "Sweep"
+   },
+   "expect": "measures 60.0, unit deg"
+  },
+  {
+   "tool": "draft_dimension",
+   "arguments": {
+    "kind": "linear",
+    "object": "Frame",
+    "vertices": [
+     1,
+     2
+    ],
+    "name": "FrameSide"
+   },
+   "expect": "measures 240.0 or 150.0 (which side Vertex1-Vertex2 is depends on the face's vertex order: not verified); follows Frame"
+  },
+  {
+   "tool": "draft_dimension",
+   "arguments": {
+    "kind": "radius",
+    "object": "Frame",
+    "edge": 1
+   },
+   "expect": "REFUSAL: Edge1 of Frame is not a circle or an arc; nothing kept"
+  },
+  {
+   "tool": "draft_fix",
+   "arguments": {
+    "action": "flip_dimension",
+    "dimension": "ToHexTop"
+   },
+   "expect": "normal [0,0,-1] (or [0,0,1] if the view was looking up); measures unchanged"
+  },
+  {
+   "tool": "draft_label",
+   "arguments": {
+    "target": [
+     0,
+     43.3013,
+     0
+    ],
+    "at": [
+     60,
+     70,
+     0
+    ],
+    "object": "Hex",
+    "show": "area",
+    "name": "HexArea"
+   },
+   "expect": "text [\"6495.19 mm²\"] in the document's units"
+  },
+  {
+   "tool": "draft_label",
+   "arguments": {
+    "target": [
+     15,
+     0,
+     0
+    ],
+    "at": [
+     40,
+     -30,
+     0
+    ],
+    "show": "custom",
+    "text": "Hub\nr 15",
+    "name": "HubNote"
+   },
+   "expect": "text [\"Hub\", \"r 15\"]"
+  },
+  {
+   "tool": "draft_label",
+   "arguments": {
+    "target": [
+     0,
+     0,
+     0
+    ],
+    "show": "length"
+   },
+   "expect": "REFUSAL: show length needs object"
+  },
+  {
+   "tool": "draft_clone",
+   "arguments": {
+    "object": "Hex",
+    "scale": 0.5,
+    "move": [
+     200,
+     0,
+     0
+    ],
+    "name": "HexHalf"
+   },
+   "expect": "of \"Hex\"; area 1623.8 (a quarter), box [50, 43.301, 0], centred near x = 200"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "move",
+    "objects": [
+     "Hub"
+    ],
+    "by": [
+     0,
+     -120,
+     0
+    ],
+    "copy": true
+   },
+   "expect": "a new Circle (label like \"Hub001\"; reply.object names it) at y = -120, area 706.8583; Hub stays"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "wire",
+    "points": [
+     [
+      160,
+      -40,
+      0
+     ],
+     [
+      190,
+      -40,
+      0
+     ],
+     [
+      190,
+      -10,
+      0
+     ]
+    ],
+    "name": "Ell"
+   },
+   "expect": "an open wire: length 60, no area"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "extend",
+    "objects": [
+     "Ell"
+    ],
+    "length": 10,
+    "end": "end"
+   },
+   "expect": "length 70"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "stretch",
+    "objects": [
+     "Ell"
+    ],
+    "box": [
+     [
+      150,
+      -50,
+      -1
+     ],
+     [
+      170,
+      -30,
+      1
+     ]
+    ],
+    "by": [
+     -10,
+     0,
+     0
+    ]
+   },
+   "expect": "its first point moves to x = 150: length 80"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "split",
+    "objects": [
+     "Ell"
+    ],
+    "edge": 1,
+    "at": [
+     170,
+     -40,
+     0
+    ]
+   },
+   "expect": "objects: Ell (length 20) and \"Ell split\" (length 60)"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "join",
+    "objects": [
+     "Ell",
+     "Ell split"
+    ]
+   },
+   "expect": "one wire again, length 80; \"Ell split\" is gone"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "join",
+    "objects": [
+     "Ell",
+     "Hex"
+    ]
+   },
+   "expect": "REFUSAL: Hex is not a Draft wire"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "upgrade",
+    "objects": [
+     "Ell"
+    ]
+   },
+   "expect": "an open Draft wire is closed in place: object Ell (points (150,-40) (170,-40) (190,-40) (190,0)), area 800 (40 x 40 / 2), length 136.5685"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "split",
+    "objects": [
+     "Ell"
+    ],
+    "edge": 4
+   },
+   "expect": "closed wire, its closing segment: objects Ell (open again, length 80) and \"Ell split\" of length 56.5685"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "rotate",
+    "objects": [
+     "Ell"
+    ],
+    "angle": 90,
+    "center": [
+     150,
+     -40,
+     0
+    ],
+    "axis": [
+     0,
+     0,
+     1
+    ]
+   },
+   "expect": "same length 80; it now runs up from (150,-40) to (150,0) and back to (110,0)"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "scale",
+    "objects": [
+     "Ell"
+    ],
+    "factor": 2,
+    "center": [
+     150,
+     -40,
+     0
+    ]
+   },
+   "expect": "length 160"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "scale",
+    "objects": [
+     "Ell"
+    ],
+    "factor": 0
+   },
+   "expect": "REFUSAL: factor not 0"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "to_bspline",
+    "objects": [
+     "Ell"
+    ]
+   },
+   "expect": "a Draft BSpline through the same four points takes its place (label Ell), type BSpline"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "to_wire",
+    "objects": [
+     "Ell"
+    ]
+   },
+   "expect": "a Draft Wire again, length 160"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "mirror",
+    "objects": [
+     "Hub"
+    ],
+    "from": [
+     0,
+     0,
+     0
+    ],
+    "to": [
+     1,
+     0,
+     0
+    ]
+   },
+   "expect": "a Part Mirroring object (label \"Hub (mirrored)\"), same area; Hub is on the mirror line so it lands on itself"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "offset",
+    "objects": [
+     "Hub"
+    ],
+    "by": [
+     5,
+     0,
+     0
+    ],
+    "copy": true
+   },
+   "expect": "a new Draft circle of radius 20: length 125.6637; Hub keeps r 15"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "offset",
+    "objects": [
+     "Frame"
+    ],
+    "by": [
+     0,
+     -10,
+     0
+    ],
+    "copy": true
+   },
+   "expect": "a new rectangle 10 mm outside the frame: length 860, area 44200 (260 x 170). Which side a +/- vector takes is not verified: 700 / 30800 (220 x 130) means the inside"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "wire",
+    "points": [
+     [
+      0,
+      -200,
+      0
+     ],
+     [
+      40,
+      -200,
+      0
+     ]
+    ],
+    "name": "F1"
+   },
+   "expect": "length 40"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "wire",
+    "points": [
+     [
+      40,
+      -200,
+      0
+     ],
+     [
+      40,
+      -170,
+      0
+     ]
+    ],
+    "name": "F2"
+   },
+   "expect": "length 30"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "fillet",
+    "objects": [
+     "F1",
+     "F2"
+    ],
+    "radius": 10
+   },
+   "expect": "a Fillet object: length 65.708 (70 - 2 x 10 + 10 x pi/2); F1 and F2 stay"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "fillet",
+    "objects": [
+     "F1",
+     "F2"
+    ],
+    "radius": 500
+   },
+   "expect": "REFUSAL: no fillet of 500 mm fits"
+  },
+  {
+   "tool": "draft_modify",
+   "arguments": {
+    "op": "downgrade",
+    "objects": [
+     "Hex"
+    ],
+    "delete": false
+   },
+   "expect": "Hex's face taken apart one stage (Draft: a face becomes its wire); Hex stays (delete false). The result's type and count are Draft's choice: not verified"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "bspline",
+    "points": [
+     [
+      0,
+      -260,
+      0
+     ],
+     [
+      20,
+      -240,
+      0
+     ],
+     [
+      40,
+      -260,
+      0
+     ],
+     [
+      60,
+      -240,
+      0
+     ]
+    ],
+    "name": "Wave"
+   },
+   "expect": "type BSpline, length about 90 (not derived)"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "bezier",
+    "points": [
+     [
+      0,
+      -300,
+      0
+     ],
+     [
+      20,
+      -270,
+      0
+     ],
+     [
+      40,
+      -300,
+      0
+     ]
+    ],
+    "name": "Bez"
+   },
+   "expect": "type BezCurve"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "ellipse",
+    "major": 40,
+    "minor": 20,
+    "at": [
+     120,
+     -250,
+     0
+    ],
+    "name": "Oval"
+   },
+   "expect": "area 628.319, box [40,20,0]"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "point",
+    "at": [
+     5,
+     5,
+     0
+    ],
+    "name": "Mark"
+   },
+   "expect": "type Point"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "polygon",
+    "sides": 2,
+    "radius": 5
+   },
+   "expect": "REFUSAL: sides 3 or more"
+  },
+  {
+   "tool": "draft_link_array",
+   "arguments": {
+    "object": "Oval",
+    "kind": "ortho",
+    "count": [
+     3,
+     2,
+     1
+    ],
+    "spacing": [
+     50,
+     30,
+     0
+    ],
+    "name": "OvalGrid"
+   },
+   "expect": "count 6; area 3769.91; box [140, 50, 0]"
+  },
+  {
+   "tool": "draft_link_array",
+   "arguments": {
+    "object": "Mark",
+    "kind": "circular",
+    "rings": 2,
+    "ringSpacing": 20,
+    "tangentSpacing": 15,
+    "name": "MarkRings"
+   },
+   "expect": "count 1 + the copies that fit one ring of radius 20 at 15 mm apart (2 x pi x 20 / 15 = 8.4, so 9 if Draft rounds down to 8: not verified)"
+  },
+  {
+   "tool": "draft_link_array",
+   "arguments": {
+    "object": "Mark",
+    "kind": "path",
+    "path": "Wave",
+    "count": 5,
+    "name": "MarkPath"
+   },
+   "expect": "count 5"
+  },
+  {
+   "tool": "draft_link_array",
+   "arguments": {
+    "object": "Mark",
+    "kind": "points",
+    "points": "Ell",
+    "link": false,
+    "name": "MarkAtCorners"
+   },
+   "expect": "count 4 (Ell's four vertices)"
+  },
+  {
+   "tool": "draft_link_array",
+   "arguments": {
+    "object": "Mark",
+    "kind": "circular",
+    "symmetry": 0
+   },
+   "expect": "REFUSAL: symmetry a whole number, 1 or more"
+  },
+  {
+   "tool": "draft_layer",
+   "arguments": {
+    "name": "Outline",
+    "objects": [
+     "Frame",
+     "Hex"
+    ],
+    "lineWidth": 3
+   },
+   "expect": "made true; objects [Frame, Hex]"
+  },
+  {
+   "tool": "draft_layer",
+   "arguments": {
+    "name": "Inner",
+    "objects": [
+     "Hex",
+     "Hub"
+    ]
+   },
+   "expect": "objects [Hex, Hub]"
+  },
+  {
+   "tool": "draft_layer",
+   "arguments": {
+    "name": "Outline"
+   },
+   "expect": "made false; objects [Frame] only: Hex left when it joined Inner"
+  },
+  {
+   "tool": "draft_hatch",
+   "arguments": {
+    "object": "Hex",
+    "pattern": "Diagonal4",
+    "scale": 2,
+    "name": "HexHatch"
+   },
+   "expect": "pattern Diagonal4, file FCPAT.pat, length about 810.0 (area / 8 mm line spacing at scale 2: an estimate)"
+  },
+  {
+   "tool": "draft_hatch",
+   "arguments": {
+    "object": "Hex",
+    "pattern": "Bricks"
+   },
+   "expect": "REFUSAL listing FCPAT's patterns (Diamond … Vertical5)"
+  },
+  {
+   "tool": "draft_to_sketch",
+   "arguments": {
+    "objects": [
+     "Frame"
+    ],
+    "name": "FrameSketch"
+   },
+   "expect": "geometry 4, constraints 8 (4 coincident, 2 horizontal, 2 vertical: by the source's auto-constraints, not verified), length 780"
+  },
+  {
+   "tool": "sketch_state",
+   "arguments": {
+    "sketch": "FrameSketch"
+   },
+   "expect": "dof 4 (a rectangle with no dimensions and no fix), 1 closed wire"
+  },
+  {
+   "tool": "draft_from_sketch",
+   "arguments": {
+    "objects": [
+     "FrameSketch"
+    ]
+   },
+   "expect": "a closed Draft Wire: length 780, area 36000"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     60,
+     30,
+     10
+    ],
+    "at": [
+     300,
+     0,
+     0
+    ],
+    "name": "Tag"
+   },
+   "expect": "a body for the tools that need one: volume 18000"
+  },
+  {
+   "tool": "draft_2d_view",
+   "arguments": {
+    "object": "Tag",
+    "direction": [
+     0,
+     0,
+     1
+    ],
+    "name": "TagTop"
+   },
+   "expect": "length 180 (the 60 x 30 outline), box [60,30,0]"
+  },
+  {
+   "tool": "draft_2d_view",
+   "arguments": {
+    "object": "Tag",
+    "direction": [
+     1,
+     1,
+     1
+    ],
+    "hidden": true,
+    "name": "TagIso"
+   },
+   "expect": "more edges than the visible nine: all 12 edges projected"
+  },
+  {
+   "tool": "draft_2d_view",
+   "arguments": {
+    "object": "Tag",
+    "section": true
+   },
+   "expect": "REFUSAL: cut faces only of a BIM section plane; part_section named"
+  },
+  {
+   "tool": "draft_facebinder",
+   "arguments": {
+    "faces": [
+     "Tag.Face6"
+    ],
+    "extrusion": 2,
+    "name": "TagSkin"
+   },
+   "expect": "Face6 of a Part box is its top (60 x 30 at z = 10): a 2 mm skin on it, volume 3600 (1800 x 2), area 3960 (the skin's whole surface), box [60,30,2]"
+  },
+  {
+   "tool": "draft_plane",
+   "arguments": {
+    "face": "Tag.Face6",
+    "rotate": 90,
+    "name": "OnTag"
+   },
+   "expect": "origin [330,15,10], normal [0,0,1], xAxis [0,1,0]"
+  },
+  {
+   "tool": "draft_fonts",
+   "arguments": {
+    "limit": 5
+   },
+   "expect": "fonts (5 names), found over 0, default named"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     60,
+     30,
+     10
+    ],
+    "at": [
+     300,
+     100,
+     0
+    ],
+    "name": "Plate"
+   },
+   "expect": "a second body, so the view and facebinder of Tag keep their faces"
+  },
+  {
+   "tool": "draft_text",
+   "arguments": {
+    "body": "Plate",
+    "text": "AL-7",
+    "size": 8,
+    "depth": 1
+   },
+   "expect": "Draft_ShapeString_tutorial's raised lettering: volumeChange over 0, box on z 10 … 11 within the top face, no warning"
+  },
+  {
+   "tool": "draft_text",
+   "arguments": {
+    "body": "Plate",
+    "text": "B",
+    "size": 6,
+    "depth": 0.5,
+    "mode": "engrave",
+    "face": {
+     "normal": [
+      0,
+      -1,
+      0
+     ]
+    }
+   },
+   "expect": "volumeChange under 0"
+  },
+  {
+   "tool": "draft_array",
+   "arguments": {
+    "body": "Plate",
+    "kind": "grid",
+    "count": [
+     2,
+     2
+    ],
+    "gap": 5,
+    "separate": true
+   },
+   "expect": "copies 4; bodies: Plate and three more, 65 mm apart in x and 35 in y"
+  },
+  {
+   "tool": "draft_fix",
+   "arguments": {
+    "action": "heal"
+   },
+   "expect": "healed \"all Draft objects\", rebuilt 0 (nothing in a new file needs it)"
+  },
+  {
+   "tool": "draft_style",
+   "arguments": {
+    "action": "delete",
+    "name": "Tutorial"
+   },
+   "expect": "deleted Tutorial; live: unstyled lists the four dimensions"
+  }
+ ],
+ "notCovered": [
+  "draft_outline: needs an .svg or .dxf file on the Mac; none is made by these calls (tests/test_draft.py test_5_outline_from_svg writes one and covers it)",
+  "Draft Text (tutorial step 14) and a Draft ShapeString object (step 15): no tool makes them; draft_text letters a body's face instead",
+  "draft_fix heal { objects }: rebuilds named objects as copies and removes them, which would rename objects later calls use (tests/test_draft.py DraftHardening.test_5 covers it)",
+  "The tutorial's TechDraw page (steps 16 on): the TechDraw model's job"
+ ]
+}

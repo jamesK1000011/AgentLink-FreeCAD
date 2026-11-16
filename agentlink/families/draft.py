@@ -416,19 +416,31 @@ def tools(session):
             edges += [el] if isinstance(el, Part.Edge) else list(el.Edges)
         if len(edges) < 1:
             raise ToolError("invalid_input", "edges: the boundary — edges (\"Body.Edge3\") or a sketch whose closed outline bounds the surface.")
+        runs = Part.sortEdges(edges)
+        if len(runs) != 1:
+            # the first run alone was filled, the other edges dropped without a word
+            raise ToolError("invalid_input", f"edges: they form {len(runs)} separate runs, not one closed boundary — give the edges of one loop (an inner loop cannot be a hole here; part_face makes a flat face with holes).")
         try:
-            w = Part.Wire(Part.sortEdges(edges)[0])
+            w = Part.Wire(runs[0])
         except Exception:
             w = None
         if w is None or not w.isClosed():
-            raise ToolError("invalid_input", "The edges do not close into one boundary: add the missing ones.")
+            gap = ""
+            if w is not None and len(w.Vertexes) >= 2:
+                vs = w.OrderedVertexes
+                gap = f" (its ends are {vs[0].Point.distanceToPoint(vs[-1].Point):.4g} mm apart)"
+            raise ToolError("invalid_input", f"edges: they do not close into one boundary{gap}: add the missing edge, or snap the ends together.")
         try:
             face = Part.makeFilledFace(w.Edges)
         except Exception as e:
-            raise ToolError("failed", f"No surface fills that boundary: {e}")
+            raise ToolError("failed", f"No surface fills that boundary: {e} — fewer, smoother edges; surface_boundary takes 2 to 4 curves, surface_sections a row of them.")
+        if face.isNull() or face.Area < 1e-9:
+            raise ToolError("failed", "The filled surface came out empty: the boundary may fold over itself.")
         t = a.get("thickness")
         if t is not None:
             t = picks.num(t, "thickness")
+            if t == 0:
+                raise ToolError("invalid_input", "thickness: mm, not 0 (negative: the other side); leave it out for the surface alone.")
             try:
                 solid = face.makeOffsetShape(t, 1e-3, fill=True)
             except Exception as e:
@@ -519,8 +531,10 @@ def tools(session):
 
     def surface_loft(a):
         curves = a.get("curves") or []
-        if len(curves) < 2:
+        if not isinstance(curves, list) or len(curves) < 2:
             raise ToolError("invalid_input", "curves: two or more, in order — edges (\"Body.Edge3\"), sketches, or { points: [[x,y,z] …], closed }.")
+        if a.get("closed") and len(curves) < 3:
+            raise ToolError("invalid_input", "closed: true runs the surface from the last curve back to the first, which needs three or more curves.")
         wires = [_curve(r, f"curves.{i}", a.get("body")) for i, r in enumerate(curves)]
         closed = [w.isClosed() for w in wires]
         if len(set(closed)) > 1:
@@ -567,25 +581,25 @@ def tools(session):
 
     face_q = {"description": "The face: \"Face6\", or a query { normal, near, area … } as shape_query takes (the largest match, or the nearest with near). Default: the largest face facing up."}
     return [
-        Tool("draft_text", "Letter a flat face of a body: text from a TrueType font (font: a name or a .ttf path; draft_fonts lists them), size mm (letter height), depth mm, mode emboss (raised, default) or engrave (cut in), centred on the face or at [x,y,z] on it, rotate degrees. The body becomes the lettered solid (one undo step). Warns when the letters run off the face, and when their strokes are thinner than a printed line.",
+        Tool("draft_text", "Letter a flat face of a body: text from a TrueType font (font: a name or .ttf path; draft_fonts lists them), size mm (the font's size: capitals come out near 0.7 of it), depth mm, mode emboss (raised, default) or engrave (cut in), face (default the largest facing up), centred on it or at [x,y,z], rotate degrees, tracking. The body becomes the lettered solid (one boolean, not parametric; slow for long text on a detailed body). Reply: volumeChange, box (the real extent), font; warning when letters run off the face, printNote when strokes are under a printed line.",
              obj({"body": {"type": "string"}, "text": {"type": "string"}, "face": face_q, "at": {"type": "array", "items": {"type": "number"}}, "size": {"type": "number"}, "depth": {"type": "number"},
                   "mode": {"type": "string", "enum": ["emboss", "engrave"]}, "font": {"type": "string"}, "rotate": {"type": "number"}, "tracking": {"type": "number"}, "name": {"type": "string"}}, ["text"]),
              draft_text, changes=True),
-        Tool("draft_outline", "Bring a logo or shape from an SVG or DXF file (closed outlines; holes kept): scaled to width or height mm, then mode emboss (raised on a body's face, the largest facing up by default), engrave (cut in), or extrude (a part of its own, depth mm thick — a sign, a stencil, a cookie cutter's outline). face, at, rotate as draft_text; mirror flips it. Says how many open curves were left out, and when strokes are under a printed line.",
+        Tool("draft_outline", "Bring a logo or shape from an SVG or DXF file (closed outlines; holes kept; text must be paths): scaled to width or height mm (neither: the file's own size), then mode emboss (raised on a body's face, the largest facing up by default), engrave (cut in), or extrude (a part of its own, depth mm thick; the default without body). face, at, rotate as draft_text; mirror flips it. Reply: outlines, size, scale, openCurvesLeftOut, volume or volumeChange, printNote when strokes are under a printed line.",
              obj({"path": {"type": "string"}, "body": {"type": "string"}, "face": face_q, "at": {"type": "array", "items": {"type": "number"}}, "width": {"type": "number"}, "height": {"type": "number"},
                   "depth": {"type": "number"}, "mode": {"type": "string", "enum": ["emboss", "engrave", "extrude"]}, "rotate": {"type": "number"}, "mirror": {"type": "boolean"}, "name": {"type": "string"}}, ["path"]),
              draft_outline, changes=True),
-        Tool("draft_array", "Copies of a whole body: kind grid (count [nx, ny, nz]; gap mm between them, 2, or spacing [dx, dy, dz]), polar (count round center about axis, angle degrees, 360), or path (count along a curve — an edge, a sketch or { points } — align to turn each with it). Joined into the body by default (one undo step); separate: true makes each copy its own body instead — a batch to print. For a feature repeated inside one part, pd_linear_pattern or pd_polar_pattern.",
+        Tool("draft_array", "Copies of a whole body as plain solids: kind grid (count [nx, ny, nz]; gap mm between them, 2, or spacing [dx, dy, dz] from one to the next), polar (count round center about axis; angle degrees, 360, a smaller one spans first to last), or path (count along a curve: an edge, a sketch or { points }; align turns each with it). Joined into the body by default (one boolean: slow past a few dozen detailed copies); separate: true makes each its own body. Reply: copies, solids, volume, size. Copies that follow the original: draft_link_array; inside one part: pd_linear_pattern, pd_polar_pattern.",
              obj({"body": {"type": "string"}, "kind": {"type": "string", "enum": ["grid", "polar", "path"]}, "count": {}, "gap": {"type": "number"}, "spacing": {"type": "array", "items": {"type": "number"}},
                   "angle": {"type": "number"}, "center": {"type": "array", "items": {"type": "number"}}, "axis": {"type": "array", "items": {"type": "number"}}, "path": {}, "bodyOfPath": {"type": "string"},
                   "align": {"type": "boolean"}, "separate": {"type": "boolean"}, "name": {"type": "string"}}), draft_array, changes=True),
-        Tool("draft_fonts", "The TrueType fonts on this computer by name (name filters; limit, 25; paths: true adds their paths), and the one draft_text takes by default.", obj({"name": {"type": "string"}, "limit": {"type": "integer"}, "paths": {"type": "boolean"}}), draft_fonts),
-        Tool("surface_loft", "A surface through curves in order — edges (\"Body.Edge3\"), sketches, or { points: [[x,y,z] …], closed } for a smooth curve through them: open curves make a sheet, closed ones a tube. ruled for straight lines between; thickness mm makes it a solid (side out, in or both). A curved panel, a duct, a shell for an organic shape.",
+        Tool("draft_fonts", "The TrueType fonts on this computer by file name (name filters; limit, 25; paths: true adds their paths), and the one draft_text takes by default. Reply: fonts, found, default.", obj({"name": {"type": "string"}, "limit": {"type": "integer"}, "paths": {"type": "boolean"}}), draft_fonts),
+        Tool("surface_loft", "A plain surface through curves in order (Part's loft; not parametric): curves, each an edge (\"Body.Edge3\"), a sketch, or { points: [[x,y,z] …], closed } for a smooth curve through them; all open (a sheet) or all closed (a tube), running the same way. ruled: straight between; closed: true joins the last back to the first (3 or more); thickness mm makes it a solid (side out, in or both). Reply: object, area, solid, volume, size, through; warnings under 0.8 mm or when the solid is not valid.",
              obj({"curves": {"type": "array", "items": {}}, "body": {"type": "string"}, "ruled": {"type": "boolean"}, "closed": {"type": "boolean"}, "thickness": {"type": "number"}, "side": {"type": "string", "enum": ["out", "in", "both"]}, "name": {"type": "string"}}, ["curves"]), surface_loft, changes=True),
-        Tool("surface_points", "A smooth surface through a grid of points, row by row (rows: [[[x,y,z] …] …], every row the same length) — through every point, or within tolerance mm of them for a smoother one; answers how far the farthest point is. thickness makes it a solid. Points measured off a real thing, a shape from numbers.",
+        Tool("surface_points", "A plain smooth surface through a grid of points, row by row (rows: [[[x,y,z] …] …], two or more rows of one length): through every point, or with tolerance mm within that of them for a smoother one. thickness and side make it a solid. Reply: grid, fitted, farthestPoint mm (how far the worst point is off it), area.",
              obj({"rows": {"type": "array", "items": {}}, "tolerance": {"type": "number"}, "thickness": {"type": "number"}, "side": {"type": "string", "enum": ["out", "in", "both"]}, "name": {"type": "string"}}, ["rows"]), surface_points, changes=True),
-        Tool("surface_thicken", "Make a surface a solid: surface an object (\"Surface\") or a body's face (\"Body.Face3\"), thickness mm, side out (along its normal), in, or both. A new object; warns under two printed lines.",
+        Tool("surface_thicken", "Make a surface a solid: surface an object (\"Surface\") or one face (\"Body.Face3\"), thickness mm over 0, side out (along its normal), in, or both (half each way). A new plain object; it cannot be thicker inward than its tightest bend. Reply: object, solid, volume, area, size; warnings under two printed lines (0.8 mm) or when the solid is not valid.",
              obj({"surface": {"type": "string"}, "body": {"type": "string"}, "thickness": {"type": "number"}, "side": {"type": "string", "enum": ["out", "in", "both"]}, "name": {"type": "string"}}, ["surface", "thickness"]), surface_thicken, changes=True),
-        Tool("surface_fill", "A surface filled across a closed boundary — edges (\"Body.Edge3\") or a sketch's outline — bent as smoothly as the edges allow; thickness mm makes it a solid (negative: the other side). A cover over an opening, a smooth transition, a shell between profiles.",
+        Tool("surface_fill", "A plain surface filled across one closed boundary (Part's filled face; not parametric): edges (\"Body.Edge3\" …) or a sketch or wire whose outline bounds it, bent as smoothly as the edges allow; thickness mm makes it a solid (negative: the other side). Edges that leave a gap or form more than one loop are refused. Reply: object, area, solid, volume.",
              obj({"edges": {"type": "array", "items": {}}, "body": {"type": "string"}, "thickness": {"type": "number"}, "name": {"type": "string"}}, ["edges"]), surface_fill, changes=True),
     ]

@@ -58,6 +58,73 @@ SCRIPT = textwrap.dedent("""
     assert S.unmatched(dict(st, loads=st["loads"][1:]), None, pick) == []
     assert S._query_words({"faces": ["Face6"]}) == "Face6"
     assert S._query_words({"near": [1, 2, 3], "normal": [0.3, 0, 1]}) == "facing [0.3, 0, 1] near [1, 2, 3]"
+    # CalculiX's own lines, each with what to do next.
+    assert "body_check" in S.ccx_hint("*ERROR in calinput: no material was assigned to element 12")
+    assert "equilibrium" in S.ccx_hint("*ERROR: too many cutbacks\\n best solution and residuals are in the frd file")
+    assert S.ccx_hint("Job finished") == ""
+    # Self weight: FreeCAD 1.1's GravityAcceleration and GravityDirection, Gravity_x/_y/_z before it.
+    class Vec:
+        def __init__(self, *a):
+            a = a[0] if len(a) == 1 else a
+            self.x, self.y, self.z = (a.x, a.y, a.z) if hasattr(a, "x") else a
+        @property
+        def Length(self):
+            return (self.x ** 2 + self.y ** 2 + self.z ** 2) ** 0.5
+        def normalize(self):
+            n = self.Length
+            self.x, self.y, self.z = self.x / n, self.y / n, self.z / n
+            return self
+    class Qty:
+        def __init__(self, v):
+            self.v = v
+        def __mul__(self, k):
+            return Qty(self.v * k)
+    S.V = Vec
+    new = types.SimpleNamespace(PropertiesList=["GravityAcceleration", "GravityDirection"], GravityAcceleration=Qty(9806.65), GravityDirection=None)
+    S.self_weight(new, [0, 3, -4])
+    assert abs(new.GravityAcceleration.v - 9806.65 * 5) < 1e-6, new.GravityAcceleration.v
+    assert (new.GravityDirection.x, round(new.GravityDirection.y, 6), round(new.GravityDirection.z, 6)) == (0, 0.6, -0.8)
+    assert not hasattr(new, "Gravity_x")
+    before = types.SimpleNamespace(PropertiesList=["Gravity_x", "Gravity_y", "Gravity_z"])
+    S.self_weight(before, [0, 0, -2])
+    assert (before.Gravity_x, before.Gravity_y, before.Gravity_z) == (0, 0, -2)
+    # A mesher run bounded: FreeCAD 1.1's QProcess tools, and create_mesh() before it.
+    class Proc:
+        ProcessState = types.SimpleNamespace(NotRunning=0)
+        def __init__(self, done, state=0):
+            self.done, self._state, self.killed = done, state, False
+        def waitForFinished(self, ms):
+            self.ms = ms
+            return self.done
+        def state(self):
+            return self._state
+        def kill(self):
+            self.killed = True
+        def errorString(self):
+            return "no such file"
+        def readAllStandardError(self):
+            return types.SimpleNamespace(data=lambda: b"Warning : thin\\n")
+    class Mesher:
+        def __init__(self, proc):
+            self.process, self.steps = proc, []
+        def prepare(self):
+            self.steps.append("prepare")
+        def compute(self):
+            self.steps.append("compute")
+    t = Mesher(Proc(True))
+    assert S.gmsh_run(t, 7) == "Warning : thin" and t.steps == ["prepare", "compute"] and t.process.ms == 7000
+    t = Mesher(Proc(False, state=2))
+    try:
+        S.gmsh_run(t, 1)
+        raise SystemExit("a mesher still running at the timeout was not refused")
+    except S.ToolError as e:
+        assert "took over 1 s" in e.message and "fea_setup { mesh }" in e.message and t.process.killed, e.message
+    try:
+        S.gmsh_run(Mesher(Proc(False, state=0)), 1, "Netgen")
+        raise SystemExit("a mesher that never started was not reported")
+    except RuntimeError as e:
+        assert "Netgen did not run (no such file)" in str(e), e
+    assert S.gmsh_run(types.SimpleNamespace(create_mesh=lambda: "Error : bad"), 5) == "Error : bad"
     print("OK")
 """)
 

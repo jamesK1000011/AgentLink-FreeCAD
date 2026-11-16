@@ -174,18 +174,36 @@ def tools(s):
         act = a.get("action")
         if act == "flip_dimension":
             o = picks.find(d(), a.get("dimension"), "dimension")
-            if not hasattr(o, "Normal"):
-                raise bad(f"{o.Label} is not a Draft dimension.")
+            if "Normal" not in o.PropertiesList or "Dimline" not in o.PropertiesList:
+                raise bad(f"dimension: {o.Label} is not a Draft dimension (draft_dimension makes them; a drawing's dimensions are td_dim's).")
+            # What Draft's Flip Dimension command does: the normal turned round.
             o.Normal = o.Normal.negative() if o.Normal.Length else FreeCAD.Vector(0, 0, -1)
             d().recompute()
-            return {"dimension": o.Label, "normal": [round(x, 6) for x in o.Normal], "note": "Its text now reads from the other side."}
+            s.snapshot("draft_fix")
+            return {"dimension": o.Label, "normal": [round(x, 6) for x in o.Normal], "note": "Its text now reads from the other side; the measured value is the same."}
         if act == "heal":
             import Draft
 
+            if FreeCAD.ActiveDocument is not d():
+                FreeCAD.setActiveDocument(d().Name)  # heal works on the active document
             targets = [picks.find(d(), r) for r in a["objects"]] if a.get("objects") else None
+            # Named objects are rebuilt whatever their state (a copy takes the
+            # place of each, the original removed), so their labels are read first.
+            asked = [o.Label for o in targets] if targets else None
+            before = {o.Name for o in d().Objects}
             Draft.heal(targets)
             d().recompute()
-            return {"healed": [o.Label for o in targets] if targets else "all Draft objects", "note": "Old-version Draft objects brought up to date."}
+            s.snapshot("draft_fix")
+            after = {o.Name: o.Label for o in d().Objects}
+            made = [lab for n, lab in after.items() if n not in before]
+            gone = len(before - set(after))
+            out = {"healed": asked if asked else "all Draft objects", "rebuilt": len(made), "removed": gone}
+            if made:
+                out["now"] = made[:30]
+                out["note"] = "Each rebuilt object is a new copy with a new name; the old one was removed, and what pointed at it was moved over."
+            else:
+                out["note"] = "Nothing needed healing." if not asked else "None of them is a kind Draft can rebuild (dimension, rectangle, wire, B-spline, circle, polygon)."
+            return out
         raise bad("action: flip_dimension { dimension } | heal { objects }.")
 
     # ---- Assembly ------------------------------------------------------------------------
@@ -239,7 +257,7 @@ def tools(s):
         Tool("cam_property_bag", "A CAM property bag: properties [{ name, type (Float, Length, Angle, Integer, String, Bool), value, group }] that ops' expressions can use.",
              obj({"name": st, "properties": {"type": "array", "items": {"type": "object"}}}), cam_property_bag, changes=True),
         Tool("cam_template_export", "Write a CAM job as a template (job_*.json): its tool controllers, stock, setup sheet and post settings, for the next job.", obj({"job": st, "path": st, "description": st}), cam_template_export),
-        Tool("draft_fix", "Draft fixes: action flip_dimension { dimension } (text to the other side) | heal { objects } (old Draft objects brought up to date; all by default).",
+        Tool("draft_fix", "Draft fixes: action flip_dimension { dimension } (text to the other side) | heal { objects } (old Draft objects rebuilt as new copies; left out: only those that need it, named ones regardless). Reply: normal; or healed, rebuilt, removed, now.",
              obj({"action": {"type": "string", "enum": ["flip_dimension", "heal"]}, "dimension": st, "objects": arr}, ["action"]), draft_fix, changes=True),
         Tool("asm_rigid_group", "Hold two or more parts of an assembly fixed to each other as one group (Assembly's rigid group joint, FreeCAD 1.2 and newer): parts by label, name. On FreeCAD 1.1 it answers unavailable — asm_joint kind fixed between each pair does the same there. Reply: joint, parts.", obj({"assembly": st, "parts": arr, "name": st}, ["parts"]), asm_rigid_group, changes=True),
         Tool("asm_new_part", "A new empty part to build in place (Assembly's New Part): an App::Part holding an empty PartDesign body, put in the assembly through an App::Link; name; at [x, y, z], axis and angle degrees place the link. Reply: part, body (sketch_new { body } and pd_pad build in it), inAssembly (the link's label). asm_check checks it where the link stands; asm_joint and asm_ground take bodies put in with asm_new or asm_add, not this link — to joint a part, build the body first and asm_add it.", obj({"assembly": st, "name": st, "at": v3, "axis": v3, "angle": num}), asm_new_part, changes=True),

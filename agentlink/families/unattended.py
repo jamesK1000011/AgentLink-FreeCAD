@@ -163,13 +163,20 @@ def tools(s):
 
     def doc_switch(a):
         ref = a.get("document")
+        if ref is not None and not isinstance(ref, str):
+            raise bad("document: an open document's name, label or .FCStd path (left out: the list of open ones).")
         if not ref:
             return {"document": s.doc.Name if s.doc else None, "label": s.doc.Label if s.doc else None,
                     "open": [{"name": d.Name, "label": d.Label, "file": d.FileName or None, **_modified(d)} for d in FreeCAD.listDocuments().values()]}
         want = os.path.abspath(os.path.expanduser(ref)) if (os.sep in ref or ref.lower().endswith(".fcstd")) else None
         nd = next((d for d in FreeCAD.listDocuments().values() if ref in (d.Name, d.Label) or (want and d.FileName and os.path.abspath(d.FileName) == want)), None)
         if nd is None:
-            raise ToolError("not_found", f"{ref}: not open — " + (", ".join(d.Label for d in FreeCAD.listDocuments().values()) or "no documents are open") + ". doc_open opens a file.")
+            docs = list(FreeCAD.listDocuments().values())
+            nd = next((d for d in docs if str(ref).lower() in (d.Name.lower(), d.Label.lower())), None)
+        if nd is None:
+            from .doc import doc_names
+
+            raise ToolError("not_found", f"{ref}: not open — open, as label (name): " + (doc_names(docs) if docs else "no documents are open") + ". doc_open { path } opens a file.")
         if s.doc is not None and nd.Name == s.doc.Name:
             out = {"document": nd.Name, "label": nd.Label, "note": "Already on it."}
             if a.get("front") and getattr(FreeCAD, "GuiUp", False):
@@ -321,18 +328,18 @@ def tools(s):
                 raise ToolError("not_allowed", f"confirm: \"{want}\", word for word, typed by the person — " + ("it takes their add-on away" if action == "remove" else "an add-on is code FreeCAD runs") + ". Nothing was changed.")
         if action == "remove":
             if not os.path.isdir(where):
-                raise ToolError("not_found", f"{name} is not installed (addon list).")
+                raise ToolError("not_found", f"{name} is not installed: addon {{ action: \"list\" }} names what is (the folder names in Mod).")
             ok = uninst.AddonUninstaller(Addon(name)).run()
             keep.record_versions({"addon": name}, None, "removed" if ok else "remove failed")
             if not ok:
                 raise ToolError("failed", f"The Addon Manager could not remove {name}.")
             return {"removed": name, "note": "Gone from the Mod folder; app_restart (window) takes it out of the running FreeCAD."}
         if action not in ("install", "update"):
-            raise bad("action: list | search { query } | install { name, url?, branch?, confirm } | update { name, confirm } | remove { name, confirm }.")
+            raise bad("action: list | search { query } | install { name, url?, branch?, confirm: \"install <name>\" } | update { name, confirm: \"update <name>\" } | remove { name, confirm: \"remove <name>\" } — confirm is typed by the person.")
         if action == "install" and os.path.isdir(where):
-            raise ToolError("invalid_state", f"{name} is installed already: action update.")
+            raise ToolError("invalid_state", f"{name} is installed already: addon {{ action: \"update\", name, confirm: \"update {name}\" }} brings it up to date.")
         if action == "update" and not os.path.isdir(where):
-            raise ToolError("not_found", f"{name} is not installed: action install.")
+            raise ToolError("not_found", f"{name} is not installed: addon {{ action: \"install\", name, confirm: \"install {name}\" }} (addon {{ action: \"list\" }} names what is).")
         url, branch = a.get("url"), a.get("branch") or ""
         sources_file = keep.path("addon-sources.json")
         sources = keep._load(sources_file, {}) or {}
@@ -350,7 +357,7 @@ def tools(s):
 
             cat = AddonCatalog(_catalog(fci))
             if name not in cat.get_available_addon_ids():
-                raise ToolError("not_found", f"{name} is not in FreeCAD's add-on catalog: addon search, or give its url.")
+                raise ToolError("not_found", f"{name} is not in FreeCAD's add-on catalog (names are exact, capitals too): addon {{ action: \"search\", query }} finds it, or give its url (git or a folder).")
             ad = cat.get_addon_from_id(name, branch or None)
         # The add-on as it is kept aside first (update), so a failed smoke
         # test puts it back (G).
@@ -399,10 +406,10 @@ def tools(s):
 
     st = {"type": "string"}
     return [
-        Tool("queue_go", "The person's go for heavy jobs held while they worked in the window (call it only on their word in chat). Answers what is running and this Mac's preset.", obj({}), queue_go),
-        Tool("addon", "FreeCAD's Addon Manager, headless (FreeCAD 1.1 and newer): list (installed in the Mod folder) | search { query } (the official catalog) | install { name, url? (git or a folder), branch?, confirm: \"install <name>\" typed by the person } | update { name, confirm: \"update <name>\" typed by the person } | remove { name, confirm: \"remove <name>\" typed by the person }. Each install or update passes a smoke test or is rolled back.",
+        Tool("queue_go", "The person's go for heavy jobs held while they worked in the window: call it only on their word in chat, never by yourself. It lifts the hold; nothing else changes. Reply: wasHeld, running (the heavy tools running now), machine (this computer's preset: heavySlots, memoryCeilingGB, fan).", obj({}), queue_go),
+        Tool("addon", "FreeCAD's Addon Manager without its dialog (FreeCAD 1.1 and newer; works headless): action list (the folders in the Mod folder, with version; managedBy marks Agent Link's own, updated by agentlink_update, not here) | search { query } (part of a name, in the official catalog, fetched once a day) | install { name, url? (https / git address or a folder; else the catalog), branch?, confirm: \"install <name>\" } | update { name, confirm: \"update <name>\" } (from where it was installed) | remove { name, confirm: \"remove <name>\" }. confirm must be typed by the person, word for word: an add-on is code FreeCAD runs. Each install or update is then loaded in a separate headless FreeCAD (a smoke test, a minute or so) and rolled back when that fails. A new add-on's workbench shows in the window only after app_restart. Reply: installed / updated / removed, folder, smoke.",
              obj({"action": {"type": "string", "enum": ["list", "search", "install", "update", "remove"]}, "name": st, "query": st, "url": st, "branch": st, "confirm": st}), addon),
-        Tool("doc_switch", "Which open document the agent works in: document (name, label or file) switches to it — the session stays on it whatever the person brings to the front of the window; front: true also brings it to the front. No document: the agent's one and those open.",
+        Tool("doc_switch", "Which open document the agent works in. document (internal name, label or .FCStd path) switches the session to it; it stays there whatever the person brings to the front of the window. front: true also brings its 3D view to the front — needed before gui_input, cmd_run and menu_run, which act on the document in front. With no document: the session's one and open [{ name, label, file, modified }]. Reply: document, label, front, bodies. Changes no document; the session's undo steps start afresh in the new one.",
              obj({"document": st, "front": {"type": "boolean"}}), doc_switch),
         Tool("crash_collect", "Copy crash evidence into ~/AgentLink/crash/<time>/: FreeCAD's document-recovery folders (from a FreeCAD that crashed or was stopped), its crash.log and the system's crash reports for FreeCAD (new ones only). Copies only, never removes. dialog_answer runs it by itself before Document Recovery's Cleanup.", obj({}), crash_collect),
         Tool("dialog_answer", "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one by its text (Cancel also closes a file picker; Document Recovery's Cleanup keeps a copy in ~/AgentLink/crash first). With no dialog, the open task panel and its buttons (OK, Cancel …). You operate FreeCAD as the person would: read it and press what the job needs (Cancel backs out of anything you did not mean to open); say what you pressed. text: typed into a text prompt (or the dialog's one text field), item: picked from a prompt's list, before button. A stuck window: app_force_restart.",

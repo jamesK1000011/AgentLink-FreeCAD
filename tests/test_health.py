@@ -91,7 +91,7 @@ def test_only_old_failures_say_so():
     Obj(d, "Old", error="broke")
     h = run(d, lambda: [Obj(d, "Fine")])
     assert h["ok"] is False and "still failing from before this call: Old" in h["verdict"]
-    assert "new" not in h["errors"][0]
+    assert "errors" not in h
 
 
 def test_touched_objects_the_call_left_alone_want_a_recompute():

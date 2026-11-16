@@ -69,6 +69,27 @@ def from_arrays(V, F):
     return m
 
 
+def in_place(m):
+    """A copy of a Mesh with its points where they stand and no placement
+    of its own (addMesh and transform work on the stored points and pass a
+    placement by)."""
+    g = m.copy()
+    pl = g.Placement
+    if not pl.isIdentity():
+        g.Placement = FreeCAD.Placement()
+        g.transform(pl.toMatrix())
+    return g
+
+
+def vec(v, name, default=None):
+    """[x, y, z] numbers as a Vector, refused by name."""
+    if v is None and default is not None:
+        v = list(default)
+    if not (isinstance(v, (list, tuple)) and len(v) == 3 and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v)):
+        raise bad(f"{name}: [x, y, z] numbers.")
+    return V(*[float(x) for x in v])
+
+
 def edges_state(m):
     """open: edges one facet has; bad: edges more than two share."""
     F = np.array(m.Topology[1], dtype=np.int64).reshape(-1, 3)
@@ -102,7 +123,8 @@ def evaluation(m):
     except Exception:
         pass
     try:
-        e["selfIntersectionPairs"] = len(m.getSelfIntersections())
+        # the pairs are found a second time to be listed: only when there are any
+        e["selfIntersectionPairs"] = len(m.getSelfIntersections()) if e.get("selfIntersections") else 0
     except Exception:
         pass
     e["open"] = not m.isSolid()
@@ -140,6 +162,7 @@ def tools(session):
     doc = lambda: s.doc  # noqa: E731
 
     EDIT = "meshEdit"
+    HEAVY = 200000  # triangles past which the slower tools say so
 
     def editing():
         """{original label: its edit copy's label} for meshes being edited."""
@@ -236,15 +259,27 @@ def tools(session):
 
         src = next((o for o in doc().Objects if a.get("body") in (o.Label, o.Name) and hasattr(o, "Shape")), None) if a.get("body") else (s.bodies()[0] if len(s.bodies()) == 1 else None)
         if src is None:
-            raise bad("body: the shape to mesh (session_state names them).")
+            have = ", ".join(o.Label for o in s.bodies()[:20]) or "none"
+            raise bad(f"body: the shape to mesh, by label — the bodies: {have}.")
+        if src.Shape.isNull() or not src.Shape.Faces:
+            raise bad(f"body: {src.Label} has no faces to mesh.")
         how = a.get("method", "standard")
         kw = {"Shape": src.Shape}
         if how == "standard":
-            kw.update(LinearDeflection=float(a.get("deflection", 0.05)), AngularDeflection=math.radians(float(a.get("angle", 15))), Relative=False)
+            defl, ang = picks.num(a.get("deflection", 0.05), "deflection"), picks.num(a.get("angle", 15), "angle")
+            if defl <= 0 or not 0 < ang <= 90:
+                raise bad("deflection: mm the triangles may stand off the surface, over 0 (0.05); angle: degrees between neighbouring triangles on a curve, over 0 to 90 (15).")
+            kw.update(LinearDeflection=defl, AngularDeflection=math.radians(ang), Relative=False)
         elif how == "mefisto":
-            kw.update(MaxLength=float(a.get("maxLength", 2.0)))
+            ml = picks.num(a.get("maxLength", 2.0), "maxLength")
+            if ml <= 0:
+                raise bad("maxLength: mm, the longest triangle edge, over 0 (2).")
+            kw.update(MaxLength=ml)
         elif how == "netgen":
-            kw.update(Fineness=int({"verycoarse": 0, "coarse": 1, "moderate": 2, "fine": 3, "veryfine": 4}.get(a.get("fineness", "moderate"), 2)), SecondOrder=0, Optimize=1, AllowQuad=0)
+            fine = {"verycoarse": 0, "coarse": 1, "moderate": 2, "fine": 3, "veryfine": 4}
+            if a.get("fineness", "moderate") not in fine:
+                raise bad(f"fineness: {', '.join(fine)}.")
+            kw.update(Fineness=fine[a.get("fineness", "moderate")], SecondOrder=0, Optimize=1, AllowQuad=0)
         else:
             raise bad("method: standard (deflection, angle), mefisto (maxLength: even triangles) or netgen (fineness).")
         try:
@@ -260,6 +295,8 @@ def tools(session):
         # than hand back a broken mesh as if it were the part.
         if src.Shape.Solids and src.Shape.isClosed() and (not m.isSolid() or m.hasNonManifolds()):
             out["warning"] = f"The solid meshed open or non-manifold with {how} ({out.get('components', '?')} components): method standard (or netgen) meshes it closed; meshobj_info shows the problems."
+        if m.CountFacets > HEAVY:
+            out["heavy"] = f"{m.CountFacets} triangles: the repair, boolean, segment and section tools slow down past about {HEAVY} — a coarser deflection / maxLength, or meshobj_decimate."
         return out
 
     def meshobj_info(a):
@@ -269,6 +306,9 @@ def tools(session):
 
     # ---- repair ----
 
+    # What Mesh.write tells from a file's extension (MeshCore's MeshOutput::GetFormat, FreeCAD 1.1).
+    WRITES = ("stl", "ast", "obj", "off", "ply", "3mf", "amf", "smf", "iv", "x3d", "x3dz", "xhtml", "wrl", "vrml", "wrz", "nas", "bdf", "py", "asy", "bms", "idtf", "mgl")
+
     REPAIRS = ("normals", "duplicates", "nonmanifolds", "selfintersections", "degenerate", "folds", "indices", "pointsonedges", "holes", "islands")
 
     def meshobj_repair(a):
@@ -276,9 +316,9 @@ def tools(session):
         m = o.Mesh.copy()
         e0, p0 = evaluation(m)
         want = a.get("fix") or [r for r in REPAIRS if r not in ("holes", "islands")]
-        unknown = [w for w in want if w not in REPAIRS]
+        unknown = [w for w in want if w not in REPAIRS] if isinstance(want, list) else [want]
         if unknown:
-            raise bad(f"fix: any of {', '.join(REPAIRS)}.")
+            raise bad(f"fix: a list of any of {', '.join(REPAIRS)} — not {', '.join(str(u) for u in unknown)}.")
         did, undone = [], []
         state = edges_state(m)
         start = dict(state)
@@ -346,19 +386,29 @@ def tools(session):
                 raise bad(f"facets: fewer than now ({n0}), 4 or more.")
             red = 1 - target / n0
         else:
-            red = float(a.get("reduction", 0.5))
+            red = picks.num(a.get("reduction", 0.5), "reduction")
             if not 0 < red < 1:
                 raise bad("reduction: the share of triangles to remove, 0 … 1 (or facets: how many to keep).")
-        m.decimate(float(a.get("tolerance", 0.1)), red)
-        return keep(o, m, "meshobj_decimate", a, {"reduced": f"{n0} → {m.CountFacets} triangles"}, before={"facets": n0})
+        tol = picks.num(a.get("tolerance", 0.1), "tolerance")
+        if tol <= 0:
+            raise bad("tolerance: over 0 — the error one collapse may add (0.1); a larger one lets more triangles go.")
+        m.decimate(tol, red)
+        extra = {"reduced": f"{n0} → {m.CountFacets} triangles"}
+        want = n0 * (1 - red)
+        if m.CountFacets > want * 1.1 + 4:
+            # FreeCAD stops collapsing where the next collapse would add more error than tolerance
+            extra["note"] = f"Stopped at {m.CountFacets}, short of the {int(want)} asked: tolerance {tol:g} holds the rest (flat regions go first). A larger tolerance removes more, at the cost of shape."
+        return keep(o, m, "meshobj_decimate", a, extra, before={"facets": n0})
 
     def meshobj_refine(a):
         o = mesh_of(a.get("mesh"))
         m = o.Mesh.copy()
         n0 = m.CountFacets
-        rounds = int(a.get("rounds", 1))
-        if not 1 <= rounds <= 3:
-            raise bad("rounds: 1 … 3 (each splits every triangle in four).")
+        rounds = a.get("rounds", 1)
+        if isinstance(rounds, bool) or not isinstance(rounds, int) or not 1 <= rounds <= 3:
+            raise bad("rounds: 1 … 3 (each puts a point in the middle of every triangle: about three times as many).")
+        if n0 * 3 ** rounds > 2000000:
+            raise ToolError("invalid_state", f"{o.Label} has {n0} triangles: {rounds} round(s) would make about {n0 * 3 ** rounds} (over 2,000,000). Fewer rounds, or meshobj_decimate first.")
         for _ in range(rounds):
             m.refine()
         if a.get("optimize"):
@@ -369,7 +419,9 @@ def tools(session):
         o = mesh_of(a.get("mesh"))
         m = o.Mesh.copy()
         meth = a.get("method", "taubin")
-        it = int(a.get("iterations", 3))
+        it = a.get("iterations", 3)
+        if isinstance(it, bool) or not isinstance(it, int) or not 1 <= it <= 200:
+            raise bad("iterations: a whole number, 1 … 200 (3).")
         if meth == "laplace":
             m.smooth(Method="Laplace", Iteration=it, Lambda=float(a.get("lambda", 0.6307)))
         elif meth == "taubin":
@@ -385,8 +437,8 @@ def tools(session):
     def meshobj_trim(a):
         o = mesh_of(a.get("mesh"))
         m = o.Mesh.copy()
-        p = V(*[float(x) for x in (a.get("at") or [0, 0, 0])])
-        n = V(*[float(x) for x in (a.get("normal") or [0, 0, 1])])
+        p = vec(a.get("at"), "at", (0, 0, 0))
+        n = vec(a.get("normal"), "normal", (0, 0, 1))
         if n.Length < 1e-9:
             raise bad("normal: not zero — the side it points to is removed.")
         n0 = m.CountFacets
@@ -398,6 +450,8 @@ def tools(session):
         m.removeDuplicatedPoints()
         m.removeDuplicatedFacets()
         m.fixIndices()
+        if m.CountFacets == 0:
+            raise ToolError("failed", f"The plane leaves nothing of {o.Label}: all of it lies on the side normal points to. Turn normal round, or move at. Nothing was changed.")
         if a.get("preview"):
             bb = m.BoundBox
             return {"mesh": o.Label, "preview": True, "wouldRemove": n0 - m.CountFacets, "wouldKeep": m.CountFacets,
@@ -417,26 +471,48 @@ def tools(session):
         o = mesh_of(a.get("mesh"))
         m = o.Mesh.copy()
         mat = FreeCAD.Matrix()
+        flips = 0
+        if not any(a.get(k) is not None for k in ("scale", "rotate", "move", "mirror")):
+            raise bad("One or more of scale (a factor or [x, y, z]), rotate { axis, angle }, move [x, y, z], mirror \"x\" | \"y\" | \"z\".")
         if a.get("scale") is not None:
             f = a["scale"]
-            fx, fy, fz = (f, f, f) if isinstance(f, (int, float)) else tuple(float(x) for x in f)
+            f = [f, f, f] if isinstance(f, (int, float)) and not isinstance(f, bool) else f
+            if not (isinstance(f, list) and len(f) == 3 and all(isinstance(x, (int, float)) and not isinstance(x, bool) and x != 0 for x in f)):
+                raise bad("scale: a factor, or [x, y, z] — none of them 0. About the origin: move it back after, or scale a mesh centred there.")
+            fx, fy, fz = (float(x) for x in f)
             mat.scale(fx, fy, fz)
+            flips += sum(1 for x in (fx, fy, fz) if x < 0)
         if a.get("rotate"):
             r = a["rotate"]
-            rot = FreeCAD.Rotation(V(*r.get("axis", [0, 0, 1])), float(r.get("angle", 0)))
+            if not isinstance(r, dict) or isinstance(r.get("angle", 0), bool) or not isinstance(r.get("angle", 0), (int, float)):
+                raise bad("rotate: { axis: [x, y, z] (default z), angle: degrees } — about the origin.")
+            ax = vec(r.get("axis"), "rotate.axis", (0, 0, 1))
+            if ax.Length < 1e-9:
+                raise bad("rotate.axis: not [0, 0, 0].")
+            rot = FreeCAD.Rotation(ax, float(r.get("angle", 0)))
             mat = rot.toMatrix().multiply(mat)
         if a.get("move"):
             t = FreeCAD.Matrix()
-            t.move(V(*a["move"]))
+            t.move(vec(a["move"], "move"))
             mat = t.multiply(mat)
         if a.get("mirror"):
+            if a["mirror"] not in ("x", "y", "z"):
+                raise bad("mirror: \"x\", \"y\" or \"z\" — the axis whose sign flips (x mirrors across the YZ plane through the origin).")
             mm = FreeCAD.Matrix()
             ax = {"x": (0, 0), "y": (1, 1), "z": (2, 2)}[a["mirror"]]
             setattr(mm, f"A{ax[0] + 1}{ax[1] + 1}", -1.0)
             mat = mm.multiply(mat)
+            flips += 1
+        # Mesh.transform moves the stored points, before the object's own
+        # placement is applied: carried through it, so a mesh that has been
+        # placed turns and moves in the document's axes like any other.
+        pl = m.Placement
+        if not pl.isIdentity():
+            pm = pl.toMatrix()
+            mat = pm.inverse().multiply(mat).multiply(pm)
         m.transform(mat)
-        if a.get("mirror"):
-            m.flipNormals()
+        if flips % 2:
+            m.flipNormals()  # a mirror (or an odd count of negative scales) turns every triangle inside out
         return keep(o, m, "meshobj_transform", a)
 
     BOOL_OPS = {"union": "add", "intersection": "intersect", "difference": "subtract"}
@@ -498,18 +574,29 @@ def tools(session):
     def meshobj_sections(a):
         o = mesh_of(a.get("mesh"))
         m = o.Mesh
-        n = V(*[float(x) for x in (a.get("normal") or [0, 0, 1])])
+        n = vec(a.get("normal"), "normal", (0, 0, 1))
+        if n.Length < 1e-9:
+            raise bad("normal: not [0, 0, 0] — the direction the slices are stacked along.")
         n.normalize()
         bb = m.BoundBox
-        span = [bb.XMin * n.x + bb.YMin * n.y + bb.ZMin * n.z, bb.XMax * n.x + bb.YMax * n.y + bb.ZMax * n.z]
-        lo, hi = min(span), max(span)
-        if a.get("at"):
-            ds = [float(d) for d in a["at"]]
+        # the box's reach along n: each axis gives its low or its high end, by n's sign there
+        ends = [(bb.XMin * n.x, bb.XMax * n.x), (bb.YMin * n.y, bb.YMax * n.y), (bb.ZMin * n.z, bb.ZMax * n.z)]
+        lo, hi = sum(min(e) for e in ends), sum(max(e) for e in ends)
+        if a.get("at") is not None:
+            ds = a["at"]
+            if not (isinstance(ds, list) and 1 <= len(ds) <= 500 and all(isinstance(d, (int, float)) and not isinstance(d, bool) for d in ds)):
+                raise bad(f"at: [distances] mm from the origin along normal, 1 … 500 of them — {o.Label} reaches from {lo:.4g} to {hi:.4g}.")
+            ds = [float(d) for d in ds]
         else:
-            k = int(a.get("count", 5))
+            k = a.get("count", 5)
+            if isinstance(k, bool) or not isinstance(k, int) or not 1 <= k <= 500:
+                raise bad("count: 1 … 500 slices, evenly spaced between the mesh's ends (or at: [distances]).")
             ds = [lo + (hi - lo) * (i + 1) / (k + 1) for i in range(k)]
+        tol = picks.num(a.get("tolerance", 0.01), "tolerance")
+        if tol <= 0:
+            raise bad("tolerance: mm within which cut ends are joined into one loop, over 0 (0.01, FreeCAD's own).")
         planes = [(n * d, n) for d in ds]
-        polys = m.crossSections(planes, float(a.get("tolerance", 1e-6)), True)
+        polys = m.crossSections(planes, tol, True)
         wires, rows = [], []
         for d, sec in zip(ds, polys):
             ws = []
@@ -534,30 +621,48 @@ def tools(session):
         parts = o.Mesh.getSeparateComponents()
         if len(parts) < 2:
             raise bad(f"{o.Label} is one piece.")
+        least = a.get("minFacets", 1)
+        if isinstance(least, bool) or not isinstance(least, int) or least < 1:
+            raise bad("minFacets: a whole number, 1 or more — pieces with fewer triangles are left out.")
+        parts = sorted([p for p in parts if p.CountFacets >= least], key=lambda x: -x.CountFacets)
+        if not parts:
+            raise bad(f"minFacets: no piece of {o.Label} has {least} triangles or more.")
+        if len(parts) > 100:
+            # a noisy scan: thousands of crumbs would each become an object
+            raise ToolError("invalid_state", f"{o.Label} has {len(parts)} pieces of {least} or more triangles (the 100th has {parts[99].CountFacets}): over 100 objects. Give minFacets above that to keep the real parts, or meshobj_repair {{ fix: [\"islands\"], minFacets }} to drop the crumbs first. Nothing was made.")
         made = []
-        for i, p in enumerate(sorted(parts, key=lambda x: -x.CountFacets), 1):
-            if p.CountFacets < int(a.get("minFacets", 1)):
-                continue
+        for i, p in enumerate(parts, 1):
             made.append(new_mesh(p, f"{o.Label} {i}").Label)
         if hasattr(o, "Visibility"):
             o.Visibility = False
-        return picks.finish(s, "meshobj_split", lambda: {"from": o.Label, "pieces": made})
+        return picks.finish(s, "meshobj_split", lambda: {"from": o.Label, "pieces": made, "facets": [p.CountFacets for p in parts][:20],
+                                                         "note": f"{o.Label} is hidden, not removed; the pieces are largest first."})
 
     def meshobj_segments(a):
         o = mesh_of(a.get("mesh"))
         m = o.Mesh
         kind = a.get("kind", "planar")
+        least, top = a.get("minFacets", 20), a.get("top", 12)
+        for k_, v_ in (("minFacets", least), ("top", top)):
+            if isinstance(v_, bool) or not isinstance(v_, int) or v_ < 1:
+                raise bad(f"{k_}: a whole number, 1 or more.")
         if kind == "planar":
-            segs = m.getPlanarSegments(float(a.get("deviation", 0.01)), int(a.get("minFacets", 20)))
+            dev = picks.num(a.get("deviation", 0.01), "deviation")
+            if dev <= 0:
+                raise bad("deviation: mm a triangle may stand off its region's plane, over 0 (0.01; a scan needs about its noise, 0.05 … 0.3).")
+            segs = m.getPlanarSegments(dev, least)
         elif kind == "curvature":
-            tol = float(a.get("tolerance", 0.01))
+            tol = picks.num(a.get("tolerance", 0.01), "tolerance")
+            if tol <= 0:
+                raise bad("tolerance: 1/mm either principal curvature may be off zero, over 0 (0.01: flatter than a 100 mm radius).")
             try:
-                segs = m.getSegmentsByCurvature([("Plane", tol, tol, int(a.get("minFacets", 20)))])
+                # (wanted max curvature, wanted min curvature, tolerance of each, least facets): 0, 0 is flat
+                segs = m.getSegmentsByCurvature([(0.0, 0.0, tol, tol, least)])
             except Exception as e:
                 raise ToolError("failed", f"Curvature segmentation failed here: {e} — kind planar finds flat regions.")
         else:
-            raise bad("kind: planar or curvature.")
-        rows = []
+            raise bad("kind: planar (flat regions by distance from a fitted plane: deviation mm) or curvature (flat regions by curvature: tolerance 1/mm).")
+        found = []
         for seg in segs:
             sub = m.meshFromSegment(list(seg))
             nrm = V()
@@ -565,13 +670,17 @@ def tools(session):
                 nrm += V(f.Normal) * f.Area
             if nrm.Length > 1e-12:
                 nrm.normalize()
-            rows.append({"facets": len(seg), "area": round(sub.Area, 3), "center": geo.vec(sub.BoundBox.Center), "normal": geo.vec(nrm)})
-        rows.sort(key=lambda r: -r["area"])
-        out = {"mesh": o.Label, "kind": kind, "segments": len(rows), "largest": rows[: int(a.get("top", 12))]}
-        if a.get("keep"):
+            found.append(({"facets": len(seg), "area": round(sub.Area, 3), "center": geo.vec(sub.BoundBox.Center), "normal": geo.vec(nrm)}, sub))
+        found.sort(key=lambda r: -r[0]["area"])
+        rows = [r for r, _ in found]
+        out = {"mesh": o.Label, "kind": kind, "segments": len(rows), "largest": rows[:top]}
+        if not rows:
+            out["note"] = ("No flat region of that size: a larger deviation (a scan's noise), or a smaller minFacets." if kind == "planar"
+                           else "No flat region of that size: a larger tolerance, or a smaller minFacets.")
+        if a.get("keep") and rows:
             made = []
-            for i, seg in enumerate(segs[: int(a.get("top", 12))], 1):
-                made.append(new_mesh(m.meshFromSegment(list(seg)), f"{o.Label} segment {i}").Label)
+            for i, (_, sub) in enumerate(found[:top], 1):  # in the order of largest
+                made.append(new_mesh(sub, f"{o.Label} segment {i}").Label)
             out["kept"] = made
             picks.finish(s, "meshobj_segments", out)
         out["use"] = "A flat segment's normal and centre place a sketch (sketch_new { face }) or a datum plane on a scan."
@@ -579,7 +688,9 @@ def tools(session):
 
     def meshobj_curvature(a):
         o = mesh_of(a.get("mesh"))
-        c = np.array([(k[0], k[1]) for k in o.Mesh.getCurvaturePerVertex()], dtype=float)
+        if o.Mesh.CountFacets == 0:
+            raise ToolError("invalid_state", f"{o.Label} has no triangles.")
+        c = np.array([(k[0], k[1]) for k in o.Mesh.getCurvaturePerVertex()], dtype=float).reshape(-1, 2)
         k1, k2 = c[:, 0], c[:, 1]
         mean = (k1 + k2) / 2
         kmax = np.max(np.abs(c), axis=1)
@@ -596,15 +707,17 @@ def tools(session):
         o = mesh_of(a.get("mesh"))
         src = next((x for x in doc().Objects if a.get("shape") in (x.Label, x.Name) and hasattr(x, "Shape")), None)
         if src is None or not src.Shape.Edges:
-            raise bad("shape: a wire, sketch or body with edges to project.")
-        d = V(*[float(x) for x in (a.get("direction") or [0, 0, -1])])
+            raise bad("shape: a wire, sketch or body with edges to project, by label.")
+        d = vec(a.get("direction"), "direction", (0, 0, -1))
+        if d.Length < 1e-9:
+            raise bad("direction: not [0, 0, 0] — the way the edges are thrown onto the mesh (default down, [0, 0, -1]).")
         try:
             polys = MeshPart.projectShapeOnMesh(src.Shape, o.Mesh, d)
         except Exception as e:
             raise ToolError("failed", f"The projection failed: {e}")
         wires = [Part.makePolygon([V(p) for p in pl]) for pl in polys if len(pl) >= 2]
         if not wires:
-            raise ToolError("failed", "Nothing landed on the mesh in that direction.")
+            raise ToolError("failed", f"Nothing of {src.Label} landed on {o.Label} along {geo.vec(d)}: the shape must lie over the mesh seen along direction (turn direction round if it is on the other side).")
         c = doc().addObject("Part::Feature", "Projection")
         c.Label = s.unique(a.get("name") or f"{src.Label} on {o.Label}")
         c.Shape = Part.Compound(wires)
@@ -612,12 +725,21 @@ def tools(session):
 
     def meshobj_export(a):
         o = mesh_of(a.get("mesh"))
-        p = paths.out_file(s, "meshobj_export", a.get("path") or f"{o.Label}.stl")
+        want = a.get("path") or f"{o.Label}.stl"
+        ext = os.path.splitext(str(want))[1].lower().lstrip(".")
+        if ext not in WRITES:
+            raise bad(f"path: its extension picks the format — one of {', '.join(WRITES)} (stl is binary, ast its text form). Not .{ext or '(none)'}.")
+        if o.Mesh.CountFacets == 0:
+            raise ToolError("invalid_state", f"{o.Label} has no triangles to write.")
+        p = paths.out_file(s, "meshobj_export", want)
         try:
             o.Mesh.write(p)
         except Exception as e:
-            raise ToolError("failed", f"Not written: {e} — formats by extension: stl, obj, ply, off, amf, 3mf, smf, asy …")
-        return {"mesh": o.Label, "file": p, "bytes": os.path.getsize(p)}
+            raise ToolError("failed", f"Not written: {e} — formats by extension: {', '.join(WRITES)}.")
+        if not os.path.isfile(p):
+            raise ToolError("failed", f"FreeCAD wrote no file at {p} (.{ext}): try stl, obj, ply or 3mf.")
+        return {"mesh": o.Label, "file": p, "format": ext, "bytes": os.path.getsize(p), "facets": o.Mesh.CountFacets,
+                "note": "Written where the mesh stands (its placement applied), in mm. import_file reads it back."}
 
     mref = {"type": "string", "description": "The mesh's label; may be left out when there is one."}
     cp = {"copy": {"type": "boolean"}, "name": {"type": "string"}}
@@ -737,17 +859,29 @@ def tools(session):
         ref = a.get("of")
         if not isinstance(ref, str):
             raise bad("of: a mesh's name, or a body's face \"Body.Face3\".")
-        label, sub, el = _p.resolve(s, ref)
-        if sub and sub.startswith("Face") and type(el.Surface).__name__ in ("Cylinder", "Cone", "Plane"):
+        # A mesh by its name first: resolving it as a shape refuses an object with no Shape.
+        mo = next((x for x in meshes(doc()) if ref in (x.Label, x.Name)), None)
+        if mo is not None:
+            label, sub, el = mo.Label, None, None
+        else:
+            label, sub, el = _p.resolve(s, ref)
+            if not (sub and sub.startswith("Face")):
+                raise bad(f"of: {ref} is a whole body — name one of its faces (\"{label}.Face3\"; shape_query lists them), or a mesh.")
+        if el is not None and type(el.Surface).__name__ in ("Cylinder", "Cone", "Plane"):
             return unroll_exact(el, ref, label, a)
-        if sub and sub.startswith("Face"):
+        if el is not None:
             vs, ts = el.tessellate(float(a.get("tolerance", 0.1)))
             P = np.array([(v.x, v.y, v.z) for v in vs], float)
             F = np.array(ts, int)
         else:
             m = mesh_of(label).Mesh
-            P = np.array([(p.x, p.y, p.z) for p in m.Points], float)
-            F = np.array([list(f) for f in m.Topology[1]], int)
+            if m.isSolid():
+                raise ToolError("invalid_state", f"{label} is a closed mesh, which cannot be laid flat in one piece: meshobj_trim or meshobj_segments {{ keep: true }} gives an open patch of it to unwrap.")
+            if m.countComponents() != 1:
+                raise ToolError("invalid_state", f"{label} is {m.countComponents()} separate pieces: meshobj_split, then unwrap one.")
+            if m.CountFacets > 50000:
+                raise ToolError("invalid_state", f"{label} has {m.CountFacets} triangles: the unwrapping is given up to 50,000 (it runs apart from FreeCAD with a 5 minute limit) — meshobj_decimate {{ copy: true }} first.")
+            P, F = arrays(m)
         if len(F) < 2:
             raise bad("of: a surface with area.")
         # flatmesh can bring FreeCAD down on a surface it cannot handle:
@@ -788,25 +922,49 @@ def tools(session):
 
     def meshobj_primitive(a):
         kind = a.get("kind", "box")
-        at = V(*[float(c) for c in a.get("at", [0, 0, 0])])
-        n = int(a.get("segments", 48))
+        at = vec(a.get("at"), "at", (0, 0, 0))
+        n = a.get("segments", 48)
+        if isinstance(n, bool) or not isinstance(n, int) or not 3 <= n <= 720:
+            raise bad("segments: how many steps round, 3 … 720 (48).")
+
+        def over0(key, default, what):
+            v = picks.num(a.get(key, default), key)
+            if v <= 0:
+                raise bad(f"{key}: {what}, mm, over 0.")
+            return v
+
         try:
             if kind == "box":
-                x, y, z = [float(c) for c in a.get("size", [10, 10, 10])]
+                size = a.get("size", [10, 10, 10])
+                if not (isinstance(size, list) and len(size) == 3 and all(isinstance(c, (int, float)) and not isinstance(c, bool) and c > 0 for c in size)):
+                    raise bad("size: [x, y, z] mm, each over 0.")
+                x, y, z = [float(c) for c in size]
                 m = Mesh.createBox(x, y, z)
                 m.translate(x / 2, y / 2, z / 2)  # a corner at at, as part_primitive
             elif kind == "sphere":
-                m = Mesh.createSphere(float(a.get("radius", 5)), n)
-            elif kind == "cylinder":
-                m = Mesh.createCylinder(float(a.get("radius", 5)), float(a.get("height", 10)), 1, 0.5, n)
-                m.rotate(0, -math.pi / 2, 0)
-            elif kind == "cone":
-                m = Mesh.createCone(float(a.get("radius", 5)), float(a.get("radius2", 0)), float(a.get("height", 10)), 1, 0.5, n)
-                m.rotate(0, -math.pi / 2, 0)
+                m = Mesh.createSphere(over0("radius", 5, "the radius"), n)
+            elif kind in ("cylinder", "cone"):
+                r1, h = over0("radius", 5, "the radius at the base"), over0("height", 10, "the height")
+                r2 = r1 if kind == "cylinder" else picks.num(a.get("radius2", 0), "radius2")
+                if r2 < 0:
+                    raise bad("radius2: the radius at the top, 0 (a point) or more.")
+                # Rings 0.5 mm apart on a small one, as before; on a large one
+                # no more than 40 along its longest size (a 1 m cylinder at
+                # 0.5 mm was some 380,000 triangles, built one by one in Python).
+                edge = max(0.5, max(h, r1, r2) / 40.0)
+                m = Mesh.createCylinder(r1, h, 1, edge, n) if kind == "cylinder" else Mesh.createCone(r1, r2, h, 1, edge, n)
+                m.rotate(0, -math.pi / 2, 0)  # FreeCAD builds it along x: up z
             elif kind == "torus":
-                m = Mesh.createTorus(float(a.get("radius", 10)), float(a.get("radius2", 2)), n)
+                r1, r2 = over0("radius", 10, "the ring's radius"), over0("radius2", 2, "the tube's radius")
+                if r2 >= r1:
+                    raise bad("radius2: the tube's radius, under radius (the ring's).")
+                m = Mesh.createTorus(r1, r2, n)
                 if m.BoundBox.ZLength > m.BoundBox.XLength + 1e-6 or m.BoundBox.XLength < m.BoundBox.YLength - 1e-6:
                     m.rotate(0, math.pi / 2, 0)  # its axis up z
+                # FreeCAD's builder (BuildRegularGeoms.Toroid) stands the ring
+                # off the origin by its radius along its axis: centred here.
+                c = m.BoundBox.Center
+                m.translate(-c.x, -c.y, -c.z)
             else:
                 raise bad("kind: box | sphere | cylinder | cone | torus.")
         except ToolError:
@@ -822,9 +980,12 @@ def tools(session):
         if not isinstance(refs, list) or len(refs) < 2:
             raise bad("meshes: two or more to put into one (not fused: meshobj_boolean union for that).")
         objs = [mesh_of(r) for r in refs]
-        m = objs[0].Mesh.copy()
+        if len({o.Name for o in objs}) < len(objs):
+            raise bad("meshes: each one once.")
+        # addMesh joins the stored points and passes placements by: each mesh is brought to where it stands first
+        m = in_place(objs[0].Mesh)
         for o in objs[1:]:
-            m.addMesh(o.Mesh)
+            m.addMesh(in_place(o.Mesh))
         n = new_mesh(m, a.get("name") or "Merged mesh")
         if a.get("remove"):
             for o in objs:
@@ -834,13 +995,15 @@ def tools(session):
     def meshobj_boundary(a):
         o = mesh_of(a.get("mesh"))
         pts, facets = o.Mesh.Topology
-        count = {}
-        for f in facets:
-            for i in range(3):
-                e = (f[i], f[(i + 1) % 3])
-                k = (min(e), max(e))
-                count[k] = count.get(k, 0) + 1
-        open_edges = [k for k, c in count.items() if c == 1]
+        # edges one triangle has, counted in numpy (a dict of every edge took seconds on a dense scan)
+        F = np.array(facets, dtype=np.int64).reshape(-1, 3)
+        if len(F) == 0:
+            raise ToolError("invalid_state", f"{o.Label} has no triangles.")
+        e0, e1 = F.reshape(-1), F[:, [1, 2, 0]].reshape(-1)
+        lo_, hi_ = np.minimum(e0, e1), np.maximum(e0, e1)
+        nn = int(F.max()) + 1
+        keys, cnt = np.unique(lo_ * nn + hi_, return_counts=True)
+        open_edges = [(int(k // nn), int(k % nn)) for k in keys[cnt == 1]]
         if not open_edges:
             return {"mesh": o.Label, "loops": 0, "note": "No open edges: the mesh is closed."}
         nbr = {}
@@ -892,42 +1055,42 @@ def tools(session):
     # The wrappers kept as data (agentlink/data/tools.json) run on these.
     helpers = {"doc": doc, "mesh_of": mesh_of, "keep": keep}
     return runners.tools(GROUP, s, helpers) + [
-        Tool("meshobj_unwrap", "Lay a curved surface flat (MeshPart's unwrap): of a body's face \"Body.Face3\" or a mesh — its flat outline (a pattern to cut from sheet, fabric, leather), the area before and after and how much it stretched (mean, max %); path .svg or .dxf writes the pattern; make: false keeps no object.",
+        Tool("meshobj_unwrap", "Lay a surface flat as a cutting pattern (sheet, fabric, leather): of a body's face \"Body.Face3\" or an open mesh in one piece. A plane, cylinder or cone face rolls out exactly; other faces and meshes go through FreeCAD's flatmesh (up to 50,000 triangles, run apart with a 5 minute limit; a closed mesh is refused). Reply: area3d, areaFlat, stretch { mean, max % }, outlines, size, pattern (the wire object; make: false keeps none); path .svg or .dxf writes it. tolerance mm tessellates a face (0.1).",
              obj({"of": {"type": "string"}, "path": {"type": "string"}, "make": {"type": "boolean"}, "tolerance": {"type": "number"}, "iterations": {"type": "integer"}, "weight": {"type": "number"}, "name": {"type": "string"}}, ["of"]), meshobj_unwrap, changes=True),
-        Tool("meshobj_from_shape", "Mesh a body (MeshPart): method standard (deflection mm, angle deg) | mefisto (maxLength: even triangles, but it can leave faces with small holes open — the answer warns) | netgen (fineness verycoarse … veryfine). Kept as a mesh object.",
+        Tool("meshobj_from_shape", "Mesh a body (MeshPart) into a new mesh object: method standard (deflection mm off the surface, 0.05; angle deg, 15) | mefisto (maxLength mm: even triangles, but it can leave faces with small holes open: the reply warns) | netgen (fineness verycoarse … veryfine; unavailable where FreeCAD lacks it). A flat-sided body meshes to two triangles a face (a box: 12); a small deflection on a large curved body makes hundreds of thousands (reply: heavy). Reply: mesh, points, facets, solid, components, area, volume, box.",
              obj({"body": {"type": "string"}, "method": {"type": "string"}, "deflection": {"type": "number"}, "angle": {"type": "number"}, "maxLength": {"type": "number"}, "fineness": {"type": "string"}, "name": {"type": "string"}}), meshobj_from_shape, changes=True),
-        Tool("meshobj_info", "A mesh's size and the Mesh workbench's evaluation: closed or open, components, non-manifolds, self-intersections, flipped normals, corrupt facets. Changes nothing.", obj({"mesh": mref}), meshobj_info),
-        Tool("meshobj_repair", "Repair a mesh as Evaluate & Repair does: fix any of normals, duplicates, nonmanifolds, selfintersections, degenerate, folds, indices, pointsonedges (default those), holes (maxHoleEdges), islands (minFacets); answers what it fixed and what is left. A step that leaves more open or overloaded edges is undone (undone says which). copy: true leaves the original.",
+        Tool("meshobj_info", "A mesh's size and the Mesh workbench's evaluation: points, facets, solid (closed), components, area, volume, box; evaluation { nonManifolds, selfIntersections, flippedNormals, corruptedFacets, … }, problems, verdict clean or next. Changes nothing. The self-intersection test is slow on a dense mesh (not measured): background: true runs it as a job.", obj({"mesh": mref}), meshobj_info),
+        Tool("meshobj_repair", "Repair a mesh as Evaluate & Repair does: fix any of normals, duplicates, nonmanifolds, selfintersections, degenerate, folds, indices, pointsonedges (default: those), holes (loops up to maxHoleEdges, 50, filled flat), islands (pieces of minFacets, 10, or fewer triangles dropped). Each step is kept only if it leaves no more open or overloaded edges (undone says which). Reply: did, fixed, problems (left), edges { open, overloaded }, before. In place; copy: true leaves the original. Evaluates twice: slow on a dense mesh, and a change cannot run as a job.",
              obj({"mesh": mref, "fix": {"type": "array", "items": {"type": "string"}}, "tolerance": {"type": "number"}, "maxHoleEdges": {"type": "integer"}, "minFacets": {"type": "integer"}, **cp}), meshobj_repair, changes=True),
-        Tool("meshobj_decimate", "Fewer triangles: reduction (share to remove) or facets (how many to keep), tolerance mm it may move the surface.",
+        Tool("meshobj_decimate", "Fewer triangles: reduction (share to remove, 0.5) or facets (how many to keep); tolerance (0.1) caps the error one collapse may add, so it can stop short of the count (the reply's note says so: raise tolerance). Reply: reduced \"n → m triangles\", the mesh's reading, before.",
              obj({"mesh": mref, "reduction": {"type": "number"}, "facets": {"type": "integer"}, "tolerance": {"type": "number"}, **cp}), meshobj_decimate, changes=True),
-        Tool("meshobj_refine", "More triangles: rounds (each splits every triangle in four), optimize: true evens their shapes.", obj({"mesh": mref, "rounds": {"type": "integer"}, "optimize": {"type": "boolean"}, **cp}), meshobj_refine, changes=True),
-        Tool("meshobj_smooth", "Smooth a mesh: method taubin (keeps its size; lambda, mu) | laplace (lambda; shrinks), iterations.",
+        Tool("meshobj_refine", "More triangles: rounds 1 … 3, each putting a point in the middle of every triangle (about three times as many; refused past 2,000,000); optimize: true swaps edges to even their shapes. The surface does not change. Reply: refined \"n → m triangles\".", obj({"mesh": mref, "rounds": {"type": "integer"}, "optimize": {"type": "boolean"}, **cp}), meshobj_refine, changes=True),
+        Tool("meshobj_smooth", "Smooth a mesh: method taubin (default; keeps its size; lambda 0.6307, mu 0.0424) | laplace (lambda; shrinks), iterations (3). Reply: volumeChange mm³ on a closed mesh.",
              obj({"mesh": mref, "method": {"type": "string"}, "iterations": {"type": "integer"}, "lambda": {"type": "number"}, "mu": {"type": "number"}, **cp}), meshobj_smooth, changes=True),
-        Tool("meshobj_edit", "Edit a mesh on a copy, as ScanRuler's Mesh Tools do: action begin { mesh } (a copy made, the original hidden; every meshobj tool given the original then changes the copy, each step undoable) | use (the copy put in place of the original) | discard (the copy dropped) | state.",
+        Tool("meshobj_edit", "Edit a mesh on a copy, as ScanRuler's Mesh Tools do: action begin { mesh } (a copy made, the original hidden; every meshobj tool given the original's name then changes the copy) | use (the copy put in place of the original) | discard (the copy dropped) | state (default: what is being edited).",
              obj({"action": {"type": "string", "enum": ["begin", "use", "discard", "state"]}, "mesh": mref}), meshobj_edit, changes=True),
-        Tool("meshobj_trim", "Cut a mesh with a plane: at [x,y,z], normal (the side it points to goes); close: true fills the cut; preview: true says what would go and changes nothing.",
+        Tool("meshobj_trim", "Cut a mesh with a plane: at [x,y,z] on it, normal (the side it points to is removed); close: true caps the cut flat (loops up to maxHoleEdges, 1000); preview: true answers wouldRemove / wouldKeep and changes nothing. Refused when nothing would be left. Reply: removed (triangles), solid, warning when the cap did not close it.",
              obj({"mesh": mref, "at": {"type": "array", "items": {}}, "normal": {"type": "array", "items": {}}, "close": {"type": "boolean"}, "maxHoleEdges": {"type": "integer"}, "preview": {"type": "boolean"}, **cp}), meshobj_trim, changes=True),
-        Tool("meshobj_transform", "Scale (a factor or [x,y,z]), rotate { axis, angle }, move [x,y,z] or mirror \"x\" | \"y\" | \"z\" a mesh's points, in that order.",
+        Tool("meshobj_transform", "Scale (a factor or [x,y,z]), rotate { axis, angle degrees }, move [x,y,z], mirror \"x\" | \"y\" | \"z\" a mesh's points, in that order, about the document's origin and axes. A mirror keeps the triangles facing out. In place; copy: true makes a new mesh.",
              obj({"mesh": mref, "scale": {"type": ["number", "array"]}, "rotate": {"type": "object"}, "move": {"type": "array", "items": {}}, "mirror": {"type": "string"}, **cp}), meshobj_transform, changes=True),
-        Tool("meshobj_boolean", "A boolean of two closed meshes: a, b, op union | intersection | difference; a new mesh. Dense scans as they are (no decimating): only the triangles the other mesh crosses are cut.",
+        Tool("meshobj_boolean", "A boolean of two closed meshes (meshobj_info: solid true): a, b, op union | intersection | difference (a minus b); a new mesh, a and b kept. Dense scans as they are: only the triangles the other mesh crosses are cut (built for scans of 100,000 triangles and more; time not measured, and a change cannot run as a job). Reply: how (which engine made it), solid, volume.",
              obj({"a": {"type": "string"}, "b": {"type": "string"}, "op": {"type": "string"}, "name": {"type": "string"}}, ["a", "b"]), meshobj_boolean, changes=True),
-        Tool("meshobj_sections", "Cross-sections of a mesh: normal (default z), count or at [distances]; each slice's loops and length, kept as wires.",
+        Tool("meshobj_sections", "Cross-sections of a mesh as wires: normal (default z), count evenly spaced (5) or at [distances from the origin along normal], up to 500; tolerance mm joins cut ends (0.01). Reply: slices [{ at, loops, length }], sections (the wire compound; export writes DXF, part_face makes a face).",
              obj({"mesh": mref, "normal": {"type": "array", "items": {}}, "count": {"type": "integer"}, "at": {"type": "array", "items": {}}, "tolerance": {"type": "number"}, "name": {"type": "string"}}), meshobj_sections, changes=True),
-        Tool("meshobj_split", "Split a mesh into its separate pieces, a mesh each (minFacets drops crumbs).", obj({"mesh": mref, "minFacets": {"type": "integer"}}), meshobj_split, changes=True),
-        Tool("meshobj_segments", "Find a mesh's regions: kind planar (deviation mm, minFacets) | curvature; each with its area, centre and normal, largest first; keep: true makes the top ones meshes. On a scan: where the flat faces are.",
+        Tool("meshobj_split", "Split a mesh into its separate pieces, a mesh object each, largest first (minFacets leaves out smaller ones; over 100 pieces is refused: raise minFacets). The original is hidden, not removed. Reply: pieces, facets.", obj({"mesh": mref, "minFacets": {"type": "integer"}}), meshobj_split, changes=True),
+        Tool("meshobj_segments", "Find a mesh's flat regions: kind planar (deviation mm off a fitted plane, 0.01; about the noise on a scan) | curvature (both curvatures within tolerance 1/mm of 0); minFacets (20). Reply: segments (count), largest [{ facets, area, center, normal }] up to top (12); keep: true makes those meshes. On a scan: where to put a sketch. Slow on a dense mesh (every region is walked; not measured).",
              obj({"mesh": mref, "kind": {"type": "string"}, "deviation": {"type": "number"}, "tolerance": {"type": "number"}, "minFacets": {"type": "integer"}, "top": {"type": "integer"}, "keep": {"type": "boolean"}}), meshobj_segments, changes=True),
-        Tool("meshobj_curvature", "A mesh's curvature: how much is flat, the tightest and the median radius, mean curvature's range. view_render { map: \"curvature\" } colours it. Changes nothing.",
+        Tool("meshobj_curvature", "A mesh's curvature: flatPercent (points under flat, 0.001 1/mm), tightestRadius and medianRadius mm, meanCurvature { min, max }. view_render { map: \"curvature\" } colours it. Changes nothing; on a dense mesh background: true runs it as a job.",
              obj({"mesh": mref, "flat": {"type": "number"}}), meshobj_curvature),
-        Tool("meshobj_project", "Project a wire, sketch or body's edges onto a mesh along direction [x,y,z] (default down); kept as wires on its surface.",
+        Tool("meshobj_project", "Project a wire, sketch or body's edges onto a mesh along direction [x,y,z] (default down, [0,0,-1]); kept as wires on its surface. Reply: projection, wires, length.",
              obj({"mesh": mref, "shape": {"type": "string"}, "direction": {"type": "array", "items": {}}, "name": {"type": "string"}}, ["shape"]), meshobj_project, changes=True),
-        Tool("meshobj_primitive", "A mesh primitive (the Mesh workbench's regular solids): kind box (size, a corner at at) | sphere (radius) | cylinder | cone (radius, radius2, height, up +z from at) | torus (radius, radius2); segments round.",
+        Tool("meshobj_primitive", "A mesh primitive (the Mesh workbench's regular solids): kind box (size [x,y,z], a corner at at) | sphere (radius, centred) | cylinder | cone (radius at the base, radius2 at the top, height; base centre at at, up +z) | torus (radius, radius2 the tube; centred, axis z); segments round (48). Reply: mesh, facets, solid, volume, box.",
              obj({"kind": {"type": "string", "enum": ["box", "sphere", "cylinder", "cone", "torus"]}, "size": {"type": "array", "items": {}}, "radius": {"type": "number"}, "radius2": {"type": "number"},
                   "height": {"type": "number"}, "at": {"type": "array", "items": {}}, "segments": {"type": "integer"}, "name": {"type": "string"}}), meshobj_primitive, changes=True),
-        Tool("meshobj_merge", "Put meshes into one mesh object (not fused — meshobj_boolean union fuses): meshes [names]; remove: true drops the originals.",
+        Tool("meshobj_merge", "Put meshes into one mesh object where they stand (not fused: components stay apart; meshobj_boolean union fuses): meshes [names]; remove: true drops the originals. Reply: components, facets.",
              obj({"meshes": {"type": "array", "items": {"type": "string"}}, "remove": {"type": "boolean"}, "name": {"type": "string"}}, ["meshes"]), meshobj_merge, changes=True),
-        Tool("meshobj_boundary", "A mesh's open edges as wires (Reverse Engineering's mesh boundary): each hole or rim loop with its length, centre and the area it spans, largest first; keep (default) makes them a wire compound — to fill, sweep or fit.",
-             obj({"mesh": {"type": "string"}, "keep": {"type": "boolean"}, "name": {"type": "string"}}), meshobj_boundary, changes=True),
-        Tool("meshobj_export", "Write a document mesh to a file by extension (stl, obj, ply, off, amf, 3mf …): path (default <label>.stl in the out folder).",
+        Tool("meshobj_boundary", "A mesh's open edges as wires (Reverse Engineering's mesh boundary): loops, openEdges, boundaries [{ edges, length, closed, centre, area }] longest first (20); keep (default) makes them a wire compound to fill, sweep or fit. A closed mesh answers loops 0.",
+             obj({"mesh": mref, "keep": {"type": "boolean"}, "name": {"type": "string"}}), meshobj_boundary, changes=True),
+        Tool("meshobj_export", "Write a document mesh to a file, the format by path's extension: stl (binary), ast, obj, ply, off, 3mf, amf, smf, wrl, x3d, iv, nas … (default <label>.stl in the out folder), where it stands, in mm. Reply: file, format, bytes, facets. Changes nothing; background: true runs a big one as a job.",
              obj({"mesh": mref, "path": {"type": "string"}}), meshobj_export),
     ]

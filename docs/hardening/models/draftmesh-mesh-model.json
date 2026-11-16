@@ -1,0 +1,728 @@
+{
+ "tutorial": "Mesh_to_Part.md (a Part shape meshed with MeshPart.meshFromShape, and a mesh made a solid again) and Mesh_Scripting.md (the pipe: one createCylinder minus another), with the Mesh workbench's Evaluate & Repair, decimate, sections and export in between (Mesh_Workbench.md, Mesh_EvaluateRepair.md, Mesh_Decimating.md, Mesh_CrossSections.md, Mesh_Export.md)",
+ "reference": null,
+ "expected": {
+  "cubeMesh": {
+   "points": 8,
+   "facets": 12,
+   "area": 600,
+   "volume": 1000,
+   "how": "derived: the standard mesher gives two triangles for each flat four-sided face and shares points"
+  },
+  "sphere": {
+   "radius": 10,
+   "trueVolume": 4188.79,
+   "how": "derived bound only: a mesh of points on the sphere is inscribed, so its volume is below the true one and rises as deflection and angle shrink; the facet counts are the mesher's (a guess: hundreds at 0.5 mm / 30°, thousands at 0.01 mm / 5°)"
+  },
+  "halfCube": {
+   "openArea": 300,
+   "rimLength": 40,
+   "rimArea": 100,
+   "repairedVolume": 500,
+   "repairedArea": 400
+  },
+  "pipe": {
+   "cylA_volume": 125.03,
+   "cylB_volume": 37.51,
+   "pipe_volume": 93.77,
+   "how": "derived: 36-sided prisms, as Mesh_Scripting's createCylinder(…, 36)"
+  },
+  "stl": {
+   "bytes": 684,
+   "how": "derived: binary STL is 84 bytes plus 50 a triangle"
+  },
+  "canSide": {
+   "flatSize": [
+    31.416,
+    10
+   ],
+   "area": 314.16
+  },
+  "refusals": 10
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "MeshHardening"
+   },
+   "expect": "a new empty document"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     10,
+     10,
+     10
+    ],
+    "name": "Cube"
+   },
+   "expect": "volume 1000"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "sphere",
+    "radius": 10,
+    "at": [
+     50,
+     0,
+     0
+    ],
+    "name": "Globe"
+   },
+   "expect": "volume 4188.79"
+  },
+  {
+   "tool": "meshobj_from_shape",
+   "arguments": {
+    "body": "Cube"
+   },
+   "expect": "Mesh_to_Part's MeshPart.meshFromShape, standard mesher: mesh \"Cube mesh\", points 8, facets 12, solid true, components 1, area 600, volume 1000, box [10,10,10] (derived: two triangles a flat face, shared points)"
+  },
+  {
+   "tool": "meshobj_from_shape",
+   "arguments": {
+    "body": "Globe",
+    "deflection": 0.5,
+    "angle": 30,
+    "name": "Globe coarse"
+   },
+   "expect": "solid true; volume under 4188.8 by a few percent (inscribed triangles; the exact figure is the mesher's: a guess of 3-8% low)"
+  },
+  {
+   "tool": "meshobj_from_shape",
+   "arguments": {
+    "body": "Globe",
+    "deflection": 0.01,
+    "angle": 5,
+    "name": "Globe fine"
+   },
+   "expect": "solid true; volume above Globe coarse's and within 1% under 4188.8 (derived bound: 1 - cos(2.5 deg) of the radius); several thousand facets (count is the mesher's: not derived)"
+  },
+  {
+   "tool": "meshobj_from_shape",
+   "arguments": {
+    "body": "Cube",
+    "method": "mefisto",
+    "maxLength": 1,
+    "name": "Cube even"
+   },
+   "expect": "even triangles about 1 mm: solid true, volume 1000, area 600, several hundred facets (about 2 x 600 / (0.43 x 1 mm²): a guess)"
+  },
+  {
+   "tool": "meshobj_from_shape",
+   "arguments": {
+    "body": "Cube",
+    "deflection": 0
+   },
+   "expect": "REFUSAL: deflection over 0"
+  },
+  {
+   "tool": "meshobj_info",
+   "arguments": {
+    "mesh": "Cube mesh"
+   },
+   "expect": "verdict clean; evaluation all false, open false, selfIntersectionPairs 0; problems []"
+  },
+  {
+   "tool": "meshobj_info",
+   "arguments": {
+    "mesh": "Globe fine",
+    "background": true
+   },
+   "expect": "runs as a job (a job id; job_status gives the same reading): verdict clean"
+  },
+  {
+   "tool": "meshobj_trim",
+   "arguments": {
+    "mesh": "Cube mesh",
+    "at": [
+     0,
+     0,
+     5
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "preview": true
+   },
+   "expect": "preview true, wouldRemove over 0, keptBox [10,10,5]; nothing changed"
+  },
+  {
+   "tool": "meshobj_trim",
+   "arguments": {
+    "mesh": "Cube mesh",
+    "at": [
+     0,
+     0,
+     5
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "copy": true,
+    "name": "Half open"
+   },
+   "expect": "the damage: solid false, components 1, area 300 (bottom 100 + four half sides 200), box [10,10,5], no volume field"
+  },
+  {
+   "tool": "meshobj_info",
+   "arguments": {
+    "mesh": "Half open"
+   },
+   "expect": "problems [\"open (holes)\"]; next names meshobj_repair"
+  },
+  {
+   "tool": "meshobj_boundary",
+   "arguments": {
+    "mesh": "Half open",
+    "name": "Half rim"
+   },
+   "expect": "loops 1; boundaries[0]: closed true, length 40, area 100, centre [5,5,5]; wires \"Half rim\""
+  },
+  {
+   "tool": "meshobj_repair",
+   "arguments": {
+    "mesh": "Half open",
+    "fix": [
+     "holes",
+     "normals"
+    ]
+   },
+   "expect": "did [holes, normals]; fixed [\"open (holes)\"]; solid true, volume 500, area 400; edges { open 0, overloaded 0 }; before.edges.open over 0"
+  },
+  {
+   "tool": "meshobj_repair",
+   "arguments": {
+    "mesh": "Half open"
+   },
+   "expect": "the default steps on a clean mesh: still solid, volume 500 (changed false, or did lists steps that left it the same)"
+  },
+  {
+   "tool": "meshobj_trim",
+   "arguments": {
+    "mesh": "Globe fine",
+    "at": [
+     50,
+     0,
+     0
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "close": true,
+    "copy": true,
+    "name": "Dome"
+   },
+   "expect": "capped: solid true, components 1, volume about 2094.4 (half), area about 942.5 (2 pi r² + pi r²)"
+  },
+  {
+   "tool": "meshobj_trim",
+   "arguments": {
+    "mesh": "Cube mesh",
+    "at": [
+     0,
+     0,
+     -5
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "copy": true
+   },
+   "expect": "REFUSAL: the plane leaves nothing"
+  },
+  {
+   "tool": "meshobj_decimate",
+   "arguments": {
+    "mesh": "Globe fine",
+    "reduction": 0.5,
+    "tolerance": 0.1,
+    "copy": true,
+    "name": "Globe light"
+   },
+   "expect": "reduced \"n → m\" with m near n / 2 (or a note that tolerance stopped it short); solid true; volume within 1% of Globe fine's"
+  },
+  {
+   "tool": "meshobj_refine",
+   "arguments": {
+    "mesh": "Cube mesh",
+    "copy": true,
+    "name": "Cube fine"
+   },
+   "expect": "refined \"12 → 36 triangles\" (a point in each triangle: three for one; fewer if FreeCAD skips some); volume 1000"
+  },
+  {
+   "tool": "meshobj_refine",
+   "arguments": {
+    "mesh": "Cube mesh",
+    "rounds": 4
+   },
+   "expect": "REFUSAL: rounds 1 … 3"
+  },
+  {
+   "tool": "meshobj_smooth",
+   "arguments": {
+    "mesh": "Globe coarse",
+    "method": "taubin",
+    "iterations": 5,
+    "copy": true,
+    "name": "Globe smooth"
+   },
+   "expect": "method taubin; volumeChange small (under 1% of the volume: taubin keeps size; not derived)"
+  },
+  {
+   "tool": "meshobj_offset",
+   "arguments": {
+    "mesh": "Globe fine",
+    "distance": 1,
+    "copy": true,
+    "name": "Globe plus"
+   },
+   "expect": "offset 1; volume about 5575.0 (r 11), box about [22,22,22]"
+  },
+  {
+   "tool": "meshobj_transform",
+   "arguments": {
+    "mesh": "Cube mesh",
+    "scale": 2,
+    "move": [
+     0,
+     40,
+     0
+    ],
+    "copy": true,
+    "name": "Cube big"
+   },
+   "expect": "volume 8000, box [20,20,20], standing at y 40 … 60"
+  },
+  {
+   "tool": "meshobj_transform",
+   "arguments": {
+    "mesh": "Cube big",
+    "mirror": "y"
+   },
+   "expect": "box unchanged [20,20,20], now at y -60 … -40; volume 8000 (positive: triangles still face out)"
+  },
+  {
+   "tool": "meshobj_transform",
+   "arguments": {
+    "mesh": "Cube big",
+    "rotate": {
+     "axis": [
+      0,
+      0,
+      1
+     ],
+     "angle": 90
+    }
+   },
+   "expect": "about the document's z: now at x 40 … 60, y 0 … 20"
+  },
+  {
+   "tool": "meshobj_transform",
+   "arguments": {
+    "mesh": "Cube big"
+   },
+   "expect": "REFUSAL: one or more of scale, rotate, move, mirror"
+  },
+  {
+   "tool": "meshobj_sections",
+   "arguments": {
+    "mesh": "Globe fine",
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "at": [
+     -5,
+     0,
+     5
+    ],
+    "name": "Globe rings"
+   },
+   "expect": "slices at -5, 0, 5: loops 1 each; lengths about 54.41, 62.83, 54.41 (2 pi sqrt(100 - z²), a little under: chords)"
+  },
+  {
+   "tool": "meshobj_sections",
+   "arguments": {
+    "mesh": "Cube mesh",
+    "normal": [
+     1,
+     -1,
+     0
+    ],
+    "count": 2
+   },
+   "expect": "oblique normal: slices at -2.357 and 2.357, each a rectangle of length 38.856 (derived; before the fix both were at 0)"
+  },
+  {
+   "tool": "meshobj_segments",
+   "arguments": {
+    "mesh": "Cube mesh",
+    "kind": "planar",
+    "minFacets": 2
+   },
+   "expect": "segments 6; each largest[i]: facets 2, area 100, a normal along ±x, ±y or ±z (assumes FreeCAD keeps a region of exactly minFacets triangles: not verified; 0 segments means it wants more than that)"
+  },
+  {
+   "tool": "meshobj_segments",
+   "arguments": {
+    "mesh": "Cube even",
+    "kind": "curvature",
+    "minFacets": 10
+   },
+   "expect": "segments 1 or more flat regions (6 expected: the faces away from the edges; not verified), no failure (it always failed before the fix)"
+  },
+  {
+   "tool": "meshobj_segments",
+   "arguments": {
+    "mesh": "Cube even",
+    "kind": "planar",
+    "keep": true,
+    "top": 2
+   },
+   "expect": "segments 6; kept: two meshes \"Cube even segment 1\", \"… 2\", area 100 each, in the order of largest"
+  },
+  {
+   "tool": "meshobj_curvature",
+   "arguments": {
+    "mesh": "Globe fine"
+   },
+   "expect": "medianRadius about 10 (9.8 … 10.2); tightestRadius of the same order; flatPercent 0; meanCurvature about 0.1 in size"
+  },
+  {
+   "tool": "meshobj_curvature",
+   "arguments": {
+    "mesh": "Cube mesh"
+   },
+   "expect": "flatPercent 100 or close (the eight corners are the exception: how FreeCAD scores a corner is not derived)"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "line",
+    "from": [
+     2,
+     5,
+     20
+    ],
+    "to": [
+     8,
+     5,
+     20
+    ],
+    "name": "Stripe"
+   },
+   "expect": "a 6 mm line above the cube"
+  },
+  {
+   "tool": "meshobj_project",
+   "arguments": {
+    "mesh": "Cube mesh",
+    "shape": "Stripe",
+    "direction": [
+     0,
+     0,
+     -1
+    ]
+   },
+   "expect": "wires 1 or more on the top face (z = 10), length 6"
+  },
+  {
+   "tool": "meshobj_project",
+   "arguments": {
+    "mesh": "Cube mesh",
+    "shape": "Stripe",
+    "direction": [
+     0,
+     0,
+     0
+    ]
+   },
+   "expect": "REFUSAL: direction not [0,0,0]"
+  },
+  {
+   "tool": "meshobj_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 2,
+    "height": 10,
+    "segments": 36,
+    "name": "CylA"
+   },
+   "expect": "Mesh_Scripting's cylA: solid true, box [4,4,10], volume 125.03 (a 36-sided prism: 18 r² sin 10° x h)"
+  },
+  {
+   "tool": "meshobj_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 1,
+    "height": 12,
+    "at": [
+     0,
+     0,
+     -1
+    ],
+    "segments": 36,
+    "name": "CylB"
+   },
+   "expect": "cylB, moved 1 down its axis to avoid coplanar ends: volume 37.51"
+  },
+  {
+   "tool": "meshobj_boolean",
+   "arguments": {
+    "a": "CylA",
+    "b": "CylB",
+    "op": "difference",
+    "name": "Pipe"
+   },
+   "expect": "the tutorial's pipe: solid true, components 1, volume 93.77 (18 x (4 - 1) x sin 10° x 10); how names the engine (Agent Link's boolean expected)"
+  },
+  {
+   "tool": "meshobj_boolean",
+   "arguments": {
+    "a": "Half rim",
+    "b": "CylB"
+   },
+   "expect": "REFUSAL: Half rim is not a mesh (the meshes are listed)"
+  },
+  {
+   "tool": "meshobj_primitive",
+   "arguments": {
+    "kind": "torus",
+    "radius": 10,
+    "radius2": 2,
+    "at": [
+     100,
+     0,
+     0
+    ],
+    "name": "Ring"
+   },
+   "expect": "box [24,24,4]; centred on [100,0,0] with its axis along z (z from -2 to 2); solid true; volume near 789.6 (2 pi² R r², under it: facets)"
+  },
+  {
+   "tool": "meshobj_primitive",
+   "arguments": {
+    "kind": "cone",
+    "radius": 5,
+    "radius2": 0,
+    "height": 10,
+    "at": [
+     100,
+     40,
+     0
+    ],
+    "name": "Spike"
+   },
+   "expect": "box [10,10,10], base at z 0, tip at z 10; volume about 261.1"
+  },
+  {
+   "tool": "meshobj_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     10,
+     10,
+     10
+    ],
+    "at": [
+     100,
+     80,
+     0
+    ],
+    "name": "Crate"
+   },
+   "expect": "facets 12, points 8, volume 1000"
+  },
+  {
+   "tool": "meshobj_primitive",
+   "arguments": {
+    "kind": "sphere",
+    "radius": 0
+   },
+   "expect": "REFUSAL: radius over 0"
+  },
+  {
+   "tool": "meshobj_merge",
+   "arguments": {
+    "meshes": [
+     "Ring",
+     "Spike",
+     "Crate"
+    ],
+    "name": "Lot"
+   },
+   "expect": "components 3; facets the three's sum; box spans x 88 … 112, y -12 … 90"
+  },
+  {
+   "tool": "meshobj_split",
+   "arguments": {
+    "mesh": "Lot",
+    "minFacets": 1
+   },
+   "expect": "pieces: three meshes \"Lot 1\" … \"Lot 3\", largest first; Lot hidden"
+  },
+  {
+   "tool": "meshobj_split",
+   "arguments": {
+    "mesh": "Cube mesh"
+   },
+   "expect": "REFUSAL: Cube mesh is one piece"
+  },
+  {
+   "tool": "meshobj_edit",
+   "arguments": {
+    "action": "begin",
+    "mesh": "Crate"
+   },
+   "expect": "editing Crate, copy \"Crate (editing)\""
+  },
+  {
+   "tool": "meshobj_refine",
+   "arguments": {
+    "mesh": "Crate"
+   },
+   "expect": "changes the copy: the reply's mesh is \"Crate (editing)\", 36 facets"
+  },
+  {
+   "tool": "meshobj_edit",
+   "arguments": {
+    "action": "state"
+   },
+   "expect": "editing [{ mesh Crate, copy Crate (editing) }]"
+  },
+  {
+   "tool": "meshobj_edit",
+   "arguments": {
+    "action": "discard",
+    "mesh": "Crate"
+   },
+   "expect": "discarded true; Crate still 12 facets, visible again"
+  },
+  {
+   "tool": "meshobj_export",
+   "arguments": {
+    "mesh": "Cube mesh",
+    "path": "cube.stl"
+   },
+   "expect": "format stl, facets 12, bytes 684 (binary STL: 84 + 50 x 12); file in the out folder"
+  },
+  {
+   "tool": "meshobj_export",
+   "arguments": {
+    "mesh": "Cube mesh",
+    "path": "cube.step"
+   },
+   "expect": "REFUSAL: the extension picks the format, the list given"
+  },
+  {
+   "tool": "meshobj_export",
+   "arguments": {
+    "mesh": "Globe fine",
+    "path": "globe.3mf",
+    "background": true
+   },
+   "expect": "a job; when done: format 3mf, bytes over 0"
+  },
+  {
+   "tool": "import_file",
+   "arguments": {
+    "path": "cube.stl",
+    "name": "Cube back"
+   },
+   "expect": "read back as a mesh (Mesh::Feature): 12 facets. If the path must be the full one, use meshobj_export's file"
+  },
+  {
+   "tool": "meshobj_info",
+   "arguments": {
+    "mesh": "Cube back"
+   },
+   "expect": "points 8, facets 12, solid true, volume 1000, verdict clean"
+  },
+  {
+   "tool": "part_from_mesh",
+   "arguments": {
+    "mesh": "Cube back",
+    "name": "Cube solid"
+   },
+   "expect": "Mesh_to_Part's other half: a solid of volume 1000, 6 faces after refine"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 5,
+    "height": 10,
+    "at": [
+     0,
+     -40,
+     0
+    ],
+    "name": "Can"
+   },
+   "expect": "a Part cylinder: Face1 is its side"
+  },
+  {
+   "tool": "meshobj_unwrap",
+   "arguments": {
+    "of": "Can.Face1",
+    "name": "Can flat"
+   },
+   "expect": "surface cylinder, exact true, size [31.416, 10], area3d and areaFlat 314.16, stretch 0; pattern \"Can flat\""
+  },
+  {
+   "tool": "meshobj_unwrap",
+   "arguments": {
+    "of": "Cube mesh"
+   },
+   "expect": "REFUSAL: a closed mesh cannot be laid flat (or unavailable where FreeCAD has no flatmesh); before the fix a mesh name was refused as \"has no shape\""
+  },
+  {
+   "tool": "meshobj_trim",
+   "arguments": {
+    "mesh": "Globe coarse",
+    "at": [
+     50,
+     0,
+     8
+    ],
+    "normal": [
+     0,
+     0,
+     -1
+    ],
+    "copy": true,
+    "name": "Cap"
+   },
+   "expect": "a shallow open cap of the sphere above z = 8 (height 2): solid false, area about 125.7 (2 pi r h)"
+  },
+  {
+   "tool": "meshobj_unwrap",
+   "arguments": {
+    "of": "Cap",
+    "name": "Cap flat"
+   },
+   "expect": "through flatmesh, run apart: outlines 1, area3d about 125, stretch.max a few percent (doubly curved); pattern \"Cap flat\". unavailable where FreeCAD has no flatmesh"
+  }
+ ],
+ "notCovered": [
+  "meshobj_from_shape method netgen: answers unavailable where FreeCAD was built without Netgen (not known for the Mac's build)",
+  "meshobj_repair's other steps (nonmanifolds, selfintersections, folds, degenerate, pointsonedges, islands) on a mesh that has those faults: none can be made through the tools; tests/test_meshobj.py test_5 builds one",
+  "meshobj_split's 100-piece guard, meshobj_refine's 2,000,000 guard and the heavy note of meshobj_from_shape: need a mesh too large for a quick model",
+  "Timings on a dense scan (meshobj_info, meshobj_repair, meshobj_boolean, meshobj_segments past 200,000 triangles): not measured anywhere; time them on the M18 scan"
+ ]
+}

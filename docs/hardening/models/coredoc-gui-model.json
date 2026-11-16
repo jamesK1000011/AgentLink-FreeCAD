@@ -1,0 +1,1283 @@
+{
+ "name": "Core window tools (coredoc hardening)",
+ "about": "Touches each window tool of the app, dev, unattended and notes groups once on the reset document (WindowTest: a 40 x 30 x 20 mm pad), with what a pass looks like in its reply. Proof is the reply or a headless read-back (object_get, session_state, selection { clear: false }), never a picture. Run live_run { script: \"reset\" } first, every time: a step run alone acts on whatever document is in front. Put this file in scripts/live (or give its path to live_run). Written from the sources, not run: where a title or a reply field differs on the Mac, the step's note says what to read instead.",
+ "needs": [],
+ "budget": "about 60 s; steps_render and the workbench switch are the slow ones. live_run { script, budget: 180 } runs it in one call; notRun names what is left otherwise.",
+ "steps": [
+  {
+   "name": "doc_switch: the session is on WindowTest and brings it to the front",
+   "calls": [
+    {
+     "tool": "doc_switch",
+     "arguments": {}
+    },
+    {
+     "tool": "doc_switch",
+     "arguments": {
+      "document": "WindowTest",
+      "front": true
+     }
+    },
+    {
+     "tool": "doc_switch",
+     "arguments": {
+      "document": "NoSuchDocument"
+     },
+     "allow": [
+      "not_found"
+     ]
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.label",
+     "equals": "WindowTest"
+    },
+    {
+     "call": 0,
+     "path": "result.open[*].name",
+     "contains": "WindowTest"
+    },
+    {
+     "call": 1,
+     "path": "result.document",
+     "equals": "WindowTest"
+    },
+    {
+     "call": 1,
+     "path": "result.front",
+     "equals": true
+    },
+    {
+     "call": 2,
+     "path": "error.code",
+     "equals": "not_found"
+    },
+    {
+     "call": 2,
+     "path": "error.message",
+     "contains": "label (name)"
+    }
+   ],
+   "pass": "reply 1 says Already on it with front true; the refusal lists the open documents as label (name)"
+  },
+  {
+   "name": "workbench: list, activate by menu name, a wrong name refused with the list",
+   "calls": [
+    {
+     "tool": "workbench",
+     "arguments": {}
+    },
+    {
+     "tool": "workbench",
+     "arguments": {
+      "activate": "Part Design"
+     }
+    },
+    {
+     "tool": "workbench",
+     "arguments": {
+      "activate": "No Such Bench"
+     },
+     "allow": [
+      "not_found"
+     ]
+    },
+    {
+     "tool": "workbench",
+     "arguments": {}
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.workbenches",
+     "contains": "Part Design"
+    },
+    {
+     "call": 1,
+     "path": "result.active",
+     "equals": "PartDesignWorkbench"
+    },
+    {
+     "call": 1,
+     "path": "result.was",
+     "exists": true
+    },
+    {
+     "call": 2,
+     "path": "error.code",
+     "equals": "not_found"
+    },
+    {
+     "call": 3,
+     "path": "result.active",
+     "equals": "PartDesignWorkbench"
+    }
+   ]
+  },
+  {
+   "name": "cmd_list finds view commands and marks refused ones",
+   "calls": [
+    {
+     "tool": "cmd_list",
+     "arguments": {
+      "query": "Std_ViewFit"
+     }
+    },
+    {
+     "tool": "cmd_list",
+     "arguments": {
+      "query": "Std_DlgPreferences"
+     }
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.count",
+     "atLeast": 2
+    },
+    {
+     "call": 0,
+     "path": "result.commands[*].name",
+     "contains": "Std_ViewFitAll"
+    },
+    {
+     "call": 1,
+     "path": "result.commands.0.refused",
+     "exists": true
+    },
+    {
+     "call": 0,
+     "path": "result.workbench",
+     "equals": "PartDesignWorkbench"
+    }
+   ]
+  },
+  {
+   "name": "cmd_run runs an active command, refuses a dialog command and an inactive one",
+   "calls": [
+    {
+     "tool": "cmd_run",
+     "arguments": {
+      "name": "Std_ViewIsometric"
+     }
+    },
+    {
+     "tool": "cmd_run",
+     "arguments": {
+      "name": "Std_ViewFitAll"
+     }
+    },
+    {
+     "tool": "cmd_run",
+     "arguments": {
+      "name": "Std_DlgPreferences"
+     },
+     "allow": [
+      "refused"
+     ]
+    },
+    {
+     "tool": "selection",
+     "arguments": {}
+    },
+    {
+     "tool": "cmd_run",
+     "arguments": {
+      "name": "Std_ToggleVisibility"
+     },
+     "allow": [
+      "invalid_state"
+     ]
+    },
+    {
+     "tool": "cmd_run",
+     "arguments": {
+      "name": "Std_NoSuchCommand"
+     },
+     "allow": [
+      "not_found"
+     ]
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.ran",
+     "equals": "Std_ViewIsometric"
+    },
+    {
+     "call": 0,
+     "path": "result.wasActive",
+     "equals": true
+    },
+    {
+     "call": 1,
+     "path": "result.document",
+     "equals": "WindowTest"
+    },
+    {
+     "call": 1,
+     "path": "result.objectsAdded",
+     "equals": 0
+    },
+    {
+     "call": 2,
+     "path": "error.code",
+     "equals": "refused"
+    },
+    {
+     "call": 3,
+     "path": "result.cleared",
+     "equals": true
+    },
+    {
+     "call": 4,
+     "path": "error.code",
+     "equals": "invalid_state"
+    },
+    {
+     "call": 4,
+     "path": "error.message",
+     "contains": "not active"
+    },
+    {
+     "call": 5,
+     "path": "error.code",
+     "equals": "not_found"
+    }
+   ],
+   "pass": "Std_ToggleVisibility is active only with a selection (FreeCAD 1.1 source: src/Gui/CommandView.cpp): with none selected the call is refused instead of doing nothing silently"
+  },
+  {
+   "name": "selection sets what a command acts on; show brings it back",
+   "calls": [
+    {
+     "tool": "selection",
+     "arguments": {
+      "objects": [
+       "Body"
+      ]
+     }
+    },
+    {
+     "tool": "selection",
+     "arguments": {
+      "clear": false
+     }
+    },
+    {
+     "tool": "cmd_run",
+     "arguments": {
+      "name": "Std_ToggleVisibility"
+     }
+    },
+    {
+     "tool": "object_get",
+     "arguments": {
+      "object": "Body",
+      "filter": [
+       "Visibility"
+      ]
+     }
+    },
+    {
+     "tool": "show",
+     "arguments": {
+      "objects": [
+       "Body",
+       "Ghost part"
+      ],
+      "visible": true
+     }
+    },
+    {
+     "tool": "object_get",
+     "arguments": {
+      "object": "Body",
+      "filter": [
+       "Visibility"
+      ]
+     }
+    },
+    {
+     "tool": "selection",
+     "arguments": {
+      "objects": [
+       "Nope"
+      ]
+     },
+     "allow": [
+      "not_found"
+     ]
+    },
+    {
+     "tool": "selection",
+     "arguments": {}
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.selected",
+     "equals": [
+      "Body"
+     ]
+    },
+    {
+     "call": 0,
+     "path": "result.document",
+     "equals": "WindowTest"
+    },
+    {
+     "call": 1,
+     "path": "result.selected",
+     "equals": [
+      "Body"
+     ]
+    },
+    {
+     "call": 2,
+     "path": "result.ran",
+     "equals": "Std_ToggleVisibility"
+    },
+    {
+     "call": 3,
+     "path": "result.properties.Visibility.value",
+     "equals": false
+    },
+    {
+     "call": 4,
+     "path": "result.visible",
+     "contains": "Body"
+    },
+    {
+     "call": 4,
+     "path": "result.unknown",
+     "equals": [
+      "Ghost part"
+     ]
+    },
+    {
+     "call": 5,
+     "path": "result.properties.Visibility.value",
+     "equals": true
+    },
+    {
+     "call": 6,
+     "path": "error.code",
+     "equals": "not_found"
+    },
+    {
+     "call": 7,
+     "path": "result.selected",
+     "equals": []
+    }
+   ]
+  },
+  {
+   "name": "menu_list walks the View menu; menu_run presses Fit All; a submenu is refused",
+   "calls": [
+    {
+     "tool": "menu_list",
+     "arguments": {
+      "menu": "View"
+     }
+    },
+    {
+     "tool": "menu_run",
+     "arguments": {
+      "path": [
+       "View",
+       "Standard Views",
+       "Fit All"
+      ]
+     }
+    },
+    {
+     "tool": "menu_run",
+     "arguments": {
+      "path": [
+       "View",
+       "Standard Views"
+      ]
+     },
+     "allow": [
+      "invalid_input"
+     ]
+    },
+    {
+     "tool": "menu_list",
+     "arguments": {
+      "menu": "No Such Menu"
+     },
+     "allow": [
+      "not_found"
+     ]
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.count",
+     "atLeast": 10
+    },
+    {
+     "call": 0,
+     "path": "result.items[*].command",
+     "contains": "Std_ViewFitAll"
+    },
+    {
+     "call": 1,
+     "path": "result.command",
+     "equals": "Std_ViewFitAll"
+    },
+    {
+     "call": 2,
+     "path": "error.code",
+     "equals": "invalid_input"
+    },
+    {
+     "call": 3,
+     "path": "error.code",
+     "equals": "not_found"
+    }
+   ],
+   "note": "Titles as FreeCAD 1.1 shows them (title case); the match ignores case. If call 1 is refused not_found, read the path of Std_ViewFitAll from call 0's items and use that."
+  },
+  {
+   "name": "gui_input: a click on the pad's top face selects it, a click on empty space clears",
+   "calls": [
+    {
+     "tool": "cmd_run",
+     "arguments": {
+      "name": "Std_ViewIsometric"
+     }
+    },
+    {
+     "tool": "cmd_run",
+     "arguments": {
+      "name": "Std_ViewFitAll"
+     }
+    },
+    {
+     "tool": "gui_input",
+     "arguments": {
+      "steps": [
+       {
+        "wait": 800
+       },
+       {
+        "click": {
+         "view_world": [
+          10,
+          5,
+          20
+         ]
+        }
+       },
+       {
+        "wait": 400
+       }
+      ],
+      "inline": false
+     }
+    },
+    {
+     "tool": "selection",
+     "arguments": {
+      "clear": false
+     }
+    },
+    {
+     "tool": "gui_input",
+     "arguments": {
+      "steps": [
+       {
+        "click": {
+         "view": [
+          20,
+          20
+         ]
+        }
+       }
+      ],
+      "inline": false
+     }
+    },
+    {
+     "tool": "selection",
+     "arguments": {
+      "clear": false
+     }
+    }
+   ],
+   "expect": [
+    {
+     "call": 2,
+     "path": "result.steps.1.selected.0",
+     "contains": "Face"
+    },
+    {
+     "call": 2,
+     "path": "result.steps.1.menu",
+     "exists": false
+    },
+    {
+     "call": 3,
+     "path": "result.detail.0.elements.0",
+     "contains": "Face"
+    },
+    {
+     "call": 4,
+     "path": "result.steps.0.selected",
+     "equals": []
+    },
+    {
+     "call": 5,
+     "path": "result.selected",
+     "equals": []
+    }
+   ],
+   "shot": "coredoc_click_select",
+   "look": "the pad's top face highlighted as selected (only if a check failed)"
+  },
+  {
+   "name": "gui_input: typing into a widget and the open report",
+   "calls": [
+    {
+     "tool": "gui_input",
+     "arguments": {
+      "steps": [
+       {
+        "key": "Escape"
+       },
+       {
+        "wait": 200
+       }
+      ],
+      "inline": false
+     }
+    },
+    {
+     "tool": "gui_unstick",
+     "arguments": {}
+    },
+    {
+     "tool": "gui_unstick",
+     "arguments": {
+      "all": true
+     }
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.steps.0",
+     "exists": true
+    },
+    {
+     "call": 0,
+     "path": "result.open",
+     "exists": false
+    },
+    {
+     "call": 1,
+     "path": "result.closed",
+     "equals": []
+    },
+    {
+     "call": 2,
+     "path": "result.closed",
+     "equals": []
+    }
+   ],
+   "note": "Nothing is open, so gui_unstick closes nothing: closed []. If result.open exists after Escape, something held the window before the script: say what."
+  },
+  {
+   "name": "object_freeze through the window's Std_ToggleFreeze",
+   "calls": [
+    {
+     "tool": "object_freeze",
+     "arguments": {
+      "objects": [
+       "Pad"
+      ],
+      "frozen": true
+     }
+    },
+    {
+     "tool": "object_set",
+     "arguments": {
+      "object": "Pad",
+      "values": {
+       "Length": 25
+      }
+     }
+    },
+    {
+     "tool": "session_state",
+     "arguments": {}
+    },
+    {
+     "tool": "object_freeze",
+     "arguments": {
+      "objects": [
+       "Pad"
+      ],
+      "frozen": false
+     }
+    },
+    {
+     "tool": "recompute",
+     "arguments": {
+      "force": true
+     }
+    },
+    {
+     "tool": "session_state",
+     "arguments": {}
+    },
+    {
+     "tool": "object_set",
+     "arguments": {
+      "object": "Pad",
+      "values": {
+       "Length": 20
+      }
+     }
+    },
+    {
+     "tool": "session_state",
+     "arguments": {}
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.frozen",
+     "equals": [
+      "Pad"
+     ]
+    },
+    {
+     "call": 0,
+     "path": "result.not",
+     "exists": false
+    },
+    {
+     "call": 2,
+     "path": "result.bodies.0.volume",
+     "equals": 24000.0
+    },
+    {
+     "call": 3,
+     "path": "result.unfrozen",
+     "equals": [
+      "Pad"
+     ]
+    },
+    {
+     "call": 4,
+     "path": "result.ok",
+     "equals": true
+    },
+    {
+     "call": 5,
+     "path": "result.bodies.0.volume",
+     "equals": 30000.0
+    },
+    {
+     "call": 7,
+     "path": "result.bodies.0.volume",
+     "equals": 24000.0
+    }
+   ],
+   "note": "Frozen, the pad keeps its shape though Length is 25 (24000 mm³); thawed and recomputed it is 30000; then back to 20. If call 1 is refused because the frozen pad reads as failed, note FreeCAD's words: that is the doubtful point in the findings."
+  },
+  {
+   "name": "pref_set, pref_get, pref_reset on a scratch group; a guarded setting refused; packs listed",
+   "calls": [
+    {
+     "tool": "pref_set",
+     "arguments": {
+      "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+      "name": "Probe",
+      "value": 3,
+      "type": "int"
+     }
+    },
+    {
+     "tool": "pref_get",
+     "arguments": {
+      "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+      "name": "Probe"
+     }
+    },
+    {
+     "tool": "pref_get",
+     "arguments": {
+      "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest"
+     }
+    },
+    {
+     "tool": "pref_reset",
+     "arguments": {
+      "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+      "names": [
+       "Probe",
+       "NeverSet"
+      ]
+     }
+    },
+    {
+     "tool": "pref_get",
+     "arguments": {
+      "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+      "name": "Probe"
+     },
+     "allow": [
+      "not_found"
+     ]
+    },
+    {
+     "tool": "pref_set",
+     "arguments": {
+      "path": "BaseApp/Preferences/Macro",
+      "name": "MacroPath",
+      "value": "elsewhere"
+     },
+     "allow": [
+      "not_allowed"
+     ]
+    },
+    {
+     "tool": "pref_pack",
+     "arguments": {}
+    },
+    {
+     "tool": "pref_pack",
+     "arguments": {
+      "apply": "No Such Pack"
+     },
+     "allow": [
+      "not_found"
+     ]
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.set.Probe.now",
+     "equals": 3
+    },
+    {
+     "call": 0,
+     "path": "result.set.Probe.type",
+     "equals": "int"
+    },
+    {
+     "call": 1,
+     "path": "result.value",
+     "equals": 3
+    },
+    {
+     "call": 1,
+     "path": "result.type",
+     "equals": "Integer"
+    },
+    {
+     "call": 2,
+     "path": "result.values.Probe.value",
+     "equals": 3
+    },
+    {
+     "call": 3,
+     "path": "result.reset",
+     "equals": [
+      "Probe"
+     ]
+    },
+    {
+     "call": 3,
+     "path": "result.notSet",
+     "equals": [
+      "NeverSet"
+     ]
+    },
+    {
+     "call": 4,
+     "path": "error.code",
+     "equals": "not_found"
+    },
+    {
+     "call": 5,
+     "path": "error.code",
+     "equals": "not_allowed"
+    },
+    {
+     "call": 6,
+     "path": "result.packs",
+     "exists": true
+    },
+    {
+     "call": 7,
+     "path": "error.code",
+     "equals": "not_found"
+    }
+   ]
+  },
+  {
+   "name": "window_snapshot writes a picture; the person's screenshots are listed",
+   "calls": [
+    {
+     "tool": "window_snapshot",
+     "arguments": {
+      "inline": false,
+      "path": "coredoc_window.png"
+     }
+    },
+    {
+     "tool": "window_snapshot",
+     "arguments": {
+      "part": "No Such Panel",
+      "inline": false
+     },
+     "allow": [
+      "not_found"
+     ]
+    },
+    {
+     "tool": "snapshot_list",
+     "arguments": {}
+    },
+    {
+     "tool": "snapshot_latest",
+     "arguments": {},
+     "allow": [
+      "not_found"
+     ]
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.width",
+     "atLeast": 500
+    },
+    {
+     "call": 0,
+     "path": "result.height",
+     "atLeast": 300
+    },
+    {
+     "call": 0,
+     "path": "result.path",
+     "contains": "coredoc_window.png"
+    },
+    {
+     "call": 1,
+     "path": "error.code",
+     "equals": "not_found"
+    },
+    {
+     "call": 1,
+     "path": "error.message",
+     "contains": "panels"
+    },
+    {
+     "call": 2,
+     "path": "result.shots",
+     "exists": true
+    }
+   ],
+   "note": "snapshot_latest answers the person's newest shot, or not_found when they have taken none: both pass. The picture is not the proof here; its size and path are."
+  },
+  {
+   "name": "notes: add, list, answer, done, delete",
+   "calls": [
+    {
+     "tool": "note_add",
+     "arguments": {
+      "text": "coredoc live note: is this face the top?",
+      "at": [
+       0,
+       0,
+       20
+      ]
+     }
+    },
+    {
+     "tool": "note_list",
+     "arguments": {}
+    },
+    {
+     "tool": "note_answer",
+     "arguments": {
+      "id": 1,
+      "text": "yes, z = 20"
+     }
+    },
+    {
+     "tool": "note_done",
+     "arguments": {
+      "id": 1
+     }
+    },
+    {
+     "tool": "note_list",
+     "arguments": {
+      "open": true
+     }
+    },
+    {
+     "tool": "note_done",
+     "arguments": {
+      "id": 1,
+      "done": false
+     }
+    },
+    {
+     "tool": "note_delete",
+     "arguments": {
+      "id": 1
+     }
+    },
+    {
+     "tool": "note_delete",
+     "arguments": {
+      "id": 1
+     },
+     "allow": [
+      "not_found"
+     ]
+    },
+    {
+     "tool": "note_add",
+     "arguments": {
+      "text": ""
+     },
+     "allow": [
+      "invalid_input"
+     ]
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.note.id",
+     "equals": 1
+    },
+    {
+     "call": 0,
+     "path": "result.note.by",
+     "equals": "agent"
+    },
+    {
+     "call": 0,
+     "path": "result.note_count",
+     "equals": 1
+    },
+    {
+     "call": 1,
+     "path": "result.notes[-1].text",
+     "contains": "coredoc live note"
+    },
+    {
+     "call": 2,
+     "path": "result.note.answer",
+     "equals": "yes, z = 20"
+    },
+    {
+     "call": 3,
+     "path": "result.note.done",
+     "equals": true
+    },
+    {
+     "call": 4,
+     "path": "result.notes",
+     "equals": []
+    },
+    {
+     "call": 5,
+     "path": "result.note.done",
+     "equals": false
+    },
+    {
+     "call": 6,
+     "path": "result.deleted",
+     "equals": 1
+    },
+    {
+     "call": 6,
+     "path": "result.left",
+     "equals": 0
+    },
+    {
+     "call": 7,
+     "path": "error.code",
+     "equals": "not_found"
+    },
+    {
+     "call": 8,
+     "path": "error.code",
+     "equals": "invalid_input"
+    }
+   ],
+   "note": "The reset document has no notes, so the first id is 1. If the person pinned a note meanwhile the ids shift: read note_list and rerun with that id.",
+   "shot": "coredoc_note_pin",
+   "look": "(only if a check failed) a numbered pin on the pad's top face while the note existed"
+  },
+  {
+   "name": "steps: the body's history listed and rendered",
+   "calls": [
+    {
+     "tool": "steps_list",
+     "arguments": {}
+    },
+    {
+     "tool": "steps_list",
+     "arguments": {
+      "sketches": true
+     }
+    },
+    {
+     "tool": "steps_render",
+     "arguments": {
+      "inline": false,
+      "width": 320,
+      "height": 240,
+      "path": "coredoc_steps"
+     }
+    },
+    {
+     "tool": "steps_list",
+     "arguments": {
+      "body": "No Such Body"
+     },
+     "allow": [
+      "not_found"
+     ]
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.count",
+     "equals": 1
+    },
+    {
+     "call": 0,
+     "path": "result.steps.0.type",
+     "equals": "Pad"
+    },
+    {
+     "call": 0,
+     "path": "result.steps.0.volume",
+     "equals": 24000.0
+    },
+    {
+     "call": 1,
+     "path": "result.count",
+     "equals": 2
+    },
+    {
+     "call": 2,
+     "path": "result.files.0",
+     "contains": "step_01.png"
+    },
+    {
+     "call": 2,
+     "path": "result.sheet",
+     "contains": "steps.png"
+    },
+    {
+     "call": 3,
+     "path": "error.code",
+     "equals": "not_found"
+    }
+   ]
+  },
+  {
+   "name": "dev and unattended reads: test jobs, the install state, the add-ons installed; an install without the person's confirm refused",
+   "calls": [
+    {
+     "tool": "addon_test",
+     "arguments": {}
+    },
+    {
+     "tool": "app_install",
+     "arguments": {}
+    },
+    {
+     "tool": "addon",
+     "arguments": {
+      "action": "list"
+     }
+    },
+    {
+     "tool": "addon",
+     "arguments": {
+      "action": "install",
+      "name": "NoSuchAddonXyz"
+     },
+     "allow": [
+      "not_allowed"
+     ]
+    },
+    {
+     "tool": "addon",
+     "arguments": {
+      "action": "install",
+      "name": "AgentLink",
+      "confirm": "install AgentLink"
+     },
+     "allow": [
+      "invalid_input"
+     ]
+    }
+   ],
+   "expect": [
+    {
+     "call": 0,
+     "path": "result.jobs",
+     "exists": true
+    },
+    {
+     "call": 1,
+     "path": "result.state",
+     "exists": true
+    },
+    {
+     "call": 2,
+     "path": "result.installed[*].name",
+     "contains": "AgentLink"
+    },
+    {
+     "call": 2,
+     "path": "result.folder",
+     "exists": true
+    },
+    {
+     "call": 3,
+     "path": "error.code",
+     "equals": "not_allowed"
+    },
+    {
+     "call": 4,
+     "path": "error.code",
+     "equals": "invalid_input"
+    }
+   ]
+  },
+  {
+   "name": "tidy up: selection cleared, Part Design in front, a clean Report view",
+   "calls": [
+    {
+     "tool": "selection",
+     "arguments": {}
+    },
+    {
+     "tool": "workbench",
+     "arguments": {
+      "activate": "Part Design"
+     }
+    },
+    {
+     "tool": "session_state",
+     "arguments": {}
+    },
+    {
+     "tool": "report_read",
+     "arguments": {
+      "problems": true
+     }
+    }
+   ],
+   "expect": [
+    {
+     "call": 2,
+     "path": "result.document",
+     "equals": "WindowTest"
+    },
+    {
+     "call": 2,
+     "path": "result.bodies.0.volume",
+     "equals": 24000.0
+    },
+    {
+     "call": 2,
+     "path": "result.where",
+     "equals": "window"
+    },
+    {
+     "call": 3,
+     "path": "result.lines",
+     "noneContain": [
+      "Error",
+      "Traceback",
+      "Exception"
+     ],
+     "ignoreLinesWith": [
+      "(qt.qpa.fonts)"
+     ]
+    }
+   ]
+  }
+ ],
+ "byHand": [
+  {
+   "tool": "live_run",
+   "how": "This script is its test: live_run { script: \"reset\" } then live_run { script: <this file> }.",
+   "pass": "reset: total.failed 0; this script: total.failed 0, leftOpen absent. Also live_run { script: \"no-such\" }: refused not_found, listing the installed scripts and naming reset."
+  },
+  {
+   "tool": "addon_test (a run)",
+   "how": "addon_test { addon: \"AgentLink\", pattern: \"test_paths.py\" } then addon_test { job } until state is not running.",
+   "pass": "job answers a state and counts with failed 0; the window and WindowTest are untouched (session_state as before)."
+  },
+  {
+   "tool": "app_restart",
+   "how": "Last, after doc_save: app_restart {} ; wait for the heartbeat; session_state.",
+   "pass": "reply restarting true, reopens lists WindowTest.FCStd; afterwards session_state.document is WindowTest and where is window. It ends the replay, so it is not a step."
+  },
+  {
+   "tool": "pref_import",
+   "how": "Only with the person's go (it merges another settings file into theirs): pref_import { path: a copy of user.cfg }.",
+   "pass": "reply backup names a file that exists; guardedKept or groups listed; pref_get of a guarded setting unchanged."
+  },
+  {
+   "tool": "queue_go",
+   "how": "Only on the person's word in chat.",
+   "pass": "go true, wasHeld true or false, machine has heavySlots."
+  },
+  {
+   "tool": "app_install (a download)",
+   "how": "Only with the person's go: app_install { version }. The step above reads the state only.",
+   "pass": "started true, then app_install {} walks to installed with the app's path."
+  },
+  {
+   "tool": "addon install / update / remove",
+   "how": "Only with the person's typed confirm.",
+   "pass": "installed / updated / removed with smoke passed; the step above checks the refusals."
+  },
+  {
+   "tool": "gui_unstick with something open",
+   "how": "scripts/live/agentlink.json's note-prompt step opens a modal prompt; gui_unstick { } there instead of dialog_answer.",
+   "pass": "closed names the prompt, open is empty, later calls answer."
+  },
+  {
+   "tool": "snapshot_latest with a shot",
+   "how": "The person presses the camera button (Alt+Shift+S); then snapshot_latest {}.",
+   "pass": "a picture comes back with its time and workbench."
+  },
+  {
+   "tool": "object_appearance in the window",
+   "how": "object_appearance { objects: [\"Body\"], color: \"#3366cc\", faces: { \"Face6\": \"#ff0000\" }, transparency: 30 } after the reset.",
+   "pass": "set[0].shown true; window_snapshot shows a blue pad with a red top, see-through (FreeCAD 1.1 reads the fourth colour value as alpha; on 1.0 it was transparency)."
+  }
+ ]
+}

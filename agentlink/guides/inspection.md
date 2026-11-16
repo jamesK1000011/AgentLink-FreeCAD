@@ -12,6 +12,9 @@ FreeCAD's own Inspection feature measures an actual against nominals, point by p
 
 ## reading it
 - A distance is signed where the nominal is a solid: plus is outside (material added), minus is inside (material missing).
+- FreeCAD takes a nominal as a solid only when its shape is one Solid. A compound of solids, or a shell, is signed by which side of the nearest face the point is on, which agrees wherever face normals point outward; a mesh nominal the same way, by its facets.
+- `thickness` is kept on the feature, but FreeCAD 1.1's Inspection does not use it when measuring.
+- FreeCAD's own default search radius is 0.05 mm; `insp_run` uses 1 mm unless told.
 - Out of reach means further than `search_radius` from every nominal. A large share of those means the actual is not aligned, the radius is too small, or the actual has parts the nominal lacks.
 - `verdict` is **pass** only if every point is in tolerance and none is out of reach; **unknown** if some are out of reach and the rest pass.
 

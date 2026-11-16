@@ -186,6 +186,40 @@ class Strength(unittest.TestCase):
         err, r = self.call("fea_heat", {"heat": [{"faces": {"normal": [1, 0, 0], "x": 100}, "watts": 1}], "air": False})
         self.assertTrue(err)
 
+    def test_4_hardening(self):
+        # From FreeCAD 1.1's FEM source, 16 Nov 2026: a load that loads nothing is refused;
+        # self weight goes to FreeCAD's constraint by its 1.1 properties (GravityAcceleration,
+        # GravityDirection), so 2 g sideways sags twice 1 g down on a square bar; a probe's
+        # "leaves the part" warning goes by the study's mesh size.
+        self.call("fea_setup", {"body": "Beam", "mesh": 5, "reset": True})
+        self.call("fea_hold", {"faces": {"normal": [-1, 0, 0], "x": 0}})
+        for bad in ({"faces": {"near": [100, 5, 5]}, "force": [0, 0, 0]}, {"gravity": [0, 0, 0]}, {"gravity": 0}):
+            err, r = self.call("fea_load", bad)
+            self.assertTrue(err, r)
+            self.assertEqual(r["error"]["code"], "invalid_input")
+        if not (shutil.which("ccx") and shutil.which("gmsh")):
+            self.skipTest("ccx and gmsh are not on PATH")
+        self.call("fea_load", {"gravity": True, "replace": True})
+        err, g1 = self.call("fea_solve")
+        self.assertFalse(err, g1)
+        self.call("fea_load", {"gravity": [0, 2, 0], "replace": True})
+        err, g2 = self.call("fea_solve")
+        self.assertFalse(err, g2)
+        print("\ngravity:", json.dumps({"1g": g1["displacementMax"], "2g": g2["displacementMax"], "solvedBy": g2["solvedBy"]}))
+        self.assertNotIn("Gravity_x", g2["solvedBy"])
+        self.assertAlmostEqual(g2["displacementMax"]["mm"], 2 * g1["displacementMax"]["mm"], delta=0.06 * g2["displacementMax"]["mm"])
+        # one analysis and one result mesh left, however many solves
+        doc = self.session.doc
+        self.assertLessEqual(len([o for o in doc.Objects if o.TypeId == "Fem::FemAnalysis"]), 1)
+        self.assertLessEqual(len([o for o in doc.Objects if o.Name.startswith("CCX_Results_Mesh")]), 1)
+        err, p = self.call("fea_probe", {"line": {"from": [5, 5, 5], "to": [95, 5, 5], "samples": 7}})
+        self.assertFalse(err, p)
+        self.assertNotIn("warning", p)
+        err, p = self.call("fea_probe", {"line": {"from": [50, 5, 5], "to": [50, 5, 80], "samples": 5}})
+        self.assertFalse(err, p)
+        self.assertIn("warning", p)
+        self.call("fea_clear")
+
 
 if __name__ == "__main__":
     unittest.main()

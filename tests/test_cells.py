@@ -41,6 +41,20 @@ class Cells(unittest.TestCase):
         with self.assertRaises(C.AddressError):
             C.content(True)
 
+    def test_content_exponents(self):
+        # an exponent's trailing zeros are part of the number
+        self.assertEqual(float(C.content(1e-10)), 1e-10)
+        self.assertEqual(float(C.content(1e20)), 1e20)
+        self.assertEqual(C.content(100.0), "100")
+        self.assertEqual(C.content(0.5), "0.5")
+
+    def test_alias_rules(self):
+        # PropertySheet::isValidAlias: a letter first; no cell address, unit or constant
+        for good in ("width", "plate_thickness", "W1x", "Diameter"):
+            self.assertIsNone(C.alias_problem(good), good)
+        for bad in ("_x", "1x", "a b", "A1", "zz16384", "mm", "m", "W", "N", "e", "pi", "True", "", None):
+            self.assertIsNotNone(C.alias_problem(bad), bad)
+
     def test_grid(self):
         g = C.grid("B2", [[1, 2], [3, None]])
         self.assertEqual(g, {"B2": 1, "C2": 2, "B3": 3, "C3": None})

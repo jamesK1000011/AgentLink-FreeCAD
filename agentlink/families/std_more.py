@@ -49,6 +49,11 @@ def tools(s):
 
     def link_make(a):
         kind = a.get("kind", "link")
+        if kind not in ("link", "group"):
+            raise bad("kind: link (to: one object, or \"Box.Face3\" for one element of it) | group (objects: an App::LinkGroup of them).")
+        count = a.get("count")
+        if count is not None and (isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= 1000):
+            raise bad("count: how many elements the link shows as an array, 0 (a plain link) … 1000.")
         if kind == "group":
             g = d().addObject("App::LinkGroup", "LinkGroup")
             g.Label = s.unique(a.get("name") or "Link group", g)
@@ -60,6 +65,11 @@ def tools(s):
             raise bad("to: the object to link — or \"Box.Face3\" for a link to one element (kind: element).")
         head, sub = picks.split_ref(target) if isinstance(target, str) else (None, None)
         src = picks.find(d(), head or target, "to")
+        if sub:
+            sh = getattr(src, "Shape", None)
+            if sh is None or sh.isNull():
+                raise bad(f"to: {src.Label} has no shape, so no {sub} to link to — leave the element out to link the whole object.")
+            picks.element(sh, sub, src.Label)  # refused here when it is not on the shape
         lk = d().addObject("App::Link", "Link")
         if sub:
             lk.LinkedObject = (src, [sub])
@@ -68,11 +78,13 @@ def tools(s):
         lk.Label = s.unique(a.get("name") or f"{src.Label} link", lk)
         if picks.placed(a):
             lk.Placement = picks.placement(a)
-        if a.get("count"):
-            lk.ElementCount = int(a["count"])
-        return done("link_make", {"link": lk.Label, "to": src.Label, **({"element": sub} if sub else {}),
-                                  **({"count": int(a["count"])} if a.get("count") else {}),
-                                  "note": "A link shows the object again without a copy: change the original and every link follows."})
+        if count:
+            lk.ElementCount = count
+        return done("link_make", lambda: {"link": lk.Label, "name": lk.Name, "to": src.Label, **({"element": sub} if sub else {}),
+                                  "placement": picks.placement_json(lk.Placement),
+                                  **({"count": count, "elements": [e.Name for e in (getattr(lk, "ElementList", None) or [])][:20],
+                                      "countNote": "The elements start on top of one another: each is an object of its own (elements), placed with object_set { object, values: { Placement } }."} if count else {}),
+                                  "note": "A link shows the object again without a copy: change the original and every link follows. Its placement stands in for the original's own (LinkTransform false)."})
 
     def link_edit(a):
         act = a.get("action")
@@ -92,9 +104,11 @@ def tools(s):
             return {"imported": [o.Label for o in got or []], "links": [o.Label for o in outside], "note": "The other documents' objects are copied in; the links now point at the copies."}
         lk = objs(a.get("link"), "link")[0]
         if not lk.TypeId.startswith("App::Link"):
-            raise bad(f"{lk.Label} is not a link ({lk.TypeId}).")
+            raise bad(f"link: {lk.Label} is not a link ({lk.TypeId}) — object_group {{ action: \"list\" }} names the links there are.")
         if act == "replace":
             to = picks.find(d(), a.get("to"), "to")
+            if to is lk or lk in getattr(to, "OutListRecursive", []):
+                raise bad(f"to: {to.Label} is {lk.Label} itself or built from it — a link cannot point at itself.")
             lk.LinkedObject = to
             return done("link_edit", {"link": lk.Label, "now": to.Label})
         if act == "unlink":
@@ -102,8 +116,10 @@ def tools(s):
             src = lk.LinkedObject[0] if isinstance(lk.LinkedObject, tuple) else lk.LinkedObject
             if src is None:
                 raise ToolError("invalid_state", f"{lk.Label} links to nothing.")
-            o = d().addObject("Part::Feature", "Body")
             sh = Part.getShape(lk)
+            if sh.isNull():
+                raise ToolError("invalid_state", f"{lk.Label} links to {src.Label}, which has no shape to copy: unlink makes a shape copy only (object_duplicate copies other objects).")
+            o = d().addObject("Part::Feature", "Body")
             o.Shape = sh
             o.Label = s.unique(a.get("name") or src.Label, o)
             # Everything that used the link (groups, features, joints,
@@ -112,7 +128,7 @@ def tools(s):
             d().removeObject(lk.Name)
             d().recompute()
             return done("link_edit", {"copy": o.Label, "from": src.Label, "volume": round(sh.Volume, 3) if sh.Solids else None, **({"repointed": moved} if moved else {})})
-        raise bad("action: replace { link, to } | unlink { link } | import { links } | import_all.")
+        raise bad("action: replace { link, to } | unlink { link } | import { links } | import_all — object_group { action: \"list\" } names the links.")
 
     def part_container(a):
         p = d().addObject("App::Part", "Part")
@@ -144,23 +160,43 @@ def tools(s):
     # ---- the document --------------------------------------------------------------------
 
     def doc_merge(a):
-        p = os.path.expanduser(a.get("path") or "")
+        if not isinstance(a.get("path"), str) or not a["path"].strip():
+            raise bad("path: the .FCStd whose objects to bring in (a relative path is in the session's folder).")
+        # As every other reader: a relative path is in the session's folder.
+        p = paths.local(s, a["path"])
         if not os.path.isfile(p):
             raise ToolError("not_found", f"path {p!r}: no such file — an .FCStd to bring in.")
+        if not p.lower().endswith(".fcstd"):
+            raise bad(f"path: {os.path.basename(p)} is not a FreeCAD document — doc_merge takes .FCStd; import_file brings STEP, STL and the rest in.")
         before = {o.Name for o in d().Objects}
-        d().mergeProject(p)
+        try:
+            d().mergeProject(p)
+        except Exception as e:  # noqa: BLE001 - not a document FreeCAD reads
+            raise ToolError("failed", f"FreeCAD could not merge {os.path.basename(p)}: {e} — doc_open {{ path }} shows whether the file opens at all.") from None
         d().recompute()
-        new = [o.Label for o in d().Objects if o.Name not in before]
+        new = [o for o in d().Objects if o.Name not in before]
+        if not new:
+            raise ToolError("failed", f"{os.path.basename(p)}: nothing came in (an empty document, or one FreeCAD could not read).")
         s.snapshot("doc_merge")
-        return {"merged": os.path.basename(p), "objects": new}
+        from .doc import errors
+
+        out = {"merged": os.path.basename(p), "count": len(new), "objects": [o.Label for o in new[:40]], "errors": errors(d())}
+        if len(new) > 40:
+            out["more"] = len(new) - 40
+        return out
 
     INFO_PROPS = {"author": "CreatedBy", "company": "Company", "comment": "Comment", "license": "License", "licenseUrl": "LicenseURL", "lastModifiedBy": "LastModifiedBy", "id": "Id", "uid": "Uid", "label": "Label"}
 
     def doc_info(a):
         dd = d()
+        for k in a:
+            if k in ("id", "uid"):
+                raise bad(f"{k}: read-only (FreeCAD's own identifier of the document).")
         for k, prop in INFO_PROPS.items():
             if k in a and k not in ("id", "uid"):
-                setattr(dd, prop, str(a[k]))
+                if not isinstance(a[k], str):
+                    raise bad(f"{k}: text.")
+                setattr(dd, prop, a[k])
         return {"document": dd.Name, "file": dd.FileName or None, **{k: str(getattr(dd, p, "")) for k, p in INFO_PROPS.items()},
                 "created": str(getattr(dd, "CreationDate", "")), "modified": str(getattr(dd, "LastModifiedDate", "")),
                 "objects": len(dd.Objects), "bytes": os.path.getsize(dd.FileName) if dd.FileName and os.path.isfile(dd.FileName) else None}
@@ -168,12 +204,22 @@ def tools(s):
     def doc_revert(a):
         dd = d()
         if not dd.FileName or not os.path.isfile(dd.FileName):
-            raise ToolError("invalid_state", f"{dd.Label} was never saved: nothing to go back to.")
-        path, label = dd.FileName, dd.Label
+            raise ToolError("invalid_state", f"{dd.Label} was never saved: there is no file to go back to — history_undo steps back through this session's changes instead.")
+        path = dd.FileName
         FreeCAD.closeDocument(dd.Name)
         nd = FreeCAD.openDocument(path)
+        # As doc_open: a document just read is as its file, though FreeCAD
+        # 1.1 marks it touched on opening (doc_close then asked to discard).
+        try:
+            from ..store import _unchanged
+
+            nd.recompute()
+            _unchanged(nd)
+        except Exception:  # noqa: BLE001
+            pass
         s.switch(nd)
-        return {"document": nd.Name, "label": label, "reverted": path, "objects": len(nd.Objects), "note": "Back to the saved file: unsaved changes are gone."}
+        return {"document": nd.Name, "label": nd.Label, "reverted": path, "objects": len(nd.Objects),
+                "note": "Back to the saved file: unsaved changes are gone, and this session's undo steps with them (the document was closed and opened again)."}
 
     def doc_save_all(a):
         saved, unsaved = [], []
@@ -207,6 +253,13 @@ def tools(s):
 
     def object_appearance(a):
         targets = objs(a.get("objects"))
+        if a.get("color") is None and not a.get("random") and a.get("transparency") is None and not a.get("faces"):
+            raise bad("color \"#rrggbb\" (or random: true), transparency 0 … 100, and/or faces { \"Face3\": \"#ff0000\" }: give at least one.")
+        tr = a.get("transparency")
+        if tr is not None and (isinstance(tr, bool) or not isinstance(tr, (int, float)) or not 0 <= tr <= 100):
+            raise bad("transparency: 0 (solid) to 100 (clear).")
+        if a.get("faces") is not None and not isinstance(a["faces"], dict):
+            raise bad("faces: { \"Face3\": \"#ff0000\", … } — a colour for each face named (shape_query finds faces).")
         out = []
         for o in targets:
             c = colour(a.get("color"))
@@ -219,14 +272,6 @@ def tools(s):
                 if vo is not None and hasattr(vo, "ShapeColor"):
                     vo.ShapeColor = c[:3]
                 e["color"] = "#" + "".join(f"{int(round(x * 255)):02x}" for x in c[:3])
-            if a.get("transparency") is not None:
-                t = int(a["transparency"])
-                if not 0 <= t <= 100:
-                    raise bad("transparency: 0 (solid) to 100 (clear).")
-                keep_colour(o, "AgentLinkTransparency", "App::PropertyInteger", t)
-                if vo is not None and hasattr(vo, "Transparency"):
-                    vo.Transparency = t
-                e["transparency"] = t
             faces = a.get("faces")
             if faces:
                 sh = getattr(o, "Shape", None)
@@ -243,6 +288,14 @@ def tools(s):
                 if vo is not None and hasattr(vo, "DiffuseColor"):
                     vo.DiffuseColor = cols
                 e["faces"] = len(faces)
+            if tr is not None:
+                # After the face colours: in FreeCAD 1.x setting DiffuseColor
+                # resets every face's transparency to what the colours carry.
+                t = int(tr)
+                keep_colour(o, "AgentLinkTransparency", "App::PropertyInteger", t)
+                if vo is not None and hasattr(vo, "Transparency"):
+                    vo.Transparency = t
+                e["transparency"] = t
             e["shown"] = vo is not None
             out.append(e)
         d().recompute()
@@ -542,13 +595,22 @@ def tools(s):
                     vo.ShapeColor = c[:3]
                 rows.append({"object": o.Label, "is": kind, "color": pal[kind]})
             return {"coloured": rows, "key": pal}
+        if act in ("explode", "expand_placements", "tolerance", "remove_subtree") and not targets:
+            raise bad(f"objects: the objects to {act.replace('_', ' ')} (names or labels).")
+        if act == "tolerance":
+            for k in ("vertex", "edge", "face"):
+                if a.get(k) is not None and (isinstance(a[k], bool) or not isinstance(a[k], (int, float)) or a[k] < 0):
+                    raise bad(f"{k}: a tolerance in mm, 0 or more (0 leaves that kind as it is).")
+            for o in targets:
+                if getattr(o, "Shape", None) is None or o.Shape.isNull():
+                    raise bad(f"objects: {o.Label} has no shape to copy with looser tolerances.")
         if act == "explode":
             out = []
             for o in targets:
                 if not (o.isDerivedFrom("Part::Fuse") or o.isDerivedFrom("Part::MultiFuse") or o.isDerivedFrom("Part::Compound")):
-                    raise bad(f"{o.Label} is not a fusion or compound ({o.TypeId}).")
+                    raise bad(f"objects: {o.Label} is not a fusion or compound ({o.TypeId}) — explode takes a Part::Fuse, Part::MultiFuse or Part::Compound (compound_explode splits any compound shape).")
                 if o.InList:
-                    raise bad(f"{o.Label} is used by {o.InList[0].Label}: only a top-level one explodes.")
+                    raise bad(f"objects: {o.Label} is used by {o.InList[0].Label}: only a top-level one explodes — explode that one, or scad_tidy {{ action: \"replace\" }} takes it out of its parent first.")
                 plm, kids = o.Placement, list(o.OutList)
                 d().removeObject(o.Name)
                 for k in kids:
@@ -589,6 +651,10 @@ def tools(s):
             import replaceobj
 
             parent, old, new = (picks.find(d(), a.get(k), k) for k in ("parent", "old", "new"))
+            if old not in parent.OutList:
+                raise bad(f"old: {parent.Label} does not use {old.Label} (it uses {', '.join(x.Label for x in parent.OutList) or 'nothing'}).")
+            if new is parent or parent in getattr(new, "OutListRecursive", []):
+                raise bad(f"new: {new.Label} is {parent.Label} or built from it — that would be a loop.")
             replaceobj.replaceobj(parent, old, new)
             return done("scad_tidy", {"parent": parent.Label, "replaced": old.Label, "with": new.Label})
         raise bad("action: color_code | explode | expand_placements | tolerance { vertex, edge, face } | remove_subtree | replace { parent, old, new }.")
@@ -617,9 +683,9 @@ def tools(s):
         elif o.isDerivedFrom("Points::Feature"):
             P = np.array([[p.x, p.y, p.z] for p in o.Points.Points])
         else:
-            raise bad(f"{o.Label}: a mesh or a point cloud.")
+            raise bad(f"from: {o.Label} is not a mesh or a point cloud ({o.TypeId}) — meshobj_from_shape meshes a body; surface_points fits a grid of given points.")
         if len(P) < 9:
-            raise bad("At least 9 points.")
+            raise bad(f"from: {o.Label} has {len(P)} points; a quadric needs 9 or more, spread over an area.")
         # As Reen's Polynomial Surface: a quadric z(u, v) over the points'
         # best plane, made a 3×3 Bézier patch over their box.
         c = P.mean(0)
@@ -664,25 +730,41 @@ def tools(s):
     def robot_tool(a):
         r = picks.find(d(), a.get("robot"), "robot")
         if not r.isDerivedFrom("Robot::RobotObject"):
-            raise bad(f"{r.Label} is not a robot.")
+            raise bad(f"robot: {r.Label} is not a robot ({r.TypeId}) — robot_new makes one.")
         t = picks.shaped(d(), a.get("tool"), "tool")
         r.ToolShape = t
         if picks.placed(a):
             r.ToolBase = picks.placement(a)
-        return done("robot_tool", {"robot": r.Label, "tool": t.Label, "note": "The tool shape follows the robot's flange (its ToolBase offset)."})
+        return done("robot_tool", {"robot": r.Label, "tool": t.Label, "note": "The tool shape is drawn on the robot's flange (ToolBase is where on the shape the flange sits). Drawing only, and only in the window: it does not move the tool point robot_move tcp works with (robot_new tool sets that)."})
 
     def sheet_cells(a):
         sh = picks.find(d(), a.get("sheet"), "sheet")
         if not sh.isDerivedFrom("Spreadsheet::Sheet"):
             raise bad(f"{sh.Label} is not a spreadsheet.")
-        if a.get("merge"):
-            sh.mergeCells(str(a["merge"]))
-        if a.get("split"):
-            sh.splitCell(str(a["split"]))
+        from .. import cells as C
+
         if not a.get("merge") and not a.get("split"):
             raise bad("merge: \"A1:C1\" (one cell across them) or split: \"A1\" (a merged cell back apart).")
-        cell = str(a.get("merge") or a.get("split")).split(":")[0]
-        return done("sheet_cells", {"sheet": sh.Label, "merged": bool(a.get("merge")), "span": list(sh.getCellSpan(cell)) if hasattr(sh, "getCellSpan") else None})
+        try:
+            # FreeCAD's addresses are capitals only ("a1:c1" is an invalid cell specifier there)
+            rng = C.range_text(*C.parse_range(a["merge"])) if a.get("merge") else None
+            cell = C.range_text(*C.parse_range(a["split"])) if a.get("split") else None
+        except C.AddressError as e:
+            raise bad(f"{e} — merge takes a range, \"A1:C1\"; split one cell, \"A1\".")
+        if rng is not None and ":" not in rng:
+            raise bad(f"merge {rng}: a range of more than one cell, \"A1:C1\" (split: \"{rng}\" takes a merged cell apart).")
+        if cell is not None and ":" in cell:
+            raise bad(f"split {cell}: one cell of the merged one, \"{cell.split(':')[0]}\".")
+        if rng:
+            sh.mergeCells(rng)
+        if cell:
+            sh.splitCell(cell)
+        first = (rng or cell).split(":")[0]
+        out = {"sheet": sh.Label, "merged": bool(rng), "cell": first}
+        if rng:
+            out["range"] = rng
+            out["note"] = f"{first} holds the merged cell; the other cells' contents and aliases were cleared, as FreeCAD does."
+        return done("sheet_cells", out)
 
     # ---- from the window-only re-sort (unattended use, O) -------------------------------
 
@@ -745,7 +827,7 @@ def tools(s):
             # FreeCAD has no Python door to freezing: only the window's
             # command (Std_ToggleFreeze) sets it, on the selection.
             if not getattr(FreeCAD, "GuiUp", False):
-                raise ToolError("unavailable", "Freezing objects works only through the FreeCAD window (FreeCAD gives no headless way): the window's link does it when it answers. skipRecompute works here.")
+                raise ToolError("unavailable", "Freezing objects works only through the FreeCAD window (FreeCAD 1.1 has no Python call for it, only the Std_ToggleFreeze command): session_state says where calls go (where: window). skipRecompute: true | false works here, for the whole document.")
             import FreeCADGui
 
             def frozen(o):
@@ -765,7 +847,8 @@ def tools(s):
             miss = [o.Label for o in targets if frozen(o) != want]
             if miss:
                 out["not"] = miss
-            out["note"] = "A frozen object keeps its shape through recomputes until unfrozen." if want else "Unfrozen: recompute brings them up to date."
+            out["note"] = ("A frozen object keeps its shape through recomputes until unfrozen (object_set on it changes its properties but not its shape); FreeCAD's wiki says the frozen state is not saved with the file."
+                           if want else "Unfrozen: recompute { force: true } brings them up to date.")
         if not out:
             raise bad("objects (frozen: true | false) and/or skipRecompute: true | false.")
         s.snapshot("object_freeze")
@@ -780,9 +863,11 @@ def tools(s):
             Q = FreeCAD.Units.Quantity(str(q))
             U = FreeCAD.Units.Quantity(f"1 {to}")
         except Exception as e:
-            raise bad(f"{q!r} or {to!r} is not a quantity FreeCAD reads: {e}")
+            raise bad(f"{q!r} or {to!r} is not a quantity FreeCAD reads ({e}): value is a number with its unit (\"2.5 in\", \"300 N*m\", \"45 deg\"), to a unit alone (\"mm\", \"lbf*ft\", \"rad\"); * and / join units, ^ raises one (\"mm^2\").") from None
         if Q.Unit != U.Unit:
-            raise bad(f"{q} and {to} measure different things ({Q.Unit} vs {U.Unit}).")
+            raise bad(f"{q} and {to} measure different things ({Q.Unit} vs {U.Unit}): to must be a unit of the same kind as value's.")
+        if not U.Value:
+            raise bad(f"to: {to!r} is not a unit FreeCAD can divide by.")
         v = Q.Value / U.Value
         return {"value": str(q), "to": to, "result": float(f"{v:.10g}"), "text": f"{v:.6g} {to}"}
 
@@ -795,7 +880,7 @@ def tools(s):
         o = objs([a.get("object")], "object")[0] if a.get("object") else None
         pairs = a.get("pairs") or []
         if o is None or len(pairs) < 1:
-            raise bad("object, pairs [[from xyz on it, to xyz where it goes] …]: one pair moves it; three or more set its turn too.")
+            raise bad("object, pairs [[from xyz on it, to xyz where it goes] …] in mm, document coordinates (measure or shape_query give points): one pair moves it; three or more set its turn too.")
         try:
             P = np.array([[float(c) for c in p[0]] for p in pairs])
             Q = np.array([[float(c) for c in p[1]] for p in pairs])
@@ -817,6 +902,8 @@ def tools(s):
         fit = (R @ P.T).T + t
         miss = np.linalg.norm(fit - Q, axis=1)
         M = FreeCAD.Matrix(*[float(x) for x in (*R[0], t[0], *R[1], t[1], *R[2], t[2], 0, 0, 0, 1)])
+        if not hasattr(o, "Placement"):
+            raise bad(f"object: {o.Label} ({o.TypeId}) has no Placement to move.")
         o.Placement = FreeCAD.Placement(M).multiply(o.Placement)
         pl = o.Placement
         out = {"object": o.Label, "pairs": len(pairs), "rms": round(float(np.sqrt((miss ** 2).mean())), 4), "worst": round(float(miss.max()), 4),
@@ -834,30 +921,30 @@ def tools(s):
     num = {"type": "number"}
     v3 = {"type": "array", "items": num}
     return runners.tools(GROUP, s, helpers) + [
-        Tool("doc_graph", "What is built from what in the document (Std Dependency graph): roots and each object's inputs; path writes a GraphViz .dot (svg: true draws it when GraphViz is here). Changes nothing.",
+        Tool("doc_graph", "What is built from what in the document (Std Dependency graph): roots (objects nothing uses), uses { label: [its inputs] }, counts; path writes a GraphViz .dot (svg: true also draws it when GraphViz's dot is on this computer; the note says when it is not). Changes nothing.",
              obj({"path": st, "svg": {"type": "boolean"}}), doc_graph),
-        Tool("object_freeze", "Freeze objects (frozen: false thaws) so recomputes leave their shapes as they are (Std Toggle freeze); skipRecompute: true | false for the document (Std Toggle skip recompute).",
+        Tool("object_freeze", "Freeze objects (objects; frozen: false thaws) so recomputes leave their shapes as they are (Std Toggle freeze) — window only: FreeCAD 1.1 has no headless call for it, and the frozen state is not saved with the file. skipRecompute: true | false switches the whole document's recomputes off or on (works headless; recompute { force: true } still runs). Reply: frozen / unfrozen, not (those that did not take), skipRecompute. After thawing: recompute { force: true }.",
              obj({"objects": arr, "frozen": {"type": "boolean"}, "skipRecompute": {"type": "boolean"}}), object_freeze, changes=True),
-        Tool("units_convert", "A quantity in other units (the Units calculator): value \"2.5 in\", to \"mm\". Changes nothing.",
+        Tool("units_convert", "A quantity in other units (FreeCAD's units calculator): value a number with its unit (\"2.5 in\", \"300 N*m\", \"45 deg\"), to a unit of the same kind (\"mm\", \"lbf*ft\", \"rad\"; * / ^ join units). Different kinds are refused. Reply: result (a number), text. Changes nothing.",
              obj({"value": {}, "to": st}, ["value", "to"]), units_convert),
-        Tool("object_align", "Place an object by point pairs (Std Alignment): pairs [[from on it, to where it goes] …] in mm; one pair moves it, three or more (not in a line) turn it too — the best fit, with its rms and worst miss.",
+        Tool("object_align", "Place an object by point pairs (what Std Alignment does by clicking): pairs [[from: a point on it now, to: where that point should be] …] in mm, document coordinates. One or two pairs move it only; three or more (not in a line) turn it too, the least-squares rigid fit — no scaling. Reply: rms and worst miss in mm (near 0 when the pairs agree), placement. Changes Placement only.",
              obj({"object": st, "pairs": {"type": "array", "items": {"type": "array"}}}, ["object", "pairs"]), object_align, changes=True),
-        Tool("link_make", "A link (App::Link): to an object (or \"Box.Face3\" for one element), at a placement, count for an array of links; kind: group makes an App::LinkGroup of objects. Shows the object again without copying it.",
+        Tool("link_make", "A link (App::Link) to an object: it shows the object again without copying it and follows every change. to: the object (or \"Box.Face3\" for one element); at, axis + angle: the link's placement, which stands in for the original's own, not added to it; count: an array of that many elements, all starting at the same place, each its own object to place with object_set (reply: elements). kind: group makes an App::LinkGroup of objects. Reply: link, name, to, placement.",
              obj({"to": st, "kind": {"type": "string", "enum": ["link", "group"]}, "objects": arr, "at": v3, "axis": v3, "angle": num, "count": {"type": "integer"}, "name": st}), link_make, changes=True),
-        Tool("link_edit", "Change links: action replace { link, to } | unlink { link } (a real copy in its place) | import { links } / import_all (objects linked from another document copied in).",
+        Tool("link_edit", "Change links: action replace { link, to } (point it at another object) | unlink { link, name } (a plain shape copy in its place, same placement; what used the link now uses the copy) | import { links } / import_all (objects linked from another document copied into this one). object_group { action: \"list\" } names the links.",
              obj({"action": {"type": "string", "enum": ["replace", "unlink", "import", "import_all"]}, "link": st, "links": arr, "to": st, "name": st}, ["action"]), link_edit, changes=True),
         Tool("part_container", "An App::Part container holding objects, moved together by its placement (Std Part): objects [names], at, axis + angle. Not a solid: booleans take the bodies inside it.",
              obj({"objects": arr, "at": v3, "axis": v3, "angle": num, "name": st}), part_container, changes=True),
-        Tool("object_duplicate", "Copy objects in the document; dependencies: true copies what each is built from too; simple: true copies the shape alone (no history).",
+        Tool("object_duplicate", "Copy objects in the document (Std Duplicate): each copy is independent but still built from the same inputs (a copied Pad uses the original's sketch); dependencies: true copies what each is built from too; simple: true copies the shape alone as a plain Part::Feature (no history, placement baked in). name: the copy's label (\"<label> copy\" by default). Reply: duplicated [{ from, copy }].",
              obj({"objects": arr, "dependencies": {"type": "boolean"}, "simple": {"type": "boolean"}, "name": st}, ["objects"]), object_duplicate, changes=True),
-        Tool("doc_merge", "Bring another .FCStd's objects into this document (Merge document).", obj({"path": st}, ["path"]), doc_merge, changes=True),
-        Tool("doc_info", "The document's information: author, company, comment, license, licenseUrl, label — given ones are set; created and modified dates, file, size.",
+        Tool("doc_merge", "Bring every object of another .FCStd into this document (File > Merge document): path (relative: the session's folder). Internal names that clash get a number (labels too, unless FreeCAD's duplicate-labels preference is on). Recomputes. Reply: count, objects, errors. import_file is for STEP, STL and other formats.", obj({"path": st}, ["path"]), doc_merge, changes=True),
+        Tool("doc_info", "The document's information (File > Document information): author, company, comment, license, licenseUrl, lastModifiedBy, label — the ones given are set (text), nothing given just reads. Reply: those, id, uid, created and modified dates, file, objects, bytes. Setting label renames the document as the person sees it; its internal name stays.",
              obj({k: st for k in ("author", "company", "comment", "license", "licenseUrl", "lastModifiedBy", "label")}), doc_info),
-        Tool("doc_revert", "Go back to the document's saved file, dropping unsaved changes.", obj({}), doc_revert),
-        Tool("doc_save_all", "Save every open document that has a file.", obj({}), doc_save_all),
-        Tool("text_document", "A text document in the file (App::TextDocument): name, text (append: true adds to it). Notes that travel with the model.",
+        Tool("doc_revert", "Go back to the document's saved file, dropping every unsaved change (Std Revert): the document is closed and opened again, so the session's undo steps go too. Refused for a document never saved. Ask the person first unless the changes are only the agent's. Reply: document, reverted (the file), objects.", obj({}), doc_revert),
+        Tool("doc_save_all", "Save every open document that has a file (Std Save all), each to its own file. Documents never saved are not touched and are listed in neverSaved: doc_save { path } for each. Reply: saved [paths].", obj({}), doc_save_all),
+        Tool("text_document", "A text document kept in the file (App::TextDocument), for notes that travel with the model: name (found by label, made if new; \"Notes\" by default), text replaces what it holds, append: true adds a line instead; with no text it only reads the size. Reply: text (its label), chars, lines. It shows in the tree; the person reads it by double-clicking.",
              obj({"name": st, "text": st, "append": {"type": "boolean"}}), text_document, changes=True),
-        Tool("object_appearance", "Colour objects: color \"#rrggbb\" or random: true, transparency 0–100, faces { \"Face3\": \"#ff0000\" } for a colour per face. Kept on the object, shown in the window.",
+        Tool("object_appearance", "Colour objects: color \"#rrggbb\" or [r,g,b] 0–1 (or random: true), transparency 0 (solid) – 100, faces { \"Face3\": \"#ff0000\" } a colour per face (the rest keep the object's colour; face numbers change after a modelling step: shape_query again). Shown at once in the window; headless they are kept on the object (AgentLinkColor …) and exports read them. Reply: set [{ object, color, transparency, faces, shown }].",
              obj({"objects": arr, "color": {}, "random": {"type": "boolean"}, "transparency": {"type": "integer"}, "faces": {"type": "object"}}, ["objects"]), object_appearance, changes=True),
         Tool("compound_explode", "Split a compound into its pieces (Part Explode compound): each a filter object that follows the compound, in a group; the compound is hidden. part_compound { explode } gives plain bodies instead.", obj({"compound": st}, ["compound"]), compound_explode, changes=True),
         Tool("compound_filter", "Keep some pieces of a compound (Part Compound filter): keep items { items: [0, 2], from 0 } | collision-pass / collision-fail { stencil: touching it or not } | window-volume / -area / -length { from, to as percents of the largest piece } | window-distance { stencil, from, to }. Refused when nothing passes; the compound is hidden. Reply: filter, kept.",
@@ -871,13 +958,13 @@ def tools(s):
              obj({"feature": st, "after": st, "before": st}, ["feature"]), pd_reorder, changes=True),
         Tool("pd_tip", "Read (no feature) or set a body's tip: the solid feature its shape stops at, and after which new features go in. A sketch or datum given: the solid feature before it. Features past the tip are kept but left out (afterTip) — set it back to the last one when done. Reply: tip, tipWas, afterTip, volume.",
              obj({"body": st, "feature": st}), pd_tip, changes=True),
-        Tool("scad_tidy", "OpenSCAD workbench's tree tools: action color_code (shapes coloured by validity and type) | explode (a fusion or compound back into its pieces) | expand_placements | tolerance { vertex, edge, face mm } (a looser-tolerance copy) | remove_subtree (objects and children nothing else uses) | replace { parent, old, new }.",
+        Tool("scad_tidy", "OpenSCAD workbench's tree tools on objects: action color_code (all shapes when no objects: coloured by validity and kind — the reply's key) | explode (a top-level Part::Fuse / MultiFuse / Compound deleted, its inputs kept, shown and moved by its placement) | expand_placements (placements pushed down to the leaves) | tolerance { vertex, edge, face mm } (a copy with tolerances raised to at least these, never lowered; the original hidden) | remove_subtree (objects and everything under them that nothing else uses — deleted for good) | replace { parent, old, new } (parent uses new where it used old). Reply by action: coloured, exploded, expanded, made, removed, replaced.",
              obj({"action": {"type": "string", "enum": ["color_code", "explode", "expand_placements", "tolerance", "remove_subtree", "replace"]}, "objects": arr, "vertex": num, "edge": num, "face": num, "parent": st, "old": st, "new": st}, ["action"]), scad_tidy, changes=True),
         Tool("points_structure", "Make a point cloud structured (rows × columns, as a scanner's grid): width, height.", obj({"points": st, "width": {"type": "integer"}, "height": {"type": "integer"}, "name": st}, ["points", "width"]), points_structure, changes=True),
-        Tool("surface_polynomial", "A polynomial (quadric) surface fitted to a mesh or point cloud, as a Bézier patch (Reverse Engineering's Polynomial Surface): its rms and max distance from the points.",
+        Tool("surface_polynomial", "A polynomial (quadric) surface fitted by least squares to a mesh's or point cloud's points, as a 3 × 3 Bézier patch over their extent (as Reverse Engineering's Polynomial Surface): from, name. For a patch that is one smooth bowl or saddle; split a scan with meshobj_segments or meshobj_trim first. Reply: surface, points, rms and max mm off the points (along the fit plane's normal).",
              obj({"from": st, "name": st}, ["from"]), surface_polynomial, changes=True),
-        Tool("robot_tool", "Put a tool shape on a robot's flange (Robot's Add tool shape): tool, at for its offset.", obj({"robot": st, "tool": st, "at": v3, "axis": v3, "angle": num}, ["robot", "tool"]), robot_tool, changes=True),
-        Tool("sheet_cells", "Merge spreadsheet cells (merge \"A1:C1\") or split a merged one (split \"A1\").", obj({"sheet": st, "merge": st, "split": st}, ["sheet"]), sheet_cells, changes=True),
+        Tool("robot_tool", "Draw a tool shape on a robot's flange (Robot's Add tool shape): robot, tool (an object with a shape), at / axis + angle where on the shape the flange sits (ToolBase). Shown in the window only; it does not change the kinematics or the tool point (robot_new tool does).", obj({"robot": st, "tool": st, "at": v3, "axis": v3, "angle": num}, ["robot", "tool"]), robot_tool, changes=True),
+        Tool("sheet_cells", "Merge spreadsheet cells (merge \"A1:C1\": the top-left cell stays, the others are cleared with their aliases) or split a merged one (split \"A1\", any of its cells). sheet_format { merge } does the same and first checks for aliases in use.", obj({"sheet": st, "merge": st, "split": st}, ["sheet"]), sheet_cells, changes=True),
         Tool("pd_shaft", "A stepped shaft (the shaft wizard's geometry) as one plain Part solid, not in a PartDesign body: segments [{ length, diameter, diameterEnd (a taper) }] mm, from one end along axis x (or y, z); at, name. Reply: shaft, length, volume. part_fillet its shoulders; pd_clone brings it into a body.",
              obj({"segments": {"type": "array", "items": {"type": "object"}}, "axis": {"type": "string", "enum": ["x", "y", "z"]}, "at": v3, "name": st}, ["segments"]), pd_shaft, changes=True),
     ]
