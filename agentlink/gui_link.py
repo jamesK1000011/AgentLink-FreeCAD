@@ -52,7 +52,9 @@ def _dialog_call(line):
         calls = ((json.loads(line).get("params") or {}).get("arguments") or {}).get("calls") or []
     except (ValueError, AttributeError):
         return False
-    return bool(calls) and all(isinstance(c, dict) and c.get("tool") == "dialog_answer" for c in calls)
+    # gui_input in a batch too (a lean client reaches it through batch): it
+    # still takes only targets inside the dialog in front.
+    return bool(calls) and all(isinstance(c, dict) and c.get("tool") in ("dialog_answer", "gui_input") for c in calls)
 
 
 # ---- what the window shows: a modal dialog, and the heartbeat (unattended use, E and F) ----
@@ -153,6 +155,45 @@ def agent_opened(d):
 
 
 BACK_OUT = ("cancel", "close", "escape", "esc", "dismiss")
+
+
+def fill(d, text=None, item=None):
+    """Type into a dialog before a button is pressed: a QInputDialog's value
+    (text, or item for its list), else the one visible line or text field
+    of a message box or dialog. Answers what was set; raises ValueError when
+    there is no single field to take it."""
+    w = d["widget"]
+    done = {}
+    if hasattr(w, "setTextValue") and hasattr(w, "textValue"):
+        if item is not None:
+            items = list(w.comboBoxItems()) if hasattr(w, "comboBoxItems") else []
+            if items and item not in items:
+                hit = [x for x in items if x.lower() == item.lower()]
+                if not hit:
+                    raise ValueError(f"item: one of {', '.join(items[:20])}.")
+                item = hit[0]
+            w.setTextValue(item)
+            done["item"] = item
+        if text is not None:
+            w.setTextValue(text)
+            done["text"] = text
+        return done
+    if item is not None:
+        raise ValueError("item: this dialog has no list to pick from (a QInputDialog's); text fills its one field.")
+    if text is None:
+        return done
+    QtGui, QtWidgets = _qt()
+    fields = [f for cls in (QtWidgets.QLineEdit, QtWidgets.QPlainTextEdit) for f in w.findChildren(cls)
+              if f.isVisible() and f.isEnabled() and not (hasattr(f, "isReadOnly") and f.isReadOnly())]
+    if len(fields) != 1:
+        raise ValueError(f"text: the dialog has {len(fields) or 'no'} text fields — text fills a dialog with one; gui_input types into one of several.")
+    f = fields[0]
+    if hasattr(f, "setPlainText") and not hasattr(f, "setText"):
+        f.setPlainText(text)
+    else:
+        f.setText(text)
+    done["text"] = text
+    return done
 
 
 def press(d, label):

@@ -196,7 +196,7 @@ def _answers_dialog(c):
     if c.get("tool") in ("dialog_answer", "gui_input"):
         return True
     calls = (c.get("args") or {}).get("calls") if c.get("tool") == "batch" else None
-    return bool(calls) and all(isinstance(x, dict) and x.get("tool") == "dialog_answer" for x in calls)
+    return bool(calls) and all(isinstance(x, dict) and x.get("tool") in ("dialog_answer", "gui_input") for x in calls)
 
 
 class Window:

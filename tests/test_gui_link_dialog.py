@@ -67,7 +67,9 @@ class GuiInputInFront(unittest.TestCase):
 
     def test_runs_with_a_dialog(self):
         self.assertTrue(gui_link._dialog_call(call("gui_input", {"steps": [{"key": "Escape"}]})))
-        self.assertFalse(gui_link._dialog_call(call("batch", {"calls": [{"tool": "gui_input"}]})))
+        # A lean client reaches gui_input through batch: let through too.
+        self.assertTrue(gui_link._dialog_call(call("batch", {"calls": [{"tool": "gui_input"}, {"tool": "dialog_answer"}]})))
+        self.assertFalse(gui_link._dialog_call(call("batch", {"calls": [{"tool": "gui_input"}, {"tool": "doc_new"}]})))
 
     def link(self):
         import io
@@ -107,6 +109,101 @@ class SupervisorLetsItThrough(unittest.TestCase):
         self.assertFalse(supervise._answers_dialog({"tool": "batch", "args": {"calls": [{"tool": "dialog_answer"}, {"tool": "cmd_run"}]}}))
         self.assertFalse(supervise._answers_dialog({"tool": "cmd_run", "args": {}}))
         self.assertTrue(supervise._answers_dialog({"tool": "gui_input", "args": {"steps": []}}))
+        self.assertTrue(supervise._answers_dialog({"tool": "batch", "args": {"calls": [{"tool": "gui_input", "arguments": {}}]}}))
+
+
+class Field:
+    def __init__(self, visible=True, plain=False):
+        self.visible, self.value = visible, None
+        if plain:
+            self.setPlainText = self._set
+
+    def isVisible(self):
+        return self.visible
+
+    def isEnabled(self):
+        return True
+
+    def isReadOnly(self):
+        return False
+
+    def setText(self, t):
+        self.value = t
+
+    def _set(self, t):
+        self.value = t
+
+
+class Prompt:
+    """A QInputDialog stand-in."""
+
+    def __init__(self, items=()):
+        self.value, self.items = "", list(items)
+
+    def textValue(self):
+        return self.value
+
+    def setTextValue(self, v):
+        self.value = v
+
+    def comboBoxItems(self):
+        return self.items
+
+
+class Box:
+    def __init__(self, fields):
+        self.fields = fields
+
+    def findChildren(self, cls):
+        return [f for f in self.fields if cls is Field]
+
+
+class Fill(unittest.TestCase):
+    def setUp(self):
+        import types
+
+        self.orig = gui_link._qt
+        gui_link._qt = lambda: (None, types.SimpleNamespace(QLineEdit=Field, QPlainTextEdit=object))
+
+    def tearDown(self):
+        gui_link._qt = self.orig
+
+    def test_prompt_text(self):
+        p = Prompt()
+        self.assertEqual(gui_link.fill({"widget": p}, text="Wall 2 mm here"), {"text": "Wall 2 mm here"})
+        self.assertEqual(p.value, "Wall 2 mm here")
+
+    def test_prompt_item(self):
+        p = Prompt(["PLA", "PETG"])
+        self.assertEqual(gui_link.fill({"widget": p}, item="petg"), {"item": "PETG"})
+        self.assertEqual(p.value, "PETG")
+        with self.assertRaises(ValueError):
+            gui_link.fill({"widget": p}, item="Nylon")
+
+    def test_one_field(self):
+        f = Field()
+        gui_link.fill({"widget": Box([f, Field(visible=False)])}, text="yes")
+        self.assertEqual(f.value, "yes")
+
+    def test_none_or_several_refused(self):
+        for fields in ([], [Field(), Field()]):
+            with self.assertRaises(ValueError):
+                gui_link.fill({"widget": Box(fields)}, text="x")
+        with self.assertRaises(ValueError):
+            gui_link.fill({"widget": Box([Field()])}, item="x")
+
+
+class PinHint(unittest.TestCase):
+    def test_events(self):
+        from agentlink import panel_tabs
+
+        self.assertTrue(panel_tabs.PIN_HINT.startswith("Click the part"))
+        self.assertIn("Esc cancels", panel_tabs.PIN_HINT)
+        self.assertEqual(panel_tabs.pin_event({"State": "DOWN", "Button": "BUTTON1"}), "place")
+        self.assertIsNone(panel_tabs.pin_event({"State": "UP", "Button": "BUTTON1"}))
+        self.assertIsNone(panel_tabs.pin_event({"State": "DOWN", "Button": "BUTTON2"}))
+        self.assertEqual(panel_tabs.pin_event({"Type": "SoKeyboardEvent", "State": "DOWN", "Key": "ESCAPE"}), "cancel")
+        self.assertIsNone(panel_tabs.pin_event({"Type": "SoKeyboardEvent", "State": "DOWN", "Key": "A"}))
 
 
 if __name__ == "__main__":

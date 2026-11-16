@@ -92,6 +92,8 @@ def tools(s):
             # No modal dialog, but a task panel (Combo View's Tasks): its OK,
             # Cancel or other buttons, pressed the same way.
             info = {k: v for k, v in task.items() if k != "widget"}
+            if a.get("text") is not None or a.get("item") is not None:
+                raise bad("text and item fill a modal dialog; a task panel's fields take gui_input.")
             if not btn:
                 return {"task": info}
             if not gui_link.press_task(task, btn):
@@ -99,6 +101,14 @@ def tools(s):
             keep.log_watchdog({"event": "task", "title": task["title"], "pressed": btn, "by": "dialog_answer"})
             return {"pressed": btn, "task": info}
         info = {k: v for k, v in d.items() if k != "widget"}
+        typed = None
+        if a.get("text") is not None or a.get("item") is not None:
+            if not btn:
+                raise bad("text and item are set before a button is pressed: give button too (OK, usually).")
+            try:
+                typed = gui_link.fill(d, a.get("text"), a.get("item"))
+            except ValueError as e:
+                raise bad(str(e)) from None
         if not btn:
             return {"dialog": info}
         # The agent operates FreeCAD as the person would, whoever opened the
@@ -118,6 +128,8 @@ def tools(s):
             raise ToolError("failed", f"Could not press {btn}.")
         keep.log_watchdog({"event": "dialog", "title": d["title"], "pressed": btn, "by": "dialog_answer"})
         out = {"pressed": btn, "dialog": info}
+        if typed:
+            out["typed"] = typed
         if kept is not None:
             out["kept"] = kept or {"note": "No recovery files or crash reports were found to keep."}
         return out
@@ -393,6 +405,6 @@ def tools(s):
         Tool("doc_switch", "Which open document the agent works in: document (name, label or file) switches to it — the session stays on it whatever the person brings to the front of the window; front: true also brings it to the front. No document: the agent's one and those open.",
              obj({"document": st, "front": {"type": "boolean"}}), doc_switch),
         Tool("crash_collect", "Copy crash evidence into ~/AgentLink/crash/<time>/: FreeCAD's document-recovery folders (from a FreeCAD that crashed or was stopped), its crash.log and the system's crash reports for FreeCAD (new ones only). Copies only, never removes. dialog_answer runs it by itself before Document Recovery's Cleanup.", obj({}), crash_collect),
-        Tool("dialog_answer", "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one by its text (Cancel also closes a file picker; Document Recovery's Cleanup keeps a copy in ~/AgentLink/crash first). With no dialog, the open task panel and its buttons (OK, Cancel …). You operate FreeCAD as the person would: read it and press what the job needs (Cancel backs out of anything you did not mean to open); say what you pressed. A stuck window: app_force_restart.",
-             obj({"button": st}), dialog_answer),
+        Tool("dialog_answer", "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one by its text (Cancel also closes a file picker; Document Recovery's Cleanup keeps a copy in ~/AgentLink/crash first). With no dialog, the open task panel and its buttons (OK, Cancel …). You operate FreeCAD as the person would: read it and press what the job needs (Cancel backs out of anything you did not mean to open); say what you pressed. text: typed into a text prompt (or the dialog's one text field), item: picked from a prompt's list, before button. A stuck window: app_force_restart.",
+             obj({"button": st, "text": st, "item": st}), dialog_answer),
     ]

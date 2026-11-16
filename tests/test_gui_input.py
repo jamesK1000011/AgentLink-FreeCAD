@@ -407,6 +407,20 @@ class Delivery(unittest.TestCase):
         self.assertEqual(len(out["steps"]), 2)  # stopped at the refusal
         self.assertEqual([w for w, _e in self.sent], ["ok", "ok", "ok"])  # a move onto it, press, release
 
+    def test_typing_into_the_dialog_in_front(self):
+        dlg = Widget("Note", 300, 300, 200, 100, cls="QInputDialog")
+        field = Widget("field", 310, 330, 180, 20, parent=dlg, cls="QLineEdit", focus=2)
+        self.state["modal"] = dlg
+        self.state["app"].topLevelWidgets = lambda: [self.mw, dlg]
+        out = self.run.run(gi.parse_steps([{"click": {"widget": {"class": "QLineEdit", "under": "Note"}}}, {"type": "Hi"}]))
+        self.assertNotIn("error", out["steps"][0])
+        self.assertTrue(field.focused)
+        self.assertTrue(all(w == "field" for w, _e in self.sent))
+        self.assertEqual([e.text for _w, e in self.sent if e.t == "KeyPress"], ["H", "i"])
+        # The main window's own field still waits behind the dialog.
+        out = self.run.run(gi.parse_steps([{"click": {"widget": {"objectName": "edit"}}}]))
+        self.assertIn("holds the window", out["steps"][-1]["error"])
+
     def test_keys_and_text_to_the_focused_widget(self):
         self.edit.focused = True
         self.run.run(gi.parse_steps([{"type": "Ab"}, {"key": "Return", "modifiers": ["shift"]}]))

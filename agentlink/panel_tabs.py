@@ -69,6 +69,20 @@ def tabs_for(rows, active, where, extra=()):
     return out
 
 
+# Shown under Pin a Note while it waits for the click on the part.
+PIN_HINT = "Click the part where the note goes. Esc cancels."
+
+
+def pin_event(ev):
+    """What a 3D view event means while a note waits to be placed: "place"
+    (the left button down), "cancel" (Esc down), else None."""
+    if not isinstance(ev, dict) or ev.get("State") != "DOWN":
+        return None
+    if ev.get("Type") == "SoKeyboardEvent" or "Key" in ev:
+        return "cancel" if str(ev.get("Key", "")).upper() in ("ESCAPE", "ESC") else None
+    return "place" if ev.get("Button") == "BUTTON1" else None
+
+
 def credit_shown(title, widget=None):
     """Whether Agent Link's credit line shows under the tab title: not while
     a page that credits Stefan Hermann itself is in front."""
