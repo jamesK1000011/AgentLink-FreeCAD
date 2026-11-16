@@ -358,10 +358,11 @@ class Overlay:
         if self._gui is None:
             try:
                 import FreeCAD
+
+                if not FreeCAD.GuiUp:  # before importing FreeCADGui: headless, a windowless one
+                    return None
                 import FreeCADGui
 
-                if not FreeCAD.GuiUp:
-                    return None
                 self._gui = FreeCADGui
             except Exception:
                 return None

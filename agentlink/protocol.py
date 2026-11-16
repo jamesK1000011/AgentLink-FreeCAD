@@ -7,6 +7,7 @@
 
 import json
 import math
+import os
 import sys
 import time
 import traceback
@@ -341,7 +342,7 @@ class Server:
             result = self.refusal("invalid_input", str(e))
         except Exception as e:
             traceback.print_exc(file=sys.stderr)
-            result = self.refusal("failed", f"{name} failed: {e}")
+            result = self.refusal("failed", f"{name} failed: {e}", _test_trace())
         return None if mid is None else {"jsonrpc": "2.0", "id": mid, "result": result}
 
     def _done(self, params, result, before):
@@ -412,7 +413,7 @@ class Server:
             return self.refusal("invalid_input", str(e))
         except Exception as e:
             traceback.print_exc(file=sys.stderr)
-            return self.refusal("failed", f"{name} failed: {e}")
+            return self.refusal("failed", f"{name} failed: {e}", _test_trace())
         image = None
         if isinstance(out, dict):
             # A picture for the agent to look at: image content beside the
@@ -431,8 +432,20 @@ class Server:
         return {"content": content}
 
     @staticmethod
-    def refusal(code, message):
-        return {"content": [{"type": "text", "text": compact({"error": {"code": code, "message": message}})}], "isError": True}
+    def refusal(code, message, trace=None):
+        err = {"code": code, "message": message}
+        if trace:
+            err["trace"] = trace
+        return {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}
+
+
+def _test_trace():
+    """The traceback of the exception in hand, for a refusal's "trace" under
+    the tests only (AGENTLINK_TEST=1): CI's log then shows where a tool
+    failed. Never sent to an agent otherwise."""
+    if os.environ.get("AGENTLINK_TEST") != "1":
+        return None
+    return traceback.format_exc()[-4000:]
 
 
 def _add_notice(result):

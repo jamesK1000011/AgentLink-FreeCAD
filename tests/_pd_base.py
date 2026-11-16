@@ -7,6 +7,10 @@ import sys
 import tempfile
 import unittest
 
+# Refusals from a tool's own failure carry its traceback ("trace"), so a
+# failed assertion below shows where it failed (agentlink/protocol.py).
+os.environ.setdefault("AGENTLINK_TEST", "1")
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 if os.environ.get("FREECAD_LIB"):
     sys.path.append(os.environ["FREECAD_LIB"])
