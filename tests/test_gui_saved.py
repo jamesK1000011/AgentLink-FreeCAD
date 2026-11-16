@@ -14,10 +14,25 @@ def _fn(gui_up, gui_doc):
     fc = types.SimpleNamespace(GuiUp=gui_up)
     import sys
 
-    sys.modules["FreeCADGui"] = types.SimpleNamespace(getDocument=lambda name: gui_doc)
+    stand_in = types.SimpleNamespace(getDocument=lambda name: gui_doc)
     ns = {"FreeCAD": fc}
     exec(compile(ast.Module([fn], []), str(SRC), "exec"), ns)
-    return ns["_gui_saved"]
+    inner = ns["_gui_saved"]
+
+    def call(*args, **kw):
+        # The stand-in FreeCADGui only for the call: left in sys.modules it
+        # passed for the window in every later test of the run (CI).
+        had = sys.modules.get("FreeCADGui")
+        sys.modules["FreeCADGui"] = stand_in
+        try:
+            return inner(*args, **kw)
+        finally:
+            if had is None:
+                sys.modules.pop("FreeCADGui", None)
+            else:
+                sys.modules["FreeCADGui"] = had
+
+    return call
 
 
 class GuiSaved(unittest.TestCase):

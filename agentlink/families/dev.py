@@ -121,18 +121,17 @@ def tools(s):
     st = {"type": "string"}
     return [
         Tool("gui_input",
-             "Mouse and keyboard input to the FreeCAD window's own widgets, sent as Qt events from inside FreeCAD — never the system cursor or "
-             "keyboard, so the person keeps their screen. "
+             "Mouse and keyboard input to the FreeCAD window's own widgets as Qt events inside FreeCAD, never the system cursor or keyboard. "
              "Window only. steps, in order, each: {click: T, button?: left|right|middle, double?, modifiers?: [shift, ctrl, alt, meta]}; "
-             "{press: T} {move: T} {release: T} (a held button's moves and release go to the widget that took the press); "
+             "{press: T} {move: T} {release: T} (after a press they go to the pressed widget); "
              f"{{drag: {{from: T, to: T, steps?: {gi_steps}, button?, modifiers?}}}}; {{scroll: T, dy: notches (over 0 rolls away)}}; "
              "{key: \"Return\"|\"Escape\"|\"F2\"|\"a\"…, modifiers?, target?: T} and {type: \"text\", target?: T} to the focused widget or T; "
-             f"{{wait: ms (≤{gi_wait})}}; {{shot: name}} (the window as a PNG in ~/AgentLink/gui_input; the last one shown unless inline: false). "
+             f"{{wait: ms (≤{gi_wait})}}; {{shot: name}} (a window PNG in ~/AgentLink/gui_input; the last shown unless inline: false). "
              "Targets T: {view: [x, y]} logical pixels from the active 3D view's top-left; {view_world: [x, y, z]} a model point projected there; "
              "{widget: {objectName?, text?, toolTip?, class?, under?: dock or dialog title}, at?: [dx, dy] from its top-left (centre by default)} "
              "the first visible match; {tab: {text, under?}}; {item: {text, under?, column?}, check?: true} a list, tree or table row "
              "(check: its box); {menu_item: \"text\"} an item of the open menu; {window: [x, y]} main-window pixels. While a dialog or menu is in front only targets inside it are taken. "
-             "Answers per step what it hit (class, name, text, where), a dialog or menu it opened (the steps after it still run, inside it), "
+             "Answers per step what it hit (class, name, text, where), a dialog or menu it opened (later steps run inside it), "
              "open: what still holds the window at the end (close it: Escape, dialog_answer or gui_unstick), new Report problems. Shortcuts are not triggered (cmd_run).",
              obj({"steps": {"type": "array", "items": {"type": "object"}}, "inline": {"type": "boolean"}}, ["steps"]), gui_input),
         Tool("gui_unstick",
