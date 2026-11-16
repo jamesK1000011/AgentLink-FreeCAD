@@ -472,19 +472,33 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         if hint is not None:
             hint.setVisible(bool(on))
         v = _view()
-        if v is None:
-            return
-        if on and self.callback is None:
-            self.callback = v.addEventCallback("SoMouseButtonEvent", self.clicked)
-            self.key_callback = v.addEventCallback("SoKeyboardEvent", self.key)
-        elif not on and self.callback is not None:
+        if not on and self.callback is not None:
+            # Taken off the view it was put on: the one in front may be
+            # another by now (its document closed, another opened).
+            armed = getattr(self, "_placing_view", None) or v
             for kind, cb in (("SoMouseButtonEvent", self.callback), ("SoKeyboardEvent", getattr(self, "key_callback", None))):
                 try:
-                    if cb is not None:
-                        v.removeEventCallback(kind, cb)
+                    if cb is not None and armed is not None:
+                        armed.removeEventCallback(kind, cb)
                 except Exception:
                     pass
-            self.callback = self.key_callback = None
+            self.callback = self.key_callback = self._placing_view = self._placing_doc = None
+        elif on and self.callback is None and v is not None:
+            self.callback = v.addEventCallback("SoMouseButtonEvent", self.clicked)
+            self.key_callback = v.addEventCallback("SoKeyboardEvent", self.key)
+            self._placing_view, self._placing_doc = v, _doc()
+
+    def _placing_stale(self):
+        """Pin a Note is on, but for a view that is no longer the one in
+        front (its document was closed or another came forward): the click
+        it waits for cannot come, and the next press of the button would
+        only switch it off (a live script's Pin a Note did nothing after
+        the test document was rebuilt)."""
+        if not getattr(self, "placing", False):
+            return False
+        # The document itself, not its name: a rebuilt document of the same
+        # name is another one (FreeCAD hands out one Python object a document).
+        return _doc() is not getattr(self, "_placing_doc", None)
 
     def key(self, ev):
         if pin_event(dict(ev, Type="SoKeyboardEvent")) == "cancel":
@@ -575,6 +589,11 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         box.exec_() if hasattr(box, "exec_") else box.exec()
 
     def refresh(self, force=False):
+        try:
+            if self._placing_stale():
+                self.pin_key.setChecked(False)
+        except Exception:
+            pass
         if hasattr(self, "usage"):
             self.refresh_usage()
         if hasattr(self, "status"):
