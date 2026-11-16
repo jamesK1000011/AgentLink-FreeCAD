@@ -6,6 +6,7 @@
 # degrees.
 
 import math
+import re
 import os
 
 import FreeCAD
@@ -73,6 +74,74 @@ def describe_con(sk, i):
     out["refs"] = refs
     if not c.Driving:
         out["driving"] = False
+    return out
+
+
+POS = {1: "the start of", 2: "the end of", 3: "the centre of"}
+
+
+def _snake(t):
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", t).lower()
+
+
+def ref_words(sk, g, pos=0):
+    """A constraint's reference in words: "the start of line 3", "the x axis"."""
+    if g == -1:
+        return "the x axis"
+    if g == -2:
+        return "the y axis"
+    if g <= -3:
+        what = f"outside edge {g}"
+    elif 0 <= g < len(sk.Geometry):
+        what = f"{_geo_kind(sk.Geometry[g]).lower()} {g}"
+    else:
+        what = f"geometry {g}"
+    return f"{POS[pos]} {what}" if pos in POS else what
+
+
+def con_words(sk, i):
+    """A constraint in words with its id: "#6 symmetric: the start of line 3
+    and the end of line 3 about the x axis"."""
+    d = describe_con(sk, i)
+    refs = [ref_words(sk, g, p) for g, p in d["refs"]]
+    t = _snake(d["type"])
+    if t == "symmetric" and len(refs) == 3:
+        on = f"{refs[0]} and {refs[1]} about {refs[2]}"
+    else:
+        on = " and ".join(refs)
+    val = f" = {d['value']:g}" if "value" in d else ""
+    return f"#{i} {t}{val}: {on}"
+
+
+def clashing(sk, cap=150):
+    """The constraints that take part in a conflict or redundancy: those
+    whose switching off (one at a time) leaves the sketch solving cleanly —
+    the solver's own lists name only one of each clash, often the last one
+    added rather than the pair that disagree. [] when none clears it alone."""
+    def clean():
+        code = sk.solve()
+        return code == 0 and not (getattr(sk, "ConflictingConstraints", None) or getattr(sk, "RedundantConstraints", None))
+
+    n = len(sk.Constraints)
+    if n > cap or not hasattr(sk, "setActive"):
+        return []
+    out = []
+    for i in range(n):
+        try:
+            if not sk.getActive(i):
+                continue
+            sk.setActive(i, False)
+        except Exception:
+            continue
+        try:
+            if clean():
+                out.append(i)
+        finally:
+            try:
+                sk.setActive(i, True)
+            except Exception:
+                pass
+    sk.solve()
     return out
 
 
@@ -697,8 +766,16 @@ def tools(session):
             st = state_of(sk)
             bad = [x for x in st.get("conflicting", []) + st.get("redundant", []) + st.get("malformed", []) if x >= before]
             if bad or st["solver"] != "solved":
+                # The solver names one constraint of each clash (often the
+                # last added): the ones that clash are those whose switching
+                # off clears it, named with what they hold, new and existing.
+                who = clashing(sk)
+                if who:
+                    new_ = [con_words(sk, i) for i in who if i >= before]
+                    old_ = [con_words(sk, i) for i in who if i < before]
+                    raise ToolError("invalid_state", f"These constraints over-constrain {sk.Label} ({st['solver']}), and any one of them dropped clears it — new: {'; '.join(new_) or 'none'}; existing: {'; '.join(old_) or 'none'}. Nothing was added: leave out a new one, or sketch_edit deleteConstraints an existing one first.")
                 clash = sorted(set(st.get("conflicting", []) + st.get("redundant", [])) - set(bad))
-                raise ToolError("invalid_state", f"These constraints over-constrain {sk.Label} ({st['solver']}): new {bad or added}, against existing {clash or '—'}. Nothing was added — drop one, or sketch_edit deleteConstraints the old one first.")
+                raise ToolError("invalid_state", f"These constraints over-constrain {sk.Label} ({st['solver']}): new {[con_words(sk, i) for i in (bad or added)]}, against existing {[con_words(sk, i) for i in clash] or '—'}. Nothing was added — drop one, or sketch_edit deleteConstraints the old one first.")
         except Exception:
             for ci in sorted(range(before, len(sk.Constraints)), reverse=True):
                 sk.delConstraint(ci)

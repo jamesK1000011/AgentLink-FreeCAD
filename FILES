@@ -31,7 +31,9 @@ agentlink/data/stock.schema.json
 agentlink/data/tools.json
 agentlink/data/tools.schema.json
 agentlink/datafiles.py
+agentlink/dxfread.py
 agentlink/echo.py
+agentlink/exprs.py
 agentlink/ext.py
 agentlink/facepick.py
 agentlink/families/__init__.py
@@ -64,6 +66,7 @@ agentlink/families/part_more.py
 agentlink/families/pd_common.py
 agentlink/families/picks.py
 agentlink/families/points.py
+agentlink/families/refs.py
 agentlink/families/robot.py
 agentlink/families/sheet.py
 agentlink/families/sketch.py
@@ -273,6 +276,7 @@ tests/test_sheets.py
 tests/test_sketch.py
 tests/test_sketch_gaps.py
 tests/test_std_more.py
+tests/test_stem_findings.py
 tests/test_strength.py
 tests/test_supervise_unattended.py
 tests/test_svg_fonts.py

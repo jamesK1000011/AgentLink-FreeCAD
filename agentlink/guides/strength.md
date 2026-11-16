@@ -23,6 +23,7 @@
 - Each answer lists the faces picked with area and centre: check them.
 
 ## Traps
+- `fea_hold` and `fea_load` take faces as `shape_query` gives them too: "Face8", a list, or its filters (`{ type: "cylinder", radius: 3 }` for a hole's wall).
 - A rigid hold makes stress no real mount does: a peak on a held face reads high. Look a little away from it, or hold a wider face.
 - A coarse mesh under-reads peaks. Halve `mesh` and solve again; if the peak rises by more than 10 %, keep going.
 - Library figures are typical. For a part that must not fail, use the supplier's (material_set custom) and keep a safety factor of 2 or more.

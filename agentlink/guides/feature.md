@@ -8,7 +8,7 @@
 4. `feature_list` shows the history. `feature_edit` changes values. `feature_suppress` and `feature_remove` take features out.
 
 ## traps
-- Name faces and edges by where they are: `{ at, normal }` for a face, `{ near }` for an edge. Do not use an index. Indices change after every edit, which is the topological naming problem.
+- Name faces and edges by where they are: `{ at, normal }` for a face, `{ near }` for an edge, or `shape_query`'s filters (`{ type: "line", axis: [1, 0, 0], z: 10 }`). A reference from `shape_query` ("Edge3") is good until the next edit. Query again after an edit: the numbers change (the topological naming problem).
 - A pocket cuts against its sketch's normal. One that cuts nothing is refused: use `reversed: true`, or put the sketch on the face the pocket enters.
 - A pad that adds nothing (inside the body already) is refused.
 - Holes drill at the centre of each circle in the sketch, against the sketch's normal. Put the sketch on the face the holes enter.

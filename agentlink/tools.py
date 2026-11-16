@@ -145,7 +145,7 @@ class Session:
             # Built into another solid (a boolean, the next feature): not a
             # part of its own. A drawing, a folder or a spreadsheet using it
             # leaves it one.
-            if any(p.TypeId not in passive and self._solid(p) for p in o.InList):
+            if any(p.TypeId not in passive and self._solid(p) and self._consumes(p, o) for p in o.InList):
                 continue
             try:
                 parent = o.getParentGeoFeatureGroup()
@@ -157,6 +157,36 @@ class Session:
                 continue
             out.append(o)
         return out
+
+    # Links that refer to an object without building from it: where a thing
+    # is attached (a screw on a hole's edge — Fasteners' BaseObject —, a
+    # part attached to a face). The Body a Fasteners screw sat on was left
+    # out of the parts (view_render drew the screws only).
+    REFERENCE_ONLY = ("AttachmentSupport", "Support", "BaseObject", "MapReference")
+
+    @staticmethod
+    def _consumes(p, o):
+        """Whether p is built from o: some link of p's, other than where it
+        is attached, holds o. True when it cannot be read (as before)."""
+        def holds(v):
+            if v is o:
+                return True
+            if isinstance(v, (list, tuple)):
+                return any(holds(x) for x in v)
+            return False
+
+        try:
+            for prop in p.PropertiesList:
+                if prop in Session.REFERENCE_ONLY:
+                    continue
+                t = p.getTypeIdOfProperty(prop)
+                if not (t.startswith("App::PropertyLink") or t.startswith("App::PropertyXLink")):
+                    continue
+                if holds(p.getPropertyByName(prop)):
+                    return True
+            return False
+        except Exception:
+            return True
 
     def switch(self, doc):
         """Work in another document from now on: its own undo, steps and

@@ -387,6 +387,146 @@ def _gui_saved(d):
         pass
 
 
+
+LIST_ALL = 12  # an import of more objects than this is summarised
+
+
+def is_holder(o):
+    """A group or a Draft layer: it holds imported objects, it is not one."""
+    if o.TypeId in ("App::DocumentObjectGroup", "App::DocumentObjectGroupPython"):
+        return True
+    proxy = getattr(o, "Proxy", None)
+    return type(proxy).__name__ in ("Layer", "LayerContainer") or o.Name.startswith(("LayerContainer",))
+
+
+def summarised(out, holders=()):
+    """The objects an import made: all of them when few, else counts by
+    type and the first few (an import of a drawing of a thousand lines is
+    not a thousand-line answer)."""
+    res = {}
+    if holders:
+        res["layers"] = sorted({h.Label for h in holders})[:LIST_ALL]
+        res["layerCount"] = len(holders)
+    if len(out) <= LIST_ALL:
+        res["objects"] = out
+        return res
+    by = {}
+    for e in out:
+        k = e.get("dxf") or e["type"]
+        by[k] = by.get(k, 0) + 1
+    res["byType"] = by
+    res["objects"] = out[:5]
+    res["more"] = f"{len(out) - 5} more ({', '.join(f'{n} {k}' for k, n in sorted(by.items()))}): doc_list or session_state lists them all."
+    return res
+
+
+def import_dxf(d, p, base, before, a):
+    """A DXF: its LINE, ARC, CIRCLE, ELLIPSE, POINT, (LW)POLYLINE and SPLINE
+    read by Agent Link's own reader (dxfread.py) — FreeCAD's dropped the
+    closing edge of a closed 3D polyline and refused a SPLINE by fit points;
+    a drawing with blocks, text, dimensions or hatches goes through
+    FreeCAD's importer, its closed polylines closed after, and what it
+    could not read said. (objects made, what was read)."""
+    from .. import dxfread
+
+    try:
+        parsed = dxfread.read(p)
+    except Exception as e:  # noqa: BLE001 - FreeCAD's reader may still read it
+        parsed, why = None, str(e)
+    else:
+        why = None if parsed is not None else "a binary DXF"
+    own_only = parsed is not None and parsed["entities"] and not parsed["other"]
+    if own_only:
+        made, took = dxf_own(d, parsed, base)
+        took["reader"] = "Agent Link's own DXF reader (dxfread)"
+        return made, took
+    try:
+        import Import
+
+        Import.readDXF(p, d.Name)
+    except Exception as e:  # noqa: BLE001
+        for o in [o for o in d.Objects if o.Name not in before]:
+            try:
+                d.removeObject(o.Name)
+            except Exception:  # noqa: BLE001
+                pass
+        if parsed is None or not parsed["entities"]:
+            raise ToolError("unavailable", f"DXF import failed here ({e}){f'; {why}' if why else ''}: open it in the FreeCAD window (Draft's importer).") from None
+        made, took = dxf_own(d, parsed, base)
+        took.update(reader="Agent Link's own DXF reader (dxfread): FreeCAD's importer failed", freecadFailed=str(e),
+                    notRead={k: v for k, v in parsed["other"].items()},
+                    note="Blocks, text, dimensions and hatches are FreeCAD's importer's to read: open the file in the FreeCAD window for them.")
+        return made, took
+    made = [o for o in d.Objects if o.Name not in before]
+    took = {"reader": "FreeCAD's DXF importer" + (f" (the drawing has {', '.join(f'{n} {k}' for k, n in sorted(parsed['other'].items()))})" if parsed and parsed["other"] else "")}
+    if parsed is not None:
+        fixed = dxf_close(made, parsed)
+        if fixed:
+            took["closed"] = f"{fixed} closed polyline(s) came in open (their closing edge dropped): closed here."
+    return made, took
+
+
+def dxf_own(d, parsed, base):
+    """The parsed entities as Part::Feature objects, one group per layer."""
+    from .. import dxfread
+
+    made, failed, groups, counts = [], [], {}, {}
+    for i, e in enumerate(parsed["entities"]):
+        try:
+            sh = dxfread.shape(e)
+        except Exception as ex:  # noqa: BLE001 - said, the rest still come in
+            failed.append({"entity": i, "type": e["type"], "layer": e.get("layer"), "why": str(ex) or type(ex).__name__})
+            continue
+        o = d.addObject("Part::Feature", e["type"].capitalize())
+        o.Shape = sh
+        o.Label = f"{e['type'].capitalize()} {e.get('layer', '0')}"
+        o.addProperty("App::PropertyString", "DxfType", "DXF", "The DXF entity this came from").DxfType = e["type"]
+        g = groups.get(e.get("layer", "0"))
+        if g is None:
+            g = d.addObject("App::DocumentObjectGroup", "Layer")
+            g.Label = str(e.get("layer", "0"))
+            groups[e.get("layer", "0")] = g
+            made.append(g)
+        g.addObject(o)
+        made.append(o)
+        counts[e["type"]] = counts.get(e["type"], 0) + 1
+    took = {"entities": counts}
+    if failed:
+        took["failed"] = failed[:10]
+        took["failedCount"] = len(failed)
+    if parsed.get("units") is not None:
+        took["dxfUnits"] = {0: "none", 1: "in", 2: "ft", 4: "mm", 5: "cm", 6: "m"}.get(parsed["units"], parsed["units"])
+    return made, took
+
+
+def dxf_close(made, parsed):
+    """Closed polylines FreeCAD's importer brought in open, closed: an open
+    wire whose ends are the polyline's first and last points gets its
+    closing edge. The count closed."""
+    from .. import dxfread
+
+    want = [e for e in parsed["entities"] if e["type"] in ("POLYLINE", "LWPOLYLINE") and e.get("closed") and len(e["points"]) > 2]
+    fixed = 0
+    for o in made:
+        sh = getattr(o, "Shape", None)
+        if sh is None or sh.isNull() or len(sh.Wires) != 1 or sh.Wires[0].isClosed():
+            continue
+        w = sh.Wires[0]
+        ends = [w.OrderedVertexes[0].Point, w.OrderedVertexes[-1].Point]
+        for e in want:
+            pts = [FreeCAD.Vector(*dxfread.to_world(q, e.get("ocs"))) for q in e["points"]]
+            if len(w.Edges) != len(dxfread.segments(e)) - 1:
+                continue
+            if {(round(v.x, 6), round(v.y, 6), round(v.z, 6)) for v in ends} == {(round(v.x, 6), round(v.y, 6), round(v.z, 6)) for v in (pts[0], pts[-1])}:
+                try:
+                    o.Shape = Part.Wire(w.OrderedEdges + [Part.makeLine(ends[1], ends[0])])
+                    fixed += 1
+                    want.remove(e)
+                except Exception:  # noqa: BLE001
+                    pass
+                break
+    return fixed
+
 def tools(session):
     s = session
 
@@ -782,13 +922,7 @@ def tools(session):
             o.Label = s.unique(base)
             made.append(o)
         elif fmt == "dxf":
-            try:
-                import Import
-
-                Import.readDXF(p, d.Name)
-            except Exception as e:
-                raise ToolError("unavailable", f"DXF import failed here ({e}): open it in the FreeCAD window (Draft's importer).")
-            made = [o for o in d.Objects if o.Name not in before]
+            made, took = import_dxf(d, p, base, before, a)
         elif fmt == "fcstd":
             raise ToolError("invalid_input", "A FreeCAD document: doc_open { path } opens it.")
         elif fmt == "svg":
@@ -820,8 +954,14 @@ def tools(session):
         picks.recompute_scoped(d, made)
         s.snapshot("import_file")
         out = []
+        # Groups and layers hold the drawing, they are not drawing: counted,
+        # not listed one by one.
+        holders = [o for o in made if is_holder(o)]
+        made = [o for o in made if not is_holder(o)]
         for o in made:
             e = {"name": o.Name, "label": o.Label, "type": o.TypeId}
+            if getattr(o, "DxfType", None):
+                e["dxf"] = o.DxfType
             sh = getattr(o, "Shape", None)
             if isinstance(sh, Part.Shape) and not sh.isNull():
                 e.update(geo.stats(sh) if sh.Solids else {"faces": len(sh.Faces), "edges": len(sh.Edges)})
@@ -832,7 +972,9 @@ def tools(session):
                 e["mesh"] = {"triangles": o.Mesh.CountFacets, "closed": o.Mesh.isSolid()}
                 e["note"] = "A mesh (Mesh::Feature), not a body: mesh files come in as meshes unless solid: true is asked. import_file { solid: true } makes a body of it (up to 200000 triangles); meshobj_* tools work on it as it is."
             out.append(e)
-        return {"path": p, "format": fmt, **({"read": took} if took else {}), "objects": out, "count": len(out), "step": len(s.steps)}
+        res = {"path": p, "format": fmt, **({"read": took} if took else {}), "count": len(out), "step": len(s.steps)}
+        res.update(summarised(out, holders))
+        return res
 
     def export_pick(ref):
         # A mesh (Mesh::Feature) is exported as it is, never refused for
@@ -994,6 +1136,6 @@ def tools(session):
              obj({"action": {"type": "string", "enum": ["add", "remove", "dissolve", "link", "list"]}, "group": {"type": "string"}, "kind": {"type": "string", "enum": ["folder", "part"]}, "objects": {"type": "array", "items": {"type": "string"}},
                   "object": {"type": "string"}, "count": {"type": "integer"}, "at": {"type": "array", "items": {}}, "step": {"type": "array", "items": {}}, "visible": {"type": "boolean"}, "name": {"type": "string"}}), object_group, changes=True),
         Tool("recompute", "Recompute the document (force: true recomputes everything) and list each object that failed, with FreeCAD's reason.", obj({"force": {"type": "boolean"}}), recompute, changes=True),
-        Tool("import_file", "Bring a file into the document: STEP, IGES, BREP as bodies (split: true makes a body of each solid); STL, OBJ, 3MF, PLY, OFF, AMF — and glTF/GLB, Collada, VRML 2, 3DS, every mesh node flattened into one in mm, Z up (units and up override what the format says; read says what was taken) — as a mesh (Mesh::Feature) unless solid: true asks for a body made of its triangles (up to 200000); DXF and SVG as Draft geometry; JT where this FreeCAD has its reader; PNG, JPG, BMP as an image plane width mm wide on XY, to trace over. PDF, DWG, IFC need the FreeCAD window; FBX: export it as glTF. .FCStd: doc_open.", obj({"path": {"type": "string"}, "name": {"type": "string"}, "split": {"type": "boolean"}, "solid": {"type": "boolean"}, "units": {"type": "string", "enum": ["mm", "cm", "m", "in"]}, "up": {"type": "string", "enum": ["x", "y", "z"]}, "width": {"type": "number"}}, ["path"]), import_file, changes=True),
+        Tool("import_file", "Bring a file into the document: STEP, IGES, BREP as bodies (split: true makes a body of each solid); STL, OBJ, 3MF, PLY, OFF, AMF — and glTF/GLB, Collada, VRML 2, 3DS, every mesh node flattened into one in mm, Z up (units and up override what the format says; read says what was taken) — as a mesh (Mesh::Feature) unless solid: true asks for a body made of its triangles (up to 200000); DXF as wires, arcs, circles and splines (Agent Link's reader; a drawing with blocks, text or dimensions through FreeCAD's) and SVG as Draft geometry — many objects come back counted, the first few listed; JT where this FreeCAD has its reader; PNG, JPG, BMP as an image plane width mm wide on XY, to trace over. PDF, DWG, IFC need the FreeCAD window; FBX: export it as glTF. .FCStd: doc_open.", obj({"path": {"type": "string"}, "name": {"type": "string"}, "split": {"type": "boolean"}, "solid": {"type": "boolean"}, "units": {"type": "string", "enum": ["mm", "cm", "m", "in"]}, "up": {"type": "string", "enum": ["x", "y", "z"]}, "width": {"type": "number"}}, ["path"]), import_file, changes=True),
         Tool("export", "Write objects (the one body when left out; several go as one compound) and read it back (verify). Meshes (Mesh::Feature) go as they are to the mesh and scene formats (STL by default). Solids: STEP, IGES, BREP. One mesh: STL, OBJ, 3MF, PLY, OFF, VRML (wrl), X3D. A scene, a mesh per object with colors {label: \"#rrggbb\"}: glTF (glb, gltf), Collada (dae) — metres, Y up. 2D: DXF (R12) or SVG of a view (top | bottom | front | back | right | left | iso; hidden: true adds hidden lines on their own layer) or of a section at z mm (section) — circles and arcs kept as such, for laser and plasma cutting. format, or from path's extension; tolerance: the chord error, 0.01 mm.", obj({"objects": {}, "format": {"type": "string", "enum": list(EXPORTS)}, "path": {"type": "string"}, "tolerance": {"type": "number"}, "colors": {"type": "object"}, "view": {"type": "string", "enum": list(VIEWS)}, "hidden": {"type": "boolean"}, "section": {"type": "number"}}), export),
     ]

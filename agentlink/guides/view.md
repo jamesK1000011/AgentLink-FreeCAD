@@ -21,6 +21,8 @@ Look at the part after every change that matters, as a person would.
 - `view_snapshot { views: ["top", "front", "right", "iso"] }` (up to 6, or `"all"`) gives one grid picture, and each view's file in `paths`. It puts the person's view back after.
 
 ## traps
+- `view_render` runs on the first call: it is not held back on a time estimate.
+- `view_snapshot` `width` and `height` are the whole picture. With several `views` they are split among the grid; `cell: true` makes them each view's size. The answer gives the sizes as saved.
 - Grey on a map is unread: an open mesh, a scan past the max distance.
 - The picture is the tessellation: a fine curve shows facets; `tolerance` sets the chord.
 - Big pictures are big answers: `inline: false` writes the file only.

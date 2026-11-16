@@ -241,10 +241,10 @@ def tools(session):
             for e in edges:
                 if isinstance(e, str) and e.startswith(("Edge", "Vertex")):
                     names.append(e)
-                elif isinstance(e, dict) and "near" in e:
+                elif isinstance(e, dict):
                     names += pc.find_edges(src.Shape, [e])
                 else:
-                    raise bad("edges: \"Edge3\" or { near: [x, y, z], kind } each; left out, every edge.")
+                    raise bad("edges: \"Edge3\", { near: [x, y, z], kind } or shape_query's filters each; left out, every edge.")
         else:
             names = [f"Edge{i + 1}" for i in range(len(src.Shape.Edges))]
         if not names:

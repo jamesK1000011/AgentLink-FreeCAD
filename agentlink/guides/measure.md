@@ -9,6 +9,7 @@
 
 ## traps
 - References go stale after a change: query again.
+- Give what `shape_query` answers to the tools that take faces or edges (`pd_fillet`, `pd_chamfer`, `pd_draft`, `pd_thickness`, `fea_hold`, `fea_load`): a reference ("Face8", "Body.Face8"), a list of them, an item as it came, or the same filters (`{ type: "circle", radius: 3 }`). A filter with `near` and no `limit` takes the nearest one.
 - References are "Face12" with `body`, or "Box.Face12"; a bare body name means the whole body, a list [x, y, z] a point.
 - Normals are outward; `axis` matches either way along a line or a hole's axis.
 - `measure_mass` treats the body as solid; a printed part with infill weighs less; an add-on for printing may estimate that.

@@ -2,7 +2,9 @@
 # Faces picked by a query rather than by name, so a pick still finds its
 # faces after an edit renumbers them: { faces: ["Face3"] }, { near: [x,y,z],
 # radius }, { normal: [nx,ny,nz], x|y|z: plane, tol: degrees }, and
-# { cylinder: true } to keep cylindrical faces only.
+# { cylinder: true } to keep cylindrical faces only. Also what every other
+# tool takes (families/refs.py): "Face8" / "Body.Face8", a list of them,
+# shape_query's items and its filters ({ type: cylinder, radius: 3 } …).
 
 import math
 
@@ -13,7 +15,7 @@ from .protocol import ToolError
 
 V = FreeCAD.Vector
 KEYS = ("faces", "near", "radius", "normal", "x", "y", "z", "tol", "cylinder", "largest")
-HELP = "a query: { near: [x,y,z] } (the nearest face; radius: mm takes every face that close), { normal: [0,0,1], z: 0 } (flat faces facing that way, at that plane), or { faces: [\"Face3\"] }"
+HELP = "a query: { near: [x,y,z] } (the nearest face; radius: mm takes every face that close), { normal: [0,0,1], z: 0 } (flat faces facing that way, at that plane), { faces: [\"Face3\"] }, a reference shape_query gives (\"Face8\", \"Body.Face8\") or a list of them, or shape_query's filters ({ type: cylinder, radius, axis, near, … })"
 
 
 def _vec(v, what):
@@ -39,8 +41,27 @@ def describe(name, face):
     return d
 
 
-def pick(shape, q, what="faces"):
-    """[(name, face)] the query picks on the shape; refused when none."""
+def _legacy(q):
+    """Whether a dict is this module's own query (not shape_query's
+    filters): only its keys, and radius only with near (radius alone is
+    shape_query's, the faces' own radius)."""
+    from .families import refs
+
+    return refs.legacy_of(KEYS, lambda d: "radius" not in d or "near" in d)(q)
+
+
+def pick(shape, q, what="faces", names=()):
+    """[(name, face)] the query picks on the shape; refused when none.
+    A reference, a list, or shape_query's filters go through the shared
+    resolver (families/refs.py); this module's own dicts as they were."""
+    if isinstance(q, (str, list)) or (isinstance(q, dict) and q and not _legacy(q)):
+        from .families import refs
+
+        return refs.pick(shape, q, "face", what, legacy=lambda d: _pick(shape, d, what), is_legacy=_legacy, names=names)
+    return _pick(shape, q, what)
+
+
+def _pick(shape, q, what):
     if not isinstance(q, dict) or not q:
         raise ToolError("invalid_input", f"{what}: {HELP}.")
     bad = [k for k in q if k not in KEYS]
