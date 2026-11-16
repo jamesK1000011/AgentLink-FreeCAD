@@ -56,14 +56,16 @@ Pick one.
 
 ### 1. The Claude Desktop extension (Mac)
 
-Download `freecad-agentlink.mcpb` from the newest `agentlink-v…`
-[release of this repository](https://github.com/jamesK1000011/AgentLink-FreeCAD/releases) and double-click it; Claude Desktop
-installs it. It finds FreeCAD in Applications, installs Agent Link and the
+Download [`freecad-agentlink.mcpb`](https://github.com/jamesK1000011/AgentLink-FreeCAD/releases/latest/download/freecad-agentlink.mcpb) (attached to the newest
+`agentlink-v…` [release of this repository](https://github.com/jamesK1000011/AgentLink-FreeCAD/releases)) and double-click it;
+Claude Desktop installs it. It finds FreeCAD in Applications, installs Agent Link and the
 add-ons bundled with it into FreeCAD and keeps them up to date: Workshop for
 FreeCAD, ScanRuler for FreeCAD (ported from ScanRuler by Stefan Hermann,
 CNC Kitchen), Texturizer (BumpMesh's textures, also by Stefan Hermann, CNC
 Kitchen), Tutor and Agent Link for OrcaSlicer. The extension is built here
-(`packaging/`, see `docs/packaging.md`). Its
+(`packaging/`, see `docs/packaging.md`); the copies once released from
+ScanRuler's `freecad-spike` branch are retired, and an installed one moves
+to this repository at its next update. Its
 settings: the output folder (`~/AgentLink` by default), the FreeCAD app if it
 is not in Applications, and whether to keep the add-ons up to date.
 

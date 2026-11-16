@@ -24,6 +24,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      # The tag names the version written everywhere (package.xml, pyproject,
+      # server.json, the server, the manifest, the changelog), and the
+      # manifest is sound: nothing is built otherwise.
+      - name: Versions agree with the tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python3 scripts/release.py check --tag "$TAG"
       - name: Check out the pinned add-ons (the list is packaging/addons.json)
         run: |
           mkdir -p pinned
