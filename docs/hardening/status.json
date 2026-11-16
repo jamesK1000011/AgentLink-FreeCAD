@@ -517,49 +517,49 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: 100 x 60 x 3 acrylic plate with one hole: pass, least web 16, kerf 0.2 assumed; refused for a body in no cut setup; 4 copies nested by BIM Nest on 300 x 200: DXF 16 lines and 4 circles on OUTER and HOLES, read back and matching, SVG the same"
  },
  "cut_export": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: 100 x 60 x 3 acrylic plate with one hole: pass, least web 16, kerf 0.2 assumed; refused for a body in no cut setup; 4 copies nested by BIM Nest on 300 x 200: DXF 16 lines and 4 circles on OUTER and HOLES, read back and matching, SVG the same"
  },
  "dfm_check": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: bracket with six holes and a nut trap in a print setup: no findings, rules from the setup (nozzle 0.4, minWall 0.8, bridge 10), least wall 3.09 mm beside the nut trap (consistent by hand, not recomputed exactly); Parts model: the bin lip thin wall found"
  },
  "dimension_add": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 degrees, angularity 1.047 mm at basic 89; limit over by 0.099 then cleared; report text and JSON (1 checked, 1 pass), CSV 15 rows"
  },
  "dimension_remove": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 degrees, angularity 1.047 mm at basic 89; limit over by 0.099 then cleared; report text and JSON (1 checked, 1 pass), CSV 15 rows"
  },
  "dimension_set_basic": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 degrees, angularity 1.047 mm at basic 89; limit over by 0.099 then cleared; report text and JSON (1 checked, 1 pass), CSV 15 rows"
  },
  "dimension_set_limit": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 degrees, angularity 1.047 mm at basic 89; limit over by 0.099 then cleared; report text and JSON (1 checked, 1 pass), CSV 15 rows"
  },
  "doc_close": {
   "description": true,
@@ -753,42 +753,49 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
  },
  "element_fit_marked": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
  },
  "element_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
+ },
+ "element_remove": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
  },
  "element_rename": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
  },
  "element_set_visible": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
  },
  "element_unlink": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
  },
  "export": {
   "headless": true,
@@ -800,7 +807,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 degrees, angularity 1.047 mm at basic 89; limit over by 0.099 then cleared; report text and JSON (1 checked, 1 pass), CSV 15 rows"
  },
  "fastener_add": {
   "description": true,
@@ -814,14 +821,14 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Fasteners model 16:58 (24 calls; as expected on every call)"
+  "model": "Workshop Fasteners model: three screws listed with their holes kept after the Body edges renumbered (Edge14 to Edge16, Edge19 to Edge21), BOM by item, sheet Fasteners_BOM by Fasteners own Generate BOM"
  },
  "fastener_print": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Fasteners model 16:58 (24 calls; as expected on every call)"
+  "model": "Workshop Fasteners model: read only: mode standard, nut [1.03, 0.1], screw [0.99, -0.05]; a wrong mode refused; set not run (it changes the person preference)"
  },
  "fastener_set": {
   "description": true,
@@ -862,7 +869,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: simply supported 1000 mm steel beam 50 x 100 under 10 N/mm: deflection 0.159 mm (0.156 Euler, 0.160 with shear), bending 15.16 MPa (15.0), reactions 5000 N each; a from of two numbers refused"
  },
  "fea_heat": {
   "description": true,
@@ -979,35 +986,35 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: calibrate kept (0 and 0.2); slide hole 8.2, shaft 8 on every fit; stack 0.6, worst case [0.25, 0.95], rss [0.371, 0.829]"
  },
  "gen_make": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Parts model 16:57 (19 calls; as expected on every call)"
+  "model": "Workshop Parts model: gridfinity bin 2x1x4 measured and made: [83.5, 41.5, 32.4], 8 magnets, one valid closed solid (body_check); range and unknown-key refusals"
  },
  "gen_part": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Parts model 16:57 (19 calls; as expected on every call)"
+  "model": "Workshop Parts model: baseplate 2x2 [84, 84, 4.65], magnet baseplate 7.65 high with 8 holes of 6.2, project box inside [76, 56, 28] with pilot 2.8 and lid hole 3.7 at calibration 0.3, board box with standoffs and one opening; each put clear beside the last, all sound; floor range refused"
  },
  "hw_embed": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: 6x2 magnet in a plain solid: pocket 6.4 x 2.2, floor 3, top 5.2, pause after layer 26, roof 4.8; listed, paused, removed (pocket filled, one solid); refused on a PartDesign Body, out of the part, unknown id; Parts model: the bin magnets pause after layer 12 at z 2.4"
  },
  "hw_embed_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: 6x2 magnet in a plain solid: pocket 6.4 x 2.2, floor 3, top 5.2, pause after layer 26, roof 4.8; listed, paused, removed (pocket filled, one solid); refused on a PartDesign Body, out of the part, unknown id; Parts model: the bin magnets pause after layer 12 at z 2.4"
  },
  "hw_hole": {
   "description": true,
@@ -1021,14 +1028,14 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: 6x2 magnet in a plain solid: pocket 6.4 x 2.2, floor 3, top 5.2, pause after layer 26, roof 4.8; listed, paused, removed (pocket filled, one solid); refused on a PartDesign Body, out of the part, unknown id; Parts model: the bin magnets pause after layer 12 at z 2.4"
  },
  "hw_unembed": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: 6x2 magnet in a plain solid: pocket 6.4 x 2.2, floor 3, top 5.2, pause after layer 26, roof 4.8; listed, paused, removed (pocket filled, one solid); refused on a PartDesign Body, out of the part, unknown id; Parts model: the bin magnets pause after layer 12 at z 2.4"
  },
  "ifc_diff": {
   "description": true,
@@ -1212,14 +1219,14 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: 608 triangles cut into 219600 with no edge over 1 mm, closed, volume unchanged (45638.77); the edited mesh made the scan"
  },
  "mesh_use_edited": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: 608 triangles cut into 219600 with no edge over 1 mm, closed, volume unchanged (45638.77); the edited mesh made the scan"
  },
  "meshobj_boolean": {
   "description": true,
@@ -1345,7 +1352,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: 60 x 40 x 20 block with a 30 x 20 x 8 pocket, 3 mm tool from +z: four sharp inside corners warned at the right places, least wall 10, stock 64 x 44 x 22 and reach 20 assumed and said"
  },
  "mill_export": {
   "description": true,
@@ -1634,7 +1641,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: spec minWall 1.2 and massMax 60 kept, material petg with the note that FreeCAD has no card; refusal lists the five limits"
  },
  "part_split": {
   "description": true,
@@ -1947,7 +1954,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 degrees, angularity 1.047 mm at basic 89; limit over by 0.099 then cleared; report text and JSON (1 checked, 1 pass), CSV 15 rows"
  },
  "robot_export": {
   "description": true,
@@ -2042,91 +2049,91 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: six faces and the pocket floor segmented with the worked areas (2235, 2136, 1157 x 2, 771 x 2, 98); a flat patch fits a plane with rms 0; heightmap cell for cell (20, 19 in the pocket, null over the bore), levels 96.5 and 3.5 percent, picture written; outline 2400 and a hole of radius 5.998; cloud of every vertex"
  },
  "scan_draft": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: only the plain cases: draft 0.0 on the bore rings (flat walls do not gather on this mesh, as the description says), no repeat about the bore with rings of radius 5.999, no thread on the plain bore"
  },
  "scan_fit_surface": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: six faces and the pocket floor segmented with the worked areas (2235, 2136, 1157 x 2, 771 x 2, 98); a flat patch fits a plane with rms 0; heightmap cell for cell (20, 19 in the pocket, null over the bore), levels 96.5 and 3.5 percent, picture written; outline 2400 and a hole of radius 5.998; cloud of every vertex"
  },
  "scan_heightmap": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: six faces and the pocket floor segmented with the worked areas (2235, 2136, 1157 x 2, 771 x 2, 98); a flat patch fits a plane with rms 0; heightmap cell for cell (20, 19 in the pocket, null over the bore), levels 96.5 and 3.5 percent, picture written; outline 2400 and a hole of radius 5.998; cloud of every vertex"
  },
  "scan_info": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: a 60 x 40 x 20 block with a 12 mm bore and a 1 mm pocket, meshed: box, centre and area 9367.8 right; qa says a sparse CAD tessellation, then thickness p5 19 / p50 20 once densified; nearest vertex 5.02 from the point; 23465 top vertices found and marked"
  },
  "scan_nearest": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: a 60 x 40 x 20 block with a 12 mm bore and a 1 mm pocket, meshed: box, centre and area 9367.8 right; qa says a sparse CAD tessellation, then thickness p5 19 / p50 20 once densified; nearest vertex 5.02 from the point; 23465 top vertices found and marked"
  },
  "scan_open": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: a 60 x 40 x 20 block with a 12 mm bore and a 1 mm pocket, meshed: box, centre and area 9367.8 right; qa says a sparse CAD tessellation, then thickness p5 19 / p50 20 once densified; nearest vertex 5.02 from the point; 23465 top vertices found and marked"
  },
  "scan_outline": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: six faces and the pocket floor segmented with the worked areas (2235, 2136, 1157 x 2, 771 x 2, 98); a flat patch fits a plane with rms 0; heightmap cell for cell (20, 19 in the pocket, null over the bore), levels 96.5 and 3.5 percent, picture written; outline 2400 and a hole of radius 5.998; cloud of every vertex"
  },
  "scan_pattern": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: only the plain cases: draft 0.0 on the bore rings (flat walls do not gather on this mesh, as the description says), no repeat about the bore with rings of radius 5.999, no thread on the plain bore"
  },
  "scan_qa": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: a 60 x 40 x 20 block with a 12 mm bore and a 1 mm pocket, meshed: box, centre and area 9367.8 right; qa says a sparse CAD tessellation, then thickness p5 19 / p50 20 once densified; nearest vertex 5.02 from the point; 23465 top vertices found and marked"
  },
  "scan_query": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: a 60 x 40 x 20 block with a 12 mm bore and a 1 mm pocket, meshed: box, centre and area 9367.8 right; qa says a sparse CAD tessellation, then thickness p5 19 / p50 20 once densified; nearest vertex 5.02 from the point; 23465 top vertices found and marked"
  },
  "scan_segment": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: six faces and the pocket floor segmented with the worked areas (2235, 2136, 1157 x 2, 771 x 2, 98); a flat patch fits a plane with rms 0; heightmap cell for cell (20, 19 in the pocket, null over the bore), levels 96.5 and 3.5 percent, picture written; outline 2400 and a hole of radius 5.998; cloud of every vertex"
  },
  "scan_thread": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: only the plain cases: draft 0.0 on the bore rings (flat walls do not gather on this mesh, as the description says), no repeat about the bore with rings of radius 5.999, no thread on the plain bore"
  },
  "section": {
   "description": true,
@@ -2140,35 +2147,35 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: section at z 10: outline 200.0 and bore 37.696 long, fitted as 4 lines and one arc of radius 5.9993 about [20, 20, 10]; section through the bore axis: 4 + 8 lines with the pocket step; shadow with play 0.5: one loop of 2531.69 mm2"
  },
  "section_fit": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: section at z 10: outline 200.0 and bore 37.696 long, fitted as 4 lines and one arc of radius 5.9993 about [20, 20, 10]; section through the bore axis: 4 + 8 lines with the pocket step; shadow with play 0.5: one loop of 2531.69 mm2"
  },
  "section_get": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: section at z 10: outline 200.0 and bore 37.696 long, fitted as 4 lines and one arc of radius 5.9993 about [20, 20, 10]; section through the bore axis: 4 + 8 lines with the pocket step; shadow with play 0.5: one loop of 2531.69 mm2"
  },
  "section_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: section at z 10: outline 200.0 and bore 37.696 long, fitted as 4 lines and one arc of radius 5.9993 about [20, 20, 10]; section through the bore axis: 4 + 8 lines with the pocket step; shadow with play 0.5: one loop of 2531.69 mm2"
  },
  "section_remove": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model, calls 0-70: section at z 10: outline 200.0 and bore 37.696 long, fitted as 4 lines and one arc of radius 5.9993 about [20, 20, 10]; section through the bore axis: 4 + 8 lines with the pocket step; shadow with play 0.5: one loop of 2531.69 mm2"
  },
  "section_to_sketch": {
   "description": true,
@@ -2182,7 +2189,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: list with each type explained, of (none), add print/cut/mill S1-S3, set add; refusals for a body in a setup already and an unknown setting"
  },
  "shape_query": {
   "description": true,
@@ -2412,28 +2419,28 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: bracket sliced by OrcaSlicer 2.5.0 with profiles written from the setup: 50 layers, 17.82 g (Make estimate 17.1), 2 h 7 min; project 3mf written and read back with its presets and statistics"
  },
  "slice_read": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: bracket sliced by OrcaSlicer 2.5.0 with profiles written from the setup: 50 layers, 17.82 g (Make estimate 17.1), 2 h 7 min; project 3mf written and read back with its presets and statistics"
  },
  "slice_with": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: bracket sliced by OrcaSlicer 2.5.0 with profiles written from the setup: 50 layers, 17.82 g (Make estimate 17.1), 2 h 7 min; project 3mf written and read back with its presets and statistics"
  },
  "slicer_presets": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: action list only (56 OrcaSlicer machine presets, no saved bundles); use, export, import and fetch not run"
  },
  "surface_blend": {
   "description": true,
@@ -2751,28 +2758,28 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+  "model": "Texturizer model: draft on the box (12 triangles, 6 faces), texture and settings set per layer, layer add / blend / name / solo / remove, a .bumpmesh project loaded back with its two layers; layer 0 blend and removing the last layer refused"
  },
  "texture_export": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+  "model": "Texturizer model: STL of a Textured object (25506 triangles) found again by texture_check, 3MF of the draft, .bumpmesh project with its four files, a body refused as not a mesh; prepare wrote the STL (12 triangles) and mask (2) to the output folder"
  },
  "texture_layer": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+  "model": "Texturizer model: draft on the box (12 triangles, 6 faces), texture and settings set per layer, layer add / blend / name / solo / remove, a .bumpmesh project loaded back with its two layers; layer 0 blend and removing the last layer refused"
  },
  "texture_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+  "model": "Texturizer model: 25 geometric textures with credits, 3 hexagon ids, a wrong category refused; estimate on the 40 x 30 x 10 box exactly as worked out: 24576 triangles and 10321920 bytes at 1.0 mm, 69206016 capped to 750000 at 0.02 mm"
  },
  "texture_mask": {
   "description": true,
@@ -2786,7 +2793,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+  "model": "Texturizer model: STL of a Textured object (25506 triangles) found again by texture_check, 3MF of the draft, .bumpmesh project with its four files, a body refused as not a mesh; prepare wrote the STL (12 triangles) and mask (2) to the output folder"
  },
  "texture_preview": {
   "description": true,
@@ -2800,14 +2807,14 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+  "model": "Texturizer model: draft on the box (12 triangles, 6 faces), texture and settings set per layer, layer add / blend / name / solo / remove, a .bumpmesh project loaded back with its two layers; layer 0 blend and removing the last layer refused"
  },
  "texture_settings": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+  "model": "Texturizer model: 25 geometric textures with credits, 3 hexagon ids, a wrong category refused; estimate on the 40 x 30 x 10 box exactly as worked out: 24576 triangles and 10321920 bytes at 1.0 mm, 69206016 capped to 750000 at 0.02 mm"
  },
  "thread_cut": {
   "description": true,
@@ -2821,14 +2828,14 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: M6 row (pitch 1, pitchDia 5.35, minors 4.917 / 4.773, tap drill 5), six sizes nearest 4.5 mm, M7.3 refused; a 4.5 mm hole read as M5x0.5 and #12-24 tap drills, #12-28 minor, needs pitch"
  },
  "thread_lookup": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "Workshop Make model: M6 row (pitch 1, pitchDia 5.35, minors 4.917 / 4.773, tap drill 5), six sizes nearest 4.5 mm, M7.3 refused; a 4.5 mm hole read as M5x0.5 and #12-24 tap drills, #12-28 minor, needs pitch"
  },
  "units_convert": {
   "description": true,
