@@ -101,6 +101,7 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 
 ### Fixed
 
+- `asm_explode` in the window fell back to moving placements ("'NoneType' object has no attribute 'redrawLines'"): the Exploded View and each move step now get their view providers before anything is set on them, as Create Exploded View's own task does; headless, with no view object, none is made.
 - A note pinned on a face stays on that face when a later step renumbers the faces (a Hole made a pad's top Face5 where it was Face6, and the note pointed at a side): it keeps FreeCAD 1.x's mapped name of the face, with its point and normal as the fallback, and is found again after each change, in `note_list` and in the panel; where neither finds it, it is flagged as lost (⚠ in the panel, `lost` in the answer) rather than moved to a guess.
 - `fea_setup` on a body that already has a study says what it kept (its holds and loads, added to from then on) or dropped (with `reset: true`, or a study on another body); `fea_hold` and `fea_load` refuse an identical hold or load already in the study, which applied it twice (a 100 N load added again came to 200 N).
 - The SVGs Agent Link writes (charts, drawing sheets, GD&T symbols) name Helvetica alone: the generic sans-serif made Qt warn of a missing "Sans-serif" family in the Report view.

@@ -90,6 +90,51 @@ SCRIPT = textwrap.dedent("""
     assert [st.MoveType for st in view.Group] == ["Normal", "Normal"]
     assert (lid.Placement.Base.z, base.Placement.Base.z) == (10.0, -5.0)
 
+    # In the window: each object gets its view provider before its references
+    # are set, and applying a step draws through it (the live failure was a
+    # ViewObject with no proxy: 'NoneType' object has no attribute 'redrawLines').
+    order = []
+    class VO:
+        def __init__(self, owner):
+            self.owner, self.Proxy = owner, None
+    class VPView:
+        def __init__(self, vo):
+            vo.Proxy = self
+            order.append(("vp", vo.owner.Label))
+    class VPStep:
+        def __init__(self, vo):
+            vo.Proxy = self
+            order.append(("vp", vo.owner.Label))
+        def redrawLines(self, move, positions):
+            order.append(("lines", move.Label))
+    CV.ViewProviderExplodedView, CV.ViewProviderExplodedViewStep = VPView, VPStep
+    real_new = Obj.newObject
+    def windowed(self, t, name):
+        o = real_new(self, t, name)
+        o.ViewObject = VO(o)
+        return o
+    Obj.newObject = windowed
+    real_apply = ExplodedView.saveAssemblyAndExplode
+    def apply_drawing(self, v):
+        for st in v.Group:
+            assert st.References, "references set after the view provider"
+            st.ViewObject.Proxy.redrawLines(st, [])
+        real_apply(self, v)
+    ExplodedView.saveAssemblyAndExplode = apply_drawing
+    real_setattr = Obj.__setattr__
+    def watch(self, k, v):
+        if k == "References":
+            assert self.ViewObject.Proxy is not None, "References set before the view provider"
+        real_setattr(self, k, v)
+    Obj.__setattr__ = watch
+    lid.Placement, base.Placement = Plc(Vec()), Plc(Vec())
+    view, why = AM._exploded_view(asm, [lid, base], moves)
+    assert why is None, why
+    assert order[0] == ("vp", "Exploded View") and order.count(("lines", "Move")) == 2, order
+    Obj.__setattr__ = real_setattr
+    Obj.newObject = real_new
+    ExplodedView.saveAssemblyAndExplode = real_apply
+
     # A step it would not take: put back, and what it made removed.
     ExplodedView.saveAssemblyAndExplode = lambda self, v: None
     n0 = len(D.objs)
