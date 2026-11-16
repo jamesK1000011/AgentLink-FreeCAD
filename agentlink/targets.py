@@ -101,6 +101,69 @@ def buttons(cmd, mw=None):
     return out
 
 
+def command_name(act):
+    """The command an action runs: its objectName, else the CommandName
+    property FreeCAD gives a group command's children."""
+    try:
+        name = act.objectName()
+        if name:
+            return str(name)
+        prop = act.property("CommandName") if hasattr(act, "property") else None
+        if prop is not None:
+            return bytes(prop).decode() if isinstance(prop, (bytes, bytearray)) or type(prop).__name__ == "QByteArray" else str(prop)
+    except (RuntimeError, TypeError, ValueError):
+        pass
+    return ""
+
+
+def in_menu(menu, cmd, depth=2):
+    """The action running cmd inside menu (and its submenus), or None."""
+    if menu is None:
+        return None
+    try:
+        acts = list(menu.actions())
+    except RuntimeError:
+        return None
+    for a in acts:
+        try:
+            if command_name(a) == cmd:
+                return a
+            sub = a.menu() if depth > 0 and hasattr(a, "menu") else None
+        except RuntimeError:
+            continue
+        got = in_menu(sub, cmd, depth - 1) if sub is not None else None
+        if got is not None:
+            return got
+    return None
+
+
+def group_buttons(cmd, mw=None, tool_button=None):
+    """[(button, menu, action)]: toolbar buttons whose dropdown holds cmd
+    (a group command: FreeCAD 1.1's Sketcher rectangles, arcs and circles,
+    Part Design's primitives), the button's own menu or its default action's
+    menu. The button shows the group's action, not cmd's, so buttons()
+    misses it."""
+    if tool_button is None:
+        _QtCore, _QtGui, QtW = _qt()
+        tool_button = QtW.QToolButton
+    out = []
+    for b in _mw(mw).findChildren(tool_button):
+        try:
+            menus = [b.menu()]
+            d = b.defaultAction()
+            if d is not None and command_name(d) == cmd:
+                continue  # the command's own button: buttons() has it
+            menus.append(d.menu() if d is not None else None)
+        except RuntimeError:
+            continue
+        for m in dict.fromkeys(x for x in menus if x is not None):
+            a = in_menu(m, cmd)
+            if a is not None:
+                out.append((b, m, a))
+                break
+    return out
+
+
 def menus_of(cmd, mw=None):
     _QtCore, _QtGui, QtW = _qt()
     out = []

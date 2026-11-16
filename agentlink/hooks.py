@@ -25,7 +25,9 @@ Services                      provide(name, obj); service(name); core's own
                               edges, vertices lit in the 3D view),
                               "panel_layout", "panel_caller"
 Finding controls              agentlink.targets: command_for, actions,
-                              buttons, menus_of, menu_path, native_menubar
+                              buttons, group_buttons (a command inside a
+                              toolbar dropdown), menus_of, menu_path,
+                              native_menubar
 Echo                          a family's NO_ECHO (names or prefixes): its
                               tools are never shown as they run
 Events                        on(event, fn); emit(event, *args);
