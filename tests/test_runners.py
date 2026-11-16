@@ -88,6 +88,34 @@ class Runners(unittest.TestCase):
         self.helpers["keep"] = lambda o: o.Label != "d"
         self.assertEqual(self.run_entry(r, {}), {"objects": [{"object": "a", "holds": ["b"]}, {"object": "c"}], "count": 2})
 
+    def test_rule_when_sum_and_a_step_value(self):
+        # A rule with "when" is checked only then; {"sum"} adds a list; an
+        # argument's "then" sees it as given ("$value", its default when left
+        # out) and its name ("$key").
+        parts = [Thing("a", Length=2.5), Thing("b", Length=4)]
+        self.helpers["find"] = lambda ref: Thing(ref, Parts=parts if ref == "Full" else [])
+        seen = []
+        self.helpers["note"] = lambda *x: seen.append(x)
+        e = {"runner": "make", "target": {"type": "X::Thing", "base": "Thing"},
+             "args": {"=base": {"value": {"if": ["$a.base", {"call": "find", "with": ["$a.base"]}, {"call": "find", "with": ["Full"]}]}},
+                      "at": {"default": [0, 0], "then": {"call": "note", "with": ["$key", "$value", "$o.TypeId"]}}},
+             "rules": [{"check": "count", "of": "$base.Parts", "min": 1, "when": "$a.base", "after": "=base", "format": True,
+                        "message": "base: {base.Label} has no parts."}],
+             "answer": {"fields": {"length": {"sum": "$base.Parts[].Length"}, "none": {"sum": []}}}}
+        self.assertEqual(self.run_entry(e, {"base": "Full", "at": [1, 2]}), {"length": 6.5, "none": 0})
+        self.assertEqual(self.run_entry(e, {}), {"length": 6.5, "none": 0})  # no base given: the rule does not apply
+        self.assertEqual(seen, [("at", [1, 2], "X::Thing"), ("at", [0, 0], "X::Thing")])
+        n = len(self.doc.Objects)
+        with self.assertRaises(ToolError) as c:
+            self.run_entry(e, {"base": "Bare"})
+        self.assertEqual((c.exception.code, c.exception.message), ("invalid_input", "base: Bare has no parts."))
+        self.assertEqual(len(self.doc.Objects), n)  # refused before anything was made
+        # A rule whose condition is not met is used up like any other: it is not checked later either.
+        late = {**e, "rules": [{**e["rules"][0], "after": "", "when": {"not": "$a.base"}, "of": []}]}
+        self.assertEqual(self.run_entry(late, {"base": "Bare"})["length"], 0)
+        with self.assertRaises(ToolError):
+            self.run_entry(late, {})
+
     def test_format_check(self):
         good = {**ENTRY, "runner": "read", "target": {}, "answer": {"fields": {}}}
         doc = {"dataVersion": "1.0.0", "entries": {"t": good}}
