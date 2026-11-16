@@ -520,6 +520,14 @@ class Link:
         except OSError:
             pass
 
+    def _writes(self):
+        """The lock replies are written under (made on first use: a Link
+        made without __init__, as the tests do, has none yet)."""
+        lock = getattr(self, "_write_lock", None)
+        if lock is None:
+            lock = self._write_lock = threading.Lock()
+        return lock
+
     def _thread_call(self, line, f):
         """A socket-thread tool (hooks.THREAD_TOOLS, such as a long poll):
         answered on a thread of its own, never through the GUI thread's
@@ -528,7 +536,7 @@ class Link:
         from . import hooks
 
         name = _tool_name(line)
-        srv = self.server
+        srv = getattr(self, "server", None)
         if name is None or name not in hooks.THREAD_TOOLS or srv is None or not hasattr(srv, "handle_light"):
             return False
 
@@ -539,7 +547,7 @@ class Link:
                 reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}
             if reply is None:
                 return
-            with self._write_lock:
+            with self._writes():
                 try:
                     f.write(compact(reply) + "\n")
                     f.flush()
@@ -785,7 +793,7 @@ class Link:
             except Exception:
                 pass
         try:
-            with self._write_lock:  # a socket-thread tool may answer on the same connection
+            with self._writes():  # a socket-thread tool may answer on the same connection
                 if reply is not None:
                     f.write(compact(reply) + "\n")
                 while self.server is not None and self.server.outbox:

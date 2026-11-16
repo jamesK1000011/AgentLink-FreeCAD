@@ -102,7 +102,7 @@ class ThreadTools(Base):
             src = f.read()
         self.assertIn("if self._thread_call(line, f):", src)
         self.assertIn("hooks.THREAD_TOOLS", src)
-        self.assertEqual(src.count("with self._write_lock"), 2)
+        self.assertEqual(src.count("with self._writes()"), 2)
 
 
 class Signal:

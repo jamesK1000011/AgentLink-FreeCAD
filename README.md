@@ -23,7 +23,7 @@ in your own FreeCAD window. Every change is one FreeCAD undo step.
 - [Uninstall](#uninstall)
 - [Credits and licence](#credits-and-licence)
 
-For an agent setting this up: follow [SETUP.md](SETUP.md).
+For an agent setting this up: follow [SETUP.md](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/SETUP.md).
 
 ## What you need
 
@@ -89,15 +89,15 @@ all: the `uvx` command in [Connect your agent](#connect-your-agent) runs it.
 
 ## Connect your agent
 
-Copy-paste configs for each client are in [docs/clients/](docs/clients/):
-[Claude Desktop](docs/clients/claude-desktop.md),
-[Claude Code](docs/clients/claude-code.md),
-[Cursor](docs/clients/cursor.md),
-[VS Code](docs/clients/vscode.md),
-[LM Studio](docs/clients/lm-studio.md),
-[OpenCode with Ollama](docs/clients/opencode-ollama.md) and
-[any other MCP client](docs/clients/generic.md). ChatGPT needs a remote
-server and is out of scope ([why](docs/clients/README.md#chatgpt)).
+Copy-paste configs for each client are in [docs/clients/](https://github.com/jamesK1000011/AgentLink-FreeCAD/tree/main/docs/clients/):
+[Claude Desktop](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/claude-desktop.md),
+[Claude Code](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/claude-code.md),
+[Cursor](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/cursor.md),
+[VS Code](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/vscode.md),
+[LM Studio](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/lm-studio.md),
+[OpenCode with Ollama](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/opencode-ollama.md) and
+[any other MCP client](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/generic.md). ChatGPT needs a remote
+server and is out of scope ([why](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/README.md#chatgpt)).
 
 They all start the same command:
 
@@ -186,7 +186,7 @@ Groups marked *lean* are listed from the start; the agent turns on the rest with
 Each group has a guide the agent reads (`guide_read`). Any tool runs by name
 whether it is listed or not. `AGENTLINK_TOOLS=full` lists every tool from the
 start; leave it unset for small local models (see
-[docs/clients/](docs/clients/README.md#small-local-models)).
+[docs/clients/](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/README.md#small-local-models)).
 
 The table is generated: `python3 scripts/tool_summary.py` rewrites it, and
 `--check` (run by the tests) fails when it is stale.

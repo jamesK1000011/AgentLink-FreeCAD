@@ -168,6 +168,13 @@ class PackageXml(unittest.TestCase):
         v = self.one("version").text.strip()
         self.assertRegex(_read("agentlink", "server.py"), r'(?m)^VERSION = "%s"' % re.escape(v))
         self.assertRegex(_read("pyproject.toml"), r'(?m)^version = "%s"' % re.escape(v))
+        # The MCP Registry entry: its own version and the PyPI package's.
+        reg = json.loads(_read("server.json"))
+        self.assertEqual(reg["version"], v)
+        self.assertEqual([p["version"] for p in reg["packages"]], [v])
+        from agentlink import launch
+
+        self.assertEqual(launch.version(), v)
 
     def test_licences(self):
         lics = self.root.findall("p:license", NS)
@@ -223,6 +230,31 @@ class Pyproject(unittest.TestCase):
         # Every non-Python file the server reads is in the package.
         self.assertEqual(sorted(st["package-data"]["agentlink"]), ["data/*.json", "guides/*.md"])
         self.assertEqual(p["project"]["dependencies"], [])
+        # A licence expression and license-files in [project] (PEP 639) need
+        # setuptools 77 or later; older ones refuse the build.
+        req = " ".join(p["build-system"]["requires"])
+        m = re.search(r"setuptools>=(\d+)", req)
+        self.assertTrue(m and int(m.group(1)) >= 77, req)
+        self.assertIsInstance(p["project"]["license"], str)
+
+    def test_registry_entry(self):
+        """server.json as the MCP Registry takes it: the name the README's
+        mcp-name line proves on PyPI, a description of 100 characters or
+        fewer, and the PyPI package this pyproject builds."""
+        reg = json.loads(_read("server.json"))
+        self.assertTrue(reg["$schema"].startswith("https://static.modelcontextprotocol.io/schemas/"))
+        self.assertRegex(reg["name"], r"^io\.github\.jamesK1000011/[a-z0-9-]+$")
+        self.assertIn("<!-- mcp-name: %s -->" % reg["name"], _read("README.md"))
+        self.assertLessEqual(len(reg["description"]), 100)
+        (pkg,) = reg["packages"]
+        self.assertEqual((pkg["registryType"], pkg["identifier"], pkg["transport"]["type"]), ("pypi", "agentlink-freecad", "stdio"))
+        self.assertRegex(_read("pyproject.toml"), r'(?m)^name = "%s"' % re.escape(pkg["identifier"]))
+
+    def test_readme_links_work_off_github(self):
+        """PyPI and the Addon Manager show the README away from the
+        repository, where relative links break: every link is absolute."""
+        rel = [u for u in re.findall(r"\]\(([^)\s]+)\)", _read("README.md")) if not re.match(r"(https?:|mailto:|#)", u)]
+        self.assertEqual(rel, [])
 
 
 class Clients(unittest.TestCase):
@@ -291,6 +323,16 @@ class SetupCheck(unittest.TestCase):
                            capture_output=True, text=True, timeout=60)
         self.assertIn(r.returncode, (0, 1), r.stderr)
         self.assertIn("items", json.loads(r.stdout))
+
+    def test_launcher_version_and_help(self):
+        from agentlink import launch, setup_check
+
+        with mock.patch.object(setup_check, "freecad_candidates", side_effect=AssertionError("looked for FreeCAD")):
+            for flag, want in (("--version", "agentlink-freecad " + launch.version()), ("--help", "--check")):
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    self.assertEqual(launch.main([flag]), 0)
+                self.assertIn(want, out.getvalue())
 
     def test_launcher_without_freecad(self):
         from agentlink import launch, setup_check
