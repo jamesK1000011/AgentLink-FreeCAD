@@ -34,8 +34,9 @@ FACES_VALID = 3000    # isValid on shapes up to this many faces
 FACES_SELF = 200      # the self-intersection check (BOP) up to this many faces
 FACES_OVERLAP = 600   # a pair's common volume when both have at most this many
 MAX_PAIRS = 24        # pairs tried for overlap
-MAX_SKETCHES = 6
-MAX_SHAPES = 4
+MAX_SKETCHES = 60     # read from attributes: cheap
+MAX_SHAPES = 12       # and the time budget ends it sooner
+MAX_AMBER = 3         # yellow lines in the verdict; the rest are counted
 SKETCH_GEO = 400      # a sketch's per-geometry freedom is read up to this many
 
 SOLVE = {0: "solved", -1: "the solver failed", -2: "redundant constraints", -3: "conflicting constraints",
@@ -260,6 +261,8 @@ def sketch_reading(sk):
     except Exception:
         pass
     r["red"] = red
+    r["amber"] = not red and (bool(r.get("dof")) or bool(r.get("open")))
+    r["state"] = "empty" if words == ["empty"] else ("fully constrained" if words == ["fully constrained"] else None)
     r["line"] = f"{r['sketch']}: " + "; ".join(words) if words else None
     return r
 
@@ -317,6 +320,8 @@ def shape_reading(o, deadline):
                 pass
             words.append(f"{len(solids)} solids" + (" (AllowCompound)" if meant else ""))
             r["solids"] = len(solids)
+            if not meant:
+                r["amber"] = True
         else:
             words.append("1 solid")
     else:
@@ -325,16 +330,27 @@ def shape_reading(o, deadline):
         except Exception:
             kind = "shape"
         words.append(f"no solid ({kind})")
+        r["amber"] = True
     if n <= FACES_SELF and not r["red"] and time.time() < deadline:
         try:
-            sh.check(True)  # the BOP check: raises with what it found
-        except Exception as e:
-            first = str(e).strip().splitlines()[0][:120] if str(e).strip() else "self-intersecting"
-            words.append(f"geometry check: {first}")
-            r["red"] = True
-            r["todo"] = "the shape cuts or touches itself: change the step that made it (a smaller fillet, a profile that does not cross itself)"
+            from . import geometry as geo
+
+            ok, said = geo.core_check(sh)
+            said = [ln for ln in said if "found the following errors" not in ln]
+            if ok is False and geo.soft_bop(said):
+                # A tolerance finding on a shape BRepCheck calls valid (a
+                # curve off its surface where two features meet): body_check
+                # words it as a warning, and so it is no red here.
+                r["amber"] = True
+                words.append("a tolerance finding in FreeCAD's geometry check (body_check says where)")
+            elif ok is False:
+                words.append(f"FreeCAD's geometry check: {(said[0] if said else 'failed')[:120]}")
+                r["red"] = True
+                r["todo"] = "body_check names the faces; change the step that made them (a smaller fillet, a profile that does not cross itself)"
+        except Exception:
+            pass
     elif n > FACES_SELF and n <= FACES_VALID:
-        skipped.append(f"self-intersection ({n} faces, over {FACES_SELF})")
+        skipped.append(f"FreeCAD's geometry check ({n} faces, over {FACES_SELF})")
     if skipped:
         r["unchecked"] = skipped
     r["line"] = f"{r['object']}: " + ", ".join(words)
@@ -508,7 +524,7 @@ def check(session, tool, m):
     touched_names = {n for d, n in seen_now if d == doc_name}
     if names0 is not None:
         touched_names |= {n for n in by_name if n not in names0}
-    changed = [by_name[n] for n in touched_names if n in by_name]
+    changed = [o for o in objs if o.Name in touched_names]  # in the document's order
 
     h, lines, todos, unchecked = {}, [], [], []
     red = False
@@ -522,7 +538,11 @@ def check(session, tool, m):
                 errors.append({"object": _label(o), "type": _short(o), "error": why[:200], **({} if o.Name in before_bad else {"new": True})})
             else:
                 try:
-                    if "Touched" in o.State:
+                    # Still touched after the call recomputed it is that
+                    # object's own way (some Python features, links moved by
+                    # an assembly's solver): another recompute changes
+                    # nothing, so it is not asked for.
+                    if "Touched" in o.State and o.Name not in touched_names:
                         pending.append(_label(o))
                 except Exception:
                     pass
@@ -549,7 +569,9 @@ def check(session, tool, m):
 
     failing_now = {e["object"] for e in errors}
 
-    # 2. Sketches the call recomputed.
+    # 2. Sketches the call recomputed. Red ones are all named, yellow ones up
+    # to MAX_AMBER, and the clean ones named when few and counted when many.
+    amber, fine = [], []
     sketches = [o for o in changed if getattr(o, "TypeId", "") == "Sketcher::SketchObject" and _label(o) not in failing_now]
     read_sketch = False
     for sk in sketches[:MAX_SKETCHES]:
@@ -557,16 +579,16 @@ def check(session, tool, m):
             r = sketch_reading(sk)
         except Exception:
             continue
-        if r.get("line"):
-            lines.append(r["line"])
+        read_sketch = True
         if r["red"]:
             red = True
+            lines.append(r["line"])
             todos.append(r.get("todo"))
-        # The lists only when something is red: the verdict's words carry
-        # the freedom, and the sketch tools' own "state" the rest.
-        if r["red"]:
             h.setdefault("sketches", []).append({k: r[k] for k in ("sketch", "conflicting", "redundant", "partiallyRedundant", "malformed") if k in r})
-        read_sketch = True
+        elif r.get("amber"):
+            amber.append(r["line"])
+        elif r.get("line"):
+            fine.append(("sketch", r["state"] or "ok", r["line"]))
     if len(sketches) > MAX_SKETCHES:
         unchecked.append(f"{len(sketches) - MAX_SKETCHES} more sketches: sketch_state")
 
@@ -588,9 +610,10 @@ def check(session, tool, m):
             continue
         seen.add(p.Name)
         todo_parts.append(p)
+    late = 0
     for p in todo_parts[:MAX_SHAPES]:
         if time.time() > deadline:
-            unchecked.append(f"{_label(p)}'s shape (out of time): body_check")
+            late += 1
             continue
         try:
             r = shape_reading(p, deadline)
@@ -598,13 +621,30 @@ def check(session, tool, m):
             r = None
         if not r:
             continue
-        lines.append(r["line"])
         if r["red"]:
             red = True
+            lines.append(r["line"])
             todos.append(r.get("todo"))
+        elif r.get("amber"):
+            amber.append(r["line"])
+        else:
+            fine.append(("part", r["line"].split(": ", 1)[1], r["line"]))
         unchecked += [f"{r['object']}: {u}" for u in r.get("unchecked", [])]
-    if len(todo_parts) > MAX_SHAPES:
-        unchecked.append(f"{len(todo_parts) - MAX_SHAPES} more parts' shapes: body_check")
+    late += max(0, len(todo_parts) - MAX_SHAPES)
+    if late:
+        unchecked.append(f"{late} more part{'s' if late != 1 else ''}' shapes (out of time): body_check")
+
+    lines += amber[:MAX_AMBER]
+    if len(amber) > MAX_AMBER:
+        lines.append(f"{len(amber) - MAX_AMBER} more with freedom left or several solids (sketch_state, body_check)")
+    if len(fine) <= 2:
+        lines += [x[2] for x in fine]
+    else:
+        tally = {}
+        for kind, state, _line in fine:
+            tally[(kind, state)] = tally.get((kind, state), 0) + 1
+        plural = {"sketch": "sketches", "part": "parts"}
+        lines += [f"{n} {plural[kind] if n != 1 else kind} {state}" for (kind, state), n in tally.items() if state != "empty"]
 
     # 4. Interference between the changed parts and the others.
     if todo_parts and len(parts) > 1:

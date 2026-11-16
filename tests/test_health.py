@@ -94,10 +94,32 @@ def test_only_old_failures_say_so():
     assert "new" not in h["errors"][0]
 
 
-def test_touched_objects_want_a_recompute():
+def test_touched_objects_the_call_left_alone_want_a_recompute():
     d = Doc()
-    h = run(d, lambda: [Obj(d, "Pad", state=["Touched"])])
+    Obj(d, "Pad", state=["Touched"])
+    h = run(d, lambda: [Obj(d, "Other")])
     assert h["ok"] is True and h["needRecompute"] == ["Pad"] and "recompute" in h["todo"]
+
+
+def test_still_touched_after_its_own_recompute_is_not_asked_again():
+    d = Doc()
+    assert run(d, lambda: [Obj(d, "Screw", state=["Touched"])]) is None
+
+
+def test_many_clean_sketches_are_counted_and_yellow_ones_capped():
+    d = Doc()
+
+    def change():
+        out = [Sketch(d, f"Full{i}") for i in range(5)]
+        out += [Sketch(d, f"Free{i}", dof=1, free=[(0, 0)]) for i in range(5)]
+        out.append(Sketch(d, "Bad", conflicting=[1]))
+        return out
+
+    h = run(d, change)
+    v = h["verdict"]
+    assert v.startswith("Bad: conflicting constraints #0")
+    assert v.count("DoF left") == 3 and "2 more with freedom left" in v
+    assert "5 sketches fully constrained" in v and "Full0" not in v
 
 
 def test_sketch_fully_constrained():
