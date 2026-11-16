@@ -301,7 +301,7 @@ def tools(session):
         src = base_body or model
         want_tc = None
         if a.get("tool"):
-            want_tc = next((x for x in job.Tools.Group if a["tool"] in (x.Label, x.Name)), None)
+            want_tc = next((x for x in job.Tools.Group if a["tool"] in (x.Label, x.Name, getattr(getattr(x, "Tool", None), "Label", None))), None)
             if want_tc is None:
                 raise ToolError("not_found", f"tool {a['tool']!r}: the job's tools are {', '.join(x.Label for x in job.Tools.Group)} (cam_tool_add adds one).")
         # With more than one tool FreeCAD asks which in a dialog (and headless
@@ -354,7 +354,13 @@ def tools(session):
         if a.get("stepDown") is not None and hasattr(op, "StepDown"):
             op.StepDown = f"{picks.num(a['stepDown'], 'stepDown')} mm"
         if a.get("stepOver") is not None and hasattr(op, "StepOver"):
-            op.StepOver = picks.num(a["stepOver"], "stepOver")
+            so = picks.num(a["stepOver"], "stepOver")
+            # A percent, and a whole one on some operations (the pocket's is
+            # an integer property: 50.0 was refused "type must be int").
+            try:
+                op.StepOver = so
+            except TypeError:
+                op.StepOver = int(round(so))
         if a.get("finalDepth") is not None:
             op.setExpression("FinalDepth", None)
             op.FinalDepth = f"{picks.num(a['finalDepth'], 'finalDepth')} mm"
@@ -681,6 +687,15 @@ def tools(session):
                 skipped.append("flutes")
         tc = PathToolController.Create(name, bit)
         job.Proxy.addToolController(tc)
+        # The name is the controller's (what cam_op { tool } asks for). In 1.1
+        # the bit is a document object that took the label first, and the
+        # controller came out "Drill 5 2" — the name given then found nothing.
+        # The bit steps aside as "<name> bit".
+        try:
+            if getattr(bit, "Label", None) == name and bit is not tc:
+                bit.Label = s.unique(f"{name} bit", bit)
+        except Exception:
+            pass
         # FreeCAD bumps a taken label's digits ("V60" to "V063"): "V60 2" says it plainly
         tc.Label = s.unique(name, tc)
         set_tool(tc, {"feed": 600, "plunge": 200, "rpm": 12000, "number": len(job.Tools.Group), **{k: a[k] for k in ("feed", "plunge", "rpm", "number") if a.get(k) is not None}})

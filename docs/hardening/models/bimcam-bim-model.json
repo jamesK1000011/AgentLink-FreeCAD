@@ -570,13 +570,13 @@
     "objects": [
      "Outer walls"
     ],
-    "classification": "Ss_25_10_30",
+    "classification": "Uniclass Ss_25_10_30",
     "properties": {
      "Pset_WallCommon.IsExternal": true,
      "Pset_WallCommon.FireRating": "REI60"
     }
    },
-   "expect": "objects[0]: ifc Wall, classification Ss_25_10_30, properties { Pset_WallCommon: { IsExternal: 'True', FireRating: 'REI60' } }"
+   "expect": "objects[0]: ifc Wall, classification Uniclass Ss_25_10_30, properties { Pset_WallCommon: { IsExternal: 'True', FireRating: 'REI60' } }"
   },
   {
    "tool": "bim_ifc",

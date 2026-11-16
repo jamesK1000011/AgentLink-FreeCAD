@@ -478,6 +478,11 @@ class Server:
             elif asked:
                 raise ToolError("invalid_input", "background: a job needs a session.")
             if asked and not as_job:
+                # Inside a batch nothing runs as a job (the batch is one
+                # answer): said so, where the general reason read as if a
+                # plain read (meshobj_info) were not one.
+                if getattr(s, "batch_now", None) is not None and jobs.eligible(tool, args):
+                    raise ToolError("invalid_input", f"background: not inside a batch, which is one answer — call {name} on its own with background: true (or job_start {{ tool, arguments }}), or leave background out here.")
                 raise ToolError("invalid_input", f"background: {name} cannot run as a job — only a read that leaves the window and the 3D view alone can (not a change, a picture or a window tool).")
             gate = self.gate
             if gate is not None:
