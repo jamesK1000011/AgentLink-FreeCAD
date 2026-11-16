@@ -589,8 +589,11 @@ def tools(session):
         if a.get("path"):
             pth = paths.made(s, a["path"] if os.path.isabs(a["path"]) else os.path.join(s.out_dir, a["path"]))
             os.makedirs(os.path.dirname(pth), exist_ok=True)
-            with open(pth, "w", encoding="utf-8") as f:
-                f.write(flat2d.dxf(items) if pth.lower().endswith(".dxf") else flat2d.svg(items))
+            if pth.lower().endswith(".dxf"):
+                out["writer"] = flat2d.write_dxf(items, pth)[1]
+            else:
+                with open(pth, "w", encoding="utf-8") as f:
+                    f.write(flat2d.svg(items))
             out["path"] = pth
         if a.get("make", True):
             o = doc().addObject("Part::Feature", "Pattern")
@@ -685,8 +688,11 @@ def tools(session):
         if a.get("path"):
             pth = paths.made(s, a["path"] if os.path.isabs(a["path"]) else os.path.join(s.out_dir, a["path"]))
             os.makedirs(os.path.dirname(pth), exist_ok=True)
-            with open(pth, "w", encoding="utf-8") as f:
-                f.write(flat2d.dxf(items) if pth.lower().endswith(".dxf") else flat2d.svg(items))
+            if pth.lower().endswith(".dxf"):
+                out["writer"] = flat2d.write_dxf(items, pth)[1]
+            else:
+                with open(pth, "w", encoding="utf-8") as f:
+                    f.write(flat2d.svg(items))
             out["path"] = pth
         if a.get("make", True):
             o = doc().addObject("Part::Feature", "Pattern")

@@ -76,5 +76,42 @@ class Scenes(unittest.TestCase):
             MF.write("x.fbx", [])
 
 
+class CoreWriterFirst(unittest.TestCase):
+    """FreeCAD's own DXF writer for a one-layer drawing; this module's R12
+    for layers kept apart, or where FreeCAD's is not here."""
+
+    def setUp(self):
+        self.path = os.path.join(tempfile.mkdtemp(), "plate.dxf")
+
+    def core(self, items, path):
+        self.asked = True
+        text = F2.dxf(items).replace("AC1009", "AC1015")
+        with open(path, "w") as f:
+            f.write(text)
+        return text
+
+    def test_one_layer_goes_to_freecad(self):
+        self.asked = False
+        one = [dict(it, layer="cut") for it in PLATE]
+        text, who = F2.write_dxf(one, self.path, core=self.core)
+        self.assertTrue(self.asked)
+        self.assertEqual(who, F2.CORE)
+        self.assertIn("AC1015", open(self.path).read())
+
+    def test_layers_stay_with_flat2d(self):
+        self.asked = False
+        text, who = F2.write_dxf(PLATE, self.path, core=self.core)
+        self.assertFalse(self.asked)
+        self.assertIn("layers kept apart", who)
+        self.assertIn("HIDDEN", text)
+
+    def test_falls_back_when_freecad_is_not_here(self):
+        def gone(items, path):
+            raise ImportError("No module named Import")
+        text, who = F2.write_dxf([dict(it, layer="cut") for it in PLATE], self.path, core=gone)
+        self.assertEqual(who, F2.OWN)
+        self.assertEqual(F2.read_dxf_counts(open(self.path).read()), F2.read_dxf_counts(text))
+
+
 if __name__ == "__main__":
     unittest.main()

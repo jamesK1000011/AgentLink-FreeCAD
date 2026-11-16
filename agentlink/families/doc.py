@@ -118,13 +118,18 @@ def flat_write(objs, fmt, path, a):
         what = {"view": view, "visibleEdges": len(vis), **({"hiddenEdges": len(hid)} if a.get("hidden") else {})}
     if not items:
         raise ToolError("failed", "The view came out empty — nothing to draw.")
-    text = flat2d.dxf(items) if fmt == "dxf" else flat2d.svg(items)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
+    writer = None
+    if fmt == "dxf":
+        text, writer = flat2d.write_dxf(items, path)
+    else:
+        text = flat2d.svg(items)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
     x0, y0, x1, y1 = flat2d.bounds(items)
     out = {**what, "size": [round(x1 - x0, 3), round(y1 - y0, 3)], "units": "mm"}
     if fmt == "dxf":
         out["entities"] = flat2d.read_dxf_counts(text)
+        out["writer"] = writer
     return out
 
 
