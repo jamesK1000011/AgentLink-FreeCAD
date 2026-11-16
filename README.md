@@ -278,6 +278,11 @@ and release tests anywhere; the tool tests need FreeCAD and are skipped
 without it. CI (`.github/workflows/ci.yml`) runs them all on Linux with
 FreeCAD 1.0 and the newest release, with PrusaSlicer and OrcaSlicer.
 
+`AGENTLINK_AS_USER=1` is a test flag, off by default: the agent's calls run
+as yours (as a click in the panel does), so an add-on that follows what you
+do, such as a lesson you work through, can be tested end to end by an agent.
+Never set it for real use (`docs/hooks.md`).
+
 ## Credits and licence
 
 - The way Agent Link works, one call per job, small answers in millimetres

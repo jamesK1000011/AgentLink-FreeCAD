@@ -239,6 +239,9 @@ class Server:
         self.meter = None
         # Told of each call that went through: on_call(tool, args).
         self.on_call = None
+        # The session the calls act on (tools.build_server sets it): whose
+        # call it is (session.by) and its undo count, for call_done.
+        self.session = None
         # Heavy jobs' estimates and memory ceiling (agentlink/heavy.py).
         self.gate = None
 
@@ -289,8 +292,13 @@ class Server:
 
     def call(self, params):
         t0 = time.time()
-        result = self._call(params)
+        s = self.session
+        before = (getattr(s, "tx", None), getattr(s, "doc", None)) if s is not None else None
+        with _as_user(s):
+            result = self._call(params)
+            self._done(params, result, before)
         _add_notice(result)
+        _add_rider(result, params.get("name"))
         if self.meter is not None:
             try:
                 content = result.get("content") or []
@@ -306,6 +314,31 @@ class Server:
             except Exception:
                 pass
         return result
+
+    def _done(self, params, result, before):
+        """hooks call_done(session, tool, ok, changed) for a call to a tool
+        there is; changed: it went through and changed the document (its
+        undo count moved, the session's document is another one, or the
+        tool changes it by its kind)."""
+        s = self.session
+        name = params.get("name")
+        tool = self.tools.get(name)
+        if s is None or tool is None:
+            return
+        ok = not result.get("isError")
+        changed = False
+        if ok:
+            try:
+                changed = (getattr(s, "tx", None) != before[0] or getattr(s, "doc", None) is not before[1]
+                           or tool.changes_for(params.get("arguments") or {}))
+            except Exception:
+                changed = bool(tool.changes)
+        try:
+            from . import hooks
+
+            hooks.emit("call_done", s, name, ok, bool(changed))
+        except Exception:
+            pass
 
     def _call(self, params):
         name = params.get("name")
@@ -389,6 +422,47 @@ def _add_notice(result):
             return
         had = body.get("notice")
         body["notice"] = f"{had} {line}" if had else line
+        content[0]["text"] = compact(body)
+    except Exception:
+        pass
+
+
+class _Nothing:
+    def __enter__(self):
+        return None
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _as_user(session):
+    """The test flag AGENTLINK_AS_USER=1 (hooks.as_user): the agent's call
+    runs as the person's. Off, or a call the person already makes: as is."""
+    try:
+        from . import hooks
+
+        if session is not None and getattr(session, "by", hooks.AGENT) == hooks.AGENT and hooks.as_user():
+            return hooks.as_person(session)
+    except Exception:
+        pass
+    return _Nothing()
+
+
+def _add_rider(result, tool=None):
+    """The add-ons' rider lines (hooks.rider_line) onto the answer in hand,
+    as "rider", while any has something in hand. Anything going wrong
+    leaves the answer as it was."""
+    try:
+        from . import hooks
+
+        line = hooks.rider_line(tool)
+        if not line:
+            return
+        content = result.get("content") or []
+        body = json.loads(content[0]["text"]) if content and content[0].get("type") == "text" else None
+        if not isinstance(body, dict):
+            return
+        body["rider"] = line
         content[0]["text"] = compact(body)
     except Exception:
         pass

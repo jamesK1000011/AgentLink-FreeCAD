@@ -28,7 +28,16 @@ Finding controls              agentlink.targets: command_for, actions,
                               buttons, menus_of, menu_path, native_menubar
 Echo                          a family's NO_ECHO (names or prefixes): its
                               tools are never shown as they run
-Events                        on(event, fn); emit(event, *args)
+Events                        on(event, fn); emit(event, *args);
+                              call_done(session, tool, ok, changed) after
+                              every call through the server
+Rider line                    register_rider(owner, fn): fn(tool) -> a short
+                              line while the add-on has something in hand,
+                              else None; every active line joins each
+                              answer as "rider" (rider_line below)
+Test flag                     AGENTLINK_AS_USER=1 (as_user()): the agent's
+                              calls run as the person's (session.by);
+                              for tests only, off by default
 Tool extensions               extend_tool(name, properties, before, after, describe)
 Panel                         register_tab(title, factory, order, workbench)
                               (the widget's fill(), if any, runs as its tab
@@ -187,11 +196,81 @@ def notice():
     return None
 
 
+# ---- the rider line: short lines from any number of add-ons that join each
+# answer while they have something in hand ("lesson: step 3/7 passed"), as
+# "rider". Unlike the one notice service, every provider is asked, each
+# line is cut to RIDER_EACH characters and the whole to RIDER_MAX; a
+# provider with nothing in hand answers None and adds nothing. Providers
+# are asked on the thread that answers, so they read what they keep in
+# memory and return at once.
+RIDER_EACH = 80
+RIDER_MAX = 200
+_RIDERS = []
+
+
+def register_rider(owner, fn):
+    """fn(tool) -> a short line or None, asked after each call to tool.
+    Registering again under the same owner replaces the provider."""
+    _RIDERS[:] = [r for r in _RIDERS if r[0] != owner]
+    _RIDERS.append((owner, fn))
+    return fn
+
+
+def unregister_rider(owner):
+    _RIDERS[:] = [r for r in _RIDERS if r[0] != owner]
+
+
+def _cut(text, n):
+    text = " ".join(str(text).split())
+    return text if len(text) <= n else text[: n - 1].rstrip() + "…"
+
+
+def rider_line(tool=None):
+    """Every active provider's line for an answer to tool, joined with
+    " · " and capped; None when none is active. A provider that raises is
+    logged and skipped."""
+    lines = []
+    for owner, fn in list(_RIDERS):
+        try:
+            got = fn(tool)
+        except Exception as e:  # noqa: BLE001
+            _log(f"the {owner} rider failed", e)
+            continue
+        if got:
+            lines.append(_cut(got, RIDER_EACH))
+    if not lines:
+        return None
+    return _cut(" · ".join(lines), RIDER_MAX)
+
+
+# ---- the test flag: AGENTLINK_AS_USER=1 runs the agent's calls as the
+# person's (session.by "person"), so an add-on that tells the two apart
+# (a lesson the person works through) can be tested end to end by an agent.
+# For tests only; off by default, and logged once when on.
+AS_USER_ENV = "AGENTLINK_AS_USER"
+_as_user_said = []
+
+
+def as_user():
+    import os
+
+    on = os.environ.get(AS_USER_ENV, "") == "1"
+    if on and not _as_user_said:
+        _as_user_said.append(True)
+        sys.stderr.write(f"Agent Link: {AS_USER_ENV}=1, the agent's calls count as the person's (a test flag)\n")
+    return on
+
+
 # ---- events: after_change(session, tool_name); setting_changing(tool, path)
 # before a settings change and setting_changed(path, name, old, new, tool=,
 # restart=, applies=) after each value (pref_set, pref_reset, pref_pack,
 # pref_import); reply_written(session) after each reply of the stdio server;
-# docs_changed(session); call_done(session, tool_name, ok).
+# docs_changed(session); call_done(session, tool_name, ok, changed) after
+# every call through the server (protocol.Server.call), refusals too:
+# changed is True when the call went through and changed the document (an
+# undo step taken or given back, or a changing tool's call), so an add-on
+# re-reads what it follows after the agent's own calls and the person's
+# panel clicks alike (session.by says whose).
 _EVENTS = {}
 
 
@@ -341,13 +420,14 @@ def saved():
     """For tests: every registration as it stands, for restore()."""
     return ({k: list(v) for k, v in _READERS.items()}, dict(_SERVICES), {k: list(v) for k, v in _EVENTS.items()},
             {k: list(v) for k, v in _EXTENSIONS.items()}, list(TABS), list(REVIEWERS), set(GUARDED),
-            {k: set(v) for k, v in TAB_WORKBENCHES.items()})
+            {k: set(v) for k, v in TAB_WORKBENCHES.items()}, list(_RIDERS))
 
 
 def restore(state):
     readers_, services, events, exts, tabs, reviewers, guarded = state[:7]
     reset()
     TAB_WORKBENCHES.update(state[7] if len(state) > 7 else {})
+    _RIDERS[:] = state[8] if len(state) > 8 else []
     for k, v in readers_.items():
         readers(k)[:] = v
     _SERVICES.update(services)
@@ -370,6 +450,7 @@ def reset():
     del REVIEWERS[:]
     TAB_WORKBENCHES.clear()
     GUARDED.clear()
+    del _RIDERS[:]
 
 
 # ---- who a call is for ----------------------------------------------------------------------
