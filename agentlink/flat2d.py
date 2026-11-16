@@ -119,3 +119,61 @@ def read_dxf_counts(text):
         elif inside and code == "0" and val not in ("VERTEX", "SEQEND"):
             counts[val] = counts.get(val, 0) + 1
     return counts
+
+
+# ---- written by FreeCAD where it can ------------------------------------------------------
+
+CORE = "FreeCAD (Import.writeDXFShape)"
+OWN = "Agent Link's R12 writer (flat2d)"
+
+
+def shape_of(items):
+    """The items as one Part compound of edges in the XY plane (FreeCAD's
+    Part; imported here, so the rest of this module stays plain Python)."""
+    import FreeCAD
+    import Part
+
+    V = FreeCAD.Vector
+    edges = []
+    for it in items:
+        k = it["kind"]
+        if k == "circle":
+            edges.append(Part.makeCircle(float(it["r"]), V(it["c"][0], it["c"][1], 0)))
+        elif k == "arc":
+            edges.append(Part.makeCircle(float(it["r"]), V(it["c"][0], it["c"][1], 0), V(0, 0, 1), float(it["a0"]), float(it["a1"])))
+        else:
+            pts = [V(float(x), float(y), 0) for x, y in it["points"]]
+            if it.get("closed") and pts and (pts[0] - pts[-1]).Length > 1e-9:
+                pts.append(pts[0])
+            if len(pts) >= 2:
+                edges.append(Part.makePolygon(pts))
+    return Part.makeCompound(edges)
+
+
+def core_dxf(items, path):
+    """FreeCAD's own DXF writer (Import.writeDXFShape) on the items' shape;
+    raises when it is not here or wrote nothing."""
+    import Import
+
+    Import.writeDXFShape([shape_of(items)], path)
+    with open(path, encoding="utf-8", errors="replace") as f:
+        text = f.read()
+    if not read_dxf_counts(text):
+        raise ValueError("FreeCAD's DXF writer wrote no entities")
+    return text
+
+
+def write_dxf(items, path, core=core_dxf):
+    """A DXF of the items: FreeCAD's own writer where it is here and the
+    drawing has one layer (it writes one), else this module's R12 with a
+    layer each (visible, hidden, cut …). Answers (text, which wrote it)."""
+    layers = {it.get("layer", "visible") for it in items}
+    if len(layers) == 1:
+        try:
+            return core(items, path), CORE
+        except Exception:  # noqa: BLE001 - no FreeCAD writer here: written below
+            pass
+    text = dxf(items)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    return text, OWN + (" — its layers kept apart" if len(layers) > 1 else "")

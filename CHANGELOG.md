@@ -65,6 +65,7 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 
 ### Changed
 
+- DXF is written by FreeCAD's own writer (`Import.writeDXFShape`) for a one-layer drawing — `export` to DXF of a view or a section, `meshobj_unwrap` and the mesh flattening — and by Agent Link's R12 writer only where layers are kept apart (hidden lines on their own) or FreeCAD's is not here; the answer's `writer` says which.
 - A TechDraw dimension's ISO 286 fit (`td_dim`, `td_tolerance` with `fit`) takes its limits from TechDraw's own Hole/Shaft Fit table where it has the code; Agent Link's table covers the rest (js, p, IT5) and is given, with what TechDraw said, where the two disagree. The answer's `fitFrom` says which.
 - Mass and materials belong to the add-on that owns them when it is installed: `measure_mass` with no material or density given answers with its `mass_properties` service (as printed, inserts included), and `material_set` / `material_clear` hand a material it keeps (the printing filaments) to its `material_set` service, which keeps the materials record and FreeCAD's material; answers say where they came from. Without it, or for a library card or custom material, Agent Link answers as before.
 - The Review tab's Body check opens FreeCAD's own Check Geometry (Part workbench) on the body and lists Agent Link's extras beside it; `body_check` reads FreeCAD's check (`shape.check` with its boolean checks) first and adds only what it does not look for (slivers under 0.01 mm, very short edges, one closed solid).
