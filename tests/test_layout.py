@@ -123,9 +123,53 @@ class AgentLinkTabs(unittest.TestCase):
             self.assertLessEqual(len(self.tabs(wb)), 8)
 
     def test_one_credit(self):
-        self.assertFalse(panel_tabs.credit_shown("ScanRuler"))
-        self.assertFalse(panel_tabs.credit_shown("Texture"))
-        self.assertTrue(panel_tabs.credit_shown("Notes"))
+        # Core names no add-on's tab: a page that credits the work itself
+        # hides Agent Link's line, by declaration, by its widget, or by a
+        # credit label of its own (stand-in widgets and labels here).
+        class Label:
+            def __init__(self, text):
+                self._t = text
+
+            def text(self):
+                return self._t
+
+        class Page:
+            def __init__(self, *texts):
+                self.labels = [Label(t) for t in texts]
+
+            def findChildren(self, cls):
+                return self.labels if cls is Label else []
+
+        class Qt:
+            QLabel = Label
+
+        saved = panel_tabs.QtWidgets
+        panel_tabs.QtWidgets = Qt
+        try:
+            self.assertTrue(panel_tabs.credit_shown("Notes"))
+            self.assertTrue(panel_tabs.credit_shown("ScanRuler"), "a title alone hides nothing")
+            self.assertTrue(panel_tabs.credit_shown("X", Page("Pick a face", "Depth 2 mm")))
+            self.assertFalse(panel_tabs.credit_shown("X", Page("Ported from a tool by Stefan Hermann (CNC Kitchen)")))
+            self.assertFalse(panel_tabs.credit_shown("X", Page("Based on work by CNC Kitchen · AGPL-3.0")))
+            self.assertFalse(panel_tabs.credit_shown("X", declared=True))
+            own = Page()
+            own.own_credit = True
+            self.assertFalse(panel_tabs.credit_shown("X", own))
+        finally:
+            panel_tabs.QtWidgets = saved
+
+    def test_register_tab_own_credit(self):
+        state = hooks.saved()
+        try:
+            hooks.reset()
+            hooks.register_tab("Standin", lambda p: None, 70, own_credit=True)
+            hooks.register_tab("Plain", lambda p: None, 30)
+            rows = {t["title"]: t for t in hooks.TABS}
+            self.assertTrue(rows["Standin"].get("own_credit"))
+            self.assertFalse(rows["Plain"].get("own_credit", False))
+            self.assertEqual([r[0] for r in panel_tabs.tab_order(hooks.TABS)], ["Notes", "Steps", "Plain", "Review", "Standin", "Activity"])
+        finally:
+            hooks.restore(state)
 
     def test_register_tab_in_workbench(self):
         state = hooks.saved()

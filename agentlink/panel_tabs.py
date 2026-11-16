@@ -28,9 +28,12 @@ CORE_TABS = (("Notes", 10), ("Steps", 20), ("Review", 50), ("Activity", 95))
 # Agent Link's own workbench, and the tabs that show in every workbench.
 HOME = "AgentLinkWorkbench"
 ALWAYS = ("Notes", "Steps", "Activity")
-# Tabs whose page carries its own credit line for Stefan Hermann's work:
-# Agent Link's line is hidden while one is in front (one credit, not two).
-OWN_CREDIT = ("ScanRuler", "Texture")
+# A page that carries its own credit line (Stefan Hermann's work, CNC
+# Kitchen): Agent Link's line is hidden while it is in front (one credit,
+# not two). An add-on says so (register_tab(own_credit=True), or its
+# widget's own_credit); a page of an add-on written before that is known by
+# a label of its own that credits the work (page_credits).
+CREDIT_WORDS = ("stefan hermann", "cnc kitchen")
 
 NO_REVIEWER = "No reviewer installed."
 
@@ -155,10 +158,33 @@ def pin_event(ev):
     return "place" if ev.get("Button") == "BUTTON1" else None
 
 
-def credit_shown(title, widget=None):
+def page_credits(widget):
+    """True when the page widget shows a credit line of its own: a label
+    under it whose text names the work credited (CREDIT_WORDS)."""
+    if widget is None or QtWidgets is None:
+        return False
+    try:
+        labels = widget.findChildren(QtWidgets.QLabel)
+    except Exception:  # noqa: BLE001 — a stand-in, or a page already gone
+        return False
+    for lab in labels:
+        try:
+            text = str(lab.text()).lower()
+        except Exception:  # noqa: BLE001
+            continue
+        if any(w in text for w in CREDIT_WORDS):
+            return True
+    return False
+
+
+def credit_shown(title, widget=None, declared=False):
     """Whether Agent Link's credit line shows under the tab title: not while
-    a page that credits Stefan Hermann itself is in front."""
-    return not (title in OWN_CREDIT or getattr(widget, "own_credit", False))
+    a page that credits the work itself is in front — declared by its
+    add-on (register_tab's own_credit, passed as declared), the widget's
+    own_credit, or a credit label on the page (page_credits)."""
+    if declared or getattr(widget, "own_credit", False):
+        return False
+    return not page_credits(widget)
 
 
 def review_hint(has_reviewer):

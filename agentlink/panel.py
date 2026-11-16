@@ -237,6 +237,9 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         # workbench in front are in the bar (filter_tabs, at each switch).
         own = {"Notes": self._notes_tab, "Steps": self._steps_tab, "Review": self._review_tab, "Activity": self._activity_tab}
         factories = {t["title"]: t["factory"] for t in hooks.TABS}
+        # Which pages credit the work they build on themselves: declared at
+        # register_tab, else read off the page as it comes up (credit_shown).
+        self._declared_credit = {t["title"]: bool(t.get("own_credit")) for t in hooks.TABS}
         self.addon_tabs = {}
         self.pages = {}
         self.rows = []
@@ -366,7 +369,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
     def _tab_changed(self, k):
         title = self.tabs.tabText(k) if k >= 0 else ""
         if hasattr(self, "credit"):
-            self.credit.setVisible(credit_shown(title, self.pages.get(title)))
+            self.credit.setVisible(credit_shown(title, self.pages.get(title), getattr(self, "_declared_credit", {}).get(title, False)))
         if title:
             self.fill_tab(title)
 
