@@ -715,5 +715,79 @@ class ArrowHit(Base):
         self.assertNotIn("part", b)
 
 
+class ArrowByItsMenu(Base):
+    """[A][B ▾][C]: a click on B's arrow that opens B's menu reports B, even
+    where the arrow's parent or position points at A (seen on FreeCAD
+    1.1.3: New Sketch's arrow reported New Body, the button to its left)."""
+
+    def toolbar(self, b_menu_on_button=True):
+        st = self.state
+        bar = tg.Widget("Part Design Helper", 100, 60, 400, 24, parent=self.mw, cls="QToolBar")
+
+        def button(name, ox, text, parent=bar, w=32):
+            b = tg.Widget(name, ox, 60, w, 24, parent=parent, cls="QToolButton")
+            b.defaultAction = lambda: Action(text) if text else None
+            b.text = lambda: ""
+            b.toolTip = lambda: text or ""
+            b.popupMode = lambda: 0
+            b.menu = lambda: None
+            return b
+
+        a = button("PartDesign_Body", 100, "New Body")
+        b = button("PartDesign_CompSketches", 132, None)
+        c = button("PartDesign_Pad", 176, "Pad")
+        menu = Menu(st, ["New Sketch", "Attach Sketch", "Edit Sketch"])
+        if b_menu_on_button:
+            b.menu = lambda: menu
+            b.defaultAction = lambda: Action("New Sketch")
+        else:  # an action group: the button's default action is one of the menu's
+            b.defaultAction = lambda: menu.acts[0]
+        b.toolTip = lambda: "New Sketch"
+        # The arrow: Qt's own small button over B's right edge, parented to A.
+        arrow = button("qt_toolbutton_menubutton", 164, None, parent=a, w=12)
+        arrow.toolTip = lambda: "Create Datum"
+        arrow.on = lambda ev: menu.exec_() if ev.t == "MouseButtonPress" else None
+        st["app"].topLevelWidgets = lambda: [self.mw, self.dialog, menu]
+        self.qt.QtWidgets.QToolButton = tg.Widget
+        return a, b, c, menu
+
+    def click_arrow(self):
+        return self.run.run(self.steps({"click": {"widget": {"objectName": "qt_toolbutton_menubutton"}}}))
+
+    def check(self, out, menu):
+        step = self.answers[0]["steps"][0] if self.answers else out["steps"][0]
+        hit = step["hit"]
+        self.assertEqual((hit["text"], hit["part"], hit["name"]), ("New Sketch", "menu arrow", "PartDesign_CompSketches"))
+        self.assertNotIn("New Body", json.dumps(hit))
+        self.assertEqual(step["menu"], ["New Sketch", "Attach Sketch", "Edit Sketch"])
+        menu.close()
+
+    def test_menu_on_the_button(self):
+        _a, _b, _c, menu = self.toolbar(True)
+        self.check(self.click_arrow(), menu)
+
+    def test_action_group_default_in_the_menu(self):
+        _a, _b, _c, menu = self.toolbar(False)
+        self.check(self.click_arrow(), menu)
+
+    def test_owner_found_from_the_menu_directly(self):
+        a, b, c, menu = self.toolbar(True)
+        self.assertIs(self.run._menu_owner(menu, 170, 70), b)
+        self.assertIsNone(self.run._menu_owner(Menu(self.state, ["Other"]), 170, 70))
+
+    def test_no_menu_geometry_left_of_the_arrow(self):
+        """No menu opened: the arrow beside its button by geometry (global
+        rects), not the button its parent is."""
+        bar = tg.Widget("bar", 100, 60, 400, 24, parent=self.mw, cls="QToolBar")
+        for name, ox, w in (("A", 100, 32), ("B", 132, 32), ("C", 176, 32), ("qt_toolbutton_menubutton", 164, 12)):
+            btn = tg.Widget(name, ox, 60, w, 24, parent=bar, cls="QToolButton")
+            btn.defaultAction = (lambda n: lambda: Action(n))(name)
+            btn.text = lambda: ""
+            btn.popupMode = lambda: 0
+        self.qt.QtWidgets.QToolButton = tg.Widget
+        hit = self.click_arrow()["steps"][0]["hit"]
+        self.assertEqual((hit["text"], hit["part"]), ("B", "menu arrow"))
+
+
 if __name__ == "__main__":
     unittest.main()
