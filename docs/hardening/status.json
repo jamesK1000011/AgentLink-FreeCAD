@@ -1,4 +1,32 @@
 {
+ "align_auto": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "align_clear": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "align_datum": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "align_symmetry": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
  "asm_add": {
   "description": true,
   "docs": true,
@@ -335,7 +363,8 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "as data since 7dc955a: BIM model re-run 18:23, answers identical to the code run"
  },
  "bim_space": {
   "description": true,
@@ -390,7 +419,15 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "as data since 7dc955a: BIM model re-run 18:23, answers identical to the code run"
+ },
+ "board_enclosure": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Electronics model 18:38 (15 calls): accepted or refused as expected; values not yet read one by one"
  },
  "cam_dressup": {
   "description": true,
@@ -491,6 +528,27 @@
   "health": true,
   "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
  },
+ "catalog_links": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "catalog_part": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "catalog_provenance": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
  "clearance": {
   "description": true,
   "docs": true,
@@ -526,6 +584,62 @@
   "health": true,
   "model": "Workshop Make model: 100 x 60 x 3 acrylic plate with one hole: pass, least web 16, kerf 0.2 assumed; refused for a body in no cut setup; 4 copies nested by BIM Nest on 300 x 200: DXF 16 lines and 4 circles on OUTER and HOLES, read back and matching, SVG the same"
  },
+ "deviation_align": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "deviation_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "deviation_hotspots": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "deviation_measure": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "deviation_open_reference": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "deviation_set_target": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "deviation_settings": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "deviation_volume": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
  "dfm_check": {
   "description": true,
   "docs": true,
@@ -538,28 +652,28 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 degrees, angularity 1.047 mm at basic 89; limit over by 0.099 then cleared; report text and JSON (1 checked, 1 pass), CSV 15 rows"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "dimension_remove": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 degrees, angularity 1.047 mm at basic 89; limit over by 0.099 then cleared; report text and JSON (1 checked, 1 pass), CSV 15 rows"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "dimension_set_basic": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 degrees, angularity 1.047 mm at basic 89; limit over by 0.099 then cleared; report text and JSON (1 checked, 1 pass), CSV 15 rows"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "dimension_set_limit": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 degrees, angularity 1.047 mm at basic 89; limit over by 0.099 then cleared; report text and JSON (1 checked, 1 pass), CSV 15 rows"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "doc_close": {
   "description": true,
@@ -741,61 +855,82 @@
   "health": true,
   "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
  },
+ "drawing_exploded": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Documents model 18:38 (23 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "drawing_make": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Documents model 18:38 (23 calls): accepted or refused as expected; values not yet read one by one"
+ },
  "element_construct": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "element_fit": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "element_fit_marked": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "element_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "element_remove": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "element_rename": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "element_set_visible": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "element_to_document": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "element_unlink": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: planes at z 0 / z 19 / z 20 / x 0 / y 0 with sigma 0, bore radius 5.99927 about [20, 20] length 20; a sparse-mesh fit refused with what to do; rename, unlink (line-coords), hide, remove, nine elements listed"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "export": {
   "headless": true,
@@ -988,6 +1123,146 @@
   "health": true,
   "model": "Workshop Make model: calibrate kept (0 and 0.2); slide hole 8.2, shaft 8 on every fit; stack 0.6, worst case [0.25, 0.95], rss [0.371, 0.829]"
  },
+ "fit_scan_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "fit_scan_features": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "fit_scan_measure": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "fit_scan_setup": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_calibrate": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_curvature": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_detect_edges": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_dimension_add": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_edges": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_edit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_fit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_note_add": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_objects": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_open_image": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_profile": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_remove": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_render": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_report": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "flat_set_alignment": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
  "gen_make": {
   "description": true,
   "docs": true,
@@ -1129,6 +1404,13 @@
   "headless": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
  },
+ "kicad_import": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Electronics model 18:38 (15 calls): accepted or refused as expected; values not yet read one by one"
+ },
  "link_edit": {
   "description": true,
   "docs": true,
@@ -1142,6 +1424,27 @@
   "headless": true,
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "manual_check": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "manual_plan": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "manual_render": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "mass_ballast": {
   "description": true,
@@ -1214,19 +1517,166 @@
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
   "note": "with density or material given; with neither the installed add-on answers in its own form"
  },
+ "mesh_apply_reduced": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_boolean": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_cut": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_cut_preview": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_delete_marked": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
  "mesh_densify": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: 608 triangles cut into 219600 with no edge over 1 mm, closed, volume unchanged (45638.77); the edited mesh made the scan"
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_discard": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_discard_edited": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_fill_holes": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_flip_normals": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_inspect": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_mirror": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_offset": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_parts": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_reduce": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_remove_islands": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_shell": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_smooth": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_trim": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_undo": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
  },
  "mesh_use_edited": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: 608 triangles cut into 219600 with no edge over 1 mm, closed, volume unchanged (45638.77); the edited mesh made the scan"
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "mesh_wrap": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
  },
  "meshobj_boolean": {
   "description": true,
@@ -1427,6 +1877,20 @@
   "headless": true,
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "pack_plan": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "pack_setup": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "param_bind": {
   "description": true,
@@ -1678,6 +2142,27 @@
   "headless": true,
   "health": true,
   "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "patent_draft": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Documents model 18:38 (23 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "patent_figures": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Documents model 18:38 (23 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "pcb_order_package": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Electronics model 18:38 (15 calls): accepted or refused as expected; values not yet read one by one"
  },
  "pd_binder": {
   "description": true,
@@ -1936,6 +2421,13 @@
   "headless": true,
   "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
  },
+ "printed_channel": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Electronics model 18:38 (15 calls): accepted or refused as expected; values not yet read one by one"
+ },
  "printer_list": {
   "description": true,
   "docs": true,
@@ -1954,7 +2446,147 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 degrees, angularity 1.047 mm at basic 89; limit over by 0.099 then cleared; report text and JSON (1 checked, 1 pass), CSV 15 rows"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_body_check": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_body_clearance": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_body_describe": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_body_names": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_body_set": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_build": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_feature_add": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_feature_clear": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_feature_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_feature_move": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_feature_remove": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_feature_rollback": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_feature_schema": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_feature_suppress": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_feature_update": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_import_step": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_parameter_add": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_parameter_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_parameter_rename": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "reverse_parameter_set": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
  },
  "robot_export": {
   "description": true,
@@ -2049,91 +2681,119 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: six faces and the pocket floor segmented with the worked areas (2235, 2136, 1157 x 2, 771 x 2, 98); a flat patch fits a plane with rms 0; heightmap cell for cell (20, 19 in the pocket, null over the bore), levels 96.5 and 3.5 percent, picture written; outline 2400 and a hole of radius 5.998; cloud of every vertex"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "scan_draft": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: only the plain cases: draft 0.0 on the bore rings (flat walls do not gather on this mesh, as the description says), no repeat about the bore with rings of radius 5.999, no thread on the plain bore"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "scan_fit_surface": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: six faces and the pocket floor segmented with the worked areas (2235, 2136, 1157 x 2, 771 x 2, 98); a flat patch fits a plane with rms 0; heightmap cell for cell (20, 19 in the pocket, null over the bore), levels 96.5 and 3.5 percent, picture written; outline 2400 and a hole of radius 5.998; cloud of every vertex"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "scan_heightmap": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: six faces and the pocket floor segmented with the worked areas (2235, 2136, 1157 x 2, 771 x 2, 98); a flat patch fits a plane with rms 0; heightmap cell for cell (20, 19 in the pocket, null over the bore), levels 96.5 and 3.5 percent, picture written; outline 2400 and a hole of radius 5.998; cloud of every vertex"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "scan_info": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: a 60 x 40 x 20 block with a 12 mm bore and a 1 mm pocket, meshed: box, centre and area 9367.8 right; qa says a sparse CAD tessellation, then thickness p5 19 / p50 20 once densified; nearest vertex 5.02 from the point; 23465 top vertices found and marked"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "scan_nearest": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: a 60 x 40 x 20 block with a 12 mm bore and a 1 mm pocket, meshed: box, centre and area 9367.8 right; qa says a sparse CAD tessellation, then thickness p5 19 / p50 20 once densified; nearest vertex 5.02 from the point; 23465 top vertices found and marked"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "scan_open": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: a 60 x 40 x 20 block with a 12 mm bore and a 1 mm pocket, meshed: box, centre and area 9367.8 right; qa says a sparse CAD tessellation, then thickness p5 19 / p50 20 once densified; nearest vertex 5.02 from the point; 23465 top vertices found and marked"
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
  },
  "scan_outline": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: six faces and the pocket floor segmented with the worked areas (2235, 2136, 1157 x 2, 771 x 2, 98); a flat patch fits a plane with rms 0; heightmap cell for cell (20, 19 in the pocket, null over the bore), levels 96.5 and 3.5 percent, picture written; outline 2400 and a hole of radius 5.998; cloud of every vertex"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "scan_pattern": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: only the plain cases: draft 0.0 on the bore rings (flat walls do not gather on this mesh, as the description says), no repeat about the bore with rings of radius 5.999, no thread on the plain bore"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "scan_qa": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: a 60 x 40 x 20 block with a 12 mm bore and a 1 mm pocket, meshed: box, centre and area 9367.8 right; qa says a sparse CAD tessellation, then thickness p5 19 / p50 20 once densified; nearest vertex 5.02 from the point; 23465 top vertices found and marked"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "scan_query": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: a 60 x 40 x 20 block with a 12 mm bore and a 1 mm pocket, meshed: box, centre and area 9367.8 right; qa says a sparse CAD tessellation, then thickness p5 19 / p50 20 once densified; nearest vertex 5.02 from the point; 23465 top vertices found and marked"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "scan_scale": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "scan_segment": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: six faces and the pocket floor segmented with the worked areas (2235, 2136, 1157 x 2, 771 x 2, 98); a flat patch fits a plane with rms 0; heightmap cell for cell (20, 19 in the pocket, null over the bore), levels 96.5 and 3.5 percent, picture written; outline 2400 and a hole of radius 5.998; cloud of every vertex"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "scan_snapshot_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "scan_snapshot_wait": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "scan_thread": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: only the plain cases: draft 0.0 on the bore rings (flat walls do not gather on this mesh, as the description says), no repeat about the bore with rings of radius 5.999, no thread on the plain bore"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "scanner": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "section": {
   "description": true,
@@ -2147,42 +2807,42 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: section at z 10: outline 200.0 and bore 37.696 long, fitted as 4 lines and one arc of radius 5.9993 about [20, 20, 10]; section through the bore axis: 4 + 8 lines with the pocket step; shadow with play 0.5: one loop of 2531.69 mm2"
+  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
  },
  "section_fit": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: section at z 10: outline 200.0 and bore 37.696 long, fitted as 4 lines and one arc of radius 5.9993 about [20, 20, 10]; section through the bore axis: 4 + 8 lines with the pocket step; shadow with play 0.5: one loop of 2531.69 mm2"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "section_get": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: section at z 10: outline 200.0 and bore 37.696 long, fitted as 4 lines and one arc of radius 5.9993 about [20, 20, 10]; section through the bore axis: 4 + 8 lines with the pocket step; shadow with play 0.5: one loop of 2531.69 mm2"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "section_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: section at z 10: outline 200.0 and bore 37.696 long, fitted as 4 lines and one arc of radius 5.9993 about [20, 20, 10]; section through the bore axis: 4 + 8 lines with the pocket step; shadow with play 0.5: one loop of 2531.69 mm2"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "section_remove": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, calls 0-70: section at z 10: outline 200.0 and bore 37.696 long, fitted as 4 lines and one arc of radius 5.9993 about [20, 20, 10]; section through the bore axis: 4 + 8 lines with the pocket step; shadow with play 0.5: one loop of 2531.69 mm2"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "section_to_sketch": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  },
  "setup": {
   "description": true,
@@ -2816,6 +3476,20 @@
   "health": true,
   "model": "Texturizer model: 25 geometric textures with credits, 3 hexagon ids, a wrong category refused; estimate on the 40 x 30 x 10 box exactly as worked out: 24576 triangles and 10321920 bytes at 1.0 mm, 69206016 capped to 750000 at 0.02 mm"
  },
+ "thickness_measure": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "thickness_settings": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
  "thread_cut": {
   "description": true,
   "docs": true,
@@ -2856,5 +3530,33 @@
   "headless": true,
   "health": true,
   "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "wear_diff": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "wear_prewarp": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "wear_rebuild": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+ },
+ "wear_setup": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
  }
 }
