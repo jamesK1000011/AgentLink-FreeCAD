@@ -78,6 +78,9 @@ KNOWN = {
     # The Activity tab's "Save as macro": moves to SafetyNet's own panel
     # (GUI design, build step 7).
     "panel.py": {"macro_save"},
+    # The mass owner's hook service is asked by its name (a stable service
+    # contract, as "manual_maker" is), not its tool.
+    "families/measure.py": {"mass_properties"},
 }
 
 class NoAddonNames(unittest.TestCase):

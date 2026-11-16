@@ -17,6 +17,25 @@ from ..materials import DENSITY
 
 from ..tools import obj
 
+
+def _owner(doc, bodies, material):
+    """The materials owner's answer (an add-on's "material_set" service,
+    hooks): {"materials", "freecadMaterial", "from"}; None when no add-on
+    offers it or it does not know this material (Agent Link sets it then)."""
+    from .. import hooks
+
+    fn = hooks.service("material_set")
+    if fn is None:
+        return None
+    try:
+        out = fn(doc, list(bodies), material)
+    except Exception:  # noqa: BLE001 - not a material it keeps: set here
+        return None
+    if not isinstance(out, dict):
+        return None
+    return {**out, "from": "the material_set service of an installed add-on (it keeps the materials record)"}
+
+
 GROUP = "material"
 INFO = "Materials: search FreeCAD's library and the printing filaments, read a card's figures, set what each body is made of."
 
@@ -207,6 +226,14 @@ def tools(session):
             c = card(s.doc, mid)
             if c is None:
                 raise ToolError("not_found", f"material {mid!r}: no such id — material_list finds one.")
+        # The add-on that owns materials (its "material_set" service) keeps
+        # the record and FreeCAD's material for what it knows (printing
+        # filaments); a library card or a custom one stays here.
+        if not custom:
+            got = _owner(s.doc, bodies, c["id"])
+            if got is not None:
+                s.snapshot("material_set")
+                return {"bodies": bodies, "material": _brief(c), **got}
         mats = store.materials(s.doc)
         shape_mat = {}
         lib_uuid = c["id"] if c["id"] in _library() else next((u for u, x in _library().items() if x["name"] == LIB_NAME.get(c["id"])), None)
@@ -236,6 +263,10 @@ def tools(session):
     def material_clear(a):
         mats = store.materials(s.doc)
         bodies = [s.body(b).Label for b in a["bodies"]] if a.get("bodies") else list(mats)
+        got = _owner(s.doc, bodies, None)
+        if got is not None:
+            s.snapshot("material_clear")
+            return {"cleared": bodies, **got}
         cleared = [b for b in bodies if mats.pop(b, None) is not None]
         store.write(s.doc, "materials", mats)
         s.snapshot("material_clear")
@@ -256,7 +287,7 @@ def tools(session):
         ),
         Tool(
             "material_set",
-            "Say what bodies are made of: id from material_list, or custom { name, density g/cm³, youngsMPa, yieldMPa, poisson, conductivity W/(m·K), softensC, source } for the supplier's figures. Kept with the document; a library card also goes on the object's ShapeMaterial. bodies: the one body when left out.",
+            "Say what bodies are made of: id from material_list, or custom { name, density g/cm³, youngsMPa, yieldMPa, poisson, conductivity W/(m·K), softensC, source } for the supplier's figures. Kept with the document; a library card also goes on the object's ShapeMaterial. An installed add-on that owns materials keeps those it knows (printing filaments), marked from. bodies: the one body when left out.",
             obj({"bodies": {"type": "array", "items": {"type": "string"}}, "id": {"type": "string"}, "custom": {"type": "object"}}),
             material_set,
             changes=True,

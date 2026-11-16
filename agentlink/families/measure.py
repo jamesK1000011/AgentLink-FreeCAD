@@ -15,6 +15,28 @@ from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import picks
 
+
+def _deferred(session, name, args):
+    """The answer of an add-on's service for this job (hooks), marked with
+    where it came from; None when no add-on offers it or it failed for a
+    reason of its own (this tool's own answer is given instead). A refusal
+    it gives (a code and a message) is the answer."""
+    from .. import hooks
+
+    fn = hooks.service(name)
+    if fn is None:
+        return None
+    try:
+        out = fn(session, dict(args))
+    except Exception as e:  # noqa: BLE001 - an add-on's refusal, or its failure
+        code, msg = getattr(e, "code", None), getattr(e, "message", None)
+        if code and msg:
+            raise ToolError(code, msg) from None
+        return None
+    if not isinstance(out, dict):
+        return None
+    return {**out, "from": f"the {name} service of an installed add-on"}
+
 GROUP = "measure"
 INFO = "Find faces and edges (the references other tools take), measure between them, sections, mass properties, clearance."
 
@@ -328,6 +350,13 @@ def tools(session):
 
     def measure_mass(a):
         o = picks.solid_body(s, a.get("body"))
+        # The add-on that owns mass (its "mass_properties" service: as
+        # printed, inserts included) answers when it is installed and no
+        # density or material is given here.
+        if a.get("density") is None and a.get("material") is None:
+            got = _deferred(s, "mass_properties", {"body": o.Label})
+            if got is not None:
+                return got
         if a.get("density") is not None:
             rho = picks.num(a["density"], "density")
             src = "given"
@@ -447,7 +476,7 @@ def tools(session):
         ),
         Tool(
             "measure_mass",
-            "Volume, area, mass, centre of mass and inertia (g·mm² about the centre of mass; principal moments and axes for one solid) of a body solid through: material (" + ", ".join(MASS_DENSITY) + ") or density g/cm³; the material recorded (material_set) when neither is given. Trap: a printed part is not solid — an add-on for printing may estimate its printed mass.",
+            "Volume, area, mass, centre of mass and inertia (g·mm² about the centre of mass; principal moments and axes for one solid) of a body solid through: material (" + ", ".join(MASS_DENSITY) + ") or density g/cm³; the material recorded (material_set) when neither is given. With neither given and an add-on that owns mass installed, its answer (as printed, inserts included) comes instead, marked from.",
             obj({"body": body, "material": {"type": "string"}, "density": {"type": "number"}}),
             measure_mass,
         ),
