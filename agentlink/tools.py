@@ -109,6 +109,10 @@ def take_back(doc, u0, names0):
             pass
     return removed
 
+# Seconds a batch starts calls for before it answers with what ran and where
+# to go on (budget); the most that may be asked for.
+BATCH_BUDGET, BATCH_BUDGET_MAX = 55.0, 100.0
+
 # What export_file writes a mesh (Mesh::Feature) as, by format or extension.
 MESH_OUT = ("stl", "obj", "ply", "off", "3mf", "amf")
 
@@ -381,7 +385,7 @@ class Session:
         seconds a call: its volume, area and face list each time)."""
         sh = o.Shape
         try:
-            key = (sh.hashCode(), sh.ShapeType)
+            key = geo.shape_key(sh)
         except Exception:
             return geo.stats(sh)
         cache = self.__dict__.setdefault("_stats_cache", {})
@@ -1070,7 +1074,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             except ValueError as e:
                 raise ToolError("invalid_input", f"file: {f} is not JSON ({e}) — a list [{{ tool, arguments }} …], or {{ calls, rollback, stopOnError }}. Nothing was run.")
             if isinstance(data, dict):
-                a = {**{k: data[k] for k in ("rollback", "stopOnError") if k in data}, **{k: v for k, v in a.items() if k in ("rollback", "stopOnError")}}
+                a = {**{k: data[k] for k in ("rollback", "stopOnError", "budget") if k in data}, **{k: v for k, v in a.items() if k in ("rollback", "stopOnError", "budget", "from")}}
                 data = data.get("calls")
             if not isinstance(data, list):
                 raise ToolError("invalid_input", f"file: {f} holds no list of calls — [{{ tool, arguments }} …], or {{ calls: [...] }}. Nothing was run.")
@@ -1115,6 +1119,18 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             raise ToolError("not_found", f"No tool named {'; '.join(hints)} — nothing was run. tool_groups lists them all.")
         rollback = a.get("rollback", True)
         stop = a.get("stopOnError", True)
+        # A long batch is answered in parts. The client drops a call after
+        # about 80 s and the watchdog takes one past 120 s for hung and
+        # starts FreeCAD again (a 113-call run of quick tools went that way,
+        # its answers lost and its document recovered from a copy): past the
+        # budget no further call starts, and the answer says where to go on.
+        budget = a.get("budget", BATCH_BUDGET)
+        if isinstance(budget, bool) or not isinstance(budget, (int, float)) or not 1 <= budget <= BATCH_BUDGET_MAX:
+            raise ToolError("invalid_input", f"budget: seconds this call may start calls for, 1 to {BATCH_BUDGET_MAX:g} ({BATCH_BUDGET:g} by default; the client waits about 80 s for an answer). Nothing was run.")
+        first = a.get("from", 0)
+        if isinstance(first, bool) or not isinstance(first, int) or not 0 <= first <= len(calls):
+            raise ToolError("invalid_input", f"from: the index of the call to start at, 0 to {len(calls)} (the calls are numbered from 0; an earlier answer's next). Nothing was run.")
+        total, calls = len(calls), calls[first:]
         for i, c in enumerate(calls):
             if c["tool"] == "batch":
                 raise ToolError("invalid_input", f"calls.{i}: a batch does not run another batch. Nothing was run.")
@@ -1153,7 +1169,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         # from then, so a heavy step late in it (view_render) knows how long
         # it has left.
         t_out = (prev.get("t0") if isinstance(prev, dict) else None) or time.time()
-        mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False, "names0": mine_mark[1], "t0": t_out}
+        mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False, "names0": mine_mark[1], "t0": t_out,
+                              "budget": float(budget), "first": first, "total": total, "file": a.get("file")}
         try:
             return _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine)
         finally:
@@ -1163,6 +1180,14 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         import json as _json
 
         for i, c in enumerate(calls):
+            if i and time.time() - mine["t0"] > mine.get("budget", BATCH_BUDGET):
+                # Out of time: what ran stays (this is no failure, so nothing
+                # is rolled back), the rest is named with how to run it.
+                nxt = mine.get("first", 0) + i
+                how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else f"batch again with the calls from index {nxt} on (calls.{i} of this list)"
+                return {"results": results, "ran": len(results), "notRun": len(calls) - i, "next": nxt,
+                        "note": f"Stopped after {time.time() - mine['t0']:.0f} s (budget {mine.get('budget', BATCH_BUDGET):g} s): a client waits about 80 s for an answer, so a long batch is answered in parts. "
+                                f"The {len(results)} calls above ran and stay; {len(calls) - i} were not started: {how}."}
             doc = s.doc
             u0 = undo_count(doc) or 0
             mine.update(i=i, tool=c["tool"])
@@ -1242,8 +1267,9 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
              obj({"job": {"type": "string"}, "wait": {"type": "number"}}), job_status),
         Tool("job_start", "Run a read as a job: tool and its arguments. The answer comes back as the tool's own when it ends within 45 s, else a job id for job_status (wait: false answers with the id at once). Reads that are heavy or were slow here (over 20 s) go to a job on their own, and any read takes background: true for the same; a client drops a call after about 80 s, so a long read's answer would be lost. Only reads that leave the window and the 3D view alone (not changes, pictures or window tools); while one runs, changes to its document wait (refused, saying which job).",
              obj({"tool": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["tool"]), job_start),
-        Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }], or file: a .json file holding that list (or { calls, rollback, stopOnError }), read on this side so a long run of calls (many profiles' points) is not sent through the conversation; a relative path is in the session's folder, and files are read where other tools may read. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it and removes every object it made (removed lists any undo did not reach), so it stands or falls whole.",
-             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}}), batch),
+        Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }], or file: a .json file holding that list (or { calls, rollback, stopOnError }), read on this side so a long run of calls (many profiles' points) is not sent through the conversation; a relative path is in the session's folder, and files are read where other tools may read. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it and removes every object it made (removed lists any undo did not reach), so it stands or falls whole. "
+             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch.",
+             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}}), batch),
         Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded making): shots past the last 50 and 3 days, solver and job runs past 14 days, FreeCAD backups past 7; exports only listed. To the Trash. Dry run unless dry_run: false; kinds, older_than_days narrow it. Runs on its own daily.",
              obj({"dry_run": {"type": "boolean"}, "kinds": {"type": "array", "items": {"type": "string", "enum": list(outputs.KINDS)}}, "older_than_days": {"type": "number"}}), outputs_clean),
         Tool("history_undo", "Undo the last change (steps: how many), as FreeCAD's Edit › Undo does.", obj({"steps": {"type": "integer"}}), history("undo")),

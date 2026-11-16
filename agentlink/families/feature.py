@@ -602,7 +602,7 @@ def tools(session):
         # What refers to it by a property of its own: a sketch on its face, a
         # fillet of its edges, a pattern of it. The feature after it (whose
         # BaseFeature it is) does not: the body re-links that itself.
-        users = [o.Label for o in f.InList if o != b and o.TypeId != "PartDesign::Body" and pc.uses(o, f)]
+        users = list(dict.fromkeys(o.Label for o in f.InList if o != b and o.TypeId != "PartDesign::Body" and pc.uses(o, f)))  # each once: InList repeats an object per link
         if users and not a.get("force"):
             raise ToolError("invalid_state", f"{f.Label} is used by {', '.join(users)}: feature_remove those first (the last made first). force: true removes it anyway, and is refused with nothing kept if one of them then fails.")
         prof = getattr(f, "Profile", None)
