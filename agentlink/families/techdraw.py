@@ -1706,9 +1706,9 @@ def tools(session):
         except Exception as e:
             doc().removeObject(d.Name)
             raise ToolError("failed", f"TechDraw cannot measure that: {e} — nothing was kept.")
-        apply_tol(d, a, raw)
+        src = apply_tol(d, a, raw)
         recompute()
-        return done("td_dim", dim_reading(d))
+        return done("td_dim", {**dim_reading(d), **({"fitFrom": src} if src else {})})
 
     def td_dimset(a):
         """Several dimensions at once along one direction: a chain (each to the
@@ -1753,9 +1753,10 @@ def tools(session):
                 d.FormatSpec = str(a["label"])
         if a.get("basic") is not None:
             d.TheoreticalExact = bool(a["basic"])
+        src = None
         if a.get("fit"):
             try:
-                up, lo = iso286.limits(raw, a["fit"])
+                up, lo, src = iso286.limits_from(raw, a["fit"])
             except ValueError as e:
                 raise bad(f"fit: {e}")
             d.EqualTolerance = False
@@ -1775,6 +1776,7 @@ def tools(session):
                 d.EqualTolerance = False
                 d.OverTolerance = p
                 d.UnderTolerance = m
+        return src
 
     def dim_reading(d):
         out = {"dimension": d.Name, "label": d.Label, "type": d.Type, "refs": ref_names(d), "view": d.References2D[0][0].Label if d.References2D else None}
@@ -1808,9 +1810,9 @@ def tools(session):
             d.TheoreticalExact = False
             d.Arbitrary = False
             d.FormatSpec = "%.2f" if d.Type in ("Distance", "DistanceX", "DistanceY", "Radius", "Diameter") else d.FormatSpec
-        apply_tol(d, a, raw)
+        src = apply_tol(d, a, raw)
         recompute()
-        return done("td_tolerance", dim_reading(d))
+        return done("td_tolerance", {**dim_reading(d), **({"fitFrom": src} if src else {})})
 
     # ---- GD&T, notes, balloons, tables ----
 
