@@ -613,12 +613,21 @@ def tools(session):
         if not p.lower().endswith(".fcstd"):
             raise ToolError("invalid_input", f"{os.path.basename(p)}: doc_open opens FreeCAD documents (.FCStd) — import_file brings STEP, STL and the rest into this one.")
         d = next((x for x in FreeCAD.listDocuments().values() if os.path.abspath(x.FileName or "") == os.path.abspath(p)), None)
+        fresh = d is None
         if d is None:
             try:
                 d = FreeCAD.openDocument(p)
             except Exception as e:
                 raise ToolError("failed", f"FreeCAD could not open {p}: {e}")
+        # A document just opened, or one open with no changes, is as its file
+        # after the recompute too: left unchanged (FreeCAD 1.1 marked it
+        # modified, so a restart brought a saved file back as a recovered copy).
+        from ..store import _unchanged, is_changed
+
+        was = False if fresh else is_changed(d)
         d.recompute()
+        if not was:
+            _unchanged(d)
         switch(d)
         return {"document": d.Name, "label": d.Label, "path": p, "objects": len(d.Objects), "bodies": [o.Label for o in s.bodies()], "errors": errors(d)}
 
@@ -1192,7 +1201,7 @@ def tools(session):
         Tool("doc_new", "Start a new, empty FreeCAD document and work in it from now on; the one before stays open (save it first: doc_save). Not undoable, and not in a batch's rollback.", obj({"name": {"type": "string"}}), doc_new),
         Tool("doc_close", "Close open documents (documents: names, labels or .FCStd paths; the current one when left out); one changed since saved is refused unless discard: true. Work moves to another open document. Not undoable.",
              obj({"documents": {"type": "array", "items": {"type": "string"}}, "discard": {"type": "boolean"}}), doc_close),
-        Tool("doc_open", "Open a FreeCAD document (.FCStd, path) and work in it from now on — recomputed, with any object's error listed. Other formats come in with import_file; recent: true lists the recent files. Not undoable.", obj({"path": {"type": "string"}, "recent": {"type": "boolean"}}), doc_open),
+        Tool("doc_open", "Open a FreeCAD document (.FCStd, path) and work in it from now on — recomputed, with any object's error listed; a document just opened (or open with no changes) is left unchanged by that recompute, as its file. Other formats come in with import_file; recent: true lists the recent files. Not undoable.", obj({"path": {"type": "string"}, "recent": {"type": "boolean"}}), doc_open),
         Tool("doc_save", "Save the document as .FCStd: path (relative goes in the session's folder), else where it was saved, else <label>.FCStd there (\"<label> 2.FCStd\" … when that name is taken by another file). Never over another document's file unless overwrite: true — ask the person first. What the tools recorded with the parts (materials, setups, notes) is saved with it.", obj({"path": {"type": "string"}, "overwrite": {"type": "boolean"}}), doc_save),
         Tool("object_list", "Every object in the document: name, label, type, visible, parents (what uses it) and its shape (volume, area, faces, solids, size for a solid; faces and edges else) or mesh. type: a part of the type to keep (\"Part::\", \"Sketch\").", obj({"type": {"type": "string"}}), object_list),
         Tool("object_get", "One object's properties: value (mm, degrees; placements as { at, axis, angle }; links by label; a shape as its stats), type, readOnly. filter: a word in the name or group (\"Placement\", \"Base\"), or a list of names.", obj({"object": objref, "filter": {}}, ["object"]), object_get),

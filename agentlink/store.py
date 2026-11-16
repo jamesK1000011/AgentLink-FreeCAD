@@ -14,6 +14,7 @@
 # back to.
 
 import json
+import os
 import re
 
 # The names below are the file format's (documents written since Agent Link's
@@ -214,6 +215,56 @@ def _unchanged(doc):
             g.Modified = False
         except Exception:
             pass
+
+
+def settle_opened(names):
+    """Documents just opened from a saved copy (an add-on's recovered
+    copies) marked unchanged: opening one renames it "(recovered …)" and
+    recomputes it, which set the window's modified mark, so the heartbeat
+    read every copy as changed for ever, the auto-save kept saving it and
+    each restart recovered it again — a copy of a copy. A change made in it
+    later marks it again. The names it settled."""
+    import FreeCAD
+
+    done = []
+    for n in names or ():
+        try:
+            d = FreeCAD.getDocument(n)
+        except Exception:
+            d = None
+        if d is None:
+            continue
+        _unchanged(d)
+        done.append(n)
+    return done
+
+
+def copy_file(f):
+    """A document file in a temporary folder: a saved copy opened beside the
+    person's file (agentlink-recovered-…, agentlink-restore-…, or anywhere
+    under the system's temporary folder), never the person's own."""
+    import tempfile
+
+    f = str(f or "")
+    if not f:
+        return False
+    if os.path.basename(os.path.dirname(f)).startswith(("agentlink-recovered-", "agentlink-restore-")):
+        return True
+    try:
+        tmp = os.path.realpath(tempfile.gettempdir())
+        return os.path.realpath(f).startswith(tmp + os.sep)
+    except Exception:
+        return False
+
+
+def settle_copies(before):
+    """After a call: the documents it opened (not in before, the names open
+    when it started) from a copy in a temporary folder, marked unchanged
+    (settle_opened). The names settled."""
+    import FreeCAD
+
+    new = [n for n, d in FreeCAD.listDocuments().items() if n not in before and copy_file(getattr(d, "FileName", ""))]
+    return settle_opened(new) if new else []
 
 
 def _gui_doc(doc):

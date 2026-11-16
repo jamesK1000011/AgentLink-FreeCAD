@@ -254,13 +254,78 @@ def recoverable(docs):
     restart reopened every old copy as well (live: "AgentLink (recovered
     15:55)" and "M18TestDrive-v3 (recovered 03:59)" came back again).
     (kept, left out)."""
-    keep_, left = [], []
+    reopen, rec, left = restart_split(docs)
+    return reopen + rec, left
+
+
+def _is_copy(d):
+    """A recovered copy: named "(recovered …)" or opened from a temporary
+    folder (a copy whose label was put back to its original's)."""
+    return bool(RECOVERED_LABEL.search(str(d.get("label") or ""))) or temp_copy(d.get("file"))
+
+
+def restart_split(docs):
+    """What happens to each document open at the stop, once FreeCAD is back,
+    each document once (by its file, else its name):
+    reopen — saved and unchanged: opened again from its own file, as itself
+      (it came back as a "(recovered …)" copy though nothing was lost);
+    recover — changed since saved, or never saved: from its newest saved
+      copy (app_recover auto), each with modified said (true or false);
+    left — a recovered copy nobody changed since it opened: not recovered
+      again (a copy of a copy).
+    (reopen, recover, left)"""
+    reopen, rec, left, seen = [], [], [], set()
     for d in docs or []:
-        if isinstance(d, dict) and RECOVERED_LABEL.search(str(d.get("label") or "")) and not d.get("modified"):
-            left.append(d)
+        if not isinstance(d, dict) or not (d.get("name") or d.get("label")):
+            continue
+        f = d.get("file") or ""
+        key = ("file", os.path.abspath(f)) if f else ("name", d.get("name") or d.get("label"))
+        if key in seen:
+            continue
+        seen.add(key)
+        changed = bool(d.get("modified"))
+        if _is_copy(d):
+            (rec if changed else left).append(dict(d, modified=changed))
+        elif f and not changed:
+            reopen.append(d)
         else:
-            keep_.append(d)
-    return keep_, left
+            rec.append(dict(d, modified=changed))
+    return reopen, rec, left
+
+
+def once(labels):
+    """Labels for a record, each document once, in order."""
+    out = []
+    for x in labels or []:
+        if x and x not in out:
+            out.append(x)
+    return out
+
+
+def newer_copies(listing, since):
+    """Of app_recover list's answer, the documents (names and labels) with a
+    saved copy written after since (when the heartbeat last read them
+    unchanged): a checkpoint taken inside the call that hung holds more than
+    the file, so those are recovered, not reopened."""
+    out = set()
+    try:
+        since = float(since or 0)
+    except (TypeError, ValueError):
+        since = 0.0
+    if not isinstance(listing, dict) or not since:
+        return out
+    for e in listing.get("documents") or []:
+        if not isinstance(e, dict):
+            continue
+        for c in e.get("copies") or []:
+            try:
+                if os.path.getmtime(c.get("path") or "") > since + 1.0:
+                    out |= {e.get("document"), e.get("label")}
+                    break
+            except (OSError, TypeError):
+                continue
+    out.discard(None)
+    return out
 
 
 def strays(before, recovered, now_docs):
@@ -540,7 +605,7 @@ class Window:
         hb = docs_at_restart(self.last_hb, heartbeat(), pid=stopped)
         app, docs = hb.get("app"), hb.get("docs") or []
         if keep is not None:
-            keep.log_watchdog({"event": why, "tool": tool, "docs": [d.get("label") for d in docs], "app": app})
+            keep.log_watchdog({"event": why, "tool": tool, "docs": once(d.get("label") or d.get("name") for d in docs), "app": app})
         if not relaunch(app, why):
             reports = keep.crash_reports() if keep else []
             return ("The window could not be started again from here" + (f" (crash report: {reports[0]})" if reports else "") +
@@ -553,11 +618,26 @@ class Window:
             reports = keep.crash_reports() if keep else []
             return ("FreeCAD was started again in the background but its link did not come up within 2 minutes" +
                     (f" (newest crash report: {reports[0]})" if reports else "") + ". The hidden FreeCAD takes the next calls: app_recover lists the saved copies.")
-        docs, old_copies = recoverable(docs)
-        got = self.ask("app_recover", {"action": "auto", "documents": docs, "since": t_crash}) if docs else {"recovered": []}
+        reopen, rec_docs, old_copies = restart_split(docs)
+        if reopen:
+            newer = newer_copies(self.ask("app_recover", {"action": "list"}, timeout=30), hb.get("t"))
+            rec_docs += [dict(d, modified=False) for d in reopen if d.get("name") in newer or d.get("label") in newer]
+            reopen = [d for d in reopen if not (d.get("name") in newer or d.get("label") in newer)]
+        reopened = []
+        for d in reopen:
+            if self.ask("doc_open", {"path": d["file"]}, timeout=60) is not None:
+                reopened.append(d.get("label") or d.get("name"))
+            else:
+                rec_docs.append(dict(d, modified=False))
+        if keep is not None and (reopened or old_copies):
+            keep.log_watchdog({"event": "reopen", "reopened": reopened, "recover": once(d.get("label") for d in rec_docs),
+                               "notAgain": once(d.get("label") for d in old_copies)})
+        got = self.ask("app_recover", {"action": "auto", "documents": rec_docs, "since": t_crash}) if rec_docs else {"recovered": []}
         if not got:
             return "FreeCAD is back (started in the background); recovering its documents did not answer — app_recover lists the saved copies."
         parts = []
+        if reopened:
+            parts.append("opened again from their own files (saved, unchanged): " + ", ".join(reopened))
         for r in got.get("recovered") or []:
             parts.append(f"{r.get('label')} recovered from {r.get('source')} ({r.get('time')}, {r.get('lost')})")
         for r in got.get("failed") or []:
@@ -682,6 +762,9 @@ def run(script, argv):
                 if mid == "__recover":
                     state["recover"] = line
                     continue
+                if isinstance(mid, str) and mid.startswith("__sv-"):
+                    state.setdefault("sv", {})[mid] = line
+                    continue
                 if mid is not None:
                     pending.pop(mid, None)
                     lines.pop(mid, None)
@@ -701,6 +784,22 @@ def run(script, argv):
     def send_child(line):
         state["child"].stdin.write(line if line.endswith("\n") else line + "\n")
         state["child"].stdin.flush()
+
+    def ask_child(name, arguments, child, timeout=60):
+        """One call of the supervisor's own to the fresh child, its answer
+        (the tool's JSON) or None (an error, or no answer in time)."""
+        state["svn"] = state.get("svn", 0) + 1
+        mid = f"__sv-{state['svn']}"
+        send_child(json.dumps({"jsonrpc": "2.0", "id": mid, "method": "tools/call", "params": {"name": name, "arguments": arguments}}))
+        t0 = time.time()
+        while mid not in state.get("sv", {}) and time.time() - t0 < timeout and child.poll() is None:
+            time.sleep(0.1)
+        line = state.get("sv", {}).pop(mid, None)
+        try:
+            r = json.loads(line)["result"]
+            return None if r.get("isError") else json.loads(r["content"][0]["text"])
+        except (TypeError, ValueError, KeyError, IndexError):
+            return None
 
     def died(code):
         quiet = keep is not None and os.path.exists(keep.path(".hidden-restart"))
@@ -741,7 +840,7 @@ def run(script, argv):
         sys.stderr.write(f"Agent Link: FreeCAD {why}; starting it again\n")
         hidden = (keep._load(keep.path("hidden.json"), {}) if keep else {}) or {}
         dead = state.get("child")
-        docs, _old_copies = recoverable(hidden_docs(hidden, getattr(dead, "pid", None)))
+        reopen, docs, _old_copies = restart_split(hidden_docs(hidden, getattr(dead, "pid", None)))
         t_crash = time.time()
         now = time.time()
         deaths[:] = [t for t in deaths if now - t < 60] + [now]
@@ -752,9 +851,19 @@ def run(script, argv):
             os._exit(1)
         child = start()
         recovered = None
+        reopened = []
         try:
             send_child(json.dumps({"jsonrpc": "2.0", "id": "__restart", "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "agentlink-supervisor", "version": "1"}}}))
             send_child(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}))
+            # Saved, unchanged documents opened again from their own files
+            # (unless a copy newer than hidden.json's word holds more).
+            if reopen:
+                newer = newer_copies(ask_child("app_recover", {"action": "list"}, child, timeout=30), hidden.get("t"))
+                for d in reopen:
+                    if d.get("name") in newer or d.get("label") in newer or ask_child("doc_open", {"path": d["file"]}, child) is None:
+                        docs.append(dict(d, modified=False))
+                    else:
+                        reopened.append(d.get("label") or d.get("name"))
             if docs:
                 state["recover"] = None
                 send_child(json.dumps({"jsonrpc": "2.0", "id": "__recover", "method": "tools/call", "params": {"name": "app_recover", "arguments": {"action": "auto", "documents": docs, "since": t_crash}}}))
@@ -771,6 +880,11 @@ def run(script, argv):
         tail = ""
         if recovered:
             parts = [f"{r.get('label')} recovered from {r.get('source')} ({r.get('time')}, {r.get('lost')})" for r in recovered.get("recovered") or []]
+        else:
+            parts = []
+        if reopened:
+            parts.append("opened again from their own files (saved, unchanged): " + ", ".join(reopened))
+        if recovered or reopened:
             tail = (" " + "; ".join(parts) + ".") if parts else ""
         elif docs:
             tail = " app_recover lists the saved copies of " + ", ".join(d.get("label", "?") for d in docs) + "."

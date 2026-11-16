@@ -15,6 +15,32 @@ import traceback
 PROTOCOL = "2025-06-18"
 
 
+
+
+def _docs_open():
+    try:
+        import FreeCAD
+
+        return set(FreeCAD.listDocuments())
+    except Exception:
+        return None
+
+
+def _settled(fn):
+    """fn run, then any document it opened from a copy in a temporary folder
+    (a recovered copy, a checkpoint opened beside its file) marked
+    unchanged, on the thread that ran it (store.settle_opened says why)."""
+    before = _docs_open()
+    out = fn()
+    if before is not None:
+        try:
+            from .store import settle_copies
+
+            settle_copies(before)
+        except Exception:
+            pass
+    return out
+
 class ToolError(Exception):
     """A refusal the agent can act on: a code (invalid_input, not_found,
     failed) and a message that says what to do next."""
@@ -441,7 +467,7 @@ class Server:
                 if as_job:
                     out = self.run(tool, lambda: self._as_job(tool, args))
                 else:
-                    out = self.run(tool, lambda: tool.fn(args))
+                    out = self.run(tool, lambda: _settled(lambda: tool.fn(args)))
             except BaseException:
                 if gate is not None:
                     gate.after(tool, args, False)

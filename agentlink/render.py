@@ -127,9 +127,13 @@ def _vertex_colours(layer):
     return np.tile(np.asarray(layer.get("color", PALETTE[0]), dtype=float), (n, 1))
 
 
-def draw(layers, view, width, height, frame=None, section=None, margin=14, bottom=0):
+def draw(layers, view, width, height, frame=None, section=None, margin=14, bottom=0, stop_at=None, cut=None):
     """One view of the layers, shaded: (rgb image h x w x 3 in 0..1,
-    millimetres across, whether anything was drawn)."""
+    millimetres across, whether anything was drawn). stop_at (a time.time()):
+    past it the triangles drawn one by one are left (cut, a list, gets
+    the view's name), so a render never runs into the watchdog."""
+    import time as _t
+
     right, upv, back = _basis(view)
     light = back + 0.5 * upv + 0.2 * right
     light /= np.linalg.norm(light)
@@ -200,7 +204,11 @@ def draw(layers, view, width, height, frame=None, section=None, margin=14, botto
         span = (x1 - x0 + 1) * (y1 - y0 + 1)
         small = span <= 4
         # Large triangles one by one, by their pixels.
-        for i in np.nonzero(~small & ok)[0]:
+        for j, i in enumerate(np.nonzero(~small & ok)[0]):
+            if stop_at is not None and j % 512 == 0 and _t.time() > stop_at:
+                if cut is not None and view not in cut:
+                    cut.append(view)
+                break
             xs_ = np.arange(x0[i], x1[i] + 1) + 0.5
             ys_ = np.arange(y0[i], y1[i] + 1) + 0.5
             gx, gy = np.meshgrid(xs_, ys_)
@@ -324,9 +332,13 @@ def png(img):
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b"")
 
 
-def compose(layers, views, width, height, frame=None, section=None, mapinfo=None):
+def compose(layers, views, width, height, frame=None, section=None, mapinfo=None, stop_at=None, cut=None):
     """One picture: a view, or a grid of views each fitted; the map's legend
-    under them. (image, per-view mm across, drawn)."""
+    under them. (image, per-view mm across, drawn). stop_at: a time past
+    which no further view is drawn and a view in hand stops drawing its
+    large triangles; cut (a list) gets the views left short."""
+    import time as _t
+
     n = len(views)
     cols = 1 if n == 1 else 2 if n <= 4 else 3
     rows = math.ceil(n / cols)
@@ -336,7 +348,12 @@ def compose(layers, views, width, height, frame=None, section=None, mapinfo=None
     across, any_drawn = {}, False
     for k, v in enumerate(views):
         r, c = divmod(k, cols)
-        sub, mm, drawn = draw(layers, v, cw, ch, frame=frame, section=section)
+        if stop_at is not None and _t.time() > stop_at:
+            if cut is not None:
+                cut.append(v)
+            text(img, v.upper() + " (NOT DRAWN: TIME)", c * cw + 8, r * ch + 8, scale=2)
+            continue
+        sub, mm, drawn = draw(layers, v, cw, ch, frame=frame, section=section, stop_at=stop_at, cut=cut)
         any_drawn |= drawn
         img[r * ch:(r + 1) * ch, c * cw:(c + 1) * cw] = sub
         if n > 1:
@@ -415,16 +432,131 @@ def vertex_normals(V, F):
     return vn
 
 
-def nearest_values(points, src_points, src_values, chunk=2048):
-    """Each point takes the value of the nearest source point (brute force
-    in chunks: no scipy)."""
-    P = np.asarray(points, dtype=float)
-    S = np.asarray(src_points, dtype=float)
-    out = np.empty(len(P))
-    for i in range(0, len(P), chunk):
-        d = ((P[i:i + chunk, None, :] - S[None, :, :]) ** 2).sum(-1)
-        out[i:i + chunk] = np.asarray(src_values)[d.argmin(1)]
+# Cells (query x source points) one brute-force pass of nearest_values
+# holds: 2048 queries against 230,896 points was 11 GB a pass, and a map
+# of an inspection on a fine body's mesh froze the window for minutes.
+NEAREST_CELLS = 4_000_000
+# Past this many sources a brute-force pass samples them evenly (a grid
+# keeps one per cell is not needed for colours: the nearest of an even
+# sample is a neighbour of the nearest).
+NEAREST_SOURCES = 60_000
+
+
+def nearest_values(points, src_points, src_values, chunk=None):
+    """Each point takes the value of the nearest source point: a k-d tree
+    when scipy is here, else brute force in passes of NEAREST_CELLS cells,
+    the sources sampled evenly to NEAREST_SOURCES when there are more."""
+    P = np.asarray(points, dtype=float).reshape(-1, 3)
+    S = np.asarray(src_points, dtype=float).reshape(-1, 3)
+    vals = np.asarray(src_values, dtype=float)
+    out = np.full(len(P), np.nan)
+    if not len(P) or not len(S):
+        return out
+    try:
+        from scipy.spatial import cKDTree
+
+        _, idx = cKDTree(S).query(P)
+        return vals[idx]
+    except Exception:
+        pass
+    if len(S) > NEAREST_SOURCES:
+        pick = np.linspace(0, len(S) - 1, NEAREST_SOURCES).astype(np.int64)
+        S, vals = S[pick], vals[pick]
+    step = int(chunk) if chunk else max(1, NEAREST_CELLS // len(S))
+    for i in range(0, len(P), step):
+        d = ((P[i:i + step, None, :] - S[None, :, :]) ** 2).sum(-1)
+        out[i:i + step] = vals[d.argmin(1)]
     return out
+
+
+def thin(layer, cap):
+    """A layer drawn on at most about cap triangles: its vertices merged in
+    an even grid (each cell one vertex, at their mean; a map's value their
+    mean over the measured ones, nan when none was), the triangles that
+    collapse dropped. The layer as it is when already under cap. A new
+    layer with "thinnedFrom" (the triangles it had)."""
+    F = np.asarray(layer.get("F"), dtype=np.int64).reshape(-1, 3)
+    cap = max(500, int(cap))
+    if len(F) <= cap:
+        return layer
+    V = np.asarray(layer["V"], dtype=float).reshape(-1, 3)
+    vals = layer.get("values")
+    vals = None if vals is None else np.asarray(vals, dtype=float)
+    T = V[F]
+    area = float(np.linalg.norm(np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]), axis=1).sum() / 2)
+    lo = V.min(0)
+    # A surface of n vertices has about 2n triangles: cells sized so about
+    # cap / 2 of them hold a vertex, grown until the triangles fit.
+    h = math.sqrt(max(area, 1e-12) / (0.5 * cap)) if area > 0 else float(np.ptp(V, axis=0).max() or 1.0) / math.sqrt(cap)
+    best = None
+    for _ in range(12):
+        key = np.floor((V - lo) / h).astype(np.int64)
+        _, inv = np.unique(key, axis=0, return_inverse=True)
+        inv = inv.reshape(-1)
+        G = inv[F]
+        ok = (G[:, 0] != G[:, 1]) & (G[:, 1] != G[:, 2]) & (G[:, 0] != G[:, 2])
+        G = G[ok]
+        best = (inv, G)
+        if len(G) <= cap:
+            break
+        h *= 1.25
+    inv, G = best
+    n = int(inv.max()) + 1
+    cnt = np.bincount(inv, minlength=n).astype(float)
+    NV = np.stack([np.bincount(inv, weights=V[:, k], minlength=n) for k in range(3)], 1) / np.maximum(cnt, 1)[:, None]
+    out = {k: v for k, v in layer.items() if k not in ("V", "F", "values", "colors")}
+    out.update(V=NV, F=G, thinnedFrom=int(len(F)))
+    if vals is not None and len(vals) == len(V):
+        fin = np.isfinite(vals)
+        num = np.bincount(inv[fin], weights=vals[fin], minlength=n)
+        den = np.bincount(inv[fin], minlength=n).astype(float)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            out["values"] = np.where(den > 0, num / np.maximum(den, 1), np.nan)
+    elif vals is not None:
+        out["values"] = vals
+    if layer.get("colors") is not None and vals is None:
+        C = np.asarray(layer["colors"], dtype=float)
+        if len(C) == len(V):
+            out["colors"] = np.stack([np.bincount(inv, weights=C[:, k], minlength=n) for k in range(3)], 1) / np.maximum(cnt, 1)[:, None]
+    return out
+
+
+# Layers under this many triangles are never thinned (a CAD part's
+# creases read on its own tessellation).
+THIN_FLOOR = 5000
+
+
+def triangle_cap(views, w, h, rate, target=40.0):
+    """The triangles a render of these views and pixels can draw within
+    target seconds at rate."""
+    pix = (int(w) * int(h) * max(1, len(views))) // 50
+    room = target / max(rate, 1e-12) - pix
+    return max(2000, int(room / max(1, len(views))))
+
+
+def fit_layers(layers, cap, floor=THIN_FLOOR):
+    """Layers thinned so their triangles total about cap: the big ones (over
+    floor) share what the small ones leave, in proportion. (layers,
+    [{ layer, from, to }])."""
+    tot = sum(int(len(l["F"])) for l in layers)
+    if tot <= cap:
+        return layers, []
+    small = sum(int(len(l["F"])) for l in layers if len(l["F"]) <= floor)
+    big = tot - small
+    if big <= 0:
+        return layers, []
+    k = max(0.0, (cap - small)) / big
+    out, said = [], []
+    for l in layers:
+        n = int(len(l["F"]))
+        if n <= floor:
+            out.append(l)
+            continue
+        t = thin(l, max(floor, int(n * k)))
+        out.append(t)
+        if t is not l:
+            said.append({"layer": l.get("name"), "from": n, "to": int(len(t["F"]))})
+    return out, said
 
 
 def even_length(V, F, cap, floor=None):

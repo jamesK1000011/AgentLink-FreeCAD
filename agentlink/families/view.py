@@ -161,6 +161,45 @@ def render_work(layers, views, w, h):
     return max(1, tris * max(1, len(views)) + (int(w) * int(h) * max(1, len(views))) // 50)
 
 
+# A render is sized before it draws (a map of an inspection on a fine
+# body's mesh, 230,896 points against a 140k-triangle scan in four views at
+# 1400 x 800, froze the window past the watchdog's 120 s): its work
+# (render_work) and, from past renders here, its time. Over RENDER_TARGET
+# seconds the layers are drawn thinned (render.thin) to fit, the count
+# said; a map's own sample (detail) is capped the same way.
+RENDER_TARGET = 40.0
+# Seconds per unit of work when no render has been timed here yet: on the
+# slow side (a 1400 x 800 four-view render of about 75k triangles in 40 s).
+RENDER_PRIOR_RATE = 1e-4
+# Seconds a render may draw, counted from its call's start (a batch's
+# start inside a batch): past it, the views not yet drawn are left and
+# said. Under the watchdog's 120 s for a call, with room for the PNG.
+RENDER_STOP = 90.0
+
+
+def _queue():
+    try:
+        from .. import keep
+
+        return keep.queue_state() or {}
+    except Exception:
+        return {}
+
+
+def render_rate(q, work):
+    """Seconds per unit of render work here: the typical of past renders
+    (view_render:work), else RENDER_PRIOR_RATE. (rate, from history)"""
+    from .. import keep
+
+    try:
+        r = keep.estimate_range(q, RENDER_KEY, max(1, work))
+    except Exception:
+        r = None
+    if r and r[1] > 0:
+        return r[1] / float(max(1, work)), True
+    return RENDER_PRIOR_RATE, False
+
+
 def _said(r):
     from .. import keep
 
@@ -275,12 +314,22 @@ def tools(session):
                 raise ToolError("invalid_input", "zoom size: mm across, over 0.")
 
         layers, shown = [], []
+        capped_detail = None
         mapname = a.get("map")
         mapinfo = None
         if mapname:
             if mapname not in render.MAPS:
                 raise ToolError("invalid_input", f"map: one of {', '.join(render.MAPS) or 'none here'}.")
-            m = render.MAPS[mapname][0](s, a)
+            # The map's own sample (detail) capped to what this render can
+            # draw in time; the drawing is thinned below as well.
+            q0 = _queue()
+            rate, _hist = render_rate(q0, 1)
+            cap0 = render.triangle_cap(views, w, h, rate, RENDER_TARGET)
+            ma = a
+            if isinstance(a.get("detail"), (int, float)) and not isinstance(a.get("detail"), bool) and a["detail"] > cap0:
+                ma = dict(a, detail=int(cap0))
+                capped_detail = (int(a["detail"]), int(cap0))
+            m = render.MAPS[mapname][0](s, ma)
             vals = np.concatenate([np.asarray(l["values"], dtype=float) for l in m["layers"]]) if m["layers"] else np.zeros(0)
             fin = vals[np.isfinite(vals)]
             if not len(fin):
@@ -339,20 +388,56 @@ def tools(session):
         if not layers:
             raise ToolError("not_found", "Nothing to draw: no body is shown, and no scan or other layer is loaded.")
         render.distinct_colours(layers)
+        # Sized before it draws: the triangles of every layer (the map's,
+        # a scan's) times the views, and the time that takes here. Over
+        # RENDER_TARGET the big layers are thinned to fit (the count said);
+        # a map's colours are worked out on the thinned layer, its numbers
+        # (min, max, worst) on the full one above.
+        q = _queue()
+        work0 = render_work(layers, views, w, h)
+        rate, hist = render_rate(q, work0)
+        thinned = []
+        if work0 * rate > RENDER_TARGET:
+            layers, thinned = render.fit_layers(layers, render.triangle_cap(views, w, h, rate, RENDER_TARGET))
+        if mapinfo:
+            for l in layers:
+                if l.get("values") is not None and (l.get("colors") is None or l.get("thinnedFrom")):
+                    l["colors"] = render.colours_for(l["values"], mapinfo["range"][0], mapinfo["range"][1], mapinfo.get("cmap", "jet"))
         # The work: triangles drawn times views — what a render's time
         # follows. Logged against it (heavy.WORK), and the time it should
         # take said from past renders here at that work.
         work = render_work(layers, views, w, h)
-        expected = None
         try:
             from .. import keep
-
-            expected = keep.estimate_range(keep.queue_state(), RENDER_KEY, work)
+        except Exception:
+            keep = None
+        expected = None
+        try:
+            expected = keep.estimate_range(q, RENDER_KEY, work) if keep else None
         except Exception:
             pass
         s.heavy_work = (RENDER_KEY, work)
-
-        img, across, drawn = render.compose(layers, views, w, h, frame=frame, section=section, mapinfo=mapinfo)
+        # The watchdog times the call from its start (a batch's start inside
+        # a batch: the batch is one call to it). A render that may run long
+        # marks itself heavy so the watchdog waits for it, and stops drawing
+        # at RENDER_STOP from that start whatever its estimate said.
+        bn = getattr(s, "batch_now", None)
+        started = (bn.get("t0") if isinstance(bn, dict) else None) or t0
+        est = work * rate
+        stop_at = started + RENDER_STOP
+        marked = False
+        if keep is not None and est > 10.0:
+            try:
+                keep.mark_heavy_call("view_render", max(est, (_time.time() - started + RENDER_STOP + 30.0) / 3.0), work)
+                marked = True
+            except Exception:
+                pass
+        cut = []
+        try:
+            img, across, drawn = render.compose(layers, views, w, h, frame=frame, section=section, mapinfo=mapinfo, stop_at=stop_at, cut=cut)
+        finally:
+            if marked:
+                keep.clear_heavy_call()
         data = render.png(img)
         p = paths.out_file(s, "view_render", a.get("path") or f"render_{'_'.join(views)}{'_' + mapname if mapname else ''}.png", ".png")
         os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
@@ -361,6 +446,12 @@ def tools(session):
         out = {"path": p, "views": views, "mmAcross": across, "layers": shown, "width": w, "height": h, "bytes": len(data),
                "time": {"took": round(_time.time() - t0, 1), "triangles": int(sum(len(l["F"]) for l in layers)),
                         **({"expected": _said(expected)} if expected else {})}}
+        if thinned:
+            out["thinned"] = {"layers": thinned, "why": f"drawn on fewer triangles to finish in about {RENDER_TARGET:g} s here (" + ("from past renders" if hist else "a first render here: a cautious guess") + f", {int(work0):,} units of work as asked); the map's numbers are read on every point. A zoom or fewer views draws finer."}
+        if capped_detail:
+            out["detailCapped"] = {"asked": capped_detail[0], "used": capped_detail[1], "why": "the map's sample capped to what this render draws in time"}
+        if cut:
+            out["cut"] = {"views": cut, "why": f"stopped drawing at {RENDER_STOP:g} s into the call so the watchdog does not take FreeCAD for hung; fewer views, a zoom, or a smaller picture draws them"}
         if summary:
             out["map"] = summary
         if section:
@@ -502,13 +593,15 @@ def tools(session):
             "map: wall (thickness, red thin), stress (the last fea_solve), heat (the last fea_heat), or one an add-on adds (view_maps lists them) — with a legend, and the worst spot's at; range [lo, hi] fixes the colours. "
             "section { axis x|y|z, offset mm, flip } cuts it open (solid cut faces hatched). zoom { at, size mm } frames a spot — a finding's at. "
             "objects: which bodies (every shown body when left out: a Body of several solids, screws and other attached parts, each in a colour of its own); layers: which add-on layers (a scan …). The PNG comes back as an image (inline false: the file only) and is written to path. "
-            "time says what it took and, from past renders here at the same triangles and views, what to expect.",
+            "time says what it took and, from past renders here at the same triangles and views, what to expect. "
+            "Sized before it draws: every layer's triangles (a map's, a scan's) times the views, timed from past renders here. Past about 40 s the big layers are drawn thinned to fit (thinned: each layer's triangles from and to; a map's min, max and worst are still read on every point) and a larger detail is capped (detailCapped). "
+            "A long render marks itself heavy so the watchdog waits for it, inside a batch too; at 90 s into the call (the batch's start in a batch) it stops drawing and names the views left (cut) rather than be taken for hung.",
             obj({
                 "view": vschema, "views": vschema,
                 "map": {"type": "string"}, "range": {"type": "array", "items": {"type": "number"}},
                 "section": {"type": "object"}, "zoom": {"type": "object"},
                 "objects": {}, "layers": {"type": "array", "items": {"type": "string"}},
-                "reach": {"type": "number"}, "tolerance": {"type": "number"}, "deform": {"description": "map stress: draw the deformed shape, displacements times this (\"auto\" scales the largest to a twentieth of the part)."}, "detail": {"type": "integer", "description": "How many small triangles a map is read on (wall 16000, stress 30000): more is finer and slower."},
+                "reach": {"type": "number"}, "tolerance": {"type": "number"}, "deform": {"description": "map stress: draw the deformed shape, displacements times this (\"auto\" scales the largest to a twentieth of the part)."}, "detail": {"type": "integer", "description": "How many small triangles a map is read on (wall 16000, stress 30000): more is finer and slower; capped to what the render can draw in time (detailCapped says so)."},
                 "width": {"type": "integer"}, "height": {"type": "integer"}, "inline": {"type": "boolean"}, "path": {"type": "string"},
             }),
             view_render,

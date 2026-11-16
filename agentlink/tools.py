@@ -1149,7 +1149,11 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         # Kept and put back: another batch can run inside this one's call
         # while a menu's or dialog's loop holds it.
         prev = getattr(s, "batch_now", None)
-        mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False, "names0": mine_mark[1]}
+        # t0: when the outermost batch started — the watchdog times the call
+        # from then, so a heavy step late in it (view_render) knows how long
+        # it has left.
+        t_out = (prev.get("t0") if isinstance(prev, dict) else None) or time.time()
+        mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False, "names0": mine_mark[1], "t0": t_out}
         try:
             return _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine)
         finally:
