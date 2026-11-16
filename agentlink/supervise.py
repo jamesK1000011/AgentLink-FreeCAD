@@ -264,6 +264,21 @@ def _is_copy(d):
     return bool(RECOVERED_LABEL.search(str(d.get("label") or ""))) or temp_copy(d.get("file"))
 
 
+def reopened_by_recover(got):
+    """The documents app_recover's answer says it opened again from their
+    own files (its "reopened": [{ document, label, why }], from the add-on
+    that recovers documents), by label — for the restart's own words."""
+    out = []
+    for r in (got or {}).get("reopened") or []:
+        if isinstance(r, dict):
+            name = r.get("label") or r.get("document") or r.get("name")
+        else:
+            name = r
+        if name:
+            out.append(str(name))
+    return out
+
+
 def restart_split(docs):
     """What happens to each document open at the stop, once FreeCAD is back,
     each document once (by its file, else its name):
@@ -636,6 +651,7 @@ class Window:
         if not got:
             return "FreeCAD is back (started in the background); recovering its documents did not answer — app_recover lists the saved copies."
         parts = []
+        reopened = once(reopened + reopened_by_recover(got))
         if reopened:
             parts.append("opened again from their own files (saved, unchanged): " + ", ".join(reopened))
         for r in got.get("recovered") or []:
@@ -882,6 +898,7 @@ def run(script, argv):
             parts = [f"{r.get('label')} recovered from {r.get('source')} ({r.get('time')}, {r.get('lost')})" for r in recovered.get("recovered") or []]
         else:
             parts = []
+        reopened = once(reopened + reopened_by_recover(recovered))
         if reopened:
             parts.append("opened again from their own files (saved, unchanged): " + ", ".join(reopened))
         if recovered or reopened:

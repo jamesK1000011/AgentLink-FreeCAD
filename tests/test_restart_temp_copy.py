@@ -76,3 +76,14 @@ def test_restart_reopens_an_agents_unsaved_document_once(tmp_path=None):
     assert plan([Doc("PocketLesson")], changed, "none", {"PocketLesson"})[0][1] == "copy"
     assert plan([Doc("PocketLesson")], changed, "agent", {"PocketLesson"}, True)[0][1] == "drop"
     assert ns["_scratch"](p) and not ns["_scratch"]("/Users/me/Bracket.FCStd") and not ns["_scratch"]("")
+
+
+def test_the_restart_note_names_what_app_recover_reopened():
+    """app_recover's own "reopened" list (documents opened again from their
+    files) is in the restart's words, each once, beside the supervisor's."""
+    from agentlink import supervise
+
+    got = {"recovered": [], "reopened": [{"document": "M18Skin", "label": "M18Skin", "why": "saved, unchanged"}, {"document": "Stem"}]}
+    assert supervise.reopened_by_recover(got) == ["M18Skin", "Stem"]
+    assert supervise.reopened_by_recover(None) == [] and supervise.reopened_by_recover({"recovered": []}) == []
+    assert supervise.once(["M18Skin"] + supervise.reopened_by_recover(got)) == ["M18Skin", "Stem"]
