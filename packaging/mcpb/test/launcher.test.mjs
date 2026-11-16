@@ -69,6 +69,32 @@ process.stdout.write(JSON.stringify(out))
   }
   console.log('launcher companions: from addons.json (bundled, then kept by the last update), the local setting over both')
 }
+// agentlink_update's window restart: a fresh heartbeat naming another call
+// in hand means the app_restart was queued behind it (a window held by a
+// nested event loop), so the update force-restarts it; app_restart itself
+// in hand, a stale heartbeat or no call is not that.
+{
+  const script = `
+global.__agentlinkHandover = true
+const L = require(${JSON.stringify(path.join(here, '..', 'server', 'index.js'))})
+global.__agentlinkHandover = false
+const now = 1000
+process.stdout.write(JSON.stringify({
+  held: L.windowHeld({ pid: 42, t: 999, busy: 'batch', busySince: 200 }, now),
+  restarting: L.windowHeld({ pid: 42, t: 999, busy: 'app_restart' }, now),
+  stale: L.windowHeld({ pid: 42, t: 900, busy: 'batch' }, now),
+  idle: L.windowHeld({ pid: 42, t: 999, busy: null }, now),
+  none: L.windowHeld(null, now),
+}))
+`
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agentlink-held-'))
+  const out = JSON.parse(execFileSync(process.execPath, ['-e', script], { env: { ...process.env, HOME: home, AGENTLINK_UPDATE: 'false' }, encoding: 'utf8' }))
+  assert.deepEqual(out.held, { pid: 42, busy: 'batch', since: 200 }, 'a window held by another call is hung for the update')
+  assert.equal(out.restarting, null, 'app_restart in hand: it was taken')
+  assert.equal(out.stale, null, 'a stale heartbeat: no window to judge')
+  assert.equal(out.idle, null)
+  assert.equal(out.none, null)
+}
 // Every pin the manifest names is a file here holding one commit.
 {
   const repo = path.join(here, '..', '..', '..')

@@ -183,6 +183,10 @@ def tools(s):
         vars_ = a.get("vars") or {}
         if not isinstance(vars_, dict):
             raise bad("vars: { name: value } for the script's $names (without the $).")
+        budget = a.get("budget", ls.BUDGET)
+        if budget is not None and (isinstance(budget, bool) or not isinstance(budget, (int, float)) or budget <= 0):
+            raise bad(f"budget: seconds the replay may hold the window ({ls.BUDGET:g} by default, at most {ls.BUDGET_MAX:g}).")
+        budget = min(float(budget), ls.BUDGET_MAX) if budget is not None else ls.BUDGET
         gui = bool(getattr(FreeCAD, "GuiUp", False))
         live = None
         if gui:
@@ -205,15 +209,40 @@ def tools(s):
                     QtWidgets.QApplication.processEvents()
                     _t.sleep(0.05)
 
+            import agentlink_state
+
+            link = getattr(agentlink_state, "link", None)
+            # The client's call in hand (live_run itself, or the batch it is
+            # in, with that batch's progress): the guard's answer goes there.
+            mine = (getattr(link, "calls", None) or [None])[-1] if link is not None else None
+            outer_bn = getattr(s, "batch_now", None)
+
+            def watch(summary):
+                # Ticked from inside whatever event loop holds the window:
+                # past the budget, a nested loop that never ended is closed,
+                # woken, and at last answered for (livescript.Guard).
+                g = ls.Guard(budget, _t.time, gui_link.loop_level,
+                             unstick=lambda: (gui_link.close_front(True), gui_link.wake()),
+                             answer=lambda body: gui_link.answer_call(mine, "live_run", body, outer_bn),
+                             stuck=lambda body: gui_link.held_stuck(body.get("note")))
+                g.summary = summary
+                return gui_link.ticker(g.tick, 1000)
+
             live = types.SimpleNamespace(push=gui_link.CONTINUE.append, pop=gui_link.CONTINUE.pop,
                                          batch_now=lambda: getattr(s, "batch_now", None), front=front,
-                                         unstick=lambda: call("gui_unstick", {"all": True}), sleep=sleep)
+                                         unstick=lambda: call("gui_unstick", {"all": True}), sleep=sleep,
+                                         wake=gui_link.wake, watch=watch)
+            # For the heartbeat: done by then (its budget, a call's grace and
+            # the guard's), or the watchdog takes a nested loop as a hang.
+            gui_link.until(_t.time() + budget + ls.LAST_CALL_GRACE + 2 * ls.GUARD_GRACE)
         prev = getattr(s, "live_now", None)
         s.live_now = True
         try:
-            out = ls.run(script, chosen, call, vars_, bool(a.get("stopOnFail", False)), shot if gui else None, live)
+            out = ls.run(script, chosen, call, vars_, bool(a.get("stopOnFail", False)), shot if gui else None, live, budget=budget)
         finally:
             s.live_now = prev
+            if gui:
+                gui_link.until(None)
         out["file"] = p
         return out
 
@@ -246,9 +275,10 @@ def tools(s):
              "steps: only these (names or numbers from 0; all by default; run reset first, as the scripts expect). Each step's calls go to batch (rollback: false, stopOnError: false), or one by one when the step is direct; "
              "$names are filled in from vars { name: value } and from earlier answers (a $name the script declares, kept from the latest answer that has that key: $next); a step that needs one not known yet is skipped and says which. "
              "Two-role steps (role: student, parallel) are skipped: they need two agents (ROLES.md). Every expect is checked (equals, contains, atLeast, atMost, exists, noneContain with ignoreLinesWith; paths with dots, [*] any item, [-1] the last). "
-             "A call with allow: [codes] may be refused with one of them without failing its step (allowedRefusals; reset closes documents that may not be open). A gui_input that opens a dialog does not end the replay: the step's calls after it and the next steps run inside the dialog's loop, so the step that answers it runs; a step answered busy is run again once after a short wait; anything left open at the end is closed (gui_unstick) and said in leftOpen. The answer is always live_run's own summary. "
+             "A call with allow: [codes] may be refused with one of them without failing its step (allowedRefusals; reset closes documents that may not be open). A gui_input that opens a dialog does not end the replay: inside the dialog's loop, the step's calls after it and the next steps' calls run one at a time only while the dialog is still open (so the step that answers it runs); once it closes the replay returns, the dialog's loop ends, and the rest runs after it; a step answered busy is run again once after a short wait; anything left open at the end is closed (gui_unstick) and said in leftOpen. "
+             f"budget: seconds the replay may hold the window ({ls.BUDGET:g} by default, at most {ls.BUDGET_MAX:g}): no call starts past it, and the answer names the steps not run (notRun) — live_run {{ steps: [...] }} runs them, so a long script is split across calls. A nested event loop still holding the window past the budget is closed, then the call is answered with what ran so far and FreeCAD is started again by the watchdog. The answer is always live_run's own summary. "
              "Answers per step pass, fail or skipped, a failing check's call, path, wanted and got, refused calls, the step's shot (a window picture, in the window) and look (what it should show), and the totals. stopOnFail: true stops at the first failing step. It changes the document as the script does.",
-             obj({"script": st, "steps": {"type": "array", "items": {}}, "vars": {"type": "object"}, "stopOnFail": {"type": "boolean"}}, ["script"]), live_run),
+             obj({"script": st, "steps": {"type": "array", "items": {}}, "vars": {"type": "object"}, "stopOnFail": {"type": "boolean"}, "budget": {"type": "number"}}, ["script"]), live_run),
         Tool("addon_test",
              "An installed add-on's own tests (its tests/ folder) run in the background in a separate FreeCAD command-line process, never this "
              "FreeCAD: documents, the window and settings are untouched, and the tests get a fresh ~/AgentLink. addon starts a run: its folder "
