@@ -73,7 +73,7 @@ KNOWN = {
     # After a crash the watchdog asks the recovery tool by name, and that
     # call is free of the pinned document: to move behind a declaration.
     "supervise.py": {"app_recover"},
-    "gui_link.py": {"app_recover"},
+    "gui_link.py": {"app_recover"},  # until its add-on declares PINNED_FREE
     # A batch that rolls back refuses a restore inside it: to become a
     # family declaration.
     "tools.py": {"history_restore"},
@@ -119,6 +119,26 @@ class NoAddonNames(unittest.TestCase):
                 text = fh.read()
             stale += [f"{rel}: {n}" for n in allowed if n not in text]
         self.assertEqual(stale, [])
+
+
+class PinnedFreeDeclared(unittest.TestCase):
+    """A tool free of the pinned document comes from its family's
+    PINNED_FREE, so Agent Link need not name it."""
+
+    def test_family_declares(self):
+        import types
+
+        from agentlink import families
+
+        saved = set(families.PINNED_FREE)
+        try:
+            families.declared([types.SimpleNamespace(PINNED_FREE={"standin_recover", "", 3}), types.SimpleNamespace()])
+            self.assertIn("standin_recover", families.PINNED_FREE)
+            self.assertNotIn("", families.PINNED_FREE)
+            self.assertNotIn(3, families.PINNED_FREE)
+        finally:
+            families.PINNED_FREE.clear()
+            families.PINNED_FREE.update(saved)
 
 
 if __name__ == "__main__":
