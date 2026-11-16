@@ -20,6 +20,7 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 
 ### Fixed
 
+- `asm_check` and `asm_joint` mark a screw's overlap with a tapped hole as `thread` (the engaged length, the size) and no longer count it against the verdict: a Fasteners screw in a PartDesign tapped hole overlaps the part in the ring between its minor and nominal diameter, as meant. A screw through solid material still counts (bike stem test drive: four M8 screws in tapped holes made the verdict fix).
 - Assembly joints made by `asm_joint`, `asm_new` and `asm_ground` in the window get FreeCAD's own joint view provider, and joints already saved without one get it when the assembly is next used: after reopening such a document every recompute failed ("'int' object has no attribute 'redrawJointPlacements'", bike stem test drive, 16 Nov 2026).
 - `pd_fillet` and `pd_chamfer` on an inside (concave) corner, which adds material, are no longer refused as "cut nothing — the profile does not meet the body": either sign of volume change is right for them, and only one that leaves the body as it was is refused. An inward `pd_thickness` that removes nothing says so without talking of a profile. Found on an L-bracket's inside corner.
 - `sketch_add` `polyline` holds its sides that run along x or y horizontal or vertical, as a rectangle's are (the guide promised it; only coincident constraints were added).
