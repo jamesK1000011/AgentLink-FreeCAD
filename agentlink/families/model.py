@@ -677,8 +677,15 @@ def tools(session):
             dist = min(bs.distToShape(x)[0] for x in shapes)
             why = "they do not touch" if dist > 1e-6 else ("the tools lie inside it" if op == "fuse" else "they only touch it")
             raise ToolError("failed", f"{op} changed nothing in {base.Label}: {why} (least distance {dist:.3f} mm). Move a tool into the base (part_transform), then again.")
+        s.last_hidden = []
         o = picks.bake(s, base, res, a.get("name"), consumed=tl, keep=bool(a.get("keep")))
         extra = {"op": op, "volumeChange": round(o.Shape.Volume - bs.Volume, 2), ("kept" if a.get("keep") else "removed"): [t.Label for t in tl]}
+        hid = list(getattr(s, "last_hidden", []) or [])
+        if hid:
+            # Said, never silent: a hidden body is not drawn by view_render.
+            extra["hidden"] = hid
+            extra["hiddenNote"] = (f"Hidden so the result is seen alone: {', '.join(hid)} — still bodies to other tools, not drawn by view_render. "
+                                   f"object_delete {o.Label} takes the result back and shows them again; object_set {{ Visibility: true }} shows one.")
         if len(o.Shape.Solids) > 1:
             extra["note"] = f"{len(o.Shape.Solids)} separate solids: pieces that do not touch."
         return report(s, o, "part_boolean", extra)
@@ -1179,7 +1186,7 @@ def tools(session):
         ),
         Tool(
             "part_boolean",
-            "fuse, cut or common base with tools (bodies). The result keeps base's name (name: a new one) as a plain shape, coplanar faces merged; the tools are removed (keep: true hides them — a hidden body is still a body to the other tools). Refused when nothing would change (not touching, or inside for fuse), for common with no overlap, when a tool is not a sound solid (invalid, open, inside out) and when a fuse drops a tool OCC could not join; the tools are kept then. A boolean of many faces (meshes made solids) is asked about first with its time: the window is frozen while OCC works. Answers whether the result is sound (valid, closed, volume above 0, no sliver faces).",
+            "fuse, cut or common base with tools (bodies). The result keeps base's name (name: a new one) as a plain shape, coplanar faces merged; the tools are removed (keep: true hides them — a hidden body is still a body to the other tools); a PartDesign Body base gives a new Body on the result and the old one is hidden. hidden names every input hidden. object_delete of the result removes the helpers made for it (the base shape, its BaseFeature) and shows the hidden inputs again under their own names. Refused when nothing would change (not touching, or inside for fuse), for common with no overlap, when a tool is not a sound solid (invalid, open, inside out) and when a fuse drops a tool OCC could not join; the tools are kept then. A boolean of many faces (meshes made solids) is asked about first with its time: the window is frozen while OCC works. Answers whether the result is sound (valid, closed, volume above 0, no sliver faces).",
             obj({"op": {"type": "string", "enum": ["fuse", "cut", "common"]}, "base": body, "tools": {"description": "A body or a list of them."}, "keep": {"type": "boolean"}, "name": {"type": "string"}}, ["op", "tools"]),
             part_boolean,
             changes=True,

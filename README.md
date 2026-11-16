@@ -153,7 +153,7 @@ licence.
 ## What the agent can do
 
 <!-- tools:begin (scripts/tool_summary.py) -->
-Agent Link itself declares 401 tools in 30 groups; a FreeCAD build without a workbench (FEM, CAM …)
+Agent Link itself declares 403 tools in 30 groups; a FreeCAD build without a workbench (FEM, CAM …)
 serves fewer, and each installed add-on adds its own groups.
 Groups marked *lean* are listed from the start; the agent turns on the rest with `tool_groups`.
 
@@ -165,7 +165,7 @@ Groups marked *lean* are listed from the start; the agent turns on the rest with
 | `measure` | 6 | Find faces and edges (the references other tools take), measure between them, sections, mass properties, clearance. |
 | `sketch` | 20 | PartDesign bodies and sketches: geometry, constraints, the solver's reading (DoF, conflicts, closed wires) and edits. |
 | `feature` | 27 | PartDesign features (pad, pocket, revolve, hole, fillet, chamfer, draft, shell, patterns, loft, pipe, datum planes) and the body's feature history. |
-| `param` | 4 | Named parameters in a Params spreadsheet, and properties or named sketch constraints bound to expressions over them. |
+| `param` | 6 | Named parameters in a Params spreadsheet, and properties or named sketch constraints bound to expressions over them. |
 | `sheet` | 12 | Spreadsheets: any cell read and written (values, expressions, aliases, units), formatting, rows and columns, CSV import and export, and design tables (configurations) that drive a part. |
 | `material` | 4 | Materials: search FreeCAD's library and the printing filaments, read a card's figures, set what each body is made of. |
 | `strength` | 16 | Strength by finite elements (Gmsh and CalculiX): set up a body, hold faces, load them, solve for stress, displacement and safety factor. |
