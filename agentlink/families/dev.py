@@ -149,10 +149,11 @@ def tools(s):
              "the first visible match; {tab: {text, under?}}; {item: {text, under?, column?}, check?: true} a list, tree or table row "
              "(check: its box); {menu_item: \"text\"} an item of the open menu; {window: [x, y]} main-window pixels. While a dialog or menu is in front only targets inside it are taken. "
              "Answers per step what it hit (class, name, text, where), a dialog or menu it opened (later steps run inside it), "
-             "open: what still holds the window at the end (close it: Escape, dialog_answer or gui_unstick), new Report problems. Shortcuts are not triggered (cmd_run). "
-             "as: \"person\" (dev, testing an add-on that follows the person): this call's input counts as the person's, not the agent's.",
+             "open: what still holds the window at the end (close it: Escape, dialog_answer or gui_unstick), new Report problems. Shortcuts are not triggered (cmd_run).",
              obj({"steps": {"type": "array", "items": {"type": "object"}}, "inline": {"type": "boolean"},
-                  "as": {"type": "string", "enum": ["person"]}}, ["steps"]), gui_input),
+                  "as": {"type": "string", "enum": ["person"],
+                         "description": "Dev, testing an add-on that follows the person: this call's input counts as the person's, not the agent's."}},
+                 ["steps"]), gui_input),
         Tool("gui_unstick",
              "Close the menu, drop-down list or dialog that holds the FreeCAD window (Escape's effect: a menu closes, a dialog is cancelled), "
              "even while it holds every other call. all: true closes each one in front, dialogs under a menu too. Answers what was closed and "
