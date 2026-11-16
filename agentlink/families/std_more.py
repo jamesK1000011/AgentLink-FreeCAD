@@ -233,9 +233,12 @@ def tools(s):
         for name, dd in FreeCAD.listDocuments().items():
             if dd.FileName:
                 dd.save()
-                from .doc import saved
+                # (named apart from the list: imported as "saved" it replaced
+                # the list, and every doc_save_all with a saved document
+                # failed "'function' object has no attribute 'append'")
+                from .doc import saved as _mark_saved
 
-                saved(dd)
+                _mark_saved(dd)
                 saved.append(dd.FileName)
             else:
                 unsaved.append(dd.Label)
