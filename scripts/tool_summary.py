@@ -51,21 +51,33 @@ def groups():
     core_tree = _parse(os.path.join(PKG, "tools.py"))
     lean = set(_consts(core_tree, {"LEAN"}).get("LEAN", ()))
     info = _consts(core_tree, {"GROUP_INFO"}).get("GROUP_INFO", {})
+    group_of = _consts(core_tree, {"GROUP_OF"}).get("GROUP_OF", {})
+    aliases = set(_consts(core_tree, {"ALIASES"}).get("ALIASES", {}))
     out = {"core": {"info": info.get("core", ""), "tools": _tool_names(core_tree)}}
+    moved = []
     fam_tree = _parse(os.path.join(PKG, "families", "__init__.py"))
     for name in _consts(fam_tree, {"NAMES"})["NAMES"]:
         t = _parse(os.path.join(PKG, "families", name + ".py"))
         c = _consts(t, {"GROUP", "INFO", "LEAN"})
         g = out.setdefault(c["GROUP"], {"info": c.get("INFO", ""), "tools": []})
-        g["tools"] += _tool_names(t)
+        for n in _tool_names(t):
+            if group_of.get(n, c["GROUP"]) == c["GROUP"]:
+                g["tools"].append(n)
+            else:
+                moved.append((group_of[n], n))
         if c.get("LEAN"):
             lean.add(c["GROUP"])
     with open(os.path.join(PKG, "data", "tools.json"), encoding="utf-8") as f:
         for name, e in json.load(f)["entries"].items():
-            if e["group"] in out:
-                out[e["group"]]["tools"].append(name)
+            grp = group_of.get(name, e["group"])
+            if grp in out:
+                out[grp]["tools"].append(name)
+    # Tools GROUP_OF puts in another group (core's, or their own family's).
+    for grp, n in moved:
+        out.setdefault(grp, {"info": "", "tools": []})["tools"].append(n)
     for g, v in out.items():
-        v["tools"] = sorted(set(v["tools"]))
+        # An alias is callable but not listed: not counted.
+        v["tools"] = sorted(set(v["tools"]) - aliases)
         v["lean"] = g in lean
     return out
 

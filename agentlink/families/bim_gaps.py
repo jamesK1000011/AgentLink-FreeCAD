@@ -102,7 +102,7 @@ def tools(s):
             d().recompute()
             s.snapshot("bim_panel_out")
             return {"cuts": [{"panel": p.Label, "cut": o.Label, "edges": len(o.Shape.Edges) if not o.Shape.isNull() else 0} for p, o in zip(panels, outs)],
-                    "note": "Flat outlines to cut, with the panel's tag; export_file to DXF or SVG for the cutter."}
+                    "note": "Flat outlines to cut, with the panel's tag; export to DXF or SVG for the cutter."}
         if kind == "sheet":
             cuts = [headless_call(Arch.makePanelCut, p) for p in panels]
             sh = headless_call(Arch.makePanelSheet, cuts)

@@ -435,7 +435,16 @@ def make_tools(session):
 GROUP_OF = {
     "session_state": "core", "body_check": "core", "export_file": "core", "history_diff": "core",
     "app_force_restart": "core", "dialog_answer": "core", "report_read": "core", "crash_collect": "core",
+    # export (every format) is core's; export_file stays an alias of it.
+    "export": "core",
+    # Tools that sat in another family's module: listed with their own group,
+    # so enabling a group lists only what it says.
+    "surface_loft": "surface", "surface_points": "surface", "surface_thicken": "surface", "surface_fill": "surface",
+    "surface_polynomial": "surface", "draft_fix": "draft", "asm_rigid_group": "assembly", "asm_new_part": "assembly",
+    "scad_tidy": "openscad", "points_structure": "points", "robot_tool": "robot", "sheet_cells": "sheet", "pd_shaft": "feature",
 }
+# Old names still callable but not listed (the listing carries one tool a job).
+ALIASES = {"export_file": "export"}
 GROUP_INFO = {
     "core": "The session, groups, guides, batches, undo, soundness, export. Always listed.",
 }
@@ -529,6 +538,9 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         t.group = GROUP_OF.get(t.name, t.group)
     info = dict(GROUP_INFO)
     lean_groups = set(LEAN)
+    # Groups an installed add-on covers (its family's REPLACES): left out of
+    # the listing, lean or full, and still callable by name.
+    replaced = set()
     # Two tools of one name: the second would hide the first without a word.
     seen = {}
     for t in tools:
@@ -551,6 +563,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         # A family says itself that it belongs in the default list.
         if getattr(fam, "LEAN", False):
             lean_groups.add(fam.GROUP)
+        replaced.update(g for g in (getattr(fam, "REPLACES", ()) or ()) if isinstance(g, str) and g != "core")
         for t in made:
             t.group = fam.GROUP if external else GROUP_OF.get(t.name, fam.GROUP)
             if t.name in seen:
@@ -573,6 +586,13 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
     server = Server(name, version, tools, instructions(lean, window), run=lambda tool, fn: outputs.track(session, tool, lambda: session.execute(tool, fn)),
                     groups=lean_groups if lean else None, resources=Resources(session),
                     guard=lambda tool, args: paths.guard(tool, args, session.out_dir))
+    for t in tools:
+        if t.name in ALIASES:
+            t.alias_of = ALIASES[t.name]
+    if replaced:
+        all_groups = {t.group for t in tools}
+        server.groups = (set(lean_groups) if lean else all_groups) - replaced
+        server.replaced = replaced
     server.on_call = session.record_call
     session.server = server
     try:

@@ -13,7 +13,7 @@
 2. Ask how it will be made. Don't assume a part is printed.
 3. Ask what it is made of and record it: `material_set`.
 4. `body_check` after every change. Look too: `view_render { views: "all" }`, and `{ map: "wall" }` or `{ zoom: { at } }` on a spot.
-5. Write `export_file` for STEP or STL. Starting a print or a cut is the person's call.
+5. Write `export` for STEP or STL (or any format it lists). Starting a print or a cut is the person's call.
 
 ## What is here, by task
 | The person wants | Tools | Guide |

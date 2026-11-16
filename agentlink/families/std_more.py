@@ -23,7 +23,7 @@ from . import picks
 from .doc import colour
 
 GROUP = "std_more"
-INFO = "Links, App::Part, the dependency graph, freeze, units, point-pair alignment, duplicates, merge files, document info, revert, save all, appearance and face colours, text documents; compounds, join features; PartDesign clone, move feature, reorder, tip, stepped shaft; OpenSCAD tree tidying, structured points, polynomial surface, robot tool, merged cells."
+INFO = "Links, App::Part, the dependency graph, freeze, units, point-pair alignment, duplicates, merge files, document info, revert, save all, appearance and face colours, text documents; compounds, join features; PartDesign clone, move feature, reorder, tip."
 
 V = FreeCAD.Vector
 # Kept on the object itself, so a colour set headless survives the save and

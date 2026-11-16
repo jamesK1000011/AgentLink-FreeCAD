@@ -58,7 +58,7 @@ COMMAND = {
     "asm_new": "Assembly_CreateAssembly", "asm_add": "Assembly_InsertLink", "asm_joint": "Assembly_CreateJointFixed",
     "asm_explode": "Assembly_CreateView", "asm_bom": "Assembly_CreateBom",
     "cam_job": "CAM_Job", "cam_post": "CAM_Post", "cam_sim": "CAM_SimulatorGL",
-    "measure": "Std_Measure", "section": "Part_Section", "doc_save": "Std_Save", "export_file": "Std_Export",
+    "measure": "Std_Measure", "section": "Part_Section", "doc_save": "Std_Save", "export_file": "Std_Export", "export": "Std_Export",
     "history_undo": "Std_Undo", "history_redo": "Std_Redo", "recompute": "Std_Refresh",
 }
 

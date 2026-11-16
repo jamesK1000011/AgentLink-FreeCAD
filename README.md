@@ -145,20 +145,20 @@ licence.
 ## What the agent can do
 
 <!-- tools:begin (scripts/tool_summary.py) -->
-Agent Link itself declares 398 tools in 30 groups; a FreeCAD build without a workbench (FEM, CAM …)
+Agent Link itself declares 397 tools in 30 groups; a FreeCAD build without a workbench (FEM, CAM …)
 serves fewer, and each installed add-on adds its own groups.
 Groups marked *lean* are listed from the start; the agent turns on the rest with `tool_groups`.
 
 | Group | Tools | What it holds |
 |---|---:|---|
-| `core` *lean* | 13 | The session, groups, guides, batches, undo, soundness, export. Always listed. |
-| `doc` | 13 | The document: new, open, save; objects listed, read, set, renamed, deleted; recompute; import and export files. |
+| `core` *lean* | 15 | The session, groups, guides, batches, undo, soundness, export. Always listed. |
+| `doc` | 12 | The document: new, open, save; objects listed, read, set, renamed, deleted; recompute; import and export files. |
 | `model` | 27 | Part modelling: primitives, booleans, move/rotate/mirror/scale/arrays, fillets and chamfers, offset and shell, extrude, revolve, loft, sweep. |
 | `measure` | 6 | Find faces and edges (the references other tools take), measure between them, sections, mass properties, clearance. |
 | `sketch` | 20 | PartDesign bodies and sketches: geometry, constraints, the solver's reading (DoF, conflicts, closed wires) and edits. |
-| `feature` | 26 | PartDesign features (pad, pocket, revolve, hole, fillet, chamfer, draft, shell, patterns, loft, pipe, datum planes) and the body's feature history. |
+| `feature` | 27 | PartDesign features (pad, pocket, revolve, hole, fillet, chamfer, draft, shell, patterns, loft, pipe, datum planes) and the body's feature history. |
 | `param` | 4 | Named parameters in a Params spreadsheet, and properties or named sketch constraints bound to expressions over them. |
-| `sheet` | 11 | Spreadsheets: any cell read and written (values, expressions, aliases, units), formatting, rows and columns, CSV import and export, and design tables (configurations) that drive a part. |
+| `sheet` | 12 | Spreadsheets: any cell read and written (values, expressions, aliases, units), formatting, rows and columns, CSV import and export, and design tables (configurations) that drive a part. |
 | `material` | 4 | Materials: search FreeCAD's library and the printing filaments, read a card's figures, set what each body is made of. |
 | `strength` | 16 | Strength by finite elements (Gmsh and CalculiX): set up a body, hold faces, load them, solve for stress, displacement and safety factor. |
 | `techdraw` | 32 | TechDraw pages piece by piece: template and title block, views, projection groups, sections, details, dimensions on real edges with tolerances and fits, GD&T frames, datums, notes, balloons, tables, export to SVG, PDF and DXF. |
@@ -167,19 +167,19 @@ Groups marked *lean* are listed from the start; the agent turns on the rest with
 | `notes` | 7 | Notes pinned to the parts between the person and the agent; the build played back step by step, a picture a step (inspired by Stefan Hermann's ScanRuler, CNC Kitchen). |
 | `app` | 17 | FreeCAD itself: settings (any parameter, preference packs), commands and menus run by name in the window, workbenches. |
 | `mesh` | 21 | FreeCAD's Mesh workbench on document meshes: mesh a body, evaluate and repair, decimate, refine, smooth, offset, trim, transform, booleans, cross-sections, split, planar and curvature segments, curvature, projection onto a mesh. |
-| `assembly` | 16 | Assemblies (FreeCAD's Assembly workbench): parts put together, one grounded, joints between faces and edges solved; positions, freedom left and overlaps checked. |
+| `assembly` | 18 | Assemblies (FreeCAD's Assembly workbench): parts put together, one grounded, joints between faces and edges solved; positions, freedom left and overlaps checked. |
 | `cam` | 12 | Toolpaths (FreeCAD's CAM workbench): a job with stock and end mill, profile, pocket, adaptive, facing and drilling operations, G-code posted and checked. |
-| `draft` | 22 | Text and surfaces: lettering raised from or cut into a face from a TrueType font; surfaces filled across edges, lofted through curves or fitted to points, thickened into solids. |
-| `surface` | 6 | Surface workbench features (parametric): sections, boundary surfaces (stretched/Coons/curved), extend, sewing into shells and solids, surface cuts, blend curves. |
-| `points` | 8 | Point clouds (Points, Reverse Engineering): read and write ASC/XYZ, PCD, PLY, E57, CSV; sample a body or mesh; crop and thin; fit a plane, sphere, cylinder or B-spline surface, and make it a body. |
+| `draft` | 19 | Draft: lettering raised from or cut into a face from a TrueType font, SVG/DXF outlines, arrays, and Draft's own parametric 2D shapes, dimensions, labels, link arrays, clones, move/rotate/scale/mirror/offset, upgrade/downgrade, layers, hatches, Draft↔Sketch, 2D views, facebinders, heal. |
+| `surface` | 11 | Surface workbench features (parametric): sections, boundary surfaces (stretched/Coons/curved), extend, sewing into shells and solids, surface cuts, blend curves; surfaces filled across edges, lofted through curves, fitted to points or a polynomial, thickened into solids. |
+| `points` | 9 | Point clouds (Points, Reverse Engineering): read and write ASC/XYZ, PCD, PLY, E57, CSV; sample a body or mesh; crop and thin; fit a plane, sphere, cylinder or B-spline surface, and make it a body. |
 | `bim` | 37 | BIM (Arch): walls, windows and doors in walls, columns, beams, slabs, roofs, stairs, spaces, levels, building and site, quantities, IFC in and out. |
-| `openscad` | 5 | OpenSCAD: CSG and SCAD files in, OpenSCAD code run into the document, CSG out, hull and Minkowski sums. |
-| `robot` | 6 | Robot: six-axis robots (KUKA models, your own kinematics), moves by axes or tool point, trajectories from waypoints or edges, reach checked along them, KUKA KRL out. |
-| `std_more` | 28 | Links, App::Part, the dependency graph, freeze, units, point-pair alignment, duplicates, merge files, document info, revert, save all, appearance and face colours, text documents; compounds, join features; PartDesign clone, move feature, reorder, tip, stepped shaft; OpenSCAD tree tidying, structured points, polynomial surface, robot tool, merged cells. |
-| `cam_more` | 6 | CAM paths from areas and shapes, compound, array, stop, fixture offsets, property bags, job templates; Draft dimension flip and heal; Assembly rigid groups and new parts. |
+| `openscad` | 6 | OpenSCAD: CSG and SCAD files in, OpenSCAD code run into the document, CSG out, hull and Minkowski sums. |
+| `robot` | 7 | Robot: six-axis robots (KUKA models, your own kinematics), moves by axes or tool point, trajectories from waypoints or edges, reach checked along them, KUKA KRL out. |
+| `std_more` | 22 | Links, App::Part, the dependency graph, freeze, units, point-pair alignment, duplicates, merge files, document info, revert, save all, appearance and face colours, text documents; compounds, join features; PartDesign clone, move feature, reorder, tip. |
+| `cam_more` | 3 | CAM paths from areas and shapes, compound, array, stop, fixture offsets, property bags, job templates. |
 | `bim_gaps` | 16 | BIM components, clones, references, structural systems, pipe connectors, panel cuts and sheets, nesting, IFC B-rep flag, 2D level views, image planes, library, re-extrude, rewire, glue, trash, reorder. |
 | `fem_more` | 3 | FEM: every boundary condition, material, element, equation, solver and mesh refinement by kind; Netgen meshes, FEM mesh to mesh, mesh groups cleared; stress linearization. |
-| `unattended` | 5 | Unattended use: the pinned document, the heavy-job queue, the Addon Manager (dialog_answer and app_force_restart are in core). |
+| `unattended` | 3 | Unattended use: the pinned document, the heavy-job queue, the Addon Manager (dialog_answer and app_force_restart are in core). |
 | `dev` | 2 | For add-on developers: an installed add-on's own test suite run in a separate FreeCAD process (addon_test); mouse and keyboard input to the window's own widgets for GUI checks (gui_input). |
 <!-- tools:end -->
 

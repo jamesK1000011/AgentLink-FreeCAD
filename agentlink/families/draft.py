@@ -18,7 +18,8 @@ from . import measure as M
 from . import picks
 
 GROUP = "draft"
-INFO = "Text and surfaces: lettering raised from or cut into a face from a TrueType font; surfaces filled across edges, lofted through curves or fitted to points, thickened into solids."
+INFO = ("Draft: lettering raised from or cut into a face from a TrueType font, SVG/DXF outlines, arrays, and Draft's own parametric 2D shapes, "
+        "dimensions, labels, link arrays, clones, move/rotate/scale/mirror/offset, upgrade/downgrade, layers, hatches, Draft↔Sketch, 2D views, facebinders, heal.")
 
 V = FreeCAD.Vector
 
