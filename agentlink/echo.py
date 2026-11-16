@@ -123,6 +123,19 @@ def _longest(name, pairs):
     return got
 
 
+# Tools never shown as they run (no bench, button, caption or selection;
+# still listed in Activity): the server's own, and what add-ons declare as
+# NO_ECHO (names or prefixes), such as tools that draw in the window
+# themselves.
+SKIP = {"batch", "session_state", "tool_groups", "guide_read"}
+NO_ECHO = set()
+
+
+def skipped(name):
+    """Whether a call of this tool is left out of the echo."""
+    return name in SKIP or bool(_longest(name, ((k, True) for k in NO_ECHO)))
+
+
 # Read-only tools that still show something (a view, a picture).
 SHOWN = ("view_", "measure", "clearance", "section", "body_check", "steps_render", "note_")
 # Read-only tools that open a panel or dialog all the same, and so bring up
@@ -239,7 +252,9 @@ def declare(fam):
     match wins, so an add-on's "part_check" can go to another bench than core's
     "part_"); COMMANDS, {tool or prefix: command} whose button lights for
     its tools, or command_for(name, args) -> command or None; NO_BUTTON,
-    names or prefixes of its tools that light no button at all; PAGES,
+    names or prefixes of its tools that light no button at all; NO_ECHO,
+    names or prefixes of its tools never shown as they run (no bench,
+    button, caption or selection; still in Activity); PAGES,
     prefixes of its tools that work on a drawing page; PHRASES, {tool or
     prefix: template or templates} of what its calls did, in the Activity
     tab's words (agentlink/activity.py: "Sliced {object}")."""
@@ -257,6 +272,7 @@ def declare(fam):
         if isinstance(k, str) and isinstance(v, str):
             COMMANDS.setdefault(k, v)
     NO_BUTTON.update(k for k in (getattr(fam, "NO_BUTTON", None) or ()) if isinstance(k, str) and k)
+    NO_ECHO.update(k for k in (getattr(fam, "NO_ECHO", None) or ()) if isinstance(k, str) and k)
     from . import activity
 
     activity.declare(fam)
@@ -374,34 +390,30 @@ def _hide_later(lbl, text):
 def flash_command(cmd, ms=1300, settle=False):
     """Light the toolbar button and the menu item that run cmd. settle:
     the bench was just switched, so one paint first, for its toolbars and
-    menus to exist before their button can light."""
-    import FreeCADGui
+    menus to exist before their button can light. The button is lit on the
+    overlay (agentlink/overlay.py), never by its stylesheet, so a theme's
+    rules stay as they are."""
+    from . import overlay, targets
 
     QtCore, QtGui, QtW = _qt()
     if settle:
         _paint()
-    mw = FreeCADGui.getMainWindow()
-    QAction = QtW.QAction if hasattr(QtW, "QAction") else QtGui.QAction
-    for act in mw.findChildren(QAction):
-        if act.objectName() != cmd:
-            continue
-        widgets = act.associatedWidgets() if hasattr(act, "associatedWidgets") else act.associatedObjects()
-        lit = []
-        for w in widgets:
+    lit = []
+    painter = overlay.service()
+    for act in targets.actions(cmd):
+        for w in targets.associated(act):
             if isinstance(w, QtW.QToolButton):
-                old = w.styleSheet()
-                w.setStyleSheet("QToolButton { background: rgba(255,150,40,0.55); border: 1px solid #ff9628; border-radius: 4px; }")
-                QtCore.QTimer.singleShot(ms, lambda w=w, old=old: _later(w, "setStyleSheet", old))
+                painter.flash(w, ms)
             elif isinstance(w, QtW.QMenu):
                 # The menu item and its menu's title in bold for a moment
                 # (no menu is opened: that would take the person's input).
                 lit += [act, w.menuAction()]
-        for a in dict.fromkeys(x for x in lit if x is not None):
-            old = QtGui.QFont(a.font())
-            f = QtGui.QFont(old)
-            f.setBold(True)
-            a.setFont(f)
-            QtCore.QTimer.singleShot(ms, lambda a=a, old=old: _later(a, "setFont", old))
+    for a in dict.fromkeys(x for x in lit if x is not None):
+        old = QtGui.QFont(a.font())
+        f = QtGui.QFont(old)
+        f.setBold(True)
+        a.setFont(f)
+        QtCore.QTimer.singleShot(ms, lambda a=a, old=old: _later(a, "setFont", old))
 
 
 def _later(obj, method, value):
@@ -508,7 +520,7 @@ class Echo:
         self.t0 = time.time()
         if self.quiet():
             return
-        if tool is None or tool.name in ("batch", "session_state", "tool_groups", "guide_read"):
+        if tool is None or skipped(tool.name):
             return
         if not enabled() or not self.live():
             return

@@ -20,7 +20,8 @@ except ImportError:  # pragma: no cover
 from .theme import muted  # noqa: F401  (one copy: the theme's)
 
 # Agent Link's own tabs and their places. Add-ons' tabs (register_tab, with
-# their own order) fall between: 30-40 after Steps, 60-90 after Review, and
+# their own order) fall between: 15 between Notes and Steps (kept free for
+# an add-on's tab there), 30-40 after Steps, 60-90 after Review, and
 # Activity stays last.
 CORE_TABS = (("Notes", 10), ("Steps", 20), ("Review", 50), ("Activity", 95))
 

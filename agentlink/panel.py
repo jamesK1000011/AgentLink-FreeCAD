@@ -79,14 +79,10 @@ def _check_geometry(label):
         return False
 
 
-def _view():
-    gd = FreeCADGui.ActiveDocument
-    return gd.activeView() if gd else None
-
-
-def _scene():
-    v = _view()
-    return v.getSceneGraph() if v and hasattr(v, "getSceneGraph") else None
+# The 3D view's annotation layer (agentlink/annotate.py): the pins and the
+# stage below draw in the same scene graph add-ons draw in through the
+# "annotations" service.
+from .annotate import _scene, _view  # noqa: E402,F401
 
 
 class Pins:

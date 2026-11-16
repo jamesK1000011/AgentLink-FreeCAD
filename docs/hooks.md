@@ -41,6 +41,7 @@ PHRASES = {"mine_do": ["Did it to {body}", "Did it"]}  # tool or prefix → what
 WORKBENCHES = {"mine_": "MineWorkbench"}  # tool or prefix → the workbench brought up for them (longest match wins)
 COMMANDS = {"mine_do": "Mine_Do"}    # tool or prefix → the command whose button (and menu item) lights for them
 NO_BUTTON = {"mine_do_quiet"}        # tools or prefixes that light no button, even where a COMMANDS prefix matches
+NO_ECHO = ("mine_point",)            # tools or prefixes never shown as they run (no bench, button, caption, selection; still in Activity)
 PAGES = ("mine_page_",)              # prefixes of tools working on a drawing page (opened, view not reframed)
 # def command_for(name, args): ...   # optional: the command for a call by its arguments, or None
 
@@ -123,7 +124,7 @@ All optional. Every hook catches and logs your exceptions.
 | `provide(name, obj)` / `service(name)` | Offer or use a named service (`process_of`, `checkpoints`, `reopen`, `material_cards`, `frame_solver`, `encased`). Absent gives `None`. |
 | `on(event, fn)` | `after_change(session, tool)`, `setting_changing(tool, path)`, `setting_changed(path, name, old, new, tool=, restart=, applies=)`, `reply_written(session)`, `docs_changed(session)`, `call_done(session, tool, ok)`. |
 | `extend_tool(name, properties, before, after, describe)` | Add arguments to a tool another family owns. `before(args, session)` may return changed arguments; `after(args, answer, session)` may return a fuller answer; `describe` is a sentence added to the tool's description. The owner never sees your arguments. |
-| `register_tab(title, factory, order, workbench=None)` | A tab in Agent Link's panel: `factory(panel)` returns a QWidget; its `fill()`, if it has one, runs each time the tab comes up. Agent Link's own tabs sit at Notes 10, Steps 20, Review 50 and Activity 95; an add-on's `order` places its tab between them (at the same order Agent Link's comes first, and a core tab's title is not taken). `panel._call(tool, args)` runs a tool as the person's click, answering `(ok, result)`. With `workbench` (a workbench name as `FreeCADGui.activeWorkbench().name()` gives it, or several) the tab shows only while that workbench is active; Notes, Steps and Activity show everywhere. |
+| `register_tab(title, factory, order, workbench=None)` | A tab in Agent Link's panel: `factory(panel)` returns a QWidget; its `fill()`, if it has one, runs each time the tab comes up. Agent Link's own tabs sit at Notes 10, Steps 20, Review 50 and Activity 95, and keep 15 (between Notes and Steps) free for an add-on; an add-on's `order` places its tab between them (at the same order Agent Link's comes first, and a core tab's title is not taken). `panel._call(tool, args)` runs a tool as the person's click, answering `(ok, result)`. With `workbench` (a workbench name as `FreeCADGui.activeWorkbench().name()` gives it, or several) the tab shows only while that workbench is active; Notes, Steps and Activity show everywhere. |
 | `tab_in(title, *workbenches)` | Show a tab (an add-on's, or Agent Link's Review) in more workbenches. |
 | `service("panel_layout")` | Agent Link's placer (`agentlink/layout.py`): `show(key, dock, workbench)`, `hide(key)`, `toggle()`, `reveal(key)`. An add-on's own panel placed through it shares one place with the others by the `Mod/AgentLink` `PanelLayout` setting (`right`, `left-tab`, `left-slide`). |
 | `register_reviewer(fn)` | `fn(session, body)` gives the Review tab its verdict (`{"verdict": "pass"/"warn"/"fail", "findings": [...], "figures": {...}, "process": ...}`), or `None` to pass. Reviewers are asked in the order they registered; the first answer that is not `None` is shown. With none, the tab says so and offers the core `body_check`. |
@@ -131,6 +132,26 @@ All optional. Every hook catches and logs your exceptions.
 | `remember(session, kind, value)` / `analysis(session, kind)` | Last results by kind, for example the last FEA solve. |
 | `agentlink.tools.register_guides(folder)` | Markdown guides the agent can read with `guide_read`. A `guides/` folder beside your `agentlink_families.py` is registered for you; if there is also a `freecad_guides/`, only that one is (for add-ons whose `guides/` serve their own server). |
 | `agentlink.render.register_layer` / `register_map` | Layers and colour maps for `view_render`. |
+
+### Services Agent Link offers
+
+Provided once the FreeCAD window is up (`hooks.service(name)`; `None` in
+FreeCADCmd). Nothing here moves the cursor, sends input, takes focus, opens a
+menu, raises the window or goes full screen.
+
+| Service | Methods | Notes |
+|---|---|---|
+| `overlay` (`agentlink/overlay.py`) | `show(specs, say=None, ms=None, owner="")` → `{handle, shown: [i], hidden: [(i, why)]}`; `flash(widget, ms=1300)`; `menu(titles, badge=None, owner="", handle=None)` → `{handle}`, `{native: True}` or `{missing: title}`; `clear(owner=None, handle=None)`; `visible(widget)` → `None` or why (`hidden`, `covered`, `in another window`); `colours()` | One transparent, mouse-transparent child of the main window draws a 3 px ring in the theme's accent (`ThemeAccentColor1`, else the palette's highlight; a colour-blind-safe stand-in under 3:1 contrast) with a 2 px halo, black on a light window and white on a dark one (the theme's name decides, since FreeCAD's light themes are stylesheets over a palette that may stay dark), a numbered badge, and one callout (wrapped at 320 px, the app font and at least 13 px, inside the window, on the target's free side). A spec is `{widget, rect?, viewport?, badge?}`: `rect` a callable giving `(x, y, w, h)` in `viewport` (default the widget) coordinates, such as a tree row's `visualItemRect`. Rects follow their widgets (Move, Resize, Show, Hide, and a 250 ms timer); a hidden target stays listed and is drawn when it shows. A menu is ringed at its menubar title, then inside each menu the person opens on the way; the native macOS menubar cannot be drawn over (`native`). The echo's lit buttons are drawn here (`flash`): no widget's stylesheet is changed. |
+| `annotations` (`agentlink/annotate.py`) | `light(obj, ["Face6", "Edge3", "Vertex1"], owner="", colour="#rrggbb")` → `{lit, missing: [(sub, why)]}`; `clear(owner=None)` | Coin nodes under an `SoAnnotation` in the 3D view's scene graph, where the panel's note pins and Steps stage draw: a face tinted, an edge thick, a vertex marked, at the shape's place in the scene. Never in the document, never FreeCAD's selection. |
+| `panel_layout`, `panel_caller` | see above | |
+
+`agentlink.targets` finds the window's controls for the echo and for
+add-ons: `command_for(tool, args)` (the command whose button does what a call
+does), `actions(cmd)` (QActions by `objectName`, as the echo finds them),
+`buttons(cmd)`, `menus_of(cmd)`, `associated(action)`, `menu_path(titles)`
+(`{bar, chain: [(menu, action)], path, missing}`; titles compared without
+`&` or a trailing `…`, case ignored), `native_menubar()` and
+`workbench_of(cmd)` (from the command's prefix).
 
 ### Services Agent Link asks for
 
