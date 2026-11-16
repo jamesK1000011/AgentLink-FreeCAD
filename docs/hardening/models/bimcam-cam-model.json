@@ -1,0 +1,404 @@
+{
+ "tutorial": "CAM_Walkthrough_for_the_Impatient.md: a block with a rectangular pocket, a job with one tool (number 4, 2 mm/s, 2000 rpm), a Profile and a Pocket (step over 50 %, pattern Offset), then verified and post-processed. The page gives no sizes for the block, so 60 x 40 x 20 with a 30 x 20 x 8 pocket is used.",
+ "reference": null,
+ "expected": {
+  "partVolume_mm3": 43200,
+  "withHole_mm3": 42634.51,
+  "stockSize": [
+   62,
+   42,
+   21
+  ],
+  "operationCount": 2,
+  "profile": {
+   "finalDepth": 0,
+   "cutBoxMin": [
+    -2.5,
+    -2.5,
+    0
+   ]
+  },
+  "pocket": {
+   "finalDepth": 12
+  },
+  "gcode": {
+   "nonEmpty": true,
+   "units": "G21",
+   "workOffset": "G54",
+   "toolChange": "M6 T4 (linuxcnc); commented for grbl",
+   "finalDepths": [
+    "Z0.000",
+    "Z12.000"
+   ]
+  },
+  "sim": {
+   "verdict": "clear",
+   "leftMostAtPocketCorner_mm": 9.0
+  }
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "CamWalkthrough"
+   },
+   "expect": "a new empty document"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     60,
+     40,
+     20
+    ],
+    "name": "Block"
+   },
+   "expect": "volume 48000; box [60, 40, 20]"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     30,
+     20,
+     8
+    ],
+    "at": [
+     15,
+     10,
+     12
+    ],
+    "name": "Pocket tool"
+   },
+   "expect": "volume 4800"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "cut",
+    "base": "Block",
+    "tools": [
+     "Pocket tool"
+    ]
+   },
+   "expect": "the walkthrough's part, a block with a rectangular pocket: volume 43200; volumeChange -4800"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 3,
+    "height": 20,
+    "at": [
+     7,
+     7,
+     0
+    ],
+    "name": "Hole tool"
+   },
+   "expect": "a 6 mm through hole to drill later (not in the walkthrough)"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "cut",
+    "base": "Block",
+    "tools": [
+     "Hole tool"
+    ]
+   },
+   "expect": "volume 42634.51"
+  },
+  {
+   "tool": "cam_job",
+   "arguments": {
+    "body": "Block",
+    "tool": {
+     "diameter": 5,
+     "feed": 120,
+     "plunge": 120,
+     "rpm": 2000,
+     "number": 4
+    },
+    "stock": {
+     "margin": 1,
+     "top": 1,
+     "bottom": 0
+    },
+    "name": "Walkthrough"
+   },
+   "expect": "walkthrough steps 3-10 (tool number 4, 2 mm/s = 120 mm/min both ways, 2000 rpm; a 5 mm end mill): job Walkthrough; model (the clone's label); stock size [62, 42, 21], min [-1, -1, 0], max [61, 41, 21]; tool { number 4, diameter 5, feed 120, plunge 120, rpm 2000 }"
+  },
+  {
+   "tool": "cam_job",
+   "arguments": {
+    "body": "Block"
+   },
+   "expect": "refused: tool is needed, with what to ask the person"
+  },
+  {
+   "tool": "cam_op",
+   "arguments": {
+    "kind": "profile",
+    "side": "outside",
+    "name": "Profile"
+   },
+   "expect": "step 12: cutBox min about [-2.5, -2.5, 0] and max about [62.5, 42.5, ...] (the tool's radius outside the 60 x 40 block); cutZ[0] 0 (down to the part's bottom); depths.final 0, depths.start 21 (the stock's top); cutMm above 200 a pass; tool the job's first"
+  },
+  {
+   "tool": "cam_op",
+   "arguments": {
+    "kind": "pocket",
+    "faces": [
+     {
+      "normal": [
+       0,
+       0,
+       1
+      ],
+      "near": [
+       30,
+       20,
+       12
+      ]
+     }
+    ],
+    "stepOver": 50,
+    "props": {
+     "ClearingPattern": "Offset"
+    },
+    "name": "Pocket"
+   },
+   "expect": "steps 13-14 (the pocket's floor, step over 50 %, pattern Offset; the property is ClearingPattern in 1.1, OffsetPattern in 1.0): cutZ[0] 12; depths.final 12; faces [one face name]; cutBox inside x 15..45, y 10..30 by the tool's radius"
+  },
+  {
+   "tool": "cam_op",
+   "arguments": {
+    "kind": "pocket",
+    "faces": [
+     "Face1"
+    ],
+    "name": "Nothing"
+   },
+   "expect": "refused: no cutting moves (an outside face is no pocket); nothing kept"
+  },
+  {
+   "tool": "cam_op",
+   "arguments": {
+    "kind": "profile",
+    "side": "left"
+   },
+   "expect": "refused: side is outside | inside"
+  },
+  {
+   "tool": "cam_list",
+   "arguments": {},
+   "expect": "ops: Profile and Pocket (2 operations), each with cutMm, minutes, cutZ; minutes total above 0; stock size [62, 42, 21]"
+  },
+  {
+   "tool": "cam_sim",
+   "arguments": {
+    "inline": false
+   },
+   "expect": "verdict clear; no crashes; no gouge; part.left.most about 9.0 at a pocket corner (stock top 21 down to the floor at 12 where the 5 mm tool cannot reach the square corner); removedMm3 above 3800 for the pocket; picture: a PNG path"
+  },
+  {
+   "tool": "cam_post",
+   "arguments": {
+    "post": "linuxcnc",
+    "path": "walkthrough.nc"
+   },
+   "expect": "via job; units mm (G21); tools [{ name, number 4 }]; fixtures ['G54']; ops [Profile, Pocket]; lines above 50; no warnings. The file has G21, G54, a tool change 'M6 T4', the profile's last pass at Z0.000 and the pocket's at Z12.000, and ends M2"
+  },
+  {
+   "tool": "cam_post",
+   "arguments": {
+    "post": "grbl",
+    "path": "walkthrough-grbl.nc"
+   },
+   "expect": "the same job for grbl: via job; the tool change is a comment '(M6 T4)' unless the job's arguments say --tool-change; G21"
+  },
+  {
+   "tool": "cam_post",
+   "arguments": {
+    "post": "fanuc"
+   },
+   "expect": "refused: post is one of grbl, linuxcnc, mach3_mach4, marlin, smoothie, centroid, generic"
+  },
+  {
+   "tool": "cam_tool_add",
+   "arguments": {
+    "shape": "drill",
+    "diameter": 5,
+    "angle": 118,
+    "feed": 80,
+    "plunge": 60,
+    "rpm": 1500,
+    "name": "Drill 5"
+   },
+   "expect": "tool { name 'Drill 5', number 2, diameter 5 }; tools [first, Drill 5]; no skipped (a drill's angle is its TipAngle in 1.1)"
+  },
+  {
+   "tool": "cam_tool_add",
+   "arguments": {
+    "shape": "v-bit",
+    "diameter": 6,
+    "angle": 60,
+    "cornerRadius": 1,
+    "name": "Vee 60"
+   },
+   "expect": "number 3; skipped ['cornerRadius'] (a v-bit has none)"
+  },
+  {
+   "tool": "cam_op",
+   "arguments": {
+    "kind": "drill",
+    "tool": "Drill 5",
+    "name": "Drill"
+   },
+   "expect": "the 6 mm hole found: cutBox min x and y 7; cutZ[0] 0 or lower (the drill's tip); tool 'Drill 5'"
+  },
+  {
+   "tool": "cam_dressup",
+   "arguments": {
+    "op": "Profile",
+    "kind": "tags",
+    "count": 4,
+    "width": 6,
+    "height": 3
+   },
+   "expect": "dressup label; on Profile; tags 4 (or one off); after.cutMm close to before.cutMm. object_get of the dressup shows Width 6 mm and Height 3 mm (they were reset to FreeCAD's defaults before the fix)"
+  },
+  {
+   "tool": "cam_setup",
+   "arguments": {
+    "fixtures": [
+     "G54",
+     "G55"
+    ],
+    "coolant": "flood",
+    "safeHeight": 5,
+    "clearance": 10
+   },
+   "expect": "fixtures [G54, G55]; coolant { mode Flood, ops 2 or 3 (those that have a coolant mode) }; safeHeightOffset 5; clearanceOffset 10; the note about ops following the setup sheet"
+  },
+  {
+   "tool": "cam_edit",
+   "arguments": {
+    "action": "stop",
+    "text": "check the part",
+    "optional": true,
+    "after": "Pocket"
+   },
+   "expect": "op 'Optional stop'; gcode ['(check the part)', 'M1']; ops in order with it after Pocket"
+  },
+  {
+   "tool": "cam_edit",
+   "arguments": {
+    "action": "active",
+    "op": "Drill",
+    "on": false
+   },
+   "expect": "active false; ops shows 'Drill (off)'"
+  },
+  {
+   "tool": "cam_post",
+   "arguments": {
+    "post": "linuxcnc",
+    "path": "walkthrough-2.nc"
+   },
+   "expect": "fixtures [G54, G55]: the file runs the job twice, once after G54 and once after G55; M8 (flood) appears; M1 after the pocket; no drilling cycle (Drill is off); tools has only number 4"
+  },
+  {
+   "tool": "cam_edit",
+   "arguments": {
+    "action": "active",
+    "op": "Drill",
+    "on": true
+   },
+   "expect": "active true"
+  },
+  {
+   "tool": "cam_library",
+   "arguments": {
+    "action": "export",
+    "path": "walkthrough-tools.json"
+   },
+   "expect": "tools: three records; shapes endmill, drill, v-bit (they were all 'endmill' before the fix); Drill 5 has angle 118, Vee 60 angle 60; no step recorded"
+  },
+  {
+   "tool": "cam_tool",
+   "arguments": {
+    "feed": 150
+   },
+   "expect": "tool.feed 150; every op computed again (cam_list minutes drop)"
+  },
+  {
+   "tool": "cam_path",
+   "arguments": {
+    "kind": "stop",
+    "mandatory": true,
+    "job": "Walkthrough",
+    "name": "Hard stop"
+   },
+   "expect": "object 'Hard stop'; first has M0; job Walkthrough"
+  },
+  {
+   "tool": "cam_path",
+   "arguments": {
+    "kind": "fixture",
+    "fixture": "G60"
+   },
+   "expect": "refused: the message lists the work offsets FreeCAD has (G54 ... G59.9)"
+  },
+  {
+   "tool": "cam_property_bag",
+   "arguments": {
+    "name": "Limits",
+    "properties": [
+     {
+      "name": "MaxDepth",
+      "type": "Length",
+      "value": 8
+     },
+     {
+      "name": "Passes",
+      "type": "Integer",
+      "value": 3
+     }
+    ]
+   },
+   "expect": "bag 'Limits'; name (its internal name for expressions); properties [MaxDepth, Passes]"
+  },
+  {
+   "tool": "cam_template_export",
+   "arguments": {
+    "job": "Walkthrough",
+    "description": "walkthrough setup"
+   },
+   "expect": "template: a path ending job_Walkthrough.json; tools 3; the file holds the tool controllers, stock and setup sheet"
+  },
+  {
+   "tool": "cam_remove",
+   "arguments": {
+    "op": "Profile"
+   },
+   "expect": "removed: the tag dressup and Profile (the whole stack); ops no longer lists either"
+  },
+  {
+   "tool": "cam_list",
+   "arguments": {},
+   "expect": "ops: Pocket, Optional stop, Drill, Hard stop"
+  }
+ ],
+ "notCovered": [
+  "cam_op kinds adaptive, face, helix, engrave, vcarve, slot, deburr, thread, surface, waterline, pocket3d, tapping, probe, custom: the walkthrough has only Profile and Pocket (tests/test_cam.py and test_cam_more.py cover adaptive finish, pocket3d, probe, custom)",
+  "cam_dressup dogbone, boundary, array, ramp, leadinout",
+  "cam_library import; cam_edit copy, comment, start; cam_setup order",
+  "cam_path area, from_shape, edges (not on 1.1 without its window), compound, array (tests/test_cam_more.py covers area, compound, array)",
+  "sending G-code to a machine: no tool does; it is the person's step"
+ ]
+}

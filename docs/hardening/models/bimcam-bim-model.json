@@ -1,0 +1,1119 @@
+{
+ "tutorial": "Arch_tutorial.md (Arch tutorial). The tutorial builds a real house from a DWG and gives no plan that can be typed in, so this model is a small house built with the tutorial's own stated sizes: exterior walls 25 cm, interior walls 15 cm, the main door 1 m x 2.45 m, interior doors 0.70 m x 2.10 m, a 15 cm floor slab, a 2.25 m column, lower walls stopping at 2.60 m. Roof usage follows Arch_Roof.md (counter-clockwise outline, 90 degrees for a gable).",
+ "reference": null,
+ "expected": {
+  "units": "mm in, m / m2 / m3 out",
+  "outerWalls": {
+   "length_mm": 28000,
+   "box": [
+    8000,
+    6000,
+    2600
+   ],
+   "volume_m3_before_openings": 17.55,
+   "volume_m3_after_openings": 16.1275
+  },
+  "innerWall": {
+   "length_mm": 5500,
+   "volume_m3": 2.145,
+   "after_door": 1.9245
+  },
+  "openingsCut_m3": {
+   "Front door": 0.6125,
+   "Front window": 0.36,
+   "Side window": 0.45,
+   "Inner door": 0.2205
+  },
+  "slab": {
+   "volume_m3": 7.2,
+   "area_m2": 48.0,
+   "min_z": -150
+  },
+  "roof": {
+   "ridge_mm": 1732.1,
+   "runs": [
+    3000,
+    4000,
+    3000,
+    4000
+   ]
+  },
+  "space": {
+   "area_m2": 20.2125
+  },
+  "stairs": {
+   "riser": 173.3,
+   "going": 280.0,
+   "blondel": 626.7
+  },
+  "rebar": {
+   "bars": 31,
+   "totalLength_m": 246.14,
+   "mass_kg": 218.53
+  },
+  "counts": {
+   "walls": 2,
+   "doors": 2,
+   "windows": 2,
+   "storeys": 2,
+   "spaces": 1
+  }
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "ArchHouse"
+   },
+   "expect": "a new empty document"
+  },
+  {
+   "tool": "bim_wall",
+   "arguments": {
+    "points": [
+     [
+      0,
+      0
+     ],
+     [
+      8000,
+      0
+     ],
+     [
+      8000,
+      6000
+     ],
+     [
+      0,
+      6000
+     ]
+    ],
+    "closed": true,
+    "width": 250,
+    "height": 2600,
+    "align": "right",
+    "name": "Outer walls"
+   },
+   "expect": "length 28000; box [8000, 6000, 2600]; min [0, 0, 0] (align right on a counter-clockwise outline: the wall lies inside the line, so the outside is 8000 x 6000); volume_m3 17.5500 (8000x6000 minus 7500x5500, x 2600); base \"Outer walls line\""
+  },
+  {
+   "tool": "bim_wall",
+   "arguments": {
+    "points": [
+     [
+      4000,
+      250
+     ],
+     [
+      4000,
+      5750
+     ]
+    ],
+    "width": 150,
+    "height": 2600,
+    "align": "center",
+    "name": "Inner wall"
+   },
+   "expect": "length 5500; box [150, 5500, 2600]; min [3925, 250, 0]; volume_m3 2.1450"
+  },
+  {
+   "tool": "bim_opening",
+   "arguments": {
+    "wall": "Outer walls",
+    "kind": "door",
+    "width": 1000,
+    "height": 2450,
+    "at": 1500,
+    "name": "Front door"
+   },
+   "expect": "tutorial's main door, 1 m x 2.45 m: wallCut_m3 0.6125 (1000 x 2450 x 250), no warning; ifc Door; min about [1500, 75, 0] (the 100 mm deep frame centred in the 250 mm wall, which lies y 0..250). A warning 'not cut' here means the opening sat on the wrong side of the line (the left/right fix)"
+  },
+  {
+   "tool": "bim_opening",
+   "arguments": {
+    "wall": "Outer walls",
+    "kind": "window",
+    "width": 1200,
+    "height": 1200,
+    "at": 5000,
+    "sill": 900,
+    "name": "Front window"
+   },
+   "expect": "wallCut_m3 0.3600; ifc Window; min z 900"
+  },
+  {
+   "tool": "bim_opening",
+   "arguments": {
+    "wall": "Outer walls",
+    "kind": "window",
+    "width": 1500,
+    "height": 1200,
+    "at": 10000,
+    "sill": 900,
+    "name": "Side window"
+   },
+   "expect": "at 10000 is 2000 along the second stretch (x = 8000): wallCut_m3 0.4500; the window lies in x 7750..8000, y 2000..3500"
+  },
+  {
+   "tool": "bim_opening",
+   "arguments": {
+    "wall": "Outer walls",
+    "kind": "window",
+    "width": 1500,
+    "at": 7500
+   },
+   "expect": "refused: the opening runs past the end of that straight stretch (7500 + 1500 > 8000); the message says an opening cannot cross a corner"
+  },
+  {
+   "tool": "bim_opening",
+   "arguments": {
+    "wall": "Inner wall",
+    "kind": "door",
+    "width": 700,
+    "height": 2100,
+    "at": 2000,
+    "name": "Inner door"
+   },
+   "expect": "tutorial's interior door 0.70 x 2.10: wallCut_m3 0.2205"
+  },
+  {
+   "tool": "bim_structure",
+   "arguments": {
+    "kind": "slab",
+    "points": [
+     [
+      0,
+      6000,
+      -150
+     ],
+     [
+      8000,
+      6000,
+      -150
+     ],
+     [
+      8000,
+      0,
+      -150
+     ],
+     [
+      0,
+      0,
+      -150
+     ]
+    ],
+    "thickness": 150,
+    "name": "Floor slab"
+   },
+   "expect": "the outline is given CLOCKWISE on purpose: the slab must still rise from it: box [8000, 6000, 150]; min [0, 0, -150]; volume_m3 7.2; ifc Slab"
+  },
+  {
+   "tool": "bim_structure",
+   "arguments": {
+    "kind": "footing",
+    "points": [
+     [
+      9250,
+      750,
+      0
+     ],
+     [
+      9750,
+      750,
+      0
+     ],
+     [
+      9750,
+      1250,
+      0
+     ],
+     [
+      9250,
+      1250,
+      0
+     ]
+    ],
+    "thickness": 400,
+    "name": "Porch footing"
+   },
+   "expect": "box [500, 500, 400]; min [9250, 750, -400] (hangs below its outline); volume_m3 0.1; ifc Footing"
+  },
+  {
+   "tool": "bim_structure",
+   "arguments": {
+    "kind": "column",
+    "at": [
+     9500,
+     1000,
+     0
+    ],
+    "width": 250,
+    "depth": 250,
+    "height": 2250,
+    "name": "Porch column"
+   },
+   "expect": "tutorial's short column, 2.25 m: box [250, 250, 2250]; min [9375, 875, 0] (at is the centre of its foot); volume_m3 0.1406; ifc Column"
+  },
+  {
+   "tool": "bim_structure",
+   "arguments": {
+    "kind": "column",
+    "at": [
+     9500,
+     5000,
+     0
+    ],
+    "width": 600,
+    "depth": 600,
+    "height": 300,
+    "name": "Plinth"
+   },
+   "expect": "a squat column (wider than tall): box [600, 600, 300]; min [9200, 4700, 0]; volume_m3 0.108. Before the fix FreeCAD laid it along X"
+  },
+  {
+   "tool": "bim_structure",
+   "arguments": {
+    "kind": "beam",
+    "from": [
+     9500,
+     1000,
+     2450
+    ],
+    "to": [
+     9500,
+     5000,
+     2450
+    ],
+    "width": 200,
+    "depth": 400,
+    "name": "Porch beam"
+   },
+   "expect": "box [200, 4000, 400]; min [9400, 1000, 2250] (from/to is the centre line; depth is vertical); volume_m3 0.32; ifc Beam"
+  },
+  {
+   "tool": "bim_profiles",
+   "arguments": {
+    "search": "HEB2",
+    "limit": 10
+   },
+   "expect": "count 4 or so (HEB200, HEB220, HEB240, HEB260 ...), each with category and dims; changes nothing"
+  },
+  {
+   "tool": "bim_member",
+   "arguments": {
+    "profile": "HEB200",
+    "from": [
+     8000,
+     5500,
+     2800
+    ],
+    "to": [
+     10000,
+     5500,
+     2800
+    ],
+    "name": "Steel beam"
+   },
+   "expect": "length 2000; category HEB; mass_kg about 118 and kgPerM about 59 (the catalogue's 61.3 less the root radii); ifc Beam"
+  },
+  {
+   "tool": "bim_roof",
+   "arguments": {
+    "points": [
+     [
+      0,
+      0,
+      2600
+     ],
+     [
+      8000,
+      0,
+      2600
+     ],
+     [
+      8000,
+      6000,
+      2600
+     ],
+     [
+      0,
+      6000,
+      2600
+     ]
+    ],
+    "angle": [
+     30,
+     90,
+     30,
+     90
+    ],
+    "thickness": 150,
+    "overhang": 300,
+    "name": "Roof"
+   },
+   "expect": "edges 4; angles [30, 90, 30, 90]; runs [3000, 4000, 3000, 4000]; ridge 1732.1 (3000 x tan 30); two panes meeting on a ridge along X at y = 3000, gable ends on the short sides; box about 8600 long (300 overhang at each gable) and a little over 6000 wide; min z a little under 2600 (the eaves drop with the overhang); volume_m3 above 0; no 'flipped'"
+  },
+  {
+   "tool": "bim_roof",
+   "arguments": {
+    "points": [
+     [
+      12000,
+      0,
+      0
+     ],
+     [
+      12000,
+      4000,
+      0
+     ],
+     [
+      18000,
+      4000,
+      0
+     ],
+     [
+      18000,
+      0,
+      0
+     ]
+    ],
+    "angle": 30,
+    "name": "Hip roof cw"
+   },
+   "expect": "a CLOCKWISE outline, one angle for all four edges (a hipped roof): flipped true; ridge about 1154.7 (run 2000); a closed hip roof standing on z = 0 with the panes sloping INWARDS and up. view_render it: panes leaning outwards would mean the flip went wrong"
+  },
+  {
+   "tool": "bim_stairs",
+   "arguments": {
+    "at": [
+     10500,
+     2000,
+     0
+    ],
+    "direction": [
+     1,
+     0
+    ],
+    "length": 3920,
+    "width": 1000,
+    "height": 2600,
+    "steps": 15,
+    "name": "Stairs"
+   },
+   "expect": "steps 15; riser 173.3; going 280.0; blondel 626.7 (inside 600-650, so no note); box about [3920, 1000, 2600]; the flight lies to the right of the line through at (y 1000..2000). Note any extra 'Railing' objects FreeCAD 1.1 adds (object_list)"
+  },
+  {
+   "tool": "bim_space",
+   "arguments": {
+    "points": [
+     [
+      250,
+      250
+     ],
+     [
+      3925,
+      250
+     ],
+     [
+      3925,
+      5750
+     ],
+     [
+      250,
+      5750
+     ]
+    ],
+    "height": 2600,
+    "use": "room",
+    "name": "Living room"
+   },
+   "expect": "area_m2 20.212 (3675 x 5500); use Room; ifc Space"
+  },
+  {
+   "tool": "bim_space",
+   "arguments": {
+    "points": [
+     [
+      4075,
+      250
+     ],
+     [
+      7750,
+      250
+     ],
+     [
+      7750,
+      5750
+     ],
+     [
+      4075,
+      5750
+     ]
+    ],
+    "height": 2600,
+    "use": "Bedroom"
+   },
+   "expect": "refused: Bedroom is not one of FreeCAD's space types; the message names near ones and says to put a free name in name"
+  },
+  {
+   "tool": "bim_level",
+   "arguments": {
+    "objects": [
+     "Outer walls",
+     "Inner wall",
+     "Floor slab",
+     "Porch footing",
+     "Porch column",
+     "Plinth",
+     "Porch beam",
+     "Steel beam",
+     "Stairs",
+     "Living room",
+     "Front door",
+     "Front window",
+     "Side window",
+     "Inner door"
+    ],
+    "elevation": 0,
+    "height": 2600,
+    "name": "Ground floor"
+   },
+   "expect": "ifc Building Storey; elevation 0; holds the 14 labels; nothing moves"
+  },
+  {
+   "tool": "bim_level",
+   "arguments": {
+    "objects": [
+     "Roof"
+    ],
+    "elevation": 2600,
+    "height": 2000,
+    "name": "Roof level"
+   },
+   "expect": "elevation 2600; holds [Roof]. The roof must NOT move (a BIM component keeps its own Z): bim_list / object_get Roof still has its eaves at z 2600"
+  },
+  {
+   "tool": "bim_building",
+   "arguments": {
+    "levels": [
+     "Ground floor",
+     "Roof level"
+    ],
+    "name": "House",
+    "siteName": "Plot"
+   },
+   "expect": "levels [Ground floor, Roof level]; site Plot; ifc Building"
+  },
+  {
+   "tool": "bim_list",
+   "arguments": {},
+   "expect": "objects with ifc types: Site, Building, 2 Building Storey, 2 Wall, 2 Door, 2 Window, Slab, Footing, 2 Column, 2 Beam, Roof (x2 with the hip roof), Stair, Space ...; the doors and windows show in: [their wall]; the levels show holds"
+  },
+  {
+   "tool": "bim_material",
+   "arguments": {
+    "name": "Brick",
+    "density": 1800,
+    "color": "#b5533c",
+    "description": "Clay brick",
+    "objects": [
+     "Inner wall"
+    ]
+   },
+   "expect": "material Brick; data has Density '1800 kg/m^3' and DiffuseColor '(0.7098, 0.3255, 0.2353)'; on [Inner wall]. In the window the material's Color is that brick red"
+  },
+  {
+   "tool": "bim_material",
+   "arguments": {
+    "name": "Concrete",
+    "density": 2400,
+    "objects": [
+     "Floor slab",
+     "Porch footing",
+     "Porch column",
+     "Plinth",
+     "Porch beam"
+    ]
+   },
+   "expect": "on the five structures"
+  },
+  {
+   "tool": "bim_layers",
+   "arguments": {
+    "layers": [
+     {
+      "material": "Brick",
+      "thickness": 115
+     },
+     {
+      "material": "Insulation",
+      "thickness": 100,
+      "density": 30
+     },
+     {
+      "material": "Plaster",
+      "thickness": 35,
+      "density": 1200
+     }
+    ],
+    "objects": [
+     "Outer walls"
+    ],
+    "name": "Outer build-up"
+   },
+   "expect": "total_mm 250 (so the wall keeps its 250 width); build-up of 3; on [Outer walls]; the wall still has a solid and the three openings (health ok)"
+  },
+  {
+   "tool": "bim_ifc",
+   "arguments": {
+    "objects": [
+     "Outer walls"
+    ],
+    "classification": "Ss_25_10_30",
+    "properties": {
+     "Pset_WallCommon.IsExternal": true,
+     "Pset_WallCommon.FireRating": "REI60"
+    }
+   },
+   "expect": "objects[0]: ifc Wall, classification Ss_25_10_30, properties { Pset_WallCommon: { IsExternal: 'True', FireRating: 'REI60' } }"
+  },
+  {
+   "tool": "bim_ifc",
+   "arguments": {
+    "objects": [
+     "Plinth"
+    ],
+    "type": "IfcFooting"
+   },
+   "expect": "ifc Footing (the IFC class name is understood)"
+  },
+  {
+   "tool": "bim_ifc",
+   "arguments": {
+    "objects": [
+     "Plinth"
+    ],
+    "type": "Plinth"
+   },
+   "expect": "refused: not an IFC type; near names listed"
+  },
+  {
+   "tool": "bim_rebar",
+   "arguments": {
+    "structure": "Floor slab",
+    "along": "x",
+    "layer": "bottom",
+    "diameter": 12,
+    "cover": 30,
+    "spacing": 200,
+    "name": "Slab bars"
+   },
+   "expect": "bars 31; spacing 197.6; totalLength_m 246.140; mass_kg 218.53; made says whether FreeCAD's own rebar was used"
+  },
+  {
+   "tool": "bim_covering",
+   "arguments": {
+    "face": "Floor slab.Face6",
+    "finish": "tiles",
+    "tile": [
+     600,
+     600
+    ],
+    "joint": 5,
+    "thickness": 10,
+    "name": "Floor tiles"
+   },
+   "expect": "area_m2 48.0 (the slab's top or bottom, whichever Face6 is: shape_query { body: \"Floor slab\", kind: \"face\", normal: [0,0,1] } names the top); tiles about 150 (14 x 10 rows of 605), whole + cut = tiles; made 'here' on 1.1"
+  },
+  {
+   "tool": "bim_schedule",
+   "arguments": {},
+   "expect": "rows for each; totals: wall count 2 (Outer walls length_m 28.0, volume_m3 16.1275 after the three openings; Inner wall 1.9245), door 2, window 2, slab 1 (area_m2 48.0, volume 7.2), footing 2 (the Plinth was retyped), column 1, beam 2, roof 2, stair 1, space 1 (area 20.212), rebar 1. No step is recorded"
+  },
+  {
+   "tool": "bim_schedule",
+   "arguments": {
+    "sheet": "House schedule"
+   },
+   "expect": "the same, plus sheet 'House schedule' (a new spreadsheet; this call is a change and carries health)"
+  },
+  {
+   "tool": "bim_quantities",
+   "arguments": {
+    "by": "material",
+    "detail": true
+   },
+   "expect": "groups Brick, Concrete, Outer build-up (thickness-weighted density (115*1800+100*30+35*1200)/250 = 1008 kg/m3) and (no material); mass_kg for the Concrete group = volume x 2400; rows carry verticalArea_m2 / horizontalArea_m2"
+  },
+  {
+   "tool": "bim_edit",
+   "arguments": {
+    "op": "cut",
+    "object": "Inner wall",
+    "at": [
+     0,
+     0,
+     2400
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ]
+   },
+   "expect": "removed_m3 0.1650 (the top 200 mm: the door is lower); box z now 2400"
+  },
+  {
+   "tool": "bim_edit",
+   "arguments": {
+    "op": "clone",
+    "object": "Porch column",
+    "move": [
+     0,
+     3000,
+     0
+    ],
+    "name": "Porch column 2"
+   },
+   "expect": "a clone 3000 further along Y; same volume 0.1406"
+  },
+  {
+   "tool": "bim_grid",
+   "arguments": {
+    "xSpacing": [
+     4000,
+     4000
+    ],
+    "ySpacing": [
+     3000,
+     3000
+    ],
+    "length": 8000,
+    "name": "Grid"
+   },
+   "expect": "axes ['Grid X', 'Grid Y']; lines { x: [0, 4000, 8000], y: [0, 3000, 6000] }; length 8000. In the window the two sets CROSS over the house (before the fix the Y set ran off to negative X and its lines were 3000 long)"
+  },
+  {
+   "tool": "bim_structure",
+   "arguments": {
+    "kind": "column",
+    "at": [
+     0,
+     0,
+     -1000
+    ],
+    "width": 400,
+    "depth": 400,
+    "height": 300,
+    "name": "Pad"
+   },
+   "expect": "a squat pad at the origin, 1 m down"
+  },
+  {
+   "tool": "bim_structural_system",
+   "arguments": {
+    "structures": [
+     "Pad"
+    ],
+    "axes": [
+     "Grid X",
+     "Grid Y"
+    ],
+    "name": "Pads"
+   },
+   "expect": "copies 9 (a pad under every grid crossing; 6 or 4 if FreeCAD does not count crossings at a line's very end: report which)"
+  },
+  {
+   "tool": "bim_structural_system",
+   "arguments": {
+    "structures": [
+     "Pad",
+     "Plinth"
+    ],
+    "axes": [
+     "Grid X"
+    ]
+   },
+   "expect": "refused: one structure per call"
+  },
+  {
+   "tool": "bim_section",
+   "arguments": {
+    "at": [
+     0,
+     0,
+     1200
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "name": "Plan cut"
+   },
+   "expect": "object 'Plan cut'; cuts lists the site (the top BIM object not inside a level)"
+  },
+  {
+   "tool": "bim_views",
+   "arguments": {
+    "levels": [
+     "Ground floor"
+    ],
+    "cutHeight": 1200
+   },
+   "expect": "views [{ level 'Ground floor', section, view, at 1200 }]: a flat plan with the door and window gaps"
+  },
+  {
+   "tool": "bim_truss",
+   "arguments": {
+    "from": [
+     0,
+     7000,
+     0
+    ],
+    "to": [
+     6000,
+     7000,
+     0
+    ],
+    "height": 800,
+    "strut": 100,
+    "rod": 20,
+    "panels": 6,
+    "pattern": "warren",
+    "name": "Truss"
+   },
+   "expect": "span_mm 6000; set has HeightStart 800, HeightEnd 800, RodSections 6, RodMode the warren zig-zag; box about [6000, 100, 800+]; mass_kg above 0"
+  },
+  {
+   "tool": "bim_fence",
+   "arguments": {
+    "points": [
+     [
+      -1000,
+      -1000,
+      0
+     ],
+     [
+      9000,
+      -1000,
+      0
+     ]
+    ],
+    "height": 1200,
+    "post": 100,
+    "spacing": 2000,
+    "panel": 20,
+    "name": "Fence"
+   },
+   "expect": "pathLength_mm 10000; NumberOfSections 5; NumberOfPosts 6; box about [10100, 100, 1200] with y -1050..-950 (posts centred on the path) and panels between the posts, 120 mm clear of the ground"
+  },
+  {
+   "tool": "bim_frame",
+   "arguments": {
+    "profile": "IPE100",
+    "points": [
+     [
+      0,
+      -2000,
+      0
+     ],
+     [
+      0,
+      -2000,
+      2500
+     ],
+     [
+      4000,
+      -2000,
+      2500
+     ],
+     [
+      4000,
+      -2000,
+      0
+     ]
+    ],
+    "name": "Portal"
+   },
+   "expect": "pathLength_mm 9000; a portal frame; mass_kg about 70 (IPE100 8.1 kg/m)"
+  },
+  {
+   "tool": "bim_curtain_wall",
+   "arguments": {
+    "points": [
+     [
+      12000,
+      6000,
+      0
+     ],
+     [
+      18000,
+      6000,
+      0
+     ]
+    ],
+    "height": 3000,
+    "vertical": 1500,
+    "horizontal": 1500,
+    "name": "Glazing"
+   },
+   "expect": "length 6000; stretches 1; set VerticalSections 4, HorizontalSections 2"
+  },
+  {
+   "tool": "bim_panel",
+   "arguments": {
+    "points": [
+     [
+      20000,
+      0
+     ],
+     [
+      21200,
+      0
+     ],
+     [
+      21200,
+      600
+     ],
+     [
+      20000,
+      600
+     ]
+    ],
+    "thickness": 18,
+    "name": "Shelf"
+   },
+   "expect": "box [1200, 600, 18]; volume_m3 0.013"
+  },
+  {
+   "tool": "bim_panel_out",
+   "arguments": {
+    "kind": "cut",
+    "panels": [
+     "Shelf"
+    ]
+   },
+   "expect": "cuts [{ panel Shelf, cut, edges 4 or more }]"
+  },
+  {
+   "tool": "bim_pipe",
+   "arguments": {
+    "points": [
+     [
+      20000,
+      2000,
+      0
+     ],
+     [
+      22000,
+      2000,
+      0
+     ]
+    ],
+    "diameter": 50,
+    "wall": 3,
+    "name": "Pipe A"
+   },
+   "expect": "diameter 50; length 2000; a tube"
+  },
+  {
+   "tool": "bim_pipe",
+   "arguments": {
+    "points": [
+     [
+      22000,
+      2000,
+      0
+     ],
+     [
+      22000,
+      4000,
+      0
+     ]
+    ],
+    "diameter": 50,
+    "wall": 3,
+    "name": "Pipe B"
+   },
+   "expect": "length 2000"
+  },
+  {
+   "tool": "bim_pipe_connector",
+   "arguments": {
+    "pipes": [
+     "Pipe A",
+     "Pipe B"
+    ],
+    "radius": 100,
+    "name": "Elbow"
+   },
+   "expect": "connector Elbow joining the two at [22000, 2000, 0]; health ok (an error state means FreeCAD saw the ends as not meeting)"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     600,
+     450,
+     200
+    ],
+    "at": [
+     5000,
+     5200,
+     850
+    ],
+    "name": "Sink block"
+   },
+   "expect": "a plain box to make equipment of"
+  },
+  {
+   "tool": "bim_equipment",
+   "arguments": {
+    "object": "Sink block",
+    "ifc": "Sanitary Terminal",
+    "model": "S-600",
+    "url": "https://example.org/sink",
+    "watts": 0,
+    "name": "Sink"
+   },
+   "expect": "ifc Sanitary Terminal; from 'Sink block'. object_get Sink shows ProductURL https://example.org/sink (it was dropped before the fix)"
+  },
+  {
+   "tool": "bim_component",
+   "arguments": {
+    "kind": "component",
+    "from": "Sink block",
+    "ifcType": "Furniture",
+    "name": "Sink as component"
+   },
+   "expect": "kind component; volume 54000000 (mm3: this group answers mm3)"
+  },
+  {
+   "tool": "bim_ifc_brep",
+   "arguments": {
+    "objects": [
+     "Sink as component"
+    ],
+    "on": true
+   },
+   "expect": "set [{ object, forceBrep true }]"
+  },
+  {
+   "tool": "bim_trash",
+   "arguments": {
+    "action": "put",
+    "objects": [
+     "Sink as component"
+    ]
+   },
+   "expect": "trash lists it; it is hidden"
+  },
+  {
+   "tool": "bim_trash",
+   "arguments": {
+    "action": "list"
+   },
+   "expect": "the same list; no step recorded"
+  },
+  {
+   "tool": "bim_reorder",
+   "arguments": {
+    "group": "Ground floor",
+    "sort": true
+   },
+   "expect": "order: the level's children by label"
+  },
+  {
+   "tool": "bim_preflight",
+   "arguments": {},
+   "expect": "ok false is fine: issues name the objects in no storey (grid, truss, fence, frame ...), without material; blocking 0"
+  },
+  {
+   "tool": "bim_export",
+   "arguments": {
+    "path": "house.ifc"
+   },
+   "expect": "path, bytes above 10000, schema (IFC4 unless the preferences say otherwise); readBack about { IfcWall 2, IfcDoor 2, IfcWindow 2, IfcSlab 1 (more if the roofs export as slabs), IfcColumn 1 or more, IfcBeam 2 or more, IfcSpace 1, IfcBuildingStorey 2, IfcRoof, IfcStair 1 } (only these classes are counted). Without IfcOpenShell: refused 'unavailable' with the BIM Setup step (then stop here: the ifc_ tools are not offered)"
+  },
+  {
+   "tool": "ifc_open",
+   "arguments": {
+    "path": "house.ifc"
+   },
+   "expect": "schema; storeys Ground floor (elevation 0) and Roof level (2.6: metres); classes counted"
+  },
+  {
+   "tool": "ifc_find",
+   "arguments": {
+    "class": "IfcWall",
+    "detail": true
+   },
+   "expect": "count 2; Outer walls shows psets Pset_WallCommon { IsExternal, FireRating REI60 } and its material layers; each has id (22 characters)"
+  },
+  {
+   "tool": "ifc_edit",
+   "arguments": {
+    "class": "IfcWall",
+    "name": "Inner",
+    "properties": {
+     "Pset_WallCommon.FireRating": "REI30"
+    },
+    "material": "Block"
+   },
+   "expect": "changed 1; done { properties 1, material 1 }"
+  },
+  {
+   "tool": "ifc_edit",
+   "arguments": {
+    "attributes": {
+     "Description": "x"
+    }
+   },
+   "expect": "refused: say which elements"
+  },
+  {
+   "tool": "ifc_save",
+   "arguments": {
+    "path": "house_edited.ifc"
+   },
+   "expect": "path house_edited.ifc; edits 1; overwrote false"
+  },
+  {
+   "tool": "ifc_diff",
+   "arguments": {
+    "a": "house.ifc",
+    "b": "house_edited.ifc"
+   },
+   "expect": "counts { added 0, removed 0, changed 1 }: Inner wall's Pset_WallCommon.FireRating [None or old, REI30] and material"
+  },
+  {
+   "tool": "ifc_remove",
+   "arguments": {
+    "ids": [
+     "<the id ifc_find gave for the Plinth: ifc_find { name: \"Plinth\" } first>"
+    ]
+   },
+   "expect": "removed [the plinth]; held in memory (not saved)"
+  },
+  {
+   "tool": "bim_import",
+   "arguments": {
+    "path": "house_edited.ifc"
+   },
+   "expect": "objects above 15; byType; read says which reader. Run it in a new document (doc_new first) so the house is not doubled"
+  }
+ ],
+ "notCovered": [
+  "bim_reference: needs a second saved .FCStd on the Mac (save this document, then bim_reference { path } in a new one)",
+  "bim_image_plane: needs an image file on the Mac (tests/test_bim_gaps.py covers it)",
+  "bim_library: needs the parts_library add-on or a folder of parts (tests/test_bim_gaps.py covers it with a temporary folder)",
+  "bim_nest: needs flat single-face pieces and a sheet face (tests/test_bim_gaps.py test_10_nest covers it; draft_shape rectangles with a face would do live)",
+  "bim_remove_shape, bim_reextrude, bim_rewire, bim_glue: tidy-up commands with no place in the house (tests/test_bim_gaps.py covers them)",
+  "bim_edit add / subtract / join: test_11_join covers join; subtracting the Roof from the walls is worth one live try (bim_edit { op: \"subtract\", object: \"Outer walls\", with: [\"Roof\"] })",
+  "ifc_save overwrite: true, and bim_import's fallback reader",
+  "code_* tools: an add-on's, not this repository's"
+ ]
+}

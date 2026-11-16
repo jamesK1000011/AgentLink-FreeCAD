@@ -57,6 +57,56 @@ class MoreFamilies(Base):
         back = self.ok("points_import", {"path": e["path"], "name": "Pt back"})
         self.assertEqual(back["points"], top["points"])
 
+    def test_points_hardening(self):
+        # Fixes of the hardening pass (docs/hardening/bimcam-findings.md), on shapes of known size.
+        import FreeCAD
+
+        self.have("points_fit")
+        self.ok("part_primitive", {"kind": "cylinder", "radius": 10, "height": 40, "at": [600, 0, 0], "name": "Ph cyl"})
+        doc = self.session.doc
+        s0 = self.ok("points_sample", {"object": "Ph cyl", "count": 6000, "name": "Ph cloud"})
+        self.assertEqual(s0["points"], 6000)
+        self.assertAlmostEqual(s0["min"][0], 590, delta=0.2)
+        # A placed cloud is read where it stands: the kernel carries the Placement already
+        # (Points::Feature::onChanged), so 100 mm along X moves the reading 100, not 200.
+        cloud = doc.getObjectsByLabel("Ph cloud")[0]
+        cloud.Placement = FreeCAD.Placement(FreeCAD.Vector(100, 0, 0), FreeCAD.Rotation())
+        doc.recompute()
+        moved = self.ok("points_info", {"points": "Ph cloud"})
+        self.assertAlmostEqual(moved["min"][0], s0["min"][0] + 100, delta=0.001)
+        self.assertAlmostEqual(moved["centre"][0], 700, delta=0.5)
+        # The wall alone (the caps cropped off) fits back to the cylinder it came from.
+        wall = self.ok("points_crop", {"points": "Ph cloud", "box": [[680, -20, 2], [720, 20, 38]], "replace": False, "name": "Ph wall"})
+        self.assertGreater(wall["kept"], 1000)
+        self.assertAlmostEqual(wall["min"][0], 690, delta=0.3)
+        f = self.ok("points_fit", {"points": "Ph wall", "shape": "cylinder", "tolerance": 0.05, "make": True, "name": "Ph fit"})
+        self.assertAlmostEqual(f["radius"], 10, delta=0.02)
+        self.assertAlmostEqual(f["diameter"], 20, delta=0.04)
+        self.assertGreater(abs(f["axis"][2]), 0.9999)
+        self.assertAlmostEqual(f["length"], 36, delta=0.5)
+        self.assertAlmostEqual(f["base"][0], 700, delta=0.05)
+        self.assertEqual(f["verdict"], "fits")
+        self.assertEqual(f["body"], "Ph fit")
+        # every format is read back with its own reader: the count holds
+        for ext, err in (("ply", 1e-3), ("pcd", 1e-5), ("asc", 1e-5), ("csv", 1e-5)):
+            e = self.ok("points_export", {"points": "Ph wall", "path": f"ph.{ext}"})
+            self.assertEqual(e["readBack"], e["count"], ext)
+            self.assertEqual(e["count"], wall["kept"], ext)
+            self.assertLess(e["maxError"], err, ext)
+            self.assertNotIn("warning", e)
+            back = self.ok("points_import", {"path": e["path"], "name": f"Ph back {ext}"})
+            self.assertEqual(back["points"], wall["kept"], ext)
+            self.assertAlmostEqual(back["min"][0], wall["min"][0], delta=0.01)
+        m = self.ok("points_merge", {"points": ["Ph back ply", "Ph back csv"], "name": "Ph both"})
+        self.assertEqual(m["points"], "Ph both")
+        self.assertEqual(m["count"], 2 * wall["kept"])
+        self.refused("points_crop", {"points": "Ph wall"})
+        self.refused("points_crop", {"points": "Ph wall", "outside": True})
+        self.refused("points_fit", {"points": "Ph wall", "shape": "cone"})
+        self.refused("points_import", {"path": "ph.ply", "scale": 0})
+        self.refused("points_export", {"points": "Ph wall", "path": "ph.stl"})
+        self.refused("points_merge", {"points": ["Ph wall", "Ph wall"]})
+
     def test_points_mesh_curve(self):
         self.have("points_mesh")
         self.box("Pm plate", [60, 40, 10], [0, 300, 0])

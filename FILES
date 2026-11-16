@@ -173,11 +173,15 @@ docs/clients/opencode-ollama.md
 docs/clients/vscode.md
 docs/hardening/STATUS.md
 docs/hardening/asmtd-findings.md
+docs/hardening/bimcam-findings.md
 docs/hardening/coredoc-findings.md
 docs/hardening/draftmesh-findings.md
 docs/hardening/inventory.json
 docs/hardening/models/asmtd-assembly-model.json
 docs/hardening/models/asmtd-techdraw-model.json
+docs/hardening/models/bimcam-bim-model.json
+docs/hardening/models/bimcam-cam-model.json
+docs/hardening/models/bimcam-points-model.json
 docs/hardening/models/coredoc-gui-model.json
 docs/hardening/models/coredoc-model.json
 docs/hardening/models/draftmesh-draft-model.json

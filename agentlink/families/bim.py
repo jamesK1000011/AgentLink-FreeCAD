@@ -31,8 +31,8 @@ ROLES = {"column": "Column", "beam": "Beam", "slab": "Slab", "footing": "Footing
 
 
 def vec(p, what):
-    if not (isinstance(p, (list, tuple)) and len(p) in (2, 3) and all(isinstance(c, (int, float)) for c in p)):
-        raise bad(f"{what}: [x, y] or [x, y, z] in mm.")
+    if not (isinstance(p, (list, tuple)) and len(p) in (2, 3) and all(isinstance(c, (int, float)) and not isinstance(c, bool) for c in p)):
+        raise bad(f"{what}: [x, y] or [x, y, z] in mm (got {p!r}).")
     return V(float(p[0]), float(p[1]), float(p[2]) if len(p) == 3 else 0.0)
 
 
@@ -86,6 +86,51 @@ def ifc_type(o):
     return str(getattr(o, "IfcType", "") or getattr(o, "IfcRole", "") or o.TypeId)
 
 
+def ifc_set(o, t):
+    """o's IFC type set to t (FreeCAD's spaced names: "Building Element Proxy"), any case; a refusal naming near ones when FreeCAD has no such type."""
+    if not t:
+        return None
+    try:
+        known = list(o.getEnumerationsOfProperty("IfcType") or [])
+    except Exception:
+        known = []
+    want = str(t)
+    if want.lower().startswith("ifc") and len(want) > 3:  # "IfcWallStandardCase" as IFC writes it
+        want = "".join(c if c.islower() else " " + c for c in want[3:]).strip()
+    pick = next((k for k in known if k.lower() == want.lower() or k.replace(" ", "").lower() == want.replace(" ", "").lower()), None)
+    if pick is None:
+        if not known:
+            raise bad(f"{o.Label} has no IFC type to set (not a BIM object): bim_component {{ from }} makes it one.")
+        w = want.lower()
+        near = [k for k in known if w[:4] in k.lower()][:8] or ["Wall", "Slab", "Beam", "Column", "Covering", "Railing", "Furniture", "Building Element Proxy"]
+        raise bad(f"type {t!r}: not an IFC type this FreeCAD knows. Near: {', '.join(near)} (FreeCAD's names have spaces: \"Sanitary Terminal\", \"Pipe Segment\").")
+    o.IfcType = pick
+    return pick
+
+
+def rgb(c):
+    """A colour as (r, g, b), each 0 … 1: "#rrggbb", or three numbers 0 … 1 or 0 … 255 ("0.8, 0.2, 0.1", [204, 51, 26])."""
+    try:
+        if isinstance(c, str) and c.strip().startswith("#") and len(c.strip()) == 7:
+            h = c.strip()[1:]
+            return tuple(round(int(h[i:i + 2], 16) / 255.0, 4) for i in (0, 2, 4))
+        v = [float(x) for x in (c.strip("()[] ").split(",") if isinstance(c, str) else c)]
+        if len(v) == 3 and all(0 <= x <= 255 for x in v):
+            return tuple(round(x / 255.0 if max(v) > 1 else x, 4) for x in v)
+    except (TypeError, ValueError):
+        pass
+    raise bad(f"color {c!r}: \"#rrggbb\", or red, green, blue as \"0.8, 0.2, 0.1\" (each 0 to 1).")
+
+
+def ccw(points):
+    """Whether a closed outline's points run counter-clockwise seen from above (+Z)."""
+    area = 0.0
+    for i, p in enumerate(points):
+        q = points[(i + 1) % len(points)]
+        area += p.x * q.y - q.x * p.y
+    return area >= 0
+
+
 def tools(session):
     s = session
     doc = lambda: s.doc  # noqa: E731
@@ -114,10 +159,14 @@ def tools(session):
 
     def baseline(points, label, closed=False):
         if not (isinstance(points, list) and len(points) >= 2):
-            raise bad("points: two or more [x, y(, z)] in mm.")
+            raise bad("points: two or more [x, y(, z)] in mm, a list of them." if not closed else "points: the outline's corners, three or more [x, y(, z)] in mm (it is closed for you).")
         P = [vec(p, "points") for p in points]
+        if any((P[i + 1] - P[i]).Length < 1e-6 for i in range(len(P) - 1)):
+            raise bad("points: two in a row are the same point; leave the repeat out (closed: true, or an outline, joins the last to the first for you).")
         if closed and (P[0] - P[-1]).Length > 1e-6:
             P.append(P[0])
+        if closed and len(P) < 4:
+            raise bad("points: an outline needs three or more corners.")
         w = Part.makePolygon(P)
         o = doc().addObject("Part::Feature", "Baseline")
         o.Shape = w
@@ -133,12 +182,14 @@ def tools(session):
         width, height = pos(a, "width", 200), pos(a, "height", 3000)
         align = {"center": "Center", "left": "Left", "right": "Right"}.get(a.get("align", "center"))
         if align is None:
-            raise bad("align: center (the line runs down the middle), left or right (the wall to that side of the line).")
+            raise bad("align: center (the line runs down the middle), left (the line is the wall's left face going from the first point on: the wall lies to the right) or right (the wall lies to the left).")
         name = a.get("name") or "Wall"
         if a.get("base"):
-            base = picks.find(doc(), a["base"])
-            if not getattr(base, "Shape", None) or not base.Shape.Edges:
-                raise bad(f"base: {base.Label} has no edges to run a wall along.")
+            base = picks.find(doc(), a["base"], "base")
+            if not isinstance(getattr(base, "Shape", None), Part.Shape) or base.Shape.isNull() or not base.Shape.Edges:
+                raise bad(f"base: {base.Label} has no edges to run a wall along; give a sketch or wire, or points [[x, y] …].")
+        elif not a.get("points"):
+            raise bad("points [[x, y] …] (the wall's line, mm) or base (a sketch or wire's label): one of them.")
         else:
             base = baseline(a.get("points"), f"{name} line", bool(a.get("closed")))
         w = Arch.makeWall(base, width=width, height=height, align=align)
@@ -154,12 +205,20 @@ def tools(session):
             raise bad(f"preset: a window — {', '.join(WINDOWS)} — or a door — {', '.join(DOORS)}.")
         width = pos(a, "width", 900 if kind == "door" else 1000)
         height = pos(a, "height", 2100 if kind == "door" else 1200)
+        if kind not in ("window", "door"):
+            raise bad("kind: window | door.")
         sill = picks.num(a.get("sill", 0 if kind == "door" else 900), "sill")
         at = picks.num(a.get("at", 0), "at")
+        if at < 0:
+            raise bad("at: 0 or more, the opening's left edge in mm along the wall's line from its first point.")
+        if wall not in walls():
+            raise bad(f"wall: {wall.Label} is not a wall (bim_list shows them); bim_edit {{ op: \"subtract\" }} cuts other components.")
         base = getattr(wall, "Base", None)
         edges = base.Shape.Edges if base is not None and getattr(base, "Shape", None) else []
         if not edges:
-            raise bad(f"wall: {wall.Label} has no baseline to place the opening along.")
+            raise bad(f"wall: {wall.Label} has no baseline to place the opening along (a wall made by bim_wall has one).")
+        if sill + height > float(getattr(wall, "Height", 0) or 0) + 1e-6 and float(getattr(wall, "Height", 0) or 0) > 0:
+            raise bad(f"sill + height is {sill + height:g} mm, above the wall's {float(wall.Height):g} mm: a lower sill or height.")
         # Which straight run of the wall: the one holding distance at.
         run, left = None, at
         for e in edges:
@@ -169,24 +228,27 @@ def tools(session):
             left -= e.Length
         if run is None:
             total = sum(e.Length for e in edges)
-            raise bad(f"at: the opening's left edge, 0 … {total - width:.0f} mm along {wall.Label}.")
+            raise bad(f"at: {at:g} is past the end of {wall.Label} ({total:.0f} mm of line); the opening's left edge goes at 0 … {max(total - width, 0):.0f}.")
         p0, p1 = run.Vertexes[0].Point, run.Vertexes[-1].Point
         d = p1 - p0
         if d.Length < 1e-9:
             raise bad("The wall's run there has no length.")
         if left + width > run.Length + 1e-6:
-            raise bad(f"The opening runs past the end of that stretch of wall ({run.Length:.0f} mm long, the opening {left:.0f} … {left + width:.0f}).")
+            raise bad(f"The opening runs past the end of that straight stretch of wall ({run.Length:.0f} mm long, the opening {left:.0f} … {left + width:.0f} along it): a smaller at or width; an opening cannot cross a corner.")
         d.normalize()
         # Across the wall: where its middle sits off the line (align), and how thick it is.
+        # FreeCAD (ArchWall.getExtrusionData) offsets a Left wall by direction × normal,
+        # the right-hand side of the line going from its start; n here points left.
         n = UP.cross(d)
         n.normalize()
         W = float(getattr(wall, "Width", 200))
-        off = {"Left": W / 2, "Right": -W / 2}.get(str(getattr(wall, "Align", "Center")), 0.0)
+        off = {"Left": -W / 2, "Right": W / 2}.get(str(getattr(wall, "Align", "Center")), 0.0)
+        off += {"Left": -1.0, "Right": 1.0}.get(str(getattr(wall, "Align", "Center")), 0.0) * float(getattr(wall, "Offset", 0) or 0)
         pl = FreeCAD.Placement(p0 + d * left + n * off + V(0, 0, sill), frame(d, n))
         fw, depth = float(a.get("frame", 50)), float(a.get("depth", 100))
         door = preset in DOORS
-        if 2 * fw >= min(width, height):
-            raise bad("frame: narrower than half the opening.")
+        if fw <= 0 or depth <= 0 or 2 * fw >= min(width, height):
+            raise bad(f"frame: above 0 and under half the opening's smaller side ({min(width, height) / 2:g} mm); depth above 0.")
         # The opening, cut out of the wall (the wall's Subtractions), a little deeper than it.
         hole = doc().addObject("Part::Feature", "Opening")
         hole.Label = s.unique(f"{a.get('name') or ('Door' if door else 'Window')} opening")
@@ -228,7 +290,7 @@ def tools(session):
         out["wallCut_m3"] = round((before - after) / 1e9, 4)
         out["opening"] = hole.Label
         if before - after <= 0:
-            out["warning"] = "The wall was not cut — the opening may be outside it."
+            out["warning"] = "The wall was not cut: the opening may be outside it (a wall moved after it was made, or a sill above its top). view_render shows where it landed; object_delete removes it and its opening."
         return out
 
     # ---- structure -------------------------------------------------------------
@@ -238,33 +300,50 @@ def tools(session):
         name = a.get("name") or kind.capitalize()
         if kind in ("slab", "footing"):
             t = pos(a, "thickness", 200 if kind == "slab" else 500)
+            up = None
             if a.get("base"):
-                base = picks.find(doc(), a["base"])
+                base = picks.find(doc(), a["base"], "base")
+                bs = getattr(base, "Shape", None)
+                if not isinstance(bs, Part.Shape) or bs.isNull() or bs.Solids or not (bs.Faces or any(w.isClosed() for w in bs.Wires)):
+                    raise bad(f"base: {base.Label} is not a closed flat outline (a closed sketch, a closed wire or a face); or give points [[x, y] …].")
             else:
                 pts = a.get("points")
                 if not pts:
-                    raise bad("points: the outline, [x, y(, z)] each, closed for you — or base, a closed sketch or wire.")
+                    raise bad(f"points: the {kind}'s outline, [x, y(, z)] each, closed for you; or base, a closed sketch or wire by label.")
                 base = baseline(pts, f"{name} outline", closed=True)
-                base.Shape = Part.Face(base.Shape)
+                try:
+                    base.Shape = Part.Face(base.Shape)
+                except Exception:
+                    doc().removeObject(base.Name)
+                    raise bad("points: the outline is not flat or crosses itself; give its corners in order, all in one plane.") from None
+                # FreeCAD extrudes along the face's normal, which follows the order the
+                # corners were given in: told to go up whichever way round they run.
+                up = base.Shape.Faces[0].normalAt(0, 0)
+                if up.z < 0:
+                    up = up.negative()
             o = Arch.makeStructure(base, height=t)
+            if up is not None and abs(up.z) > 1e-6 and hasattr(o, "Normal"):
+                o.Normal = up
             if kind == "footing":
                 o.Placement.Base = o.Placement.Base - V(0, 0, t)
         elif kind == "column":
             w, dp, h = pos(a, "width", 300), pos(a, "depth", 300), pos(a, "height", 3000)
-            o = Arch.makeStructure(None, length=w, width=dp, height=h)
+            o = prism(w, dp, h, name)
             o.Placement = FreeCAD.Placement(vec(a.get("at", [0, 0, 0]), "at"), FreeCAD.Rotation())
         else:
+            if a.get("from") is None or a.get("to") is None:
+                raise bad("from and to: the beam's two ends, [x, y, z] each in mm (its centre line).")
             p0, p1 = vec(a.get("from"), "from"), vec(a.get("to"), "to")
             d = p1 - p0
             if d.Length < 1e-6:
                 raise bad("from and to: the beam's two ends, apart.")
             w, h = pos(a, "width", 200), pos(a, "depth", 400)
-            o = Arch.makeStructure(None, length=w, width=h, height=d.Length)
             dn = V(d).normalize()
             side = UP.cross(dn)
             if side.Length < 1e-9:
-                raise bad("A beam runs across, not straight up: kind column for that.")
+                raise bad("A beam runs across, not straight up: kind column { at, width, depth, height } for an upright.")
             side.normalize()
+            o = prism(w, h, d.Length, name)
             # The section across (X sideways, Y up), extruded along its local Z: the beam's run.
             o.Placement = FreeCAD.Placement(p0, frame(side, dn.cross(side)))
         named(o, name)
@@ -274,6 +353,22 @@ def tools(session):
             except Exception:
                 pass
         return finish(o, "bim_structure", {"kind": kind})
+
+    def prism(x, y, z, label):
+        """A structure x by y across (centred on its local origin), z along its local Z.
+        FreeCAD's own box structure (no base) is that only while z is the longest:
+        a Beam or Column with Length above Height is laid along X instead
+        (ArchStructure.getExtrusionData), so a squat one is built on a section face."""
+        if z > x:
+            return Arch.makeStructure(None, length=x, width=y, height=z)
+        sec = doc().addObject("Part::Feature", "Section")
+        sec.Shape = Part.Face(Part.makePolygon([V(-x / 2, -y / 2, 0), V(x / 2, -y / 2, 0), V(x / 2, y / 2, 0), V(-x / 2, y / 2, 0), V(-x / 2, -y / 2, 0)]))
+        sec.Label = s.unique(f"{label} section")
+        sec.Visibility = False
+        o = Arch.makeStructure(sec, height=z)
+        if hasattr(o, "Normal"):
+            o.Normal = V(0, 0, 1)
+        return o
 
     def presets():
         try:
@@ -335,21 +430,44 @@ def tools(session):
 
     def bim_roof(a):
         name = a.get("name") or "Roof"
+        made_base = not a.get("base")
         if a.get("base"):
-            base = picks.find(doc(), a["base"])
+            base = picks.find(doc(), a["base"], "base")
+            bs = getattr(base, "Shape", None)
+            if not isinstance(bs, Part.Shape) or bs.isNull() or bs.Solids or not bs.Wires or not bs.Wires[0].isClosed():
+                raise bad(f"base: {base.Label} is not a closed outline (a closed sketch or wire); or give points [[x, y] …] at the eaves' height.")
+        elif not a.get("points"):
+            raise bad("points [[x, y] …] (the outline at the eaves' height, mm) or base (a closed sketch or wire's label): one of them.")
         else:
             base = baseline(a.get("points"), f"{name} outline", closed=True)
-        n = len(base.Shape.Edges)
+
+        def refuse(msg):
+            if made_base:
+                doc().removeObject(base.Name)
+            return bad(msg)
+
+        # FreeCAD's roof reads the outline's first wire, its edges in order (ArchRoof.execute).
+        edges = Part.__sortEdges__(base.Shape.Wires[0].Edges)
+        n = len(edges)
+        if any(len(e.Vertexes) < 2 or abs(e.Length - (e.Vertexes[-1].Point - e.Vertexes[0].Point).Length) > 1e-6 for e in edges):
+            raise refuse("A roof's outline is straight edges only: FreeCAD slopes one pane up from each edge.")
         ang = a.get("angle", 30)
-        angles = ang if isinstance(ang, list) else [float(ang)] * n
+        try:
+            angles = [float(x) for x in ang] if isinstance(ang, list) else [float(ang)] * n
+        except (TypeError, ValueError):
+            raise refuse("angle: degrees, one number or a list of one per edge.") from None
         if len(angles) != n:
-            raise bad(f"angle: one number, or one per edge ({n}); 90 makes a gable.")
+            raise refuse(f"angle: one number, or one per edge ({n} here, in the outline's order); 90 makes a gable end.")
+        if any(not 0 < x <= 90 for x in angles):
+            raise refuse("angle: above 0 up to 90 degrees each (90: a gable end, no pane on that edge).")
+        if all(x == 90 for x in angles):
+            raise refuse("angle: every edge is a gable (90), so there is no pane left to build: give the sloping edges an angle below 90.")
         t = pos(a, "thickness", 150)
         over = picks.num(a.get("overhang", 300), "overhang")
         # Each slope's run: half the outline's depth away from its edge — the ridge midway.
-        verts = [v.Point for v in base.Shape.Vertexes]
+        verts = [e.Vertexes[0].Point for e in edges]
         runs = []
-        for e in base.Shape.Edges:
+        for e in edges:
             p0, p1 = e.Vertexes[0].Point, e.Vertexes[-1].Point
             d = V(p1 - p0)
             d.z = 0
@@ -358,16 +476,40 @@ def tools(session):
             runs.append(round(far / 2, 3))
         if a.get("run") is not None:
             r = a["run"]
-            runs = [float(x) for x in r] if isinstance(r, list) else [float(r)] * n
-        o = Arch.makeRoof(base, 0, [float(x) for x in angles], runs, [-1] * n, [t] * n, [over] * n)
+            try:
+                runs = [float(x) for x in r] if isinstance(r, list) else [float(r)] * n
+            except (TypeError, ValueError):
+                raise refuse("run: mm from an edge in to its ridge, one number or a list of one per edge.") from None
+            if len(runs) != n:
+                raise refuse(f"run: one number, or one per edge ({n} here).")
+        # The outline must run counter-clockwise seen from above (wiki Arch_Roof): a
+        # clockwise one slopes its panes outwards. Flip turns it round inside FreeCAD,
+        # which then counts the edges backwards, so the per-edge lists are turned too.
+        flip = not ccw(verts)
+        la, lr = (list(reversed(angles)), list(reversed(runs))) if flip else (angles, runs)
+        o = Arch.makeRoof(base, 0, la, lr, [-1] * n, [t] * n, [over] * n)
+        if flip:
+            if not hasattr(o, "Flip"):
+                doc().removeObject(o.Name)
+                raise refuse("The outline runs clockwise seen from above and this FreeCAD's roof cannot be flipped: give the points counter-clockwise.")
+            o.Flip = True
         named(o, name)
-        return finish(o, "bim_roof", {"edges": n, "angles": angles, "runs": runs})
+        out = finish(o, "bim_roof", {"edges": n, "angles": angles, "runs": runs})
+        try:
+            hs = [float(h) for h in (getattr(o, "Heights", None) or [])]
+        except (TypeError, ValueError):
+            hs = []
+        if hs:
+            out["ridge"] = round(max(hs), 1)
+        if flip:
+            out["flipped"] = True
+        return out
 
     def bim_stairs(a):
         length, width, height = pos(a, "length", 4500), pos(a, "width", 1000), pos(a, "height", 3000)
         steps = int(a.get("steps", max(3, round(height / 175))))
         if steps < 2:
-            raise bad("steps: 2 or more.")
+            raise bad("steps: 2 or more (FreeCAD counts risers: steps - 1 treads share the length).")
         o = Arch.makeStairs(None, length=length, width=width, height=height, steps=steps)
         d = vec(a.get("direction", [1, 0]), "direction")
         d.z = 0
@@ -386,28 +528,44 @@ def tools(session):
     def bim_space(a):
         name = a.get("name") or "Space"
         if a.get("base"):
-            base = picks.find(doc(), a["base"])
+            base = picks.find(doc(), a["base"], "base")
+            if not isinstance(getattr(base, "Shape", None), Part.Shape) or base.Shape.isNull() or not base.Shape.Solids:
+                raise bad(f"base: {base.Label} is not a solid; a space takes a solid of the room's volume, or points (its floor outline) and height.")
+        elif not a.get("points"):
+            raise bad("points [[x, y] …] (the room's floor outline, mm) with height, or base (a solid's label): one of them.")
         else:
-            base = baseline(a.get("points"), f"{name} outline", closed=True)
             h = pos(a, "height", 2600)
-            face = Part.Face(base.Shape)
-            base.Shape = face.extrude(V(0, 0, h))
+            base = baseline(a.get("points"), f"{name} outline", closed=True)
+            try:
+                face = Part.Face(base.Shape)
+            except Exception:
+                doc().removeObject(base.Name)
+                raise bad("points: the outline is not flat or crosses itself; give the room's corners in order.") from None
+            up = face.normalAt(0, 0)
+            base.Shape = face.extrude((up.negative() if up.z < 0 else up) * h)
+            base.Visibility = False
         o = Arch.makeSpace([base])
         named(o, name)
         if a.get("use") and hasattr(o, "SpaceType"):
-            try:
-                o.SpaceType = a["use"]
-            except Exception:
-                pass
+            kinds = list(o.getEnumerationsOfProperty("SpaceType") or [])
+            want = str(a["use"]).lower()
+            pick = next((k for k in kinds if k.lower() == want), None)
+            if pick is None:
+                near = [k for k in kinds if want in k.lower()][:8] or ["Room", "Office", "Corridor / Transition", "Restrooms", "Dining Area", "Food Preparation", "Stairs", "Lobby"]
+                doc().removeObject(o.Name)
+                if not a.get("base"):
+                    doc().removeObject(base.Name)
+                raise bad(f"use {a['use']!r}: not one of FreeCAD's space types. Near: {', '.join(near)}. Leave use out for Undefined; put a free name in name.")
+            o.SpaceType = pick
         doc().recompute()
         area = getattr(o, "Area", None)
         a_m2 = float(area.Value if hasattr(area, "Value") else area or 0) / 1e6
-        return finish(o, "bim_space", {"area_m2": round(a_m2, 3)})
+        return finish(o, "bim_space", {"area_m2": round(a_m2, 3), "use": str(getattr(o, "SpaceType", ""))})
 
     # ---- levels, building, site ---------------------------------------------------
 
     def bim_building(a):
-        objs = [picks.find(doc(), r) for r in (a.get("levels") or [])]
+        objs = [picks.find(doc(), r, "levels") for r in picks.ref_list(a.get("levels") or [], "levels: the levels' labels (bim_level makes them), a list.")] if a.get("levels") else []
         b = Arch.makeBuilding(objs)
         named(b, a.get("name") or "Building")
         out = finish(b, "bim_building", {"levels": [x.Label for x in objs]})
@@ -468,7 +626,7 @@ def tools(session):
         if a.get("sheet"):
             sh = doc().addObject("Spreadsheet::Sheet", "Schedule")
             sh.Label = s.unique(a.get("sheet") if isinstance(a.get("sheet"), str) else "Schedule")
-            cols = ["object", "kind", "length_m", "height_m", "width_m", "area_m2", "volume_m3", "use"]
+            cols = ["object", "kind", "length_m", "height_m", "width_m", "area_m2", "volume_m3", "mass_kg", "use"]
             for j, c in enumerate(cols):
                 sh.set(f"{chr(65 + j)}1", c)
             for i, r in enumerate(rows, start=2):
@@ -476,6 +634,7 @@ def tools(session):
                     if c in r and r[c] != "":
                         v = r[c]
                         sh.set(f"{chr(65 + j)}{i}", str(v) if isinstance(v, (int, float)) else f"'{v}")
+            sh.recompute()
             out["sheet"] = sh.Label
             picks.finish(s, "bim_schedule", out)
         return out
@@ -486,7 +645,7 @@ def tools(session):
         try:
             import ifcopenshell  # noqa: F401
         except ImportError:
-            raise ToolError("unavailable", "IFC needs IfcOpenShell, which this FreeCAD does not have: the person installs it (the BIM workbench's IFC setup, or pip install ifcopenshell into FreeCAD's Python).")
+            raise ToolError("unavailable", "IFC needs IfcOpenShell, which this FreeCAD does not have, so bim_export, bim_import and the ifc_ tools cannot run. Installing it is the person's step: in FreeCAD, the BIM workbench's Setup command (BIM_Setup) checks for it and offers the install, then FreeCAD is restarted. Until then export { format: \"step\" } carries the shapes without the BIM data.")
 
     def ifc_module(name):
         for m in (f"importers.{name}", name):
@@ -508,7 +667,7 @@ def tools(session):
             tops = [o for o in doc().Objects if ifc_type(o) in ("Site", "Building") or type(getattr(o, "Proxy", None)).__name__ in ("_Site", "_Building")]
             objs = tops[:1] or [o for o in doc().Objects if is_bim(o) and not contained(o)]
             if not objs:
-                raise bad("Nothing to write: no BIM objects here (bim_wall …), or objects to name.")
+                raise bad("Nothing to write: no BIM objects here (bim_wall … make them; bim_list shows them), or give objects.")
         p = where(a.get("path"), (doc().Label or "model") + ".ifc")
         if not p.lower().endswith(".ifc"):
             p += ".ifc"
@@ -517,7 +676,7 @@ def tools(session):
         try:
             ex.export(objs, p)
         except Exception as e:
-            raise ToolError("failed", f"IFC export failed: {e}")
+            raise ToolError("failed", f"IFC export failed: {e}. bim_preflight lists what an export trips on (objects with no shape, invalid solids).") from None
         import ifcopenshell
 
         f = ifcopenshell.open(p)
@@ -577,7 +736,7 @@ def tools(session):
         need_ifc()
         p = where(a.get("path"), "")
         if not os.path.isfile(p):
-            raise ToolError("not_found", f"{p}: no such file.")
+            raise ToolError("not_found", f"path {a.get('path')!r}: no such file (a relative path is looked for in the session's output folder; give the full path of an .ifc elsewhere).")
         before = {o.Name for o in doc().Objects}
         how = "FreeCAD's IFC importer"
         try:
@@ -615,30 +774,35 @@ def tools(session):
         name = a.get("name") or "Curtain wall"
         pts = a.get("points")
         h = pos(a, "height", 3000)
-        line = baseline(pts, f"{name} line")
-        face = line.Shape.extrude(V(0, 0, h))
-        line.Shape = face
-        mk = getattr(Arch, "makeCurtainWall", None)
-        if mk is None:
-            raise ToolError("unavailable", "This FreeCAD's BIM has no curtain wall.")
-        o = headless_call(mk, line)
-        named(o, name)
-        length = sum(e.Length for e in Part.makePolygon([vec(p, "points") for p in pts]).Edges)
         vs, hs = pos(a, "vertical", 1500), pos(a, "horizontal", 1500)
         mw, md = pos(a, "mullion", 50), pos(a, "depth", 100)
-        set_ = setprops(o, {"VerticalSections": max(1, round(length / vs)), "HorizontalSections": max(1, round(h / hs)),
+        mk = getattr(Arch, "makeCurtainWall", None)
+        if mk is None:
+            raise ToolError("unavailable", "This FreeCAD's BIM has no curtain wall; bim_wall with bim_opening is the nearest.")
+        line = baseline(pts, f"{name} line")
+        runs = [e.Length for e in line.Shape.Edges]
+        length = sum(runs)
+        face = line.Shape.extrude(V(0, 0, h))
+        line.Shape = face
+        o = headless_call(mk, line)
+        named(o, name)
+        # FreeCAD divides each face of the base (each straight stretch) into the
+        # same number of panels: counted on the mean stretch.
+        set_ = setprops(o, {"VerticalSections": max(1, round(length / len(runs) / vs)), "HorizontalSections": max(1, round(h / hs)),
                             "VerticalMullionWidth": mw, "VerticalMullionHeight": md, "HorizontalMullionWidth": mw, "HorizontalMullionHeight": md,
                             "PanelThickness": float(a.get("glass", 20))})
-        return finish(o, "bim_curtain_wall", {"length": round(length, 1), "height": h, "set": set_})
+        return finish(o, "bim_curtain_wall", {"length": round(length, 1), "height": h, "stretches": len(runs), "set": set_})
 
     def bim_rebar(a):
         host = picks.find(doc(), a.get("structure"), "structure")
         sh = getattr(host, "Shape", None)
-        if not isinstance(sh, Part.Shape) or not sh.Solids:
-            raise bad(f"structure: {host.Label} has no solid to reinforce.")
+        if not isinstance(sh, Part.Shape) or sh.isNull() or not sh.Solids:
+            raise bad(f"structure: {host.Label} has no solid to reinforce; give a slab, beam, column or footing (bim_structure).")
         mk = getattr(Arch, "makeRebar", None)
         if mk is None:
             raise ToolError("unavailable", "This FreeCAD's BIM has no rebar.")
+        if a.get("layer", "bottom") not in ("bottom", "top"):
+            raise bad("layer: bottom | top.")
         bb = sh.BoundBox
         cover = picks.num(a.get("cover", 30), "cover")
         dia = pos(a, "diameter", 12)
@@ -654,17 +818,21 @@ def tools(session):
             p0, p1, spread, width = V(bb.XMin, y, bb.ZMin + cover), V(bb.XMin, y, bb.ZMax - cover), V(1, 0, 0), bb.XLength
         else:
             raise bad("along: x | y | z — the bars' own direction.")
-        if (p1 - p0).Length <= 0:
-            raise bad("cover: more than the structure is long.")
+        if cover < 0:
+            raise bad("cover: 0 or more mm of concrete outside the bars.")
+        if (p1 - p0).dot({"x": V(1, 0, 0), "y": V(0, 1, 0), "z": V(0, 0, 1)}[along]) <= 0:
+            raise bad(f"cover: 2 × {cover:g} mm leaves no bar length along {along} (the structure's box is {bb.XLength:g} × {bb.YLength:g} × {bb.ZLength:g} mm); a smaller cover.")
         span = width - 2 * cover - dia
         if span <= 0:
-            raise bad("cover: more than the structure is wide.")
+            raise bad(f"cover and diameter leave no room across the structure ({width:g} mm wide there); a smaller cover.")
         if a.get("spacing"):
-            n = math.ceil(span / picks.num(a["spacing"], "spacing") - 1e-9) + 1  # at most the spacing asked
+            n = math.ceil(span / pos(a, "spacing", None) - 1e-9) + 1  # at most the spacing asked
         else:
             n = int(a.get("amount", 4))
         if n < 1:
-            raise bad("amount: 1 or more bars.")
+            raise bad("amount: 1 or more bars (or spacing mm).")
+        if n > 2000:
+            raise bad(f"{n} bars: too many to build in one call; a wider spacing or a smaller amount.")
         bar = doc().addObject("Part::Feature", "RebarLine")
         bar.Label = s.unique(f"{a.get('name') or 'Rebar'} line")
         bar.Shape = Part.makePolygon([p0, p1])
@@ -704,7 +872,10 @@ def tools(session):
         t = pos(a, "thickness", 18)
         if a.get("points"):
             base = baseline(a["points"], f"{a.get('name') or 'Panel'} outline", closed=True)
-            base.Shape = Part.Face(base.Shape)
+            try:
+                base.Shape = Part.Face(base.Shape)
+            except Exception:
+                raise bad("points: the outline is not flat or crosses itself; give the panel's corners in order.") from None
             o = headless_call(mk, base, thickness=t)
         else:
             o = headless_call(mk, None, length=pos(a, "length", 1000), width=pos(a, "width", 500), thickness=t)
@@ -716,32 +887,53 @@ def tools(session):
         mk = getattr(Arch, "makeAxis", None)
         if mk is None:
             raise ToolError("unavailable", "This FreeCAD's BIM has no axes.")
-        made = []
+        made, lines = [], {}
         for dirn, k in (("x", "xSpacing"), ("y", "ySpacing")):
             sp = a.get(k) or a.get("spacing")
             if not sp:
                 continue
-            sp = [float(x) for x in sp] if isinstance(sp, list) else [float(sp)] * (int(a.get("count", 4)) - 1)
-            ax = headless_call(mk, len(sp) + 1, float(a.get("length", 10000)))
+            if not isinstance(sp, list) and int(a.get("count", 4)) < 2:
+                raise bad("count: 2 or more grid lines (count - 1 spaces of spacing mm).")
+            try:
+                sp = [float(x) for x in sp] if isinstance(sp, list) else [float(sp)] * (int(a.get("count", 4)) - 1)
+            except (TypeError, ValueError):
+                raise bad(f"{k if a.get(k) else 'spacing'}: mm between grid lines, one number (with count) or a list of gaps.") from None
+            if any(x <= 0 for x in sp):
+                raise bad("spacing: every gap above 0 mm.")
+            length = pos(a, "length", 10000)
+            ax = headless_call(mk, len(sp) + 1, sp[0])
             ax.Distances = [0.0] + sp
+            ax.Angles = [0.0] * (len(sp) + 1)
+            ax.Length = length  # the lines' own length (makeAxis's second input is the gap, not this)
             if dirn == "y":
-                ax.Placement = FreeCAD.Placement(V(0, 0, 0), FreeCAD.Rotation(V(0, 0, 1), 90))
+                # An axis set's lines stand at x = 0, gap, … and run along +Y. Turned a quarter
+                # they run along -X, so the set is moved their length along X to cover 0 … length.
+                ax.Placement = FreeCAD.Placement(V(length, 0, 0), FreeCAD.Rotation(V(0, 0, 1), 90))
             named(ax, f"{a.get('name') or 'Grid'} {dirn.upper()}")
             made.append(ax.Label)
+            at, cur = [], 0.0
+            for g in [0.0] + sp:
+                cur += g
+                at.append(round(cur, 3))
+            lines[dirn] = at
         if not made:
-            raise bad("spacing (or xSpacing / ySpacing): mm between grid lines, one number or a list.")
-        return picks.finish(s, "bim_grid", lambda: {"axes": made})
+            raise bad("spacing (or xSpacing / ySpacing): mm between grid lines, one number (with count) or a list of gaps.")
+        return picks.finish(s, "bim_grid", lambda: {"axes": made, "lines": lines, "length": pos(a, "length", 10000)})
 
     def bim_section(a):
         mk = getattr(Arch, "makeSectionPlane", None)
         if mk is None:
             raise ToolError("unavailable", "This FreeCAD's BIM has no section plane.")
-        objs = [picks.find(doc(), r) for r in (a.get("objects") or [])] or [o for o in doc().Objects if is_bim(o) and not contained(o)]
-        o = headless_call(mk, objs)
+        objs = [picks.find(doc(), r, "objects") for r in (a.get("objects") or [])] or [o for o in doc().Objects if is_bim(o) and not contained(o)]
         n = vec(a.get("normal", [0, 0, 1]), "normal")
+        if n.Length < 1e-9:
+            raise bad("normal: a direction, not [0, 0, 0] ([0, 0, 1] for a plan cut, [0, 1, 0] for a section looking along Y).")
+        if not objs:
+            raise bad("Nothing to cut: no BIM objects here; give objects, or make some first (bim_wall …).")
+        o = headless_call(mk, objs)
         o.Placement = FreeCAD.Placement(vec(a.get("at", [0, 0, 1200]), "at"), FreeCAD.Rotation(V(0, 0, 1), n))
         named(o, a.get("name") or "Section")
-        return picks.finish(s, "bim_section", lambda: {"object": o.Label, "cuts": [x.Label for x in objs], "note": "A section plane for TechDraw (td_view of it) and the FreeCAD window; export { section: z } writes a plan cut as DXF/SVG headless."})
+        return picks.finish(s, "bim_section", lambda: {"object": o.Label, "cuts": [x.Label for x in objs], "note": "A section plane for TechDraw (td_bim of it) and the FreeCAD window; export { section: z } writes a plan cut as DXF/SVG headless."})
 
     def bim_material(a):
         mk = getattr(Arch, "makeMaterial", None)
@@ -753,62 +945,69 @@ def tools(session):
             mat = headless_call(mk, name)
             named(mat, name)
         data = dict(getattr(mat, "Material", {}) or {})
-        for k, key in (("density", "Density"), ("description", "Description"), ("color", "Color")):
-            if a.get(k) is not None:
-                data[key] = (f"{a[k]} kg/m^3" if k == "density" else str(a[k]))
+        if a.get("density") is not None:
+            data["Density"] = f"{pos(a, 'density', None):g} kg/m^3"
+        if a.get("description") is not None:
+            data["Description"] = str(a["description"])
+        if a.get("color") is not None:
+            # FreeCAD's material reads its colour from DiffuseColor, "(r, g, b)" each 0 … 1
+            # (ArchMaterial.onChanged); any other key is kept but colours nothing.
+            data["DiffuseColor"] = str(rgb(a["color"]))
+        objs = [picks.find(doc(), r, "objects") for r in (a.get("objects") or [])]
+        without = [o.Label for o in objs if not hasattr(o, "Material")]
+        if without:
+            raise bad(f"objects: {', '.join(without)} cannot carry a BIM material (not BIM components); bim_component {{ from }} makes a shape one.")
         mat.Material = data
-        objs = [picks.find(doc(), r) for r in (a.get("objects") or [])]
         for o in objs:
-            if hasattr(o, "Material"):
-                o.Material = mat
-        return picks.finish(s, "bim_material", lambda: {"material": mat.Label, "data": data, "on": [o.Label for o in objs if hasattr(o, "Material")]})
+            o.Material = mat
+        return picks.finish(s, "bim_material", lambda: {"material": mat.Label, "data": dict(mat.Material), "on": [o.Label for o in objs]})
 
     # The wrappers kept as data (agentlink/data/tools.json) run on these.
     helpers = {"doc": doc, "finish": finish, "named": named, "baseline": baseline, "setprops": setprops, "headless_call": headless_call,
-               "pos": pos, "num": picks.num, "is_bim": is_bim, "ifc_type": ifc_type,
+               "pos": pos, "num": picks.num, "is_bim": is_bim, "ifc_type": ifc_type, "ifc_set": ifc_set,
                "find": lambda ref, *what: picks.find(doc(), ref, *what), "finds": lambda refs: [picks.find(doc(), r) for r in (refs or [])]}
 
     pt = {"type": "array", "items": {"type": "number"}}
     pts = {"type": "array", "items": pt}
     return runners.tools(GROUP, s, helpers) + [
-        Tool("bim_wall", "A wall along points [[x, y(, z)] …] (closed: true joins the last to the first) or a base sketch/wire: width (200), height (3000) mm, align center | left | right of the line.",
+        Tool("bim_wall", "A wall along points [[x, y(, z)] …] mm (closed: true joins the last to the first) or a base sketch/wire: width (200), height (3000). align center | left (the line is the wall's left face going from the first point, so the wall lies to its right) | right. Answers length, box, min, volume_m3, base (the line bim_opening measures along).",
              obj({"points": pts, "closed": {"type": "boolean"}, "base": {"type": "string"}, "width": {"type": "number"}, "height": {"type": "number"},
                   "align": {"type": "string", "enum": ["center", "left", "right"]}, "name": {"type": "string"}}), bim_wall, changes=True),
-        Tool("bim_opening", "A window or door set into a wall, its opening cut through (the wall's subtraction): kind window | door — a frame (frame mm wide, depth mm deep) round a glass pane or a door panel — width, height, at (its left edge, mm along the wall from its start), sill (mm above the wall's foot: 900 window, 0 door), frame and depth mm.",
+        Tool("bim_opening", "A window or door in a wall, its opening cut through: kind window | door, width, height, at (the opening's left edge, mm along the wall's line from its first point; one straight stretch only), sill (900 window, 0 door), frame (50), depth (100). Whatever preset says, it is a plain frame round a pane or a door panel. Answers wallCut_m3 (0 with a warning: nothing was cut), opening (the cutting box), box, min.",
              obj({"wall": {"type": "string"}, "kind": {"type": "string", "enum": ["window", "door"]}, "preset": {"type": "string"}, "width": {"type": "number"}, "height": {"type": "number"},
                   "at": {"type": "number"}, "sill": {"type": "number"}, "frame": {"type": "number"}, "depth": {"type": "number"}, "name": {"type": "string"}}, ["wall"]), bim_opening, changes=True),
-        Tool("bim_structure", "Structure: column { at, width, depth, height }, beam { from, to, width, depth }, slab or footing { points outline or base, thickness (slab on top of the outline, footing below it) }.",
+        Tool("bim_structure", "Structure, mm: column { at (centre of its foot), width (X), depth (Y), height } | beam { from, to (centre line), width, depth (vertical) } | slab or footing { points (outline) or base (closed sketch/wire), thickness }: a slab rises from its outline, a footing hangs below. Answers box, min, volume_m3.",
              obj({"kind": {"type": "string", "enum": list(ROLES)}, "at": pt, "from": pt, "to": pt, "points": pts, "base": {"type": "string"}, "width": {"type": "number"}, "depth": {"type": "number"},
                   "height": {"type": "number"}, "thickness": {"type": "number"}, "name": {"type": "string"}}), bim_structure, changes=True),
-        Tool("bim_profiles", "FreeCAD's section library (steel HEA/HEB/IPE/UPN/RHS/CHS …, timber): search a name, category. Changes nothing.",
+        Tool("bim_profiles", "FreeCAD's section library (steel HEA/HEB/IPE/UPN/RHS/CHS …, timber): search (part of a name), category, limit (40). Answers profiles [{ name, category, type, dims }]. Changes nothing.",
              obj({"search": {"type": "string"}, "category": {"type": "string"}, "limit": {"type": "integer"}}), bim_profiles),
-        Tool("bim_member", "A structural member of a library section from one point to another (a beam across, a column upright): profile (\"HEB200\", \"IPE300\"; bim_profiles lists them), from, to, rotate degrees about its length, density kg/m³ (steel 7850). Answers mass and kg/m.",
+        Tool("bim_member", "A library section between two points (its centre line): profile (\"HEB200\"; bim_profiles lists them), from, to, rotate degrees about its length, density kg/m³ (7850 steel, 500 timber). Answers length, mass_kg, kgPerM (root radii left out, so a little light).",
              obj({"profile": {"type": "string"}, "from": pt, "to": pt, "rotate": {"type": "number"}, "density": {"type": "number"}, "name": {"type": "string"}}, ["profile", "from", "to"]), bim_member, changes=True),
-        Tool("bim_roof", "A roof over a closed outline (points, at the eaves' height, or base): angle degrees (one, or one per edge; 90 makes a gable end), thickness, overhang mm.",
+        Tool("bim_roof", "A pitched roof over a closed outline of straight edges at the eaves' height (points or base), a pane rising from each edge: angle degrees, one or a list per edge in the outline's order (90: a gable end); run mm from each edge to its ridge (half the outline's depth by default); thickness (150), overhang (300). Either way round works. Answers angles, runs, ridge (height above the eaves), box, volume_m3.",
              obj({"points": pts, "base": {"type": "string"}, "angle": {}, "run": {}, "thickness": {"type": "number"}, "overhang": {"type": "number"}, "name": {"type": "string"}}), bim_roof, changes=True),
-        Tool("bim_stairs", "A straight flight: at (the foot, on its left side going up), direction [x, y] it climbs, length (its run), width, height (floor to floor), steps (height / 175 by default). Answers riser, going and 2R + G.",
+        Tool("bim_stairs", "A straight flight, mm: at (the foot, on its left side going up), direction [x, y], length (run, 4500), width (1000), height (3000), steps (risers; height / 175 by default). Answers riser, going, blondel (2 risers + going; 600–650 is comfortable). FreeCAD 1.1 may add Railing objects.",
              obj({"at": pt, "direction": pt, "length": {"type": "number"}, "width": {"type": "number"}, "height": {"type": "number"}, "steps": {"type": "integer"}, "name": {"type": "string"}}), bim_stairs, changes=True),
-        Tool("bim_space", "A space (a room) from its floor outline (points, height) or a base solid: its floor area; use the space's purpose.",
+        Tool("bim_space", "A room from its floor outline (points, height 2600) or a base solid. use: one of FreeCAD's space types (Room, Office, Restrooms, Corridor / Transition …; a wrong one is refused with near names); a free name goes in name. Answers area_m2, use, box.",
              obj({"points": pts, "base": {"type": "string"}, "height": {"type": "number"}, "use": {"type": "string"}, "name": {"type": "string"}}), bim_space, changes=True),
-        Tool("bim_building", "A building holding levels, on a site (site: false for none).",
+        Tool("bim_building", "A building holding levels (labels from bim_level; make them first), on a site too (site: false for none; siteName). Answers levels, site.",
              obj({"levels": {"type": "array", "items": {"type": "string"}}, "site": {"type": "boolean"}, "siteName": {"type": "string"}, "name": {"type": "string"}}), bim_building, changes=True),
-        Tool("bim_curtain_wall", "A curtain wall along points, height mm: mullions every vertical / horizontal mm (1500), mullion width and depth, glass thickness.",
+        Tool("bim_curtain_wall", "A curtain wall along points, height mm (3000): a mullion about every vertical / horizontal mm (1500; each straight stretch gets the same count), mullion width (50) and depth (100), glass thickness (20). Answers length, stretches, set (what FreeCAD took).",
              obj({"points": pts, "height": {"type": "number"}, "vertical": {"type": "number"}, "horizontal": {"type": "number"}, "mullion": {"type": "number"},
                   "depth": {"type": "number"}, "glass": {"type": "number"}, "name": {"type": "string"}}, ["points"]), bim_curtain_wall, changes=True),
-        Tool("bim_rebar", "Straight reinforcing bars in a structure (slab, beam, column, footing): along x | y | z (the bars' direction), layer bottom | top, diameter (12), cover (30), spacing or amount. Answers bars, total length and steel mass.",
+        Tool("bim_rebar", "Straight bars in a structure, laid out in its bounding box: along x | y | z (the bars' direction), layer bottom | top, diameter (12), cover (30), spacing mm (never wider than asked) or amount (4). Answers made (FreeCAD's rebar, or plain bars), bars, spacing, totalLength_m, mass_kg.",
              obj({"structure": {"type": "string"}, "along": {"type": "string", "enum": ["x", "y", "z"]}, "layer": {"type": "string", "enum": ["bottom", "top"]}, "diameter": {"type": "number"},
                   "cover": {"type": "number"}, "spacing": {"type": "number"}, "amount": {"type": "integer"}, "name": {"type": "string"}}, ["structure"]), bim_rebar, changes=True),
-        Tool("bim_panel", "A panel (sheet material: plywood, cladding): an outline (points) or length × width at, thickness (18).",
+        Tool("bim_panel", "A panel (sheet material), mm: an outline (points, flat) or length (1000) × width (500) centred on at; thickness (18). Answers box, volume_m3. bim_panel_out lays panels out for cutting.",
              obj({"points": pts, "length": {"type": "number"}, "width": {"type": "number"}, "thickness": {"type": "number"}, "at": pt, "name": {"type": "string"}}), bim_panel, changes=True),
-        Tool("bim_grid", "Structural grid lines: spacing mm (one number with count, or a list), or xSpacing / ySpacing each; length of the lines.",
+        Tool("bim_grid", "Grid lines from the origin: spacing mm (one number with count lines, or a list of gaps) for both ways, or xSpacing (lines at x = 0, gap …, running along Y) and ySpacing each; length of the lines (10000). Answers axes (\"Grid X\", \"Grid Y\") and lines (where each stands).",
              obj({"spacing": {}, "xSpacing": {}, "ySpacing": {}, "count": {"type": "integer"}, "length": {"type": "number"}, "name": {"type": "string"}}), bim_grid, changes=True),
-        Tool("bim_section", "A section plane through objects (all BIM objects when left out): at, normal ([0,0,1] for a plan cut).",
+        Tool("bim_section", "A section plane through objects (every BIM object not in a level when left out): at ([0, 0, 1200]), normal ([0, 0, 1]: a plan cut). It draws nothing itself: td_bim puts it on a page; export { section: z } writes a plan cut as DXF/SVG.",
              obj({"objects": {"type": "array", "items": {"type": "string"}}, "at": pt, "normal": pt, "name": {"type": "string"}}), bim_section, changes=True),
-        Tool("bim_material", "A BIM material (made if new): name, density kg/m³, description, color; put on objects.",
+        Tool("bim_material", "A BIM material by name (made if new): density kg/m³ (what bim_quantities weighs with), description, color (\"#rrggbb\" or \"r, g, b\" 0 to 1); put on objects (BIM components). Answers material, data, on.",
              obj({"name": {"type": "string"}, "density": {"type": "number"}, "description": {"type": "string"}, "color": {"type": "string"}, "objects": {"type": "array", "items": {"type": "string"}}}, ["name"]), bim_material, changes=True),
-        Tool("bim_schedule", "Quantities: every wall (length, height, area, volume), window and door (size, area), column, beam, slab, roof, stairs (volume) and space (floor area), with totals by kind; sheet: true (or a name) writes them to a spreadsheet.",
-             obj({"sheet": {}}), bim_schedule),
-        Tool("bim_export", "Write IFC (path .ifc): the site or building, or objects; read back by type. Needs IfcOpenShell.",
+        Tool("bim_schedule", "Quantities read off the model (Agent Link's own, not an Arch schedule object): walls (length, height, width, area, volume), windows and doors, columns, beams, slabs, footings, roofs, stairs, rebar, spaces, as rows with totals by kind. sheet: true (or a name) also writes a spreadsheet (a change).",
+             obj({"sheet": {}}), bim_schedule, changes=True, reads={"sheet": [None, False, ""]}),
+        Tool("bim_export", "Write IFC (path, .ifc added; the output folder when relative): the site or building with all it holds, or objects. IFC lengths are metres. Answers path, bytes, schema, readBack (count by IFC class, read from the file). Without IfcOpenShell: refused 'unavailable' with the install step.",
              obj({"objects": {"type": "array", "items": {"type": "string"}}, "path": {"type": "string"}}), bim_export),
-        Tool("bim_import", "Read an IFC file into the document (path). Needs IfcOpenShell.", obj({"path": {"type": "string"}}, ["path"]), bim_import, changes=True),
+        Tool("bim_import", "Read an IFC file (path) into the document as FreeCAD objects. Answers objects, byType, read (which reader). Thousands of elements can outlast the call; to edit a file in place, ifc_open instead. Needs IfcOpenShell.", obj({"path": {"type": "string"}}, ["path"]), bim_import, changes=True),
     ]

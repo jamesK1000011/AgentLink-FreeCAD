@@ -107,7 +107,7 @@ def tools(session):
     def model():
         m = getattr(s, "_agentlink_ifc", None)
         if not m:
-            raise ToolError("invalid_state", "No IFC open: ifc_open { path } first.")
+            raise ToolError("invalid_state", "No IFC file is open in this session: ifc_open { path } first (bim_export writes one from the model).")
         return m
 
     def where(p):
@@ -119,7 +119,7 @@ def tools(session):
             raise bad("path: an .ifc file.")
         path = where(p)
         if not os.path.isfile(path):
-            raise ToolError("not_found", f"{p}: no such file.")
+            raise ToolError("not_found", f"path {p!r}: no such file (a relative path is looked for in the session's output folder, where bim_export writes).")
         try:
             f = ifcopenshell.open(path)
         except Exception as e:
@@ -141,13 +141,13 @@ def tools(session):
                 try:
                     out.append(f.by_guid(g))
                 except Exception:
-                    raise ToolError("not_found", f"{g}: no element with that GlobalId.")
+                    raise ToolError("not_found", f"ids: {g!r} is no element's GlobalId in the open file (ifc_find lists them as id; they are 22 characters, not names).") from None
             return out
         cls = a.get("class") or "IfcProduct"
         try:
             els = f.by_type(cls)
         except Exception:
-            raise bad(f"class {cls!r}: not an IFC class in {f.schema} (IfcWall, IfcSlab, IfcBeam, IfcWindow, IfcSpace …).")
+            raise bad(f"class {cls!r}: not an IFC class in {f.schema}. Classes are written IfcWall, IfcSlab, IfcBeam, IfcWindow, IfcSpace …; ifc_open lists those in the file.") from None
         if a.get("name"):
             n = str(a["name"]).lower()
             els = [e for e in els if n in str(e.Name or "").lower()]
@@ -172,8 +172,14 @@ def tools(session):
         els = select(f, a)
         if not els:
             raise ToolError("not_found", "No element matches: ifc_find with the same filters shows what is there.")
+        if not any(a.get(k) for k in ("attributes", "properties", "material", "storey_to", "classification")):
+            raise bad("Nothing to change: give attributes, properties, material, storey_to or classification (ifc_find only looks).")
+        if not (a.get("ids") or a.get("class") or a.get("name") or a.get("storey") or a.get("where")):
+            raise bad("Say which elements: ids, class, name, storey or where (as ifc_find takes them); with none of them every product in the file would be changed.")
         if len(els) > int(a.get("max", 200)):
             raise bad(f"{len(els)} elements match: narrow it, or max: {len(els)} to change them all.")
+        if a.get("classification") is not None and not (isinstance(a["classification"], dict) and a["classification"].get("code")):
+            raise bad("classification: { system (e.g. \"Uniclass 2015\"), code (e.g. \"Ss_25_10\"), title }; code is needed.")
         done = {"attributes": 0, "properties": 0, "material": 0, "storey": 0, "classification": 0}
         attrs = a.get("attributes") or {}
         props = a.get("properties") or {}
@@ -190,13 +196,13 @@ def tools(session):
         if a.get("storey_to"):
             storey = next((x for x in f.by_type("IfcBuildingStorey") if x.Name == a["storey_to"]), None)
             if storey is None:
-                raise ToolError("not_found", f"storey {a['storey_to']!r}: the storeys are {', '.join(x.Name for x in f.by_type('IfcBuildingStorey'))}.")
+                raise ToolError("not_found", f"storey_to {a['storey_to']!r}: the file's storeys are {', '.join(str(x.Name) for x in f.by_type('IfcBuildingStorey')) or 'none'} (by name, exactly).")
         for el in els:
             if attrs:
                 try:
                     run(f, "attribute.edit_attributes", product=el, attributes=attrs)
                 except Exception as e:
-                    raise bad(f"attributes on {el.is_a()}: {e}")
+                    raise bad(f"attributes on {el.is_a()}: {e}. Attribute names are IFC's own (Name, Description, ObjectType, Tag …); anything else is a property: properties {{ \"Pset.Name\": value }}.") from None
                 done["attributes"] += 1
             for ps, vals in grouped.items():
                 existing = uel.get_pset(el, ps)
@@ -240,7 +246,7 @@ def tools(session):
         m = model()
         f = m["file"]
         if not a.get("ids"):
-            raise bad("ids: the GlobalIds to remove (ifc_find lists them) — removal goes by id only.")
+            raise bad("ids: the GlobalIds to remove (ifc_find lists them as id); removal goes by id only, never by class or name.")
         els = select(f, {"ids": a["ids"]})
         names = [row(e) for e in els]
         for e in els:
@@ -264,7 +270,16 @@ def tools(session):
         pa, pb = a.get("a"), a.get("b")
         if not (pa and pb):
             raise bad("a and b: two IFC files (paths), the old and the new.")
-        fa, fb = ifcopenshell.open(where(pa)), ifcopenshell.open(where(pb))
+        files = []
+        for key, p in (("a", pa), ("b", pb)):
+            path = where(p)
+            if not os.path.isfile(path):
+                raise ToolError("not_found", f"{key} {p!r}: no such file (a relative path is looked for in the session's output folder).")
+            try:
+                files.append(ifcopenshell.open(path))
+            except Exception as e:
+                raise bad(f"{key} {p!r}: not an IFC file IfcOpenShell can read ({e}).") from None
+        fa, fb = files
         ia = {e.GlobalId: e for e in fa.by_type("IfcProduct")}
         ib = {e.GlobalId: e for e in fb.by_type("IfcProduct")}
         added = [row(ib[g]) for g in ib.keys() - ia.keys()]
@@ -297,15 +312,15 @@ def tools(session):
     s_ = {"type": "string"}
     sel = {"ids": {"type": "array", "items": s_}, "class": s_, "name": s_, "storey": s_, "where": {"type": "object"}}
     return [
-        Tool("ifc_open", "Open an IFC file to edit in place (as BIM's native IFC mode does: the file is the model): path. Answers its schema, project, storeys and element counts by class.",
+        Tool("ifc_open", "Open an IFC file (path) to edit in place with IfcOpenShell: nothing is added to the FreeCAD document, and GlobalIds and all that is untouched stay as they are. One file at a time. Answers schema, storeys (elevation in the file's unit), classes (counts). The ifc_ tools exist only when FreeCAD has IfcOpenShell.",
              obj({"path": s_}, ["path"]), ifc_open),
-        Tool("ifc_find", "Find elements in the open IFC: class (IfcWall, IfcBeam …), name (contains), storey, where { \"Pset_WallCommon.IsExternal\": true }, ids; detail: true adds property sets, quantities, material and description.",
+        Tool("ifc_find", "Find elements in the open IFC, filters combined: class (IfcWall …; every product when left out), name (contains), storey (exact name), where { \"Pset_WallCommon.IsExternal\": true }, or ids (GlobalIds). limit (50); detail: true adds psets, quantities, material. Answers elements [{ id, class, name, storey }].",
              obj({**sel, "detail": {"type": "boolean"}, "limit": {"type": "integer"}}), ifc_find),
-        Tool("ifc_edit", "Change elements of the open IFC in place, chosen as ifc_find chooses them: attributes { Name, Description, ObjectType, Tag }, properties { \"Pset_WallCommon.FireRating\": \"REI60\" } (sets made as needed), material (by name, made if new), storey_to (move to a storey), classification { system, code, title }. max guards a wide change.",
+        Tool("ifc_edit", "Change elements of the open IFC, chosen by ifc_find's filters (one at least): attributes { Name, Description, ObjectType, Tag }, properties { \"Pset_WallCommon.FireRating\": \"REI60\" }, material (by name), storey_to (a storey's name), classification { system, code, title }. Over max (200) matches is refused. In memory until ifc_save.",
              obj({**sel, "attributes": {"type": "object"}, "properties": {"type": "object"}, "material": s_, "storey_to": s_, "classification": {"type": "object"}, "max": {"type": "integer"}}), ifc_edit),
-        Tool("ifc_remove", "Remove elements from the open IFC by GlobalId (ids), with their relationships.", obj({"ids": {"type": "array", "items": s_}}, ["ids"]), ifc_remove),
-        Tool("ifc_save", "Write the open IFC: path (default <name>_edited.ifc in the session folder), or overwrite: true to write it back over the file it came from.",
+        Tool("ifc_remove", "Remove elements from the open IFC by GlobalId (ids, from ifc_find), with their openings and relationships. In memory until ifc_save; outside undo.", obj({"ids": {"type": "array", "items": s_}}, ["ids"]), ifc_remove),
+        Tool("ifc_save", "Write the open IFC with its edits: path (default <name>_edited.ifc in the output folder), or overwrite: true to write over the file it came from.",
              obj({"path": s_, "overwrite": {"type": "boolean"}}), ifc_save),
-        Tool("ifc_diff", "Compare two IFC files by GlobalId: elements added, removed, and changed (attributes, property sets, material, storey). a, b paths. Changes nothing.",
+        Tool("ifc_diff", "Compare two IFC files (a old, b new) by GlobalId: elements added, removed and changed (attributes, property sets, material, storey; not geometry). limit (60). Changes nothing.",
              obj({"a": s_, "b": s_, "limit": {"type": "integer"}}, ["a", "b"]), ifc_diff),
     ]

@@ -1,0 +1,463 @@
+{
+ "tutorial": "Points_Workbench.md with Points_Convert.md, Points_Import.md, Points_Export.md, Points_Merge.md, Points_Structure.md and Reverse_Engineering_Workbench.md. There is no step-by-step Points tutorial on the wiki, so the model samples bodies of known size (as Points Convert does), writes and reads the cloud back (Points Export / Import), and fits the shapes it came from.",
+ "reference": "FreeCAD/Examples: Point_cloud_ExampleFiles/PointCloud-Data_Stanford-Bunny.asc (397 points, metres)",
+ "expected": {
+  "sample": {
+   "count": 6000
+  },
+  "exportReadBack": {
+   "ply": 6000,
+   "csv": 6000,
+   "pcd": 6000
+  },
+  "cylinder": {
+   "radius": 10,
+   "diameter": 20,
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "lengthOfCroppedWall": 36
+  },
+  "plane": {
+   "normal": [
+    0,
+    0,
+    1
+   ],
+   "z": 40
+  },
+  "sphere": {
+   "centre": [
+    100,
+    0,
+    0
+   ],
+   "radius": 15
+  },
+  "plateTopArea_mm2": 2400,
+  "bunny": {
+   "points": 397,
+   "min_mm": [
+    -93.938,
+    37.42,
+    -55.026
+   ],
+   "max_mm": [
+    59.562,
+    184.5,
+    57.803
+   ],
+   "box_mm": [
+    153.5,
+    147.08,
+    112.829
+   ]
+  }
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "PointsModel"
+   },
+   "expect": "a new empty document"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 10,
+    "height": 40,
+    "at": [
+     0,
+     0,
+     0
+    ],
+    "name": "Shaft"
+   },
+   "expect": "volume 12566.37; box [20, 20, 40]"
+  },
+  {
+   "tool": "points_sample",
+   "arguments": {
+    "object": "Shaft",
+    "count": 6000,
+    "seed": 1,
+    "name": "Shaft cloud"
+   },
+   "expect": "object 'Shaft cloud'; points 6000; min about [-10, -10, 0]; max about [10, 10, 40]; box about [20, 20, 40]; from Shaft"
+  },
+  {
+   "tool": "points_info",
+   "arguments": {
+    "points": "Shaft cloud"
+   },
+   "expect": "points 6000; centre about [0, 0, 20]; spacing about 0.5 to 0.8 (3142 mm2 over 6000 points)"
+  },
+  {
+   "tool": "points_export",
+   "arguments": {
+    "points": "Shaft cloud",
+    "path": "shaft.ply"
+   },
+   "expect": "count 6000; readBack 6000 (count preserved); maxError under 0.0001 (32-bit floats); bytes 72000 plus the header; no warning"
+  },
+  {
+   "tool": "points_export",
+   "arguments": {
+    "points": "Shaft cloud",
+    "path": "shaft.csv"
+   },
+   "expect": "count 6000; readBack 6000; maxError under 0.000001"
+  },
+  {
+   "tool": "points_export",
+   "arguments": {
+    "points": "Shaft cloud",
+    "path": "shaft.pcd"
+   },
+   "expect": "count 6000; readBack 6000"
+  },
+  {
+   "tool": "points_export",
+   "arguments": {
+    "points": "Shaft cloud",
+    "path": "shaft.stl"
+   },
+   "expect": "refused: not a format written here, with the five that are"
+  },
+  {
+   "tool": "points_import",
+   "arguments": {
+    "path": "shaft.ply",
+    "name": "Shaft back"
+   },
+   "expect": "points 6000; read 6000; box as the cloud's"
+  },
+  {
+   "tool": "points_import",
+   "arguments": {
+    "path": "shaft.csv",
+    "every": 2,
+    "scale": 2,
+    "name": "Shaft half"
+   },
+   "expect": "read 6000; points 3000; box about [40, 40, 80] (scaled 2x)"
+  },
+  {
+   "tool": "points_crop",
+   "arguments": {
+    "points": "Shaft cloud",
+    "box": [
+     [
+      -11,
+      -11,
+      2
+     ],
+     [
+      11,
+      11,
+      38
+     ]
+    ],
+    "replace": false,
+    "name": "Shaft wall"
+   },
+   "expect": "the wall without the end caps: from 6000; kept about 4320 (the wall between z 2 and 38 is 72% of the area); min z 2 or just above; 'Shaft cloud' still has 6000"
+  },
+  {
+   "tool": "points_fit",
+   "arguments": {
+    "points": "Shaft wall",
+    "shape": "cylinder",
+    "tolerance": 0.05,
+    "make": true,
+    "name": "Shaft fit"
+   },
+   "expect": "radius 10 (within 0.02; the facets lie just inside the true cylinder), diameter 20, axis [0, 0, 1], base about [0, 0, 2], length about 36; rms under 0.01; max under 0.02; verdict fits; body 'Shaft fit' (a cylinder of that size)"
+  },
+  {
+   "tool": "points_fit",
+   "arguments": {
+    "points": "Shaft cloud",
+    "shape": "cylinder",
+    "tolerance": 0.05
+   },
+   "expect": "the whole cloud, caps included: the fit is pulled off (max several mm) and verdict 'does not fit': the trap the guide names"
+  },
+  {
+   "tool": "points_crop",
+   "arguments": {
+    "points": "Shaft cloud",
+    "plane": {
+     "at": [
+      0,
+      0,
+      39.99
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ]
+    },
+    "replace": false,
+    "name": "Shaft top"
+   },
+   "expect": "the top cap alone: kept about 600 (10% of the area); min z 40"
+  },
+  {
+   "tool": "points_fit",
+   "arguments": {
+    "points": "Shaft top",
+    "shape": "plane",
+    "tolerance": 0.01,
+    "make": true,
+    "name": "Top plane"
+   },
+   "expect": "centre about [0, 0, 40]; normal [0, 0, 1]; rms 0; max 0; verdict fits; body 'Top plane' (a flat face about 20 x 20)"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "sphere",
+    "radius": 15,
+    "at": [
+     100,
+     0,
+     0
+    ],
+    "name": "Ball"
+   },
+   "expect": "a sphere of radius 15 centred [100, 0, 0]"
+  },
+  {
+   "tool": "points_sample",
+   "arguments": {
+    "object": "Ball",
+    "count": 3000,
+    "noise": 0.02,
+    "seed": 3,
+    "name": "Ball cloud"
+   },
+   "expect": "points 3000; noise 0.02"
+  },
+  {
+   "tool": "points_fit",
+   "arguments": {
+    "points": "Ball cloud",
+    "shape": "sphere",
+    "tolerance": 0.1
+   },
+   "expect": "centre [100, 0, 0] within 0.01; radius 15 within 0.01; diameter 30; rms about 0.02 (the noise); verdict fits"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     60,
+     40,
+     10
+    ],
+    "at": [
+     0,
+     100,
+     0
+    ],
+    "name": "Plate"
+   },
+   "expect": "a plate to scan from above"
+  },
+  {
+   "tool": "points_sample",
+   "arguments": {
+    "object": "Plate",
+    "count": 6000,
+    "name": "Plate cloud"
+   },
+   "expect": "points 6000"
+  },
+  {
+   "tool": "points_crop",
+   "arguments": {
+    "points": "Plate cloud",
+    "box": [
+     [
+      0,
+      100,
+      9.9
+     ],
+     [
+      60,
+      140,
+      10.1
+     ]
+    ],
+    "replace": false,
+    "name": "Plate top"
+   },
+   "expect": "the top face: kept about 2118 (2400 of 6800 mm2)"
+  },
+  {
+   "tool": "points_mesh",
+   "arguments": {
+    "points": "Plate top",
+    "method": "height",
+    "name": "Plate mesh"
+   },
+   "expect": "mesh 'Plate mesh'; area between 2040 and 2450 (the 60 x 40 face, short of its edges by a cell); closed false"
+  },
+  {
+   "tool": "points_mesh",
+   "arguments": {
+    "points": "Shaft cloud",
+    "method": "hull"
+   },
+   "expect": "the convex hull of the cylinder: closed true; area about 3100 (3141.6 for the true cylinder)"
+  },
+  {
+   "tool": "points_mesh",
+   "arguments": {
+    "points": "Shaft cloud",
+    "method": "poisson"
+   },
+   "expect": "refused 'unavailable' on a FreeCAD without PCL, naming height and hull (or a closed mesh where it has PCL)"
+  },
+  {
+   "tool": "points_fit",
+   "arguments": {
+    "points": "Plate top",
+    "shape": "surface",
+    "degree": 3,
+    "poles": 6,
+    "name": "Plate surface"
+   },
+   "expect": "a B-spline sheet over the top: rms and max near 0; area about 2400; body 'Plate surface'"
+  },
+  {
+   "tool": "points_crop",
+   "arguments": {
+    "points": "Plate cloud",
+    "box": [
+     [
+      -1,
+      99,
+      4.5
+     ],
+     [
+      61,
+      100.01,
+      5.5
+     ]
+    ],
+    "replace": false,
+    "name": "Plate edge"
+   },
+   "expect": "a thin band of points along the front side at mid height (a line of points)"
+  },
+  {
+   "tool": "points_fit",
+   "arguments": {
+    "points": "Plate edge",
+    "shape": "curve",
+    "tolerance": 0.5
+   },
+   "expect": "an open B-spline edge about 60 long; closed false; body made"
+  },
+  {
+   "tool": "points_merge",
+   "arguments": {
+    "points": [
+     "Shaft wall",
+     "Shaft top"
+    ],
+    "name": "Shaft parts"
+   },
+   "expect": "points 'Shaft parts'; count = the two kept counts added"
+  },
+  {
+   "tool": "points_structure",
+   "arguments": {
+    "points": "Shaft cloud",
+    "width": 100,
+    "name": "Shaft grid"
+   },
+   "expect": "points 'Shaft grid'; width 100; height 60 (6000 / 100). The original stays"
+  },
+  {
+   "tool": "points_structure",
+   "arguments": {
+    "points": "Shaft cloud",
+    "width": 7
+   },
+   "expect": "refused: 7 does not divide 6000; the message lists widths that do"
+  },
+  {
+   "tool": "points_import",
+   "arguments": {
+    "path": "PointCloud-Data_Stanford-Bunny.asc",
+    "scale": 1000,
+    "name": "Bunny"
+   },
+   "expect": "the wiki's sample cloud (copy it into the session's output folder first; it is in metres): read 397; points 397; min [-93.938, 37.42, -55.026]; max [59.562, 184.5, 57.803]; box [153.5, 147.08, 112.829]"
+  },
+  {
+   "tool": "points_info",
+   "arguments": {
+    "points": "Bunny"
+   },
+   "expect": "points 397; centre about [-29.081, 102.653, 27.302]; spacing a few mm"
+  },
+  {
+   "tool": "points_crop",
+   "arguments": {
+    "points": "Bunny",
+    "specks": {
+     "radius": 25,
+     "least": 2
+    },
+    "thin": 5,
+    "replace": false,
+    "name": "Bunny thin"
+   },
+   "expect": "from 397; kept a little under 397; specksDropped 0 or a few"
+  },
+  {
+   "tool": "points_crop",
+   "arguments": {
+    "points": "Bunny",
+    "box": [
+     [
+      1000,
+      1000,
+      1000
+     ],
+     [
+      2000,
+      2000,
+      2000
+     ]
+    ]
+   },
+   "expect": "refused: nothing left; the message gives the cloud's span; the cloud is unchanged (points_info still 397)"
+  },
+  {
+   "tool": "points_mesh",
+   "arguments": {
+    "points": "Bunny",
+    "method": "hull",
+    "name": "Bunny hull"
+   },
+   "expect": "closed true; facets a few hundred at most; box as the cloud's"
+  }
+ ],
+ "notCovered": [
+  "points_import .e57: needs an E57 file and a FreeCAD built with the E57 library",
+  "points_mesh poisson where FreeCAD has PCL",
+  "a cloud moved by its Placement (the double-placement fix): tests/test_more_families.py test_points_hardening moves one 100 mm and reads it; live, object_set { object: \"Shaft cloud\", values: { Placement: { at: [100, 0, 0] } } } then points_info should show min x about 90, not 190",
+  "points_structure against FreeCAD's own Points Structure command, which sorts the points onto an XY grid; the tool only lays the existing order out as rows"
+ ]
+}
