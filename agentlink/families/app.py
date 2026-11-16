@@ -728,6 +728,9 @@ def tools(session):
             if hit is None:
                 raise ToolError("not_found", f"activate: no workbench {a['activate']!r} — the workbenches: " + ", ".join(sorted(getattr(w, "MenuText", k) for k, w in names.items())) + ".")
             was = gui.activeWorkbench().name()
+            from .. import echo
+
+            echo.bench_ready(hit)  # OpenSCAD's first start would otherwise ask Finder for the program and wait
             ok = gui.activateWorkbench(hit)
             if ok is False or gui.activeWorkbench().name() != hit:
                 raise ToolError("failed", f"FreeCAD did not switch to {hit} (still {gui.activeWorkbench().name()}): the workbench failed to load — report_read {{ problems: true }} shows its error.")

@@ -509,6 +509,24 @@ def bench_to_switch(name, loaded, active):
     return wb
 
 
+def bench_ready(wb):
+    """Before a workbench is brought up from here: what must be in place so
+    its first start cannot stop the window. OpenSCAD's start looks for the
+    OpenSCAD program when FreeCAD's preference for it is empty — on a Mac by
+    asking Finder through AppleScript, with no time limit, behind a permission
+    prompt (FreeCAD 1.1: src/Mod/OpenSCAD/InitGui.py, OpenSCADUtils.py): the
+    plain search is put in its place first. Never raises."""
+    if wb != "OpenSCADWorkbench":
+        return
+    try:
+        from .families import openscad
+
+        openscad.plain_search()
+    except Exception as e:  # noqa: BLE001
+        if FreeCAD is not None:
+            FreeCAD.Console.PrintLog(f"Agent Link: OpenSCAD's search was not replaced ({e})\n")
+
+
 class Echo:
     def __init__(self, session):
         self.s = session
@@ -544,6 +562,7 @@ class Echo:
                 act = FreeCADGui.activeWorkbench()
                 wb = bench_to_switch(tool.name, FreeCADGui.listWorkbenches(), act.name() if act else None)
                 if wb:
+                    bench_ready(wb)
                     FreeCADGui.activateWorkbench(wb)
                 self._mode(tool.name, args)
             caption(_describe(tool.name, args))

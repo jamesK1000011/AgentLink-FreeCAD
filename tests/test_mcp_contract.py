@@ -16,6 +16,11 @@ from _pd_base import HAVE, Base
 SKIP_FUZZ = {"doc_open", "agentlink_update", "printer_stop", "printer_pause", "printer_status", "printer_list", "patent_search"}
 READ_WORDS = ("_list", "_get", "_read", "_info", "_state", "_status", "_results", "_probe", "_geometry", "_query", "_preflight", "_quantities", "_check", "_bom", "_lookup", "_identify", "_review", "_fits", "_limits")
 DESC_MAX = 1500   # characters: a description longer than this costs every turn it is listed
+# The hub's own descriptions already past DESC_MAX, each with a ceiling of
+# its own: the owner has ruled that descriptions are not cut to fit this
+# test, so these two stand as they are (both in the dev group, off the lean
+# listing) and are only kept from growing unnoticed.
+DESC_KEPT = {"live_run": 2600, "gui_input": 1850}
 LEAN_MAX = 90_000  # bytes: the lean listing, all of it sent at the start of a session
 
 
@@ -23,6 +28,25 @@ LEAN_MAX = 90_000  # bytes: the lean listing, all of it sent at the start of a s
 class McpContract(Base):
     def listing(self):
         return self.server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})["result"]["tools"]
+
+    def own(self):
+        """The hub's own tools, by name. An installed add-on's tools are
+        judged by the add-on's own tests, not here: this suite also runs on
+        computers with add-ons installed, where their tools are in the same
+        server. An add-on's family is known by its group (families.EXTENSIONS,
+        filled as the server is built); a hub family whose group an add-on
+        has joined is still the hub's, known by where its function is
+        written."""
+        from agentlink import families
+
+        theirs = {g for e in families.EXTENSIONS for g in (e.get("groups") or [])}
+
+        def hub(t):
+            if t.group not in theirs:
+                return True
+            return (getattr(t.fn, "__module__", None) or "").startswith("agentlink.families.")
+
+        return {n: t for n, t in self.server.tools.items() if hub(t)}
 
     def test_names_and_schemas(self):
         tools = self.listing()
@@ -50,16 +74,18 @@ class McpContract(Base):
         self.assertEqual(bad, [], "\n".join(bad))
 
     def test_descriptions(self):
-        tools = self.listing()
+        own = self.own()
+        self.assertIn("doc_new", own)
+        tools = [t for t in self.listing() if t["name"] in own]
         long_ = sorted(((len(t["description"]), t["name"]) for t in tools), reverse=True)
         print("\nlongest descriptions:", long_[:8], file=sys.stderr)
-        too = [f"{n}: {l} chars" for l, n in long_ if l > DESC_MAX]
+        too = [f"{n}: {l} chars (at most {DESC_KEPT.get(n, DESC_MAX)})" for l, n in long_ if l > DESC_KEPT.get(n, DESC_MAX)]
         self.assertEqual(too, [], "\n".join(too))
         empty = [t["name"] for t in tools if len(t["description"]) < 20]
         self.assertEqual(empty, [])
 
     def test_read_only_tools_say_so(self):
-        wrong = [n for n, t in self.server.tools.items() if any(n.endswith(w) or (w + "_") in n for w in READ_WORDS) and t.changes and n not in ("asm_check", "asm_limits", "asm_bom")]
+        wrong = [n for n, t in self.own().items() if any(n.endswith(w) or (w + "_") in n for w in READ_WORDS) and t.changes and n not in ("asm_check", "asm_limits", "asm_bom")]
         print("\nread-sounding tools marked as changing:", wrong, file=sys.stderr)
         # a tool that only reads must not take an undo step or a history snapshot
         self.assertEqual(wrong, [])

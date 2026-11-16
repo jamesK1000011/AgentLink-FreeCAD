@@ -275,6 +275,48 @@ class MoreFamilies(Base):
         self.assertAlmostEqual(max(m.get("volume", 0) for m in out["made"]), 6000, delta=0.01)
         self.refused("scad_import", {"path": "rt_box.stl"})
 
+    def test_openscad_never_searches(self):
+        # FreeCAD's own search for OpenSCAD (Finder through AppleScript on a
+        # Mac, no time limit) is never run: the plain one stands in its place
+        # in every loaded copy of the module, and the reader's own window
+        # switch is back as it was after an import.
+        self.have("scad_import")
+        import sys
+
+        import FreeCAD
+
+        from agentlink.families import openscad
+
+        up = FreeCAD.GuiUp
+        self.box("Ns box", [20, 30, 10])
+        e = self.ok("scad_export", {"objects": ["Ns box"], "path": "ns_box.csg"})
+        err, out = self.call("scad_import", {"path": e["path"]})
+        if err and out["error"]["code"] == "unavailable":
+            self.skipTest(out["error"]["message"])
+        self.assertFalse(err, out)
+        self.assertEqual(out["objects"], 1, out)
+        self.assertEqual(FreeCAD.GuiUp, up)
+        for name in openscad.SEARCHERS:
+            m = sys.modules.get(name)
+            if m is not None:
+                self.assertIs(m.searchforopenscadexe, openscad._search, name)
+        self.assertIn("OpenSCADUtils", sys.modules)
+        import importCSG
+
+        self.assertEqual(bool(importCSG.gui), bool(up))
+        self.assertEqual(importCSG.original_root_objects, [])
+        # a file whose hull only the OpenSCAD program can work out: refused before anything is read
+        if openscad.exe() is None:
+            p = os.path.join(os.path.dirname(e["path"]), "ns_hull.csg")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("hull() {\n cube(size = [10, 10, 10], center = false);\n multmatrix([[1, 0, 0, 30], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]) {\n  cube(size = [10, 10, 10], center = false);\n }\n}\n")
+            before = len(self.session.doc.Objects)
+            err, out = self.call("scad_import", {"path": p})
+            self.assertTrue(err, out)
+            self.assertEqual(out["error"]["code"], "unavailable", out)
+            self.assertIn("hull", out["error"]["message"])
+            self.assertEqual(len(self.session.doc.Objects), before)
+
     def test_gear(self):
         self.have("pd_gear")
         self.ok("pd_body_new", {"name": "Gear body"})

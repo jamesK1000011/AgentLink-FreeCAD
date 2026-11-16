@@ -374,7 +374,11 @@ def modified_state(d):
     out = {}
     try:
         out["touched"] = bool(d.isTouched())
-        objs = [o.Name for o in d.Objects if o.isTouched()]
+        # by each object's State: an object has no isTouched() (only the
+        # document has), so this list was never filled before
+        from ..store import touched_names
+
+        objs = touched_names(d)
         if objs:
             out["touchedObjects"] = objs[:10]
     except Exception:
@@ -389,6 +393,16 @@ def modified_state(d):
         except Exception:
             pass
     return out
+
+
+def saved(d):
+    """After d was written to its file: the window's mark cleared
+    (_gui_saved), and what is still touched kept as the saved state for
+    where there is no window (store.note_saved)."""
+    _gui_saved(d)
+    from ..store import note_saved
+
+    note_saved(d)
 
 
 def _gui_saved(d):
@@ -630,7 +644,11 @@ def tools(session):
 
         unsaved = [d.Label for d in picked if changed(d)]
         if unsaved and not a.get("discard"):
-            raise ToolError("invalid_state", "Changed since saved: " + ", ".join(unsaved) + " — nothing was closed. doc_save first (doc_switch { document } to each, then doc_save), or doc_close { documents, discard: true } closes without saving and the changes are lost.")
+            # which objects say so, where FreeCAD's touched marks are all there is to go by
+            from ..store import touched_since_save
+
+            marks = "; ".join(f"{d.Label}: {', '.join(t[:5])}" for d in picked for t in [touched_since_save(d)] if t and d.Label in unsaved)
+            raise ToolError("invalid_state", "Changed since saved: " + ", ".join(unsaved) + (f" (objects marked changed — {marks})" if marks else "") + " — nothing was closed. doc_save first (doc_switch { document } to each, then doc_save), or doc_close { documents, discard: true } closes without saving and the changes are lost.")
         closed = []
         try:
             current = s.doc.Name
@@ -708,7 +726,7 @@ def tools(session):
                     k += 1
                 p = f"{base} {k}.FCStd"
             d.saveAs(p)
-        _gui_saved(d)
+        saved(d)
         out = {"document": d.Name, "label": d.Label, "path": p, "bytes": os.path.getsize(p), **modified_state(d)}
         if d.Label != label_was:
             # FreeCAD's saveAs relabels the document after the file.
