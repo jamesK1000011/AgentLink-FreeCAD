@@ -157,7 +157,7 @@ class LoftFindings(unittest.TestCase):
         shell = Part.makeBox(10, 10, 10, FreeCAD.Vector(15, 5, 5)).Faces[:5]
         add_body(self.session, "Open", Part.Shell(shell))
         self.no("part_boolean", {"op": "fuse", "base": "Base", "tools": ["Open"]})
-        self.assertIn("Open", self.bodies())
+        self.assertTrue(self.session.doc.getObjectsByLabel("Open"))  # a shell: kept, though no body
 
     def test_fuse_dropped_is_seen(self):
         import FreeCAD
