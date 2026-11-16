@@ -208,7 +208,10 @@ def free_geometry(sk, cap=MAX_LIST):
     for g in sorted(by):
         kind = _geo_kind(geos[g]) if 0 <= g < len(geos) else "geometry"
         ps = by[g]
-        where = "" if (0 in ps or len(ps) > 1) else POS.get(next(iter(ps)), "")
+        # A circle or a point has no ends: whichever of its parameters the
+        # solver names, it is the thing itself that is free.
+        whole = 0 in ps or len(ps) > 1 or kind in ("circle", "point", "ellipse")
+        where = "" if whole else POS.get(next(iter(ps)), "")
         key = (where, kind)
         if key not in groups:
             groups[key] = []
@@ -437,18 +440,6 @@ def overlaps(changed, parts, deadline):
     return out, skipped
 
 
-def _body_of(o):
-    """The PartDesign Body (or other part) an object belongs to, else the
-    object."""
-    try:
-        for p in o.InList:
-            if p.TypeId == "PartDesign::Body" and o in getattr(p, "Group", []):
-                return p
-    except Exception:
-        pass
-    return o
-
-
 def window():
     """The window's own warnings (GUI only, read on its thread): { dialog,
     task: [labels that warn], status }. {} headless or when nothing can be
@@ -587,13 +578,11 @@ def check(session, tool, m):
     # to MAX_AMBER, and the clean ones named when few and counted when many.
     amber, fine = [], []
     sketches = [o for o in changed if getattr(o, "TypeId", "") == "Sketcher::SketchObject" and _label(o) not in failing_now]
-    read_sketch = False
     for sk in sketches[:MAX_SKETCHES]:
         try:
             r = sketch_reading(sk)
         except Exception:
             continue
-        read_sketch = True
         if r["red"]:
             red = True
             lines.append(r["line"])
@@ -614,16 +603,17 @@ def check(session, tool, m):
     except Exception:
         parts = []
     part_names = {p.Name for p in parts}
-    todo_parts, seen = [], set()
+    # A part is read when it was itself recomputed (a Body is, when its tip
+    # changes): a sketch added to a body leaves the body's solid as it was,
+    # and its reading is not repeated.
+    todo_parts = []
     for o in changed:
-        p = _body_of(o)
         try:
-            if p.Name in seen or p.Name not in part_names or p.TypeId in CONTAINERS or _label(p) in failing_now:
+            if o.Name not in part_names or o.TypeId in CONTAINERS or _label(o) in failing_now:
                 continue
         except Exception:
             continue
-        seen.add(p.Name)
-        todo_parts.append(p)
+        todo_parts.append(o)
     late = 0
     for p in todo_parts[:MAX_SHAPES]:
         if time.time() > deadline:
@@ -693,11 +683,9 @@ def check(session, tool, m):
         red = True
         lines.append(f"a dialog is open in the window: {w['dialog']}")
         todos.append("dialog_answer reads it and presses a button")
-    task = w.get("task") or []
-    if read_sketch:
-        # The Sketcher panel's solver message says what the sketch reading
-        # above already did.
-        task = [t for t in task if not SOLVER_LABEL.search(t)]
+    # The Sketcher panel's solver message is the open sketch's standing
+    # state, read above when the call recomputed it and no news when it did not.
+    task = [t for t in (w.get("task") or []) if not SOLVER_LABEL.search(t)]
     if task:
         h["taskPanel"] = task
         lines.append("the task panel says: " + " | ".join(task[:2]))

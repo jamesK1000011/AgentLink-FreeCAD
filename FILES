@@ -173,6 +173,8 @@ docs/clients/opencode-ollama.md
 docs/clients/vscode.md
 docs/hardening/STATUS.md
 docs/hardening/inventory.json
+docs/hardening/models/sketcher-model.json
+docs/hardening/sketcher-findings.md
 docs/hardening/status.json
 docs/hooks.md
 docs/packaging.md
