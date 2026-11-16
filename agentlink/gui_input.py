@@ -880,13 +880,13 @@ class Run:
 
     # -- mouse --
 
-    def _mouse(self, kind, w, x, y, button, mods):
+    def _mouse(self, kind, w, x, y, button, mods, focus=True):
         Qt = self.qt.QtCore.Qt
         if kind in ("MouseButtonPress", "MouseButtonDblClick"):
             if button not in HELD["buttons"]:
                 HELD["buttons"].append(button)
             HELD["widget"] = w
-            if kind == "MouseButtonPress":
+            if kind == "MouseButtonPress" and focus:
                 self._focus_for_press(w)
         elif kind == "MouseButtonRelease":
             if button in HELD["buttons"]:
@@ -912,6 +912,25 @@ class Run:
                 x, y, w = p.x(), p.y(), w.parentWidget()
             except Exception:
                 return
+
+    def selected(self):
+        """What FreeCAD's selection holds after a click: 'Object.Sub' for the
+        first 3 sub-elements (the object alone when none), or None where
+        there is no selection to read."""
+        sel = getattr(self.gui, "Selection", None)
+        if sel is None:
+            return None
+        try:
+            got = []
+            for s in sel.getSelectionEx():
+                subs = list(getattr(s, "SubElementNames", ()) or ())
+                name = getattr(s, "ObjectName", "") or getattr(getattr(s, "Object", None), "Name", "")
+                got += [f"{name}.{x}" for x in subs] if subs else [name]
+                if len(got) >= 3:
+                    break
+            return got[:3]
+        except Exception:
+            return None
 
     def _arrive(self, w, x, y, mods):
         """The pointer moved onto the spot before a press, as a real hand's
@@ -980,19 +999,34 @@ class Run:
         if do in ("click", "press", "release", "move", "scroll"):
             w, x, y = self._target(st["target"])
             out["hit"] = self.hit(w, x, y)
-            if do in ("click", "press") and not HELD["buttons"]:
+            if do == "click" and not HELD["buttons"]:
+                # A tap as the 3D view's navigation styles read one: the
+                # hand arrives and focus is given first, with the window
+                # caught up; then press and release back to back, nothing
+                # processed between them. Gesture (and the others) time a
+                # press by the wall clock at each event: a redraw between
+                # them read as tap-and-hold and opened the context menu.
+                self._mouse("MouseMove", w, x, y, None, st["mods"])
+                self._focus_for_press(w)
+                self.pump(MOVE_GAP_MS)
+            elif do == "press" and not HELD["buttons"]:
                 self._arrive(w, x, y, st["mods"])
             if do == "click":
-                self._mouse("MouseButtonPress", w, x, y, st["button"], st["mods"])
+                self._mouse("MouseButtonPress", w, x, y, st["button"], st["mods"], focus=False)
                 if self.answered:
                     return out
                 gw, gx, gy = self._grabbed(w, x, y)
                 self._mouse("MouseButtonRelease", gw, gx, gy, st["button"], st["mods"])
                 if st["double"] and not self.answered:
                     self.pump(MOVE_GAP_MS)
-                    self._mouse("MouseButtonDblClick", w, x, y, st["button"], st["mods"])
+                    self._mouse("MouseButtonDblClick", w, x, y, st["button"], st["mods"], focus=False)
                     gw, gx, gy = self._grabbed(w, x, y)
                     self._mouse("MouseButtonRelease", gw, gx, gy, st["button"], st["mods"])
+                if not self.answered:
+                    self.pump(MOVE_GAP_MS)
+                    sel = self.selected()
+                    if sel is not None:
+                        out["selected"] = sel
             elif do == "press":
                 self._mouse("MouseButtonPress", w, x, y, st["button"], st["mods"])
             elif do == "move":

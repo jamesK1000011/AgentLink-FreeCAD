@@ -27,6 +27,7 @@ Look at the part after every change that matters, as a person would.
 ## Driving the window (`gui_input`, group dev)
 - Panel buttons by `{widget:{text}}`; a panel's tabs by `{tab:{text, under?: dock title}}` (a tab is not a widget, so `widget` never finds it); rows of lists, trees and tables by `{item:{text, under?, column?}}`, scrolled into view first, and a row's check box by adding `check: true` (the answer's `hit.check` says whether the click took or the model's state was set); points on the part by `{view_world:[x,y,z]}` (each step answers its `point`: where it landed, and why if FreeCAD's own projection was used). Look with `shot`, then trust a headless read-back over the picture.
 - The live camera by `cmd_run { name: "Std_ViewIsometric" }` and `"Std_ViewFitAll"`: `view_snapshot` renders apart and leaves it where it was.
+- A `click` is a tap (press and release back to back), so every navigation style selects with it, Gesture included; its answer's `selected` lists what FreeCAD's selection holds after it (first 3 sub-elements). A held `press` … `release` is what turns or opens a hold menu.
 - Keys go where the call's last press went; with none, to the window's focus.
 - Toggle buttons flip on each click and keep their state over a restart: check before clicking twice.
 - Save before `agentlink_update`: unsaved changes come back as a "(recovered …)" copy in front; `doc_switch { front: true }` brings the right tab back.
