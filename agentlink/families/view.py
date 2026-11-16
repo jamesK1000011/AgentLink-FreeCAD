@@ -206,12 +206,125 @@ def _said(r):
     return keep.said_range(r) + " from past renders here"
 
 
-def _bodies(s, a):
+def _bodies(s, a, shapeless=None):
+    """The parts to draw. shapeless (a list): gets the label of each object
+    named that is in the document but has no solid shape, which is then
+    left out instead of refused as not there."""
     refs = a.get("objects")
     if refs is None:
         return s.bodies() if s.doc else []
     refs = picks.ref_list(refs)
-    return [s.body(r) for r in refs]
+    out = []
+    for r in refs:
+        try:
+            out.append(s.body(r))
+        except ToolError:
+            o = None
+            try:
+                o = next((x for x in s.doc.Objects if x.Label == r or x.Name == r), None)
+            except Exception:
+                o = None
+            if o is None or shapeless is None:
+                raise
+            shapeless.append(o.Label)
+    return out
+
+
+def _nothing(s, a, shapeless):
+    """Why view_render has nothing to draw (emptywhy.nothing_to_draw), from
+    the document."""
+    from .. import emptywhy
+
+    named = a.get("objects") is not None
+    hidden, n, bare = [], 0, list(shapeless)
+    try:
+        objs = list(s.doc.Objects)
+        n = len(objs)
+        hidden = [o.Label for o in s.hidden_in(s.doc)]
+        if not named:
+            bare = [o.Label for o in objs if not s._solid(o) and getattr(o, "TypeId", "") not in s.CONTAINERS and not s.helper(o)]
+    except Exception:
+        pass
+    return emptywhy.nothing_to_draw(hidden=[] if named else hidden, shapeless=bare, objects=n, named=named, layers=list(render.LAYERS))
+
+
+def _box(layers):
+    """{ min, max } of the layers' points, or None."""
+    try:
+        pts = [np.asarray(l["V"], dtype=float) for l in layers if len(l["V"])]
+        if not pts:
+            return None
+        allp = np.concatenate(pts)
+        return {"min": [float(c) for c in allp.min(axis=0)], "max": [float(c) for c in allp.max(axis=0)]}
+    except Exception:
+        return None
+
+
+def _snap_shown(s):
+    """Whether anything with a shape is visible in the window (True when
+    it cannot be read)."""
+    try:
+        for o in s.doc.Objects:
+            try:
+                vo = o.ViewObject
+                if vo is None or not vo.Visibility:
+                    continue
+                sh = getattr(o, "Shape", None)
+                if (sh is not None and not sh.isNull()) or getattr(o, "Mesh", None) is not None or getattr(o, "Points", None) is not None:
+                    return True
+            except Exception:
+                continue
+        return False
+    except Exception:
+        return True
+
+
+def _snap_empty(s, view):
+    """Why the window's view shows nothing or almost nothing of the model
+    (emptywhy.off_screen), or None: what is shown, and where the shown
+    objects' box lands in the view's pixels. Reads only."""
+    from .. import emptywhy
+
+    try:
+        import FreeCAD
+
+        shown, box = 0, None
+        for o in s.doc.Objects:
+            try:
+                vo = o.ViewObject
+                if vo is None or not vo.Visibility:
+                    continue
+                bb = None
+                sh = getattr(o, "Shape", None)
+                if sh is not None and not sh.isNull():
+                    bb = sh.BoundBox
+                elif getattr(o, "Mesh", None) is not None and o.Mesh.CountFacets:
+                    bb = o.Mesh.BoundBox
+                elif getattr(o, "Points", None) is not None and o.Points.CountPoints:
+                    bb = o.Points.BoundBox
+                if bb is None or not bb.isValid():
+                    continue
+                shown += 1
+                if box is None:
+                    box = FreeCAD.BoundBox(bb)
+                else:
+                    box.add(bb)
+            except Exception:
+                continue
+        hidden = []
+        try:
+            hidden = [o.Label for o in s.hidden_in(s.doc)]
+        except Exception:
+            pass
+        pts = []
+        if box is not None:
+            for x in (box.XMin, box.XMax):
+                for y in (box.YMin, box.YMax):
+                    for z in (box.ZMin, box.ZMax):
+                        pts.append(tuple(view.getPointOnViewport(FreeCAD.Vector(x, y, z))))
+        return emptywhy.off_screen(pts, tuple(view.getSize()), shown=shown, hidden=hidden)
+    except Exception:
+        return None
 
 
 # ---- the maps Agent Link has ---------------------------------------------------------
@@ -314,6 +427,7 @@ def tools(session):
                 raise ToolError("invalid_input", "zoom size: mm across, over 0.")
 
         layers, shown = [], []
+        shapeless = []
         capped_detail = None
         mapname = a.get("map")
         mapinfo = None
@@ -329,11 +443,21 @@ def tools(session):
             if isinstance(a.get("detail"), (int, float)) and not isinstance(a.get("detail"), bool) and a["detail"] > cap0:
                 ma = dict(a, detail=int(cap0))
                 capped_detail = (int(a["detail"]), int(cap0))
-            m = render.MAPS[mapname][0](s, ma)
+            from .. import emptywhy
+
+            try:
+                m = render.MAPS[mapname][0](s, ma)
+            except ToolError as e:
+                if e.code != "not_found":
+                    raise
+                # No data to colour by (no solve yet, no scan loaded): said,
+                # with no picture.
+                return {"empty": emptywhy.no_map(mapname, e.message), "map": mapname}
             vals = np.concatenate([np.asarray(l["values"], dtype=float) for l in m["layers"]]) if m["layers"] else np.zeros(0)
             fin = vals[np.isfinite(vals)]
             if not len(fin):
-                raise ToolError("failed", f"The {mapname} map read nothing here.")
+                return {"empty": emptywhy.no_map(mapname, "it read no value on any point here" + (f" ({m['note']})" if m.get("note") else "")
+                                                 + " — for wall: the body must be a closed solid (body_check), and reach (mm) at least its thickest wall."), "map": mapname}
             rng = a.get("range") or m.get("range")
             if rng:
                 lo, hi = float(rng[0]), float(rng[1])
@@ -366,7 +490,7 @@ def tools(session):
                     summary[kk] = m[kk]
         else:
             summary = None
-            for i, o in enumerate(_bodies(s, a)):
+            for i, o in enumerate(_bodies(s, a, shapeless)):
                 l = render.body_layer(o, i, tol=float(a.get("tolerance", 0.05)))
                 layers.append(l)
                 shown.append({"layer": o.Label, "triangles": int(len(l["F"]))})
@@ -386,7 +510,8 @@ def tools(session):
             if unknown:
                 raise ToolError("invalid_input", f"layers: {', '.join(render.LAYERS) or 'none here'} (the parts are always drawn; objects picks which).")
         if not layers:
-            raise ToolError("not_found", "Nothing to draw: no body is shown, and no scan or other layer is loaded.")
+            # No picture, and why: a blank image would say nothing.
+            return {"empty": _nothing(s, a, shapeless)}
         render.distinct_colours(layers)
         # Sized before it draws: the triangles of every layer (the map's,
         # a scan's) times the views, and the time that takes here. Over
@@ -433,8 +558,9 @@ def tools(session):
             except Exception:
                 pass
         cut = []
+        cover = {}
         try:
-            img, across, drawn = render.compose(layers, views, w, h, frame=frame, section=section, mapinfo=mapinfo, stop_at=stop_at, cut=cut)
+            img, across, drawn = render.compose(layers, views, w, h, frame=frame, section=section, mapinfo=mapinfo, stop_at=stop_at, cut=cut, cover=cover)
         finally:
             if marked:
                 keep.clear_heavy_call()
@@ -467,10 +593,20 @@ def tools(session):
                 hid = []
             if hid:
                 out["hidden"] = "hidden, not drawn: " + ", ".join(hid) + " — objects: [names] draws them too."
-        if not drawn:
-            out["warning"] = "Nothing landed in the picture: the zoom or the cut leaves the parts out of view."
-        if a.get("inline", True):
+        if shapeless:
+            out["notDrawn"] = f"no solid shape, so not drawn: {', '.join(shapeless)}"
+        from .. import emptywhy
+
+        why = emptywhy.off_frame(cover, frame, section, _box(layers)) if not cut else None
+        if why is None and not drawn:
+            why = "Nothing landed in the picture: the zoom or the cut leaves the parts out of view."
+        if why:
+            # The file is written; the blank picture is not sent to be looked at.
+            out["empty"] = why
+        elif a.get("inline", True):
             out["_png"] = data
+        if frame:
+            out["fitted"] = False  # framed on the zoom, not fitted to the parts
         return out
 
     def view_maps(a):
@@ -521,15 +657,26 @@ def tools(session):
         bg = a.get("background", "Current")
         if len(views) <= 1:
             which = views[0] if views else None
+            fitted = False
             if which:
                 getattr(view, SNAP_TURN[which])()
                 if a.get("fit", True):
                     snap_fit(view, w, h)
+                    fitted = True
+            # Nothing (or a speck) of the model in the view: said, with no
+            # picture taken to look at.
+            why = _snap_empty(s, view)
+            if why:
+                return {"empty": why, "view": which or "as the person left it", "fitted": fitted}
             p = paths.out_file(s, "view_snapshot", a.get("path") or f"snapshot_{which or 'current'}.png", ".png")
             view.saveImage(p, w, h, bg)
             fit_png(p, w, h)
             got = png_size(p) or (w, h)
             out = {"path": p, "view": which or "as the person left it", "width": got[0], "height": got[1], "bytes": os.path.getsize(p)}
+            if not fitted:
+                out["fitted"] = False
+                out["fitNote"] = ("Not re-fitted: the view is as the person left it (its zoom and pan), so parts may be cut off or out of frame."
+                                  if not which else "Turned but not re-fitted (fit: false): the zoom is the person's, so parts may be cut off.")
             if got != (w, h):
                 out["warning"] = f"Asked {w} x {h}; FreeCAD saved {got[0]} x {got[1]} and it could not be resized here."
             if a.get("inline", True):
@@ -544,6 +691,11 @@ def tools(session):
         cols, rows, cw, ch = snap_size(w, h, len(views), bool(a.get("cell")))
         if cw * cols > 8192 or ch * rows > 8192:
             raise ToolError("invalid_input", f"cell {cw} x {ch} in a {cols} x {rows} grid is {cw * cols} x {ch * rows} px: 8192 at most each way.")
+        from .. import emptywhy
+
+        why = emptywhy.off_screen([], None, shown=0, hidden=[o.Label for o in s.hidden_in(s.doc)]) if not _snap_shown(s) else None
+        if why:
+            return {"empty": why, "views": views}
         try:
             cam = view.getCamera()
         except Exception:
@@ -567,6 +719,7 @@ def tools(session):
         p = paths.out_file(s, "view_snapshot", a.get("path") or f"snapshot_{'_'.join(views)}.png", ".png")
         combined = snap_combine(each, views, cols, rows, cw, ch, p)
         out = {"views": views, "paths": each, "width": cw * cols, "height": ch * rows, "grid": [cols, rows], "cell": [cw, ch],
+               **({} if a.get("fit", True) else {"fitted": False, "fitNote": "Turned but not re-fitted (fit: false): each view keeps the person's zoom, so parts may be cut off or out of frame."}),
                "sizeIs": "each view's (cell: true)" if a.get("cell") else "the whole grid (cell: true makes it each view's)",
                "note": "The person's own view is put back."}
         if combined:
@@ -593,7 +746,8 @@ def tools(session):
             "map: wall (thickness, red thin), stress (the last fea_solve), heat (the last fea_heat), or an add-on's (view_maps lists them) — with a legend and the worst spot's at; range [lo, hi] fixes the colours. "
             "section { axis x|y|z, offset mm, flip } cuts it open (cut faces hatched). zoom { at, size mm } frames a spot — a finding's at. layers: which add-on layers (a scan …). The PNG comes back as an image (inline false: the file only) and is written to path. "
             "Limits: sized before it draws (every layer's triangles times the views, timed from past renders here: time gives took and expected). Past about 40 s the big layers are drawn thinned (thinned: from and to; a map's min, max and worst are still read on every point) and a larger detail is capped (detailCapped). "
-            "At 90 s into the call (a batch's start, in a batch) it stops drawing and names the views left (cut): fewer views, a zoom or a smaller picture draws them.",
+            "At 90 s into the call (a batch's start, in a batch) it stops drawing and names the views left (cut): fewer views, a zoom or a smaller picture draws them. "
+            "An empty picture is answered in words, with no image sent: empty says why and what to do — no shown body (the document is empty, every part is hidden, or nothing has a solid shape), the objects named have no solid shape (notDrawn names them when others were drawn), the zoom or section leaves the parts out of frame or under 0.2% of the picture (with the parts' box), or the map has no data (no solve in this session, no wall read). fitted: false marks a picture framed by zoom rather than fitted to the parts.",
             obj({
                 "view": vschema, "views": vschema,
                 "map": {"type": "string"}, "range": {"type": "array", "items": {"type": "number"}},
@@ -605,5 +759,5 @@ def tools(session):
             view_render,
         ),
         Tool("view_maps", "The maps and layers view_render can draw here (add-ons add theirs), and the views.", obj({}), view_maps),
-        Tool("view_snapshot", "Save the FreeCAD window's own 3D view as the person sees it (view: turn it to a standard view first, fit true) and look at it. views [..] (up to 6, or \"all\") gives one grid picture of them, each view's file in paths, and puts the person's view back. width and height (800 x 600) are the whole picture — the grid with several views, split among them; cell: true makes them each view's size instead. The answer gives the sizes as saved. Needs the window; view_render draws without one.", obj({"cell": {"type": "boolean", "description": "width and height are each view's in the grid, not the whole grid's."}, "view": {"type": "string"}, "views": {"description": "A list of views (iso, top, bottom, front, rear, left, right), up to 6, or \"all\" (iso, top, front, right): one grid picture."}, "fit": {"type": "boolean"}, "width": {"type": "integer"}, "height": {"type": "integer"}, "background": {"type": "string"}, "inline": {"type": "boolean"}, "path": {"type": "string"}}), view_snapshot),
+        Tool("view_snapshot", "Save the FreeCAD window's own 3D view as the person sees it (view: turn it to a standard view first, fit true) and look at it. views [..] (up to 6, or \"all\") gives one grid picture of them, each view's file in paths, and puts the person's view back. width and height (800 x 600) are the whole picture — the grid with several views, split among them; cell: true makes them each view's size instead. The answer gives the sizes as saved. When nothing with a shape is shown (an empty document, everything hidden), or the model lies outside the frame or is under 6 pixels across as the view stands, the answer is empty with the reason and what to do, and no picture is taken. fitted: false with fitNote says the view was not re-fitted (no view given: as the person left it; or fit: false), so parts may be cut off. Needs the window; view_render draws without one.", obj({"cell": {"type": "boolean", "description": "width and height are each view's in the grid, not the whole grid's."}, "view": {"type": "string"}, "views": {"description": "A list of views (iso, top, bottom, front, rear, left, right), up to 6, or \"all\" (iso, top, front, right): one grid picture."}, "fit": {"type": "boolean"}, "width": {"type": "integer"}, "height": {"type": "integer"}, "background": {"type": "string"}, "inline": {"type": "boolean"}, "path": {"type": "string"}}), view_snapshot),
     ]

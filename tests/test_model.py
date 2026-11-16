@@ -94,6 +94,29 @@ class Model(unittest.TestCase):
         self.assertEqual(pol["solids"], 4)
         self.assertAlmostEqual(pol["volume"], 4 * p["volume"], delta=0.1)
 
+    def test_an_asked_for_surface_answers_as_a_surface(self):
+        # Live, 16 Nov: part_sweep { solid: false } answered sound: false and
+        # "0 solids where one is meant" for the surface that was asked for.
+        sw = self.call("part_sweep", {"profile": {"circle": {"center": [0, 0, 0], "radius": 2, "normal": [0, 0, 1]}},
+                                      "path": {"points": [[0, 0, 0], [0, 0, 20]]}, "solid": False, "name": "Tube"})
+        self.assertIs(sw["surface"], True, sw)
+        for k in ("sound", "problems", "solids", "volume"):
+            self.assertNotIn(k, sw)
+        self.assertTrue(sw["valid"])
+        self.assertAlmostEqual(sw["area"], 2 * math.pi * 2 * 20, delta=0.5)
+        self.assertGreaterEqual(sw["openEdges"], 2)  # its two rims; the seam is joined
+        self.assertIs(sw["closed"], False)
+        self.assertIn("surface_thicken", sw["note"])
+        ex = self.call("part_extrude", {"profile": {"points": [[0, 0, 0], [10, 0, 0]], "closed": False}, "direction": [0, 0, 1], "length": 5, "solid": False, "name": "Strip"})
+        self.assertIs(ex["surface"], True, ex)
+        self.assertEqual((ex["faces"], ex["openEdges"]), (1, 4))
+        self.assertAlmostEqual(ex["area"], 50, delta=1e-6)
+        self.assertNotIn("sound", ex)
+        # a solid still answers as one
+        so = self.call("part_extrude", {"profile": {"points": [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]]}, "length": 5, "name": "Slab"})
+        self.assertTrue(so["sound"])
+        self.assertNotIn("surface", so)
+
     def test_profiles(self):
         r = self.call("part_revolve", {"profile": {"points": [[5, 0, 0], [10, 0, 0], [10, 0, 10], [5, 0, 10]]}, "axis": "+z", "name": "Ring"})
         self.assertAlmostEqual(r["volume"], math.pi * (100 - 25) * 10, delta=0.5)

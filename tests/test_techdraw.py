@@ -125,6 +125,27 @@ class TechDrawTools(Base):
         sv = next(x for x in self.session.doc.Objects if x.Label == s["view"])
         self.assertIn(str(sv.CutSurfaceDisplay), ("Hide", "None"))
 
+    def test_9_a_page_read_after_opening_its_file_is_measured_not_zero(self):
+        # Live, 16 Nov: after doc_open of a file holding a page, td_list read
+        # 0 edges and 0.00 dimensions until a recompute — FreeCAD saves a
+        # view's settings, not its lines.
+        before = self.ok("td_list", {"page": "Plate drawing"})
+        saved = self.ok("doc_save", {"path": "td-cold.FCStd"})
+        self.ok("doc_close", {})
+        self.ok("doc_open", {"path": saved.get("path") or os.path.join(self.dir, "td-cold.FCStd")})
+        out = self.ok("td_list", {"page": "Plate drawing"})
+        self.assertNotIn("notReady", out, out)
+        rows = [x for v in out["views"] for x in ([v] + (v.get("items") or []))]
+        self.assertTrue(any(r.get("edges", 0) > 0 for r in rows), out)
+        self.assertEqual(len(out["dimensions"]), len(before["dimensions"]))
+        was = {d["dimension"]: d.get("measured") for d in before["dimensions"]}
+        for d in out["dimensions"]:
+            self.assertNotIn("notReady", d)
+            self.assertAlmostEqual(d["measured"], was[d["dimension"]], places=3, msg=d)
+            self.assertGreater(d["measured"], 0, d)
+        # read again: nothing left to work out
+        self.assertNotIn("computed", self.ok("td_list", {"page": "Plate drawing"}))
+
 
 if __name__ == "__main__":
     unittest.main()

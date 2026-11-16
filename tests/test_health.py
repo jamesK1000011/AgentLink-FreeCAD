@@ -215,3 +215,95 @@ def test_switched_off_by_the_environment():
         assert health.mark(Session(Doc())) is None
     finally:
         del os.environ["AGENTLINK_HEALTH"]
+
+
+# ---- sketches: news only (live, 16 Nov: sheet_format repeated a sketch's standing freedom) ----
+
+class Other:
+    name, group, changes = "sheet_format", "sheet", True
+
+
+def run_as(tool, doc, change):
+    s = Session(doc)
+    m = health.mark(s)
+    for o in change() or []:
+        health._observer_note(o)
+    return health.check(s, tool, m)
+
+
+def test_a_recomputed_sketch_that_reads_as_before_is_passed_over():
+    d = Doc()
+    nut = Sketch(d, "NutSketch", dof=1, free=[(0, 0)])
+    assert run_as(Other, d, lambda: [nut]) is None
+
+
+def test_a_sketch_whose_reading_changed_is_said_after_any_call():
+    d = Doc()
+    nut = Sketch(d, "NutSketch", dof=1, free=[(0, 0)])
+
+    def change():
+        nut.DoF, nut._free = 2, [(0, 0), (1, 1)]
+        return [nut]
+
+    assert "NutSketch: 2 DoF left" in run_as(Other, d, change)["verdict"]
+
+    def solved():
+        nut.DoF, nut._free = 0, []
+        return [nut]
+
+    assert run_as(Other, d, solved)["verdict"] == "NutSketch: fully constrained"
+
+
+def test_fully_constrained_is_no_news_after_a_call_that_is_not_a_sketch_tools():
+    d = Doc()
+    assert run_as(Other, d, lambda: [Sketch(d, "Made")]) is None
+    assert run_as(Other, d, lambda: [Sketch(d, "Blank", n=0)]) is None
+    # freedom left on a sketch the call made is still said
+    assert "Loose: 1 DoF left" in run_as(Other, d, lambda: [Sketch(d, "Loose", dof=1, free=[(0, 0)])])["verdict"]
+    # and a sketch tool's own call reads its sketch out as before
+    assert run_as(T, d, lambda: [Sketch(d, "Mine")])["verdict"] == "Mine: fully constrained"
+
+
+def test_a_sketch_tool_reads_an_unchanged_sketch_out():
+    d = Doc()
+    sk = Sketch(d, "Sketch", dof=1, free=[(0, 0)])
+    assert "Sketch: 1 DoF left on line 0" in run_as(T, d, lambda: [sk])["verdict"]
+
+
+def test_a_red_sketch_is_said_however_it_read_before():
+    d = Doc()
+    sk = Sketch(d, "Sketch", conflicting=[2])
+    h = run_as(Other, d, lambda: [sk])
+    assert h["ok"] is False and "conflicting constraints #1" in h["verdict"]
+
+
+def test_a_cam_tool_bits_own_sketch_is_passed_over():
+    class Body(Obj):
+        TypeId = "PartDesign::Body"
+
+    class Bit(Obj):
+        TypeId = "Part::FeaturePython"
+        PropertiesList = ["BitBody", "ShapeType"]
+
+    def change(d):
+        body, bit = Body(d, "Body"), Bit(d, "ToolBit")
+        bit.BitBody = body
+        body.InList = [bit]
+        sk = Sketch(d, "Sketch001", dof=1, free=[(0, 0)])
+        sk.getParentGeoFeatureGroup = lambda: body
+        own = Sketch(d, "Profile", dof=1, free=[(0, 0)])
+        return [sk, own]
+
+    for tool in (T, Other):
+        d = Doc()
+        v = run_as(tool, d, lambda: change(d))["verdict"]
+        assert "Sketch001" not in v and "Profile: 1 DoF left" in v
+
+
+def test_sketch_sig_tells_readings_apart():
+    d = Doc()
+    a, b = Sketch(d, "A", dof=1), Sketch(d, "B", dof=1)
+    assert health.sketch_sig(a) == health.sketch_sig(b)
+    b.RedundantConstraints = [3]
+    assert health.sketch_sig(a) != health.sketch_sig(b)
+    assert health.sketch_tool(T) and not health.sketch_tool(Other) and not health.sketch_tool(None)

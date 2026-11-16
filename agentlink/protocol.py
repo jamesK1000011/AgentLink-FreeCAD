@@ -305,6 +305,13 @@ class Server:
         self.session = None
         # Heavy jobs' estimates and memory ceiling (agentlink/heavy.py).
         self.gate = None
+        # What the client was last sent by tools/list ({listed tool: a hash
+        # of its description and inputs}, every tool's name), and the state
+        # list_stale() last named in full: session_state says once when the
+        # list in the client's hands is no longer the one here.
+        self._listed = None
+        self._all_then = None
+        self._stale_said = None
 
     def add(self, tool):
         self.tools[tool.name] = tool
@@ -312,6 +319,50 @@ class Server:
     def listed(self):
         # An alias (an old name kept callable) is never listed beside its tool.
         return [t for t in self.tools.values() if (self.groups is None or t.group in self.groups) and not getattr(t, "alias_of", None)]
+
+    def _list_sig(self):
+        out = {}
+        for t in self.listed():
+            try:
+                out[t.name] = hash((t.description, json.dumps(t.schema, sort_keys=True, default=str)))
+            except Exception:
+                out[t.name] = 0
+        return out
+
+    def note_listed(self):
+        """tools/list was answered: what the client holds from now on."""
+        self._listed = self._list_sig()
+        self._all_then = set(self.tools)
+        self._stale_said = None
+
+    def list_stale(self, cap=30):
+        """None while the client's tool list is the one here (or it never
+        listed). Else what changed since it last listed — groups enabled or
+        hidden, an add-on installed, updated or removed: the first time
+        { added, removed, updated (listed tools whose description or inputs
+        changed), callable (new tools that are not listed), note }, each a
+        list of names; asked again before the client lists, the counts only."""
+        if self._listed is None:
+            return None
+        now = self._list_sig()
+        was = self._listed
+        added = sorted(n for n in now if n not in was)
+        removed = sorted(n for n in was if n not in now)
+        updated = sorted(n for n in now if n in was and now[n] != was[n])
+        new_all = sorted(n for n in self.tools if n not in (self._all_then or ()) and n not in now and not getattr(self.tools[n], "alias_of", None))
+        gone_all = sorted(n for n in (self._all_then or ()) if n not in self.tools and n not in was)
+        if not (added or removed or updated or new_all or gone_all):
+            self._stale_said = None
+            return None
+        parts = {"added": added, "removed": removed, "updated": updated, "callable": new_all, "gone": gone_all}
+        state = tuple(tuple(v) for v in parts.values())
+        if self._stale_said == state:
+            return {**{k: len(v) for k, v in parts.items() if v}, "note": "As said before: the tool list changed since it was last listed, and has not been listed again."}
+        self._stale_said = state
+        out = {k: (v[:cap] + [f"… {len(v) - cap} more"] if len(v) > cap else v) for k, v in parts.items() if v}
+        out["note"] = ("The tool list changed since it was last listed (tools/list): list it again to see the new descriptions and inputs. "
+                       "Meanwhile every tool here is callable by name, and tool_groups { tool: name } gives one tool's description and inputs.")
+        return out
 
     def set_groups(self, groups):
         self.groups = groups
@@ -335,6 +386,7 @@ class Server:
                 result = {}
             elif method == "tools/list":
                 result = {"tools": [t.listing() for t in self.listed()]}
+                self.note_listed()
                 if self.meter is not None:
                     self.meter.list(result["tools"], self.instructions)
             elif method == "resources/list" and self.resources:

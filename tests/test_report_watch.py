@@ -24,8 +24,32 @@ class ReportWatch(unittest.TestCase):
                 "12:54:24  Cannot find icon: Std_DlgMacroExecute\n"
                 "12:54:24  (qt.qpa.fonts) Populating font family aliases took 147 ms. Replace uses of missing font family \"Sans-serif\"\n")
         out, _ = report_watch.problems(text, 0)
-        self.assertEqual(len(out), 2)
+        # Qt's font-alias line is written at every start and is nothing to
+        # act on: off the answers, still in the Report view (report_read).
+        self.assertEqual(len(out), 1)
         self.assertTrue(out[0].endswith("Std_DlgMacroExecute"))
+
+    def test_the_font_alias_line_is_off_the_answers_and_still_readable(self):
+        font = "12:54:24  (qt.qpa.fonts) Populating font family aliases took 147 ms. Replace uses of missing font family \"Sans-serif\""
+        rows = [(font, "#ffaa00"), ("12:54:25  (qt.qpa.fonts) another font problem", "#ffaa00"), ("12:54:26  Error: x", "#ff0000")]
+
+        saved = (report_watch._report_widget, report_watch._blocks, report_watch._problem_colours, report_watch._report_text, dict(report_watch._state))
+        report_watch._report_widget = lambda: object()
+        report_watch._blocks = lambda w, start: (rows[start:], len(rows))
+        report_watch._problem_colours = lambda: {"#ffaa00", "#ff0000"}
+        report_watch._report_text = lambda: "\n".join(t for t, _c in rows)
+        report_watch._state["seen"] = 0
+        try:
+            took = report_watch.take()
+            self.assertEqual(len(took), 2)
+            self.assertFalse(any("Populating font family" in t for t in took))
+            self.assertEqual(report_watch.take(), [])
+            read = report_watch.read(40, True)
+            self.assertTrue(any("Populating font family" in t for t in read["lines"]), read)
+            self.assertEqual(read["problems"], 3)
+        finally:
+            report_watch._report_widget, report_watch._blocks, report_watch._problem_colours, report_watch._report_text = saved[:4]
+            report_watch._state.update(saved[4])
 
     def test_problems_since_start(self):
         out, end = report_watch.problems(TEXT, 0)
