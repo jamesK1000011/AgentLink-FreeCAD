@@ -27,10 +27,18 @@ class Declared(unittest.TestCase):
         fam = types.SimpleNamespace(SHOWN=("mine_check",), AREAS={"mine": "Mine"}, WORKBENCHES={"mine_": "PartDesignWorkbench"}, PAGES=("mine_page_",))
         echo.declare(fam)
         self.assertTrue("mine_check_all".startswith(echo.SHOWN))
-        self.assertTrue(echo._describe("mine_do", {}).startswith("Mine › do"))
+        self.assertTrue(echo._describe("mine_do", {}).startswith("Mine › Do"))
         self.assertEqual(echo._workbench_for("mine_do"), "PartDesignWorkbench")
         self.assertIn("mine_page_", echo.PAGES)
         echo.declare(types.SimpleNamespace())  # nothing declared: nothing changes
+
+    def test_did_names_one_form(self):
+        echo.declare(types.SimpleNamespace(AREAS={"app_recover": "SafetyNet", "pref_": "Settings"}))
+        for name, want in (("gui_input", "Window › Input"), ("report_read", "Report › Read"), ("session_state", "Session › State"),
+                           ("dialog_answer", "Dialog › Answer"), ("app_recover", "SafetyNet › Recover"), ("doc_save", "Document › Save"),
+                           ("note_list", "Note › List"), ("pref_set", "Settings › Set"), ("batch", "Batch"),
+                           ("pd_pad", "Part Design › Pad"), ("zz_new_thing", "Zz › New thing")):
+            self.assertEqual(echo.did_name(name), want)
 
     def test_densities_once(self):
         self.assertEqual(materials.MASS_DENSITY["pla"], materials.DENSITY["pla"])
