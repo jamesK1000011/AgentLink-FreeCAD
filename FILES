@@ -194,6 +194,7 @@ docs/hardening/models/sheetfem-sheet-model.json
 docs/hardening/models/sketcher-model.json
 docs/hardening/part-findings.md
 docs/hardening/partdesign-findings.md
+docs/hardening/scad-findings.md
 docs/hardening/sheetfem-findings.md
 docs/hardening/sketcher-findings.md
 docs/hardening/status.json

@@ -182,12 +182,60 @@ def undo_on(doc):
         _unchanged(doc)
 
 
+# Headless, what was still marked touched when a document was last saved
+# from here: its name -> (its file, those objects' names).
+_AT_SAVE = {}
+
+
+def touched_names(doc):
+    """The objects FreeCAD still marks touched (waiting for a recompute), by
+    name, from each one's State: the document answers isTouched(), an object
+    has no such method."""
+    out = []
+    for o in getattr(doc, "Objects", None) or ():
+        try:
+            if "Touched" in o.State:
+                out.append(o.Name)
+        except Exception:
+            pass
+    return out
+
+
+def note_saved(doc):
+    """doc was just written to its file. FreeCAD's save clears no touched
+    mark (src/App/Document.cpp: save() and saveToFile() purge nothing; only a
+    recompute does), so an object still touched as the file was written — a
+    frozen one, one whose input failed, a holder nothing recomputes — read as
+    "changed since saved" for good where there is no window. What was
+    touched at the save is kept, and only a mark that came after it counts
+    (is_changed). The marks themselves are left: they are FreeCAD's note of
+    what the next recompute must redo."""
+    try:
+        _AT_SAVE[doc.Name] = (doc.FileName, frozenset(touched_names(doc)))
+    except Exception:
+        pass
+
+
+def touched_since_save(doc):
+    """The objects touched now that were not when doc was last saved from
+    here (all the touched ones when it was not, or was saved elsewhere)."""
+    now = touched_names(doc)
+    try:
+        kept = _AT_SAVE.get(doc.Name)
+        if kept is not None and kept[0] == doc.FileName:
+            return [n for n in now if n not in kept[1]]
+    except Exception:
+        pass
+    return now
+
+
 def is_changed(doc):
     """Whether doc has changes since it was saved. With the window up, its
     own modified mark (the "*") says so: FreeCAD 1.1 reports a document
     touched as soon as it is opened, with no change at all (seen on the
     Mac after each restart), so touched alone kept a recovered copy each
-    time. Headless, touched is all there is."""
+    time. Headless, touched is all there is — less what was already touched
+    when it was last saved from here (note_saved)."""
     g = _gui_doc(doc)
     if g is not None:
         try:
@@ -195,9 +243,17 @@ def is_changed(doc):
         except Exception:
             pass
     try:
-        return bool(doc.isTouched())
+        if not doc.isTouched():
+            return False
     except Exception:
         return False
+    try:
+        kept = _AT_SAVE.get(doc.Name)
+        if kept is not None and kept[0] == doc.FileName:
+            return bool(touched_since_save(doc))
+    except Exception:
+        pass
+    return True
 
 
 def _changed(doc):

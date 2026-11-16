@@ -151,7 +151,12 @@ class LiveFindings(unittest.TestCase):
         self.assertIn("Touched", big.State)
 
     def test_snapshot_reuses_stats(self):
-        from agentlink import geometry
+        # The module the session itself measures with (agentlink.tools' geo),
+        # not whatever "agentlink.geometry" names by now: another test file
+        # loading a second copy made the two differ, and the count read 0.
+        from agentlink import tools
+
+        geometry = tools.geo
 
         self.ok("part_primitive", {"kind": "box", "size": [10, 10, 10], "name": "Kept"})
         self.ok("part_primitive", {"kind": "box", "size": [10, 10, 10], "at": [50, 0, 0], "name": "Moved"})

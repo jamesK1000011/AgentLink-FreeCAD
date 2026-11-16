@@ -55,5 +55,51 @@ class GuiSaved(unittest.TestCase):
         self.assertTrue(g.Modified)
 
 
+class SavedHeadless(unittest.TestCase):
+    """Without a window FreeCAD's touched marks are all there is, and its
+    save clears none: what was touched as the file was written is the saved
+    state, and only a mark that came after it reads as a change."""
+
+    def setUp(self):
+        import os
+        import sys
+
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+        from agentlink import store
+
+        self.store = store
+        store._AT_SAVE.clear()
+
+    def obj(self, name, touched=False):
+        return types.SimpleNamespace(Name=name, State=["Touched"] if touched else ["Up-to-date"])
+
+    def doc(self, *objs, file="a.FCStd"):
+        d = types.SimpleNamespace(Name="Doc", FileName=file, Objects=list(objs))
+        d.isTouched = lambda: any("Touched" in o.State for o in d.Objects)
+        return d
+
+    def test_touched_at_the_save_is_saved(self):
+        box, holder = self.obj("Box"), self.obj("Records", touched=True)
+        d = self.doc(box, holder)
+        self.assertTrue(self.store.is_changed(d))
+        self.store.note_saved(d)
+        self.assertFalse(self.store.is_changed(d))
+        self.assertEqual(self.store.touched_since_save(d), [])
+        box.State = ["Touched"]  # a change after the save
+        self.assertTrue(self.store.is_changed(d))
+        self.assertEqual(self.store.touched_since_save(d), ["Box"])
+        self.store.note_saved(d)
+        self.assertFalse(self.store.is_changed(d))
+
+    def test_another_file_or_no_save_goes_by_touched(self):
+        d = self.doc(self.obj("Box", touched=True))
+        self.assertTrue(self.store.is_changed(d))
+        self.store.note_saved(d)
+        d.FileName = "b.FCStd"  # saved elsewhere since, not from here
+        self.assertTrue(self.store.is_changed(d))
+        self.assertEqual(self.store.touched_since_save(d), ["Box"])
+        self.assertFalse(self.store.is_changed(self.doc(self.obj("Box"))))
+
+
 if __name__ == "__main__":
     unittest.main()

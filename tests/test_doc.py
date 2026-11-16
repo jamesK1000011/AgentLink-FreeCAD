@@ -52,6 +52,22 @@ class Doc(unittest.TestCase):
         self.assertNotIn(a["document"], FreeCAD.listDocuments())
         self.call("doc_close", {"documents": ["Nope"]}, ok=False)
 
+    def test_close_after_save_with_a_mark_left(self):
+        # FreeCAD's save clears no touched mark: an object still marked as
+        # the file is written (frozen, a failed input, a holder) is saved all
+        # the same, and the document closes without discard.
+        n = self.call("doc_new", {"name": "MarkLeft"})
+        self.call("part_primitive", {"kind": "box", "size": [5, 5, 5], "name": "Box"})
+        d = FreeCAD.getDocument(n["document"])
+        box = d.Objects[0]
+        box.touch()
+        s = self.call("doc_save", {"path": "mark_left.FCStd"})
+        if not FreeCAD.GuiUp:  # the window's save clears the marks
+            self.assertEqual(s.get("touchedObjects"), [box.Name], s)
+        out = self.call("doc_close", {"documents": [n["document"]]})
+        self.assertEqual(len(out["closed"]), 1)
+        self.assertNotIn(n["document"], FreeCAD.listDocuments())
+
     def test_close_by_name_and_shared_label(self):
         # Hardening (live finding): a document is found by its internal Name
         # also when its label differs, and two documents sharing a label are

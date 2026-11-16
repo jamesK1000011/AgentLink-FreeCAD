@@ -201,14 +201,34 @@ class Jobs(_Home):
         self.assertIn("expected", out)
 
     def test_slow_read_is_logged(self):
+        # A name of this test's own: note_slow leaves a HEAVY tool alone, and
+        # an installed add-on may declare any real tool heavy (one did for
+        # the name this test borrowed, in keep.HEAVY and heavy-tools.json).
         class T:
-            name, changes = "thickness_measure", False
+            name, changes = "slow_read_stand_in", False
 
             def changes_for(self, a):
                 return False
 
+        self.assertFalse(self.keep.is_heavy(T.name))
         self.jobs.note_slow(T(), {}, self.session, 95.0)
-        self.assertTrue(self.jobs.past_slow("thickness_measure", 1))
+        self.assertTrue(self.jobs.past_slow(T.name, 1))
+
+    def test_heavy_read_is_not_logged_as_slow(self):
+        # What that add-on showed: a tool declared heavy is queued and timed
+        # as heavy tools are, so its long read is not logged a second time.
+        class T:
+            name, changes = "heavy_read_stand_in", False
+
+            def changes_for(self, a):
+                return False
+
+        self.keep.HEAVY.add(T.name)
+        try:
+            self.jobs.note_slow(T(), {}, self.session, 95.0)
+            self.assertFalse(self.jobs.past_slow(T.name, 1))
+        finally:
+            self.keep.HEAVY.discard(T.name)
 
     def test_not_jobs(self):
         e = self.call("pad", {"background": True})[1]["error"]["message"]
