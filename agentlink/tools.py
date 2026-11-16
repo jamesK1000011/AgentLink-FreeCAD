@@ -1986,14 +1986,60 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             except Exception:
                 heavy_read = False
             if heavy_read:
+                # It runs as a job on a worker thread, as it would alone, and
+                # the batch waits for it while its budget lasts: done in
+                # time, its answer takes its place among the results; not
+                # done, the batch stops with the job's id and where to go on.
+                left = mine.get("budget", BATCH_BUDGET) - (time.time() - mine["t0"])
+                hargs, hmiss = c.get("arguments") or {}, None
+                if _chain.has_refs(hargs):
+                    try:
+                        hargs = _chain.resolve(hargs, read_file, answers, first + i, first)
+                    except _chain.Miss as e:
+                        hmiss = {"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."}
                 nxt = first + i + 1
                 how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else f"batch again with the calls from index {nxt} on"
                 if hold is not None:
-                    hold.build("end: a heavy read next")
-                return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": nxt,
-                              "heavy": {"index": first + i, "tool": c["tool"], "arguments": c.get("arguments") or {}},
-                              "note": f"Stopped before calls.{first + i} ({c['tool']}): a heavy read, which runs as a job on its own and would hold FreeCAD here for its whole length. "
-                                      f"The {len(results)} calls above ran and stay. Call {c['tool']} on its own with those arguments (it answers with a job id past 45 s; job_status gives the answer), then {how}."})
+                    hold.build("before a heavy read")
+                job = None
+                if hmiss is None and left >= 5:
+                    try:
+                        from .protocol import check_input as _check
+
+                        tt = _t.for_call(dict(hargs))
+                        _check(tt.schema, dict(hargs))
+                        job = _jobs.start(tt, dict(hargs), s)
+                    except ToolError as e:
+                        hmiss = {"code": e.code, "message": e.message}
+                if hmiss is None and job is None:
+                    return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": first + i,
+                                  "note": f"Stopped before calls.{first + i} ({c['tool']}), a heavy read, with {max(left, 0):.0f} s of the budget left: "
+                                          + (f"batch {{ file: \"{mine['file']}\", from: {first + i} }}" if mine.get("file") else f"batch again with the calls from index {first + i} on") + " runs it first."})
+                if hmiss is None and not _jobs.wait_for(job, max(left, 1)):
+                    return ended({"results": results, "ran": len(results), "notRun": len(calls) - i - 1, "next": nxt,
+                                  "heavy": {"index": first + i, "tool": c["tool"], "job": job["job"]},
+                                  "note": f"calls.{first + i} ({c['tool']}) is a heavy read still running as job {job['job']} when the budget ran out: "
+                                          f"job_status {{ job: \"{job['job']}\", wait: 25 }} gives its answer (changes to its document wait for it), then {how}."})
+                if hmiss is None and job["status"] == "failed":
+                    hmiss = job["error"]
+                hok = hmiss is None
+                hbody = job["result"] if hok else {"error": hmiss}
+                if hok and isinstance(hbody, dict):
+                    hbody = dict(hbody)
+                    hbody.setdefault("job", job["job"])
+                answers[first + i] = {"ok": hok, "tool": c["tool"], "size": 0, **({"answer": hbody} if hok else {"error": (hmiss or {}).get("message")})}
+                row = {"tool": c["tool"], "ok": hok, **({"result": hbody} if hok else {"error": hmiss})}
+                if hok and c.get("to"):
+                    try:
+                        row = _chain.written_row(c["tool"], hbody, _chain.write_answer(c["to"], hbody))
+                    except Exception as e:
+                        row["toError"] = f"to: not written ({e}). The answer is here in full instead."
+                results.append(row)
+                if mine.get("record") is not None:
+                    mine["record"].write({"running": True, "ran": len(results), "results": results})
+                if not hok and stop:
+                    return stopped({"results": results, "stopped": i})
+                continue
             doc = s.doc
             mine.update(i=i, tool=c["tool"])
             s.batch_now = mine
@@ -2102,7 +2148,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         Tool("job_start", "Run a read as a job: tool and its arguments. The answer comes back as the tool's own when it ends within 45 s, else a job id for job_status (wait: false answers with the id at once). Reads that are heavy or were slow here (over 20 s) go to a job on their own, and any read takes background: true for the same; a client drops a call after about 80 s, so a long read's answer would be lost. Only reads that leave the window and the 3D view alone (not changes, pictures or window tools); while one runs, changes to its document wait (refused, saying which job).",
              obj({"tool": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["tool"]), job_start),
         Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }], or file: a .json file holding that list (or { calls, rollback, stopOnError }), read on this side so a long run of calls (many profiles' points) is not sent through the conversation; a relative path is in the session's folder, and files are read where other tools may read. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it and removes every object it made (removed lists any undo did not reach), so it stands or falls whole. "
-             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); a heavy read (a tool that runs as a job on its own: a wall-thickness or deviation reading, a solve) is not run inside a batch — the batch stops before it and the answer says how to go on; no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch. In the FreeCAD window each changing call is shown as it runs (its workbench, its button lit, its result selected) with a pause so a person can follow, which costs about 0.4 s and up to 2.5 s a call: a long batch runs faster from its fourth changing call on — those are still shown, with a pause of 60 ms (the person's EchoBatchDelay preference, ms; 0 none, -1 the full pause throughout) — and its last changing call is shown at the full pace again, so the window ends on a state that can be read; one batch of 20 calls is therefore much quicker in the window than 20 calls sent singly. to: a .json file the whole answer is written to (relative: in the session's folder); the reply is then a line per call — ok, a refusal's words, the health verdict — and keeps the batch's own note beside it (where it stopped and how to go on: next, notRun, heavy), so a long run's answers stay out of the conversation; read a call's result from the file when its line needs it. Every batch also keeps what ran in a record of its own, batches/<date>-<time>.json in the session's folder (the reply's record is its path; the newest 20 are kept), rewritten as each call ends: when a batch's answer never arrives — a call the client dropped, FreeCAD stopped and started again — read the newest record to see which calls ran (running: true and ran: n while it was under way, each call's whole result in results) before running anything again. "
+             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); a heavy read (a tool that runs as a job on its own: a wall-thickness or deviation reading) runs as a job inside the batch too, and the batch waits for it while its budget lasts — still running then, the answer carries the job id (job_status gives its answer) and where to go on; no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch. In the FreeCAD window each changing call is shown as it runs (its workbench, its button lit, its result selected) with a pause so a person can follow, which costs about 0.4 s and up to 2.5 s a call: a long batch runs faster from its fourth changing call on — those are still shown, with a pause of 60 ms (the person's EchoBatchDelay preference, ms; 0 none, -1 the full pause throughout) — and its last changing call is shown at the full pace again, so the window ends on a state that can be read; one batch of 20 calls is therefore much quicker in the window than 20 calls sent singly. to: a .json file the whole answer is written to (relative: in the session's folder); the reply is then a line per call — ok, a refusal's words, the health verdict — and keeps the batch's own note beside it (where it stopped and how to go on: next, notRun, heavy), so a long run's answers stay out of the conversation; read a call's result from the file when its line needs it. Every batch also keeps what ran in a record of its own, batches/<date>-<time>.json in the session's folder (the reply's record is its path; the newest 20 are kept), rewritten as each call ends: when a batch's answer never arrives — a call the client dropped, FreeCAD stopped and started again — read the newest record to see which calls ran (running: true and ran: n while it was under way, each call's whole result in results) before running anything again. "
              "Chaining, so an answer one call needs from another does not pass through the conversation: (1) a call may carry to — { tool, arguments, to: \"outline.json\" } writes that call's whole answer to the .json file (relative: in the session's folder; written where tools may write) and its result here is only { written: { path, bytes }, keys (an object's) or length (a list's), and health when it had a verdict }; a refused call writes nothing, and a rollback leaves the files. "
              "(2) Anywhere inside a call's arguments, { \"$file\": \"outline.json\" } is replaced by that JSON file's contents and { \"$file\": \"outline.json\", \"$at\": \"loops.0.points\" } by the part at that dotted path of keys and list indices (from 0; -1 is the last); the file is read as the call is about to run, so it may be one an earlier call of this batch wrote, and is read where tools may read. "
              "(3) { \"$from\": 2, \"$at\": \"bodies.0.name\" } takes the same from the answer of call 2 of this batch (calls are numbered from 0 through the whole list, as from and next count; only an earlier call, and only one run in this part of the batch — across parts use to and $file). A reference stands alone as the value ($file or $from, with $at); one that cannot be followed — no file, no key, no index, a refused call — refuses that call, saying what is there (the keys or the length at the deepest level reached), and counts as a refusal for stopOnError and rollback; a file or answer over 20 MB is refused. The arguments are checked after the references are filled in. "
