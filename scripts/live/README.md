@@ -43,6 +43,8 @@ They are data, not code: an agent connected to Agent Link replays them with the 
 
 ## How to run (for an agent)
 
+`live_run { script: "reset" }` then `live_run { script: "agentlink" }` (group dev) does steps 1–2 below in one call each: it batches each step's calls, checks every `expect` and answers pass, fail or skipped per step with the failing check's path, wanted and got. It skips two-role steps (`role: student`, `parallel`: they need two agents) and steps whose `$name` is not known yet (give `vars`). By hand:
+
 1. Run `reset.json`'s steps, then the script's.
 2. For each step: `batch` its calls, check each `expect`, and note pass or fail with the value seen.
 3. On a failure, take the step's shot, read `report_read { problems: true }`, and report: step, check, value seen, Report view lines.
