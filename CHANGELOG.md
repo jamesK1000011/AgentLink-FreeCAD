@@ -92,4 +92,5 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 
 ### Fixed
 
+- A `gui_input` click in the 3D view with the Gesture navigation style opened the view's context menu instead of selecting: the style times a press by the wall clock at each event, and the click's focus change ran between press and release. The pointer's arrival and focus now come first, with the window caught up, then press and release back to back; the click's answer says what was `selected`.
 - The agent's caption over the 3D view no longer raises "Internal C++ object already deleted" in the Report view when its document is closed before the caption fades.

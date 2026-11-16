@@ -407,6 +407,43 @@ class Delivery(unittest.TestCase):
         self.assertEqual(len(out["steps"]), 2)  # stopped at the refusal
         self.assertEqual([w for w, _e in self.sent], ["ok", "ok", "ok"])  # a move onto it, press, release
 
+    def test_click_is_a_tap(self):
+        """Press and release back to back: nothing processed between them, and
+        no time for a navigation style's tap-and-hold; the window caught up
+        before the press and after the release."""
+        import time as _time
+
+        order = []
+        real_send = self.qt.QtWidgets.QApplication.sendEvent
+
+        def send(w, ev):
+            order.append((ev.t, _time.perf_counter()))
+            return real_send(w, ev)
+        self.qt.QtWidgets.QApplication.sendEvent = staticmethod(send)
+        self.qt.QtCore.QCoreApplication.processEvents = lambda flags, ms: order.append(("pump", _time.perf_counter()))
+        sel = types.SimpleNamespace(getSelectionEx=lambda: [types.SimpleNamespace(ObjectName="Pad", SubElementNames=["Face6", "Face2", "Edge1", "Edge2"])])
+        self.run.gui.Selection = sel
+        out = self.run.run(gi.parse_steps([{"click": {"view": [5, 5]}}]))
+        kinds = [k for k, _t in order]
+        i = kinds.index("MouseButtonPress")
+        self.assertEqual(kinds[i + 1], "MouseButtonRelease")
+        self.assertEqual(kinds[0], "MouseMove")
+        self.assertIn("pump", kinds[1:i])  # caught up before the press
+        self.assertIn("pump", kinds[i + 2:])  # and after the release
+        self.assertLess(order[i + 1][1] - order[i][1], 0.05)
+        self.assertTrue(self.vp.focused)  # focus given before the press, as a real press gives it
+        self.assertEqual(out["steps"][0]["selected"], ["Pad.Face6", "Pad.Face2", "Pad.Edge1"])
+
+    def test_double_click_has_no_pump_inside_each_tap(self):
+        order = []
+        real_send = self.qt.QtWidgets.QApplication.sendEvent
+        self.qt.QtWidgets.QApplication.sendEvent = staticmethod(lambda w, ev: (order.append(ev.t), real_send(w, ev))[1])
+        self.qt.QtCore.QCoreApplication.processEvents = lambda flags, ms: order.append("pump")
+        self.run.run(gi.parse_steps([{"click": {"view": [5, 5]}, "double": True}]))
+        for a_, b_ in (("MouseButtonPress", "MouseButtonRelease"), ("MouseButtonDblClick", "MouseButtonRelease")):
+            i = order.index(a_)
+            self.assertEqual(order[i + 1], b_)
+
     def test_typing_into_the_dialog_in_front(self):
         dlg = Widget("Note", 300, 300, 200, 100, cls="QInputDialog")
         field = Widget("field", 310, 330, 180, 20, parent=dlg, cls="QLineEdit", focus=2)
