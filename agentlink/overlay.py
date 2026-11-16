@@ -11,7 +11,10 @@ a 3 px line in the theme's accent (ThemeAccentColor1, else the palette's
 highlight) with a 2 px halo, black on a light window and white on a dark
 one; a badge numbers the targets so a highlight never rests on colour
 alone; the callout wraps at 320 px in the app font (13 px at least), stays
-inside the window and sits on the side of its target with the most room.
+inside the window, off its target, and never over the 3D view: a native GL
+surface paints over the overlay, so the callout goes to the docks or the
+toolbar area beside it, narrowing to 180 px with more lines if it must; it
+keeps off tab bars and the menubar where it can.
 
 Rects follow their widgets: an event filter on each (Move, Resize, Show,
 Hide) and a 250 ms timer while anything is drawn. A widget that is hidden,
@@ -171,39 +174,77 @@ def badge_at(r, area):
     return clamp_rect((x - BADGE // 2, y - BADGE // 2, BADGE, BADGE), area)
 
 
-def place_callout(target, size, area):
-    """(x, y, w, h, side) of a callout of size (w, h) next to target (a
-    rect, or None for none): on the side with the most room (below, above,
-    right, left), kept inside area and off the target where it fits; with
-    no target, at the top centre of area."""
-    bw, bh = size
+CALLOUT_MIN = 180  # px: the narrowest a callout gets, wrapping more lines
+WIDTHS = (WRAP + 2 * BUBBLE_PAD, 280, 240, 210, CALLOUT_MIN)
+HARD, SOFT, NEAR = 1000.0, 20.0, 1000.0
+
+
+def _side(r, t):
+    x, y, w, h = r
+    tx, ty, tw, th = t
+    if y >= ty + th:
+        return "below"
+    if y + h <= ty:
+        return "above"
+    return "right" if x >= tx + tw else "left" if x + w <= tx else "over"
+
+
+def place_callout(target, size, area, forbid=(), soft=(), measure=None):
+    """(x, y, w, h, side) of a callout next to target (a rect, or None).
+
+    size (w, h) is its natural size; measure(w) -> h, when given, lets it
+    narrow (down to CALLOUT_MIN, more lines) to fit. forbid: rects it must
+    not cover, where the overlay cannot draw (the 3D view: a native GL
+    surface paints over it); soft: rects it had better not cover (tab bars,
+    the menubar, the rings). It is kept inside area and off its target; of
+    the places beside the target, slid clear of what is forbidden, and the
+    free columns beside each forbidden rect (the docks), the one that
+    covers least, then is nearest, wins. With no target: the top centre,
+    unless that is forbidden."""
     ax, ay, aw, ah = area
-    bw, bh = min(bw, aw - 2 * MARGIN), min(bh, ah - 2 * MARGIN)
     inner = (ax + MARGIN, ay + MARGIN, aw - 2 * MARGIN, ah - 2 * MARGIN)
-    if target is None:
-        x, y, w, h = clamp_rect((ax + (aw - bw) // 2, ay + MARGIN + 40, bw, bh), inner)
-        return (x, y, w, h, "top")
-    tx, ty, tw, th = grow(target, PAD + RING)
-    room = {"below": ay + ah - (ty + th), "above": ty - ay, "right": ax + aw - (tx + tw), "left": tx - ax}
-    need = {"below": bh, "above": bh, "right": bw, "left": bw}
-    cands = {
-        "below": (tx + (tw - bw) // 2, ty + th + GAP),
-        "above": (tx + (tw - bw) // 2, ty - GAP - bh),
-        "right": (tx + tw + GAP, ty + (th - bh) // 2),
-        "left": (tx - GAP - bw, ty + (th - bh) // 2),
-    }
-    order = ("below", "above", "right", "left")
-    fits = [s for s in order if room[s] >= need[s] + GAP + MARGIN]
+    forbid, soft = [tuple(f) for f in forbid or ()], [tuple(f) for f in soft or ()]
+    if measure is None:  # the same text over less width: as many more lines
+        def measure(w, w0=size[0], h0=size[1]):
+            return h0 if w >= w0 else int(-(-h0 * w0 // max(1, w)))
+    sizes = []
+    for w in sorted({min(size[0], x) for x in WIDTHS} | {size[0]}, reverse=True):
+        if w >= min(CALLOUT_MIN, size[0]):
+            sizes.append((w, size[1] if w == size[0] else measure(w)))
+    t = grow(target, PAD + RING) if target is not None else None
+    if t is not None:
+        tx, ty, tw, th = t
+        cx, cy = tx + tw / 2.0, ty + th / 2.0
+    else:
+        cx, cy = ax + aw / 2.0, ay + MARGIN + 40
     best = None
-    for side in fits or sorted(order, key=lambda s: room[s] - need[s], reverse=True):
-        x, y = cands[side]
-        r = clamp_rect((x, y, bw, bh), inner)
-        cover = overlap(r, (tx, ty, tw, th))
-        if best is None or cover < best[1]:
-            best = (r + (side,), cover)
-        if cover == 0:
-            break
-    return best[0]
+    for bw, bh in sizes:
+        bw, bh = min(bw, aw - 2 * MARGIN), min(bh, ah - 2 * MARGIN)
+        spots = []
+        if t is None:
+            spots.append((ax + (aw - bw) // 2, ay + MARGIN + 40))
+        else:
+            xs = [tx + (tw - bw) // 2, tx, tx + tw - bw] + [f[0] - GAP - bw for f in forbid] + [f[0] + f[2] + GAP for f in forbid]
+            ys = [ty + (th - bh) // 2, ty, ty + th - bh] + [f[1] - GAP - bh for f in forbid] + [f[1] + f[3] + GAP for f in forbid]
+            spots += [(x, ty + th + GAP) for x in xs] + [(x, ty - GAP - bh) for x in xs]
+            spots += [(tx + tw + GAP, y) for y in ys] + [(tx - GAP - bw, y) for y in ys]
+        # The free columns and rows beside each forbidden rect (a dock).
+        for fx, fy, fw, fh in forbid:
+            yy = int(cy - bh / 2)
+            xx = int(cx - bw / 2)
+            spots += [(fx - GAP - bw, yy), (fx + fw + GAP, yy), (xx, fy - GAP - bh), (xx, fy + fh + GAP)]
+        for x, y in spots:
+            r = clamp_rect((int(x), int(y), bw, bh), inner)
+            score = sum(overlap(r, f) for f in forbid) * HARD + sum(overlap(r, f) for f in soft) * SOFT
+            if t is not None:
+                score += overlap(r, t) * NEAR
+            rx, ry = r[0] + r[2] / 2.0, r[1] + r[3] / 2.0
+            score += abs(rx - cx) + abs(ry - cy)
+            score += (WRAP - bw) * 0.2  # wider and fewer lines, other things equal
+            if best is None or score < best[0]:
+                best = (score, r)
+    r = best[1]
+    return r + (_side(r, t) if t is not None else "top",)
 
 
 # ---- the marks (no Qt) ------------------------------------------------------
@@ -369,6 +410,43 @@ class Overlay:
         except RuntimeError:
             return "gone"
         return None
+
+    # Where the overlay cannot draw (hard): the 3D views and any other native
+    # GL surface, painted over the overlay by the system. Where a callout had
+    # better not go (soft): tab bars and the menubar. Widget class names.
+    NO_GO = ("QMdiArea", "QOpenGLWidget", "QGLWidget", "QQuickWidget", "Gui::View3DInventorViewer", "View3DInventor")
+    SOFT = ("QTabBar", "QMenuBar")
+    NO_GO_MS = 1.0
+
+    def no_go(self, host=None):
+        """([hard rects], [soft rects]) in the main window's px, kept a
+        second (the window is walked at most once a second)."""
+        now = time.monotonic()
+        got = getattr(self, "_no_go", None)
+        if got is not None and now - got[0] < self.NO_GO_MS:
+            return got[1], got[2]
+        hard, soft = [], []
+        mw = self.window()
+        try:
+            _QtCore, _QtGui, QtW = _qt()
+            for w in mw.findChildren(QtW.QWidget):
+                try:
+                    cls = w.metaObject().className()
+                except Exception:
+                    cls = type(w).__name__
+                kind = "hard" if cls in self.NO_GO else "soft" if cls in self.SOFT else None
+                if kind is None or not w.isVisible() or w.window() is not mw:
+                    continue
+                r = self._map({"widget": w})
+                if r is None:
+                    continue
+                (hard if kind == "hard" else soft).append(r)
+        except Exception as e:  # noqa: BLE001
+            _log("overlay: no-go areas not read", e)
+        # A GL view inside the MDI area is inside its rect: one rect is enough.
+        hard = [r for r in hard if not any(o != r and _inside(r, o) for o in hard)]
+        self._no_go = (now, hard, soft)
+        return hard, soft
 
     # -- drawing
     def show(self, specs, say=None, ms=None, owner=""):
@@ -593,6 +671,11 @@ def _is_menu(w):
         return type(w).__name__ == "QMenu"
 
 
+def _inside(a, b):
+    """a lies wholly in b."""
+    return a[0] >= b[0] and a[1] >= b[1] and a[0] + a[2] <= b[0] + b[2] and a[1] + a[3] <= b[1] + b[3]
+
+
 def _point(x, y):
     try:
         from PySide import QtCore
@@ -736,6 +819,7 @@ def _painter_class():
                     f.setPixelSize(11)
                     p.setFont(f)
                     p.drawText(QtCore.QRect(bx, by, bw, bh), centre, str(badge))
+            self._items = items
             for target, text in calls:
                 self._callout(p, target, text, area, col)
             p.end()
@@ -749,7 +833,14 @@ def _painter_class():
             wrap = int(_flag(QtCore, "TextWordWrap"))
             br = fm.boundingRect(QtCore.QRect(0, 0, WRAP, 4000), wrap, text)
             size = (min(WRAP, br.width()) + 2 * BUBBLE_PAD, br.height() + 2 * BUBBLE_PAD)
-            x, y, w, h, _side = place_callout(target, size, area)
+
+            def measure(w):
+                inner = max(20, w - 2 * BUBBLE_PAD)
+                return fm.boundingRect(QtCore.QRect(0, 0, inner, 4000), wrap, text).height() + 2 * BUBBLE_PAD
+
+            hard, soft = self.ov.no_go(self.host) if self.host is None else ([], [])
+            soft = soft + [grow(r, PAD + RING) for r, _b, _s in getattr(self, "_items", [])]
+            x, y, w, h, _side = place_callout(target, size, area, forbid=hard, soft=soft, measure=measure)
             p.setPen(QtGui.QPen(QtGui.QColor(col["accent"]), 2))
             p.setBrush(QtGui.QBrush(QtGui.QColor(col["bubble"])))
             p.drawRoundedRect(QtCore.QRect(x, y, w, h), 6, 6)
