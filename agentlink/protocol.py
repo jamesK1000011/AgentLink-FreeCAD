@@ -256,11 +256,35 @@ def _finite(o):
     return o
 
 
+def _plain(o):
+    """What json does not know, as its plain value: a numpy number or bool
+    (a tool's own arithmetic) by .item(), a set as a list, anything else as
+    text. One numpy bool in one answer failed a whole batch's reply
+    ("Object of type bool_ is not JSON serializable")."""
+    item = getattr(o, "item", None)
+    if callable(item):
+        try:
+            v = item()
+            if isinstance(v, (bool, int, float, str)) or v is None:
+                return v
+        except Exception:
+            pass
+    tolist = getattr(o, "tolist", None)
+    if callable(tolist):
+        try:
+            return tolist()
+        except Exception:
+            pass
+    if isinstance(o, (set, frozenset)):
+        return sorted(o, key=str)
+    return str(o)
+
+
 def compact(obj):
     try:
-        return json.dumps(obj, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        return json.dumps(obj, separators=(",", ":"), ensure_ascii=False, allow_nan=False, default=_plain)
     except ValueError:
-        return json.dumps(_finite(obj), separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        return json.dumps(_finite(json.loads(json.dumps(obj, default=_plain))), separators=(",", ":"), ensure_ascii=False, allow_nan=False)
 
 
 def failed_words(name, e):
