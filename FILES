@@ -28,6 +28,8 @@ agentlink/data/filaments.json
 agentlink/data/filaments.schema.json
 agentlink/data/stock.json
 agentlink/data/stock.schema.json
+agentlink/data/tool_index.json
+agentlink/data/tool_index.schema.json
 agentlink/data/tools.json
 agentlink/data/tools.schema.json
 agentlink/datafiles.py
@@ -157,6 +159,7 @@ agentlink/td_wait.py
 agentlink/testrun.py
 agentlink/theme.py
 agentlink/tooldata.py
+agentlink/toolindex.py
 agentlink/tools.py
 agentlink/usage.py
 agentlink/workbench.py
@@ -176,7 +179,9 @@ docs/hardening/asmtd-findings.md
 docs/hardening/bimcam-findings.md
 docs/hardening/coredoc-findings.md
 docs/hardening/draftmesh-findings.md
+docs/hardening/freecad-1.1.0-commands.txt
 docs/hardening/inventory.json
+docs/hardening/map-findings.md
 docs/hardening/models/asmtd-assembly-model.json
 docs/hardening/models/asmtd-techdraw-model.json
 docs/hardening/models/bimcam-bim-model.json
@@ -214,6 +219,8 @@ scripts/live/tutor-watch.json
 scripts/live/workshop.json
 scripts/release.py
 scripts/sync_shared.py
+scripts/tool_index.py
+scripts/tool_index_more.py
 scripts/tool_summary.py
 scripts/tool_tables.py
 server.json
@@ -330,6 +337,7 @@ tests/test_techdraw.py
 tests/test_techdraw_gaps.py
 tests/test_theme.py
 tests/test_tool_groups.py
+tests/test_tool_index.py
 tests/test_tooldata.py
 tests/test_unattended.py
 tests/test_usage.py

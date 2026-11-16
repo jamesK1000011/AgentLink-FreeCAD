@@ -47,13 +47,95 @@ class LiveFindings(unittest.TestCase):
         self.assertEqual(e["code"], "not_found")
         self.assertIn("pd_fillet", e["message"])
 
+    # 1c. The search ranks by FreeCAD's own names too (the tool index):
+    # every word counts, a workbench's name lifts its tools, and the one
+    # line is the description's first sentence, not cut at a colon.
+    def test_tool_groups_find_ranking(self):
+        def names(find, **more):
+            return [t["tool"] for t in self.ok("tool_groups", {"find": find, **more})["tools"]]
+
+        self.assertEqual(sorted(names("fillet edges")[:2]), ["part_fillet", "pd_fillet"])
+        self.assertEqual(names("drawing dimension")[0], "td_dim")
+        self.assertEqual(names("PartDesign_Pad")[0], "pd_pad")
+        self.assertEqual(names("mesh decimate")[0], "meshobj_decimate")
+        self.assertEqual(names("fillet", group="feature")[0], "pd_fillet")
+        self.assertEqual(len(names("edges", limit=3)), 3)
+        got = self.ok("tool_groups", {"find": "fillet edges"})
+        does = next(t["does"] for t in got["tools"] if t["tool"] == "pd_fillet")
+        self.assertGreater(len(does), 60)
+        self.assertLessEqual(len(does), 162)
+        self.assertFalse(does.endswith(":"))
+        self.assertLess(len(str(got)), 3500)
+        self.assertEqual(self.no("tool_groups", {"find": "  "})["code"], "invalid_input")
+        self.assertEqual(self.no("tool_groups", {"find": "pad", "limit": 0})["code"], "invalid_input")
+        self.assertEqual(self.no("tool_groups", {"find": "pad", "group": "nope"})["code"], "not_found")
+
+    # 1d. Up to 20 cards in one call.
+    def test_tool_groups_twenty_cards(self):
+        twenty = [t["tool"] for t in self.ok("tool_groups", {"find": "sketch", "limit": 20})["tools"]]
+        self.assertEqual(len(twenty), 20)
+        cards = self.ok("tool_groups", {"tool": twenty})["tools"]
+        self.assertEqual([c["tool"] for c in cards], twenty)
+        e = self.no("tool_groups", {"tool": twenty + ["pd_pad"]})
+        self.assertEqual(e["code"], "invalid_input")
+        self.assertIn("20", e["message"])
+
+    # 1e. What fits now. Without a window it goes by the document's objects
+    # only and says so; nothing is listed for it and nothing raises.
+    def test_tool_groups_now(self):
+        import FreeCAD
+
+        before = self.ok("tool_groups")["listed"]
+        if FreeCAD.GuiUp:
+            got = self.ok("tool_groups", {"now": True})
+            self.assertIn("workbench", got["now"])
+            self.assertLessEqual(len(got["tools"]), 10)
+            return
+        empty = self.ok("tool_groups", {"now": True})
+        self.assertEqual(empty["now"], {"window": False})
+        self.assertEqual(empty["tools"], [])
+        self.assertIn("find", empty["note"])
+        self.ok("pd_body_new", {"name": "Bracket"})
+        self.ok("sketch_new", {"plane": "XY", "name": "Base"})
+        got = self.ok("tool_groups", {"now": True, "limit": 40})
+        self.assertIn("No window", got["note"])
+        self.assertTrue(got["tools"])
+        self.assertTrue(all(set(t) == {"tool", "group", "does", "fits"} for t in got["tools"]))
+        self.assertTrue(all(t["fits"] == "document" for t in got["tools"]))
+        fit = self.ok("tool_groups", {"now": True, "limit": 40, "group": "feature"})["tools"]
+        self.assertIn("pd_fillet", [t["tool"] for t in fit])
+        self.assertIn("sketch_add", [t["tool"] for t in self.ok("tool_groups", {"now": True, "limit": 40, "group": "sketch"})["tools"]])
+        self.assertGreater(got["count"], 30)
+        self.assertEqual(self.ok("tool_groups", {"now": True, "group": "techdraw"})["tools"], [])
+        # With find: the search's hits, those that fit the document first.
+        both = self.ok("tool_groups", {"find": "fillet edges", "now": True})
+        self.assertEqual(both["tools"][0]["tool"], "pd_fillet")
+        self.assertEqual(both["tools"][0]["fits"], "document")
+        self.assertIn("part_fillet", [t["tool"] for t in both["tools"][:3]])
+        self.assertEqual(self.ok("tool_groups", {"find": "zzqqxx", "now": True})["tools"], [])
+        self.assertEqual(self.no("tool_groups", {"now": "yes"})["code"], "invalid_input")
+        self.assertEqual(self.ok("tool_groups")["listed"], before)
+
+    def test_tool_groups_now_state_never_raises(self):
+        from agentlink import tools
+
+        st = tools.now_state(None, ["No_SuchCommand", "PartDesign_Pad"])
+        self.assertIsNone(st["docBenches"])
+        self.assertEqual(st["selected"], 0)
+        st = tools.now_state(self.session.doc, ["No_SuchCommand"])
+        self.assertEqual(st["docBenches"], set())
+        self.assertNotIn("No_SuchCommand", st["active"])
+
     def test_tool_groups_filters(self):
         whole = self.ok("tool_groups")
         self.assertGreater(len(whole["groups"]), 3)
         one = self.ok("tool_groups", {"group": "doc"})
         self.assertNotIn("groups", one)
         self.assertEqual(one["group"], "doc")
-        self.assertIn("import_file", one["tools"])
+        # Each tool with one line of what it does, not names only.
+        self.assertIn("import_file", [t["tool"] for t in one["tools"]])
+        self.assertTrue(all(set(t) == {"tool", "does"} and t["does"] and len(t["does"]) <= 122 for t in one["tools"]))
+        self.assertEqual(one["count"], len(one["tools"]))
         self.assertTrue(one["about"])
         both = self.ok("tool_groups", {"group": "model", "detail": True})
         self.assertNotIn("groups", both)

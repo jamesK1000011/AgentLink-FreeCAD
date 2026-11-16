@@ -78,7 +78,7 @@ class EchoDeclared(unittest.TestCase):
         self.assertEqual(echo.command_for("mine_x", {}), "Mine_Any")
         self.assertEqual(echo.command_for("mine_make", {"kind": "bin"}), "Mine_Bin")
         self.assertEqual(echo.command_for("mine_make", {}), "Mine_Any")
-        self.assertEqual(echo.command_for("bim_wall", {}), "BIM_Wall")  # core's own stays
+        self.assertEqual(echo.command_for("bim_wall", {}), "Arch_Wall")  # core's own stays
         self.assertIsNone(echo.command_for("session_state", {}))
         echo.declare(types.SimpleNamespace(COMMANDS={"mine_do": "Other"}))
         self.assertEqual(echo.command_for("mine_do", {}), "Mine_Do")  # first declared stays

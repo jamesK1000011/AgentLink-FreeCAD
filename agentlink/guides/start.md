@@ -4,6 +4,9 @@
 ## The shape of a session
 - `session_state` first: what the document holds and the step count.
 - Tools come in groups. `tool_groups` lists them and turns them on. `tool_groups { group }` gives one group only, with its tools; `detail: true` gives the full text of each group. Every tool can be called by name whether it is listed or not.
+- The way to a tool is find, card, call. `tool_groups { find: "fillet edges" }` searches every tool by what it does — plain words, or FreeCAD's own names for the command or workbench ("PartDesign_Fillet", "techdraw", "drawing dimension") — and answers a few names with a line each. `tool_groups { tool: name }` (up to 20 names) gives the description and inputs. Then call the tool by name (or in a `batch`): it runs unlisted.
+- `tool_groups { now: true }` (alone, or with `find`) puts first the tools that fit what is in front: the active workbench, a sketch open in edit, the selection, and whether FreeCAD's own command for the tool is active just now. Without a window it goes by the document's objects only.
+- `enable: [group]` lists a whole group and loads every description in it: do that only when a task uses most of the group (a drawing, a sketch-and-pad part), not for one tool.
 - Every change is one undo step: `history_undo`, `history_redo` (and checkpoints where an add-on offers them). `history_diff` says what a change did, so you don't have to describe the part again.
 - `batch` runs several calls in one, rolled back whole if one is refused: every object it made is taken away too. Use it for a run of edits you can predict.
 - A long read (a heavy one, one slow here before, or any read with `background: true`) runs as a job: its answer comes back as usual when it ends within 45 s, else a job id — `job_status { job, wait: 25 }` gives the answer when it is done. A client drops a call after about 80 s, so never just call a long read again. While a job reads the document, changes to it are refused until it ends.
