@@ -2478,6 +2478,83 @@
   "headless": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
  },
+ "texture_apply": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+ },
+ "texture_check": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+ },
+ "texture_draft": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+ },
+ "texture_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+ },
+ "texture_layer": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+ },
+ "texture_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+ },
+ "texture_mask": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+ },
+ "texture_prepare": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+ },
+ "texture_preview": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+ },
+ "texture_set": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+ },
+ "texture_settings": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+ },
  "thread_cut": {
   "description": true,
   "docs": true,
