@@ -188,12 +188,39 @@ class Session:
         # holding .doc (an add-on's own copy of a session).
         return Session.bodies_in(self.doc)
 
+    # Objects that hold parts rather than being one: an assembly's shape is
+    # its parts', so drawn with them everything was drawn twice (z-fighting,
+    # a 8 s render past 70 s) and session_state listed the assembly as a
+    # body of 8 solids.
+    CONTAINERS = ("Assembly::AssemblyObject", "App::Part", "App::DocumentObjectGroup", "App::LinkGroup")
+
     @classmethod
     def bodies_in(cls, doc):
         """The parts: solid objects that nothing else is built from (a
         PartDesign Body, not its features; a boolean's result, not its
         inputs) and that are shown. A folder or a spreadsheet using one
-        does not count."""
+        does not count, nor a container (an assembly, an App::Part, a
+        group) whose parts are listed themselves."""
+        return cls._parts_in(doc, shown=True)
+
+    @classmethod
+    def hidden_in(cls, doc):
+        """The parts as bodies_in finds them, but hidden: what a render or a
+        check that goes by what is shown leaves out (session_state,
+        view_render and asm_check name them). Agent Link's own helpers
+        (AgentLinkHelper: a study's compound, a solid studied alone) are not
+        parts."""
+        return [o for o in cls._parts_in(doc, shown=False) if not cls.helper(o)]
+
+    @staticmethod
+    def helper(o):
+        try:
+            return "AgentLinkHelper" in o.PropertiesList
+        except Exception:
+            return False
+
+    @classmethod
+    def _parts_in(cls, doc, shown=True):
         self = cls
         passive = ("App::DocumentObjectGroup", "Spreadsheet::Sheet", "App::Part", "Assembly::AssemblyObject", "Assembly::JointGroup")
         out = []
@@ -211,9 +238,43 @@ class Session:
                 parent = None
             if parent is not None and parent.TypeId == "PartDesign::Body":
                 continue  # a feature: its Body is the part
-            if getattr(o, "Visibility", True) is False:
+            if (getattr(o, "Visibility", True) is False) == shown:
                 continue
             out.append(o)
+        return cls._drop_containers(doc, out)
+
+    @classmethod
+    def _drop_containers(cls, doc, found):
+        """found without the containers whose parts are among the solids of
+        the document (shown or not): their parts stand for them."""
+        if not any(getattr(o, "TypeId", "") in cls.CONTAINERS for o in found):
+            return found
+        solids = {x.Name for x in doc.Objects if getattr(x, "TypeId", "") not in cls.CONTAINERS and cls._solid(x)}
+        out = []
+        for o in found:
+            if getattr(o, "TypeId", "") in cls.CONTAINERS:
+                try:
+                    inner = {x.Name for x in (getattr(o, "OutListRecursive", None) or [])}
+                    inner |= {x.Name for x in (getattr(o, "Group", None) or [])}
+                except Exception:
+                    inner = set()
+                if inner & solids:
+                    continue
+            out.append(o)
+        return out
+
+    @classmethod
+    def assemblies_in(cls, doc):
+        """The assemblies and App::Parts holding parts: [{name, type, parts}]."""
+        out = []
+        for o in doc.Objects:
+            if getattr(o, "TypeId", "") not in ("Assembly::AssemblyObject", "App::Part"):
+                continue
+            try:
+                parts = [x.Label for x in (getattr(o, "Group", None) or []) if cls._solid(x) or getattr(x, "TypeId", "") == "App::Link"]
+            except Exception:
+                parts = []
+            out.append({"name": o.Label, "type": "assembly" if o.TypeId == "Assembly::AssemblyObject" else "part container", "parts": parts})
         return out
 
     # Links that refer to an object without building from it: where a thing
@@ -342,6 +403,7 @@ class Session:
             "label": self.doc.Label,
             "freecad": ".".join(FreeCAD.Version()[:3]),
             "bodies": [self._body_row(o) for o in self.bodies()],
+            **self._hidden_state(),
             "step": len(self.steps),
             "outDir": self.out_dir,
             "where": getattr(self, "where", "hidden"),
@@ -349,6 +411,25 @@ class Session:
             **({"note": "The hidden FreeCAD answered: the FreeCAD window is closed, or its link is off or still starting, so this is not the document on screen."} if getattr(self, "where", "hidden") == "hidden" and os.environ.get("AGENTLINK_SUPERVISED") else {}),
             **({"launcher": _launcher()} if a.get("launcher") else {}),
         }
+
+    def _hidden_state(self):
+        """Hidden parts (left out of bodies, of renders and of checks that go
+        by what is shown) and assemblies, named, never left out silently."""
+        out = {}
+        try:
+            hid = [o.Label for o in Session.hidden_in(self.doc)]
+        except Exception:
+            hid = []
+        if hid:
+            out["hidden"] = hid
+            out["hiddenNote"] = "Hidden, so not in bodies and not drawn by view_render: " + ", ".join(hid) + " (object_set { Visibility: true } shows one; view_render { objects } draws it anyway)."
+        try:
+            asm = Session.assemblies_in(self.doc)
+        except Exception:
+            asm = []
+        if asm:
+            out["assemblies"] = asm
+        return out
 
     @staticmethod
     def allows_compound(o):

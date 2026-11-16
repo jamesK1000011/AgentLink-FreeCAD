@@ -65,6 +65,78 @@ def qualified(doc, expr, keep=()):
     return exprs.qualify(expr, [n for _, n in rows(ss)], ss.Name, keep)
 
 
+# FreeCAD 1.0's variable sets (App::VarSet): named values as an object's own
+# properties, read in expressions as VarSet.size (its name) or by its label.
+VARSET = "App::VarSet"
+# A VarSet's own properties, not variables.
+VARSET_OWN = {"Label", "Label2", "ExpressionEngine", "Visibility", "ExposedVarSet", "Exposed", "Proxy", "Placement"}
+LENGTH_UNITS = ("mm", "cm", "m", "in", "inch", "ft", "µm", "um", "km", "\"", "thou", "mil")
+ANGLE_UNITS = ("deg", "°", "rad", "gon")
+
+
+def varsets(doc):
+    return [o for o in doc.Objects if getattr(o, "TypeId", "") == VARSET]
+
+
+def varset_vars(o):
+    """A VarSet's variables: its properties other than its own."""
+    out = []
+    for p in o.PropertiesList:
+        if p in VARSET_OWN:
+            continue
+        try:
+            if "Hidden" in (o.getPropertyStatus(p) or []):
+                continue
+        except Exception:
+            pass
+        out.append(p)
+    return out
+
+
+def var_type(value):
+    """(property type, value to set) for a VarSet variable: "55 mm" a
+    length, "30 deg" an angle, another quantity a quantity, a whole number
+    an integer, a number a float, true/false a bool, other text a string."""
+    if isinstance(value, bool):
+        return "App::PropertyBool", value
+    if isinstance(value, int):
+        return "App::PropertyInteger", value
+    if isinstance(value, float):
+        return "App::PropertyFloat", value
+    if not isinstance(value, str):
+        raise ToolError("invalid_input", f"{value!r}: a number, true/false, text, or a quantity with its unit (\"55 mm\", \"30 deg\").")
+    m = re.match(r"^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*(\S.*)?$", value)
+    if m and m.group(2):
+        unit = m.group(2).strip()
+        if unit in LENGTH_UNITS:
+            return "App::PropertyLength" if not value.strip().startswith("-") else "App::PropertyDistance", value
+        if unit in ANGLE_UNITS:
+            return "App::PropertyAngle", value
+        return "App::PropertyQuantity", value
+    if m:
+        return "App::PropertyFloat", float(m.group(1))
+    return "App::PropertyString", value
+
+
+def var_value(o, p):
+    v = getattr(o, p)
+    if hasattr(v, "Value") and hasattr(v, "Unit"):
+        u = str(v).split(" ", 1)
+        return round(float(v.Value), 6) + 0.0, (u[1] if len(u) > 1 else "")
+    return picks.json_safe(v) if hasattr(picks, "json_safe") else v, ""
+
+
+def by_varset_label(doc, expr):
+    """A VarSet named by its label in an expression (Dims.size) written by
+    its object name (VarSet001.size), which FreeCAD's expressions take."""
+    if not isinstance(expr, str):
+        return expr
+    for o in varsets(doc):
+        if o.Label != o.Name and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", o.Label):
+            expr = re.sub(rf"(?<![A-Za-z0-9_.<]){re.escape(o.Label)}\.", o.Name + ".", expr)
+    return expr
+
+
 def users(doc, ss, name):
     pat = re.compile(rf"(\b{re.escape(ss.Name)}|<<{re.escape(ss.Label)}>>)\.{re.escape(name)}\b")
     out = []
@@ -130,10 +202,25 @@ def tools(session):
             out["note"] = "The change renamed edges or faces later features use: each was found again by what it is. Check them with view_render."
         return out
 
+    def varset_rows():
+        rows_ = []
+        for o in varsets(doc()):
+            vs = []
+            for p in varset_vars(o):
+                val, u = var_value(o, p)
+                e = {"name": p, "value": val, "unit": u, "ref": f"{o.Name}.{p}"}
+                us = users(doc(), o, p)
+                if us:
+                    e["usedBy"] = us
+                vs.append(e)
+            rows_.append({"varset": o.Label, "object": o.Name, "variables": vs})
+        return rows_
+
     def param_list(a):
         ss = sheet(doc())
+        vsets = varset_rows()
         if ss is None:
-            return {"params": [], "note": "No Params sheet yet: param_set makes it."}
+            return {"params": [], **({"varsets": vsets} if vsets else {}), "note": "No Params sheet yet: param_set makes it." + (" The variable sets are listed under varsets." if vsets else "")}
         out = []
         for r, n in rows(ss):
             val, u = value_of(ss, n)
@@ -145,7 +232,81 @@ def tools(session):
             if us:
                 e["usedBy"] = us
             out.append(e)
-        return {"sheet": ss.Name, "params": out, "refAs": f"{ss.Name}.<name>"}
+        res = {"sheet": ss.Name, "params": out, "refAs": f"{ss.Name}.<name>"}
+        if vsets:
+            res["varsets"] = vsets
+        return res
+
+    def _vs(ref):
+        vs = varsets(doc())
+        if not vs:
+            raise ToolError("not_found", "No variable set here: varset_new { name, properties } makes one.")
+        if ref is None:
+            if len(vs) == 1:
+                return vs[0]
+            raise ToolError("invalid_input", f"varset: say which — {', '.join(o.Label for o in vs)}.")
+        hit = next((o for o in vs if ref in (o.Label, o.Name)), None)
+        if hit is None:
+            raise ToolError("not_found", f"varset {ref!r}: the variable sets are {', '.join(o.Label for o in vs)}.")
+        return hit
+
+    def _set_vars(o, props, group="Variables"):
+        if not isinstance(props, dict) or not props:
+            raise ToolError("invalid_input", "properties: { name: value } — \"55 mm\" a length, \"30 deg\" an angle, a number, true/false or text.")
+        done = {}
+        for name, value in props.items():
+            if not isinstance(name, str) or not NAME.match(name) or CELL.match(name):
+                raise ToolError("invalid_input", f"properties.{name}: a name of letters, digits and _, starting with a letter — not a cell address.")
+            if name in VARSET_OWN:
+                raise ToolError("invalid_input", f"properties.{name}: the VarSet's own property — another name.")
+            typ, v = var_type(value)
+            new = name not in o.PropertiesList
+            if new:
+                o.addProperty(typ, name, group, "Set by Agent Link (varset_new / varset_set)")
+            try:
+                setattr(o, name, v)
+            except Exception as e:
+                if new:
+                    raise ToolError("invalid_input", f"properties.{name} = {value!r}: FreeCAD refuses it ({e}).")
+                raise ToolError("invalid_input", f"properties.{name} = {value!r}: it is a {o.getTypeIdOfProperty(name)} — give a value of that kind ({e}).")
+            done[name] = {"new": new, "type": o.getTypeIdOfProperty(name).split("::")[-1]}
+        return done
+
+    def varset_new(a):
+        name = a.get("name") or "VarSet"
+        if not isinstance(name, str) or not name.strip():
+            raise ToolError("invalid_input", "name: the variable set's label (Dims), read in expressions as <Dims>.size.")
+        if any(o.Label == name for o in doc().Objects):
+            raise ToolError("invalid_input", f"name {name!r}: taken — varset_set adds to an existing set.")
+        refs = [e for b in pc.pd_bodies(doc()) for e in pc.ref_snapshot(b)]
+        try:
+            o = doc().addObject(VARSET, "VarSet")
+        except Exception as e:
+            raise ToolError("unavailable", f"App::VarSet is FreeCAD 1.0's and later ({e}): param_set keeps parameters in a Params sheet instead.")
+        o.Label = name
+        try:
+            done = _set_vars(o, a.get("properties") or {}, a.get("group") or "Variables") if a.get("properties") else {}
+        except ToolError:
+            doc().removeObject(o.Name)
+            raise
+        check(doc(), f"varset {name}", refs)
+        s.snapshot("varset_new")
+        return {"varset": o.Label, "object": o.Name, "set": done, "variables": varset_rows_one(o), "refAs": f"{o.Name}.<name>" + (f" (or {o.Label}.<name>: param_bind writes it by name)" if o.Label != o.Name else ""), "step": len(s.steps)}
+
+    def varset_rows_one(o):
+        return [{"name": p, "value": var_value(o, p)[0], "unit": var_value(o, p)[1]} for p in varset_vars(o)]
+
+    def varset_set(a):
+        o = _vs(a.get("varset"))
+        refs = [e for b in pc.pd_bodies(doc()) for e in pc.ref_snapshot(b)]
+        repaired.clear()
+        done = _set_vars(o, a.get("properties"), a.get("group") or "Variables")
+        check(doc(), f"varset {o.Label}", refs)
+        s.snapshot("varset_set")
+        out = {"varset": o.Label, "object": o.Name, "set": done, "variables": varset_rows_one(o), "usedBy": sorted({u for p in done for u in users(doc(), o, p)}), "bodies": bodies_now(), "step": len(s.steps)}
+        if repaired:
+            out["refsFound"] = dict(repaired)
+        return out
 
     def param_remove(a):
         ss = sheet(doc())
@@ -185,14 +346,17 @@ def tools(session):
             return picks.finish(s, "param_bind", lambda: {"target": target, "expression": None, "bodies": bodies_now()}, recompute=False)
         given = str(expr)
         # A parameter by its bare name ("size") is the Params sheet's
-        # (Params.size), as param_set answers it.
-        expr, named = qualified(doc(), given)
+        # (Params.size), as param_set answers it; a VarSet by its label
+        # (Dims.size) is written by its object's name.
+        expr, named = qualified(doc(), by_varset_label(doc(), given))
         try:
             o.evalExpression(expr)
         except Exception as e:
             ss = sheet(doc())
             have = [n for _, n in rows(ss)] if ss else []
-            raise ToolError("invalid_input", f"{given!r} does not evaluate: {e} — a parameter by its name ({', '.join(have[:12]) or 'none yet: param_set makes one'}) or as {SHEET}.<name>, or any sheet's cell as <Sheet>.<alias> or <Sheet>.A1 (sheet_list).")
+            vs = [f"{o.Name}.{p}" for o in varsets(doc()) for p in varset_vars(o)]
+            raise ToolError("invalid_input", f"{given!r} does not evaluate: {e} — a parameter by its name ({', '.join(have[:12]) or 'none yet: param_set makes one'}) or as {SHEET}.<name>, any sheet's cell as <Sheet>.<alias> or <Sheet>.A1 (sheet_list)"
+                            + (f", or a variable set's: {', '.join(vs[:12])}" if vs else "") + ".")
         try:
             o.setExpression(path, expr)
         except Exception as e:
@@ -210,8 +374,12 @@ def tools(session):
     return [
         Tool("param_set", "Set a named parameter in the Params spreadsheet (made when first needed): name, value (a number with unit mm | deg | \"\", or an expression over others, \"width / 2\"), note. Everything bound to it recomputes; a value that breaks a feature is refused with FreeCAD's error and nothing kept. Answers its reference (Params.<name>) and who uses it.",
              obj({"name": {"type": "string"}, "value": {"type": ["number", "string"]}, "unit": {"type": "string"}, "note": {"type": "string"}}, ["name", "value"]), param_set, changes=True),
-        Tool("param_list", "The parameters: name, value, unit, what they are set to, and which properties use them. Changes nothing.", obj({}), param_list),
+        Tool("param_list", "The parameters: name, value, unit, what they are set to, and which properties use them; varsets: each variable set's variables (name, value, unit, ref, usedBy). Changes nothing.", obj({}), param_list),
+        Tool("varset_new", "Make a variable set (FreeCAD 1.0's App::VarSet): name (its label), properties { size: \"55 mm\" (a length), angle: \"30 deg\", count: 3, ratio: 0.5, on: true, note: \"text\" } as its variables, group (Variables). Expressions read them as <VarSet name>.size — param_bind { target, expression: \"Dims.size\" } takes the label too. Answers the object's name to use.",
+             obj({"name": {"type": "string"}, "properties": {"type": "object"}, "group": {"type": "string"}}, ["name"]), varset_new, changes=True),
+        Tool("varset_set", "Set or add variables of a variable set: varset (its label; may be left out when there is one), properties { name: value } as varset_new takes them (an existing one keeps its kind). Everything bound to them recomputes; a value that breaks a feature is refused and nothing kept.",
+             obj({"varset": {"type": "string"}, "properties": {"type": "object"}, "group": {"type": "string"}}, ["properties"]), varset_set, changes=True),
         Tool("param_remove", "Remove a parameter no property uses (unbind its users first).", obj({"name": {"type": "string"}}, ["name"]), param_remove, changes=True),
-        Tool("param_bind", "Bind a property or a named sketch constraint to an expression: target \"Pad.Length\" | \"Sketch.width\" (a constraint's name), expression \"width\" (a parameter by its name), \"Params.width\" or \"width / 2 + 1\"; null unbinds (the value stays). A bound value is then changed by param_set, not edited directly.",
+        Tool("param_bind", "Bind a property or a named sketch constraint to an expression: target \"Pad.Length\" | \"Sketch.width\" (a constraint's name), expression \"width\" (a parameter by its name), \"Params.width\", \"Dims.size\" (a variable set's, by its label or name) or \"width / 2 + 1\"; null unbinds (the value stays). A bound value is then changed by param_set, not edited directly.",
              obj({"target": {"type": "string"}, "expression": {"type": ["string", "null"]}}, ["target", "expression"]), param_bind, changes=True),
     ]

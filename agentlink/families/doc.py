@@ -745,19 +745,86 @@ def tools(session):
             out["note"] = "Set. Other objects failed in the same recompute, not from this change: " + "; ".join(f"{e['object']}: {e['error']}" for e in errs[:4])
         return out
 
+    def _along(objs):
+        """What goes with objs: a PartDesign Body's own features and Origin,
+        and the helpers a result was made with (picks.remember_made: a
+        boolean's base shape and its FeatureBase) — each only when nothing
+        staying uses it. (extra objects, inputs to show again, labels to
+        give back)."""
+        doc_ = s.doc
+        going = {o.Name for o in objs}
+        cand, show, labels = [], [], {}
+        for o in objs:
+            made, hid, lab = picks.made_record(o)
+            cand += [doc_.getObject(n) for n in made]
+            show += [n for n in hid]
+            labels.update(lab)
+            if getattr(o, "TypeId", "") == "PartDesign::Body":
+                cand += list(getattr(o, "Group", None) or [])
+                cand += [getattr(o, "Origin", None), getattr(o, "BaseFeature", None)]
+        cand = [c for c in cand if c is not None and c.Name not in going]
+        # Origins' axes and planes go with their Origin.
+        for c in list(cand):
+            if getattr(c, "TypeId", "") == "App::Origin":
+                cand += [x for x in (getattr(c, "OriginFeatures", None) or []) if x.Name not in going]
+        extra = []
+        changed = True
+        while changed:  # a helper goes once all that use it go
+            changed = False
+            for c in cand:
+                if c.Name in going:
+                    continue
+                if getattr(c, "TypeId", "") != "PartDesign::Body" and all(p.Name in going for p in c.InList):
+                    going.add(c.Name)
+                    extra.append(c)
+                    changed = True
+        show = [n for n in show if n not in going]
+        return extra, show, labels
+
     def object_delete(a):
         names = a.get("objects")
         names = picks.ref_list(names, "objects: the names or labels to delete.")
         objs = [picks.find(s.doc, n) for n in names]
-        going = {o.Name for o in objs}
+        extra, show, labels = _along(objs)
+        going = {o.Name for o in objs} | {o.Name for o in extra}
         for o in objs:
             users = [p.Label for p in o.InList if p.Name not in going]
             if users and not a.get("force"):
                 raise ToolError("invalid_state", f"{o.Label} is used by {', '.join(users)}: delete those too, or force: true leaves them broken.")
-        labels = [o.Label for o in objs]
-        for o in objs:
-            s.doc.removeObject(o.Name)
-        return picks.finish(s, "object_delete", lambda: {"deleted": labels, "errors": errors(s.doc)})
+        deleted = [o.Label for o in objs]
+        along = [o.Label for o in extra]
+        names_out = [o.Name for o in objs] + [o.Name for o in extra]
+        for n in names_out:
+            if s.doc.getObject(n) is not None:
+                try:
+                    s.doc.removeObject(n)
+                except Exception:
+                    pass
+        shown, renamed = [], {}
+        for n in show:
+            x = s.doc.getObject(n)
+            if x is None:
+                continue
+            old = labels.get(n)
+            if old and x.Label != old and not any(y.Label == old for y in s.doc.Objects if y is not x):
+                renamed[x.Label] = old
+                x.Label = old
+            if hasattr(x, "Visibility") and not x.Visibility:
+                x.Visibility = True
+                shown.append(x.Label)
+
+        def answer():
+            out = {"deleted": deleted, "errors": errors(s.doc)}
+            if along:
+                out["alongWith"] = along
+                out["alongNote"] = "Made for what was deleted and used by nothing else: deleted with it."
+            if shown:
+                out["shownAgain"] = shown
+            if renamed:
+                out["renamed"] = renamed
+            return out
+
+        return picks.finish(s, "object_delete", answer)
 
     def object_rename(a):
         o = picks.find(s.doc, a.get("object"))
@@ -1130,7 +1197,7 @@ def tools(session):
         Tool("object_list", "Every object in the document: name, label, type, visible, parents (what uses it) and its shape (volume, area, faces, solids, size for a solid; faces and edges else) or mesh. type: a part of the type to keep (\"Part::\", \"Sketch\").", obj({"type": {"type": "string"}}), object_list),
         Tool("object_get", "One object's properties: value (mm, degrees; placements as { at, axis, angle }; links by label; a shape as its stats), type, readOnly. filter: a word in the name or group (\"Placement\", \"Base\"), or a list of names.", obj({"object": objref, "filter": {}}, ["object"]), object_get),
         Tool("object_set", "Set properties of an object by name: values { Length: 20, Placement: { at, axis, angle } (or FreeCAD's Base, Axis, Angle, Rotation; what is left out is kept), Refine: true, Base: \"Box\", Mode: \"…\" } — each converted to its type (numbers in mm and degrees, or strings with a unit \"1 in\"); enumerations checked; read-only ones refused; a value that did not change is marked unchanged. Recomputes; refused and undone when that fails. Trap: a plain shape (Part::Feature from a boolean) has no sizes to set — only placement.", obj({"object": objref, "values": {"type": "object"}}, ["object", "values"]), object_set, changes=True),
-        Tool("object_delete", "Delete objects (objects: names or labels). Refused while another object uses one (force: true deletes it anyway and the user breaks); recomputes and lists any error.", obj({"objects": {}, "force": {"type": "boolean"}}, ["objects"]), object_delete, changes=True),
+        Tool("object_delete", "Delete objects (objects: names or labels). Refused while another object uses one (force: true deletes it anyway and the user breaks); recomputes and lists any error. A PartDesign Body goes with its own features and Origin, and a boolean's result with the helpers made for it alone (its base shape, the BaseFeature: alongWith names them); the inputs it hid are shown again and given their names back (shownAgain, renamed).", obj({"objects": {}, "force": {"type": "boolean"}}, ["objects"]), object_delete, changes=True),
         Tool("object_rename", "Give an object a new label (its internal name stays). Trap: setups, specs and waivers keep the old label.", obj({"object": objref, "label": {"type": "string"}}, ["object", "label"]), object_rename, changes=True),
         Tool("object_group", "Organise the document: action add | remove (objects into or out of group — made if new; kind folder (a plain group) | part (an App::Part container that moves as one)) | dissolve (the group, its objects kept) | link (count App::Link copies of object at, step [dx,dy,dz] apart — light copies that follow it) | list; visible: false hides a whole group's objects.",
              obj({"action": {"type": "string", "enum": ["add", "remove", "dissolve", "link", "list"]}, "group": {"type": "string"}, "kind": {"type": "string", "enum": ["folder", "part"]}, "objects": {"type": "array", "items": {"type": "string"}},

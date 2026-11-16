@@ -276,6 +276,46 @@ def index_of(shape, sub_shape, kind):
 
 # ---- the document -------------------------------------------------------------------------
 
+MADE_PROP, HID_PROP, LABEL_PROP = "AgentLinkMade", "AgentLinkHid", "AgentLinkRelabelled"
+
+
+def remember_made(out, made=(), hid=(), relabelled=None):
+    """On a result: the helper objects made for it alone, the inputs it hid
+    and the labels it changed (name=old label), kept with the document, so
+    object_delete of the result takes the helpers too and shows and
+    renames the inputs back."""
+    for prop, vals in ((MADE_PROP, [o.Name for o in made if o is not None]), (HID_PROP, [o.Name for o in hid if o is not None]),
+                       (LABEL_PROP, [f"{k}={v}" for k, v in (relabelled or {}).items()])):
+        if not vals:
+            continue
+        try:
+            if prop not in out.PropertiesList:
+                out.addProperty("App::PropertyStringList", prop, "Agent Link", "Set by Agent Link: what object_delete of this result undoes")
+                try:
+                    out.setEditorMode(prop, 2)  # hidden in the property view
+                except Exception:
+                    pass
+            setattr(out, prop, list(getattr(out, prop) or []) + vals)
+        except Exception:
+            pass
+
+
+def made_record(o):
+    """(helper names, hidden input names, {name: old label}) remember_made kept."""
+    def get(p):
+        try:
+            return list(getattr(o, p) or []) if p in o.PropertiesList else []
+        except Exception:
+            return []
+
+    labels = {}
+    for x in get(LABEL_PROP):
+        k, _, v = x.partition("=")
+        if k:
+            labels[k] = v
+    return get(MADE_PROP), get(HID_PROP), labels
+
+
 def bake(session, base, shape, name=None, consumed=(), keep=False):
     """Put a modelling result in the document as a plain shape: into the base
     when it is one (a Part::Feature) and no new name is asked, else as a new
@@ -291,14 +331,18 @@ def bake(session, base, shape, name=None, consumed=(), keep=False):
         # (its base feature), so modelling goes on in PartDesign, and the
         # old Body stays, hidden, as the input.
         label = name or base.Label
+        relabelled = {}
         if name is None:
+            relabelled[base.Name] = base.Label
             base.Label = base.Label + " (input)"
+        before = {x.Name for x in doc.Objects}
         holder = doc.addObject("Part::Feature", "BaseShape")
         holder.Shape = shape
         holder.Label = session.unique(f"{label} base shape")
         out = doc.addObject("PartDesign::Body", "Body")
         out.BaseFeature = holder
         out.Label = label if name is None else session.unique(label)
+        hid = [base]
         for o in (holder, base):
             if hasattr(o, "Visibility"):
                 o.Visibility = False
@@ -308,9 +352,16 @@ def bake(session, base, shape, name=None, consumed=(), keep=False):
             if keep or o.InList:
                 if hasattr(o, "Visibility"):
                     o.Visibility = False
+                    hid.append(o)
             else:
                 doc.removeObject(o.Name)
         doc.recompute()
+        # The holder and what FreeCAD made with the Body for it (its
+        # FeatureBase "BaseFeature", its Origin): object_delete of the
+        # result takes them along, and shows the inputs again.
+        made = [x for x in doc.Objects if x.Name not in before and x is not out]
+        remember_made(out, made, hid, relabelled)
+        session.last_hidden = [o.Label for o in hid]
         return out
     if name is None and base is not None and base.TypeId == "Part::Feature":
         base.Shape = shape
@@ -324,13 +375,19 @@ def bake(session, base, shape, name=None, consumed=(), keep=False):
         out = doc.addObject("Part::Feature", "Body")
         out.Shape = shape
         out.Label = label if name is None else session.unique(label)
+    hid = []
     for o in gone:
         if keep or o.InList:
             if hasattr(o, "Visibility"):
                 o.Visibility = False
+                hid.append(o)
         else:
             doc.removeObject(o.Name)
     doc.recompute()
+    if out is not base:
+        relabelled = {base.Name: base.Label[:-len(" (input)")]} if (name is None and base is not None and base.Label.endswith(" (input)") and base in hid) else {}
+        remember_made(out, (), hid, relabelled)
+    session.last_hidden = [o.Label for o in hid]
     return out
 
 

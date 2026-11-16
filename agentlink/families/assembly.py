@@ -93,6 +93,66 @@ def _parts(asm):
     return [o for o in asm.Group if o.TypeId != "Assembly::JointGroup" and hasattr(o, "Shape") and not o.Shape.isNull()]
 
 
+class _LinkPart:
+    """A part an assembly holds through an App::Link (or a link's element):
+    its shape as placed, for the overlap check. Label, Name and Placement
+    as the link's; obj the link itself."""
+
+    def __init__(self, link, shape):
+        self.obj = link
+        self.Label, self.Name = link.Label, link.Name
+        self.Shape = shape
+        self.Placement = getattr(link, "Placement", FreeCAD.Placement())
+
+    def getLinkedObject(self, *a):
+        try:
+            return self.obj.getLinkedObject(*a)
+        except Exception:
+            return self.obj
+
+
+def _check_parts(asm):
+    """Every part of an assembly for asm_check, shown or not: its own parts,
+    those inside App::Parts and sub-assemblies, and those held through
+    links (their shape as placed). (parts, hidden labels, left out labels).
+    A part hidden in the window is still a part: a check that skipped
+    hidden parts passed with a screw and the body it sits in left out."""
+    out, hidden, left, seen = [], [], [], set()
+
+    def walk(group):
+        for o in group or []:
+            if o.Name in seen or o.TypeId == "Assembly::JointGroup":
+                continue
+            seen.add(o.Name)
+            if o.TypeId in ("App::Part", "Assembly::AssemblyObject", "App::DocumentObjectGroup"):
+                walk(getattr(o, "Group", None))
+                continue
+            part = None
+            sh = getattr(o, "Shape", None)
+            try:
+                if sh is not None and not sh.isNull() and sh.Solids:
+                    part = o
+            except Exception:
+                part = None
+            if part is None and o.TypeId in ("App::Link", "App::LinkElement"):
+                try:
+                    lsh = Part.getShape(o)
+                    if not lsh.isNull() and lsh.Solids:
+                        part = _LinkPart(o, lsh)
+                except Exception:
+                    part = None
+            if part is None:
+                if sh is not None or o.TypeId.startswith("App::Link"):
+                    left.append(o.Label)
+                continue
+            if getattr(o, "Visibility", True) is False:
+                hidden.append(o.Label)
+            out.append(part)
+
+    walk(asm.Group)
+    return out, hidden, left
+
+
 def ref_element(doc, r):
     """A joint reference's part and element, either form: [asm,
     ["Part.Face6", …]] (1.0) or [part, ["Face6", …]]."""
@@ -661,11 +721,16 @@ def tools(session):
     def asm_check(a):
         asm = _assembly(doc(), a.get("assembly"))
         clearance = picks.num(a.get("clearance", 0), "clearance")
-        parts = _parts(asm)
         code, said = _status(asm)
+        parts, hidden, left = _check_parts(asm)
         hits, near = _overlaps(parts, clearance)
-        free = [o.Label for o in parts if o not in _grounded(asm) and not asm.isPartConnected(o)] if hasattr(asm, "isPartConnected") else []
+        own = [o for o in parts if not isinstance(o, _LinkPart) and o in asm.Group]
+        free = [o.Label for o in own if o not in _grounded(asm) and not asm.isPartConnected(o)] if hasattr(asm, "isPartConnected") else []
         out = {"assembly": asm.Label, "solve": said, "parts": len(parts), "overlaps": hits}
+        if hidden:
+            out["hidden"] = f"checked though hidden: {', '.join(hidden)}"
+        if left:
+            out["notChecked"] = f"no solid to check: {', '.join(left)}"
         if clearance > 0:
             out["closerThan"] = {"clearance": clearance, "pairs": near}
         if free:
@@ -692,6 +757,6 @@ def tools(session):
         Tool("asm_joint_remove", "Remove a joint (by label, asm_list lists them) and solve again.", obj({"assembly": asm_ref, "joint": {"type": "string"}}, ["joint"]), asm_joint_remove, changes=True),
         Tool("asm_sweep", "Move a revolute joint through angles (from, to degrees; 0 to 90) or a slider or cylindrical one along its axis (mm; turn: true turns a cylindrical) in steps (12), solving at each and checking the parts for overlaps (clearance mm also lists those closer). Answers each step, collidesAt and the clear range from the start, and puts every part back. Does the lid open fully, does the arm swing past the post.",
              obj({"assembly": asm_ref, "joint": {"type": "string"}, "from": {"type": "number"}, "to": {"type": "number"}, "steps": {"type": "integer"}, "clearance": {"type": "number"}, "turn": {"type": "boolean"}}, ["joint"]), asm_sweep),
-        Tool("asm_check", "Check an assembly: whether it solves, which parts overlap (the volume and where; a screw's thread in a tapped hole is marked thread and not counted against the verdict), with clearance mm the pairs closer than it, and parts joined to nothing grounded. verdict clear or fix. view_render shows it; section cuts it open at a fit.",
+        Tool("asm_check", "Check an assembly: every part of it, shown or hidden (hidden names those checked though hidden), inside App::Parts and sub-assemblies and through links too: whether it solves, which parts overlap (the volume and where; a screw's thread in a tapped hole is marked thread and not counted against the verdict), with clearance mm the pairs closer than it, and parts joined to nothing grounded. verdict clear or fix. view_render shows it; section cuts it open at a fit.",
              obj({"assembly": asm_ref, "clearance": {"type": "number"}}), asm_check),
     ]

@@ -132,6 +132,8 @@
   "param_set": {"did": ["Set the parameter {name}", "Set a parameter"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "param_list": {"did": ["Read the parameters"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "param_bind": {"did": ["Linked a parameter to {object}", "Linked a parameter"], "source": "Agent Link's own wording", "date": "2026-11-15"},
+  "varset_new": {"did": ["Made the variable set {name}"], "source": "Agent Link's own wording", "date": "2026-11-16"},
+  "varset_set": {"did": ["Set variables in {varset}", "Set variables"], "source": "Agent Link's own wording", "date": "2026-11-16"},
   "param_remove": {"did": ["Removed the parameter {name}", "Removed a parameter"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "material_set": {"did": ["Gave {body} the material {material}", "Gave {object} the material {material}", "Set a material"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "material_get": {"did": ["Read the material of {body}", "Read the material of {object}", "Read a material"], "source": "Agent Link's own wording", "date": "2026-11-15"},

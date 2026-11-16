@@ -103,10 +103,100 @@ def _nonlinear(text, cards, a):
     return text
 
 
+def mark_helper(o):
+    """An object Agent Link keeps for a study (a compound of parts, one
+    solid studied alone): hidden, and not a part of its own to
+    session_state, view_render or the hidden lists (AgentLinkHelper)."""
+    try:
+        if "AgentLinkHelper" not in o.PropertiesList:
+            o.addProperty("App::PropertyBool", "AgentLinkHelper", "Agent Link", "Kept by Agent Link for a study: not a part")
+            o.AgentLinkHelper = True
+            try:
+                o.setEditorMode("AgentLinkHelper", 2)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:
+        o.Visibility = False
+    except Exception:
+        pass
+
+
+def solid_holder(session, src, n):
+    """One solid of a multi-solid body, for a study of it alone: a hidden
+    helper object "<body> solid <n> (study)", its shape the body's solid n
+    as the body is now (made or refreshed)."""
+    sols = list(src.Shape.Solids)
+    if not 1 <= n <= len(sols):
+        raise ToolError("invalid_input" if len(sols) > 1 else "invalid_state",
+                        f"solid: 1 to {len(sols)} — {src.Label} has {len(sols)} solid{'s' if len(sols) != 1 else ''}" + ("" if len(sols) > 1 else ": study the body itself (leave solid out)") + ".")
+    label = f"{src.Label} solid {n} (study)"
+    doc = session.doc
+    h = next((x for x in doc.Objects if x.Label == label), None)
+    if h is None:
+        h = doc.addObject("Part::Feature", "StudySolid")
+        h.Label = label
+    sh = sols[n - 1].copy()
+    try:
+        same = not h.Shape.isNull() and geo.stats(h.Shape) == geo.stats(sh)
+    except Exception:
+        same = False
+    if not same:
+        h.Shape = sh
+    mark_helper(h)
+    return h
+
+
+def last_lines(text, n=6):
+    """CalculiX's last lines that say something (its errors first), joined."""
+    lines = [ln.strip() for ln in str(text or "").splitlines() if ln.strip()]
+    errs = [ln for ln in lines if "ERROR" in ln.upper() or "WARNING" in ln.upper()]
+    pick = (errs[:3] + [ln for ln in lines[-n:] if ln not in errs[:3]])[:n] if errs else lines[-n:]
+    return " | ".join(pick)[:900]
+
+
+def ccx_said(fea, ccx, timeout):
+    """What CalculiX printed on a run that wrote no results: FemToolsCcx's
+    kept stdout and stderr, else ccx run again in its folder on the same
+    deck, its output read."""
+    text = ""
+    for k in ("ccx_stdout", "ccx_stderr"):
+        v = getattr(fea, k, None)
+        if isinstance(v, bytes):
+            v = v.decode("utf-8", "replace")
+        if v:
+            text += str(v) + "\n"
+    if text.strip():
+        return last_lines(text)
+    try:
+        inp = fea.inp_file_name
+        r = subprocess.run([ccx, "-i", os.path.splitext(os.path.basename(inp))[0]], cwd=os.path.dirname(inp), capture_output=True, text=True, timeout=min(float(timeout), 120.0))
+        return last_lines((r.stdout or "") + (r.stderr or ""))
+    except Exception:  # noqa: BLE001 - no words to add
+        return ""
+
+
+def unheld_words(label, count, free):
+    """The refusal for solids no hold reaches: "solid 2 (at …) touches" for
+    one, "solids 2 and 3 (…) touch" for several."""
+    where = [f"solid {i} (at {geo.vec(p)})" for i, p in free]
+    if len(where) == 1:
+        said, verb = where[0], "touches"
+    else:
+        said, verb = ", ".join(where[:-1]) + " and " + where[-1], "touch"
+    return (f"{label} is {count} separate solids and {said} {verb} no held face: a part held by nothing has no static answer, and solids that only touch are not joined in the study. "
+            "Hold each solid too (fea_hold its faces), study one alone (fea_setup { solid: n }), or fuse them for a check of the whole.")
+
+
 def _need_study(session):
     st = _study(session.doc)
     if not st:
         raise ToolError("invalid_state", "No strength study: fea_setup { body } first.")
+    of = st.get("of")
+    if of:
+        # One solid of a body studied alone: read again from the body as it is now.
+        return st, solid_holder(session, session.body(of["body"]), int(of["solid"]))
     o = session.body(st["body"])
     return st, o
 
@@ -235,6 +325,14 @@ def tools(session):
 
     def fea_setup(a):
         o = s.body(a.get("body"))
+        of = None
+        if a.get("solid") is not None:
+            n = a["solid"]
+            if isinstance(n, bool) or not isinstance(n, int):
+                raise ToolError("invalid_input", "solid: a solid's number in the body, from 1 (body_check lists them).")
+            src = o
+            o = solid_holder(s, src, n)
+            of = {"body": src.Label, "solid": n}
         bb = o.Shape.BoundBox
         least = min(bb.XLength, bb.YLength, bb.ZLength)
         mesh = a.get("mesh")
@@ -252,13 +350,15 @@ def tools(session):
                 raise ToolError("not_found", f"material {a['material']!r}: no such material by id or name — material_list {{ words }} finds one.")
             mid, said = c["id"], "given"
         else:
-            c, set_ = matfam.of_body(s.doc, o.Label)
+            c, set_ = matfam.of_body(s.doc, of["body"] if of else o.Label)
             mid, said = c["id"], "the body's" if set_ else "assumed PLA: material_set records the real one"
         if not c.get("E"):
             raise ToolError("invalid_state", f"{c['name']} has no Young's modulus on its card: material_set custom {{ name, density, youngsMPa, yieldMPa }} gives one.")
         old = _study(s.doc) or {}
         keep = old.get("body") == o.Label and not a.get("reset")
         st = {"body": o.Label, "material": mid, "mesh": mesh, "holds": old.get("holds", []) if keep else [], "loads": old.get("loads", []) if keep else []}
+        if of:
+            st["of"] = of
         _save(s.doc, st)
         s.snapshot("fea_setup")
         out = {"study": st, "material": {"id": mid, "name": c["name"], "E": c["E"], "nu": c.get("nu"), "yield": c.get("yield"), "from": said}}
@@ -268,6 +368,11 @@ def tools(session):
             out["unmatched"] = lost
         if mesh > least / 2:
             out["warning"] = f"mesh {mesh:g} mm is over half the part's least size ({least:.1f} mm): too coarse to read stress — {round(least / 3, 2)} mm or less."
+        if of:
+            out["solid"] = (f"Solid {of['solid']} of {of['body']} alone, as {o.Label} (hidden, kept for the study and read again from {of['body']} at each solve): "
+                            "its faces are numbered on their own — pick holds and loads by where they are (near, normal) or shape_query it.")
+        elif len(o.Shape.Solids) > 1:
+            out["solids"] = f"{o.Label} is {len(o.Shape.Solids)} solids: every one needs a hold of its own (they are not joined), or solid: n studies one alone."
         out["next"] = "fea_hold the faces it is held by, fea_load what pushes on it, then fea_solve."
         return out
 
@@ -584,7 +689,7 @@ def tools(session):
             holder = s.doc.addObject("Part::Feature", "FeaParts")
             holder.Label = s.unique(name, holder)
         holder.Shape = comp
-        holder.Visibility = False
+        mark_helper(holder)
         s.doc.recompute()
         tol = float(a.get("tolerance", 0.05))
         # where they touch: faces of two parts that lie on each other
@@ -774,6 +879,7 @@ def tools(session):
         return out
 
     def fea_solve(a):
+        s._ccx_tail = s._ccx_fem_tail = None
         st, o = _need_study(s)
         if not st["holds"]:
             raise ToolError("invalid_state", "Nothing holds the part: fea_hold the faces it is mounted by — a free body has no static answer.")
@@ -788,7 +894,7 @@ def tools(session):
         shape = o.Shape
         free = _unheld_solids(st, shape)
         if free:
-            raise ToolError("invalid_state", f"{o.Label} is {len(shape.Solids)} separate solids and " + ", ".join(f"solid {i} (at {geo.vec(p)})" for i, p in free) + " touch no held face: a part held by nothing has no static answer, and solids that only touch are not joined in the study. Hold each solid too (fea_hold its faces), study the solids one at a time, or fuse them for a check of the whole.")
+            raise ToolError("invalid_state", unheld_words(o.Label, len(shape.Solids), free))
         t0 = time.time()
         timeout = float(a.get("timeout", 300))
         mesh = float(st["mesh"])
@@ -818,7 +924,12 @@ def tools(session):
         else:
             wd, femmesh, nodes, elems, disp, stress, fixed, held_faces, applied, groups, pairs, part_cards, frd = _solve_own(st, o, c, a, timeout)
         if not disp or not stress:
-            raise ToolError("failed", "CalculiX wrote no displacements or stresses — most often a part free to move (a solid or region no hold reaches, a hold on too few faces) or a mesh that failed; the files are in " + wd)
+            said = getattr(s, "_ccx_tail", None) if fem is None else getattr(s, "_ccx_fem_tail", None)
+            raise ToolError("failed", "CalculiX wrote no displacements or stresses — most often a part free to move (a solid or region no hold reaches, a hold on too few faces) or a mesh that failed"
+                            + (f". CalculiX's last lines: {said}" if said else "")
+                            + (f". FreeCAD's FEM route first: {route_why}" if route_why and fem is None else "")
+                            + (". A multi-solid body: fea_setup { solid: n } studies one solid alone" if len(shape.Solids) > 1 else "")
+                            + "; the files are in " + wd)
         vm = {n: ccx_io.von_mises(sv) for n, sv in stress.items()}
         n_max = max(vm, key=vm.get)
         dmag = {n: math.sqrt(sum(x * x for x in u[:3])) for n, u in disp.items()}
@@ -1007,10 +1118,16 @@ def tools(session):
         fea.write_inp_file()
         rc = fea.ccx_run()
         frd = os.path.splitext(fea.inp_file_name)[0] + ".frd"
-        if not os.path.isfile(frd):
-            raise ToolError("failed", f"CalculiX (run by FreeCAD's FEM, exit {rc}) wrote no results: see {wd}. The part may be free to move: hold more faces.")
-        with open(frd) as f:
-            disp, stress = ccx_io.read_frd(f.read())
+        disp = stress = None
+        if os.path.isfile(frd):
+            with open(frd) as f:
+                disp, stress = ccx_io.read_frd(f.read())
+        if not disp or not stress:
+            # CalculiX's own words (FemToolsCcx keeps its output; else it is
+            # run again here to read them), then Agent Link's own deck tries.
+            tail = ccx_said(fea, ccx, timeout)
+            s._ccx_fem_tail = tail
+            raise RuntimeError(f"CalculiX (run by FreeCAD's FEM, exit {rc}) wrote no displacements or stresses" + (f" — it said: {tail}" if tail else "") + f" (files in {wd})")
         try:
             fea.load_results()
         except Exception:
@@ -1065,6 +1182,7 @@ def tools(session):
             raise ToolError("failed", f"CalculiX took over {timeout:g} s: a coarser mesh or a longer timeout.")
         frd = os.path.join(wd, "job.frd")
         log = (r.stdout or "") + (r.stderr or "")
+        s._ccx_tail = last_lines(log)
         if "*ERROR" in log or not os.path.isfile(frd):
             err = [l.strip() for l in log.splitlines() if "ERROR" in l][:2] or log.strip().splitlines()[-2:]
             hint = " The part may be free to move: hold more faces." if any("singular" in l.lower() or "zero pivot" in l.lower() for l in log.splitlines()) else ""
@@ -1740,8 +1858,8 @@ def tools(session):
                   "friction": {"type": "number"}, "tolerance": {"type": "number"}, "mesh": {"type": "number"}, "name": {"type": "string"}}, ["bodies"]), fea_parts, changes=True),
         Tool(
             "fea_setup",
-            "Start (or change) a strength study of one body: material (the body's by default), mesh (largest element edge, mm; a third of the least size by default). The same body's holds and loads are kept (said as kept); reset: true drops them (said as dropped). " + TRAPS,
-            obj({"body": {"type": "string"}, "material": {"type": "string"}, "mesh": {"type": "number"}, "reset": {"type": "boolean"}}),
+            "Start (or change) a strength study of one body: solid: n studies one solid of a multi-solid body alone (a hidden helper, read again from the body at each solve; its faces are numbered on their own); material (the body's by default), mesh (largest element edge, mm; a third of the least size by default). The same body's holds and loads are kept (said as kept); reset: true drops them (said as dropped). " + TRAPS,
+            obj({"body": {"type": "string"}, "solid": {"type": "integer", "description": "One solid of a multi-solid body (an AllowCompound Body), from 1, studied alone."}, "material": {"type": "string"}, "mesh": {"type": "number"}, "reset": {"type": "boolean"}}),
             fea_setup,
             changes=True,
         ),

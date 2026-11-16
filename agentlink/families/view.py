@@ -367,6 +367,15 @@ def tools(session):
             out["section"] = section
         if frame:
             out["zoom"] = frame
+        if a.get("objects") is None and s.doc is not None:
+            # Never silent about what is left out: a hidden part is not drawn
+            # (a boolean's kept inputs drew nothing and nothing said so).
+            try:
+                hid = [o.Label for o in s.hidden_in(s.doc)]
+            except Exception:
+                hid = []
+            if hid:
+                out["hidden"] = "hidden, not drawn: " + ", ".join(hid) + " — objects: [names] draws them too."
         if not drawn:
             out["warning"] = "Nothing landed in the picture: the zoom or the cut leaves the parts out of view."
         if a.get("inline", True):
@@ -489,7 +498,7 @@ def tools(session):
     return [
         Tool(
             "view_render",
-            "Draw the parts as a picture and look at it — works headless. views: one or several (\"all\": iso, top, front, right, each fitted). "
+            "Draw the parts as a picture and look at it — works headless. The parts shown, without the containers that hold them (an assembly, an App::Part, a group: their parts are drawn, never twice); hidden parts are not drawn and the answer names them (hidden), objects: [names] draws those named. views: one or several (\"all\": iso, top, front, right, each fitted). "
             "map: wall (thickness, red thin), stress (the last fea_solve), heat (the last fea_heat), or one an add-on adds (view_maps lists them) — with a legend, and the worst spot's at; range [lo, hi] fixes the colours. "
             "section { axis x|y|z, offset mm, flip } cuts it open (solid cut faces hatched). zoom { at, size mm } frames a spot — a finding's at. "
             "objects: which bodies (every shown body when left out: a Body of several solids, screws and other attached parts, each in a colour of its own); layers: which add-on layers (a scan …). The PNG comes back as an image (inline false: the file only) and is written to path. "

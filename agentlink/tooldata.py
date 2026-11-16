@@ -20,6 +20,19 @@ reads: for a changing tool, the calls that only read, {"action": ["list"]}
 what a call did in the Activity tab's words, a template whose {fields} come
 from the call's arguments or answer ("Sliced {object}", agentlink/activity.py).
 
+Long reads, for add-on authors: a client drops a call after about 80 s, and
+the watchdog stops a FreeCAD that holds a call past its deadline. A read
+("changes": false) that may run long should say "heavy": true (or be in its
+family module's HEAVY): it then runs as a job from the first call (the call
+answers with a job id past 45 s; job_status gives the answer) and is timed
+and given a heavy job's deadline. A read not declared heavy is still sent
+to a job on its own once a past run here took over 20 s (jobs.SLOW_READ,
+logged against the document's size; a scan add-on's wall-thickness read
+is handled so), or once the watchdog stopped FreeCAD in it — but that first
+long run is not, so declare what you know is slow. A tool that changes the
+document cannot run as a job: if it can be long, declare it heavy so it is
+estimated, queued and given a deadline of three times its estimate.
+
 A handler refuses by raising any exception with `code` (invalid_input,
 not_found, invalid_state, unavailable, failed) and `message`: the agent gets
 it as a refusal, never a crash.
