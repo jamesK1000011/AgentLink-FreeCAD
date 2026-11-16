@@ -124,6 +124,8 @@ agentlink/launch.py
 agentlink/launcher_check.py
 agentlink/layout.py
 agentlink/link_token.py
+agentlink/livescript.py
+agentlink/loftmath.py
 agentlink/materials.py
 agentlink/meshbool.py
 agentlink/meshdist.py
@@ -134,6 +136,7 @@ agentlink/overlay.py
 agentlink/panel.py
 agentlink/panel_tabs.py
 agentlink/paths.py
+agentlink/pointfiles.py
 agentlink/protocol.py
 agentlink/quit_guard.py
 agentlink/refusal.py
@@ -242,7 +245,9 @@ tests/test_layout_placer.py
 tests/test_licence_boundary.py
 tests/test_link_token.py
 tests/test_live_findings.py
+tests/test_live_run.py
 tests/test_loft_findings.py
+tests/test_loft_spans.py
 tests/test_material.py
 tests/test_mcp_contract.py
 tests/test_measure.py
