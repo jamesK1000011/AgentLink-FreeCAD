@@ -687,8 +687,8 @@ def tools(session):
             import traceback as _tb
 
             fr = _tb.extract_tb(e.__traceback__)
-            where = f" (FreeCAD's {os.path.basename(fr[-1].filename)}:{fr[-1].lineno}, in {fr[-1].name}: {(fr[-1].line or '').strip()[:120]})" if fr else ""
-            raise ToolError("failed", f"IFC export failed: {e}{where}. objects: [names] exports part of the model, which finds the object it trips on; bim_preflight lists objects with no shape and invalid solids.") from None
+            stopped = f" (FreeCAD's {os.path.basename(fr[-1].filename)}:{fr[-1].lineno}, in {fr[-1].name}: {(fr[-1].line or '').strip()[:120]})" if fr else ""
+            raise ToolError("failed", f"IFC export failed: {e}{stopped}. objects: [names] exports part of the model, which finds the object it trips on; bim_preflight lists objects with no shape and invalid solids.") from None
         import ifcopenshell
 
         f = ifcopenshell.open(p)
