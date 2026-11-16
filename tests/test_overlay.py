@@ -522,6 +522,124 @@ class Annotations(unittest.TestCase):
         self.assertIsNone(annotate.kind_of("Faces"))
 
 
+# ---- commands inside a toolbar dropdown (group commands) ------------------------
+
+class GAct:
+    def __init__(self, name="", menu=None, prop=None):
+        self.n, self.m, self.p = name, menu, prop
+
+    def objectName(self):
+        return self.n
+
+    def property(self, k):
+        return self.p if k == "CommandName" else None
+
+    def menu(self):
+        return self.m
+
+
+class GMenu:
+    def __init__(self, *acts):
+        self.acts = list(acts)
+
+    def actions(self):
+        return self.acts
+
+
+class Btn:
+    def __init__(self, default=None, menu=None):
+        self.d, self.m = default, menu
+
+    def defaultAction(self):
+        return self.d
+
+    def menu(self):
+        return self.m
+
+
+class DeadBtn:
+    def defaultAction(self):
+        raise RuntimeError("Internal C++ object already deleted.")
+
+    menu = defaultAction
+
+
+def group(name, *children, own_menu=False):
+    m = GMenu(*[GAct(c) for c in children])
+    return Btn(GAct(name, menu=None if own_menu else m), m if own_menu else None)
+
+
+class Groups(unittest.TestCase):
+    """FreeCAD 1.1.3: Sketcher's rectangles, arcs and circles and Part
+    Design's primitives sit in dropdown buttons whose default action is the
+    group's, not the child command's."""
+
+    def setUp(self):
+        self.rects = group("Sketcher_CompCreateRectangles", "Sketcher_CreateRectangle", "Sketcher_CreateRectangle_Center", "Sketcher_CreateOblong")
+        self.arcs = group("Sketcher_CompCreateArc", "Sketcher_CreateArc", "Sketcher_Create3PointArc")
+        self.circles = group("Sketcher_CompCreateCircle", "Sketcher_CreateCircle", "Sketcher_Create3PointCircle", own_menu=True)
+        prims = GMenu(GAct(prop=b"PartDesign_AdditiveBox"), GAct(prop=b"PartDesign_AdditiveCylinder"))  # named only by property
+        self.prims = Btn(GAct("PartDesign_CompPrimitiveAdditive", menu=prims))
+        self.line = Btn(GAct("Sketcher_CreateLine"))
+        btns = [self.rects, self.arcs, self.circles, self.prims, self.line, DeadBtn()]
+        self.mw = types.SimpleNamespace(findChildren=lambda cls: list(btns))
+
+    def find(self, cmd):
+        return targets.group_buttons(cmd, self.mw, tool_button=object)
+
+    def test_each_group_found_by_its_child(self):
+        for cmd, btn in (("Sketcher_CreateRectangle", self.rects), ("Sketcher_CreateOblong", self.rects),
+                         ("Sketcher_Create3PointArc", self.arcs), ("Sketcher_CreateCircle", self.circles),
+                         ("PartDesign_AdditiveCylinder", self.prims)):
+            with self.subTest(cmd=cmd):
+                got = self.find(cmd)
+                self.assertEqual([b for b, _m, _a in got], [btn])
+                self.assertEqual(targets.command_name(got[0][2]), cmd)
+
+    def test_own_button_and_unknown_not_groups(self):
+        self.assertEqual(self.find("Sketcher_CreateLine"), [])  # its own button: buttons() has it
+        self.assertEqual(self.find("Sketcher_CreatePolyline"), [])
+
+    def test_submenu_inside_a_dropdown(self):
+        inner = GMenu(GAct("Sketcher_CreateSlot"))
+        b = Btn(GAct("Sketcher_CompSlots", menu=GMenu(GAct("More", menu=inner))))
+        mw = types.SimpleNamespace(findChildren=lambda cls: [b])
+        self.assertEqual(targets.group_buttons("Sketcher_CreateSlot", mw, tool_button=object)[0][0], b)
+
+    def test_watch_menu_rings_the_item_when_opened(self):
+        ov = overlay.Overlay(gui=Gui(W("main")))
+        seen = []
+        ov._watch_menu = lambda m, a, h, o, b: seen.append((m, a, h, o, b))
+        ov.watch_menu("menu", "act", owner="tutor", handle=3, badge=2)
+        ov.watch_menu(None, "act")
+        self.assertEqual(seen, [("menu", "act", 3, "tutor", 2)])
+
+
+class Covered(unittest.TestCase):
+    """visibleRegion can be empty for a button the person plainly sees;
+    what the window has under the button's middle decides."""
+
+    def test_under_the_middle(self):
+        btn = W("btn", None, pos=(100, 40))
+        child = types.SimpleNamespace(parentWidget=lambda: btn)
+        mw = types.SimpleNamespace(childAt=lambda p: child)
+        btn.mapTo = lambda target, p: p
+        btn.rect = lambda: types.SimpleNamespace(center=lambda: (15, 15))
+        self.assertTrue(overlay.Overlay._hit(btn, mw))
+        other = types.SimpleNamespace(parentWidget=lambda: None)
+        self.assertFalse(overlay.Overlay._hit(btn, types.SimpleNamespace(childAt=lambda p: other)))
+        self.assertFalse(overlay.Overlay._hit(btn, types.SimpleNamespace(childAt=lambda p: None)))
+
+    def test_empty_region_but_hit_is_not_covered(self):
+        mw = W("main", size=(1200, 800))
+        ov = overlay.Overlay(gui=Gui(mw))
+        btn = W("btn", mw, covered=True)
+        ov._hit = lambda w, m: True
+        self.assertIsNone(ov.visible(btn))
+        ov._hit = lambda w, m: False
+        self.assertEqual(ov.visible(btn), "covered")
+
+
 class TabSlot(unittest.TestCase):
     def test_slot_15_is_free_and_between_notes_and_steps(self):
         self.assertNotIn(15, [o for _t, o in panel_tabs.CORE_TABS])

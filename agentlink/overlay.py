@@ -405,11 +405,38 @@ class Overlay:
                 return "hidden"
             if widget.window() is not mw and not _is_menu(widget):
                 return "in another window"
-            if widget.visibleRegion().isEmpty():
+            if widget.visibleRegion().isEmpty() and not self._hit(widget, mw):
                 return "covered"
         except RuntimeError:
             return "gone"
         return None
+
+    @staticmethod
+    def _hit(widget, mw):
+        """True when the main window's widget under widget's middle is widget
+        or inside it. childAt passes over widgets transparent to the mouse,
+        so the overlay and its callout never count as covering."""
+        try:
+            r = widget.rect()
+            mid = r.center() if hasattr(r, "center") else _point(r[0] + r[2] // 2, r[1] + r[3] // 2)
+            at = mw.childAt(widget.mapTo(mw, mid))
+        except Exception:  # noqa: BLE001
+            return False
+        while at is not None:
+            if at is widget:
+                return True
+            try:
+                at = at.parentWidget()
+            except Exception:  # noqa: BLE001
+                return False
+        return False
+
+    def watch_menu(self, menu, action, owner="", handle=None, badge=None):
+        """Ring action inside menu whenever the person opens it (a toolbar
+        button's dropdown), as menu() does for the menubar's menus."""
+        if menu is None or action is None:
+            return
+        self._watch_menu(menu, action, handle, owner, badge)
 
     # Where the overlay cannot draw (hard): the 3D views and any other native
     # GL surface, painted over the overlay by the system. Where a callout had

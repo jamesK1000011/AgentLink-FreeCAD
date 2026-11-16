@@ -400,14 +400,22 @@ def flash_command(cmd, ms=1300, settle=False):
         _paint()
     lit = []
     painter = overlay.service()
+    flashed = False
     for act in targets.actions(cmd):
         for w in targets.associated(act):
             if isinstance(w, QtW.QToolButton):
-                painter.flash(w, ms)
+                flashed = painter.flash(w, ms) or flashed
             elif isinstance(w, QtW.QMenu):
                 # The menu item and its menu's title in bold for a moment
                 # (no menu is opened: that would take the person's input).
                 lit += [act, w.menuAction()]
+    if not flashed:
+        # Inside a toolbar dropdown (a group command): its button lights.
+        try:
+            for b, _m, _a in targets.group_buttons(cmd):
+                painter.flash(b, ms)
+        except Exception:  # noqa: BLE001  (a nicety; the call has run)
+            pass
     for a in dict.fromkeys(x for x in lit if x is not None):
         old = QtGui.QFont(a.font())
         f = QtGui.QFont(old)
