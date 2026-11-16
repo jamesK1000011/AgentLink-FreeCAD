@@ -539,17 +539,31 @@ def estimate(q, tool, size):
     return max(0.0, a + b * float(size))
 
 
-def estimate_range(q, tool, size, last=12):
+def estimate_range(q, tool, size, last=12, recent=5, decay=0.75):
     """(low, typical, high) seconds for a job of this size, from the time
-    per unit of size of its last runs here (fastest, middle, slowest), or
-    None with no runs. A range, so one slow run (a render that hit a busy
-    Mac) does not stand as the estimate."""
+    per unit of size of its last runs here, or None with no runs. The
+    newest runs count most (each older run decay times the one after it:
+    the typical is their weighted middle), and low and high are the fastest
+    and slowest of the newest few — so one slow run (a render that hit a
+    busy Mac) does not stand as the estimate, and runs from before a fix
+    made the tool faster stop weighing on it after a run or two (two 80–120 s
+    renders from before renders were sized kept a 3 s render's estimate at
+    13 s)."""
     pts = [(s, t) for s, t in ((q.get("timings") or {}).get(tool) or [])[-last:] if s > 0 and t >= 0]
     if not pts:
         return None
-    rates = sorted(t / s for s, t in pts)
-    mid = rates[len(rates) // 2] if len(rates) % 2 else (rates[len(rates) // 2 - 1] + rates[len(rates) // 2]) / 2.0
-    return rates[0] * float(size), mid * float(size), rates[-1] * float(size)
+    rates = [t / s for s, t in pts]
+    n = len(rates)
+    weighted = sorted((r, decay ** (n - 1 - i)) for i, r in enumerate(rates))
+    half, run, mid = sum(w for _r, w in weighted) / 2.0, 0.0, weighted[-1][0]
+    for r, w in weighted:
+        run += w
+        if run >= half:
+            mid = r
+            break
+    newest = rates[-recent:]
+    lo, hi = min(min(newest), mid), max(max(newest), mid)
+    return lo * float(size), mid * float(size), hi * float(size)
 
 
 def said_range(r):
