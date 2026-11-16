@@ -671,6 +671,20 @@ class Run:
         # An item's check box clicked: (view, index, state before) until the
         # click is done and checked.
         self.checking = None
+        # gui_input's as: "person" (hooks.person_input, dev only): its steps'
+        # input counts as the person's until the answer is decided, then
+        # it is closed (even while a step's menu or dialog still holds the
+        # call, and on an error); as_ is echoed in the answer.
+        self.person = None
+        self.as_ = None
+
+    def _release_person(self):
+        p, self.person = self.person, None
+        if p is not None:
+            try:
+                p.close()
+            except Exception:
+                pass
 
     # -- the window's parts --
 
@@ -1622,6 +1636,8 @@ class Run:
 
     def answer(self, steps, note=None, open_=None):
         out = {"steps": steps}
+        if self.as_:
+            out["as"] = self.as_
         if HELD["buttons"]:
             out["held"] = list(HELD["buttons"])
         if self.shots:
@@ -1684,6 +1700,7 @@ class Run:
             return
         info = self.open_info()
         self.final = self.answer(self.done, open_=info)
+        self._release_person()  # the steps are over: what follows is not theirs
         self._tell(info)
         # Inside a step's nested loop (the steps it held were set aside):
         # the answer goes out now, while the menu or dialog stays open.
@@ -1701,6 +1718,7 @@ class Run:
         try:
             self._go()
         finally:
+            self._release_person()
             if stop is not None:
                 try:
                     stop()

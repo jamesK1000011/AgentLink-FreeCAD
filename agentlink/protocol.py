@@ -353,6 +353,14 @@ class Server:
         s = self.session
         name = params.get("name")
         tool = self.tools.get(name)
+        # A call that counts as the person's (gui_input's as: "person") says
+        # so for its own call_done only: taken here, so it never outlives it.
+        by = getattr(s, "done_by", None) if s is not None else None
+        if by is not None:
+            try:
+                s.done_by = None
+            except Exception:
+                pass
         if s is None or tool is None:
             return
         ok = not result.get("isError")
@@ -366,7 +374,11 @@ class Server:
         try:
             from . import hooks
 
-            hooks.emit("call_done", s, name, ok, bool(changed))
+            if by == hooks.PERSON and getattr(s, "by", hooks.AGENT) == hooks.AGENT:
+                with hooks.as_person(s):
+                    hooks.emit("call_done", s, name, ok, bool(changed))
+            else:
+                hooks.emit("call_done", s, name, ok, bool(changed))
         except Exception:
             pass
 

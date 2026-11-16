@@ -77,6 +77,9 @@ def tools(s):
         if not getattr(FreeCAD, "GuiUp", False):
             raise ToolError("unavailable", "gui_input sends mouse and keyboard input to the FreeCAD window, and this FreeCAD has none (headless): it runs through the window's link (Agent Link > Start Link).")
         steps = gi.parse_steps(a.get("steps"))
+        as_ = a.get("as")
+        if as_ is not None and as_ != "person":
+            raise bad('as: "person" (the steps\' input counts as the person\'s), or leave it out.')
         import FreeCADGui
 
         from .. import gui_link, report_watch
@@ -98,7 +101,21 @@ def tools(s):
             if st.get("do") == "shot":
                 for n in (st["name"] + ".png", st["name"] + "-front.png"):
                     paths.made(s, os.path.join(shot_dir, n), "shot")
-        out = run.run(steps)
+        from .. import hooks
+
+        if as_ == "person":
+            # Dev only: a student agent standing in for the person. The steps'
+            # window events are the person's (hooks.person_input), and so is
+            # this call's call_done (session.done_by); nothing else changes.
+            run.as_ = "person"
+            with hooks.person_input() as p:
+                run.person = p
+                try:
+                    out = run.run(steps)
+                finally:
+                    s.done_by = hooks.PERSON
+        else:
+            out = run.run(steps)
         if run.shots and a.get("inline", True) and not run.answered:
             try:
                 with open(run.shots[-1], "rb") as f:
@@ -132,8 +149,10 @@ def tools(s):
              "the first visible match; {tab: {text, under?}}; {item: {text, under?, column?}, check?: true} a list, tree or table row "
              "(check: its box); {menu_item: \"text\"} an item of the open menu; {window: [x, y]} main-window pixels. While a dialog or menu is in front only targets inside it are taken. "
              "Answers per step what it hit (class, name, text, where), a dialog or menu it opened (later steps run inside it), "
-             "open: what still holds the window at the end (close it: Escape, dialog_answer or gui_unstick), new Report problems. Shortcuts are not triggered (cmd_run).",
-             obj({"steps": {"type": "array", "items": {"type": "object"}}, "inline": {"type": "boolean"}}, ["steps"]), gui_input),
+             "open: what still holds the window at the end (close it: Escape, dialog_answer or gui_unstick), new Report problems. Shortcuts are not triggered (cmd_run). "
+             "as: \"person\" (dev, testing an add-on that follows the person): this call's input counts as the person's, not the agent's.",
+             obj({"steps": {"type": "array", "items": {"type": "object"}}, "inline": {"type": "boolean"},
+                  "as": {"type": "string", "enum": ["person"]}}, ["steps"]), gui_input),
         Tool("gui_unstick",
              "Close the menu, drop-down list or dialog that holds the FreeCAD window (Escape's effect: a menu closes, a dialog is cancelled), "
              "even while it holds every other call. all: true closes each one in front, dialogs under a menu too. Answers what was closed and "

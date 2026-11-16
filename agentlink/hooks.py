@@ -40,7 +40,8 @@ Rider line                    register_rider(owner, fn): fn(tool) -> a short
 Who is acting                 agent_acting(): True while one of the agent's
                               calls runs (not a panel click), so an
                               add-on's observers keep the person's events
-                              apart from the agent's
+                              apart from the agent's; not inside gui_input
+                              with as: "person" (person_input, dev only)
 Socket-thread tools           register_thread_tool(name): the window link
                               answers it on its socket thread (a long poll
                               that never holds the GUI thread); the tool
@@ -275,7 +276,43 @@ class acting:
 
 
 def agent_acting():
-    return _ACTING[0] > 0
+    n = _ACTING[0]
+    return n > 0 and not (_PERSON_AT and _PERSON_AT[-1] == n)
+
+
+# ---- the person's hands, for one call: gui_input's dev-only as: "person"
+# (a student agent standing in for the person, beside a teaching agent on the
+# same link). While its steps run, agent_acting() is False at the depth of
+# the call that opened it, so the window events its input makes are the
+# person's; an agent's call that runs inside it (a call taken while a
+# step's menu or dialog loop holds the window) is one level deeper and
+# stays the agent's. Attribution follows the call: no global toggle, so a
+# teaching agent's calls on the same link before, after or inside it are
+# untouched. close() is idempotent; the with block closes it on any exit.
+_PERSON_AT = []
+
+
+class person_input:
+    def __init__(self):
+        self.level = None
+
+    def __enter__(self):
+        self.level = _ACTING[0]
+        _PERSON_AT.append(self.level)
+        return self
+
+    def close(self):
+        if self.level is None:
+            return
+        for i in range(len(_PERSON_AT) - 1, -1, -1):
+            if _PERSON_AT[i] == self.level:
+                del _PERSON_AT[i]
+                break
+        self.level = None
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
 
 
 # ---- socket-thread tools: answered by the window link on its socket
@@ -526,6 +563,7 @@ def restore(state):
 
 def reset():
     """For tests: every registration forgotten."""
+    del _PERSON_AT[:]
     for lst in _READERS.values():
         del lst[:]
     _SERVICES.clear()
