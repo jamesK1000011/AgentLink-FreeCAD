@@ -64,7 +64,7 @@ FAKE_WINDOW = textwrap.dedent('''
     def beat():
         while True:
             if state["beat"]:
-                hb = {"pid": os.getpid(), "t": time.time(), "pairing": 1, "app": "Fake.app", "docs": state["docs"], "dialog": state["dialog"], "popup": state["popup"]}
+                hb = {"pid": os.getpid(), "t": time.time(), "pairing": 1, "app": "Fake.app", "docs": state["docs"], "dialog": state["dialog"], "popup": state["popup"], **state.get("held", {})}
                 tmp = os.path.join(home, "heartbeat.json.tmp")
                 json.dump(hb, open(tmp, "w")); os.replace(tmp, os.path.join(home, "heartbeat.json"))
             time.sleep(0.3)
@@ -86,9 +86,19 @@ FAKE_WINDOW = textwrap.dedent('''
         for line in f:
             m = json.loads(line)
             name = (m.get("params") or {}).get("name")
+            if state.get("held") and name not in ("gui_unstick",):
+                time.sleep(3600)  # queued behind the call a nested loop holds
             if name == "hang":
                 state["beat"] = False
                 time.sleep(3600)
+            if name in ("nested_hang", "nested_answered"):
+                # A nested event loop that never ends, nothing open in front:
+                # the heartbeat goes on (written from inside that loop).
+                state["held"] = {"busy": "batch", "busySince": time.time(), "loops": 2}
+                if name == "nested_hang":
+                    time.sleep(3600)
+                # Answered by live_run's guard, which gave up on the loop.
+                state["held"]["stuck"] = {"t": time.time(), "why": "guard"}
             if name == "heavy_slow":
                 # OCC holds the GUI thread: no heartbeat, past the deadline, but marked heavy.
                 mark = os.path.join(home, "heavy-call.json")
@@ -321,6 +331,34 @@ class WindowSide(Sup):
         self.assertIn("started in the background", out["note"])
         again = self.call("ping")[1]["pid"]
         self.assertNotEqual(first, again)
+
+    def test_a_nested_loop_that_never_ends_is_a_hang(self):
+        # Live: a batch of live_runs held the window for 12 minutes inside a
+        # nested event loop, heartbeat fresh, every later call timing out.
+        first = self.call("ping")[1]["pid"]
+        err, out = self.call("nested_hang", timeout=90)
+        self.assertTrue(err)
+        msg = out["error"]["message"]
+        self.assertIn("nested event loop", msg)
+        self.assertIn("Plate", msg)
+        self.assertNotEqual(first, self.call("ping")[1]["pid"])
+        log = [json.loads(ln) for ln in open(os.path.join(self.home, "watchdog.log")) if ln.strip()]
+        self.assertTrue(any(e.get("event") == "hang" and e.get("nested") for e in log), log)
+
+    def test_a_loop_its_guard_gave_up_on_is_restarted(self):
+        # The call was answered (its guard), the window still held: started
+        # again with nothing in hand, or at the next call, which is said.
+        first = self.call("ping")[1]["pid"]
+        err, out = self.call("nested_answered")
+        self.assertFalse(err, out)
+        err, out = self.call("ping", timeout=90)
+        if err:
+            self.assertIn("held by an earlier batch", out["error"]["message"])
+            err, out = self.call("ping", timeout=30)
+        self.assertFalse(err, out)
+        self.assertNotEqual(first, out["pid"])
+        log = [json.loads(ln) for ln in open(os.path.join(self.home, "watchdog.log")) if ln.strip()]
+        self.assertTrue(any(e.get("event") == "hang" and e.get("nested") for e in log), log)
 
     def test_hang_stops_relaunches_and_recovers(self):
         first = self.call("ping")[1]["pid"]

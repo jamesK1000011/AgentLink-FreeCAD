@@ -8,6 +8,7 @@
 import json
 import os
 import re
+import time
 
 from .protocol import ToolError
 
@@ -236,6 +237,16 @@ def load(path):
 
 
 BUSY_RETRY_WAIT = 2.0  # seconds before a step refused busy is run again, once
+BUDGET = 90.0  # seconds a live_run may hold the window by default (budget: …)
+BUDGET_MAX = 600.0
+# Past its budget, a live_run still inside a nested event loop (a dialog
+# whose loop never ended): after GUARD_GRACE s what is open is closed and
+# the loop woken; GUARD_GRACE s after that the call is answered with the
+# summary so far (guard_action).
+GUARD_GRACE = 15.0
+# A call started just inside the budget may run on past it (one call is
+# never cut short): the heartbeat's until allows it this long.
+LAST_CALL_GRACE = 150.0
 
 
 def _busy(answers, rec):
@@ -246,22 +257,116 @@ def _busy(answers, rec):
     return bool(bad) or (isinstance(be, dict) and be.get("code") == "busy")
 
 
-def run(script, chosen, call, vars_=None, stop_on_fail=False, shot=None, live=None):
+def guard_action(now, t0, budget, level, level0, unstuck_at=None, answered=False, grace=GUARD_GRACE):
+    """What live_run's guard does on a tick, from inside whatever event loop
+    holds the window: "none", "unstick" (close what is open, wake the loop)
+    or "answer" (answer the call with the summary so far: a nested loop
+    that never ends must not hold the call). Only past the budget and a
+    grace, and only inside a deeper event loop than the one live_run
+    started in (level; None when not known: then by time alone)."""
+    if answered or budget is None:
+        return "none"
+    if now - t0 < budget + grace:
+        return "none"
+    if level is not None and level0 is not None and level <= level0:
+        return "none"  # a long call of its own, not a nested loop: the budget stops it after the call
+    if unstuck_at is None:
+        return "unstick"
+    return "answer" if now - unstuck_at >= grace else "none"
+
+
+class Guard:
+    """live_run's guard, ticked from inside whatever event loop holds the
+    window (gui_link.ticker posts its ticks there): past the budget and a
+    grace, inside a nested loop, it closes what is open and wakes the loop
+    (unstick()); if the loop still has not ended a grace later, it answers
+    the call with the summary so far (answer(summary)) and says so
+    (stuck()), so the watchdog can start FreeCAD again."""
+
+    def __init__(self, budget, clock, level, unstick, answer, stuck=None, grace=GUARD_GRACE):
+        self.budget, self.clock, self.level, self.grace = budget, clock, level, grace
+        self._unstick, self._answer, self._stuck = unstick, answer, stuck
+        self.t0 = clock()
+        self.level0 = self._level()
+        self.unstuck_at = None
+        self.answered = False
+        self.summary = None
+
+    def _level(self):
+        try:
+            return self.level()
+        except Exception:
+            return None
+
+    def tick(self):
+        if self.summary is None:
+            return "none"
+        now = self.clock()
+        act = guard_action(now, self.t0, self.budget, self._level(), self.level0, self.unstuck_at, self.answered, self.grace)
+        if act == "unstick":
+            self.unstuck_at = now
+            try:
+                self._unstick()
+            except Exception:
+                pass
+        elif act == "answer":
+            self.answered = True
+            body = self.summary(f"A nested event loop still held the window {int(now - self.t0)} s in (budget {self.budget:g} s) after what was open was closed: answered with what ran so far; FreeCAD is started again if it stays held.")
+            try:
+                self._answer(body)
+            except Exception:
+                pass
+            if self._stuck is not None:
+                try:
+                    self._stuck(body)
+                except Exception:
+                    pass
+        return act
+
+
+def run(script, chosen, call, vars_=None, stop_on_fail=False, shot=None, live=None, budget=None, clock=None):
     """Replay the chosen steps. call(tool, arguments) answers one call's
     entry ({tool, ok, result | error}); batch(calls) is call("batch", …).
     shot(name) takes a window picture and answers its path or None.
 
     live (the window; None elsewhere) has push(fn) / pop() for the answer
     of a gui_input whose step opened a dialog (fn(tool, body) is called
-    from inside the dialog's own loop: the step's calls after it and the
-    steps after that run there, so the step that answers the dialog does
-    run), batch_now() (the batch in hand: its results so far, its index),
-    front() (what is open in front, or None), unstick() and sleep(s).
-    Whatever is left open at the end is closed (gui_unstick) and said in
-    leftOpen. The answer is always this summary, never a bare batch."""
+    from inside the dialog's own loop), batch_now() (the batch in hand: its
+    results so far, its index), front() (what is open in front, or None),
+    unstick(), sleep(s), and optionally wake() (the event loop woken, so a
+    loop whose dialog closed ends) and watch(summary) (a guard started,
+    answering a function that stops it; summary() is the answer so far).
+
+    Inside a dialog's loop only what the dialog needs runs: the step's
+    calls after the gui_input and the next steps' calls, one at a time,
+    each only while something is still open in front. Once it is closed
+    the replay returns, the dialog's loop ends, and the rest runs from the
+    replay's own level (a loop left running after its dialog closed held
+    the window for good). Whatever is left open at the end is closed
+    (gui_unstick) and said in leftOpen.
+
+    budget (seconds, None: no limit): no call starts past it; the steps not
+    run are named (notRun) and the answer says how to run them. The answer
+    is always this summary, never a bare batch."""
     vars_ = dict(vars_ or {})
     names = declared_vars(script)
-    state = {"k": 0, "out": [], "passed": 0, "failed": 0, "skipped": 0, "stop": False, "cur": None, "left": []}
+    clock = clock or time.time
+    t0 = clock()
+    state = {"k": 0, "out": [], "passed": 0, "failed": 0, "skipped": 0, "stop": False, "cur": None, "left": [], "pending": None, "over": False}
+
+    def over():
+        if budget is not None and clock() - t0 >= budget:
+            state["over"] = True
+        return state["over"]
+
+    def held():
+        """Something is open in front (the dialog a gui_input opened)."""
+        if live is None:
+            return False
+        try:
+            return bool(live.front())
+        except Exception:
+            return False
 
     def finish_step(i, st, rec, answers):
         checks = evaluate(answers, st.get("expect"))
@@ -312,17 +417,32 @@ def run(script, chosen, call, vars_=None, stop_on_fail=False, shot=None, live=No
             f = None
         if not f:
             return
-        r = live.unstick()
+        try:
+            r = live.unstick()
+        except Exception:
+            r = None
         state["left"].append({"open": f, "closed": bool(isinstance(r, dict) and r.get("ok"))})
+
+    def wake():
+        w = getattr(live, "wake", None) if live is not None else None
+        if w is not None:
+            try:
+                w()
+            except Exception:
+                pass
 
     def continued(tool, body):
         """A gui_input in the step in hand opened a dialog that holds its
-        call: the step's answers so far and this one, then its calls after
-        it and the steps after, run here inside the dialog's loop."""
+        call: its answer is taken here, inside the dialog's loop. The step's
+        calls after it and the next steps' run here one at a time while the
+        dialog is open; the rest waits for the replay's own level."""
         cur = state["cur"]
         if cur is None or cur.get("taken"):
             return False
-        cur["taken"] = True
+        if not held():
+            # Closed already: the call returns by itself and the replay goes
+            # on at its own level (nothing is run inside a loop that ends).
+            return False
         if cur["direct"]:
             done = list(cur["answers"]) + [{"tool": tool, "ok": True, "result": body}]
             at = cur["j"]
@@ -333,31 +453,52 @@ def run(script, chosen, call, vars_=None, stop_on_fail=False, shot=None, live=No
             done = list(bn.get("results") or []) + [{"tool": tool, "ok": True, "result": body}]
             at = int(bn.get("i", len(done) - 1))
             bn["answered"] = True  # the batch stops when its call returns
-        for c in cur["calls"][at + 1:]:
-            ans = call(c.get("tool"), c.get("arguments") or {})
-            done.append(ans)
-            capture(vars_, names, ans)
-        cur["rec"]["dialog"] = f"{tool} (call {at}) opened a dialog that held its call: the calls after it ran inside the dialog's loop"
-        finish_step(cur["i"], cur["st"], cur["rec"], done)
-        state["k"] = cur["pos"] + 1
+        cur["taken"] = True
+        cur["rec"]["dialog"] = f"{tool} (call {at}) opened a dialog that held its call: what it needed ran inside the dialog's loop, the rest after it closed"
         state["cur"] = None
-        advance()
-        close_left()
+        state["pending"] = {"i": cur["i"], "pos": cur["pos"], "st": cur["st"], "rec": cur["rec"], "calls": cur["calls"], "answers": done, "next": at + 1}
+        advance(nested=True)
+        if held():
+            # Nothing more to run inside it (the script is done, stopped or
+            # out of time): closed, so its loop ends.
+            close_left()
+        wake()
         return True
 
-    def run_calls(cur):
+    def one_by_one(cur, start, nested):
+        """cur's calls from start on, one at a time; nested: each only while
+        something is open in front. True when all ran."""
+        calls = cur["calls"]
+        for j in range(start, len(calls)):
+            if (nested and not held()) or over():
+                cur["next"] = j
+                return False
+            cur["j"] = j
+            c = calls[j]
+            ans = call(c.get("tool"), c.get("arguments") or {})
+            if cur.get("taken"):
+                return None
+            cur["answers"].append(ans)
+            capture(vars_, names, ans)
+        cur["next"] = len(calls)
+        return True
+
+    def run_calls(cur, nested):
+        """The step's calls: answers, None when a dialog's loop took them on
+        (continued), or False when left part-way (nested, the dialog
+        closed): state["pending"] holds the rest."""
         st, calls = cur["st"], cur["calls"]
         if live is not None:
             live.push(continued)
         try:
-            if st.get("direct"):
-                for j, c in enumerate(calls):
-                    cur["j"] = j
-                    ans = call(c.get("tool"), c.get("arguments") or {})
-                    if cur.get("taken"):
-                        return None
-                    cur["answers"].append(ans)
-                    capture(vars_, names, ans)
+            if st.get("direct") or nested:
+                cur["direct"] = True
+                got = one_by_one(cur, 0, nested)
+                if got is None:
+                    return None
+                if got is False:
+                    state["pending"] = {k: cur[k] for k in ("i", "pos", "st", "rec", "calls", "answers", "next")}
+                    return False
                 return cur["answers"]
             b = call("batch", {"calls": calls, "rollback": False, "stopOnError": False})
             if cur.get("taken"):
@@ -372,8 +513,58 @@ def run(script, chosen, call, vars_=None, stop_on_fail=False, shot=None, live=No
             if live is not None:
                 live.pop()
 
-    def advance():
-        while state["k"] < len(chosen) and not state["stop"]:
+    def resume(p, nested):
+        """A step left part-way (its gui_input's dialog took its answer, or
+        the dialog closed between its calls): the calls not run yet."""
+        rest = p["calls"][p["next"]:]
+        cur = {"i": p["i"], "pos": p["pos"], "st": p["st"], "calls": p["calls"], "rec": p["rec"], "direct": True, "answers": list(p["answers"]), "j": p["next"]}
+        state["cur"] = cur
+        if live is not None:
+            live.push(continued)
+        try:
+            if not rest:
+                got = True
+            elif nested or p["st"].get("direct"):
+                got = one_by_one(cur, p["next"], nested)
+            else:
+                b = call("batch", {"calls": rest, "rollback": False, "stopOnError": False})
+                if cur.get("taken"):
+                    got = None
+                else:
+                    more = ((b.get("result") or {}).get("results") or []) if b.get("ok") else []
+                    if not b.get("ok"):
+                        cur["rec"]["batchError"] = b.get("error")
+                    for ans in more:
+                        capture(vars_, names, ans)
+                    cur["answers"].extend(more)
+                    got = True
+        finally:
+            if live is not None:
+                live.pop()
+        if got is None:
+            return  # taken on inside another dialog's loop
+        state["cur"] = None
+        if got is False:
+            state["pending"] = {k: cur[k] for k in ("i", "pos", "st", "rec", "calls", "answers", "next")}
+            return
+        finish_step(p["i"], p["st"], p["rec"], cur["answers"])
+        state["k"] = p["pos"] + 1
+
+    def advance(nested=False):
+        while not state["stop"]:
+            if nested and not held():
+                return  # the dialog closed: the rest runs at the replay's own level
+            if over():
+                return
+            p = state["pending"]
+            if p is not None:
+                state["pending"] = None
+                resume(p, nested)
+                if state["pending"] is not None and nested:
+                    return
+                continue
+            if state["k"] >= len(chosen):
+                return
             pos = state["k"]
             i, st = chosen[pos]
             rec = {"step": i, "name": st.get("name")}
@@ -392,10 +583,10 @@ def run(script, chosen, call, vars_=None, stop_on_fail=False, shot=None, live=No
             answers = None
             for attempt in (0, 1):
                 cur = state["cur"] = {"i": i, "pos": pos, "st": st, "calls": calls, "rec": rec, "direct": bool(st.get("direct")), "answers": [], "j": 0}
-                answers = run_calls(cur)
-                if answers is None:
-                    return  # finished inside a dialog's loop (continued)
-                if attempt == 0 and _busy(answers, rec):
+                answers = run_calls(cur, nested)
+                if answers is None or answers is False:
+                    break
+                if attempt == 0 and _busy(answers, rec) and not over():
                     # Seen as held (a progress dialog, a pop-up closing): once more.
                     rec.pop("batchError", None)
                     rec["retried"] = "a call was answered busy: the step was run again after a short wait"
@@ -403,14 +594,52 @@ def run(script, chosen, call, vars_=None, stop_on_fail=False, shot=None, live=No
                         live.sleep(BUSY_RETRY_WAIT)
                     continue
                 break
+            if answers is None:
+                # Taken on inside a dialog's loop (continued): state["k"] and
+                # state["pending"] say where the replay stands.
+                if state["cur"] is cur:
+                    state["cur"] = None
+                continue
             state["cur"] = None
+            if answers is False:
+                if nested:
+                    return
+                continue
             finish_step(i, st, rec, answers)
             state["k"] = pos + 1
 
-    advance()
-    close_left()
-    out = {"script": script.get("name"), "steps": state["out"], "total": {"passed": state["passed"], "failed": state["failed"], "skipped": state["skipped"], "run": state["passed"] + state["failed"]}, "vars": vars_}
-    if state["left"]:
-        out["leftOpen"] = state["left"]
-        out["note"] = "Something was left open in front at the end: gui_unstick closed it (leftOpen says what)."
-    return out
+    def summary(partial=None):
+        out = {"script": script.get("name"), "steps": list(state["out"]), "total": {"passed": state["passed"], "failed": state["failed"], "skipped": state["skipped"], "run": state["passed"] + state["failed"]}, "vars": dict(vars_)}
+        p = state["pending"]
+        if p is not None:
+            # Out of time part-way through a step: what ran of it.
+            out["steps"].append({**p["rec"], "result": "unfinished", "ran": len(p["answers"]), "of": len(p["calls"])})
+        done = {r.get("step") for r in state["out"]}
+        left = [i for i, _st in chosen if i not in done]
+        if left and (state["over"] or partial):
+            out["notRun"] = left
+            out["budget"] = budget
+            out["note"] = (partial + " " if partial else "") + (
+                f"Out of its budget ({budget:g} s) before step(s) {', '.join(str(x) for x in left)}: live_run {{ script, steps: [{', '.join(str(x) for x in left)}] }} runs them (budget: … for more time).")
+        if state["left"]:
+            out["leftOpen"] = state["left"]
+            out["note"] = ((out.get("note") or "") + " Something was left open in front at the end: gui_unstick closed it (leftOpen says what).").strip()
+        return out
+
+    stop_guard = None
+    watch = getattr(live, "watch", None) if live is not None else None
+    if watch is not None:
+        try:
+            stop_guard = watch(summary)
+        except Exception:
+            stop_guard = None
+    try:
+        advance()
+        close_left()
+    finally:
+        if stop_guard is not None:
+            try:
+                stop_guard()
+            except Exception:
+                pass
+    return summary()

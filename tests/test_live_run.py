@@ -7,6 +7,7 @@ import glob
 import json
 import os
 import sys
+import types
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -252,6 +253,166 @@ class LiveReplay(unittest.TestCase):
         self.assertTrue(closes and all("not_found" in c.get("allow", []) for c in closes))
 
 
+# Live: batch { live_run reset, live_run agentlink } held the window for 12
+# minutes: the replay ran every step after the Note dialog inside that
+# dialog's loop, long after the dialog had closed, and the loop never ended.
+class InLoopWindow(FakeWindow):
+    """FakeWindow that says, per call, whether it ran inside the dialog's
+    loop; close_first: the dialog closes before its answer is handed on."""
+
+    def __init__(self, close_first=False, clock=None, step_s=0.0):
+        super().__init__()
+        self.inside, self.where, self.close_first = False, [], close_first
+        self.clock, self.step_s = clock, step_s
+
+    def call(self, tool, args):
+        if tool != "batch":
+            self.where.append((tool, self.inside))
+            if self.clock is not None:
+                self.clock[0] += self.step_s
+        if tool == "gui_input" and args.get("open"):
+            self.log.append(tool)
+            self.dialog = "Note"
+            if self.close_first:
+                self.dialog = None
+            body = {"steps": [{"i": 0, "dialog": "Note"}]}
+            self.inside = True
+            try:
+                taken = bool(self.cont) and self.cont[-1]("gui_input", body)
+            finally:
+                self.inside = False
+            self.taken = taken
+            return {"tool": tool, "ok": True, "result": body}
+        return super().call(tool, args)
+
+
+class NestedOnlyWhileOpen(unittest.TestCase):
+    def sc(self):
+        return {"name": "t", "steps": [
+            {"name": "open", "calls": [{"tool": "gui_input", "arguments": {"open": True}}, {"tool": "in_step"}]},
+            {"name": "answer it", "calls": [{"tool": "dialog_answer"}, {"tool": "note_list"}]},
+            {"name": "later", "calls": [{"tool": "gui_input", "arguments": {"click": 1}}]},
+            {"name": "last", "calls": [{"tool": "report_read"}], "expect": [{"call": 0, "path": "result.done", "equals": "report_read"}]},
+        ]}
+
+    def test_the_rest_runs_after_the_dialog_closed(self):
+        w = InLoopWindow()
+        sc = self.sc()
+        out = ls.run(sc, list(enumerate(sc["steps"])), w.call, live=w.live())
+        self.assertEqual(out["total"], {"passed": 4, "failed": 0, "skipped": 0, "run": 4}, out)
+        self.assertEqual(w.where, [("gui_input", False), ("in_step", True), ("dialog_answer", True),
+                                   ("note_list", False), ("gui_input", False), ("report_read", False)])
+        self.assertEqual([s["step"] for s in out["steps"]], [0, 1, 2, 3])
+        self.assertNotIn("leftOpen", out)
+        self.assertEqual(w.cont, [])
+
+    def test_a_dialog_closed_before_the_hand_off_is_not_taken(self):
+        w = InLoopWindow(close_first=True)
+        sc = self.sc()
+        out = ls.run(sc, list(enumerate(sc["steps"])), w.call, live=w.live())
+        self.assertFalse(w.taken)
+        self.assertNotIn("dialog", out["steps"][0])
+        self.assertTrue(all(not inside for _t, inside in w.where), w.where)
+        self.assertEqual(out["total"]["run"], 4, out)
+        self.assertEqual(w.cont, [])
+
+    def test_nothing_more_to_run_closes_it_inside(self):
+        w = InLoopWindow()
+        sc = {"name": "t", "steps": [{"name": "open", "calls": [{"tool": "gui_input", "arguments": {"open": True}}]}]}
+        out = ls.run(sc, list(enumerate(sc["steps"])), w.call, live=w.live())
+        self.assertEqual(out["leftOpen"][0]["open"]["title"], "Note")
+        self.assertIsNone(w.dialog)
+
+
+class Budget(unittest.TestCase):
+    def test_no_call_starts_past_it_and_the_rest_is_named(self):
+        clock = [0.0]
+        w = InLoopWindow(clock=clock, step_s=40.0)
+        sc = {"name": "t", "steps": [{"name": f"s{i}", "calls": [{"tool": "x"}]} for i in range(5)]}
+        out = ls.run(sc, list(enumerate(sc["steps"])), w.call, live=w.live(), budget=90, clock=lambda: clock[0])
+        self.assertEqual(out["total"]["run"], 3)
+        self.assertEqual(out["notRun"], [3, 4])
+        self.assertIn("steps: [3, 4]", out["note"])
+
+    def test_out_of_time_inside_a_dialog_closes_it(self):
+        clock = [0.0]
+        w = InLoopWindow(clock=clock, step_s=50.0)
+        sc = {"name": "t", "steps": [{"name": "open", "calls": [{"tool": "gui_input", "arguments": {"open": True}}, {"tool": "a"}, {"tool": "b"}]},
+                                     {"name": "next", "calls": [{"tool": "c"}]}]}
+        out = ls.run(sc, list(enumerate(sc["steps"])), w.call, live=w.live(), budget=90, clock=lambda: clock[0])
+        self.assertIsNone(w.dialog)
+        self.assertEqual(out["leftOpen"][0]["open"]["title"], "Note")
+        self.assertEqual(out["notRun"], [0, 1])
+        self.assertEqual((out["steps"][0]["result"], out["steps"][0]["ran"]), ("unfinished", 2))
+        self.assertNotIn(("b", True), w.where)
+
+    def test_guard_answers_a_nested_loop_that_never_quits(self):
+        # The stand-in loop never ends on its own (its dialog closed, the loop
+        # did not): only the guard's answer gets the call answered; then the
+        # supervisor stops FreeCAD (raised here to leave the loop).
+        clock = [0.0]
+        said = {}
+
+        class Killed(Exception):
+            pass
+
+        level = [1]
+        guard = ls.Guard(90, lambda: clock[0], lambda: level[0], unstick=lambda: said.setdefault("unstuck", clock[0]),
+                         answer=lambda body: said.setdefault("answer", body), stuck=lambda body: said.setdefault("stuck", True))
+
+        def call(tool, args):
+            if tool == "loops_for_ever":
+                level[0] = 2
+                acts = []
+                while True:  # the nested loop: ticks arrive, nothing quits it
+                    clock[0] += 1.0
+                    acts.append(guard.tick())
+                    if "stuck" in said:
+                        raise Killed(acts)
+            return {"tool": tool, "ok": True, "result": {"done": tool}}
+
+        live = types.SimpleNamespace(push=lambda f: None, pop=lambda: None, batch_now=lambda: None, front=lambda: None,
+                                     unstick=lambda: None, sleep=lambda s: None, watch=lambda summary: setattr(guard, "summary", summary))
+        sc = {"name": "t", "steps": [{"name": "first", "direct": True, "calls": [{"tool": "ok"}]},
+                                     {"name": "stuck", "direct": True, "calls": [{"tool": "loops_for_ever"}]},
+                                     {"name": "never", "calls": [{"tool": "x"}]}]}
+        with self.assertRaises(Killed) as e:
+            ls.run(sc, list(enumerate(sc["steps"])), call, live=live, budget=90, clock=lambda: clock[0])
+        acts = e.exception.args[0]
+        self.assertEqual([a for a in acts if a != "none"], ["unstick", "answer"])
+        self.assertGreaterEqual(said["unstuck"], 90 + ls.GUARD_GRACE)
+        body = said["answer"]
+        self.assertEqual(body["total"]["passed"], 1)
+        self.assertEqual(body["notRun"], [1, 2])
+        self.assertIn("nested event loop", body["note"])
+
+    def test_guard_leaves_a_long_call_of_its_own_alone(self):
+        self.assertEqual(ls.guard_action(500, 0, 90, 1, 1), "none")
+        self.assertEqual(ls.guard_action(50, 0, 90, 2, 1), "none")
+        self.assertEqual(ls.guard_action(200, 0, 90, 2, 1), "unstick")
+        self.assertEqual(ls.guard_action(200, 0, 90, None, 1), "unstick")
+        self.assertEqual(ls.guard_action(200, 0, 90, 2, 1, unstuck_at=195), "none")
+        self.assertEqual(ls.guard_action(220, 0, 90, 2, 1, unstuck_at=195), "answer")
+        self.assertEqual(ls.guard_action(220, 0, 90, 2, 1, unstuck_at=195, answered=True), "none")
+
+
+class NestedHangRule(unittest.TestCase):
+    def test_rule(self):
+        from agentlink import supervise as sv
+
+        hb = {"pid": 7, "t": 1000.0, "busy": "batch", "busySince": 100.0, "loops": 2}
+        self.assertIsNotNone(sv.nested_hang(hb, 1001.0, 120))
+        self.assertIsNone(sv.nested_hang({**hb, "loops": 1}, 1001.0, 120), "a long call pumping its own events is not a hang")
+        self.assertIsNone(sv.nested_hang({**hb, "dialog": {"title": "Note"}}, 1001.0, 120), "a dialog in front has its own rule")
+        self.assertIsNone(sv.nested_hang({**hb, "popup": {"kind": "menu"}}, 1001.0, 120))
+        self.assertIsNone(sv.nested_hang({**hb, "busySince": 950.0}, 1001.0, 120), "within the deadline")
+        self.assertIsNone(sv.nested_hang({**hb, "t": 900.0}, 1001.0, 120), "no heartbeat: the ping rule's")
+        self.assertIsNone(sv.nested_hang({**hb, "busy": None}, 1001.0, 120))
+        self.assertIsNone(sv.nested_hang({**hb, "until": 2000.0}, 1001.0, 120), "within the time live_run said")
+        self.assertIsNotNone(sv.nested_hang({**hb, "until": 1000.5, "loops": None}, 1001.0, 120))
+        self.assertIsNotNone(sv.nested_hang({**hb, "busySince": 999.0, "stuck": {"why": "guard"}}, 1001.0, 120))
+
+
 class LinkDeadlines(unittest.TestCase):
     def test_a_finished_gui_input_lifts_its_deadline_and_progress_holds_nothing(self):
         import types
@@ -282,6 +443,63 @@ class LinkDeadlines(unittest.TestCase):
             self.assertNotIn("deadline", link.calls[-1])
         finally:
             agentlink_state.link = old
+
+class LinkHeldCalls(unittest.TestCase):
+    """The heartbeat names a held call's start, loop depth and until; a
+    guard's answer goes to the client's call (or its batch); a stuck loop
+    makes queued calls answered busy instead of waiting for ever."""
+
+    def setUp(self):
+        import io
+
+        import agentlink_state
+
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from test_gui_link_dialog import gui_link
+
+        self.gl = gui_link
+        self.link = gui_link.Link.__new__(gui_link.Link)
+        self.link.calls, self.link.front, self.link.busy = [], None, None
+        self.out = io.StringIO()
+        self.old = getattr(agentlink_state, "link", None)
+        agentlink_state.link = self.link
+
+    def tearDown(self):
+        import agentlink_state
+
+        agentlink_state.link = self.old
+
+    def test_beat_and_until(self):
+        self.assertEqual(self.link._busy_beat(), {})
+        self.link.busy, self.link.busy_since = "batch", 5.0
+        self.gl.until(99.0)
+        b = self.link._busy_beat()
+        self.assertEqual((b["busySince"], b["until"]), (5.0, 99.0))
+        self.assertIn("loops", b)
+        self.gl.until(None)
+        self.assertNotIn("until", self.link._busy_beat())
+
+    def test_guard_answer_to_the_batch_and_busy_after(self):
+        call = {"id": 9, "name": "batch", "f": self.out, "answered": False}
+        self.link.calls = [call]
+        bn = {"results": [{"tool": "live_run", "ok": True, "result": {"script": "reset"}}], "i": 1, "n": 2, "answered": False}
+        self.assertTrue(self.gl.answer_call(call, "live_run", {"script": "agentlink", "notRun": [6, 7]}, bn))
+        sent = json.loads(self.out.getvalue())
+        body = json.loads(sent["result"]["content"][0]["text"])
+        self.assertEqual(sent["id"], 9)
+        self.assertEqual([r["result"]["script"] for r in body["results"]], ["reset", "agentlink"])
+        self.assertTrue(call["answered"] and bn["answered"])
+        self.assertFalse(self.gl.answer_call(call, "live_run", {}, bn), "answered once")
+        self.link.calls = []
+        self.assertIsNone(self.link._stuck())
+        self.gl.held_stuck("a loop that did not end")
+        self.assertIn("did not end", self.link._stuck())
+
+    def test_guard_answer_to_live_run_itself(self):
+        call = {"id": 3, "name": "live_run", "f": self.out, "answered": False}
+        self.assertTrue(self.gl.answer_call(call, "live_run", {"script": "agentlink"}))
+        self.assertEqual(json.loads(json.loads(self.out.getvalue())["result"]["content"][0]["text"]), {"script": "agentlink"})
+
 
 if __name__ == "__main__":
     unittest.main()

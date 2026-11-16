@@ -406,6 +406,83 @@ def answer_now(tool, body):
     return bool(link is not None and link.answer_now(tool, body))
 
 
+def loop_level():
+    """How many event loops the GUI thread is inside (1: the main loop
+    alone; more: a dialog's or menu's own, nested), or None when not known."""
+    try:
+        from PySide import QtCore
+
+        return int(QtCore.QThread.currentThread().loopLevel())
+    except Exception:
+        return None
+
+
+def wake():
+    """The GUI thread's event loop woken: a nested loop whose dialog closed
+    while calls ran inside it sees that it is done and ends."""
+    try:
+        from PySide import QtCore
+
+        d = QtCore.QAbstractEventDispatcher.instance()
+        if d is not None:
+            d.wakeUp()
+    except Exception:
+        pass
+
+
+def until(t):
+    """The call in hand says it is done by t (time.time(); None: no longer
+    said), for the heartbeat: past it, still inside a nested event loop,
+    the supervisor's watchdog takes the window as hung (live_run)."""
+    import agentlink_state
+
+    link = getattr(agentlink_state, "link", None)
+    if link is not None:
+        link.until = t
+
+
+def held_stuck(why):
+    """The call in hand was answered by its own guard while a nested event
+    loop still holds the window (live_run): said in the heartbeat, so the
+    supervisor's watchdog starts FreeCAD again; calls meanwhile are answered
+    busy rather than waiting."""
+    import agentlink_state
+
+    link = getattr(agentlink_state, "link", None)
+    if link is not None:
+        link.stuck = {"t": time.time(), "why": str(why)[:300]}
+
+
+def answer_call(call, tool, body, bn=None):
+    """Answer call (an entry of Link.calls: the client's call in hand when
+    tool started) now with tool's answer body: as tool's own when the call
+    is tool, else as its batch's (bn: the batch's batch_now when tool
+    started), with what ran before it. True when it went out."""
+    import agentlink_state
+
+    link = getattr(agentlink_state, "link", None)
+    if link is None or not isinstance(call, dict) or call.get("answered") or call.get("finished"):
+        return False
+    if call.get("name") != tool:
+        if call.get("name") != "batch" or not isinstance(bn, dict) or bn.get("answered"):
+            return False
+        i, n = bn.get("i", 0), bn.get("n", 0)
+        body = {"results": list(bn.get("results") or []) + [{"tool": tool, "ok": True, "result": body}], "ran": i + 1,
+                **({"not_run": n - i - 1, "note": f"Answered by {tool}'s guard while a nested event loop held the window: the {n - i - 1} call(s) after it were not run."} if n - i - 1 > 0 else {})}
+        bn["answered"] = True
+    reply = {"jsonrpc": "2.0", "id": call.get("id"), "result": {"content": [{"type": "text", "text": compact(body)}]}}
+    with link._writes():
+        if call.get("answered"):
+            return False
+        try:
+            call["f"].write(compact(reply) + "\n")
+            call["f"].flush()
+        except (OSError, ValueError, KeyError, AttributeError):
+            return False
+        call["answered"] = True
+    return True
+
+
 def _live_now():
     """A live_run replay is in hand: its own calls are not the client's
     (no client deadline, no early batch answer from them)."""
@@ -729,12 +806,28 @@ class Link:
             docs = [{"name": x.Name, "label": x.Label, "file": x.FileName or "", **({"modified": True} if _modified(x) else {})} for x in FreeCAD.listDocuments().values()]
             keep._save(keep.path("heartbeat.json"), {
                 "pid": os.getpid(), "t": time.time(), "pairing": 1, "app": _bundle(), "freecad": ".".join(FreeCAD.Version()[:3]), "port": self.port,
-                "docs": docs, "busy": self.busy, "pinned": getattr(self.session, "doc", None).Name if self.session and getattr(self.session, "doc", None) else None,
+                "docs": docs, "busy": self.busy, **self._busy_beat(), "pinned": getattr(self.session, "doc", None).Name if self.session and getattr(self.session, "doc", None) else None,
                 "dialog": {k: v for k, v in d.items() if k != "widget"} if d else None,
                 "popup": pop,
             })
         except Exception:
             pass
+
+    def _busy_beat(self):
+        """For the heartbeat, while a call is in hand: since when (busySince),
+        how many event loops the GUI thread is inside as it beats (loops: 1
+        the main one; more, a nested one such as a dialog's), the time the
+        call said it would be done by (until) and a call's guard that gave
+        up on a nested loop (stuck). The watchdog takes a call held past its
+        deadline inside a nested loop, with nothing open, as a hang."""
+        if not self.busy:
+            return {}
+        out = {"busySince": getattr(self, "busy_since", None), "loops": loop_level()}
+        if getattr(self, "until", None):
+            out["until"] = self.until
+        if getattr(self, "stuck", None):
+            out["stuck"] = self.stuck
+        return out
 
     def stop(self):
         if getattr(self, "beat", None):
@@ -893,6 +986,8 @@ class Link:
             front = None
         if front or any(c.get("answered") for c in calls):
             return gi.front_words(front)
+        if getattr(self, "stuck", None):
+            return "a nested event loop that did not end (" + str(self.stuck.get("why") or "")[:160] + ")"
         now = time.time()
         if any(c.get("deadline") and now > c["deadline"] and not c.get("finished") for c in calls):
             return gi.front_words(front)
@@ -1234,7 +1329,7 @@ class Link:
             return
         if not self._claim(line):
             return  # answered busy from the socket thread while it waited
-        prev = (self.busy, self.in_call)
+        prev = (self.busy, self.in_call, getattr(self, "busy_since", None))
         try:
             self._ready()
             name = _tool_name(line)
@@ -1262,6 +1357,8 @@ class Link:
                     self._write(f, {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
                     return
             if name is not None and name != "dialog_answer":
+                if not prev[0]:
+                    self.busy_since = time.time()
                 self.busy, self.in_call = name, True
             msg = json.loads(line)
             call = {"id": msg.get("id") if isinstance(msg, dict) else None, "name": name, "f": f, "answered": False}
@@ -1270,7 +1367,9 @@ class Link:
                 reply = self.server.handle(msg)
             finally:
                 call["finished"] = True
-                self.busy, self.in_call = prev
+                self.busy, self.in_call, self.busy_since = prev
+                if not self.busy:
+                    self.until = self.stuck = None
                 self.calls = [c for c in self.calls if c is not call]
             if call["answered"]:
                 reply = None  # sent already, while a dialog held the call

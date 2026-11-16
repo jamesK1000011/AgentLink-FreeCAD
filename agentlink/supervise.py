@@ -166,6 +166,41 @@ def _deadline(tool):
     return keep.deadline("change")
 
 
+def nested_hang(hb, now, limit=None, fresh=10.0):
+    """The window held by a call that will not end, though its heartbeat
+    goes on: the GUI thread is inside a nested event loop (loops > 1, a
+    dialog's or menu's own) with nothing open in front, past the call's
+    deadline — limit (deadline_for its tool) or the until it said itself
+    (live_run) — or the call's own guard gave up on that loop (stuck). The
+    heartbeat is written from inside that loop, so the stale-heartbeat rule
+    never saw it (live: busy "batch" for 12 minutes, every later call timed
+    out). {tool, after, why} or None."""
+    if not isinstance(hb, dict) or not hb.get("busy") or hb.get("dialog") or hb.get("popup"):
+        return None
+    try:
+        since, t = float(hb.get("busySince") or 0), float(hb.get("t") or 0)
+    except (TypeError, ValueError):
+        return None
+    if not since or now - t > fresh:
+        return None  # no heartbeat: the hang rule by pings sees that one
+    after = now - since
+    loops = hb.get("loops")
+    nested = loops is None or (isinstance(loops, (int, float)) and loops > 1)
+    out = {"tool": hb["busy"], "after": after}
+    if hb.get("stuck") and nested:
+        return {**out, "why": "its own guard gave up on a nested event loop"}
+    until = hb.get("until")
+    if until:
+        try:
+            past = now > float(until)
+        except (TypeError, ValueError):
+            past = False
+        return {**out, "why": "past the time it said it would be done by, inside a nested event loop"} if past and nested else None
+    if loops is not None and nested and limit is not None and after > limit:
+        return {**out, "why": f"past its deadline ({int(limit)} s) inside a nested event loop with nothing open"}
+    return None
+
+
 # ---- after a restart: only what was open then comes back ----------------------------------
 
 def docs_at_restart(*beats, pid=None):
@@ -591,7 +626,12 @@ class Window:
             self.seen = False
             hang = self.hang
             t_crash = time.time()
-            if hang:
+            if hang and hang.get("heldBy") and hang["heldBy"] != tool:
+                head = (f"The FreeCAD window was held by an earlier {hang['heldBy']} for {int(hang['after'])} s ({hang.get('why')}) and was stopped (its pid {hang['pid']}): "
+                        f"{tool} waited behind it and was not run.")
+            elif hang and hang.get("why"):
+                head = f"FreeCAD's window stayed held during {tool} for {int(hang['after'])} s ({hang['why']}) and was stopped (its pid {hang['pid']})."
+            elif hang:
                 head = f"FreeCAD stopped responding during {tool} after {int(hang['after'])} s and was stopped (its pid {hang['pid']})."
             else:
                 head = f"The FreeCAD window went away during {tool} (a crash, or it was quit): it may or may not have run."
@@ -806,6 +846,15 @@ def run(script, argv):
                                 if got and got.get("closed") else " Closing it did not work: gui_unstick, or app_force_restart if the window stays stuck.")
                         window.abandon(f"Blocked by {what} in the FreeCAD window: {c['tool']} waited behind it for {int(held)} s." + tail, code="busy")
                         continue
+                    nh = nested_hang(hb, now, deadline_for((hb or {}).get("busy") or c["tool"], c.get("args") if (hb or {}).get("busy") == c["tool"] else None, c["start"]))
+                    if nh and not keep.saving() and window.hang is None:
+                        pid = (hb or {}).get("pid")
+                        if pid:
+                            window.hang = {"pid": pid, "after": nh["after"], "tool": c["tool"], "heldBy": nh["tool"], "why": nh["why"]}
+                            keep.log_watchdog({"event": "hang", "where": "window", "nested": True, "tool": nh["tool"], "call": c["tool"], "after": nh["after"], "why": nh["why"], "pid": pid})
+                            keep.note_stopped(nh["tool"], nh["after"])
+                            stop_pid(int(pid))
+                            continue
                     last = float((hb or {}).get("t") or c["start"])
                     limit = deadline_for(c["tool"], c.get("args"), c["start"])
                     if keep.hung(now, c["start"], max(last, c["start"]), limit) and not keep.saving():
@@ -817,6 +866,25 @@ def run(script, argv):
                             key = keep.call_key(c["tool"], c.get("args"))
                             hangs[key] = hangs.get(key, 0) + 1
                             stop_pid(int(pid))
+                elif not window.off and not state.get("nested_restart"):
+                    # No call in hand here (the stuck one was answered by its
+                    # guard, or the client gave up on it): a window held by a
+                    # nested loop is started again all the same, its
+                    # documents recovered, before the next call waits on it.
+                    hb = heartbeat()
+                    nh = nested_hang(hb, now, deadline_for(hb.get("busy"), None, float(hb.get("busySince") or now))) if hb else None
+                    if nh and not keep.saving():
+                        state["nested_restart"] = True
+                        keep.log_watchdog({"event": "hang", "where": "window", "nested": True, "tool": nh["tool"], "after": nh["after"], "why": nh["why"], "pid": hb.get("pid")})
+                        keep.note_stopped(nh["tool"], nh["after"])
+
+                        def _restart_held():
+                            try:
+                                window.force_restart()
+                            finally:
+                                state["nested_restart"] = False
+
+                        threading.Thread(target=_restart_held, daemon=True).start()
                 # The hidden FreeCAD runs one call at a time: the oldest is the
                 # one in hand, started when the one before it answered.
                 first = min(inflight.items(), key=lambda kv: kv[1]["start"]) if inflight else None

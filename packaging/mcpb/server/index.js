@@ -918,6 +918,25 @@ const UPDATE_TOOL = {
   inputSchema: { type: 'object', properties: {} },
 }
 
+/** The window's heartbeat (written from its GUI thread every 2 s) says a
+ *  call holds it — one other than the app_restart just sent — and it is
+ *  fresh: the restart was queued behind that call, not taken. A window held
+ *  by a nested event loop that never ends kept its old pid through an
+ *  update this way (live). { pid, busy } or null. */
+function windowHeld(hb, now = Date.now() / 1000) {
+  if (!hb || typeof hb !== 'object' || !hb.pid || !hb.busy || hb.busy === 'app_restart') return null
+  if (!(now - Number(hb.t || 0) < 10)) return null
+  return { pid: hb.pid, busy: hb.busy, since: hb.busySince || null }
+}
+
+function readHeartbeat() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(AL_HOME, 'heartbeat.json'), 'utf8'))
+  } catch {
+    return null
+  }
+}
+
 /** The window (if its link is on) quits and opens again on the new add-ons:
  *  its documents saved and reopened by app_restart; nothing if it is closed.
  *  Resolves once the window has answered (its restart mark written, so calls
@@ -952,7 +971,10 @@ function restartWindow() {
         finish(why ? { refused: why } : true)
         s.destroy()
       })
-      setTimeout(() => { finish(true); s.destroy() }, 5000)
+      // No answer: taken and saving (true), or queued behind a call that
+      // holds the window (hung: the update stops it as app_force_restart
+      // does, rather than leave the old FreeCAD running).
+      setTimeout(() => { const held = windowHeld(readHeartbeat()); finish(held ? { hung: held } : true); s.destroy() }, 8000)
     })
   })
 }
@@ -1007,8 +1029,10 @@ function headless(exe, args, e, inst = {}) {
         // starts again without them.
         updating = true
         const windowed = await restartWindow()
+        const old = child
         child.kill()
-        reply(id, { before, after: version, restarted: true, retired, ...(comp.length ? { companions: comp } : {}), note: `Already the newest; set aside the retired add-on folders ${retired.join(', ')} and started FreeCAD again without them.${windowed && windowed.refused ? ` The window did not restart: ${windowed.refused} Then app_restart.` : ''}` })
+        const forced = windowed && windowed.hung ? await forceWindow(old, windowed.hung) : null
+        reply(id, { before, after: version, restarted: true, retired, ...(comp.length ? { companions: comp } : {}), note: `Already the newest; set aside the retired add-on folders ${retired.join(', ')} and started FreeCAD again without them.${windowed && windowed.refused ? ` The window did not restart: ${windowed.refused} Then app_restart.` : ''}${forced ? ' ' + forced : ''}` })
         return
       }
       updating = true
@@ -1016,13 +1040,18 @@ function headless(exe, args, e, inst = {}) {
       const next = newerLauncher() ? loadNewer() : null
       if (next) {
         // A newer launcher came with these add-ons: it takes over this
-        // connection in place of this one, no restart of Claude.
-        reply(id, { before, after: version, restarted: true, ...(retired.length ? { retired } : {}), launcher: 'updated: the new launcher serves from now on', ...(snapshot ? { settingsSnapshot: snapshot } : {}), ...(comp.length ? { companions: comp } : {}), note: 'FreeCAD started again on the new add-ons, under the new launcher. New tools are listed.' })
+        // connection in place of this one, no restart of Claude. A held
+        // window is stopped and started again first, through this one's
+        // Python side (its own process, still running).
+        const forced = windowed && windowed.hung ? await forceWindow(null, windowed.hung) : null
+        reply(id, { before, after: version, restarted: true, ...(forced ? { window: forced } : {}), ...(retired.length ? { retired } : {}), launcher: 'updated: the new launcher serves from now on', ...(snapshot ? { settingsSnapshot: snapshot } : {}), ...(comp.length ? { companions: comp } : {}), note: 'FreeCAD started again on the new add-ons, under the new launcher. New tools are listed.' })
         handover(next)
         return
       }
+      const old = child
       child.kill()
-      reply(id, { before, after: version, restarted: true, ...(retired.length ? { retired } : {}), ...(snapshot ? { settingsSnapshot: snapshot } : {}), ...(comp.length ? { companions: comp } : {}), ...(next === false ? { launcher: 'kept: the updated launcher did not load, so this one keeps serving (launcher.log says why)' } : {}), note: windowed && windowed.refused
+      const forced = windowed && windowed.hung ? await forceWindow(old, windowed.hung) : null
+      reply(id, { before, after: version, restarted: true, ...(retired.length ? { retired } : {}), ...(snapshot ? { settingsSnapshot: snapshot } : {}), ...(comp.length ? { companions: comp } : {}), ...(next === false ? { launcher: 'kept: the updated launcher did not load, so this one keeps serving (launcher.log says why)' } : {}), ...(forced ? { window: forced } : {}), note: windowed && windowed.refused
         ? `The hidden FreeCAD runs the new add-ons, but the window did not restart and keeps the old ones: ${windowed.refused} Then app_restart.`
         : windowed
           ? 'FreeCAD started again on the new add-ons: the window reopens its documents (calls wait for it, up to 90 s), the one in front back in front. New tools are listed.'
@@ -1033,6 +1062,29 @@ function headless(exe, args, e, inst = {}) {
   }
   const send = (line) => {
     if (child && child.stdin.writable) child.stdin.write(line + '\n')
+  }
+  // Calls of the launcher's own to the (new) Python side, answered here.
+  const asks = new Map()
+  const askChild = (name, args, ms) => new Promise((resolve) => {
+    const aid = `__ask${Date.now()}${Math.random().toString(36).slice(2, 6)}`
+    const timer = setTimeout(() => { asks.delete(aid); resolve(null) }, ms)
+    asks.set(aid, (msg) => { clearTimeout(timer); resolve(msg) })
+    send(JSON.stringify({ jsonrpc: '2.0', id: aid, method: 'tools/call', params: { name, arguments: args } }))
+  })
+  /** A window held by a call that never ends (restartWindow's hung) is
+   *  stopped and started again as app_force_restart does, its documents
+   *  recovered, once the new Python side is up: the words for the answer. */
+  async function forceWindow(old, held) {
+    const t0 = Date.now()
+    while ((child === old || !child || !child.stdin.writable || child.exitCode !== null) && Date.now() - t0 < 20000) await new Promise((r) => setTimeout(r, 200))
+    const got = await askChild('app_force_restart', {}, 180000)
+    let words = null
+    try {
+      const r = got && got.result
+      words = r ? JSON.parse(r.content[0].text).note || null : null
+    } catch {}
+    log(`window held by ${held.busy} (pid ${held.pid}) at the update: force-restarted${words ? '' : ' (no answer)'}`)
+    return `The window was held by ${held.busy} and did not take the restart: it was stopped and started again as app_force_restart does${words ? ` — ${words}` : ' (it had not answered within 3 minutes; session_state shows how it stands)'}.`
   }
   const start = () => {
     // The add-ons' folders as installed now: an update may have brought one.
@@ -1048,6 +1100,16 @@ function headless(exe, args, e, inst = {}) {
         id = JSON.parse(line).id
       } catch {}
       if (id === '__restart') return
+      if (typeof id === 'string' && asks.has(id)) {
+        const done = asks.get(id)
+        asks.delete(id)
+        try {
+          done(JSON.parse(line))
+        } catch {
+          done(null)
+        }
+        return
+      }
       if (id !== undefined) pending.delete(id)
       if (id !== undefined && initing.has(id)) {
         initing.delete(id)
@@ -1228,7 +1290,7 @@ function startHandedOver({ stdin, stdout, state = {} }) {
   log(`took over from the launcher in this process (add-ons ${state.version || '?'})`)
   return main()
 }
-module.exports = { startHandedOver, resolveChannel, checkSources, CHANNELS, companions, bundledManifest }
+module.exports = { startHandedOver, resolveChannel, checkSources, CHANNELS, companions, bundledManifest, windowHeld }
 
 /** No FreeCAD: still a server, so Claude shows why instead of a dead entry. */
 function serveError(message) {
