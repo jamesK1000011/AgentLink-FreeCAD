@@ -13,6 +13,7 @@ All notable changes to Agent Link for FreeCAD. The format follows
 
 ### Changed
 
+- `tests/test_sync_shared.py` checks that `scripts/sync_shared.py` lists every file that says it is shared (and each listed file says so), and, with `AGENTLINK_SHARED_CHECKOUTS` set to the add-ons' checkouts, that their copies are in step, as `--check` does.
 - The panel names no add-on's tab: which pages carry their own credit line (Agent Link's then hidden while one is in front) is declared by the add-on — `hooks.register_tab(..., own_credit=True)` or its widget's `own_credit` — or read off a credit label on the page, instead of a list of two add-on tab titles in core. Same behaviour for the tabs that showed a credit before. Tests with stand-in pages.
 - The Claude extension's launcher names no companion server: its companions come from `addons.json` — the copy the extension now carries at its top (build.sh puts it there; a checkout reads `packaging/addons.json`), then the list the last update kept, with `~/AgentLink/companions.json` over both. The built-in list it kept beside the data is gone; with no list there are none. Launcher test with a stand-in companion.
 

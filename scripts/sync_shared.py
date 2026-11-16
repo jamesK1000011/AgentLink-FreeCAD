@@ -11,7 +11,11 @@ keeping that first line.
 
 A copy is a file of the same name under the checkout (tests, .git and
 build folders left out) whose text says it is the same in every add-on
-(MARK). Nothing else is touched; commit in each checkout yourself."""
+(MARK). Nothing else is touched; commit in each checkout yourself.
+
+tests/test_sync_shared.py checks that this list covers every file here that
+says it is shared, and, with AGENTLINK_SHARED_CHECKOUTS set to the add-ons'
+checkouts (os.pathsep between), that their copies are in step (--check)."""
 import os
 import sys
 
