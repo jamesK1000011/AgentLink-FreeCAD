@@ -22,7 +22,7 @@ class Obj:
     def __init__(self, doc, name, error=None, state=()):
         self.Document, self.Name, self.Label = doc, name, name
         self._error, self.State = error, list(state)
-        self.InList, self.InListRecursive = [], []
+        self.InList, self.InListRecursive, self.OutList = [], [], []
         doc.Objects.append(self)
 
     def isValid(self):
@@ -96,7 +96,9 @@ def test_only_old_failures_say_so():
 
 def test_touched_objects_the_call_left_alone_want_a_recompute():
     d = Doc()
-    Obj(d, "Pad", state=["Touched"])
+    pad = Obj(d, "Pad", state=["Touched"])
+    pad.TypeId = "PartDesign::Pad"
+    Obj(d, "Records", state=["Touched"])  # a plain holder with no inputs: not out of date
     h = run(d, lambda: [Obj(d, "Other")])
     assert h["ok"] is True and h["needRecompute"] == ["Pad"] and "recompute" in h["todo"]
 

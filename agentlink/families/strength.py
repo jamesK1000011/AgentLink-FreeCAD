@@ -156,6 +156,19 @@ def last_lines(text, n=6):
     return " | ".join(pick)[:900]
 
 
+def ccx_hint(log):
+    """What to do about CalculiX's own error lines, where they say it: a
+    part free to move, a badly shaped element. "" when they name neither."""
+    low = str(log or "").lower()
+    out = ""
+    if "singular" in low or "zero pivot" in low:
+        out += " The part may be free to move: hold more faces (fea_hold)."
+    if "nonpositive jacobian" in low:
+        out += (" Nonpositive jacobian: an element of the mesh is folded over, usually a coarse second-order tetrahedron on a small"
+                " round or a thin wall — fea_setup { mesh: a smaller size, about half } (holds and loads are kept), or fea_refine at the small feature, then fea_solve again.")
+    return out
+
+
 def ccx_said(fea, ccx, timeout):
     """What CalculiX printed on a run that wrote no results: FemToolsCcx's
     kept stdout and stderr, else ccx run again in its folder on the same
@@ -320,16 +333,18 @@ def _unheld_solids(st, shape):
             continue
     return out
 
+# The tools that run CalculiX: only their answers carry its lines.
+SOLVERS = ("fea_solve", "fea_modes", "fea_buckle", "fea_heat", "fea_shell", "fea_frame", "fea_parts", "fea_native")
+
+
 def _health(session, tool, changed):
     """CalculiX's own warning lines after a solve that went through (the
     shared health check, agentlink/health.py). A refused solve carries its
     error lines in the refusal."""
-    if not str(getattr(tool, "name", "")).startswith("fea_"):
-        return None
     tail = getattr(session, "_ccx_tail", None)
-    if not tail:
+    session._ccx_tail = None  # read once: a later call is not told an earlier solve's lines
+    if not tail or str(getattr(tool, "name", "")) not in SOLVERS:
         return None
-    session._ccx_tail = None
     warn = [x for x in str(tail).split(" | ") if "WARNING" in x.upper() or "ERROR" in x.upper()]
     if not warn:
         return [{"line": "CalculiX ran clean"}]
@@ -949,7 +964,7 @@ def tools(session):
         if not disp or not stress:
             said = getattr(s, "_ccx_tail", None) if fem is None else getattr(s, "_ccx_fem_tail", None)
             raise ToolError("failed", "CalculiX wrote no displacements or stresses — most often a part free to move (a solid or region no hold reaches, a hold on too few faces) or a mesh that failed"
-                            + (f". CalculiX's last lines: {said}" if said else "")
+                            + (f". CalculiX's last lines: {said}.{ccx_hint(said)}" if said else "")
                             + (f". FreeCAD's FEM route first: {route_why}" if route_why and fem is None else "")
                             + (". A multi-solid body: fea_setup { solid: n } studies one solid alone" if len(shape.Solids) > 1 else "")
                             + "; the files are in " + wd)
@@ -1208,7 +1223,7 @@ def tools(session):
         s._ccx_tail = last_lines(log)
         if "*ERROR" in log or not os.path.isfile(frd):
             err = [l.strip() for l in log.splitlines() if "ERROR" in l][:2] or log.strip().splitlines()[-2:]
-            hint = " The part may be free to move: hold more faces." if any("singular" in l.lower() or "zero pivot" in l.lower() for l in log.splitlines()) else ""
+            hint = ccx_hint(log)
             if nonlin and any("increment size smaller" in l.lower() for l in log.splitlines()):
                 hint += (" It stopped finding equilibrium as the load rose: past its strength the part gives way (it would collapse or break) — "
                          "less load, a stronger material or a larger section; or contact that never closes.")
@@ -1264,7 +1279,7 @@ def tools(session):
         log = (r.stdout or "") + (r.stderr or "")
         if "*ERROR" in log or not os.path.isfile(os.path.join(wd, "job.frd")):
             err = [l.strip() for l in log.splitlines() if "ERROR" in l][:2] or log.strip().splitlines()[-2:]
-            raise ToolError("failed", f"CalculiX refused the {what}: {' | '.join(err)}.")
+            raise ToolError("failed", f"CalculiX refused the {what}: {' | '.join(err)}.{ccx_hint(log)}")
         with open(os.path.join(wd, "job.frd")) as f:
             frd = f.read()
         dat = ""

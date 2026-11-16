@@ -127,6 +127,20 @@ def _failing(o):
         return "invalid"
 
 
+# Objects that are what was put into them and compute nothing: touched after
+# a write, they are not out of date (a study's helper solid, the session's
+# own records object, a mesh, a group).
+HOLDERS = ("Part::Feature", "Mesh::Feature", "Points::Feature", "App::TextDocument", "App::DocumentObjectGroup",
+           "App::FeaturePython", "App::Annotation", "App::AnnotationLabel")
+
+
+def _holds_only(o):
+    try:
+        return o.TypeId in HOLDERS and not o.OutList
+    except Exception:
+        return False
+
+
 def mark(session):
     """Before a changing call: the objects already failing (so the answer
     says which are new), and the observer armed."""
@@ -542,7 +556,7 @@ def check(session, tool, m):
                     # object's own way (some Python features, links moved by
                     # an assembly's solver): another recompute changes
                     # nothing, so it is not asked for.
-                    if "Touched" in o.State and o.Name not in touched_names:
+                    if "Touched" in o.State and o.Name not in touched_names and not _holds_only(o):
                         pending.append(_label(o))
                 except Exception:
                     pass

@@ -40,3 +40,17 @@ class CcxMore(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_ccx_hint_says_what_to_do_about_calculix_own_lines():
+    """The stem's study of solid 1 at the default 7 mm mesh: CalculiX said
+    "nonpositive jacobian" and the refusal stopped there. At 4 mm it solved."""
+    import pytest
+
+    pytest.importorskip("FreeCAD")
+    from agentlink.families import strength
+
+    h = strength.ccx_hint("*ERROR in e_c3d: nonpositive jacobian\n in element 5")
+    assert "fea_setup { mesh:" in h and "fea_refine" in h
+    assert "fea_hold" in strength.ccx_hint("*ERROR: singular matrix, zero pivot")
+    assert strength.ccx_hint("job finished") == "" and strength.ccx_hint(None) == ""
