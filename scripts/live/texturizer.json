@@ -1,0 +1,68 @@
+{
+  "name": "Texturizer on a part with a hole",
+  "about": "Run reset.json first. Drills an M3 clearance hole through WindowTest, textures it with Knurling and checks the mesh with FreeCAD's own evaluation, then the linked rebuild after a model edit. Texturizer is based on BumpMesh by Stefan Hermann (CNC Kitchen).",
+  "needs": ["AgentLink-FreeCAD", "Texturizer-FreeCAD", "Workshop-FreeCAD"],
+  "steps": [
+    {
+      "name": "an M3 clearance hole through the top",
+      "calls": [
+        { "tool": "hw_hole", "arguments": { "kind": "clearance", "face": "Pad.Face6", "at": [0, 0, 20], "size": "M3", "depth": 20 } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.route", "equals": "PartDesign Hole" },
+        { "call": 0, "path": "result.sound", "equals": true }
+      ]
+    },
+    {
+      "name": "Knurling 0.5 mm on the body",
+      "calls": [
+        { "tool": "texture_apply", "arguments": { "body": "Body", "texture": "Knurling", "settings": { "textureHeight": 0.5 } } },
+        { "tool": "texture_check", "arguments": { "object": "Textured" } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.repair.open", "equals": 0 },
+        { "call": 0, "path": "result.repair.nonManifold", "equals": 0 },
+        { "call": 1, "path": "result.verdict", "equals": "ok" }
+      ]
+    },
+    {
+      "name": "FreeCAD's Mesh evaluation finds nothing to repair",
+      "calls": [
+        { "tool": "meshobj_info", "arguments": { "mesh": "Textured" } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.evaluation.selfIntersectionPairs", "equals": 0 },
+        { "call": 0, "path": "result.evaluation.nonManifolds", "equals": false },
+        { "call": 0, "path": "result.evaluation.flippedCount", "equals": 0 },
+        { "call": 0, "path": "result.evaluation.pointsOnEdges", "equals": false },
+        { "call": 0, "path": "result.evaluation.open", "equals": false }
+      ],
+      "shot": "tx_hole_knurl"
+    },
+    {
+      "name": "a model edit marks the texture out of date; Update rebuilds it clean",
+      "calls": [
+        { "tool": "object_set", "arguments": { "object": "Pad", "values": { "Length": 24 } } },
+        { "tool": "recompute", "arguments": {} },
+        { "tool": "object_get", "arguments": { "object": "Textured", "filter": ["OutOfDate"] } },
+        { "tool": "texture_apply", "arguments": { "update": "Textured" } },
+        { "tool": "meshobj_info", "arguments": { "mesh": "Textured" } }
+      ],
+      "expect": [
+        { "call": 2, "path": "result.values.OutOfDate", "equals": true },
+        { "call": 4, "path": "result.box.2", "atLeast": 24.0 },
+        { "call": 4, "path": "result.evaluation.selfIntersectionPairs", "equals": 0 },
+        { "call": 4, "path": "result.evaluation.pointsOnEdges", "equals": false }
+      ]
+    },
+    {
+      "name": "Report view clean",
+      "calls": [
+        { "tool": "report_read", "arguments": { "problems": true } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.lines", "noneContain": ["Error", "Traceback", "Exception"], "ignoreLinesWith": ["(qt.qpa.fonts)"] }
+      ]
+    }
+  ]
+}

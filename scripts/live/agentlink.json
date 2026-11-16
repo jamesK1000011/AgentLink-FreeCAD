@@ -1,0 +1,93 @@
+{
+  "name": "Agent Link panel and window input",
+  "about": "Run reset.json first. Checks that a view click selects (Gesture navigation reads it as a tap), and the panel's Notes, Steps and Activity tabs as a person uses them.",
+  "needs": ["AgentLink-FreeCAD"],
+  "steps": [
+    {
+      "name": "a click on the part selects its face (no context menu)",
+      "calls": [
+        { "tool": "workbench", "arguments": { "activate": "Part Design" } },
+        { "tool": "cmd_run", "arguments": { "name": "Std_ViewIsometric" } },
+        { "tool": "cmd_run", "arguments": { "name": "Std_ViewFitAll" } },
+        { "tool": "gui_input", "arguments": { "steps": [ { "wait": 800 }, { "click": { "view_world": [-10, -5, 20] } }, { "wait": 400 } ] } }
+      ],
+      "expect": [
+        { "call": 3, "path": "result.steps.1.selected.0", "contains": "Face" },
+        { "call": 3, "path": "result.steps.1.menu", "exists": false }
+      ],
+      "shot": "al_click_select"
+    },
+    {
+      "name": "clear the selection with a click on empty space",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "steps": [ { "click": { "view": [20, 20] } } ] } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.steps.0.selected", "equals": [] }
+      ]
+    },
+    {
+      "name": "Pin a Note: the hint shows, a click on the part opens the note prompt",
+      "calls": [
+        { "tool": "workbench", "arguments": { "activate": "Agent Link" } },
+        { "tool": "gui_input", "arguments": { "steps": [ { "wait": 800 }, { "click": { "tab": { "text": "Notes" } } }, { "click": { "widget": { "text": "Pin a Note" } } }, { "wait": 500 }, { "shot": "al_pin_hint" }, { "click": { "view_world": [10, 5, 20] } } ] } }
+      ],
+      "expect": [],
+      "note": "The batch stops at the modal prompt (Blocked by a dialog … \"Note\"): that is the expected end of this step."
+    },
+    {
+      "name": "type the note into the prompt and press OK",
+      "calls": [
+        { "tool": "dialog_answer", "arguments": { "button": "OK", "text": "Live script note" } },
+        { "tool": "note_list", "arguments": {} }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.typed.text", "equals": "Live script note" },
+        { "call": 1, "path": "result.notes.0.text", "equals": "Live script note" },
+        { "call": 1, "path": "result.notes.0.by", "equals": "person" },
+        { "call": 1, "path": "result.notes.0.body", "equals": "Body" }
+      ]
+    },
+    {
+      "name": "the note follows its face when the model changes",
+      "calls": [
+        { "tool": "object_set", "arguments": { "object": "Pad", "values": { "Length": 24 } } },
+        { "tool": "recompute", "arguments": {} },
+        { "tool": "note_list", "arguments": {} }
+      ],
+      "expect": [
+        { "call": 2, "path": "result.notes.0.at.2", "equals": 24.0 },
+        { "call": 2, "path": "result.notes.0.lost", "exists": false }
+      ]
+    },
+    {
+      "name": "Steps tab: Play steps through the build",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "steps": [ { "click": { "tab": { "text": "Steps" } } }, { "click": { "widget": { "text": "Play" } } }, { "wait": 2000 }, { "shot": "al_steps_play" } ] } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.steps.1.hit.text", "equals": "Play" }
+      ]
+    },
+    {
+      "name": "Activity tab fits the dock",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "steps": [ { "click": { "tab": { "text": "Activity" } } }, { "wait": 600 }, { "shot": "al_activity" } ] } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.steps.0.hit.tab", "equals": "Activity" }
+      ]
+    },
+    {
+      "name": "tidy up: delete the script's note, Report view clean",
+      "calls": [
+        { "tool": "note_list", "arguments": {} },
+        { "tool": "report_read", "arguments": { "problems": true } }
+      ],
+      "expect": [
+        { "call": 1, "path": "result.lines", "noneContain": ["Error", "Traceback", "Exception"], "ignoreLinesWith": ["(qt.qpa.fonts)"] }
+      ],
+      "then": "note_delete { id } for each note whose text is \"Live script note\"; doc_save."
+    }
+  ]
+}

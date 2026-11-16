@@ -1,0 +1,137 @@
+{
+  "name": "Reset WindowTest",
+  "about": "Rebuilds the shared test document from scratch: a 40 x 30 x 20 mm pad in a PartDesign Body, in front, saved in the out folder. Every live script starts here (roadmap v19 item 4). Overwriting WindowTest.FCStd is the person's standing decision for this one test file (v19 item 4); never use overwrite for any other document.",
+  "needs": [],
+  "steps": [
+    {
+      "name": "close the old test document without saving",
+      "calls": [
+        {
+          "tool": "doc_close",
+          "arguments": {
+            "documents": [
+              "WindowTest"
+            ],
+            "discard": true
+          }
+        }
+      ],
+      "expect": []
+    },
+    {
+      "name": "a new WindowTest with a 40 x 30 x 20 pad",
+      "calls": [
+        {
+          "tool": "doc_new",
+          "arguments": {
+            "name": "WindowTest"
+          }
+        },
+        {
+          "tool": "pd_body_new",
+          "arguments": {}
+        },
+        {
+          "tool": "sketch_new",
+          "arguments": {
+            "plane": "XY"
+          }
+        },
+        {
+          "tool": "sketch_add",
+          "arguments": {
+            "items": [
+              {
+                "kind": "rectangle",
+                "center": [
+                  0,
+                  0
+                ],
+                "size": [
+                  40,
+                  30
+                ],
+                "dims": true
+              }
+            ]
+          }
+        },
+        {
+          "tool": "pd_pad",
+          "arguments": {
+            "length": 20
+          }
+        },
+        {
+          "tool": "doc_switch",
+          "arguments": {
+            "document": "WindowTest",
+            "front": true
+          }
+        },
+        {
+          "tool": "doc_close",
+          "arguments": {
+            "documents": [
+              "Unnamed"
+            ],
+            "discard": true
+          }
+        },
+        {
+          "tool": "doc_save",
+          "arguments": {
+            "path": "WindowTest.FCStd",
+            "overwrite": true
+          }
+        },
+        {
+          "tool": "session_state",
+          "arguments": {}
+        }
+      ],
+      "expect": [
+        {
+          "call": 8,
+          "path": "result.document",
+          "equals": "WindowTest"
+        },
+        {
+          "call": 8,
+          "path": "result.bodies.0.volume",
+          "equals": 24000.0
+        },
+        {
+          "call": 8,
+          "path": "result.where",
+          "equals": "window"
+        }
+      ]
+    },
+    {
+      "name": "a clean Report view after the reset",
+      "calls": [
+        {
+          "tool": "report_read",
+          "arguments": {
+            "problems": true
+          }
+        }
+      ],
+      "expect": [
+        {
+          "call": 0,
+          "path": "result.lines",
+          "noneContain": [
+            "Error",
+            "Traceback",
+            "Exception"
+          ],
+          "ignoreLinesWith": [
+            "(qt.qpa.fonts)"
+          ]
+        }
+      ]
+    }
+  ]
+}
