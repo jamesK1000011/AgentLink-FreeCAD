@@ -17,6 +17,35 @@ import tempfile
 import time
 
 
+def _trial_first(sys, os):
+    """The add-ons on trial (PYTHONPATH, as the launcher gives it) before
+    the installed ones: FreeCAD's start-up puts its own Mod folders on the
+    path and may import the installed agentlink first, and the trial then
+    tested the add-ons in use, not the new ones (seen when a new module of
+    the trial was "not in" the installed package)."""
+    roots = [os.path.realpath(p) for p in os.environ.get("PYTHONPATH", "").split(os.pathsep) if p and os.path.isdir(p)]
+    if not roots:
+        return
+    for r in reversed(roots):
+        sys.path[:] = [p for p in sys.path if os.path.realpath(p or ".") != r]
+        sys.path.insert(0, r)
+    tops = set()
+    for r in roots:
+        try:
+            for n in os.listdir(r):
+                if os.path.isfile(os.path.join(r, n, "__init__.py")):
+                    tops.add(n)
+                elif n.endswith(".py"):
+                    tops.add(n[:-3])
+        except OSError:
+            pass
+    for name, mod in list(sys.modules.items()):
+        top = name.split(".", 1)[0]
+        f = getattr(mod, "__file__", None)
+        if top in tops and f and not any(os.path.realpath(f).startswith(r + os.sep) for r in roots):
+            sys.modules.pop(name, None)
+
+
 def run():
     # Imported here: FreeCAD's start-up, run from a script as __main__, can
     # take module names out of its globals (seen on 26.x).
@@ -35,6 +64,7 @@ def run():
         import FreeCAD
 
         out["freecad"] = ".".join(FreeCAD.Version()[:3])
+        _trial_first(sys, os)
     except Exception as e:
         fails.append(f"FreeCAD does not import: {e}")
         return out
