@@ -1,4 +1,41 @@
 {
+ "$defs": {
+  "steps": {"type": "array", "items": {"$ref": "#/$defs/step"}},
+  "message": {
+   "description": "A refusal's words: as written, or {\"fmt\": \"…{field}…\"} filled from the run's values ({{ and }} are braces).",
+   "anyOf": [{"type": "string"}, {"type": "object", "required": ["fmt"], "additionalProperties": false, "properties": {"fmt": {"type": "string"}}}]
+  },
+  "answer": {
+   "type": "object",
+   "description": "Agent Link only: the answer. via: the family helper that finishes it (with: its arguments; $fields is the fields); fields: the answer's own fields in order (\"...\": a dict spread in; {\"when\", \"value\"}: only then); late: the helper reads the fields itself, after its recompute; then: steps run once the answer is made (\"out\"); first: expressions run before the fields are read.",
+   "additionalProperties": false,
+   "properties": {"via": {"type": "string"}, "with": {"type": "array"}, "fields": {"type": "object"}, "late": {"type": "boolean"}, "first": {"type": "array"},
+                  "then": {"$ref": "#/$defs/steps"}}
+  },
+  "step": {
+   "type": "object",
+   "description": "One step: exactly one of let, refuse, make, add, set, do, put, push, each, choose, try, then, answer.",
+   "properties": {"when": {"description": "The step runs only when this is truthy."}},
+   "oneOf": [
+    {"required": ["let"], "properties": {"let": {"type": "object", "description": "Values by name, in order; \"p, q\" unpacks."}}},
+    {"required": ["refuse"], "properties": {"refuse": {"$ref": "#/$defs/message"}, "code": {"enum": ["invalid_input", "not_found", "invalid_state", "unavailable", "failed"]},
+                                           "first": {"$ref": "#/$defs/steps", "description": "What to undo before the refusal."}}},
+    {"required": ["make"], "properties": {"make": {"type": "string", "description": "A maker's dotted name (Arch.makeStairs), or =expression giving one."}, "call": {"type": "array"},
+                                         "kw": {"type": "object"}, "as": {"type": "string"}, "headless": {"type": "boolean", "description": "Through the family's headless_call."}}},
+    {"required": ["add"], "properties": {"add": {"type": "string", "description": "A document object's TypeId."}, "name": {"type": "string"}, "as": {"type": "string"}}},
+    {"required": ["set"], "properties": {"set": {"type": "object", "description": "Properties by path (o.Placement.Base), in order."}}},
+    {"required": ["do"], "properties": {"do": {"description": "An expression, or a list of them, for what they do."}}},
+    {"required": ["put"], "properties": {"put": {"type": "object"}, "into": {"type": "string", "description": "The dict's name; the answer (out) when left out."}}},
+    {"required": ["push"], "properties": {"push": {"type": "object", "description": "A list's name and one more for it."}}},
+    {"required": ["each", "in", "steps"], "properties": {"each": {"type": "string"}, "in": {}, "index": {"type": "string"}, "steps": {"$ref": "#/$defs/steps"}}},
+    {"required": ["choose", "of"], "properties": {"choose": {}, "of": {"type": "object", "additionalProperties": {"$ref": "#/$defs/steps"}}, "else": {"$ref": "#/$defs/steps"}}},
+    {"required": ["try"], "properties": {"try": {"$ref": "#/$defs/steps"}, "on": {"description": "error (any), refusal (a tool's own), or a list of Python error names."},
+                                        "except": {"$ref": "#/$defs/steps"}}},
+    {"required": ["then", "when"], "properties": {"then": {"$ref": "#/$defs/steps"}, "else": {"$ref": "#/$defs/steps"}}},
+    {"required": ["answer"], "properties": {"answer": {"$ref": "#/$defs/answer", "description": "Ends the run with this answer."}}}
+   ]
+  }
+ },
  "$comment": "The tool-data format Agent Link reads (agentlink/tooldata.py). One file per add-on: <package>/data/tools.json.",
  "type": "object",
  "required": [
@@ -82,9 +119,20 @@
        "make",
        "apply",
        "command",
-       "read"
+       "read",
+       "steps"
       ],
-      "description": "Agent Link's own tools only: the runner (agentlink/runners.py) that runs this wrapper. Add-ons bind handlers instead."
+      "description": "Agent Link's own tools only: the runner (agentlink/runners.py) that runs this entry: a wrapper of one FreeCAD command (make, apply, command, read; with target, args, rules) or a list of steps. Add-ons bind handlers instead."
+     },
+     "family": {
+      "type": "string",
+      "pattern": "^[a-z_]+$",
+      "description": "Agent Link only: where two family modules share a group, the module whose helpers this entry calls (bim_more)."
+     },
+     "steps": {
+      "type": "array",
+      "description": "Agent Link only, with the steps runner: what the tool does, in order. Each step is one action, and \"when\" (an expression) on any step runs it only then. A value starting with = is an expression (agentlink/expr.py): arithmetic, comparisons, conditionals, lists, the family's helpers by name; never eval.",
+      "items": {"$ref": "#/$defs/step"}
      },
      "target": {
       "type": "object",
@@ -105,10 +153,7 @@
       },
       "description": "Agent Link only: the checks the handler made, each with its refusal message word for word."
      },
-     "answer": {
-      "type": "object",
-      "description": "Agent Link only: the answer's fields and the family helper that finishes it."
-     },
+     "answer": {"$ref": "#/$defs/answer"},
      "activity": {
       "type": "string",
       "description": "What a call did, in the Activity tab's words: a template whose {fields} come from the call's arguments or answer, e.g. \"Sliced {object}\". The first template whose fields are all given is used; \" if {field}\" at the end makes it conditional."

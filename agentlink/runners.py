@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Agent Link's own tools as data: the four runners.
+"""Agent Link's own tools as data: the runners.
 
-A tool that only wraps one FreeCAD command is an entry in
-agentlink/data/tools.json (the tool-data format, agentlink/tooldata.py) with
-a runner and what it needs, instead of a handler of its own:
+A tool is an entry in agentlink/data/tools.json (the tool-data format,
+agentlink/tooldata.py; docs/data-tools.md says what each construct is
+for) with a runner and what it needs, instead of a handler of its own:
 
   make     make one object (a maker such as Arch.makePanel, or a TypeId),
            name it, set properties from the arguments, answer
@@ -11,32 +11,75 @@ a runner and what it needs, instead of a handler of its own:
            copy), the result kept
   command  one FreeCAD command by name on a selection
   read     find objects and answer chosen properties
+  steps    a list of steps run in order, each able to use the ones before
+           it: for a tool that is more than one command
 
-Each family keeps its finishing code (finish, done, keep, named …) and
-hands it to tools(group, session, helpers); the entries name the helpers
-they use, so nothing here repeats them. Descriptions, schemas and refusal
-messages are in the data word for word.
+Each family keeps its finishing code and its named helpers (finish, done,
+named …; the small functions that are real geometry or FreeCAD-API logic)
+and hands them to tools(group, session, helpers); the entries name the
+helpers they use, so nothing here repeats them. Descriptions, schemas and
+refusal messages are in the data word for word.
 
 Values in an entry ("expressions"):
+  "=expression"    worked out by agentlink/expr.py's evaluator: arithmetic,
+                   comparisons, and/or/not, "x if c else y", lists and
+                   [… for x in xs], a helper or a listed function by name,
+                   a value's methods. "a" is the call's arguments, and
+                   a.name the argument "name" (None when left out).
   "$x.Attr"        a value in the run: the arguments resolved so far by
                    name, "a" (the call's arguments), "o" (the object made or
                    found), "m" (apply's working copy), "tool", "fields"; a
                    name ending in ? is getattr(…, None); "x[].Label" maps a list
-  {"fmt": "…"}     str.format over the same values ("{o.Label} copy")
-  {"len": e}  {"round": [e, n]}  {"or": [e, …]} (the first truthy)
+  {"fmt": "…"}     a message filled from the run's values: "{o.Label} copy",
+                   "{sill + height:g} mm", "{path!r}" (expr.fmt)
+  {"len": e}  {"sum": e}  {"round": [e, n]}  {"or": [e, …]} (the first truthy)
   {"if": [cond, then, else]}  {"not": e}  {"vec": [x, y, z]}
-  {"set": [object, "Property", e]}  sets it (in an argument's "then")
+  {"set": [object, "Property", e]}  sets it (in an argument's "then", a
+                   step run once the object is made, in the entry's order;
+                   "$value" there is the argument, its default when left
+                   out, and "$key" its name)
   {"do": [object, "method", e, …]}  calls one of its methods
   {"call": "helper", "with": [e, …]}  a family helper's answer
   {"when": e, "value": e}  in an answer: the field only when e is truthy
   anything else    itself (lists and objects element by element)
+
+A rule ({"check", "of", "message", "code", "after"}) may carry "when": an
+expression; the rule is only checked when it is truthy (a check that
+belongs to one way of calling the tool: its base given, not its points).
+
+The steps runner's steps (each one object; "when": e on any of them runs
+it only when e is truthy):
+  {"let": {"name": e, …}}        values, in order ("p, q": e unpacks)
+  {"refuse": message, "when": e, "code": "invalid_input", "first": [steps]}
+                                 the refusal, in its place in the order;
+                                 first: what to undo before it
+  {"make": "Arch.makeStairs", "call": [e, …], "kw": {…}, "as": "o",
+   "headless": true}             a maker called (through the family's
+                                 headless_call when headless)
+  {"add": "Part::Feature", "name": "Opening", "as": "hole"}   a new object
+  {"set": {"o.Label": e, "o.Placement.Base": e}}   properties, in order
+  {"do": e}  {"do": [e, …]}      for what it does (a method, a helper)
+  {"put": {"field": e}, "into": "out"}   items into a dict (the answer)
+  {"push": {"list": e}}          one more on a list
+  {"each": "x", "in": e, "index": "i", "steps": [steps]}
+  {"when": e, "then": [steps], "else": [steps]}
+  {"choose": e, "of": {"value": [steps], …}, "else": [steps]}
+  {"try": [steps], "on": "error" | "refusal" | ["ValueError", …],
+   "except": [steps]}            "error" there is what was caught
+  {"answer": {"via": helper, "with": [e, …], "fields": {…}, "late": true,
+              "then": [steps]}}  ends the run with this answer; late: the
+                                 helper reads the fields itself, after its
+                                 recompute; then: steps after the answer
+                                 is made ("out"), for what must be read
+                                 or made after it
+The entry's own "answer" is the one a run reaches the end with.
 """
-import importlib
 import os
 
+from . import expr
 from .protocol import Tool, ToolError
 
-RUNNERS = ("make", "apply", "command", "read")
+RUNNERS = ("make", "apply", "command", "read", "steps")
 DATA = os.path.join(os.path.dirname(__file__), "data")
 CODES = {"invalid_input", "not_found", "invalid_state", "unavailable", "failed"}
 
@@ -85,6 +128,8 @@ def _attrs(x, names):
 
 def value(e, env, helpers):
     if isinstance(e, str):
+        if e.startswith("="):
+            return expr.evaluate(e[1:], env, helpers)
         return _path(env, e[1:]) if e.startswith("$") else e
     if isinstance(e, list):
         return [value(x, env, helpers) for x in e]
@@ -92,9 +137,11 @@ def value(e, env, helpers):
         if len(e) == 1:
             (op, arg), = e.items()
             if op == "fmt":
-                return arg.format(**env)
+                return expr.fmt(arg, env, helpers)
             if op == "len":
                 return len(value(arg, env, helpers))
+            if op == "sum":
+                return sum(value(arg, env, helpers))
             if op == "round":
                 return round(value(arg[0], env, helpers), arg[1])
             if op == "if":
@@ -166,6 +213,8 @@ def resolve(k, spec, a, env, helpers):
 def check(r, env, helpers):
     """One rule: raises its refusal (message as written) when it fails."""
     kind = r["check"]
+    if "when" in r and not value(r["when"], env, helpers):
+        return
     if kind == "available":
         ok = value(r["of"], env, helpers) is not None
     elif kind == "given":
@@ -188,15 +237,10 @@ def check(r, env, helpers):
     else:
         raise ValueError(f"rule {kind}: not a check the runners make")
     if not ok:
-        raise ToolError(r.get("code", "invalid_input"), r["message"].format(**env) if r.get("format") else r["message"])
+        raise ToolError(r.get("code", "invalid_input"), expr.fmt(r["message"], env, helpers) if r.get("format") else r["message"])
 
 
-def _maker(dotted):
-    mod, _, fn = dotted.rpartition(".")
-    try:
-        return getattr(importlib.import_module(mod), fn, None)
-    except ImportError:
-        return None
+_maker = expr.FUNCTIONS["maker"]
 
 
 # ---- the runners ----------------------------------------------------------------------------
@@ -248,7 +292,8 @@ def _after(e, a, env, helpers):
     for k, spec in (e.get("args") or {}).items():
         if "then" in spec:
             flush()
-            value(spec["then"], env, helpers)
+            # The step sees the argument as given ("$value", its default when left out) and its name ("$key").
+            value(spec["then"], {**env, "value": a.get(k, spec["default"]) if "default" in spec else a.get(k), "key": k}, helpers)
             continue
         if not spec.get("prop"):
             continue
@@ -289,13 +334,20 @@ def _after(e, a, env, helpers):
 
 
 def _answer(e, env, helpers):
-    ans = e.get("answer") or {}
+    return _answered(e.get("answer") or {}, env, helpers)
+
+
+def _answered(ans, env, helpers):
     for x in ans.get("first", []):
         value(x, env, helpers)  # e.g. recompute and record the step before the fields are read
-    env["fields"] = fields(ans.get("fields"), env, helpers)
-    if ans.get("via"):
-        return helpers[ans["via"]](*[value(x, env, helpers) for x in ans.get("with", [])])
-    return env["fields"]
+    # late: the fields are read by the helper itself, once it has recomputed and recorded the step.
+    env["fields"] = (lambda: fields(ans.get("fields"), env, helpers)) if ans.get("late") else fields(ans.get("fields"), env, helpers)
+    out = helpers[ans["via"]](*[value(x, env, helpers) for x in ans.get("with", [])]) if ans.get("via") else env["fields"]
+    if ans.get("then"):
+        env["out"] = out  # after the answer: what is read or made once it is there
+        _steps(ans["then"], env, helpers)
+        out = env["out"]
+    return out
 
 
 def run_make(name, e, a, helpers):
@@ -369,7 +421,115 @@ def run_read(name, e, a, helpers):
     return _answer(e, env, helpers)
 
 
-RUN = {"make": run_make, "apply": run_apply, "command": run_command, "read": run_read}
+# ---- the steps runner -----------------------------------------------------------------------
+
+ACTIONS = ("let", "refuse", "make", "add", "set", "do", "put", "push", "each", "choose", "try", "then", "answer")
+EXTRA = {"let": (), "refuse": ("code", "first"), "make": ("call", "kw", "as", "headless"), "add": ("name", "as"), "set": (), "do": (),
+         "put": ("into",), "push": (), "each": ("in", "index", "steps"), "choose": ("of", "else"), "try": ("on", "except"),
+         "then": ("else",), "answer": ()}
+
+
+class _Done(BaseException):
+    """A run ended by an answer step (not an error: no try step catches it)."""
+
+    def __init__(self, out):
+        self.out = out
+
+
+def _assign(names, v, env):
+    if "," not in names:
+        env[names] = v
+        return
+    keys = [k.strip() for k in names.split(",")]
+    vals = list(v)
+    if len(keys) != len(vals):
+        raise ValueError(f"{names}: {len(keys)} names for {len(vals)} values")
+    env.update(zip(keys, vals))
+
+
+def _steps(steps, env, helpers):
+    for st in steps:
+        _step(st, env, helpers)
+
+
+def _step(st, env, helpers):
+    if "when" in st and not value(st["when"], env, helpers):
+        if "then" in st:
+            _steps(st.get("else", []), env, helpers)
+        return
+    if "let" in st:
+        for k, x in st["let"].items():
+            _assign(k, value(x, env, helpers), env)
+    elif "refuse" in st:
+        _steps(st.get("first", []), env, helpers)
+        raise ToolError(st.get("code", "invalid_input"), value(st["refuse"], env, helpers))
+    elif "make" in st:
+        fn = value(st["make"], env, helpers) if st["make"].startswith("=") else _maker(st["make"])
+        args = [value(x, env, helpers) for x in st.get("call", [])]
+        kw = {k: value(x, env, helpers) for k, x in (st.get("kw") or {}).items()}
+        env[st.get("as", "o")] = helpers["headless_call"](fn, *args, **kw) if st.get("headless") else fn(*args, **kw)
+    elif "add" in st:
+        env[st.get("as", "o")] = helpers["doc"]().addObject(st["add"], st.get("name", st["add"].split("::")[-1]))
+    elif "set" in st:
+        for path, x in st["set"].items():
+            v = value(x, env, helpers)
+            head, *mid, last = path.split(".")
+            o = env[head]
+            for k in mid:
+                o = getattr(o, k)
+            setattr(o, last, v)
+    elif "do" in st:
+        value(st["do"], env, helpers)
+    elif "put" in st:
+        into = env[st.get("into", "out")]
+        for k, x in st["put"].items():
+            into[k] = value(x, env, helpers)
+    elif "push" in st:
+        for k, x in st["push"].items():
+            env[k].append(value(x, env, helpers))
+    elif "each" in st:
+        for i, x in enumerate(list(value(st["in"], env, helpers))):
+            _assign(st["each"], x, env)
+            if "index" in st:
+                env[st["index"]] = i
+            _steps(st["steps"], env, helpers)
+    elif "choose" in st:
+        v = value(st["choose"], env, helpers)
+        _steps(st["of"][v] if isinstance(v, str) and v in st["of"] else st.get("else", []), env, helpers)
+    elif "try" in st:
+        try:
+            _steps(st["try"], env, helpers)
+        except _caught(st.get("on", "error")) as e:
+            env["error"] = e
+            _steps(st.get("except", []), env, helpers)
+    elif "then" in st:
+        _steps(st["then"], env, helpers)
+    elif "answer" in st:
+        raise _Done(_answered(st["answer"], env, helpers))
+    else:
+        raise ValueError(f"step {sorted(st)}: not a step the runner takes")
+
+
+ERRORS = {"error": Exception, "refusal": ToolError, "TypeError": TypeError, "ValueError": ValueError, "KeyError": KeyError,
+          "AttributeError": AttributeError, "ImportError": ImportError}
+
+
+def _caught(on):
+    """What a try step catches: "error" (any), "refusal" (a tool's own), or
+    a list of Python's error names."""
+    return tuple(ERRORS[k] for k in on) if isinstance(on, list) else ERRORS[on]
+
+
+def run_steps(name, e, a, helpers):
+    env = {"a": a, "tool": name}
+    try:
+        _steps(e.get("steps") or [], env, helpers)
+    except _Done as d:
+        return d.out
+    return _answer(e, env, helpers)
+
+
+RUN = {"make": run_make, "apply": run_apply, "command": run_command, "read": run_read, "steps": run_steps}
 
 
 def tool(name, e, helpers):
@@ -378,10 +538,12 @@ def tool(name, e, helpers):
                 reads=e.get("reads"), activity=e.get("activity"))
 
 
-def tools(group, session, helpers, data=None):
-    """The group's data-defined tools, bound to the family's helpers."""
+def tools(group, session, helpers, data=None, family=None):
+    """The group's data-defined tools, bound to the family's helpers. Where
+    two family modules share a group, an entry says whose helpers it calls
+    ("family": the module's name) and that module asks for its own."""
     ents = entries() if data is None else data
-    return [tool(k, v, helpers) for k, v in ents.items() if v["group"] == group and v.get("runner")]
+    return [tool(k, v, helpers) for k, v in ents.items() if v["group"] == group and v.get("runner") and v.get("family") == family]
 
 
 def check_entry(name, e):
@@ -390,9 +552,20 @@ def check_entry(name, e):
     r = e.get("runner")
     if r not in RUNNERS:
         return [f"{name}.runner: one of {', '.join(RUNNERS)}"]
+    for k in ("target", "args", "rules", "answer", "steps"):
+        out += [f"{name}.{k}{w}" for w in _check_values(e.get(k), "")]
+    if r == "steps":
+        if not isinstance(e.get("steps"), list):
+            return out + [f"{name}.steps: a list of steps"]
+        if set(e) & {"target", "args", "rules"}:
+            out.append(f"{name}: a steps tool has steps and an answer, not target, args or rules")
+        out += [f"{name}.steps{w}" for w in _check_steps(e["steps"], "")]
+        return out + _check_answer(name + ".answer", e.get("answer"))
+    if "steps" in e:
+        out.append(f"{name}.steps: only with the steps runner")
     t = e.get("target")
     if not isinstance(t, dict):
-        return [f"{name}.target: an object"]
+        return out + [f"{name}.target: an object"]
     need = {"make": ("maker", "type"), "apply": ("method",), "command": ("command",), "read": ()}[r]
     if need and not any(k in t for k in need):
         out.append(f"{name}.target: needs {' or '.join(need)}")
@@ -404,7 +577,111 @@ def check_entry(name, e):
             out.append(f"{name}.rules[{i}]: check and message")
         elif rule.get("code", "invalid_input") not in CODES:
             out.append(f"{name}.rules[{i}].code: one of {', '.join(sorted(CODES))}")
-    ans = e.get("answer")
-    if ans is not None and (not isinstance(ans, dict) or set(ans) - {"first", "via", "with", "fields"}):
-        out.append(f"{name}.answer: first, via, with, fields")
+        elif rule.get("format") and expr.check_fmt(rule["message"]):
+            out.append(f"{name}.rules[{i}].message: {expr.check_fmt(rule['message'])}")
+    return out + _check_answer(name + ".answer", e.get("answer"))
+
+
+def _check_answer(where, ans):
+    if ans is None:
+        return []
+    if not isinstance(ans, dict) or set(ans) - {"first", "via", "with", "fields", "late", "then"}:
+        return [f"{where}: first, via, with, fields, late, then"]
+    if "then" in ans:
+        if not isinstance(ans["then"], list):
+            return [f"{where}.then: a list of steps"]
+        return [f"{where}.then{w}" for w in _check_steps(ans["then"], "")]
+    return []
+
+
+def _check_values(x, where):
+    """Every expression and message template in x that the evaluator would not read."""
+    out = []
+    if isinstance(x, str):
+        if x.startswith("=") and expr.check(x[1:]):
+            out.append(f"{where}: {expr.check(x[1:])}")
+    elif isinstance(x, list):
+        for i, v in enumerate(x):
+            out += _check_values(v, f"{where}[{i}]")
+    elif isinstance(x, dict):
+        if set(x) == {"fmt"} and isinstance(x["fmt"], str):
+            w = expr.check_fmt(x["fmt"])
+            return [f"{where}.fmt: {w}"] if w else []
+        for k, v in x.items():
+            out += _check_values(v, f"{where}.{k}")
     return out
+
+
+def _check_steps(steps, where):
+    out = []
+    for i, st in enumerate(steps):
+        at = f"{where}[{i}]"
+        if not isinstance(st, dict):
+            out.append(f"{at}: an object")
+            continue
+        acts = [k for k in ACTIONS if k in st]
+        if len(acts) != 1:
+            out.append(f"{at}: one of {', '.join(ACTIONS)} (has {sorted(st)})")
+            continue
+        act = acts[0]
+        extra = set(st) - {act, "when"} - set(EXTRA[act])
+        if extra:
+            out.append(f"{at}: {act} does not take {sorted(extra)}")
+        if act == "refuse":
+            if st.get("code", "invalid_input") not in CODES:
+                out.append(f"{at}.code: one of {', '.join(sorted(CODES))}")
+            if not (isinstance(st["refuse"], str) or isinstance(st["refuse"], dict) and set(st["refuse"]) == {"fmt"}):
+                out.append(f"{at}.refuse: the message, or {{\"fmt\": a message with fields}}")
+        if act in ("let", "set", "put", "push") and not isinstance(st[act], dict):
+            out.append(f"{at}.{act}: an object of names and values")
+        if act == "make" and not isinstance(st["make"], str):
+            out.append(f"{at}.make: a maker's dotted name")
+        if act == "each" and not (isinstance(st.get("steps"), list) and "in" in st and isinstance(st["each"], str)):
+            out.append(f"{at}: each (a name), in and steps")
+        if act == "choose" and not isinstance(st.get("of"), dict):
+            out.append(f"{at}.of: an object of steps by value")
+        if act == "try" and not all(isinstance(k, str) and k in ERRORS for k in (st["on"] if isinstance(st.get("on"), list) else [st.get("on", "error")])):
+            out.append(f"{at}.on: error | refusal | a list of {', '.join(sorted(set(ERRORS) - {'error', 'refusal'}))}")
+        if act == "answer":
+            out += _check_answer(f"{at}.answer", st["answer"])
+        for key in ("first", "steps", "else", "except", "then", "try"):
+            if key in st and key in (act, *EXTRA[act]):
+                if isinstance(st[key], list):
+                    out += _check_steps(st[key], f"{at}.{key}")
+                else:
+                    out.append(f"{at}.{key}: a list of steps")
+        if act == "choose" and isinstance(st.get("of"), dict):
+            for k, v in st["of"].items():
+                out += _check_steps(v, f"{at}.of.{k}") if isinstance(v, list) else [f"{at}.of.{k}: a list of steps"]
+    return out
+
+
+def calls(e):
+    """The names an entry's expressions call as functions, and the helpers
+    it names (to check an entry against its family's helpers)."""
+    names = set()
+
+    def walk(x):
+        if isinstance(x, str):
+            if x.startswith("="):
+                names.update(expr.called(x[1:]))
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+        elif isinstance(x, dict):
+            if set(x) == {"fmt"} and isinstance(x["fmt"], str):
+                for _, field, _s, _c in expr._split(x["fmt"]):
+                    if field and not expr._PLAIN.match(field):
+                        names.update(expr.called(field))
+                return
+            for k in ("call", "via", "helper"):
+                if isinstance(x.get(k), str):
+                    names.add(x[k])
+            if x.get("headless"):
+                names.add("headless_call" if x["headless"] is True else x["headless"])
+            for v in x.values():
+                walk(v)
+
+    for k in ("target", "args", "rules", "answer", "steps"):
+        walk(e.get(k))
+    return names - set(expr.FUNCTIONS)
