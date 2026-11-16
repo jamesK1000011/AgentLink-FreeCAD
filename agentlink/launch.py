@@ -7,6 +7,7 @@ agentlink_headless.py in FreeCAD's own Python, which serves.
     agentlink-freecad [--out DIR]       headless
     agentlink-freecad --connect [PORT]  relay to the FreeCAD window's Start link (needs no FreeCAD here)
     agentlink-freecad --check [--json]  what is missing and how to get it
+    agentlink-freecad --version         the version (needs no FreeCAD)
 """
 
 import importlib.util
@@ -22,8 +23,26 @@ def _headless():
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "agentlink_headless.py")
 
 
+def version():
+    """The server's VERSION, read from server.py without importing it."""
+    import re
+
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "server.py"), encoding="utf-8") as f:
+            m = re.search(r'(?m)^VERSION = "([^"]+)"', f.read())
+        return m.group(1) if m else "unknown"
+    except OSError:
+        return "unknown"
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if "--version" in argv or "-V" in argv:
+        sys.stdout.write(f"agentlink-freecad {version()}\n")
+        return 0
+    if "--help" in argv or "-h" in argv:
+        sys.stdout.write(__doc__.split("\n\n", 1)[1].strip("\n") + "\n")
+        return 0
     from . import setup_check
 
     if "--check" in argv:

@@ -165,6 +165,7 @@ docs/hooks.md
 docs/packaging.md
 docs/records.md
 package.xml
+packaging/mcpb/icon.png
 pyproject.toml
 scripts/live/README.md
 scripts/live/agentlink.json

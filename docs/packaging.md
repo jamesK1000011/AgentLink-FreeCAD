@@ -29,8 +29,30 @@ which no package index has. So the package is a launcher:
 
 `uvx --from git+https://github.com/jamesK1000011/AgentLink-FreeCAD agentlink-freecad`
 works without anything on PyPI. To build: `uv build` (or
-`python3 -m pip wheel --no-deps .`). Nothing is published; a PyPI release
-would be `uv publish` of that build, from a tag.
+`python3 -m pip wheel --no-deps .`); offline, with setuptools 77 or later
+already installed, `uv build --no-build-isolation`. setuptools 77 is the
+first to take the licence expression and `license-files` in `[project]`
+(PEP 639). `agentlink-freecad --version` prints the version without
+looking for FreeCAD. Nothing is published; a PyPI release would be
+`uv publish` of that build, from a tag, best through PyPI's trusted
+publishing (a workflow on the tag, no token kept anywhere). Once it is on
+PyPI the client configs can drop `--from git+…` for plain
+`uvx agentlink-freecad`.
+
+The README's links are absolute (`https://github.com/…/blob/main/…`): PyPI
+and the Addon Manager show the README away from the repository, where
+relative links break. The release test checks it.
+
+## The MCP Registry entry
+
+`server.json` lists the PyPI package for the
+[MCP Registry](https://registry.modelcontextprotocol.io). The registry
+checks that the package is ours by the README's
+`<!-- mcp-name: io.github.jamesK1000011/agentlink-freecad -->` line, which
+PyPI shows as the package's description, so the entry can only be
+published after the PyPI release, with `mcp-publisher publish` signed in
+through GitHub. The release test keeps its versions, name and package in
+step with `pyproject.toml`.
 
 ### What differs from the add-on copy
 
@@ -47,7 +69,10 @@ would be `uv publish` of that build, from a tag.
 
 Built and released from ScanRuler's repository (tag `agentlink-v*`,
 workflow `mcpb-release.yml`), with a privacy and identity check of the built
-file before upload. Its Node launcher finds FreeCAD in Applications,
+file before upload. Its icon is kept here, `packaging/mcpb/icon.png` (the
+workbench icon at 512 px), and goes into the bundle when the pinned Agent
+Link has it. Building it from this repository instead is planned; until
+then the launcher's self-update channel stays ScanRuler's `freecad-spike`. Its Node launcher finds FreeCAD in Applications,
 installs Agent Link and the pinned add-ons into FreeCAD's `Mod` folder, and
 starts the server in FreeCAD's Python. It is macOS-only for now.
 

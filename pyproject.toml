@@ -4,7 +4,7 @@
 # Python (agentlink/launch.py). The FreeCAD add-on itself is this same
 # folder, installed by the Addon Manager; see docs/packaging.md.
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -18,6 +18,10 @@ license-files = ["LICENSE", "LICENSE-DATA", "LICENSES/*"]
 authors = [{ name = "Agent Link contributors" }]
 keywords = ["FreeCAD", "MCP", "CAD", "agent"]
 classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Manufacturing",
+  "Intended Audience :: End Users/Desktop",
   "Programming Language :: Python :: 3",
   "Operating System :: MacOS",
   "Operating System :: POSIX :: Linux",
@@ -29,6 +33,8 @@ dependencies = []
 [project.urls]
 Homepage = "https://github.com/jamesK1000011/AgentLink-FreeCAD"
 Issues = "https://github.com/jamesK1000011/AgentLink-FreeCAD/issues"
+Documentation = "https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/README.md"
+Changelog = "https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/CHANGELOG.md"
 
 [project.scripts]
 agentlink-freecad = "agentlink.launch:main"
