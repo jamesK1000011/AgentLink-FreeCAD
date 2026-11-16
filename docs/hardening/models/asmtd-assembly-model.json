@@ -1,0 +1,1055 @@
+{
+ "tutorial": "Assembly_Workbench.md, section \"Example crank and slider\" (the built-in Assembly workbench has no tutorial page of its own: Tutorial_KinematicAssembly.md is for the external Assembly3 workbench; the workbench page carries this example with the parts' Python). The parts are built with part_primitive / part_boolean from that Python's numbers, then the page's steps: assembly, ground the Base, Revolute Base-Crank, Slider Base-SliderRod, Revolute Crank-ConnectingRod, Cylindrical ConnectingRod-SliderRod.",
+ "reference": null,
+ "expected": {
+  "parts": 4,
+  "boxSizes": {
+   "Base": [
+    140,
+    40,
+    23
+   ],
+   "SliderRod": [
+    106,
+    12,
+    12
+   ],
+   "Crank": [
+    15,
+    45,
+    10
+   ],
+   "ConnectingRod": [
+    62,
+    12,
+    4
+   ]
+  },
+  "volumesMm3": {
+   "Crank": 2607.39,
+   "ConnectingRod": 2450.27
+  },
+  "volumesNote": "Crank and ConnectingRod worked out by hand from the page's sizes; Base and SliderRod not worked out (overlapping fuses) — read them once and keep.",
+  "grounded": [
+   "Base"
+  ],
+  "joints": {
+   "CrankPivot": "Revolute",
+   "RodSlide": "Slider",
+   "CrankRod": "Revolute",
+   "RodPinJoint": "Cylindrical"
+  },
+  "solverStatus": "solved (code 0) after each joint",
+  "degreesOfFreedom": "1 (the crank's turn) by counting: 3 moving parts x 6 = 18, less revolute 5 + slider 5 + revolute 5 + cylindrical 4 = 19, plus the 2 redundantly held the wiki page names. FreeCAD 1.1 does not report freedom left through Python (solve() returns 0, -1 or -6 only), so no tool can read this number: it is shown by CrankPivot still turning.",
+  "fits": "every pin 8 mm in a hole 8 mm: clearance 0, H7/g6 verdict fix"
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "CrankSlider"
+   },
+   "expect": "a new empty document, worked in from now on"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     140,
+     40,
+     7
+    ],
+    "at": [
+     0,
+     -20,
+     0
+    ],
+    "name": "Base"
+   },
+   "expect": "body Base, box 140 x 40 x 7"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 4,
+    "height": 8,
+    "at": [
+     120,
+     0,
+     7
+    ],
+    "name": "BasePin"
+   },
+   "expect": "pivot pin, z 7 to 15"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     20,
+     12,
+     10
+    ],
+    "at": [
+     5,
+     -6,
+     7
+    ],
+    "name": "BaseBlock"
+   },
+   "expect": "block under the boss"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 6,
+    "height": 20,
+    "at": [
+     25,
+     0,
+     17
+    ],
+    "direction": [
+     -1,
+     0,
+     0
+    ],
+    "name": "BaseBoss"
+   },
+   "expect": "boss along -x, x 25 to 5, axis at z 17"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "fuse",
+    "base": "Base",
+    "tools": [
+     "BasePin",
+     "BaseBlock",
+     "BaseBoss"
+    ]
+   },
+   "expect": "one solid Base; tools removed; health ok (valid, closed)"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 4,
+    "height": 20,
+    "at": [
+     25,
+     0,
+     17
+    ],
+    "direction": [
+     -1,
+     0,
+     0
+    ],
+    "name": "BaseBore"
+   },
+   "expect": "the bore's tool"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "cut",
+    "base": "Base",
+    "tools": "BaseBore"
+   },
+   "expect": "Base with a 8 mm bore through the boss; box 140 x 40 x 23 (z 0 to 23)"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     4,
+     12,
+     12
+    ],
+    "at": [
+     -12,
+     -6,
+     0
+    ],
+    "name": "SliderRod"
+   },
+   "expect": "body SliderRod"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     14,
+     12,
+     4
+    ],
+    "at": [
+     -8,
+     -6,
+     0
+    ],
+    "name": "RodFoot"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 4,
+    "height": 8,
+    "at": [
+     0,
+     0,
+     4
+    ],
+    "name": "RodPin"
+   },
+   "expect": "pin z 4 to 12"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 4,
+    "height": 88,
+    "at": [
+     -12,
+     0,
+     6
+    ],
+    "direction": [
+     -1,
+     0,
+     0
+    ],
+    "name": "RodShaft"
+   },
+   "expect": "shaft along -x to x -100"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "fuse",
+    "base": "SliderRod",
+    "tools": [
+     "RodFoot",
+     "RodPin",
+     "RodShaft"
+    ]
+   },
+   "expect": "one solid, box 106 x 12 x 12 (x -100 to 6)"
+  },
+  {
+   "tool": "part_transform",
+   "arguments": {
+    "op": "move",
+    "body": "SliderRod",
+    "by": [
+     100,
+     -40,
+     0
+    ]
+   },
+   "expect": "placement at [100, -40, 0], as the wiki's slider_rod.Placement.Base"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 7.5,
+    "height": 4,
+    "name": "Crank"
+   },
+   "expect": "body Crank"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     15,
+     30,
+     4
+    ],
+    "at": [
+     -7.5,
+     0,
+     0
+    ],
+    "name": "CrankArm"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 7.5,
+    "height": 4,
+    "at": [
+     0,
+     30,
+     0
+    ],
+    "name": "CrankEnd"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 4,
+    "height": 6,
+    "at": [
+     0,
+     30,
+     4
+    ],
+    "name": "CrankPin"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "fuse",
+    "base": "Crank",
+    "tools": [
+     "CrankArm",
+     "CrankEnd",
+     "CrankPin"
+    ]
+   },
+   "expect": "one solid"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 4,
+    "height": 4,
+    "name": "CrankHole"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "cut",
+    "base": "Crank",
+    "tools": "CrankHole"
+   },
+   "expect": "Crank: box 15 x 45 x 10, volume about 2607.4 mm3"
+  },
+  {
+   "tool": "part_transform",
+   "arguments": {
+    "op": "move",
+    "body": "Crank",
+    "by": [
+     125,
+     -70,
+     0
+    ]
+   },
+   "expect": "placement at [125, -70, 0]"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 6,
+    "height": 4,
+    "name": "ConnectingRod"
+   },
+   "expect": "body ConnectingRod"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     50,
+     12,
+     4
+    ],
+    "at": [
+     0,
+     -6,
+     0
+    ],
+    "name": "ConRodBar"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 6,
+    "height": 4,
+    "at": [
+     50,
+     0,
+     0
+    ],
+    "name": "ConRodEnd"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "fuse",
+    "base": "ConnectingRod",
+    "tools": [
+     "ConRodBar",
+     "ConRodEnd"
+    ]
+   },
+   "expect": "one solid"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 4,
+    "height": 4,
+    "name": "ConRodHoleA"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 4,
+    "height": 4,
+    "at": [
+     50,
+     0,
+     0
+    ],
+    "name": "ConRodHoleB"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "cut",
+    "base": "ConnectingRod",
+    "tools": [
+     "ConRodHoleA",
+     "ConRodHoleB"
+    ]
+   },
+   "expect": "ConnectingRod: box 62 x 12 x 4, volume about 2450.3 mm3"
+  },
+  {
+   "tool": "part_transform",
+   "arguments": {
+    "op": "move",
+    "body": "ConnectingRod",
+    "by": [
+     25,
+     -70,
+     0
+    ]
+   },
+   "expect": "placement at [25, -70, 0]"
+  },
+  {
+   "tool": "asm_joint",
+   "arguments": {
+    "kind": "fixed",
+    "a": {
+     "part": "Base",
+     "element": {
+      "kind": "face",
+      "normal": [
+       0,
+       0,
+       1
+      ]
+     }
+    },
+    "b": {
+     "part": "Crank",
+     "element": {
+      "kind": "face",
+      "normal": [
+       0,
+       0,
+       -1
+      ]
+     }
+    }
+   },
+   "expect": "REFUSED: no assembly in the document, and the refusal names asm_new { parts }"
+  },
+  {
+   "tool": "asm_new",
+   "arguments": {
+    "parts": [
+     "Base",
+     "SliderRod",
+     "Crank",
+     "ConnectingRod"
+    ],
+    "name": "CrankSlider"
+   },
+   "expect": "assembly CrankSlider, parts the four, grounded [\"Base\"]; in the tree the assembly's Type property reads Assembly (object_get CrankSlider); health: \"CrankSlider: assembly solved\""
+  },
+  {
+   "tool": "asm_ground",
+   "arguments": {
+    "part": "Base",
+    "grounded": false
+   },
+   "expect": "grounded []; health red: no part is grounded, todo names asm_ground"
+  },
+  {
+   "tool": "asm_joint",
+   "arguments": {
+    "kind": "revolute",
+    "a": {
+     "part": "Base",
+     "element": {
+      "kind": "edge",
+      "type": "circle",
+      "radius": 4,
+      "near": [
+       120,
+       0,
+       7
+      ]
+     }
+    },
+    "b": {
+     "part": "Crank",
+     "element": {
+      "kind": "edge",
+      "type": "circle",
+      "radius": 4,
+      "near": [
+       125,
+       -70,
+       0
+      ]
+     }
+    }
+   },
+   "expect": "REFUSED invalid_state: no part grounded, names asm_ground { part }"
+  },
+  {
+   "tool": "asm_ground",
+   "arguments": {
+    "part": "Base"
+   },
+   "expect": "grounded [\"Base\"]; health ok again"
+  },
+  {
+   "tool": "asm_joint",
+   "arguments": {
+    "kind": "revolute",
+    "name": "CrankPivot",
+    "a": {
+     "part": "Base",
+     "element": {
+      "kind": "edge",
+      "type": "circle",
+      "radius": 4,
+      "near": [
+       120,
+       0,
+       7
+      ]
+     }
+    },
+    "b": {
+     "part": "Crank",
+     "element": {
+      "kind": "edge",
+      "type": "circle",
+      "radius": 4,
+      "near": [
+       125,
+       -70,
+       0
+      ]
+     }
+    }
+   },
+   "expect": "solve solved; moved has Crank only (Base grounded, never moved); Crank's hole on the Base pin: its box z 7 to 17 (flipped may appear if FreeCAD first put it into the Base); no overlaps (pin 8 mm in hole 8 mm is line to line: if an overlap of a few mm3 is listed, record it)"
+  },
+  {
+   "tool": "asm_limits",
+   "arguments": {
+    "joint": "CrankPivot",
+    "min": -90,
+    "max": 90
+   },
+   "expect": "limits { angleMin: -90, angleMax: 90 }, unit degrees, solve solved"
+  },
+  {
+   "tool": "asm_limits",
+   "arguments": {
+    "joint": "CrankPivot",
+    "min": 50,
+    "max": 10
+   },
+   "expect": "REFUSED: min (50) is over max (10); nothing kept (asm_list still solved, limits still -90 and 90)"
+  },
+  {
+   "tool": "asm_pose",
+   "arguments": {
+    "joint": "CrankPivot",
+    "to": 45
+   },
+   "expect": "pose 45, was 0 (or near), unit degrees, moved [\"Crank\"], solve solved"
+  },
+  {
+   "tool": "asm_pose",
+   "arguments": {
+    "joint": "CrankPivot",
+    "to": 120
+   },
+   "expect": "REFUSED: 120 is outside the joint's limits [-90 … 90], says it is at 45 now"
+  },
+  {
+   "tool": "asm_pose",
+   "arguments": {
+    "joint": "CrankPivot",
+    "home": true
+   },
+   "expect": "pose 0, was 45"
+  },
+  {
+   "tool": "asm_sweep",
+   "arguments": {
+    "joint": "CrankPivot",
+    "steps": 12
+   },
+   "expect": "from -90 to 90 (the limits), 13 rows in steps, moves [\"Crank\"], verdict clear expected (record collidesAt if not: SliderRod still lies at y -40 beside the crank's reach); Crank back where it was after"
+  },
+  {
+   "tool": "asm_limits",
+   "arguments": {
+    "joint": "CrankPivot",
+    "min": null,
+    "max": null
+   },
+   "expect": "limits {} (both cleared)"
+  },
+  {
+   "tool": "asm_joint",
+   "arguments": {
+    "kind": "slider",
+    "name": "RodSlide",
+    "a": {
+     "part": "Base",
+     "element": {
+      "kind": "face",
+      "type": "cylinder",
+      "radius": 4,
+      "near": [
+       15,
+       0,
+       17
+      ]
+     }
+    },
+    "b": {
+     "part": "SliderRod",
+     "element": {
+      "kind": "face",
+      "type": "cylinder",
+      "radius": 4,
+      "near": [
+       44,
+       -40,
+       6
+      ]
+     }
+    }
+   },
+   "expect": "solve solved; moved has SliderRod only; its shaft axis on the bore's (y 0, z 17). Record which way up the rod's pin ends (the slider joint fixes the turn about the axis by the two faces' own frames)"
+  },
+  {
+   "tool": "asm_motion",
+   "arguments": {
+    "action": "save",
+    "name": "swing",
+    "keys": [
+     {
+      "CrankPivot": 0
+     },
+     {
+      "CrankPivot": 60
+     },
+     {
+      "CrankPivot": 0
+     }
+    ]
+   },
+   "expect": "saved swing, keys 3"
+  },
+  {
+   "tool": "asm_motion",
+   "arguments": {
+    "action": "play",
+    "name": "swing",
+    "steps": 3
+   },
+   "expect": "frames 7, verdict clear (or the clash frames listed), left \"as it was\"; CrankPivot back at 0"
+  },
+  {
+   "tool": "asm_motion",
+   "arguments": {
+    "action": "list"
+   },
+   "expect": "motions [{ name: swing, keys: 3, joints: [CrankPivot] }]"
+  },
+  {
+   "tool": "asm_motion",
+   "arguments": {
+    "action": "delete",
+    "name": "swing"
+   },
+   "expect": "deleted swing"
+  },
+  {
+   "tool": "asm_joint",
+   "arguments": {
+    "kind": "revolute",
+    "name": "CrankRod",
+    "a": {
+     "part": "Crank",
+     "element": {
+      "kind": "face",
+      "type": "cylinder",
+      "radius": 4,
+      "area": [
+       140,
+       160
+      ]
+     }
+    },
+    "b": {
+     "part": "ConnectingRod",
+     "element": {
+      "kind": "face",
+      "type": "cylinder",
+      "radius": 4,
+      "near": [
+       25,
+       -70,
+       2
+      ]
+     }
+    }
+   },
+   "expect": "solve solved; moved has ConnectingRod (the part not yet joined to ground; Crank is). a is the Crank's pin (the one r 4 cylinder face of area about 150.8; its hole's is 100.5); b the rod's hole at its own origin (the rod has not moved yet, so near still holds)"
+  },
+  {
+   "tool": "asm_list",
+   "arguments": {},
+   "expect": "CrankRod's b reads ConnectingRod.Face<N>: note N — the rod's other r 4 cylinder face is the free hole for the next joint"
+  },
+  {
+   "tool": "shape_query",
+   "arguments": {
+    "body": "ConnectingRod",
+    "kind": "face",
+    "type": "cylinder",
+    "radius": 4
+   },
+   "expect": "two faces; the one that is not CrankRod's b is the free hole: use its name in the next call"
+  },
+  {
+   "tool": "asm_joint",
+   "arguments": {
+    "kind": "cylindrical",
+    "name": "RodPinJoint",
+    "a": {
+     "part": "SliderRod",
+     "element": {
+      "kind": "face",
+      "type": "cylinder",
+      "radius": 4,
+      "area": [
+       150,
+       250
+      ]
+     }
+    },
+    "b": {
+     "part": "ConnectingRod",
+     "element": "<the free hole's face name from the shape_query above, e.g. Face7>"
+    }
+   },
+   "expect": "a is the SliderRod's short pin (area about 201; the shaft's is 2212). solve solved and the loop is closed. The wiki notes the solver may need the parts dragged to an easier position: a solver error here is refused with nothing kept — then asm_pose { joint: \"CrankPivot\", by: 20 } and try again; record what happened"
+  },
+  {
+   "tool": "asm_list",
+   "arguments": {},
+   "expect": "parts 4 with Base grounded; joints CrankPivot (revolute), RodSlide (slider), CrankRod (revolute), RodPinJoint (cylindrical), none suppressed; solve solved"
+  },
+  {
+   "tool": "asm_check",
+   "arguments": {
+    "clearance": 0.2
+   },
+   "expect": "solve solved, parts 4, no notConnected; overlaps empty expected (pins in holes of the same size are line to line), closerThan lists the pin/hole pairs at gap 0; verdict clear if no overlaps"
+  },
+  {
+   "tool": "asm_fits",
+   "arguments": {
+    "fit": "H7/g6"
+   },
+   "expect": "fits one row a joint: hole and shaft diameter 8 and 8, clearance 0, as \"line to line\"; fit type clearance, range [0.005, 0.029]; shaft ok false (g6 wants 7.986 … 7.995), hole ok true (8 … 8.015); verdict fix — right for parts drawn at nominal size"
+  },
+  {
+   "tool": "asm_bom",
+   "arguments": {
+    "name": "CrankSlider BOM"
+   },
+   "expect": "native true, parts 4 rows (Base, SliderRod, Crank, ConnectingRod) with volume in cm3 (Crank about 2.607, ConnectingRod about 2.45); note about no material"
+  },
+  {
+   "tool": "asm_explode",
+   "arguments": {
+    "axis": "z",
+    "gap": 20
+   },
+   "expect": "exploded: the three parts not grounded with their moves along z; by \"FreeCAD's Exploded View (Assembly)\" with a view name on 1.1.3; jointsOff 4; health line still solved (joints suppressed)"
+  },
+  {
+   "tool": "asm_pose",
+   "arguments": {
+    "joint": "CrankPivot",
+    "by": 10
+   },
+   "expect": "REFUSED invalid_state: exploded, names asm_explode { collapse: true }"
+  },
+  {
+   "tool": "asm_explode",
+   "arguments": {
+    "collapse": true
+   },
+   "expect": "collapsed true, solve solved; asm_list shows the placements as before the explode and no joint suppressed"
+  },
+  {
+   "tool": "asm_export",
+   "arguments": {
+    "path": "crank_slider.asmt"
+   },
+   "expect": "path in the session's folder, bytes above 0, format OndselSolver .asmt"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "tube",
+    "radius": 8,
+    "radius2": 4,
+    "height": 1,
+    "at": [
+     200,
+     0,
+     0
+    ],
+    "name": "Washer"
+   },
+   "expect": "body Washer"
+  },
+  {
+   "tool": "asm_add",
+   "arguments": {
+    "parts": [
+     "Washer"
+    ]
+   },
+   "expect": "added [\"Washer\"], parts 5"
+  },
+  {
+   "tool": "asm_check",
+   "arguments": {},
+   "expect": "notConnected [\"Washer\"] with the note; verdict clear if nothing overlaps (a free part is noted, not a fix)"
+  },
+  {
+   "tool": "asm_joint",
+   "arguments": {
+    "kind": "distance",
+    "name": "WasherGap",
+    "distance": 2,
+    "a": {
+     "part": "Base",
+     "element": {
+      "kind": "face",
+      "normal": [
+       0,
+       0,
+       1
+      ],
+      "near": [
+       70,
+       0,
+       7
+      ]
+     }
+    },
+    "b": {
+     "part": "Washer",
+     "element": {
+      "kind": "face",
+      "normal": [
+       0,
+       0,
+       -1
+      ]
+     }
+    }
+   },
+   "expect": "solve solved; moved has Washer; its underside 2 mm from the Base's top face (above it at z 9, or below at z 5: record which; reverse: true gives the other), free to slide over it"
+  },
+  {
+   "tool": "asm_joint_remove",
+   "arguments": {
+    "joint": "WasherGap"
+   },
+   "expect": "removed WasherGap, solve solved; Washer stays where it stands"
+  },
+  {
+   "tool": "asm_rigid_group",
+   "arguments": {
+    "parts": [
+     "Washer",
+     "ConnectingRod"
+    ]
+   },
+   "expect": "REFUSED unavailable on FreeCAD 1.1.3: rigid groups came in 1.2, names asm_joint kind fixed"
+  },
+  {
+   "tool": "asm_new_part",
+   "arguments": {
+    "name": "Guard",
+    "at": [
+     0,
+     60,
+     0
+    ]
+   },
+   "expect": "part Guard, body \"Guard body\", inAssembly the link's label; note says asm_joint does not take the link"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     20,
+     20,
+     5
+    ],
+    "at": [
+     0,
+     100,
+     0
+    ],
+    "name": "StandFoot"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     5,
+     5,
+     30
+    ],
+    "at": [
+     40,
+     100,
+     0
+    ],
+    "name": "StandPost"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "asm_new",
+   "arguments": {
+    "parts": [
+     "StandFoot",
+     "StandPost"
+    ],
+    "name": "Stand"
+   },
+   "expect": "a second assembly, grounded [\"StandFoot\"]"
+  },
+  {
+   "tool": "asm_joint",
+   "arguments": {
+    "assembly": "Stand",
+    "kind": "fixed",
+    "a": {
+     "part": "StandFoot",
+     "element": {
+      "kind": "face",
+      "normal": [
+       0,
+       0,
+       1
+      ]
+     }
+    },
+    "b": {
+     "part": "StandPost",
+     "element": {
+      "kind": "face",
+      "normal": [
+       0,
+       0,
+       -1
+      ]
+     }
+    }
+   },
+   "expect": "solve solved; StandPost on the foot's top, z 5 to 35; health lists both assemblies solved"
+  },
+  {
+   "tool": "asm_sub",
+   "arguments": {
+    "assembly": "CrankSlider",
+    "sub": "Stand"
+   },
+   "expect": "as Stand (or Stand001), type Assembly::AssemblyLink, rigid true, solve solved"
+  },
+  {
+   "tool": "asm_check",
+   "arguments": {
+    "assembly": "CrankSlider"
+   },
+   "expect": "parts now counts the sub-assembly's two (through its links) and the Guard link is under notChecked (no solid yet); verdict as before unless the Stand overlaps something where it stands"
+  }
+ ],
+ "notCovered": [
+  "asm_joint kinds ball, parallel, perpendicular, angle, rackpinion, screw, gears, belt: the example has none; Assembly_Workbench.md's vise example (screw) and universal joint example would reach screw and ball",
+  "asm_sweep on a closed loop: the tool carries the chain rigidly and says so; only the open chain is swept here",
+  "asm_pose / asm_motion after the loop is closed: expected to be refused when the solver moves the joint back (worth one manual try: asm_pose { joint: \"CrankPivot\", by: 15 } and record)",
+  "asm_sub rigid: false, and jointing or grounding a sub-assembly or an asm_new_part link: asm_joint and asm_ground do not take them (reported in the findings)",
+  "the window's own behaviour on these joints (double-click a joint, change its type to Fixed and its Offset as the page's \"Drive the crank\" does): a GUI check"
+ ]
+}

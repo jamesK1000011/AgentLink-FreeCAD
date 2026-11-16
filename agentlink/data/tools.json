@@ -5,7 +5,7 @@
  "entries": {
   "pd_clone": {
    "group": "std_more",
-   "description": "A new PartDesign body on another object's shape (PartDesign Clone): it follows the original; features go on top.",
+   "description": "A new PartDesign body on another object's shape (PartDesign Clone): from (a body, a Part solid, anything with a shape), at [x,y,z] and axis, angle to place it, name. Its first feature (BaseFeature) follows the original; pd_ features go on top. Reply: body, from, volume.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -126,7 +126,7 @@
        null
       ]
      },
-     "note": "A body built on the other's shape: it follows the original; add features on top."
+     "note": "A body built on the other's shape: its BaseFeature follows the original; add pd_ features on top (sketch_new on its planes or faces)."
     }
    }
   },

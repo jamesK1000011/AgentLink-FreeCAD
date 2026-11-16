@@ -1,0 +1,1589 @@
+{
+ "tutorial": "Basic_Part_Design_Tutorial_019.md (FreeCAD wiki: Basic Part Design Tutorial 019), built on the body's planes with the tutorial's dimensions; then extra calls for the tools the tutorial does not use.",
+ "reference": "github.com/FreeCAD/Examples: Basic_Part_Design_Tutorial_Example_Files/Basic_Part_Design_Tutorial.FCStd (on the Mac: the reference copy: Basic_Part_Design_Tutorial.FCStd)",
+ "referenceNotes": [
+  "The answer key is the OLD tutorial's file (saved by FreeCAD 0.16, no Body: Pad, Pocket, Mirrored, Pad001, Mirrored001, Pad002, Pocket001 at the document's top level). It is the same part, built another way and placed differently: its profile is centred (y, z from -13 to 13), the 019 tutorial's sits at y -26..0, z 0..26. Compare by volume and box size, or after moving by [0, -13, 13].",
+  "The key holds one feature the tutorials' text does not: Pad002, a 1 mm pad of the hole's rectangle on the slanted face, which Pocket001 (through all, from the back) does not fully remove. By my arithmetic that leaves a sliver of about 6.9 mm³ above the hole's upper edge, so the key's volume should read about 18514.7, not 18507.86. I could not measure the key here (no CAD kernel): measure it on the Mac before using it as an exact answer.",
+  "Dimensions taken from the tutorial text (53, 26, 5, 11 x 5, 7, 16.7, 17, 7, pocket 8.5 + 8.5) and, where the text points at figures only, from the key's sketches (the profile's 26 x 26 with a 5 mm top; the hole 7 mm up the slanted face)."
+ ],
+ "expected": {
+  "tutorialPart": {
+   "volume": 18507.86,
+   "volumeTolerance": 0.5,
+   "box": [
+    53,
+    26,
+    26
+   ],
+   "boxMin": [
+    -26.5,
+    -26,
+    0
+   ],
+   "solids": 1,
+   "steps": {
+    "Pad": 21359.0,
+    "Pocket": -386.06,
+    "Mirrored": -386.06,
+    "Pad 2": 788.4,
+    "Mirrored 2": 788.4,
+    "Pocket 2": -3655.83
+   },
+   "derivation": "analytic, from the tutorial's dimensions: trapezoid profile 403 mm² x 53; corner cuts 11 mm of the top 5 mm of the profile; side blocks 7 x 26 x 16.7 less what the profile already fills; centre hole 17 mm wide between the heights 7·sinθ and 24·sinθ (θ the slanted face's angle, tanθ = 26/21)",
+   "faces": "not derived (depends on Refine)"
+  },
+  "tutorialPartAfterExtras": {
+   "volume": 18440.32
+  },
+  "answerKeyFile": {
+   "volume": "about 18514.7 by arithmetic, not measured",
+   "box": [
+    53,
+    26,
+    26
+   ]
+  },
+  "otherBodies": {
+   "Plate": "12000 ± 131.23 (draft) - 502.65 (four bores), doubled by the whole-body mirror, less the M6 holes",
+   "Tray": 2672,
+   "Disc": 5817.74,
+   "DiscClone": "as Disc",
+   "Ring": 819.96,
+   "Spring": "about 987",
+   "Frustum": 4666.67,
+   "Tube": 376.99,
+   "Sheet": 7160.71,
+   "Hist": 972.51,
+   "Hist2": 75,
+   "Shaft": 8953.54
+  },
+  "dof": "not applicable here: the sketches are drawn by coordinates, unconstrained on purpose (the Sketcher model covers constraints); pd_ answers carry sketchDof when a sketch has freedom left"
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "PDTutorial"
+   },
+   "expect": "A new empty document; everything below goes in it."
+  },
+  {
+   "tool": "guide_read",
+   "arguments": {
+    "topic": "feature"
+   },
+   "expect": "The rewritten PartDesign guide (sections: workflow, reading the answer, traps, pad and pocket, holes, patterns and mirrors, the history and the tip, More features, gears and sprockets)."
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Tut"
+   },
+   "expect": "body Tut"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Tut",
+    "plane": "XY",
+    "name": "Master"
+   },
+   "expect": "sketch Master on XY; frame xAxis [1,0,0], yAxis [0,1,0]"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "Master",
+    "items": [
+     {
+      "kind": "rectangle",
+      "corner": [
+       -26.5,
+       -26
+      ],
+      "size": [
+       53,
+       26
+      ]
+     }
+    ]
+   },
+   "expect": "The tutorial's master sketch: 53 x 26, top edge centred on the origin. (The tutorial names its constraints length / width and binds later sketches to them; that is the Sketcher model's job, plain numbers here.) No feature uses it."
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Tut",
+    "plane": "YZ",
+    "name": "Profile"
+   },
+   "expect": "frame xAxis [0,1,0], yAxis [0,0,1] (sketch x is the body's Y). If the frame differs, the profile's x values need their sign changed."
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "Profile",
+    "items": [
+     {
+      "kind": "polyline",
+      "points": [
+       [
+        0,
+        0
+       ],
+       [
+        0,
+        26
+       ],
+       [
+        -5,
+        26
+       ],
+       [
+        -26,
+        0
+       ]
+      ],
+      "closed": true
+     }
+    ]
+   },
+   "expect": "Tutorial Sketch001: P1 at the origin, P1-P2 26 up, P2-P3 5 across, P1-P4 26 (= width); closed, 4 lines."
+  },
+  {
+   "tool": "pd_pad",
+   "arguments": {
+    "body": "Tut",
+    "sketch": "Profile",
+    "length": 53,
+    "sides": "symmetric"
+   },
+   "expect": "feature Pad; volume 21359.0 (trapezoid 403 mm² x 53); box [53, 26, 26]; solids 1; volumeChange 21359.0. FreeCAD: SideType Symmetric (not the deprecated Midplane: no deprecation warning in health/report)."
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Tut",
+    "plane": "XZ",
+    "name": "Corner"
+   },
+   "expect": "frame xAxis [1,0,0], yAxis [0,0,1]; normal [0,-1,0]"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "Corner",
+    "items": [
+     {
+      "kind": "rectangle",
+      "corner": [
+       15.5,
+       21
+      ],
+      "size": [
+       11,
+       5
+      ]
+     }
+    ]
+   },
+   "expect": "Tutorial Sketch002: 11 x 5 at the top corner (x 15.5..26.5, z 21..26)."
+  },
+  {
+   "tool": "pd_pocket",
+   "arguments": {
+    "body": "Tut",
+    "sketch": "Corner",
+    "type": "through_all",
+    "reversed": true
+   },
+   "expect": "feature Pocket; volumeChange -386.06; solids 1. (Without reversed it must be refused as cutting nothing: the XZ sketch's normal points to -Y, away from the material — the tutorial ticks Reversed for the same reason.)"
+  },
+  {
+   "tool": "pd_mirrored",
+   "arguments": {
+    "body": "Tut",
+    "features": [
+     "Pocket"
+    ],
+    "plane": "YZ"
+   },
+   "expect": "feature Mirrored; volumeChange -386.06; volume 20586.88"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Tut",
+    "plane": "XY",
+    "name": "Side"
+   },
+   "expect": "sketch Side on XY"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "Side",
+    "items": [
+     {
+      "kind": "rectangle",
+      "corner": [
+       -26.5,
+       -26
+      ],
+      "size": [
+       7,
+       26
+      ]
+     }
+    ]
+   },
+   "expect": "Tutorial Sketch003: 7 x 26 (= width), its corner on the master sketch's corner."
+  },
+  {
+   "tool": "pd_pad",
+   "arguments": {
+    "body": "Tut",
+    "sketch": "Side",
+    "length": 16.7
+   },
+   "expect": "feature 'Pad 2' (labels are unique in the document); volumeChange +788.4; solids 1"
+  },
+  {
+   "tool": "pd_mirrored",
+   "arguments": {
+    "body": "Tut",
+    "features": [
+     "Pad 2"
+    ],
+    "plane": "YZ"
+   },
+   "expect": "feature 'Mirrored 2'; volumeChange +788.4; volume 22163.69"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Tut",
+    "plane": "YZ",
+    "name": "Window"
+   },
+   "expect": "sketch Window on YZ"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "Window",
+    "items": [
+     {
+      "kind": "polyline",
+      "points": [
+       [
+        1,
+        5.4456
+       ],
+       [
+        1,
+        18.6706
+       ],
+       [
+        -12,
+        18.6706
+       ],
+       [
+        -23,
+        5.4456
+       ]
+      ],
+      "closed": true
+     }
+    ]
+   },
+   "expect": "Tutorial Sketch004, the centre hole seen from the side: its two horizontal edges at z 5.4456 and 18.6706 (7 mm and 7 + 17 mm up the slanted face from its lower end; slope length 33.422). Deviation from the tutorial: the profile runs 1 mm past the back face and past the slanted face instead of ending on them, so rounded coordinates leave no sliver; the cut is the same."
+  },
+  {
+   "tool": "pd_pocket",
+   "arguments": {
+    "body": "Tut",
+    "sketch": "Window",
+    "length": 8.5,
+    "length2": 8.5,
+    "sides": "two"
+   },
+   "expect": "feature 'Pocket 2'; volumeChange -3655.83; FreeCAD 1.1: SideType 'Two sides', Length 8.5, Length2 8.5 (the tutorial's 'Two dimensions'); solids 1"
+  },
+  {
+   "tool": "feature_edit",
+   "arguments": {
+    "body": "Tut",
+    "feature": "Pocket 2",
+    "set": {
+     "Refine": true
+    }
+   },
+   "expect": "set { Refine: true }; volume 18507.86 unchanged (the tutorial's last step); faces may drop"
+  },
+  {
+   "tool": "feature_list",
+   "arguments": {
+    "body": "Tut"
+   },
+   "expect": "Master, Profile, Pad (sideType Symmetric, length 53), Corner, Pocket (type ThroughAll, reversed), Mirrored (originals [Pocket]), Side, 'Pad 2' (length 16.7), 'Mirrored 2', Window, 'Pocket 2' (sideType 'Two sides', length 8.5, length2 8.5, refine true; tip true); tip 'Pocket 2'; volume 18507.86; box [53, 26, 26]; solids 1"
+  },
+  {
+   "tool": "body_check",
+   "arguments": {
+    "body": "Tut"
+   },
+   "expect": "sound: valid, closed, one solid"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Tut",
+    "face": {
+     "at": [
+      0,
+      -2.5,
+      26
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ]
+    },
+    "name": "TopHoles"
+   },
+   "expect": "on the top flat; frame origin [0,0,26], xAxis [1,0,0], yAxis [0,1,0]"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "TopHoles",
+    "items": [
+     {
+      "kind": "circle",
+      "center": [
+       0,
+       -2.5
+      ],
+      "radius": 1
+     }
+    ]
+   },
+   "expect": "one circle"
+  },
+  {
+   "tool": "pd_hole",
+   "arguments": {
+    "body": "Tut",
+    "sketch": "TopHoles",
+    "diameter": 2,
+    "depth": 4
+   },
+   "expect": "feature Hole; holes 1; diameter 2; volumeChange -12.57 (flat bottom: drillPoint defaults to flat)"
+  },
+  {
+   "tool": "pd_linear_pattern",
+   "arguments": {
+    "body": "Tut",
+    "features": [
+     "Hole"
+    ],
+    "direction": "x",
+    "occurrences": 3,
+    "spacing": 6
+   },
+   "expect": "feature LinearPattern; volumeChange -25.13 (holes at x 0, 6, 12); FreeCAD Mode Extent, Length 12"
+  },
+  {
+   "tool": "pd_chamfer",
+   "arguments": {
+    "body": "Tut",
+    "edges": [
+     {
+      "near": [
+       0,
+       0,
+       26
+      ]
+     }
+    ],
+    "size": 1
+   },
+   "expect": "feature Chamfer on the top-back edge (31 mm long); on: one edge; volumeChange -15.5"
+  },
+  {
+   "tool": "pd_fillet",
+   "arguments": {
+    "body": "Tut",
+    "edges": [
+     {
+      "near": [
+       26.5,
+       -26,
+       8
+      ]
+     }
+    ],
+    "radius": 2
+   },
+   "expect": "feature Fillet on the side block's outer upright edge (16.7 mm); volumeChange -14.34; volume 18440.32"
+  },
+  {
+   "tool": "pd_datum_plane",
+   "arguments": {
+    "body": "Tut",
+    "on": "XY",
+    "offset": 30,
+    "name": "Above"
+   },
+   "expect": "plane Above; origin [0,0,30]; normal [0,0,1]; volume and tip unchanged"
+  },
+  {
+   "tool": "feature_suppress",
+   "arguments": {
+    "body": "Tut",
+    "feature": "Fillet"
+   },
+   "expect": "suppressed true; volumeChange +14.34"
+  },
+  {
+   "tool": "feature_suppress",
+   "arguments": {
+    "body": "Tut",
+    "feature": "Fillet",
+    "suppressed": false
+   },
+   "expect": "suppressed false; volumeChange -14.34"
+  },
+  {
+   "tool": "feature_remove",
+   "arguments": {
+    "body": "Tut",
+    "feature": "LinearPattern"
+   },
+   "expect": "REFUSED (invalid_state): 'LinearPattern is used by Chamfer: feature_remove those first …' — the chamfer's edge is on the pattern's shape. Nothing changes."
+  },
+  {
+   "tool": "pd_tip",
+   "arguments": {
+    "body": "Tut"
+   },
+   "expect": "a read: tip Fillet; no afterTip; volume as after the fillet"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Plate"
+   },
+   "expect": "body Plate"
+  },
+  {
+   "tool": "pd_primitive",
+   "arguments": {
+    "body": "Plate",
+    "kind": "box",
+    "size": {
+     "length": 40,
+     "width": 30,
+     "height": 10
+    },
+    "at": [
+     60,
+     0,
+     0
+    ],
+    "name": "PlateBase"
+   },
+   "expect": "volume 12000; box [40, 30, 10]"
+  },
+  {
+   "tool": "pd_draft",
+   "arguments": {
+    "body": "Plate",
+    "faces": [
+     {
+      "at": [
+       100,
+       15,
+       5
+      ],
+      "normal": [
+       1,
+       0,
+       0
+      ]
+     }
+    ],
+    "angle": 5,
+    "neutral": "XY",
+    "pull": "z"
+   },
+   "expect": "feature Draft; |volumeChange| 131.23 (a 5° wedge on the x = 100 face, pivoting on z = 0; the sign depends on FreeCAD's convention — record it); on: one face"
+  },
+  {
+   "tool": "pd_primitive",
+   "arguments": {
+    "body": "Plate",
+    "kind": "cylinder",
+    "size": {
+     "radius": 2,
+     "height": 20
+    },
+    "at": [
+     68,
+     8,
+     -5
+    ],
+    "subtractive": true,
+    "name": "Bore"
+   },
+   "expect": "volumeChange -125.66"
+  },
+  {
+   "tool": "pd_multitransform",
+   "arguments": {
+    "body": "Plate",
+    "features": [
+     "Bore"
+    ],
+    "name": "BoreGrid",
+    "steps": [
+     {
+      "kind": "linear",
+      "direction": "x",
+      "occurrences": 2,
+      "spacing": 24
+     },
+     {
+      "kind": "linear",
+      "direction": "y",
+      "occurrences": 2,
+      "spacing": 14
+     }
+    ]
+   },
+   "expect": "feature BoreGrid; volumeChange -376.99 (4 bores in all); steps ['BoreGrid linear 1', 'BoreGrid linear 2'], kept in the body; no 'links go out of scope' warning in health/report"
+  },
+  {
+   "tool": "pd_datum",
+   "arguments": {
+    "body": "Plate",
+    "kind": "line",
+    "on": {
+     "near": [
+      68,
+      10,
+      10
+     ]
+    },
+    "name": "BoreAxis"
+   },
+   "expect": "datum BoreAxis attached to a bore's top rim (the point is on the rim, away from the cylinder's seam): at [68, 8, …], direction [0, 0, ±1]; how: attached to …"
+  },
+  {
+   "tool": "pd_datum",
+   "arguments": {
+    "body": "Plate",
+    "kind": "line",
+    "at": [
+     80,
+     15,
+     0
+    ],
+    "direction": [
+     0,
+     0,
+     1
+    ],
+    "name": "MidAxis"
+   },
+   "expect": "datum MidAxis: at [80, 15, 0], direction [0, 0, 1]. (Was refused before this pass: a datum line has no FlatFace attachment mode; now ObjectZ.)"
+  },
+  {
+   "tool": "pd_datum",
+   "arguments": {
+    "body": "Plate",
+    "kind": "point",
+    "at": [
+     60,
+     0,
+     10
+    ],
+    "name": "Corner point"
+   },
+   "expect": "at [60, 0, 10] (was refused before this pass; now ObjectOrigin)"
+  },
+  {
+   "tool": "pd_datum",
+   "arguments": {
+    "body": "Plate",
+    "kind": "lcs",
+    "at": [
+     80,
+     15,
+     10
+    ],
+    "rotate": {
+     "axis": [
+      0,
+      0,
+      1
+     ],
+     "angle": 90
+    },
+    "name": "Top frame"
+   },
+   "expect": "at [80, 15, 10]; axes x [0,1,0], y [-1,0,0], z [0,0,1]"
+  },
+  {
+   "tool": "pd_mirrored",
+   "arguments": {
+    "body": "Plate",
+    "features": "all",
+    "plane": "XZ"
+   },
+   "expect": "feature 'Mirrored 3'; repeated: the whole body (FreeCAD's TransformMode \"Whole shape\"); volume doubles (the copy joins along y = 0); box [40, 60, 10] (x may differ by the draft's 0.87); solids 1"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Plate",
+    "face": {
+     "at": [
+      80,
+      15,
+      10
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ]
+    },
+    "name": "PlateHoles"
+   },
+   "expect": "on the top face; frame origin [0,0,10], xAxis [1,0,0], yAxis [0,1,0]"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "PlateHoles",
+    "items": [
+     {
+      "kind": "circle",
+      "center": [
+       80,
+       15
+      ],
+      "radius": 1
+     },
+     {
+      "kind": "point",
+      "at": [
+       80,
+       -15
+      ]
+     },
+     {
+      "kind": "circle",
+      "center": [
+       70,
+       0
+      ],
+      "radius": 1,
+      "construction": true
+     }
+    ]
+   },
+   "expect": "a circle, a point, and a construction circle"
+  },
+  {
+   "tool": "pd_hole",
+   "arguments": {
+    "body": "Plate",
+    "sketch": "PlateHoles",
+    "thread": "M6x7"
+   },
+   "expect": "REFUSED (invalid_input): not an ISO metric size; the message lists coarse sizes and 'fine pitches for M6: M6x0.75'. Nothing kept."
+  },
+  {
+   "tool": "pd_hole",
+   "arguments": {
+    "body": "Plate",
+    "sketch": "PlateHoles",
+    "thread": "M6",
+    "depth": "through",
+    "cut": "counterbore"
+   },
+   "expect": "feature 'Hole 2'; thread 'M6x1.0 (cosmetic)'; diameter 5 (the tap drill); holes 2 on FreeCAD 1.1 (the circle and the point; never the construction circle) — 1 if this FreeCAD's Hole has no BaseProfileType or the preference is circles only; cut { type: Counterbore, diameter, depth } with FreeCAD's ISO 4762 sizes (record them); volumeChange negative"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Tray"
+   },
+   "expect": "body Tray"
+  },
+  {
+   "tool": "pd_primitive",
+   "arguments": {
+    "body": "Tray",
+    "kind": "box",
+    "size": {
+     "length": 30,
+     "width": 20,
+     "height": 10
+    },
+    "at": [
+     60,
+     50,
+     0
+    ],
+    "name": "TrayBase"
+   },
+   "expect": "volume 6000"
+  },
+  {
+   "tool": "pd_thickness",
+   "arguments": {
+    "body": "Tray",
+    "faces": [
+     {
+      "at": [
+       75,
+       60,
+       10
+      ],
+      "normal": [
+       0,
+       0,
+       1
+      ]
+     }
+    ],
+    "thickness": 2
+   },
+   "expect": "feature Thickness; volume 2672 (6000 - 26 x 16 x 8); volumeChange -3328; on: one face"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Cap"
+   },
+   "expect": "body Cap"
+  },
+  {
+   "tool": "pd_binder",
+   "arguments": {
+    "body": "Cap",
+    "from": "Tray",
+    "faces": [
+     {
+      "at": [
+       75,
+       60,
+       0
+      ],
+      "normal": [
+       0,
+       0,
+       -1
+      ]
+     }
+    ]
+   },
+   "expect": "binder 'Tray binder'; faces: one; shape { faces: 1, edges: 4 }; follows Tray"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Disc"
+   },
+   "expect": "body Disc"
+  },
+  {
+   "tool": "pd_primitive",
+   "arguments": {
+    "body": "Disc",
+    "kind": "cylinder",
+    "size": {
+     "radius": 20,
+     "height": 5
+    },
+    "at": [
+     0,
+     60,
+     0
+    ],
+    "name": "DiscBase"
+   },
+   "expect": "volume 6283.19"
+  },
+  {
+   "tool": "pd_primitive",
+   "arguments": {
+    "body": "Disc",
+    "kind": "cylinder",
+    "size": {
+     "radius": 2,
+     "height": 7
+    },
+    "at": [
+     12,
+     60,
+     -1
+    ],
+    "subtractive": true,
+    "name": "Pin"
+   },
+   "expect": "volumeChange -62.83"
+  },
+  {
+   "tool": "pd_datum",
+   "arguments": {
+    "body": "Disc",
+    "kind": "line",
+    "at": [
+     0,
+     60,
+     0
+    ],
+    "direction": [
+     0,
+     0,
+     1
+    ],
+    "name": "DiscAxis"
+   },
+   "expect": "datum DiscAxis at [0, 60, 0], direction [0, 0, 1]"
+  },
+  {
+   "tool": "pd_polar_pattern",
+   "arguments": {
+    "body": "Disc",
+    "features": [
+     "Pin"
+    ],
+    "axis": "DiscAxis",
+    "occurrences": 6,
+    "angle": 360
+   },
+   "expect": "feature PolarPattern; volumeChange -314.16 (six pins, 60° apart)"
+  },
+  {
+   "tool": "pd_chamfer",
+   "arguments": {
+    "body": "Disc",
+    "edges": [
+     {
+      "near": [
+       0,
+       80,
+       5
+      ]
+     }
+    ],
+    "size": 1
+   },
+   "expect": "feature 'Chamfer 2' on the top rim; volumeChange -61.78"
+  },
+  {
+   "tool": "pd_fillet",
+   "arguments": {
+    "body": "Disc",
+    "edges": [
+     {
+      "near": [
+       0,
+       80,
+       0
+      ]
+     }
+    ],
+    "radius": 1
+   },
+   "expect": "feature 'Fillet 2' on the bottom rim; volumeChange -26.67"
+  },
+  {
+   "tool": "pd_clone",
+   "arguments": {
+    "from": "Disc",
+    "name": "DiscClone",
+    "at": [
+     0,
+     0,
+     40
+    ]
+   },
+   "expect": "body DiscClone, 40 mm above; volume equal to Disc's"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Ring"
+   },
+   "expect": "body Ring"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Ring",
+    "plane": "XZ",
+    "name": "RingProfile"
+   },
+   "expect": "frame xAxis [1,0,0], yAxis [0,0,1]"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "RingProfile",
+    "items": [
+     {
+      "kind": "line",
+      "from": [
+       120,
+       0
+      ],
+      "to": [
+       120,
+       10
+      ],
+      "construction": true
+     },
+     {
+      "kind": "rectangle",
+      "corner": [
+       130,
+       0
+      ],
+      "size": [
+       4,
+       6
+      ]
+     }
+    ]
+   },
+   "expect": "geometry 0 is the construction line (the axis), then the rectangle"
+  },
+  {
+   "tool": "pd_revolution",
+   "arguments": {
+    "body": "Ring",
+    "sketch": "RingProfile",
+    "axis": 0
+   },
+   "expect": "feature Revolution about the construction line (FreeCAD's 'Axis0'); volume 1809.56; box [28, 28, 6]. (Before this pass geometry id 0 was sent as 'Edge1', the rectangle's first edge.)"
+  },
+  {
+   "tool": "pd_revolution",
+   "arguments": {
+    "body": "Ring",
+    "sketch": "RingProfile",
+    "axis": 0,
+    "sides": "two"
+   },
+   "expect": "REFUSED (invalid_input): sides one or symmetric; two angles by feature_edit { Type: \"TwoAngles\", Angle2 }."
+  },
+  {
+   "tool": "pd_datum",
+   "arguments": {
+    "body": "Ring",
+    "kind": "line",
+    "at": [
+     120,
+     0,
+     0
+    ],
+    "direction": [
+     0,
+     0,
+     1
+    ],
+    "name": "RingAxis"
+   },
+   "expect": "datum RingAxis"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Ring",
+    "plane": "XZ",
+    "name": "GrooveProfile"
+   },
+   "expect": "sketch GrooveProfile"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "GrooveProfile",
+    "items": [
+     {
+      "kind": "rectangle",
+      "corner": [
+       133,
+       2
+      ],
+      "size": [
+       2,
+       2
+      ]
+     }
+    ]
+   },
+   "expect": "2 x 2 at radius 13..15 from the axis"
+  },
+  {
+   "tool": "pd_groove",
+   "arguments": {
+    "body": "Ring",
+    "sketch": "GrooveProfile",
+    "axis": "RingAxis"
+   },
+   "expect": "feature Groove; volumeChange -169.65"
+  },
+  {
+   "tool": "feature_edit",
+   "arguments": {
+    "body": "Ring",
+    "feature": "Revolution",
+    "set": {
+     "Type": "Nope"
+    }
+   },
+   "expect": "REFUSED (invalid_input): Type = 'Nope': one of Angle, UpToLast, UpToFirst, UpToFace, TwoAngles"
+  },
+  {
+   "tool": "feature_edit",
+   "arguments": {
+    "body": "Ring",
+    "feature": "Revolution",
+    "set": {
+     "Angle": 180
+    }
+   },
+   "expect": "set { Angle: 180 }; volume 819.96 (half the grooved ring)"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Spring"
+   },
+   "expect": "body Spring"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Spring",
+    "plane": "XZ",
+    "name": "Wire"
+   },
+   "expect": "sketch Wire"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "Wire",
+    "items": [
+     {
+      "kind": "line",
+      "from": [
+       160,
+       0
+      ],
+      "to": [
+       160,
+       10
+      ],
+      "construction": true
+     },
+     {
+      "kind": "circle",
+      "center": [
+       170,
+       0
+      ],
+      "radius": 1
+     }
+    ]
+   },
+   "expect": "axis line (geometry 0) and the wire's section"
+  },
+  {
+   "tool": "pd_helix",
+   "arguments": {
+    "body": "Spring",
+    "profile": "Wire",
+    "axis": 0,
+    "pitch": 4,
+    "height": 20,
+    "name": "Coil"
+   },
+   "expect": "feature Coil; helix { pitch 4, height 20, turns 5 }; volume about 987.0 (section π mm² x 2π·10 x 5 turns), within 1 %"
+  },
+  {
+   "tool": "pd_helix",
+   "arguments": {
+    "body": "Spring",
+    "profile": "Wire",
+    "pitch": 4
+   },
+   "expect": "REFUSED (invalid_input): two of pitch, height and turns; got pitch"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Frustum"
+   },
+   "expect": "body Frustum"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Frustum",
+    "plane": "XY",
+    "name": "Bottom"
+   },
+   "expect": "sketch Bottom"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "Bottom",
+    "items": [
+     {
+      "kind": "rectangle",
+      "center": [
+       0,
+       100
+      ],
+      "size": [
+       20,
+       20
+      ]
+     }
+    ]
+   },
+   "expect": "20 x 20"
+  },
+  {
+   "tool": "pd_datum_plane",
+   "arguments": {
+    "body": "Frustum",
+    "on": "XY",
+    "offset": 20,
+    "name": "Up"
+   },
+   "expect": "plane Up; origin [0,0,20]"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Frustum",
+    "plane": "Up",
+    "name": "TopSec"
+   },
+   "expect": "sketch TopSec on the datum plane"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "TopSec",
+    "items": [
+     {
+      "kind": "rectangle",
+      "center": [
+       0,
+       100
+      ],
+      "size": [
+       10,
+       10
+      ]
+     }
+    ]
+   },
+   "expect": "10 x 10"
+  },
+  {
+   "tool": "pd_loft",
+   "arguments": {
+    "body": "Frustum",
+    "profile": "Bottom",
+    "sections": [
+     "TopSec"
+    ],
+    "ruled": true
+   },
+   "expect": "feature Loft; volume 4666.67"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Tube"
+   },
+   "expect": "body Tube"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Tube",
+    "plane": "XY",
+    "name": "TubeProfile"
+   },
+   "expect": "sketch TubeProfile"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "TubeProfile",
+    "items": [
+     {
+      "kind": "circle",
+      "center": [
+       -50,
+       0
+      ],
+      "radius": 2
+     }
+    ]
+   },
+   "expect": "r 2 at (-50, 0)"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Tube",
+    "plane": "XZ",
+    "name": "TubePath"
+   },
+   "expect": "sketch TubePath"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "TubePath",
+    "items": [
+     {
+      "kind": "line",
+      "from": [
+       -50,
+       0
+      ],
+      "to": [
+       -50,
+       30
+      ]
+     }
+    ]
+   },
+   "expect": "a 30 mm line up from the profile's centre"
+  },
+  {
+   "tool": "pd_pipe",
+   "arguments": {
+    "body": "Tube",
+    "profile": "TubeProfile",
+    "path": "TubePath"
+   },
+   "expect": "feature Pipe; volume 376.99"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Gear"
+   },
+   "expect": "body Gear"
+  },
+  {
+   "tool": "pd_gear",
+   "arguments": {
+    "body": "Gear",
+    "kind": "gear",
+    "teeth": 20,
+    "module": 1,
+    "thickness": 5,
+    "bore": 5,
+    "at": [
+     -60,
+     60,
+     0
+    ],
+    "name": "Spur"
+   },
+   "expect": "teeth 20; pitchDiameter 20; outsideDiameter 22; profile 'Spur profile'; feature 'Spur bore'; volume not derived here — roughly 5 x (π·10² - π·2.5²) ≈ 1470, record it"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Sheet"
+   },
+   "expect": "body Sheet"
+  },
+  {
+   "tool": "pd_primitive",
+   "arguments": {
+    "body": "Sheet",
+    "kind": "box",
+    "size": {
+     "length": 50,
+     "width": 50,
+     "height": 3
+    },
+    "at": [
+     -80,
+     -90,
+     8
+    ],
+    "name": "SheetBase"
+   },
+   "expect": "volume 7500"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Cutter"
+   },
+   "expect": "body Cutter"
+  },
+  {
+   "tool": "pd_primitive",
+   "arguments": {
+    "body": "Cutter",
+    "kind": "cylinder",
+    "size": {
+     "radius": 6,
+     "height": 20
+    },
+    "at": [
+     -60,
+     -75,
+     5
+    ],
+    "name": "CutterBase"
+   },
+   "expect": "volume 2261.95"
+  },
+  {
+   "tool": "pd_boolean",
+   "arguments": {
+    "body": "Sheet",
+    "op": "cut",
+    "with": [
+     "Cutter"
+    ],
+    "name": "SheetCut"
+   },
+   "expect": "feature SheetCut; volumeChange -339.29; volume 7160.71; with ['Cutter']"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Hist"
+   },
+   "expect": "body Hist"
+  },
+  {
+   "tool": "pd_primitive",
+   "arguments": {
+    "body": "Hist",
+    "kind": "box",
+    "size": {
+     "length": 20,
+     "width": 10,
+     "height": 5
+    },
+    "at": [
+     -80,
+     20,
+     0
+    ],
+    "name": "HistBase"
+   },
+   "expect": "volume 1000"
+  },
+  {
+   "tool": "pd_primitive",
+   "arguments": {
+    "body": "Hist",
+    "kind": "cylinder",
+    "size": {
+     "radius": 2,
+     "height": 7
+    },
+    "at": [
+     -75,
+     25,
+     -1
+    ],
+    "subtractive": true,
+    "name": "H1"
+   },
+   "expect": "volumeChange -62.83"
+  },
+  {
+   "tool": "pd_primitive",
+   "arguments": {
+    "body": "Hist",
+    "kind": "cylinder",
+    "size": {
+     "radius": 1.5,
+     "height": 5
+    },
+    "at": [
+     -65,
+     25,
+     5
+    ],
+    "name": "H2"
+   },
+   "expect": "volumeChange +35.34; volume 972.51"
+  },
+  {
+   "tool": "pd_tip",
+   "arguments": {
+    "body": "Hist",
+    "feature": "H1"
+   },
+   "expect": "tip H1; tipWas H2; afterTip ['H2']; volume 937.17"
+  },
+  {
+   "tool": "pd_tip",
+   "arguments": {
+    "body": "Hist",
+    "feature": "H2"
+   },
+   "expect": "tip H2; no afterTip; volume 972.51"
+  },
+  {
+   "tool": "pd_reorder",
+   "arguments": {
+    "feature": "H2",
+    "before": "H1"
+   },
+   "expect": "order [HistBase, H2, H1]; tip H2 (it was the tip and stays so); afterTip ['H1'] — H1 is now left out; volume 1035.34"
+  },
+  {
+   "tool": "pd_tip",
+   "arguments": {
+    "body": "Hist",
+    "feature": "H1"
+   },
+   "expect": "tip H1; no afterTip; volume 972.51"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Hist",
+    "plane": "XY",
+    "name": "Island"
+   },
+   "expect": "sketch Island"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "Island",
+    "items": [
+     {
+      "kind": "rectangle",
+      "corner": [
+       -80,
+       32
+      ],
+      "size": [
+       5,
+       5
+      ]
+     }
+    ]
+   },
+   "expect": "5 x 5, 2 mm away from the base"
+  },
+  {
+   "tool": "pd_pad",
+   "arguments": {
+    "body": "Hist",
+    "sketch": "Island",
+    "length": 3
+   },
+   "expect": "feature 'Pad 3'; volumeChange +75; solids 2; health verdict says '2 solids (AllowCompound)' — FreeCAD 1.1 keeps it because the body's AllowCompound is true"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Hist2"
+   },
+   "expect": "body Hist2"
+  },
+  {
+   "tool": "pd_move_feature",
+   "arguments": {
+    "feature": "Pad 3",
+    "to": "Hist2"
+   },
+   "expect": "moved ['Island', 'Pad 3']; from Hist; to Hist2; tip 'Pad 3'. Hist is one solid again."
+  },
+  {
+   "tool": "feature_list",
+   "arguments": {
+    "body": "Hist2"
+   },
+   "expect": "Island, 'Pad 3' (tip); volume 75"
+  },
+  {
+   "tool": "pd_move_feature",
+   "arguments": {
+    "feature": "H1",
+    "to": "Hist2"
+   },
+   "expect": "Either moved (H1 cuts nothing there: check Hist2's volume stays 75) or REFUSED with 'breaks …, nothing was moved'. Record which: this one could not be derived from source."
+  },
+  {
+   "tool": "pd_shaft",
+   "arguments": {
+    "segments": [
+     {
+      "length": 20,
+      "diameter": 10
+     },
+     {
+      "length": 30,
+      "diameter": 16
+     },
+     {
+      "length": 10,
+      "diameter": 16,
+      "diameterEnd": 10
+     }
+    ],
+    "at": [
+     0,
+     0,
+     60
+    ],
+    "name": "Shaft"
+   },
+   "expect": "shaft Shaft (a plain Part solid, not a body); length 60; segments 3; volume 8953.54"
+  },
+  {
+   "tool": "feature_list",
+   "arguments": {
+    "body": "Plate"
+   },
+   "expect": "PlateBase, Draft, Bore, BoreGrid, its two steps marked stepOf: BoreGrid, the datums, 'Mirrored 3' (transformMode 'Whole shape'), PlateHoles, 'Hole 2' (tip)"
+  }
+ ],
+ "notCovered": [
+  "pd_pad / pd_pocket types up_to_face, up_to_first, up_to_last and taper: the tutorial uses lengths and through_all only; no expected numbers derived. Try pd_pad { body: Hist, sketch on XY, type up_to_face, upToFace: { at: [-70, 25, 5], normal: [0, 0, 1] } } by hand.",
+  "pd_hole countersink / counterdrill, modelThread: true (slow), clearance holes (threaded: false, fit): one threaded counterbored hole only.",
+  "pd_draft with a face as the neutral plane, pd_mirrored across a face or a datum plane: covered by tests/test_feature.py (test_9a) rather than here.",
+  "pd_multitransform mirror, polar and scale steps: only two linear steps.",
+  "pd_gear kind sprocket and internal: true: no expected numbers; FreeCAD's sprocket module could not be exercised here.",
+  "pd_helix growth / taper / leftHanded / subtractive.",
+  "pd_loft closed and subtractive; pd_pipe subtractive, Mode and Transition (feature_edit).",
+  "pd_boolean fuse and common; pd_binder frozen and whole-shape; pd_primitive sphere, cone, ellipsoid, torus, prism, wedge.",
+  "feature_remove of a MultiTransform (its steps go with it): covered by tests/test_feature_more.py (test_6).",
+  "feature_edit's re-finding of renumbered fillet edges (refsFound): needs a model where an upstream edit renumbers edges; not forced here."
+ ]
+}

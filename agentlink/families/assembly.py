@@ -54,7 +54,39 @@ def _view_provider(obj, kind):
 OFFERED = ["fixed", "revolute", "cylindrical", "slider", "ball", "distance", "parallel", "perpendicular", "angle"]
 # the motion couplings, where this FreeCAD has them
 OFFERED += [k for k in ("rackpinion", "screw", "gears", "belt") if k in KINDS]
+# AssemblyObject.solve()'s codes as its own notes list them. FreeCAD 1.1's
+# solve returns only three of them (AssemblyObject.cpp): 0, -1 (the solver
+# threw) and -6 (nothing grounded); it does not count freedom left, and a
+# joint that repeats another is dropped by the solver without a word. The
+# others are kept for a release that returns them.
 SOLVE = {0: "solved", -1: "solver error", -2: "redundant constraints", -3: "conflicting constraints", -4: "over-constrained", -5: "malformed constraints", -6: "no part is grounded"}
+# The kinds FreeCAD's own joint panel offers Reverse for.
+REVERSIBLE = {k.lower() for k in getattr(JointObject, "JointUsingReverse", ["Fixed", "Revolute", "Cylindrical", "Slider", "Distance", "Parallel"])}
+LINKS = ("App::Link", "App::LinkElement")
+
+
+def _typed(asm):
+    """The assembly marked as one, as FreeCAD's Create Assembly does
+    (assembly.Type = "Assembly"). JointObject reads it: without it a new
+    joint always moves its second part, grounded or not, and never takes
+    along the parts already joined to the one it moves."""
+    try:
+        if getattr(asm, "Type", None) != "Assembly" and asm.TypeId == "Assembly::AssemblyObject":
+            asm.Type = "Assembly"
+    except Exception:
+        pass
+    return asm
+
+
+def _shape(o):
+    """A part's shape where it stands. A link answers Shape with its
+    target's own (App::Link hands on the linked object's properties), which
+    leaves the link's placement out: Part.getShape places it."""
+    if isinstance(o, _LinkPart):
+        return o.Shape
+    if getattr(o, "TypeId", "") in LINKS:
+        return Part.getShape(o)
+    return o.Shape
 
 
 def _release():
@@ -94,15 +126,19 @@ def _parts(asm):
 
 
 class _LinkPart:
-    """A part an assembly holds through an App::Link (or a link's element):
-    its shape as placed, for the overlap check. Label, Name and Placement
-    as the link's; obj the link itself."""
+    """A part an assembly holds through an App::Link (or a link's element),
+    or inside a moved App::Part or sub-assembly: its shape as placed, for
+    the overlap check. Label and Name as the object's own; obj the object
+    itself."""
 
-    def __init__(self, link, shape):
+    def __init__(self, link, shape, frame=None):
         self.obj = link
         self.Label, self.Name = link.Label, link.Name
         self.Shape = shape
         self.Placement = getattr(link, "Placement", FreeCAD.Placement())
+        if frame is not None:
+            # inside a moved container: where it stands in the assembly
+            self.Placement = frame.multiply(self.Placement)
 
     def getLinkedObject(self, *a):
         try:
@@ -119,28 +155,33 @@ def _check_parts(asm):
     hidden parts passed with a screw and the body it sits in left out."""
     out, hidden, left, seen = [], [], [], set()
 
-    def walk(group):
+    def walk(group, frame):
+        # frame: where the container holding these stands in the assembly
+        # (None at the assembly's own level); a part inside a moved App::Part
+        # or sub-assembly keeps its shape in that container's own frame.
         for o in group or []:
             if o.Name in seen or o.TypeId == "Assembly::JointGroup":
                 continue
             seen.add(o.Name)
-            if o.TypeId in ("App::Part", "Assembly::AssemblyObject", "App::DocumentObjectGroup"):
-                walk(getattr(o, "Group", None))
+            if o.TypeId in ("App::Part", "Assembly::AssemblyObject", "Assembly::AssemblyLink"):
+                own = getattr(o, "Placement", None)
+                inner = frame if own is None or own.isIdentity() else (own if frame is None else frame.multiply(own))
+                walk(getattr(o, "Group", None), inner)
                 continue
-            part = None
-            sh = getattr(o, "Shape", None)
+            if o.TypeId == "App::DocumentObjectGroup":
+                walk(getattr(o, "Group", None), frame)
+                continue
+            part, sh = None, None
             try:
+                # a link first: its Shape property is its target's, not placed
+                sh = Part.getShape(o) if o.TypeId in LINKS else getattr(o, "Shape", None)
                 if sh is not None and not sh.isNull() and sh.Solids:
-                    part = o
+                    if frame is not None:
+                        sh = sh.copy()
+                        sh.Placement = frame.multiply(sh.Placement)
+                    part = _LinkPart(o, sh, frame) if (frame is not None or o.TypeId in LINKS) else o
             except Exception:
                 part = None
-            if part is None and o.TypeId in ("App::Link", "App::LinkElement"):
-                try:
-                    lsh = Part.getShape(o)
-                    if not lsh.isNull() and lsh.Solids:
-                        part = _LinkPart(o, lsh)
-                except Exception:
-                    part = None
             if part is None:
                 if sh is not None or o.TypeId.startswith("App::Link"):
                     left.append(o.Label)
@@ -149,7 +190,7 @@ def _check_parts(asm):
                 hidden.append(o.Label)
             out.append(part)
 
-    walk(asm.Group)
+    walk(asm.Group, None)
     return out, hidden, left
 
 
@@ -218,7 +259,7 @@ def _element(session, part, q, what):
         try:
             part.Shape.getElement(q)
         except Exception:
-            raise ToolError("invalid_input", f"{what}: {part.Label} has no {q}.")
+            raise ToolError("invalid_input", f"{what}: {part.Label} has no {q} — shape_query {{ body: \"{part.Label}\" }} lists its faces and edges, or give a query {{ kind: face|edge, normal, near, radius, type }} here.")
         return q
     if not isinstance(q, dict):
         raise ToolError("invalid_input", f"{what}: a face or edge — \"Face6\", or a query {{ kind: face|edge, normal, near, radius, type }} as shape_query takes.")
@@ -300,7 +341,7 @@ def _overlaps(parts, clearance=0.0):
     out, near = [], []
     for i, a in enumerate(parts):
         for b in parts[i + 1:]:
-            sa, sb = a.Shape, b.Shape
+            sa, sb = _shape(a), _shape(b)
             if not sa.BoundBox.intersect(sb.BoundBox) and clearance <= 0:
                 continue
             try:
@@ -325,7 +366,10 @@ def _overlaps(parts, clearance=0.0):
 
 def _health(session, tool, changed):
     """The assembly solver's own status after a call of this family (the
-    shared health check, agentlink/health.py): one line an assembly."""
+    shared health check, agentlink/health.py): one line an assembly.
+    FreeCAD 1.1's solve answers 0 (solved), -1 (the solver threw) or -6
+    (nothing grounded) only; "solved" is not "fully constrained" — it does
+    not count the freedom left."""
     if not str(getattr(tool, "group", "")).startswith("assembly"):
         return None
     out = []
@@ -338,7 +382,7 @@ def _health(session, tool, changed):
         elif code == -6:
             out.append({"line": line, "red": True, "todo": "asm_ground { part } fixes one part so the solver has a frame"})
         else:
-            out.append({"line": line, "red": True, "todo": "asm_check names the joints and what is left free; asm_joint_remove the one that clashes"})
+            out.append({"line": line, "red": True, "todo": "asm_list names the joints (asm_check the parts joined to nothing); asm_joint_remove the one that fights another, or history_undo"})
     return out
 
 
@@ -363,11 +407,12 @@ def tools(session):
         parts = [s.body(r) for r in refs]
         asm = doc().addObject("Assembly::AssemblyObject", (a.get("name") or "Assembly").replace(" ", "_"))
         asm.Label = a.get("name") or "Assembly"
+        _typed(asm)
         _joints(asm)
         for o in parts:
             for p in list(o.InList):
                 if p.TypeId == "Assembly::AssemblyObject" and p is not asm:
-                    raise ToolError("invalid_state", f"{o.Label} is in {p.Label} already: a part is in one assembly.")
+                    raise ToolError("invalid_state", f"{o.Label} is in {p.Label} already: a part is in one assembly. Join it there (asm_joint {{ assembly: \"{p.Label}\" }}), or put {p.Label} itself into another with asm_sub. Nothing was made.")
             asm.addObject(o)
         ground = a.get("ground", parts[0].Label)
         if ground:
@@ -388,7 +433,7 @@ def tools(session):
             asm.addObject(o)
             added.append(o.Label)
         if not added:
-            raise ToolError("invalid_input", "parts: bodies not in the assembly yet.")
+            raise ToolError("invalid_input", f"parts: bodies not in {asm.Label} yet, by label — every one named is in it already (asm_list lists its parts; session_state the bodies).")
         doc().recompute()
         return {"assembly": asm.Label, "added": added, "parts": [o.Label for o in _parts(asm)]}
 
@@ -409,10 +454,10 @@ def tools(session):
         return {"assembly": asm.Label, "grounded": [x.Label for x in _grounded(asm)]}
 
     def asm_joint(a):
-        asm = _assembly(doc(), a.get("assembly"))
+        asm = _typed(_assembly(doc(), a.get("assembly")))
         kind = str(a.get("kind", "")).lower()
         if kind not in OFFERED:
-            raise ToolError("invalid_input", f"kind: one of {', '.join(OFFERED)}.")
+            raise ToolError("invalid_input", f"kind: one of {', '.join(OFFERED)} (got {a.get('kind')!r}).")
         if not _grounded(asm):
             raise ToolError("invalid_state", f"No part of {asm.Label} is grounded: asm_ground {{ part }} the one that stays put first.")
         ends = []
@@ -424,7 +469,7 @@ def tools(session):
             el = _element(s, part, e.get("element", {"kind": "face", **{k: v for k, v in e.items() if k not in ('part', 'element')}}), f"{side}.element")
             ends.append((part, el))
         if ends[0][0] is ends[1][0]:
-            raise ToolError("invalid_input", "a and b are on the same part: a joint is between two parts.")
+            raise ToolError("invalid_input", f"a and b are both on {ends[0][0].Label}: a joint is between two parts of the assembly (asm_list names them).")
         # Keyed by Name: a workbench that relabels its objects on recompute
         # (Fasteners counts its screws' labels up) made a lookup by label
         # after the solve fail with a bare KeyError.
@@ -491,6 +536,14 @@ def tools(session):
             j.Proxy.updateJCSPlacements(j)
         except Exception:
             pass
+        # As the joint panel's OK does: the placements the solve kept for its
+        # own undo are dropped, or the next joint made starts by putting the
+        # parts back where they were before this one (Joint.__init__ calls
+        # setJointConnectors with nothing, which undoes the last solve).
+        try:
+            asm.clearUndo()
+        except Exception:
+            pass
         doc().recompute()
         code, said = _status(asm)
         flipped = False
@@ -501,7 +554,7 @@ def tools(session):
         # runs, which can put a lid into its box instead of on it. Two parts
         # overlapping after the solve, and no reverse said: the other way is
         # tried, and kept when it overlaps less.
-        if code == 0 and a.get("reverse") is None:
+        if code == 0 and a.get("reverse") is None and kind in REVERSIBLE:
             first, _ = _overlaps(_parts(asm))
             if first:
                 vol0 = sum(h["volume"] for h in first)
@@ -516,7 +569,10 @@ def tools(session):
                     doc().recompute()
                     code, said = _status(asm)
         if code != 0:
-            raise ToolError("failed", f"The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. A joint that repeats what another holds is redundant; asm_list shows the joints.")
+            hint = ("asm_ground { part } holds one part first." if code == -6 else
+                    "The solver could not put the parts where all the joints ask: this one fights another on the same parts (asm_list shows them; asm_joint_remove takes one out), "
+                    "or the elements cannot meet that way — pick other elements, or for parts far out of place try reverse: true.")
+            raise ToolError("failed", f"The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. {hint}")
         moved = {}
         for o in _parts(asm):
             b = before.get(o.Name)
@@ -599,7 +655,7 @@ def tools(session):
         hi = float(a.get("to", lim_hi if lim_hi is not None else (90 if turning else 10)))
         steps = int(a.get("steps", 12))
         if not 1 <= steps <= 72:
-            raise ToolError("invalid_input", "steps: 1 to 72.")
+            raise ToolError("invalid_input", f"steps: 1 to 72 (got {steps}); each step checks every pair of parts — for a closer look sweep a shorter from/to range.")
         clearance = float(a.get("clearance", 0))
         p1, e1 = _ref_element(j.Reference1)
         p2, e2 = _ref_element(j.Reference2)
@@ -737,7 +793,7 @@ def tools(session):
         name = a.get("joint")
         hit = next((j for j in _joints(asm).Group if name in (j.Label, j.Name)), None)
         if hit is None:
-            raise ToolError("not_found", f"joint {name!r}: asm_list lists them.")
+            raise ToolError("not_found", f"joint {name!r} is not in {asm.Label}: asm_list lists its joints (a grounding is taken off with asm_ground {{ part, grounded: false }}).")
         doc().removeObject(hit.Name)
         doc().recompute()
         code, said = _status(asm)
@@ -749,7 +805,8 @@ def tools(session):
         code, said = _status(asm)
         parts, hidden, left = _check_parts(asm)
         hits, near = _overlaps(parts, clearance)
-        own = [o for o in parts if not isinstance(o, _LinkPart) and o in asm.Group]
+        # each part's own object (a linked part's is its link), where it is the assembly's own
+        own = [x for x in (getattr(o, "obj", o) for o in parts) if x in asm.Group]
         free = [o.Label for o in own if o not in _grounded(asm) and not asm.isPartConnected(o)] if hasattr(asm, "isPartConnected") else []
         out = {"assembly": asm.Label, "solve": said, "parts": len(parts), "overlaps": hits}
         if hidden:
@@ -770,18 +827,18 @@ def tools(session):
     part_end = {"type": "object", "description": "{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of several."}
     asm_ref = {"type": "string", "description": "The assembly's label; may be left out when there is one."}
     return [
-        Tool("asm_new", "Put bodies together in a new assembly (FreeCAD's Assembly workbench): parts by label, the first grounded (held fixed) unless ground names another or is false. Then asm_joint between them.",
+        Tool("asm_new", "Put bodies together in a new assembly (FreeCAD's Assembly workbench): parts by label — the bodies themselves move into it (not links), and a body is in one assembly only. The first is grounded (held fixed) unless ground names another or is false; with nothing grounded no joint solves. Reply: assembly, parts, grounded. Then asm_joint between them.",
              obj({"parts": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}, "ground": {}}, ["parts"]), asm_new, changes=True),
-        Tool("asm_add", "Put more bodies into an assembly.", obj({"assembly": asm_ref, "parts": {"type": "array", "items": {"type": "string"}}}, ["parts"]), asm_add, changes=True),
-        Tool("asm_ground", "Hold a part fixed (grounded: true, the default) or let it move again (false). An assembly needs one grounded part to solve.", obj({"assembly": asm_ref, "part": {"type": "string"}, "grounded": {"type": "boolean"}}, ["part"]), asm_ground, changes=True),
+        Tool("asm_add", "Put more bodies into an assembly: parts by label (moved in, not linked; ones already in are skipped). They float free until asm_joint ties them to a grounded part. Reply: added, parts.", obj({"assembly": asm_ref, "parts": {"type": "array", "items": {"type": "string"}}}, ["parts"]), asm_add, changes=True),
+        Tool("asm_ground", "Hold a part fixed where it stands (grounded: true, the default) or let it move again (false). An assembly needs at least one grounded part: with none every solve answers \"no part is grounded\". Reply: grounded, every part held.", obj({"assembly": asm_ref, "part": {"type": "string"}, "grounded": {"type": "boolean"}}, ["part"]), asm_ground, changes=True),
         Tool("asm_joint",
-             "Join two parts and solve: kind fixed (no motion), revolute (turns about the elements' axis), cylindrical (turns and slides), slider (slides only), ball, distance (distance mm between them), parallel, perpendicular, angle (angle degrees); couplings, which tie one motion to another for asm_sweep: rackpinion (radius1, the pinion's pitch radius), screw (pitch mm a turn), gears and belt (radius1, radius2 — read off round edges when left out). a and b each a part and a face or edge on it — for a flat face the joint sits at its middle with its normal; for a round edge or face, on its axis. offset mm along the joint's normal and rotate degrees about it; reverse: true turns b over (false keeps FreeCAD's way; left out, b is turned over when that stops the parts overlapping). Returns which parts moved where, and overlaps the solve left. Trap: the part of b moves; a grounded part never does.",
+             "Join two parts and solve (needs a grounded part): kind fixed (no motion), revolute (turns about the joint's axis), cylindrical (turns and slides), slider (slides only), ball, distance (distance mm between the elements; round faces count from their surface), parallel, perpendicular, angle (angle degrees, 90); couplings, which tie one motion to another for asm_sweep and need each part's own revolute or slider too: rackpinion (radius1, the pinion's pitch radius), screw (pitch mm a turn), gears and belt (radius1, radius2 — read off round edges when left out). a and b each a part and a face or edge on it — a flat face puts the joint at its middle along its normal; a round edge or cylindrical face, on its axis. offset mm along b's joint normal and rotate degrees about it; reverse: true turns the moved part over (false keeps FreeCAD's way; left out, it is turned over when that stops parts overlapping). Which part moves: the one not yet joined to a grounded part (a when neither is), with what is joined to it; a grounded part never. Reply: joint, solve, moved { part: from, to, by }, flipped, overlaps with a warning. Unsolved is refused, nothing kept. FreeCAD 1.1's solver answers only solved or solver error — not freedom left, nor a joint that repeats another: asm_check and asm_sweep show what still moves.",
              obj({"assembly": asm_ref, "kind": {"type": "string", "enum": OFFERED}, "a": part_end, "b": part_end, "offset": {"type": "number"}, "rotate": {"type": "number"}, "distance": {"type": "number"}, "angle": {"type": "number"}, "radius1": {"type": "number"}, "radius2": {"type": "number"}, "pitch": {"type": "number"}, "reverse": {"type": "boolean"}, "name": {"type": "string"}}, ["kind", "a", "b"]),
              asm_joint, changes=True),
-        Tool("asm_list", "An assembly: its parts with their placements and which are grounded, its joints with what each joins, and whether it solves. Changes nothing.", obj({"assembly": asm_ref}), asm_list),
-        Tool("asm_joint_remove", "Remove a joint (by label, asm_list lists them) and solve again.", obj({"assembly": asm_ref, "joint": {"type": "string"}}, ["joint"]), asm_joint_remove, changes=True),
-        Tool("asm_sweep", "Move a revolute joint through angles (from, to degrees; 0 to 90) or a slider or cylindrical one along its axis (mm; turn: true turns a cylindrical) in steps (12), solving at each and checking the parts for overlaps (clearance mm also lists those closer). Answers each step, collidesAt and the clear range from the start, and puts every part back. Does the lid open fully, does the arm swing past the post.",
+        Tool("asm_list", "An assembly: parts [{ part, placement { at, axis, angle degrees }, grounded }], joints [{ joint, kind, a, b as Part.Element, suppressed }] and solve. It runs the solver to answer solve, which puts a part dragged off its joints back; nothing else changes.", obj({"assembly": asm_ref}), asm_list),
+        Tool("asm_joint_remove", "Remove a joint (by label or object name; asm_list lists them) and solve again. Parts stay where they stand; one left joined to nothing grounded floats free (asm_check: notConnected). Reply: removed, solve.", obj({"assembly": asm_ref, "joint": {"type": "string"}}, ["joint"]), asm_joint_remove, changes=True),
+        Tool("asm_sweep", "Move a revolute joint through angles (from, to degrees; 0 to 90, or its asm_limits) or a slider or cylindrical one along its axis (mm; 0 to 10; turn: true turns a cylindrical) in steps (12, at most 72), checking every pair of parts for overlap at each (clearance mm also lists pairs closer). from and to count from where the joint stands now. The moving part carries the parts joined beyond it rigidly; gears, belt, rackpinion and screw drive theirs by ratio; a closed loop (a four-bar) is not followed. Reply: moves, driven, axis, steps [{ at, overlaps, closer }], verdict clear | collides, collidesAt, clearFromStart; every part is put back. Does the lid open fully, does the arm swing past the post. Each step cuts every pair of parts (a call is dropped after about 80 s): with many parts, fewer steps or a shorter range, not a job.",
              obj({"assembly": asm_ref, "joint": {"type": "string"}, "from": {"type": "number"}, "to": {"type": "number"}, "steps": {"type": "integer"}, "clearance": {"type": "number"}, "turn": {"type": "boolean"}}, ["joint"]), asm_sweep),
-        Tool("asm_check", "Check an assembly: every part of it, shown or hidden (hidden names those checked though hidden), inside App::Parts and sub-assemblies and through links too: whether it solves, which parts overlap (the volume and where; a screw's thread in a tapped hole is marked thread and not counted against the verdict), with clearance mm the pairs closer than it, and parts joined to nothing grounded. verdict clear or fix. view_render shows it; section cuts it open at a fit.",
+        Tool("asm_check", "Check an assembly: every part of it, shown or hidden (hidden names those checked though hidden), inside App::Parts and sub-assemblies and through links too, each where it stands: solve; overlaps [{ parts, volume mm³, at }] (a screw's thread in a tapped hole is marked thread and not counted against the verdict); with clearance mm, closerThan pairs; notConnected, parts joined to nothing grounded (the solver leaves them and their joints out without a word). verdict clear | fix. Freedom left is not counted (FreeCAD 1.1 does not report it): asm_sweep shows what a joint lets move. Every pair of parts is cut against each other, so dozens of parts take a while. view_render shows it; section cuts it open at a fit.",
              obj({"assembly": asm_ref, "clearance": {"type": "number"}}), asm_check),
     ]

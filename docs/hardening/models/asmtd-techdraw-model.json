@@ -1,0 +1,1067 @@
+{
+ "tutorial": "Basic_TechDraw_Tutorial.md (a page, a view at scale 2, a vertical and a horizontal dimension, the title block, an annotation; then an ANSI B page with a projection group at 2:1 and a length dimension on the isometric view that reads foreshortened until linked to the 3D model). Part A follows it on the tutorial's own part; part B is a small plate for the tools the tutorial does not reach.",
+ "reference": "github.com/FreeCAD/Examples: Basic_TechDraw_Tutorial_Example_Files/Basic_TechDraw_Tutorial.fcstd (on the Mac: the reference copy: Basic_TechDraw_Tutorial.FCStd)",
+ "expected": {
+  "answerKeyPages": 2,
+  "page1": {
+   "paper": [
+    297,
+    210
+   ],
+   "views": 1,
+   "viewDirection": [
+    0,
+    0,
+    1
+   ],
+   "dimensions": {
+    "vertical (DistanceY)": 26,
+    "horizontal (DistanceX)": 53
+   },
+   "annotations": 1,
+   "scaleInFile": 3,
+   "scaleInTutorialText": 2
+  },
+  "page2": {
+   "paper": [
+    431.8,
+    279.4
+   ],
+   "projection": "First angle",
+   "groupScale": 2,
+   "items": {
+    "Front": [
+     0,
+     -1,
+     0
+    ],
+    "Left": [
+     -1,
+     0,
+     0
+    ],
+    "Top": [
+     0,
+     0,
+     1
+    ],
+    "FrontTopLeft": [
+     -1,
+     -1,
+     1
+    ]
+   },
+   "viewCount": 4,
+   "isoDimensionProjected": 43.27,
+   "isoDimensionLinkedTo3D": 53
+  },
+  "bodyBox": [
+   53,
+   26,
+   26
+  ],
+  "bodyBoxNote": "read from the file's first sketch (26 x 26 profile on YZ) and Pad (53, symmetric); the later pockets and pad are assumed to stay inside it — measure once to confirm",
+  "plate": {
+   "topFaceArea": 2168.9,
+   "holes": [
+    10,
+    6
+   ],
+   "slotEndRadius": 3,
+   "wholeCirclesOfDiameter6": 1,
+   "arcsOfDiameter6": "2 ends (2 or 4 edges)"
+  }
+ },
+ "calls": [
+  {
+   "tool": "doc_open",
+   "arguments": {
+    "path": "the reference copy: Basic_TechDraw_Tutorial.FCStd"
+   },
+   "expect": "the tutorial's file (made with 0.17) open and recomputed; any object error listed — record them. Do NOT doc_save over it (doc_save with another path if a copy is wanted)"
+  },
+  {
+   "tool": "shape_query",
+   "arguments": {
+    "body": "Body",
+    "kind": "vertex",
+    "sort": "x",
+    "limit": 40
+   },
+   "expect": "the Body's vertices: x runs -26.5 to 26.5, y and z -13 to 13 (the box 53 x 26 x 26 the dimensions below rest on); note which corners exist at x -26.5 — the calls below name (-26.5, 13, 13), (-26.5, -13, -13), (26.5, 13, 13) and (26.5, -13, -13)"
+  },
+  {
+   "tool": "td_list",
+   "arguments": {
+    "page": "Page"
+   },
+   "expect": "THE ANSWER KEY, page 1: A4 landscape (297 x 210), one view of Body from the top (file: Direction 0,0,1; scale 3 from the page), two dimensions: DistanceY (vertical) = 26 and DistanceX (horizontal) = 53, one annotation. The key's dimensions sit on Vertex20/Vertex4 and Vertex5/Vertex4 as 0.17 numbered them: if 1.1.3 numbers the view differently they may read other values or an error — record, it is what td_dim_repair is for"
+  },
+  {
+   "tool": "td_list",
+   "arguments": {
+    "page": "Page001"
+   },
+   "expect": "THE ANSWER KEY, page 2: ANSI B (431.8 x 279.4), one projection group, First angle, scale 2 Custom, 4 items: Front (0,-1,0), Left (-1,0,0), Top (0,0,1), FrontTopLeft (-1,-1,1); one dimension on FrontTopLeft, linked to the 3D model (MeasureType True), reading 53"
+  },
+  {
+   "tool": "td_page",
+   "arguments": {
+    "action": "new",
+    "paper": "A4",
+    "scale": 2,
+    "name": "Tut A4"
+   },
+   "expect": "page Tut A4, paper [297, 210], an A4 landscape template with a title block, cleared lists the sample texts removed; health ok"
+  },
+  {
+   "tool": "td_view",
+   "arguments": {
+    "page": "Tut A4",
+    "bodies": [
+     "Body"
+    ],
+    "direction": "top",
+    "at": [
+     110,
+     125
+    ],
+    "name": "TutTop"
+   },
+   "expect": "view TutTop, scale 2 (the page's: the tutorial's 'change Scale from 1 to 2'), size [106, 52] (53 x 2 by 26 x 2), edges above 0"
+  },
+  {
+   "tool": "td_geometry",
+   "arguments": {
+    "view": "TutTop",
+    "kind": "vertices"
+   },
+   "expect": "the view's vertices in part mm; the four corners at x ±26.5, y ±13 (signs as TechDraw keeps y)"
+  },
+  {
+   "tool": "td_dim",
+   "arguments": {
+    "view": "TutTop",
+    "type": "vertical",
+    "refs": [
+     {
+      "point": [
+       -26.5,
+       13,
+       13
+      ]
+     },
+     {
+      "point": [
+       -26.5,
+       -13,
+       -13
+      ]
+     }
+    ],
+    "at": [
+     -70,
+     0
+    ]
+   },
+   "expect": "measured 26 (the tutorial's first, vertical dimension; the key's Dimension). If a corner is refused as 'No vertex … at' the part's corner is cut there: take the two left-most vertices from td_geometry above instead"
+  },
+  {
+   "tool": "td_dim",
+   "arguments": {
+    "view": "TutTop",
+    "type": "horizontal",
+    "refs": [
+     {
+      "point": [
+       -26.5,
+       13,
+       13
+      ]
+     },
+     {
+      "point": [
+       26.5,
+       13,
+       13
+      ]
+     }
+    ],
+    "at": [
+     0,
+     40
+    ]
+   },
+   "expect": "measured 53 (the key's Dimension001)"
+  },
+  {
+   "tool": "td_dim_special",
+   "arguments": {
+    "view": "TutTop",
+    "kind": "extent_h"
+   },
+   "expect": "measured 53: the view's whole width, no picking"
+  },
+  {
+   "tool": "td_dim_special",
+   "arguments": {
+    "view": "TutTop",
+    "kind": "extent_v"
+   },
+   "expect": "measured 26"
+  },
+  {
+   "tool": "td_title",
+   "arguments": {
+    "page": "Tut A4"
+   },
+   "expect": "fields: the template's own field names with their values (the key's 0.17 template had FC-Title, Designed_by_Name …; 1.1's names differ) — note the title's and the designer's field names for the next call"
+  },
+  {
+   "tool": "td_title",
+   "arguments": {
+    "page": "Tut A4",
+    "fields": {
+     "<the title field's name from the call above>": "My First TechDraw"
+    }
+   },
+   "expect": "fields with the title set; an unknown name is refused with the list of names (try one: {\"nosuchfield\": \"x\"})"
+  },
+  {
+   "tool": "td_note",
+   "arguments": {
+    "page": "Tut A4",
+    "text": "Some meaningful text to\ndocument my drawing.",
+    "size": 8,
+    "at": [
+     73,
+     43
+    ]
+   },
+   "expect": "note, lines 2 (the key's Annotation: two lines, TextSize 8, at about 72.8, 42.8)"
+  },
+  {
+   "tool": "td_page",
+   "arguments": {
+    "action": "new",
+    "template": "ASME/ANSIB.svg",
+    "projection": "first",
+    "name": "Tut ANSIB"
+   },
+   "expect": "page Tut ANSIB, paper [431.8, 279.4], projection First angle (the tutorial's ANSIB.SVG). If the template name is refused, td_page { action: \"templates\" } lists the build's own"
+  },
+  {
+   "tool": "td_projection",
+   "arguments": {
+    "page": "Tut ANSIB",
+    "bodies": [
+     "Body"
+    ],
+    "views": [
+     "front",
+     "left",
+     "top",
+     "isoLeft"
+    ],
+    "projection": "first",
+    "scale": 2,
+    "at": [
+     120,
+     190
+    ]
+   },
+   "expect": "a group of 4 items labelled Front, Left, Top, FrontTopLeft, projection First angle, each scale 2; Front size [106, 52], Left [52, 52], Top [106, 52]; edges above 0 in each. object_get on the items: Direction Front (0,-1,0), Left (-1,0,0), Top (0,0,1), FrontTopLeft (-1,-1,1) normalised — the key's"
+  },
+  {
+   "tool": "td_dim",
+   "arguments": {
+    "view": "FrontTopLeft",
+    "type": "distance",
+    "refs": [
+     {
+      "point": [
+       -26.5,
+       -13,
+       -13
+      ]
+     },
+     {
+      "point": [
+       26.5,
+       -13,
+       -13
+      ]
+     }
+    ]
+   },
+   "expect": "measured 43.27 — the tutorial's 'faulty' dimension: 53 foreshortened in the isometric view (53 x 0.8165). If the view's label differs (td_list names the items) use that; if a corner is refused, take the front edge's two ends from td_geometry"
+  },
+  {
+   "tool": "td_dim_special",
+   "arguments": {
+    "view": "FrontTopLeft",
+    "kind": "axo_length",
+    "refs": [
+     {
+      "edge": {
+       "through": [
+        [
+         -26.5,
+         -13,
+         -13
+        ],
+        [
+         26.5,
+         -13,
+         -13
+        ]
+       ]
+      }
+     },
+     {
+      "edge": {
+       "through": [
+        [
+         -26.5,
+         -13,
+         -13
+        ],
+        [
+         26.5,
+         -13,
+         -13
+        ]
+       ]
+      }
+     }
+    ]
+   },
+   "expect": "text 53.00, the true length (what the tutorial reaches by linking the dimension to the 3D model: the key's Dimension002 reads 53). The second ref is the edge the extension lines run along; the same edge is given here only to have a valid call — record how it draws"
+  },
+  {
+   "tool": "td_list",
+   "arguments": {
+    "page": "Tut ANSIB"
+   },
+   "expect": "views: the group with its 4 items; dimensions: the 43.27 one and the 53.00 text one"
+  },
+  {
+   "tool": "td_export",
+   "arguments": {
+    "page": "Tut A4",
+    "formats": [
+     "svg",
+     "pdf",
+     "dxf"
+    ]
+   },
+   "expect": "three files in the session's folder, each over 500 bytes; dxf by TechDraw"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     60,
+     40,
+     8
+    ],
+    "name": "Plate"
+   },
+   "expect": "body Plate"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 5,
+    "height": 8,
+    "at": [
+     30,
+     20,
+     0
+    ],
+    "name": "Hole10"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 3,
+    "height": 8,
+    "at": [
+     45,
+     30,
+     0
+    ],
+    "name": "Hole6"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     16,
+     6,
+     8
+    ],
+    "at": [
+     10,
+     7,
+     0
+    ],
+    "name": "Slot"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 3,
+    "height": 8,
+    "at": [
+     10,
+     10,
+     0
+    ],
+    "name": "SlotA"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 3,
+    "height": 8,
+    "at": [
+     26,
+     10,
+     0
+    ],
+    "name": "SlotB"
+   },
+   "expect": ""
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "fuse",
+    "base": "Slot",
+    "tools": [
+     "SlotA",
+     "SlotB"
+    ]
+   },
+   "expect": "the slot's tool: 22 x 6 with R3 ends"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "cut",
+    "base": "Plate",
+    "tools": [
+     "Hole10",
+     "Hole6",
+     "Slot"
+    ]
+   },
+   "expect": "Plate with a 10 mm hole, a 6 mm hole and a 6 mm wide slot; volume about 17351 mm3 (top face 2168.9 mm2 x 8)"
+  },
+  {
+   "tool": "td_page",
+   "arguments": {
+    "action": "new",
+    "paper": "A3",
+    "projection": "first",
+    "name": "Plate drawing"
+   },
+   "expect": "page Plate drawing, paper [420, 297]"
+  },
+  {
+   "tool": "td_view",
+   "arguments": {
+    "page": "Plate drawing",
+    "bodies": [
+     "Plate"
+    ],
+    "direction": "top",
+    "scale": 2,
+    "at": [
+     130,
+     190
+    ],
+    "name": "PlateTop"
+   },
+   "expect": "view PlateTop, size [120, 80], edges above 0"
+  },
+  {
+   "tool": "td_geometry",
+   "arguments": {
+    "view": "PlateTop",
+    "kind": "circles"
+   },
+   "expect": "one circle of diameter 10, one circle of diameter 6 (the hole at 45, 30) and the slot's two ends as arcs of diameter 6 (kind arc; each end may come as one half-turn arc or two quarter arcs: record)"
+  },
+  {
+   "tool": "td_dim",
+   "arguments": {
+    "view": "PlateTop",
+    "type": "diameter",
+    "refs": [
+     {
+      "circle": {
+       "diameter": 6
+      }
+     }
+    ],
+    "at": [
+     40,
+     30
+    ]
+   },
+   "expect": "THE LEFTOVER'S PROOF: no near given and three round edges of diameter 6, yet it lands on the hole (refs names the edge td_geometry marked circle), measured 6, no note"
+  },
+  {
+   "tool": "td_dim",
+   "arguments": {
+    "view": "PlateTop",
+    "type": "diameter",
+    "refs": [
+     {
+      "circle": {
+       "diameter": 6,
+       "near": [
+        26,
+        10,
+        8
+       ]
+      }
+     }
+    ]
+   },
+   "expect": "near points at the slot's end, and the diameter still lands on the 6 mm hole (same edge as the call before): an arc is never taken for a diameter"
+  },
+  {
+   "tool": "td_dim",
+   "arguments": {
+    "view": "PlateTop",
+    "type": "radius",
+    "refs": [
+     {
+      "circle": {
+       "diameter": 6,
+       "near": [
+        26,
+        10,
+        8
+       ]
+      }
+     }
+    ],
+    "at": [
+     10,
+     -30
+    ]
+   },
+   "expect": "measured 3, on the slot's end at (26, 10): the right callout for an arc"
+  },
+  {
+   "tool": "td_dim",
+   "arguments": {
+    "view": "PlateTop",
+    "type": "diameter",
+    "refs": [
+     {
+      "circle": {
+       "diameter": 10
+      }
+     }
+    ],
+    "fit": "H7",
+    "at": [
+     -40,
+     30
+    ]
+   },
+   "expect": "measured 10, tolerance +0.015/0, text carries H7, fitFrom given"
+  },
+  {
+   "tool": "td_tolerance",
+   "arguments": {
+    "dimension": "<the name of the 10 mm diameter dimension from the call above, e.g. Dimension006>",
+    "clear": true,
+    "plus": 0.1,
+    "minus": 0.05
+   },
+   "expect": "tolerance +0.1/-0.05, H7 gone from the text"
+  },
+  {
+   "tool": "td_dimset",
+   "arguments": {
+    "view": "PlateTop",
+    "type": "horizontal",
+    "style": "chain",
+    "refs": [
+     {
+      "point": [
+       0,
+       0,
+       8
+      ]
+     },
+     {
+      "center": {
+       "diameter": 10
+      }
+     },
+     {
+      "point": [
+       60,
+       0,
+       8
+      ]
+     }
+    ]
+   },
+   "expect": "two dimensions, 30 and 30, overall 60 (the hole's centre is made a cosmetic vertex)"
+  },
+  {
+   "tool": "td_dim_special",
+   "arguments": {
+    "view": "PlateTop",
+    "kind": "arc_length",
+    "refs": [
+     {
+      "circle": {
+       "diameter": 6,
+       "near": [
+        26,
+        10,
+        8
+       ]
+      }
+     }
+    ]
+   },
+   "expect": "text ◠ 9.42 (pi x 3, a half turn) — or ◠ 4.71 if TechDraw hands the slot's end over as two quarter arcs: record which"
+  },
+  {
+   "tool": "td_centermarks",
+   "arguments": {
+    "views": [
+     "PlateTop"
+    ]
+   },
+   "expect": "views [{ view: PlateTop, circles: 2 }]: the two holes; the slot's half-turn ends are not marked"
+  },
+  {
+   "tool": "td_section",
+   "arguments": {
+    "view": "PlateTop",
+    "normal": "-y",
+    "through": [
+     30,
+     20,
+     4
+    ],
+    "hatch": false
+   },
+   "expect": "view Section A, edges above 0; object_get on it: CutSurfaceDisplay reads Hide (it stayed SvgHatch before this pass)"
+  },
+  {
+   "tool": "td_section_position",
+   "arguments": {
+    "section": "Section A"
+   },
+   "expect": "the section moved straight above or below PlateTop (same x)"
+  },
+  {
+   "tool": "td_detail",
+   "arguments": {
+    "view": "PlateTop",
+    "center": [
+     45,
+     30,
+     8
+    ],
+    "radius": 6
+   },
+   "expect": "view Detail B, scale 4, edges above 0"
+  },
+  {
+   "tool": "td_datum",
+   "arguments": {
+    "view": "PlateTop",
+    "letter": "A",
+    "on": {
+     "edge": {
+      "through": [
+       [
+        0,
+        0,
+        8
+       ],
+       [
+        60,
+        0,
+        8
+       ]
+      ]
+     }
+    }
+   },
+   "expect": "symbol Datum A on the bottom edge, side down"
+  },
+  {
+   "tool": "td_gdt",
+   "arguments": {
+    "view": "PlateTop",
+    "on": {
+     "circle": {
+      "diameter": 10
+     }
+    },
+    "frame": [
+     {
+      "characteristic": "position",
+      "tolerance": 0.1,
+      "diameter": true,
+      "datums": [
+       "A"
+      ]
+     }
+    ]
+   },
+   "expect": "reads the frame in words with the position symbol and A; a leader made"
+  },
+  {
+   "tool": "td_gdt",
+   "arguments": {
+    "view": "PlateTop",
+    "on": {
+     "circle": {
+      "diameter": 10
+     }
+    },
+    "frame": [
+     {
+      "characteristic": "perpendicularity",
+      "tolerance": 0.1
+     }
+    ]
+   },
+   "expect": "REFUSED: perpendicularity needs a datum, and says so"
+  },
+  {
+   "tool": "td_balloon",
+   "arguments": {
+    "view": "PlateTop",
+    "on": {
+     "point": [
+      60,
+      40,
+      8
+     ]
+    }
+   },
+   "expect": "balloon with text 1 (the page's next number)"
+  },
+  {
+   "tool": "td_leader",
+   "arguments": {
+    "view": "PlateTop",
+    "on": {
+     "point": [
+      0,
+      40,
+      8
+     ]
+    },
+    "text": "Break sharp edges"
+   },
+   "expect": "leader and a note"
+  },
+  {
+   "tool": "td_finish",
+   "arguments": {
+    "view": "PlateTop",
+    "on": {
+     "edge": {
+      "through": [
+       [
+        0,
+        0,
+        8
+       ],
+       [
+        0,
+        40,
+        8
+       ]
+      ]
+     }
+    },
+    "ra": "1.6"
+   },
+   "expect": "symbol Surface finish, ra 1.6, removal required, on a leader"
+  },
+  {
+   "tool": "td_weld",
+   "arguments": {
+    "view": "PlateTop",
+    "kind": "fillet",
+    "on": {
+     "point": [
+      60,
+      0,
+      8
+     ]
+    },
+    "size": "3",
+    "allAround": true
+   },
+   "expect": "weld Weld fillet; note: drawn by td_export"
+  },
+  {
+   "tool": "shape_query",
+   "arguments": {
+    "body": "Plate",
+    "kind": "face",
+    "normal": [
+     0,
+     0,
+     1
+    ]
+   },
+   "expect": "one face, the top: note its name (Face<N>) for the next two calls"
+  },
+  {
+   "tool": "td_hatch",
+   "arguments": {
+    "view": "PlateTop",
+    "faces": [
+     "<the top face's name from shape_query, e.g. Face6>"
+    ],
+    "spacing": 3
+   },
+   "expect": "faces hatched, no warning (the face faces the view)"
+  },
+  {
+   "tool": "td_area",
+   "arguments": {
+    "view": "PlateTop",
+    "face": "Plate.<the same face name>",
+    "decimals": 1
+   },
+   "expect": "area 2168.9 mm2 (60 x 40 less the holes and the slot), text A = 2168.9 mm²"
+  },
+  {
+   "tool": "td_cosmetic",
+   "arguments": {
+    "view": "PlateTop",
+    "items": [
+     {
+      "kind": "line",
+      "from": [
+       0,
+       0,
+       8
+      ],
+      "to": [
+       60,
+       40,
+       8
+      ]
+     },
+     {
+      "kind": "circle",
+      "center": [
+       30,
+       20,
+       8
+      ],
+      "radius": 8,
+      "style": "center"
+     },
+     {
+      "kind": "thread",
+      "circle": {
+       "circle": {
+        "diameter": 10
+       }
+      },
+      "internal": true
+     }
+    ]
+   },
+   "expect": "made 3, total 3, native above 0 on 1.1.3 (FreeCAD's own cosmetic edges, visible in the window)"
+  },
+  {
+   "tool": "td_lines",
+   "arguments": {
+    "view": "PlateTop",
+    "action": "extend",
+    "items": [
+     0
+    ],
+    "by": 3
+   },
+   "expect": "extended [0], by 3"
+  },
+  {
+   "tool": "td_lines",
+   "arguments": {
+    "view": "PlateTop",
+    "action": "erase",
+    "items": [
+     0
+    ]
+   },
+   "expect": "erased [0], left 2"
+  },
+  {
+   "tool": "td_dim_format",
+   "arguments": {
+    "dims": [
+     "<the name of the first 6 mm diameter dimension>"
+    ],
+    "prefix": "count",
+    "count": 1,
+    "decimals": 1
+   },
+   "expect": "format with 1× before the value; reads shows the text as drawn"
+  },
+  {
+   "tool": "td_dim_align",
+   "arguments": {
+    "dims": [
+     "<the first dimension td_dimset made, by name>",
+     "<the second>"
+    ],
+    "direction": "horizontal"
+   },
+   "expect": "both at one height"
+  },
+  {
+   "tool": "td_dim_repair",
+   "arguments": {
+    "dimension": "<the radius dimension's name>",
+    "refs": [
+     {
+      "circle": {
+       "diameter": 6,
+       "near": [
+        10,
+        10,
+        8
+       ]
+      }
+     }
+    ]
+   },
+   "expect": "now on the slot's other end, measured 3"
+  },
+  {
+   "tool": "sheet_new",
+   "arguments": {
+    "name": "Parts"
+   },
+   "expect": "a sheet; made names it"
+  },
+  {
+   "tool": "sheet_set",
+   "arguments": {
+    "sheet": "Parts",
+    "rows": [
+     [
+      "Item",
+      "Part",
+      "Qty"
+     ],
+     [
+      1,
+      "Plate",
+      1
+     ]
+    ],
+    "at": "A1"
+   },
+   "expect": "cells A1:C2 filled"
+  },
+  {
+   "tool": "td_table",
+   "arguments": {
+    "page": "Plate drawing",
+    "sheet": "Parts",
+    "at": [
+     330,
+     250
+    ]
+   },
+   "expect": "table on the page, range A1:C2"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "lock",
+    "view": "PlateTop",
+    "locked": true
+   },
+   "expect": "locked true"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "stack",
+    "view": "PlateTop",
+    "to": "top"
+   },
+   "expect": "stackOrder above the others"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "clip",
+    "page": "Plate drawing",
+    "width": 60,
+    "height": 40,
+    "at": [
+     330,
+     80
+    ],
+    "name": "ClipBox"
+   },
+   "expect": "a clip group on the page"
+  },
+  {
+   "tool": "td_list",
+   "arguments": {
+    "page": "Plate drawing"
+   },
+   "expect": "views PlateTop, Section A, Detail B (and the clip); dimensions with measured values; gdt 2 (the frame and datum A); other objects listed"
+  },
+  {
+   "tool": "td_export",
+   "arguments": {
+    "page": "Plate drawing"
+   },
+   "expect": "svg, pdf and dxf written; open the PDF: centre marks on both holes and none on the slot's ends, the top face hatched, the section's cut plain (hatch off), the weld symbol at its leader"
+  }
+ ],
+ "notCovered": [
+  "td_bim: needs a BIM section plane (bim_section); belongs with the BIM model",
+  "td_dim type angle, td_dim_special chamfer_h / chamfer_v: neither part has a chamfer or a slanted edge worth an angle (the tutorial part's sloped face would do for angle in its Left view: td_geometry { view: \"Left\", kind: \"lines\" } and two edge names)",
+  "td_view_more broken, draft, image, symbol, share, move, clip_add: need break sketches, a Draft object, an image or SVG file; lock, stack and clip are run",
+  "td_lines align_h / align_v and style: left out to keep PlateTop's numbers steady for the calls after them",
+  "td_title presets (save, delete, import, export): they write to the person's own presets file",
+  "linking a dimension to the 3D model (TechDraw LinkDimension: References3D, MeasureType True), the tutorial's last step: no td_ tool does it; td_dim_special axo_length is the stand-in",
+  "TechDraw's own PDF / SVG export of a page (TechDrawGui.exportPageAsPdf / exportPageAsSvg): window only, not a td_ tool",
+  "the window: views appearing on the page tab as they are made (the hidden-line thread and the wait) is exercised by every td_view here, but that the page tab repaints is a look, not a reply"
+ ]
+}

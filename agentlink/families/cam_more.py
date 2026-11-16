@@ -196,7 +196,7 @@ def tools(s):
         asm = _assembly(d(), a.get("assembly"))
         parts = [_part(asm, r) for r in (a.get("parts") or [])]
         if len(parts) < 2:
-            raise bad("parts: two or more, held fixed to each other.")
+            raise bad(f"parts: two or more parts of {asm.Label}, held fixed to each other (asm_list lists them).")
         import JointObject
 
         if not hasattr(JointObject, "RigidGroupJoint"):
@@ -226,7 +226,7 @@ def tools(s):
         d().recompute()
         s.snapshot("asm_new_part")
         return {"part": part.Label, "body": body.Label, "inAssembly": lk.Label,
-                "note": "An empty part in the assembly: sketch_new and pd_pad in its body build it in place."}
+                "note": "An empty part in the assembly: sketch_new and pd_pad in its body build it in place. asm_joint and asm_ground do not take this link as a part; a body put in with asm_add they do."}
 
     st = {"type": "string"}
     arr = {"type": "array", "items": {"type": "string"}}
@@ -241,6 +241,6 @@ def tools(s):
         Tool("cam_template_export", "Write a CAM job as a template (job_*.json): its tool controllers, stock, setup sheet and post settings, for the next job.", obj({"job": st, "path": st, "description": st}), cam_template_export),
         Tool("draft_fix", "Draft fixes: action flip_dimension { dimension } (text to the other side) | heal { objects } (old Draft objects brought up to date; all by default).",
              obj({"action": {"type": "string", "enum": ["flip_dimension", "heal"]}, "dimension": st, "objects": arr}, ["action"]), draft_fix, changes=True),
-        Tool("asm_rigid_group", "Hold parts of an assembly fixed to each other as one group (Assembly rigid group, FreeCAD 1.2).", obj({"assembly": st, "parts": arr, "name": st}, ["parts"]), asm_rigid_group, changes=True),
-        Tool("asm_new_part", "A new empty part (App::Part with a PartDesign body) linked into an assembly, to build in place.", obj({"assembly": st, "name": st, "at": v3, "axis": v3, "angle": num}), asm_new_part, changes=True),
+        Tool("asm_rigid_group", "Hold two or more parts of an assembly fixed to each other as one group (Assembly's rigid group joint, FreeCAD 1.2 and newer): parts by label, name. On FreeCAD 1.1 it answers unavailable — asm_joint kind fixed between each pair does the same there. Reply: joint, parts.", obj({"assembly": st, "parts": arr, "name": st}, ["parts"]), asm_rigid_group, changes=True),
+        Tool("asm_new_part", "A new empty part to build in place (Assembly's New Part): an App::Part holding an empty PartDesign body, put in the assembly through an App::Link; name; at [x, y, z], axis and angle degrees place the link. Reply: part, body (sketch_new { body } and pd_pad build in it), inAssembly (the link's label). asm_check checks it where the link stands; asm_joint and asm_ground take bodies put in with asm_new or asm_add, not this link — to joint a part, build the body first and asm_add it.", obj({"assembly": st, "name": st, "at": v3, "axis": v3, "angle": num}), asm_new_part, changes=True),
     ]

@@ -255,8 +255,11 @@ def tools(s):
 
         o = picks.shaped(d(), a.get("compound"), "compound")
         if len(o.Shape.childShapes()) < 2:
-            raise ToolError("invalid_state", f"{o.Label} is one shape, nothing to explode — a compound of several is.")
+            raise ToolError("invalid_state", f"compound: {o.Label} is one {o.Shape.ShapeType.lower()}, nothing to explode — a compound of several pieces is (part_compound makes one; a part_split result is one).")
         g, children = X.explodeCompound(o)
+        if hasattr(o, "Visibility"):
+            # As Part's Explode compound command: the pieces stand in for it.
+            o.Visibility = False
         d().recompute()
         s.snapshot("compound_explode")
         return {"group": g.Label, "pieces": [{"name": c.Label, "volume": round(c.Shape.Volume, 3) if c.Shape.Solids else None} for c in children]}
@@ -265,69 +268,121 @@ def tools(s):
         import CompoundTools.CompoundFilter as CF
 
         o = picks.shaped(d(), a.get("compound"), "compound")
-        f = CF.makeCompoundFilter(s.unique(a.get("name") or f"{o.Label} filtered"))
-        f.Base = o
+        n = len(o.Shape.childShapes())
         how = a.get("keep", "items")
+        # FreeCAD's FilterType: bypass, specific items, collision-pass,
+        # window-volume, window-area, window-length, window-distance.
+        # collision-fail is collision-pass with Invert; window-distribution
+        # was this tool's old word for window-distance.
+        kinds = {"collision-pass": ("collision-pass", False), "collision-fail": ("collision-pass", True), "window-volume": ("window-volume", False),
+                 "window-area": ("window-area", False), "window-length": ("window-length", False), "window-distance": ("window-distance", False),
+                 "window-distribution": ("window-distance", False)}
+        if how != "items" and how not in kinds:
+            raise bad("keep: items { items: [0, 2] } | collision-pass / collision-fail { stencil } | window-volume / window-area / window-length { from, to } | window-distance { stencil, from, to }.")
+        stencil = picks.shaped(d(), a["stencil"], "stencil") if a.get("stencil") else None
+        if how != "items" and kinds[how][0] in ("collision-pass", "window-distance") and stencil is None:
+            raise bad(f"stencil: {how} needs one — the object the pieces are tested against (touching it, or their distance from it).")
+        items = a.get("items")
+        if how == "items":
+            items = [0] if items is None else items
+            wrong = [i for i in items if isinstance(i, bool) or not isinstance(i, int) or not 0 <= i < n]
+            if wrong or not items:
+                raise bad(f"items: the pieces to keep by number from 0 — {o.Label} has {n} (0 … {n - 1})" + (f"; {wrong[0]!r} is not one of them." if wrong else "."))
+        # In the session's document (makeCompoundFilter alone adds to FreeCAD.ActiveDocument).
+        f = CF.makeCompoundFilter("CompoundFilter", d())
+        f.Label = s.unique(a.get("name") or f"{o.Label} filtered", f)
+        f.Base = o
         if how == "items":
             f.FilterType = "specific items"
-            f.items = ";".join(str(int(i)) for i in (a.get("items") or [0]))
-        elif how in ("collision-pass", "collision-fail", "window-volume", "window-area", "window-length", "window-distribution"):
-            f.FilterType = how
-            if a.get("stencil"):
-                f.Stencil = picks.find(d(), a["stencil"], "stencil")
+            f.items = ";".join(str(i) for i in items)
+        else:
+            f.FilterType, f.Invert = kinds[how]
+            if stencil is not None:
+                f.Stencil = stencil
             if a.get("from") is not None:
                 f.WindowFrom = float(a["from"])
             if a.get("to") is not None:
                 f.WindowTo = float(a["to"])
-        else:
-            raise bad("keep: items | collision-pass | collision-fail | window-volume | window-area | window-length | window-distribution.")
-        if getattr(o, "ViewObject", None) is not None:
-            o.ViewObject.Visibility = False
         d().recompute()
         if f.Shape.isNull() or "Invalid" in (getattr(f, "State", None) or []):
-            raise ToolError("failed", f"The filter keeps nothing of {o.Label} ({how}" + ("" if a.get("stencil") or not how.startswith("collision") else ", and collision filters need a stencil") + ") — nothing was made.")
+            why = "no piece touches the stencil" if how == "collision-pass" else "every piece touches the stencil" if how == "collision-fail" else \
+                f"no piece lies within {f.WindowFrom:g} … {f.WindowTo:g}% of the largest (or of the stencil's)" if how.startswith("window") else "nothing passed"
+            raise ToolError("failed", f"The filter keeps nothing of {o.Label} ({how}): {why} — nothing was made.")
+        if getattr(o, "ViewObject", None) is not None:
+            o.ViewObject.Visibility = False
         s.snapshot("compound_filter")
-        return {"filter": f.Label, "kept": len(f.Shape.childShapes())}
+        return {"filter": f.Label, "kept": len(f.Shape.childShapes()) if f.Shape.ShapeType == "Compound" else 1}
 
     def part_join(a):
         import BOPTools.JoinFeatures as J
 
         kind = a.get("kind")
+
+        def feature(proxy, view, default):
+            # In the session's document: BOPTools' make* add to
+            # FreeCAD.ActiveDocument, which is not always this one.
+            j = d().addObject("Part::FeaturePython", default)
+            proxy(j)
+            if FreeCAD.GuiUp and getattr(j, "ViewObject", None) is not None:
+                view(j.ViewObject)
+            j.Label = s.unique(a.get("name") or default, j)
+            return j
+
         if kind == "connect":
-            j = J.makeConnect(s.unique(a.get("name") or "Connect"))
-            j.Objects = objs(a.get("objects"))
+            members = [picks.shaped(d(), r, "objects") for r in picks.ref_list(a.get("objects"), "objects: two or more walled objects (pipes, shells) by name.")]
+            if len(members) < 2:
+                raise bad("objects: two or more walled objects (pipes, shells) by name.")
+            j = feature(J.FeatureConnect, J.ViewProviderConnect, "Connect")
+            j.Objects = members
         elif kind in ("embed", "cutout"):
-            j = (J.makeEmbed if kind == "embed" else J.makeCutout)(s.unique(a.get("name") or kind.title()))
-            j.Base = picks.shaped(d(), a.get("base"), "base")
-            j.Tool = picks.shaped(d(), a.get("tool"), "tool")
+            base, tool = picks.shaped(d(), a.get("base"), "base"), picks.shaped(d(), a.get("tool"), "tool")
+            if base is tool:
+                raise bad("base and tool: two different objects.")
+            j = feature(J.FeatureEmbed, J.ViewProviderEmbed, "Embed") if kind == "embed" else feature(J.FeatureCutout, J.ViewProviderCutout, "Cutout")
+            j.Base, j.Tool = base, tool
+            members = [base, tool]
         else:
             raise bad("kind: connect { objects } (walls fused, insides kept) | embed { base, tool } (tool's wall set into base) | cutout { base, tool } (base cut to fit tool's wall).")
         d().recompute()
         sh = j.Shape
+        if sh.isNull() or "Invalid" in (getattr(j, "State", None) or []):
+            raise ToolError("failed", f"The {kind} failed: {j.getStatusString()} — nothing was made. The objects' walls must cross one another (part_section {{ body, with }} shows whether they meet).")
+        for m in members:
+            # As Part's join commands: the inputs are hidden under the result.
+            if hasattr(m, "Visibility"):
+                m.Visibility = False
         s.snapshot("part_join")
         return {"join": j.Label, "kind": kind, "valid": sh.isValid(), "solids": len(sh.Solids), "volume": round(sh.Volume, 3) if sh.Solids else None}
 
     def part_import_curves(a):
-        p = os.path.expanduser(a.get("path") or "")
+        if not isinstance(a.get("path"), str) or not a["path"].strip():
+            raise bad("path: a STEP, IGES or BREP file with curves (a relative path is in the session's folder).")
+        # As every other reader: a relative path is in the session's folder.
+        p = paths.in_file(s, "part_import_curves", a["path"])
         if not os.path.isfile(p):
-            raise ToolError("not_found", f"path {p!r}: no such file — a STEP, IGES or BREP with curves.")
-        sh = Part.read(p)
+            raise ToolError("not_found", f"path {p!r}: no such file — a STEP, IGES or BREP with curves; a relative path is looked for in the session's folder.")
+        try:
+            sh = Part.read(p)
+        except Exception as e:
+            raise ToolError("failed", f"FreeCAD could not read {os.path.basename(p)} ({e}): a .step / .stp, .iges / .igs or .brep file. Nothing was added.")
         edges = sh.Edges
         if not edges:
-            raise ToolError("invalid_input", f"{os.path.basename(p)} has no curves.")
+            raise ToolError("invalid_input", f"{os.path.basename(p)} has no curves: nothing was added.")
         o = d().addObject("Part::Feature", "CurveNet")
         o.Shape = Part.Compound(edges)
         o.Label = s.unique(a.get("name") or os.path.splitext(os.path.basename(p))[0], o)
-        return done("part_import_curves", {"curves": o.Label, "edges": len(edges), "note": "Edges only, as Part's curve-network import: surface_filling or surface_sections builds faces from them."})
+        return done("part_import_curves", {"curves": o.Label, "edges": len(edges), "note": "Edges only (faces are left out): surface_fill or surface_sections builds faces from them."})
 
     # ---- PartDesign ------------------------------------------------------------------------
 
     def pd_move_feature(a):
         f = picks.find(d(), a.get("feature"), "feature")
+        if not f.TypeId.startswith(("PartDesign::", "Sketcher::", "Part::Part2DObject")) or f.TypeId == "PartDesign::Body":
+            raise bad(f"feature: {f.Label} is a {f.TypeId.split('::')[-1]}, not a PartDesign feature or sketch — a whole solid goes into a body with pd_clone.")
         src = pdc.body_of(f)
         to = pdc.pd_body(d(), a.get("to"))
         if src is to:
-            raise bad(f"{f.Label} is in {to.Label} already.")
+            raise bad(f"{f.Label} is in {to.Label} already: to takes another body (pd_reorder moves it within this one).")
         broken0 = {x["object"] for x in pdc.broken(d())}
         moved = [f]
         # A sketch's feature takes its sketch along, as the GUI's Move does.
@@ -353,7 +408,7 @@ def tools(s):
         new_broken = [x["object"] for x in pdc.broken(d()) if x["object"] not in broken0]
         if new_broken:
             # Raised inside the tool's transaction: the move is taken back.
-            raise ToolError("invalid_state", f"Moving {f.Label} to {to.Label} breaks {', '.join(map(str, new_broken))} — nothing was moved. What it is built on must go with it, or it be rebuilt there.")
+            raise ToolError("invalid_state", f"Moving {f.Label} to {to.Label} breaks {', '.join(map(str, new_broken))} — nothing was moved. A pocket, hole or fillet needs the solid it works on: move the features before it first (the first pad first), or rebuild it in {to.Label}.")
         s.snapshot("pd_move_feature")
         return {"moved": [o.Label for o in moved], "from": src.Label if src else None, "to": to.Label, "tip": to.Tip.Label if to.Tip else None}
 
@@ -361,11 +416,15 @@ def tools(s):
         f = picks.find(d(), a.get("feature"), "feature")
         b = pdc.body_of(f)
         if b is None:
-            raise ToolError("invalid_state", f"{f.Label} is not in a PartDesign body.")
+            raise ToolError("invalid_state", f"{f.Label} is not in a PartDesign body: pd_reorder moves a body's own features and sketches (feature_list names them).")
+        if a.get("after") and a.get("before"):
+            raise bad("after or before, one of them: the feature to put it next to.")
         where = "after" if a.get("after") else "before"
         target = pdc.in_body(b, a.get(where), what=where) if a.get(where) else None
         if target is None:
-            raise bad("after or before: the feature to put it next to.")
+            raise bad("after or before: the feature of the same body to put it next to (feature_list gives the order).")
+        if target is f:
+            raise bad(f"{where}: another feature than {f.Label} itself.")
         broken0 = {x["object"] for x in pdc.broken(d())}
         tip_was = b.Tip
         b.removeObject(f)
@@ -381,31 +440,68 @@ def tools(s):
         d().recompute()
         new_broken = [x["object"] for x in pdc.broken(d()) if x["object"] not in broken0]
         if new_broken:
-            raise ToolError("invalid_state", f"{f.Label} {where} {target.Label} breaks {', '.join(map(str, new_broken))} — nothing was moved: it uses something that would come after it.")
+            raise ToolError("invalid_state", f"{f.Label} {where} {target.Label} breaks {', '.join(map(str, new_broken))} — nothing was moved: a feature may only use what comes before it (its sketch, the faces and edges it names).")
         s.snapshot("pd_reorder")
         order = [o.Label for o in b.Group if not o.TypeId.startswith("App::Origin")]
-        return {"body": b.Label, "order": order, "tip": b.Tip.Label if b.Tip else None, **({"tipMoved": True} if moved_tip else {}),
+        return {"body": b.Label, "order": order, "tip": b.Tip.Label if b.Tip else None, **({"tipMoved": True} if moved_tip else {}), **after_tip(b),
                 "volume": round(b.Shape.Volume, 3) if not b.Shape.isNull() and b.Shape.Solids else None}
+
+    def solid_feature(o):
+        """What a body's tip may be: a feature with a solid of its own — not
+        a sketch, a datum or a binder (Body::execute refuses those: "Linked
+        object is not a PartDesign feature"), nor a MultiTransform's step."""
+        if not o.isDerivedFrom("PartDesign::Feature"):
+            return False
+        return not any(x.TypeId == "PartDesign::MultiTransform" and o in x.Transformations for x in o.InList)
+
+    def after_tip(b):
+        """The solid features past the tip: kept, but not in the body's shape."""
+        g = list(b.Group)
+        if b.Tip is None or b.Tip not in g:
+            return {}
+        left = [o.Label for o in g[g.index(b.Tip) + 1:] if solid_feature(o)]
+        return {"afterTip": left} if left else {}
 
     def pd_tip(a):
         b = pdc.pd_body(d(), a.get("body"))
+        out = {}
         if a.get("feature"):
-            b.Tip = pdc.in_body(b, a["feature"])
+            f = pdc.in_body(b, a["feature"])
+            was = b.Tip
+            if not solid_feature(f):
+                # As the window's Set tip does for a sketch or a datum: the
+                # solid feature before it.
+                g = list(b.Group)
+                prev = next((o for o in reversed(g[:g.index(f)]) if solid_feature(o)), None)
+                if prev is None:
+                    raise bad(f"feature: {f.Label} is a {f.TypeId.split('::')[-1]} with no solid feature before it — the tip is a pad, pocket or other solid feature: "
+                              f"{', '.join(o.Label for o in g if solid_feature(o)) or 'none yet'}.")
+                out["note"] = f"{f.Label} is not a solid feature: the tip went to {prev.Label}, the one before it."
+                f = prev
+            broken0 = {x["object"] for x in pdc.broken(d())}
+            b.Tip = f
             d().recompute()
+            new_broken = [x["object"] for x in pdc.broken(d()) if x["object"] not in broken0]
+            if new_broken:
+                # Raised inside the tool's transaction: the tip goes back.
+                raise ToolError("failed", f"With the tip at {f.Label}, {', '.join(map(str, new_broken))} failed — the tip stays at {was.Label if was else 'none'}.")
             s.snapshot("pd_tip")
-        return {"body": b.Label, "tip": b.Tip.Label if b.Tip else None, "volume": round(b.Shape.Volume, 3) if not b.Shape.isNull() and b.Shape.Solids else None,
-                "note": "Features after the tip are kept but not in the body's shape until the tip moves past them."}
+            out["tipWas"] = was.Label if was else None
+        return {"body": b.Label, "tip": b.Tip.Label if b.Tip else None, "volume": round(b.Shape.Volume, 3) if not b.Shape.isNull() and b.Shape.Solids else None, **after_tip(b), **out,
+                "use": "The body's shape stops at the tip and new features go in right after it; features past it (afterTip) are kept but left out until the tip moves past them."}
 
     def pd_shaft(a):
         segs = a.get("segments") or []
         if not segs:
-            raise bad("segments: [{ length, diameter }, …] from one end; a segment may also give diameterEnd for a taper.")
+            raise bad("segments: [{ length, diameter }, …] in mm, from one end; a segment may also give diameterEnd for a taper.")
         pts, x = [V(0, 0, 0)], 0.0
         for i, sg in enumerate(segs):
+            if not isinstance(sg, dict):
+                raise bad(f"segment {i + 1}: {{ length, diameter }} in mm (diameterEnd for a taper).")
             L, D = float(sg.get("length", 0)), float(sg.get("diameter", 0))
             D2 = float(sg.get("diameterEnd", D))
             if L <= 0 or D <= 0 or D2 <= 0:
-                raise bad(f"segment {i + 1}: length and diameter over 0.")
+                raise bad(f"segment {i + 1}: length and diameter (and diameterEnd) in mm, over 0.")
             pts += [V(x, D / 2, 0), V(x + L, D2 / 2, 0)]
             x += L
         pts.append(V(x, 0, 0))
@@ -425,7 +521,7 @@ def tools(s):
         if picks.placed(a):
             o.Placement = picks.placement(a)
         return done("pd_shaft", {"shaft": o.Label, "length": round(x, 3), "segments": len(segs), "volume": round(o.Shape.Volume, 3),
-                                 "note": "Shoulders are sharp: pd_fillet/part chamfer them; strength_check or fem for loads."})
+                                 "note": "A plain Part solid, not in a PartDesign body: part_fillet or part_chamfer its sharp shoulders; pd_clone brings it into a body for pd_ features."})
 
     # ---- other workbenches' leftovers ---------------------------------------------------
 
@@ -750,7 +846,7 @@ def tools(s):
              obj({"to": st, "kind": {"type": "string", "enum": ["link", "group"]}, "objects": arr, "at": v3, "axis": v3, "angle": num, "count": {"type": "integer"}, "name": st}), link_make, changes=True),
         Tool("link_edit", "Change links: action replace { link, to } | unlink { link } (a real copy in its place) | import { links } / import_all (objects linked from another document copied in).",
              obj({"action": {"type": "string", "enum": ["replace", "unlink", "import", "import_all"]}, "link": st, "links": arr, "to": st, "name": st}, ["action"]), link_edit, changes=True),
-        Tool("part_container", "An App::Part container holding objects, moved together by its placement (Std Part).",
+        Tool("part_container", "An App::Part container holding objects, moved together by its placement (Std Part): objects [names], at, axis + angle. Not a solid: booleans take the bodies inside it.",
              obj({"objects": arr, "at": v3, "axis": v3, "angle": num, "name": st}), part_container, changes=True),
         Tool("object_duplicate", "Copy objects in the document; dependencies: true copies what each is built from too; simple: true copies the shape alone (no history).",
              obj({"objects": arr, "dependencies": {"type": "boolean"}, "simple": {"type": "boolean"}, "name": st}, ["objects"]), object_duplicate, changes=True),
@@ -763,15 +859,18 @@ def tools(s):
              obj({"name": st, "text": st, "append": {"type": "boolean"}}), text_document, changes=True),
         Tool("object_appearance", "Colour objects: color \"#rrggbb\" or random: true, transparency 0–100, faces { \"Face3\": \"#ff0000\" } for a colour per face. Kept on the object, shown in the window.",
              obj({"objects": arr, "color": {}, "random": {"type": "boolean"}, "transparency": {"type": "integer"}, "faces": {"type": "object"}}, ["objects"]), object_appearance, changes=True),
-        Tool("compound_explode", "Split a compound into its pieces, each an object of its own (Part Explode compound).", obj({"compound": st}, ["compound"]), compound_explode, changes=True),
-        Tool("compound_filter", "Keep some pieces of a compound (Part Compound filter): keep items { items: [0, 2] } | collision-pass / collision-fail { stencil } | window-volume / -area / -length / -distribution { from, to } as percents.",
+        Tool("compound_explode", "Split a compound into its pieces (Part Explode compound): each a filter object that follows the compound, in a group; the compound is hidden. part_compound { explode } gives plain bodies instead.", obj({"compound": st}, ["compound"]), compound_explode, changes=True),
+        Tool("compound_filter", "Keep some pieces of a compound (Part Compound filter): keep items { items: [0, 2], from 0 } | collision-pass / collision-fail { stencil: touching it or not } | window-volume / -area / -length { from, to as percents of the largest piece } | window-distance { stencil, from, to }. Refused when nothing passes; the compound is hidden. Reply: filter, kept.",
              obj({"compound": st, "keep": st, "items": {"type": "array", "items": {"type": "integer"}}, "stencil": st, "from": num, "to": num, "name": st}, ["compound"]), compound_filter, changes=True),
-        Tool("part_join", "Join walled objects (Part join features): kind connect { objects } fuses walls keeping the insides; embed { base, tool } sets tool into base; cutout { base, tool } cuts base to fit tool's wall. Pipes and tanks.",
+        Tool("part_join", "Join walled objects (Part join features; inputs hidden): kind connect { objects } fuses walls keeping the insides; embed { base, tool } sets tool into base; cutout { base, tool } cuts base to fit tool's wall. Pipes and tanks. Reply: valid, solids, volume.",
              obj({"kind": {"type": "string", "enum": ["connect", "embed", "cutout"]}, "objects": arr, "base": st, "tool": st, "name": st}, ["kind"]), part_join, changes=True),
-        Tool("part_import_curves", "Import a curve network (the edges of a STEP, IGES or BREP) as one object, for surfacing.", obj({"path": st, "name": st}, ["path"]), part_import_curves, changes=True),
-        Tool("pd_move_feature", "Move a PartDesign feature (with its sketch) to another body.", obj({"feature": st, "to": st}, ["feature", "to"]), pd_move_feature, changes=True),
-        Tool("pd_reorder", "Move a feature in its body's tree: after or before another feature.", obj({"feature": st, "after": st, "before": st}, ["feature"]), pd_reorder, changes=True),
-        Tool("pd_tip", "Read or set a body's tip (the feature its shape stops at): feature.", obj({"body": st, "feature": st}), pd_tip, changes=True),
+        Tool("part_import_curves", "Import a curve network (the edges of a STEP, IGES or BREP; faces left out) as one object, for surface_fill or surface_sections: path (relative: in the session's folder).", obj({"path": st, "name": st}, ["path"]), part_import_curves, changes=True),
+        Tool("pd_move_feature", "Move a PartDesign feature (with its sketch, re-attached to the same origin plane) to another body: feature, to. It goes after that body's tip. Refused, with nothing moved, when it or what is left behind then fails (a pocket needs a solid to cut). Reply: moved, from, to, tip.",
+             obj({"feature": st, "to": st}, ["feature", "to"]), pd_move_feature, changes=True),
+        Tool("pd_reorder", "Move a feature or sketch in its body's history: after or before another one of the same body. Refused, with nothing moved, when something would then use what comes after it. Put after the tip, it becomes the tip. Reply: order, tip, afterTip (solid features past the tip, left out of the shape), volume.",
+             obj({"feature": st, "after": st, "before": st}, ["feature"]), pd_reorder, changes=True),
+        Tool("pd_tip", "Read (no feature) or set a body's tip: the solid feature its shape stops at, and after which new features go in. A sketch or datum given: the solid feature before it. Features past the tip are kept but left out (afterTip) — set it back to the last one when done. Reply: tip, tipWas, afterTip, volume.",
+             obj({"body": st, "feature": st}), pd_tip, changes=True),
         Tool("scad_tidy", "OpenSCAD workbench's tree tools: action color_code (shapes coloured by validity and type) | explode (a fusion or compound back into its pieces) | expand_placements | tolerance { vertex, edge, face mm } (a looser-tolerance copy) | remove_subtree (objects and children nothing else uses) | replace { parent, old, new }.",
              obj({"action": {"type": "string", "enum": ["color_code", "explode", "expand_placements", "tolerance", "remove_subtree", "replace"]}, "objects": arr, "vertex": num, "edge": num, "face": num, "parent": st, "old": st, "new": st}, ["action"]), scad_tidy, changes=True),
         Tool("points_structure", "Make a point cloud structured (rows × columns, as a scanner's grid): width, height.", obj({"points": st, "width": {"type": "integer"}, "height": {"type": "integer"}, "name": st}, ["points", "width"]), points_structure, changes=True),
@@ -779,6 +878,6 @@ def tools(s):
              obj({"from": st, "name": st}, ["from"]), surface_polynomial, changes=True),
         Tool("robot_tool", "Put a tool shape on a robot's flange (Robot's Add tool shape): tool, at for its offset.", obj({"robot": st, "tool": st, "at": v3, "axis": v3, "angle": num}, ["robot", "tool"]), robot_tool, changes=True),
         Tool("sheet_cells", "Merge spreadsheet cells (merge \"A1:C1\") or split a merged one (split \"A1\").", obj({"sheet": st, "merge": st, "split": st}, ["sheet"]), sheet_cells, changes=True),
-        Tool("pd_shaft", "A stepped shaft (the shaft wizard's geometry): segments [{ length, diameter, diameterEnd }] from one end along axis x (or y, z).",
+        Tool("pd_shaft", "A stepped shaft (the shaft wizard's geometry) as one plain Part solid, not in a PartDesign body: segments [{ length, diameter, diameterEnd (a taper) }] mm, from one end along axis x (or y, z); at, name. Reply: shaft, length, volume. part_fillet its shoulders; pd_clone brings it into a body.",
              obj({"segments": {"type": "array", "items": {"type": "object"}}, "axis": {"type": "string", "enum": ["x", "y", "z"]}, "at": v3, "name": st}, ["segments"]), pd_shaft, changes=True),
     ]

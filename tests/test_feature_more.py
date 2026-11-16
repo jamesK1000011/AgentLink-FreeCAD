@@ -41,6 +41,44 @@ class FeatureMore(Base):
         c = self.ok("pd_boolean", {"body": "Sheet", "op": "cut", "with": ["Cutter"]})
         self.assertAlmostEqual(c["volumeChange"], -math.pi * 36 * 3, delta=0.5)
 
+    # ---- the hardening pass (16 Nov 2026) ----
+
+    def test_5_datums_placed_from_the_origin(self):
+        # A datum line's and point's attachers have no FlatFace mode
+        # (Attacher.cpp): placed ones attach by ObjectZ / ObjectOrigin.
+        ln = self.ok("pd_datum", {"body": "Block", "kind": "line", "at": [5, 6, 7], "direction": [1, 0, 0], "name": "Along X"})
+        self.assertEqual(ln["at"], [5.0, 6.0, 7.0])
+        self.assertEqual(ln["direction"], [1.0, 0.0, 0.0])
+        pt = self.ok("pd_datum", {"body": "Block", "kind": "point", "at": [1, 2, 3]})
+        self.assertEqual(pt["at"], [1.0, 2.0, 3.0])
+        cs = self.ok("pd_datum", {"body": "Block", "kind": "lcs", "at": [0, 0, 5], "rotate": {"axis": [0, 0, 1], "angle": 90}})
+        self.assertEqual(cs["at"], [0.0, 0.0, 5.0])
+        self.assertEqual(cs["axes"]["x"], [0.0, 1.0, 0.0])
+        self.refused("pd_datum", {"body": "Block", "kind": "plane"})
+
+    def test_6_multitransform_steps_stay_in_the_body(self):
+        self.ok("pd_body_new", {"name": "Grid"})
+        self.ok("pd_primitive", {"body": "Grid", "kind": "box", "size": {"length": 20, "width": 20, "height": 5}})
+        one = self.ok("pd_primitive", {"body": "Grid", "kind": "cylinder", "size": {"radius": 1, "height": 7}, "at": [5, 5, -1], "subtractive": True, "name": "GBore"})
+        m = self.ok("pd_multitransform", {"body": "Grid", "features": ["GBore"], "name": "GGrid",
+                                          "steps": [{"kind": "linear", "direction": "x", "occurrences": 2, "spacing": 10}, {"kind": "linear", "direction": "y", "occurrences": 2, "spacing": 10}]})
+        self.assertAlmostEqual(m["volume"], 2000 - 4 * math.pi * 5, delta=0.5)
+        self.assertEqual(len(m["steps"]), 2)
+        body = self.session.doc.getObjectsByLabel("Grid")[0]
+        mt = self.session.doc.getObjectsByLabel(m["feature"])[0]
+        # as FreeCAD's own task panel leaves them: in the body, the MultiTransform the tip
+        self.assertTrue(all(body.hasObject(t) for t in mt.Transformations))
+        self.assertEqual(body.Tip.Name, mt.Name)
+        listing = self.ok("feature_list", {"body": "Grid"})
+        self.assertEqual([f["name"] for f in listing["features"] if f.get("stepOf") == m["feature"]], m["steps"])
+        # a step is the MultiTransform's: not removed on its own
+        e = self.refused("feature_remove", {"body": "Grid", "feature": m["steps"][0]})
+        self.assertIn("is used by", e["message"])
+        r = self.ok("feature_remove", {"body": "Grid", "feature": m["feature"]})
+        self.assertEqual(r["removed"], [m["feature"]] + m["steps"])
+        self.assertAlmostEqual(r["volume"], one["volume"], delta=0.01)
+        self.assertEqual(r["tip"], one["feature"])
+
 
 if __name__ == "__main__":
     unittest.main()

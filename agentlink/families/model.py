@@ -594,15 +594,17 @@ def tools(session):
             o = d.addObject("Part::Sphere", "Sphere")
             o.Radius = positive(a, "radius", 5)
         elif kind == "cone":
-            r1, r2 = positive(a, "radius", 5), picks.num(a.get("radius2", 0), "radius2")
+            # FreeCAD's Part::Cone refuses only a radius under 0: either end may be the point.
+            r1 = picks.number(a, "radius", 5, ge=0, msg="radius: the base radius, 0 (a point) or more, mm.")
+            r2 = picks.num(a.get("radius2", 0), "radius2")
             if r2 < 0 or abs(r1 - r2) < 1e-9:
-                raise ToolError("invalid_input", "radius2: the top radius, 0 or more and not equal to radius (that is a cylinder).")
+                raise ToolError("invalid_input", "radius2: the top radius, 0 (a point) or more and not equal to radius — equal radii are kind: \"cylinder\".")
             o = d.addObject("Part::Cone", "Cone")
             o.Radius1, o.Radius2, o.Height = r1, r2, positive(a, "height", 10)
         elif kind == "torus":
             r1, r2 = positive(a, "radius", 10), positive(a, "radius2", 2)
             if r2 >= r1:
-                raise ToolError("invalid_input", "radius2: the tube's radius, under radius (the ring's).")
+                raise ToolError("invalid_input", f"radius2: the tube's radius ({r2:g}), under radius, the ring's ({r1:g}) — else the torus cuts through itself.")
             o = d.addObject("Part::Torus", "Torus")
             o.Radius1, o.Radius2 = r1, r2
         elif kind == "wedge":
@@ -612,14 +614,15 @@ def tools(session):
                 raise ToolError("invalid_input", f"wedge.{bad[0]}: the keys are {', '.join(WEDGE)}.")
             w.update({k: picks.num(v, f"wedge.{k}") for k, v in (a.get("wedge") or {}).items()})
             if not (w["xmax"] > w["xmin"] and w["ymax"] > w["ymin"] and w["zmax"] > w["zmin"] and w["x2max"] >= w["x2min"] and w["z2max"] >= w["z2min"]):
-                raise ToolError("invalid_input", "wedge: each max above its min (x2/z2 may be equal: a ridge).")
+                raise ToolError("invalid_input", "wedge: xmax above xmin, ymax above ymin, zmax above zmin; x2max not under x2min and z2max not under z2min (equal: a ridge or a point). "
+                                "Front face xmin…xmax by zmin…zmax at ymin, rear face x2min…x2max by z2min…z2max at ymax.")
             o = d.addObject("Part::Wedge", "Wedge")
             for k, v in w.items():
                 setattr(o, k[0].upper() + k[1:], v)
         elif kind == "prism":
             n = int(a.get("sides", 6))
             if n < 3:
-                raise ToolError("invalid_input", "sides: 3 or more.")
+                raise ToolError("invalid_input", "sides: 3 or more (a prism's polygon).")
             o = d.addObject("Part::Prism", "Prism")
             o.Polygon, o.Circumradius, o.Height = n, positive(a, "radius", 5), positive(a, "height", 10)
         else:  # tube
@@ -641,7 +644,12 @@ def tools(session):
         o.Placement = pl
         d.recompute()
         if o.Shape.isNull() or not o.Shape.Solids:
-            raise ToolError("failed", f"The {kind} came out empty — check its sizes.")
+            why = ""
+            try:
+                why = f" (FreeCAD: {o.getStatusString()})" if not o.isValid() else ""
+            except Exception:
+                pass
+            raise ToolError("failed", f"The {kind} came out empty{why} — check its sizes; nothing was added.")
         return report(s, o, "part_primitive", {"kind": kind, "type": o.TypeId, "placement": picks.placement_json(o.Placement)})
 
     # ---- booleans ----
@@ -653,7 +661,7 @@ def tools(session):
         names = picks.ref_list(names, "tools: the bodies to fuse, cut away or keep in common with base.")
         tl = [picks.solid_body(s, n) for n in names]
         if any(t is base for t in tl):
-            raise ToolError("invalid_input", "tools: base is among them — a body with itself changes nothing.")
+            raise ToolError("invalid_input", f"tools: base ({base.Label}) is among them — a body with itself changes nothing. tools: the other bodies; base: the one that is kept.")
         bs = base.Shape
         shapes = [t.Shape for t in tl]
         for t in tl:
@@ -789,7 +797,7 @@ def tools(session):
         for ref in refs or []:
             head, sub = picks.split_ref(ref) if isinstance(ref, str) else (None, None)
             if not sub:
-                raise ToolError("invalid_input", f"edges: {ref!r} is not \"Edge3\" or \"Face6\" (a face takes all its edges).")
+                raise ToolError("invalid_input", f"edges: {ref!r} is not \"Edge3\" or \"Face6\" (a face takes all its edges), numbered from 1 — or edges: \"all\". shape_query {{ kind: \"edge\" }} lists them.")
             if head and picks.find(doc(), head) is not o:
                 raise ToolError("invalid_input", f"edges: {ref} is on another body than {o.Label}.")
             el = picks.element(sh, sub, o.Label)
@@ -816,9 +824,9 @@ def tools(session):
             try:
                 res = sh.makeFillet(size, edges) if kind == "fillet" else sh.makeChamfer(size, edges)
             except Exception as e:
-                raise ToolError("failed", f"The {kind} of {size} mm on {len(edges)} edges failed ({e}): try a smaller size, fewer edges at once, or the edges of one face.")
+                raise ToolError("failed", f"The {kind} of {size} mm on {len(edges)} edges failed ({e}): try a smaller size, fewer edges at once, or the edges of one face. Nothing was changed.")
             if res.isNull() or not res.isValid() or not res.Solids:
-                raise ToolError("failed", f"The {kind} left a broken shape: {size} mm is likely more than a face beside an edge can take — smaller, or fewer edges.")
+                raise ToolError("failed", f"The {kind} of {size} mm on {len(edges)} edges left a broken shape: likely more than a face beside an edge can take — smaller, or fewer edges (shape_query {{ kind: \"edge\" }} gives their lengths). Nothing was changed.")
             o2 = picks.bake(s, o, res, a.get("name"))
             return report(s, o2, f"part_{kind}", {"edges": len(edges), "volumeChange": round(o2.Shape.Volume - sh.Volume, 2)})
 
@@ -837,7 +845,7 @@ def tools(session):
         try:
             res = o.Shape.makeOffsetShape(d, 1e-6, join=join, fill=False)
         except Exception as e:
-            raise ToolError("failed", f"The offset failed ({e}): a smaller distance, or join: arc.")
+            raise ToolError("failed", f"The offset of {d} mm failed ({e}): a smaller distance, or join: arc. Inward, it cannot pass a concave fillet's radius or half the thinnest wall. Nothing was changed.")
         if not res.Solids:
             try:
                 res = Part.Solid(Part.Shell(res.Faces)) if res.Faces else res
@@ -852,11 +860,19 @@ def tools(session):
         o = picks.solid_body(s, a.get("body"))
         t = positive(a, "thickness", 1)
         sh = o.Shape
+        if len(sh.Solids) != 1:
+            # Part::Thickness: "Source shape is not single solid."
+            raise ToolError("invalid_state", f"{o.Label} holds {len(sh.Solids)} solids: a shell is made of one solid at a time (as FreeCAD's Part Thickness). part_compound {{ explode: \"{o.Label}\" }} makes each a body, then shell the one meant.")
+        if t <= 2e-3:
+            # makeThickness hands the shape back unchanged at or under twice its tolerance (1e-3).
+            raise ToolError("invalid_input", f"thickness: {t:g} mm is under what OCC shells (above 0.002 mm) — a wall in mm, such as 1.5.")
         faces = []
         for ref in a.get("open") or []:
             head, sub = picks.split_ref(ref)
             if not sub or not sub.startswith("Face"):
-                raise ToolError("invalid_input", f"open: {ref!r} — faces to remove (\"Face6\").")
+                raise ToolError("invalid_input", f"open: {ref!r} is not a face — the faces to remove, as \"Face6\" (shape_query {{ kind: \"face\" }} lists them).")
+            if head and picks.find(doc(), head) is not o:
+                raise ToolError("invalid_input", f"open: {ref} is on another body than {o.Label}.")
             faces.append(picks.element(sh, sub, o.Label))
         if a.get("query"):
             q = dict(a["query"])
@@ -869,7 +885,7 @@ def tools(session):
         try:
             res = sh.makeThickness(faces, -t if inward else t, 1e-3, False, False, 0, {"arc": 0, "intersection": 2}.get(a.get("join", "intersection"), 2))
         except Exception as e:
-            raise ToolError("failed", f"The shell failed ({e}): a thinner wall, or join: arc, or remove fewer faces.")
+            raise ToolError("failed", f"The shell failed ({e}): a thinner wall, or join: arc, or fewer faces opened. Fillets smaller than the wall break an inward shell: shell first, fillet after. Nothing was changed.")
         if res.isNull() or not res.Solids or res.Volume < 1e-6:
             raise ToolError("failed", f"The shell of {t} mm left no solid: thinner than half the part's smallest size.")
         if not res.isValid():
@@ -890,13 +906,16 @@ def tools(session):
         else:
             vec = profile_normal(sh) * picks.num(a.get("length", 10), "length")
         if vec.Length < 1e-9:
-            raise ToolError("invalid_input", "length: not 0.")
+            raise ToolError("invalid_input", "length: not 0 — mm along the profile's normal (negative: the other way), or direction [x, y, z].")
         if a.get("symmetric"):
             base = base.copy()
             base.translate(vec * -0.5)
-        res = base.extrude(vec)
+        try:
+            res = base.extrude(vec)
+        except Exception as e:
+            raise ToolError("failed", f"The extrusion failed ({e}): direction must not lie in the profile's own plane. Nothing was added.")
         if solid and not res.Solids:
-            raise ToolError("failed", "The extrusion made no solid: the profile must be a closed, flat outline.")
+            raise ToolError("failed", "The extrusion made no solid: the profile must be a closed, flat outline (solid: false for a surface from an open one) and direction must leave its plane. Nothing was added.")
         return finish(res, a, "part_extrude", [src])
 
     def part_revolve(a):
@@ -904,12 +923,20 @@ def tools(session):
         solid = a.get("solid", True)
         base = as_face(sh) if solid else sh
         ang = picks.num(a.get("angle", 360), "angle")
-        res = base.revolve(picks.vec3(a.get("at"), "at", (0, 0, 0)), picks.direction(a.get("axis"), "axis", (0, 0, 1)), ang)
+        if abs(ang) < 1e-9 or abs(ang) > 360:
+            # Part::Revolution keeps Angle within -360 … 360.
+            raise ToolError("invalid_input", f"angle: {ang:g} — degrees, not 0 and within -360 … 360 (360: all the way round).")
+        try:
+            res = base.revolve(picks.vec3(a.get("at"), "at", (0, 0, 0)), picks.direction(a.get("axis"), "axis", (0, 0, 1)), ang)
+        except ToolError:
+            raise
+        except Exception as e:
+            raise ToolError("failed", f"The revolve failed ({e}): the profile must lie to one side of the axis (touching it is fine, crossing is not); axis [x,y,z] through at [x,y,z] places the axis. Nothing was added.")
         if solid and not res.Solids:
             try:
                 res = Part.Solid(Part.Shell(res.Faces))
             except Exception:
-                raise ToolError("failed", "The revolve made no solid: the profile must be closed and not cross the axis.")
+                raise ToolError("failed", "The revolve made no solid: the profile must be closed and lie to one side of the axis (axis through at) — or solid: false for a surface. Nothing was added.")
         if solid and res.Volume < 0:
             res.reverse()
         return finish(res, a, "part_revolve", [src])
@@ -1157,6 +1184,10 @@ def tools(session):
         sh, src = profile(s, a.get("profile"), a.get("body"))
         if sh.ShapeType == "Face":
             sh = sh.OuterWire
+        elif sh.ShapeType != "Wire":
+            raise ToolError("invalid_input", f"profile: one outline — {len(sh.Wires)} wires here. Name one wire or face (\"Sketch.Edge1\" is one edge; part_face makes a face whose outer outline is swept).")
+        if solid and not sh.isClosed():
+            raise ToolError("invalid_input", "profile: open, so the sweep has no inside — close it (part_wire { closed: true }), or solid: false for a surface.")
         path_spec = a.get("path")
         if isinstance(path_spec, dict) and "points" in path_spec:
             path_spec = {**path_spec, "closed": path_spec.get("closed", False)}
@@ -1169,9 +1200,9 @@ def tools(session):
         try:
             res = path.makePipeShell([sh], solid, bool(a.get("frenet", False)), {"none": 0, "right": 1, "round": 2}.get(a.get("corners", "right"), 1))
         except Exception as e:
-            raise ToolError("failed", f"The sweep failed ({e}): the profile at the path's start, across it; a path without sharp turns tighter than the profile.")
+            raise ToolError("failed", f"The sweep failed ({e}): put the profile at the path's start, across it (part_transform moves it); no turn of the path tighter than the profile is wide; a helix wants frenet: true. Nothing was added.")
         if solid and not res.Solids:
-            raise ToolError("failed", "The sweep made no solid: a closed profile.")
+            raise ToolError("failed", "The sweep made no solid: the profile must be closed (part_wire { closed: true }) — or solid: false for a surface. Nothing was added.")
         return finish(res, a, "part_sweep", [src, psrc])
 
     placement_in = {"at": {"type": "array", "items": {"type": "number"}}, "rotate": {"type": "object", "description": "{ axis: [x,y,z], angle: degrees } about at"}}
@@ -1179,73 +1210,70 @@ def tools(session):
     return [
         Tool(
             "part_primitive",
-            "Add a FreeCAD primitive as a body: box { size [x,y,z] } (a corner at at), cylinder { radius, height }, cone { radius, radius2 (top), height }, prism { sides, radius (to a corner), height } and tube { radius, radius2 (bore), height } (base centred at at, up +z, or along direction [x,y,z]), sphere { radius } and torus { radius, radius2 } (centred), wedge { wedge: { xmin … z2max } as FreeCAD's Part Wedge }. at [x,y,z] and rotate { axis, angle } place it. Parametric: object_set changes a size later (Length, Radius …) until a boolean bakes it.",
+            "Add a FreeCAD Part primitive as a body (mm, degrees). kind: box { size [x,y,z] }: a corner at at. cylinder { radius, height }, cone { radius (base), radius2 (top); either may be 0 }, prism { sides, radius (centre to corner), height }, tube { radius, radius2 (bore), height }: base centred at at, axis +z or along direction. sphere { radius }, torus { radius (ring), radius2 (tube) }: centred at at. wedge { wedge: { xmin, ymin, zmin, x2min, z2min, xmax, ymax, zmax, x2max, z2max } }: front face at ymin, rear face (x2, z2) at ymax. rotate { axis, angle } turns it about at. Parametric until a boolean, fillet or other part_ step bakes it to a plain shape: till then object_set changes Length / Width / Height (box x, y, z), Radius, Radius1 / Radius2 (cone base / top; torus ring / tube), Polygon / Circumradius, Xmin … Z2max, OuterRadius / InnerRadius. Reply: body, volume, area, faces, solids, box, sound, type, placement.",
             obj({"kind": {"type": "string", "enum": list(PRIMS)}, "size": {"type": "array", "items": {"type": "number"}}, "radius": {"type": "number"}, "radius2": {"type": "number"}, "height": {"type": "number"}, "sides": {"type": "integer"}, "wedge": {"type": "object"}, **placement_in, **direction_in, "name": {"type": "string"}}, ["kind"]),
             part_primitive,
             changes=True,
         ),
         Tool(
             "part_boolean",
-            "fuse, cut or common base with tools (bodies). The result keeps base's name (name: a new one) as a plain shape, coplanar faces merged; the tools are removed (keep: true hides them — a hidden body is still a body to the other tools); a PartDesign Body base gives a new Body on the result and the old one is hidden. hidden names every input hidden. object_delete of the result removes the helpers made for it (the base shape, its BaseFeature) and shows the hidden inputs again under their own names. Refused when nothing would change (not touching, or inside for fuse), for common with no overlap, when a tool is not a sound solid (invalid, open, inside out) and when a fuse drops a tool OCC could not join; the tools are kept then. A boolean of many faces (meshes made solids) is asked about first with its time: the window is frozen while OCC works. Answers whether the result is sound (valid, closed, volume above 0, no sliver faces).",
+            "fuse, cut or common base with tools (solid bodies by name; base is the one kept, and must be named when more than one body is shown). common with several tools keeps what base shares with any of them. Done on the shapes, not as a Part::Cut feature: the result keeps base's label (name: a new one) as a plain shape with coplanar faces merged; the tools are removed (keep: true hides them; a hidden body is still a body to other tools). A PartDesign Body base gives a new Body on the result and the old one is hidden. Trap: faces and edges are renumbered; shape_query again. Refused, with the tools kept, when nothing would change (apart, or inside for fuse), common has no overlap, a tool is not a sound solid (invalid, open, inside out), or OCC drops a tool or makes an invalid result. Heavy with many faces (meshes made solids): past an estimated minute the first call answers with the time and runs nothing, the same call again runs it, and the window is frozen meanwhile. Reply: body, volume, box, sound (problems when not), op, volumeChange, removed or kept, hidden + hiddenNote (object_delete of the result shows the inputs again).",
             obj({"op": {"type": "string", "enum": ["fuse", "cut", "common"]}, "base": body, "tools": {"description": "A body or a list of them."}, "keep": {"type": "boolean"}, "name": {"type": "string"}}, ["op", "tools"]),
             part_boolean,
             changes=True,
         ),
         Tool(
             "part_transform",
-            "Move or copy a body: move { by [dx,dy,dz] }, rotate { axis, angle degrees, about [x,y,z] (its box centre by default) } — in place, copy: true for a new body; mirror { normal, about (box centre) } and scale { factor or [fx,fy,fz], about (origin) } make a new body (mirror fuse: true joins the mirror to the original); linear { count, step [dx,dy,dz] } and polar { count, axis, about, angle (360 shares out evenly) } array the body into itself, fused (fuse: false keeps the copies apart in one body). Trap: face numbers change after this; shape_query again.",
+            "Move or copy a solid body. move { by [dx,dy,dz] } and rotate { axis, angle degrees, about [x,y,z] (default: its box centre) } change its Placement in place (a primitive stays parametric); copy: true makes a new body instead. mirror { normal, about (box centre) } and scale { factor or [fx,fy,fz], about (origin) } make a new body and keep the original (mirror fuse: true joins both into the original). linear { count, step [dx,dy,dz] } and polar { count, axis, about (origin), angle (360 shares out evenly, less runs end to end) } array the body into itself, count with the original, fused (fuse: false keeps the copies apart in one body, quicker for many). Trap: all but move and rotate bake a plain shape and renumber faces and edges; shape_query again. Reply: body, volume, box, sound, op, and placement, from or count.",
             obj({"op": {"type": "string", "enum": ["move", "rotate", "mirror", "scale", "linear", "polar"]}, "body": body, "by": {"type": "array", "items": {"type": "number"}}, "axis": {}, "angle": {"type": "number"}, "about": {"type": "array", "items": {"type": "number"}}, "normal": {}, "factor": {}, "count": {"type": "integer"}, "step": {"type": "array", "items": {"type": "number"}}, "copy": {"type": "boolean"}, "fuse": {"type": "boolean"}, "name": {"type": "string"}}, ["op"]),
             part_transform,
             changes=True,
         ),
         Tool(
             "part_fillet",
-            "Round edges of a body: radius mm; edges [\"Edge3\", \"Face6\" (all its edges) …] or \"all\", and/or query { type, axis, radius, near, inside, of: \"Face6\" … } as shape_query takes for edges. Refused with a broken result: a radius larger than a face beside the edge allows. Trap: fillet last — a later boolean renumbers edges and may not keep the round tidy.",
+            "Round edges of a solid body by radius mm. edges: [\"Edge3\", \"Face6\" (all its edges) …], numbered from 1 as shape_query lists them, or \"all\"; and/or query { type, axis, radius, near, inside, of: \"Face6\" … } as shape_query takes for edges. Done on the shape, not as a Part::Fillet feature: the body becomes a plain shape. Traps: every modelling step renumbers edges, so query again rather than reuse numbers; fillet last. Refused, nothing changed, when OCC fails or leaves a broken shape (a radius larger than a face beside the edge allows). Reply: body, volume, box, sound, edges (how many), volumeChange.",
             obj({"body": body, "radius": {"type": "number"}, "edges": {}, "query": {"type": "object"}, "name": {"type": "string"}}, ["radius"]),
             round_edges("fillet"),
             changes=True,
         ),
         Tool(
             "part_chamfer",
-            "Bevel edges of a body by size mm, the edges picked as part_fillet picks them (edges refs, \"all\", or query).",
+            "Bevel edges of a solid body by size mm (the same on both faces). Edges are picked, numbered and refused as part_fillet's (edges refs from 1, \"all\", or query); reply as part_fillet.",
             obj({"body": body, "size": {"type": "number"}, "edges": {}, "query": {"type": "object"}, "name": {"type": "string"}}, ["size"]),
             round_edges("chamfer"),
             changes=True,
         ),
         Tool(
             "part_offset",
-            "Grow (+) or shrink (-) a solid by distance mm all round; join arc (rounded corners, default) or intersection (sharp). Refused when it leaves no solid (shrunk past half the thinnest part).",
+            "Grow (+) or shrink (-) a solid by distance mm all round (OCC's 3D offset, skin mode); join arc (rounded corners, default) or intersection (sharp). The body becomes a plain shape and its faces are renumbered. Refused, nothing changed, when OCC fails or no solid is left: shrunk past half the thinnest part or past a concave fillet's radius. Reply: body, volume, box, sound, distance.",
             obj({"body": body, "distance": {"type": "number"}, "join": {"type": "string", "enum": ["arc", "intersection"]}, "name": {"type": "string"}}, ["distance"]),
             part_offset,
             changes=True,
         ),
         Tool(
             "part_thickness",
-            "Shell a solid: open the faces named (open [\"Face6\"] or query { normal: \"+z\", sort: \"-z\", limit: 1 }) and leave walls of thickness mm, inward by default (inward: false grows outward). join intersection (sharp, default) or arc. Trap: fillets smaller than the wall break it — shell first, or a thinner wall.",
+            "Shell one solid: open the faces named (open [\"Face6\"], numbered from 1, and/or query { normal: \"+z\", sort: \"-z\", limit: 1 }) and leave walls of thickness mm (above 0.002), inward by default (inward: false grows outward). join intersection (sharp, default) or arc. A body of several solids is refused (part_compound { explode } first). Traps: concave fillets smaller than the wall break an inward shell, so shell first and fillet after; faces are renumbered. Reply: body, volume, box, sound, thickness, inward, opened, volumeChange.",
             obj({"body": body, "thickness": {"type": "number"}, "open": {"type": "array", "items": {"type": "string"}}, "query": {"type": "object"}, "inward": {"type": "boolean"}, "join": {"type": "string", "enum": ["arc", "intersection"]}, "name": {"type": "string"}}, ["thickness"]),
             part_thickness,
             changes=True,
         ),
         Tool(
             "part_extrude",
-            "Extrude a profile into a solid: length along its normal (a face's outward one; +z for a flat outline), or direction [x,y,z] (its length, or length given); symmetric splits it both ways. op new (default without into) | fuse (default with into) | cut | common with into: a boss or a pocket in one call. Refused when the cut or fuse misses into. solid: false gives a surface from an open profile. The source sketch is hidden.",
+            "Extrude a profile into a solid: length mm along its normal (a face's outward one; a flat outline's plane normal, +z in XY; negative goes the other way), or direction [x,y,z] (its own length, or length given); symmetric: half each way. op new (default without into) | fuse (default with into) | cut | common with into: a boss or a pocket in one call, refused when it misses into. solid: false gives a surface from an open profile. Done on the shape, not as a Part::Extrusion feature (no taper). A sketch used as profile is hidden; into's faces are renumbered. Reply: body, volume, area, faces, box, sound; with into also op, volumeChange.",
             obj({"profile": prof, "body": body, "length": {"type": "number"}, "direction": {"type": "array", "items": {"type": "number"}}, "symmetric": {"type": "boolean"}, "solid": {"type": "boolean"}, **common_in}, ["profile"]),
             part_extrude,
             changes=True,
         ),
         Tool(
             "part_revolve",
-            "Revolve a profile about an axis: axis [x,y,z] (+z) through at [x,y,z] (origin), angle degrees (360). The profile must not cross the axis. op / into as part_extrude.",
+            "Revolve a profile about an axis: axis [x,y,z] (default +z) through at [x,y,z] (default the origin), angle degrees (default 360; within -360 … 360, not 0). The profile must lie to one side of the axis (touching it is fine). solid: false gives a surface. profile, op / into and the reply as part_extrude.",
             obj({"profile": prof, "body": body, "axis": {}, "at": {"type": "array", "items": {"type": "number"}}, "angle": {"type": "number"}, "solid": {"type": "boolean"}, **common_in}, ["profile"]),
             part_revolve,
             changes=True,
         ),
         Tool(
             "part_loft",
-            "A solid through two or more profiles in order (each a sketch, face, wire, { points }, { points_file, key } or { circle }; { points, smooth: true } is a B-spline through the points), or all at once from profiles_file (a .json list of point lists, or a .csv; key picks a list inside; smooth: true for B-splines): many sections read from a file, not sent in the call. "
-            "The profiles are lined up first (each run the same way round, each seam at the point nearest the one before: aligned says what changed). ruled: true is straight between them: each profile is made a polygon of the same number of points (spread by arc length, seams lined up; samples sets it; polygons of one corner count keep theirs), so it always pairs up, and route says so. "
-            "Smooth (the default): if OCC refuses the profiles as given, they are rebuilt as B-splines through the same points with one set of knots; if the loft bulges more than 15% beyond its profiles (read from the surface, not its control points), it is tried again at maxDegree 3 then 2 (maxDegree: 1–8, 5 by default; lower is stiffer); if it still bulges, it is lofted span by span with the bulging spans ruled and sewn into one, kept only if sound (segments: false turns that off). route says what was done; a refusal names the spans that bulge (profiles i–i+1, by how much) so ruled or more profiles can go there. "
-            "Two profiles that OCC will not loft smooth are ruled between matching polygons (straight between two anyway). closed: back to the first. The answer gives strays: how far the result lies from the points it was made from at most and on average, and the profile. Refused, with the reason, when invalid, open or inside out. A loft of many profiles and points is heavy (its time grows about as the cube of its faces: 91 profiles of 36 points ruled 10 s, of 80 points over 2 min): it is estimated first from profiles x points (ruled and smooth timed apart) and, past a minute, refused once with the estimate and how to split it (runs of profiles fused, or fewer points: samples) — the same call again runs it, the watchdog waiting its estimate times three. Past its time (60 s, or twice an estimate it was let run on) it stops — between tries, after OCC's loft, before the checks — and says so; a kept loft made late is not soundness-checked (unchecked says so: body_check it). aligned gives the first few changes and a count. op / into as part_extrude.",
+            "A solid (solid: false: a surface) through two or more profiles in order: each a sketch, wire, face, { points, closed, smooth } (smooth: a B-spline through them), { points_file, key } or { circle }; or all at once from profiles_file, so many sections are read from a file, not sent in the call. All closed or all open. They are lined up first (each run the same way round, each seam at the point nearest the one before: aligned says what changed). ruled: true is straight between profiles: each is made a polygon of the same point count (samples), so it always pairs up. Smooth (default): when OCC refuses the profiles or the loft bulges more than 15% beyond them, it tries again by itself: profiles rebuilt as matching B-splines, maxDegree 3 then 2 (maxDegree 1–8, default 5; lower is stiffer), then span by span with the bulging spans ruled (segments: false turns that off). route says what was done; a refusal names the spans that bulge. closed: back to the first profile. Refused, nothing added, when invalid, open or inside out. Heavy: its time grows about as the cube of its faces (91 profiles of 36 points ruled 10 s; of 80 points over 2 min). Past an estimated minute the first call answers with the estimate and how to split it and runs nothing; the same call again runs it. Past its time it stops and says so; a loft kept late is not checked (unchecked: run body_check). Reply: body, volume, box, sound, aligned, route, maxDegree, strays (how far the result lies from the given points: maxDistance, meanDistance, profile). op / into as part_extrude. More: guide_read { topic: \"model\" }.",
             obj({"profiles": {"type": "array", "items": {}, "description": "Each a sketch or wire's name, a face (\"Box.Face6\"), { points: [[x,y,z] …], closed, smooth }, { points_file: \"<file>.json\"|\".csv\", key, closed, smooth } or { circle }."},
                  "profiles_file": {"type": "string", "description": "A .json (a list of [[x,y,z] …] lists, or an object of them) or .csv (x,y,z rows; outlines apart by blank lines or named in a first column) holding every profile, in order. A relative path is in the session's folder."},
                  "key": {"description": "With profiles_file: the name (or number from 0) of the list in the file that holds the profiles."},
@@ -1258,7 +1286,7 @@ def tools(session):
         ),
         Tool(
             "part_sweep",
-            "Sweep a closed profile along a path (a wire or sketch, an edge \"Box.Edge3\", or { points } — open by default): frenet: true keeps a helix's profile upright; corners right (default), round or none at sharp turns. Trap: put the profile at the path's start, across it. op / into as part_extrude.",
+            "Sweep one closed profile (a face gives its outer outline) along a path: a wire or sketch, an edge \"Box.Edge3\", a helix from part_wire, or { points } (open by default). frenet: true keeps the profile from twisting along a helix; corners at sharp turns: right (default), round or none (FreeCAD's Transition Right corner, Round corner, Transformed). solid: false gives a surface, and then the profile may be open. Trap: the profile must already sit at the path's start, across it; it is not moved there. profile, op / into and the reply as part_extrude.",
             obj({"profile": prof, "path": prof, "body": body, "frenet": {"type": "boolean"}, "corners": {"type": "string", "enum": ["right", "round", "none"]}, "solid": {"type": "boolean"}, **common_in}, ["profile", "path"]),
             part_sweep,
             changes=True,

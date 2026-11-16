@@ -12,6 +12,7 @@
 - Face and edge numbers change after every modelling step: query again (`shape_query`) rather than reuse old references.
 - A result keeps the base body's label, so setups and specs follow it; the tools are removed (keep: true hides them, and a hidden body is still listed).
 - A refusal for "changed nothing" means the pieces do not overlap: move them (`part_transform move`) and try again.
+- `part_boolean` `common` with several tools keeps what the base shares with any of them (base ∩ the tools together), as FreeCAD's own common does; for the part shared by all, run `common` once a tool.
 - Fillets bigger than a face beside the edge, or shells thinner than a fillet, fail: smaller sizes, or the shell before the fillet.
 - Loft profiles with different edge counts twist; start each at the matching corner. `part_loft` turns each profile to run the same way round and starts each at the point nearest the one before (`aligned` says what it changed). It keeps no loft that is invalid, open, inside out or bulges more than 15% beyond its profiles (measured on the surface itself, not its control points); the refusal gives the reason and names the spans that bulge (`profiles 11–12 by 37% along y`).
 - A smooth loft through many real sections (a scan's, with local notches) can overshoot between them. `part_loft` tries again by itself: the profiles rebuilt as B-splines through the same points with one set of knots, then `maxDegree` 3 and 2 (stiffer), then span by span with the bulging spans ruled and sewn into one (kept only if sound; `segments: false` turns that off). `route` says what it did. Give `maxDegree: 3` up front for long runs of uneven sections.
@@ -28,6 +29,28 @@
 - `part_split { mode: "slice", bodies: [one], tools: [a plane or bodies] }` cuts a body into pieces; `explode: true` makes each its own body. `fragments` keeps every overlap region apart (for multi-material prints); `xor` keeps what is in an odd number.
 - `part_compound` groups bodies without fusing them, or `explode`s a multi-solid body.
 - `part_refine` merges faces split by booleans; `fix: true` also repairs tolerances and closes a shell into a solid.
-- `part_attach` makes a primitive follow a face. `part_face` is a face from closed wires, `part_ruled` a surface between two edges, `part_project` puts a wire onto a face.
+- `part_attach` makes a primitive, wire or datum follow a face, edge, vertex or whole object (see Attachment below). `part_face` is a face from closed wires, `part_ruled` a surface between two edges, `part_project` puts a wire onto a face.
 - `part_slices` gives a stack of cross-sections: outlines and areas. `part_from_mesh` turns a closed mesh into a solid. Curved areas stay faceted; for a clean model, fit features instead.
 - `part_section` gives the curves where a body meets another body or a plane (face: true fills closed loops). `part_offset2d` grows or shrinks a flat outline in its plane (fill: true makes the band). `part_extract` copies faces, edges or whole shapes out as a body of their own, or builds a wire, face, shell or solid from them. `part_defeature` takes a hole, boss or fillet off a solid by all its faces. `part_fix` reverses, sews, closes into a solid or repairs. `part_datum` makes datum points, lines, planes and coordinate systems, attached so they follow.
+
+## Parametric or plain
+- Stay parametric (their properties can be changed later with `object_set`): `part_primitive` (Box Length / Width / Height; Cylinder Radius, Height, Angle; Cone Radius1 base, Radius2 top; Sphere Radius; Torus Radius1 ring, Radius2 tube; Prism Polygon, Circumradius, Height; Wedge Xmin … Z2max; tube OuterRadius, InnerRadius, Height), `part_wire` (all but bspline), `part_split`, `part_join`, `part_compound`, `compound_filter`, `compound_explode`, `part_ruled`, `part_section` with another body, `part_offset2d` of an open wire or a face, `part_datum`.
+- Everything else works on the shape itself and leaves a plain shape (Part::Feature) with no history: booleans, fillets, chamfers, offset, shell, extrude, revolve, loft, sweep, mirror, scale, arrays, refine, fix, defeature. There is no Part::Cut, Part::Fillet or Part::Extrusion object to edit afterwards; `history_undo` takes a step back.
+- Elements are numbered from 1 (`Face1`, `Edge1`, `Vertex1`), in the shape's own order. Any step that leaves a plain shape renumbers them. Ask `shape_query` again after each step; pick by `query` where a tool takes one.
+- Where things sit: a box has a corner at `at`; a cylinder, cone, prism and tube stand on `at` (base centre) along +z or `direction`; a sphere and torus are centred on it; a `part_wire` plane has a corner at `at`, its other curves their centre. `rotate` turns about `at`.
+
+## Attachment
+- `part_attach` and `part_datum { to }` take one reference. The modes FreeCAD's attacher has for one reference: a flat face `FlatFace`; an edge `NormalToEdge`, `FrenetNB`, `Concentric` (a circle or arc); a vertex `Translate`; a whole object `ObjectXY`, `ObjectXZ`, `ObjectYZ`. A datum line takes `TwoPointLine` (a straight edge) or `AxisOfCurvature` (a circle or arc); a datum point `Vertex`, `CenterOfCurvature`, `CenterOfMass`.
+- Modes that need two or three references (`TangentPlane` and a line's `FaceNormal`: a face and a vertex; `ThreePointsPlane`) cannot be reached with one `to`. A line datum on a face therefore needs a `mode` of its own (`AxisOfInertia1` …) or no attachment (`at` and `normal`).
+- An attachment names a face or edge by number. A boolean or fillet on the support renumbers it, and the attached object then follows another element: attach to datums or to primitives that stay parametric.
+
+## Heavy steps
+- These freeze FreeCAD's window while OCC works and cannot run as a background job (jobs are for reads): booleans of many faces, lofts of many profiles and points, `part_from_mesh`, fused arrays of many copies, offsets and shells of free-form bodies.
+- `part_boolean` and `part_loft` are estimated first; past a minute the first call answers with the estimate and runs nothing, and the same call again runs it.
+- `part_from_mesh` makes a face of every triangle: it refuses a mesh over `maxFacets` (60000 by default), and far smaller ones are already slow in every later boolean. Reduce the mesh first (`meshobj_decimate`), do the boolean on the meshes (`meshobj_boolean`), or fit features to the scan instead.
+- `part_transform` arrays: `fuse: false` keeps the copies apart in one body and is far quicker than fusing many.
+
+## Compounds
+- `part_compound { explode }` copies each solid out as a plain body. `compound_explode` is FreeCAD's Explode compound: filter objects that follow the compound.
+- `compound_filter` keeps pieces by number from 0 (`items`), by touching a stencil or not (`collision-pass`, `collision-fail`), or by size as a percent of the largest piece (`window-volume`, `window-area`, `window-length`) or distance from a stencil (`window-distance`).
+- `part_slices` measures `at` from the origin along the normal; `range` in its answer is the body's reach along it. Each slice's `area` is the material's: loops inside loops are holes.

@@ -1,0 +1,1509 @@
+{
+ "tutorial": "Whiffle_Ball_tutorial.md (FreeCAD wiki, Part workbench), steps 2-27; the calls after it reach the Part tools the tutorial does not use",
+ "reference": "github.com/FreeCAD/Examples: Whiffle_Ball_Tutorial_ExampleFiles/WhiffleBall_Tutorial_FCWiki.FCStd (on the Mac: the reference copy: )",
+ "expected": {
+  "source": "Sizes and placements are the tutorial's and the answer key's Document.xml (Box 90, Box001 80, three cylinders r 27.5 h 120, Box002/004 140 x 112 x 112 and Box003/005 180 cubes with the file's placements). The file stores no volumes; the volumes below were derived here from those dimensions (exact polytope clipping for the cube parts, the six 5 mm hole plugs checked to lie wholly inside the trimming boxes). Face counts are not given by the tutorial.",
+  "afterStep11_Cut": {
+   "volume_mm3": 145725.12,
+   "box": [
+    90,
+    90,
+    90
+   ],
+   "faces": 18
+  },
+  "fusion_step10": {
+   "volume_mm3": 797099.53,
+   "box": [
+    120,
+    120,
+    120
+   ]
+  },
+  "Cut001_and_Cut002": {
+   "volume_mm3": 4075840.0
+  },
+  "Cut003": {
+   "volume_mm3": 118681.94
+  },
+  "final_Cut004": {
+   "volume_mm3": 91638.77,
+   "box": [
+    90,
+    90,
+    90
+   ],
+   "solids": 1
+  },
+  "halves_at_z0": {
+   "volume_mm3_each": 45819.38
+  },
+  "section_at_z0": {
+   "area_mm2": 600.0,
+   "closedLoops": 4,
+   "length_mm": 280.0
+  },
+  "slices_at_z_plus_minus_22_5": {
+   "area_mm2": 874.687
+  },
+  "placement_Box002": {
+   "at": [
+    -49.497,
+    -49.497,
+    -79.196
+   ],
+   "axis": [
+    0.679,
+    0.281,
+    0.679
+   ],
+   "angle": 62.7994
+  },
+  "fillet_step27": "not in the answer key (it stops at Cut004); no number derived",
+  "tolerances": "volumes within 0.05 % unless a call says otherwise; replies round volume to 2 places and box to 3"
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "PartHardening"
+   },
+   "expect": "a new empty document"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     90,
+     90,
+     90
+    ],
+    "at": [
+     -45,
+     -45,
+     -45
+    ],
+    "name": "Cube"
+   },
+   "expect": "tutorial 2-3. body Cube, type Part::Box, volume 729000, box [90,90,90], sound true, placement.at [-45,-45,-45]"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "name": "Inner"
+   },
+   "expect": "tutorial 4, made at FreeCAD's defaults first: volume 1000, box [10,10,10]"
+  },
+  {
+   "tool": "object_set",
+   "arguments": {
+    "object": "Inner",
+    "values": {
+     "Length": 80,
+     "Width": 80,
+     "Height": 80,
+     "Placement": {
+      "at": [
+       -40,
+       -40,
+       -40
+      ]
+     }
+    }
+   },
+   "expect": "tutorial 4.3-4.9: the primitive is still parametric; Length/Width/Height (x, y, z) and the placement change"
+  },
+  {
+   "tool": "body_check",
+   "arguments": {
+    "body": "Inner"
+   },
+   "expect": "volume 512000, sound"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 27.5,
+    "height": 120,
+    "at": [
+     0,
+     0,
+     -60
+    ],
+    "name": "CylZ"
+   },
+   "expect": "tutorial 6. type Part::Cylinder, volume 285099.53, box [55,55,120]"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 27.5,
+    "height": 120,
+    "at": [
+     0,
+     60,
+     0
+    ],
+    "rotate": {
+     "axis": [
+      1,
+      0,
+      0
+     ],
+     "angle": 90
+    },
+    "name": "CylY"
+   },
+   "expect": "tutorial 7 (Y 60, rotation X 90, as the answer key's Cylinder001: Q = (0.7071, 0, 0, 0.7071)). box [55,120,55]; placement.axis [1,0,0], angle 90"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 27.5,
+    "height": 120,
+    "at": [
+     -60,
+     0,
+     0
+    ],
+    "direction": [
+     1,
+     0,
+     0
+    ],
+    "name": "CylX"
+   },
+   "expect": "tutorial 8 through direction instead of rotate (answer key Cylinder002: rotation Y 90). box [120,55,55]; placement.axis [0,1,0], angle 90"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "fuse",
+    "base": "Inner",
+    "tools": [
+     "CylZ",
+     "CylY",
+     "CylX"
+    ]
+   },
+   "expect": "tutorial 10 (Fusion). body Inner, volume 797099.53 (80^3 + 6 x pi x 27.5^2 x 20), box [120,120,120], sound true, removed [CylZ, CylY, CylX]; Inner is now a plain shape"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "cut",
+    "base": "Cube",
+    "tools": [
+     "Inner"
+    ]
+   },
+   "expect": "tutorial 11 (Cut). body Cube, volume 145725.12 (90^3 - 80^3 - 6 x pi x 27.5^2 x 5), box [90,90,90], faces 18 (6 outer, 6 inner, 6 hole walls: my count, not the tutorial's), sound true, removed [Inner]"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     140,
+     112,
+     112
+    ],
+    "at": [
+     -70,
+     -56,
+     -56
+    ],
+    "name": "Trim A inner"
+   },
+   "expect": "tutorial 12 (Cube002). volume 1756160"
+  },
+  {
+   "tool": "part_transform",
+   "arguments": {
+    "op": "rotate",
+    "body": "Trim A inner",
+    "axis": [
+     1,
+     0,
+     0
+    ],
+    "angle": 45,
+    "about": [
+     0,
+     0,
+     0
+    ]
+   },
+   "expect": "tutorial 17.3. in place, still Part::Box: placement.at [-70, 0, -79.196], axis [1,0,0], angle 45"
+  },
+  {
+   "tool": "part_transform",
+   "arguments": {
+    "op": "rotate",
+    "body": "Trim A inner",
+    "axis": [
+     0,
+     0,
+     1
+    ],
+    "angle": 45,
+    "about": [
+     0,
+     0,
+     0
+    ]
+   },
+   "expect": "tutorial 17.4. placement as the answer key's Box002: at [-49.497, -49.497, -79.196], axis [0.679, 0.281, 0.679], angle 62.7994; volume still 1756160"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     180,
+     180,
+     180
+    ],
+    "at": [
+     -63.639610306789,
+     -63.639610306789,
+     -127.279220613579
+    ],
+    "rotate": {
+     "axis": [
+      0.67859834,
+      0.28108464,
+      0.67859834
+     ],
+     "angle": 62.79942962
+    },
+    "name": "Trim A outer"
+   },
+   "expect": "tutorial 13 + 17 in one call, placed as the answer key's Box003. volume 5832000"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "cut",
+    "base": "Trim A outer",
+    "tools": [
+     "Trim A inner"
+    ]
+   },
+   "expect": "tutorial 18 (Cut001). volume 4075840 (180^3 - 140 x 112 x 112), solids 1 (a solid with a cavity), sound true"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     140,
+     112,
+     112
+    ],
+    "at": [
+     -49.497474683058,
+     49.497474683058,
+     -79.195959492893
+    ],
+    "rotate": {
+     "axis": [
+      0.67859834,
+      -0.28108464,
+      -0.67859834
+     ],
+     "angle": 62.79942962
+    },
+    "name": "Trim B inner"
+   },
+   "expect": "tutorial 14 + 21, placed as the answer key's Box004. volume 1756160"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     180,
+     180,
+     180
+    ],
+    "at": [
+     -63.639610306789,
+     63.639610306789,
+     -127.279220613579
+    ],
+    "rotate": {
+     "axis": [
+      0.67859834,
+      -0.28108464,
+      -0.67859834
+     ],
+     "angle": 62.79942962
+    },
+    "name": "Trim B outer"
+   },
+   "expect": "tutorial 15 + 21, as the answer key's Box005. volume 5832000"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "cut",
+    "base": "Trim B outer",
+    "tools": [
+     "Trim B inner"
+    ]
+   },
+   "expect": "tutorial 22 (Cut002). volume 4075840"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "cut",
+    "base": "Cube",
+    "tools": [
+     "Trim A outer"
+    ]
+   },
+   "expect": "tutorial 25 (Cut003). volume 118681.94, box [90,90,90], sound true"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "cut",
+    "base": "Cube",
+    "tools": [
+     "Trim B outer"
+    ]
+   },
+   "expect": "tutorial 26 (Cut004), the whiffle ball. volume 91638.77, box [90,90,90], solids 1, sound true"
+  },
+  {
+   "tool": "body_check",
+   "arguments": {
+    "body": "Cube"
+   },
+   "expect": "valid, closed, one solid, volume 91638.766"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "plane",
+    "length": 200,
+    "width": 200,
+    "at": [
+     -100,
+     -100,
+     0
+    ],
+    "name": "Mid plane"
+   },
+   "expect": "object Mid plane, type Plane, faces 1, area 40000, box [200,200,0]: a corner at at"
+  },
+  {
+   "tool": "part_section",
+   "arguments": {
+    "body": "Cube",
+    "with": "Mid plane",
+    "name": "Ball outline"
+   },
+   "expect": "a parametric Part::Section: closedLoops 4 (the four corner L shapes at z = 0), length_mm 280, edges 24 (6 a loop, unless OCC splits one)"
+  },
+  {
+   "tool": "part_section",
+   "arguments": {
+    "body": "Cube",
+    "plane": {
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "at": [
+      0,
+      0,
+      0
+     ]
+    },
+    "face": true,
+    "name": "Ball section"
+   },
+   "expect": "closedLoops 4, length_mm 280, area_mm2 600 (8100 - 6400 - 4 x 55 x 5)"
+  },
+  {
+   "tool": "part_slices",
+   "arguments": {
+    "body": "Cube",
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "count": 3,
+    "name": "Ball slices"
+   },
+   "expect": "range [-45, 45]; slices at -22.5, 0, 22.5 with area 874.687, 600, 874.687 and 4 wires each"
+  },
+  {
+   "tool": "part_split",
+   "arguments": {
+    "mode": "slice",
+    "bodies": [
+     "Cube"
+    ],
+    "tools": [
+     "Mid plane"
+    ],
+    "explode": true,
+    "name": "Halves"
+   },
+   "expect": "pieces 2, each volume 45819.383; bodies [Halves 1, Halves 2]; no note; Cube and Mid plane hidden"
+  },
+  {
+   "tool": "part_compound",
+   "arguments": {
+    "bodies": [
+     "Halves 1",
+     "Halves 2"
+    ],
+    "name": "Halves again"
+   },
+   "expect": "object Halves again, type Compound, solids 2, volume 91638.77"
+  },
+  {
+   "tool": "compound_filter",
+   "arguments": {
+    "compound": "Halves again",
+    "keep": "items",
+    "items": [
+     1
+    ],
+    "name": "One half"
+   },
+   "expect": "kept 1 (items count from 0)"
+  },
+  {
+   "tool": "compound_filter",
+   "arguments": {
+    "compound": "Halves again",
+    "keep": "collision-fail",
+    "stencil": "Mid plane",
+    "name": "None left"
+   },
+   "expect": "refused: both halves touch the plane, so nothing passes ('every piece touches the stencil'); nothing made, Halves again still shown"
+  },
+  {
+   "tool": "compound_filter",
+   "arguments": {
+    "compound": "Halves again",
+    "keep": "window-volume",
+    "from": 50,
+    "to": 100,
+    "name": "Big ones"
+   },
+   "expect": "kept 2 (equal halves, both within 50-100% of the largest)"
+  },
+  {
+   "tool": "compound_explode",
+   "arguments": {
+    "compound": "Halves again"
+   },
+   "expect": "group 'Exploded Halves again', pieces 2 (Halves again.0, Halves again.1), each volume 45819.383"
+  },
+  {
+   "tool": "part_fillet",
+   "arguments": {
+    "body": "Cube",
+    "radius": 1,
+    "edges": "all",
+    "name": "Whiffle ball"
+   },
+   "expect": "tutorial 27 (fillet all edges, 1 mm). If OCC makes it: a new body 'Whiffle ball', volume a little under 91638.77, box [90,90,90], sound true, Cube kept. A refusal ('failed … nothing was changed') is a finding to record, not a script error: FreeCAD's own Part Fillet is what the tutorial uses, and the answer-key file stops at Cut004 (no Fillet object in it)"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     40,
+     30,
+     20
+    ],
+    "at": [
+     200,
+     0,
+     0
+    ],
+    "name": "Block"
+   },
+   "expect": "volume 24000"
+  },
+  {
+   "tool": "shape_query",
+   "arguments": {
+    "body": "Block",
+    "kind": "face",
+    "normal": [
+     0,
+     0,
+     1
+    ]
+   },
+   "expect": "one face, ref Face6 (a Part::Box's top)"
+  },
+  {
+   "tool": "part_extrude",
+   "arguments": {
+    "profile": "Block.Face6",
+    "length": 5,
+    "into": "Block"
+   },
+   "expect": "a boss fused in one call: op fuse, volumeChange 6000, volume 30000, box [40,30,25], faces 6 (coplanar faces merged)"
+  },
+  {
+   "tool": "part_extrude",
+   "arguments": {
+    "profile": {
+     "circle": {
+      "center": [
+       220,
+       15,
+       25
+      ],
+      "radius": 5,
+      "normal": [
+       0,
+       0,
+       1
+      ]
+     }
+    },
+    "direction": [
+     0,
+     0,
+     -1
+    ],
+    "length": 10,
+    "into": "Block",
+    "op": "cut"
+   },
+   "expect": "a pocket: op cut, volumeChange -785.4, volume 29214.6"
+  },
+  {
+   "tool": "part_fillet",
+   "arguments": {
+    "body": "Block",
+    "radius": 2,
+    "query": {
+     "type": "line",
+     "axis": [
+      0,
+      0,
+      1
+     ],
+     "length": [
+      24,
+      26
+     ]
+    }
+   },
+   "expect": "the four 25 mm vertical edges (the hole's 10 mm seam is left out by length): edges 4, volumeChange -85.84, volume 29128.76"
+  },
+  {
+   "tool": "part_chamfer",
+   "arguments": {
+    "body": "Block",
+    "size": 1,
+    "query": {
+     "type": "circle",
+     "radius": 5,
+     "sort": "-z",
+     "limit": 1
+    }
+   },
+   "expect": "the pocket's top rim: edges 1, volumeChange -16.76 (pi x (5 + 1/3)), volume 29112.0"
+  },
+  {
+   "tool": "part_refine",
+   "arguments": {
+    "body": "Block"
+   },
+   "expect": "faces before = after (nothing left to merge), sound true"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     30,
+     30,
+     30
+    ],
+    "at": [
+     300,
+     0,
+     0
+    ],
+    "name": "Cup"
+   },
+   "expect": "volume 27000"
+  },
+  {
+   "tool": "part_thickness",
+   "arguments": {
+    "body": "Cup",
+    "thickness": 2,
+    "query": {
+     "normal": [
+      0,
+      0,
+      1
+     ],
+     "sort": "-z",
+     "limit": 1
+    }
+   },
+   "expect": "opened 1, inward true, volume 8072 (27000 - 26 x 26 x 28)"
+  },
+  {
+   "tool": "part_thickness",
+   "arguments": {
+    "body": "Cup",
+    "thickness": 0.001,
+    "open": [
+     "Face1"
+    ]
+   },
+   "expect": "refused: thickness above 0.002 mm"
+  },
+  {
+   "tool": "part_transform",
+   "arguments": {
+    "op": "move",
+    "body": "Cup",
+    "by": [
+     0,
+     0,
+     5
+    ]
+   },
+   "expect": "in place: placement.at [0,0,5] (a plain shape's own placement), volume 8072"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     10,
+     10,
+     10
+    ],
+    "at": [
+     350,
+     0,
+     0
+    ],
+    "name": "Pad"
+   },
+   "expect": "volume 1000"
+  },
+  {
+   "tool": "part_offset",
+   "arguments": {
+    "body": "Pad",
+    "distance": 1,
+    "join": "intersection"
+   },
+   "expect": "volume 1728, box [12,12,12], distance 1 (join arc would give 1698.44)"
+  },
+  {
+   "tool": "part_transform",
+   "arguments": {
+    "op": "mirror",
+    "body": "Pad",
+    "normal": [
+     1,
+     0,
+     0
+    ],
+    "about": [
+     345,
+     0,
+     0
+    ],
+    "name": "Pad mirror"
+   },
+   "expect": "a new body Pad mirror, from Pad, volume 1728 (it spans x 329 … 341)"
+  },
+  {
+   "tool": "part_transform",
+   "arguments": {
+    "op": "linear",
+    "body": "Pad mirror",
+    "count": 3,
+    "step": [
+     0,
+     20,
+     0
+    ],
+    "fuse": false
+   },
+   "expect": "count 3, solids 3, volume 5184, note: separate solids"
+  },
+  {
+   "tool": "part_transform",
+   "arguments": {
+    "op": "polar",
+    "body": "Pad",
+    "count": 4,
+    "axis": [
+     0,
+     0,
+     1
+    ],
+    "about": [
+     355,
+     40,
+     0
+    ],
+    "angle": 360,
+    "fuse": false,
+    "name": "Pad ring"
+   },
+   "expect": "count 4, solids 4, volume 6912"
+  },
+  {
+   "tool": "part_transform",
+   "arguments": {
+    "op": "scale",
+    "body": "Pad",
+    "factor": [
+     1,
+     1,
+     0.5
+    ],
+    "about": [
+     350,
+     0,
+     0
+    ],
+    "name": "Pad half"
+   },
+   "expect": "a new body, volume 864, box [12,12,6]"
+  },
+  {
+   "tool": "part_revolve",
+   "arguments": {
+    "profile": {
+     "points": [
+      [
+       405,
+       0,
+       0
+      ],
+      [
+       410,
+       0,
+       0
+      ],
+      [
+       410,
+       0,
+       10
+      ],
+      [
+       405,
+       0,
+       10
+      ]
+     ]
+    },
+    "axis": [
+     0,
+     0,
+     1
+    ],
+    "at": [
+     400,
+     0,
+     0
+    ],
+    "name": "Ring"
+   },
+   "expect": "volume 2356.19 (pi x (100 - 25) x 10), box [20,20,10]"
+  },
+  {
+   "tool": "part_revolve",
+   "arguments": {
+    "profile": {
+     "points": [
+      [
+       405,
+       0,
+       0
+      ],
+      [
+       410,
+       0,
+       0
+      ],
+      [
+       410,
+       0,
+       10
+      ],
+      [
+       405,
+       0,
+       10
+      ]
+     ]
+    },
+    "axis": [
+     0,
+     0,
+     1
+    ],
+    "at": [
+     400,
+     0,
+     0
+    ],
+    "angle": 400
+   },
+   "expect": "refused: angle within -360 … 360"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "helix",
+    "pitch": 5,
+    "height": 20,
+    "radius": 8,
+    "at": [
+     450,
+     0,
+     0
+    ],
+    "name": "Coil path"
+   },
+   "expect": "type Helix, length 202.05, box z 20, closed false"
+  },
+  {
+   "tool": "part_sweep",
+   "arguments": {
+    "profile": {
+     "circle": {
+      "center": [
+       458,
+       0,
+       0
+      ],
+      "radius": 1,
+      "normal": [
+       0,
+       1,
+       0
+      ]
+     }
+    },
+    "path": "Coil path",
+    "frenet": true,
+    "name": "Spring"
+   },
+   "expect": "a solid spring, volume about 634.8 (pi x 1^2 x 202.05; within 2 %), sound true"
+  },
+  {
+   "tool": "part_loft",
+   "arguments": {
+    "profiles": [
+     {
+      "circle": {
+       "center": [
+        500,
+        0,
+        0
+       ],
+       "radius": 10
+      }
+     },
+     {
+      "circle": {
+       "center": [
+        500,
+        0,
+        20
+       ],
+       "radius": 5
+      }
+     }
+    ],
+    "name": "Taper"
+   },
+   "expect": "a frustum: volume 3665.19 (pi x 20 / 3 x 175), box [20,20,20], sound true, strays.maxDistance near 0"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "polygon",
+    "sides": 6,
+    "radius": 10,
+    "at": [
+     550,
+     0,
+     0
+    ],
+    "name": "Hex"
+   },
+   "expect": "type RegularPolygon, closed true, length 60"
+  },
+  {
+   "tool": "part_face",
+   "arguments": {
+    "from": [
+     "Hex"
+    ],
+    "name": "Hex face"
+   },
+   "expect": "faces 1, area 259.8076"
+  },
+  {
+   "tool": "part_offset2d",
+   "arguments": {
+    "shape": "Hex",
+    "distance": 2,
+    "fill": true,
+    "name": "Hex band"
+   },
+   "expect": "area_mm2 132.566 (60 x 2 + pi x 4), a plain shape (a closed wire goes through its face)"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "line",
+    "from": [
+     600,
+     0,
+     0
+    ],
+    "to": [
+     620,
+     0,
+     0
+    ],
+    "name": "Rail A"
+   },
+   "expect": "length 20"
+  },
+  {
+   "tool": "part_wire",
+   "arguments": {
+    "kind": "line",
+    "from": [
+     600,
+     10,
+     10
+    ],
+    "to": [
+     620,
+     10,
+     10
+    ],
+    "name": "Rail B"
+   },
+   "expect": "length 20"
+  },
+  {
+   "tool": "part_ruled",
+   "arguments": {
+    "a": "Rail A",
+    "b": "Rail B",
+    "name": "Ramp"
+   },
+   "expect": "type RuledSurface, faces 1, area 282.8427"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     40,
+     40,
+     5
+    ],
+    "at": [
+     530,
+     -20,
+     -20
+    ],
+    "name": "Screen"
+   },
+   "expect": "volume 8000; its top (Face6) at z = -15"
+  },
+  {
+   "tool": "part_ruled",
+   "arguments": {
+    "a": "Rail A",
+    "b": "Screen.Edge1",
+    "name": "Ramp to edge"
+   },
+   "expect": "one edge of a body as Curve2 (Screen, ['Edge1']): faces 1"
+  },
+  {
+   "tool": "part_project",
+   "arguments": {
+    "shape": "Hex",
+    "onto": "Screen.Face6",
+    "direction": [
+     0,
+     0,
+     -1
+    ],
+    "name": "Hex on screen"
+   },
+   "expect": "edges 6, length 60, how 'along [0, 0, -1]', no missed"
+  },
+  {
+   "tool": "part_extract",
+   "arguments": {
+    "refs": [
+     "Screen.Face6"
+    ],
+    "name": "Screen top"
+   },
+   "expect": "build copy, faces 1, area_mm2 1600, valid true"
+  },
+  {
+   "tool": "part_extract",
+   "arguments": {
+    "refs": [
+     "Screen"
+    ],
+    "build": "solid",
+    "name": "Screen again"
+   },
+   "expect": "solids 1, volume_mm3 8000, valid true"
+  },
+  {
+   "tool": "part_fix",
+   "arguments": {
+    "body": "Screen again",
+    "op": "reverse"
+   },
+   "expect": "volume_mm3 -8000, notes: inside out"
+  },
+  {
+   "tool": "part_fix",
+   "arguments": {
+    "body": "Screen again",
+    "op": "reverse"
+   },
+   "expect": "volume_mm3 8000 again"
+  },
+  {
+   "tool": "part_fix",
+   "arguments": {
+    "body": "Screen again",
+    "op": "fix"
+   },
+   "expect": "valid true, closed true"
+  },
+  {
+   "tool": "part_datum",
+   "arguments": {
+    "kind": "plane",
+    "to": "Screen.Face6",
+    "name": "Screen datum"
+   },
+   "expect": "type Part::DatumPlane, mode FlatFace, placement.at z -15"
+  },
+  {
+   "tool": "part_datum",
+   "arguments": {
+    "kind": "line",
+    "to": "Screen.Face6",
+    "name": "No line"
+   },
+   "expect": "refused: a line on a face needs mode (FaceNormal takes a face and a vertex); nothing left in the document"
+  },
+  {
+   "tool": "part_datum",
+   "arguments": {
+    "kind": "line",
+    "to": "Screen.Edge1",
+    "name": "Edge line"
+   },
+   "expect": "mode TwoPointLine (a straight edge)"
+  },
+  {
+   "tool": "part_datum",
+   "arguments": {
+    "kind": "point",
+    "at": [
+     1,
+     2,
+     3
+    ],
+    "name": "Loose point"
+   },
+   "expect": "type Part::DatumPoint, placement.at [1,2,3], no mode"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 2,
+    "height": 5,
+    "name": "Peg"
+   },
+   "expect": "volume 62.83"
+  },
+  {
+   "tool": "part_attach",
+   "arguments": {
+    "body": "Peg",
+    "to": "Screen.Face6",
+    "offset": [
+     5,
+     5,
+     0
+    ]
+   },
+   "expect": "mode FlatFace, placement.at z -15 and x, y within 5 of the face's centre (550, 0); Peg follows Screen"
+  },
+  {
+   "tool": "part_attach",
+   "arguments": {
+    "body": "Peg",
+    "to": "Screen.Vertex1"
+   },
+   "expect": "mode Translate, placement.at = that vertex"
+  },
+  {
+   "tool": "part_attach",
+   "arguments": {
+    "body": "Peg",
+    "to": "Screen"
+   },
+   "expect": "mode ObjectXY, placement.at [530,-20,-20] (Screen's own placement)"
+  },
+  {
+   "tool": "part_attach",
+   "arguments": {
+    "body": "Peg",
+    "to": "Screen.Face6",
+    "mode": "Flat"
+   },
+   "expect": "refused: not a FreeCAD attachment mode, with the modes named"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     40,
+     30,
+     20
+    ],
+    "at": [
+     650,
+     0,
+     0
+    ],
+    "name": "Plate"
+   },
+   "expect": "volume 24000"
+  },
+  {
+   "tool": "part_extrude",
+   "arguments": {
+    "profile": {
+     "circle": {
+      "center": [
+       670,
+       15,
+       20
+      ],
+      "radius": 5,
+      "normal": [
+       0,
+       0,
+       1
+      ]
+     }
+    },
+    "direction": [
+     0,
+     0,
+     -1
+    ],
+    "length": 20,
+    "into": "Plate",
+    "op": "cut"
+   },
+   "expect": "a through hole: volume 22429.2, faces 7"
+  },
+  {
+   "tool": "shape_query",
+   "arguments": {
+    "body": "Plate",
+    "kind": "face",
+    "type": "cylinder"
+   },
+   "expect": "one face: the hole's wall (expected Face7; use the ref it gives in the next call)"
+  },
+  {
+   "tool": "part_defeature",
+   "arguments": {
+    "body": "Plate",
+    "faces": [
+     "Face7"
+    ]
+   },
+   "expect": "the hole gone: facesBefore 7, facesAfter 6, volume_mm3 24000"
+  },
+  {
+   "tool": "meshobj_from_shape",
+   "arguments": {
+    "body": "Taper",
+    "method": "standard",
+    "deflection": 0.1,
+    "name": "Taper mesh"
+   },
+   "expect": "a closed mesh of the frustum (note its triangle count)"
+  },
+  {
+   "tool": "part_from_mesh",
+   "arguments": {
+    "mesh": "Taper mesh",
+    "name": "Taper solid"
+   },
+   "expect": "solids 1, triangles = the mesh's count, volume within 1 % under 3665.19 (faceted), sound true"
+  },
+  {
+   "tool": "part_from_mesh",
+   "arguments": {
+    "mesh": "Taper mesh",
+    "maxFacets": 10
+   },
+   "expect": "refused: over maxFacets, meshobj_decimate named"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "tube",
+    "radius": 10,
+    "radius2": 8,
+    "height": 40,
+    "at": [
+     700,
+     0,
+     0
+    ],
+    "name": "Pipe"
+   },
+   "expect": "a FeaturePython tube (OuterRadius 10, InnerRadius 8): volume 4523.89"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "tube",
+    "radius": 5,
+    "radius2": 3,
+    "height": 40,
+    "at": [
+     700,
+     -20,
+     20
+    ],
+    "direction": [
+     0,
+     1,
+     0
+    ],
+    "name": "Branch"
+   },
+   "expect": "volume 2010.62, box [10,40,10]"
+  },
+  {
+   "tool": "part_join",
+   "arguments": {
+    "kind": "connect",
+    "objects": [
+     "Pipe",
+     "Branch"
+    ],
+    "name": "Tee"
+   },
+   "expect": "join Tee, valid true, solids 1; Pipe and Branch hidden"
+  },
+  {
+   "tool": "part_container",
+   "arguments": {
+    "objects": [
+     "Tee"
+    ],
+    "at": [
+     0,
+     0,
+     10
+    ],
+    "name": "Tee part"
+   },
+   "expect": "part 'Tee part', objects [Tee]"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "sphere",
+    "radius": 10,
+    "at": [
+     800,
+     0,
+     0
+    ],
+    "name": "Globe"
+   },
+   "expect": "volume 4188.79, centred at at: box [20,20,20]"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     10,
+     10,
+     10
+    ],
+    "at": [
+     800,
+     0,
+     0
+    ],
+    "name": "Octant"
+   },
+   "expect": "volume 1000"
+  },
+  {
+   "tool": "part_boolean",
+   "arguments": {
+    "op": "common",
+    "base": "Globe",
+    "tools": [
+     "Octant"
+    ],
+    "keep": true
+   },
+   "expect": "an eighth of the sphere: volume 523.6, kept [Octant], hidden names Octant"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cone",
+    "radius": 0,
+    "radius2": 4,
+    "height": 6,
+    "at": [
+     850,
+     0,
+     0
+    ],
+    "name": "Funnel"
+   },
+   "expect": "a cone standing on its point (Radius1 0): volume 100.53"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "torus",
+    "radius": 10,
+    "radius2": 2,
+    "at": [
+     900,
+     0,
+     0
+    ],
+    "name": "Donut"
+   },
+   "expect": "volume 789.57, box [24,24,4]"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "prism",
+    "sides": 6,
+    "radius": 5,
+    "height": 10,
+    "at": [
+     950,
+     0,
+     0
+    ],
+    "name": "Hex bar"
+   },
+   "expect": "Polygon 6, Circumradius 5: volume 649.52"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "wedge",
+    "at": [
+     1000,
+     0,
+     0
+    ],
+    "name": "Wedge"
+   },
+   "expect": "FreeCAD's default wedge (front 10 x 10 at y 0, rear 6 x 6 at y 10): volume 653.33, box [10,10,10]"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     10,
+     10,
+     10
+    ],
+    "at": [
+     1050,
+     0,
+     0
+    ],
+    "name": "Crate"
+   },
+   "expect": "volume 1000"
+  },
+  {
+   "tool": "export",
+   "arguments": {
+    "objects": [
+     "Crate"
+    ],
+    "path": "crate.brep"
+   },
+   "expect": "a BREP file in the session's folder"
+  },
+  {
+   "tool": "part_import_curves",
+   "arguments": {
+    "path": "crate.brep",
+    "name": "Crate curves"
+   },
+   "expect": "curves 'Crate curves', edges 12 (a relative path is looked for in the session's folder)"
+  }
+ ],
+ "notCovered": [
+  "part_loft with many profiles, profiles_file, ruled, segments and the heavy-estimate refusal: the model lofts two circles only (tests/test_loft_findings.py and test_loft_spans.py hold the rest)",
+  "part_boolean's heavy-size ask (meshes made solids) and its PartDesign Body base route: no faceted solid or Body in this model",
+  "part_split modes fragments and xor; part_join embed and cutout; compound_filter window-area, window-length and window-distance: one mode of each tool is run (tests/test_part_hardening.py and test_model_more.py run others)",
+  "part_wire kinds circle, arc, ellipse, polyline, spiral, bspline and points_file: helix, polygon, line and plane are run",
+  "part_fix ops solid and sew; part_extract builds wire, face and shell; part_datum csys; part_refine { fix: true } and its PartDesign tip route",
+  "part_from_mesh from a file, and a mesh of several pieces (the largest-shell note)",
+  "part_attach and part_datum modes that need two or three references (TangentPlane, FaceNormal, ThreePointsPlane): to takes one reference, so they cannot be reached"
+ ]
+}

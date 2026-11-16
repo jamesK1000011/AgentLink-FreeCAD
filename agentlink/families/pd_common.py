@@ -91,7 +91,7 @@ def tip_shape(body, need=True):
     tip = body.Tip
     if tip is None or tip.Shape.isNull() or not tip.Shape.Solids:
         if need:
-            raise ToolError("invalid_state", f"{body.Label} has no solid yet: pd_pad a closed sketch first.")
+            raise ToolError("invalid_state", f"{body.Label} has no solid yet: pd_pad a closed sketch (or pd_primitive) first.")
         return None, None
     return tip, tip.Shape
 
@@ -157,7 +157,7 @@ def plane_ref(body, ref, what="plane"):
         i, f = find_face(shape, ref)
         own, j = face_owner(body, ref, tip, f)
         return (own, [f"Face{j + 1}"]), f"face at {geo.vec(f.CenterOfMass)}" + ("" if own is tip else f" ({own.Label}'s)")
-    raise ToolError("invalid_input", f"{what}: XY, XZ, YZ, a datum plane's name, or a face {{ at: [x,y,z], normal: [x,y,z] }}.")
+    raise ToolError("invalid_input", f"{what}: XY, XZ, YZ, a datum plane's name (pd_datum_plane makes one), \"Pad.Face3\" as shape_query names it, or a face {{ at: [x,y,z], normal: [x,y,z] }}.")
 
 
 def solid_features(body, upto=None):
@@ -211,6 +211,13 @@ def face_owner(body, ref, tip, face):
     return tip, i
 
 
+def _construction(sketch, i):
+    try:
+        return bool(sketch.getConstruction(i))
+    except Exception:
+        return False
+
+
 def axis_ref(body, ref, sketch=None, what="axis"):
     """x | y | z (the body's origin axes), H_Axis | V_Axis of the sketch, or a
     sketch geometry id (a line, often construction)."""
@@ -223,11 +230,29 @@ def axis_ref(body, ref, sketch=None, what="axis"):
         line = next((o for o in body.Group if o.TypeId == "PartDesign::Line" and ref in (o.Label, o.Name)), None)
         if line is not None:
             return (line, [""]), line.Label
-    if isinstance(ref, int) and sketch is not None:
-        if not (0 <= ref < len(sketch.Geometry)):
-            raise ToolError("invalid_input", f"{what}: geometry {ref} is not in {sketch.Label} (0 to {len(sketch.Geometry) - 1}).")
-        return (sketch, [f"Edge{ref + 1}"]), f"{sketch.Label} geometry {ref}"
-    raise ToolError("invalid_input", f"{what}: x, y, z (the body's axes), H_Axis or V_Axis (the sketch's), a datum line's name (pd_datum), or a line's geometry id in the sketch.")
+    if isinstance(ref, int) and not isinstance(ref, bool) and sketch is not None:
+        geo_ = sketch.Geometry
+        if not (0 <= ref < len(geo_)):
+            raise ToolError("invalid_input", f"{what}: geometry {ref} is not in {sketch.Label} (0 to {len(geo_) - 1}).")
+        g = geo_[ref]
+        if type(g).__name__ != "LineSegment":
+            raise ToolError("invalid_input", f"{what}: geometry {ref} of {sketch.Label} is a {type(g).__name__}, not a line — a straight line's id (sketch_state lists them), or x | y | z | V_Axis | H_Axis.")
+        # FreeCAD names a sketch's construction lines "Axis0", "Axis1" … in
+        # their own count (SketchObject::getAxis), and reads "Edge3" on the
+        # sketch's shape, which holds the profile's edges only: a geometry id
+        # is neither (FeatureSketchBased.cpp, ProfileBased::getAxis).
+        if _construction(sketch, ref):
+            k = sum(1 for i in range(ref) if type(geo_[i]).__name__ == "LineSegment" and _construction(sketch, i))
+            return (sketch, [f"Axis{k}"]), f"{sketch.Label} geometry {ref} (construction line {k})"
+        pl = sketch.Placement
+        a0, a1 = pl.multVec(g.StartPoint), pl.multVec(g.EndPoint)
+        for i, e in enumerate(sketch.Shape.Edges):
+            if len(e.Vertexes) == 2 and type(e.Curve).__name__ == "Line":
+                p0, p1 = e.Vertexes[0].Point, e.Vertexes[1].Point
+                if ((p0 - a0).Length < 1e-6 and (p1 - a1).Length < 1e-6) or ((p0 - a1).Length < 1e-6 and (p1 - a0).Length < 1e-6):
+                    return (sketch, [f"Edge{i + 1}"]), f"{sketch.Label} geometry {ref}"
+        raise ToolError("invalid_input", f"{what}: geometry {ref} of {sketch.Label} was not found among its profile's edges — make the axis a construction line (sketch_add {{ kind: line, construction: true }}).")
+    raise ToolError("invalid_input", f"{what}: x, y, z (the body's axes)" + (", H_Axis or V_Axis (the sketch's), a line's geometry id in the sketch (a number, from 0)" if sketch is not None else "") + ", or a datum line's name (pd_datum { kind: line } makes one).")
 
 
 # ---- faces and edges by where they are -----------------------------------------------------
@@ -376,8 +401,13 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
             # it; a change upstream can leave a later feature's references
             # pointing at what is no longer there (worst in 1.0).
             hint = (f"{first['object']} refers to edges or faces of the model as it was, which the change renamed or removed. "
-                    f"Make the change, then pick {first['object']}'s edges again (shape_query, then feature_edit {{ feature: \"{first['object']}\", edges }}), "
-                    "or remove it, change, and add it again.")
+                    f"feature_remove {first['object']}, make the change, then add it again on the new edges (shape_query finds them; pd_fillet, pd_chamfer, pd_draft or pd_thickness).")
+        if "multiple solids" in first["error"].lower():
+            # FreeCAD 1.1: a body takes several solids only while its
+            # AllowCompound is true (the default); with it off, a feature
+            # that leaves two pieces is an error.
+            hint = (f"The result would be more than one solid and {body.Label}'s AllowCompound is off: make the feature touch the rest of the body, "
+                    f"or object_set {{ object: \"{body.Label}\", values: {{ AllowCompound: true }} }} first.")
         raise ToolError("failed", f"{first['object']} ({first['type']}) failed: {first['error']}" + (f"; also broken: {[b['object'] for b in bad if b is not first]}" if len(bad) > 1 else "") + f" — nothing was kept.{(' ' + hint) if hint else ''}")
     out = {**({"feature": feat.Label, "type": short(feat)} if feat is not None else {}), "valid": True, **body_reading(body)}
     if before is not None and "volume" in out:
@@ -395,6 +425,35 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
             # or take it away (an outside one): only no change at all is wrong.
             raise ToolError("failed", f"{feat.Label} left the body as it was — the edges it was given round or bevel nothing. Nothing was kept. {hint}".strip())
     return picks.finish(session, tool, out, recompute=False)
+
+
+def uses(o, f):
+    """Whether object o refers to feature f by a property of its own (a
+    profile, a base and its edges, originals, a support, an axis): the
+    body's own bookkeeping (BaseFeature, the feature before it; _Body) does
+    not count."""
+    def has(v):
+        if v is f:
+            return True
+        if isinstance(v, (list, tuple)):
+            return any(has(x) for x in v)
+        return False
+
+    for p in o.PropertiesList:
+        if p in ("BaseFeature", "_Body", "Group", "Tip"):
+            continue
+        try:
+            if o.getTypeIdOfProperty(p).startswith(("App::PropertyLink", "App::PropertyXLink")) and has(getattr(o, p)):
+                return True
+        except Exception:
+            continue
+    # an expression that reads it (<<Pad>>.Length, Pad.Length)
+    try:
+        if any(f.Name in str(e) or f.Label in str(e) for _, e in (getattr(o, "ExpressionEngine", None) or [])):
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def volume(body):
