@@ -487,7 +487,7 @@ class Overlay:
         for i, s in enumerate(specs):
             why = self.visible(s.get("widget"))
             if why is None and s.get("rect") is not None and self._map(s) is None:
-                why = "scrolled out of view"
+                why = "scrolled out of view" + self._why_unmapped(s)
             if why:
                 hidden.append((i, why))
             else:
@@ -619,6 +619,25 @@ class Overlay:
         except Exception as e:  # noqa: BLE001
             _log("overlay: a rect could not be mapped", e)
             return None
+
+    def _why_unmapped(self, m):
+        """Which of _map's reasons it was, in a few words after "scrolled out
+        of view" (that one phrase stood for a row with no rect, a row of no
+        size and a row off its viewport alike, and could not be told apart
+        from outside)."""
+        try:
+            w, rect = m.get("widget"), m.get("rect")
+            port = m.get("viewport") or w
+            r = rect() if callable(rect) else None
+            if r is None:
+                return " (its row is no longer there)"
+            x, y, rw, rh = r
+            pr = _rect(port.rect())
+            if rw <= 0 or rh <= 0:
+                return f" (its row has no size yet: {int(rw)} x {int(rh)} at {int(x)}, {int(y)}; the view is {int(pr[2])} x {int(pr[3])})"
+            return f" (its row is at {int(x)}, {int(y)}, {int(rw)} x {int(rh)}; the view shows 0, 0 to {int(pr[2])}, {int(pr[3])})"
+        except Exception as e:  # noqa: BLE001
+            return f" ({type(e).__name__})"
 
     def _refresh(self):
         try:
