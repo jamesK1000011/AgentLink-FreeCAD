@@ -110,8 +110,11 @@ jobs:
           grep -E '^(Ran|OK|FAILED|ERROR:|FAIL:)' "$RUNNER_TEMP/addons.log" | tail -n 60
           test "$code" -eq 0
       - name: The Claude extension's launcher, against a fake FreeCAD
+        # Runs after a red step too, so one run shows every part of the gate.
+        if: ${{ !cancelled() }}
         run: node packaging/mcpb/test/launcher.test.mjs
       - name: The extension, built from the pinned add-ons and checked
+        if: ${{ !cancelled() }}
         run: |
           mkdir -p dist
           sh packaging/mcpb/build.sh "$PWD/pinned" "$PWD/dist/freecad-agentlink.mcpb"
@@ -119,6 +122,7 @@ jobs:
           for f in pinned/*/.github/privacy/images.txt; do [ -f "$f" ] && set -- --images "$f" "$@"; done
           python3 .github/privacy/check.py "$@"
       - name: The brief, headless
+        if: ${{ !cancelled() }}
         working-directory: scanruler
         run: node scripts/bakeoff/run-freecad.mjs --out "$GITHUB_WORKSPACE/bakeoff-out/freecad" --python python --addon "$GITHUB_WORKSPACE/pinned/AgentLink-FreeCAD"
       - name: Server log
