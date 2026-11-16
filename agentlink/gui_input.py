@@ -393,6 +393,21 @@ def _classes(w):
     return out
 
 
+def _same(a, b):
+    """One Qt object: the same wrapper, or the same C++ object behind two."""
+    if a is None or b is None:
+        return False
+    if a is b:
+        return True
+    for mod in ("shiboken6", "shiboken2"):
+        try:
+            sh = __import__(mod)
+            return sh.getCppPointer(a) == sh.getCppPointer(b)
+        except Exception:  # noqa: BLE001 — not that binding, or not Qt objects
+            continue
+    return False
+
+
 def _has_class(w, name):
     return w is not None and any(c == name or c.endswith("::" + name) for c in _classes(w))
 
@@ -1108,19 +1123,110 @@ class Run:
             return None
         QtW = self.qt.QtWidgets
         try:
-            g = w.geometry()
-            best = None
-            for sib in par.findChildren(QtW.QToolButton):
-                if sib is w or sib.parentWidget() is not par or not sib.isVisible():
-                    continue
-                sg = sib.geometry()
-                gap = abs(sg.x() + sg.width() - g.x())
-                overlap = min(sg.y() + sg.height(), g.y() + g.height()) - max(sg.y(), g.y())
-                if gap <= 6 and overlap > 0 and (best is None or gap < best[0]):
-                    best = (gap, sib)
-            return best[1] if best else None
+            sibs = [b for b in par.findChildren(QtW.QToolButton)
+                    if b is not w and _has_class(b, "QToolButton") and b.isVisible()
+                    and not (b.objectName() or "").startswith("qt_toolbutton_menubutton")]
         except Exception:
             return None
+        return self._nearest_left(w, sibs)
+
+    def _grect(self, w):
+        """w's rect in global px (x, y, width, height): one frame for
+        widgets of different parents."""
+        g = w.mapToGlobal(self.qt.QtCore.QPoint(0, 0))
+        return (g.x(), g.y(), w.width(), w.height())
+
+    def _nearest_left(self, arrow, buttons):
+        """Of buttons, the one whose rect holds the arrow's middle, else the
+        one immediately left of it on its row (right edge at most 6 px from
+        the arrow's left), by global rects."""
+        try:
+            ax, ay, aw, ah = self._grect(arrow)
+        except Exception:
+            return None
+        mx, my = ax + aw / 2.0, ay + ah / 2.0
+        best = None
+        for b in buttons:
+            try:
+                x, y, bw, bh = self._grect(b)
+            except Exception:
+                continue
+            if x <= mx < x + bw and y <= my < y + bh:
+                return b
+            gap = abs(x + bw - ax)
+            overlap = min(y + bh, ay + ah) - max(y, ay)
+            if gap <= 6 and overlap > 0 and (best is None or gap < best[0]):
+                best = (gap, b)
+        return best[1] if best else None
+
+    def _menu_owner(self, menu, gx, gy):
+        """The tool button whose dropdown menu is the one now open: its
+        menu(), its default action's menu, or (an action group's button)
+        its default action among the menu's items. More than one: the one
+        under (gx, gy), else the one immediately left of it."""
+        try:
+            acts = list(menu.actions())
+        except Exception:
+            acts = []
+        found = []
+        try:
+            buttons = self.mw().findChildren(self.qt.QtWidgets.QToolButton)
+        except Exception:
+            return None
+        for b in buttons:
+            try:
+                if not _has_class(b, "QToolButton") or not b.isVisible():
+                    continue
+                m = getattr(b, "menu", None)
+                m = m() if callable(m) and not _has_class(m, "QMenu") else m
+                d = b.defaultAction() if hasattr(b, "defaultAction") else None
+                dm = d.menu() if d is not None and hasattr(d, "menu") else None
+                if _same(m, menu) or _same(dm, menu) or (d is not None and any(_same(d, a) for a in acts)):
+                    found.append(b)
+            except Exception:
+                continue
+        own = [b for b in found if not (b.objectName() or "").startswith("qt_toolbutton_menubutton")] or found
+        if len(own) <= 1:
+            return own[0] if own else None
+        best = None
+        for b in own:
+            try:
+                x, y, bw, bh = self._grect(b)
+            except Exception:
+                continue
+            if x <= gx < x + bw and y <= gy < y + bh:
+                return b
+            if x + bw <= gx + 6 and y <= gy < y + bh and (best is None or x + bw > best[0]):
+                best = (x + bw, b)
+        return best[1] if best else own[0]
+
+    def _arrow_hit(self, b, g):
+        out = {"class": self._props(b)["classes"][0], "text": self._button_text(b)[:60], "part": "menu arrow"}
+        try:
+            tip = _plain(b.toolTip())
+            if tip and _norm(tip) != _norm(out["text"]):
+                out["toolTip"] = tip[:80]
+        except Exception:
+            pass
+        if b.objectName():
+            out["name"] = b.objectName()
+        place = next((u for u in self._props(b)["under"] if u), "")
+        if place:
+            out["in"] = place[:40]
+        out["global"] = list(g)
+        return out
+
+    def _arrow_by_menu(self, out, front):
+        """A click on a dropdown's arrow that opened a menu: the hit is the
+        button that menu belongs to (geometry alone named the button to its
+        left on FreeCAD 1.1.3)."""
+        hit = out.get("hit")
+        if not isinstance(hit, dict) or hit.get("part") != "menu arrow" or not _has_class(front, "QMenu"):
+            return
+        gx, gy = (hit.get("global") or [0, 0])[:2]
+        b = self._menu_owner(front, gx, gy)
+        if b is not None:
+            out["hit"] = self._arrow_hit(b, (gx, gy))
 
     def _arrow_part(self, w, x):
         """True when x falls on a MenuButtonPopup tool button's own arrow."""
@@ -1138,21 +1244,7 @@ class Run:
             return {**extra, "global": [int(round(g.x())), int(round(g.y()))]}
         owner = self._arrow_owner(w)
         if owner is not None or self._arrow_part(w, x):
-            b = owner or w
-            out = {"class": self._props(b)["classes"][0], "text": self._button_text(b)[:60], "part": "menu arrow"}
-            try:
-                tip = _plain(b.toolTip())
-                if tip and _norm(tip) != _norm(out["text"]):
-                    out["toolTip"] = tip[:80]
-            except Exception:
-                pass
-            if b.objectName():
-                out["name"] = b.objectName()
-            place = next((u for u in self._props(b)["under"] if u), "")
-            if place:
-                out["in"] = place[:40]
-            out["global"] = [int(round(g.x())), int(round(g.y()))]
-            return out
+            return self._arrow_hit(owner or w, (int(round(g.x())), int(round(g.y()))))
         p = self._props(w)
         out = {"class": p["classes"][0] if p["classes"] else type(w).__name__}
         if p["objectName"]:
@@ -1515,6 +1607,7 @@ class Run:
         # mouse (as a real one does): no button is held for later steps.
         HELD.update({"widget": None, "buttons": []})
         out = {"i": fr["i"], **fr["out"]}
+        self._arrow_by_menu(out, b)
         out.update(self._front_info(b) or {})
         self.done.append(out)
         self._tell(self.open_info())
@@ -1572,6 +1665,7 @@ class Run:
                 out = {"i": i, **fr["out"]}
                 b = self.blocker()
                 if b is not None and b is not fr["front"]:
+                    self._arrow_by_menu(out, b)
                     out.update(self._front_info(b) or {})
                 elif before is None and self.modal() is not None:
                     out.update(self._front_info(self.blocker()) or {})
