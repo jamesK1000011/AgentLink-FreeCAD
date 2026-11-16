@@ -15,6 +15,7 @@ from .. import keep, paths, testrun
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from .unattended import installed_names, mod_dir
+from .. import livescript as ls
 
 GROUP = "dev"
 INFO = "For add-on developers: an installed add-on's own test suite run in a separate FreeCAD process (addon_test); live window scripts replayed and checked (live_run); mouse and keyboard input to the window's own widgets for GUI checks (gui_input), and closing a menu or dialog that holds the window (gui_unstick)."
