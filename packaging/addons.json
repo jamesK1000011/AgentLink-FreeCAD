@@ -1,0 +1,56 @@
+{
+  "about": "The add-ons the Claude extension's launcher installs into FreeCAD's Mod folder, each at the commit pinned in its file under packaging/pins (bumped only once the bake-off, .github/workflows/bakeoff.yml, is green). repo: a repository of jamesK1000011's; folder: the add-on's folder in it ('' for the root); dest: its folder in Mod. companions: other local MCP servers the launcher keeps as git clones and brings up to their branch on each update (name; dir under the home folder; url, a repository of jamesK1000011's; branch; process, the path a running copy is found by); ~/AgentLink/companions.json on the Mac wins over it.",
+  "sources": [
+    {
+      "repo": "AgentLink-FreeCAD",
+      "branch": "main",
+      "folder": "",
+      "dest": "AgentLink",
+      "pin": "packaging/pins/addon-ref"
+    },
+    {
+      "repo": "ScanRuler-FreeCAD",
+      "branch": "main",
+      "folder": "",
+      "dest": "ScanRulerFC",
+      "pin": "packaging/pins/scanrulerfc-ref"
+    },
+    {
+      "repo": "AgentLink-OrcaSlicer",
+      "branch": "main",
+      "folder": "",
+      "dest": "OrcaLink",
+      "pin": "packaging/pins/orcalink-ref"
+    },
+    {
+      "repo": "Workshop-FreeCAD",
+      "branch": "main",
+      "folder": "",
+      "dest": "Workshop",
+      "pin": "packaging/pins/workshop-ref"
+    },
+    {
+      "repo": "Texturizer-FreeCAD",
+      "branch": "main",
+      "folder": "",
+      "dest": "Texturizer",
+      "pin": "packaging/pins/texturizer-ref"
+    },
+    {
+      "repo": "Tutor-FreeCAD",
+      "branch": "main",
+      "folder": "",
+      "dest": "Tutor",
+      "pin": "packaging/pins/tutor-ref"
+    }
+  ],
+  "companions": [
+    {
+      "name": "bumpmesh",
+      "dir": "~/src/bumpmesh",
+      "url": "https://github.com/jamesK1000011/stlTexturizer.git",
+      "branch": "agent-link",
+      "process": "mcp/"
+    }
+  ]
+}

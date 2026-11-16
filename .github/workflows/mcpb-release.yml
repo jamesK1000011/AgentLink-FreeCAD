@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Agent Link for FreeCAD's Claude Desktop extension (.mcpb), released: built
+# by packaging/mcpb/build.sh from the add-ons at the commits pinned in
+# packaging/pins (the ones the bake-off passed), put through the privacy and
+# identity check, and only then attached to a release of the tag.
+# Tag-triggered only (agentlink-v*), so it costs no minutes otherwise.
+# Moved here from ScanRuler's freecad-spike on 16 Nov 2026.
+name: Agent Link extension release
+
+on:
+  push:
+    tags: ['agentlink-v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mcpb-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mcpb:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check out the pinned add-ons (the list is packaging/addons.json)
+        run: |
+          mkdir -p pinned
+          python3 -c "
+          import json
+          seen = set()
+          for s in json.load(open('packaging/addons.json'))['sources']:
+              if s['repo'] not in seen:
+                  seen.add(s['repo']); print(s['repo'], open(s['pin']).read().strip())
+          " | while read -r repo ref; do
+            git clone -q "https://github.com/jamesK1000011/$repo" "pinned/$repo"
+            git -C "pinned/$repo" checkout -q "$ref"
+          done
+      - name: The launcher test
+        run: node packaging/mcpb/test/launcher.test.mjs
+      - name: Build the extension
+        run: |
+          mkdir -p dist
+          sh packaging/mcpb/build.sh "$PWD/pinned" "$PWD/dist/freecad-agentlink.mcpb"
+      # Findings fail the job: nothing is published until they are fixed.
+      - name: Privacy and identity check of the built file
+        run: |
+          set -- dist/
+          for f in pinned/*/.github/privacy/images.txt; do [ -f "$f" ] && set -- --images "$f" "$@"; done
+          python3 .github/privacy/check.py "$@"
+      - name: Attach it to the tag's release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/freecad-agentlink.mcpb --clobber
+          else
+            gh release create "$TAG" --verify-tag --title "Agent Link for FreeCAD ${TAG#agentlink-v}" --notes "Claude Desktop extension, built from the pinned add-ons and checked for privacy and identity before upload." dist/freecad-agentlink.mcpb
+          fi

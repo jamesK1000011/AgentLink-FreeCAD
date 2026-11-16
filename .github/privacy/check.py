@@ -7,6 +7,7 @@ published. A failure blocks the release; findings are fixed, never waived.
 
     python3 .github/privacy/check.py --git .        # tracked files + history
     python3 .github/privacy/check.py dist/           # built artefacts
+    python3 .github/privacy/check.py --images other/images.txt dist/  # also another repo's reviewed images
     python3 .github/privacy/check.py --git --since <rev> .   # history after <rev> only
     python3 .github/privacy/check.py --git --upstream <rev> .  # a fork: skip upstream's files and commits
 
@@ -154,11 +155,17 @@ class Terms:
 
 
 class Checker:
-    def __init__(self):
+    def __init__(self, more_images=()):
         self.terms = Terms()
         self.allow = [re.compile(p) for p in load_lines("allow.txt")]
         self.images = {}
-        for l in load_lines("images.txt"):
+        # images.txt here, plus the reviewed lists of the repos whose files
+        # are in a built bundle (--images FILE, each add-on's own list).
+        lines = load_lines("images.txt")
+        for extra in more_images:
+            with open(extra, encoding="utf-8") as f:
+                lines += [l.strip() for l in f if l.strip() and not l.lstrip().startswith("#")]
+        for l in lines:
             digest, _, path = l.partition(" ")
             self.images[digest] = path.strip()
         self.findings = []
@@ -289,8 +296,13 @@ def main(argv):
         i = argv.index("--since")
         since = argv[i + 1]
         argv = argv[:i] + argv[i + 2:]
+    more = []
+    while "--images" in argv:
+        i = argv.index("--images")
+        more.append(argv[i + 1])
+        argv = argv[:i] + argv[i + 2:]
     roots = [a for a in argv if not a.startswith("--")] or ["."]
-    c = Checker()
+    c = Checker(more)
     for root in roots:
         c.tree(root, tracked=git, base=upstream)
         if git:
