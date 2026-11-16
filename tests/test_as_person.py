@@ -218,7 +218,8 @@ class Declared(unittest.TestCase):
         root = os.path.join(os.path.dirname(__file__), "..", "agentlink")
         with open(os.path.join(root, "families", "dev.py"), encoding="utf-8") as f:
             src = f.read()
-        self.assertIn('"as": {"type": "string", "enum": ["person"]}', src)
+        # The note on what it does is the property's own description.
+        self.assertIn('"as": {"type": "string", "enum": ["person"],', src)
         self.assertIn("hooks.person_input()", src)
         self.assertIn("s.done_by = hooks.PERSON", src)
         with open(os.path.join(root, "guides", "view.md"), encoding="utf-8") as f:
