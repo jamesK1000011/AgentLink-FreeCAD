@@ -146,16 +146,20 @@ class Unattended(Base):
         st = self.ok("session_state")
         self.assertIn("heavySlots", st["machine"])
         self.assertTrue(self.ok("queue_go")["go"])
-        # Past runs say view_render is slow at this size: the first call is
-        # answered with the estimate, the same call again runs it.
+        # Past runs say a heavy tool is slow at this size: the first call is
+        # answered with the estimate, the same call again runs it (here it
+        # then refuses for its own reason: no mesh). A picture is never held
+        # back on an estimate (heavy.NO_OFFER): view_render runs at once.
         q = keep.queue_state()
-        q["timings"] = {"view_render": [[1, 400.0], [2, 800.0]]}
+        q["timings"] = {"view_render": [[1, 400.0], [2, 800.0]], "meshobj_decimate": [[1, 400.0], [2, 800.0]]}
         keep.save_queue(q)
         self.box("N box", [10, 10, 10])
         os.environ["AGENTLINK_GATE"] = "1"
         try:
-            e = self.refused("view_render", {"view": "iso", "inline": False})
+            e = self.refused("meshobj_decimate", {})
             self.assertIn("takes about", e["message"])
+            e = self.refused("meshobj_decimate", {})
+            self.assertNotIn("takes about", e["message"])
             self.ok("view_render", {"view": "iso", "inline": False})
         finally:
             os.environ.pop("AGENTLINK_GATE", None)
