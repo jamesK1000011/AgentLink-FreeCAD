@@ -109,3 +109,18 @@ class Synonyms(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_compact_takes_numpy_like_values():
+    from agentlink import protocol
+
+    class B:
+        def item(self):
+            return True
+
+    class A:
+        def tolist(self):
+            return [1, 2]
+
+    assert protocol.compact({"ok": B(), "v": A(), "s": {2, 1}}) == '{"ok":true,"v":[1,2],"s":[1,2]}'
+    assert protocol.compact({"x": float("nan"), "ok": B()}) == '{"x":null,"ok":true}'
