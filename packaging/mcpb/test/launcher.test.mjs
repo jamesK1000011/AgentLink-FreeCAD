@@ -95,6 +95,35 @@ process.stdout.write(JSON.stringify({
   assert.equal(out.idle, null)
   assert.equal(out.none, null)
 }
+// An update's words on add-ons left out: none, nothing said; one, named
+// with its error, the groups gone compared with before, and a warning.
+{
+  const script = `
+global.__agentlinkHandover = true
+const L = require(${JSON.stringify(path.join(here, '..', 'server', 'index.js'))})
+global.__agentlinkHandover = false
+process.stdout.write(JSON.stringify({
+  none: L.extensionReport({ groups: { a: 1 } }, { ok: true, extensions: { loaded: ['x'], leftOut: [] }, groups: { a: 1 } }),
+  old: L.extensionReport({}, { ok: true }),
+  one: L.extensionReport({ groups: { core: 3, scan: 133, gone: 0 } }, { ok: true, extensions: { leftOut: [{ extension: 'scan.agentlink_families', error: 'SyntaxError: bad' }] }, groups: { core: 3 } }),
+  noBefore: L.extensionReport({}, { ok: true, extensions: { leftOut: [{ extension: 'a.agentlink_families' }, { extension: 'b.agentlink_families', error: 'E' }] }, groups: { core: 3 } }),
+  noFile: L.extensionRecord('/nonexistent/extensions.json'),
+}))
+`
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agentlink-ext-'))
+  const out = JSON.parse(execFileSync(process.execPath, ['-e', script], { env: { ...process.env, HOME: home, AGENTLINK_UPDATE: 'false' }, encoding: 'utf8' }))
+  assert.deepEqual(out.none, {}, 'every add-on loaded: nothing said')
+  assert.deepEqual(out.old, {}, 'a smoke test from before this: nothing said')
+  assert.deepEqual(out.one.leftOut, [{ extension: 'scan.agentlink_families', error: 'SyntaxError: bad' }])
+  assert.deepEqual(out.one.lostGroups, ['scan'])
+  assert.match(out.one.warning, /An installed add-on did not load.*: scan\. Tool groups gone compared with before: scan\./)
+  assert.equal(out.noBefore.lostGroups, undefined, 'no record of before: no groups claimed lost')
+  assert.match(out.noBefore.warning, /Installed add-ons did not load.*a, b\./)
+  assert.equal(out.noBefore.leftOut[0].error, 'no error given')
+  assert.deepEqual(out.noFile, {})
+  fs.rmSync(home, { recursive: true, force: true })
+  console.log('launcher extensions: an add-on left out is named with its error, the groups gone and a warning')
+}
 // Every pin the manifest names is a file here holding one commit.
 {
   const repo = path.join(here, '..', '..', '..')
@@ -309,6 +338,35 @@ try {
   assert.equal((await tool('anything')).result.content[0].text, '2.0')
   const hist = JSON.parse(fs.readFileSync(path.join(root, 'AgentLink', 'versions.json'), 'utf8')).history
   assert.match(hist[hist.length - 1].outcome, /rolled back/)
+  // An update whose smoke test passes with an installed add-on left out
+  // (one that did not load before either): installed, and the answer says
+  // which add-on, its error, the tool groups gone and a plain warning. The
+  // smoke test is told which add-ons loaded before.
+  fs.writeFileSync(path.join(root, 'AgentLink', 'extensions.json'), JSON.stringify({ hidden: { loaded: [{ extension: 'good.agentlink_families', groups: ['good'], tools: 4 }, { extension: 'bad name;rm', groups: [], tools: 1 }], leftOut: [], groups: { core: 3, good: 4, scan: 133 } } }))
+  fs.writeFileSync(path.join(fresh, 'VERSION'), '3.5\n')
+  fs.writeFileSync(path.join(fresh, 'AgentLink', 'VERSION'), '3.5\n')
+  const envSeen = path.join(root, 'smoke-env.txt')
+  fs.writeFileSync(path.join(fresh, 'AgentLink', 'agentlink', 'smoke.py'), `import json, os\nopen(${JSON.stringify(envSeen)}, 'w').write(os.environ.get('AGENTLINK_LOADED_BEFORE', '<none>'))\nprint(json.dumps({"ok": True, "failures": [], "extensions": {"loaded": ["good.agentlink_families"], "leftOut": [{"extension": "scan.agentlink_families", "error": "SyntaxError: invalid syntax (agentlink_families.py, line 12)"}]}, "groups": {"core": 3, "good": 4}}))\n`)
+  const warned = await tool('agentlink_update')
+  const warnedSaid = JSON.parse(warned.result.content[0].text)
+  assert.equal(warned.result.isError, false, JSON.stringify(warnedSaid))
+  assert.equal(warnedSaid.after, 'local+3.5')
+  assert.deepEqual(warnedSaid.leftOut, [{ extension: 'scan.agentlink_families', error: 'SyntaxError: invalid syntax (agentlink_families.py, line 12)' }])
+  assert.deepEqual(warnedSaid.lostGroups, ['scan'])
+  assert.match(warnedSaid.warning, /did not load.*scan\./)
+  assert.match(warnedSaid.note, /WARNING: .*did not load/, 'the note itself carries the warning')
+  assert.equal(fs.readFileSync(envSeen, 'utf8'), 'good.agentlink_families', 'the smoke test is told what loaded before (plain module names only)')
+  const hist2 = JSON.parse(fs.readFileSync(path.join(root, 'AgentLink', 'versions.json'), 'utf8')).history
+  assert.match(hist2[hist2.length - 1].outcome, /left out: scan\.agentlink_families/)
+  await wait(500)
+  // Nothing new, and the running FreeCAD's own record names one left out:
+  // "already the newest" still says so.
+  fs.writeFileSync(path.join(root, 'AgentLink', 'extensions.json'), JSON.stringify({ hidden: { loaded: [], leftOut: [{ extension: 'scan.agentlink_families', error: 'SyntaxError: x' }], groups: { core: 3 } } }))
+  const same = JSON.parse((await tool('agentlink_update')).result.content[0].text)
+  assert.equal(same.restarted, false)
+  assert.equal(same.leftOut[0].extension, 'scan.agentlink_families')
+  assert.match(same.note, /Already the newest.*WARNING/)
+  fs.rmSync(path.join(root, 'AgentLink', 'extensions.json'))
   // An update that brings a new add-on folder and a newer launcher: the
   // folder installed and written down as ours, and the new launcher takes
   // over this same connection (no restart of Claude).

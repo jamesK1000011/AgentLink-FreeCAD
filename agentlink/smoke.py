@@ -5,7 +5,10 @@
 # lacks), and a few core tools run on a fresh document: session_state, a
 # primitive, body_check, an export read back. Run as a script with the new
 # FreeCAD's Python (or FreeCADCmd) and the new add-ons on the path; the last
-# line out is JSON: { ok, freecad, failures, families, ms }.
+# line out is JSON: { ok, freecad, failures, families, extensions { loaded,
+# leftOut [{ extension, error }] }, groups { group: count }, tools, ms }.
+# An installed add-on that loaded before the update (AGENTLINK_LOADED_BEFORE,
+# given by the launcher) and no longer loads is a failure.
 
 import json
 import os
@@ -54,8 +57,21 @@ def run():
     out["families"] = {"loaded": len(loaded), "leftOut": left}
     d = tempfile.mkdtemp(prefix="agentlink-smoke-")
     try:
+        # A trial of add-ons not yet in use: the record of what runs
+        # (~/AgentLink/extensions.json) is not replaced by it.
+        from agentlink import extstate
+
+        os.environ[extstate.NO_RECORD] = "1"
         s = Session(out_dir=d)
         srv = build_server(s, lean=False)
+        # The installed add-ons' own families load too: one left out (its
+        # module raised, its tools() raised) is named with its error, and
+        # fails the test when it loaded before this update — its tools
+        # would be gone without a word otherwise.
+        ext = extstate.state()
+        out["extensions"] = {"loaded": [r["extension"] for r in ext["loaded"]], "leftOut": ext["leftOut"]}
+        out["groups"] = extstate.groups_of(srv.tools.values())
+        fails.extend(extstate.smoke_failures(ext["leftOut"], extstate.before_list(os.environ.get(extstate.BEFORE))))
 
         def call(name, args):
             r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}})["result"]
@@ -128,6 +144,15 @@ def against(app=None, addon_dirs=(), python=None, lib=None, timeout=600):
     inherited = [x for x in os.environ.get("PYTHONPATH", "").split(os.pathsep) if x and x not in dirs + extra]
     env = {**os.environ, "PYTHONPATH": os.pathsep.join(dirs + extra + inherited + ([lib] if lib else [])), **({"FREECAD_LIB": lib} if lib else {})}
     env.pop("AGENTLINK_SUPERVISED", None)
+    # The add-ons that load in this FreeCAD: one of them no longer loading
+    # with what is tried fails the test (run() above).
+    try:
+        from . import extstate
+
+        if extstate.BEFORE not in env:
+            env[extstate.BEFORE] = ",".join(r["extension"] for r in extstate.state()["loaded"])
+    except Exception:  # noqa: BLE001 - run as a script, or an older layout
+        pass
     script = os.path.join(dirs[0], "agentlink", "smoke.py")
     if not os.path.isfile(script):
         script = os.path.abspath(__file__)

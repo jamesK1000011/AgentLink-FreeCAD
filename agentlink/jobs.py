@@ -54,6 +54,40 @@ def eligible(tool, args):
         return not getattr(tool, "changes", True)
 
 
+def writes_file(tool, args):
+    """Whether this call writes a file (an export; agentlink/paths.py
+    WRITERS, an add-on's declared writers, or action: "export"): a read
+    as far as the document goes, so it may run as a job, but what comes
+    after it may need the file."""
+    from . import paths
+
+    return tool.name in paths.WRITERS or (args or {}).get("action") == "export"
+
+
+def background_refusal(tool, args, in_batch):
+    """Why background: true was not taken for this call, and what to do
+    instead — by what the call is: a read asked for inside a batch (plain,
+    or one that writes a file: the calls after it wait for the file, so it
+    belongs in the batch's order), or a call that can never be a job."""
+    name = tool.name
+    if in_batch and eligible(tool, args):
+        if writes_file(tool, args):
+            return (f"background: not inside a batch, which is one answer. {name} writes a file: leave background out and it runs here in its place, "
+                    f"the file written before the next call starts. (On its own, {name} with background: true runs as a job: it answers with a job id past 45 s, "
+                    "and the file is whole only once job_status says done.)")
+        return (f"background: not inside a batch, which is one answer — call {name} on its own with background: true "
+                "(or job_start { tool, arguments }), or leave background out here.")
+    try:
+        changing = bool(tool.changes_for(args or {}))
+    except Exception:  # noqa: BLE001
+        changing = bool(getattr(tool, "changes", False))
+    if changing:
+        return (f"background: {name} changes the document, so it cannot run as a job (only a read that leaves the window and the 3D view alone can) — "
+                "leave background out: it runs as a plain call" + (", here in the batch's order." if in_batch else "."))
+    return (f"background: {name} cannot run as a job — only a read that leaves the window and the 3D view alone can (not a change, a picture or a window tool). "
+            "Leave background out" + (": it runs here in the batch's order." if in_batch else "."))
+
+
 def past_slow(tool_name, size):
     """Its past runs here say it takes longer than SLOW_READ at this size."""
     try:

@@ -1,0 +1,611 @@
+{
+ "$schema": "nexthint.schema.json",
+ "dataVersion": "1.0.0",
+ "licence": "CC-BY-4.0",
+ "about": "The likely next tools by the document's own state, for the \"next\" hint of session_state and the health check and for tool_groups { now: true } (agentlink/nexthint.py). Each entry is a rule: when (facts that must all hold; a list means any of its values), unless (facts of which none may hold), suggest (up to four tools, likeliest first, each with a few words on why) and weight (0-100: the heaviest matching rules come first; a failing recompute 100, the selection 80-90, a sketch in edit 70-85, an assembly 45, or 72 in the Assembly workbench, a drawing page in front 75, the body's progress 30-66). The facts, read cheaply from the document and the window: document (empty | objects), failing (true | false), selection (edge | face | vertex | object), selectionIn (body: the picked object is a Part Design body or one of its features | other), editing (sketch | other), dof (free | full), page (true: a drawing page is in front), assembly (empty | unjointed | jointed), body (none | empty | sketch-empty | sketch-open | sketch-closed | features: its newest sketch that no feature uses has no geometry, open wires or only closed ones; else it has features), features (none | some), lastFeature (the tip's type in lower case: pad, pocket, fillet …), workbench (FreeCAD's class name). A tool that is not installed, or whose FreeCAD command is on the active workbench's toolbars and reports itself inactive, is passed over; at most three are said. An add-on adds rules for its own tools with NEXT on its family module ({ id: entry } of this same shape).",
+ "entries": {
+  "recompute-failing": {
+   "when": {
+    "failing": true
+   },
+   "suggest": [
+    {
+     "tool": "recompute",
+     "why": "lists each failing object with FreeCAD's reason"
+    },
+    {
+     "tool": "feature_list",
+     "why": "which feature is invalid, and why"
+    },
+    {
+     "tool": "feature_edit",
+     "why": "correct the failing feature's values"
+    }
+   ],
+   "weight": 100,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "selected-edge": {
+   "when": {
+    "selection": "edge",
+    "selectionIn": "body"
+   },
+   "unless": {
+    "editing": "sketch"
+   },
+   "suggest": [
+    {
+     "tool": "pd_fillet",
+     "why": "round the picked edge"
+    },
+    {
+     "tool": "pd_chamfer",
+     "why": "bevel the picked edge"
+    },
+    {
+     "tool": "measure",
+     "why": "length of the picked edge"
+    }
+   ],
+   "weight": 90,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "selected-edge-part": {
+   "when": {
+    "selection": "edge",
+    "selectionIn": "other"
+   },
+   "unless": {
+    "editing": "sketch"
+   },
+   "suggest": [
+    {
+     "tool": "part_fillet",
+     "why": "round the picked edge"
+    },
+    {
+     "tool": "part_chamfer",
+     "why": "bevel the picked edge"
+    },
+    {
+     "tool": "measure",
+     "why": "length of the picked edge"
+    }
+   ],
+   "weight": 90,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "selected-face": {
+   "when": {
+    "selection": "face",
+    "selectionIn": "body"
+   },
+   "unless": {
+    "editing": "sketch"
+   },
+   "suggest": [
+    {
+     "tool": "sketch_new",
+     "why": "a sketch on the picked face"
+    },
+    {
+     "tool": "pd_draft",
+     "why": "draft angle on the picked face"
+    },
+    {
+     "tool": "pd_thickness",
+     "why": "hollow the body, the picked face open"
+    }
+   ],
+   "weight": 90,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "selected-face-part": {
+   "when": {
+    "selection": "face",
+    "selectionIn": "other"
+   },
+   "unless": {
+    "editing": "sketch"
+   },
+   "suggest": [
+    {
+     "tool": "part_thickness",
+     "why": "hollow the shape, the picked face open"
+    },
+    {
+     "tool": "measure",
+     "why": "area of the picked face"
+    },
+    {
+     "tool": "part_offset",
+     "why": "offset the shape's faces"
+    }
+   ],
+   "weight": 90,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "selected-vertex": {
+   "when": {
+    "selection": "vertex"
+   },
+   "unless": {
+    "editing": "sketch"
+   },
+   "suggest": [
+    {
+     "tool": "measure",
+     "why": "distances from the picked point"
+    },
+    {
+     "tool": "pd_datum",
+     "why": "a datum at the picked point"
+    }
+   ],
+   "weight": 80,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "sketch-edit-free": {
+   "when": {
+    "editing": "sketch",
+    "dof": "free"
+   },
+   "suggest": [
+    {
+     "tool": "sketch_constrain",
+     "why": "the open sketch still has DoF"
+    },
+    {
+     "tool": "sketch_state",
+     "why": "which geometry is still free"
+    },
+    {
+     "tool": "sketch_add",
+     "why": "more geometry, if the outline is not done"
+    }
+   ],
+   "weight": 85,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "sketch-edit-full": {
+   "when": {
+    "editing": "sketch",
+    "dof": "full"
+   },
+   "suggest": [
+    {
+     "tool": "sketch_state",
+     "why": "check closed wires before a feature"
+    },
+    {
+     "tool": "pd_pad",
+     "why": "the sketch is fully constrained"
+    },
+    {
+     "tool": "pd_pocket",
+     "why": "the sketch is fully constrained"
+    }
+   ],
+   "weight": 85,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "sketch-edit": {
+   "when": {
+    "editing": "sketch"
+   },
+   "unless": {
+    "dof": [
+     "free",
+     "full"
+    ]
+   },
+   "suggest": [
+    {
+     "tool": "sketch_state",
+     "why": "the open sketch's solver and DoF"
+    },
+    {
+     "tool": "sketch_constrain",
+     "why": "constrain the open sketch"
+    },
+    {
+     "tool": "sketch_add",
+     "why": "draw in the open sketch"
+    }
+   ],
+   "weight": 70,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "page-open": {
+   "when": {
+    "page": true
+   },
+   "suggest": [
+    {
+     "tool": "td_view",
+     "why": "place a view on the page"
+    },
+    {
+     "tool": "td_dim",
+     "why": "dimension a view"
+    },
+    {
+     "tool": "td_list",
+     "why": "what the page holds"
+    }
+   ],
+   "weight": 75,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "assembly-unjointed-bench": {
+   "when": {
+    "assembly": "unjointed",
+    "workbench": "AssemblyWorkbench"
+   },
+   "suggest": [
+    {
+     "tool": "asm_joint",
+     "why": "the assembly's parts have no joints yet"
+    },
+    {
+     "tool": "asm_ground",
+     "why": "fix one part in place first"
+    },
+    {
+     "tool": "asm_add",
+     "why": "bring another part in"
+    }
+   ],
+   "weight": 72,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "assembly-unjointed": {
+   "when": {
+    "assembly": "unjointed"
+   },
+   "suggest": [
+    {
+     "tool": "asm_joint",
+     "why": "the assembly's parts have no joints yet"
+    },
+    {
+     "tool": "asm_ground",
+     "why": "fix one part in place first"
+    },
+    {
+     "tool": "asm_add",
+     "why": "bring another part in"
+    }
+   ],
+   "weight": 45,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "assembly-jointed-bench": {
+   "when": {
+    "assembly": "jointed",
+    "workbench": "AssemblyWorkbench"
+   },
+   "suggest": [
+    {
+     "tool": "asm_check",
+     "why": "do the joints solve, do parts collide"
+    },
+    {
+     "tool": "asm_joint",
+     "why": "the next joint"
+    },
+    {
+     "tool": "asm_bom",
+     "why": "the parts list"
+    }
+   ],
+   "weight": 72,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "assembly-jointed": {
+   "when": {
+    "assembly": "jointed"
+   },
+   "suggest": [
+    {
+     "tool": "asm_check",
+     "why": "do the joints solve, do parts collide"
+    },
+    {
+     "tool": "asm_joint",
+     "why": "the next joint"
+    },
+    {
+     "tool": "asm_bom",
+     "why": "the parts list"
+    }
+   ],
+   "weight": 45,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "assembly-empty-bench": {
+   "when": {
+    "assembly": "empty",
+    "workbench": "AssemblyWorkbench"
+   },
+   "suggest": [
+    {
+     "tool": "asm_add",
+     "why": "the assembly holds no parts yet"
+    },
+    {
+     "tool": "asm_new_part",
+     "why": "a new part in the assembly"
+    }
+   ],
+   "weight": 72,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "assembly-empty": {
+   "when": {
+    "assembly": "empty"
+   },
+   "suggest": [
+    {
+     "tool": "asm_add",
+     "why": "the assembly holds no parts yet"
+    },
+    {
+     "tool": "asm_new_part",
+     "why": "a new part in the assembly"
+    }
+   ],
+   "weight": 45,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "body-empty": {
+   "when": {
+    "body": "empty"
+   },
+   "suggest": [
+    {
+     "tool": "sketch_new",
+     "why": "the body has no sketch yet"
+    },
+    {
+     "tool": "pd_primitive",
+     "why": "or start from a box or cylinder"
+    }
+   ],
+   "weight": 65,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "body-sketch-empty": {
+   "when": {
+    "body": "sketch-empty"
+   },
+   "suggest": [
+    {
+     "tool": "sketch_add",
+     "why": "the new sketch has no geometry yet"
+    },
+    {
+     "tool": "sketch_external",
+     "why": "or bring in edges to build on"
+    }
+   ],
+   "weight": 65,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "body-sketch-open": {
+   "when": {
+    "body": "sketch-open"
+   },
+   "suggest": [
+    {
+     "tool": "sketch_state",
+     "why": "the sketch is not closed yet"
+    },
+    {
+     "tool": "sketch_add",
+     "why": "close the outline"
+    },
+    {
+     "tool": "sketch_validate",
+     "why": "find ends that do not meet"
+    }
+   ],
+   "weight": 65,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "body-sketch-closed-first": {
+   "when": {
+    "body": "sketch-closed",
+    "features": "none"
+   },
+   "suggest": [
+    {
+     "tool": "pd_pad",
+     "why": "a closed sketch no feature uses yet"
+    },
+    {
+     "tool": "pd_revolution",
+     "why": "or turn it about an axis"
+    },
+    {
+     "tool": "sketch_constrain",
+     "why": "or finish its dimensions first"
+    }
+   ],
+   "weight": 66,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "body-sketch-closed": {
+   "when": {
+    "body": "sketch-closed",
+    "features": "some"
+   },
+   "suggest": [
+    {
+     "tool": "pd_pad",
+     "why": "a closed sketch no feature uses yet"
+    },
+    {
+     "tool": "pd_pocket",
+     "why": "cut it out of the body"
+    },
+    {
+     "tool": "pd_revolution",
+     "why": "or turn it about an axis"
+    }
+   ],
+   "weight": 66,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "body-after-solid": {
+   "when": {
+    "body": "features",
+    "lastFeature": [
+     "pad",
+     "pocket",
+     "revolution",
+     "groove",
+     "additiveloft",
+     "additivepipe",
+     "subtractiveloft",
+     "subtractivepipe",
+     "additivehelix",
+     "subtractivehelix",
+     "boolean",
+     "additivebox",
+     "additivecylinder",
+     "additivesphere",
+     "additivecone",
+     "additiveellipsoid",
+     "additivetorus",
+     "additiveprism",
+     "additivewedge",
+     "subtractivebox",
+     "subtractivecylinder",
+     "subtractivesphere",
+     "subtractivecone",
+     "subtractiveellipsoid",
+     "subtractivetorus",
+     "subtractiveprism",
+     "subtractivewedge",
+     "featurebase"
+    ]
+   },
+   "suggest": [
+    {
+     "tool": "pd_fillet",
+     "why": "round edges of the new solid"
+    },
+    {
+     "tool": "pd_chamfer",
+     "why": "bevel edges of the new solid"
+    },
+    {
+     "tool": "pd_hole",
+     "why": "holes, from a sketch of points"
+    }
+   ],
+   "weight": 50,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "body-after-dressup": {
+   "when": {
+    "body": "features",
+    "lastFeature": [
+     "fillet",
+     "chamfer",
+     "draft",
+     "thickness",
+     "hole",
+     "mirrored",
+     "linearpattern",
+     "polarpattern",
+     "multitransform"
+    ]
+   },
+   "suggest": [
+    {
+     "tool": "body_check",
+     "why": "is the body one sound solid"
+    },
+    {
+     "tool": "sketch_new",
+     "why": "the next feature's sketch"
+    },
+    {
+     "tool": "export",
+     "why": "write it out when done"
+    }
+   ],
+   "weight": 48,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "body-check": {
+   "when": {
+    "body": "features"
+   },
+   "suggest": [
+    {
+     "tool": "body_check",
+     "why": "is the body one sound solid"
+    },
+    {
+     "tool": "measure",
+     "why": "check a size"
+    },
+    {
+     "tool": "sketch_new",
+     "why": "the next feature's sketch"
+    }
+   ],
+   "weight": 30,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "document-empty": {
+   "when": {
+    "document": "empty"
+   },
+   "suggest": [
+    {
+     "tool": "pd_body_new",
+     "why": "nothing here yet: a body to build in"
+    },
+    {
+     "tool": "part_primitive",
+     "why": "or a plain box or cylinder"
+    },
+    {
+     "tool": "doc_open",
+     "why": "or open a file"
+    }
+   ],
+   "weight": 40,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  }
+ }
+}

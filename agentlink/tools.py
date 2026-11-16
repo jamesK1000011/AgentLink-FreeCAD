@@ -453,6 +453,7 @@ class Session:
             "where": getattr(self, "where", "hidden"),
             **self._next_state(),
             **self._tools_state(),
+            **self._extensions_state(),
             **self._unattended_state(),
             **({"note": "The hidden FreeCAD answered: the FreeCAD window is closed, or its link is off or still starting, so this is not the document on screen."} if getattr(self, "where", "hidden") == "hidden" and os.environ.get("AGENTLINK_SUPERVISED") else {}),
             **({"launcher": _launcher()} if a.get("launcher") else {}),
@@ -463,6 +464,18 @@ class Session:
         window only."""
         line = next_hint(self)
         return {"next": line} if line else {}
+
+    def _extensions_state(self):
+        """leftOut and warning while an installed add-on is not loaded in
+        this FreeCAD (agentlink/extstate.py): its tools are missing, and
+        nothing else would say so."""
+        try:
+            from . import extstate
+
+            left = extstate.state()["leftOut"]
+            return {"leftOut": left, "warning": extstate.warning(left)} if left else {}
+        except Exception:  # noqa: BLE001
+            return {}
 
     def _tools_state(self):
         """toolsChanged: the server's tool list is no longer the one the
@@ -955,10 +968,19 @@ def now_state(doc, commands=()):
     # FreeCAD asks those itself as it draws them, so they are safe. Asking
     # every indexed command (about 550, most of workbenches not loaded)
     # crashed FreeCAD 1.1.3 on the Mac, twice.
+    ask_active(gui, commands, state)
+    return state
+
+
+def ask_active(gui, commands, state):
+    """Whether each of commands reports itself active, into
+    state["active"] — only those on the active workbench's toolbars
+    (shown_commands): FreeCAD asks those itself as it draws them. No other
+    command's isActive() is ever called (that crashed FreeCAD 1.1.3)."""
     shown = shown_commands(gui)
     state["asked"] = len(shown)
     for name in dict.fromkeys(commands):
-        if name not in shown:
+        if name not in shown or name in state["active"]:
             continue
         try:
             c = gui.Command.get(name)
@@ -967,6 +989,26 @@ def now_state(doc, commands=()):
         except Exception:  # noqa: BLE001 - a command that cannot say counts for nothing
             pass
     return state
+
+
+def next_picks(session, state, gui=None, ask=True):
+    """(facts, picks): the likely next tools for the present state, ranked
+    by the rules (agentlink/nexthint.py rank()) and passed through what
+    FreeCAD says can run now (available()): [{ tool, why, rule, score }],
+    at most three. ask: ask the picked tools' commands whether they are
+    active (those on the active workbench's toolbars only). Never raises."""
+    from . import nexthint
+
+    try:
+        facts = nexthint.facts(getattr(session, "doc", None), state, gui)
+        ranked = nexthint.rank(facts)
+        if ask and gui is not None and ranked:
+            ask_active(gui, nexthint.commands_of(ranked), state)
+        server = getattr(session, "server", None)
+        exists = (lambda n: n in server.tools) if server is not None else None
+        return facts, nexthint.available(ranked, state, exists)
+    except Exception:  # noqa: BLE001
+        return {}, []
 
 
 def shown_commands(gui):
@@ -989,7 +1031,8 @@ def next_state(session):
     """What the window is in the middle of, for the "next" hint
     (agentlink/nexthint.py): now_state() with the sketch in edit and its
     degrees of freedom, an open task panel's buttons, a dialog in front and
-    the status bar's text, and the tools whose FreeCAD commands are active.
+    the status bar's text, and the likely next tools ranked from the
+    document's own state (next_picks: [{ tool, why }], at most three).
     (state, tools). With no window: ({"window": False}, []) at the cost of
     one attribute read. Never raises."""
     try:
@@ -998,21 +1041,12 @@ def next_state(session):
         import FreeCADGui as gui
     except Exception:  # noqa: BLE001
         return {"window": False}, []
-    from . import nexthint
-
-    wb = editing = None
     sketch = None
-    try:
-        w = gui.activeWorkbench()
-        wb = str(w.name()) if hasattr(w, "name") else type(w).__name__
-    except Exception:  # noqa: BLE001
-        pass
     try:
         gd = gui.ActiveDocument
         vp = gd.getInEdit() if gd is not None else None
         o = getattr(vp, "Object", None)
         if o is not None and o.isDerivedFrom("Sketcher::SketchObject"):
-            editing = "sketch"
             sketch = {"name": str(o.Label)}
             try:
                 sketch["dof"] = int(o.DoF)
@@ -1020,25 +1054,9 @@ def next_state(session):
                 pass
     except Exception:  # noqa: BLE001
         pass
-    rows = []
-    try:
-        server = getattr(session, "server", None)
-        # Which tools belong to a workbench does not change while the tool
-        # set stays: kept per workbench.
-        cache = session.__dict__.setdefault("_next_rows", {})
-        ck = (wb, editing, len(server.tools) if server is not None else 0)
-        if ck not in cache:
-            cache.clear()
-            # Only tools whose command sits on the active workbench's
-            # toolbars: nothing else is ever asked whether it is active.
-            shown = shown_commands(gui)
-            got = nexthint.candidates(list(server.tools) if server is not None else [], wb, editing, cap=10_000)
-            got = [(n, {**e, "commands": [c for c in e["commands"] if c in shown]}) for n, e in got]
-            cache[ck] = [(n, e) for n, e in got if e["commands"]][:nexthint.MAX_CANDIDATES]
-        rows = cache[ck]
-    except Exception:  # noqa: BLE001
-        rows = []
-    state = now_state(getattr(session, "doc", None), [c for _n, e in rows for c in e["commands"]])
+    # No command is asked yet: which ones are worth asking follows from
+    # the document's state (next_picks below).
+    state = now_state(getattr(session, "doc", None), ())
     if sketch:
         state["sketch"] = sketch
     try:
@@ -1081,10 +1099,12 @@ def next_state(session):
             state["dialog"] = {"title": d.get("title") or d.get("class"), "buttons": d.get("buttons") or []}
     except Exception:  # noqa: BLE001
         pass
-    try:
-        tools_now = nexthint.active_tools(rows, state)
-    except Exception:  # noqa: BLE001
-        tools_now = []
+    # The likely next tools, from the document's own state; none while a
+    # dialog is in front (answering it is the next step).
+    tools_now = []
+    if not state.get("dialog"):
+        _facts, tools_now = next_picks(session, state, gui)
+    state["rules"] = [p["rule"] for p in tools_now]
     return state, tools_now
 
 
@@ -1098,7 +1118,8 @@ def _next_quick(session):
     """What tells one state of the window from the next at the cost of a
     few attribute reads (no command is asked anything): workbench, the
     object in edit and a sketch's freedom, the selection's size, whether a
-    task panel or a dialog is open. None with no window."""
+    task panel or a dialog is open, how many objects the document holds.
+    None with no window."""
     try:
         if not FreeCAD.GuiUp:
             return None
@@ -1110,7 +1131,10 @@ def _next_quick(session):
                  lambda: (lambda o: None if o is None else (o.Name, getattr(o, "DoF", None)))(getattr(gui.ActiveDocument.getInEdit(), "Object", None)),
                  lambda: len(gui.Selection.getSelection()),
                  lambda: bool(gui.Control.activeDialog()),
-                 _modal_up):
+                 _modal_up,
+                 # The document grew or shrank (a first sketch, a pad): the
+                 # likely next step is then another.
+                 lambda: len(session.doc.Objects)):
         try:
             out.append(read())
         except Exception:  # noqa: BLE001
@@ -1152,7 +1176,7 @@ def make_tools(session):
     s = session
     body = {"type": "string", "description": "A body's name; may be left out when there is one."}
     return [
-        Tool("session_state", "What the document holds: each body's volume, area, faces, solids and size (mm) — every shown body, a Body of several solids too (multiSolid says how many and whether AllowCompound means it), a part attached to another (a screw) beside it — the step count, jobs running and where files go. In the window also next: one short line (under 400 characters) of what FreeCAD is in the middle of, most pressing first — a dialog in front and its buttons, a sketch open in edit with its DoF, an open task panel and its buttons, the active workbench, the status bar's text, and up to 5 tools whose FreeCAD commands (on the active workbench's toolbars) report themselves active now; a changing call's health carries the same line when it is news. toolsChanged: the tool list is no longer the one last listed (groups enabled or hidden, an add-on installed, updated or removed) — the first time added, removed, updated and callable (new but unlisted) by name, after that the counts, until the list is read again. launcher: true adds the Claude extension's launcher as seen from here (the copy fetched from GitHub, whether it can load, its log's last lines). Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
+        Tool("session_state", "What the document holds: each body's volume, area, faces, solids and size (mm) — every shown body, a Body of several solids too (multiSolid says how many and whether AllowCompound means it), a part attached to another (a screw) beside it — the step count, jobs running and where files go. In the window also next: one short line (under 400 characters) of what FreeCAD is in the middle of, most pressing first — a dialog in front and its buttons, a sketch open in edit with its DoF, an open task panel and its buttons, then likely next: up to 3 tools, likeliest first, each with a few words on why, ranked from the document's own state (a failing recompute first; then what is picked — an edge, a face; a sketch open in edit and whether it still has DoF; a drawing page in front; an assembly and its joints; how far the body is — no sketch yet, a closed sketch no feature uses, the last feature a pad or a fillet), leaving out a tool whose FreeCAD command on the active workbench's toolbars reports itself inactive; then the active workbench and the status bar's text. No tool is named while a dialog is in front (dialog_answer is the next step). A changing call's health carries the same line when it is news. leftOut [{ extension, error }] and warning are there while an installed add-on did not load in this FreeCAD (its tools are missing: the error says why; fix or update the add-on, then agentlink_update or app_restart). toolsChanged: the tool list is no longer the one last listed (groups enabled or hidden, an add-on installed, updated or removed) — the first time added, removed, updated and callable (new but unlisted) by name, after that the counts, until the list is read again. launcher: true adds the Claude extension's launcher as seen from here (the copy fetched from GitHub, whether it can load, its log's last lines). Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
         Tool("app_force_restart", "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang): run by Agent Link outside FreeCAD; the documents come back from their newest saved copies, as after a crash. For a window that is stuck; app_restart quits a working one cleanly.", obj({}), _force_restart_here),
         Tool("report_read", "FreeCAD's Report view in the window: its last lines (last, 40 by default), or only the warnings and errors (problems: true). New problem lines also come back on each answer as \"report\". Window only.", obj({"last": {"type": "integer"}, "problems": {"type": "boolean"}}), _report_read),
         Tool("body_check", "Whether a body is sound: FreeCAD's own Check Geometry, and on top of it closed, one solid, no sliver faces (under 0.01 mm wide) or very short edges, with where each problem is. A Body with AllowCompound true may hold several solids on purpose: they are counted and each checked (each), not a problem. A BOP-only finding (InvalidCurveOnSurface, where a counterbore breaks a chamfer) on a shape BRepCheck calls valid and closed is a warning with where, not a failure.", obj({"body": body}), s.body_check),
@@ -1267,7 +1291,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
 
     if lean is None:
         lean = os.environ.get("AGENTLINK_TOOLS", "lean") != "full"
-    from . import hooks
+    from . import extstate, hooks
 
     tools = make_tools(session)
     # job_status answers on the link's own thread: at once, even while the
@@ -1294,6 +1318,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             if not external:
                 raise
             sys.stderr.write(f"Agent Link: the {getattr(fam, 'GROUP', fam)} tools of an extension are left out — {type(e).__name__}: {e}\n")
+            extstate.left_out(getattr(fam, "EXTENSION", None) or getattr(fam, "__name__", "?"), f"its {getattr(fam, 'GROUP', '?')} tools: {extstate.error_words(e)}", "tools")
             continue
         if fam.GROUP in info:  # a family joining a group already there keeps its INFO
             pass
@@ -1303,6 +1328,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         if getattr(fam, "LEAN", False):
             lean_groups.add(fam.GROUP)
         replaced.update(g for g in (getattr(fam, "REPLACES", ()) or ()) if isinstance(g, str) and g != "core")
+        added = 0
         for t in made:
             t.group = fam.GROUP if external else GROUP_OF.get(t.name, fam.GROUP)
             if t.name in seen:
@@ -1313,10 +1339,16 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 continue
             seen[t.name] = t.group
             tools.append(t)
+            added += 1
+        if external:
+            extstate.loaded(getattr(fam, "EXTENSION", None) or getattr(fam, "__name__", "?"), fam.GROUP, added)
     try:
         window = bool(FreeCAD.GuiUp)
     except Exception:
         window = False
+    # What loaded and what was left out, kept where the launcher's update
+    # and the supervisor read it (~/AgentLink/extensions.json).
+    extstate.write(extstate.groups_of(tools), window=window, version=version)
     from . import outputs, paths
 
     hooks.apply_extensions(tools, session)
@@ -1459,15 +1491,39 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             hits = toolindex.rank(rows, find) if find is not None else [(r, 0, 0.0) for r in rows]
             pool = hits[:max(60, limit)] if find is not None else hits
             state = now_state(getattr(session, "doc", None), [c for r, _m, _s in pool for c in r["entry"]["commands"]])
+            # The same ranking as the "next" hint (agentlink/nexthint.py):
+            # the likely next tools by the document's own state come first,
+            # each with its reason; the rest by how they fit the window.
+            picks = []
+            try:
+                gui_now = None
+                if state["window"]:
+                    import FreeCADGui as gui_now
+
+                    try:
+                        o = getattr(gui_now.ActiveDocument.getInEdit(), "Object", None)
+                        if o is not None and state["editing"] == "sketch":
+                            state["sketch"] = {"name": str(o.Label), "dof": int(o.DoF)}
+                    except Exception:  # noqa: BLE001
+                        pass
+                _facts, picks = next_picks(session, state, gui_now)
+            except Exception:  # noqa: BLE001
+                picks = []
+            likely = {p["tool"]: (k, p["why"]) for k, p in enumerate(picks)}
             scored = []
             for r, m, sc in pool:
                 fit, why = toolindex.fits(r["entry"], state, ((r["tool"].schema or {}).get("properties") or {}))
+                if r["name"] in likely:
+                    k, words = likely[r["name"]]
+                    fit, why = fit + 50 - 5 * k, [f"likely next: {words}"] + why
                 if find is None and fit <= 0:
                     continue
                 scored.append((-m, -(sc + 2 * fit), r["name"], r, why))
             scored.sort(key=lambda h: h[:3])
             seen_now = {"workbench": state["workbench"], "editing": state["editing"], "selected": state["selected"]} if state["window"] else {"window": False}
             out = {**({"find": find} if find is not None else {}), "now": seen_now, "count": len(scored), "tools": [row(r, why) for _m, _s, _n, r, why in scored[:limit]]}
+            if picks:
+                out["next"] = [{"tool": p["tool"], "why": p["why"]} for p in picks]
             if not scored:
                 out["note"] = ("Nothing by those words. Fewer or plainer words, or leave find out for what fits now." if find is not None
                                else "Nothing fits this state in particular: tool_groups { find: \"words\" } searches every tool, session_state says what the document holds.")
@@ -1494,7 +1550,18 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 rows.append({"group": g, "on": True, "count": n})
             else:
                 rows.append({"group": g, "on": False, "count": n, "about": short(info.get(g, ""))})
-        return {"groups": rows, "listed": sum(1 for t in server.tools.values() if server.groups is None or t.group in server.groups),
+        # Installed add-ons that brought no tools (left out at import, by
+        # their API, or by their own tools()): said, never silently absent.
+        addons = {}
+        try:
+            from . import extstate
+
+            none = extstate.state()["noTools"]
+            if none:
+                addons = {"addonsWithoutTools": none, "warning": extstate.warning(none)}
+        except Exception:  # noqa: BLE001
+            pass
+        return {"groups": rows, "listed": sum(1 for t in server.tools.values() if server.groups is None or t.group in server.groups), **addons,
                 "note": "Every tool is callable by name, listed or not. find: \"words\" searches them all; group: g gives one group's whole about and its tools, a line each; detail: true every group's whole about."}
 
     def outputs_clean(a):
@@ -1757,7 +1824,20 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             except Exception:
                 pass
         record.write({"running": True, "results": []})
+        # The last call that changes the document: shown in the window at
+        # the full pace again (agentlink/echo.py pace()), as the first three
+        # changing calls are; those between at the short one.
+        last_change = None
+        for i, c in enumerate(calls):
+            t = server.tools.get(c["tool"])
+            try:
+                if t is not None and t.changes_for(c["arguments"]):
+                    last_change = i
+            except Exception:  # noqa: BLE001
+                if getattr(t, "changes", False):
+                    last_change = i
         mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False, "names0": mine_mark[1], "t0": t_out,
+                              "lastChange": last_change, "echoed": 0,
                               "budget": float(budget), "first": first, "total": total, "file": a.get("file"), "record": record,
                               "hold": _batch_hold() if build_mode == "end" else None}
         got = None
@@ -1798,26 +1878,11 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         except Exception as e:
             got["toError"] = f"to: not written ({getattr(e, 'message', None) or e}). The answers are here in full instead."
             return got
-        lines = []
-        for i, r in enumerate(got.get("results") or []):
-            row = {"i": first + i, "tool": r.get("tool"), "ok": bool(r.get("ok"))}
-            if r.get("undone"):
-                row["undone"] = True
-            if not r.get("ok"):
-                e = r.get("error") or {}
-                row["error"] = f"{e.get('code')}: {e.get('message')}" if isinstance(e, dict) else str(e)
-            else:
-                res = r.get("result")
-                h = res.get("health") if isinstance(res, dict) else r.get("health")
-                if isinstance(h, dict) and h.get("verdict"):
-                    row["health"] = h["verdict"]
-                if isinstance(r.get("written"), dict):
-                    row["written"] = r["written"].get("path")
-            lines.append(row)
-        short = {k: v for k, v in got.items() if k != "results"}
-        short.update({"results": lines, "written": {"path": path, "bytes": os.path.getsize(path)},
-                      "note": "Each call's whole answer is in the file (results[i].result; a call with a to of its own: in that file, written here); here: ok, a refusal's words and the health verdict."})
-        return short
+        # A line per call; the batch's own note (where it stopped and how
+        # to go on) is kept, the file's beside it (batchrec.to_reply).
+        from . import batchrec
+
+        return batchrec.to_reply(got, first, path, os.path.getsize(path))
 
     def _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine):
         import json as _json
@@ -2027,7 +2092,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
     core = [
         Tool("usage_report", "What working through Agent Link has cost the agent, estimated on this side: calls, tokens (text at ~3.5 characters a token, pictures by size) and the tool list each session loads up front — per day over days (7), per session, the costliest tools, and tips to cut it. session: true gives this session alone. Not Claude's own count: the plan's usage page has that. Changes nothing.",
              obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}}), usage_report),
-        Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools, each with one line of what it does); detail: true gives every group's whole about. The cheap way to a tool that is not listed is find, card, call: find: \"words\" searches every tool (best first; group narrows it, limit 1-40, 10 by default) by its name, FreeCAD's own names for its commands and workbench (\"PartDesign_Fillet\", \"techdraw\", \"drawing\"), search words and description — tools matching every word come before those matching some — and answers name, group and what it does; tool: name (or up to 20 names) answers that tool's whole description and inputSchema; then call it by name. now: true (alone or with find) answers the tools that fit the present state, best first, each with fits (why): the active workbench, a sketch open in edit, the selection, and whether the tool's FreeCAD command reports itself active — without a window it goes by the document's objects only and says so. None of these lists anything, so a group's other descriptions are not loaded: enable a group only when a task uses most of it. Every tool is callable by name either way. Changes nothing but which tools are listed.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}}), tool_groups),
+        Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools, each with one line of what it does); detail: true gives every group's whole about. The cheap way to a tool that is not listed is find, card, call: find: \"words\" searches every tool (best first; group narrows it, limit 1-40, 10 by default) by its name, FreeCAD's own names for its commands and workbench (\"PartDesign_Fillet\", \"techdraw\", \"drawing\"), search words and description — tools matching every word come before those matching some — and answers name, group and what it does; tool: name (or up to 20 names) answers that tool's whole description and inputSchema; then call it by name. now: true (alone or with find) answers the tools that fit the present state, best first, each with fits (why): first the likely next step by the document's own state, the same ranking as session_state's next (next [{ tool, why }], at most three; fits then starts \"likely next: …\"), then the active workbench, a sketch open in edit, the selection, and whether the tool's FreeCAD command reports itself active — without a window it goes by the document's objects only and says so. With no arguments the answer also names installed add-ons that brought no tools (addonsWithoutTools [{ extension, error }] and warning), when there are any. None of these lists anything, so a group's other descriptions are not loaded: enable a group only when a task uses most of it. Every tool is callable by name either way. Changes nothing but which tools are listed.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}}), tool_groups),
         Tool("guide_read", "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry. No topic: the index — per guide its sections, what the guide and each section cost to read (tokens and sectionTokens: approximate, characters / 4), start (its \"Start here\" section, where it has one: a short map of what to read first; named first in sections) and later (sections meant for one moment of a task, each with when; firstReadTokens is the guide without them). "
              "topic: a guide whole; section: one of its ## sections by the start of its name, or a list of them in one answer (section: [\"Start here\", \"traps\"]). The cheap way through a long guide: its Start here section, then the sections it names, the later ones when their moment comes. "
              "topic as a list reads several guides in order in one call (with section: that section of each guide that has it; missing names the rest), up to about 55 000 characters — the answer is read [{ topic, text }], with next: the topics not reached; guide_read { topic: next } reads on. Changes nothing.",
@@ -2037,7 +2102,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         Tool("job_start", "Run a read as a job: tool and its arguments. The answer comes back as the tool's own when it ends within 45 s, else a job id for job_status (wait: false answers with the id at once). Reads that are heavy or were slow here (over 20 s) go to a job on their own, and any read takes background: true for the same; a client drops a call after about 80 s, so a long read's answer would be lost. Only reads that leave the window and the 3D view alone (not changes, pictures or window tools); while one runs, changes to its document wait (refused, saying which job).",
              obj({"tool": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["tool"]), job_start),
         Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }], or file: a .json file holding that list (or { calls, rollback, stopOnError }), read on this side so a long run of calls (many profiles' points) is not sent through the conversation; a relative path is in the session's folder, and files are read where other tools may read. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it and removes every object it made (removed lists any undo did not reach), so it stands or falls whole. "
-             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); a heavy read (a tool that runs as a job on its own: a wall-thickness or deviation reading, a solve) is not run inside a batch — the batch stops before it and the answer says how to go on; no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch. to: a .json file the whole answer is written to (relative: in the session's folder); the reply is then a line per call — ok, a refusal's words, the health verdict — so a long run's answers stay out of the conversation; read a call's result from the file when its line needs it. Every batch also keeps what ran in a record of its own, batches/<date>-<time>.json in the session's folder (the reply's record is its path; the newest 20 are kept), rewritten as each call ends: when a batch's answer never arrives — a call the client dropped, FreeCAD stopped and started again — read the newest record to see which calls ran (running: true and ran: n while it was under way, each call's whole result in results) before running anything again. "
+             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); a heavy read (a tool that runs as a job on its own: a wall-thickness or deviation reading, a solve) is not run inside a batch — the batch stops before it and the answer says how to go on; no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch. In the FreeCAD window each changing call is shown as it runs (its workbench, its button lit, its result selected) with a pause so a person can follow, which costs about 0.4 s and up to 2.5 s a call: a long batch runs faster from its fourth changing call on — those are still shown, with a pause of 60 ms (the person's EchoBatchDelay preference, ms; 0 none, -1 the full pause throughout) — and its last changing call is shown at the full pace again, so the window ends on a state that can be read; one batch of 20 calls is therefore much quicker in the window than 20 calls sent singly. to: a .json file the whole answer is written to (relative: in the session's folder); the reply is then a line per call — ok, a refusal's words, the health verdict — and keeps the batch's own note beside it (where it stopped and how to go on: next, notRun, heavy), so a long run's answers stay out of the conversation; read a call's result from the file when its line needs it. Every batch also keeps what ran in a record of its own, batches/<date>-<time>.json in the session's folder (the reply's record is its path; the newest 20 are kept), rewritten as each call ends: when a batch's answer never arrives — a call the client dropped, FreeCAD stopped and started again — read the newest record to see which calls ran (running: true and ran: n while it was under way, each call's whole result in results) before running anything again. "
              "Chaining, so an answer one call needs from another does not pass through the conversation: (1) a call may carry to — { tool, arguments, to: \"outline.json\" } writes that call's whole answer to the .json file (relative: in the session's folder; written where tools may write) and its result here is only { written: { path, bytes }, keys (an object's) or length (a list's), and health when it had a verdict }; a refused call writes nothing, and a rollback leaves the files. "
              "(2) Anywhere inside a call's arguments, { \"$file\": \"outline.json\" } is replaced by that JSON file's contents and { \"$file\": \"outline.json\", \"$at\": \"loops.0.points\" } by the part at that dotted path of keys and list indices (from 0; -1 is the last); the file is read as the call is about to run, so it may be one an earlier call of this batch wrote, and is read where tools may read. "
              "(3) { \"$from\": 2, \"$at\": \"bodies.0.name\" } takes the same from the answer of call 2 of this batch (calls are numbered from 0 through the whole list, as from and next count; only an earlier call, and only one run in this part of the batch — across parts use to and $file). A reference stands alone as the value ($file or $from, with $at); one that cannot be followed — no file, no key, no index, a refused call — refuses that call, saying what is there (the keys or the length at the deepest level reached), and counts as a refusal for stopOnError and rollback; a file or answer over 20 MB is refused. The arguments are checked after the references are filled in. "

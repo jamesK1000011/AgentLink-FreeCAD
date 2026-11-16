@@ -2,18 +2,45 @@
 """The "next" hint of session_state and the health check: one short line of
 what FreeCAD's window is in the middle of, so the agent's next call fits it
 — a dialog in front and its buttons, a sketch open in edit with its degrees
-of freedom, an open task panel and its buttons, the active workbench, the
-status bar's text, and up to five tools whose FreeCAD commands report
-themselves active now (agentlink/toolindex.py's entries, tools.now_state()).
+of freedom, an open task panel and its buttons, up to three tools that are
+the likely next step with a few words each on why, the active workbench
+and the status bar's text.
 
-Plain Python: the state is read by tools.next_state(); here it is put into
-words and kept under MAX characters.
+The likely next tools are ranked from the document's own state, not listed
+by name: a small table of rules (data/nexthint.json, its schema beside it)
+says, for a state — a failing recompute, an edge or a face picked, a sketch
+open in edit with freedom left, a closed sketch no feature uses, a body
+whose last feature is a pad, a drawing page in front, an assembly without
+joints — which tools usually come next, and how much the rule weighs. The
+state is read cheaply (tools.next_facts()); a tool that is not installed,
+or whose FreeCAD command sits on the active workbench's toolbars and
+reports itself inactive, is passed over (tools.now_state(): no command
+outside those toolbars is ever asked). tool_groups { now: true } puts the
+same picks first.
+
+An add-on adds rules for its own tools with NEXT on its family module
+({ id: entry }, the same shape as the file's entries): declare().
+
+Plain Python: the state is read by tools.next_state(); here it is ranked,
+put into words and kept under MAX characters.
 """
+import json
+import os
+
 from . import toolindex
 
 MAX = 400
-MAX_TOOLS = 5
-MAX_CANDIDATES = 60
+MAX_TOOLS = 3        # tools said in the hint
+MAX_SUGGEST = 4      # tools read from one rule
+MAX_PICKS = 12       # tools whose commands are asked whether they are active
+MAX_WHY = 60
+
+DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "nexthint.json")
+SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "nexthint.schema.json")
+
+# Rules installed add-ons declared (declare()): { id: entry }.
+EXTRA = {}
+_cache = {}
 
 
 def _cut(text, n):
@@ -26,57 +53,298 @@ def _buttons(names, n=5):
     return ", ".join(names[:n]) + (" …" if len(names) > n else "")
 
 
-def candidates(names, workbench, editing=None, entry=toolindex.entry, cap=MAX_CANDIDATES):
-    """The tools worth asking FreeCAD about: those of the active workbench
-    (a sketch in edit: Sketcher's) that name a FreeCAD command, at most cap.
-    [(tool, entry)] — asking every command of every tool would cost more
-    than the hint is worth."""
-    want = {w for w in (workbench, "SketcherWorkbench" if editing == "sketch" else None) if w}
-    out = []
-    if not want:
-        return out
-    for n in names:
+# ---- the facts ----------------------------------------------------------------------------
+
+# Past this many objects the document's own state is not read for the hint
+# (the selection, the sketch in edit and the page in front still are).
+MAX_OBJECTS = 2000
+# PartDesign's solid features (FreeCAD's type names, lower case) are told
+# from its dress-ups and patterns by the rules themselves (data/nexthint.json).
+
+
+def _sketch_progress(sk):
+    """sketch-empty (no geometry), sketch-closed (every wire closed) or
+    sketch-open, of a sketch no feature uses yet."""
+    try:
+        if int(sk.GeometryCount) == 0:
+            return "sketch-empty"
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        wires = sk.Shape.Wires
+        return "sketch-closed" if wires and all(w.isClosed() for w in wires) else "sketch-open"
+    except Exception:  # noqa: BLE001 - a null shape: nothing closed yet
+        return "sketch-open"
+
+
+def facts(doc, state=None, gui=None):
+    """The document's own state as the rules read it (data/nexthint.json's
+    "about" lists the facts), from FreeCAD's objects as they are (doc: the
+    document; state: tools.now_state()'s, with the sketch in edit; gui:
+    FreeCADGui in the window, None without one) and from cheap
+    reads only: object State flags, the active body's Group and Tip, an
+    unused sketch's wires, an assembly's joint group, the selection and
+    the view in front. A fact that cannot be read is left out, and a rule
+    that needs it then does not fit. Never raises."""
+    state = state or {}
+    out = {}
+    if state.get("workbench"):
+        out["workbench"] = state["workbench"]
+    if state.get("editing"):
+        out["editing"] = "sketch" if state["editing"] == "sketch" else "other"
+        dof = (state.get("sketch") or {}).get("dof")
+        if isinstance(dof, int):
+            out["dof"] = "full" if dof == 0 else "free"
+    subs = state.get("selSubs") or ()
+    sel = next((k for k in ("edge", "face", "vertex") if k in subs), None) or ("object" if state.get("selected") else None)
+    picked = None
+    active_body = active_part = None
+    if gui is not None:
         try:
-            e = entry(n)
+            if sel:
+                picked = gui.Selection.getSelectionEx()[0].Object
         except Exception:  # noqa: BLE001
-            continue
-        if e.get("commands") and e.get("workbench") in want:
-            out.append((n, e))
-            if len(out) >= cap:
-                break
+            picked = None
+        try:
+            view = gui.ActiveDocument.ActiveView
+            if type(view).__name__ == "MDIViewPagePy":  # TechDraw's page view (FreeCAD 1.1: TechDraw/Gui/MDIViewPage.cpp)
+                out["page"] = True
+            elif hasattr(view, "getActiveObject"):
+                active_body = view.getActiveObject("pdbody")
+                active_part = view.getActiveObject("part")
+        except Exception:  # noqa: BLE001
+            pass
+    if sel:
+        out["selection"] = sel
+        try:
+            in_body = picked is not None and (picked.TypeId == "PartDesign::Body" or any(p.TypeId == "PartDesign::Body" for p in picked.InList))
+            out["selectionIn"] = "body" if in_body else "other"
+        except Exception:  # noqa: BLE001
+            out["selectionIn"] = "other"
+    try:
+        objs = list(doc.Objects)
+    except Exception:  # noqa: BLE001 - no document, or one that was closed
+        return out
+    out["document"] = "objects" if objs else "empty"
+    if len(objs) > MAX_OBJECTS:
+        return out
+    try:
+        out["failing"] = any("Invalid" in o.State for o in objs)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        asms = [o for o in objs if o.TypeId == "Assembly::AssemblyObject"]
+        if asms:
+            asm = active_part if active_part in asms else asms[-1]
+            group = list(asm.Group)
+            joints = sum(len(g.Group) for g in group if g.TypeId == "Assembly::JointGroup")
+            parts = [o for o in group if not o.TypeId.endswith("Group")]
+            out["assembly"] = "empty" if not parts else ("jointed" if joints else "unjointed")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        bodies = [o for o in objs if o.TypeId == "PartDesign::Body"]
+        if not bodies:
+            out["body"] = "none"
+            return out
+        body = active_body if active_body in bodies else None
+        if body is None and picked is not None:
+            body = picked if picked in bodies else next((p for p in picked.InList if p in bodies), None)
+        if body is None:
+            body = bodies[-1]
+        group = list(body.Group)
+        sketches = [o for o in group if o.isDerivedFrom("Sketcher::SketchObject")]
+        feats = [o for o in group if o.isDerivedFrom("PartDesign::Feature")]
+        unused = [k for k in sketches if not any(p.isDerivedFrom("PartDesign::Feature") for p in k.InList)]
+        out["features"] = "some" if feats else "none"
+        if unused:
+            out["body"] = _sketch_progress(unused[-1])
+        elif feats:
+            out["body"] = "features"
+            tip = getattr(body, "Tip", None) or feats[-1]
+            out["lastFeature"] = str(tip.TypeId).rsplit("::", 1)[-1].lower()
+        else:
+            out["body"] = "empty"
+    except Exception:  # noqa: BLE001
+        pass
     return out
 
 
-def active_tools(rows, state, n=MAX_TOOLS):
-    """The tools among rows [(tool, entry)] whose FreeCAD command reports
-    itself active in state (now_state's), best fit first, at most n."""
-    hits = []
-    for name, e in rows:
+
+# ---- the rules ----------------------------------------------------------------------------
+
+def _schema():
+    if "schema" not in _cache:
         try:
-            score, why = toolindex.fits(e, state)
+            with open(SCHEMA, encoding="utf-8") as f:
+                _cache["schema"] = json.load(f)
+        except (OSError, ValueError):
+            _cache["schema"] = None
+    return _cache["schema"]
+
+
+def problems(entry):
+    """What is wrong with one rule, by the schema ([] when it fits)."""
+    from . import datafiles
+
+    schema = _schema()
+    if schema is None:
+        return [] if isinstance(entry, dict) and isinstance(entry.get("when"), dict) and isinstance(entry.get("suggest"), list) else ["not a rule"]
+    return datafiles.validate(entry, schema)
+
+
+def load(path=None):
+    """{ id: rule } from the data file ({} when it is missing or unreadable:
+    the hint then says the state and names no tools). A rule that does not
+    fit the schema is left out."""
+    path = path or DATA
+    if path not in _cache:
+        try:
+            with open(path, encoding="utf-8") as f:
+                entries = json.load(f).get("entries", {})
+            _cache[path] = {k: v for k, v in entries.items() if not problems(v)}
+        except (OSError, ValueError, AttributeError):
+            _cache[path] = {}
+    return _cache[path]
+
+
+def declare(entries, owner="an add-on"):
+    """An add-on's own rules ({ id: entry }, its family module's NEXT): the
+    same shape as the file's, checked by the same schema. Those that do not
+    fit are left out; their problems are returned (for the log). A rule of
+    the file is never replaced: an add-on's id that is taken is kept under
+    "<owner>:<id>"."""
+    bad = []
+    if not isinstance(entries, dict):
+        return [f"{owner}: NEXT is not an object of rules"]
+    for k, v in entries.items():
+        if not isinstance(k, str) or not k:
+            continue
+        p = problems(v)
+        if p:
+            bad.append(f"{owner}: next-hint rule {k}: {p[0]}")
+            continue
+        key = k if k not in load() else f"{owner}:{k}"
+        EXTRA[key] = v
+    return bad
+
+
+def rules():
+    """Every rule: the file's, then the add-ons'."""
+    return {**load(), **EXTRA}
+
+
+def _holds(cond, facts):
+    """Whether every fact of cond has (one of) its value(s)."""
+    for k, want in cond.items():
+        have = facts.get(k)
+        if isinstance(want, list):
+            if have not in want:
+                return False
+        elif have != want:
+            return False
+    return True
+
+
+def matches(rule, facts):
+    """Whether a rule fits the facts: all of when, none of unless."""
+    when = rule.get("when") or {}
+    if not when or not _holds(when, facts):
+        return False
+    for k, want in (rule.get("unless") or {}).items():
+        if _holds({k: want}, facts):
+            return False
+    return True
+
+
+def rank(facts, table=None, limit=MAX_PICKS):
+    """The likely next tools for these facts, likeliest first:
+    [{ tool, why, rule, score }], each tool once (from its heaviest rule).
+    A rule's first tool scores its weight, each later one a little less,
+    so a heavier rule's tools come before a lighter one's."""
+    table = rules() if table is None else table
+    best = {}
+    for order, (rid, rule) in enumerate(table.items()):
+        try:
+            if not matches(rule, facts or {}):
+                continue
+            weight = float(rule.get("weight") or 0)
+            for k, s in enumerate((rule.get("suggest") or [])[:MAX_SUGGEST]):
+                tool, why = s.get("tool"), s.get("why")
+                if not isinstance(tool, str) or not tool:
+                    continue
+                score = weight - 0.1 * k
+                if tool not in best or score > best[tool][0]:
+                    best[tool] = (score, order, k, _cut(why, MAX_WHY), rid)
+        except Exception:  # noqa: BLE001 - one bad rule never stops the hint
+            continue
+    got = sorted(best.items(), key=lambda kv: (-kv[1][0], kv[1][1], kv[1][2], kv[0]))
+    return [{"tool": t, "why": v[3], "rule": v[4], "score": v[0]} for t, v in got[:limit]]
+
+
+def commands_of(picks, entry=toolindex.entry):
+    """The FreeCAD commands of the picked tools, for now_state() to ask
+    (it asks only those on the active workbench's toolbars)."""
+    out = []
+    for p in picks:
+        try:
+            out += [c for c in entry(p["tool"]).get("commands") or [] if c not in out]
         except Exception:  # noqa: BLE001
             continue
-        if "command active" in why:
-            hits.append((-score, name))
-    hits.sort()
-    return [name for _s, name in hits[:n]]
+    return out
 
+
+def available(picks, state=None, exists=None, entry=toolindex.entry, n=MAX_TOOLS):
+    """The first n picks that can be called now: the tool exists here
+    (exists(name); None: not checked) and FreeCAD does not say otherwise —
+    a tool whose commands on the shown toolbars all report themselves
+    inactive (state["active"]) is passed over; one FreeCAD was not asked
+    about (its command is on another workbench's toolbars, or it has none)
+    stays, since nothing says it cannot run."""
+    active = (state or {}).get("active") or {}
+    out = []
+    for p in picks:
+        name = p["tool"]
+        try:
+            if exists is not None and not exists(name):
+                continue
+            known = [active[c] for c in (entry(name).get("commands") or []) if c in active]
+        except Exception:  # noqa: BLE001
+            known = []
+        if known and not any(known):
+            continue
+        out.append(p)
+        if len(out) >= n:
+            break
+    return out
+
+
+def words(picks, n=MAX_TOOLS):
+    """"pd_pad (a closed sketch no feature uses yet), pd_pocket (…)"."""
+    return ", ".join(f"{p['tool']} ({p['why']})" if p.get("why") else p["tool"] for p in list(picks)[:n])
+
+
+# ---- the line -----------------------------------------------------------------------------
 
 def key(state):
     """What makes a hint news: the dialog, the sketch in edit and its
-    freedom, the task panel, the workbench. Not the status bar's text or the
-    tools, which move with the mouse and the selection."""
+    freedom, the task panel, the workbench, and the rules that fit (the
+    body got its first sketch, a recompute began to fail). Not the status
+    bar's text, which moves with the mouse."""
     d, sk, p = state.get("dialog") or {}, state.get("sketch") or {}, state.get("panel") or {}
     return (state.get("workbench"), state.get("editing"), sk.get("name"), sk.get("dof"), bool(p), tuple(p.get("buttons") or ()),
-            d.get("title"), tuple(d.get("buttons") or ()))
+            d.get("title"), tuple(d.get("buttons") or ()), tuple(state.get("rules") or ()))
 
 
 def compose(state, tools=(), limit=MAX):
     """The hint, or None when there is nothing to say (no window).
     state: { window, workbench, editing, sketch { name, dof }, panel
-    { buttons }, dialog { title, buttons }, status }; tools: names from
-    active_tools. What matters most comes first, and the line is cut to
-    limit."""
+    { buttons }, dialog { title, buttons }, status }; tools: the picks
+    from available() ([{ tool, why }]; plain names are taken too). What
+    matters most comes first, and the line is cut to limit: the likely
+    next tools come before the workbench and the status bar's text, so
+    they are not what is cut. With a dialog in front no tool is named:
+    answering it is the next step."""
     if not state or not state.get("window"):
         return None
     parts = []
@@ -95,12 +363,13 @@ def compose(state, tools=(), limit=MAX):
     if p:
         b = _buttons(p.get("buttons"))
         parts.append("a task panel is open" + (f" [{b}]" if b else ""))
+    picks = [t if isinstance(t, dict) else {"tool": str(t), "why": ""} for t in (tools or ())][:MAX_TOOLS]
+    if picks and not d:
+        parts.append("likely next: " + words(picks))
     if state.get("workbench"):
         parts.append(f"workbench {state['workbench']}")
     if state.get("status"):
         parts.append(f"status bar: {_cut(state['status'], 80)}")
-    if tools:
-        parts.append("active now: " + ", ".join(list(tools)[:MAX_TOOLS]))
     if not parts:
         return None
     return _cut("; ".join(parts), limit)
