@@ -32,7 +32,8 @@ MAX_OBJECTS = 4000    # State flags are read on at most this many objects
 MAX_LIST = 6          # entries per list in the answer
 FACES_VALID = 3000    # isValid on shapes up to this many faces
 FACES_SELF = 200      # the self-intersection check (BOP) up to this many faces
-FACES_OVERLAP = 600   # a pair's common volume when both have at most this many
+FACES_OVERLAP = 300   # a pair's common volume when both have at most this many
+OVERLAP_S = 0.6       # seconds the overlap pass may start pairs for
 MAX_PAIRS = 24        # pairs tried for overlap
 MAX_SKETCHES = 60     # read from attributes: cheap
 MAX_SHAPES = 12       # and the time budget ends it sooner
@@ -160,7 +161,33 @@ def mark(session):
         m["names"] = {o.Name for o in objs}
     except Exception:
         pass
+    m["shapes"] = _part_hashes(doc)
     return m
+
+
+def _key(o):
+    from . import geometry as geo
+
+    return geo.shape_key(o.Shape)
+
+
+def _part_hashes(doc):
+    """{part name: its shape's hash} — the same OCC shape in the same place
+    hashes the same, so a part a call recomputed without changing (a Body
+    whose new sketch left its tip alone) is told from one it changed."""
+    out = {}
+    try:
+        from . import geometry as geo
+        from .tools import Session
+
+        for o in Session.bodies_in(doc):
+            try:
+                out[o.Name] = geo.shape_key(o.Shape)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return out
 
 
 # ---- the readings -----------------------------------------------------------------------
@@ -330,17 +357,27 @@ def shape_reading(o, deadline):
                 r["red"] = True
                 r.setdefault("todo", "open edges: the solid has no inside — body_check names them")
         if len(solids) != 1:
-            meant = False
+            # FreeCAD 1.1 allows a Body of several solids (AllowCompound, on
+            # by default), so it cannot say whether they are meant: yellow,
+            # never passed over.
+            allowed = False
             try:
-                meant = bool(getattr(o, "AllowCompound", False)) and o.TypeId == "PartDesign::Body"
+                allowed = bool(getattr(o, "AllowCompound", False)) and o.TypeId == "PartDesign::Body"
             except Exception:
                 pass
-            words.append(f"{len(solids)} solids" + (" (AllowCompound)" if meant else ""))
+            words.append(f"{len(solids)} solids" + (" (AllowCompound)" if allowed else ""))
             r["solids"] = len(solids)
-            if not meant:
-                r["amber"] = True
+            r["amber"] = True
         else:
             words.append("1 solid")
+        try:
+            vol = float(sh.Volume)
+        except Exception:
+            vol = None
+        if vol is not None and vol <= 1e-9:
+            words.append(f"volume {vol:.4g} mm³: inside out")
+            r["red"] = True
+            r.setdefault("todo", "a solid with no positive volume is turned inside out or broken: part_fix { op: \"reverse\" } turns it, or history_undo")
     else:
         try:
             kind = sh.ShapeType.lower()
@@ -352,7 +389,13 @@ def shape_reading(o, deadline):
         try:
             from . import geometry as geo
 
-            ok, said = geo.core_check(sh)
+            # Several solids are checked one by one: together, solids that
+            # touch read as one shape cutting itself.
+            ok, said = True, []
+            for piece in (solids if len(solids) > 1 else [sh]):
+                k, lines_ = geo.core_check(piece)
+                if k is False:
+                    ok, said = False, said + lines_
             said = [ln for ln in said if "found the following errors" not in ln]
             if ok is False and geo.soft_bop(said):
                 # A tolerance finding on a shape BRepCheck calls valid (a
@@ -418,6 +461,10 @@ def overlaps(changed, parts, deadline):
             try:
                 sb = b.Shape
                 if sb.isNull() or not sb.Solids or not _visible(b) or _in_container(b):
+                    continue
+                # Made from one another (a copy, a filter's pieces, a mesh
+                # made solid): they lie where their source does.
+                if b in a.OutListRecursive or b in a.InListRecursive:
                     continue
                 if not _boxes_meet(ba, sb.BoundBox):
                     continue
@@ -606,11 +653,14 @@ def check(session, tool, m):
     # A part is read when it was itself recomputed (a Body is, when its tip
     # changes): a sketch added to a body leaves the body's solid as it was,
     # and its reading is not repeated.
+    shapes0 = m.get("shapes") or {} if same_doc else {}
     todo_parts = []
     for o in changed:
         try:
             if o.Name not in part_names or o.TypeId in CONTAINERS or _label(o) in failing_now:
                 continue
+            if o.Name in shapes0 and shapes0[o.Name] == _key(o):
+                continue  # recomputed, and the same shape as before the call
         except Exception:
             continue
         todo_parts.append(o)
@@ -651,16 +701,20 @@ def check(session, tool, m):
         lines += [f"{n} {plural[kind] if n != 1 else kind} {state}" for (kind, state), n in tally.items() if state != "empty"]
 
     # 4. Interference between the changed parts and the others.
+    # Yellow, not red: in Part work a body laid over another is the next
+    # boolean's tool, and only the person or agent knows which it is. An
+    # assembly's overlaps are asm_check's, which knows a thread from a clash.
     if todo_parts and len(parts) > 1:
         try:
-            hits, skipped = overlaps(todo_parts[:MAX_SHAPES], parts, deadline)
+            hits, skipped = overlaps(todo_parts[:MAX_SHAPES], parts, min(deadline, time.time() + OVERLAP_S))
         except Exception:
             hits, skipped = [], []
         if hits:
-            red = True
-            h["interference"] = [{k: x[k] for k in ("a", "b", "volume", "box")} for x in hits[:MAX_LIST]]
-            lines += [x["line"] for x in hits[:3]]
-            todos.append("move one part, or cut the overlap away (part_boolean cut) if it is not meant; clearance reads the gap")
+            h["interference"] = [{k: x[k] for k in ("a", "b", "volume", "box")} for x in hits[:3]]
+            lines += [x["line"] for x in hits[:2]]
+            if len(hits) > 2:
+                lines.append(f"{len(hits) - 2} more overlaps")
+            todos.append("an overlap is right for a boolean's tool or a press fit; if it is not meant, part_transform moves the part and clearance reads the gap")
         if skipped:
             unchecked.append("interference of " + "; ".join(skipped[:3]) + (" …" if len(skipped) > 3 else "") + ": clearance")
 

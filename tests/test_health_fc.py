@@ -41,7 +41,7 @@ class Health(Base):
     def test_4_overlapping_parts_are_named_with_the_overlap(self):
         out = self.ok("part_primitive", {"kind": "box", "size": [10, 10, 10], "at": [15, 5, 5], "name": "Clash"})
         h = out["health"]
-        self.assertFalse(h["ok"], h)
+        self.assertTrue(h["ok"], h)  # yellow: an overlap may be the next boolean's tool
         hit = h["interference"][0]
         self.assertEqual({hit["a"], hit["b"]}, {"Clash", "Block"})
         # Block is 40 x 20 x 10 about the origin: the box overlaps 5 x 5 x 5
@@ -49,6 +49,26 @@ class Health(Base):
         self.assertEqual(hit["box"], [5.0, 5.0, 5.0])
         self.assertIn("Clash interferes with Block", h["verdict"])
         self.ok("object_delete", {"objects": ["Clash"]})
+
+    def test_4b_a_sketch_in_a_body_does_not_read_the_body_again(self):
+        out = self.ok("sketch_new", {"plane": "YZ", "name": "Later"})
+        self.assertNotIn("Block:", out["health"]["verdict"])
+
+    def test_4c_an_inside_out_solid_is_red(self):
+        self.ok("part_primitive", {"kind": "box", "size": [4, 4, 4], "at": [200, 0, 0], "name": "Turned"})
+        out = self.ok("part_fix", {"body": "Turned", "op": "reverse"})
+        self.assertFalse(out["health"]["ok"], out)
+        self.assertIn("inside out", out["health"]["verdict"])
+        self.ok("object_delete", {"objects": ["Turned"]})
+
+    def test_4d_touching_solids_in_a_compound_are_not_a_self_cut(self):
+        self.ok("part_primitive", {"kind": "box", "size": [4, 4, 4], "at": [300, 0, 0], "name": "Left"})
+        self.ok("part_primitive", {"kind": "box", "size": [4, 4, 4], "at": [304, 0, 0], "name": "Right"})
+        out = self.ok("part_compound", {"bodies": ["Left", "Right"], "name": "Pair"})
+        h = out["health"]
+        self.assertTrue(h["ok"], h)
+        self.assertIn("2 solids", h["verdict"])
+        self.assertNotIn("geometry check", h["verdict"])
 
     def test_5_a_failed_recompute_is_named_with_freecads_reason(self):
         import FreeCAD

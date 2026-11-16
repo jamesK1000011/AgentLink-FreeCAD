@@ -33,15 +33,48 @@ def vec(v):
     return [r3(v.x), r3(v.y), r3(v.z)]
 
 
-def box_of(shape):
+# Faces up to which a shape's box is asked from its geometry (bound_box).
+BOX_EXACT_FACES = 600
+
+
+def bound_box(shape):
+    """A shape's bounding box from its geometry. OCC's quick box (BoundBox)
+    of a curved shape that has been tessellated for the 3D view is the box
+    of its triangles, a little inside the surface: in the window a 55 mm
+    cylinder read 54.814 × 54.907 and a 28 mm ring 27.95, while headless
+    (no tessellation) the same shapes read exact. optimalBoundingBox
+    without the triangulation is the true box; it is slower, so shapes over
+    BOX_EXACT_FACES faces keep the quick one."""
+    try:
+        if shape.countElement("Face") <= BOX_EXACT_FACES:
+            b = shape.optimalBoundingBox(False, False)
+            if b.isValid():
+                return b
+    except Exception:
+        pass
+    return shape.BoundBox
+
+
+def shape_key(shape):
+    """A cheap key that changes when the shape does: its hash (the OCC shape
+    and placement), kind, element counts and quick box. The hash alone is
+    not enough: a recomputed shape can be given the address the old one had
+    (a box made taller hashed the same on FreeCAD 1.1.3 on the Mac, and a
+    step's snapshot then kept its old volume)."""
     b = shape.BoundBox
+    return (shape.hashCode(), shape.ShapeType, shape.countElement("Face"), shape.countElement("Edge"), shape.countElement("Vertex"),
+            round(b.XMin, 6), round(b.YMin, 6), round(b.ZMin, 6), round(b.XMax, 6), round(b.YMax, 6), round(b.ZMax, 6))
+
+
+def box_of(shape):
+    b = bound_box(shape)
     return {"min": [r3(b.XMin), r3(b.YMin), r3(b.ZMin)], "max": [r3(b.XMax), r3(b.YMax), r3(b.ZMax)], "size": [r3(b.XLength), r3(b.YLength), r3(b.ZLength)]}
 
 
 def box_json(b, nd=1):
     """A bounding box (or a shape's) as lists rounded to nd places: min,
     max and size (the lengths along x, y, z)."""
-    b = getattr(b, "BoundBox", b)
+    b = bound_box(b) if hasattr(b, "BoundBox") else b
     return {"min": [round(b.XMin, nd), round(b.YMin, nd), round(b.ZMin, nd)], "max": [round(b.XMax, nd), round(b.YMax, nd), round(b.ZMax, nd)],
             "size": [round(b.XLength, nd), round(b.YLength, nd), round(b.ZLength, nd)]}
 

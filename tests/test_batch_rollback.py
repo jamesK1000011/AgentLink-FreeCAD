@@ -68,3 +68,43 @@ class BatchRollback(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BatchBudget(unittest.TestCase):
+    """A long batch is answered in parts: past its budget no further call
+    starts (a 113-call run was taken for hung at 120 s and FreeCAD started
+    again under it)."""
+
+    @unittest.skipUnless(HAVE, "FreeCAD is not importable here")
+    def test_out_of_budget_names_where_to_go_on(self):
+        import time
+
+        from agentlink import tools as T
+
+        _session, srv = server()
+        call = caller(srv)
+        calls = [{"tool": "session_state", "arguments": {}} for _ in range(4)]
+        was = T.time.time
+        clock = {"t": was()}
+
+        def tick():
+            clock["t"] += 30.0  # every look at the clock is 30 s later
+            return clock["t"]
+
+        T.time.time = tick
+        try:
+            err, out = call("batch", {"calls": calls, "rollback": False, "budget": 50})
+        finally:
+            T.time.time = was
+        self.assertFalse(err, out)
+        self.assertLess(out["ran"], 4)
+        self.assertEqual(out["ran"] + out["notRun"], 4)
+        self.assertEqual(out["next"], out["ran"])
+        self.assertIn("from index", out["note"])
+        err, out = call("batch", {"calls": calls, "rollback": False, "from": out["next"]})
+        self.assertFalse(err, out)
+        self.assertNotIn("notRun", out)
+        err, out = call("batch", {"calls": calls, "from": 9})
+        self.assertTrue(err)
+        err, out = call("batch", {"calls": calls, "budget": 1000})
+        self.assertTrue(err)

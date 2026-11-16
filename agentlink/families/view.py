@@ -589,13 +589,11 @@ def tools(session):
     return [
         Tool(
             "view_render",
-            "Draw the parts as a picture and look at it — works headless. The parts shown, without the containers that hold them (an assembly, an App::Part, a group: their parts are drawn, never twice); hidden parts are not drawn and the answer names them (hidden), objects: [names] draws those named. views: one or several (\"all\": iso, top, front, right, each fitted). "
-            "map: wall (thickness, red thin), stress (the last fea_solve), heat (the last fea_heat), or one an add-on adds (view_maps lists them) — with a legend, and the worst spot's at; range [lo, hi] fixes the colours. "
-            "section { axis x|y|z, offset mm, flip } cuts it open (solid cut faces hatched). zoom { at, size mm } frames a spot — a finding's at. "
-            "objects: which bodies (every shown body when left out: a Body of several solids, screws and other attached parts, each in a colour of its own); layers: which add-on layers (a scan …). The PNG comes back as an image (inline false: the file only) and is written to path. "
-            "time says what it took and, from past renders here at the same triangles and views, what to expect. "
-            "Sized before it draws: every layer's triangles (a map's, a scan's) times the views, timed from past renders here. Past about 40 s the big layers are drawn thinned to fit (thinned: each layer's triangles from and to; a map's min, max and worst are still read on every point) and a larger detail is capped (detailCapped). "
-            "A long render marks itself heavy so the watchdog waits for it, inside a batch too; at 90 s into the call (the batch's start in a batch) it stops drawing and names the views left (cut) rather than be taken for hung.",
+            "Draw the parts as a picture and look at it — works headless. The parts shown, without the containers that hold them (an assembly, an App::Part, a group); hidden parts are not drawn and the answer names them (hidden); objects: [names] draws those named. views: one or several (\"all\": iso, top, front, right, each fitted). "
+            "map: wall (thickness, red thin), stress (the last fea_solve), heat (the last fea_heat), or an add-on's (view_maps lists them) — with a legend and the worst spot's at; range [lo, hi] fixes the colours. "
+            "section { axis x|y|z, offset mm, flip } cuts it open (cut faces hatched). zoom { at, size mm } frames a spot — a finding's at. layers: which add-on layers (a scan …). The PNG comes back as an image (inline false: the file only) and is written to path. "
+            "Limits: sized before it draws (every layer's triangles times the views, timed from past renders here: time gives took and expected). Past about 40 s the big layers are drawn thinned (thinned: from and to; a map's min, max and worst are still read on every point) and a larger detail is capped (detailCapped). "
+            "At 90 s into the call (a batch's start, in a batch) it stops drawing and names the views left (cut): fewer views, a zoom or a smaller picture draws them.",
             obj({
                 "view": vschema, "views": vschema,
                 "map": {"type": "string"}, "range": {"type": "array", "items": {"type": "number"}},
