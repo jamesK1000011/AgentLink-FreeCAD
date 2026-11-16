@@ -140,6 +140,50 @@ def fem_route_why(st, a):
     return None
 
 
+def _query_words(q):
+    """A face query in words: "at z = 20 facing +Z", "Face6", "near [1, 2, 3]"."""
+    if not isinstance(q, dict):
+        return str(q)
+    bits = []
+    if "faces" in q:
+        bits.append(", ".join(q["faces"]) if isinstance(q["faces"], list) else str(q["faces"]))
+    for ax in "xyz":
+        if ax in q:
+            bits.append(f"at {ax} = {q[ax]:g}" if isinstance(q[ax], (int, float)) else f"at {ax} = {q[ax]}")
+    if "normal" in q:
+        n = q["normal"]
+        axes = {(1, 0, 0): "+X", (-1, 0, 0): "-X", (0, 1, 0): "+Y", (0, -1, 0): "-Y", (0, 0, 1): "+Z", (0, 0, -1): "-Z"}
+        try:
+            key = tuple(int(round(float(c))) for c in n)
+            name = axes.get(key) if all(abs(float(c) - k) < 1e-9 for c, k in zip(n, key)) else None
+        except (TypeError, ValueError):
+            name = None
+        bits.append(f"facing {name or list(n)}")
+    if "near" in q:
+        bits.append(f"near {list(q['near'])}")
+    if q.get("cylinder"):
+        bits.append("cylindrical")
+    return " ".join(bits) or "the query"
+
+
+def unmatched(st, shape, pick):
+    """The study's holds and loads whose face query picks nothing on the
+    shape as it is now: ["Load 1: no face at z = 20 facing +Z now; the part changed?"]."""
+    out = []
+    for what, items in (("Hold", st.get("holds") or []), ("Load", st.get("loads") or [])):
+        for i, it in enumerate(items, 1):
+            q = it.get("faces")
+            if q is None:
+                continue  # gravity, temperature, spin: the whole part
+            try:
+                got = pick(shape, q, "faces")
+            except Exception:  # noqa: BLE001 - the refusal is the answer here
+                got = []
+            if not got:
+                out.append(f"{what} {i}: no face {_query_words(q)} now; the part changed? fea_{what.lower()} it again (replace: true), or clear: true.")
+    return out
+
+
 def _same_in(item, items):
     """Whether an identical hold or load is already in the list."""
     import json
@@ -195,6 +239,9 @@ def tools(session):
         s.snapshot("fea_setup")
         out = {"study": st, "material": {"id": mid, "name": c["name"], "E": c["E"], "nu": c.get("nu"), "yield": c.get("yield"), "from": said}}
         out.update(_setup_said(old, keep, bool(a.get("reset"))))
+        lost = unmatched(st, o.Shape, facepick.pick) if keep else []
+        if lost:
+            out["unmatched"] = lost
         if mesh > least / 2:
             out["warning"] = f"mesh {mesh:g} mm is over half the part's least size ({least:.1f} mm): too coarse to read stress — {round(least / 3, 2)} mm or less."
         out["next"] = "fea_hold the faces it is held by, fea_load what pushes on it, then fea_solve."
@@ -708,6 +755,9 @@ def tools(session):
             raise ToolError("invalid_state", "Nothing holds the part: fea_hold the faces it is mounted by — a free body has no static answer.")
         if not st["loads"]:
             raise ToolError("invalid_state", "Nothing loads the part: fea_load a force, pressure or gravity.")
+        lost = unmatched(st, o.Shape, facepick.pick)
+        if lost:
+            raise ToolError("invalid_state", "The study no longer fits the part, so it was not solved (it would run without them): " + " ".join(lost))
         c = matfam.card(s.doc, st["material"])
         if c is None or not c.get("E"):
             raise ToolError("invalid_state", f"The study's material {st['material']!r} is gone or has no Young's modulus: fea_setup {{ material }} again.")

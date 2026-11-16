@@ -69,8 +69,10 @@ def add_note(doc, at, text, by, body=None, face=None):
 # after each change, and flagged (lost) rather than guessed when neither
 # finds it. The same approach as a linked texture mask's.
 
-POINT_TOL = 0.5      # mm from the old point to the face
 NORMAL_COS = 0.8     # within about 37 degrees of the old normal
+# How far a face may have moved from a note's point (a pad made longer):
+# this many mm, or this share of the part's size, whichever is more.
+MOVE_MM, MOVE_SHARE = 3.0, 0.1
 
 
 def mapped_name(shape, face):
@@ -120,6 +122,26 @@ class Geo:
         return [(f"Face{i + 1}", f) for i, f in enumerate(shape.Faces)]
 
     @staticmethod
+    def project(face, p):
+        """(distance, point): p projected onto the face's surface along its
+        normal, when it lands on the face itself; None when it lands off it."""
+        import FreeCAD
+
+        v = FreeCAD.Vector(*p)
+        u, w = face.Surface.parameter(v)
+        q = face.Surface.value(u, w)
+        if not face.isInside(q, 1e-3, True):
+            return None
+        return (q - v).Length, [q.x, q.y, q.z]
+
+    @staticmethod
+    def size(shape):
+        try:
+            return float(shape.BoundBox.DiagonalLength)
+        except Exception:  # noqa: BLE001
+            return 0.0
+
+    @staticmethod
     def dist(face, p):
         import FreeCAD
         import Part
@@ -160,8 +182,11 @@ def _dot(a, b):
 
 def refind(shape, n, geo=Geo):
     """(face, how, point) for a note on this shape: by its mapped name, else
-    the face its point lies on facing the same way; (None, why, None) when
-    neither finds it."""
+    the face its point projects onto (along that face's normal, landing on
+    it, within MOVE_MM or MOVE_SHARE of the part) facing the way it did —
+    its own face first when that still fits, else the nearest; (None, why,
+    None) when nothing does. A note made before anchors (no normal) takes
+    the nearest face its point projects onto."""
     an = n.get("anchor") or {}
     p = an.get("point") or n.get("at")
     name = indexed_name(shape, an.get("mapped"))
@@ -176,25 +201,29 @@ def refind(shape, n, geo=Geo):
         return name, "mapped", q
     if not p:
         return None, "no point to find it by", None
-    best = None
+    reach = max(MOVE_MM, MOVE_SHARE * geo.size(shape))
+    fits = []
     for nm, f in geo.faces(shape):
         try:
-            d, q = geo.dist(f, p)
+            got = geo.project(f, p)
         except Exception:  # noqa: BLE001
+            got = None
+        if got is None or got[0] > reach:
             continue
-        if d > POINT_TOL:
-            continue
+        d, q = got
         if an.get("normal"):
             try:
                 if _dot(geo.normal(f, q), an["normal"]) < NORMAL_COS:
                     continue
             except Exception:  # noqa: BLE001
                 continue
-        if best is None or d < best[0]:
-            best = (d, nm, q)
-    if best is None:
+        fits.append((d, nm, q))
+    if not fits:
         return None, "no face is where it was, facing the same way", None
-    return best[1], "point", best[2]
+    fits.sort(key=lambda t: t[0])
+    own = next((t for t in fits if t[1] == n.get("face") and t[0] <= fits[0][0] + 1e-6), None)
+    d, nm, q = own or fits[0]
+    return nm, "point", q
 
 
 def _shape_of(doc, label):
@@ -210,8 +239,11 @@ def follow(doc, shape_of=_shape_of, geo=Geo):
     data = notes_of(doc)
     changed = []
     for n in data["notes"]:
-        if not (n.get("face") and n.get("body") and n.get("anchor")):
+        if not (n.get("face") and n.get("body")):
             continue
+        # A note from before anchors: found by its point the first time, its
+        # anchor (mapped name, normal) kept from then on.
+        n.setdefault("anchor", {"point": list(n["at"])})
         try:
             shape = shape_of(doc, n["body"])
         except Exception:  # noqa: BLE001
@@ -340,14 +372,21 @@ def tools(session):
         return {"note": note_view(n), "note_count": len(notes_of(s.doc)["notes"])}
 
     def note_list(a):
+        # Each note's face found again first (a step may have renumbered
+        # them); a failure here is said, the notes answered as they were.
+        followed, why = [], None
         try:
-            follow(s.doc)
-        except Exception:  # noqa: BLE001 - the notes as they were
-            pass
+            followed = follow(s.doc)
+        except Exception as e:  # noqa: BLE001
+            why = f"{type(e).__name__}: {e}"
         data = notes_of(s.doc)
         rows = [note_view(n) for n in data["notes"] if not (a.get("open") and n.get("done"))]
         waiting = [n["id"] for n in data["notes"] if n["by"] == "person" and not n.get("done") and not n.get("answer")]
         out = {"notes": rows}
+        if followed:
+            out["followed"] = followed
+        if why:
+            out["notFollowed"] = f"The notes' faces were not looked for again ({why}): faces may have moved."
         if waiting:
             out["waiting"] = waiting
             out["next"] = "The person's notes waiting for an answer: note_answer { id, text }, and note_done when it is dealt with."
