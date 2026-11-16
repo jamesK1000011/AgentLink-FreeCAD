@@ -185,6 +185,44 @@ def _status(asm):
     return code, SOLVE.get(code, f"code {code}")
 
 
+def _fastener_diameter(o):
+    """A Fasteners Workbench screw's nominal diameter in mm (its "diameter"
+    property, "M8" or "M8x1"), else None."""
+    d = getattr(o, "diameter", None) or getattr(o, "Diameter", None)
+    if not isinstance(d, str) or not d.upper().startswith("M"):
+        return None
+    try:
+        return float(d[1:].lower().split("x")[0])
+    except ValueError:
+        return None
+
+
+def _thread_engagement(screw, other, common):
+    """Where a screw overlaps a part only in the ring between its minor and
+    nominal diameter round its own axis, it is threaded into it, as meant:
+    the engagement length, else None. A screw through solid material fills
+    the core too, and stays an overlap."""
+    d = _fastener_diameter(screw)
+    if not d:
+        return None
+    try:
+        import Part
+        pl = screw.Placement
+        axis = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
+        base = pl.Base - axis * 500
+        outer = Part.makeCylinder(d / 2 + 0.05, 1000, base, axis)
+        inner = Part.makeCylinder(0.38 * d, 1000, base, axis)
+        ring = outer.cut(inner)
+        inside = common.common(ring).Volume
+        if common.Volume <= 0 or inside / common.Volume < 0.95:
+            return None
+        area = 3.141592653589793 / 4 * (d ** 2 - (0.85 * d) ** 2)
+        return {"screw": screw.Label, "size": f"M{d:g}", "engaged": round(common.Volume / area, 1),
+                "note": "the screw's thread in a tapped hole, as meant — not counted against the verdict"}
+    except Exception:
+        return None
+
+
 def _overlaps(parts, clearance=0.0):
     """Pairs of parts that overlap (their common volume), and, with
     clearance, those closer than it."""
@@ -201,7 +239,11 @@ def _overlaps(parts, clearance=0.0):
                 vol = 0.0
             if vol > 1e-3:
                 c = common.BoundBox.Center
-                out.append({"parts": [a.Label, b.Label], "volume": round(vol, 3), "at": geo.vec(c)})
+                row = {"parts": [a.Label, b.Label], "volume": round(vol, 3), "at": geo.vec(c)}
+                eng = _thread_engagement(a, b, common) or _thread_engagement(b, a, common)
+                if eng:
+                    row["thread"] = eng
+                out.append(row)
                 continue
             if clearance > 0:
                 d, pts, _ = sa.distToShape(sb)
@@ -387,6 +429,7 @@ def tools(session):
             if not o.Placement.isSame(b, 1e-6):
                 moved[o.Label] = {"from": geo.vec(b.Base), "to": _placement(o), "by": round((o.Placement.Base - b.Base).Length, 4)}
         hits, _ = _overlaps(_parts(asm))
+        hits = [h for h in hits if not h.get("thread")]
         out = {"joint": j.Label, "kind": kind, "a": f"{ends[0][0].Label}.{ends[0][1]}", "b": f"{ends[1][0].Label}.{ends[1][1]}", "solve": said, "moved": moved}
         if flipped:
             out["flipped"] = True if a.get("reverse") else "turned over to stop the parts overlapping (reverse: false keeps it as FreeCAD first put it)"
@@ -617,7 +660,10 @@ def tools(session):
         if free:
             out["notConnected"] = free
             out["note"] = "Parts joined to nothing grounded float free: a joint to the grounded part, or asm_ground."
-        out["verdict"] = "clear" if not hits and said == "solved" else "fix"
+        real = [h for h in hits if not h.get("thread")]
+        if len(real) < len(hits):
+            out["threads"] = len(hits) - len(real)
+        out["verdict"] = "clear" if not real and said == "solved" else "fix"
         return out
 
     part_end = {"type": "object", "description": "{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of several."}
@@ -635,6 +681,6 @@ def tools(session):
         Tool("asm_joint_remove", "Remove a joint (by label, asm_list lists them) and solve again.", obj({"assembly": asm_ref, "joint": {"type": "string"}}, ["joint"]), asm_joint_remove, changes=True),
         Tool("asm_sweep", "Move a revolute joint through angles (from, to degrees; 0 to 90) or a slider or cylindrical one along its axis (mm; turn: true turns a cylindrical) in steps (12), solving at each and checking the parts for overlaps (clearance mm also lists those closer). Answers each step, collidesAt and the clear range from the start, and puts every part back. Does the lid open fully, does the arm swing past the post.",
              obj({"assembly": asm_ref, "joint": {"type": "string"}, "from": {"type": "number"}, "to": {"type": "number"}, "steps": {"type": "integer"}, "clearance": {"type": "number"}, "turn": {"type": "boolean"}}, ["joint"]), asm_sweep),
-        Tool("asm_check", "Check an assembly: whether it solves, which parts overlap (the volume and where), with clearance mm the pairs closer than it, and parts joined to nothing grounded. verdict clear or fix. view_render shows it; section cuts it open at a fit.",
+        Tool("asm_check", "Check an assembly: whether it solves, which parts overlap (the volume and where; a screw's thread in a tapped hole is marked thread and not counted against the verdict), with clearance mm the pairs closer than it, and parts joined to nothing grounded. verdict clear or fix. view_render shows it; section cuts it open at a fit.",
              obj({"assembly": asm_ref, "clearance": {"type": "number"}}), asm_check),
     ]
