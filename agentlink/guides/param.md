@@ -13,7 +13,9 @@ FreeCAD 1.0 and later also keeps named values in a variable set (App::VarSet), a
 - Bind to one with `param_bind { target: "Pad.Length", expression: "Dims.size" }`. The label works as well as the object's name (`VarSet.size`). `param_list` lists the variable sets under `varsets`.
 
 ## traps
-- A sketch constraint must have a name to be bound. Name it with `sketch_constrain { name }`, `sketch_add { dims, name }` or `sketch_edit rename`.
+- A sketch constraint must have a name to be bound. Name it with `sketch_constrain { name }`, `sketch_add { dims, name }` or `sketch_edit rename`. A reference (driven) dimension cannot be bound.
+- A parameter's name follows FreeCAD's alias rules: a letter first, and not a cell address (`A1`), a unit (`m`, `mm`, `s`, `N`, `W` and the rest) or `e` / `pi`. A variable set's variables take the same names.
 - A value that breaks a feature is refused with FreeCAD's error, and nothing is kept.
 - A formula in another sheet takes a parameter by its bare name too (`=height * 2`), unless that sheet has an alias of the same name.
 - `param_remove` refuses a parameter that is still in use. Unbind its users first (`expression: null`).
+- A variable keeps the kind it was made with. A length takes `"60 mm"`, a count takes a whole number.

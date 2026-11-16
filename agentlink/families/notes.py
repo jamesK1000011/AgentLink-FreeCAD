@@ -317,7 +317,7 @@ def find_note(data, nid):
     for n in data["notes"]:
         if n["id"] == int(nid):
             return n
-    raise ToolError("not_found", f"No note {nid}: note_list shows them.")
+    raise ToolError("not_found", f"id: no note {nid!r} in this document — note_list shows them with their ids.")
 
 
 # ---- steps -------------------------------------------------------------------------------
@@ -382,11 +382,11 @@ def tools(session):
             pds = [o for o in s.doc.Objects if o.TypeId == "PartDesign::Body"]
             if len(pds) == 1:
                 return pds[0]
-            raise ToolError("invalid_input", "body: which PartDesign body — " + (", ".join(o.Label for o in pds) or "there is none") + ".")
+            raise ToolError("invalid_input", "body: which PartDesign body — " + (", ".join(o.Label for o in pds) or "there is none (the steps are a PartDesign body's features; a plain Part shape has no history)") + ".")
         for o in s.doc.Objects:
             if o.TypeId == "PartDesign::Body" and (o.Label == ref or o.Name == ref):
                 return o
-        raise ToolError("not_found", f"No PartDesign body '{ref}'.")
+        raise ToolError("not_found", f"body: no PartDesign body '{ref}' — " + (", ".join(o.Label for o in s.doc.Objects if o.TypeId == "PartDesign::Body") or "the document has none") + ".")
 
     # -- notes --
 
@@ -402,12 +402,12 @@ def tools(session):
             at, body, face = [c.x, c.y, c.z], o.Label, name
         elif a.get("at") is not None:
             at = a["at"]
-            if not (isinstance(at, list) and len(at) == 3):
-                raise ToolError("invalid_input", "at: [x, y, z] in mm.")
+            if not (isinstance(at, list) and len(at) == 3 and all(isinstance(c, (int, float)) and not isinstance(c, bool) for c in at)):
+                raise ToolError("invalid_input", "at: [x, y, z] in mm, document coordinates (or body and faces to pin it on a face).")
             if a.get("body"):
                 body = s.body(a["body"]).Label
         else:
-            raise ToolError("invalid_input", "at [x, y, z], or body and faces (the note pinned at the face's centre).")
+            raise ToolError("invalid_input", "at [x, y, z] in mm, or body and faces (\"Face6\" or shape_query's filters: the note is pinned at the first face's centre and follows it).")
         n = add_note(s.doc, at, a["text"], "agent", body, face)
         return {"note": note_view(n), "note_count": len(notes_of(s.doc)["notes"])}
 
@@ -472,11 +472,13 @@ def tools(session):
         b = _body_pd(a.get("body"))
         rows = steps_of(b, False)
         if not rows:
-            raise ToolError("invalid_state", f"{b.Label} has no features yet.")
+            raise ToolError("invalid_state", f"{b.Label} has no features yet: pd_pad and the other pd_ tools add them.")
         view = str(a.get("view", "iso")).lower()
         if view not in render.VIEWS:
             raise ToolError("invalid_input", "view: " + ", ".join(render.VIEWS) + ".")
-        w, h = int(a.get("width", 480)), int(a.get("height", 360))
+        w, h = a.get("width", 480), a.get("height", 360)
+        if not all(isinstance(v, int) and not isinstance(v, bool) and 120 <= v <= 2000 for v in (w, h)):
+            raise ToolError("invalid_input", "width, height: pixels a picture, 120 … 2000 (480 × 360 by default).")
         folder = paths.local(s, a.get("path") or f"steps_{''.join(ch if ch.isalnum() else '_' for ch in b.Label)}")
         os.makedirs(folder, exist_ok=True)
         # Framed on the finished part, so the camera holds still and the part grows in it.
@@ -523,15 +525,15 @@ def tools(session):
         return out
 
     return [
-        Tool("note_add", "Pin a note to the part for the person: a question or a remark, at [x,y,z] or on body + faces (a query as fea_hold takes). It shows as a pin in the window; the person answers it there.",
+        Tool("note_add", "Pin a note to the part for the person — a question or a remark (text): at [x,y,z] mm, or on body + faces (\"Face6\", or shape_query's filters; pinned at the first face's centre and found again when faces renumber). It shows as a numbered pin in the window and in Agent Link's Notes tab; the person answers it there. Kept in the document (saved with doc_save). Reply: note { id, text, at, body, face, by: agent }, note_count.",
              obj({"text": {"type": "string"}, "at": {"type": "array", "items": {"type": "number"}}, "body": {"type": "string"}, "faces": {}}, ["text"]), note_add, changes=True),
-        Tool("note_list", "The notes pinned to the parts — the person's and the agent's — with answers and which are done; waiting lists the person's notes with no answer yet. open: true leaves out the done ones.",
+        Tool("note_list", "The notes pinned to the parts — the person's and the agent's — each with id, text, by, at, face, answer and done. waiting lists the ids of the person's notes with no answer yet (answer them: note_answer, then note_done); followed says which notes moved to a renumbered face. open: true leaves out the done ones. Read it at the start of a session and after the person has worked in the window.",
              obj({"open": {"type": "boolean"}}), note_list),
-        Tool("note_answer", "Answer a note (the person's question or request): id, text.", obj({"id": {"type": "integer"}, "text": {"type": "string"}}, ["id", "text"]), note_answer, changes=True),
-        Tool("note_done", "Tick a note off (done: false opens it again).", obj({"id": {"type": "integer"}, "done": {"type": "boolean"}}, ["id"]), note_done, changes=True),
-        Tool("note_delete", "Take a note out of the document, the person's or the agent's (note_done only ticks it off).", obj({"id": {"type": "integer"}}, ["id"]), note_delete, changes=True),
-        Tool("steps_list", "A PartDesign body's history in order: each feature with its key value, the volume after it and what it added or took away (sketches: true lists the sketches too).",
+        Tool("note_answer", "Answer a note (the person's question or request): id (from note_list), text. The answer shows under the note in the window; a second answer replaces the first. note_done ticks it off once dealt with.", obj({"id": {"type": "integer"}, "text": {"type": "string"}}, ["id", "text"]), note_answer, changes=True),
+        Tool("note_done", "Tick a note off: id (done: false opens it again). It stays in the document; note_delete removes it.", obj({"id": {"type": "integer"}, "done": {"type": "boolean"}}, ["id"]), note_done, changes=True),
+        Tool("note_delete", "Take a note out of the document for good: id — the person's or the agent's (note_done only ticks it off; delete the person's only when they ask). Reply: deleted, left.", obj({"id": {"type": "integer"}}, ["id"]), note_delete, changes=True),
+        Tool("steps_list", "A PartDesign body's history in order (body may be left out when there is one): each feature's step number, name, label, type, its key value, the volume after it and what it added or took away (sketches: true lists the sketches too). The same list Agent Link's Steps tab plays. Changes nothing.",
              obj({"body": {"type": "string"}, "sketches": {"type": "boolean"}}), steps_list),
-        Tool("steps_render", "The build played back as pictures: a picture a feature, framed on the finished part so it grows in place, each captioned with its step, type and what it did; a contact sheet of them (sheet: false leaves it out). view (iso), width, height, path (a folder).",
+        Tool("steps_render", "The build played back as pictures, drawn headless (not the window): a PNG a feature (step_01.png …), framed on the finished part so it grows in place, each captioned with its step, type and what it did, and a contact sheet steps.png of them all (sheet: false leaves it out; inline: false keeps it out of the reply). body; view (iso, or top, front, right …); width, height pixels a picture (480 × 360); path a folder (steps_<body> in the session's folder). Tessellates every step: seconds a step on a heavy body. Reply: folder, files, sheet, steps. The model is not changed.",
              obj({"body": {"type": "string"}, "view": {"type": "string"}, "width": {"type": "integer"}, "height": {"type": "integer"}, "path": {"type": "string"}, "sheet": {"type": "boolean"}, "inline": {"type": "boolean"}}), steps_render),
     ]

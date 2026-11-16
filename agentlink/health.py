@@ -166,9 +166,19 @@ def mark(session):
 
 
 def _key(o):
+    """What tells a part's shape before a call from the one after it: kind,
+    element counts, box and (small shapes) volume. Not its hash: a recompute
+    that changes nothing still makes a new OCC shape (a sketch added to a
+    body had the body read again)."""
     from . import geometry as geo
 
-    return geo.shape_key(o.Shape)
+    sh = o.Shape
+    k = geo.shape_key(sh)[1:]
+    try:
+        vol = round(float(sh.Volume), 4) if k[1] <= 500 else None
+    except Exception:
+        vol = None
+    return k + (vol,)
 
 
 def _part_hashes(doc):
@@ -177,12 +187,11 @@ def _part_hashes(doc):
     whose new sketch left its tip alone) is told from one it changed."""
     out = {}
     try:
-        from . import geometry as geo
         from .tools import Session
 
         for o in Session.bodies_in(doc):
             try:
-                out[o.Name] = geo.shape_key(o.Shape)
+                out[o.Name] = _key(o)
             except Exception:
                 continue
     except Exception:
@@ -605,8 +614,8 @@ def check(session, tool, m):
         new = [e for e in errors if e.get("new")]
         old = len(errors) - len(new)
         show = (new or errors)[:MAX_LIST]
-        h["errors"] = show
         if new:
+            h["errors"] = show  # failures that were there before are named, not listed again each call
             lines.append(f"{len(new)} object{'s' if len(new) != 1 else ''} failed to recompute: "
                          + "; ".join(f"{e['object']} ({e['error'][:80]})" for e in show[:3]) + (" …" if len(new) > 3 else "")
                          + (f" — {old} more were failing before this call" if old else ""))
@@ -710,7 +719,6 @@ def check(session, tool, m):
         except Exception:
             hits, skipped = [], []
         if hits:
-            h["interference"] = [{k: x[k] for k in ("a", "b", "volume", "box")} for x in hits[:3]]
             lines += [x["line"] for x in hits[:2]]
             if len(hits) > 2:
                 lines.append(f"{len(hits) - 2} more overlaps")

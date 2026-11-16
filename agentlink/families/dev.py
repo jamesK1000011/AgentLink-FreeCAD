@@ -41,7 +41,7 @@ def tools(s):
     def addon_test(a):
         job, addon = a.get("job"), a.get("addon")
         if job is not None and addon is not None:
-            raise bad("addon starts a run, job reads one: give one of them.")
+            raise bad("addon starts a run, job reads one: give one of them (neither lists the recent jobs).")
         if job is not None:
             return testrun.wait(testrun.find(job), testrun.STATUS_WAIT, _pump())
         if addon is None:
@@ -67,7 +67,7 @@ def tools(s):
             home = None
         cmd, lib = testrun.find_cmd(home=home)
         if cmd is None:
-            raise ToolError("unavailable", "No FreeCAD command-line binary (freecadcmd) beside this FreeCAD, in FREECAD_APP or on the PATH.")
+            raise ToolError("unavailable", "No FreeCAD command-line binary (freecadcmd) beside this FreeCAD, in FREECAD_APP or on the PATH: the tests need it to run apart from this FreeCAD. Nothing was started.")
         roots = [os.path.join(mod, n) for n in sorted((installed or set()) - {"AgentLink", "AddonManager"}) if os.path.isdir(os.path.join(mod, n))]
         log = keep.path("tests", f"{addon}-{keep.stamp()}.log")
         return testrun.wait(testrun.start(cmd, addon, root, OWN_ROOT, roots, lib, log, pattern, select, float(timeout), folder), testrun.START_WAIT, _pump())
@@ -76,7 +76,7 @@ def tools(s):
         from .. import gui_input as gi
 
         if not getattr(FreeCAD, "GuiUp", False):
-            raise ToolError("unavailable", "gui_input sends mouse and keyboard input to the FreeCAD window, and this FreeCAD has none (headless): it runs through the window's link (Agent Link > Start Link).")
+            raise ToolError("unavailable", "gui_input sends mouse and keyboard input to the FreeCAD window, and this FreeCAD has none (headless): it runs through the window's link (Agent Link > Start Link). session_state says where calls go (where: window).")
         steps = gi.parse_steps(a.get("steps"))
         as_ = a.get("as")
         if as_ is not None and as_ != "person":
@@ -163,7 +163,7 @@ def tools(s):
                 p = q
         if p is None:
             have = sorted({f[:-5] for r in roots for f in (os.listdir(os.path.join(r, "scripts", "live")) if os.path.isdir(os.path.join(r, "scripts", "live")) else []) if f.endswith(".json")})
-            raise ToolError("not_found", f"script: {name} — no such live script. Installed: {', '.join(have) or 'none'}; or a .json file's path.")
+            raise ToolError("not_found", f"script: {name} — no such live script. Installed: {', '.join(have) or 'none'}; or a .json file's path. Start with live_run {{ script: \"reset\" }}.")
         script = ls.load(p)
         chosen = ls.pick_steps(script["steps"], a.get("steps"))
 
@@ -261,24 +261,25 @@ def tools(s):
              "the first visible match; {tab: {text, under?}}; {item: {text, under?, column?}, check?: true} a list, tree or table row "
              "(check: its box); {menu_item: \"text\"} an item of the open menu; {window: [x, y]} main-window pixels. While a dialog or menu is in front only targets inside it are taken. "
              "Answers per step what it hit (class, name, text, where), a dialog or menu it opened (later steps run inside it), "
-             "open: what still holds the window at the end (close it: Escape, dialog_answer or gui_unstick), new Report problems. Shortcuts are not triggered (cmd_run).",
+             "open: what still holds the window at the end (close it: Escape, dialog_answer or gui_unstick), new Report problems. Shortcuts are not triggered (cmd_run). Proof that a step worked is what the tools read back afterwards (session_state, selection { clear: false }, object_get), not the shot. Face and edge names change with the model: aim view_world at a point on the face, after cmd_run Std_ViewIsometric and Std_ViewFitAll.",
              obj({"steps": {"type": "array", "items": {"type": "object"}}, "inline": {"type": "boolean"},
                   "as": {"type": "string", "enum": ["person"],
                          "description": "Dev, testing an add-on that follows the person: this call's input counts as the person's, not the agent's."}},
                  ["steps"]), gui_input),
         Tool("gui_unstick",
-             "Close the menu, drop-down list or dialog that holds the FreeCAD window (Escape's effect: a menu closes, a dialog is cancelled), "
-             "even while it holds every other call. all: true closes each one in front, dialogs under a menu too. Answers what was closed and "
-             "what is still open. Window only.",
+             "Close the menu, drop-down list or dialog that holds the FreeCAD window (Escape's effect: a menu closes, a dialog is cancelled, nothing in it is accepted), "
+             "even while it holds every other call (it is answered off the GUI thread). all: true closes each one in front, dialogs under a menu too. Reply: what was closed and "
+             "what is still open (dialog_answer presses a named button instead; a window that stays stuck: app_force_restart). Window only.",
              obj({"all": {"type": "boolean"}}), gui_unstick),
         Tool("live_run",
              "Replay a live window script (scripts/live, its README's format) and check it: script is a name (reset, agentlink, or another found in the installed add-ons' scripts/live folders; a wrong name lists them) or a .json file's path; "
-             "steps: only these (names or numbers from 0; all by default; run reset first, as the scripts expect). Each step's calls go to batch (rollback: false, stopOnError: false), or one by one when the step is direct; "
+             "Every script starts from live_run { script: \"reset\" } (it rebuilds the WindowTest document and brings it to the front): run that first, each time. "
+             "steps: only these (names or numbers from 0; all by default) — a later step run alone acts on whatever document is in front, with what the steps before it would have made missing. Each step's calls go to batch (rollback: false, stopOnError: false), or one by one when the step is direct; "
              "$names are filled in from vars { name: value } and from earlier answers (a $name the script declares, kept from the latest answer that has that key: $next); a step that needs one not known yet is skipped and says which. "
              "Two-role steps (role: student, parallel) are skipped: they need two agents (ROLES.md). Every expect is checked (equals, contains, atLeast, atMost, exists, noneContain with ignoreLinesWith; paths with dots, [*] any item, [-1] the last). "
              "A call with allow: [codes] may be refused with one of them without failing its step (allowedRefusals; reset closes documents that may not be open). A gui_input that opens a dialog does not end the replay: inside the dialog's loop, the step's calls after it and the next steps' calls run one at a time only while the dialog is still open (so the step that answers it runs); once it closes the replay returns, the dialog's loop ends, and the rest runs after it; a step answered busy is run again once after a short wait; anything left open at the end is closed (gui_unstick) and said in leftOpen. "
              f"budget: seconds the replay may hold the window ({ls.BUDGET:g} by default, at most {ls.BUDGET_MAX:g}): no call starts past it, and the answer names the steps not run (notRun) — live_run {{ steps: [...] }} runs them, so a long script is split across calls. A nested event loop still holding the window past the budget is closed, then the call is answered with what ran so far and FreeCAD is started again by the watchdog. The answer is always live_run's own summary. "
-             "Answers per step pass, fail or skipped, a failing check's call, path, wanted and got, refused calls, the step's shot (a window picture, in the window) and look (what it should show), and the totals. stopOnFail: true stops at the first failing step. It changes the document as the script does.",
+             "Reply: total { passed, failed, skipped, run } and steps, each with result pass, fail or skipped, a failing check's call, path, wanted and got, refused calls, the step's shot (a window picture, in the window) and look (what it should show), and the totals. stopOnFail: true stops at the first failing step. It changes the document as the script does.",
              obj({"script": st, "steps": {"type": "array", "items": {}}, "vars": {"type": "object"}, "stopOnFail": {"type": "boolean"}, "budget": {"type": "number"}}, ["script"]), live_run),
         Tool("addon_test",
              "An installed add-on's own tests (its tests/ folder) run in the background in a separate FreeCAD command-line process, never this "
@@ -286,7 +287,7 @@ def tools(s):
              "in FreeCAD's Mod folder (one the launcher installed) or AgentLink; folder: only this subfolder of tests/ (e.g. make); pattern: test files (test_*.py); select: only tests whose id "
              f"holds it; timeout: seconds ({testrun.TIMEOUT:g}, at most {testrun.TIMEOUT_MAX:g}). It answers at once with the job (the result "
              f"itself when it finishes within {testrun.START_WAIT:g} s); job answers how it stands (counts so far, or the counts, the time and each "
-             f"failure's last traceback lines), waiting up to {testrun.STATUS_WAIT:g} s for the end. Neither: the recent jobs. The full log is "
+             f"failure's last traceback lines), waiting up to {testrun.STATUS_WAIT:g} s for the end — call it again while state is running. Neither: the recent jobs. The full log is "
              "under ~/AgentLink/tests; a run is stopped at its timeout or when FreeCAD quits.",
              obj({"addon": st, "job": st, "folder": st, "pattern": st, "select": st, "timeout": {"type": "number"}}), addon_test),
     ]

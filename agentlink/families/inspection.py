@@ -106,6 +106,14 @@ def inspections(doc):
     return [o for o in doc.Objects if o.TypeId == "Inspection::Feature"]
 
 
+def tol_props(o):
+    """The tolerance band's two properties, added when the inspection has
+    none (one made in FreeCAD's own Inspection workbench)."""
+    for p in TOL_PROP:
+        if p not in o.PropertiesList:
+            o.addProperty("App::PropertyFloat", p, "Tolerance", "The band a distance must fall in, mm (set by Agent Link)")
+
+
 def band(o):
     if all(p in o.PropertiesList for p in TOL_PROP):
         lo, hi = float(o.ToleranceLow), float(o.ToleranceHigh)
@@ -229,7 +237,7 @@ def tools(session):
                 act = doc().addObject("Points::Feature", "Actual")
                 act.Points = Points.Points(p) if hasattr(Points, "Points") else Points.read(p)
             else:
-                raise bad("file: a mesh (stl, obj, ply, off, 3mf, amf) or points (asc, pcd, xyz).")
+                raise bad(f"file: {ext or 'no extension'} is not read here — a mesh (stl, obj, ply, off, 3mf, amf) or points (asc, pcd, xyz, txt, e57). import_file brings other formats in; then actual names the object.")
             act.Label = s.unique(os.path.splitext(os.path.basename(p))[0])
         elif a.get("actual"):
             act = find(a["actual"], "actual")
@@ -237,7 +245,7 @@ def tools(session):
             raise bad("actual: the measured thing (a mesh, points or a body), or file: a scan to read.")
         k = kind_of(act)
         if k is None:
-            raise bad(f"{act.Label} is a {act.TypeId}: the actual is a mesh, points or a body.")
+            raise bad(f"actual: {act.Label} is a {act.TypeId} — the actual is a mesh, a point cloud or an object with a shape (object_list names them).")
         meshed = None
         if k == "shape":
             # A body is measured at the vertices of a mesh of it, kept in the
@@ -259,10 +267,10 @@ def tools(session):
             raise bad("nominals: what it should be — bodies, meshes or points (a list of names).")
         for n in noms:
             if kind_of(n) is None:
-                raise bad(f"nominal {n.Label} is a {n.TypeId}: bodies, meshes or points.")
+                raise bad(f"nominals: {n.Label} is a {n.TypeId} — each is a body (an object with a shape), a mesh or a point cloud.")
             if n is act:
-                raise bad("A nominal cannot be the actual itself.")
-        r = float(a.get("search_radius", 1.0))
+                raise bad(f"nominals: {n.Label} is the actual itself — the nominal is what it should be (the design), the actual what was measured or made.")
+        r = picks.num(a.get("search_radius", 1.0), "search_radius")
         if r <= 0:
             raise bad("search_radius: mm, over 0 — points further than this from every nominal are out of reach.")
         lo, hi = tol_of(a)
@@ -274,9 +282,8 @@ def tools(session):
         f.Nominals = noms
         f.SearchRadius = r
         if a.get("thickness") is not None:
-            f.Thickness = float(a["thickness"])
-        for p in TOL_PROP:
-            f.addProperty("App::PropertyFloat", p, "Tolerance", "The band a distance must fall in, mm (set by Agent Link)")
+            f.Thickness = picks.num(a["thickness"], "thickness")
+        tol_props(f)
         if lo is not None:
             f.ToleranceLow, f.ToleranceHigh = lo, hi
         doc().recompute()
@@ -289,27 +296,46 @@ def tools(session):
             out["how"] = (f"{act.Label} was tessellated first (a mesh at deflection {defl:g} mm, split to spacing {spacing:.3g} mm, {len(meshed.Mesh.Points)} points) "
                           "and FreeCAD's Inspection read each point's distance to the nominals — the body's faces are not sampled directly. "
                           "Timed against the body's B-spline poles: a large free-form body is given a longer deadline (and a coarser deflection or larger spacing is quicker).")
-        out["next"] = "view_render { map: \"inspection\" } to see it; insp_export for a report."
+        if a.get("thickness") is not None:
+            out["thicknessNote"] = "Thickness is stored on the feature, but FreeCAD 1.1's Inspection does not use it when measuring: the distances are the same with or without it."
+        out["next"] = "view_render { map: \"inspection\" } to see it; insp_faces says which faces are off; insp_export for a report."
         out["step"] = len(s.steps)
         return out
 
     def insp_update(a):
         o = ins_of(a.get("inspection"))
+        if not any(k in a for k in ("search_radius", "thickness", "tolerance", "nominals")):
+            raise bad("Nothing to change: search_radius, thickness, tolerance (±t, [low, high] or null to clear) or nominals — insp_read reads it as it is.")
+        # Checked before anything is set, so a refusal changes nothing.
+        r = float(o.SearchRadius)
         if a.get("search_radius") is not None:
-            r = float(a["search_radius"])
+            r = picks.num(a["search_radius"], "search_radius")
             if r <= 0:
-                raise bad("search_radius: over 0.")
+                raise bad("search_radius: mm, over 0 — points further than this from every nominal are out of reach.")
+        lo, hi = band(o)
+        if a.get("tolerance") is not None:
+            lo, hi = tol_of(a)
+        elif "tolerance" in a:
+            lo = hi = None
+        if lo is not None and max(abs(lo), abs(hi)) > r:
+            raise bad(f"tolerance reaches past search_radius ({r:g} mm): points out of tolerance would read as out of reach. Raise search_radius in the same call.")
+        noms = None
+        if a.get("nominals"):
+            noms = [find(n, "nominal") for n in a["nominals"]]
+            for n in noms:
+                if kind_of(n) is None:
+                    raise bad(f"nominals: {n.Label} is a {n.TypeId} — each is a body (an object with a shape), a mesh or a point cloud.")
+                if n is o.Actual:
+                    raise bad(f"nominals: {n.Label} is this inspection's actual.")
+        if a.get("search_radius") is not None:
             o.SearchRadius = r
         if a.get("thickness") is not None:
-            o.Thickness = float(a["thickness"])
+            o.Thickness = picks.num(a["thickness"], "thickness")
         if "tolerance" in a:
-            if a["tolerance"] is None:
-                o.ToleranceLow = o.ToleranceHigh = 0.0
-            else:
-                lo, hi = tol_of(a)
-                o.ToleranceLow, o.ToleranceHigh = lo, hi
-        if a.get("nominals"):
-            o.Nominals = [find(n, "nominal") for n in a["nominals"]]
+            tol_props(o)
+            o.ToleranceLow, o.ToleranceHigh = (0.0, 0.0) if lo is None else (lo, hi)
+        if noms is not None:
+            o.Nominals = noms
         o.touch()
         return picks.finish(s, "insp_update", lambda: reading(o, int(a.get("worst", 5))))
 
@@ -334,9 +360,12 @@ def tools(session):
             raise ToolError("invalid_state", f"{o.Label}: its points and distances do not line up — insp_update to measure again.")
         noms = [x for x in (o.Nominals or []) if isinstance(getattr(x, "Shape", None), __import__("Part").Shape) and x.Shape.Faces]
         if a.get("body"):
-            noms = [find(a["body"], "body")]
+            nb = find(a["body"], "body")
+            if not isinstance(getattr(nb, "Shape", None), __import__("Part").Shape) or not nb.Shape.Faces:
+                raise bad(f"body: {nb.Label} ({nb.TypeId}) has no faces to split the inspection by.")
+            noms = [nb]
         if not noms:
-            raise ToolError("invalid_input", "This inspection's nominals hold no body with faces: body names one.")
+            raise ToolError("invalid_input", "This inspection's nominals hold no body with faces (meshes and points have none): body names a body whose faces to split by.")
         lo, hi = band(o)
         V, F, owner = [], [], []
         for nb in noms:
@@ -366,6 +395,8 @@ def tools(session):
             out.append(row)
         key = (lambda r: -r.get("outOfTolerance", 0) * 1e9 - abs(r["mean"])) if lo is not None else (lambda r: -abs(r["mean"]))
         out.sort(key=key)
+        if not out:
+            raise ToolError("not_found", f"{o.Label}: no measured point lies within {reach:g} mm of a face of {', '.join(x.Label for x in noms)} — a larger reach, or the body is not where the actual is.")
         res = {"inspection": o.Label, "faces": out[: int(a.get("limit", 30))], "facesMeasured": len(out)}
         if lo is not None:
             res["failing"] = [r["face"] for r in out if r.get("verdict") == "fail"]
@@ -399,16 +430,16 @@ def tools(session):
                 "summary": {k: rep[k] for k in ("rms", "min", "max", "inTolerancePercent", "verdict") if k in rep}}
 
     return [
-        Tool("insp_run", "Inspect: actual (a mesh, points or a body — a body is sampled every spacing mm (default 1% of its size), kept hidden as a mesh) or file (a scan: stl, obj, ply, asc, pcd …) against nominals [bodies, meshes, points]; search_radius mm (further reads out of reach), thickness, tolerance ±t or [low, high]. FreeCAD's own Inspection feature, left in the document. A body is tessellated first (deflection mm, 0.1) and the distances read from that mesh's points (how says so). Its time is estimated from the actual body's B-spline poles (a lofted free-form body is slow, a ruled one of thousands of flat faces quick) and the watchdog given that long; a tool the watchdog stopped FreeCAD in before is asked about once, then run with a longer deadline. Answers RMS, spread, % in tolerance and the worst spots.",
+        Tool("insp_run", "Inspect with FreeCAD's own Inspection feature (left in the document): actual — a mesh, points or a body — or file (a scan: stl, obj, ply, off, 3mf, amf, asc, pcd, xyz) against nominals [bodies, meshes, points]. Nothing is aligned: put the actual where the nominal is first (object_align). search_radius mm (1; FreeCAD's own default is 0.05): a point further than that from every nominal reads out of reach, so it must reach past the tolerance. tolerance ±t or [low, high] mm gives the verdict. Distances are signed: + outside a solid nominal (material added), − inside. A mesh or scan is measured at its vertices; a body is meshed first (deflection 0.1 mm, points every spacing mm, default 1% of its size, at most cap 60000) and that hidden mesh measured (how says so). thickness is stored but FreeCAD 1.1 does not use it. Cost grows with points × nominal faces: a free-form body against a big scan takes minutes — raise spacing first. Reply: points, measured, outOfReach, min, max, mean, rms, stdDev, inTolerancePercent, verdict (pass only when all are in tolerance and none out of reach), worst [{ at, distance }], health.",
              obj({"actual": {"type": "string"}, "file": {"type": "string"}, "nominals": {"type": "array", "items": {"type": "string"}}, "search_radius": {"type": "number"}, "thickness": {"type": "number"},
                   "tolerance": {"type": ["number", "array"]}, "deflection": {"type": "number"}, "spacing": {"type": "number"}, "cap": {"type": "integer"}, "name": {"type": "string"}, "worst": {"type": "integer"}}, ["nominals"]), insp_run, changes=True),
-        Tool("insp_update", "Change an inspection and measure again: search_radius, thickness, tolerance (null clears), nominals.",
+        Tool("insp_update", "Change an inspection and measure again: search_radius, thickness, tolerance (±t or [low, high]; null clears), nominals — at least one; inspection may be left out when there is one. Checked before anything is set (a tolerance past the search radius is refused). Reply: as insp_run.",
              obj({"inspection": {"type": "string"}, "search_radius": {"type": "number"}, "thickness": {"type": "number"}, "tolerance": {"type": ["number", "array", "null"]}, "nominals": {"type": "array", "items": {"type": "string"}}, "worst": {"type": "integer"}}), insp_update, changes=True),
-        Tool("insp_read", "One inspection's numbers: RMS, min, max, mean, spread, histogram, in/out of tolerance, out of reach, worst spots (worst: how many). Changes nothing.",
+        Tool("insp_read", "One inspection's numbers (the one there is when inspection is left out): points, measured, outOfReach, min, max, mean, rms, stdDev, p95abs, histogram, tolerance, inTolerancePercent, over, under, verdict, worst spots (worst: how many, 10). Distances in mm, + outside the nominal. Changes nothing.",
              obj({"inspection": {"type": "string"}, "worst": {"type": "integer"}}), insp_read),
-        Tool("insp_list", "The inspections in the document, each in a line. Changes nothing.", obj({}), insp_list),
-        Tool("insp_faces", "An inspection split by the nominal body's faces: each face's points, mean offset, min, max, RMS and (with a tolerance) how many are out — the faces off first. Which face is the problem. Changes nothing.",
+        Tool("insp_list", "The inspections in the document, a line each: inspection, actual, nominals, points, rms, inTolerancePercent, verdict, outOfReachPercent. Changes nothing.", obj({}), insp_list),
+        Tool("insp_faces", "An inspection split by the nominal body's faces: each face (\"Body.Face4\") with its points, mean offset (+ the actual sits outside there), min, max, rms and, with a tolerance, outOfTolerance and verdict — the faces that are off first; failing lists them. A face off evenly is displaced; one with min and max far apart is out of form. body: which body when the nominals hold several or none; reach mm (the search radius): how near a face a point must be to count for it; limit (30). Changes nothing.",
              obj({"inspection": {"type": "string"}, "body": {"type": "string"}, "reach": {"type": "number"}, "deflection": {"type": "number"}, "limit": {"type": "integer"}}), insp_faces),
-        Tool("insp_export", "Write an inspection out: a CSV of every point (x, y, z, distance, status) and a JSON report, to the out folder.",
+        Tool("insp_export", "Write an inspection out to the session's folder: <name>.csv with a row a point (x, y, z, distance_mm, status ok | over | under | out_of_reach) and <name>.json with insp_read's numbers. name: the files' base name (the inspection's label by default). Reply: files { csv { path, rows }, json { path } }, summary. The document is not changed.",
              obj({"inspection": {"type": "string"}, "name": {"type": "string"}, "worst": {"type": "integer"}}), insp_export),
     ]

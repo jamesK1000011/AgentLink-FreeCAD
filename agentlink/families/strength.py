@@ -166,7 +166,62 @@ def ccx_hint(log):
     if "nonpositive jacobian" in low:
         out += (" Nonpositive jacobian: an element of the mesh is folded over, usually a coarse second-order tetrahedron on a small"
                 " round or a thin wall — fea_setup { mesh: a smaller size, about half } (holds and loads are kept), or fea_refine at the small feature, then fea_solve again.")
+    if "no material was assigned" in low:
+        out += " An element has no material: the mesh holds elements outside the part's solid — body_check the body (one closed solid), then fea_solve again."
+    if "too many cutbacks" in low or "increment size smaller" in low:
+        out += (" It stopped finding equilibrium as the load rose (a nonlinear run): less load, a stronger material or a larger section;"
+                " or contact that never closes, or a part held too little.")
     return out
+
+
+def self_weight(g, gravity):
+    """A self-weight constraint set to gravity [gx, gy, gz] in g. FreeCAD 1.1
+    keeps GravityAcceleration (a quantity) and GravityDirection (a unit
+    vector); before it, Gravity_x / _y / _z as multiples of g."""
+    gv = V(*[float(x) for x in gravity])
+    if "GravityAcceleration" in g.PropertiesList:
+        g.GravityAcceleration = g.GravityAcceleration * gv.Length  # its own 1 g, as FreeCAD's migration does
+        d = V(gv)
+        d.normalize()
+        g.GravityDirection = d
+    else:
+        g.Gravity_x, g.Gravity_y, g.Gravity_z = gv.x, gv.y, gv.z
+
+
+def gmsh_run(tool, timeout, name="Gmsh", slow="a coarser mesh (fea_setup { mesh }) or a longer timeout (fea_solve { timeout })"):
+    """One of FreeCAD's meshers (GmshTools, NetgenTools) run to the end,
+    bounded: its error lines, or "". FreeCAD 1.1 runs a mesher as a
+    QProcess (prepare, compute, then the mesh is read into the mesh object
+    when it finishes) and GmshTools.create_mesh() answers nothing; before
+    1.1 create_mesh() answered Gmsh's stderr."""
+    proc = getattr(tool, "process", None)
+    if proc is None or not hasattr(tool, "prepare") or not hasattr(tool, "compute"):
+        return str(tool.create_mesh() or "") if hasattr(tool, "create_mesh") else str(tool.run() or "")
+    tool.prepare()
+    tool.compute()
+    if not proc.waitForFinished(int(max(1.0, float(timeout)) * 1000)):
+        running = True
+        try:
+            running = proc.state() != proc.ProcessState.NotRunning
+        except Exception:
+            pass
+        if running:
+            try:
+                proc.kill()
+                proc.waitForFinished(3000)
+            except Exception:
+                pass
+            raise ToolError("failed", f"{name} took over {float(timeout):g} s: {slow}.")
+        why = ""
+        try:
+            why = str(proc.errorString())
+        except Exception:
+            pass
+        raise RuntimeError(f"{name} did not run ({why or 'no reason given'})")
+    try:
+        return bytes(proc.readAllStandardError().data()).decode("utf-8", "replace").strip()
+    except Exception:
+        return ""
 
 
 def ccx_said(fea, ccx, timeout):
@@ -542,6 +597,8 @@ def tools(session):
                 elif not (isinstance(v, list) and len(v) == 3):
                     raise ToolError("invalid_input", "force: [fx, fy, fz] N in total over the faces, or a number pushing into them.")
                 ld["force"] = [float(x) for x in v]
+                if not any(abs(x) > 0 for x in ld["force"]):
+                    raise ToolError("invalid_input", "force: [0, 0, 0] loads nothing — give its size and direction in N, [fx, fy, fz], or a number pushing into the faces.")
             else:
                 if not isinstance(v, (int, float)):
                     raise ToolError("invalid_input", "pressure: MPa (N/mm²), a number; positive pushes into the faces.")
@@ -557,6 +614,8 @@ def tools(session):
                 g = [float(x) for x in v]
             else:
                 raise ToolError("invalid_input", "gravity: true (1 g down -z), a number of g down -z, or [gx, gy, gz] in g.")
+            if not any(abs(x) > 0 for x in g):
+                raise ToolError("invalid_input", "gravity: 0 g loads nothing — true (1 g down -z), a number of g, or [gx, gy, gz] in g.")
             ld["gravity"] = g
         if not a.get("replace") and _same_in(ld, st["loads"]):
             raise ToolError("invalid_state", f"That load is already in the study (loads: {len(st['loads'])}): adding it again would apply it twice — replace: true to start the loads over, or clear: true.")
@@ -1086,7 +1145,13 @@ def tools(session):
         doc = s.doc
         label = f"{o.Label} strength (fea_solve)"
         for old in [x for x in doc.Objects if x.Label == label and x.TypeId == "Fem::FemAnalysis"]:
-            for m in list(getattr(old, "Group", []) or []):
+            members = list(getattr(old, "Group", []) or [])
+            # A result object's mesh (CCX_Results_Mesh) is linked from it, not
+            # a member of the analysis: taken away with it, or one is left per solve.
+            members += [m.Mesh for m in members if m.isDerivedFrom("Fem::FemResultObject") and getattr(m, "Mesh", None) is not None]
+            # and a mesh's refinements (fem_add puts them on the mesh, not in the analysis)
+            members += [r for m in members for k in ("MeshRegionList", "MeshGroupList", "MeshBoundaryLayerList") for r in (getattr(m, k, None) or [])]
+            for m in members:
                 try:
                     doc.removeObject(m.Name)
                 except Exception:
@@ -1101,15 +1166,25 @@ def tools(session):
         if mk is None:
             raise RuntimeError("no CalculiX solver object in this FEM")
         solver = mk(doc)
+        # Said outright, as FreeCAD's own examples do: a linear static step
+        # whatever this FreeCAD's defaults or preferences are.
+        for prop, val in (("AnalysisType", "static"), ("GeometricalNonlinearity", "linear")):
+            if prop in solver.PropertiesList:
+                setattr(solver, prop, val)
         an.addObject(solver)
         mo = ObjectsFem.makeMaterialSolid(doc, "Material")
         props = {"Name": c.get("name", st["material"]), "YoungsModulus": f"{float(c['E'])} MPa", "PoissonRatio": str(float(c.get("nu") or 0.35)),
                  "Density": f"{float(c['density']) * 1000} kg/m^3"}
         mo.Material = props
-        mo.References = [(o, "")]
+        # No References: the one material is every element's. With a
+        # reference FreeCAD's prerequisite check prints an error line ("Only
+        # one material object, but this one has a reference shape") at each solve.
         an.addObject(mo)
         mesh = ObjectsFem.makeMeshGmsh(doc, "Mesh")
-        mesh.Shape = o
+        if "Shape" in mesh.PropertiesList:
+            mesh.Shape = o
+        else:
+            mesh.Part = o  # before FreeCAD 1.1
         mesh.CharacteristicLengthMax = f"{float(st['mesh'])} mm"
         mesh.ElementOrder = "2nd"
         an.addObject(mesh)
@@ -1126,7 +1201,7 @@ def tools(session):
                 an.addObject(pr)
             elif ld["kind"] == "gravity":
                 g = ObjectsFem.makeConstraintSelfWeight(doc, "SelfWeight")
-                g.Gravity_x, g.Gravity_y, g.Gravity_z = ld["gravity"]
+                self_weight(g, ld["gravity"])
                 an.addObject(g)
             else:
                 fv = V(*ld["force"])
@@ -1142,21 +1217,30 @@ def tools(session):
                 fo.Direction = (ln, ["Edge1"])
                 an.addObject(fo)
         doc.recompute()
-        err = gmshtools.GmshTools(mesh).create_mesh()
+        err = gmsh_run(gmshtools.GmshTools(mesh), timeout)
         femmesh = mesh.FemMesh
-        if err or not femmesh.VolumeCount:
-            raise ToolError("failed", f"Gmsh did not mesh {o.Label}: {err or 'no volume elements'} — body_check it, or another mesh size.")
+        if not femmesh.VolumeCount:
+            said = " | ".join([ln.strip() for ln in err.splitlines() if ln.strip()][-3:])[:600]
+            raise ToolError("failed", f"Gmsh did not mesh {o.Label}: {said or 'no volume elements'} — body_check it (one closed solid), or another mesh size (fea_setup {{ mesh }}).")
         wd = paths.made(s, os.path.join(s.out_dir, "fea_" + "".join(ch if ch.isalnum() else "_" for ch in o.Label)), "run")
         os.makedirs(wd, exist_ok=True)
         fea = ccxtools.FemToolsCcx(an, solver)
         fea.update_objects()
         fea.setup_working_dir(wd)
         fea.setup_ccx(ccx)
+        # ccx_run() calls setup_ccx() again with no argument, which looks in
+        # FreeCAD's preference and the PATH only: the binary found here
+        # (AGENTLINK_CCX too) is the one it runs.
+        _setup = fea.setup_ccx
+        fea.setup_ccx = lambda ccx_binary=None, ccx_binary_sig="CalculiX": _setup(ccx_binary or ccx, ccx_binary_sig)
         msg = fea.check_prerequisites()
         if msg:
             raise RuntimeError(f"its prerequisites: {msg.strip()}")
         fea.write_inp_file()
         rc = fea.ccx_run()
+        # CalculiX's own lines for the shared health check, as the own deck keeps them.
+        said = [getattr(fea, k, "") or "" for k in ("ccx_stdout", "ccx_stderr")]
+        s._ccx_tail = last_lines("\n".join(v.decode("utf-8", "replace") if isinstance(v, bytes) else str(v) for v in said)) or None
         frd = os.path.splitext(fea.inp_file_name)[0] + ".frd"
         disp = stress = None
         if os.path.isfile(frd):
@@ -1587,8 +1671,9 @@ def tools(session):
         VM = np.asarray(f["vonMises"], float)
         U = np.asarray(f["displacement"], float)
         um = np.linalg.norm(U, axis=1)
-        m_ = r.get("mesh")
-        msize = float((m_.get("size") if isinstance(m_, dict) else m_) or 1.0)
+        # the solve's element size: the study's mesh (the session keeps body, study, result, field)
+        m_ = (r.get("study") or {}).get("mesh") or ((r.get("result") or {}).get("mesh") or {}).get("size")
+        msize = float(m_ or 1.0)
 
         def at(q):
             d = np.linalg.norm(P - np.asarray(q, float), axis=1)
@@ -1711,13 +1796,15 @@ def tools(session):
                 props["ThermalExpansionCoefficient"] = f"{float(c['alpha'])} 1/K"
             props["RelativePermittivity"] = str(float(c.get("permittivity", 1)))
             mo.Material = props
-            if kind != "elmer":
-                # Elmer reads a material without references as every body's
-                mo.References = [(o, "")]
+            # No References: one material is every element's, for CalculiX and
+            # Elmer alike (a reference makes FreeCAD's check print an error line).
             an.addObject(mo)
             made.append(mo.Label)
         mesh = ObjectsFem.makeMeshGmsh(doc, "Mesh")
-        mesh.Shape = o
+        if "Shape" in mesh.PropertiesList:
+            mesh.Shape = o
+        else:
+            mesh.Part = o  # before FreeCAD 1.1
         mesh.CharacteristicLengthMax = f"{float(st['mesh'])} mm"
         try:
             mesh.ElementOrder = "2nd"
@@ -1760,7 +1847,7 @@ def tools(session):
                 skipped.append("the spin (FreeCAD 1.0's centrifugal constraint is Elmer's; CalculiX takes it as *DLOAD CENTRIF)")
             elif ld["kind"] == "gravity":
                 g = ObjectsFem.makeConstraintSelfWeight(doc, "SelfWeight")
-                g.Gravity_x, g.Gravity_y, g.Gravity_z = ld["gravity"]
+                self_weight(g, ld["gravity"])
                 an.addObject(g)
                 made.append(g.Label)
             else:
@@ -1890,66 +1977,66 @@ def tools(session):
         return out
 
     return [
-        Tool("fea_shell", "A thin plate or shell by shell elements (CalculiX on Gmsh's triangles): object (a face, shell or sheet: its faces are the mid-surface; faces narrows), thickness mm, material, holds [{ edges \"boundary\" (every free edge) | [{ near: [x,y,z] }], kind pinned (simply supported) | fixed (clamped) }], pressure MPa and/or gravity. Answers the largest deflection and stress. Panels, lids, sheet-metal, floors and walls as plates.",
+        Tool("fea_shell", "A thin plate or shell by shell elements (CalculiX on Gmsh's triangles): object (a face, shell or sheet: its faces are the mid-surface; faces narrows), thickness mm, material, holds [{ edges \"boundary\" (every free edge) | [{ near: [x,y,z] }], kind pinned (simply supported) | fixed (clamped) }], pressure MPa and/or gravity: true, mesh mm. Answers the largest deflection (mm) and stress (MPa). Panels, lids, sheet-metal, floors and walls as plates. Runs in the foreground (timeout s, 300); needs ccx and gmsh.",
              obj({"object": {"type": "string"}, "faces": {"type": "array", "items": {"type": "string"}}, "thickness": {"type": "number"}, "material": {"type": "string"},
                   "holds": {"type": "array", "items": {"type": "object"}}, "pressure": {"type": "number"}, "gravity": {"type": "boolean"}, "mesh": {"type": "number"}, "timeout": {"type": "number"}}, ["object", "thickness"]), fea_shell),
-        Tool("fea_parts", "A strength study of several parts together (instead of fea_setup): bodies [labels, one solid each], materials { label: id } (else each body's own), join tie (bonded where they touch: glued, welded, press-fit) | contact (they push but do not pull; friction 0.2 lets them slide) | none, tolerance mm for touching (0.05), mesh mm. Then fea_hold / fea_load on the parts' faces and fea_solve: each part's peak stress and safety.",
+        Tool("fea_parts", "A strength study of several parts together (instead of fea_setup): bodies [labels, one solid each], materials { label: id } (else each body's own), join tie (bonded where they touch: glued, welded, press-fit) | contact (they push but do not pull; friction 0.2 lets them slide) | none, tolerance mm for touching (0.05), mesh mm. Makes a hidden compound, the study's body; answers touching (pairs and area) and warns of overlaps. Then fea_hold / fea_load on the parts' faces and fea_solve: each part's peak stress and safety.",
              obj({"bodies": {"type": "array", "items": {"type": "string"}}, "materials": {"type": "object"}, "join": {"type": "string", "enum": ["tie", "contact", "none"]},
                   "friction": {"type": "number"}, "tolerance": {"type": "number"}, "mesh": {"type": "number"}, "name": {"type": "string"}}, ["bodies"]), fea_parts, changes=True),
         Tool(
             "fea_setup",
-            "Start (or change) a strength study of one body: solid: n studies one solid of a multi-solid body alone (a hidden helper, read again from the body at each solve; its faces are numbered on their own); material (the body's by default), mesh (largest element edge, mm; a third of the least size by default). The same body's holds and loads are kept (said as kept); reset: true drops them (said as dropped). " + TRAPS,
+            "Start (or change) a strength study of one body: body; solid: n studies one solid of a multi-solid body alone (a hidden helper, read again from the body at each solve; its faces are numbered on their own); material (the body's by default; it needs a Young's modulus), mesh (largest element edge, mm; by default a third of the least size; one that makes over about 400,000 elements is refused). The same body's holds and loads are kept (said as kept; unmatched lists those that fit no face now); reset: true drops them (said as dropped). Answers study, material and next. " + TRAPS,
             obj({"body": {"type": "string"}, "solid": {"type": "integer", "description": "One solid of a multi-solid body (an AllowCompound Body), from 1, studied alone."}, "material": {"type": "string"}, "mesh": {"type": "number"}, "reset": {"type": "boolean"}}),
             fea_setup,
             changes=True,
         ),
         Tool(
             "fea_hold",
-            "Hold faces: faces by query — { near: [x,y,z] }, { normal: [0,0,-1], z: 0 }, { faces: [\"Face1\"] }, shape_query's references (\"Face8\", a list) or its filters ({ type: cylinder, radius: 3 }); kind fixed (no movement at all, the default) | slide (held only along the face's normal, x/y/z: a roller, a smooth floor, a symmetry plane) | pin (dofs [\"x\",\"y\",\"z\"] held, the rest free) | move (move [dx,dy,dz] mm, null for free: a set displacement, a press fit). Adds to the holds (replace: true starts again; clear: true drops them). Answers the faces picked, with area and centre. A rigid hold makes stress no real mount does: peaks at a hold read high.",
+            "Hold faces: faces by query — { near: [x,y,z] }, { normal: [0,0,-1], z: 0 }, { faces: [\"Face1\"] }, shape_query's references (\"Face8\", a list) or its filters ({ type: cylinder, radius: 3 }); kind fixed (no movement at all, the default) | slide (held only along the face's normal, x/y/z: a roller, a smooth floor, a symmetry plane) | pin (dofs [\"x\",\"y\",\"z\"] held, the rest free) | move (move [dx,dy,dz] mm, null for free: a set displacement, a press fit). Adds to the holds (replace: true starts again; clear: true drops them). The query is kept, not the face numbers (they change when the part is edited): fea_solve matches it again and refuses if it finds nothing. Answers held (the faces picked, with area and centre): check them.",
             obj({"faces": query, "kind": {"type": "string", "enum": ["fixed", "slide", "pin", "move"]}, "dofs": {"type": "array", "items": {"type": "string"}}, "move": {"type": "array", "items": {}}, "replace": {"type": "boolean"}, "clear": {"type": "boolean"}}),
             fea_hold,
             changes=True,
         ),
         Tool(
             "fea_load",
-            "Load the part: force on faces (N; [fx, fy, fz] in total spread by area, or a number pushing into the faces), pressure on faces (MPa, positive pushes in), gravity (true is 1 g down -z; a number of g; [gx, gy, gz] in g), or temperature (K the whole part warms by, against its holds; alpha 1/K, else the material's), or spin { rpm, axis [x,y,z], at [x,y,z] } (a rotor's own mass flung outward). Adds to the loads (replace: true starts again; clear: true drops them).",
+            "Load the part: force on faces (N; [fx, fy, fz] in total spread by area, or a number pushing into the faces), pressure on faces (MPa = N/mm², positive pushes in), gravity (true is 1 g down -z; a number of g; [gx, gy, gz] in g), or temperature (K the whole part warms by, against its holds; alpha 1/K, else the material's), or spin { rpm, axis [x,y,z], at [x,y,z] } (a rotor's own mass flung outward). One kind a call; faces as fea_hold takes them. Adds to the loads (replace: true starts again; clear: true drops them); an identical or zero load is refused. Answers on (the faces picked) and load.",
             obj({"faces": query, "force": {}, "pressure": {"type": "number"}, "gravity": {}, "temperature": {"type": "number"}, "alpha": {"type": "number"}, "spin": {"type": "object"}, "replace": {"type": "boolean"}, "clear": {"type": "boolean"}}),
             fea_load,
             changes=True,
         ),
         Tool(
             "fea_solve",
-            "Solve the study: as FreeCAD's own FEM analysis (its CalculiX solver, Gmsh mesh and constraints, results loaded into it) where the study is one body, fixed holds, force/pressure/gravity, linear; else Agent Link's own CalculiX deck (solvedBy says which and why). Second-order tetrahedra, linear static. Answers the largest von Mises stress (MPa) and where, the largest displacement (mm) and where, the safety factor against yield, with warnings. nonlinear: true follows large deflections and each material into yield (elastic-plastic from yield to its tensile strength; elasticOnly: true keeps it elastic) and answers the plastic strain — for a part loaded past yield, a thin part that bends far, or contact. " + TRAPS + " Needs ccx and gmsh installed (timeout s, 300).",
+            "Solve the study: as FreeCAD's own FEM analysis (CalculiX solver object, Gmsh mesh object, its constraints, results loaded into it; made anew each solve as \"<body> strength (fea_solve)\") where the study is one body, fixed holds, force/pressure/gravity, linear; else Agent Link's own CalculiX deck (solvedBy says which and why). Second-order tetrahedra, linear static; mm, N, MPa. Answers vonMisesMax { MPa, at, face } and displacementMax { mm, at, face }, safety (yield over the peak), mesh { nodes, elements }, warnings, files; health carries CalculiX's own warning lines. nonlinear: true follows large deflections and each material into yield (elasticOnly: true keeps it elastic) and answers the plastic strain. Runs in the foreground, FreeCAD waiting: seconds for a few thousand elements, minutes past 100,000 (timeout s, 300, bounds Gmsh and the own deck). " + TRAPS + " Needs ccx and gmsh installed.",
             obj({"timeout": {"type": "number"}, "nonlinear": {"type": "boolean"}, "elasticOnly": {"type": "boolean"}}),
             fea_solve,
             changes=True,
         ),
         Tool(
             "fea_modes",
-            "Natural frequencies of the study's body: the lowest count (6) modes, held by the study's holds (none: free, its rigid motions left out). Answers each mode's Hz and where it swings most and which way. Keep what shakes the part well away from the lowest. Needs ccx and gmsh (timeout s, 300).",
+            "Natural frequencies of the study's body: the lowest count (6, up to 30) modes, held by the study's holds (none: free, its rigid motions left out). Answers each mode's Hz and where it swings most and which way. Keep what shakes the part well away from the lowest. Runs in the foreground; needs ccx and gmsh (timeout s, 300).",
             obj({"count": {"type": "integer"}, "timeout": {"type": "number"}}),
             fea_modes,
         ),
         Tool(
             "fea_heat",
-            "Steady heat through the study's body: temperatures [{ faces, celsius }] held, heat [{ faces, watts }] going in, air { h W/(m²·K) (10, still air), celsius (25), faces (the rest) } taking it away — air: false for none. Answers the hottest and coolest place and warns when the part passes where its material softens (k from the card, or conductivity here). Conduction and convection only. view_render map heat shows it.",
+            "Steady heat through the study's body: temperatures [{ faces, celsius }] held, heat [{ faces, watts }] going in (one of the two at least), air { h W/(m²·K) (10, still air), celsius (25), faces (the rest) } taking it away — air: false for none. Answers the hottest and coolest place and warns when the part passes where its material softens (k from the card, or conductivity W/(m·K) here). Conduction and convection only. view_render map heat shows it. Runs in the foreground (timeout s, 300); needs ccx and gmsh.",
             obj({"temperatures": {"type": "array", "items": {}}, "heat": {"type": "array", "items": {}}, "air": {}, "conductivity": {"type": "number"}, "timeout": {"type": "number"}}),
             fea_heat,
         ),
-        Tool("fea_results", "The last solve's answer again, with stale: true when the body or the study changed since.", obj({}), fea_results),
-        Tool("fea_clear", "Drop the strength study and its results.", obj({}), fea_clear, changes=True),
-        Tool("fea_buckle", "Linear buckling of the study (its holds and loads): the lowest count (3) buckling factors — the loads times the factor is where each mode buckles — and where each bulges. Thin walls, columns, ribs under compression. Needs ccx and gmsh.",
+        Tool("fea_results", "The last solve's answer again (kept with the session, not the file), with stale: true and staleWhy when the body or the study changed since. Changes nothing.", obj({}), fea_results),
+        Tool("fea_clear", "Drop the strength study (body, material, holds, loads, refined regions) and its results. FEM analyses already made in the document stay.", obj({}), fea_clear, changes=True),
+        Tool("fea_buckle", "Linear buckling of the study (its holds and loads): the lowest count (3) buckling factors — the loads times the factor is where each mode buckles; under 1 it buckles as loaded — and where each bulges. Thin walls, columns, ribs under compression. Runs in the foreground; needs ccx and gmsh (timeout s, 300).",
              obj({"count": {"type": "integer"}, "timeout": {"type": "number"}}), fea_buckle),
-        Tool("fea_refine", "A finer mesh near faces (a fillet, a hole's edge, where the peak sits): faces (a query as fea_hold takes), size mm; clear: true drops every region. Kept in the study; the next solve uses it.",
+        Tool("fea_refine", "A finer mesh near faces (a fillet, a hole's edge, where the peak sits): faces (a query as fea_hold takes), size mm (under the study's mesh); clear: true drops every region. Kept in the study; the next solve uses it (by Agent Link's own deck).",
              obj({"faces": {}, "size": {"type": "number"}, "clear": {"type": "boolean"}}), fea_refine, changes=True),
-        Tool("fea_probe", "Read the last solve where asked: points [[x,y,z] …] (von Mises and displacement there), line { from, to, samples } (a profile along it), faces (a query as fea_hold takes: max, mean and where on them). Changes nothing.",
+        Tool("fea_probe", "Read the last solve where asked: points [[x,y,z] …] (von Mises MPa and displacement mm there, from the nearest nodes; nearestNodeMm says how near), line { from, to, samples } (a profile along it; warns where it leaves the part), faces (a query as fea_hold takes: max, mean and where on them). Changes nothing.",
              obj({"points": {"type": "array", "items": {}}, "line": {"type": "object"}, "faces": {}}), fea_probe),
         Tool("fea_chart", "The last solve as FreeCAD's FEM post-processing charts, headless: kind histogram (field over every node, bins 20: an SVG bar chart, the CSV of the bins, min, median, p95, p99, max) | line (along line { from, to, samples } mm: an SVG line plot and CSV) | table (points [[x,y,z] …] or a line: a CSV, and the rows in the answer when 25 or fewer). field vonMises (MPa, default) or displacement (mm). name, title. Files go to the out folder. Changes nothing in the document.",
              obj({"kind": {"type": "string", "enum": ["histogram", "line", "table"]}, "field": {"type": "string", "enum": ["vonMises", "displacement"]}, "bins": {"type": "integer"},
                   "line": {"type": "object"}, "points": {"type": "array", "items": {}}, "name": {"type": "string"}, "title": {"type": "string"}}), fea_chart),
-        Tool("fea_export", "Write the last solve out: formats [vtu (ParaView, FreeCAD FEM post-processing), csv (every node: position, von Mises, displacement)], name.",
+        Tool("fea_export", "Write the last solve to the out folder: formats [vtu (ParaView, FreeCAD FEM post-processing), csv (every node: position mm, von Mises MPa, displacement mm)] (both by default), name. Changes nothing in the document.",
              obj({"formats": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}}), fea_export),
-        Tool("fea_native", "Build the study as FreeCAD's own FEM analysis (Analysis, solver, material, Gmsh mesh, fixed / force / pressure / self-weight constraints), to open and run in the FEM workbench. solver elmer (multiphysics) takes equations [elasticity, heat, flow, electrostatic, electricforce, flux, staticcurrent, magnetodynamic, deformation (nonlinear elasticity)] together, temperatures [{ faces, celsius }] and heat [{ faces, watts }] for heat, potentials [{ faces, volts }] for electrostatics; with flow the body is the fluid's space (fluid air | water; inlets and walls are set in the FEM workbench); write: true meshes it and writes Elmer's case (case.sif), run: true solves it where ElmerSolver is installed.",
+        Tool("fea_native", "Build the study as FreeCAD's own FEM analysis (Analysis, solver, material, Gmsh mesh, fixed / force / pressure / self-weight constraints), to open and run in the FEM workbench; it is not solved here (fea_solve does that), and skipped lists what the FEM objects could not take. solver elmer (multiphysics) takes equations [elasticity, heat, flow, electrostatic, electricforce, flux, staticcurrent, magnetodynamic, deformation (nonlinear elasticity)] together, temperatures [{ faces, celsius }] and heat [{ faces, watts }] for heat, potentials [{ faces, volts }] for electrostatics; with flow the body is the fluid's space (fluid air | water; inlets and walls are set in the FEM workbench); write: true meshes it and writes Elmer's case (case.sif), run: true solves it where ElmerSolver is installed.",
              obj({"name": {"type": "string"}, "solver": {"type": "string", "enum": ["calculix", "elmer"]},
                   "equations": {"type": "array", "items": {"type": "string", "enum": list(ELMER_EQUATIONS)}},
                   "temperatures": {"type": "array", "items": {"type": "object"}}, "heat": {"type": "array", "items": {"type": "object"}},

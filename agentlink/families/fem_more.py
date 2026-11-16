@@ -152,7 +152,7 @@ def tools(s):
                     v = FreeCAD.Vector(*v)
                 setattr(o, k, v)
             except Exception as e:
-                raise bad(f"props.{k} = {v!r}: {e}")
+                raise bad(f"props.{k} = {v!r}: FreeCAD refuses it ({e}) — now {_show(getattr(o, k))!r}; a value of that kind (an enumeration takes one of its own words).")
 
     def fem_add(a):
         F = _fem()
@@ -170,17 +170,17 @@ def tools(s):
             if m is None:
                 m = next((x for x in an.Group if hasattr(x, "FemMesh")), None)
             if m is None:
-                raise ToolError("not_found", f"{an.Label} has no mesh to refine: fea_native makes one (Gmsh).")
+                raise ToolError("not_found", f"{an.Label} has no mesh to refine: fea_native makes the analysis a Gmsh mesh, or mesh: its label.")
             o = getattr(F, fn)(d(), m)
         elif need == "solver":
             sv = picks.find(d(), a["solver"], "solver") if a.get("solver") else next((x for x in an.Group if "Elmer" in getattr(getattr(x, "Proxy", None), "Type", "") or "Elmer" in x.Label), None)
             if sv is None:
-                raise ToolError("not_found", f"{an.Label} has no Elmer solver for equations: fem_add kind solver_elmer first.")
+                raise ToolError("not_found", f"{an.Label} has no Elmer solver for equations: fem_add {{ kind: \"solver_elmer\" }} first, or solver: its label.")
             o = getattr(F, fn)(d(), sv)
         elif need == "material":
-            mat = picks.find(d(), a["material"], "material") if a.get("material") else next((x for x in an.Group if "MaterialSolid" in getattr(getattr(x, "Proxy", None), "Type", "") or x.TypeId == "App::MaterialObjectPython"), None)
+            mat = picks.find(d(), a["material"], "material") if a.get("material") else next((x for x in an.Group if x.TypeId == "App::MaterialObjectPython" and getattr(x, "Category", "Solid") == "Solid"), None)
             if mat is None:
-                raise ToolError("not_found", f"{an.Label} has no solid material for a nonlinear model to extend: fea_native gives it one.")
+                raise ToolError("not_found", f"{an.Label} has no solid material for a nonlinear model to extend: fea_native gives the analysis one, or material: its label.")
             o = getattr(F, fn)(d(), mat)
             an.addObject(o)
         else:
@@ -189,7 +189,7 @@ def tools(s):
         rf = refs_of(a)
         if rf:
             if not hasattr(o, "References"):
-                raise bad(f"{kind} takes no references.")
+                raise bad(f"refs: {kind} takes no references (it applies to the whole analysis) — leave refs out.")
             o.References = rf
         set_props(o, a.get("props"))
         if a.get("name"):
@@ -226,13 +226,20 @@ def tools(s):
                     from femtools import membertools  # noqa: F401
                     import femmesh.netgentools as NT
 
-                    t = NT.NetgenTools(m)
-                    t.run()
-                    t.update_properties()
+                    from . import strength as S
+
+                    # FreeCAD 1.1 runs Netgen as a separate process and reads
+                    # the mesh in when it ends: run() alone returns at once,
+                    # with nothing meshed yet.
+                    said = S.gmsh_run(NT.NetgenTools(m), 300.0, "Netgen", "a coarser mesh (props) or a longer timeout")
                     nodes = m.FemMesh.NodeCount
+                    if not nodes:
+                        raise RuntimeError(" | ".join([ln.strip() for ln in said.splitlines() if ln.strip()][-2:])[:400] or "no mesh came back")
+                except ToolError:
+                    raise
                 except Exception as e:
                     d().removeObject(m.Name)
-                    raise ToolError("unavailable", f"Netgen did not mesh here ({e}): fea_native's Gmsh mesh does.")
+                    raise ToolError("unavailable", f"Netgen did not mesh here ({e}): it needs Netgen installed with this FreeCAD's Python. fea_native makes a Gmsh mesh instead.")
             s.snapshot("fem_mesh")
             return {"mesh": m.Label, "nodes": nodes, "volumes": m.FemMesh.VolumeCount}
         m = picks.find(d(), a.get("mesh"), "mesh")
@@ -288,7 +295,15 @@ def tools(s):
         elif hasattr(src, "vonMises") and hasattr(src, "Mesh"):
             # A CalculiX result object: nearest node per sample.
             fm = src.Mesh.FemMesh
-            vals = list(src.vonMises) if field.lower().startswith("von") else list(getattr(src, field))
+            if field.lower().startswith("von"):
+                vals = list(src.vonMises)
+            elif field in src.PropertiesList and isinstance(getattr(src, field), (list, tuple)):
+                vals = list(getattr(src, field))
+            else:
+                have = [p for p in src.PropertiesList if p.startswith(("NodeStress", "Principal", "MaxShear", "vonMises", "Temperature", "Peeq"))]
+                raise bad(f"field {field!r}: not a list of values on {src.Label} — one of {', '.join(have)}.")
+            if not vals:
+                raise ToolError("invalid_state", f"{src.Label} holds no {field} values: the solve wrote none (fea_solve again).")
             ids = list(src.NodeNumbers)
             pos = {i: fm.getNodeById(i) for i in ids}
             xs, ys, far = [], [], 0.0
@@ -305,7 +320,7 @@ def tools(s):
             if far > max(0.5, 0.25 * L):
                 raise ToolError("invalid_input", f"The line runs {far:.2f} mm from any node of the mesh: it leaves the part. from and to go across the wall, on its two faces.")
         else:
-            raise bad(f"{src.Label}: a FEM result (CalculiX result or a post pipeline).")
+            raise bad(f"result {src.Label}: not a FEM result — a CalculiX result object (CCX_Results in the analysis fea_solve makes) or a post pipeline.")
         # Membrane: the mean; bending: the linear part, at the surfaces.
         T = xs[-1] - xs[0] or L
         h = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
@@ -322,11 +337,11 @@ def tools(s):
 
     st = {"type": "string"}
     return [
-        Tool("fem_add", "Add anything FEM has to an analysis: kind (" + ", ".join(KINDS) + "); refs [\"Body.Face3\", …] or { body, faces: [queries] }; props { its FreeCAD properties: a quantity as text with its unit, \"2 MPa\", \"100 N\", \"1000 N/mm\" — a bare number is refused for a quantity, since FreeCAD keeps them in mN and kPa } — the answer lists them; mesh / solver where a refinement or equation needs one; new: true makes a new analysis for a solver.",
+        Tool("fem_add", "Add one of FEM's other objects to an analysis (fixed / force / pressure / self-weight, the material and Gmsh mesh: fea_native): kind (" + ", ".join(KINDS) + "; refused where this FreeCAD lacks it); refs [\"Body.Face3\", …] or { body, faces: [queries] }; props { its FreeCAD properties: a quantity as text with its unit, \"2 MPa\", \"100 N\", \"1000 N/mm\" — a bare number is refused for a quantity, since FreeCAD keeps them in mN and kPa } — the answer lists them; mesh / solver / material where a refinement, equation or nonlinear material needs one; new: true makes a new analysis for a solver.",
              obj({"kind": {"type": "string", "enum": list(KINDS)}, "analysis": st, "refs": {}, "props": {"type": "object"}, "mesh": st, "solver": st, "material": st, "new": {"type": "boolean"}, "name": st}, ["kind"]), fem_add, changes=True),
-        Tool("fem_mesh", "FEM meshes: action netgen { body, props } (Netgen's mesh) | to_mesh { mesh, result } (the FEM mesh's outside as a plain mesh, deformed by a result) | clear_groups { mesh }.",
+        Tool("fem_mesh", "FEM meshes: action netgen { body, props } (Netgen's mesh; refused where Netgen is not installed) | to_mesh { mesh, result, name } (the FEM mesh's outside as a plain mesh, deformed by a result) | clear_groups { mesh } (its groups removed).",
              obj({"action": {"type": "string", "enum": ["netgen", "to_mesh", "clear_groups"]}, "body": st, "mesh": st, "result": st, "analysis": st, "props": {"type": "object"}, "name": st}, ["action"]), fem_mesh, changes=True),
-        Tool("fem_linearize", "Stress linearization through a wall from a FEM result (CalculiX result or post pipeline): from and to [x,y,z] across the wall, points, field (von Mises by default) → membrane, bending, membrane + bending, peak.",
+        Tool("fem_linearize", "Stress linearization through a wall from a FEM result (a CalculiX result object, CCX_Results after fea_solve, or a post pipeline): from and to [x,y,z] mm on the wall's two faces, points (41), field (von Mises by default; NodeStressXX …) → membrane, bending, membrane + bending, peak (MPa). A line that leaves the part is refused.",
              obj({"result": st, "from": {"type": "array", "items": {"type": "number"}}, "to": {"type": "array", "items": {"type": "number"}}, "points": {"type": "integer"}, "field": st}, ["result", "from", "to"]), fem_linearize, changes=True),
     ]
 

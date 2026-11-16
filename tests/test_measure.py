@@ -86,6 +86,40 @@ class Measure(unittest.TestCase):
         self.assertEqual(c2["state"], "interference")
         self.assertAlmostEqual(c2["interference"], 2 * 4 * 4, delta=1e-3)
 
+    def test_mass_from_a_recorded_custom_material(self):
+        # Hardening: measure_mass reads the density of a custom (or library)
+        # material material_set recorded; it used to refuse anything but a
+        # stock key, though material_set's note promised it.
+        self.call("part_primitive", {"kind": "box", "size": [10, 10, 10], "at": [100, 0, 0], "name": "Ingot"})
+        m = self.call("material_set", {"bodies": ["Ingot"], "custom": {"name": "Brass X", "density": 8.5}})
+        self.assertAlmostEqual(m["mass_g"]["Ingot"], 8.5, delta=1e-6)
+        mp = self.call("measure_mass", {"body": "Ingot"})
+        self.assertAlmostEqual(mp["mass"], 8.5, delta=1e-6)
+        self.assertIn("Brass X", mp["densityFrom"])
+        by_name = self.call("measure_mass", {"body": "Block", "material": "Brass X"})
+        self.assertAlmostEqual(by_name["mass"], 6000 * 8.5 / 1000, delta=1e-6)
+        self.call("material_clear", {"bodies": ["Ingot"]})
+        self.call("measure_mass", {"body": "Ingot"}, ok=False)
+
+    def test_measure_keep_takes_what_freecad_takes(self):
+        # FreeCAD's Measure objects (1.1): a radius is kept of a circular
+        # edge, not of a cylinder's face; nothing is kept of a whole object.
+        side = self.call("shape_query", {"body": "Rod", "type": "cylinder"})["items"][0]["ref"]
+        e = self.call("measure_keep", {"kind": "radius", "of": ["Rod." + side]}, ok=False)
+        self.assertIn("circular edge", e["error"]["message"])
+        e = self.call("measure_keep", {"kind": "distance", "of": ["Block", "Rod"]}, ok=False)
+        self.assertIn("whole object", e["error"]["message"])
+        e = self.call("measure_keep", {"kind": "distance", "of": [[0, 0, 0], "Rod.Edge1"]}, ok=False)
+        self.assertEqual(e["error"]["code"], "invalid_input")
+        rim = self.call("shape_query", {"body": "Rod", "kind": "edge", "type": "circle"})["items"][0]["ref"]
+        out = self.call("measure_keep", {"kind": "radius", "of": ["Rod." + rim]}, ok=None)
+        if "error" in out:
+            self.assertEqual(out["error"]["code"], "unavailable", out)  # a FreeCAD without the Measure module
+        else:
+            self.assertAlmostEqual(out["value"], 5, delta=1e-4)
+        same = self.call("measure", {"a": "Rod." + rim, "b": "Rod." + rim}, ok=False)
+        self.assertIn("same", same["error"]["message"])
+
 
 if __name__ == "__main__":
     unittest.main()

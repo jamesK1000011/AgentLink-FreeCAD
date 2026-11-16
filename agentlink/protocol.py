@@ -271,6 +271,12 @@ def failed_words(name, e):
         key = e.args[0] if e.args else "?"
         return (f"{name} failed: it looked up {key!r} and found nothing by that name — an object renamed or removed while it ran "
                 "(a workbench that relabels its objects on recompute does this). Nothing was kept; session_state or asm_list gives the names as they are now.")
+    if "invalid bounding box" in str(e):
+        # FreeCAD's own words for measuring something with no shape: a view
+        # whose source has no solid, an empty body (td_dim on such a view
+        # said only "Cannot determine diagonal length of invalid bounding box").
+        return (f"{name} failed: what it measured has no shape (FreeCAD: {e}) — an empty body, or a drawing view whose source has no solid. "
+                "Nothing was kept; session_state lists the bodies that have one, recompute names what failed to build.")
     return f"{name} failed: {e}"
 
 

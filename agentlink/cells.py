@@ -10,10 +10,33 @@ MAX_ROW = 16384
 CELL = re.compile(r"^\$?([A-Za-z]{1,2})\$?([0-9]+)$")
 COL = re.compile(r"^[A-Za-z]{1,2}$")
 NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# What FreeCAD's expression parser reads as a unit or a constant (App/Expression.l,
+# FreeCAD 1.1): Sheet.setAlias and the VarSet dialog refuse these as names
+# ("Invalid alias"), since Sheet.mm in an expression would read as a unit.
+UNITS = frozenset("""nm um mm cm dm m km l ml Hz kHz MHz GHz THz ug mg g kg t s min h A mA kA MA K mK uK mol mmol cd
+in ft thou mil yd mi mph sqft cft lb lbm oz st cwt lbf N mN kN MN Pa kPa MPa GPa bar mbar Torr mTorr uTorr psi ksi Mpsi
+W mW kW VA V kV mV MS kS S mS uS Ohm kOhm MOhm C T G Wb F mF uF nF pF H mH uH nH J mJ kJ Nm VAs CV Ws kWh eV keV MeV
+cal kcal deg rad gon M AS""".split())
+CONSTANTS = frozenset(("pi", "e", "None", "True", "true", "False", "false"))
+ALIAS = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")  # PropertySheet::isValidAlias: a letter first
 
 
 class AddressError(ValueError):
     pass
+
+
+def alias_problem(name):
+    """Why FreeCAD would refuse this as a cell's alias (or a variable's
+    name), in words, or None: the rules of PropertySheet::isValidAlias."""
+    if not isinstance(name, str) or not ALIAS.match(name):
+        return "letters, digits and _, starting with a letter"
+    if is_cell(name):
+        return "it reads as a cell address"
+    if name in UNITS:
+        return f"{name} is a unit in FreeCAD's expressions (a longer name: {name}_size, {name}1x)"
+    if name in CONSTANTS:
+        return f"{name} is a constant in FreeCAD's expressions"
+    return None
 
 
 def col_num(letters):
@@ -113,7 +136,11 @@ def content(value, text=False):
     if isinstance(value, bool):
         raise AddressError("a cell takes a number, a string or null, not true/false")
     if isinstance(value, (int, float)):
-        return repr(float(value)).rstrip("0").rstrip(".") if isinstance(value, float) else str(value)
+        if isinstance(value, float):
+            r = repr(value)
+            # 2.0 -> "2"; an exponent's own zeros stay (1e-10 is not 1e-1)
+            return r.rstrip("0").rstrip(".") if "." in r and "e" not in r and "n" not in r else r
+        return str(value)
     if not isinstance(value, str):
         raise AddressError("a cell takes a number, a string or null")
     if text and value and not value.startswith("'"):

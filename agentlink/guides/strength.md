@@ -17,6 +17,13 @@
 - It warns when the hottest spot passes where the material softens (PLA about 55 °C, PETG 70, ABS and ASA 95). `view_render { map: "heat" }` shows it.
 - Conduction and convection only, steady: no radiation, no warm-up time. Still air is 5 to 25 W/(m²·K), a fan 25 to 100.
 
+## What fea_solve does in FreeCAD
+- Where the study is one body, fixed holds, force / pressure / gravity and linear, it is built as FreeCAD's own FEM analysis, labelled `<body> strength (fea_solve)`: a CalculiX solver object (static, linear), a solid material, a Gmsh mesh object (second order, largest edge = the study's `mesh`), a fixed constraint per hold, and force / pressure / self-weight constraints. FreeCAD's tools then mesh it, check it, write the CalculiX input, run `ccx` and load the results into the analysis (`CCX_Results`). The analysis is made anew at each solve.
+- Anything else (pinned or sliding holds, several parts, refined regions, temperature, spin, nonlinear) is solved by Agent Link's own CalculiX deck. `solvedBy` in the answer says which, and why.
+- Units throughout: mm, N, MPa. A force is its total over the faces.
+- It runs in the foreground with FreeCAD waiting. A few thousand elements take seconds; past 100,000 it is minutes. `timeout` bounds Gmsh and the own deck; CalculiX run by FreeCAD's tools is not bounded, so keep the mesh sensible (`fea_setup` refuses one that makes over about 400,000 elements).
+- Holds and loads are kept as face queries, not face numbers. After the part changes, `fea_solve` matches them again and refuses with the ones that find no face.
+
 ## Faces by query
 - `{ normal: [0,0,-1], z: 0 }`: flat faces facing down at z = 0.
 - `{ near: [x,y,z] }`: the nearest face; `radius` takes every face that close.
@@ -29,6 +36,7 @@
 - Library figures are typical. For a part that must not fail, use the supplier's (material_set custom) and keep a safety factor of 2 or more.
 - A linear solve is wrong past yield or for large deflections; the warnings say when.
 - Needs CalculiX (`ccx`) and Gmsh (`gmsh`) installed; without them fea_solve says what to install.
+- CalculiX's own lines come back with a refusal: "nonpositive jacobian" wants a smaller `mesh` (or `fea_refine` at the small feature); "singular" or "zero pivot" a part free to move (more holds); "no material was assigned" a body that is not one closed solid.
 
 ## More from a study
 - `fea_buckle` runs a linear buckling analysis with the same holds and loads, giving the factor at which each mode buckles. Keep the lowest at 3 or more: real, imperfect parts buckle sooner.

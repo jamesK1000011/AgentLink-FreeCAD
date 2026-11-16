@@ -113,5 +113,152 @@ class MeshObj(unittest.TestCase):
         self.assertEqual(b["edges"], {"open": 0, "overloaded": 0})
 
 
+@unittest.skipUnless(HAVE_M, "FreeCAD with Mesh and MeshPart is not importable here")
+class MeshHardening(unittest.TestCase):
+    """The hardening pass (16 Nov 2026), written from FreeCAD 1.1's source
+    (Mesh.cpp, MeshPyImp.cpp, BuildRegularGeoms.py, AppMeshPartPy.cpp)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import FreeCAD
+
+        cls.session, srv = server()
+        cls.call = staticmethod(caller(srv))
+        FreeCAD.newDocument("MeshHardening")
+        cls.session.switch(FreeCAD.ActiveDocument)
+        cls.call("part_primitive", {"kind": "box", "size": [10, 10, 10], "name": "Cube"})
+        cls.call("part_primitive", {"kind": "sphere", "radius": 10, "at": [50, 0, 0], "name": "Globe"})
+
+    def ok(self, n, a=None):
+        err, out = self.call(n, a)
+        self.assertFalse(err, f"{n}: {out}")
+        return out
+
+    def refused(self, n, a=None):
+        err, out = self.call(n, a)
+        self.assertTrue(err, f"{n}: {out}")
+        return str(out)
+
+    def obj(self, label):
+        return next(o for o in self.session.doc.Objects if o.Label == label)
+
+    def test_1_known_counts(self):
+        import math
+
+        c = self.ok("meshobj_from_shape", {"body": "Cube"})
+        # Two triangles a flat face, points shared: 8 and 12 at any deflection.
+        self.assertEqual((c["points"], c["facets"]), (8, 12))
+        self.assertTrue(c["solid"])
+        self.assertAlmostEqual(c["volume"], 1000, places=3)
+        self.assertAlmostEqual(c["area"], 600, places=3)
+        full = 4 / 3 * math.pi * 1000
+        coarse = self.ok("meshobj_from_shape", {"body": "Globe", "deflection": 0.5, "angle": 30, "name": "Globe coarse"})
+        fine = self.ok("meshobj_from_shape", {"body": "Globe", "deflection": 0.01, "angle": 5, "name": "Globe fine"})
+        # Inscribed triangles: under the true volume, closer as they shrink.
+        self.assertLess(coarse["volume"], fine["volume"])
+        self.assertLess(fine["volume"], full)
+        self.assertGreater(fine["volume"], full * 0.99)
+        self.assertTrue(fine["solid"])
+        self.assertIn("deflection", self.refused("meshobj_from_shape", {"body": "Cube", "deflection": 0}))
+        self.assertIn("Cube", self.refused("meshobj_from_shape", {"body": "Nope"}))
+
+    def test_2_refine_is_three_not_four(self):
+        r = self.ok("meshobj_refine", {"mesh": "Cube mesh", "copy": True, "name": "Cube fine"})
+        # a point in the middle of each triangle: three for one (FreeCAD skips a deformed triangle)
+        self.assertGreater(r["facets"], 12)
+        self.assertLessEqual(r["facets"], 36)
+        self.assertAlmostEqual(r["volume"], 1000, places=2)
+
+    def test_3_placed_meshes(self):
+        import FreeCAD
+
+        self.ok("meshobj_primitive", {"kind": "box", "size": [10, 10, 10], "name": "Placed"})
+        o = self.obj("Placed")
+        o.Placement = FreeCAD.Placement(FreeCAD.Vector(100, 0, 0), FreeCAD.Rotation())
+        self.session.doc.recompute()
+        # It stands at x 100 … 110. A quarter turn about the document's z then 5 up:
+        # x -10 … 0, y 100 … 110, z 5 … 15 (the turn was made before the placement: x 90 … 100).
+        self.ok("meshobj_transform", {"mesh": "Placed", "rotate": {"axis": [0, 0, 1], "angle": 90}, "move": [0, 0, 5]})
+        bb = self.obj("Placed").Mesh.BoundBox
+        for got, want in zip((bb.XMin, bb.XMax, bb.YMin, bb.YMax, bb.ZMin, bb.ZMax), (-10, 0, 100, 110, 5, 15)):
+            self.assertAlmostEqual(got, want, places=3)
+        self.assertGreater(self.obj("Placed").Mesh.Volume, 0)
+        # Mirrored: still facing out.
+        m = self.ok("meshobj_transform", {"mesh": "Placed", "mirror": "x", "copy": True, "name": "Placed mirror"})
+        self.assertAlmostEqual(m["volume"], 1000, places=2)
+        self.assertGreater(self.obj("Placed mirror").Mesh.Volume, 0)
+        self.assertAlmostEqual(self.obj("Placed mirror").Mesh.BoundBox.XMax, 10, places=3)
+        # Merged where they stand: the cube at the origin and the placed one.
+        mg = self.ok("meshobj_merge", {"meshes": ["Cube mesh", "Placed"], "name": "Both"})
+        self.assertEqual(mg["components"], 2)
+        bb = self.obj("Both").Mesh.BoundBox
+        self.assertAlmostEqual(bb.YMax, 110, places=3)
+        self.assertAlmostEqual(bb.XMin, -10, places=3)
+        self.assertIn("One or more", self.refused("meshobj_transform", {"mesh": "Placed"}))
+        self.assertIn("mirror", self.refused("meshobj_transform", {"mesh": "Placed", "mirror": "w"}))
+
+    def test_4_primitives(self):
+        t = self.ok("meshobj_primitive", {"kind": "torus", "radius": 10, "radius2": 2, "at": [50, 100, 0], "name": "Ring"})
+        c = self.obj("Ring").Mesh.BoundBox.Center
+        # FreeCAD's builder stands the ring off the origin by its radius along its axis.
+        for got, want in zip((c.x, c.y, c.z), (50, 100, 0)):
+            self.assertAlmostEqual(got, want, delta=0.01)
+        self.assertAlmostEqual(t["box"][2], 4.0, delta=0.01)
+        big = self.ok("meshobj_primitive", {"kind": "cylinder", "radius": 100, "height": 1000, "name": "Mast"})
+        self.assertEqual(big["box"], [200.0, 200.0, 1000.0])
+        self.assertLess(big["facets"], 20000)  # rings 25 mm apart, not 0.5
+        self.assertTrue(big["solid"])
+        self.assertEqual(self.ok("meshobj_primitive", {"kind": "box", "name": "Unit"})["facets"], 12)
+        self.assertIn("radius", self.refused("meshobj_primitive", {"kind": "sphere", "radius": 0}))
+
+    def test_5_sections_and_segments(self):
+        self.ok("meshobj_primitive", {"kind": "box", "size": [10, 10, 10], "at": [0, 20, 0], "name": "Off"})
+        # Along [1, -1, 0] the box reaches from -21.21 to -7.07: two slices at
+        # thirds of that (they were both at the middle: the reach was read off two corners).
+        s = self.ok("meshobj_sections", {"mesh": "Off", "normal": [1, -1, 0], "count": 2})
+        ats = [x["at"] for x in s["slices"]]
+        self.assertAlmostEqual(ats[0], -16.4992, places=3)
+        self.assertAlmostEqual(ats[1], -11.7851, places=3)
+        for sl in s["slices"]:  # each a 9.428 x 10 rectangle
+            self.assertAlmostEqual(sl["length"], 2 * (9.4281 + 10), delta=0.05)
+        self.assertIn("count", self.refused("meshobj_sections", {"mesh": "Off", "count": 0}))
+        # Curvature segments: Mesh.getSegmentsByCurvature takes (max, min, tolerance, tolerance, facets);
+        # the call passed a name first and always failed.
+        fine = self.ok("meshobj_from_shape", {"body": "Cube", "method": "mefisto", "maxLength": 1, "name": "Cube even"})
+        self.assertTrue(fine["solid"])
+        seg = self.ok("meshobj_segments", {"mesh": "Cube even", "kind": "curvature", "minFacets": 10})
+        self.assertGreaterEqual(seg["segments"], 1)
+        pl = self.ok("meshobj_segments", {"mesh": "Cube even", "kind": "planar", "keep": True, "top": 2})
+        self.assertEqual(pl["segments"], 6)
+        self.assertEqual(len(pl["kept"]), 2)
+        self.assertAlmostEqual(self.obj(pl["kept"][0]).Mesh.Area, pl["largest"][0]["area"], places=2)  # kept in the order listed
+
+    def test_6_files_and_unwrap(self):
+        import os
+
+        e = self.ok("meshobj_export", {"mesh": "Cube mesh", "path": "cube.stl"})
+        self.assertEqual(e["format"], "stl")
+        self.assertEqual(e["bytes"], 84 + 50 * 12)  # binary STL: an 84-byte head and 50 bytes a triangle
+        self.assertTrue(os.path.isfile(e["file"]))
+        back = Mesh.Mesh(e["file"])
+        self.assertEqual(back.CountFacets, 12)
+        self.assertAlmostEqual(back.Volume, 1000, places=2)
+        self.assertIn("stl", self.refused("meshobj_export", {"mesh": "Cube mesh", "path": "cube.step"}))
+        # A mesh by its name reaches the unwrapping (it was refused as "has no shape").
+        err, out = self.call("meshobj_unwrap", {"of": "Cube mesh"})
+        self.assertTrue(err)
+        self.assertNotIn("has no shape", str(out))
+        self.assertTrue("closed mesh" in str(out) or "flatmesh" in str(out), out)
+        whole = self.refused("meshobj_unwrap", {"of": "Cube"})
+        self.assertTrue("Face" in whole or "flatmesh" in whole, whole)
+
+    def test_7_split_guard_and_trim(self):
+        self.assertIn("nothing", self.refused("meshobj_trim", {"mesh": "Cube mesh", "at": [0, 0, -5], "normal": [0, 0, 1], "copy": True}))
+        self.assertIn("one piece", self.refused("meshobj_split", {"mesh": "Cube mesh"}))
+        sp = self.ok("meshobj_split", {"mesh": "Both"})
+        self.assertEqual(len(sp["pieces"]), 2)
+        self.assertEqual(sp["facets"], [12, 12])
+
+
 if __name__ == "__main__":
     unittest.main()

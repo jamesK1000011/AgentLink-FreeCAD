@@ -52,6 +52,64 @@ class Doc(unittest.TestCase):
         self.assertNotIn(a["document"], FreeCAD.listDocuments())
         self.call("doc_close", {"documents": ["Nope"]}, ok=False)
 
+    def test_close_by_name_and_shared_label(self):
+        # Hardening (live finding): a document is found by its internal Name
+        # also when its label differs, and two documents sharing a label are
+        # told apart by name in the refusal.
+        a = self.call("doc_new", {"name": "TwinA"})
+        b = self.call("doc_new", {"name": "TwinB"})
+        FreeCAD.getDocument(a["document"]).Label = "Same label"
+        FreeCAD.getDocument(b["document"]).Label = "Same label"
+        e = self.call("doc_close", {"documents": ["Same label"], "discard": True}, ok=False)
+        self.assertIn(f"({a['document']})", e["error"]["message"])
+        self.assertIn(f"({b['document']})", e["error"]["message"])
+        self.assertIn(a["document"], FreeCAD.listDocuments())
+        out = self.call("doc_close", {"documents": [b["document"]], "discard": True})
+        self.assertEqual(out["closed"], ["Same label"])
+        self.assertNotIn(b["document"], FreeCAD.listDocuments())
+        # any case, and the one label left now names one document
+        out = self.call("doc_close", {"documents": [a["document"].lower()], "discard": True})
+        self.assertNotIn(a["document"], FreeCAD.listDocuments())
+        e = self.call("doc_close", {"documents": ["Nope"]}, ok=False)
+        self.assertIn("label (name)", e["error"]["message"])
+
+    def test_close_says_what_was_lost(self):
+        n = self.call("doc_new", {"name": "Lossy"})
+        self.call("part_primitive", {"kind": "box", "size": [5, 5, 5], "name": "Box"})
+        e = self.call("doc_close", {"documents": [n["document"]]}, ok=False)
+        self.assertIn("discard: true", e["error"]["message"])
+        self.assertIn(n["document"], FreeCAD.listDocuments())
+        out = self.call("doc_close", {"documents": [n["document"]], "discard": True})
+        self.assertEqual(out["discarded"], ["Lossy"])
+
+    def test_save_as_relabels_and_units(self):
+        # FreeCAD's saveAs relabels the document after the file: said in the reply.
+        n = self.call("doc_new", {"name": "Before"})
+        self.call("part_primitive", {"kind": "box", "size": [10, 10, 10], "name": "Box"})
+        s = self.call("doc_save", {"path": "after_name.FCStd"})
+        self.assertEqual(s["document"], n["document"])
+        self.assertEqual(s["label"], "after_name")
+        self.assertEqual(s["labelWas"], "Before")
+        # a length takes a string with its unit; an integer property a whole number only
+        r = self.call("object_set", {"object": "Box", "values": {"Length": "1 in"}})
+        self.assertAlmostEqual(r["set"]["Length"]["to"], 25.4, delta=1e-6)
+        e = self.call("object_get", {"object": "Box", "filter": "NoSuchWord"}, ok=False)
+        self.assertEqual(e["error"]["code"], "not_found")
+        rc = self.call("recompute", {})
+        self.assertIsInstance(rc["recomputed"], int)
+        # groups: remove from a group that does not exist is refused, not made
+        e = self.call("object_group", {"action": "remove", "group": "Nowhere", "objects": ["Box"]}, ok=False)
+        self.assertEqual(e["error"]["code"], "not_found")
+        g = self.call("object_group", {"action": "add", "group": "Bin", "objects": ["Box"]})
+        self.assertEqual(g["holds"], ["Box"])
+        ln = self.call("object_group", {"action": "link", "object": "Box", "count": 2, "at": [50, 0, 0], "step": [0, 40, 0]})
+        self.assertEqual(len(ln["links"]), 2)
+        p = self.call("object_get", {"object": ln["links"][1], "filter": ["Placement"]})["properties"]["Placement"]["value"]
+        for got, want in zip(p["at"], [50, 40, 0]):
+            self.assertAlmostEqual(got, want, delta=1e-6)
+        e = self.call("object_delete", {"objects": ["Box"]}, ok=False)
+        self.assertIn("force: true", e["error"]["message"])
+
     def test_objects_and_properties(self):
         n = self.call("doc_new", {"name": "Parts"})
         self.assertEqual(self.session.doc.Name, n["document"])

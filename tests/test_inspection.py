@@ -50,6 +50,32 @@ class InspectionTools(unittest.TestCase):
         err, _ = self.call("insp_run", {"actual": "Made", "nominals": ["Nominal"], "search_radius": 0.1, "tolerance": 0.5})
         self.assertTrue(err)
 
+    def test_4_moved_copy_and_update(self):
+        # A copy moved 0.5 mm along x against the original: the face ahead
+        # reads +0.5 (outside the solid nominal), the one behind -0.5.
+        import FreeCAD
+        import Part
+
+        add_body(self.session, "Shifted", Part.makeBox(60, 40, 8, FreeCAD.Vector(0.5, 0, 0)))
+        r = self.ok("insp_run", {"actual": "Shifted", "nominals": ["Nominal"], "search_radius": 1, "deflection": 0.5, "name": "Shift check"})
+        self.assertAlmostEqual(r["max"], 0.5, delta=0.02)
+        self.assertAlmostEqual(r["min"], -0.5, delta=0.02)
+        self.assertEqual(r["outOfReach"], 0)
+        # nothing to change is refused; a tolerance past the radius is refused before anything is set
+        err, out = self.call("insp_update", {"inspection": "Shift check"})
+        self.assertTrue(err, out)
+        err, out = self.call("insp_update", {"inspection": "Shift check", "tolerance": 2})
+        self.assertTrue(err, out)
+        self.assertNotIn("verdict", self.ok("insp_read", {"inspection": "Shift check"}))
+        # an inspection made without Agent Link's tolerance properties takes one
+        f = next(o for o in self.session.doc.Objects if o.Label == "Shift check")
+        for p in ("ToleranceLow", "ToleranceHigh"):
+            f.removeProperty(p)
+        r = self.ok("insp_update", {"inspection": "Shift check", "tolerance": 0.6})
+        self.assertEqual(r["verdict"], "pass")
+        faces = self.ok("insp_faces", {"inspection": "Shift check"})
+        self.assertTrue(faces["faces"])
+
 
 if __name__ == "__main__":
     unittest.main()

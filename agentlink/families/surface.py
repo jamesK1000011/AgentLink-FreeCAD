@@ -24,6 +24,8 @@ def reading(o):
         out["area"] = round(sh.Area, 3)
     if sh.Solids:
         out["volume"] = round(sh.Volume, 3)
+    elif sh.Edges:
+        out["length"] = round(sum(e.Length for e in sh.Edges), 3)
     out["shells"] = len(sh.Shells)
     out["closed"] = bool(sh.Shells and all(x.isClosed() for x in sh.Shells))
     return out
@@ -33,7 +35,9 @@ def chain(edges, refs, tol=1e-4, closed=True):
     """Which boundary edges run backwards, so that each starts where the one before ends
     (the feature takes them as given); refused where two do not meet."""
     def ends(e):
-        return e.Vertexes[0].Point, e.Vertexes[-1].Point
+        # The curve's own ends: the feature reverses the curve under the edge
+        # (ReversedList), whichever way the edge is turned in its body.
+        return e.valueAt(e.FirstParameter), e.valueAt(e.LastParameter)
 
     for first in (False, True):
         a0, a1 = ends(edges[0])
@@ -69,8 +73,9 @@ def tools(session):
         o.Label = lab
         return o
 
-    def done(o, tool, extra=None):
-        return picks.finish(s, tool, lambda: reading(o), objs=[o], broken=lambda o: not o.isValid() or o.Shape.isNull(), refuse="{kind} failed: {msg} — nothing was kept.", extra=extra)
+    def done(o, tool, extra=None, hint=""):
+        return picks.finish(s, tool, lambda: reading(o), objs=[o], broken=lambda o: not o.isValid() or o.Shape.isNull(),
+                            refuse="{kind} failed: {msg} — nothing was kept." + (" " + hint if hint else ""), extra=extra)
 
     def edge_ref(r, what):
         """"Body.Edge3", or a whole wire/sketch by name (all its edges)."""
@@ -89,29 +94,34 @@ def tools(session):
 
     def surface_sections(a):
         refs = a.get("sections") or []
-        if len(refs) < 2:
-            raise bad("sections: two or more curves in order (\"Body.Edge3\" or wire names).")
+        links = [edge_ref(r, "sections") for r in refs] if isinstance(refs, list) else []
+        n = sum(len(subs) for _, subs in links)
+        if n < 2:
+            raise bad("sections: two or more curves in the order the surface passes through them — each \"Body.Edge3\", or the name of a wire or sketch (every edge of it is a section of its own).")
         o = new("Surface::Sections", a.get("name") or "Sections")
-        o.NSections = [edge_ref(r, "sections") for r in refs]
-        return done(o, "surface_sections")
+        o.NSections = links
+        return done(o, "surface_sections", {"sections": n},
+                    hint="Each section must be one open curve, all running the same way (a twisted surface means one runs backwards), none crossing the next.")
 
     def surface_boundary(a):
         refs = a.get("edges") or []
-        if not 2 <= len(refs) <= 4:
-            raise bad("edges: two to four boundary curves that meet end to end.")
-        bl = [edge_ref(r, "edges") for r in refs]
+        ft = {"stretched": "Stretched", "coons": "Coons", "curved": "Curved"}.get(a.get("fill", "stretched"))
+        if ft is None:
+            raise bad("fill: stretched (flattest), coons (smooth across), curved (round).")
+        bl = [edge_ref(r, "edges") for r in refs] if isinstance(refs, list) else []
         edges = [ob.Shape.getElement(sub) for ob, subs in bl for sub in subs]
+        if not 2 <= len(edges) <= 4:
+            # a wire or sketch named whole counts each of its edges
+            raise bad(f"edges: two to four boundary curves in all that meet end to end, going round — these are {len(edges)}. More sides: surface_fill takes any closed boundary.")
         # Three or four curves go round the surface; two meet at a corner, the surface between them.
         flags = chain(edges, refs, closed=len(edges) > 2)
         o = new("Surface::GeomFillSurface", a.get("name") or "Boundary surface")
         o.BoundaryList = bl
         o.ReversedList = flags
-        ft = {"stretched": "Stretched", "coons": "Coons", "curved": "Curved"}.get(a.get("fill", "stretched"))
-        if ft is None:
-            raise bad("fill: stretched (flattest), coons (smooth across), curved (round).")
         o.FillType = ft
         try:
-            return done(o, "surface_boundary")
+            return done(o, "surface_boundary", {"fill": ft.lower(), "sides": len(edges)},
+                        hint="The curves must meet at their ends within FreeCAD's tolerance; fill stretched is the most forgiving, and surface_fill takes any closed boundary.")
         except ToolError as e:
             if ft == "Stretched" or "disjoint" not in str(e) or len(edges) < 3:
                 raise
@@ -134,12 +144,14 @@ def tools(session):
         label, sub, _ = picks.resolve(s, ref) if isinstance(ref, str) else (None, None, None)
         if not sub or not sub.startswith("Face"):
             raise bad("face: \"Body.Face2\".")
+        u, v = picks.num(a.get("u", 0.05), "u"), picks.num(a.get("v", 0.05), "v")
+        if not (-0.5 <= u <= 10 and -0.5 <= v <= 10):
+            raise bad("u, v: how far past each pair of opposite edges, as a share of the face's size that way: -0.5 (shrunk to nothing) … 10 (0.05 = 5% at each end).")
         o = new("Surface::Extend", a.get("name") or "Extended")
         o.Face = (picks.find(doc(), label), [sub])
-        u, v = a.get("u", 0.05), a.get("v", 0.05)
-        o.ExtendUSymetric = o.ExtendVSymetric = True
-        o.ExtendUNeg, o.ExtendVNeg = float(u), float(v)
-        return done(o, "surface_extend", {"note": "u and v: how far past each edge, as a share of the face's length that way (0.05 = 5%)."})
+        o.ExtendUSymetric = o.ExtendVSymetric = True  # the same at both ends: FreeCAD copies Neg to Pos
+        o.ExtendUNeg, o.ExtendVNeg = u, v
+        return done(o, "surface_extend", {"u": u, "v": v, "note": "A new four-sided B-spline surface over the face's whole u and v range, run on by u and v of that range at each end and fitted to within 0.1 mm of the face (property Tolerance): holes and a trimmed outline are not kept."})
 
     def surface_sew(a):
         refs = a.get("faces") or []
@@ -156,14 +168,20 @@ def tools(session):
             links.setdefault(x, []).extend(subs)
         if sum(len(v) for v in links.values()) < 2:
             raise bad("faces: two or more faces (surfaces, or \"Body.Face3\") whose edges meet.")
+        tol = picks.num(a.get("tolerance", 0.01), "tolerance")
+        if tol <= 0:
+            raise bad("tolerance: mm, over 0 — edges closer than this are joined (0.01).")
         o = new("Surface::Sewing", a.get("name") or "Sewn")
         o.ShapeList = list(links.items())
-        o.Tolerance = float(a.get("tolerance", 0.01))
+        o.Tolerance = tol
         out = done(o, "surface_sew")
+        if not out.get("shells"):
+            out["warning"] = "No face was joined to another (no shell): their edges are further apart than tolerance, or do not match along their length."
         if a.get("solid"):
             sh = o.Shape
             if not (sh.Shells and sh.Shells[0].isClosed()):
-                out["solid"] = "not made: the shell is open — a gap wider than tolerance, or a face missing"
+                free = [e for e in sh.Edges if len(sh.ancestorsOfType(e, Part.Face)) < 2] if sh.Shells else []
+                out["solid"] = "not made: the shell is open — a gap wider than tolerance, or a face missing" + (f" ({len(free)} edge(s) with a face on one side only)" if free else "")
             else:
                 sol = doc().addObject("Part::Feature", "Body")
                 sol.Label = s.unique(a.get("name") and a["name"] + " solid" or f"{o.Label} solid")
@@ -173,23 +191,36 @@ def tools(session):
         return out
 
     def surface_cut(a):
-        x, y = picks.find(doc(), a.get("surface")), picks.find(doc(), a.get("by"))
+        x, y = picks.shaped(doc(), a.get("surface"), "surface"), picks.shaped(doc(), a.get("by"), "by")
+        if x is y:
+            raise bad("surface, by: two different objects.")
+        before = len(x.Shape.Faces), x.Shape.Area
         o = new("Surface::Cut", a.get("name") or "Surface cut")
         o.ShapeList = [x, y]
-        return done(o, "surface_cut")
+        out = done(o, "surface_cut", {"of": x.Label, "by": y.Label})
+        if out.get("faces") == before[0] and abs(out.get("area", 0) - before[1]) < 1e-6 * max(1.0, before[1]):
+            out["note"] = f"Nothing was cut: {y.Label} does not cross {x.Label}."
+        elif abs(out.get("area", 0) - before[1]) < 1e-6 * max(1.0, before[1]):
+            out["note"] = f"{y.Label} is a surface, not a solid: nothing was removed, {x.Label} came back split along where they cross. part_extract takes the piece to keep."
+        return out
 
     def surface_blend(a):
         ends = {}
         for side in ("start", "end"):
-            e = a.get(side) or {}
+            e = a.get(side)
+            if not isinstance(e, dict):
+                raise bad(f"{side}: {{ edge: \"Body.Edge3\", at: 0 … 1, continuity: 0 … 4, size }}.")
             ob, subs = edge_ref(e.get("edge"), f"{side}.edge")
-            c = int(e.get("continuity", 2))
-            if not 0 <= c <= 4:
+            c = e.get("continuity", 2)
+            if isinstance(c, bool) or not isinstance(c, int) or not 0 <= c <= 4:
                 raise bad(f"{side}.continuity: 0 (touching) … 4; 1 tangent, 2 curvature.")
-            at = float(e.get("at", 0 if side == "start" else 1))
+            at = picks.num(e.get("at", 0 if side == "start" else 1), f"{side}.at")
             if not 0 <= at <= 1:
                 raise bad(f"{side}.at: 0 (the edge's start) … 1 (its end).")
-            ends[side] = ((ob, [subs[0]]), c, at, float(e.get("size", 1)))
+            size = picks.num(e.get("size", 1), f"{side}.size")
+            if not -100 <= size <= 100 or size == 0:
+                raise bad(f"{side}.size: -100 … 100, not 0 — how strongly the blend follows the edge's direction there; negative leaves against the edge's direction.")
+            ends[side] = ((ob, [subs[0]]), c, at, size)
         o = new("Surface::FeatureBlendCurve", a.get("name") or "Blend curve")
         # Both edges first: changing any other property recomputes the curve at once.
         o.StartEdge, o.EndEdge = ends["start"][0], ends["end"][0]
@@ -198,18 +229,18 @@ def tools(session):
             setattr(o, f"{p}Continuity", c)
             setattr(o, f"{p}Parameter", at)
             setattr(o, f"{p}Size", size)
-        return done(o, "surface_blend", {"note": "at: where on each edge, 0 (its start) … 1 (its end); size: how far the blend follows each edge's direction."})
+        return done(o, "surface_blend", {"note": "at: where on each edge, 0 (its start) … 1 (its end); size: how far the blend follows each edge's direction (negative: against it — the usual fix for a blend that loops back)."})
 
     return [
-        Tool("surface_sections", "A surface through curves in order (Surface Sections, parametric): sections [\"Body.Edge3\" | a wire or sketch's name …].",
+        Tool("surface_sections", "A surface through curves in order (Surface Sections, parametric: it follows them): sections [\"Body.Edge3\" | a wire or sketch's name …], two or more, each one open curve, all running the same way; every edge of a named wire is a section of its own. Reply: object, sections, faces, area, closed.",
              obj({"sections": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}}, ["sections"]), surface_sections, changes=True),
-        Tool("surface_boundary", "A surface bounded by 2–4 curves meeting end to end (GeomFillSurface): edges, fill stretched | coons | curved.",
+        Tool("surface_boundary", "A surface bounded by 2–4 curves meeting end to end, given going round (Surface GeomFillSurface, parametric): edges, fill stretched (default, flattest) | coons | curved (rounder). Lines and arcs are taken as B-splines. When coons or curved is refused for curves that do not match, a Surface Filling through the same edges is made instead (reply: note). Reply: object, fill, sides, area.",
              obj({"edges": {"type": "array", "items": {"type": "string"}}, "fill": {"type": "string"}, "name": {"type": "string"}}, ["edges"]), surface_boundary, changes=True),
-        Tool("surface_extend", "Extend a face past its edges (Surface Extend): face \"Body.Face2\", u and v as shares of its size (0.05).",
+        Tool("surface_extend", "Run a face on past its edges (Surface Extend, parametric): face \"Body.Face2\"; u and v, how far past each pair of opposite edges as a share of its size that way (0.05 = 5% at each end; -0.5 … 10). The result is a new four-sided B-spline surface within 0.1 mm of the face; holes and a trimmed outline are not kept. Reply: object, area.",
              obj({"face": {"type": "string"}, "u": {"type": "number"}, "v": {"type": "number"}, "name": {"type": "string"}}, ["face"]), surface_extend, changes=True),
-        Tool("surface_sew", "Sew surfaces into a shell (Surface Sewing): faces [surfaces, or \"Body.Face3\"], tolerance mm; solid: true makes a closed shell a solid body.",
+        Tool("surface_sew", "Sew surfaces into one shell (Surface Sewing, parametric): faces [surface objects (all their faces), or \"Body.Face3\"], two or more whose edges meet within tolerance mm (0.01). solid: true also makes a closed shell a solid body (a plain copy). Reply: faces, shells, closed, area; solid { body, volume }, or why not (the shell is open); warning when nothing joined.",
              obj({"faces": {"type": "array", "items": {"type": "string"}}, "tolerance": {"type": "number"}, "solid": {"type": "boolean"}, "name": {"type": "string"}}, ["faces"]), surface_sew, changes=True),
-        Tool("surface_cut", "Cut one surface by another (Surface Cut): surface, by.", obj({"surface": {"type": "string"}, "by": {"type": "string"}, "name": {"type": "string"}}, ["surface", "by"]), surface_cut, changes=True),
-        Tool("surface_blend", "A blend curve joining two edges smoothly: start / end { edge \"Body.Edge3\", at 0…1 along it, continuity 0…4 (2: curvature), size }.",
+        Tool("surface_cut", "Cut a surface by another object (Surface Cut, a boolean cut that follows both): surface, by. By a solid: what lies inside it is removed. By a surface: nothing is removed, the surface comes back split along where they cross (reply: note; part_extract takes a piece). Reply: object, of, by, faces, area.", obj({"surface": {"type": "string"}, "by": {"type": "string"}, "name": {"type": "string"}}, ["surface", "by"]), surface_cut, changes=True),
+        Tool("surface_blend", "A blend curve joining two edges smoothly (Surface BlendCurve, parametric): start / end { edge \"Body.Edge3\", at 0…1 along it (default: start 0, end 1), continuity 0…4 (1 tangent, 2 curvature, default), size (1; negative leaves against the edge's direction) }. Reply: object, edges 1, length. Use it as a boundary for the next surface.",
              obj({"start": {"type": "object"}, "end": {"type": "object"}, "name": {"type": "string"}}, ["start", "end"]), surface_blend, changes=True),
     ]

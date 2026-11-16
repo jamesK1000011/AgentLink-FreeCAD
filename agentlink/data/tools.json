@@ -704,7 +704,7 @@
   },
   "meshobj_offset": {
    "group": "mesh",
-   "description": "Move a mesh's surface along its normals by distance mm (negative inward).",
+   "description": "Move a mesh's surface along its point normals by distance mm (negative: inward); triangles the move turns over are collapsed, so a distance beyond the tightest inside radius damages the mesh: meshobj_info after. In place; copy: true makes a new mesh. Reply: offset, the mesh's reading.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -772,7 +772,7 @@
   },
   "draft_to_sketch": {
    "group": "draft",
-   "description": "Draft shapes made into one sketch (constrain: true adds the obvious constraints; delete: true removes the originals).",
+   "description": "Draft shapes (or other flat shapes with edges) made into one new sketch on their plane: objects (all flat, in one plane); constrain: true (default) adds coincident, horizontal and vertical constraints where they hold, no dimensions; delete: true removes the originals. Reply: object, geometry, constraints (counts), length, box; sketch_state reads its degrees of freedom.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -844,7 +844,7 @@
      "of": "$o",
      "after": "made",
      "code": "failed",
-     "message": "Draft could not make a sketch of those (they must be flat, in one plane)."
+     "message": "Draft could not make a sketch of those: every object needs a shape, flat, and all in one plane (FreeCAD's report view names which failed). draft_modify op move or part_transform lays them in one plane first."
     }
    ],
    "answer": {

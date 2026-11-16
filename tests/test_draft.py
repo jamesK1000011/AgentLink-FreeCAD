@@ -145,5 +145,177 @@ class Draft(unittest.TestCase):
         err, x = self.call("draft_array", {"body": "Bead", "kind": "spiral"})
         self.assertTrue(err)
 
+
+
+@unittest.skipUnless(HAVE, "FreeCAD is not importable here")
+class DraftHardening(unittest.TestCase):
+    """The hardening pass (16 Nov 2026): Draft's own objects, against the
+    wiki's Draft tutorial (two arcs tied by two lines, a frame, a circle, a
+    hexagon, a polar array, dimensions). Written from FreeCAD 1.1's source."""
+
+    @classmethod
+    def setUpClass(cls):
+        import FreeCAD
+
+        cls.session, srv = server()
+        cls.call = staticmethod(caller(srv))
+        FreeCAD.newDocument("DraftTutorial")
+        cls.session.switch(FreeCAD.ActiveDocument)
+
+    def ok(self, name, args=None):
+        err, out = self.call(name, args)
+        self.assertFalse(err, out)
+        return out
+
+    def refused(self, name, args=None):
+        err, out = self.call(name, args)
+        self.assertTrue(err, out)
+        return json.dumps(out)
+
+    def obj(self, label):
+        return next(o for o in self.session.doc.Objects if o.Label == label)
+
+    def test_1_shapes(self):
+        import math
+
+        a = self.ok("draft_shape", {"kind": "arc", "radius": 30, "start": 60, "end": 120, "name": "Arc30"})
+        self.assertAlmostEqual(a["length"], 30 * math.pi / 3, places=3)
+        self.assertNotIn("area", a)
+        self.ok("draft_shape", {"kind": "arc", "radius": 25, "start": 60, "end": 120, "name": "Arc25"})
+        c60, s60 = math.cos(math.radians(60)), math.sin(math.radians(60))
+        ln = self.ok("draft_shape", {"kind": "wire", "points": [[30 * c60, 30 * s60, 0], [25 * c60, 25 * s60, 0]], "name": "TieR"})
+        self.assertAlmostEqual(ln["length"], 5, places=4)
+        self.ok("draft_shape", {"kind": "wire", "points": [[-30 * c60, 30 * s60, 0], [-25 * c60, 25 * s60, 0]], "name": "TieL"})
+        r = self.ok("draft_shape", {"kind": "rectangle", "length": 240, "height": 150, "at": [-100, -60, 0], "name": "Frame"})
+        self.assertAlmostEqual(r["area"], 36000, places=2)  # Make Face is on as installed
+        self.assertAlmostEqual(r["length"], 780, places=3)
+        c = self.ok("draft_shape", {"kind": "circle", "radius": 15, "face": False, "name": "Hub"})
+        self.assertNotIn("area", c)
+        self.assertAlmostEqual(c["length"], 2 * math.pi * 15, places=3)
+        h = self.ok("draft_shape", {"kind": "polygon", "sides": 6, "radius": 50, "name": "Hex"})
+        self.assertAlmostEqual(h["length"], 300, places=3)
+        self.assertAlmostEqual(h["area"], 1.5 * math.sqrt(3) * 2500, places=1)
+        e = self.ok("draft_shape", {"kind": "ellipse", "major": 40, "minor": 20, "at": [200, 0, 0], "name": "Oval"})
+        self.assertAlmostEqual(e["area"], math.pi * 20 * 10, places=1)
+        self.assertEqual(self.obj("Oval").Placement.Base.x, 200)
+        # A first point repeated as the last closes the wire (three sides, a face).
+        t = self.ok("draft_shape", {"kind": "wire", "points": [[300, 0, 0], [310, 0, 0], [300, 10, 0], [300, 0, 0]], "name": "Tri"})
+        self.assertAlmostEqual(t["area"], 50, places=3)
+        self.assertIn("sides", self.refused("draft_shape", {"kind": "polygon", "sides": 2, "radius": 5}))
+        self.assertIn("radius", self.refused("draft_shape", {"kind": "circle", "radius": 0}))
+        self.assertIn("start, end", self.refused("draft_shape", {"kind": "arc", "radius": 5, "start": 10, "end": 370}))
+
+    def test_2_upgrade_array_dimensions(self):
+        import math
+
+        up = self.ok("draft_modify", {"op": "upgrade", "objects": ["Arc30", "Arc25", "TieR", "TieL"]})
+        wire = (up.get("objects") or [up])[0]
+        self.assertAlmostEqual(wire["length"], 55 * math.pi / 3 + 10, places=3)
+        arr = self.ok("draft_link_array", {"object": wire["object"], "kind": "polar", "count": 4, "angle": 360, "name": "Ring"})
+        self.assertEqual(arr["count"], 4)
+        self.assertEqual(arr["of"], wire["object"])
+        d = self.ok("draft_dimension", {"kind": "linear", "from": [0, 0, 0], "to": [0, 50 * math.sin(math.radians(60)), 0], "at": [100, 20, 0], "name": "ToHexTop"})
+        self.assertAlmostEqual(d["measures"], 43.3013, places=3)
+        self.assertEqual(d["unit"], "mm")
+        dia = self.ok("draft_dimension", {"kind": "diameter", "object": "Hub", "edge": 1, "at": [20, 20, 0]})
+        self.assertAlmostEqual(dia["measures"], 30, places=4)
+        ang = self.ok("draft_dimension", {"kind": "angular", "center": [0, 0, 0], "angles": [60, 120], "at": [0, 35, 0]})
+        self.assertAlmostEqual(ang["measures"], 60, places=4)  # worked out here: Draft sets Angle only in its window
+        self.assertEqual(ang["unit"], "deg")
+        follow = self.ok("draft_dimension", {"kind": "linear", "object": "Frame", "vertices": [1, 2]})
+        self.assertIn(round(follow["measures"]), (240, 150))
+        self.assertIn("Vertex", self.refused("draft_dimension", {"kind": "linear", "object": "Frame", "vertices": [1, 9]}))
+        self.assertIn("not a circle", self.refused("draft_dimension", {"kind": "radius", "object": "Frame", "edge": 1}))
+        n = len(self.session.doc.Objects)
+        self.refused("draft_dimension", {"kind": "radius", "object": "Frame", "edge": 1})
+        self.assertEqual(len(self.session.doc.Objects), n)
+
+    def test_3_labels_and_styles(self):
+        import FreeCAD
+
+        lb = self.ok("draft_label", {"target": [0, 15, 0], "at": [40, 40, 0], "object": "Hex", "show": "area"})
+        self.assertTrue(lb["text"] and "mm" in lb["text"][0], lb)
+        self.assertIn("needs object", self.refused("draft_label", {"target": [0, 0, 0], "show": "length"}))
+        st = self.ok("draft_style", {"action": "set", "name": "Shop", "values": {"FontSize": 6, "ArrowType": "Tick", "ShowUnit": False, "ExtLines": 45}})
+        # As Draft 1.1 stores them: both ends, an arrow's type by its index, floats as floats.
+        self.assertEqual(st["values"]["ArrowTypeStart"], 3)
+        self.assertEqual(st["values"]["ArrowTypeEnd"], 3)
+        self.assertNotIn("ArrowType", st["values"])
+        self.assertIsInstance(st["values"]["FontSize"], float)
+        import json as js
+
+        from draftutils import utils
+
+        fixed = utils.repair_annotation_style(js.loads(self.session.doc.Meta["Draft_Style_Shop"]))  # raised ValueError on a name
+        self.assertEqual(fixed["ArrowTypeStart"], 3)
+        self.assertEqual(fixed["FontSize"], 6.0)
+        self.assertIn("Tick-2", self.refused("draft_style", {"action": "set", "name": "Shop", "values": {"ArrowType": "Arrowhead"}}))
+        ap = self.ok("draft_style", {"action": "apply", "name": "Shop", "objects": ["ToHexTop"]})
+        self.assertEqual((ap.get("applied") or []) + (ap.get("recorded") or []), ["ToHexTop"])
+        if FreeCAD.GuiUp:
+            self.assertEqual(ap["applied"], ["ToHexTop"], ap)
+        self.assertIn("Shop", self.refused("draft_style", {"action": "apply", "name": "Nope", "objects": ["ToHexTop"]}))
+
+    def test_4_modify(self):
+        import math
+
+        self.ok("draft_shape", {"kind": "wire", "points": [[0, 200, 0], [10, 200, 0]], "name": "J1"})
+        self.ok("draft_shape", {"kind": "wire", "points": [[10, 200, 0], [10, 210, 0]], "name": "J2"})
+        self.ok("draft_shape", {"kind": "wire", "points": [[50, 200, 0], [60, 200, 0]], "name": "Far"})
+        # join_wires answers a list whether or not anything joined: no shared end is a refusal now.
+        self.assertIn("share an end", self.refused("draft_modify", {"op": "join", "objects": ["J1", "Far"]}))
+        j = self.ok("draft_modify", {"op": "join", "objects": ["J1", "J2"]})
+        self.assertAlmostEqual(j["length"], 20, places=4)
+        self.assertFalse([o for o in self.session.doc.Objects if o.Label == "J2"])
+        # An open Draft wire is closed in place by upgrade: nothing new, and not "nothing to upgrade".
+        self.ok("draft_shape", {"kind": "wire", "points": [[0, 300, 0], [10, 300, 0], [10, 310, 0]], "name": "Open"})
+        u = self.ok("draft_modify", {"op": "upgrade", "objects": ["Open"]})
+        self.assertTrue(self.obj("Open").Closed)
+        self.assertEqual(u["object"], "Open")
+        # A closed wire split on its closing segment: that segment, and the other two as one open wire.
+        sp = self.ok("draft_modify", {"op": "split", "objects": ["Open"], "edge": 3})
+        lens = sorted(x["length"] for x in sp["objects"])
+        self.assertAlmostEqual(lens[0], math.hypot(10, 10), places=3)
+        self.assertAlmostEqual(lens[1], 20, places=3)
+        self.assertFalse(self.obj("Open").Closed)
+        # A Draft circle offsets to a radius, which Draft takes as a number.
+        self.ok("draft_shape", {"kind": "circle", "radius": 10, "at": [0, 400, 0], "face": False, "name": "Ring10"})
+        of = self.ok("draft_modify", {"op": "offset", "objects": ["Ring10"], "by": [2, 0, 0], "copy": True})
+        self.assertAlmostEqual(of["length"], 2 * math.pi * 12, places=2)
+        self.assertAlmostEqual(float(self.obj("Ring10").Radius), 10, places=6)
+        self.assertIn("factor", self.refused("draft_modify", {"op": "scale", "objects": ["Ring10"], "factor": 0}))
+        self.assertIn("different points", self.refused("draft_modify", {"op": "mirror", "objects": ["Ring10"], "from": [0, 0, 0], "to": [0, 0, 0]}))
+        m = self.ok("draft_modify", {"op": "mirror", "objects": ["Ring10"], "from": [0, 0, 0], "to": [1, 0, 0]})
+        self.assertAlmostEqual(m["length"], 2 * math.pi * 10, places=2)
+        self.assertAlmostEqual(self.obj(m["object"]).Shape.BoundBox.Center.y, -400, places=6)
+
+    def test_5_views_hatch_layers_heal(self):
+        import Part
+
+        add_body(self.session, "Block", Part.makeBox(20, 10, 5))
+        v = self.ok("draft_2d_view", {"object": "Block", "direction": [0, 0, 1]})
+        self.assertAlmostEqual(v["length"], 60, delta=0.01)
+        # Cut faces come only from a BIM section plane: on a body the view was silently empty.
+        self.assertIn("section plane", self.refused("draft_2d_view", {"object": "Block", "section": True}))
+        hz = self.ok("draft_hatch", {"object": "Hex", "pattern": "Diagonal4"})
+        self.assertGreater(hz.get("length", 0), 100, hz)
+        self.assertIn("Diagonal4", self.refused("draft_hatch", {"object": "Hex", "pattern": "Nope"}))
+        self.assertIn("flat face", self.refused("draft_hatch", {"object": "Hub"}))
+        a = self.ok("draft_layer", {"name": "Outline", "objects": ["Frame", "Hex"]})
+        self.assertEqual(sorted(a["objects"]), ["Frame", "Hex"])
+        b = self.ok("draft_layer", {"name": "Inner", "objects": ["Hex"]})
+        self.assertEqual(b["objects"], ["Hex"])
+        self.assertEqual(self.ok("draft_layer", {"name": "Outline"})["objects"], ["Frame"])
+        sk = self.ok("draft_to_sketch", {"objects": ["Frame"], "name": "FrameSketch"})
+        self.assertEqual(sk["geometry"], 4)
+        back = self.ok("draft_from_sketch", {"objects": ["FrameSketch"]})
+        self.assertAlmostEqual(back["length"], 780, places=3)
+        # heal { objects } rebuilds the named ones as copies and removes them: the reply reads their labels first.
+        self.ok("draft_shape", {"kind": "rectangle", "length": 4, "height": 3, "at": [0, 500, 0], "name": "Old"})
+        hl = self.ok("draft_fix", {"action": "heal", "objects": ["Old"]})
+        self.assertEqual(hl["healed"], ["Old"])
+        self.assertEqual(hl["rebuilt"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -6,6 +6,7 @@
 
 import re
 
+from .. import cells as C
 from .. import exprs
 from ..protocol import Tool, ToolError
 from ..tools import obj
@@ -70,7 +71,7 @@ def qualified(doc, expr, keep=()):
 VARSET = "App::VarSet"
 # A VarSet's own properties, not variables.
 VARSET_OWN = {"Label", "Label2", "ExpressionEngine", "Visibility", "ExposedVarSet", "Exposed", "Proxy", "Placement"}
-LENGTH_UNITS = ("mm", "cm", "m", "in", "inch", "ft", "µm", "um", "km", "\"", "thou", "mil")
+LENGTH_UNITS = ("mm", "cm", "dm", "m", "in", "ft", "yd", "mi", "µm", "um", "nm", "km", "\"", "'", "thou", "mil")
 ANGLE_UNITS = ("deg", "°", "rad", "gon")
 
 
@@ -161,15 +162,29 @@ def tools(session):
                 repaired.update(found)
         bad = pc.broken(doc_)
         if bad:
-            raise ToolError("failed", f"{what} breaks {bad[0]['object']}: {bad[0]['error']}" + (f" (and {', '.join(b['object'] for b in bad[1:])})" if len(bad) > 1 else "") + " — nothing was kept. Choose a value the features can take.")
+            raise ToolError("failed", f"{what} breaks {bad[0]['object']}: {why(doc_, bad[0])}" + (f" (and {', '.join(b['object'] for b in bad[1:])})" if len(bad) > 1 else "") + " — nothing was kept. Choose a value the features can take.")
+
+    def why(doc_, b):
+        """A broken object's reason; for a sheet (FreeCAD says only that some
+        cell failed) the cells and their own reasons."""
+        o = next((x for x in doc_.Objects if x.Label == b["object"]), None)
+        if o is not None and o.isDerivedFrom("Spreadsheet::Sheet"):
+            from . import sheet as S
+
+            cells_ = [c for c in (S.cell_reading(o, x) for x in S.filled(o)) if "error" in c]
+            if cells_:
+                return "; ".join(f"{c.get('alias') or c['cell']} ({c['content']}): {c['error']}" for c in cells_[:3])
+        return b["error"]
 
     def bodies_now():
         return [pc.body_reading(b) for b in pc.pd_bodies(doc())]
 
     def param_set(a):
         name = a.get("name")
-        if not isinstance(name, str) or not NAME.match(name) or CELL.match(name):
-            raise ToolError("invalid_input", "name: letters, digits and _, starting with a letter — not a cell address like A1.")
+        prob = C.alias_problem(name)
+        if prob:
+            # FreeCAD's rules for a cell's alias (PropertySheet::isValidAlias); it answers only "Invalid alias".
+            raise ToolError("invalid_input", f"name {name!r}: {prob} — e.g. width, plate_thickness.")
         v = a.get("value")
         unit = a.get("unit", "mm" if isinstance(v, (int, float)) else "")
         if isinstance(v, bool) or not isinstance(v, (int, float, str)):
@@ -182,15 +197,19 @@ def tools(session):
         new = found is None
         if new:
             found = len(rows(ss)) + 2
-            ss.set(f"A{found}", name)
+            ss.set(f"A{found}", "'" + name)  # as text: FreeCAD reads "inf" or "nan" typed bare as a number
         ss.set(f"B{found}", content)
+        lit = content[1:].strip()
+        if not (lit.startswith("<<") and lit.endswith(">>")) and ss.getContents(f"B{found}").startswith("'"):
+            # Cell::setContent keeps what it cannot parse as text and the sheet stays valid.
+            raise ToolError("invalid_input", f"{name} = {v!r}" + (f" {unit}" if unit and isinstance(v, (int, float)) else "") + ": FreeCAD cannot read it as an expression — a number with unit mm | deg | \"\" (or another unit FreeCAD knows: cm, m, in, rad), or a formula over other parameters, \"width / 2\". Nothing was kept.")
         if new:
             try:
                 ss.setAlias(f"B{found}", name)
             except Exception as e:
                 raise ToolError("invalid_input", f"name {name!r}: FreeCAD refuses it as an alias ({e}) — choose another.")
         if a.get("note") is not None:
-            ss.set(f"C{found}", str(a["note"]))
+            ss.set(f"C{found}", "'" + str(a["note"]))  # text, whatever it reads as
         check(doc(), f"{name} = {v}", refs)
         val, u = value_of(ss, name)
         if val is None:
@@ -256,7 +275,11 @@ def tools(session):
         done = {}
         for name, value in props.items():
             if not isinstance(name, str) or not NAME.match(name) or CELL.match(name):
-                raise ToolError("invalid_input", f"properties.{name}: a name of letters, digits and _, starting with a letter — not a cell address.")
+                raise ToolError("invalid_input", f"properties.{name}: a name of letters, digits and _, not starting with a digit — and not a cell address (A1), which an expression would read as a cell.")
+            if name in C.UNITS or name in C.CONSTANTS:
+                # FreeCAD's own Add Property dialog refuses these (addProperty
+                # from Python does not): <VarSet>.mm would not read as a variable.
+                raise ToolError("invalid_input", f"properties.{name}: {name} is a unit or constant in FreeCAD's expressions — a longer name ({name}_value).")
             if name in VARSET_OWN:
                 raise ToolError("invalid_input", f"properties.{name}: the VarSet's own property — another name.")
             typ, v = var_type(value)
@@ -267,7 +290,7 @@ def tools(session):
                 setattr(o, name, v)
             except Exception as e:
                 if new:
-                    raise ToolError("invalid_input", f"properties.{name} = {value!r}: FreeCAD refuses it ({e}).")
+                    raise ToolError("invalid_input", f"properties.{name} = {value!r}: FreeCAD refuses it as a {typ.split('::')[-1]} ({e}) — a quantity is a number and a unit FreeCAD knows (\"55 mm\", \"2 in\", \"30 deg\"); other text is kept as text.")
                 raise ToolError("invalid_input", f"properties.{name} = {value!r}: it is a {o.getTypeIdOfProperty(name)} — give a value of that kind ({e}).")
             done[name] = {"new": new, "type": o.getTypeIdOfProperty(name).split("::")[-1]}
         return done
@@ -325,7 +348,7 @@ def tools(session):
     def param_bind(a):
         target = a.get("target")
         if not isinstance(target, str) or "." not in target:
-            raise ToolError("invalid_input", "target: \"Object.Property\" (Pad.Length) or \"Sketch.<constraint name>\".")
+            raise ToolError("invalid_input", "target: \"Object.Property\" (\"Pad.Length\") or \"Sketch.<constraint name>\" (\"Sketch.width\") — the object by its label or name.")
         oname, path = target.split(".", 1)
         o = next((x for x in doc().Objects if oname in (x.Label, x.Name)), None)
         if o is None:
@@ -335,10 +358,14 @@ def tools(session):
             if path.startswith("Constraints."):
                 path = path.split(".", 1)[1]
             if path not in names:
-                raise ToolError("not_found", f"constraint {path!r}: not a named constraint of {o.Label} — they are: {', '.join(names) or 'none (name one with sketch_constrain or sketch_edit rename)'}.")
+                raise ToolError("not_found", f"constraint {path!r}: not a named constraint of {o.Label} (a constraint is bound by its name, not its number) — they are: {', '.join(names) or 'none (name one with sketch_constrain or sketch_edit rename)'}.")
+            con = next(c for c in o.Constraints if c.Name == path)
+            if not getattr(con, "Driving", True):
+                # SketchObject::validateExpression: "Reference constraints cannot be set!"
+                raise ToolError("invalid_state", f"constraint {path!r} of {o.Label} is a reference (driven) dimension: it only measures, so it cannot be bound — bind a driving dimension instead.")
             path = f"Constraints.{path}"
         elif path.split(".")[0] not in o.PropertiesList:
-            raise ToolError("not_found", f"{path}: not a property of {o.Label}.")
+            raise ToolError("not_found", f"{path}: not a property of {o.Label} — by FreeCAD's own name, as feature_list shows them (Length, Angle, Radius, Offset …)" + ("; a sketch's dimension is bound by its constraint's name." if o.TypeId == "Sketcher::SketchObject" else "."))
         expr = a.get("expression")
         if expr in (None, ""):
             o.setExpression(path, None)
@@ -360,7 +387,7 @@ def tools(session):
         try:
             o.setExpression(path, expr)
         except Exception as e:
-            raise ToolError("invalid_input", f"{target} = {given!r}: {e}")
+            raise ToolError("invalid_input", f"{target} = {given!r}: FreeCAD refuses it ({e}) — an expression must not read the thing it sets (a circle), and its unit must suit the property (a length for a length: \"width\", \"2 * 5 mm\").")
         check(doc(), f"Binding {target} to {expr}")
         try:
             now = picks.num_json(o.getDatum(path.split(".", 1)[1])) if path.startswith("Constraints.") else picks.num_json(getattr(o, path))
@@ -372,14 +399,14 @@ def tools(session):
         return picks.finish(s, "param_bind", lambda: {**out, "bodies": bodies_now()}, recompute=False)
 
     return [
-        Tool("param_set", "Set a named parameter in the Params spreadsheet (made when first needed): name, value (a number with unit mm | deg | \"\", or an expression over others, \"width / 2\"), note. Everything bound to it recomputes; a value that breaks a feature is refused with FreeCAD's error and nothing kept. Answers its reference (Params.<name>) and who uses it.",
+        Tool("param_set", "Set a named parameter in the Params spreadsheet (made when first needed): name (a letter, then letters, digits, _; not a cell address, a unit such as m, mm, s, N, or e / pi), value (a number with unit mm | deg | \"\", default mm; or an expression over others, \"width / 2\"), note. Everything bound to it recomputes; a value that does not evaluate or breaks a feature is refused with FreeCAD's error and nothing kept. Reply: value, unit, ref (Params.<name>), usedBy, bodies.",
              obj({"name": {"type": "string"}, "value": {"type": ["number", "string"]}, "unit": {"type": "string"}, "note": {"type": "string"}}, ["name", "value"]), param_set, changes=True),
         Tool("param_list", "The parameters: name, value, unit, what they are set to, and which properties use them; varsets: each variable set's variables (name, value, unit, ref, usedBy). Changes nothing.", obj({}), param_list),
-        Tool("varset_new", "Make a variable set (FreeCAD 1.0's App::VarSet): name (its label), properties { size: \"55 mm\" (a length), angle: \"30 deg\", count: 3, ratio: 0.5, on: true, note: \"text\" } as its variables, group (Variables). Expressions read them as <VarSet name>.size — param_bind { target, expression: \"Dims.size\" } takes the label too. Answers the object's name to use.",
+        Tool("varset_new", "Make a variable set (App::VarSet, FreeCAD 1.0 on): name (its label), properties { size: \"55 mm\" (a length), angle: \"30 deg\", count: 3, ratio: 0.5, on: true, note: \"text\" } as its variables (names: letters, digits, _; not a unit or constant), group (Variables). Expressions read them as <object name>.size (the reply's refAs) — param_bind { target, expression: \"Dims.size\" } takes the label too.",
              obj({"name": {"type": "string"}, "properties": {"type": "object"}, "group": {"type": "string"}}, ["name"]), varset_new, changes=True),
-        Tool("varset_set", "Set or add variables of a variable set: varset (its label; may be left out when there is one), properties { name: value } as varset_new takes them (an existing one keeps its kind). Everything bound to them recomputes; a value that breaks a feature is refused and nothing kept.",
+        Tool("varset_set", "Set or add variables of a variable set: varset (its label; may be left out when there is one), properties { name: value } as varset_new takes them (an existing one keeps its kind: a length takes \"60 mm\", not text). Everything bound to them recomputes; a value that breaks a feature is refused and nothing kept. Reply: variables, usedBy, bodies.",
              obj({"varset": {"type": "string"}, "properties": {"type": "object"}, "group": {"type": "string"}}, ["properties"]), varset_set, changes=True),
-        Tool("param_remove", "Remove a parameter no property uses (unbind its users first).", obj({"name": {"type": "string"}}, ["name"]), param_remove, changes=True),
-        Tool("param_bind", "Bind a property or a named sketch constraint to an expression: target \"Pad.Length\" | \"Sketch.width\" (a constraint's name), expression \"width\" (a parameter by its name), \"Params.width\", \"Dims.size\" (a variable set's, by its label or name) or \"width / 2 + 1\"; null unbinds (the value stays). A bound value is then changed by param_set, not edited directly.",
+        Tool("param_remove", "Remove a parameter no property uses (param_list shows usedBy; unbind each with param_bind expression: null first).", obj({"name": {"type": "string"}}, ["name"]), param_remove, changes=True),
+        Tool("param_bind", "Bind a property or a named, driving sketch constraint to an expression: target \"Pad.Length\" | \"Sketch.width\" (the constraint's name, not its number), expression \"width\" (a parameter by its name), \"Params.width\", \"<Sheet>.<alias>\", \"Dims.size\" (a variable set's, by its label or name) or \"width / 2 + 1\"; null unbinds (the value stays). One that does not evaluate or breaks a feature is refused, nothing kept. A bound value is then changed by param_set, sheet_set or varset_set, not edited directly. Reply: expression as kept, value, bodies.",
              obj({"target": {"type": "string"}, "expression": {"type": ["string", "null"]}}, ["target", "expression"]), param_bind, changes=True),
     ]

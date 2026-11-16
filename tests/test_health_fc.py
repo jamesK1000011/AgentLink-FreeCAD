@@ -42,12 +42,8 @@ class Health(Base):
         out = self.ok("part_primitive", {"kind": "box", "size": [10, 10, 10], "at": [15, 5, 5], "name": "Clash"})
         h = out["health"]
         self.assertTrue(h["ok"], h)  # yellow: an overlap may be the next boolean's tool
-        hit = h["interference"][0]
-        self.assertEqual({hit["a"], hit["b"]}, {"Clash", "Block"})
         # Block is 40 x 20 x 10 about the origin: the box overlaps 5 x 5 x 5
-        self.assertAlmostEqual(hit["volume"], 125.0, delta=0.5)
-        self.assertEqual(hit["box"], [5.0, 5.0, 5.0])
-        self.assertIn("Clash interferes with Block", h["verdict"])
+        self.assertIn("Clash interferes with Block: 125 mm³ in a box 5 × 5 × 5 mm", h["verdict"])
         self.ok("object_delete", {"objects": ["Clash"]})
 
     def test_4b_a_sketch_in_a_body_does_not_read_the_body_again(self):
