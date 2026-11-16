@@ -198,7 +198,7 @@ class MoreFamilies(Base):
         self.ok("part_primitive", {"kind": "cylinder", "radius": 6, "height": 10, "at": [30, 1020, 0], "name": "Td hole"})
         self.ok("part_boolean", {"op": "cut", "base": "Td plate", "tools": ["Td hole"], "name": "Td holed"})
         self.ok("td_page", {"action": "new", "paper": "A4", "name": "Td sheet"})
-        self.ok("td_view", {"bodies": ["Td holed"], "direction": "top", "name": "Td top"})
+        self.ok("td_view", {"page": "Td sheet", "bodies": ["Td holed"], "direction": "top", "name": "Td top"})
         m = self.ok("td_centermarks", {"views": ["Td top"]})
         self.assertEqual(m["views"][0]["circles"], 1)
         top = self.ok("shape_query", {"body": "Td holed", "normal": [0, 0, 1]})["items"][0]["ref"]

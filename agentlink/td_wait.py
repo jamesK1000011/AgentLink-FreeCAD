@@ -29,7 +29,7 @@ def wait_views(views_, timeout=30.0):
     app = QtCore.QCoreApplication.instance() or QtCore.QCoreApplication([])
     t0 = time.time()
     while time.time() - t0 < timeout:
-        app.processEvents()
+        pump(app)
         if ready():
             break
         time.sleep(0.02)
@@ -39,3 +39,23 @@ def wait_views(views_, timeout=30.0):
         except Exception:
             pass
     return round(time.time() - t0, 2)
+
+
+# Errors raised by someone else's timer or slot while the loop was pumped
+# here (PySide2 hands them to the caller of processEvents): logged and kept,
+# never the TechDraw call's own failure.
+PUMP_ERRORS = []
+
+
+def pump(app):
+    """app.processEvents(), an error from what it ran logged, not raised."""
+    try:
+        app.processEvents()
+    except Exception:  # noqa: BLE001
+        import sys
+        import traceback
+
+        tb = traceback.format_exc()
+        PUMP_ERRORS.append(tb[-2000:])
+        del PUMP_ERRORS[:-5]
+        sys.stderr.write("Agent Link: an error raised while TechDraw's lines were awaited (not TechDraw's):\n" + tb)

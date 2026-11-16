@@ -104,10 +104,11 @@ def attach():
         return True
     try:
         import FreeCAD
+
+        if not FreeCAD.GuiUp:  # before importing FreeCADGui
+            return False
         import FreeCADGui
 
-        if not FreeCAD.GuiUp:
-            return False
         mw = FreeCADGui.getMainWindow()
     except Exception:  # noqa: BLE001
         return False

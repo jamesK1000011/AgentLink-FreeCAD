@@ -1189,8 +1189,10 @@ def tools(session):
         if app is None:
             return
         t0 = time.time()
+        from ..td_wait import pump
+
         while time.time() - t0 < seconds:
-            app.processEvents()
+            pump(app)
             time.sleep(0.01)
 
     def done(tool, out):
