@@ -242,7 +242,8 @@ class Server:
         self.tools[tool.name] = tool
 
     def listed(self):
-        return [t for t in self.tools.values() if self.groups is None or t.group in self.groups]
+        # An alias (an old name kept callable) is never listed beside its tool.
+        return [t for t in self.tools.values() if (self.groups is None or t.group in self.groups) and not getattr(t, "alias_of", None)]
 
     def set_groups(self, groups):
         self.groups = groups

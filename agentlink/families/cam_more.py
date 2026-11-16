@@ -17,7 +17,7 @@ from ..tools import obj
 from . import picks
 
 GROUP = "cam_more"
-INFO = "CAM paths from areas and shapes, compound, array, stop, fixture offsets, property bags, job templates; Draft dimension flip and heal; Assembly rigid groups and new parts."
+INFO = "CAM paths from areas and shapes, compound, array, stop, fixture offsets, property bags, job templates."
 
 
 def _cam(what):

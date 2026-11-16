@@ -14,7 +14,7 @@ from ..tools import obj
 from . import picks
 
 GROUP = "surface"
-INFO = "Surface workbench features (parametric): sections, boundary surfaces (stretched/Coons/curved), extend, sewing into shells and solids, surface cuts, blend curves."
+INFO = "Surface workbench features (parametric): sections, boundary surfaces (stretched/Coons/curved), extend, sewing into shells and solids, surface cuts, blend curves; surfaces filled across edges, lofted through curves, fitted to points or a polynomial, thickened into solids."
 
 
 def reading(o):

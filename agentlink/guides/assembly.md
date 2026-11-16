@@ -8,7 +8,7 @@ FreeCAD's own Assembly workbench, its solver and its joints. Parts are bodies al
 2. `asm_joint` between two parts, one at a time, each solved as it is made. Read `moved` (which part went where) and `overlaps` after every joint.
 3. `view_render { views: "all" }` — look. A part upside down or inside another is a face picked the wrong way: `history_undo`, then the joint again with `reverse: true`.
 4. `asm_check { clearance }` at the end: solves, overlaps (volume and where), pairs closer than the clearance, parts joined to nothing. **verdict clear** is the goal.
-5. Draw it from where the parts now sit (`td_page`, `td_view`); `export_file` each part.
+5. Draw it from where the parts now sit (`td_page`, `td_view`); `export` each part.
 
 ## Joints
 - `fixed` — no motion between them: a lid screwed down, a bracket bolted on.
