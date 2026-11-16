@@ -47,6 +47,7 @@ TASK_WORDS = re.compile(r"(error|warning|invalid|failed|cannot|could not|conflic
 
 # What the observer saw, in order, while any mark is open: a batch's mark and
 # its calls' marks nest, each reading the log from where it started.
+SOLVER_LABEL = re.compile(r"(under-?constrained|over-?constrained|fully constrained|degrees? of freedom|redundant|conflicting|malformed|empty sketch)", re.I)
 _seen = {"log": [], "depth": 0}
 _extra = []  # [(owner, fn)] — families' own readings
 
@@ -186,14 +187,23 @@ def free_geometry(sk, cap=MAX_LIST):
     by = {}
     for g, p in pairs:
         by.setdefault(int(g), set()).add(int(p))
-    out = []
+    # Grouped by what is free and of which kind, so a rectangle's four
+    # corners read "the start of lines 0, 1, 2, 3", not four phrases.
+    groups, order = {}, []
     for g in sorted(by):
         kind = _geo_kind(geos[g]) if 0 <= g < len(geos) else "geometry"
         ps = by[g]
-        if 0 in ps or len(ps) > 1:
-            out.append(f"{kind} {g}")
-        else:
-            out.append(f"{POS.get(next(iter(ps)), '')}{kind} {g}")
+        where = "" if (0 in ps or len(ps) > 1) else POS.get(next(iter(ps)), "")
+        key = (where, kind)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(g)
+    out = []
+    for where, kind in order:
+        ids = groups[(where, kind)]
+        shown = ", ".join(str(i) for i in ids[:8]) + (" …" if len(ids) > 8 else "")
+        out.append(f"{where}{kind}{'s' if len(ids) > 1 else ''} {shown}")
     return out[:cap], len(out)
 
 
@@ -541,6 +551,7 @@ def check(session, tool, m):
 
     # 2. Sketches the call recomputed.
     sketches = [o for o in changed if getattr(o, "TypeId", "") == "Sketcher::SketchObject" and _label(o) not in failing_now]
+    read_sketch = False
     for sk in sketches[:MAX_SKETCHES]:
         try:
             r = sketch_reading(sk)
@@ -551,9 +562,11 @@ def check(session, tool, m):
         if r["red"]:
             red = True
             todos.append(r.get("todo"))
-        keep = {k: r[k] for k in ("sketch", "dof", "free", "conflicting", "redundant", "partiallyRedundant", "malformed", "open") if k in r}
-        if len(keep) > 1:
-            h.setdefault("sketches", []).append(keep)
+        # The lists only when something is red: the verdict's words carry
+        # the freedom, and the sketch tools' own "state" the rest.
+        if r["red"]:
+            h.setdefault("sketches", []).append({k: r[k] for k in ("sketch", "conflicting", "redundant", "partiallyRedundant", "malformed") if k in r})
+        read_sketch = True
     if len(sketches) > MAX_SKETCHES:
         unchecked.append(f"{len(sketches) - MAX_SKETCHES} more sketches: sketch_state")
 
@@ -626,9 +639,14 @@ def check(session, tool, m):
         red = True
         lines.append(f"a dialog is open in the window: {w['dialog']}")
         todos.append("dialog_answer reads it and presses a button")
-    if w.get("task"):
-        h["taskPanel"] = w["task"]
-        lines.append("the task panel says: " + " | ".join(w["task"][:2]))
+    task = w.get("task") or []
+    if read_sketch:
+        # The Sketcher panel's solver message says what the sketch reading
+        # above already did.
+        task = [t for t in task if not SOLVER_LABEL.search(t)]
+    if task:
+        h["taskPanel"] = task
+        lines.append("the task panel says: " + " | ".join(task[:2]))
     if w.get("status"):
         h["statusBar"] = w["status"]
 

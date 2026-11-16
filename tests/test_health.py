@@ -111,8 +111,13 @@ def test_sketch_dof_names_the_free_geometry():
     # line 3 whole (its edge, 0), line 1 by its end point only
     h = run(d, lambda: [Sketch(d, "Sketch", dof=2, free=[(3, 0), (3, 1), (1, 2)])])
     assert h["ok"] is True
-    assert h["verdict"] == "Sketch: 2 DoF left on the end of line 1, line 3"
-    assert h["sketches"] == [{"sketch": "Sketch", "dof": 2, "free": ["the end of line 1", "line 3"]}]
+    assert h == {"ok": True, "verdict": "Sketch: 2 DoF left on the end of line 1, line 3"}
+
+
+def test_free_points_of_one_kind_are_named_together():
+    d = Doc()
+    h = run(d, lambda: [Sketch(d, "Sketch", dof=4, free=[(0, 1), (1, 1), (2, 1), (3, 1)])])
+    assert h["verdict"] == "Sketch: 4 DoF left on the start of lines 0, 1, 2, 3"
 
 
 def test_sketch_conflict_is_red_and_counts_from_zero():
