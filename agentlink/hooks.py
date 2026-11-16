@@ -372,7 +372,7 @@ class as_person:
     """A call the person made by a click in a panel (Agent Link's own, or an
     add-on dock it hosts): session.by is "person" while it runs, then back
     to what it was ("agent" for the agent's session). Add-ons read
-    session.by (SafetyNet labels a checkpoint "My checkpoint" by it)."""
+    session.by (a checkpoint labelled "My checkpoint" by it, say)."""
 
     def __init__(self, session):
         self.s = session
