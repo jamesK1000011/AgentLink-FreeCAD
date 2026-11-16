@@ -29,6 +29,24 @@ class LiveFindings(unittest.TestCase):
         return out["error"]
 
     # 1. tool_groups answers with what its filter asks for.
+    # 1b. One tool's card and a search of the index, nothing listed for it.
+    def test_tool_groups_find_and_card(self):
+        before = self.ok("tool_groups")["listed"]
+        got = self.ok("tool_groups", {"find": "fillet edges"})
+        names = [t["tool"] for t in got["tools"]]
+        self.assertIn("pd_fillet", names[:5])
+        self.assertTrue(all(set(t) == {"tool", "group", "does"} for t in got["tools"]))
+        self.assertLessEqual(len(got["tools"]), 10)
+        card = self.ok("tool_groups", {"tool": "pd_fillet"})["tools"][0]
+        self.assertEqual(card["group"], "feature")
+        self.assertIn("properties", card["inputSchema"])
+        self.assertTrue(card["description"])
+        self.assertEqual(self.ok("tool_groups")["listed"], before)
+        self.assertEqual(self.ok("tool_groups", {"find": "zzqqxx"})["tools"], [])
+        e = self.no("tool_groups", {"tool": "pd_filet"})
+        self.assertEqual(e["code"], "not_found")
+        self.assertIn("pd_fillet", e["message"])
+
     def test_tool_groups_filters(self):
         whole = self.ok("tool_groups")
         self.assertGreater(len(whole["groups"]), 3)

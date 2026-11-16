@@ -14,7 +14,7 @@ from .. import geometry as geo
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import picks
-from .bim import UP, bad, contained, frame, headless_call, ifc_type, is_bim, vec  # noqa: F401
+from .bim import UP, bad, contained, frame, headless_call, ifc_set, ifc_type, is_bim, vec  # noqa: F401
 
 GROUP = "bim"
 INFO = "BIM extras: frames, trusses, fences, coverings, layered walls (multi-materials), IFC properties and classification, quantity take-off, IFC preflight, additions/subtractions/cuts/joins."
@@ -77,10 +77,13 @@ def tools(session):
 
     def path_obj(a, label):
         if a.get("path"):
-            return picks.find(doc(), a["path"], "path")
+            o = picks.find(doc(), a["path"], "path")
+            if not isinstance(getattr(o, "Shape", None), Part.Shape) or o.Shape.isNull() or not o.Shape.Edges:
+                raise bad(f"path: {o.Label} has no edges to follow; give a wire, sketch or line, or points [[x, y, z] …].")
+            return o
         pts = a.get("points")
         if not (isinstance(pts, list) and len(pts) >= 2):
-            raise bad("path (a wire, sketch or line) or points [[x,y,z] …].")
+            raise bad("path (a wire, sketch or line by label) or points [[x, y, z] …] in mm, two or more: one of them.")
         o = doc().addObject("Part::Feature", "Path")
         o.Shape = Part.makePolygon([vec(p, "points") for p in pts])
         o.Label = s.unique(label)
@@ -92,7 +95,8 @@ def tools(session):
         rows = headless_call(ArchProfile.readPresets)
         row = next((r for r in rows if str(r[2]).lower() == str(name).lower()), None)
         if row is None:
-            raise bad(f"profile: {name!r} is not in the library (bim_profiles lists them).")
+            near = [r[2] for r in rows if str(name).lower()[:3] and str(r[2]).lower().startswith(str(name).lower()[:3])][:8]
+            raise bad(f"profile: {name!r} is not in the library" + (f"; near: {', '.join(near)}" if near else "") + " (bim_profiles { search } lists them).")
         p = headless_call(Arch.makeProfile, row)
         p.Label = s.unique(f"{row[2]} section", p)
         return p, row
@@ -137,7 +141,7 @@ def tools(session):
         base = path_obj(a, "Frame path")
         o = headless_call(Arch.makeFrame, base, prof)
         if o is None:
-            raise ToolError("failed", "FreeCAD made no frame.")
+            raise ToolError("failed", "FreeCAD made no frame from that path and section; bim_member { profile, from, to } makes a straight member.")
         if a.get("rotate"):
             setsome(o, {"Rotation": float(a["rotate"])})
         if a.get("align") is not None:
@@ -153,13 +157,16 @@ def tools(session):
     def bim_truss(a):
         p0, p1 = vec(a.get("from"), "from"), vec(a.get("to"), "to")
         if (p1 - p0).Length < 1:
-            raise bad("from and to: the truss's two ends, apart.")
+            raise bad("from and to: the truss's two ends, [x, y, z] each, apart.")
+        patterns = {"pratt": "/|/|/|", "warren": "/\\/\\/\\", "howe": "/|\\|/|\\"}  # ArchTruss.rodmodes, in its order
+        if a.get("pattern") is not None and a["pattern"] not in patterns:
+            raise bad("pattern: pratt | warren | howe.")
+        mk = getattr(Arch, "makeTruss", None)
+        if mk is None:
+            raise ToolError("unavailable", "This FreeCAD's BIM has no truss (FreeCAD 1.0 or newer); bim_member builds one chord by chord.")
         line = doc().addObject("Part::Feature", "TrussLine")
         line.Shape = Part.makeLine(p0, p1)
         line.Visibility = False
-        mk = getattr(Arch, "makeTruss", None)
-        if mk is None:
-            raise ToolError("unavailable", "This FreeCAD's BIM has no truss (FreeCAD 1.0 or newer).")
         o = headless_call(mk, line)
         h = a.get("height", 1000)
         strut = float(a.get("strut", 100))
@@ -168,10 +175,10 @@ def tools(session):
                                     "RodSize": float(a.get("rod", 20)), "RodSections": a.get("panels")})
         if a.get("pattern"):
             modes = o.getEnumerationsOfProperty("RodMode") if hasattr(o, "RodMode") else []
-            want = {"pratt": "/|/|/", "warren": "/\\/\\/\\", "howe": "/|\\|/|\\"}[a["pattern"]]
+            want = patterns[a["pattern"]]
             pick = next((m for m in modes if m.replace(" ", "") == want), None)
             if pick is None and modes:
-                pick = modes[min(["pratt", "warren", "howe"].index(a["pattern"]), len(modes) - 1)]
+                pick = modes[min(list(patterns).index(a["pattern"]), len(modes) - 1)]
             if pick:
                 o.RodMode = pick
                 done["RodMode"] = pick
@@ -188,22 +195,27 @@ def tools(session):
         mk = getattr(Arch, "makeFence", None)
         if mk is None:
             raise ToolError("unavailable", "This FreeCAD's BIM has no fence.")
+        h = picks.number(a, "height", 1200, gt=0, msg="height: above 0 mm.")
+        post = picks.number(a, "post", 100, gt=0, msg="post: above 0 mm (its square size).")
+        gap = picks.number(a, "spacing", 2000, gt=0, msg="spacing: above 0 mm, post centre to post centre.")
+        th = picks.number(a, "panel", 20, gt=0, msg="panel: above 0 mm (its thickness).")
+        if gap <= post:
+            raise bad(f"spacing ({gap:g} mm, post centre to post centre) must be more than the post ({post:g} mm).")
         base = path_obj(a, "Fence path")
-        h = float(a.get("height", 1200))
-        post = float(a.get("post", 100))
-        gap = float(a.get("spacing", 2000))
-        th = float(a.get("panel", 20))
+        # FreeCAD's fence (ArchFence.execute) reads each one's length and width off its
+        # bounding box's XMax and YMax and places copies of the post by its own corner,
+        # centring it across the path itself: so the post stands on its corner at the
+        # origin, and the panel is set in to the middle of the post's width.
         po = doc().addObject("Part::Box", "FencePost")
         po.Length, po.Width, po.Height = post, post, h
-        po.Placement.Base = V(-post / 2, -post / 2, 0)
         sec = doc().addObject("Part::Box", "FencePanel")
         sec.Length, sec.Width, sec.Height = gap - post, th, h * 0.8
-        sec.Placement.Base = V(0, -th / 2, h * 0.1)
+        sec.Placement.Base = V(0, (post - th) / 2, h * 0.1)
         po.Visibility = sec.Visibility = False
         o = headless_call(mk, sec, po, base)
         settype(o, "Railing")
         o.Label = s.unique(a.get("name") or "Fence", o)
-        out = finish(o, "bim_fence")
+        out = finish(o, "bim_fence", {"pathLength_mm": round(sum(e.Length for e in base.Shape.Edges), 1)})
         out.update({k: int(getattr(o, k)) for k in ("NumberOfPosts", "NumberOfSections") if hasattr(o, k)})
         return out
 
@@ -213,7 +225,12 @@ def tools(session):
             raise bad("face: \"Slab.Face6\" — the face to cover.")
         target = picks.find(doc(), label)
         finish_kind = a.get("finish", "tiles")
-        th = float(a.get("thickness", 10))
+        if finish_kind not in ("tiles", "solid", "pattern", "hatch"):
+            raise bad("finish: tiles | solid | pattern | hatch.")
+        th = picks.number(a, "thickness", 10, gt=0, msg="thickness: above 0 mm.")
+        tile = a.get("tile")
+        if tile is not None and not (isinstance(tile, (list, tuple)) and len(tile) == 2 and all(isinstance(x, (int, float)) and x > 0 for x in tile)):
+            raise bad("tile: [length, width] in mm, both above 0.")
         mk = getattr(Arch, "makeCovering", None)
         if mk is not None:
             o = headless_call(mk, (target, [sub]))
@@ -223,9 +240,9 @@ def tools(session):
                                         "TileThickness": th, "JointWidth": a.get("joint")})
             o.Label = s.unique(a.get("name") or "Covering", o)
             return finish(o, "bim_covering", {"set": done, **({"skipped": skipped} if skipped else {})})
-        # FreeCAD 1.0 has no covering object: the tiles (or the slab of finish) built here as a covering component
+        # FreeCAD 1.0 and 1.1 have no covering object (no Arch.makeCovering): the tiles (or the slab of finish) built here as a covering component
         if face.findPlane() is None:
-            raise bad("face: a flat face.")
+            raise bad(f"face: {label}.{sub} is not flat; a covering goes on a flat face (a floor, a wall's side).")
         u0, u1, v0, v1 = face.ParameterRange
         n = face.normalAt((u0 + u1) / 2, (v0 + v1) / 2)
         slab = face.extrude(n * th)
@@ -244,14 +261,17 @@ def tools(session):
             k = int(span / (tl + j)) + 2
             m = int(span / (tw + j)) + 2
             if k * m > 20000:
-                raise bad(f"tiles: {k * m} would be laid — bigger tiles, or finish solid.")
+                raise bad(f"tiles: about {k * m} would be tried (each one a boolean cut); the limit is 20000. Bigger tiles, or finish: \"solid\" for one slab of finish.")
             full = tl * tw * th
             whole = cut = 0
+            sb = slab.BoundBox
             for i in range(-k, k):
                 for jj in range(-m, m):
                     o0 = c + u * (i * (tl + j)) + v * (jj * (tw + j))
                     b = Part.makeBox(tl, tw, th)
                     b.Placement = FreeCAD.Placement(o0, FreeCAD.Rotation(u, v, n, "ZXY"))
+                    if not b.BoundBox.intersect(sb):
+                        continue  # clear of the face: no boolean needed
                     piece = b.common(slab)
                     if piece.isNull() or piece.Volume < 1e-6:
                         continue
@@ -260,10 +280,14 @@ def tools(session):
                         whole += 1
                     else:
                         cut += 1
+            if not tiles:
+                raise ToolError("failed", "No tile landed on the face; view_render shows the face, and finish: \"solid\" covers it in one piece.")
             shape = Part.makeCompound(tiles)
             note = {"tiles": len(tiles), "whole": whole, "cut": cut, "tile": [tl, tw], "joint": j}
         else:
             shape = slab
+            if finish_kind in ("pattern", "hatch"):
+                note = {"note": f"finish {finish_kind} needs FreeCAD's covering object, which this FreeCAD does not have: one solid slab of finish was made instead."}
         base = doc().addObject("Part::Feature", "CoveringShape")
         base.Shape = shape
         base.Visibility = False
@@ -280,7 +304,7 @@ def tools(session):
     def bim_layers(a):
         layers = a.get("layers")
         if not (isinstance(layers, list) and layers and all(isinstance(x, dict) and x.get("thickness") for x in layers)):
-            raise bad("layers: [{ material, thickness mm, density kg/m³ (optional), name }] outside to inside.")
+            raise bad("layers: [{ material (its name), thickness mm above 0, density kg/m³ (optional), name (optional) }], one or more, in order across the wall.")
         mk = getattr(Arch, "makeMultiMaterial", None)
         if mk is None:
             raise ToolError("unavailable", "This FreeCAD's BIM has no multi-materials.")
@@ -291,10 +315,11 @@ def tools(session):
         mm.Names = [str(x.get("name") or x.get("material", f"Layer {i + 1}")) for i, x in enumerate(layers)]
         mm.Thicknesses = [float(x["thickness"]) for x in layers]
         total = sum(float(x["thickness"]) for x in layers)
-        on = []
+        on, skipped = [], []
         for r in a.get("objects") or []:
-            o = picks.find(doc(), r)
+            o = picks.find(doc(), r, "objects")
             if not hasattr(o, "Material"):
+                skipped.append(o.Label)
                 continue
             o.Material = mm
             if hasattr(o, "Width") and o in [w for w in doc().Objects if ifc_type(w) == "Wall"]:
@@ -303,23 +328,21 @@ def tools(session):
         doc().recompute()
         s.snapshot("bim_layers")
         return {"layers": mm.Label, "total_mm": round(total, 1), "build-up": [{"material": m.Label, "thickness": float(x["thickness"])} for m, x in zip(mats, layers)],
-                "on": on, "note": "Walls on it take its total as their width; IFC export writes the layer set.", "step": len(s.steps)}
+                "on": on, **({"skipped": skipped, "skippedWhy": "not BIM components (no Material): bim_component { from } makes a shape one"} if skipped else {}),
+                "note": "Walls on it take its total as their width; IFC export writes the layer set.", "step": len(s.steps)}
 
     # ---- IFC data ---------------------------------------------------------------
 
     def bim_ifc(a):
-        objs = [picks.find(doc(), r) for r in (a.get("objects") or [])]
+        objs = [picks.find(doc(), r, "objects") for r in (a.get("objects") or [])]
         if not objs:
-            raise bad("objects: the BIM objects to read or tag.")
+            raise bad("objects: the BIM objects to read or tag, a list of labels (bim_list shows them).")
         out = []
         for o in objs:
             if not is_bim(o):
-                raise bad(f"{o.Label} is not a BIM object (no IFC type).")
+                raise bad(f"{o.Label} is not a BIM object (no IFC type): bim_component {{ from }} makes a shape one.")
             if a.get("type"):
-                try:
-                    o.IfcType = a["type"]
-                except Exception:
-                    raise bad(f"type {a['type']!r}: not an IFC type FreeCAD knows — e.g. Wall, Slab, Beam, Column, Covering, Railing, Building Element Proxy.")
+                ifc_set(o, a["type"])
             if a.get("classification") is not None:
                 for k in ("StandardCode", "Classification"):
                     if hasattr(o, k):
@@ -327,7 +350,7 @@ def tools(session):
             props = a.get("properties") or {}
             if props:
                 if not hasattr(o, "IfcProperties"):
-                    raise ToolError("unavailable", f"{o.Label} carries no IFC properties here.")
+                    raise ToolError("unavailable", f"{o.Label} ({ifc_type(o)}) carries no IFC property sets in FreeCAD (levels, materials and sheets do not); set them on its elements, or in the exported file with ifc_edit.")
                 cur = dict(o.IfcProperties or {})
                 for full, v in props.items():
                     if "." not in full:
@@ -449,18 +472,25 @@ def tools(session):
         host = picks.find(doc(), a.get("object"), "object") if a.get("object") else None
         if op in ("add", "subtract"):
             if host is None or not hasattr(host, "Additions"):
-                raise bad("object: the wall, slab or structure to change.")
-            others = [picks.find(doc(), r) for r in (a.get("with") or [])]
+                raise bad("object: the wall, slab or structure to change (a BIM component; bim_list shows them).")
+            others = [picks.find(doc(), r, "with") for r in (a.get("with") or [])]
             if not others:
                 raise bad("with: [objects] to join to it (add) or cut from it (subtract).")
+            if host in others or any(host in x.OutListRecursive for x in others):
+                raise bad(f"with: {host.Label} itself, or something built on it, cannot be added to or cut from it (a loop).")
             prop = "Additions" if op == "add" else "Subtractions"
             setattr(host, prop, list(getattr(host, prop)) + others)
             for x in others:
-                x.Visibility = False
+                # As FreeCAD does (ArchComponent.hideSubobjects): a roof or a window cut
+                # from a wall stays shown; plain cutting and joining volumes are hidden.
+                if proxy_name(x) not in ("_Roof", "_Window") and ifc_type(x) not in ("Window", "Door", "Roof"):
+                    x.Visibility = False
             return finish(host, "bim_edit", {"op": op, "with": [x.Label for x in others]})
         if op == "cut":
             if host is None or not hasattr(host, "Subtractions"):
-                raise bad("object: the component to cut.")
+                raise bad("object: the BIM component to cut (a wall, slab, structure).")
+            if host.Shape.isNull() or not host.Shape.Solids:
+                raise bad(f"object: {host.Label} has no solid to cut.")
             n = picks.direction(a.get("normal", [0, 0, 1]), "normal")
             at = picks.vec3(a.get("at", [0, 0, 0]), "at")
             bb = host.Shape.BoundBox
@@ -479,16 +509,25 @@ def tools(session):
                 out["warning"] = "nothing was cut: the plane misses it, or the normal points away (it removes the side the normal points to)."
             return out
         if op == "join":
-            ws = [picks.find(doc(), r) for r in (a.get("walls") or [])]
-            if len(ws) < 2:
-                raise bad("walls: two or more walls to join into one.")
-            res = headless_call(Arch.joinWalls, ws, delete=bool(a.get("delete", True)))
+            ws = [picks.find(doc(), r, "walls") for r in (a.get("walls") or [])]
+            if len(ws) < 2 or len({w.Name for w in ws}) < len(ws):
+                raise bad("walls: two or more different walls to join into one.")
+            # FreeCAD keeps the last wall and draws the others' lines into its sketch
+            # (Arch.joinWalls pops it). Its own delete removes a wall once per edge of its
+            # line, which fails on a wall of two or more stretches: the others are removed here.
+            res = headless_call(Arch.joinWalls, list(ws), delete=False)
             if res is None:
-                raise ToolError("failed", "FreeCAD could not join them: same width, height and alignment, and ends that meet.")
-            return finish(res, "bim_edit", {"op": "join", "joined": len(ws)})
+                raise ToolError("failed", "FreeCAD would not join them: walls need the same width, height and alignment, and each a line as its base (not a face). bim_edit { op: \"add\" } fuses unlike walls instead.")
+            gone = []
+            if a.get("delete", True):
+                for w in ws:
+                    if w.Name != res.Name:
+                        gone.append(w.Label)
+                        doc().removeObject(w.Name)
+            return finish(res, "bim_edit", {"op": "join", "joined": len(ws), "kept": res.Label, "removed": gone})
         if op == "clone":
             if host is None:
-                raise bad("object: the component to clone.")
+                raise bad("object: the BIM component to clone.")
             mk = getattr(Arch, "cloneComponent", None)
             c = headless_call(mk, host) if mk else None
             if c is None:
@@ -499,29 +538,29 @@ def tools(session):
                 c.Placement.Base = c.Placement.Base + picks.vec3(a["move"], "move")
             c.Label = s.unique(a.get("name") or f"{host.Label} clone", c)
             return finish(c, "bim_edit", {"op": "clone", "of": host.Label})
-        raise bad("op: add | subtract (with) | cut (at, normal: the side it points to goes) | join (walls) | clone (move).")
+        raise bad("op: add | subtract (object, with) | cut (object, at, normal: the side it points to goes) | join (walls) | clone (object, move).")
 
     pt = {"type": "array", "items": {"type": "number"}}
     s_ = {"type": "string"}
     return [
-        Tool("bim_frame", "A library section (bim_profiles: HEB200, IPE300, RHS … ) swept along a path — a wire, sketch or points: portal frames, purlins along a roof, handrails, steel along a curve. Answers the path length, volume and mass.",
+        Tool("bim_frame", "A library section (profile; bim_profiles lists them) swept along a path (a wire or sketch by label) or points: portal frames, purlins, handrails. rotate degrees about the path; align: false keeps the section as drawn. Answers pathLength_mm, volume_m3, mass_kg.",
              obj({"profile": s_, "path": s_, "points": {"type": "array", "items": pt}, "rotate": {"type": "number"}, "align": {"type": "boolean"}, "name": s_}, ["profile"]), bim_frame, changes=True),
-        Tool("bim_truss", "A truss from one end to the other (Arch truss): height (heightStart, heightEnd for a pitched one), strut size mm, rod size mm, panels, pattern warren | pratt | howe. Answers span, volume, mass.",
+        Tool("bim_truss", "A truss between from and to, standing up +Z: height (1000; heightStart / heightEnd for a pitched one), strut (chord size, 100), rod (20), panels, pattern pratt | warren | howe, density (7850). Answers span_mm, set (what FreeCAD took), skipped, mass_kg.",
              obj({"from": pt, "to": pt, "height": {"type": "number"}, "heightStart": {"type": "number"}, "heightEnd": {"type": "number"}, "strut": {"type": "number"},
                   "rod": {"type": "number"}, "panels": {"type": "integer"}, "pattern": {"type": "string", "enum": ["warren", "pratt", "howe"]}, "density": {"type": "number"}, "name": s_}, ["from", "to"]), bim_truss, changes=True),
-        Tool("bim_fence", "A fence along a path (or points): height, post size, spacing between posts, panel thickness (mm). Answers the posts and sections.",
+        Tool("bim_fence", "A fence along a path (label) or points, mm: height (1200), post (square, 100), spacing (post centre to centre, 2000), panel (thickness, 20). The last panel is cut to fit. Answers pathLength_mm, NumberOfPosts, NumberOfSections, box.",
              obj({"path": s_, "points": {"type": "array", "items": pt}, "height": {"type": "number"}, "post": {"type": "number"}, "spacing": {"type": "number"}, "panel": {"type": "number"}, "name": s_}), bim_fence, changes=True),
-        Tool("bim_covering", "Cover a face (a floor, a wall face) with a finish: finish tiles (tile [length, width], joint mm) | solid | pattern, thickness mm.",
+        Tool("bim_covering", "Cover a flat face (\"Slab.Face6\") with a finish thickness mm (10): finish tiles (tile [length, width] 300 × 300, joint 3; counted whole and cut) | solid. FreeCAD 1.1 has no covering object: tiles are solids made here (a boolean each, so thousands are slow; refused past 20000) and pattern / hatch become solid. Face numbers change when an object is rebuilt.",
              obj({"face": s_, "finish": {"type": "string", "enum": ["tiles", "solid", "pattern", "hatch"]}, "tile": pt, "thickness": {"type": "number"}, "joint": {"type": "number"}, "name": s_}, ["face"]), bim_covering, changes=True),
-        Tool("bim_layers", "A layered build-up (multi-material): layers [{ material, thickness mm, density kg/m³ }] outside to inside, put on objects (a wall takes the total as its width). For wall and slab assemblies, U-value and fire checks downstream.",
+        Tool("bim_layers", "A layered build-up (multi-material): layers [{ material (name), thickness mm, density kg/m³ }] in order across the wall, put on objects (a wall takes the total as its width). Answers layers (its label), total_mm, on, skipped.",
              obj({"layers": {"type": "array", "items": {"type": "object"}}, "objects": {"type": "array", "items": s_}, "name": s_}, ["layers"]), bim_layers, changes=True),
-        Tool("bim_ifc", "Read or set objects' IFC data: type (IFC class), classification (Uniclass / OmniClass / your code), properties { \"Pset_WallCommon.FireRating\": \"REI60\", \"Pset_WallCommon.IsExternal\": true } — answers each object's type, classification and property sets.",
+        Tool("bim_ifc", "Read or set BIM objects' IFC data (objects alone reads): type (FreeCAD's spaced names: Wall, Covering, \"Building Element Proxy\"; IfcWall is understood), classification (a code), properties { \"Pset_WallCommon.FireRating\": \"REI60\" } (set.property). Answers objects [{ object, ifc, classification, properties }].",
              obj({"objects": {"type": "array", "items": s_}, "type": s_, "classification": s_, "properties": {"type": "object"}}, ["objects"]), bim_ifc, changes=True),
-        Tool("bim_quantities", "Quantity take-off of the BIM model: by type | material | both — counts, volume m³ and mass kg (from material densities) per group; detail: true lists every object with its areas and perimeter. Changes nothing.",
+        Tool("bim_quantities", "Take-off of the BIM model by type | material | both: groups { count, volume_m3, mass_kg (null when a density is missing) }, totalMass_kg; detail: true adds rows with areas and perimeter. Densities come from bim_material / bim_layers. Changes nothing.",
              obj({"by": {"type": "string", "enum": ["type", "material", "both"]}, "detail": {"type": "boolean"}}), bim_quantities),
-        Tool("bim_preflight", "Check the model before IFC export (as BIM's preflight does): spatial structure, IFC types, solids, containment in a storey, hosted windows, materials, duplicate labels. Changes nothing.",
+        Tool("bim_preflight", "Check the model before bim_export (Agent Link's own checks): a site, building or storey; each object's IFC type, solid and valid shape, storey, material, host wall; duplicate labels. Answers ok, issues [{ object, issues }], blocking (fix these first). Changes nothing.",
              obj({}), bim_preflight),
-        Tool("bim_edit", "Change BIM components: op add (with: join objects to it) | subtract (with: cut them out) | cut (at, normal: the side the normal points to is removed — a wall under a roof pitch) | join (walls: into one) | clone (move [x,y,z]).",
+        Tool("bim_edit", "Change BIM components. op add | subtract { object, with [labels] }: fuse them in or cut them out | cut { object, at, normal }: by a plane, removing the side the normal points to (answers removed_m3) | join { walls, delete }: walls of the same width, height and align into one, the last named kept | clone { object, move }.",
              obj({"op": {"type": "string", "enum": ["add", "subtract", "cut", "join", "clone"]}, "object": s_, "with": {"type": "array", "items": s_}, "walls": {"type": "array", "items": s_},
                   "at": pt, "normal": pt, "move": pt, "delete": {"type": "boolean"}, "name": s_}, ["op"]), bim_edit, changes=True),
     ]

@@ -27,14 +27,12 @@ WRITES = ("asc", "xyz", "pcd", "ply", "csv")
 
 
 def array_of(o):
-    """A Points object's points as an n × 3 array, in the document's placement."""
+    """A Points object's points as an n × 3 array, where they stand in the document.
+    The kernel already carries the object's Placement (Points::Feature::onChanged sets
+    it as the kernel's transform, and the kernel's iterator applies it), so the points
+    are read as they come: applying the Placement here as well moved a placed cloud twice."""
     pts = o.Points.Points
-    P = np.array([(p.x, p.y, p.z) for p in pts], float).reshape(-1, 3)
-    pl = o.Placement
-    if not pl.isIdentity():
-        M = np.array(pl.toMatrix().A, float).reshape(4, 4)
-        P = P @ M[:3, :3].T + M[:3, 3]
-    return P
+    return np.array([(p.x, p.y, p.z) for p in pts], float).reshape(-1, 3)
 
 
 def reading(o, P=None):
@@ -138,6 +136,16 @@ def read_pcd(path):
     return A[:, [idx["x"], idx["y"], idx["z"]]]
 
 
+def read_file(path):
+    """A cloud file's points by its ending, as points_import and points_export's read-back take them."""
+    ext = os.path.splitext(path)[1].lower().lstrip(".")
+    if ext == "ply":
+        return read_ply(path)
+    if ext == "pcd":
+        return read_pcd(path)
+    return read_text(path)
+
+
 def write_points(path, P):
     ext = os.path.splitext(path)[1].lower().lstrip(".")
     if ext in ("asc", "xyz"):
@@ -154,7 +162,7 @@ def write_points(path, P):
             f.write(f"ply\nformat binary_little_endian 1.0\nelement vertex {len(P)}\nproperty float x\nproperty float y\nproperty float z\nend_header\n".encode("ascii"))
             f.write(P.astype("<f4").tobytes())
     else:
-        raise bad(f"path: .{ext} — write one of {', '.join(WRITES)}.")
+        raise bad(f"path: .{ext or '(no ending)'} is not a format written here; end it .ply, .pcd, .asc, .xyz or .csv.")
 
 
 def sample_triangles(V, T, n, seed=1):
@@ -172,6 +180,12 @@ def sample_triangles(V, T, n, seed=1):
 
 def vec(x):
     return FreeCAD.Vector(*[float(c) for c in x])
+
+
+def xyz(v, name):
+    """[x, y, z] as an array; a refusal naming the input otherwise."""
+    q = picks.vec3(v, name)
+    return np.array([q.x, q.y, q.z], float)
 
 
 def spacing(P):
@@ -276,10 +290,11 @@ def tools(session):
             cs = clouds()
             if len(cs) == 1:
                 return cs[0]
-            raise bad("points: which point cloud — " + (", ".join(o.Label for o in cs) or "there are none (points_import or points_sample)") + ".")
-        o = picks.find(doc(), ref, "point cloud")
+            raise bad("points: which point cloud — " + (", ".join(o.Label for o in cs) or "there are none (points_import or points_sample makes one)") + ".")
+        o = picks.find(doc(), ref, "points")
         if not o.isDerivedFrom("Points::Feature"):
-            raise bad(f"{o.Label} is not a point cloud.")
+            cs = clouds()
+            raise bad(f"points: {o.Label} is not a point cloud" + (f" — the clouds are {', '.join(c.Label for c in cs)}." if cs else "; points_sample { object } makes one from a body or mesh."))
         return o
 
     def make(P, label):
@@ -293,23 +308,23 @@ def tools(session):
 
     def where(p):
         if not p:
-            raise bad("path: a file.")
+            raise bad("path: a file (in the session's output folder when relative).")
         return paths.local(s, p, expand=False)
 
     def points_import(a):
         p = where(a.get("path"))
         if not os.path.isfile(p):
-            raise ToolError("not_found", f"{p}: no such file.")
+            raise ToolError("not_found", f"path {a.get('path')!r}: no such file (a relative path is looked for in the session's output folder; give the full path of a file elsewhere).")
         ext = os.path.splitext(p)[1].lower().lstrip(".")
         if ext not in READS:
-            raise bad(f"path: .{ext} — one of {', '.join(READS)}.")
+            raise bad(f"path: .{ext or '(no ending)'} is not read here — one of {', '.join(READS)}. A mesh (.stl, .obj) is opened with import_file and sampled with points_sample.")
+        k = int(a.get("every", 1))
+        if k < 1:
+            raise bad("every: keep every n-th point, 1 or more.")
+        scale = picks.number(a, "scale", 1.0, gt=0, msg="scale: what one file unit is in mm, above 0 (1000 for metres, 25.4 for inches).")
         try:
-            if ext in ("xyz", "txt", "csv", "asc"):
-                P = read_text(p)
-            elif ext == "ply":
-                P = read_ply(p)
-            elif ext == "pcd":
-                P = read_pcd(p)
+            if ext != "e57":
+                P = read_file(p)
             else:
                 # E57: FreeCAD's own reader makes the cloud an object; its points are taken.
                 before = {o.Name for o in doc().Objects}
@@ -319,29 +334,36 @@ def tools(session):
                 for o in new:
                     doc().removeObject(o.Name)
         except Exception as e:
-            raise ToolError("failed", f"{os.path.basename(p)} could not be read: {e}")
+            raise ToolError("failed", f"{os.path.basename(p)} could not be read: {e}" + (" (E57 needs a FreeCAD built with the E57 library; save the scan as .ply or .pcd instead)." if ext == "e57" else ". A text file needs x y z on each line; a .ply its vertices' x, y, z; a compressed .pcd saved as ascii or binary.")) from None
         if not len(P):
-            raise ToolError("failed", f"{os.path.basename(p)}: no points read.")
+            raise ToolError("failed", f"{os.path.basename(p)}: no points read (no line had three numbers).")
+        if not np.isfinite(P).all():
+            keep = np.isfinite(P).all(axis=1)
+            P = P[keep]
+            if not len(P):
+                raise ToolError("failed", f"{os.path.basename(p)}: every point is NaN or infinite.")
         total = len(P)
-        k = int(a.get("every", 1))
-        if k < 1:
-            raise bad("every: keep every n-th point, 1 or more.")
-        P = P[::k] * float(a.get("scale", 1.0))
+        P = P[::k] * scale
         o = make(P, a.get("name") or os.path.splitext(os.path.basename(p))[0])
         return picks.finish(s, "points_import", lambda: {**reading(o, P), "read": total}, recompute=False)
 
     def points_sample(a):
-        o = picks.find(doc(), a.get("object"))
+        o = picks.find(doc(), a.get("object"), "object")
         n = int(a.get("count", 5000))
         if not 3 <= n <= 2_000_000:
             raise bad("count: 3 … 2000000 points.")
+        if float(a.get("noise", 0)) < 0:
+            raise bad("noise: mm of scatter (one standard deviation), 0 or more.")
         if o.isDerivedFrom("Mesh::Feature"):
             pts, tri = o.Mesh.Topology
         else:
             sh = getattr(o, "Shape", None)
-            if not isinstance(sh, Part.Shape) or not sh.Faces:
-                raise bad(f"{o.Label}: a body, a surface or a mesh, with faces.")
-            pts, tri = sh.tessellate(float(a.get("tolerance", 0.01)))
+            if not isinstance(sh, Part.Shape) or sh.isNull() or not sh.Faces:
+                raise bad(f"object: {o.Label} has no faces to sample; give a body, a surface or a mesh.")
+            tol = picks.number(a, "tolerance", 0.01, gt=0, msg="tolerance: mm the sampled facets may stray from curved faces, above 0 (0.01).")
+            pts, tri = sh.tessellate(tol)
+        if not len(tri):
+            raise bad(f"object: {o.Label} gave no triangles to sample.")
         V = np.array([(p.x, p.y, p.z) for p in pts], float)
         T = np.array(tri, int).reshape(-1, 3)
         P = sample_triangles(V, T, n, int(a.get("seed", 1)))
@@ -367,16 +389,27 @@ def tools(session):
         if a.get("box") is not None:
             b = a["box"]
             if not (isinstance(b, list) and len(b) == 2 and all(isinstance(x, list) and len(x) == 3 for x in b)):
-                raise bad("box: [[xmin, ymin, zmin], [xmax, ymax, zmax]].")
+                raise bad("box: [[xmin, ymin, zmin], [xmax, ymax, zmax]] in mm, document coordinates (points_info gives the cloud's min and max).")
             lo, hi = np.minimum(b[0], b[1]), np.maximum(b[0], b[1])
             keep &= np.all((P >= lo) & (P <= hi), axis=1)
         if a.get("near") is not None:
-            r = picks.num(a.get("radius"), "radius")
-            keep &= np.linalg.norm(P - np.asarray(a["near"], float), axis=1) <= r
+            if a.get("radius") is None:
+                raise bad("radius: mm round near to keep (near and radius go together).")
+            r = picks.number(a, "radius", gt=0, msg="radius: mm, above 0.")
+            keep &= np.linalg.norm(P - xyz(a["near"], "near"), axis=1) <= r
         if a.get("plane") is not None:
             pl = a["plane"]
-            n = fitting.unit(pl.get("normal", [0, 0, 1]))
-            keep &= (P - np.asarray(pl.get("at", [0, 0, 0]), float)) @ n >= 0
+            if not isinstance(pl, dict):
+                raise bad("plane: { at [x, y, z], normal [x, y, z] }: the side the normal points to is kept.")
+            try:
+                n = fitting.unit(pl.get("normal", [0, 0, 1]))
+            except (fitting.FitError, TypeError, ValueError):
+                raise bad("plane.normal: a direction [x, y, z], not zero.") from None
+            keep &= (P - xyz(pl.get("at", [0, 0, 0]), "plane.at")) @ n >= 0
+        if not any(a.get(k) is not None for k in ("box", "near", "plane")) and not a.get("thin") and not a.get("specks"):
+            raise bad("Nothing to do: give box, near + radius, plane, thin or specks.")
+        if a.get("outside") and not any(a.get(k) is not None for k in ("box", "near", "plane")):
+            raise bad("outside: true needs a box, near + radius or plane to be outside of.")
         if a.get("outside"):
             keep = ~keep
         voxel = a.get("thin")
@@ -398,7 +431,8 @@ def tools(session):
             _, first = np.unique(np.floor(Q / vx).astype(np.int64), axis=0, return_index=True)
             Q = Q[np.sort(first)]
         if not len(Q):
-            raise ToolError("failed", "Nothing left after the crop — no point was kept.")
+            lo, hi = P.min(axis=0), P.max(axis=0)
+            raise ToolError("failed", f"Nothing left after the crop: no point was kept, and the cloud is unchanged. It spans {[round(float(x), 2) for x in lo]} … {[round(float(x), 2) for x in hi]}; check the box or plane against that.")
         if a.get("replace", True):
             pk = Points.Points()
             pk.addPoints([tuple(p) for p in Q.tolist()])
@@ -414,19 +448,28 @@ def tools(session):
         o = cloud(a.get("points"))
         P = array_of(o)
         kind = a.get("shape", "plane")
+        if kind not in ("plane", "sphere", "cylinder", "surface", "curve"):
+            raise bad("shape: plane | sphere | cylinder | surface (a free B-spline) | curve (a B-spline through a line of points).")
+        if a.get("tolerance") is not None and float(a["tolerance"]) <= 0:
+            raise bad("tolerance: mm, above 0.")
+        hint = None
+        if kind == "cylinder" and a.get("axis") is not None:
+            hint = xyz(a["axis"], "axis")
+            if not np.linalg.norm(hint):
+                raise bad("axis: a direction [x, y, z], not zero (leave it out to let the fit find it).")
         try:
             if kind == "plane":
                 f = fitting.plane(P)
             elif kind == "sphere":
                 f = fitting.sphere(P)
             elif kind == "cylinder":
-                f = fitting.cylinder(P, a.get("axis"))
+                f = fitting.cylinder(P, hint)
             elif kind in ("surface", "curve"):
                 f = None
             else:
                 raise bad("shape: plane | sphere | cylinder | surface (a free B-spline) | curve (a B-spline through a line of points).")
         except fitting.FitError as e:
-            raise ToolError("failed", str(e))
+            raise ToolError("failed", f"{e} points_info counts the cloud; points_crop narrows it to the one feature.") from None
         r3 = lambda v: [round(float(x), 4) for x in v]  # noqa: E731
         out = {"points": o.Label, "shape": kind}
         body = None
@@ -434,18 +477,22 @@ def tools(session):
             try:
                 import ReverseEngineering as RE
             except ImportError:
-                raise ToolError("unavailable", "Reverse Engineering is not in this FreeCAD build: fit a plane, sphere or cylinder.")
+                raise ToolError("unavailable", "Reverse Engineering is not in this FreeCAD build: fit a plane, sphere or cylinder, or points_mesh for a mesh.") from None
             ud, vd = int(a.get("degree", 3)), int(a.get("degree", 3))
             nu = nv = int(a.get("poles", 6))
-            if nu <= ud:
-                raise bad("poles: more than the degree (6 for degree 3).")
+            if ud < 1 or nu <= ud:
+                raise bad("degree 1 or more, and poles more than the degree (6 poles for degree 3).")
+            if len(P) < nu * nv:
+                raise bad(f"The cloud has {len(P)} points; a surface of {nu} × {nv} poles needs {nu * nv} or more. Fewer poles, or more points.")
+            if len(P) > 200000:
+                raise bad(f"{len(P)} points is more than a surface fit takes in one call (200000): points_crop {{ thin }} first; the fit gains nothing from more.")
             pk = Points.Points()
             pk.addPoints([tuple(p) for p in P.tolist()])
             try:
                 srf = RE.approxSurface(Points=pk, UDegree=ud, VDegree=vd, NbUPoles=nu, NbVPoles=nv, Smooth=bool(a.get("smooth", True)),
                                        Weight=float(a.get("weight", 0.1)), Iterations=int(a.get("iterations", 5)))
             except Exception as e:
-                raise ToolError("failed", f"The surface could not be fitted: {e}")
+                raise ToolError("failed", f"The surface could not be fitted: {e}. It fits one sheet seen from one side (like a height field over the points' own plane): crop to such a patch, or use fewer poles.") from None
             face = srf.toShape()
             d = np.array([face.distToShape(Part.Vertex(vec(p)))[0] for p in P[np.random.default_rng(0).choice(len(P), min(len(P), 400), replace=False)]])
             out.update({"degree": ud, "poles": [nu, nv], "rms": round(float(np.sqrt(np.mean(d * d))), 4), "max": round(float(d.max()), 4),
@@ -456,12 +503,12 @@ def tools(session):
             ring = ring_order(P)
             loop = a.get("closed", ring is not None)
             if loop and ring is None:
-                raise bad("closed: these points do not go round a centre — leave closed out for an open curve.")
+                raise bad("closed: these points do not go round a centre (a gap wider than 45° seen from it, or points near the middle); leave closed out for an open curve.")
             Q = P[ring] if loop else P[chain_order(P)]
             step = max(1, len(Q) // 400)
             Q = Q[::step]
             if len(Q) < 4:
-                raise bad("curve: four or more points along a line.")
+                raise bad(f"curve: four or more points along a line, not {len(Q)}.")
             c = Part.BSplineCurve()
             try:
                 if loop:
@@ -473,7 +520,7 @@ def tools(session):
                 else:
                     c.approximate(Points=[vec(q) for q in Q], DegMax=int(a.get("degree", 3)), Tolerance=tol)
             except Exception as e:
-                raise ToolError("failed", f"No curve through these points: {e}")
+                raise ToolError("failed", f"No curve through these points: {e}. A larger tolerance, or crop to the one line of points.") from None
             edge = c.toShape()
             d = np.array([edge.distToShape(Part.Vertex(vec(p)))[0] for p in P[np.random.default_rng(0).choice(len(P), min(len(P), 400), replace=False)]])
             out.update({"length": round(edge.Length, 3), "poles": c.NbPoles, "degree": c.Degree, "closed": bool(loop),
@@ -503,6 +550,7 @@ def tools(session):
         tol = a.get("tolerance")
         if tol is not None:
             out["verdict"] = "fits" if out["max"] <= float(tol) else "does not fit"
+            out["tolerance"] = float(tol)
         if body is not None and (a.get("make") or kind in ("surface", "curve")):
             b = doc().addObject("Part::Feature", "Fit")
             b.Label = s.unique(a.get("name") or f"{o.Label} {kind}")
@@ -515,34 +563,56 @@ def tools(session):
         o = cloud(a.get("points"))
         P = array_of(o)
         p = where(a.get("path") or (o.Label.replace(" ", "_") + ".ply"))
+        ext = os.path.splitext(p)[1].lower().lstrip(".")
+        if ext not in WRITES:
+            raise bad(f"path: .{ext or '(no ending)'} is not a format written here; end it .ply, .pcd, .asc, .xyz or .csv.")
+        if not len(P):
+            raise ToolError("invalid_state", f"{o.Label} has no points to write.")
         os.makedirs(os.path.dirname(p), exist_ok=True)
         write_points(p, P)
-        back = read_text(p) if not p.lower().endswith(".ply") else None
         out = {"points": o.Label, "path": p, "bytes": os.path.getsize(p), "count": int(len(P))}
-        if back is not None:
+        try:
+            back = read_file(p)
             out["readBack"] = int(len(back))
+            if len(back) == len(P):
+                out["maxError"] = round(float(np.abs(back - P).max()), 6)
+            else:
+                out["warning"] = f"The file reads back as {len(back)} points, not {len(P)}."
+        except Exception as e:
+            out["warning"] = f"The file could not be read back: {e}"
         return out
 
     def points_merge(a):
         refs = a.get("points")
         if not isinstance(refs, list) or len(refs) < 2:
-            raise bad("points: two or more clouds to join.")
-        P = np.vstack([array_of(cloud(r)) for r in refs])
+            raise bad("points: two or more clouds to join, a list of labels.")
+        srcs = [cloud(r) for r in refs]
+        if len({c.Name for c in srcs}) < len(srcs):
+            raise bad("points: each cloud once.")
+        P = np.vstack([array_of(c) for c in srcs])
         o = make(P, a.get("name") or "Merged points")
         if a.get("remove"):
-            for r in refs:
-                doc().removeObject(cloud(r).Name)
-        return picks.finish(s, "points_merge", lambda: {"points": o.Label, "count": int(len(P))}, recompute=False)
+            for c in srcs:
+                doc().removeObject(c.Name)
+        return picks.finish(s, "points_merge", lambda: {"points": o.Label, "count": int(len(P)), **{k: v for k, v in reading(o, P).items() if k in ("min", "max", "box")}, "from": list(refs), "removed": bool(a.get("remove"))}, recompute=False)
 
     def points_mesh(a):
         o = cloud(a.get("points"))
         P = array_of(o)
         method = a.get("method", "height")
+        if method not in ("height", "hull", "poisson"):
+            raise bad("method: height (one side, gridded) | hull (convex) | poisson (needs FreeCAD built with PCL).")
+        if len(P) < 4:
+            raise bad(f"{o.Label} has {len(P)} points: a mesh needs four or more.")
         import Mesh
         if method == "height":
+            if a.get("cell") is not None and float(a["cell"]) <= 0:
+                raise bad("cell: mm, above 0 (left out: about six points to a cell).")
             V, T, cell = grid_mesh(P, float(a["cell"]) if a.get("cell") else None)
             if not T:
-                raise ToolError("failed", f"No triangles at a {cell:g} mm cell: a larger cell, or the points are not a surface seen from one side.")
+                raise ToolError("failed", f"No triangles at a {cell:g} mm cell: a larger cell (points_info gives the spacing; two or three times it), or the points are not a surface seen from one side.")
+            if len(T) > 2_000_000:
+                raise bad(f"A {cell:g} mm cell makes {len(T)} triangles: a larger cell (2000000 at most).")
             m = Mesh.Mesh([[tuple(V[i]) for i in tri] for tri in T])
             note = f"A height field on the points' own plane, one vertex per {cell:g} mm cell: for a scan of one side (terrain, a panel, a face)."
         elif method == "hull":
@@ -560,7 +630,7 @@ def tools(session):
                 except TypeError:
                     m = RE.poissonReconstruction(pk)
             except Exception as e:
-                raise ToolError("unavailable", f"Poisson reconstruction is not in this FreeCAD build ({e}): method height or hull.")
+                raise ToolError("unavailable", f"Poisson reconstruction is not in this FreeCAD build ({e}): it needs a FreeCAD compiled with the Point Cloud Library. method height or hull instead.") from None
             note = "Poisson reconstruction: a closed surface through the cloud."
         else:
             raise bad("method: height (one side, gridded) | hull (convex) | poisson (needs FreeCAD built with PCL).")
@@ -572,23 +642,23 @@ def tools(session):
         return {"mesh": mo.Label, "method": method, "facets": int(m.CountFacets), "points": int(m.CountPoints),
                 "area": round(m.Area, 3), "closed": bool(m.isSolid()), "note": note, "step": len(s.steps)}
 
-    pts = {"type": "string", "description": "The point cloud (the only one when left out)."}
+    pts = {"type": "string", "description": "The point cloud's label (the only one when left out)."}
     return [
-        Tool("points_import", "Read a point cloud: path .asc / .xyz / .txt / .csv (x y z a line), .pcd, .ply, .e57; every n-th point kept (every), scale (to mm).",
+        Tool("points_import", "Read a point cloud file: path .asc / .xyz / .txt / .csv (x y z a line), .pcd, .ply, .e57 (where FreeCAD has the E57 library). every: keep every n-th point; scale: mm per file unit (1000 for metres). Positions only. The whole file is read into memory: thin a huge one with every. Answers object, points (kept), read, min, max, box.",
              obj({"path": {"type": "string"}, "every": {"type": "integer"}, "scale": {"type": "number"}, "name": {"type": "string"}}, ["path"]), points_import, changes=True),
-        Tool("points_sample", "A point cloud sampled evenly over a body's, surface's or mesh's faces: count (5000), noise mm (to try a fit as a scan would see it), seed.",
+        Tool("points_sample", "A point cloud spread evenly over a body's, surface's or mesh's faces (object): count (5000; up to 2000000), noise mm (to try a fit as a scan would see it), seed, tolerance mm (faceting of curved faces, 0.01). Answers object, points, min, max, box.",
              obj({"object": {"type": "string"}, "count": {"type": "integer"}, "noise": {"type": "number"}, "seed": {"type": "integer"}, "tolerance": {"type": "number"}, "name": {"type": "string"}}, ["object"]), points_sample, changes=True),
-        Tool("points_info", "A point cloud's count, extent, centre and typical spacing between points. Changes nothing.", obj({"points": pts}), points_info),
-        Tool("points_crop", "Keep the points within a box [[min], [max]], near [x,y,z] within radius, and/or above a plane { at, normal } (outside: true keeps the rest); thin mm keeps one point per cell; specks { radius mm, least } drops stray points with fewer than least neighbours within radius. replace: false makes a new cloud.",
+        Tool("points_info", "A point cloud's points (count), min, max, box (mm, where it stands in the document), centre and spacing (typical gap between neighbours). Changes nothing.", obj({"points": pts}), points_info),
+        Tool("points_crop", "Keep part of a cloud, filters combined: box [[min], [max]], near [x, y, z] with radius, plane { at, normal } (the side the normal points to); outside: true keeps the rest. specks { radius, least } drops points with fewer than least neighbours; thin mm keeps one point per cell. The cloud itself is cut down unless replace: false. Answers from, kept, min, max, box; refused, nothing changed, when no point is left.",
              obj({"points": pts, "box": {"type": "array", "items": {}}, "near": {"type": "array", "items": {}}, "radius": {"type": "number"}, "plane": {"type": "object"}, "outside": {"type": "boolean"},
                   "thin": {"type": "number"}, "specks": {"type": "object"}, "replace": {"type": "boolean"}, "name": {"type": "string"}}), points_crop, changes=True),
-        Tool("points_fit", "Fit a shape through the points: plane (centre, normal), sphere (centre, diameter), cylinder (base, axis, diameter, length; axis a hint), surface (a B-spline: degree 3, poles 6, smooth) or curve (a B-spline edge through a line of points — an edge scan, a path: tolerance mm, degree) — with rms and max distance of the points from it; tolerance mm gives a verdict. make: true makes the shape a body (a surface always is). Crop to the feature first.",
+        Tool("points_fit", "Fit a shape through all of a cloud's points (crop to the one feature first): shape plane (centre, normal) | sphere (centre, diameter) | cylinder (base, axis, diameter, length; axis is a hint) | surface (a B-spline sheet over the points' own plane, one side only: degree 3, poles 6, smooth; 200000 points at most) | curve (a B-spline along a line of points; a loop closes itself: degree, tolerance). Answers rms and max (the points' distance from it, mm; a large max means the crop holds more than the feature); tolerance adds verdict fits | does not fit. make: true keeps the shape as an object (a surface or curve always is).",
              obj({"points": pts, "shape": {"type": "string", "enum": ["plane", "sphere", "cylinder", "surface", "curve"]}, "axis": {"type": "array", "items": {}}, "tolerance": {"type": "number"},
                   "make": {"type": "boolean"}, "degree": {"type": "integer"}, "poles": {"type": "integer"}, "smooth": {"type": "boolean"}, "weight": {"type": "number"},
                   "iterations": {"type": "integer"}, "name": {"type": "string"}}), points_fit, changes=True),
-        Tool("points_merge", "Join point clouds into one: points [names]; remove: true drops the originals.",
+        Tool("points_merge", "Join two or more point clouds into a new one: points [labels]; remove: true deletes the originals. Answers points (its label), count, box.",
              obj({"points": {"type": "array", "items": {"type": "string"}}, "remove": {"type": "boolean"}, "name": {"type": "string"}}, ["points"]), points_merge, changes=True),
-        Tool("points_mesh", "A mesh through a point cloud: method height (one side of a surface — terrain, a panel, a scanned face — gridded at cell mm, about six points a cell by default) | hull (the convex shrink-wrap) | poisson (a closed surface, FreeCAD built with PCL; depth). Then meshobj_repair / part_from_mesh.",
+        Tool("points_mesh", "A mesh through a point cloud: method height (one side of a surface: a height field on the points' own plane, one vertex per cell mm, about six points a cell by default) | hull (convex) | poisson (closed; only in a FreeCAD built with PCL; depth). Answers mesh, facets, area, closed. Then meshobj_repair / part_from_mesh.",
              obj({"points": pts, "method": {"type": "string", "enum": ["height", "hull", "poisson"]}, "cell": {"type": "number"}, "depth": {"type": "integer"}, "name": {"type": "string"}}), points_mesh, changes=True),
-        Tool("points_export", "Write a point cloud: path .ply (binary), .pcd, .asc / .xyz, .csv.", obj({"points": pts, "path": {"type": "string"}}), points_export),
+        Tool("points_export", "Write a point cloud (mm, where it stands) to path: .ply (binary, 32-bit floats), .pcd, .asc / .xyz, .csv; <label>.ply in the output folder by default. Read back: answers count, readBack (should match), maxError. Changes nothing.", obj({"points": pts, "path": {"type": "string"}}), points_export),
     ]

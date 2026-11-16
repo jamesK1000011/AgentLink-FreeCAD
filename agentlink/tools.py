@@ -11,6 +11,7 @@
 # on a document of their own. Every change is one undo step.
 
 import os
+import re
 import sys
 import time
 
@@ -705,8 +706,10 @@ WORKING = (
 LEAN_NOTE = (
     "Only the tools every task uses are listed at the start: the session, guides, undo, the checks "
     "and the pictures. The rest come in groups, Agent Link's and those of the add-ons installed (doc, model, sketch, "
-    "feature, draft, measure, strength, techdraw, assembly, cam …): tool_groups lists them and enable: [group] lists a group's tools from then on — enable what the task's "
-    "guide names, not all. A tool not listed still runs: call it by name, or through batch. AGENTLINK_TOOLS=full "
+    "feature, draft, measure, strength, techdraw, assembly, cam …): tool_groups lists them. For one tool, do not load its group: tool_groups { find: \"words\" } searches every tool by what it does, "
+    "tool_groups { tool: name } gives its description and inputs, and it runs by name (or through batch) unlisted. "
+    "enable: [group] lists a whole group from then on — for a task that uses most of it; enable what the task's "
+    "guide names, not all. AGENTLINK_TOOLS=full "
     "lists every tool from the start."
 )
 
@@ -972,6 +975,78 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
 
         def tools_of(g):
             return sorted(t.name for t in server.tools.values() if t.group == g and not getattr(t, "alias_of", None))
+
+        # One tool's card, or a search of the whole index, without listing
+        # anything: an agent that knows what it wants to do finds the tool
+        # and its inputs for a few hundred tokens, where enabling the
+        # tool's group costs every description in it (the 600-odd tools
+        # are an index to query, not a list to load).
+        def first_sentence(t, n=160):
+            t = (t or "").strip()
+            m = re.search(r"[.:;](\s|$)", t)
+            cut = t[:m.start() + 1] if m and m.start() < n else short(t, n)
+            return cut
+
+        def card(t):
+            return {"tool": t.name, "group": t.group, "listed": server.groups is None or t.group in server.groups, "changes": bool(t.changes),
+                    "description": t.description, "inputSchema": t.schema}
+
+        names = a.get("tool")
+        if names:
+            names = [names] if isinstance(names, str) else names
+            if not isinstance(names, list) or not all(isinstance(n, str) for n in names) or len(names) > 8:
+                raise ToolError("invalid_input", "tool: a tool's name, or up to 8 names — tool_groups { find: \"words\" } finds names by what they do.")
+            cards = []
+            for n in names:
+                t = server.tools.get(n)
+                if t is None:
+                    import difflib
+
+                    near = difflib.get_close_matches(n, list(server.tools), 4)
+                    raise ToolError("not_found", f"tool {n!r}: not here{' — did you mean ' + ', '.join(near) if near else ''}. tool_groups {{ find: \"words\" }} searches every tool by what it does.")
+                cards.append(card(t))
+            return {"tools": cards, "note": "Callable by name as they are, listed or not: directly, or batch { calls: [{ tool, arguments }] } where the client only sends listed tools."}
+        find = a.get("find")
+        if find is not None:
+            words = [w for w in re.findall(r"[a-z0-9]+", str(find).lower()) if len(w) > 1]
+            if not words:
+                raise ToolError("invalid_input", "find: words for what the tool does (\"fillet edge\", \"mesh decimate\", \"drawing dimension\").")
+            only = a.get("group")
+            if only is not None and only not in groups:
+                raise ToolError("not_found", f"group {only!r}: not here. The groups: {', '.join(groups)}.")
+            hits = []
+            for t in server.tools.values():
+                if getattr(t, "alias_of", None) or (only and t.group != only):
+                    continue
+                name = t.name.lower()
+                name_words = set(re.findall(r"[a-z0-9]+", name))
+                text = (t.description or "").lower()
+                about = (info.get(t.group, "") or "").lower()
+                score = 0
+                for w in words:
+                    stem = w[:-1] if len(w) > 3 and w.endswith("s") else w
+                    if w in name_words or stem in name_words:
+                        score += 8
+                    elif stem in name:
+                        score += 5
+                    if stem in text[:160]:
+                        score += 3
+                    elif stem in text:
+                        score += 1
+                    if stem in t.group.lower():
+                        score += 2
+                    elif stem in about:
+                        score += 0.5
+                if score >= 3:
+                    hits.append((-score, t.name, t))
+            hits.sort(key=lambda h: h[:2])
+            limit = a.get("limit", 10)
+            if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 40:
+                raise ToolError("invalid_input", "limit: 1 to 40 (10 when left out).")
+            if not hits:
+                return {"find": find, "tools": [], "note": "Nothing by those words. Fewer or plainer words (FreeCAD's own name for the command works), or tool_groups with no arguments for the groups and what each holds."}
+            return {"find": find, "count": len(hits), "tools": [{"tool": t.name, "group": t.group, "does": first_sentence(t.description)} for _, _, t in hits[:limit]],
+                    "note": "tool_groups { tool: name } gives a tool's whole description and inputs; each is callable by name without enabling its group."}
 
         want = a.get("group")
         if want:
@@ -1261,7 +1336,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
     core = [
         Tool("usage_report", "What working through Agent Link has cost the agent, estimated on this side: calls, tokens (text at ~3.5 characters a token, pictures by size) and the tool list each session loads up front — per day over days (7), per session, the costliest tools, and tips to cut it. session: true gives this session alone. Not Claude's own count: the plan's usage page has that. Changes nothing.",
              obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}}), usage_report),
-        Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools); detail: true gives every group's whole about. Every tool is callable by name either way.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}}), tool_groups),
+        Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools); detail: true gives every group's whole about. The cheap way to a tool that is not listed: find: \"words\" searches every tool by name and description (best first; group narrows it, limit 1-40, 10 by default) and answers name, group and what it does; tool: name (or up to 8 names) answers that tool's whole description and inputSchema. Neither lists anything, so a group's other descriptions are not loaded. Every tool is callable by name either way. Changes nothing but which tools are listed.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}}), tool_groups),
         Tool("guide_read", "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry. No topic: the index. topic: a guide whole; section: one of its ## sections.", obj({"topic": {"type": "string"}, "section": {"type": "string"}}), guide_read),
         Tool("job_status", "A long read run as a job: job (its id) answers its status — running (seconds so far, the time expected from past runs here) or done with the tool's own answer (or its error); wait: seconds (up to 30) to wait for it first. No job: every job kept (an hour after it ends). Answered at once even while FreeCAD is busy. Changes nothing.",
              obj({"job": {"type": "string"}, "wait": {"type": "number"}}), job_status),

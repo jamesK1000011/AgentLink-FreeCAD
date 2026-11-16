@@ -18,7 +18,7 @@ from .. import geometry as geo
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
-from .bim import headless_call
+from .bim import headless_call, ifc_set
 
 GROUP = "bim_gaps"
 INFO = "BIM components, clones, references, structural systems, pipe connectors, panel cuts and sheets, nesting, IFC B-rep flag, 2D level views, image planes, library, re-extrude, rewire, glue, trash, reorder."
@@ -56,8 +56,8 @@ def tools(s):
         if kind == "component":
             base = picks.shaped(d(), a.get("from"), "from") if a.get("from") else None
             o = headless_call(Arch.makeComponent, base)
-            if a.get("ifcType") and hasattr(o, "IfcType"):
-                o.IfcType = a["ifcType"]
+            if a.get("ifcType"):
+                ifc_set(o, a["ifcType"])
         elif kind == "clone":
             src = picks.find(d(), a.get("from"), "from")
             o = headless_call(Arch.cloneComponent, src)
@@ -67,7 +67,7 @@ def tools(s):
             o = picks.find(d(), a.get("from"), "from")
             src = getattr(o, "CloneOf", None)
             if src is None:
-                raise ToolError("invalid_state", f"{o.Label} is not a clone.")
+                raise ToolError("invalid_state", f"{o.Label} is not a clone (it has no CloneOf): kind clone {{ from }} makes one.")
             pl = FreeCAD.Placement(o.Placement)
             o.CloneOf = None
             skip = {"Objects", "CloneOf", "ExpressionEngine", "HorizontalArea", "Area", "VerticalArea", "PerimeterLength", "Placement", "Proxy", "Shape", "Label", "Label2"}
@@ -79,14 +79,14 @@ def tools(s):
                         pass
             o.Placement = pl
         else:
-            raise bad("kind: component { from, ifcType } | clone { from, at } | unclone { from }.")
+            raise bad("kind: component { from, ifcType } | clone { from, at, axis, angle } | unclone { from }.")
         named(o, a.get("name"))
         return done("bim_component", {"object": o.Label, "kind": kind, **reading(o)})
 
     def bim_reference(a):
         p = os.path.expanduser(a.get("path") or "")
         if not os.path.isfile(p):
-            raise ToolError("not_found", f"path {p!r}: no such file — an .FCStd (or .ifc) to reference.")
+            raise ToolError("not_found", f"path {a.get('path')!r}: no such file. Give the full path of an .FCStd (or .ifc, .dxf) to reference.")
         o = headless_call(Arch.makeReference, p, a.get("part"))
         named(o, a.get("name"))
         d().recompute()
@@ -97,6 +97,11 @@ def tools(s):
     def bim_panel_out(a):
         kind = a.get("kind", "cut")
         panels = objs(a.get("panels"), "panels")
+        import Draft
+
+        wrong = [p.Label for p in panels if Draft.getType(p) != "Panel"]
+        if wrong:
+            raise bad(f"panels: {', '.join(wrong)} {'is' if len(wrong) == 1 else 'are'} not BIM panels; bim_panel makes them.")
         if kind == "cut":
             outs = [named(headless_call(Arch.makePanelCut, p), None) for p in panels]
             d().recompute()
@@ -112,28 +117,49 @@ def tools(s):
                 sh.Height = float(a["height"])
             named(sh, a.get("name"))
             return done("bim_panel_out", {"sheet": sh.Label, "panels": len(cuts), "size": [float(sh.Width), float(sh.Height)]})
-        raise bad("kind: cut | sheet { width, height }.")
+        raise bad("kind: cut { panels } | sheet { panels, width, height }.")
 
     def bim_nest(a):
         import ArchNesting
 
         cont = picks.shaped(d(), a.get("container"), "container")
         pieces = objs(a.get("pieces"), "pieces")
+        # FreeCAD's nester (ArchNesting.Nester.run) takes one flat face as the sheet and
+        # pieces of exactly one face each, all facing the same way; it prints and stops otherwise.
+        if len(cont.Shape.Faces) != 1 or cont.Shape.Solids:
+            raise bad(f"container: {cont.Label} must be one flat face (the sheet), not a solid or a wire: draft_shape makes a rectangle with a face.")
+        not_flat = [p.Label for p in pieces if not isinstance(getattr(p, "Shape", None), Part.Shape) or p.Shape.isNull() or len(p.Shape.Faces) != 1 or p.Shape.Solids]
+        if not_flat:
+            raise bad(f"pieces: each must be a single flat face (an outline with a face), not a solid: {', '.join(not_flat[:8])}. A panel's outline (its base) is such a face.")
+        if len({p.Name for p in pieces}) < len(pieces) or cont in pieces:
+            raise bad("pieces: each piece once, and not the container itself.")
         n = ArchNesting.Nester()
-        n.addContainer(cont)
+        n.container = cont.Shape.Faces[0]
         n.addObjects(pieces)
-        if a.get("rotations"):
-            n.rotations = [int(r) for r in a["rotations"]]
-        if a.get("margin") is not None:
-            n.margin = float(a["margin"])
-        res = n.run()
-        if not n.results:
-            raise ToolError("failed", "The pieces would not nest into the container: a bigger sheet, fewer pieces, or more rotations.")
+        # The nester has no settings of its own: the rotations it tries are the module's
+        # ROTATIONS (0, 90, 180, 270), set for this run; it has no margin in 1.1.
+        was = list(ArchNesting.ROTATIONS)
+        try:
+            if a.get("rotations"):
+                try:
+                    ArchNesting.ROTATIONS = [float(r) for r in a["rotations"]]
+                except (TypeError, ValueError):
+                    raise bad("rotations: degrees to try each piece at, a list such as [0, 90, 180, 270].") from None
+            res = n.run()
+        finally:
+            ArchNesting.ROTATIONS = was
+        if not res or not n.results:
+            raise ToolError("failed", "The pieces would not nest: FreeCAD's nester stopped (its reason is in the report view; report_read shows it). Check each piece is a flat face lying the same way up as the sheet, and that the largest fits the sheet.")
         n.apply()
         d().recompute()
         s.snapshot("bim_nest")
         sheets = n.results[-1]
-        return {"sheets": len(sheets), "placed": sum(len(x) for x in sheets), "of": len(pieces), "ran": bool(res is not False)}
+        out = {"sheets": len(sheets), "placed": sum(len(x) for x in sheets), "of": len(pieces), "rotations": list(a.get("rotations") or was)}
+        if len(sheets) > 1:
+            out["note"] = f"The pieces did not all fit one sheet: {len(sheets)} sheets' worth were laid out; view_render shows where."
+        if a.get("margin"):
+            out["margin"] = "not applied: FreeCAD 1.1's nester has no margin. Leave room by nesting into a face smaller than the sheet."
+        return out
 
     def bim_ifc_brep(a):
         out = []
@@ -157,7 +183,7 @@ def tools(s):
 
         levels = objs(a["levels"], "levels") if a.get("levels") else [o for o in d().Objects if getattr(o, "IfcType", "") == "Building Storey"]
         if not levels:
-            raise ToolError("not_found", "No levels: bim_level makes them, or give levels.")
+            raise ToolError("not_found", "No levels here: bim_level makes them, or give levels (labels).")
         cut = float(a.get("cutHeight", 1100))
         out = []
         for lv in levels:
@@ -170,12 +196,12 @@ def tools(s):
                 v.ProjectionMode = "Cutfaces" if a.get("cutOnly") else "Solid"
             v.Label = s.unique(f"{lv.Label} plan", v)
             out.append({"level": lv.Label, "section": sp.Label, "view": v.Label, "at": z})
-        return done("bim_views", {"views": out, "note": "2D plan views at the cut height; techdraw_page puts them on a sheet."})
+        return done("bim_views", {"views": out, "note": "2D plan views at the cut height (Draft shape views, flat on Z = 0): export { format: \"dxf\" } writes them; td_bim draws a section plane on a drawing page."})
 
     def bim_image_plane(a):
         p = os.path.expanduser(a.get("path") or "")
         if not os.path.isfile(p):
-            raise ToolError("not_found", f"path {p!r}: no such image.")
+            raise ToolError("not_found", f"path {a.get('path')!r}: no such image file; give its full path (png, jpg, bmp, svg).")
         o = d().addObject("Image::ImagePlane", "ImagePlane")
         o.ImageFile = p
         w = a.get("width")
@@ -235,7 +261,7 @@ def tools(s):
 
         label, sub, fac = picks.resolve(s, a.get("face"))
         if sub is None or not sub.startswith("Face"):
-            raise bad("face: \"Wall.Face3\" — the face to extrude from again.")
+            raise bad("face: \"Wall.Face3\", the object's label, a dot and one of its faces: the face to extrude from again.")
         o = picks.find(d(), label)
         straight = len(fac.Wires) == 1 and all(e.tangentAt(e.FirstParameter).getAngle(e.tangentAt(e.LastParameter)) < 1e-4 for e in fac.Edges)
         if straight:
@@ -272,7 +298,7 @@ def tools(s):
         targets = objs(a.get("objects"))
         edges = [e for o in targets for e in getattr(o.Shape, "Edges", [])]
         if not edges:
-            raise bad("objects: lines or wires with edges.")
+            raise bad("objects: lines or wires (objects with edges) to join; none of these has an edge.")
         made = []
         for w in DraftGeomUtils.findWires(edges):
             if DraftGeomUtils.hasCurves(w):
@@ -288,7 +314,7 @@ def tools(s):
     def bim_glue(a):
         targets = [o for o in objs(a.get("objects")) if o.isDerivedFrom("Part::Feature") and not o.Shape.isNull()]
         if len(targets) < 2:
-            raise bad("objects: two or more shapes to glue into one.")
+            raise bad("objects: two or more objects with shapes to glue into one.")
         c = d().addObject("Part::Feature", "Glue")
         c.Shape = Part.makeCompound([o.Shape for o in targets])
         c.Label = s.unique(a.get("name") or "Glue", c)
@@ -335,7 +361,7 @@ def tools(s):
     def bim_reorder(a):
         g = picks.find(d(), a.get("group"), "group")
         if not hasattr(g, "Group"):
-            raise bad(f"{g.Label} has no children.")
+            raise bad(f"group: {g.Label} is not a group, level or building (it holds no children).")
         kids = list(g.Group)
         if a.get("sort"):
             new = sorted(kids, key=lambda o: o.Label.lower())
@@ -356,22 +382,22 @@ def tools(s):
     num = {"type": "number"}
     v3 = {"type": "array", "items": num}
     return runners.tools(GROUP, s, helpers) + [
-        Tool("bim_component", "A generic BIM component: kind component { from (a shape), ifcType } | clone { from, at } (follows the original) | unclone { from } (an independent copy of what it cloned).",
+        Tool("bim_component", "A generic BIM component: kind component { from (an object with a shape), ifcType } | clone { from, at, axis, angle } (follows the original) | unclone { from } (cut loose). Answers object, volume mm³, box.",
              obj({"kind": {"type": "string", "enum": ["component", "clone", "unclone"]}, "from": st, "ifcType": st, "at": v3, "axis": v3, "angle": num, "name": st}, ["from"]), bim_component, changes=True),
-        Tool("bim_reference", "An external reference: another file's objects shown here (part: one of its parts), updated when it changes.", obj({"path": st, "part": st, "name": st}, ["path"]), bim_reference, changes=True),
-        Tool("bim_panel_out", "Panels for the cutter: kind cut (each panel's flat outline with its tag) | sheet { width, height } (the cuts laid on a stock sheet).",
+        Tool("bim_reference", "An external reference: another file's objects shown here and updated with it, not copied. path: the full path of an .FCStd (or .ifc, .dxf); part: one of its parts. Answers reference, file, volume, box.", obj({"path": st, "part": st, "name": st}, ["path"]), bim_reference, changes=True),
+        Tool("bim_panel_out", "BIM panels for the cutter: kind cut (each panel's flat outline with its tag) | sheet { width, height } (the cuts on one stock sheet, not nested). export { format: \"dxf\" } writes them.",
              obj({"kind": {"type": "string", "enum": ["cut", "sheet"]}, "panels": arr, "width": num, "height": num, "name": st}, ["panels"]), bim_panel_out, changes=True),
-        Tool("bim_nest", "Nest flat pieces into a container face (a sheet): rotations [0, 90, …], margin mm; the pieces are moved into place.", obj({"container": st, "pieces": arr, "rotations": {"type": "array", "items": num}, "margin": num}, ["container", "pieces"]), bim_nest, changes=True),
-        Tool("bim_ifc_brep", "Toggle IFC export as B-rep (plain geometry) for BIM objects: on true/false, toggled when left out.", obj({"objects": arr, "on": {"type": "boolean"}}, ["objects"]), bim_ifc_brep, changes=True),
-        Tool("bim_views", "2D plan views of the levels (Create 2D Views): a section plane per level at cutHeight mm (1100 by default) and its 2D view; cutOnly for the cut faces alone.",
+        Tool("bim_nest", "Nest flat pieces into a sheet: container (one flat face), pieces (objects of exactly one flat face each, the same way up; not solids), rotations to try ([0, 90, 180, 270]). The pieces are moved. margin is not applied (FreeCAD 1.1's nester has none). Slow with many pieces: start with a few.", obj({"container": st, "pieces": arr, "rotations": {"type": "array", "items": num}, "margin": num}, ["container", "pieces"]), bim_nest, changes=True),
+        Tool("bim_ifc_brep", "Set whether BIM objects go to IFC as B-rep (plain faces) instead of extrusions: on true | false, toggled when left out.", obj({"objects": arr, "on": {"type": "boolean"}}, ["objects"]), bim_ifc_brep, changes=True),
+        Tool("bim_views", "2D plan views of levels (all storeys when left out): a section plane at cutHeight mm above each one's elevation (1100) and a flat Draft view of it; cutOnly: the cut faces alone. Slow on big levels.",
              obj({"levels": arr, "cutHeight": num, "cutOnly": {"type": "boolean"}}), bim_views, changes=True),
-        Tool("bim_image_plane", "An image plane: a picture (path) at width/height mm (one gives the other by the image's shape) and placement, to trace over.", obj({"path": st, "width": num, "height": num, "at": v3, "axis": v3, "angle": num, "name": st}, ["path"]), bim_image_plane, changes=True),
-        Tool("bim_library", "The objects library (FreeCAD's parts library, or folder): search words → files; insert a file's name or path to bring it in.", obj({"search": st, "folder": st, "insert": st}), bim_library, changes=True),
-        Tool("bim_reextrude", "Re-extrude a BIM object from one of its faces (face \"Wall.Face3\"): a new wall, panel or structure on that face with the same thickness; delete: false keeps the old.",
+        Tool("bim_image_plane", "An image plane to trace over: path (the image's full path), width and/or height mm (one gives the other), at, axis, angle. Seen in the window only.", obj({"path": st, "width": num, "height": num, "at": v3, "axis": v3, "angle": num, "name": st}, ["path"]), bim_image_plane, changes=True),
+        Tool("bim_library", "The objects library (the parts_library add-on, or folder): search words find files (answers found [{ name, path }]); insert: a found name or full path brings it into the document.", obj({"search": st, "folder": st, "insert": st}), bim_library, changes=True, reads={"insert": [None, ""]}),
+        Tool("bim_reextrude", "Re-extrude a BIM object from one of its faces (\"Wall.Face3\"): a new wall, panel or structure standing on that face, as deep as the old one, with its material and IFC type; the old one is deleted unless delete: false. Face numbers change when an object is rebuilt.",
              obj({"face": st, "delete": {"type": "boolean"}, "name": st}, ["face"]), bim_reextrude, changes=True),
-        Tool("bim_rewire", "Rebuild loose lines and wires as joined Draft wires (Rewire).", obj({"objects": arr}, ["objects"]), bim_rewire, changes=True),
-        Tool("bim_glue", "Glue shapes into one plain compound (BIM Glue); the originals go.", obj({"objects": arr, "name": st}, ["objects"]), bim_glue, changes=True),
-        Tool("bim_trash", "BIM's trash: action put { objects } (hidden in a Trash group, recoverable) | list | empty (deleted, with children nothing else uses).",
-             obj({"action": {"type": "string", "enum": ["put", "list", "empty"]}, "objects": arr}), bim_trash, changes=True),
-        Tool("bim_reorder", "Reorder a group's children: order [labels first], or sort: true by name.", obj({"group": st, "order": arr, "sort": {"type": "boolean"}}, ["group"]), bim_reorder, changes=True),
+        Tool("bim_rewire", "Rebuild loose lines and wires (objects) as joined wires, one per connected run; the originals are deleted.", obj({"objects": arr}, ["objects"]), bim_rewire, changes=True),
+        Tool("bim_glue", "Glue two or more objects' shapes into one plain compound (not fused, no longer parametric); the originals are deleted.", obj({"objects": arr, "name": st}, ["objects"]), bim_glue, changes=True),
+        Tool("bim_trash", "BIM's trash: action put { objects } (moved into a hidden Trash group, still in the document) | list | empty (deleted for good, with children nothing else uses).",
+             obj({"action": {"type": "string", "enum": ["put", "list", "empty"]}, "objects": arr}), bim_trash, changes=True, reads={"action": ["list"]}),
+        Tool("bim_reorder", "Reorder a group's, level's or building's children in the tree: order [labels to put first], or sort: true by label.", obj({"group": st, "order": arr, "sort": {"type": "boolean"}}, ["group"]), bim_reorder, changes=True),
     ]

@@ -662,12 +662,13 @@ def tools(s):
     def points_structure(a):
         o = picks.find(d(), a.get("points"), "points")
         if not o.isDerivedFrom("Points::Feature"):
-            raise bad(f"{o.Label} is not a point cloud.")
+            raise bad(f"points: {o.Label} is not a point cloud (points_import or points_sample makes one).")
         n = o.Points.CountPoints
         w = int(a.get("width") or 0)
         h = int(a.get("height") or (n // w if w else 0))
         if w <= 0 or w * h != n:
-            raise bad(f"width × height must be the point count ({n}): a scanner's rows × columns.")
+            fits = [k for k in range(2, min(n, 5000) + 1) if n % k == 0][:12]
+            raise bad(f"width × height must equal the point count ({n}), as a scanner's columns × rows; {w} × {h} is {w * h}." + (f" Widths that divide it: {', '.join(map(str, fits))} …" if fits else " This count has no such grid: only a cloud that kept its scan order has one."))
         st_ = d().addObject("Points::Structured", "Structured")
         st_.Points = o.Points
         st_.Width, st_.Height = w, h
@@ -960,7 +961,7 @@ def tools(s):
              obj({"body": st, "feature": st}), pd_tip, changes=True),
         Tool("scad_tidy", "OpenSCAD workbench's tree tools on objects: action color_code (all shapes when no objects: coloured by validity and kind — the reply's key) | explode (a top-level Part::Fuse / MultiFuse / Compound deleted, its inputs kept, shown and moved by its placement) | expand_placements (placements pushed down to the leaves) | tolerance { vertex, edge, face mm } (a copy with tolerances raised to at least these, never lowered; the original hidden) | remove_subtree (objects and everything under them that nothing else uses — deleted for good) | replace { parent, old, new } (parent uses new where it used old). Reply by action: coloured, exploded, expanded, made, removed, replaced.",
              obj({"action": {"type": "string", "enum": ["color_code", "explode", "expand_placements", "tolerance", "remove_subtree", "replace"]}, "objects": arr, "vertex": num, "edge": num, "face": num, "parent": st, "old": st, "new": st}, ["action"]), scad_tidy, changes=True),
-        Tool("points_structure", "Make a point cloud structured (rows × columns, as a scanner's grid): width, height.", obj({"points": st, "width": {"type": "integer"}, "height": {"type": "integer"}, "name": st}, ["points", "width"]), points_structure, changes=True),
+        Tool("points_structure", "A structured copy of a point cloud (Points::Structured: the points in their order laid out as a grid): points, width (per row), height (rows; count / width when left out). width × height must equal the count, so it suits a cloud still in scan order. The original stays.", obj({"points": st, "width": {"type": "integer"}, "height": {"type": "integer"}, "name": st}, ["points", "width"]), points_structure, changes=True),
         Tool("surface_polynomial", "A polynomial (quadric) surface fitted by least squares to a mesh's or point cloud's points, as a 3 × 3 Bézier patch over their extent (as Reverse Engineering's Polynomial Surface): from, name. For a patch that is one smooth bowl or saddle; split a scan with meshobj_segments or meshobj_trim first. Reply: surface, points, rms and max mm off the points (along the fit plane's normal).",
              obj({"from": st, "name": st}, ["from"]), surface_polynomial, changes=True),
         Tool("robot_tool", "Draw a tool shape on a robot's flange (Robot's Add tool shape): robot, tool (an object with a shape), at / axis + angle where on the shape the flange sits (ToolBase). Shown in the window only; it does not change the kinematics or the tool point (robot_new tool does).", obj({"robot": st, "tool": st, "at": v3, "axis": v3, "angle": num}, ["robot", "tool"]), robot_tool, changes=True),

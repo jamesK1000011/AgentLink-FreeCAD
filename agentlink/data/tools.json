@@ -132,7 +132,7 @@
   },
   "bim_level": {
    "group": "bim",
-   "description": "A level (building storey) holding objects, at elevation mm (height: floor to floor).",
+   "description": "A level (Building Storey) holding objects (labels), its floor at elevation mm; height: floor to floor. A container, not a lift: BIM components keep their own Z (build an upper storey on points with z); plain shapes put in it move up by the elevation. Then bim_building { levels }.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -223,7 +223,7 @@
   },
   "bim_pipe": {
    "group": "bim",
-   "description": "A pipe along points: diameter, wall (thickness) mm.",
+   "description": "A pipe swept along points [[x, y, z] …] mm: diameter (50), wall (thickness). Corners are sharp: bim_pipe_connector joins separate pipes with a bend. Answers diameter, length, box.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -332,7 +332,7 @@
   },
   "bim_equipment": {
    "group": "bim",
-   "description": "An object made BIM equipment (furniture, fixtures, appliances): object, ifc (e.g. Furniture, Sanitary Terminal), model, url, watts.",
+   "description": "An object made BIM equipment (furniture, fixtures): object (a shape), ifc (FreeCAD's spaced type name: Furniture, Sanitary Terminal; a wrong one is refused with near names), model, url, watts.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -404,15 +404,19 @@
      "prop": "Model"
     },
     "url": {
-     "prop": "Url"
+     "prop": "ProductURL"
     },
     "watts": {
      "prop": "EquipmentPower"
     },
     "ifc": {
-     "prop": "IfcType",
-     "when": "truthy",
-     "alone": true
+     "then": {
+      "call": "ifc_set",
+      "with": [
+       "$o",
+       "$a.ifc"
+      ]
+     }
     }
    },
    "answer": {
@@ -429,7 +433,7 @@
   },
   "bim_list": {
    "group": "bim",
-   "description": "The BIM objects: IFC type, what each holds, which wall each opening is in. Changes nothing.",
+   "description": "The BIM objects: each one's label, ifc type, holds (what a level, building or site contains), in (the wall a window or door is set into). Changes nothing.",
    "inputSchema": {
     "type": "object",
     "properties": {},
@@ -472,7 +476,7 @@
   },
   "bim_remove_shape": {
    "group": "bim_gaps",
-   "description": "Turn shape-only BIM objects into what they are (Remove Shape from BIM): a cubic shape becomes a structure with a profile and height.",
+   "description": "Remove Shape from BIM: structures and walls whose shape is a plain box are rebuilt from their sizes; the new object carries the old one's internal name as its label. Anything else is left as it was.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -502,6 +506,9 @@
    "args": {
     "objects": {
      "helper": "objs"
+    },
+    "=labels": {
+     "value": "$objects[].Label"
     }
    },
    "answer": {
@@ -515,14 +522,14 @@
      }
     ],
     "fields": {
-     "turned": "$objects[].Label",
-     "note": "Shape-only BIM objects rebuilt from what they are (a box as a structure's profile and height) where Arch can read them."
+     "turned": "$labels",
+     "note": "Box-shaped structures and walls among them were rebuilt from their length, width and height and now carry their old internal name as label (object_list shows them); the rest were left as they were."
     }
    }
   },
   "bim_structural_system": {
    "group": "bim_gaps",
-   "description": "A structural system: structures repeated on the axes' crossings (a column on every grid node).",
+   "description": "One structure copied to every crossing of two axis sets (bim_grid's \"Grid X\", \"Grid Y\"), or along one. Its own position is added to each crossing: make it at [0, 0, 0]. structures: one per call. Answers system, copies (0: the axes do not cross).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -614,11 +621,29 @@
       ]
      }
     }
-   }
+   },
+   "rules": [
+    {
+     "check": "count",
+     "of": "$structures",
+     "min": 1,
+     "max": 1,
+     "after": "structures",
+     "message": "structures: one structure per call (FreeCAD makes a separate system for each); call again for the next."
+    },
+    {
+     "check": "count",
+     "of": "$axes",
+     "min": 1,
+     "max": 2,
+     "after": "axes",
+     "message": "axes: one or two axis objects (bim_grid makes them: \"Grid X\", \"Grid Y\")."
+    }
+   ]
   },
   "bim_pipe_connector": {
    "group": "bim_gaps",
-   "description": "A pipe connector where two pipes meet (an elbow) or three (a tee); radius of the bend.",
+   "description": "A connector where the ends of two pipes meet (an elbow) or three (a tee): pipes (labels), radius of the bend mm (the pipe's diameter when left out). An error state on it means the ends do not meet.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -659,7 +684,7 @@
      "min": 2,
      "max": 3,
      "after": "pipes",
-     "message": "pipes: two (an elbow) or three (a tee) that meet."
+     "message": "pipes: two pipes (an elbow) or three (a tee) whose ends meet at one point; bim_pipe makes them."
     }
    ],
    "args": {
