@@ -125,6 +125,19 @@ def _longest(name, pairs):
 
 # Read-only tools that still show something (a view, a picture).
 SHOWN = ("view_", "measure", "clearance", "section", "body_check", "steps_render", "note_")
+# Read-only tools that open a panel or dialog all the same, and so bring up
+# their workbench (add-ons declare theirs as OPENS). Every other read leaves
+# the bench as the person has it.
+OPENS = ()
+
+
+def switches_bench(tool):
+    """Whether a call brings up its workbench: one that changes the document
+    (its tool's changes flag, after for_call, so a changing tool's read
+    action counts as a read) or opens a panel; a read never does."""
+    if tool is None:
+        return False
+    return bool(getattr(tool, "changes", False)) or bool(OPENS) and tool.name.startswith(OPENS)
 
 # What a tool's arguments and answer name: the objects to select.
 ARG_KEYS = ("body", "sketch", "object", "base", "target", "feature", "page", "op", "joint")
@@ -217,7 +230,9 @@ def declare(fam):
     """What an add-on's family says of its own tools, so no table here names
     them (read where families load: agentlink/families/__init__.py
     declared()). All optional, on the family module: SHOWN, names or name
-    prefixes of read-only tools that still show something; AREAS, {prefix:
+    prefixes of read-only tools that still show something; OPENS, those of
+    read-only tools that open a panel or dialog (they bring their bench up,
+    as changing tools do; other reads never switch it); AREAS, {prefix:
     name} for the Activity list ('slice' gives 'Slice › …'); WORKBENCHES,
     {tool or prefix: workbench} to bring up for its tools (the longest
     match wins, so an add-on's "part_check" can go to another bench than core's
@@ -225,9 +240,11 @@ def declare(fam):
     its tools, or command_for(name, args) -> command or None; NO_BUTTON,
     names or prefixes of its tools that light no button at all; PAGES,
     prefixes of its tools that work on a drawing page."""
-    global SHOWN
+    global SHOWN, OPENS
     shown = tuple(x for x in (getattr(fam, "SHOWN", ()) or ()) if isinstance(x, str) and x not in SHOWN)
     SHOWN = SHOWN + shown
+    opens = tuple(x for x in (getattr(fam, "OPENS", ()) or ()) if isinstance(x, str) and x and x not in OPENS)
+    OPENS = OPENS + opens
     for k, v in dict(getattr(fam, "AREAS", None) or {}).items():
         PREFIX_NAME.setdefault(k, v)
     for k, v in dict(getattr(fam, "WORKBENCHES", None) or {}).items():
@@ -501,17 +518,20 @@ class Echo:
             return
         if not enabled() or not self.live():
             return
-        shown = tool.changes or tool.name.startswith(SHOWN)
+        switch = switches_bench(tool)
+        shown = switch or tool.name.startswith(SHOWN)
         if not shown:
             return
         try:
             import FreeCADGui
 
-            act = FreeCADGui.activeWorkbench()
-            wb = bench_to_switch(tool.name, FreeCADGui.listWorkbenches(), act.name() if act else None)
-            if wb:
-                FreeCADGui.activateWorkbench(wb)
-            self._mode(tool.name, args)
+            wb = None
+            if switch:
+                act = FreeCADGui.activeWorkbench()
+                wb = bench_to_switch(tool.name, FreeCADGui.listWorkbenches(), act.name() if act else None)
+                if wb:
+                    FreeCADGui.activateWorkbench(wb)
+                self._mode(tool.name, args)
             caption(_describe(tool.name, args))
             # Which document the agent is on (K), when it is not the one in front.
             where = ""
@@ -521,7 +541,7 @@ class Echo:
             except Exception:
                 pass
             FreeCADGui.getMainWindow().statusBar().showMessage("Agent" + where + ": " + _describe(tool.name, args), 4000)
-            cmd = command_for(tool.name, args)
+            cmd = command_for(tool.name, args) if switch else None
             if cmd:
                 flash_command(cmd, settle=bool(wb))
             doc = self.s.doc
