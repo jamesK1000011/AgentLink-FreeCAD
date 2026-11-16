@@ -26,6 +26,22 @@ INFO = "Assemblies (FreeCAD's Assembly workbench): parts put together, one groun
 
 V = FreeCAD.Vector
 KINDS = {k.lower(): k for k in JointObject.JointTypes}
+
+
+def _view_provider(obj, kind):
+    """FreeCAD's own view provider for a joint made from here, as its
+    commands give one: without it a joint saved in the window comes back with
+    no proxy, and every recompute after reopening fails ("'int' object has no
+    attribute 'redrawJointPlacements'")."""
+    if not getattr(FreeCAD, "GuiUp", False) or getattr(obj, "ViewObject", None) is None:
+        return
+    try:
+        if kind == "grounded":
+            JointObject.ViewProviderGroundedJoint(obj.ViewObject)
+        else:
+            JointObject.ViewProviderJoint(obj.ViewObject)
+    except Exception:
+        pass
 # Joints between two elements; gears, belts and the like need more than this
 # family asks for yet.
 OFFERED = ["fixed", "revolute", "cylindrical", "slider", "ball", "distance", "parallel", "perpendicular", "angle"]
@@ -55,6 +71,14 @@ def _joints(asm):
     g = next((o for o in asm.Group if o.TypeId == "Assembly::JointGroup"), None)
     if g is None:
         g = asm.newObject("Assembly::JointGroup", "Joints")
+    # Joints made before their view provider was set (or by another tool
+    # without one) get FreeCAD's own, so the window's recompute works again.
+    for j in getattr(g, "Group", []):
+        vo = getattr(j, "ViewObject", None)
+        if vo is not None and getattr(FreeCAD, "GuiUp", False) and not hasattr(getattr(vo, "Proxy", None), "redrawJointPlacements") and hasattr(j, "JointType"):
+            _view_provider(j, "joint")
+        elif vo is not None and getattr(FreeCAD, "GuiUp", False) and getattr(vo, "Proxy", None) in (None, 0) and hasattr(j, "ObjectToGround"):
+            _view_provider(j, "grounded")
     return g
 
 
@@ -204,6 +228,7 @@ def tools(session):
         if ground:
             g = _joints(asm).newObject("App::FeaturePython", "GroundedJoint")
             JointObject.GroundedJoint(g, _part(asm, ground))
+            _view_provider(g, "grounded")
         doc().recompute()
         return {"assembly": asm.Label, "parts": [o.Label for o in parts], "grounded": [o.Label for o in _grounded(asm)],
                 "next": "asm_joint between the parts' faces and edges; each joint solves the assembly."}
@@ -231,6 +256,7 @@ def tools(session):
         if want and not have:
             g = jg.newObject("App::FeaturePython", "GroundedJoint")
             JointObject.GroundedJoint(g, o)
+            _view_provider(g, "grounded")
         if not want:
             for j in have:
                 doc().removeObject(j.Name)
@@ -260,6 +286,7 @@ def tools(session):
         before = {o.Name: o.Placement.copy() for o in _parts(asm)}
         j = _joints(asm).newObject("App::FeaturePython", a.get("name") or KINDS[kind])
         JointObject.Joint(j, JointObject.JointTypes.index(KINDS[kind]))
+        _view_provider(j, "joint")
         if a.get("name"):
             j.Label = a["name"]
         if kind == "distance":
