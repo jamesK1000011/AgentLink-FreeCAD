@@ -198,6 +198,9 @@ def _target(t):
         return "tab", f"the {name} tab"
     if "item" in t:
         return "item", _widget_name(t["item"]) or "a row"
+    if "menu_item" in t:
+        name = t["menu_item"] if isinstance(t["menu_item"], str) and t["menu_item"].strip() else "an item"
+        return "menu_item", f"{name[:40]} in the menu"
     if "widget" in t:
         return "widget", _widget_name(t["widget"])
     return "window", "the window"

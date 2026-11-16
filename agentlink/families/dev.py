@@ -17,7 +17,7 @@ from ..tools import obj
 from .unattended import installed_names, mod_dir
 
 GROUP = "dev"
-INFO = "For add-on developers: an installed add-on's own test suite run in a separate FreeCAD process (addon_test); mouse and keyboard input to the window's own widgets for GUI checks (gui_input)."
+INFO = "For add-on developers: an installed add-on's own test suite run in a separate FreeCAD process (addon_test); mouse and keyboard input to the window's own widgets for GUI checks (gui_input), and closing a menu or dialog that holds the window (gui_unstick)."
 
 OWN_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -88,7 +88,11 @@ def tools(s):
         qt = types.SimpleNamespace(QtCore=QtCore, QtGui=QtGui, QtWidgets=QtWidgets)
         shot_dir = os.path.join(s.out_dir, "gui_input")
         run = gi.Run(qt, FreeCADGui, FreeCAD.Vector, gui_link.modal_info, report_watch.take, grab_window,
-                     lambda body: gui_link.answer_now("gui_input", body), shot_dir)
+                     lambda body: gui_link.answer_now("gui_input", body), shot_dir,
+                     ticker=gui_link.ticker, seen=gui_link.front_seen)
+        # How long the call may take: past it, the link answers it "busy" from
+        # its socket thread (a step's menu or dialog that nothing could see).
+        gui_link.expect("gui_input", sum(st.get("ms", 0) for st in steps) / 1000.0 + gi.BUSY_AFTER)
         # Its shots noted as the call's outputs (agentlink/outputs.py).
         for st in steps:
             if st.get("do") == "shot":
@@ -103,6 +107,17 @@ def tools(s):
                 pass
         return out
 
+    def gui_unstick(a):
+        from .. import gui_link
+
+        return gui_link.unstick(all_=bool(a.get("all", False)))
+
+    # Answered on the link's socket thread: it works while a menu's or a
+    # dialog's own event loop holds the GUI thread (agentlink/hooks.py).
+    from .. import hooks
+
+    hooks.register_thread_tool("gui_unstick")
+
     st = {"type": "string"}
     return [
         Tool("gui_input",
@@ -116,10 +131,15 @@ def tools(s):
              "Targets T: {view: [x, y]} logical pixels from the active 3D view's top-left; {view_world: [x, y, z]} a model point projected there; "
              "{widget: {objectName?, text?, toolTip?, class?, under?: dock or dialog title}, at?: [dx, dy] from its top-left (centre by default)} "
              "the first visible match; {tab: {text, under?}}; {item: {text, under?, column?}, check?: true} a list, tree or table row "
-             "(check: its box); {window: [x, y]} main-window pixels. While a dialog or menu is in front only targets inside it are taken. "
-             "Answers per step what it hit (class, name, text, where), a dialog or menu it opened (the answer comes at once while it "
-             "holds the window: dialog_answer or more gui_input inside it), new Report problems. Shortcuts are not triggered (cmd_run).",
+             "(check: its box); {menu_item: \"text\"} an item of the open menu; {window: [x, y]} main-window pixels. While a dialog or menu is in front only targets inside it are taken. "
+             "Answers per step what it hit (class, name, text, where), a dialog or menu it opened (the steps after it still run, inside it), "
+             "open: what still holds the window at the end (close it: Escape, dialog_answer or gui_unstick), new Report problems. Shortcuts are not triggered (cmd_run).",
              obj({"steps": {"type": "array", "items": {"type": "object"}}, "inline": {"type": "boolean"}}, ["steps"]), gui_input),
+        Tool("gui_unstick",
+             "Close the menu, drop-down list or dialog that holds the FreeCAD window (Escape's effect: a menu closes, a dialog is cancelled), "
+             "even while it holds every other call. all: true closes each one in front, dialogs under a menu too. Answers what was closed and "
+             "what is still open. Window only.",
+             obj({"all": {"type": "boolean"}}), gui_unstick),
         Tool("addon_test",
              "An installed add-on's own tests (its tests/ folder) run in the background in a separate FreeCAD command-line process, never this "
              "FreeCAD: documents, the window and settings are untouched, and the tests get a fresh ~/AgentLink. addon starts a run: its folder "

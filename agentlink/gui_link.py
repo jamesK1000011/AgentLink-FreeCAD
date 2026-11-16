@@ -26,6 +26,10 @@ PORT = 7318
 # own: refused when the person has another in front (K), rather than acting
 # on theirs.
 FRONT_TOOLS = {"cmd_run", "menu_run", "view_snapshot"}
+# A call not taken off the inbox this long while a menu or dialog holds the
+# window (or past the call in hand's own time) is answered "busy" from the
+# socket thread, not left waiting for ever.
+BUSY_AFTER = 10.0
 PINNED_FREE = {"doc_open", "doc_new", "doc_switch", "session_state", "tool_groups", "guide_read", "app_recover", "dialog_answer", "usage_report", "doc_close", "report_read"}
 
 
@@ -124,8 +128,164 @@ def popup_info():
         items = [a.text().replace("&", "") for a in w.actions() if a.text() and a.isVisible()]
     except Exception:
         items = []
-    return {"class": w.metaObject().className(), "title": "a menu", "text": "items: " + ", ".join(items[:20]) + " — gui_input { steps: [{ key: \"Escape\" }] } closes it",
+    return {"class": w.metaObject().className(), "title": "a menu", "text": "items: " + ", ".join(items[:20]) + " — gui_unstick, or gui_input { steps: [{ key: \"Escape\" }] }, closes it",
             "buttons": [], "widget": w}
+
+
+# ---- queued calls onto the GUI thread, from any thread ----
+# A queued signal is a posted event: Qt delivers it inside whatever event
+# loop runs, a menu's or a dialog's nested one included, and with none of
+# Agent Link's own timers needed (a timer whose handler is on the stack is
+# not fired again until it returns).
+
+_POSTER = [None]
+
+
+def make_poster():
+    """An object living on the GUI thread (make it there) whose post(fn)
+    runs fn there through a queued signal; safe to call from any thread."""
+    from PySide import QtCore
+
+    class Poster(QtCore.QObject):
+        go = QtCore.Signal(object)
+
+        def __init__(self):
+            super().__init__()
+            self.go.connect(self._run, QtCore.Qt.QueuedConnection)
+
+        def _run(self, fn):
+            try:
+                fn()
+            except Exception as e:  # noqa: BLE001
+                try:
+                    FreeCAD.Console.PrintLog(f"Agent Link: a queued call failed: {type(e).__name__}: {e}\n")
+                except Exception:
+                    pass
+
+        def post(self, fn):
+            self.go.emit(fn)
+
+    return Poster()
+
+
+def poster():
+    """The GUI thread's poster: the link's, else one made now (call it on
+    the GUI thread the first time)."""
+    import agentlink_state
+
+    link = getattr(agentlink_state, "link", None)
+    p = getattr(link, "_poster", None) if link is not None else None
+    if p is None:
+        if _POSTER[0] is None:
+            _POSTER[0] = make_poster()
+        p = _POSTER[0]
+    return p
+
+
+def ticker(fn, ms=100):
+    """fn called on the GUI thread every ms through queued calls from a
+    thread of its own, until the function it answers is called (gui_input's
+    watch: it runs inside a step's nested loop even where timers do not)."""
+    p = poster()
+    stop = threading.Event()
+
+    def beat():
+        while not stop.wait(ms / 1000.0):
+            p.post(fn)
+
+    threading.Thread(target=beat, name="agentlink-gui-ticker", daemon=True).start()
+    return stop.set
+
+
+def front_seen(info):
+    """What the GUI thread last saw open in front (gui_input's steps, the
+    heartbeat), for the socket thread's busy answers."""
+    import agentlink_state
+
+    link = getattr(agentlink_state, "link", None)
+    if link is not None:
+        link.front = info
+
+
+def expect(tool, seconds):
+    """The call in hand (tool, not in a batch) should be done within
+    seconds: past that, unanswered, the link answers it busy from the
+    socket thread (a step's menu or dialog that holds the window)."""
+    import agentlink_state
+
+    link = getattr(agentlink_state, "link", None)
+    if link is not None and hasattr(link, "expect"):
+        link.expect(tool, seconds)
+
+
+def close_front(all_=False):
+    """On the GUI thread: the menus (and drop-down lists) in front closed,
+    else the modal dialog in front cancelled; all_: every one in front.
+    { closed: [...], open: what is left }."""
+    from . import gui_input as gi
+
+    QtGui, QtWidgets = _qt()
+    app = QtWidgets.QApplication.instance()
+    closed = []
+    for _ in range(12):
+        p = app.activePopupWidget()
+        if p is not None:
+            closed.append(gi.describe_popup(p))
+            p.close()
+            if app.activePopupWidget() is p:
+                p.hide()
+            continue
+        if closed and not all_:
+            break
+        m = app.activeModalWidget()
+        if m is None:
+            break
+        closed.append({"kind": "dialog", "title": m.windowTitle()})
+        if hasattr(m, "reject"):
+            m.reject()
+        else:
+            m.close()
+        if not all_:
+            break
+    left = gi.describe_front(app, modal_info)
+    front_seen(left)
+    return {"closed": closed, "open": left}
+
+
+def unstick(all_=False, wait=3.0):
+    """gui_unstick, on the socket thread: close_front run on the GUI thread
+    through a queued call (a nested loop delivers it), waited for."""
+    import agentlink_state
+
+    from .protocol import ToolError
+
+    link = getattr(agentlink_state, "link", None)
+    p = getattr(link, "_poster", None) if link is not None else None
+    if p is None:
+        raise ToolError("unavailable", "gui_unstick closes what holds the FreeCAD window, through the window's link (Agent Link > Start Link); this FreeCAD has none.")
+    done, box = threading.Event(), {}
+
+    def on_gui():
+        try:
+            box["out"] = close_front(all_)
+        except Exception as e:  # noqa: BLE001
+            box["err"] = f"{type(e).__name__}: {e}"
+        finally:
+            done.set()
+
+    p.post(on_gui)
+    if not done.wait(wait):
+        raise ToolError("busy", f"The window took no queued call in {wait:g} s: something other than a menu or dialog holds it. app_force_restart starts it again.")
+    if "err" in box:
+        raise ToolError("failed", "gui_unstick: " + box["err"])
+    return box["out"]
+
+
+class _Line(str):
+    """A line read off a connection, with its ticket: queued, taken (by the
+    GUI thread) or busy (answered from the socket thread instead)."""
+
+    ticket = None
 
 
 def answer_now(tool, body):
@@ -302,6 +462,9 @@ class Link:
         self._pending, self._pending_lock = [], threading.Lock()
         # The calls in hand, innermost last: { id, name, f, answered }.
         self.calls = []
+        # What the GUI thread last saw in front (gui_input, the heartbeat).
+        self.front = None
+        self._poster = None
 
     def _ready(self):
         """The session, made at the first call (so a link turned on as the
@@ -365,6 +528,13 @@ class Link:
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self._drain)
         self.timer.start(30)
+        # Each call read also pokes the GUI thread through a queued call: it
+        # is taken inside a menu's or dialog's nested loop even where no
+        # timer of ours fires there.
+        try:
+            self._poster = make_poster()
+        except Exception:
+            self._poster = None
         # Qt never fires a timer again while its own handler is still on the
         # stack: a call that opened a modal dialog sits inside _drain until
         # the dialog closes, so _drain cannot take the dialog_answer that
@@ -405,6 +575,28 @@ class Link:
                     keep.log_watchdog({"event": "dialog", "title": d["title"], "pressed": act[1]})
             else:
                 self._dialog = None
+            # A menu or drop-down list in front (a popup, which no modal
+            # check sees): in the heartbeat too, with how long it has been
+            # open, so the supervisor can tell a call held by it.
+            pop = None
+            try:
+                from . import gui_input as gi
+
+                QtGui, QtWidgets = _qt()
+                app = QtWidgets.QApplication.instance()
+                self.front = gi.describe_front(app, modal_info)
+                w = app.activePopupWidget() if app is not None else None
+                if w is not None:
+                    pop = {"class": w.metaObject().className(), **gi.describe_popup(w)}
+            except Exception:
+                pass
+            pkey = (pop["class"], pop.get("title"), tuple(pop.get("items") or ())) if pop else None
+            if pkey is None:
+                self._popup = None
+            elif getattr(self, "_popup", None) is None or self._popup[0] != pkey:
+                self._popup = (pkey, time.time())
+            if pop:
+                pop["since"] = self._popup[1]
             # A heavy job held for the person's go (N): said in the status bar.
             q = keep._load(keep.path("queue.json"), {}) or {}
             if q.get("held") and q.get("notice"):
@@ -419,6 +611,7 @@ class Link:
                 "pid": os.getpid(), "t": time.time(), "pairing": 1, "app": _bundle(), "freecad": ".".join(FreeCAD.Version()[:3]), "port": self.port,
                 "docs": docs, "busy": self.busy, "pinned": getattr(self.session, "doc", None).Name if self.session and getattr(self.session, "doc", None) else None,
                 "dialog": {k: v for k, v in d.items() if k != "widget"} if d else None,
+                "popup": pop,
             })
         except Exception:
             pass
@@ -503,7 +696,11 @@ class Link:
                     break
                 if self._thread_call(line, f):
                     continue  # answered on a thread of its own
+                line = _Line(line)
+                line.ticket = {"state": "queued", "t": time.time()}
                 self.inbox.put((line, f, conn))
+                self._poke()
+                self._arm_busy(line, f)
                 continue
             else:
                 return
@@ -527,6 +724,132 @@ class Link:
         if lock is None:
             lock = self._write_lock = threading.Lock()
         return lock
+
+    # ---- the GUI thread poked, and calls answered "busy" when it cannot take them ----
+
+    def _poke(self):
+        p = getattr(self, "_poster", None)
+        if p is not None:
+            try:
+                p.post(self._poked)
+            except Exception:
+                pass
+
+    def _poked(self):
+        """On the GUI thread, from a queued call: the inbox drained as the
+        timers would (nested while a call is in hand inside a loop)."""
+        if self.inbox.empty():
+            return
+        self._drain()
+
+    def _claims(self):
+        lock = getattr(self, "_claim_lock", None)
+        if lock is None:
+            lock = self._claim_lock = threading.Lock()
+        return lock
+
+    def _claim(self, line, state="taken"):
+        """True when this thread may answer line (moving its ticket on from
+        queued); a line with no ticket is always ours."""
+        t = getattr(line, "ticket", None)
+        if t is None:
+            return True
+        with self._claims():
+            if t["state"] != "queued":
+                return False
+            t["state"] = state
+            return True
+
+    def _stuck(self):
+        """Why the GUI thread cannot take calls now, in words, or None when
+        it is only busy with a long call (that one is waited for)."""
+        from . import gui_input as gi
+
+        calls = list(getattr(self, "calls", []) or [])
+        front = getattr(self, "front", None)
+        if front or any(c.get("answered") for c in calls):
+            return gi.front_words(front)
+        now = time.time()
+        if any(c.get("deadline") and now > c["deadline"] and not c.get("finished") for c in calls):
+            return gi.front_words(front)
+        return None
+
+    @staticmethod
+    def busy_reply(mid, why, ran=False):
+        msg = (f"FreeCAD's window has a menu or dialog open: {why}. Its own event loop holds the window, so "
+               + ("this call's steps after the one that opened it may not have run" if ran else "this call was not run")
+               + ". gui_unstick closes it (or gui_input { steps: [{ key: \"Escape\" }] }); app_force_restart if that does not help.")
+        text = compact({"error": {"code": "busy", "message": msg}})
+        return {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}}
+
+    def _write(self, f, reply):
+        with self._writes():
+            try:
+                f.write(compact(reply) + "\n")
+                f.flush()
+                return True
+            except (OSError, ValueError):
+                return False
+
+    def _arm_busy(self, line, f, after=None, tick=0.25):
+        """A thread that answers line busy if, BUSY_AFTER s on, the GUI
+        thread has not taken it and is held by a menu or dialog."""
+        try:
+            mid = json.loads(line).get("id")
+        except (ValueError, AttributeError):
+            return None
+        if mid is None:
+            return None
+        after = BUSY_AFTER if after is None else after
+
+        def watch():
+            t0 = time.time()
+            while True:
+                time.sleep(tick)
+                if line.ticket["state"] != "queued" or getattr(self, "going", False):
+                    return
+                if time.time() - t0 < after:
+                    continue
+                why = self._stuck()
+                if why is not None and self._claim(line, "busy"):
+                    self._write(f, self.busy_reply(mid, why))
+                    return
+
+        th = threading.Thread(target=watch, name="agentlink-busy", daemon=True)
+        th.start()
+        return th
+
+    def expect(self, tool, seconds, tick=0.25):
+        """The call in hand (tool) has seconds: past them, not answered yet,
+        it is answered busy from a thread of its own (its steps' menu or
+        dialog holds the window and nothing in it answered)."""
+        call = self.calls[-1] if self.calls else None
+        if call is None or call["name"] not in (tool, "batch"):
+            return None
+        call["deadline"] = time.time() + seconds
+
+        def watch():
+            while not call.get("finished"):
+                time.sleep(tick)
+                if call.get("finished") or call["answered"]:
+                    return
+                if time.time() > call["deadline"]:
+                    from . import gui_input as gi
+
+                    with self._writes():
+                        if call["answered"] or call.get("finished"):
+                            return
+                        try:
+                            call["f"].write(compact(self.busy_reply(call["id"], gi.front_words(getattr(self, "front", None)), ran=True)) + "\n")
+                            call["f"].flush()
+                        except (OSError, ValueError):
+                            pass
+                        call["answered"] = True
+                    return
+
+        th = threading.Thread(target=watch, name="agentlink-busy-call", daemon=True)
+        th.start()
+        return th
 
     def _thread_call(self, line, f):
         """A socket-thread tool (hooks.THREAD_TOOLS, such as a long poll):
@@ -618,8 +941,15 @@ class Link:
         """Send the innermost call's answer now (answer_now above); its
         own reply, when it returns, is then dropped."""
         call = self.calls[-1] if self.calls else None
-        if call is None or call["answered"] or call["name"] != tool:
+        if call is None or call["answered"]:
             return False
+        if call["name"] != tool:
+            # Inside a batch (a lean client's way to gui_input): the batch is
+            # answered with what ran so far and this call's answer, and stops
+            # there (the calls after it are not run).
+            body = self._batch_body(call, tool, body)
+            if body is None:
+                return False
         reply = {"jsonrpc": "2.0", "id": call["id"], "result": {"content": [{"type": "text", "text": compact(body)}]}}
         try:
             from . import report_watch
@@ -628,17 +958,36 @@ class Link:
             add_report(reply, report_watch.take())
         except Exception:
             pass
-        try:
-            call["f"].write(compact(reply) + "\n")
-            call["f"].flush()
-        except OSError:
-            return False
-        call["answered"] = True
+        with self._writes():  # the socket thread may answer it busy meanwhile
+            if call["answered"]:
+                return False
+            try:
+                call["f"].write(compact(reply) + "\n")
+                call["f"].flush()
+            except OSError:
+                return False
+            call["answered"] = True
         return True
+
+    def _batch_body(self, call, tool, body):
+        """A batch's early answer, from the batch in hand (session.batch_now:
+        its results so far, the index and count) with tool running in it."""
+        bn = getattr(getattr(self, "session", None), "batch_now", None)
+        if call["name"] != "batch" or not isinstance(bn, dict) or bn.get("answered") or bn.get("tool") != tool:
+            return None
+        i, n = bn.get("i", 0), bn.get("n", 0)
+        out = {"results": list(bn.get("results") or []) + [{"tool": tool, "ok": True, "result": body}], "ran": i + 1}
+        if n - i - 1 > 0:
+            out["not_run"] = n - i - 1
+            out["note"] = f"Answered while what {tool} opened holds the window: the {n - i - 1} call(s) after it in the batch were not run."
+        bn["answered"] = True
+        return out
 
     def _blocked(self, line, f, d):
         """A call that came while a modal dialog holds the window: answered
         at once, not run inside the dialog's loop."""
+        if not self._claim(line):
+            return  # answered busy already
         try:
             mid = json.loads(line).get("id")
         except ValueError:
@@ -647,11 +996,7 @@ class Link:
                "dialog_answer { button } presses one of its buttons: read it and press what the job needs (Cancel backs out); app_force_restart if the window is stuck. This call was not run.") if d else \
             "The window is busy with a call that is waiting on a dialog: this call was not run."
         text = compact({"error": {"code": "invalid_state", "message": msg}})
-        try:
-            f.write(compact({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}}) + "\n")
-            f.flush()
-        except OSError:
-            pass
+        self._write(f, {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
 
     def _drain_nested(self):
         """Only while _drain is on the stack (a call in hand inside a dialog's
@@ -660,7 +1005,10 @@ class Link:
             self._drain(nested=True)
 
     def _drain(self, nested=False):
-        if nested:
+        # Entered again while on the stack (a queued poke or the timer inside
+        # a call's nested loop): handled as nested, and the outer entry keeps
+        # the flag until it returns.
+        if nested or getattr(self, "_draining", False):
             self._handle_inbox()
             return
         self._draining = True
@@ -675,8 +1023,13 @@ class Link:
         d = modal_info()
         # A menu opened by a call answered early (gui_input) holds that call
         # as a dialog would: the same handling, or every call would wait.
-        if d is None and any(c["answered"] for c in self.calls):
+        # So does a menu open while a call is in hand: that call is inside the
+        # menu's loop (a batch's gui_input, a command's menu), and a call
+        # that waited for it would wait for ever.
+        if d is None and (any(c["answered"] for c in self.calls) or self.in_call):
             d = popup_info()
+        if d is not None and d.get("class") != "TaskPanel":
+            self.front = {"kind": "menu" if d.get("title") == "a menu" else "dialog", "title": d.get("title"), **({"buttons": d["buttons"]} if d.get("buttons") else {})}
         # While documents reopen after a restart, calls wait — except with a
         # dialog up: FreeCAD's Document Recovery comes up at start and holds
         # the reopening, so the dialog_answer that clears it must not wait
@@ -731,6 +1084,8 @@ class Link:
             except OSError:
                 pass
             return
+        if not self._claim(line):
+            return  # answered busy from the socket thread while it waited
         prev = (self.busy, self.in_call)
         try:
             self._ready()
@@ -743,8 +1098,7 @@ class Link:
                 except ValueError:
                     mid = None
                 text = compact({"error": {"code": "invalid_state", "message": f"{gone} was closed — doc_open it again, or doc_switch to another open document (doc_new for a fresh one). This call was not run."}})
-                f.write(compact({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}}) + "\n")
-                f.flush()
+                self._write(f, {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
                 return
             if self.session:
                 self.session.closed_doc = None
@@ -757,8 +1111,7 @@ class Link:
                     except ValueError:
                         mid = None
                     text = compact({"error": {"code": "invalid_state", "message": f"{name} acts on the window's front document, and the person has {front.Label} in front while the agent is on {mine.Label}: doc_switch {{ document: \"{mine.Label}\", front: true }} brings the agent's back (their view moves), or ask them. This call was not run."}})
-                    f.write(compact({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}}) + "\n")
-                    f.flush()
+                    self._write(f, {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
                     return
             if name is not None and name != "dialog_answer":
                 self.busy, self.in_call = name, True
@@ -768,6 +1121,7 @@ class Link:
             try:
                 reply = self.server.handle(msg)
             finally:
+                call["finished"] = True
                 self.busy, self.in_call = prev
                 self.calls = [c for c in self.calls if c is not call]
             if call["answered"]:

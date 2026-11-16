@@ -775,10 +775,29 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             except Exception:
                 return None
 
+        # What has run, for an answer sent from inside a call's nested loop
+        # (gui_link.Link.answer_now: a gui_input step's menu or dialog).
+        # Kept and put back: another batch can run inside this one's call
+        # while a menu's or dialog's loop holds it.
+        prev = getattr(s, "batch_now", None)
+        mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False}
+        try:
+            return _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine)
+        finally:
+            s.batch_now = prev
+
+    def _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine):
+        import json as _json
+
         for i, c in enumerate(calls):
             doc = s.doc
             u0 = undo_count(doc) or 0
+            mine.update(i=i, tool=c["tool"])
+            s.batch_now = mine
             r = server.call({"name": c["tool"], "arguments": c["arguments"]})
+            if mine.get("answered"):
+                # Answered already, from inside this call: the batch stops here.
+                return {"results": results, "answered_early": True}
 
             body = _json.loads(r["content"][0]["text"])
             ok = not r.get("isError")
