@@ -77,7 +77,14 @@ def fuse_dropped(base_shape, tools, res):
     return lost
 
 
-def report(session, o, tool, extra=None):
+def report(session, o, tool, extra=None, check=True):
+    """A made body's answer: its stats and whether it is sound. check
+    False (a loft out of time) leaves the soundness check to body_check
+    and says so."""
+    if not check:
+        out = picks.finish(session, tool, lambda: {"body": o.Label, **geo.stats(o.Shape), "sound": None}, recompute=False, extra=extra)
+        out["unchecked"] = f"Not checked for soundness: the call was out of time ({len(o.Shape.Faces):,} faces). body_check {o.Label} checks it (it is timed and given its own deadline)."
+        return out
     s = geo.soundness(o.Shape)
     out = picks.finish(session, tool, lambda: {"body": o.Label, **geo.stats(o.Shape), "sound": s["ok"]}, recompute=False, extra=extra)
     if not s["ok"]:
@@ -532,18 +539,21 @@ def tools(session):
     prof = {"description": "A sketch or wire's name, a face or edge (\"Box.Face6\"), { points: [[x,y,z] …], closed: true, smooth }, { points_file: \"<file>.json\"|\".csv\", key } (points read from a file in the session's folder, not sent in the call) or { circle: { center, radius, normal } }."}
     common_in = {"into": body, "op": {"type": "string", "enum": ["new", "fuse", "cut", "common"]}, "name": {"type": "string"}}
 
-    def finish(result, a, tool, consumed=()):
-        """A made solid: a new body, or fused into / cut from / common with `into`."""
+    def finish(result, a, tool, consumed=(), late=None):
+        """A made solid: a new body, or fused into / cut from / common with
+        `into`. late(): whether the call is out of time (a loft): then the
+        coplanar faces are left unmerged and the soundness check is left
+        to body_check, said in the answer."""
         op = a.get("op") or ("fuse" if a.get("into") else "new")
         if op == "new":
             o = doc().addObject("Part::Feature", "Body")
             o.Label = s.unique(a.get("name") or tool.split("_")[1].capitalize())
-            o.Shape = geo.clean(result)
+            o.Shape = result if late and late() else geo.clean(result)
             for c in consumed:
                 if c is not None and hasattr(c, "Visibility"):
                     c.Visibility = False
             doc().recompute()
-            return report(s, o, tool)
+            return report(s, o, tool, check=not (late and late()))
         if not a.get("into"):
             raise ToolError("invalid_input", f"op {op}: into names the body it acts on.")
         tgt = picks.solid_body(s, a["into"])
@@ -945,19 +955,36 @@ def tools(session):
         import time as _time
 
         t0 = _time.monotonic()
+        # The time the call has: LOFT_BUDGET, or more where the heavy gate
+        # let a loft it estimated long run with a longer deadline.
+        budget = max(LOFT_BUDGET, float(getattr(s, "call_budget", 0) or 0))
+
+        def late():
+            return _time.monotonic() - t0 > budget
+
+        def out_of_time(what):
+            return f"out of time: {what} took {_time.monotonic() - t0:.0f} s of the {budget:.0f} s a loft has (a window that stops answering is taken for hung)"
 
         def make(ws, rl, d):
             """(result, why not kept) — why None when it is fit to keep."""
-            if route_tries and _time.monotonic() - t0 > LOFT_BUDGET:
-                return None, f"out of time: the tries so far took {_time.monotonic() - t0:.0f} s (a window that stops answering is taken for hung)"
+            if route_tries and late():
+                return None, out_of_time("the tries so far")
             route_tries.append(d)
             try:
                 r = Part.makeLoft(ws, solid, rl, loop, d)
             except Exception as e:
                 return None, f"OCC could not build it ({e})"
+            if late():
+                # OCC's loft alone used the time: checking it (validity on
+                # thousands of faces) would run past the deadline.
+                return None, out_of_time(f"OCC's loft ({len(r.Faces):,} faces)")
             if solid and r.Solids and r.Volume < 0:
                 r.reverse()
             why = loft_problem(r, ws, solid)
+            if why is None and late():
+                return r, None
+            if why and late():
+                return None, out_of_time("the loft and its check") + f"; it was not fit to keep: {why}"
             if why and not why.startswith("profiles twist"):
                 try:
                     r2 = r.copy()
@@ -1049,21 +1076,30 @@ def tools(session):
                 hint += (" Tried maxDegree " + ", ".join(str(d) for d in [deg] + [d for d in (3, 2) if d < deg]) + " and the profiles rebuilt alike." if not ruled else "")
                 hint += (" Lofted span by span with those spans ruled, it was not sound either." if segments is not False and spans and not ruled and not loop and len(wires) >= 3 else "")
                 hint += " ruled: true for straight runs; more profiles where the shape turns quickly; or loft the bulging span's neighbours apart and part_boolean fuse."
+            elif why and why.startswith("out of time"):
+                k = max(2, len(wires) // 2 + 1)
+                pts = max(8, int(n * 0.7))
+                hint = (f" Lighter: split it into lofts of about {k} profiles (each run starting on the profile the last ended on) and part_boolean fuse them; "
+                        f"or fewer points a profile (samples: {pts}); or fewer profiles where the shape changes slowly.")
             else:
                 hint = " Each profile closed (or each open), in order along the loft, none crossing another."
             raise ToolError("failed", f"The loft is not kept: {why}.{hint} Nothing was added.")
         extra = {}
         if aligned:
-            extra["aligned"] = aligned
+            # One line a profile ran to 51 lines: a count and the first few.
+            extra["aligned"] = aligned if len(aligned) <= 4 else aligned[:3] + [f"… and {len(aligned) - 3} more profiles lined up alike ({len(aligned)} in all)"]
         if route:
             extra["route"] = route
         if not ruled:
             extra["maxDegree"] = used_deg
-        st = strays(res, given)
+        st = None if late() else strays(res, given)
         if st:
-            st["profile"] = f"profiles.{st['profile']}"
+            if st.get("profile") is None:
+                st.pop("profile", None)
+            else:
+                st["profile"] = f"profiles.{st['profile']}"
             extra["strays"] = st
-        out = finish(res, a, "part_loft", srcs)
+        out = finish(res, a, "part_loft", srcs, late=late)
         if extra and isinstance(out, dict):
             out.update(extra)
         return out
@@ -1202,7 +1238,7 @@ def tools(session):
             "A solid through two or more profiles in order (each a sketch, face, wire, { points }, { points_file, key } or { circle }; { points, smooth: true } is a B-spline through the points), or all at once from profiles_file (a .json list of point lists, or a .csv; key picks a list inside; smooth: true for B-splines): many sections read from a file, not sent in the call. "
             "The profiles are lined up first (each run the same way round, each seam at the point nearest the one before: aligned says what changed). ruled: true is straight between them: each profile is made a polygon of the same number of points (spread by arc length, seams lined up; samples sets it; polygons of one corner count keep theirs), so it always pairs up, and route says so. "
             "Smooth (the default): if OCC refuses the profiles as given, they are rebuilt as B-splines through the same points with one set of knots; if the loft bulges more than 15% beyond its profiles (read from the surface, not its control points), it is tried again at maxDegree 3 then 2 (maxDegree: 1–8, 5 by default; lower is stiffer); if it still bulges, it is lofted span by span with the bulging spans ruled and sewn into one, kept only if sound (segments: false turns that off). route says what was done; a refusal names the spans that bulge (profiles i–i+1, by how much) so ruled or more profiles can go there. "
-            "Two profiles that OCC will not loft smooth are ruled between matching polygons (straight between two anyway). closed: back to the first. The answer gives strays: how far the result lies from the points it was made from at most and on average, and the profile. Refused, with the reason, when invalid, open or inside out. op / into as part_extrude.",
+            "Two profiles that OCC will not loft smooth are ruled between matching polygons (straight between two anyway). closed: back to the first. The answer gives strays: how far the result lies from the points it was made from at most and on average, and the profile. Refused, with the reason, when invalid, open or inside out. A loft of many profiles and points is heavy (its time grows about as the cube of its faces: 91 profiles of 36 points ruled 10 s, of 80 points over 2 min): it is estimated first from profiles x points (ruled and smooth timed apart) and, past a minute, refused once with the estimate and how to split it (runs of profiles fused, or fewer points: samples) — the same call again runs it, the watchdog waiting its estimate times three. Past its time (60 s, or twice an estimate it was let run on) it stops — between tries, after OCC's loft, before the checks — and says so; a kept loft made late is not soundness-checked (unchecked says so: body_check it). aligned gives the first few changes and a count. op / into as part_extrude.",
             obj({"profiles": {"type": "array", "items": {}, "description": "Each a sketch or wire's name, a face (\"Box.Face6\"), { points: [[x,y,z] …], closed, smooth }, { points_file: \"<file>.json\"|\".csv\", key, closed, smooth } or { circle }."},
                  "profiles_file": {"type": "string", "description": "A .json (a list of [[x,y,z] …] lists, or an object of them) or .csv (x,y,z rows; outlines apart by blank lines or named in a first column) holding every profile, in order. A relative path is in the session's folder."},
                  "key": {"description": "With profiles_file: the name (or number from 0) of the list in the file that holds the profiles."},

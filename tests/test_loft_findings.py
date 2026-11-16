@@ -289,6 +289,140 @@ class SizedGate(unittest.TestCase):
         g.after(Tool("history_undo"), {}, True)
         self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
 
+    # Live: part_loft { profiles_file: 91 x 80 points, ruled } ran past 120 s and
+    # the watchdog stopped FreeCAD; 91 x 36 took 9.7 s.
+    def loft_args(self, n_prof, n_pts, **kw):
+        prof = [{"points": [[float(i), float(j), 0.0] for i in range(n_pts)]} for j in range(n_prof)]
+        return {"profiles": prof, **kw}
+
+    def test_loft_is_sized_from_profiles_and_points(self):
+        c = self.heavy.loft_counts(self.gate.s, self.loft_args(91, 80, ruled=True))
+        self.assertEqual(c, (91, 80))
+        small = self.keep.sized_estimate({}, "part_loft", self.heavy.sized_size(self.gate.s, "part_loft", self.loft_args(91, 36, ruled=True)))
+        big = self.keep.sized_estimate({}, "part_loft", self.heavy.sized_size(self.gate.s, "part_loft", self.loft_args(91, 80, ruled=True)))
+        self.assertTrue(5 < small < 20, small)
+        self.assertGreater(big, 60)
+        # samples rebuilds smooth profiles with that many points
+        self.assertEqual(self.heavy.loft_counts(self.gate.s, self.loft_args(10, 80, samples=40)), (10, 40))
+        self.assertEqual(self.keep.sized_key("part_loft", {"ruled": True}), "part_loft ruled")
+        self.assertEqual(self.keep.sized_key("part_loft", {}), "part_loft")
+
+    def test_big_loft_is_refused_once_with_the_split_then_runs_with_a_deadline(self):
+        from agentlink.protocol import ToolError
+
+        args = self.loft_args(91, 80, ruled=True)
+        t = Tool("part_loft")
+        with self.assertRaises(ToolError) as cm:
+            self.gate.before(t, args)
+        m = cm.exception.message
+        for w in ("91 profiles of 80 points ruled", "part_boolean fuse", "samples:", "Nothing was run", "7,200 faces"):
+            self.assertIn(w, m)
+        started = time.time()
+        self.gate.before(t, args)
+        self.assertGreater(self.keep.heavy_call_limit(started, time.time()), 120)
+        self.assertGreater(self.gate.s.call_budget, 60)
+        self.gate.sized = (time.time() - 5.0,) + tuple(self.gate.sized[1:])  # it ran 5 s
+        self.gate.after(t, args, True)
+        self.assertEqual(self.gate.s.call_budget, 0)
+        self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
+        # timed under its own key, ruled apart from smooth
+        self.assertIn("part_loft ruled", self.keep.queue_state().get("timings") or {})
+
+    def test_small_loft_is_left_alone(self):
+        t = Tool("part_loft")
+        self.gate.before(t, self.loft_args(5, 24))
+        self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
+        self.gate.after(t, {}, True)
+
+    def test_split_advice_comes_under_the_target(self):
+        per_run, runs, pts = self.heavy.loft_split(91, 80, False, 107.0)
+        self.assertLess(per_run, 91)
+        self.assertGreaterEqual(runs, 2)
+        self.assertLess(pts, 80)
+        # each run's faces cubed comes in under the 40 s target
+        self.assertLess(self.keep.sized_estimate({}, "part_loft", self.heavy.loft_size(self.heavy.loft_faces(per_run, 80))), 45)
+
+    # Live: insp_run of a lofted 3-face B-spline body against a 140k-triangle
+    # scan ran past 120 s (the watchdog stopped FreeCAD); a 3242-face ruled
+    # body took under 1 s.
+    def test_insp_is_sized_by_bspline_poles(self):
+        class Srf:
+            NbUPoles, NbVPoles = 91, 80
+
+        class Plane:
+            pass
+
+        class F:
+            def __init__(self, s):
+                self.Surface = s
+
+        class Sh:
+            def __init__(self, fs):
+                self.Faces = fs
+
+        class M:
+            CountPoints = 70000
+
+        class O:
+            def __init__(self, name, sh=None, mesh=None):
+                self.Name = self.Label = name
+                self.Shape, self.InList = sh, []
+                if mesh is not None:
+                    self.Mesh = mesh
+
+        doc = Doc([O("Smooth", Sh([F(Srf()), F(Plane()), F(Plane())])), O("Ruled", Sh([F(Plane())] * 3242)), O("Scan", mesh=M())])
+        s = Sess(doc)
+        smooth = self.heavy.sized_size(s, "insp_run", {"actual": "Smooth", "nominals": ["Scan"]})
+        ruled = self.heavy.sized_size(s, "insp_run", {"actual": "Ruled", "nominals": ["Scan"]})
+        self.assertGreater(self.keep.sized_estimate({}, "insp_run", smooth), 60)
+        self.assertLess(self.keep.sized_estimate({}, "insp_run", ruled), 2)
+        # marked for the watchdog, never asked (a read the person wants)
+        g = self.heavy.Gate(s)
+        started = time.time()
+        g.before(Tool("insp_run"), {"actual": "Smooth", "nominals": ["Scan"]})
+        self.assertGreater(self.keep.heavy_call_limit(started, time.time()), 120)
+        g.after(Tool("insp_run"), {}, True)
+        self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
+
+    def test_a_change_the_watchdog_stopped_is_asked_then_given_longer(self):
+        from agentlink.protocol import ToolError
+
+        t = Tool("part_sweep")
+        self.gate.before(t, {"a": 1})  # never stopped: runs as ever, no mark
+        self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
+        self.gate.after(t, {"a": 1}, True)
+        self.keep.note_stopped("part_sweep", 125.0)
+        self.assertEqual(self.keep.stopped_before("part_sweep"), 125.0)
+        with self.assertRaises(ToolError) as cm:
+            self.gate.before(t, {"a": 1})
+        self.assertIn("stopped FreeCAD before", cm.exception.message)
+        started = time.time()
+        self.gate.before(t, {"a": 1})
+        self.assertGreaterEqual(self.keep.heavy_call_limit(started, time.time()), 3 * 1.5 * 125.0 - 0.01)
+        self.gate.after(t, {"a": 1}, True)
+        self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
+        # the sized gate never estimates under what stopped it either
+        self.keep.note_stopped("insp_run", 130.0)
+        g = self.heavy.Gate(Sess(Doc([Obj("Grip", 10)])))
+        started = time.time()
+        g.before(Tool("insp_run"), {"actual": "Grip", "nominals": []})
+        self.assertGreaterEqual(self.keep.heavy_call_limit(started, time.time()), 3 * 1.5 * 130.0 - 0.01)
+        g.after(Tool("insp_run"), {}, True)
+
+    def test_a_read_the_watchdog_stopped_goes_to_a_job(self):
+        from agentlink import jobs
+
+        class R:
+            name, changes = "insp_faces", False
+
+            def changes_for(self, a):
+                return False
+
+        s = Sess(Doc([]))
+        self.assertFalse(jobs.wanted(R(), {}, s))
+        self.keep.note_stopped("insp_faces", 121.0)
+        self.assertTrue(jobs.wanted(R(), {}, s))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -786,6 +786,7 @@ def run(script, argv):
                         if pid:
                             window.hang = {"pid": pid, "after": now - c["start"], "tool": c["tool"]}
                             keep.log_watchdog({"event": "hang", "where": "window", "tool": c["tool"], "after": now - c["start"], "pid": pid})
+                            keep.note_stopped(c["tool"], now - c["start"])
                             key = keep.call_key(c["tool"], c.get("args"))
                             hangs[key] = hangs.get(key, 0) + 1
                             stop_pid(int(pid))
@@ -800,6 +801,7 @@ def run(script, argv):
                         child = state["child"]
                         state["hang"] = {"id": mid, "tool": h["tool"], "after": now - began}
                         keep.log_watchdog({"event": "hang", "where": "hidden", "tool": h["tool"], "after": now - began, "pid": child.pid})
+                        keep.note_stopped(h["tool"], now - began)
                         key = keep.call_key(h["tool"], h.get("args"))
                         hangs[key] = hangs.get(key, 0) + 1
                         threading.Thread(target=stop_pid, args=(child.pid,), daemon=True).start()

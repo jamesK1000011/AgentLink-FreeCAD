@@ -286,6 +286,9 @@ def tools(session):
         out = reading(f, int(a.get("worst", 5)))
         if meshed is not None:
             out["measuredOn"] = f"{meshed.Label}: {len(meshed.Mesh.Points)} points about {spacing:.3g} mm apart (spacing), hidden"
+            out["how"] = (f"{act.Label} was tessellated first (a mesh at deflection {defl:g} mm, split to spacing {spacing:.3g} mm, {len(meshed.Mesh.Points)} points) "
+                          "and FreeCAD's Inspection read each point's distance to the nominals — the body's faces are not sampled directly. "
+                          "Timed against the body's B-spline poles: a large free-form body is given a longer deadline (and a coarser deflection or larger spacing is quicker).")
         out["next"] = "view_render { map: \"inspection\" } to see it; insp_export for a report."
         out["step"] = len(s.steps)
         return out
@@ -396,7 +399,7 @@ def tools(session):
                 "summary": {k: rep[k] for k in ("rms", "min", "max", "inTolerancePercent", "verdict") if k in rep}}
 
     return [
-        Tool("insp_run", "Inspect: actual (a mesh, points or a body — a body is sampled every spacing mm (default 1% of its size), kept hidden as a mesh) or file (a scan: stl, obj, ply, asc, pcd …) against nominals [bodies, meshes, points]; search_radius mm (further reads out of reach), thickness, tolerance ±t or [low, high]. FreeCAD's own Inspection feature, left in the document. Answers RMS, spread, % in tolerance and the worst spots.",
+        Tool("insp_run", "Inspect: actual (a mesh, points or a body — a body is sampled every spacing mm (default 1% of its size), kept hidden as a mesh) or file (a scan: stl, obj, ply, asc, pcd …) against nominals [bodies, meshes, points]; search_radius mm (further reads out of reach), thickness, tolerance ±t or [low, high]. FreeCAD's own Inspection feature, left in the document. A body is tessellated first (deflection mm, 0.1) and the distances read from that mesh's points (how says so). Its time is estimated from the actual body's B-spline poles (a lofted free-form body is slow, a ruled one of thousands of flat faces quick) and the watchdog given that long; a tool the watchdog stopped FreeCAD in before is asked about once, then run with a longer deadline. Answers RMS, spread, % in tolerance and the worst spots.",
              obj({"actual": {"type": "string"}, "file": {"type": "string"}, "nominals": {"type": "array", "items": {"type": "string"}}, "search_radius": {"type": "number"}, "thickness": {"type": "number"},
                   "tolerance": {"type": ["number", "array"]}, "deflection": {"type": "number"}, "spacing": {"type": "number"}, "cap": {"type": "integer"}, "name": {"type": "string"}, "worst": {"type": "integer"}}, ["nominals"]), insp_run, changes=True),
         Tool("insp_update", "Change an inspection and measure again: search_radius, thickness, tolerance (null clears), nominals.",
