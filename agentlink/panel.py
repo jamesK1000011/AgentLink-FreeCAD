@@ -62,6 +62,23 @@ def _doc():
     return FreeCAD.ActiveDocument
 
 
+def _check_geometry(label):
+    """Part Check Geometry on the body labelled label: selected, then the
+    command run, as the person would from the Part menu."""
+    doc = _doc()
+    objs = doc.getObjectsByLabel(label) if doc is not None else []
+    if not objs:
+        return False
+    try:
+        FreeCADGui.Selection.clearSelection()
+        FreeCADGui.Selection.addSelection(objs[0])
+        FreeCADGui.runCommand("Part_CheckGeometry", 0)
+        return True
+    except Exception as e:
+        FreeCAD.Console.PrintLog(f"Agent Link: Part_CheckGeometry did not open: {e}\n")
+        return False
+
+
 def _view():
     gd = FreeCADGui.ActiveDocument
     return gd.activeView() if gd else None
@@ -597,7 +614,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         go.clicked.connect(self.review)
         # With no reviewer installed: the core soundness check.
         self.sound_btn = QtWidgets.QPushButton("Body check")
-        self.sound_btn.setToolTip("Whether the body is sound: valid, closed, one solid, no slivers (body_check)")
+        self.sound_btn.setToolTip("FreeCAD's Check Geometry on the body (Part workbench), with Agent Link's sliver and short-edge findings listed here")
         self.sound_btn.clicked.connect(self.body_check)
         row.addWidget(self.review_pick, 1)
         row.addWidget(go)
@@ -707,10 +724,13 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.figures.setText("  ·  ".join(f"{k} {v}" for k, v in fig.items()) + (f"\n{out.get('processFrom')}" if out.get("processFrom") else ""))
 
     def body_check(self):
-        """The core soundness check, shown as the Review tab's findings."""
+        """FreeCAD's own Check Geometry opened on the body (its task panel),
+        and Agent Link's extras (slivers, short edges) as the Review tab's
+        findings."""
         body = self.review_pick.currentText()
         if not body:
             return
+        _check_geometry(body)
         ok, out = self._call("body_check", {"body": body})
         self.findings.clear()
         if not ok:

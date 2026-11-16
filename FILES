@@ -175,6 +175,7 @@ tests/test_cam_more.py
 tests/test_ccx.py
 tests/test_cells.py
 tests/test_charts.py
+tests/test_core_check.py
 tests/test_core_guards.py
 tests/test_core_guards_fc.py
 tests/test_crash_logs.py
