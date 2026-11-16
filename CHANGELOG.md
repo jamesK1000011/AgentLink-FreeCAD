@@ -20,6 +20,7 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 
 ### Fixed
 
+- Assembly joints made by `asm_joint`, `asm_new` and `asm_ground` in the window get FreeCAD's own joint view provider, and joints already saved without one get it when the assembly is next used: after reopening such a document every recompute failed ("'int' object has no attribute 'redrawJointPlacements'", bike stem test drive, 16 Nov 2026).
 - `pd_fillet` and `pd_chamfer` on an inside (concave) corner, which adds material, are no longer refused as "cut nothing — the profile does not meet the body": either sign of volume change is right for them, and only one that leaves the body as it was is refused. An inward `pd_thickness` that removes nothing says so without talking of a profile. Found on an L-bracket's inside corner.
 - `sketch_add` `polyline` holds its sides that run along x or y horizontal or vertical, as a rectangle's are (the guide promised it; only coincident constraints were added).
 - A PartDesign Body is a part again in FreeCAD 1.x whatever its features link: a feature's hidden `_Body` link to its own Body no longer reads as building from it. `session_state` and `view_render` (with no `objects`) left out a Body of two solids (AllowCompound) and showed only the screws on it. `session_state` lists such a Body with `multiSolid` (how many, and whether AllowCompound means it) and each body's object name where it differs from its label.
