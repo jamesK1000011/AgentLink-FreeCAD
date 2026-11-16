@@ -290,6 +290,9 @@ class Link:
     def __init__(self, port=PORT):
         self.port = port
         self.inbox = queue.Queue()
+        # One reply written at a time: socket-thread tools answer beside the
+        # GUI thread's replies on the same connection.
+        self._write_lock = threading.Lock()
         self.sock = None
         self.timer = None
         self.session = None
@@ -498,6 +501,8 @@ class Link:
                     continue
                 if not looks_like_call(line):
                     break
+                if self._thread_call(line, f):
+                    continue  # answered on a thread of its own
                 self.inbox.put((line, f, conn))
                 continue
             else:
@@ -514,6 +519,35 @@ class Link:
             conn.close()
         except OSError:
             pass
+
+    def _thread_call(self, line, f):
+        """A socket-thread tool (hooks.THREAD_TOOLS, such as a long poll):
+        answered on a thread of its own, never through the GUI thread's
+        inbox and never holding in_call. False for any other line, or before
+        the server is made (it goes to the inbox then)."""
+        from . import hooks
+
+        name = _tool_name(line)
+        srv = self.server
+        if name is None or name not in hooks.THREAD_TOOLS or srv is None or not hasattr(srv, "handle_light"):
+            return False
+
+        def run():
+            try:
+                reply = srv.handle_light(json.loads(line))
+            except ValueError:
+                reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}
+            if reply is None:
+                return
+            with self._write_lock:
+                try:
+                    f.write(compact(reply) + "\n")
+                    f.flush()
+                except (OSError, ValueError):
+                    pass
+
+        threading.Thread(target=run, name=f"agentlink-{name}", daemon=True).start()
+        return True
 
     @staticmethod
     def _refused():
@@ -751,11 +785,12 @@ class Link:
             except Exception:
                 pass
         try:
-            if reply is not None:
-                f.write(compact(reply) + "\n")
-            while self.server is not None and self.server.outbox:
-                f.write(compact(self.server.outbox.pop(0)) + "\n")
-            f.flush()
+            with self._write_lock:  # a socket-thread tool may answer on the same connection
+                if reply is not None:
+                    f.write(compact(reply) + "\n")
+                while self.server is not None and self.server.outbox:
+                    f.write(compact(self.server.outbox.pop(0)) + "\n")
+                f.flush()
         except OSError:
             pass
         if FreeCAD.GuiUp and not self.in_call:

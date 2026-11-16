@@ -79,6 +79,7 @@ agentlink/flat2d.py
 agentlink/gdt.py
 agentlink/geometry.py
 agentlink/grab.py
+agentlink/gui_events.py
 agentlink/gui_input.py
 agentlink/gui_link.py
 agentlink/guides/assembly.md
@@ -275,4 +276,5 @@ tests/test_unattended.py
 tests/test_usage.py
 tests/test_usage_strip.py
 tests/test_view.py
+tests/test_watch_hooks.py
 tests/test_window_route.py
