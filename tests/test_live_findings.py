@@ -130,7 +130,7 @@ class LiveFindings(unittest.TestCase):
         print(f"\nobject_set: {base * 1000:.0f} ms alone, {heavy * 1000:.0f} ms beside a {big.Mesh.CountFacets}-triangle mesh")
         self.assertLess(heavy, max(1.0, base * 5), "an unrelated object_set got slower beside the heavy mesh")
         # Not re-run by a call that did not touch it.
-        self.assertTrue(big.isTouched())
+        self.assertIn("Touched", big.State)
 
     def test_snapshot_reuses_stats(self):
         from agentlink import geometry
