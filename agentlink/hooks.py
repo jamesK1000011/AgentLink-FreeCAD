@@ -30,13 +30,25 @@ Finding controls              agentlink.targets: command_for, actions,
                               native_menubar
 Echo                          a family's NO_ECHO (names or prefixes): its
                               tools are never shown as they run
-Events                        on(event, fn); emit(event, *args);
+Events                        on(event, fn); off(event, fn); emit(event, *args);
                               call_done(session, tool, ok, changed) after
                               every call through the server
 Rider line                    register_rider(owner, fn): fn(tool) -> a short
                               line while the add-on has something in hand,
                               else None; every active line joins each
                               answer as "rider" (rider_line below)
+Who is acting                 agent_acting(): True while one of the agent's
+                              calls runs (not a panel click), so an
+                              add-on's observers keep the person's events
+                              apart from the agent's
+Socket-thread tools           register_thread_tool(name): the window link
+                              answers it on its socket thread (a long poll
+                              that never holds the GUI thread); the tool
+                              reads only what it keeps under its own lock
+Window events                 watch_window(owner) / unwatch_window(owner):
+                              while any owner watches, workbench_activated
+                              (name, by) and command_used(name, by) are
+                              emitted (agentlink/gui_events.py)
 Test flag                     AGENTLINK_AS_USER=1 (as_user()): the agent's
                               calls run as the person's (session.by);
                               for tests only, off by default
@@ -245,6 +257,69 @@ def rider_line(tool=None):
     return _cut(" · ".join(lines), RIDER_MAX)
 
 
+# ---- who is acting: the agent's own calls (protocol.Server.call, which
+# every call goes through, the window link's and the echo's alike) set it
+# while they run; a panel click (session.by "person") does not. Read on
+# the GUI thread by an add-on's observers.
+_ACTING = [0]
+
+
+class acting:
+    def __enter__(self):
+        _ACTING[0] += 1
+        return self
+
+    def __exit__(self, *exc):
+        _ACTING[0] = max(0, _ACTING[0] - 1)
+        return False
+
+
+def agent_acting():
+    return _ACTING[0] > 0
+
+
+# ---- socket-thread tools: answered by the window link on its socket
+# thread, never queued for the GUI thread and never holding in_call (a long
+# poll such as a watch). Such a tool reads only data it keeps behind its own
+# lock and touches no FreeCAD or Qt object; it gets no undo step, echo,
+# call_done, notice or rider.
+THREAD_TOOLS = set()
+
+
+def register_thread_tool(name):
+    THREAD_TOOLS.add(str(name))
+    return name
+
+
+# ---- window events for add-ons, only while some owner watches
+# (agentlink/gui_events.py): workbench_activated(name, by) and
+# command_used(name, by), by "agent" or "person" (agent_acting()).
+_WATCHERS = set()
+
+
+def watch_window(owner):
+    """Start the window events for owner; True when they could start."""
+    _WATCHERS.add(owner)
+    try:
+        from . import gui_events
+
+        return gui_events.attach()
+    except Exception as e:  # noqa: BLE001
+        _log("window events could not start", e)
+        return False
+
+
+def unwatch_window(owner):
+    _WATCHERS.discard(owner)
+    if not _WATCHERS:
+        try:
+            from . import gui_events
+
+            gui_events.detach()
+        except Exception as e:  # noqa: BLE001
+            _log("window events could not stop", e)
+
+
 # ---- the test flag: AGENTLINK_AS_USER=1 runs the agent's calls as the
 # person's (session.by "person"), so an add-on that tells the two apart
 # (a lesson the person works through) can be tested end to end by an agent.
@@ -267,6 +342,8 @@ def as_user():
 # before a settings change and setting_changed(path, name, old, new, tool=,
 # restart=, applies=) after each value (pref_set, pref_reset, pref_pack,
 # pref_import); reply_written(session) after each reply of the stdio server;
+# workbench_activated(name, by) and command_used(name, by) while an add-on
+# watches the window (watch_window);
 # docs_changed(session); call_done(session, tool_name, ok, changed) after
 # every call through the server (protocol.Server.call), refusals too:
 # changed is True when the call went through and changed the document (an
@@ -281,6 +358,13 @@ def on(event, fn):
     if fn not in lst:
         lst.append(fn)
     return fn
+
+
+def off(event, fn):
+    """fn no longer told of event."""
+    lst = _EVENTS.get(event) or []
+    if fn in lst:
+        lst.remove(fn)
 
 
 def emit(event, *args, **kw):

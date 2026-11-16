@@ -294,7 +294,7 @@ class Server:
         t0 = time.time()
         s = self.session
         before = (getattr(s, "tx", None), getattr(s, "doc", None)) if s is not None else None
-        with _as_user(s):
+        with _as_user(s), _acting(s):
             result = self._call(params)
             self._done(params, result, before)
         _add_notice(result)
@@ -314,6 +314,35 @@ class Server:
             except Exception:
                 pass
         return result
+
+    def handle_light(self, msg):
+        """A tools/call for a socket-thread tool (hooks.THREAD_TOOLS): its
+        arguments checked and its handler run here, on the caller's thread,
+        with none of a call's window work (no undo step, echo, call_done,
+        notice, rider or meter). The reply, as handle() gives it."""
+        mid = msg.get("id")
+        params = msg.get("params") or {}
+        name = params.get("name")
+        args = params.get("arguments") or {}
+        tool = self.tools.get(name)
+        t0 = time.time()
+        try:
+            if tool is None:
+                result = self.refusal("not_found", f"{name}: no such tool.")
+            else:
+                check_input(tool.schema, args)
+                out = tool.fn(args)
+                if isinstance(out, dict):
+                    out.setdefault("ms", int((time.time() - t0) * 1000))
+                result = {"content": [{"type": "text", "text": compact(out)}]}
+        except ToolError as e:
+            result = self.refusal(e.code, e.message)
+        except ValueError as e:
+            result = self.refusal("invalid_input", str(e))
+        except Exception as e:
+            traceback.print_exc(file=sys.stderr)
+            result = self.refusal("failed", f"{name} failed: {e}")
+        return None if mid is None else {"jsonrpc": "2.0", "id": mid, "result": result}
 
     def _done(self, params, result, before):
         """hooks call_done(session, tool, ok, changed) for a call to a tool
@@ -433,6 +462,19 @@ class _Nothing:
 
     def __exit__(self, *exc):
         return False
+
+
+def _acting(session):
+    """hooks.acting while the agent's call runs (a panel click is the
+    person's: session.by "person")."""
+    try:
+        from . import hooks
+
+        if session is None or getattr(session, "by", hooks.AGENT) == hooks.AGENT:
+            return hooks.acting()
+    except Exception:
+        pass
+    return _Nothing()
 
 
 def _as_user(session):
