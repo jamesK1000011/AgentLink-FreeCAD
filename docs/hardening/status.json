@@ -512,6 +512,27 @@
   "health": true,
   "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
  },
+ "cut_check": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "cut_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "dfm_check": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
  "doc_close": {
   "description": true,
   "docs": true,
@@ -690,6 +711,41 @@
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
  },
+ "fastener_add": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Fasteners model 16:58 (24 calls; as expected on every call)"
+ },
+ "fastener_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Fasteners model 16:58 (24 calls; as expected on every call)"
+ },
+ "fastener_print": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Fasteners model 16:58 (24 calls; as expected on every call)"
+ },
+ "fastener_set": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Fasteners model 16:58 (24 calls; as expected on every call)"
+ },
+ "fastener_types": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Fasteners model 16:58 (24 calls; as expected on every call)"
+ },
  "fea_buckle": {
   "description": true,
   "headless": true,
@@ -709,6 +765,13 @@
   "docs": true,
   "headless": true,
   "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+ },
+ "fea_frame": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
  },
  "fea_heat": {
   "description": true,
@@ -820,6 +883,62 @@
   "health": true,
   "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
  },
+ "fit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "gen_make": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Parts model 16:57 (19 calls; as expected on every call)"
+ },
+ "gen_part": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Parts model 16:57 (19 calls; as expected on every call)"
+ },
+ "hw_embed": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "hw_embed_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "hw_hole": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "hw_pauses": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "hw_unembed": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
  "ifc_diff": {
   "description": true,
   "docs": true,
@@ -925,6 +1044,27 @@
   "headless": true,
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "mass_ballast": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "mass_properties": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "mass_target": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
  },
  "material_clear": {
   "description": true,
@@ -1094,6 +1234,20 @@
   "docs": true,
   "headless": true,
   "model": "MeshHardening re-run 16:25 after the fixes"
+ },
+ "mill_check": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "mill_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
  },
  "object_align": {
   "description": true,
@@ -1335,6 +1489,13 @@
   "health": true,
   "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
  },
+ "part_review": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
  "part_revolve": {
   "description": true,
   "docs": true,
@@ -1362,6 +1523,13 @@
   "headless": true,
   "health": true,
   "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "part_spec": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
  },
  "part_split": {
   "description": true,
@@ -1656,6 +1824,13 @@
   "headless": true,
   "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
  },
+ "printer_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
  "recompute": {
   "description": true,
   "docs": true,
@@ -1749,6 +1924,13 @@
   "headless": true,
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "setup": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
  },
  "shape_query": {
   "description": true,
@@ -1972,6 +2154,34 @@
   "headless": true,
   "health": true,
   "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+ },
+ "slice": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "slice_read": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "slice_with": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "slicer_presets": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
  },
  "surface_blend": {
   "description": true,
@@ -2267,6 +2477,27 @@
   "docs": true,
   "headless": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "thread_cut": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "thread_identify": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "thread_lookup": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
  },
  "units_convert": {
   "description": true,
