@@ -1,0 +1,292 @@
+{
+  "name": "Tutor watch mode, two roles: a teacher agent and a student agent",
+  "about": "Run reset.json first. Two agents on one Agent Link: the teacher (role tutor) turns watch mode on, follows the person through tutor_watch and reads the lesson; the student (role student) stands in for the person and acts only through gui_input with as: \"person\" (clicks, keys, typing, menu items, shots). Checks the status-bar sign, the person's events in order with a rising next, a long poll that a milestone ends early, Ask Claude as an ask event, and watch off. ROLES.md in this folder says how to run the roles as two subagents and what the student may see. Then the soak loop (soak below).",
+  "needs": ["AgentLink-FreeCAD", "Tutor-FreeCAD"],
+  "conventions": {
+    "role": "tutor: the teacher agent's calls (the agent's own; left out of the person's events). student: gui_input calls with as: \"person\" only, each sent on its own (no batch).",
+    "direct": "true: send each call on its own, never through batch. A tutor_watch with wait over 0 inside a batch runs on the window's thread and holds it, so no event can arrive.",
+    "$next": "the next of the last tutor_watch answer; the teacher keeps it between steps (0 at first).",
+    "$X,$Y": "main-window pixels the student reads from its last shot (the ▾ of the ringed or named button)."
+  },
+  "steps": [
+    {
+      "name": "setup: the camera, Part Design, watch mode on",
+      "role": "tutor",
+      "calls": [
+        { "tool": "workbench", "arguments": { "activate": "Part Design" } },
+        { "tool": "cmd_run", "arguments": { "name": "Std_ViewIsometric" } },
+        { "tool": "cmd_run", "arguments": { "name": "Std_ViewFitAll" } },
+        { "tool": "tutor", "arguments": { "action": "watch", "on": true } }
+      ],
+      "expect": [
+        { "call": 3, "path": "result.watching", "equals": true }
+      ],
+      "note": "Dev test: the person's standing request for watch mode during live checks. A person turns it on with Let Claude watch in the Tutor tab."
+    },
+    {
+      "name": "the student sees the sign in the status bar",
+      "role": "student",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "as": "person", "steps": [
+          { "wait": 300 },
+          { "move": { "widget": { "objectName": "TutorWatchBadge" } } },
+          { "shot": "tw_sign_on" }
+        ] } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.as", "equals": "person" },
+        { "call": 0, "path": "result.steps.1.hit.name", "equals": "TutorWatchBadge" },
+        { "call": 0, "path": "result.steps.1.error", "exists": false }
+      ],
+      "shot": "tw_sign_on",
+      "look": "Bottom right of the status bar: \"● Claude is watching (Tutor tab: turn it off)\"."
+    },
+    {
+      "name": "the teacher's baseline: watching, nothing from the person yet",
+      "role": "tutor",
+      "direct": true,
+      "calls": [
+        { "tool": "tutor_watch", "arguments": { "since": 0, "wait": 0 } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.watching", "equals": true },
+        { "call": 0, "path": "result.events", "equals": [] }
+      ],
+      "note": "Keep result.next as $next. The setup calls above were the agent's: none of them shows here."
+    },
+    {
+      "name": "the student selects the top face",
+      "role": "student",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "as": "person", "steps": [
+          { "click": { "view_world": [0, 0, 20] } },
+          { "wait": 300 }
+        ] } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.as", "equals": "person" },
+        { "call": 0, "path": "result.steps.0.selected.0", "contains": "Face" }
+      ]
+    },
+    {
+      "name": "the student finds New Sketch's dropdown in a shot",
+      "role": "student",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "as": "person", "steps": [ { "shot": "tw_toolbar" } ] } }
+      ],
+      "expect": [],
+      "shot": "tw_toolbar",
+      "look": "The Part Design toolbar: the button group that holds New Sketch, and the ▾ at its right edge. Read the ▾'s main-window pixels as $X,$Y."
+    },
+    {
+      "name": "the student opens the dropdown and picks New Sketch",
+      "role": "student",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "as": "person", "steps": [
+          { "click": { "window": ["$X", "$Y"] } },
+          { "menu_item": "New Sketch" },
+          { "wait": 1000 },
+          { "shot": "tw_sketch_open" }
+        ] } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.steps.0.hit.part", "equals": "menu arrow" },
+        { "call": 0, "path": "result.steps.1.error", "exists": false },
+        { "call": 0, "path": "result.open", "exists": false }
+      ],
+      "shot": "tw_sketch_open",
+      "look": "The Sketcher is open on the top face (the task panel shows Sketcher's tools and a Close button).",
+      "note": "With the top face selected, New Sketch attaches the sketch at once (no attachment dialog). If the ▾ hit is another button, take the shot again and read $X,$Y closer to the arrow; gui_unstick if a menu stays open."
+    },
+    {
+      "name": "the student closes the task panel",
+      "role": "student",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "as": "person", "steps": [
+          { "click": { "widget": { "text": "Close", "class": "QPushButton" } } },
+          { "wait": 600 }
+        ] } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.steps.0.hit.text", "equals": "Close" },
+        { "call": 0, "path": "result.open", "exists": false }
+      ]
+    },
+    {
+      "name": "the teacher reads the person's events in order",
+      "role": "tutor",
+      "direct": true,
+      "calls": [
+        { "tool": "tutor_watch", "arguments": { "since": "$next", "wait": 0 } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.watching", "equals": true },
+        { "call": 0, "path": "result.events[*].k", "equals": "sel" },
+        { "call": 0, "path": "result.events[*].k", "equals": "cmd" },
+        { "call": 0, "path": "result.events[*].c", "equals": "PartDesign_NewSketch" },
+        { "call": 0, "path": "result.events[*].k", "equals": "new" },
+        { "call": 0, "path": "result.events[*].k", "equals": "edit" },
+        { "call": 0, "path": "result.events[*].k", "equals": "done" },
+        { "call": 0, "path": "result.missed", "exists": false }
+      ],
+      "note": "Check by hand: every n is above $next and rises by event; result.next is the last n and above $next. Expected order: sel, cmd PartDesign_NewSketch, new Sketcher::SketchObject, edit, (wb if FreeCAD switches to Sketcher), done, (rc). None of the setup calls. Keep result.next as $next."
+    },
+    {
+      "name": "a milestone ends the teacher's long poll early: the teacher waits",
+      "role": "tutor",
+      "direct": true,
+      "parallel": "start this call, then run the next student step while it waits (two subagents: the teacher's call is out while the student acts)",
+      "calls": [
+        { "tool": "tutor_watch", "arguments": { "since": "$next", "wait": 20, "until": "milestone" } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.events[*].m", "equals": 1 },
+        { "call": 0, "path": "result.events[*].k", "equals": "new" },
+        { "call": 0, "path": "result.ms", "atMost": 15000 }
+      ],
+      "note": "It answers as soon as the Pad is made (new), well before 20 s; the selection before it does not end the wait. One driver only (no second agent): run the student's step first, then this call with wait 5; it answers at once (result.ms under 1000) as the milestone is already there. Keep result.next as $next."
+    },
+    {
+      "name": "a milestone ends the teacher's long poll early: the student pads",
+      "role": "student",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "as": "person", "steps": [
+          { "click": { "view_world": [0, 0, 20] } },
+          { "wait": 300 },
+          { "click": { "widget": { "text": "Pad", "class": "QToolButton" } } },
+          { "wait": 1000 },
+          { "shot": "tw_pad_panel" }
+        ] } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.steps.0.selected.0", "contains": "Face" },
+        { "call": 0, "path": "result.steps.2.hit.text", "equals": "Pad" }
+      ],
+      "shot": "tw_pad_panel",
+      "look": "The Pad parameters in the task panel, a preview on the top face.",
+      "note": "Pad takes the selected face as its profile. If FreeCAD asks for a sketch instead, the student closes the dialog (Escape), selects the Sketch in the tree ({item: {text: \"Sketch\"}}) and pushes Pad again; that is also a person's normal recovery."
+    },
+    {
+      "name": "the student pushes OK; the teacher's next wait ends on it",
+      "role": "student",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "as": "person", "steps": [
+          { "click": { "widget": { "text": "OK", "class": "QPushButton" } } },
+          { "wait": 800 }
+        ] } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.steps.0.hit.text", "equals": "OK" },
+        { "call": 0, "path": "result.open", "exists": false }
+      ],
+      "note": "Two roles: the teacher calls tutor_watch { since: $next, wait: 20, until: \"milestone\" } first and it answers with done (and rc) right after this OK. One driver: call it after, with wait 5."
+    },
+    {
+      "name": "the teacher sees OK as a milestone",
+      "role": "tutor",
+      "direct": true,
+      "calls": [
+        { "tool": "tutor_watch", "arguments": { "since": "$next", "wait": 5, "until": "milestone" } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.events[*].k", "equals": "done" },
+        { "call": 0, "path": "result.ms", "atMost": 1500 }
+      ],
+      "note": "Skip when the teacher's parallel wait above already gave the done event. Keep result.next as $next."
+    },
+    {
+      "name": "the student asks a question with Ask Claude",
+      "role": "student",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "as": "person", "steps": [
+          { "click": { "tab": { "text": "Tutor" } } },
+          { "wait": 400 },
+          { "click": { "widget": { "text": "Ask Claude", "class": "QPushButton" }, "at": [-40, 10] } },
+          { "type": "Why a pad here?" },
+          { "key": "Return" },
+          { "wait": 500 },
+          { "shot": "tw_ask" }
+        ] } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.steps.0.error", "exists": false },
+        { "call": 0, "path": "result.steps.2.hit.class", "contains": "QLineEdit" },
+        { "call": 0, "path": "result.steps.4.error", "exists": false }
+      ],
+      "shot": "tw_ask",
+      "look": "Under the Tutor tab's buttons: \"Left for Claude as a note (Notes tab).\"",
+      "note": "at [-40, 10] lands in the question field left of the Ask Claude button. If the Tutor tab is not shown in this workbench, the teacher switches with workbench { activate: \"Agent Link\" } first (the agent's call: left out of the events)."
+    },
+    {
+      "name": "the teacher reads the question as an ask event",
+      "role": "tutor",
+      "direct": true,
+      "calls": [
+        { "tool": "tutor_watch", "arguments": { "since": "$next", "wait": 5, "until": "milestone" } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.events[-1].k", "equals": "ask" },
+        { "call": 0, "path": "result.events[-1].q", "contains": "Why a pad here?" },
+        { "call": 0, "path": "result.events[-1].m", "equals": 1 }
+      ],
+      "note": "q reads \"Tutor question: Why a pad here?\" (with the lesson and step when one runs). Keep result.next as $next."
+    },
+    {
+      "name": "watch off",
+      "role": "tutor",
+      "direct": true,
+      "calls": [
+        { "tool": "tutor", "arguments": { "action": "watch", "on": false } },
+        { "tool": "tutor_watch", "arguments": { "since": "$next", "wait": 0 } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.watching", "equals": false },
+        { "call": 1, "path": "result.watching", "equals": false },
+        { "call": 1, "path": "result.say", "contains": "Watch mode is off" }
+      ]
+    },
+    {
+      "name": "the student sees the sign gone",
+      "role": "student",
+      "calls": [
+        { "tool": "gui_input", "arguments": { "as": "person", "steps": [
+          { "move": { "widget": { "objectName": "TutorWatchBadge" } } }
+        ] } },
+        { "tool": "gui_input", "arguments": { "as": "person", "steps": [ { "shot": "tw_sign_off" } ] } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.steps.0.error", "exists": true }
+      ],
+      "shot": "tw_sign_off",
+      "look": "No \"Claude is watching\" in the status bar."
+    },
+    {
+      "name": "a clean Report view",
+      "role": "tutor",
+      "calls": [
+        { "tool": "report_read", "arguments": { "problems": true } }
+      ],
+      "expect": [
+        { "call": 0, "path": "result.lines", "noneContain": ["Error", "Traceback", "Exception"], "ignoreLinesWith": ["(qt.qpa.fonts)"] }
+      ]
+    }
+  ],
+  "soak": {
+    "about": "The 30-minute soak of watch mode, in short MCP batches. Run the steps above once first; then turn watch on again (setup step) and loop. Each loop takes about 20-30 s of calls: 60 loops, or stop at 30 minutes.",
+    "loop": [
+      { "role": "student", "tool": "gui_input", "arguments": { "as": "person", "steps": [
+        { "click": { "view_world": [0, 0, 20] } }, { "wait": 200 },
+        { "click": { "view": [20, 20] } }, { "wait": 200 },
+        { "click": { "view_world": [0, 0, 20] } }, { "wait": 200 },
+        { "click": { "window": ["$X", "$Y"] } }, { "menu_item": "New Sketch" }, { "wait": 800 },
+        { "click": { "widget": { "text": "Close", "class": "QPushButton" } } }, { "wait": 400 },
+        { "click": { "widget": { "text": "Undo", "class": "QToolButton" } } }, { "wait": 400 }
+      ] } },
+      { "role": "tutor", "direct": true, "tool": "tutor_watch", "arguments": { "since": "$next", "wait": 2, "until": "milestone" } }
+    ],
+    "note": "After the Pad step the top face is at z 30: view_world [0, 0, 20] should still land on it (the point is inside the block, and in isometric the ray to it enters through the top); check that selected names a Face of the top, else use [0, 0, 30].",
+    "log": "One line per loop: loop number, minutes since start, gui_input ms, tutor_watch ms, number of events, the kinds in order, next, missed (must stay absent), open (must stay absent), and Report problems (report_read { problems: true } every 10th loop). Every 10th loop: a shot (tw_soak_<n>) and session_state's document and undo count (the sketch is undone each loop, so the body keeps one Pad and one Sketch more than reset).",
+    "pass": "Every loop: events hold sel, clr, cmd PartDesign_NewSketch, new, edit, done and undo, with n rising and next above the last; no missed; no open popup; tutor_watch ms under 2500 at the end as at the start (no slowdown over 2x the first 5 loops' mean); no new Report problems; the status-bar sign still there at the end (student step 2). The teacher's own calls never show as events.",
+    "end": "Watch off (the two steps above), then reset.json."
+  }
+}

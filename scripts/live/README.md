@@ -12,6 +12,7 @@ They are data, not code: an agent connected to Agent Link replays them with the 
 | `agentlink.json` | Agent Link's panel: Notes (Pin a Note, typed into the dialog), Steps (Play), Activity; view clicks select; tab targets. |
 | `scanruler.json` | ScanRuler: workspaces, Create Feature labels, Fillet edge picks and Create Fillet, Split View's reason, the panel's width, state saved with the document. |
 | `texturizer.json` | Texturizer: the sidebar's part choice, a texture tile, FreeCAD's own Undo and Redo of it, the rotate ring, Add to Document and the linked result following a pad change. |
+| `tutor-watch.json` | The Tutor's watch mode with two roles (a teacher agent and a student agent who stands in for the person, `ROLES.md`): the status-bar sign, the person's events in order, a long poll a milestone ends early, Ask Claude, watch off; then a 30-minute soak loop. |
 
 `workshop.json` covers Workshop, which now holds SafetyNet too.
 
@@ -36,6 +37,7 @@ They are data, not code: an agent connected to Agent Link replays them with the 
 - `expect` checks one value of one call's answer. `path` walks the answer with dots, numbers for list items. Paths: dots for keys and list indices; `[*]` means any item of a list, `[-1]` the last.
 - Checks: `equals`, `contains` (text or list), `atLeast` / `atMost` (numbers), `exists: true|false`, and `noneContain: [words]` for a list of lines, with `ignoreLinesWith: [texts]` to skip lines that aren't ours.
 - FreeCAD itself logs `(qt.qpa.fonts) … missing font family "Sans" / "Sans-serif"` (seen when a sketch is made and when TechDraw draws its own templates; none of the add-ons name those families any more): Report view checks ignore those lines.
+- `role` (two-role scripts, `ROLES.md`): `"tutor"` steps are the teacher agent's calls; `"student"` steps are `gui_input` calls with `as: "person"`, sent on their own. `direct: true`: each call on its own, not in a batch (a waiting `tutor_watch`). `parallel`: the call waits while the next step runs. `look`: what the shot should show. `$name` values are filled in from earlier answers (the script's `conventions` say how).
 - `shot`: a `gui_input` shot of the window after the step, to look at when a check fails.
 - Waits: `gui_input` takes at most 3000 ms per wait; repeat waits for longer.
 

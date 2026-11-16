@@ -167,10 +167,12 @@ docs/records.md
 package.xml
 pyproject.toml
 scripts/live/README.md
+scripts/live/ROLES.md
 scripts/live/agentlink.json
 scripts/live/reset.json
 scripts/live/scanruler.json
 scripts/live/texturizer.json
+scripts/live/tutor-watch.json
 scripts/live/workshop.json
 scripts/sync_shared.py
 scripts/tool_summary.py
@@ -181,6 +183,7 @@ tests/_pd_base.py
 tests/test_activity_words.py
 tests/test_addon_test.py
 tests/test_app_install.py
+tests/test_as_person.py
 tests/test_assembly.py
 tests/test_assembly_more.py
 tests/test_batch_rollback.py
