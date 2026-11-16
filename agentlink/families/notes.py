@@ -42,7 +42,10 @@ def note_view(n):
     return out
 
 
-def add_note(doc, at, text, by, body=None, face=None):
+def add_note(doc, at, text, by, body=None, face=None, face_on=None):
+    """face_on: the object the face name belongs to, when it is not body (a
+    PartDesign feature picked in the window): the face is then found on the
+    body by its point at the next re-find."""
     data = notes_of(doc)
     n = {"id": data["next"], "by": by, "text": str(text), "at": [round(float(x), 4) for x in at], "done": False,
          "made": datetime.datetime.now().isoformat(timespec="seconds")}
@@ -50,12 +53,15 @@ def add_note(doc, at, text, by, body=None, face=None):
         n["body"] = body
     if face:
         n["face"] = face
-        try:
-            shape = _shape_of(doc, body) if body else None
-            if shape is not None:
-                n["anchor"] = anchor(shape, face, n["at"])
-        except Exception:  # noqa: BLE001 - no anchor: the note keeps its face name
-            pass
+        if face_on and face_on != body:
+            n["anchor"], n["_rebodied"] = {"point": list(n["at"])}, True
+        else:
+            try:
+                shape = _shape_of(doc, body) if body else None
+                if shape is not None:
+                    n["anchor"] = anchor(shape, face, n["at"])
+            except Exception:  # noqa: BLE001 - no anchor: the note keeps its face name
+                pass
     data["notes"].append(n)
     data["next"] += 1
     save_notes(doc, data)
@@ -231,7 +237,26 @@ def _shape_of(doc, label):
     return objs[0].Shape if objs else None
 
 
-def follow(doc, shape_of=_shape_of, geo=Geo):
+def _body_of(doc, label):
+    """The label a note's part goes by: a PartDesign feature's body (the
+    whole part as shown, its Tip) rather than the feature itself — a note
+    pinned in the window on the top of a Pad named the Pad, whose own faces
+    keep their numbers while the body's change; else the label as it is."""
+    objs = doc.getObjectsByLabel(label) if doc is not None and label else []
+    if not objs:
+        return label
+    o = objs[0]
+    try:
+        if o.TypeId != "PartDesign::Body":
+            b = o.getParentGeoFeatureGroup() if hasattr(o, "getParentGeoFeatureGroup") else None
+            if b is not None and b.TypeId == "PartDesign::Body":
+                return b.Label
+    except Exception:  # noqa: BLE001
+        pass
+    return label
+
+
+def follow(doc, shape_of=_shape_of, geo=Geo, body_of=_body_of):
     """Each note on a face found again on its body as it is now: the face
     renamed (and the pin moved onto it) where a later step renumbered the
     faces, lost (flagged, the face name left as it was) where it cannot be
@@ -244,6 +269,17 @@ def follow(doc, shape_of=_shape_of, geo=Geo):
         # A note from before anchors: found by its point the first time, its
         # anchor (mapped name, normal) kept from then on.
         n.setdefault("anchor", {"point": list(n["at"])})
+        # On a PartDesign feature: followed on its body from now on, its face
+        # name and mapped name looked for afresh there.
+        moved_to = None
+        try:
+            moved_to = body_of(doc, n["body"])
+        except Exception:  # noqa: BLE001
+            moved_to = None
+        if moved_to and moved_to != n["body"]:
+            n["body"] = moved_to
+            n["anchor"] = {"point": list(n["at"]), **({"normal": n["anchor"]["normal"]} if n["anchor"].get("normal") else {})}
+            n["_rebodied"] = True
         try:
             shape = shape_of(doc, n["body"])
         except Exception:  # noqa: BLE001
@@ -251,7 +287,8 @@ def follow(doc, shape_of=_shape_of, geo=Geo):
         if shape is None:
             continue
         sig = _sig(shape)
-        if sig is not None and sig == n["anchor"].get("sig") and not n.get("lost"):
+        rebodied = n.pop("_rebodied", False)
+        if sig is not None and sig == n["anchor"].get("sig") and not n.get("lost") and not rebodied:
             continue
         face, how, q = refind(shape, n, geo)
         if face is None:
@@ -266,8 +303,11 @@ def follow(doc, shape_of=_shape_of, geo=Geo):
         if q:
             n["at"] = [round(float(x), 4) for x in q]
         n["anchor"] = anchor(shape, face, n["at"], geo) if how == "point" else dict(n["anchor"], sig=sig, point=n["at"])
-        if (n["face"], list(n["at"]), n.get("lost")) != was:
+        if (n["face"], list(n["at"]), n.get("lost")) != was or rebodied:
             changed.append(n["id"])
+            # Said at the next note_list, whoever re-found it (the panel's
+            # refresh often comes first).
+            n["movedFrom"] = {"face": was[0], "at": was[1]}
     if changed:
         save_notes(doc, data)
     return changed
@@ -376,10 +416,16 @@ def tools(session):
         # them); a failure here is said, the notes answered as they were.
         followed, why = [], None
         try:
-            followed = follow(s.doc)
+            follow(s.doc)
         except Exception as e:  # noqa: BLE001
             why = f"{type(e).__name__}: {e}"
         data = notes_of(s.doc)
+        for n in data["notes"]:
+            m = n.pop("movedFrom", None)
+            if m:
+                followed.append({"id": n["id"], "from": m["face"], "to": n.get("face"), "at": n.get("at"), **({"body": n["body"]} if n.get("body") else {})})
+        if followed:
+            save_notes(s.doc, data)
         rows = [note_view(n) for n in data["notes"] if not (a.get("open") and n.get("done"))]
         waiting = [n["id"] for n in data["notes"] if n["by"] == "person" and not n.get("done") and not n.get("answer")]
         out = {"notes": rows}
