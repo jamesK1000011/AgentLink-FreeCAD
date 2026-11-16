@@ -127,11 +127,13 @@ def _vertex_colours(layer):
     return np.tile(np.asarray(layer.get("color", PALETTE[0]), dtype=float), (n, 1))
 
 
-def draw(layers, view, width, height, frame=None, section=None, margin=14, bottom=0, stop_at=None, cut=None):
+def draw(layers, view, width, height, frame=None, section=None, margin=14, bottom=0, stop_at=None, cut=None, cover=None):
     """One view of the layers, shaded: (rgb image h x w x 3 in 0..1,
     millimetres across, whether anything was drawn). stop_at (a time.time()):
     past it the triangles drawn one by one are left (cut, a list, gets
-    the view's name), so a render never runs into the watchdog."""
+    the view's name), so a render never runs into the watchdog. cover (a
+    dict) gets the share of the view's pixels a part covers, under the
+    view's name: 0 is an empty picture."""
     import time as _t
 
     right, upv, back = _basis(view)
@@ -300,6 +302,8 @@ def draw(layers, view, width, height, frame=None, section=None, margin=14, botto
         img[bmask & hatch] *= 0.6
     img[edge] = img[edge] * 0.25 + LINE * 0.75
     drawn = bool((fid >= 0).any())
+    if cover is not None:
+        cover[view] = float((fid >= 0).mean())
     return img, (width / scale), drawn
 
 
@@ -332,11 +336,12 @@ def png(img):
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b"")
 
 
-def compose(layers, views, width, height, frame=None, section=None, mapinfo=None, stop_at=None, cut=None):
+def compose(layers, views, width, height, frame=None, section=None, mapinfo=None, stop_at=None, cut=None, cover=None):
     """One picture: a view, or a grid of views each fitted; the map's legend
     under them. (image, per-view mm across, drawn). stop_at: a time past
     which no further view is drawn and a view in hand stops drawing its
-    large triangles; cut (a list) gets the views left short."""
+    large triangles; cut (a list) gets the views left short; cover (a dict)
+    each drawn view's share of pixels covered (draw)."""
     import time as _t
 
     n = len(views)
@@ -353,7 +358,7 @@ def compose(layers, views, width, height, frame=None, section=None, mapinfo=None
                 cut.append(v)
             text(img, v.upper() + " (NOT DRAWN: TIME)", c * cw + 8, r * ch + 8, scale=2)
             continue
-        sub, mm, drawn = draw(layers, v, cw, ch, frame=frame, section=section, stop_at=stop_at, cut=cut)
+        sub, mm, drawn = draw(layers, v, cw, ch, frame=frame, section=section, stop_at=stop_at, cut=cut, cover=cover)
         any_drawn |= drawn
         img[r * ch:(r + 1) * ch, c * cw:(c + 1) * cw] = sub
         if n > 1:

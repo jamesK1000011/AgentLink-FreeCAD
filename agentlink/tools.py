@@ -115,6 +115,8 @@ def take_back(doc, u0, names0):
 # to go on (budget); the most that may be asked for.
 BATCH_BUDGET, BATCH_BUDGET_MAX = 55.0, 100.0
 
+from .batchrec import BatchRecord  # noqa: E402 - a batch's record of what ran
+
 # What export_file writes a mesh (Mesh::Feature) as, by format or extension.
 MESH_OUT = ("stl", "obj", "ply", "off", "3mf", "amf")
 
@@ -138,6 +140,9 @@ class Session:
         self.calls = []
         # Documents this session changed: app_restart saves these (L).
         self.agent_docs = set()
+        # The checks that ran, {(tool, body or ""): the step then}: what
+        # history_diff's recheck goes by (agentlink/diffing.py).
+        self.checks = {}
         self.t0 = time.time()
         # Who the call in hand is for: the agent's, unless a panel click runs
         # it as the person's (hooks.as_person); add-ons read it.
@@ -173,7 +178,18 @@ class Session:
         return out
 
     def record_call(self, tool, args):
-        """A changing call that went through, for saving as a macro."""
+        """A changing call that went through, for saving as a macro; a check
+        that ran, for history_diff's recheck."""
+        if not tool.changes:
+            try:
+                from . import diffing
+
+                if diffing.is_check(tool.name):
+                    if getattr(self, "checks", None) is None:
+                        self.checks = {}
+                    diffing.note_check(self.checks, tool.name, args, [o.Label for o in self.bodies()], len(self.steps))
+            except Exception:
+                pass
         if tool.changes and in_macros(tool.name):
             import copy
 
@@ -343,6 +359,7 @@ class Session:
         self.meta = {}
         self.tx = 0
         self.calls = []
+        self.checks = {}
         self.__dict__.pop("_stats_cache", None)
 
     def body(self, ref):
@@ -377,7 +394,28 @@ class Session:
         return f"{label} {n}"
 
     def snapshot(self, tool):
-        self.steps.append({"step": len(self.steps) + 1, "tool": tool, "bodies": {o.Label: self.stats_of(o) for o in self.bodies()}})
+        self.steps.append({"step": len(self.steps) + 1, "tool": tool, **self._step_of(self.doc, self.steps[-1] if self.steps else None)})
+
+    def _step_of(self, doc, previous=None, cached=True):
+        """What a step keeps of a document for history_diff: each body's
+        numbers (bodies), its box's lowest corner (at), and the features
+        and sketches with the values that make them (features, read by
+        agentlink/diffing.py; shared with the step before where unchanged)."""
+        bodies = list(Session.bodies_in(doc))
+        out = {"bodies": {o.Label: (self.stats_of(o) if cached else geo.stats(o.Shape)) for o in bodies}, "at": {}}
+        for o in bodies:
+            try:
+                b = o.Shape.BoundBox
+                out["at"][o.Label] = [round(b.XMin, 4), round(b.YMin, 4), round(b.ZMin, 4)]
+            except Exception:
+                pass
+        try:
+            from . import diffing
+
+            out["features"] = diffing.fingerprint(doc, (previous or {}).get("features"))
+        except Exception as e:
+            out["features"] = {"_unchecked": f"the features could not be read ({e})"}
+        return out
 
     def stats_of(self, o):
         """geo.stats of an object's shape, kept per object while its shape is
@@ -413,10 +451,27 @@ class Session:
             "step": len(self.steps),
             "outDir": self.out_dir,
             "where": getattr(self, "where", "hidden"),
+            **self._next_state(),
+            **self._tools_state(),
             **self._unattended_state(),
             **({"note": "The hidden FreeCAD answered: the FreeCAD window is closed, or its link is off or still starting, so this is not the document on screen."} if getattr(self, "where", "hidden") == "hidden" and os.environ.get("AGENTLINK_SUPERVISED") else {}),
             **({"launcher": _launcher()} if a.get("launcher") else {}),
         }
+
+    def _next_state(self):
+        """next: what the window is in the middle of (next_hint), in the
+        window only."""
+        line = next_hint(self)
+        return {"next": line} if line else {}
+
+    def _tools_state(self):
+        """toolsChanged: the server's tool list is no longer the one the
+        client last listed (protocol.Server.list_stale), said in full once."""
+        try:
+            stale = self.server.list_stale()
+        except Exception:
+            stale = None
+        return {"toolsChanged": stale} if stale else {}
 
     def _hidden_state(self):
         """Hidden parts (left out of bodies, of renders and of checks that go
@@ -609,17 +664,21 @@ class Session:
             pass
         return {"body": o.Label, "mesh": True, "format": fmt, "path": path, "bytes": os.path.getsize(path), "verify": verify}
 
-    def _bodies_in_file(self, path):
-        """Each body's stats in a saved copy, opened hidden and closed."""
+    def _step_in_file(self, path):
+        """A saved copy as a step (_step_of), opened hidden and closed."""
         try:
             nd = FreeCAD.openDocument(path, True)
         except TypeError:
             nd = FreeCAD.openDocument(path)
         try:
             nd.recompute()
-            return {o.Label: geo.stats(o.Shape) for o in self.bodies_in(nd)}
+            return self._step_of(nd, cached=False)
         finally:
             FreeCAD.closeDocument(nd.Name)
+
+    def _bodies_in_file(self, path):
+        """Each body's stats in a saved copy, opened hidden and closed."""
+        return self._step_in_file(path)["bodies"]
 
     def history_diff(self, a):
         since = a.get("since")
@@ -640,20 +699,117 @@ class Session:
                 if since == last:
                     return {"since": cp["id"], "changed": False, "bodies": {}, "steps": []}
             else:
-                before = self._bodies_in_file(cp["file"])
-                now = {o.Label: geo.stats(o.Shape) for o in self.bodies()}
-                changed = self._changed(before, now)
-                return {"since": cp["id"], "from": "its saved copy", "changed": bool(changed), "bodies": changed}
+                before = self._step_in_file(cp["file"])
+                now = self._step_of(self.doc, cached=False)
+                out = self._diff(before, now, None)
+                return {"since": cp["id"], "from": "its saved copy", **out}
         if not self.steps:
             return {"changed": False, "note": "Nothing changed yet in this session."}
         last = len(self.steps)
         since = last - 1 if since is None else (int(since) if isinstance(since, str) else since)
         if not isinstance(since, int) or not (0 <= since < last):
             raise ToolError("invalid_input", f"since: a step from 0 to {last - 1} (session_state gives the step now), or a checkpoint (cp3 or its name).")
-        before = self.steps[since - 1]["bodies"] if since > 0 else {}
-        now = self.steps[-1]["bodies"]
-        changed = self._changed(before, now)
-        return {"since": since, "to": last, "changed": bool(changed), "bodies": changed, "steps": [s["tool"] for s in self.steps[since:]]}
+        before = self.steps[since - 1] if since > 0 else {"bodies": {}, "at": {}, "features": None}
+        out = self._diff(before, self.steps[-1], since)
+        return {"since": since, "to": last, **out, "steps": [s["tool"] for s in self.steps[since:]]}
+
+    def _diff(self, before, now, since):
+        """Two steps compared, only what differs: bodies (numbers from and
+        to), moved (each box's lowest corner), features (added, removed,
+        edited by name) and recheck (the checks the change makes stale).
+        since None: from a saved copy, where no step numbers the checks."""
+        from . import diffing
+
+        bodies = self._changed(before.get("bodies") or {}, now.get("bodies") or {})
+        out = {"changed": bool(bodies), "bodies": bodies}
+        moved = diffing.moved(before.get("at") or {}, now.get("at") or {})
+        if moved:
+            out["moved"] = moved
+        # From before the session's first step there is nothing to compare
+        # the features with (every one would read as added).
+        feats = diffing.features_diff(before.get("features"), now.get("features")) if before.get("features") is not None else {}
+        if feats:
+            out["features"] = feats
+        out["changed"] = bool(bodies or moved or {k for k in feats if k != "unchecked"})
+        try:
+            again = self._recheck(set(bodies) | set(moved), now)
+        except Exception:
+            again = []
+        if again:
+            out["recheck"] = again
+        return out
+
+    def _recheck(self, changed, now):
+        """diffing.recheck for the bodies changed: the checks this session
+        ran on them before the change, and what the document itself says
+        hangs on them — an assembly they are in, the last strength solve,
+        drawing pages with a view of them."""
+        from . import diffing, hooks
+
+        if not changed:
+            return []
+        steps, last = self.steps, len(self.steps)
+
+        def differs(body, step):
+            if step <= 0 or step > len(steps):
+                return True  # ran before the session's first step: no record of the body then
+            was = steps[step - 1]
+            if not body:
+                return was.get("bodies") != now.get("bodies") or was.get("at") != now.get("at")
+            return (was.get("bodies") or {}).get(body) != (now.get("bodies") or {}).get(body) or (was.get("at") or {}).get(body) != (now.get("at") or {}).get(body)
+
+        extra = []
+        by_label = {}
+        try:
+            for o in self.doc.Objects:
+                if o.Label in changed and self._solid(o):
+                    by_label.setdefault(o.Label, o)
+        except Exception:
+            pass
+        asms = {}
+        for label, o in by_label.items():
+            try:
+                for p in o.InListRecursive:
+                    if getattr(p, "TypeId", "") == "Assembly::AssemblyObject":
+                        asms.setdefault(p.Label, []).append(label)
+            except Exception:
+                pass
+        for asm, parts in asms.items():
+            extra.append({"tool": "asm_check", "assembly": asm, "why": f"{', '.join(sorted(parts)[:4])} in assembly {asm} changed"})
+        try:
+            fea = hooks.analysis(self, "fea")
+            if fea and fea.get("body") in changed and fea.get("stats") != (now.get("bodies") or {}).get(fea.get("body")):
+                extra.append({"tool": "fea_solve", "body": fea["body"], "why": "the last solve was of this body as it was before the change: its stress and safety factor are stale"})
+        except Exception:
+            pass
+        pages = {}
+        try:
+            for v in self.doc.Objects:
+                if not str(getattr(v, "TypeId", "")).startswith("TechDraw::DrawView"):
+                    continue
+                src = list(getattr(v, "Source", None) or []) + list(getattr(v, "XSource", None) or [])
+                drawn = set()
+                for x in src:
+                    if x.Label in by_label:
+                        drawn.add(x.Label)
+                    try:
+                        g = x.getParentGeoFeatureGroup()
+                        if g is not None and g.Label in by_label:
+                            drawn.add(g.Label)
+                    except Exception:
+                        pass
+                if not drawn:
+                    continue
+                for pg in v.InList:
+                    if getattr(pg, "TypeId", "") == "TechDraw::DrawPage":
+                        pages.setdefault(pg.Label, set()).update(drawn)
+        except Exception:
+            pass
+        for page, drawn in pages.items():
+            extra.append({"tool": "td_list", "page": page, "why": f"its views draw {', '.join(sorted(drawn)[:4])}: dimensions and views follow at the next recompute — read them again"})
+        server = getattr(self, "server", None)
+        known = set(server.tools) if server is not None else None
+        return diffing.recheck(changed, getattr(self, "checks", None) or {}, last, differs, known, extra)
 
     @staticmethod
     def _changed(before, now):
@@ -741,7 +897,8 @@ def now_state(doc, commands=()):
     """What tool_groups { now: true } goes by (agentlink/toolindex.py fits()):
     the document's objects by workbench, and in the window the active
     workbench, a sketch open in edit, the selection, and whether each of
-    commands reports itself active. Nothing here raises: what cannot be read
+    commands that is on the active workbench's toolbars reports itself
+    active (asked: how many are there). Nothing here raises: what cannot be read
     is left out, and a command this FreeCAD does not have counts for nothing."""
     from . import toolindex
 
@@ -795,16 +952,10 @@ def now_state(doc, commands=()):
     except Exception:  # noqa: BLE001
         pass
     # Only the commands on the active workbench's own toolbars are asked:
-    # FreeCAD asks those itself all the time, so they answer safely. Asking
-    # every command known (some 550, most of workbenches not loaded) took
-    # FreeCAD 1.1.3 down outright on the Mac, twice.
-    shown = set()
-    try:
-        bars = gui.activeWorkbench().getToolbarItems() or {}
-        for names in bars.values():
-            shown.update(n for n in names if isinstance(n, str))
-    except Exception:  # noqa: BLE001
-        shown = set()
+    # FreeCAD asks those itself as it draws them, so they are safe. Asking
+    # every indexed command (about 550, most of workbenches not loaded)
+    # crashed FreeCAD 1.1.3 on the Mac, twice.
+    shown = shown_commands(gui)
     state["asked"] = len(shown)
     for name in dict.fromkeys(commands):
         if name not in shown:
@@ -818,11 +969,190 @@ def now_state(doc, commands=()):
     return state
 
 
+def shown_commands(gui):
+    """The command names on the active workbench's toolbars
+    (Workbench.getToolbarItems()): the only ones whose isActive() is ever
+    called here. Empty when they cannot be read."""
+    shown = set()
+    try:
+        items = gui.activeWorkbench().getToolbarItems()
+        for names in (items.values() if isinstance(items, dict) else ()):
+            for n in names or ():
+                if isinstance(n, str) and n and n != "Separator":
+                    shown.add(n)
+    except Exception:  # noqa: BLE001
+        pass
+    return shown
+
+
+def next_state(session):
+    """What the window is in the middle of, for the "next" hint
+    (agentlink/nexthint.py): now_state() with the sketch in edit and its
+    degrees of freedom, an open task panel's buttons, a dialog in front and
+    the status bar's text, and the tools whose FreeCAD commands are active.
+    (state, tools). With no window: ({"window": False}, []) at the cost of
+    one attribute read. Never raises."""
+    try:
+        if not FreeCAD.GuiUp:
+            return {"window": False}, []
+        import FreeCADGui as gui
+    except Exception:  # noqa: BLE001
+        return {"window": False}, []
+    from . import nexthint
+
+    wb = editing = None
+    sketch = None
+    try:
+        w = gui.activeWorkbench()
+        wb = str(w.name()) if hasattr(w, "name") else type(w).__name__
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        gd = gui.ActiveDocument
+        vp = gd.getInEdit() if gd is not None else None
+        o = getattr(vp, "Object", None)
+        if o is not None and o.isDerivedFrom("Sketcher::SketchObject"):
+            editing = "sketch"
+            sketch = {"name": str(o.Label)}
+            try:
+                sketch["dof"] = int(o.DoF)
+            except Exception:  # noqa: BLE001
+                pass
+    except Exception:  # noqa: BLE001
+        pass
+    rows = []
+    try:
+        server = getattr(session, "server", None)
+        # Which tools belong to a workbench does not change while the tool
+        # set stays: kept per workbench.
+        cache = session.__dict__.setdefault("_next_rows", {})
+        ck = (wb, editing, len(server.tools) if server is not None else 0)
+        if ck not in cache:
+            cache.clear()
+            # Only tools whose command sits on the active workbench's
+            # toolbars: nothing else is ever asked whether it is active.
+            shown = shown_commands(gui)
+            got = nexthint.candidates(list(server.tools) if server is not None else [], wb, editing, cap=10_000)
+            got = [(n, {**e, "commands": [c for c in e["commands"] if c in shown]}) for n, e in got]
+            cache[ck] = [(n, e) for n, e in got if e["commands"]][:nexthint.MAX_CANDIDATES]
+        rows = cache[ck]
+    except Exception:  # noqa: BLE001
+        rows = []
+    state = now_state(getattr(session, "doc", None), [c for _n, e in rows for c in e["commands"]])
+    if sketch:
+        state["sketch"] = sketch
+    try:
+        from PySide import QtWidgets
+
+        mw = gui.getMainWindow()
+        try:
+            if gui.Control.activeDialog():
+                buttons = []
+                for box in mw.findChildren(QtWidgets.QDialogButtonBox):
+                    if not box.isVisible():
+                        continue
+                    par, inside = box.parent(), False
+                    for _ in range(12):
+                        if par is None:
+                            break
+                        if "TaskView" in par.metaObject().className():
+                            inside = True
+                            break
+                        par = par.parent()
+                    if inside:
+                        buttons = [b.text().replace("&", "") for b in box.buttons() if b.isVisible() and b.text()]
+                        break
+                state["panel"] = {"buttons": buttons}
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            msg = (mw.statusBar().currentMessage() or "").strip()
+            if msg and not msg.startswith("Agent"):  # Agent Link's own echo is not FreeCAD's news
+                state["status"] = msg
+        except Exception:  # noqa: BLE001
+            pass
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from . import gui_link
+
+        d = gui_link.modal_info()
+        if d:
+            state["dialog"] = {"title": d.get("title") or d.get("class"), "buttons": d.get("buttons") or []}
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        tools_now = nexthint.active_tools(rows, state)
+    except Exception:  # noqa: BLE001
+        tools_now = []
+    return state, tools_now
+
+
+def _modal_up():
+    from PySide import QtWidgets
+
+    return QtWidgets.QApplication.activeModalWidget() is not None
+
+
+def _next_quick(session):
+    """What tells one state of the window from the next at the cost of a
+    few attribute reads (no command is asked anything): workbench, the
+    object in edit and a sketch's freedom, the selection's size, whether a
+    task panel or a dialog is open. None with no window."""
+    try:
+        if not FreeCAD.GuiUp:
+            return None
+        import FreeCADGui as gui
+    except Exception:  # noqa: BLE001
+        return None
+    out = []
+    for read in (lambda: type(gui.activeWorkbench()).__name__,
+                 lambda: (lambda o: None if o is None else (o.Name, getattr(o, "DoF", None)))(getattr(gui.ActiveDocument.getInEdit(), "Object", None)),
+                 lambda: len(gui.Selection.getSelection()),
+                 lambda: bool(gui.Control.activeDialog()),
+                 _modal_up):
+        try:
+            out.append(read())
+        except Exception:  # noqa: BLE001
+            out.append(None)
+    return tuple(out)
+
+
+def next_hint(session, news_only=False):
+    """The "next" line for session_state (always, when there is a window)
+    and for the health check (news_only: only when the workbench, the edit
+    state, the selection, a task panel or a dialog is not as it was at the
+    last hint — told by a few attribute reads, so a call that leaves the
+    window as it was costs no more than those). None with no window, or
+    when nothing is new. Never raises."""
+    try:
+        quick = _next_quick(session)
+        if quick is None:
+            return None
+        if news_only and getattr(session, "_next_quick", None) == quick:
+            return None
+        from . import nexthint
+
+        state, tools_now = next_state(session)
+        session._next_quick = quick
+        if not state.get("window"):
+            return None
+        k = nexthint.key(state)
+        if news_only and getattr(session, "_next_said", None) == k:
+            return None
+        line = nexthint.compose(state, tools_now)
+        if line:
+            session._next_said = k
+        return line
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def make_tools(session):
     s = session
     body = {"type": "string", "description": "A body's name; may be left out when there is one."}
     return [
-        Tool("session_state", "What the document holds: each body's volume, area, faces, solids and size (mm) — every shown body, a Body of several solids too (multiSolid says how many and whether AllowCompound means it), a part attached to another (a screw) beside it — the step count, jobs running and where files go. launcher: true adds the Claude extension's launcher as seen from here (the copy fetched from GitHub, whether it can load, its log's last lines). Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
+        Tool("session_state", "What the document holds: each body's volume, area, faces, solids and size (mm) — every shown body, a Body of several solids too (multiSolid says how many and whether AllowCompound means it), a part attached to another (a screw) beside it — the step count, jobs running and where files go. In the window also next: one short line (under 400 characters) of what FreeCAD is in the middle of, most pressing first — a dialog in front and its buttons, a sketch open in edit with its DoF, an open task panel and its buttons, the active workbench, the status bar's text, and up to 5 tools whose FreeCAD commands (on the active workbench's toolbars) report themselves active now; a changing call's health carries the same line when it is news. toolsChanged: the tool list is no longer the one last listed (groups enabled or hidden, an add-on installed, updated or removed) — the first time added, removed, updated and callable (new but unlisted) by name, after that the counts, until the list is read again. launcher: true adds the Claude extension's launcher as seen from here (the copy fetched from GitHub, whether it can load, its log's last lines). Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
         Tool("app_force_restart", "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang): run by Agent Link outside FreeCAD; the documents come back from their newest saved copies, as after a crash. For a window that is stuck; app_restart quits a working one cleanly.", obj({}), _force_restart_here),
         Tool("report_read", "FreeCAD's Report view in the window: its last lines (last, 40 by default), or only the warnings and errors (problems: true). New problem lines also come back on each answer as \"report\". Window only.", obj({"last": {"type": "integer"}, "problems": {"type": "boolean"}}), _report_read),
         Tool("body_check", "Whether a body is sound: FreeCAD's own Check Geometry, and on top of it closed, one solid, no sliver faces (under 0.01 mm wide) or very short edges, with where each problem is. A Body with AllowCompound true may hold several solids on purpose: they are counted and each checked (each), not a problem. A BOP-only finding (InvalidCurveOnSurface, where a counterbore breaks a chamfer) on a shape BRepCheck calls valid and closed is a warning with where, not a failure.", obj({"body": body}), s.body_check),
@@ -833,7 +1163,7 @@ def make_tools(session):
             s.export_file,
             changes=True,
         ),
-        Tool("history_diff", "What changed since a step (the one before the last by default) or a checkpoint (cp3 or its name — read from its saved copy when it is older than this session): per body its volume, area, faces, solids and size from and to, and the steps between.", obj({"since": {"type": ["integer", "string"]}}), s.history_diff),
+        Tool("history_diff", "What changed since a step (the one before the last by default) or a checkpoint (cp3 or its name — read from its saved copy when it is older than this session), and only what changed: bodies — per body its volume, area, faces, solids and size from and to (added, removed); moved — per body how far its box's lowest corner (least x, y, z) shifted: by [dx, dy, dz] and distance, mm (a body that only moved is here and not in bodies); features — PartDesign features, sketches and Part's parametric objects by name: added, removed, and edited with each property that changed from and to (a Pad's Length, an expression), a sketch's dimension constraints by index and name (constraintValues, angles in degrees), its constraint count and its geometry (count, length, size); recheck — what to run again, and nothing else: each check this session ran on a changed body before the change (tool, body, ranAt: the step it ran at), asm_check when the body is in an assembly, fea_solve when the last strength solve was of the body as it was, td_list for each drawing page with a view of it; and steps, the tools between. A key is left out when nothing of its kind changed; changed: false says nothing did. Features are compared from step to step of this session (not from before its first step) and in a checkpoint's saved copy; with over 600 of them, or when reading them is slow, features.unchecked says so and the rest still answers. Changes nothing.", obj({"since": {"type": ["integer", "string"]}}), s.history_diff),
     ]
 
 
@@ -1342,12 +1672,27 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         # from then, so a heavy step late in it (view_render) knows how long
         # it has left.
         t_out = (prev.get("t0") if isinstance(prev, dict) else None) or time.time()
+        # What ran, kept in a file as it runs (BatchRecord): an answer lost to
+        # a dropped call or a forced restart is read from there.
+        record = BatchRecord(s.out_dir, total, first)
+        if record.path:
+            try:
+                from . import paths as _paths
+
+                _paths.made(s, record.path, "run")
+            except Exception:
+                pass
+        record.write({"running": True, "results": []})
         mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False, "names0": mine_mark[1], "t0": t_out,
-                              "budget": float(budget), "first": first, "total": total, "file": a.get("file")}
+                              "budget": float(budget), "first": first, "total": total, "file": a.get("file"), "record": record}
         try:
             got = _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine)
         finally:
             s.batch_now = prev
+        if isinstance(got, dict):
+            record.write(got, final=True)
+            if record.ok and record.path:
+                got["record"] = record.path
         return _batch_to(a.get("to"), got, first)
 
     def _batch_to(to, got, first):
@@ -1420,6 +1765,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 d = u1 - u0
                 made += d if d > 0 else (1 if u0 >= limit and getattr(server.tools.get(c["tool"]), "changes", False) else 0)
             results.append({"tool": c.get("tool"), "ok": ok, **({"result": body} if ok else {"error": body.get("error")})})
+            if mine.get("record") is not None:
+                mine["record"].write({"running": True, "ran": len(results), "results": results})
             if not ok and stop:
                 out = {"results": results, "stopped": i}
                 if rollback and start is None:
@@ -1482,7 +1829,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         Tool("job_start", "Run a read as a job: tool and its arguments. The answer comes back as the tool's own when it ends within 45 s, else a job id for job_status (wait: false answers with the id at once). Reads that are heavy or were slow here (over 20 s) go to a job on their own, and any read takes background: true for the same; a client drops a call after about 80 s, so a long read's answer would be lost. Only reads that leave the window and the 3D view alone (not changes, pictures or window tools); while one runs, changes to its document wait (refused, saying which job).",
              obj({"tool": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["tool"]), job_start),
         Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }], or file: a .json file holding that list (or { calls, rollback, stopOnError }), read on this side so a long run of calls (many profiles' points) is not sent through the conversation; a relative path is in the session's folder, and files are read where other tools may read. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it and removes every object it made (removed lists any undo did not reach), so it stands or falls whole. "
-             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch. to: a .json file the whole answer is written to (relative: in the session's folder); the reply is then a line per call — ok, a refusal's words, the health verdict — so a long run's answers stay out of the conversation; read a call's result from the file when its line needs it.",
+             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch. to: a .json file the whole answer is written to (relative: in the session's folder); the reply is then a line per call — ok, a refusal's words, the health verdict — so a long run's answers stay out of the conversation; read a call's result from the file when its line needs it. Every batch also keeps what ran in a record of its own, batches/<date>-<time>.json in the session's folder (the reply's record is its path; the newest 20 are kept), rewritten as each call ends: when a batch's answer never arrives — a call the client dropped, FreeCAD stopped and started again — read the newest record to see which calls ran (running: true and ran: n while it was under way, each call's whole result in results) before running anything again.",
              obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}}), batch),
         Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded making): shots past the last 50 and 3 days, solver and job runs past 14 days, FreeCAD backups past 7; exports only listed. To the Trash. Dry run unless dry_run: false; kinds, older_than_days narrow it. Runs on its own daily.",
              obj({"dry_run": {"type": "boolean"}, "kinds": {"type": "array", "items": {"type": "string", "enum": list(outputs.KINDS)}}, "older_than_days": {"type": "number"}}), outputs_clean),

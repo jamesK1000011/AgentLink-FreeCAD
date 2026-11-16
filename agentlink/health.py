@@ -8,7 +8,10 @@
 #     recompute;
 #   - sketches the call recomputed: degrees of freedom left and on which
 #     geometry, conflicting / redundant / malformed constraints (the solver's
-#     own lists), open profiles;
+#     own lists), open profiles — news only: a sketch that reads as it did
+#     before the call (a spreadsheet edit recomputes the sketches that use
+#     the sheet), a CAM tool bit's own sketch, and "fully constrained" after
+#     a call that is not a sketch tool's are passed over;
 #   - shapes the call recomputed: valid, closed, solid count, self-
 #     intersection (small shapes only), overlap with the other parts, with
 #     the overlap's size;
@@ -16,7 +19,11 @@
 #     solver's status, CalculiX's lines);
 #   - the window: an open dialog, the task panel's warning labels, the status
 #     bar's text. New Report view lines come back as "report" beside it
-#     (report_watch), and are counted in the verdict.
+#     (report_watch), and are counted in the verdict;
+#   - "next": one short line of what the window is in the middle of (a sketch
+#     open in edit and its freedom, a task panel and its buttons, the
+#     workbench, tools whose FreeCAD commands are active), said when it is
+#     not what was last said (agentlink/nexthint.py).
 #
 # One place runs it (protocol.Server._call, round every changing tool), so a
 # tool gets it without doing anything. It only reads; it has a time budget
@@ -36,6 +43,7 @@ FACES_OVERLAP = 300   # a pair's common volume when both have at most this many
 OVERLAP_S = 0.6       # seconds the overlap pass may start pairs for
 MAX_PAIRS = 24        # pairs tried for overlap
 MAX_SKETCHES = 60     # read from attributes: cheap
+SKETCHES_BEFORE = 300 # sketches whose reading is kept from before the call
 MAX_SHAPES = 12       # and the time budget ends it sooner
 MAX_AMBER = 3         # yellow lines in the verdict; the rest are counted
 SKETCH_GEO = 400      # a sketch's per-geometry freedom is read up to this many
@@ -162,6 +170,7 @@ def mark(session):
     except Exception:
         pass
     m["shapes"] = _part_hashes(doc)
+    m["sketches"] = _sketch_sigs(doc)
     return m
 
 
@@ -259,6 +268,95 @@ def free_geometry(sk, cap=MAX_LIST):
         shown = ", ".join(str(i) for i in ids[:8]) + (" …" if len(ids) > 8 else "")
         out.append(f"{where}{kind}{'s' if len(ids) > 1 else ''} {shown}")
     return out[:cap], len(out)
+
+
+def _open_profiles(sk):
+    """How many of a sketch's wires are open; None when it cannot be read."""
+    try:
+        sh = sk.Shape
+        return 0 if sh.isNull() else sum(1 for w in sh.Wires if not w.isClosed())
+    except Exception:
+        return None
+
+
+def sketch_sig(sk):
+    """A sketch's reading as one value to compare: degrees of freedom, the
+    solver's four lists, whether it is empty, open profiles. Two equal ones
+    make the same line in the verdict (bar which geometry is free)."""
+    def ids(prop):
+        try:
+            return tuple(int(i) for i in (getattr(sk, prop, None) or ()))
+        except Exception:
+            return ()
+
+    try:
+        dof = int(sk.DoF)
+    except Exception:
+        dof = None
+    try:
+        empty = int(sk.GeometryCount) == 0
+    except Exception:
+        empty = None
+    return (dof, ids("ConflictingConstraints"), ids("RedundantConstraints"), ids("PartiallyRedundantConstraints"),
+            ids("MalformedConstraints"), empty, _open_profiles(sk))
+
+
+def _sketch_sigs(doc):
+    """{sketch name: sketch_sig} before the call, for up to SKETCHES_BEFORE
+    sketches (attributes and a wire count each: cheap). A sketch past that
+    has no reading from before and is read as a new one."""
+    out = {}
+    try:
+        for o in doc.Objects:
+            if getattr(o, "TypeId", "") != "Sketcher::SketchObject":
+                continue
+            if len(out) >= SKETCHES_BEFORE:
+                break
+            try:
+                out[o.Name] = sketch_sig(o)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return out
+
+
+def tool_bit_sketch(sk):
+    """Whether a sketch is part of a CAM tool bit's own model: FreeCAD's
+    tool bit (Path.Tool.toolbit) keeps the bit's parametric body in its
+    BitBody link, copied in from the bit's shape file, sketches and all.
+    Nobody designs in it, so its solver state is no news."""
+    try:
+        holders = []
+        try:
+            g = sk.getParentGeoFeatureGroup()
+        except Exception:
+            g = None
+        if g is not None:
+            holders.append(g)
+        for p in getattr(sk, "InList", None) or []:
+            if getattr(p, "TypeId", "") == "PartDesign::Body" and p not in holders:
+                holders.append(p)
+        for body in holders:
+            for user in getattr(body, "InList", None) or []:
+                try:
+                    if "BitBody" in user.PropertiesList and user.BitBody is body:
+                        return True
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return False
+
+
+def sketch_tool(tool):
+    """Whether a call is a sketch tool's own (its group or its name says
+    so): after one, the sketches it recomputed are read out as they stand,
+    "fully constrained" included; after any other, only what changed."""
+    try:
+        return str(getattr(tool, "group", "") or "") == "sketch" or str(getattr(tool, "name", "") or "").startswith("sketch_")
+    except Exception:
+        return False
 
 
 def sketch_reading(sk):
@@ -647,11 +745,25 @@ def check(session, tool, m):
     # to MAX_AMBER, and the clean ones named when few and counted when many.
     amber, fine = [], []
     sketches = [o for o in changed if getattr(o, "TypeId", "") == "Sketcher::SketchObject" and _label(o) not in failing_now]
+    # News only (live: every sheet_format repeated "NutSketch: 1 DoF left…",
+    # and cam_tool_add said "Sketch001: fully constrained" of the bit's own
+    # sketch). A red reading is always said.
+    sigs0 = (m.get("sketches") or {}) if same_doc else {}
+    own_call = sketch_tool(tool)
     for sk in sketches[:MAX_SKETCHES]:
         try:
+            if tool_bit_sketch(sk):
+                continue  # a CAM tool bit's own model
             r = sketch_reading(sk)
+            was = sigs0.get(sk.Name)
+            same = was is not None and was == sketch_sig(sk)
         except Exception:
             continue
+        if not r["red"] and not own_call:
+            if same:
+                continue  # recomputed, and reads as it did before the call
+            if not r.get("amber") and was is None:
+                continue  # made by the call, with nothing to do on it
         if r["red"]:
             red = True
             lines.append(r["line"])
@@ -767,9 +879,25 @@ def check(session, tool, m):
     if w.get("status"):
         h["statusBar"] = w["status"]
 
-    if not lines and not unchecked:
+    # 7. What the window is in the middle of, when that is news (a sketch
+    # now open in edit, a task panel, another workbench): one short line,
+    # nothing without a window (tools.next_hint).
+    nxt = None
+    try:
+        import FreeCAD
+
+        if FreeCAD.GuiUp:
+            from .tools import next_hint
+
+            nxt = next_hint(session, news_only=True)
+    except Exception:
+        nxt = None
+
+    if not lines and not unchecked and not nxt:
         return None
     out = {"ok": not red, "verdict": "; ".join(lines) if lines else "nothing red"}
+    if nxt:
+        out["next"] = nxt
     todos = [t for i, t in enumerate(todos) if t and t not in todos[:i]]
     if todos:
         out["todo"] = "; ".join(todos[:3])

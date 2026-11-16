@@ -92,6 +92,42 @@ def report(session, o, tool, extra=None, check=True):
     return out
 
 
+def open_edges(sh):
+    """How many of a surface's edges bound one face only (its free border):
+    OCC's ShapeAnalysis_Shell over its faces, which counts a cylinder's seam
+    as joined. None when it cannot be read."""
+    try:
+        faces = sh.Faces
+        if not faces:
+            return None
+        return len(Part.Shell(faces).getFreeEdges().Edges)
+    except Exception:
+        return None
+
+
+def report_surface(session, o, tool, extra=None):
+    """An asked-for surface's answer (solid: false): what a surface is —
+    faces, area, box, its open edges — and never a solid's failings (it was
+    answered "The shape is not closed … 0 solids where one is meant" with
+    sound: false, as if the call had failed)."""
+    def read():
+        sh = o.Shape
+        st = geo.stats(sh)
+        out = {"body": o.Label, "surface": True, "faces": st["faces"], "area": st["area"], "box": st["box"], "valid": bool(sh.isValid())}
+        free = open_edges(sh)
+        if free is not None:
+            out["openEdges"] = free
+            out["closed"] = free == 0
+        if not out["valid"]:
+            out["problems"] = ["The surface is not valid (FreeCAD's isValid): history_undo, and make it another way — a profile that does not cross itself, a path with no turn tighter than the profile is wide."]
+        out["note"] = ("A surface, as asked (solid: false): it has no volume and no inside, so it is not among session_state's bodies and body_check does not apply; "
+                       "open edges are its border. surface_thicken gives it thickness; view_render { objects: [its name] } draws it."
+                       + (" No open edges: it is closed all round — the same call with solid left out makes the solid." if free == 0 else ""))
+        return out
+
+    return picks.finish(session, tool, read, recompute=False, extra=extra)
+
+
 # ---- profiles: what extrude, revolve, loft and sweep take ----------------------------------
 
 def spec_points(session, spec, what="profile"):
@@ -553,6 +589,8 @@ def tools(session):
                 if c is not None and hasattr(c, "Visibility"):
                     c.Visibility = False
             doc().recompute()
+            if a.get("solid", True) is False and not o.Shape.Solids:
+                return report_surface(s, o, tool)
             return report(s, o, tool, check=not (late and late()))
         if not a.get("into"):
             raise ToolError("invalid_input", f"op {op}: into names the body it acts on.")
@@ -1260,21 +1298,21 @@ def tools(session):
         ),
         Tool(
             "part_extrude",
-            "Extrude a profile into a solid: length mm along its normal (a face's outward one; a flat outline's plane normal, +z in XY; negative goes the other way), or direction [x,y,z] (its own length, or length given); symmetric: half each way. op new (default without into) | fuse (default with into) | cut | common with into: a boss or a pocket in one call, refused when it misses into. solid: false gives a surface from an open profile. Done on the shape, not as a Part::Extrusion feature (no taper). A sketch used as profile is hidden; into's faces are renumbered. Reply: body, volume, area, faces, box, sound; with into also op, volumeChange.",
+            "Extrude a profile into a solid: length mm along its normal (a face's outward one; a flat outline's plane normal, +z in XY; negative goes the other way), or direction [x,y,z] (its own length, or length given); symmetric: half each way. op new (default without into) | fuse (default with into) | cut | common with into: a boss or a pocket in one call, refused when it misses into. solid: false gives a surface from an open profile. Done on the shape, not as a Part::Extrusion feature (no taper). A sketch used as profile is hidden; into's faces are renumbered. Reply: body, volume, area, faces, box, sound; with into also op, volumeChange. A surface (solid: false) answers as one instead: body, surface: true, faces, area, box, valid, openEdges (edges on its border) and closed — no volume, sound or solids, and it is not among session_state's bodies.",
             obj({"profile": prof, "body": body, "length": {"type": "number"}, "direction": {"type": "array", "items": {"type": "number"}}, "symmetric": {"type": "boolean"}, "solid": {"type": "boolean"}, **common_in}, ["profile"]),
             part_extrude,
             changes=True,
         ),
         Tool(
             "part_revolve",
-            "Revolve a profile about an axis: axis [x,y,z] (default +z) through at [x,y,z] (default the origin), angle degrees (default 360; within -360 … 360, not 0). The profile must lie to one side of the axis (touching it is fine). solid: false gives a surface. profile, op / into and the reply as part_extrude.",
+            "Revolve a profile about an axis: axis [x,y,z] (default +z) through at [x,y,z] (default the origin), angle degrees (default 360; within -360 … 360, not 0). The profile must lie to one side of the axis (touching it is fine). solid: false gives a surface. profile, op / into and the reply as part_extrude (a surface's too: surface, faces, area, openEdges).",
             obj({"profile": prof, "body": body, "axis": {}, "at": {"type": "array", "items": {"type": "number"}}, "angle": {"type": "number"}, "solid": {"type": "boolean"}, **common_in}, ["profile"]),
             part_revolve,
             changes=True,
         ),
         Tool(
             "part_loft",
-            "A solid (solid: false: a surface) through two or more profiles in order: each a sketch, wire, face, { points, closed, smooth } (smooth: a B-spline through them), { points_file, key } or { circle }; or all from profiles_file (many sections read from a file, not sent in the call). All closed or all open. They are lined up first (same way round, seams nearest: aligned says what changed). ruled: true is straight between profiles, each made a polygon of samples points, so it always pairs up. Smooth (default): when OCC refuses or the loft bulges over 15% beyond the profiles it tries again itself (matching B-splines, maxDegree 3 then 2; maxDegree 1–8, default 5), then span by span with the bulging spans ruled (segments: false: off); route says what was done, a refusal names the spans. closed: back to the first profile. Refused, nothing added, when invalid, open or inside out. Heavy: time grows about as the cube of its faces (91 profiles of 36 points ruled 10 s; of 80 points over 2 min); past an estimated minute the first call answers with the estimate and runs nothing, the same call again runs it; a loft kept late says unchecked (run body_check). Reply: body, volume, box, sound, aligned, route, maxDegree, strays (how far it lies from the given points). op / into as part_extrude. More: guide_read { topic: \"model\" }.",
+            "A solid (solid: false: a surface) through two or more profiles in order: each a sketch, wire, face, { points, closed, smooth } (smooth: a B-spline through them), { points_file, key } or { circle }; or all from profiles_file (many sections read from a file, not sent in the call). All closed or all open. They are lined up first (same way round, seams nearest: aligned says what changed). ruled: true is straight between profiles, each made a polygon of samples points, so it always pairs up. Smooth (default): when OCC refuses or the loft bulges over 15% beyond the profiles it tries again itself (matching B-splines, maxDegree 3 then 2; maxDegree 1–8, default 5), then span by span with the bulging spans ruled (segments: false: off); route says what was done, a refusal names the spans. closed: back to the first profile. Refused, nothing added, when invalid, open or inside out. Heavy: time grows about as the cube of its faces (91 profiles of 36 points ruled 10 s; of 80 points over 2 min); past an estimated minute the first call answers with the estimate and runs nothing, the same call again runs it; a loft kept late says unchecked (run body_check). Reply: body, volume, box, sound, aligned, route, maxDegree, strays (how far it lies from the given points); a surface (solid: false) answers surface: true, faces, area, box, valid, openEdges and closed in place of volume and sound. op / into as part_extrude. More: guide_read { topic: \"model\" }.",
             obj({"profiles": {"type": "array", "items": {}, "description": "Each a sketch or wire's name, a face (\"Box.Face6\"), { points: [[x,y,z] …], closed, smooth }, { points_file: \"<file>.json\"|\".csv\", key, closed, smooth } or { circle }."},
                  "profiles_file": {"type": "string", "description": "A .json (a list of [[x,y,z] …] lists, or an object of them) or .csv (x,y,z rows; outlines apart by blank lines or named in a first column) holding every profile, in order. A relative path is in the session's folder."},
                  "key": {"description": "With profiles_file: the name (or number from 0) of the list in the file that holds the profiles."},
@@ -1287,7 +1325,7 @@ def tools(session):
         ),
         Tool(
             "part_sweep",
-            "Sweep one closed profile (a face gives its outer outline) along a path: a wire or sketch, an edge \"Box.Edge3\", a helix from part_wire, or { points } (open by default). frenet: true keeps the profile from twisting along a helix; corners at sharp turns: right (default), round or none (FreeCAD's Transition Right corner, Round corner, Transformed). solid: false gives a surface, and then the profile may be open. Trap: the profile must already sit at the path's start, across it; it is not moved there. profile, op / into and the reply as part_extrude.",
+            "Sweep one closed profile (a face gives its outer outline) along a path: a wire or sketch, an edge \"Box.Edge3\", a helix from part_wire, or { points } (open by default). frenet: true keeps the profile from twisting along a helix; corners at sharp turns: right (default), round or none (FreeCAD's Transition Right corner, Round corner, Transformed). solid: false gives a surface, and then the profile may be open. Trap: the profile must already sit at the path's start, across it; it is not moved there. profile, op / into and the reply as part_extrude (a surface's too: surface: true, faces, area, box, valid, openEdges, closed — not a solid's sound and problems).",
             obj({"profile": prof, "path": prof, "body": body, "frenet": {"type": "boolean"}, "corners": {"type": "string", "enum": ["right", "round", "none"]}, "solid": {"type": "boolean"}, **common_in}, ["profile", "path"]),
             part_sweep,
             changes=True,

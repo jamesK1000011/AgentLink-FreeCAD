@@ -121,6 +121,54 @@ class ViewRender(unittest.TestCase):
         self.assertGreaterEqual(z["mmAcross"]["left"], 16.0)
         self.assertLess(z["mmAcross"]["left"], 30.0)
 
+    def test_an_empty_picture_is_answered_in_words(self):
+        import FreeCAD
+
+        # the zoom misses the cup: why, the parts' box, and no image
+        r = self.raw({"view": "iso", "zoom": {"at": [900, 900, 900], "size": 10}})
+        self.assertFalse(r.get("isError"), r)
+        self.assertEqual(len(r["content"]), 1, "a blank picture was sent")
+        said = json.loads(r["content"][0]["text"])
+        self.assertIn("outside the parts", said["empty"])
+        self.assertIn("[40.0, 30.0, 20.0]", said["empty"])
+        self.assertIs(said["fitted"], False)
+        # an object with no solid shape, named
+        doc = self.session.doc
+        sk = doc.addObject("Part::Feature", "Flat")
+        import Part
+
+        sk.Shape = Part.makePlane(5, 5)
+        doc.recompute()
+        err, r = self.call("view_render", {"objects": ["Flat"]})
+        self.assertFalse(err, r)
+        self.assertIn("Flat has no solid shape", r["empty"])
+        err, r = self.call("view_render", {"objects": ["Cup", "Flat"], "inline": False})
+        self.assertFalse(err, r)
+        self.assertIn("Flat", r["notDrawn"])
+        self.assertNotIn("empty", r)
+        err, r = self.call("view_render", {"objects": ["NoSuchThing"]})
+        self.assertTrue(err)
+        doc.removeObject("Flat")
+        # everything hidden
+        cup = next(o for o in doc.Objects if o.Label == "Cup")
+        cup.Visibility = False
+        try:
+            err, r = self.call("view_render", {})
+            self.assertFalse(err, r)
+            self.assertIn("every part is hidden (Cup)", r["empty"])
+        finally:
+            cup.Visibility = True
+        # an empty document
+        empty = FreeCAD.newDocument("Nothing")
+        self.session.switch(empty)
+        try:
+            err, r = self.call("view_render", {})
+            self.assertFalse(err, r)
+            self.assertIn("document is empty", r["empty"])
+        finally:
+            self.session.switch(doc)
+            FreeCAD.closeDocument(empty.Name)
+
     def test_section_and_refusals(self):
         err, r = self.call("view_render", {"section": {"axis": "x", "offset": 20}, "inline": False, "path": os.path.join(OUT, "cup_section.png")})
         self.assertFalse(err, r)
@@ -129,9 +177,13 @@ class ViewRender(unittest.TestCase):
         err, r = self.call("view_render", {"map": "nope"})
         self.assertTrue(err)
         self.assertIn("wall", r["error"]["message"])
-        err, r = self.call("view_render", {"map": "stress"})
-        self.assertTrue(err)
-        self.assertEqual(r["error"]["code"], "not_found")
+        # a map with no data is answered in words, with no picture
+        r = self.raw({"map": "stress"})
+        self.assertFalse(r.get("isError"), r)
+        self.assertEqual(len(r["content"]), 1)
+        said = json.loads(r["content"][0]["text"])
+        self.assertIn("fea_solve", said["empty"])
+        self.assertNotIn("path", said)
         err, m = self.call("view_maps")
         self.assertIn("wall", [x["name"] for x in m["maps"]])
         import FreeCAD

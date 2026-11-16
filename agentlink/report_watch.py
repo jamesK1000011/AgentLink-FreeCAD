@@ -12,6 +12,16 @@ import re
 # (live on the Mac).
 MARK = re.compile(r"(traceback|error|exception|warning|failed|cannot|could not|not found|missing|\(qt\.[a-z.]+\)|^qt\.[a-z.]+:)", re.I)
 MAX_LINES, MAX_CHARS = 6, 300
+# Qt's own start-up line about font aliases ("Populating font family aliases
+# took 147 ms. Replace uses of missing font family …"): written at every
+# start, nothing anyone can act on from here. It is left off the answers
+# (problems(), take()) and stays readable through report_read (read()).
+QUIET = re.compile(r"(populating font family aliases took|replace uses of missing font family)", re.I)
+
+
+def quiet(line):
+    """Whether a problem-looking line is start-up noise kept off the answers."""
+    return bool(QUIET.search(line or ""))
 _state = {"seen": 0}
 
 
@@ -24,7 +34,7 @@ def problems(text, start):
     out = []
     for line in new.splitlines():
         line = line.strip()
-        if line and MARK.search(line):
+        if line and MARK.search(line) and not quiet(line):
             out.append(line[:MAX_CHARS])
     if len(out) > MAX_LINES:
         out = out[:MAX_LINES - 1] + [f"… and {len(out) - MAX_LINES + 1} more lines (window_snapshot part: \"Report view\")"]
@@ -153,7 +163,7 @@ def take():
         rows, _state["seen"] = _blocks(w, _state["seen"])
     except Exception:
         return []
-    out = coloured(rows, _problem_colours())
+    out = [t for t in coloured(rows, _problem_colours()) if not quiet(t)]
     if len(out) > MAX_LINES:
         out = out[:MAX_LINES - 1] + [f"… and {len(out) - MAX_LINES + 1} more lines (report_read problems: true)"]
     return out
@@ -190,7 +200,8 @@ def _report_dock():
 
 # Lines that are noise at start-up, not a problem for the person: Qt's font
 # and platform chatter and FreeCAD's missing icons. They still ride on the
-# agent's answers (MARK); they do not open the Report view.
+# agent's answers (MARK), bar the font-alias line (QUIET); they do not open
+# the Report view.
 NOISE = re.compile(r"(\(qt\.qpa|^qt\.qpa|font famil|cannot find icon)", re.I)
 # FreeCAD shows the Report view again as it starts and at a workbench switch
 # (its saved dock layout): for this long after either, a Report view that

@@ -2105,13 +2105,89 @@ def tools(session):
 
     # ---- reading and writing out ----
 
+    def lines_of(v):
+        try:
+            return bool(v.getVisibleEdges())
+        except Exception:
+            return False
+
+    def warm(page):
+        """The page's part views that have no lines yet — a document just
+        opened: FreeCAD saves a view's settings, not its lines, and works
+        them out at the view's first recompute (DrawViewPart::execute; on a
+        worker thread in the window) — recomputed here and waited for, and
+        the dimensions on them recomputed after (a dimension keeps the
+        points it measures between from its own recompute). (how many were
+        cold, seconds waited, the names of those still without lines)."""
+        parts = []
+        for v in page.Views:
+            if v.isDerivedFrom("TechDraw::DrawProjGroup"):
+                parts += [x for x in v.Views if x.isDerivedFrom("TechDraw::DrawViewPart")]
+            elif v.isDerivedFrom("TechDraw::DrawViewPart"):
+                parts.append(v)
+        cold = [v for v in parts if not lines_of(v)]
+        if not cold:
+            return 0, None, set()
+        import time
+
+        t0 = time.time()
+        for v in cold:
+            try:
+                v.recompute()
+            except Exception:
+                pass
+        try:
+            from ..td_wait import wait_views
+
+            wait_views(cold, timeout=20.0)
+        except Exception:
+            pass
+        still = {v.Name for v in cold if not lines_of(v)}
+        warmed = {v.Name for v in cold} - still
+        frames.clear()
+        for d in page.Views:
+            try:
+                if d.TypeId == "TechDraw::DrawViewDimension" and d.References2D and d.References2D[0][0].Name in warmed:
+                    d.recompute()
+            except Exception:
+                pass
+        return len(cold), round(time.time() - t0, 2), still
+
     def td_list(a):
         page = page_of(doc(), a.get("page"))
+        n_cold, waited, still = warm(page)
         out = page_reading(page, full=True)
+        if n_cold:
+            out["computed"] = (f"{n_cold} view{'s' if n_cold != 1 else ''} had no lines yet (a document just opened keeps a view's settings, not its lines): "
+                               f"worked out here in {waited:g} s before reading.")
+        if still:
+            # Never zeros as if measured: a view with no lines has no edge
+            # count, and a dimension on it no value.
+            def mark(row):
+                if row.get("name") in still:
+                    row.pop("edges", None)
+                    row.pop("vertices", None)
+                    row["notReady"] = True
+                for sub in row.get("items") or []:
+                    mark(sub)
+
+            for row in out["views"]:
+                mark(row)
+            out["notReady"] = ("No lines yet for " + ", ".join(sorted(doc().getObject(n).Label for n in still)) + ": their edge counts and the dimensions on them are left out, not zero. "
+                               "A view whose source has no shape or whose page has KeepUpdated off stays so; otherwise recompute, then td_list again.")
         dims, syms, other = [], [], []
         for o in page.Views:
             if o.TypeId == "TechDraw::DrawViewDimension":
-                dims.append(dim_reading(o))
+                row = dim_reading(o)
+                try:
+                    on = o.References2D[0][0].Name if o.References2D else None
+                except Exception:
+                    on = None
+                if on in still:
+                    row.pop("measured", None)
+                    row.pop("text", None)
+                    row["notReady"] = True
+                dims.append(row)
             elif o.isDerivedFrom("TechDraw::DrawViewSymbol") and GDT_PROP in o.PropertiesList:
                 data = json.loads(getattr(o, GDT_PROP))
                 # Frames, datums and what else is kept as a symbol (a surface
@@ -2845,7 +2921,7 @@ def tools(session):
              obj({"view": {"type": "string"}, "on": ref_schema, "text": {"type": "string"}, "at": {"type": "array", "items": {}}}, ["view", "on"]), td_balloon, changes=True),
         Tool("td_table", "A spreadsheet's cells as a table on the page (a parts list from asm_bom, a revision table): sheet, range (default its used cells), size, at. It follows the sheet; an empty sheet is refused.",
              obj({"page": {"type": "string"}, "sheet": {"type": "string"}, "range": {"type": "string"}, "size": {"type": "number"}, "at": {"type": "array", "items": {}}}), td_table, changes=True),
-        Tool("td_list", "A page's views (label, scale, size, edge count; a group's items), dimensions (name, refs, measured, text, tolerance), GD&T, other objects and title block. Changes nothing.", obj({"page": {"type": "string"}}), td_list),
+        Tool("td_list", "A page's views (label, scale, size, edge count; a group's items), dimensions (name, refs, measured, text, tolerance), GD&T, other objects and title block. A document just opened holds each view's settings but not its lines (FreeCAD works them out at the view's first recompute): views without lines are computed here first and waited for (up to 20 s; computed says how many and how long), and the dimensions on them after. A view still without lines is marked notReady with no edge count, and a dimension on it has notReady in place of measured and text — never 0 as if measured; notReady at the top says which and what to do (recompute, then td_list again). Changes nothing in the model.", obj({"page": {"type": "string"}}), td_list),
         Tool("td_cosmetic", "Cosmetic geometry on a view (FreeCAD's own cosmetic edges from 1.1, so in the window too; always in td_export): items [{ kind line (from, to: points on the part) | circle (center on the part, radius mm) | centerline (edges: a shaft's or hole's two side lines; extend mm) | thread (edges: the two outline lines of a side view, or circle: the end view's round edge; internal: true for a tapped hole; pitch, ISO coarse by default; length mm) , style thin | visible | hidden | center }]; clear: true drops the earlier ones. td_lines takes them by order, from 0.",
              obj({"view": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}, "clear": {"type": "boolean"}}, ["view"]), td_cosmetic, changes=True),
         Tool("td_leader", "A leader line from a feature of a view (on: a ref as td_dim takes) to at [x, y] page mm, with text (\\n splits lines) at its end — a note pointing at something.",

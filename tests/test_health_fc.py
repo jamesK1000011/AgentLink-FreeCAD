@@ -98,6 +98,19 @@ class Health(Base):
         self.assertNotIn("health", out)
         self.assertIn("InBatch: ", out["results"][1]["result"]["health"]["verdict"])
 
+    def test_8_a_sketch_recomputed_without_news_is_not_read_out_again(self):
+        # Base has freedom left (test 1). Recomputed by a call that is not a
+        # sketch tool's, reading as before: nothing said of it (live, a
+        # spreadsheet's edits repeated the sketches using the sheet).
+        sk = self.session.doc.getObjectsByLabel("Base")[0]
+        self.assertGreater(sk.DoF, 0)
+        sk.touch()
+        out = self.ok("recompute", {})
+        self.assertNotIn("Base:", (out.get("health") or {}).get("verdict", ""))
+        # a sketch tool's own call still reads it out
+        out = self.ok("sketch_add", {"sketch": "Base", "items": [{"kind": "circle", "center": [5, 0], "radius": 2}]})
+        self.assertIn("Base: ", out["health"]["verdict"])
+
 
 if __name__ == "__main__":
     unittest.main()
