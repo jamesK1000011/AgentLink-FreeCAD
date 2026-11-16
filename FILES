@@ -194,6 +194,7 @@ tests/test_facepick.py
 tests/test_feature.py
 tests/test_feature_more.py
 tests/test_fem_more.py
+tests/test_fem_route.py
 tests/test_files.py
 tests/test_fitting.py
 tests/test_flat2d.py

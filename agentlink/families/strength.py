@@ -1,8 +1,14 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Strength by finite elements: a linear static solve of one body, meshed by
-# Gmsh into ten-node tetrahedra, read into FreeCAD's FemMesh (which finds
-# the nodes and element faces on each picked face and writes the CalculiX
-# deck's mesh), solved by CalculiX (ccx), and read back from the .frd.
+# Strength by finite elements. fea_solve builds the study as FreeCAD's own
+# FEM analysis (CalculiX solver, Gmsh mesh, material, fixed / force /
+# pressure / self-weight constraints) and solves it with FemToolsCcx, its
+# results loaded into the analysis, where the study is one body, fixed
+# holds, those loads, linear (fem_route_why). The rest — several parts tied
+# or in contact, nonlinear, refined regions, pinned holds, heat and spin, and
+# fea_modes / fea_buckle / fea_heat / fea_shell — still run Agent Link's own
+# deck: Gmsh into ten-node tetrahedra, read into FreeCAD's FemMesh, solved by
+# CalculiX (ccx), read back from the .frd. The verdicts are Agent Link's
+# either way.
 # Headless: no FEM workbench GUI, no Qt. The study (body, material, holds,
 # loads) is kept with the document; the last results with the session.
 
@@ -108,6 +114,30 @@ def _need_study(session):
 def _pick_report(shape, q, what):
     picked = facepick.pick(shape, q, what)
     return picked, [facepick.describe(n, f) for n, f in picked]
+
+
+def fem_route_why(st, a):
+    """Why this study does not go through FreeCAD's FEM objects here, or
+    None when it does: one body, fixed holds, force / pressure / gravity,
+    linear, no refined regions."""
+    if st.get("parts"):
+        return "several parts tied or in contact (fea_parts) are solved by its own deck"
+    if a.get("nonlinear"):
+        return "nonlinear (large deflection, elastic-plastic) is solved by its own deck"
+    if st.get("refine"):
+        return "refined mesh regions (fea_refine) are meshed by its own Gmsh script"
+    if any(h.get("kind", "fixed") != "fixed" for h in st["holds"]):
+        return "a pinned or sliding hold is solved by its own deck"
+    odd = sorted({ld["kind"] for ld in st["loads"] if ld["kind"] not in ("force", "pressure", "gravity")})
+    if odd:
+        return f"{' and '.join(odd)} loads are solved by its own deck"
+    try:
+        import ObjectsFem  # noqa: F401
+        from femtools import ccxtools  # noqa: F401
+        from femmesh import gmshtools  # noqa: F401
+    except Exception as e:  # noqa: BLE001
+        return f"FreeCAD's FEM tools are not here ({type(e).__name__}: {e})"
+    return None
 
 
 def tools(session):
@@ -657,55 +687,34 @@ def tools(session):
         shape = o.Shape
         t0 = time.time()
         timeout = float(a.get("timeout", 300))
-        ccx, wd, femmesh, mesh_text, nodes, elems = _meshed(o, st, timeout)
         mesh = float(st["mesh"])
         faces = shape.Faces
-
-        fixed, held_faces, cloads, dloads, gravity, applied = _assemble(st, shape, femmesh, nodes, elems)
-        mat = {"E": float(c["E"]), "nu": float(c.get("nu") or 0.35), "rho": float(c["density"])}
-        text = ccx_io.deck(mesh_text, mat, fixed, cloads, dloads, gravity, thermal=_thermal(st, nodes), bounds=st.pop("_bounds", None), centrif=st.pop("_centrif", None))
+        nonlin = bool(a.get("nonlinear"))
         groups = pairs = None
         part_cards = []
-        if st.get("parts"):
-            groups, pairs = _parts_split(st, shape, femmesh, nodes, elems)
-            defs = []
-            for k, pinfo in enumerate(st["parts"]):
-                pc = matfam.card(s.doc, pinfo["material"]) or c
-                part_cards.append(pc)
-                defs.append((f"P{k + 1}", groups[k], {"E": float(pc["E"]), "nu": float(pc.get("nu") or 0.35), "rho": float(pc.get("density") or c["density"]),
-                                                     **({"alpha": _thermal(st, nodes)["alpha"]} if _thermal(st, nodes) else {})}))
-            empty = [st["parts"][k]["body"] for k, g in enumerate(groups) if not g]
-            if empty:
-                raise ToolError("failed", f"No elements landed in {', '.join(empty)}: a finer mesh (fea_setup is not used here — fea_parts {{ mesh }}).")
-            join = [(f"J{n + 1}", sl, ma) for n, (i, j, sl, ma) in enumerate(pairs)]
-            Emin = min(float(pc["E"]) for pc in part_cards)
-            text = ccx_io.parts_deck(text, defs, ties=join if st.get("join") == "tie" else (), contacts=join if st.get("join") == "contact" else (),
-                                     contact_slope=Emin * 50, friction=st.get("friction", 0))
-        nonlin = bool(a.get("nonlinear"))
-        if nonlin:
-            text = _nonlinear(text, {"PART": c} if not st.get("parts") else {f"MP{k + 1}": pc for k, pc in enumerate(part_cards)}, a)
-        with open(os.path.join(wd, "job.inp"), "w") as f:
-            f.write(text)
-        env = dict(os.environ)
-        env.setdefault("OMP_NUM_THREADS", str(max(1, min(4, os.cpu_count() or 1))))
-        try:
-            r = subprocess.run([ccx, "-i", "job"], cwd=wd, capture_output=True, text=True, timeout=timeout, env=env)
-        except subprocess.TimeoutExpired:
-            raise ToolError("failed", f"CalculiX took over {timeout:g} s: a coarser mesh or a longer timeout.")
-        frd = os.path.join(wd, "job.frd")
-        log = (r.stdout or "") + (r.stderr or "")
-        if "*ERROR" in log or not os.path.isfile(frd):
-            err = [l.strip() for l in log.splitlines() if "ERROR" in l][:2] or log.strip().splitlines()[-2:]
-            hint = " The part may be free to move: hold more faces." if any("singular" in l.lower() or "zero pivot" in l.lower() for l in log.splitlines()) else ""
-            if nonlin and any("increment size smaller" in l.lower() for l in log.splitlines()):
-                hint += (" It stopped finding equilibrium as the load rose: past its strength the part gives way (it would collapse or break) — "
-                         "less load, a stronger material or a larger section; or contact that never closes.")
-            raise ToolError("failed", f"CalculiX refused the job: {' | '.join(err)}.{hint}")
-        with open(frd) as f:
-            disp, stress = ccx_io.read_frd(f.read())
+        # FreeCAD's own FEM first: an analysis with its CalculiX solver,
+        # Gmsh mesh, material and constraints, solved by FemToolsCcx and its
+        # results loaded into the analysis. Agent Link's own deck only for
+        # what that route does not take here (fem_route_why), or where it fails.
+        route_why = fem_route_why(st, a)
+        fem = None
+        if route_why is None:
+            try:
+                fem = _solve_fem(st, o, c, timeout)
+            except ToolError:
+                raise
+            except Exception as e:  # noqa: BLE001 - its own failure: the deck below runs, and the answer says why
+                route_why = f"FreeCAD's FEM route failed here: {type(e).__name__}: {e}"
+        if fem is not None:
+            wd, femmesh, nodes, elems, disp, stress, an_label = fem
+            fixed, held_faces, _cl, _dl, _gr, applied = _assemble(st, shape, femmesh, nodes, elems)
+            st.pop("_bounds", None)
+            st.pop("_centrif", None)
+            frd = os.path.join(wd, "job.frd")
+        else:
+            wd, femmesh, nodes, elems, disp, stress, fixed, held_faces, applied, groups, pairs, part_cards, frd = _solve_own(st, o, c, a, timeout)
         if not disp or not stress:
-            raise ToolError("failed", "CalculiX wrote no displacements or stresses: see job.frd in " + wd)
-
+            raise ToolError("failed", "CalculiX wrote no displacements or stresses: see the files in " + wd)
         vm = {n: ccx_io.von_mises(sv) for n, sv in stress.items()}
         n_max = max(vm, key=vm.get)
         dmag = {n: math.sqrt(sum(x * x for x in u[:3])) for n, u in disp.items()}
@@ -727,6 +736,8 @@ def tools(session):
             "held": sorted(held_faces),
             "vonMisesMax": {"MPa": round(smax, 3), **where(n_max)},
             "displacementMax": {"mm": round(dmag[n_dmax], 4), **where(n_dmax)},
+            "solvedBy": (f"FreeCAD's FEM ({an_label}: CalculiX solver, Gmsh mesh, its constraints; results in the analysis)" if fem is not None
+                         else f"Agent Link's own CalculiX deck — {route_why}"),
         }
         warnings = []
         if nonlin:
@@ -786,6 +797,180 @@ def tools(session):
 
         hooks.remember(s, "fea", s._agentlink_fea)
         return out
+
+    def _solve_fem(st, o, c, timeout):
+        """_fem_build_and_run, and on its own failure what it made taken out
+        again (the own deck then solves, and the document holds no
+        half-built analysis)."""
+        doc = s.doc
+        before = {x.Name for x in doc.Objects}
+        try:
+            return _fem_build_and_run(st, o, c, timeout)
+        except ToolError:
+            raise
+        except Exception:
+            for x in [x for x in doc.Objects if x.Name not in before]:
+                try:
+                    doc.removeObject(x.Name)
+                except Exception:
+                    pass
+            raise
+
+    def _fem_build_and_run(st, o, c, timeout):
+        """The study as FreeCAD's FEM analysis (replacing the one the last
+        solve made), meshed by its Gmsh tools and solved by FemToolsCcx:
+        (work folder, FemMesh, nodes, elements, displacements, stresses,
+        the analysis's label)."""
+        import ObjectsFem
+        from femmesh import gmshtools
+        from femtools import ccxtools
+
+        ccx = _binary("ccx", "Ccx", "ccxBinaryPath", "AGENTLINK_CCX")
+        if not ccx:
+            raise ToolError("unavailable", "CalculiX (ccx) not found: install it (conda install -c conda-forge calculix; or your system's packages), or set its path in FreeCAD's FEM preferences or AGENTLINK_CCX.")
+        doc = s.doc
+        label = f"{o.Label} strength (fea_solve)"
+        for old in [x for x in doc.Objects if x.Label == label and x.TypeId == "Fem::FemAnalysis"]:
+            for m in list(getattr(old, "Group", []) or []):
+                try:
+                    doc.removeObject(m.Name)
+                except Exception:
+                    pass
+            doc.removeObject(old.Name)
+        for old in [x for x in doc.Objects if x.Label.startswith(f"{o.Label} force direction")]:
+            doc.removeObject(old.Name)
+        an = ObjectsFem.makeAnalysis(doc, "Analysis")
+        an.Label = label
+        names = ("makeSolverCalculiXCcxTools", "makeSolverCalculixCcxTools", "makeSolverCcxTools", "makeSolverCalculiX", "makeSolverCalculix")
+        mk = next((getattr(ObjectsFem, n) for n in names if hasattr(ObjectsFem, n)), None)
+        if mk is None:
+            raise RuntimeError("no CalculiX solver object in this FEM")
+        solver = mk(doc)
+        an.addObject(solver)
+        mo = ObjectsFem.makeMaterialSolid(doc, "Material")
+        props = {"Name": c.get("name", st["material"]), "YoungsModulus": f"{float(c['E'])} MPa", "PoissonRatio": str(float(c.get("nu") or 0.35)),
+                 "Density": f"{float(c['density']) * 1000} kg/m^3"}
+        mo.Material = props
+        mo.References = [(o, "")]
+        an.addObject(mo)
+        mesh = ObjectsFem.makeMeshGmsh(doc, "Mesh")
+        mesh.Shape = o
+        mesh.CharacteristicLengthMax = f"{float(st['mesh'])} mm"
+        mesh.ElementOrder = "2nd"
+        an.addObject(mesh)
+        shape = o.Shape
+        for h in st["holds"]:
+            fx = ObjectsFem.makeConstraintFixed(doc, "Fixed")
+            fx.References = [(o, tuple(n for n, _ in facepick.pick(shape, h["faces"], "faces")))]
+            an.addObject(fx)
+        for ld in st["loads"]:
+            if ld["kind"] == "pressure":
+                pr = ObjectsFem.makeConstraintPressure(doc, "Pressure")
+                pr.References = [(o, tuple(n for n, _ in facepick.pick(shape, ld["faces"], "faces")))]
+                pr.Pressure = f"{float(ld['pressure'])} MPa"
+                an.addObject(pr)
+            elif ld["kind"] == "gravity":
+                g = ObjectsFem.makeConstraintSelfWeight(doc, "SelfWeight")
+                g.Gravity_x, g.Gravity_y, g.Gravity_z = ld["gravity"]
+                an.addObject(g)
+            else:
+                fv = V(*ld["force"])
+                ln = doc.addObject("Part::Line", "ForceDirection")
+                ln.Label = f"{o.Label} force direction"
+                d = V(fv)
+                d.normalize()
+                ln.X2, ln.Y2, ln.Z2 = d.x, d.y, d.z
+                ln.Visibility = False
+                fo = ObjectsFem.makeConstraintForce(doc, "Force")
+                fo.References = [(o, tuple(n for n, _ in facepick.pick(shape, ld["faces"], "faces")))]
+                fo.Force = f"{fv.Length} N"
+                fo.Direction = (ln, ["Edge1"])
+                an.addObject(fo)
+        doc.recompute()
+        err = gmshtools.GmshTools(mesh).create_mesh()
+        femmesh = mesh.FemMesh
+        if err or not femmesh.VolumeCount:
+            raise ToolError("failed", f"Gmsh did not mesh {o.Label}: {err or 'no volume elements'} — body_check it, or another mesh size.")
+        wd = paths.made(s, os.path.join(s.out_dir, "fea_" + "".join(ch if ch.isalnum() else "_" for ch in o.Label)), "run")
+        os.makedirs(wd, exist_ok=True)
+        fea = ccxtools.FemToolsCcx(an, solver)
+        fea.update_objects()
+        fea.setup_working_dir(wd)
+        fea.setup_ccx(ccx)
+        msg = fea.check_prerequisites()
+        if msg:
+            raise RuntimeError(f"its prerequisites: {msg.strip()}")
+        fea.write_inp_file()
+        rc = fea.ccx_run()
+        frd = os.path.splitext(fea.inp_file_name)[0] + ".frd"
+        if not os.path.isfile(frd):
+            raise ToolError("failed", f"CalculiX (run by FreeCAD's FEM, exit {rc}) wrote no results: see {wd}. The part may be free to move: hold more faces.")
+        with open(frd) as f:
+            disp, stress = ccx_io.read_frd(f.read())
+        try:
+            fea.load_results()
+        except Exception:
+            pass
+        nodes = {int(n): (float(p.x), float(p.y), float(p.z)) for n, p in femmesh.Nodes.items()}
+        elems = {int(e): tuple(femmesh.getElementNodes(e)) for e in femmesh.Volumes}
+        # The verdict reads job.frd beside the deck, as the own route writes it.
+        try:
+            import shutil
+
+            if os.path.abspath(frd) != os.path.join(os.path.abspath(wd), "job.frd"):
+                shutil.copyfile(frd, os.path.join(wd, "job.frd"))
+        except OSError:
+            pass
+        return wd, femmesh, nodes, elems, disp, stress, an.Label
+
+    def _solve_own(st, o, c, a, timeout):
+        """Agent Link's own deck and run (the cases FreeCAD's FEM route does
+        not take here)."""
+        shape = o.Shape
+        ccx, wd, femmesh, mesh_text, nodes, elems = _meshed(o, st, timeout)
+        fixed, held_faces, cloads, dloads, gravity, applied = _assemble(st, shape, femmesh, nodes, elems)
+        mat = {"E": float(c["E"]), "nu": float(c.get("nu") or 0.35), "rho": float(c["density"])}
+        text = ccx_io.deck(mesh_text, mat, fixed, cloads, dloads, gravity, thermal=_thermal(st, nodes), bounds=st.pop("_bounds", None), centrif=st.pop("_centrif", None))
+        groups = pairs = None
+        part_cards = []
+        if st.get("parts"):
+            groups, pairs = _parts_split(st, shape, femmesh, nodes, elems)
+            defs = []
+            for k, pinfo in enumerate(st["parts"]):
+                pc = matfam.card(s.doc, pinfo["material"]) or c
+                part_cards.append(pc)
+                defs.append((f"P{k + 1}", groups[k], {"E": float(pc["E"]), "nu": float(pc.get("nu") or 0.35), "rho": float(pc.get("density") or c["density"]),
+                                                     **({"alpha": _thermal(st, nodes)["alpha"]} if _thermal(st, nodes) else {})}))
+            empty = [st["parts"][k]["body"] for k, g in enumerate(groups) if not g]
+            if empty:
+                raise ToolError("failed", f"No elements landed in {', '.join(empty)}: a finer mesh (fea_setup is not used here — fea_parts {{ mesh }}).")
+            join = [(f"J{n + 1}", sl, ma) for n, (i, j, sl, ma) in enumerate(pairs)]
+            Emin = min(float(pc["E"]) for pc in part_cards)
+            text = ccx_io.parts_deck(text, defs, ties=join if st.get("join") == "tie" else (), contacts=join if st.get("join") == "contact" else (),
+                                     contact_slope=Emin * 50, friction=st.get("friction", 0))
+        nonlin = bool(a.get("nonlinear"))
+        if nonlin:
+            text = _nonlinear(text, {"PART": c} if not st.get("parts") else {f"MP{k + 1}": pc for k, pc in enumerate(part_cards)}, a)
+        with open(os.path.join(wd, "job.inp"), "w") as f:
+            f.write(text)
+        env = dict(os.environ)
+        env.setdefault("OMP_NUM_THREADS", str(max(1, min(4, os.cpu_count() or 1))))
+        try:
+            r = subprocess.run([ccx, "-i", "job"], cwd=wd, capture_output=True, text=True, timeout=timeout, env=env)
+        except subprocess.TimeoutExpired:
+            raise ToolError("failed", f"CalculiX took over {timeout:g} s: a coarser mesh or a longer timeout.")
+        frd = os.path.join(wd, "job.frd")
+        log = (r.stdout or "") + (r.stderr or "")
+        if "*ERROR" in log or not os.path.isfile(frd):
+            err = [l.strip() for l in log.splitlines() if "ERROR" in l][:2] or log.strip().splitlines()[-2:]
+            hint = " The part may be free to move: hold more faces." if any("singular" in l.lower() or "zero pivot" in l.lower() for l in log.splitlines()) else ""
+            if nonlin and any("increment size smaller" in l.lower() for l in log.splitlines()):
+                hint += (" It stopped finding equilibrium as the load rose: past its strength the part gives way (it would collapse or break) — "
+                         "less load, a stronger material or a larger section; or contact that never closes.")
+            raise ToolError("failed", f"CalculiX refused the job: {' | '.join(err)}.{hint}")
+        with open(frd) as f:
+            disp, stress = ccx_io.read_frd(f.read())
+        return wd, femmesh, nodes, elems, disp, stress, fixed, held_faces, applied, groups, pairs, part_cards, frd
 
     def fea_results(a):
         r = _results(s)
@@ -1472,9 +1657,10 @@ def tools(session):
         ),
         Tool(
             "fea_solve",
-            "Solve the study: Gmsh meshes the body (second-order tetrahedra), CalculiX solves it linear static. Answers the largest von Mises stress (MPa) and where, the largest displacement (mm) and where, the safety factor against yield, with warnings. nonlinear: true follows large deflections and each material into yield (elastic-plastic from yield to its tensile strength; elasticOnly: true keeps it elastic) and answers the plastic strain — for a part loaded past yield, a thin part that bends far, or contact. " + TRAPS + " Needs ccx and gmsh installed (timeout s, 300).",
+            "Solve the study: as FreeCAD's own FEM analysis (its CalculiX solver, Gmsh mesh and constraints, results loaded into it) where the study is one body, fixed holds, force/pressure/gravity, linear; else Agent Link's own CalculiX deck (solvedBy says which and why). Second-order tetrahedra, linear static. Answers the largest von Mises stress (MPa) and where, the largest displacement (mm) and where, the safety factor against yield, with warnings. nonlinear: true follows large deflections and each material into yield (elastic-plastic from yield to its tensile strength; elasticOnly: true keeps it elastic) and answers the plastic strain — for a part loaded past yield, a thin part that bends far, or contact. " + TRAPS + " Needs ccx and gmsh installed (timeout s, 300).",
             obj({"timeout": {"type": "number"}, "nonlinear": {"type": "boolean"}, "elasticOnly": {"type": "boolean"}}),
             fea_solve,
+            changes=True,
         ),
         Tool(
             "fea_modes",
