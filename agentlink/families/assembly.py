@@ -188,13 +188,24 @@ def _status(asm):
 def _fastener_diameter(o):
     """A Fasteners Workbench screw's nominal diameter in mm (its "diameter"
     property, "M8" or "M8x1"), else None."""
-    d = getattr(o, "diameter", None) or getattr(o, "Diameter", None)
-    if not isinstance(d, str) or not d.upper().startswith("M"):
-        return None
+    import re
+
+    src = o
     try:
-        return float(d[1:].lower().split("x")[0])
-    except ValueError:
-        return None
+        if hasattr(o, "getLinkedObject"):
+            src = o.getLinkedObject(True) or o
+    except Exception:
+        src = o
+    for d in (getattr(src, "diameter", None), getattr(src, "Diameter", None), getattr(o, "diameter", None)):
+        m = re.match(r"^\s*M(\d+(?:\.\d+)?)", d) if isinstance(d, str) else None
+        if m:
+            return float(m.group(1))
+    # "Auto" (sized from the hole): the screw's own label carries the size
+    if getattr(src, "Proxy", None) is not None and type(src.Proxy).__name__.startswith("FS"):
+        m = re.search(r"\bM(\d+(?:\.\d+)?)x", src.Label) or re.search(r"\bM(\d+(?:\.\d+)?)x", o.Label)
+        if m:
+            return float(m.group(1))
+    return None
 
 
 def _thread_engagement(screw, other, common):
@@ -211,7 +222,7 @@ def _thread_engagement(screw, other, common):
         axis = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
         base = pl.Base - axis * 500
         outer = Part.makeCylinder(d / 2 + 0.05, 1000, base, axis)
-        inner = Part.makeCylinder(0.38 * d, 1000, base, axis)
+        inner = Part.makeCylinder(0.33 * d, 1000, base, axis)  # tap drills run down to 0.75 d
         ring = outer.cut(inner)
         inside = common.common(ring).Volume
         if common.Volume <= 0 or inside / common.Volume < 0.95:
