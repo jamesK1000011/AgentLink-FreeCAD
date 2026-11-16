@@ -15,6 +15,10 @@
 #   session.window_quiet   True: the live echo leaves the window alone (the
 #                          activity list still gets each call)
 #   session.activity_tag   text put before each call in the activity list
+#   session.by             who the call in hand is for: "agent" (a call from
+#                          the agent), "person" (a click in Agent Link's panel
+#                          or an add-on dock it hosts); add-ons read it, e.g.
+#                          to label a checkpoint "My checkpoint"
 
 import os
 import sys

@@ -77,6 +77,9 @@ class Session:
         # Documents this session changed: app_restart saves these (L).
         self.agent_docs = set()
         self.t0 = time.time()
+        # Who the call in hand is for: the agent's, unless a panel click runs
+        # it as the person's (hooks.as_person); add-ons read it.
+        self.by = "agent"
 
     # ---- every change one undo step ----
 
