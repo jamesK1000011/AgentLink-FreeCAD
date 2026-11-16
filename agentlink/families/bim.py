@@ -122,6 +122,12 @@ def rgb(c):
     raise bad(f"color {c!r}: \"#rrggbb\", or red, green, blue as \"0.8, 0.2, 0.1\" (each 0 to 1).")
 
 
+def edges(o):
+    """o's edges: none when it has no shape, or an empty one."""
+    sh = getattr(o, "Shape", None)
+    return list(sh.Edges) if isinstance(sh, Part.Shape) and not sh.isNull() else []
+
+
 def ccw(points):
     """Whether a closed outline's points run counter-clockwise seen from above (+Z)."""
     area = 0.0
@@ -177,25 +183,6 @@ def tools(session):
         return [o for o in doc().Objects if ifc_type(o) == "Wall" or (hasattr(o, "Proxy") and type(getattr(o, "Proxy", None)).__name__ == "_Wall")]
 
     # ---- walls and openings ----------------------------------------------------
-
-    def bim_wall(a):
-        width, height = pos(a, "width", 200), pos(a, "height", 3000)
-        align = {"center": "Center", "left": "Left", "right": "Right"}.get(a.get("align", "center"))
-        if align is None:
-            raise bad("align: center (the line runs down the middle), left (the line is the wall's left face going from the first point on: the wall lies to the right) or right (the wall lies to the left).")
-        name = a.get("name") or "Wall"
-        if a.get("base"):
-            base = picks.find(doc(), a["base"], "base")
-            if not isinstance(getattr(base, "Shape", None), Part.Shape) or base.Shape.isNull() or not base.Shape.Edges:
-                raise bad(f"base: {base.Label} has no edges to run a wall along; give a sketch or wire, or points [[x, y] …].")
-        elif not a.get("points"):
-            raise bad("points [[x, y] …] (the wall's line, mm) or base (a sketch or wire's label): one of them.")
-        else:
-            base = baseline(a.get("points"), f"{name} line", bool(a.get("closed")))
-        w = Arch.makeWall(base, width=width, height=height, align=align)
-        named(w, name)
-        length = sum(e.Length for e in base.Shape.Edges)
-        return finish(w, "bim_wall", {"length": round(length, 1), "width": width, "height": height, "align": align.lower(), "base": base.Label})
 
     def bim_opening(a):
         wall = picks.find(doc(), a.get("wall"), "wall")
@@ -947,21 +934,6 @@ def tools(session):
             raise bad("spacing (or xSpacing / ySpacing): mm between grid lines, one number (with count) or a list of gaps.")
         return picks.finish(s, "bim_grid", lambda: {"axes": made, "lines": lines, "length": pos(a, "length", 10000)})
 
-    def bim_section(a):
-        mk = getattr(Arch, "makeSectionPlane", None)
-        if mk is None:
-            raise ToolError("unavailable", "This FreeCAD's BIM has no section plane.")
-        objs = [picks.find(doc(), r, "objects") for r in (a.get("objects") or [])] or [o for o in doc().Objects if is_bim(o) and not contained(o)]
-        n = vec(a.get("normal", [0, 0, 1]), "normal")
-        if n.Length < 1e-9:
-            raise bad("normal: a direction, not [0, 0, 0] ([0, 0, 1] for a plan cut, [0, 1, 0] for a section looking along Y).")
-        if not objs:
-            raise bad("Nothing to cut: no BIM objects here; give objects, or make some first (bim_wall …).")
-        o = headless_call(mk, objs)
-        o.Placement = FreeCAD.Placement(vec(a.get("at", [0, 0, 1200]), "at"), FreeCAD.Rotation(V(0, 0, 1), n))
-        named(o, a.get("name") or "Section")
-        return picks.finish(s, "bim_section", lambda: {"object": o.Label, "cuts": [x.Label for x in objs], "note": "A section plane for TechDraw (td_bim of it) and the FreeCAD window; export { section: z } writes a plan cut as DXF/SVG headless."})
-
     def bim_material(a):
         mk = getattr(Arch, "makeMaterial", None)
         if mk is None:
@@ -992,14 +964,13 @@ def tools(session):
     # The wrappers kept as data (agentlink/data/tools.json) run on these.
     helpers = {"doc": doc, "finish": finish, "named": named, "baseline": baseline, "setprops": setprops, "headless_call": headless_call,
                "pos": pos, "num": picks.num, "is_bim": is_bim, "ifc_type": ifc_type, "ifc_set": ifc_set,
-               "find": lambda ref, *what: picks.find(doc(), ref, *what), "finds": lambda refs: [picks.find(doc(), r) for r in (refs or [])]}
+               "find": lambda ref, *what: picks.find(doc(), ref, *what), "finds": lambda refs, *what: [picks.find(doc(), r, *what) for r in (refs or [])],
+               "vec": vec, "edges": edges, "loose": lambda: [o for o in doc().Objects if is_bim(o) and not contained(o)],
+               "facing": lambda at, n: FreeCAD.Placement(at, FreeCAD.Rotation(V(0, 0, 1), n)), "done": lambda tool, out: picks.finish(s, tool, out)}
 
     pt = {"type": "array", "items": {"type": "number"}}
     pts = {"type": "array", "items": pt}
     return runners.tools(GROUP, s, helpers) + [
-        Tool("bim_wall", "A wall along points [[x, y(, z)] …] mm (closed: true joins the last to the first) or a base sketch/wire: width (200), height (3000). align center | left (the line is the wall's left face going from the first point, so the wall lies to its right) | right. Answers length, box, min, volume_m3, base (the line bim_opening measures along).",
-             obj({"points": pts, "closed": {"type": "boolean"}, "base": {"type": "string"}, "width": {"type": "number"}, "height": {"type": "number"},
-                  "align": {"type": "string", "enum": ["center", "left", "right"]}, "name": {"type": "string"}}), bim_wall, changes=True),
         Tool("bim_opening", "A window or door in a wall, its opening cut through: kind window | door, width, height, at (the opening's left edge, mm along the wall's line from its first point; one straight stretch only), sill (900 window, 0 door), frame (50), depth (100). Whatever preset says, it is a plain frame round a pane or a door panel. Answers wallCut_m3 (0 with a warning: nothing was cut), opening (the cutting box), box, min.",
              obj({"wall": {"type": "string"}, "kind": {"type": "string", "enum": ["window", "door"]}, "preset": {"type": "string"}, "width": {"type": "number"}, "height": {"type": "number"},
                   "at": {"type": "number"}, "sill": {"type": "number"}, "frame": {"type": "number"}, "depth": {"type": "number"}, "name": {"type": "string"}}, ["wall"]), bim_opening, changes=True),
@@ -1028,8 +999,6 @@ def tools(session):
              obj({"points": pts, "length": {"type": "number"}, "width": {"type": "number"}, "thickness": {"type": "number"}, "at": pt, "name": {"type": "string"}}), bim_panel, changes=True),
         Tool("bim_grid", "Grid lines from the origin: spacing mm (one number with count lines, or a list of gaps) for both ways, or xSpacing (lines at x = 0, gap …, running along Y) and ySpacing each; length of the lines (10000). Answers axes (\"Grid X\", \"Grid Y\") and lines (where each stands).",
              obj({"spacing": {}, "xSpacing": {}, "ySpacing": {}, "count": {"type": "integer"}, "length": {"type": "number"}, "name": {"type": "string"}}), bim_grid, changes=True),
-        Tool("bim_section", "A section plane through objects (every BIM object not in a level when left out): at ([0, 0, 1200]), normal ([0, 0, 1]: a plan cut). It draws nothing itself: td_bim puts it on a page; export { section: z } writes a plan cut as DXF/SVG.",
-             obj({"objects": {"type": "array", "items": {"type": "string"}}, "at": pt, "normal": pt, "name": {"type": "string"}}), bim_section, changes=True),
         Tool("bim_material", "A BIM material by name (made if new): density kg/m³ (what bim_quantities weighs with), description, color (\"#rrggbb\" or \"r, g, b\" 0 to 1); put on objects (BIM components). Answers material, data, on.",
              obj({"name": {"type": "string"}, "density": {"type": "number"}, "description": {"type": "string"}, "color": {"type": "string"}, "objects": {"type": "array", "items": {"type": "string"}}}, ["name"]), bim_material, changes=True),
         Tool("bim_schedule", "Quantities read off the model (Agent Link's own, not an Arch schedule object): walls (length, height, width, area, volume), windows and doors, columns, beams, slabs, footings, roofs, stairs, rebar, spaces, as rows with totals by kind. sheet: true (or a name) also writes a spreadsheet (a change).",

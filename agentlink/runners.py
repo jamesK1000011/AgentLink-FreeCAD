@@ -23,13 +23,20 @@ Values in an entry ("expressions"):
                    found), "m" (apply's working copy), "tool", "fields"; a
                    name ending in ? is getattr(…, None); "x[].Label" maps a list
   {"fmt": "…"}     str.format over the same values ("{o.Label} copy")
-  {"len": e}  {"round": [e, n]}  {"or": [e, …]} (the first truthy)
+  {"len": e}  {"sum": e}  {"round": [e, n]}  {"or": [e, …]} (the first truthy)
   {"if": [cond, then, else]}  {"not": e}  {"vec": [x, y, z]}
-  {"set": [object, "Property", e]}  sets it (in an argument's "then")
+  {"set": [object, "Property", e]}  sets it (in an argument's "then", a
+                   step run once the object is made, in the entry's order;
+                   "$value" there is the argument, its default when left
+                   out, and "$key" its name)
   {"do": [object, "method", e, …]}  calls one of its methods
   {"call": "helper", "with": [e, …]}  a family helper's answer
   {"when": e, "value": e}  in an answer: the field only when e is truthy
   anything else    itself (lists and objects element by element)
+
+A rule ({"check", "of", "message", "code", "after"}) may carry "when": an
+expression; the rule is only checked when it is truthy (a check that
+belongs to one way of calling the tool: its base given, not its points).
 """
 import importlib
 import os
@@ -95,6 +102,8 @@ def value(e, env, helpers):
                 return arg.format(**env)
             if op == "len":
                 return len(value(arg, env, helpers))
+            if op == "sum":
+                return sum(value(arg, env, helpers))
             if op == "round":
                 return round(value(arg[0], env, helpers), arg[1])
             if op == "if":
@@ -166,6 +175,8 @@ def resolve(k, spec, a, env, helpers):
 def check(r, env, helpers):
     """One rule: raises its refusal (message as written) when it fails."""
     kind = r["check"]
+    if "when" in r and not value(r["when"], env, helpers):
+        return
     if kind == "available":
         ok = value(r["of"], env, helpers) is not None
     elif kind == "given":
@@ -248,7 +259,8 @@ def _after(e, a, env, helpers):
     for k, spec in (e.get("args") or {}).items():
         if "then" in spec:
             flush()
-            value(spec["then"], env, helpers)
+            # The step sees the argument as given ("$value", its default when left out) and its name ("$key").
+            value(spec["then"], {**env, "value": a.get(k, spec["default"]) if "default" in spec else a.get(k), "key": k}, helpers)
             continue
         if not spec.get("prop"):
             continue

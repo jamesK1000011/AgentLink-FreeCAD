@@ -26,6 +26,12 @@ INFO = "BIM components, clones, references, structural systems, pipe connectors,
 V = FreeCAD.Vector
 
 
+def file(path):
+    """The file at path (~ opened out), or None when there is none."""
+    p = os.path.expanduser(path or "")
+    return p if os.path.isfile(p) else None
+
+
 def tools(s):
     def d():
         if s.doc is None:
@@ -82,17 +88,6 @@ def tools(s):
             raise bad("kind: component { from, ifcType } | clone { from, at, axis, angle } | unclone { from }.")
         named(o, a.get("name"))
         return done("bim_component", {"object": o.Label, "kind": kind, **reading(o)})
-
-    def bim_reference(a):
-        p = os.path.expanduser(a.get("path") or "")
-        if not os.path.isfile(p):
-            raise ToolError("not_found", f"path {a.get('path')!r}: no such file. Give the full path of an .FCStd (or .ifc, .dxf) to reference.")
-        o = headless_call(Arch.makeReference, p, a.get("part"))
-        named(o, a.get("name"))
-        d().recompute()
-        s.snapshot("bim_reference")
-        return {"reference": o.Label, "file": os.path.basename(p), "part": getattr(o, "Part", None) or None, **reading(o),
-                "note": "Shown from the other file and kept up to date with it; not copied in."}
 
     def bim_panel_out(a):
         kind = a.get("kind", "cut")
@@ -375,7 +370,8 @@ def tools(s):
         return done("bim_reorder", {"group": g.Label, "order": [o.Label for o in g.Group]})
 
     # The wrappers kept as data (agentlink/data/tools.json) run on these.
-    helpers = {"doc": d, "objs": objs, "done": done, "named": named, "reading": reading, "headless_call": headless_call}
+    helpers = {"doc": d, "objs": objs, "done": done, "named": named, "reading": reading, "headless_call": headless_call,
+               "file": file, "basename": os.path.basename, "snapshot": lambda tool: s.snapshot(tool)}
 
     st = {"type": "string"}
     arr = {"type": "array", "items": {"type": "string"}}
@@ -384,7 +380,6 @@ def tools(s):
     return runners.tools(GROUP, s, helpers) + [
         Tool("bim_component", "A generic BIM component: kind component { from (an object with a shape), ifcType } | clone { from, at, axis, angle } (follows the original) | unclone { from } (cut loose). Answers object, volume mm³, box.",
              obj({"kind": {"type": "string", "enum": ["component", "clone", "unclone"]}, "from": st, "ifcType": st, "at": v3, "axis": v3, "angle": num, "name": st}, ["from"]), bim_component, changes=True),
-        Tool("bim_reference", "An external reference: another file's objects shown here and updated with it, not copied. path: the full path of an .FCStd (or .ifc, .dxf); part: one of its parts. Answers reference, file, volume, box.", obj({"path": st, "part": st, "name": st}, ["path"]), bim_reference, changes=True),
         Tool("bim_panel_out", "BIM panels for the cutter: kind cut (each panel's flat outline with its tag) | sheet { width, height } (the cuts on one stock sheet, not nested). export { format: \"dxf\" } writes them.",
              obj({"kind": {"type": "string", "enum": ["cut", "sheet"]}, "panels": arr, "width": num, "height": num, "name": st}, ["panels"]), bim_panel_out, changes=True),
         Tool("bim_nest", "Nest flat pieces into a sheet: container (one flat face), pieces (objects of exactly one flat face each, the same way up; not solids), rotations to try ([0, 90, 180, 270]). The pieces are moved. margin is not applied (FreeCAD 1.1's nester has none). Slow with many pieces: start with a few.", obj({"container": st, "pieces": arr, "rotations": {"type": "array", "items": num}, "margin": num}, ["container", "pieces"]), bim_nest, changes=True),

@@ -888,6 +888,448 @@
      }
     }
    }
+  },
+  "bim_wall": {
+   "group": "bim",
+   "description": "A wall along points [[x, y(, z)] …] mm (closed: true joins the last to the first) or a base sketch/wire: width (200), height (3000). align center | left (the line is the wall's left face going from the first point, so the wall lies to its right) | right. Answers length, box, min, volume_m3, base (the line bim_opening measures along).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "points": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "number"
+       }
+      }
+     },
+     "closed": {
+      "type": "boolean"
+     },
+     "base": {
+      "type": "string"
+     },
+     "width": {
+      "type": "number"
+     },
+     "height": {
+      "type": "number"
+     },
+     "align": {
+      "type": "string",
+      "enum": [
+       "center",
+       "left",
+       "right"
+      ]
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/bim.py)",
+   "date": "2026-11-16",
+   "runner": "make",
+   "target": {
+    "maker": "Arch.makeWall",
+    "call": [
+     "$base"
+    ],
+    "kw": {
+     "width": "$width",
+     "height": "$height",
+     "align": "$align"
+    }
+   },
+   "rules": [
+    {
+     "check": "given",
+     "of": "$align",
+     "after": "align",
+     "message": "align: center (the line runs down the middle), left (the line is the wall's left face going from the first point on: the wall lies to the right) or right (the wall lies to the left)."
+    },
+    {
+     "check": "truthy",
+     "of": {
+      "or": [
+       "$a.base",
+       "$a.points"
+      ]
+     },
+     "after": "closed",
+     "message": "points [[x, y] …] (the wall's line, mm) or base (a sketch or wire's label): one of them."
+    },
+    {
+     "check": "count",
+     "of": "$edges",
+     "min": 1,
+     "when": "$a.base",
+     "after": "=edges",
+     "format": true,
+     "message": "base: {base.Label} has no edges to run a wall along; give a sketch or wire, or points [[x, y] …]."
+    }
+   ],
+   "args": {
+    "width": {
+     "helper": "pos",
+     "with": [
+      "$a",
+      "$key",
+      200
+     ]
+    },
+    "height": {
+     "helper": "pos",
+     "with": [
+      "$a",
+      "$key",
+      3000
+     ]
+    },
+    "align": {
+     "default": "center",
+     "map": {
+      "center": "Center",
+      "left": "Left",
+      "right": "Right"
+     }
+    },
+    "=wname": {
+     "value": {
+      "or": [
+       "$a.name",
+       "Wall"
+      ]
+     }
+    },
+    "closed": {
+     "as": "bool"
+    },
+    "=base": {
+     "value": {
+      "if": [
+       "$a.base",
+       {
+        "call": "find",
+        "with": [
+         "$a.base",
+         "base"
+        ]
+       },
+       {
+        "call": "baseline",
+        "with": [
+         "$a.points",
+         {
+          "fmt": "{wname} line"
+         },
+         "$closed"
+        ]
+       }
+      ]
+     }
+    },
+    "=edges": {
+     "value": {
+      "call": "edges",
+      "with": [
+       "$base"
+      ]
+     }
+    },
+    "name": {
+     "then": {
+      "call": "named",
+      "with": [
+       "$o",
+       "$wname"
+      ]
+     }
+    }
+   },
+   "answer": {
+    "via": "finish",
+    "with": [
+     "$o",
+     "$tool",
+     "$fields"
+    ],
+    "fields": {
+     "length": {
+      "round": [
+       {
+        "sum": "$edges[].Length"
+       },
+       1
+      ]
+     },
+     "width": "$width",
+     "height": "$height",
+     "align": {
+      "do": [
+       "$align",
+       "lower"
+      ]
+     },
+     "base": "$base.Label"
+    }
+   }
+  },
+  "bim_section": {
+   "group": "bim",
+   "description": "A section plane through objects (every BIM object not in a level when left out): at ([0, 0, 1200]), normal ([0, 0, 1]: a plan cut). It draws nothing itself: td_bim puts it on a page; export { section: z } writes a plan cut as DXF/SVG.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "normal": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/bim.py)",
+   "date": "2026-11-16",
+   "runner": "make",
+   "target": {
+    "maker": "Arch.makeSectionPlane",
+    "headless": "headless_call",
+    "call": [
+     "$objects"
+    ]
+   },
+   "rules": [
+    {
+     "check": "available",
+     "of": "$maker",
+     "after": "start",
+     "code": "unavailable",
+     "message": "This FreeCAD's BIM has no section plane."
+    },
+    {
+     "check": "range",
+     "of": "$normal.Length",
+     "min": 1e-09,
+     "after": "normal",
+     "message": "normal: a direction, not [0, 0, 0] ([0, 0, 1] for a plan cut, [0, 1, 0] for a section looking along Y)."
+    },
+    {
+     "check": "truthy",
+     "of": "$objects",
+     "after": "normal",
+     "message": "Nothing to cut: no BIM objects here; give objects, or make some first (bim_wall …)."
+    }
+   ],
+   "args": {
+    "objects": {
+     "value": {
+      "or": [
+       {
+        "call": "finds",
+        "with": [
+         "$a.objects",
+         "objects"
+        ]
+       },
+       {
+        "call": "loose"
+       }
+      ]
+     }
+    },
+    "normal": {
+     "helper": "vec",
+     "default": [
+      0,
+      0,
+      1
+     ],
+     "with": [
+      "$value",
+      "$key"
+     ]
+    },
+    "at": {
+     "default": [
+      0,
+      0,
+      1200
+     ],
+     "then": {
+      "set": [
+       "$o",
+       "Placement",
+       {
+        "call": "facing",
+        "with": [
+         {
+          "call": "vec",
+          "with": [
+           "$value",
+           "$key"
+          ]
+         },
+         "$normal"
+        ]
+       }
+      ]
+     }
+    },
+    "name": {
+     "then": {
+      "call": "named",
+      "with": [
+       "$o",
+       {
+        "or": [
+         "$a.name",
+         "Section"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "answer": {
+    "via": "done",
+    "with": [
+     "$tool",
+     "$fields"
+    ],
+    "fields": {
+     "object": "$o.Label",
+     "cuts": "$objects[].Label",
+     "note": "A section plane for TechDraw (td_bim of it) and the FreeCAD window; export { section: z } writes a plan cut as DXF/SVG headless."
+    }
+   }
+  },
+  "bim_reference": {
+   "group": "bim_gaps",
+   "description": "An external reference: another file's objects shown here and updated with it, not copied. path: the full path of an .FCStd (or .ifc, .dxf); part: one of its parts. Answers reference, file, volume, box.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string"
+     },
+     "part": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/bim_gaps.py)",
+   "date": "2026-11-16",
+   "runner": "make",
+   "target": {
+    "maker": "Arch.makeReference",
+    "headless": "headless_call",
+    "call": [
+     "$file",
+     "$a.part"
+    ]
+   },
+   "rules": [
+    {
+     "check": "given",
+     "of": "$file",
+     "after": "=file",
+     "code": "not_found",
+     "format": true,
+     "message": "path {path!r}: no such file. Give the full path of an .FCStd (or .ifc, .dxf) to reference."
+    }
+   ],
+   "args": {
+    "path": {},
+    "=file": {
+     "value": {
+      "call": "file",
+      "with": [
+       "$path"
+      ]
+     }
+    },
+    "name": {
+     "then": {
+      "call": "named",
+      "with": [
+       "$o",
+       "$a.name"
+      ]
+     }
+    }
+   },
+   "answer": {
+    "first": [
+     {
+      "do": [
+       {
+        "call": "doc"
+       },
+       "recompute"
+      ]
+     },
+     {
+      "call": "snapshot",
+      "with": [
+       "$tool"
+      ]
+     }
+    ],
+    "fields": {
+     "reference": "$o.Label",
+     "file": {
+      "call": "basename",
+      "with": [
+       "$file"
+      ]
+     },
+     "part": {
+      "or": [
+       "$o.Part?",
+       null
+      ]
+     },
+     "...reading": {
+      "call": "reading",
+      "with": [
+       "$o"
+      ]
+     },
+     "note": "Shown from the other file and kept up to date with it; not copied in."
+    }
+   }
   }
  }
 }

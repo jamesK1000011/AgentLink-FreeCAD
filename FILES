@@ -186,6 +186,7 @@ docs/hardening/asmtd-findings.md
 docs/hardening/bimcam-findings.md
 docs/hardening/chain-findings.md
 docs/hardening/coredoc-findings.md
+docs/hardening/data-findings.md
 docs/hardening/diff-findings.md
 docs/hardening/draftmesh-findings.md
 docs/hardening/freecad-1.1.0-commands.txt
@@ -236,6 +237,7 @@ scripts/tool_index_more.py
 scripts/tool_summary.py
 scripts/tool_tables.py
 server.json
+tests/_bim_before.py
 tests/_fc.py
 tests/_pd_base.py
 tests/test_activity_words.py
@@ -246,6 +248,7 @@ tests/test_assembly.py
 tests/test_assembly_more.py
 tests/test_batch_chain_fc.py
 tests/test_batch_rollback.py
+tests/test_bim_data.py
 tests/test_bim_gaps.py
 tests/test_cam.py
 tests/test_cam_more.py
