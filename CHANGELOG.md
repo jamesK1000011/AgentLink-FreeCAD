@@ -101,5 +101,6 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 
 ### Fixed
 
+- A panel whose dock FreeCAD restored wider than 420 px at start (a content's size hint once grew one to about 640 px) is put back to 354 px once, at the first placement after the window shows; a width dragged later in the session stays. `scripts/sync_shared.py` copies Agent Link's shared files (layout.py) over the add-ons' copies in checkouts given to it, keeping each copy's licence line (`--check` only reports).
 - A `gui_input` click in the 3D view with the Gesture navigation style opened the view's context menu instead of selecting: the style times a press by the wall clock at each event, and the click's focus change ran between press and release. The pointer's arrival and focus now come first, with the window caught up, then press and release back to back; the click's answer says what was `selected`.
 - The agent's caption over the 3D view no longer raises "Internal C++ object already deleted" in the Report view when its document is closed before the caption fades.
