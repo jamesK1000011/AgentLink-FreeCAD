@@ -496,7 +496,8 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.pin_key.setChecked(False)
         text, ok = QtWidgets.QInputDialog.getText(self, "Note", "What the note says:")
         if ok and text.strip():
-            nf.add_note(doc, at, text.strip(), "person", obj.Label if obj else None, info.get("Component"))
+            # On a PartDesign feature: the note goes on its body, the part as shown.
+            nf.add_note(doc, at, text.strip(), "person", nf._body_of(doc, obj.Label) if obj else None, info.get("Component"), obj.Label if obj else None)
             self.refresh(force=True)
 
     def tick(self, item, col):

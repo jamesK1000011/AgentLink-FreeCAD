@@ -125,6 +125,33 @@ SCRIPT = textwrap.dedent("""
     old["anchor"].pop("mapped")
     N.follow(None, shape_of, G)
     assert "lost" in old and old["face"] == "Face5", old
+    # The live case: a note pinned in the window on the top of the Pad
+    # feature (its label "Pad", Face6 the Pad's own top at z 20) before
+    # anchors. A Hole made the body's top Face5 and its +Y side Face6; the
+    # pad went to 22. The Pad feature's own shape still calls its top Face6,
+    # so it is followed on the body: Face5, the pin up at z 22, listed as moved.
+    class SideY:
+        def __init__(self, y):
+            self.y = y
+    real_project, real_normal = G.project, G.normal
+    def project(f, p):
+        if isinstance(f, SideY):
+            return abs(p[1] - f.y), [p[0], f.y, p[2]]
+        return real_project(f, p)
+    def normal(f, p):
+        return [0, 1, 0] if isinstance(f, SideY) else real_normal(f, p)
+    G.project, G.normal = staticmethod(project), staticmethod(normal)
+    live = {"id": 3, "body": "Pad", "face": "Face6", "at": [-9.77, -5.21, 20.0]}
+    store["notes"] = {"next": 4, "notes": [live]}
+    shapes["Pad"] = Shape([("Face5", Face(0, up=False)), ("Face6", Face(22))], volume=9000)  # the feature's own shape
+    shapes["Body"] = Shape([("Face4", Face(0, up=False, hole=3)), ("Face5", Face(22, hole=3)), ("Face6", SideY(15))],
+                           {"Face5": "Hole;:H3,F", "Face4": "Pad;:H2,F"}, volume=8800)
+    body_of = lambda doc, label: "Body" if label == "Pad" else label
+    assert N.follow(None, shape_of, G, body_of) == [3]
+    assert (live["body"], live["face"], live["at"]) == ("Body", "Face5", [-9.77, -5.21, 22.0]), live
+    assert live["anchor"]["mapped"] == "Hole;:H3,F" and "lost" not in live and "_rebodied" not in live, live
+    assert live["movedFrom"] == {"face": "Face6", "at": [-9.77, -5.21, 20.0]}, live  # note_list says it, whoever moved it
+    assert N.follow(None, shape_of, G, body_of) == []  # settled
     print("OK")
 """)
 
