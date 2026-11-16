@@ -126,3 +126,19 @@ class Machine(Home):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_runs_from_before_a_fix_stop_weighing_on_the_estimate():
+    """The Mac's view_render:work timings on 16 Nov: two frozen renders from
+    before renders were sized, then two at the new speed. The estimate for
+    the next follows the new ones."""
+    from agentlink import keep
+
+    q = {"timings": {"view_render:work": [[927608, 82.24], [1191536, 121.99], [140942, 2.91], [338792, 5.67]]}}
+    lo, mid, hi = keep.estimate_range(q, "view_render:work", 140942)
+    assert mid < 4.0, mid          # was 7.7 s with a plain middle of the four
+    assert lo <= mid <= hi
+    # one slow run among quick ones still does not stand as the estimate
+    q = {"timings": {"t": [[100, 1.0], [100, 1.1], [100, 0.9], [100, 30.0]]}}
+    _lo, mid, hi = keep.estimate_range(q, "t", 100)
+    assert mid < 2.0 and hi == 30.0
