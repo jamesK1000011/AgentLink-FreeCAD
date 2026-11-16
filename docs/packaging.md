@@ -74,7 +74,14 @@ check on the built file, and only then attaches it to the tag's
 [release](https://github.com/jamesK1000011/AgentLink-FreeCAD/releases). Its Node launcher (`packaging/mcpb/server/index.js`) finds
 FreeCAD in Applications, installs Agent Link and the pinned add-ons into
 FreeCAD's `Mod` folder, and starts the server in FreeCAD's Python. It is
-macOS-only for now.
+macOS-only for now. Its version is Agent Link's (the manifest's `version`,
+checked with the rest by `scripts/release.py check`, which the release job
+runs against the tag), and its manifest lists the tools listed from the
+start (`python3 scripts/release.py manifest` rewrites them). The download
+link in the README is
+`https://github.com/jamesK1000011/AgentLink-FreeCAD/releases/latest/download/freecad-agentlink.mcpb`,
+the file `build.sh` makes. The steps that publish a release are in
+[RELEASING.md](RELEASING.md).
 
 What it installs is `packaging/addons.json` (the add-ons, each a repository
 and the Mod folder it goes in) at the commits in `packaging/pins/<name>-ref`:

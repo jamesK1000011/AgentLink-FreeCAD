@@ -35,17 +35,9 @@ for s in json.load(open(sys.argv[1]))['sources']:
 " "$HERE/../addons.json" | while read -r repo folder dest; do
   copy "$CHECKOUTS/$repo/$folder" "$dest"
 done
-# The icon, kept beside this script (Agent Link's workbench icon at 512 px).
-if [ -f "$HERE/icon.png" ]; then
-  cp "$HERE/icon.png" "$STAGE/icon.png"
-  python3 -c "
-import json, sys
-p = sys.argv[1]
-m = json.load(open(p))
-m['icon'] = 'icon.png'
-json.dump(m, open(p, 'w'), indent=2, ensure_ascii=False)
-" "$STAGE/manifest.json"
-fi
+# The icon the manifest names, kept beside this script (Agent Link's
+# workbench icon at 512 px).
+cp "$HERE/icon.png" "$STAGE/icon.png"
 VERSION=$(python3 -c "import json;print(json.load(open('$HERE/manifest.json'))['version'])")
 echo "$VERSION+$(git -C "$AGENTLINK" rev-parse --short HEAD)+$(git -C "$HERE" rev-parse --short HEAD)" > "$STAGE/addons/VERSION"
 rm -f "$OUT"

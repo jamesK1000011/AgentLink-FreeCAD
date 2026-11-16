@@ -44,9 +44,11 @@ or `FREECAD_LIB` (its `lib` folder) in the client's `env`.
 
 Headless use needs no add-on. To let the person watch, install it one way:
 
-- macOS with Claude Desktop: the `.mcpb` extension does it (step 5); it
-  is attached to this repository's `agentlink-v…` releases
-  (https://github.com/jamesK1000011/AgentLink-FreeCAD/releases).
+- macOS with Claude Desktop: the `.mcpb` extension does it (and is the
+  client setup too): https://github.com/jamesK1000011/AgentLink-FreeCAD/releases/latest/download/freecad-agentlink.mcpb
+  (attached to each `agentlink-v…` release of this repository). The copies
+  once released from ScanRuler's `freecad-spike` branch are retired; an
+  installed one moves here at its next update.
 - Addon Manager: Preferences > Addon Manager > Custom repositories, add
   `https://github.com/jamesK1000011/AgentLink-FreeCAD` branch `main`, then
   install **Agent Link** from Tools > Addon manager.

@@ -2,9 +2,10 @@
   "manifest_version": "0.2",
   "name": "freecad-agentlink",
   "display_name": "Agent Link for FreeCAD",
-  "version": "0.4.1",
+  "version": "0.3.0",
   "description": "Drive FreeCAD from Claude: parts, printability, strength, drawings, scans, textures and lessons, headless or live in the FreeCAD window.",
   "long_description": "Finds FreeCAD on this Mac and installs Agent Link for FreeCAD and its add-ons into FreeCAD's Mod folder: ScanRuler for FreeCAD (scan measuring, ported from ScanRuler by Stefan Hermann, CNC Kitchen), Workshop (standard parts, making, electronics, drawings, SafetyNet), Texturizer (BumpMesh's surface textures, also by Stefan Hermann, CNC Kitchen), Tutor (lessons in your own window) and Agent Link for OrcaSlicer. Works headless with no FreeCAD window open. To watch the work, open FreeCAD, pick the Agent Link workbench and press Start Link, then start a new chat: the extension relays to the window. This extension's launcher, Agent Link, Workshop, Tutor and the OrcaSlicer add-on are LGPL-2.1-or-later (data CC-BY-4.0); ScanRuler for FreeCAD and Texturizer are AGPL-3.0-only (fonts OFL-1.1). Not affiliated with or endorsed by the FreeCAD project, the FPA or CNC Kitchen.",
+  "icon": "icon.png",
   "author": {
     "name": "jamesK1000011"
   },
@@ -61,5 +62,92 @@
   },
   "homepage": "https://github.com/jamesK1000011/AgentLink-FreeCAD",
   "documentation": "https://github.com/jamesK1000011/AgentLink-FreeCAD#readme",
-  "support": "https://github.com/jamesK1000011/AgentLink-FreeCAD/issues"
+  "support": "https://github.com/jamesK1000011/AgentLink-FreeCAD/issues",
+  "tools": [
+    {
+      "name": "app_force_restart",
+      "description": "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang): run by Agent Link outside FreeCAD; the documents come back from their newest saved copies, as after a crash."
+    },
+    {
+      "name": "batch",
+      "description": "Run several tools in one call, in order: calls [{ tool, arguments }], or file: a .json file holding that list (or { calls, rollback, stopOnError }), read on this side so a long run of calls (many profiles' points) is not sent through the conversation; a relative path is in the session's folder, and files are read where other tools may read."
+    },
+    {
+      "name": "body_check",
+      "description": "Whether a body is sound: FreeCAD's own Check Geometry, and on top of it closed, one solid, no sliver faces (under 0.01 mm wide) or very short edges, with where each problem is."
+    },
+    {
+      "name": "crash_collect",
+      "description": "Copy crash evidence into ~/AgentLink/crash/<time>/: FreeCAD's document-recovery folders (from a FreeCAD that crashed or was stopped), its crash.log and the system's crash reports for FreeCAD (new ones only)."
+    },
+    {
+      "name": "dialog_answer",
+      "description": "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one by its text (Cancel also closes a file picker; Document Recovery's Cleanup keeps a copy in ~/AgentLink/crash first)."
+    },
+    {
+      "name": "export",
+      "description": "Write objects (the one body when left out; several go as one compound) and read it back (verify)."
+    },
+    {
+      "name": "guide_read",
+      "description": "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry."
+    },
+    {
+      "name": "history_diff",
+      "description": "What changed since a step (the one before the last by default) or a checkpoint (cp3 or its name — read from its saved copy when it is older than this session): per body its volume, area, faces, solids and size from and to, and the steps between."
+    },
+    {
+      "name": "history_redo",
+      "description": "Redo what was undone (steps: how many)."
+    },
+    {
+      "name": "history_undo",
+      "description": "Undo the last change (steps: how many), as FreeCAD's Edit › Undo does."
+    },
+    {
+      "name": "job_start",
+      "description": "Run a read as a job: tool and its arguments."
+    },
+    {
+      "name": "job_status",
+      "description": "A long read run as a job: job (its id) answers its status — running (seconds so far, the time expected from past runs here) or done with the tool's own answer (or its error); wait: seconds (up to 30) to wait for it first."
+    },
+    {
+      "name": "outputs_clean",
+      "description": "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded making): shots past the last 50 and 3 days, solver and job runs past 14 days, FreeCAD backups past 7; exports only listed."
+    },
+    {
+      "name": "report_read",
+      "description": "FreeCAD's Report view in the window: its last lines (last, 40 by default), or only the warnings and errors (problems: true)."
+    },
+    {
+      "name": "session_state",
+      "description": "What the document holds: each body's volume, area, faces, solids and size (mm) — every shown body, a Body of several solids too (multiSolid says how many and whether AllowCompound means it), a part attached to another (a screw) beside it — the step count, jobs running and where files go."
+    },
+    {
+      "name": "tool_groups",
+      "description": "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools); detail: true gives every group's whole about."
+    },
+    {
+      "name": "usage_report",
+      "description": "What working through Agent Link has cost the agent, estimated on this side: calls, tokens (text at ~3.5 characters a token, pictures by size) and the tool list each session loads up front — per day over days (7), per session, the costliest tools, and tips to cut it."
+    },
+    {
+      "name": "view_maps",
+      "description": "The maps and layers view_render can draw here (add-ons add theirs), and the views."
+    },
+    {
+      "name": "view_render",
+      "description": "Draw the parts as a picture and look at it — works headless."
+    },
+    {
+      "name": "view_snapshot",
+      "description": "Save the FreeCAD window's own 3D view as the person sees it (view: turn it to a standard view first, fit true) and look at it."
+    },
+    {
+      "name": "agentlink_update",
+      "description": "Fetch the newest Agent Link and ScanRuler for FreeCAD from GitHub and start FreeCAD again on them, without restarting Claude: new tools and fixes from then on."
+    }
+  ],
+  "tools_generated": true
 }

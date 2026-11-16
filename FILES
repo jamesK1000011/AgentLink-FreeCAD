@@ -161,6 +161,7 @@ agentlink/usage.py
 agentlink/workbench.py
 agentlink_headless.py
 agentlink_state.py
+docs/RELEASING.md
 docs/clients/README.md
 docs/clients/claude-code.md
 docs/clients/claude-desktop.md
@@ -182,6 +183,7 @@ scripts/live/scanruler.json
 scripts/live/texturizer.json
 scripts/live/tutor-watch.json
 scripts/live/workshop.json
+scripts/release.py
 scripts/sync_shared.py
 scripts/tool_summary.py
 scripts/tool_tables.py
@@ -273,6 +275,7 @@ tests/test_protocol.py
 tests/test_quiet_reads.py
 tests/test_quit_guard.py
 tests/test_release.py
+tests/test_release_tools.py
 tests/test_report_watch.py
 tests/test_restart_temp_copy.py
 tests/test_rider_calldone.py
