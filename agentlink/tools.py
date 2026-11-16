@@ -245,8 +245,17 @@ class Session:
         return out
 
     def body_check(self, a):
+        """FreeCAD's own check (Part Check Geometry's shape.check) first, and
+        on top of it what it does not look for: slivers under 0.01 mm, very
+        short edges, one closed solid."""
         o = self.body(a.get("body"))
         s = geo.soundness(o.Shape)
+        ok, said = geo.core_check(o.Shape)
+        if ok is not None:
+            s["checkGeometry"] = {"ok": ok, **({"problems": said} if said else {})}
+            if not ok:
+                s["problems"] = [f"FreeCAD's Check Geometry: {'; '.join(said[:3])}"] + s["problems"]
+                s["ok"] = False
         return {"body": o.Label, **s, **geo.stats(o.Shape)}
 
     def export_file(self, a):
@@ -418,7 +427,7 @@ def make_tools(session):
         Tool("session_state", "What the document holds: each body's volume, area, faces, solids and size (mm), the step count and where files go. launcher: true adds the Claude extension's launcher as seen from here (the copy fetched from GitHub, whether it can load, its log's last lines). Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
         Tool("app_force_restart", "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang): run by Agent Link outside FreeCAD; the documents come back from their newest saved copies, as after a crash. For a window that is stuck; app_restart quits a working one cleanly.", obj({}), _force_restart_here),
         Tool("report_read", "FreeCAD's Report view in the window: its last lines (last, 40 by default), or only the warnings and errors (problems: true). New problem lines also come back on each answer as \"report\". Window only.", obj({"last": {"type": "integer"}, "problems": {"type": "boolean"}}), _report_read),
-        Tool("body_check", "Whether a body is sound: valid, closed, one solid, no sliver faces (under 0.01 mm wide) or very short edges, with where each problem is.", obj({"body": body}), s.body_check),
+        Tool("body_check", "Whether a body is sound: FreeCAD's own Check Geometry, and on top of it closed, one solid, no sliver faces (under 0.01 mm wide) or very short edges, with where each problem is.", obj({"body": body}), s.body_check),
         Tool(
             "export_file",
             "Write a body as STEP or STL (tolerance: the chord error, mm, 0.01 by default) and read it back: verify gives the volume read and, for STEP, how far it is from the body's.",

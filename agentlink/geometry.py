@@ -80,6 +80,21 @@ def short_edges(shape, length_mm=0.02):
     return out
 
 
+def core_check(shape):
+    """FreeCAD's own geometry check (Part Check Geometry's, shape.check with
+    its BOP checks): (ok, the problems it names). None, [] where this
+    FreeCAD's shape has no check."""
+    fn = getattr(shape, "check", None)
+    if fn is None:
+        return None, []
+    try:
+        fn(True)
+        return True, []
+    except Exception as e:  # Part.OCCError / ValueError: one line a problem
+        lines = [ln.strip() for ln in str(e).splitlines() if ln.strip()]
+        return False, lines[:10] or [type(e).__name__]
+
+
 def soundness(shape):
     """Valid, closed, one solid, no slivers: as a body check reads it."""
     shells = shape.Shells
