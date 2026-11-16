@@ -223,7 +223,8 @@ PREFIX_NAME = {"pd": "Part Design", "part": "Part", "sketch": "Sketch", "bim": "
                "gui": "Window", "window": "Window", "report": "Report", "session": "Session", "dialog": "Dialog",
                "history": "History", "usage": "Usage", "tool": "Tools", "guide": "Guide", "batch": "Batch",
                "crash": "Crash", "queue": "Queue", "addon": "Add-ons", "app": "FreeCAD", "cmd": "Command",
-               "menu": "Menu", "body": "Body", "export": "Export", "outputs": "Outputs", "measure": "Measure"}
+               "menu": "Menu", "body": "Body", "export": "Export", "outputs": "Outputs", "measure": "Measure",
+               "fem": "FEM", "scad": "OpenSCAD", "param": "Parameter", "robot": "Robot", "link": "Link"}
 
 
 def declare(fam):
@@ -239,7 +240,9 @@ def declare(fam):
     "part_"); COMMANDS, {tool or prefix: command} whose button lights for
     its tools, or command_for(name, args) -> command or None; NO_BUTTON,
     names or prefixes of its tools that light no button at all; PAGES,
-    prefixes of its tools that work on a drawing page."""
+    prefixes of its tools that work on a drawing page; PHRASES, {tool or
+    prefix: template or templates} of what its calls did, in the Activity
+    tab's words (agentlink/activity.py: "Sliced {object}")."""
     global SHOWN, OPENS
     shown = tuple(x for x in (getattr(fam, "SHOWN", ()) or ()) if isinstance(x, str) and x not in SHOWN)
     SHOWN = SHOWN + shown
@@ -254,27 +257,15 @@ def declare(fam):
         if isinstance(k, str) and isinstance(v, str):
             COMMANDS.setdefault(k, v)
     NO_BUTTON.update(k for k in (getattr(fam, "NO_BUTTON", None) or ()) if isinstance(k, str) and k)
+    from . import activity
+
+    activity.declare(fam)
     fn = getattr(fam, "command_for", None)
     if callable(fn) and fn not in COMMAND_FNS:
         COMMAND_FNS.append(fn)
     for k in getattr(fam, "PAGES", ()) or ():
         if isinstance(k, str) and k not in PAGES:
             PAGES.append(k)
-
-
-SKIP_ARGS = ("calls", "body", "inline", "name", "rollback", "stopOnError")
-
-
-def _value(v):
-    if isinstance(v, dict):
-        v = ", ".join(f"{k} {_value(x)}" for k, x in list(v.items())[:3])
-    elif isinstance(v, list):
-        v = "[" + ", ".join(_value(x) for x in v[:4]) + ("…" if len(v) > 4 else "") + "]"
-        return v if len(v) <= 60 else v[:57] + "…]"
-    elif isinstance(v, float):
-        v = f"{v:g}"
-    s = str(v)
-    return s if len(s) <= 40 else s[:37] + "…"
 
 
 def _area(name):
@@ -307,12 +298,15 @@ def did_name(name):
 
 
 def _describe(name, args):
-    """A tool call in words a person reads at a glance: 'Part Design ›
-    Primitive — kind cylinder, size radius 6, height 8 (Panel test)'."""
-    title = did_name(name)
-    bits = [f"{k} {_value(v)}" for k, v in (args or {}).items() if k not in SKIP_ARGS and v not in (None, "", [], {})][:3]
-    on = (args or {}).get("body")
-    return title + (" — " + "; ".join(bits) if bits else "") + (f" ({on})" if isinstance(on, str) else "")
+    """A tool call in words a person reads at a glance, the same as the
+    Activity tab says it ("Padded Sketch by 20 mm", "Clicked Pin a Note"):
+    agentlink/activity.py, never raw arguments or a folder."""
+    from . import activity
+
+    try:
+        return activity.did(name, args)
+    except Exception:
+        return did_name(name)
 
 
 def _view_widget():
@@ -686,23 +680,25 @@ class Echo:
             return
         name = tool.name if tool is not None else "?"
         ok = not (reply or {}).get("isError")
-        summary = ""
         try:
             import json
 
             body = json.loads(reply["content"][0]["text"]) if reply and reply.get("content") else {}
-            if not ok:
-                summary = (body.get("error") or {}).get("message", "")[:160]
-            else:
-                for k in ("feature", "body", "object", "sketch", "page", "note", "ran", "path"):
-                    if k in body:
-                        summary = f"{k}: {str(body[k])[:80]}"
-                        break
         except Exception:
             body = {}
         if name != "batch":
-            _note({"time": datetime.datetime.now().strftime("%H:%M:%S"), "tool": name, "ok": ok, "what": (getattr(self.s, "activity_tag", "") or "") + _describe(name, args), "result": summary,
-                   "ms": int((time.time() - (self.t0 or time.time())) * 1000)})
+            from . import activity
+
+            try:
+                what = activity.did(name, args, body, getattr(tool, "activity", None))
+                result = activity.outcome(name, ok, body, args)
+                call = activity.raw_call(name, args)
+            except Exception as e:  # the words never stop a call
+                what, result, call = name, "" if ok else "Refused", name
+                if FreeCAD is not None:
+                    FreeCAD.Console.PrintLog(f"Agent Link activity words ({name}): {e}\n")
+            _note({"time": datetime.datetime.now().strftime("%H:%M:%S"), "tool": name, "ok": ok, "what": _tag(self.s) + what,
+                   "result": result, "call": call, "ms": int((time.time() - (self.t0 or time.time())) * 1000)})
         if not (enabled() and ok and tool is not None and tool.changes and self.live()) or name == "batch":
             return
         try:
@@ -736,6 +732,14 @@ class Echo:
             _paint()
         except Exception as e:
             FreeCAD.Console.PrintLog(f"Agent Link echo (after {name}): {e}\n")
+
+
+def _tag(session):
+    """An extension's text before each call (session.activity_tag), plain."""
+    from . import activity
+
+    t = activity.plain(getattr(session, "activity_tag", "") or "")
+    return t + " " if t else ""
 
 
 def wrap(server, session):

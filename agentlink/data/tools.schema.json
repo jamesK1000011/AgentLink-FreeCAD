@@ -108,6 +108,10 @@
      "answer": {
       "type": "object",
       "description": "Agent Link only: the answer's fields and the family helper that finishes it."
+     },
+     "activity": {
+      "type": "string",
+      "description": "What a call did, in the Activity tab's words: a template whose {fields} come from the call's arguments or answer, e.g. \"Sliced {object}\". The first template whose fields are all given is used; \" if {field}\" at the end makes it conditional."
      }
     }
    }

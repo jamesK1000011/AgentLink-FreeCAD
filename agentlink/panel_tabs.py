@@ -78,10 +78,66 @@ def step_caption(r, count, what):
 
 def activity_row(e):
     """(columns, tooltip) of an Activity entry: time, what was done
-    (✗ when refused) and its result; the tooltip the whole line."""
-    did = ("" if e.get("ok", True) else "✗ ") + e.get("what", "")
-    cols = [e.get("time", ""), did, e.get("result", "")]
-    return cols, " — ".join(c for c in cols if c)
+    (✗ when refused) and what came of it; the tooltip has the whole line and
+    the call as sent, for the curious. Plain words only: any path shows as
+    its file name (activity.plain), whatever wrote the entry."""
+    from .activity import plain
+
+    did = ("" if e.get("ok", True) else "✗ ") + plain(e.get("what", ""))
+    cols = [e.get("time", ""), did, plain(e.get("result", ""))]
+    tip = " — ".join(c for c in cols if c)
+    if e.get("call"):
+        tip += "\n\nCall: " + plain(e["call"])
+    return cols, tip
+
+
+# The Activity list's columns: the time as narrow as it reads, Did taking
+# what the dock leaves, Result after it at this share of the width.
+ACTIVITY_RESULT_SHARE = 0.38
+ACTIVITY_RESULT_MIN = 70
+
+
+def _enum(owner, group, name):
+    """A Qt enum value by its short name, for Qt 5 and Qt 6 alike."""
+    v = getattr(owner, name, None)
+    if v is None:
+        v = getattr(getattr(owner, group), name)
+    return v
+
+
+def setup_activity(tree, QtCore, QtWidgets):
+    """The Activity list fitted to a narrow dock: no sideways scroll bar,
+    lines cut at the right end (the start of a sentence is what reads; the
+    whole line is in the tooltip), Time to its contents, Did stretching."""
+    tree.setHeaderLabels(["Time", "Did", "Result"])
+    tree.setRootIsDecorated(False)
+    tree.setUniformRowHeights(True)
+    tree.setWordWrap(False)
+    tree.setTextElideMode(_enum(QtCore.Qt, "TextElideMode", "ElideRight"))
+    tree.setHorizontalScrollBarPolicy(_enum(QtCore.Qt, "ScrollBarPolicy", "ScrollBarAlwaysOff"))
+    head = tree.header()
+    head.setStretchLastSection(False)
+    head.setMinimumSectionSize(36)
+    mode = QtWidgets.QHeaderView
+    head.setSectionResizeMode(0, _enum(mode, "ResizeMode", "ResizeToContents"))
+    head.setSectionResizeMode(1, _enum(mode, "ResizeMode", "Stretch"))
+    head.setSectionResizeMode(2, _enum(mode, "ResizeMode", "Interactive"))
+    fit_activity(tree)
+
+
+def result_width(total):
+    """The Result column's width in a list this wide."""
+    return max(ACTIVITY_RESULT_MIN, int(total * ACTIVITY_RESULT_SHARE))
+
+
+def fit_activity(tree):
+    """Result's share of the list's width now (on show and on resize)."""
+    try:
+        w = tree.viewport().width()
+    except Exception:
+        return
+    if w > 0:
+        tree.setColumnWidth(2, result_width(w))
 
 
 # Shown under Pin a Note while it waits for the click on the part.

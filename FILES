@@ -15,11 +15,14 @@ Studio Dark/parameters/Studio Dark.yaml
 Studio Light/Studio Light.cfg
 Studio Light/parameters/Studio Light.yaml
 agentlink/__init__.py
+agentlink/activity.py
 agentlink/ccx_io.py
 agentlink/cells.py
 agentlink/charts.py
 agentlink/commands.py
 agentlink/crash_logs.py
+agentlink/data/activity.json
+agentlink/data/activity.schema.json
 agentlink/data/filaments.json
 agentlink/data/filaments.schema.json
 agentlink/data/stock.json
@@ -159,12 +162,19 @@ docs/packaging.md
 docs/records.md
 package.xml
 pyproject.toml
+scripts/live/README.md
+scripts/live/agentlink.json
+scripts/live/reset.json
+scripts/live/scanruler.json
+scripts/live/texturizer.json
+scripts/live/workshop.json
 scripts/sync_shared.py
 scripts/tool_summary.py
 scripts/tool_tables.py
 server.json
 tests/_fc.py
 tests/_pd_base.py
+tests/test_activity_words.py
 tests/test_addon_test.py
 tests/test_app_install.py
 tests/test_assembly.py
