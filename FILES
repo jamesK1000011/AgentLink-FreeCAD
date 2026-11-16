@@ -20,6 +20,7 @@ agentlink/annotate.py
 agentlink/batchrec.py
 agentlink/ccx_io.py
 agentlink/cells.py
+agentlink/chain.py
 agentlink/charts.py
 agentlink/commands.py
 agentlink/crash_logs.py
@@ -90,6 +91,7 @@ agentlink/grab.py
 agentlink/gui_events.py
 agentlink/gui_input.py
 agentlink/gui_link.py
+agentlink/guideidx.py
 agentlink/guides/assembly.md
 agentlink/guides/bim.md
 agentlink/guides/cam.md
@@ -112,6 +114,7 @@ agentlink/guides/techdraw.md
 agentlink/guides/view.md
 agentlink/health.py
 agentlink/heavy.py
+agentlink/hold.py
 agentlink/hooks.py
 agentlink/hull3d.py
 agentlink/icons/AgentLink_Check.svg
@@ -181,10 +184,12 @@ docs/clients/vscode.md
 docs/hardening/STATUS.md
 docs/hardening/asmtd-findings.md
 docs/hardening/bimcam-findings.md
+docs/hardening/chain-findings.md
 docs/hardening/coredoc-findings.md
 docs/hardening/diff-findings.md
 docs/hardening/draftmesh-findings.md
 docs/hardening/freecad-1.1.0-commands.txt
+docs/hardening/hubrest-findings.md
 docs/hardening/inventory.json
 docs/hardening/map-findings.md
 docs/hardening/models/asmtd-assembly-model.json
@@ -197,6 +202,7 @@ docs/hardening/models/coredoc-model.json
 docs/hardening/models/draftmesh-draft-model.json
 docs/hardening/models/draftmesh-mesh-model.json
 docs/hardening/models/draftmesh-surface-model.json
+docs/hardening/models/hubrest-model.json
 docs/hardening/models/part-model.json
 docs/hardening/models/partdesign-model.json
 docs/hardening/models/sheetfem-fem-model.json
@@ -238,12 +244,14 @@ tests/test_app_install.py
 tests/test_as_person.py
 tests/test_assembly.py
 tests/test_assembly_more.py
+tests/test_batch_chain_fc.py
 tests/test_batch_rollback.py
 tests/test_bim_gaps.py
 tests/test_cam.py
 tests/test_cam_more.py
 tests/test_ccx.py
 tests/test_cells.py
+tests/test_chain.py
 tests/test_charts.py
 tests/test_core_check.py
 tests/test_core_guards.py
@@ -276,12 +284,14 @@ tests/test_gui_link_dialog.py
 tests/test_gui_popups.py
 tests/test_gui_saved.py
 tests/test_gui_shell.py
+tests/test_guideidx.py
 tests/test_guides.py
 tests/test_health.py
 tests/test_health_fc.py
 tests/test_heavy_memory.py
 tests/test_hidden_parts.py
 tests/test_history_diff_fc.py
+tests/test_hold.py
 tests/test_hooks.py
 tests/test_hull3d.py
 tests/test_inspection.py

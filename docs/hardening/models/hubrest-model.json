@@ -1,0 +1,373 @@
+{
+ "tutorial": "No wiki tutorial covers the window tools. The model starts from the repo's own live script reset (scripts/live/reset.json: it rebuilds the WindowTest document: a Body with a 20 mm pad) and walks the dev, unattended, notes, app, core and view tools once each, reads only where a read proves the point. docs/hardening/models/coredoc-gui-model.json (the earlier pass) is the deeper click-by-click script for the same tools; this one is the call list in the shape of bimcam-cam-model.json.",
+ "reference": null,
+ "conventions": {
+  "placeholders": "<NOTE_ID> is result.id of the note_add call (an integer; send it as a number).",
+  "reset": "Call 1 (live_run reset) must run first in every chunk of 20: a chunk that starts later repeats it.",
+  "refused": "An expect starting REFUSED means isError with that code.",
+  "window": "All calls go to the window's link. Nothing here takes the cursor, focus or full screen."
+ },
+ "expected": {
+  "document": "WindowTest",
+  "body": {
+   "name": "Body",
+   "padLength_mm": 20
+  },
+  "noteAt": [
+   0,
+   0,
+   20
+  ],
+  "renderViews": 4,
+  "snapshotSize": [
+   800,
+   600
+  ],
+  "note": "The WindowTest body's numbers are the reset script's: read them from session_state in call 2 rather than from here; I did not run the script."
+ },
+ "calls": [
+  {
+   "tool": "live_run",
+   "arguments": {
+    "script": "reset"
+   },
+   "expect": "total.failed 0; the WindowTest document is rebuilt and in front. This is the reset every later call (and every other live_run) starts from"
+  },
+  {
+   "tool": "session_state",
+   "arguments": {},
+   "expect": "the document is WindowTest; where says window; bodies with volume, faces, size; the step count"
+  },
+  {
+   "tool": "doc_switch",
+   "arguments": {},
+   "expect": "label WindowTest; open lists it"
+  },
+  {
+   "tool": "workbench",
+   "arguments": {},
+   "expect": "active (an internal name such as PartDesignWorkbench) and workbenches"
+  },
+  {
+   "tool": "cmd_list",
+   "arguments": {
+    "query": "Std_ViewFit"
+   },
+   "expect": "lists Std_ViewFitAll and Std_ViewFitSelection with their menu text"
+  },
+  {
+   "tool": "cmd_run",
+   "arguments": {
+    "name": "Std_ViewIsometric"
+   },
+   "expect": "wasActive true; nothing added to the document"
+  },
+  {
+   "tool": "cmd_run",
+   "arguments": {
+    "name": "Std_ViewFitAll"
+   },
+   "expect": "wasActive true"
+  },
+  {
+   "tool": "menu_list",
+   "arguments": {
+    "menu": "View"
+   },
+   "expect": "the View menu's items"
+  },
+  {
+   "tool": "selection",
+   "arguments": {
+    "objects": [
+     "Body"
+    ]
+   },
+   "expect": "Body selected"
+  },
+  {
+   "tool": "selection",
+   "arguments": {
+    "clear": false
+   },
+   "expect": "reads the selection back: Body (nothing cleared)"
+  },
+  {
+   "tool": "selection",
+   "arguments": {
+    "clear": true
+   },
+   "expect": "selection empty"
+  },
+  {
+   "tool": "show",
+   "arguments": {
+    "objects": [
+     "Body"
+    ],
+    "visible": false
+   },
+   "expect": "Body hidden"
+  },
+  {
+   "tool": "show",
+   "arguments": {
+    "objects": [
+     "Body"
+    ],
+    "visible": true
+   },
+   "expect": "Body shown"
+  },
+  {
+   "tool": "pref_set",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+    "name": "Probe",
+    "value": 3,
+    "type": "int"
+   },
+   "expect": "Probe set to 3"
+  },
+  {
+   "tool": "pref_get",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+    "name": "Probe"
+   },
+   "expect": "value 3, type int"
+  },
+  {
+   "tool": "pref_reset",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+    "names": [
+     "Probe",
+     "NeverSet"
+    ]
+   },
+   "expect": "Probe removed; notSet lists NeverSet"
+  },
+  {
+   "tool": "gui_input",
+   "arguments": {
+    "steps": [
+     {
+      "wait": 300
+     },
+     {
+      "shot": "hubrest_view"
+     }
+    ],
+    "inline": false
+   },
+   "expect": "one step waited, one shot written (gui_input/hubrest_view.png in the output folder); open empty; no new Report problems"
+  },
+  {
+   "tool": "gui_unstick",
+   "arguments": {},
+   "expect": "nothing was open: closed empty"
+  },
+  {
+   "tool": "window_snapshot",
+   "arguments": {
+    "inline": false,
+    "path": "hubrest_window.png"
+   },
+   "expect": "a PNG of the window written; its size in the answer"
+  },
+  {
+   "tool": "view_maps",
+   "arguments": {},
+   "expect": "maps (wall, stress, heat and any add-on's, each with about), layers, views [iso, top, front, right …]"
+  },
+  {
+   "tool": "view_render",
+   "arguments": {
+    "views": "all",
+    "inline": false,
+    "path": "hubrest_render.png"
+   },
+   "expect": "one picture of four views written; hidden names any hidden part; time { took, expected }"
+  },
+  {
+   "tool": "view_snapshot",
+   "arguments": {
+    "view": "iso",
+    "fit": true,
+    "inline": false,
+    "path": "hubrest_snap.png"
+   },
+   "expect": "the window's own 3D view saved, 800 x 600 unless given"
+  },
+  {
+   "tool": "note_add",
+   "arguments": {
+    "text": "hubrest: is this the top face?",
+    "at": [
+     0,
+     0,
+     20
+    ]
+   },
+   "expect": "a note with id (use it as <NOTE_ID>), by agent, at [0, 0, 20], done false"
+  },
+  {
+   "tool": "note_list",
+   "arguments": {},
+   "expect": "the note above among notes; waiting lists only the person's unanswered notes"
+  },
+  {
+   "tool": "note_answer",
+   "arguments": {
+    "id": "<NOTE_ID>",
+    "text": "yes, z = 20"
+   },
+   "expect": "the note carries the answer"
+  },
+  {
+   "tool": "note_done",
+   "arguments": {
+    "id": "<NOTE_ID>"
+   },
+   "expect": "done true"
+  },
+  {
+   "tool": "note_delete",
+   "arguments": {
+    "id": "<NOTE_ID>"
+   },
+   "expect": "deleted <NOTE_ID>; left counts the rest"
+  },
+  {
+   "tool": "note_delete",
+   "arguments": {
+    "id": 99999
+   },
+   "expect": "REFUSED not_found: no such note; note_list lists them"
+  },
+  {
+   "tool": "steps_list",
+   "arguments": {},
+   "expect": "the body's steps in order (sketch, pad …), each with what it made"
+  },
+  {
+   "tool": "steps_render",
+   "arguments": {
+    "inline": false,
+    "width": 320,
+    "height": 240,
+    "path": "hubrest_steps"
+   },
+   "expect": "one picture per step written; paths in the answer"
+  },
+  {
+   "tool": "history_undo",
+   "arguments": {
+    "steps": 1
+   },
+   "expect": "done undo; steps names what was undone; undoCount one lower"
+  },
+  {
+   "tool": "history_redo",
+   "arguments": {
+    "steps": 1
+   },
+   "expect": "done redo; redoCount 0 again; bodies as before"
+  },
+  {
+   "tool": "history_diff",
+   "arguments": {},
+   "expect": "since / to step numbers; changed and per body volume, faces, size from and to"
+  },
+  {
+   "tool": "body_check",
+   "arguments": {
+    "body": "Body"
+   },
+   "expect": "sound: valid, closed, one solid; no sliver faces or short edges"
+  },
+  {
+   "tool": "report_read",
+   "arguments": {
+    "problems": true
+   },
+   "expect": "found true; count; problems 0 in a clean run"
+  },
+  {
+   "tool": "guide_read",
+   "arguments": {},
+   "expect": "the index of guides"
+  },
+  {
+   "tool": "tool_groups",
+   "arguments": {
+    "find": "restart window"
+   },
+   "expect": "app_restart and app_force_restart among the first rows"
+  },
+  {
+   "tool": "tool_groups",
+   "arguments": {
+    "tool": "live_run"
+   },
+   "expect": "live_run's whole description, which begins by saying to reset the test document first"
+  },
+  {
+   "tool": "addon",
+   "arguments": {
+    "action": "list"
+   },
+   "expect": "the installed add-ons with versions"
+  },
+  {
+   "tool": "addon_test",
+   "arguments": {},
+   "expect": "the recent test jobs (none started)"
+  },
+  {
+   "tool": "crash_collect",
+   "arguments": {},
+   "expect": "a folder under the crash folder, or a note that there was nothing new; copies only"
+  },
+  {
+   "tool": "dialog_answer",
+   "arguments": {},
+   "expect": "no modal dialog; the open task panel and its buttons, or none"
+  },
+  {
+   "tool": "outputs_clean",
+   "arguments": {},
+   "expect": "a dry run: what would go to the Trash, by kind; nothing removed"
+  },
+  {
+   "tool": "job_status",
+   "arguments": {},
+   "expect": "every job kept; no job running"
+  },
+  {
+   "tool": "usage_report",
+   "arguments": {
+    "session": true
+   },
+   "expect": "this session's calls and estimated tokens"
+  },
+  {
+   "tool": "live_run",
+   "arguments": {
+    "script": "agentlink",
+    "budget": 60
+   },
+   "expect": "total with passed, failed, skipped; notRun names the steps past the 60 s budget (run them with steps); leftOpen empty"
+  }
+ ],
+ "notCovered": [
+  "queue_go: it is the person's go for held heavy jobs and is called only on their word in chat, never by a test",
+  "app_restart, app_force_restart, app_install { version }, addon install / update / remove, pref_import, pref_pack { apply }: they restart FreeCAD, download, or change the person's settings; by hand only, with the person's say",
+  "menu_run: titles differ between FreeCAD 1.1.0 and 1.1.3 menus; coredoc-gui-model has the call",
+  "gui_input clicks and drags, dialogs: coredoc-gui-model.json covers them step by step",
+  "addon_test { addon }: starts a separate FreeCAD process for minutes; run once by hand: addon_test { addon: \"AgentLink\", select: \"test_paths\" }",
+  "batch, job_start, export, collab, history_checkpoint, history_restore, app_extensions: other passes' models (coredoc, map) or another add-on's tools",
+  "the tools of bim_gaps, cam_more, fem_more and std_more: all are rows in the earlier findings (bimcam, sheetfem, part, partdesign, coredoc) with their own models; nothing was left unchecked there"
+ ]
+}
