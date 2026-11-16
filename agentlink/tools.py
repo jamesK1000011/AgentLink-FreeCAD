@@ -1150,7 +1150,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             except ValueError as e:
                 raise ToolError("invalid_input", f"file: {f} is not JSON ({e}) — a list [{{ tool, arguments }} …], or {{ calls, rollback, stopOnError }}. Nothing was run.")
             if isinstance(data, dict):
-                a = {**{k: data[k] for k in ("rollback", "stopOnError", "budget") if k in data}, **{k: v for k, v in a.items() if k in ("rollback", "stopOnError", "budget", "from")}}
+                a = {**{k: data[k] for k in ("rollback", "stopOnError", "budget") if k in data}, **{k: v for k, v in a.items() if k in ("rollback", "stopOnError", "budget", "from", "to", "file")}}
                 data = data.get("calls")
             if not isinstance(data, list):
                 raise ToolError("invalid_input", f"file: {f} holds no list of calls — [{{ tool, arguments }} …], or {{ calls: [...] }}. Nothing was run.")
