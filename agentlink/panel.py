@@ -15,8 +15,8 @@ import FreeCADGui
 
 from .families import notes as nf
 from . import layout
-from .panel_tabs import (EMPTY, HOME, NO_REVIEWER, FlowRow, Tabs, credit_shown, link_status, panel_qss, review_hint, tab_order,
-                         tabs_for)
+from .panel_tabs import (EMPTY, HOME, NO_REVIEWER, PIN_HINT, FlowRow, Tabs, credit_shown, link_status, panel_qss, pin_event, review_hint,
+                         tab_order, tabs_for)
 
 try:
     from PySide import QtCore, QtGui
@@ -413,6 +413,11 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         row.addStretch(1)
         row.addWidget(self.show_pins)
         lay.addLayout(row)
+        # What to do next, while Pin a Note waits for the click.
+        self.pin_hint = QtWidgets.QLabel(PIN_HINT)
+        self.pin_hint.setWordWrap(True)
+        self.pin_hint.setVisible(False)
+        lay.addWidget(self.pin_hint)
         self.notes_empty = self._empty("Notes")
         lay.addWidget(self.notes_empty)
         self.note_list = QtWidgets.QTreeWidget()
@@ -438,20 +443,30 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
 
     def set_placing(self, on):
         self.placing = on
+        hint = getattr(self, "pin_hint", None)
+        if hint is not None:
+            hint.setVisible(bool(on))
         v = _view()
         if v is None:
             return
         if on and self.callback is None:
             self.callback = v.addEventCallback("SoMouseButtonEvent", self.clicked)
+            self.key_callback = v.addEventCallback("SoKeyboardEvent", self.key)
         elif not on and self.callback is not None:
-            try:
-                v.removeEventCallback("SoMouseButtonEvent", self.callback)
-            except Exception:
-                pass
-            self.callback = None
+            for kind, cb in (("SoMouseButtonEvent", self.callback), ("SoKeyboardEvent", getattr(self, "key_callback", None))):
+                try:
+                    if cb is not None:
+                        v.removeEventCallback(kind, cb)
+                except Exception:
+                    pass
+            self.callback = self.key_callback = None
+
+    def key(self, ev):
+        if pin_event(dict(ev, Type="SoKeyboardEvent")) == "cancel":
+            self.pin_key.setChecked(False)
 
     def clicked(self, ev):
-        if ev.get("State") != "DOWN" or ev.get("Button") != "BUTTON1":
+        if pin_event(ev) != "place":
             return
         v = _view()
         info = v.getObjectInfo(ev["Position"]) if v else None
@@ -460,8 +475,9 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         at = [info["x"], info["y"], info["z"]]
         doc = _doc()
         obj = doc.getObject(info.get("Object", "")) if doc else None
-        text, ok = QtWidgets.QInputDialog.getText(self, "Note", "What the note says:")
+        # The click is made: the hint goes before the prompt comes up.
         self.pin_key.setChecked(False)
+        text, ok = QtWidgets.QInputDialog.getText(self, "Note", "What the note says:")
         if ok and text.strip():
             nf.add_note(doc, at, text.strip(), "person", obj.Label if obj else None, info.get("Component"))
             self.refresh(force=True)
