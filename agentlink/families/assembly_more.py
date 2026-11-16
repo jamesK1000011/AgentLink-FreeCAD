@@ -145,6 +145,19 @@ def fit_of(code):
     return hole.strip(), shaft.strip()
 
 
+def _view_provider(CV, cls, o):
+    """o's view provider from CommandCreateView, where o has a ViewObject
+    (the window); nothing headless."""
+    vo = getattr(o, "ViewObject", None)
+    if vo is None:
+        return False
+    vp = getattr(CV, cls, None)
+    if vp is None:
+        raise RuntimeError(f"{cls} is not in this FreeCAD's Assembly")
+    vp(vo)
+    return True
+
+
 def _exploded_view(asm, which, moves):
     """FreeCAD's own Exploded View of the assembly (CommandCreateView's
     ExplodedView with a Normal move step a part), its moves applied:
@@ -161,11 +174,16 @@ def _exploded_view(asm, which, moves):
         view = UA.getViewGroup(asm).newObject("App::FeaturePython", "Exploded View")
         made.append(view)
         CV.ExplodedView(view)
+        # In the window each object gets its view provider before anything
+        # is set on it, as Create Exploded View's task does: applying a step
+        # draws its lines through it (headless there is no ViewObject).
+        _view_provider(CV, "ViewProviderExplodedView", view)
         steps = []
         for o in which:
             st = asm.newObject("App::FeaturePython", "Move")
             made.append(st)
             CV.ExplodedViewStep(st, 0)
+            _view_provider(CV, "ViewProviderExplodedViewStep", st)
             st.References = [asm, [o.Name + "."]]
             st.MovementTransform = FreeCAD.Placement(moves[o.Name], FreeCAD.Rotation())
             steps.append(st)
