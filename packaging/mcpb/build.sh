@@ -21,6 +21,9 @@ STAGE=$(mktemp -d)
 cp "$HERE/manifest.json" "$STAGE/"
 mkdir -p "$STAGE/server" "$STAGE/addons"
 cp "$HERE/server/index.js" "$STAGE/server/"
+# The add-on list itself: the launcher reads its companions (and nothing
+# else it serves names them) from this copy until an update keeps newer.
+cp "$HERE/../addons.json" "$STAGE/addons.json"
 copy() { # copy SRC DEST: the files FILES lists, tests too (addon_test runs them)
   [ -f "$1/FILES" ] || return 0
   grep -v -E '^#|^$|(^|/)__pycache__/' "$1/FILES" | while read -r f; do

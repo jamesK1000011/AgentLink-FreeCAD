@@ -7,6 +7,10 @@ All notable changes to Agent Link for FreeCAD. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The Claude extension's launcher names no companion server: its companions come from `addons.json` — the copy the extension now carries at its top (build.sh puts it there; a checkout reads `packaging/addons.json`), then the list the last update kept, with `~/AgentLink/companions.json` over both. The built-in list it kept beside the data is gone; with no list there are none. Launcher test with a stand-in companion.
+
 ## [0.3.0] - 2026-11-16
 
 ### Added
