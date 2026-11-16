@@ -80,6 +80,25 @@ def describe_con(sk, i):
 POS = {1: "the start of", 2: "the end of", 3: "the centre of"}
 
 
+def ext_count(sk):
+    """How many outside (external) geometries a sketch has: their ids run
+    -3, -4 … -(2 + this). FreeCAD 1.1 keeps them in ExternalGeo behind the
+    two axes (ids -1, -2); one linked edge can give more than one. Before
+    1.1: one per linked sub-element (ExternalGeometry groups them by
+    object, so its length is not the count)."""
+    eg = getattr(sk, "ExternalGeo", None)
+    if eg is not None:
+        try:
+            return max(0, len(eg) - 2)
+        except Exception:
+            pass
+    n = 0
+    for link in getattr(sk, "ExternalGeometry", None) or []:
+        subs = link[1] if isinstance(link, (tuple, list)) and len(link) > 1 else ()
+        n += len(subs) if isinstance(subs, (tuple, list)) else 1
+    return n
+
+
 def _snake(t):
     return re.sub(r"(?<!^)(?=[A-Z])", "_", t).lower()
 
@@ -154,12 +173,11 @@ def state_of(sk):
     dof = getattr(sk, "DoF", None)
     wires = sk.Shape.Wires if not sk.Shape.isNull() else []
     closed = sum(1 for w in wires if w.isClosed())
-    try:
-        openv = [_pt(v) for v in (sk.OpenVertices or [])]
-    except Exception:
-        openv = []
-    if not openv and wires and closed < len(wires):
-        # Older releases leave OpenVertices empty: the ends of the open wires.
+    openv = []
+    if wires and closed < len(wires):
+        # The ends of the open wires, in the sketch's own x/y. (Not the
+        # sketch's OpenVertices: it lists every vertex that does not join
+        # exactly two edges, a lone circle's too.)
         inv = sk.Placement.inverse()
         for w in wires:
             if not w.isClosed():
@@ -473,11 +491,14 @@ def _ref(r, what):
     """[geo] or [geo, pos]; 'origin' is the sketch's origin point."""
     if r == "origin":
         return (-1, 1)
-    if isinstance(r, int):
+    if isinstance(r, int) and not isinstance(r, bool):
         return (r, None)
-    if isinstance(r, list) and r and all(isinstance(x, int) for x in r) and len(r) <= 2:
-        return (r[0], r[1] if len(r) == 2 else None)
-    raise ToolError("invalid_input", f"{what}: a geometry id, [id, vertex] (vertex 1 start, 2 end, 3 centre) or \"origin\". The axes: -1 the horizontal, -2 the vertical.")
+    if isinstance(r, list) and r and all(isinstance(x, int) and not isinstance(x, bool) for x in r) and len(r) <= 2:
+        v = r[1] if len(r) == 2 else 0
+        if v not in (0, 1, 2, 3):
+            raise ToolError("invalid_input", f"{what}: vertex {v} of geometry {r[0]} — 1 its start, 2 its end, 3 its centre (arcs, circles, ellipses); 0 or left out means the whole curve.")
+        return (r[0], v or None)
+    raise ToolError("invalid_input", f"{what}: a geometry id, [id, vertex] (vertex 1 start, 2 end, 3 centre) or \"origin\". The axes: -1 the horizontal, -2 the vertical; outside edges -3 down (sketch_external). sketch_state lists the ids.")
 
 
 def make_constraint(sk, c):
@@ -493,7 +514,7 @@ def make_constraint(sk, c):
 
     def mm():
         if not isinstance(val, (int, float)):
-            raise ToolError("invalid_input", f"{t}: value, mm.")
+            raise ToolError("invalid_input", f"{t}: value, a number in mm.")
         return float(val)
 
     if t == "coincident":
@@ -506,12 +527,12 @@ def make_constraint(sk, c):
         need(n == 2 and len(pts) == 2, "one line [g], or two points [[g, v], [g, v]]")
         return [(k, refs[0][0], refs[0][1], refs[1][0], refs[1][1])]
     if t in ("parallel", "perpendicular", "equal"):
-        need(n == 2 and not pts, "two geometries [g, g]")
+        need(n == 2 and not pts, "two geometries [g, g] (no vertices)")
         return [(t.capitalize(), refs[0][0], refs[1][0])]
     if t == "tangent":
         if n == 2 and not pts:
             return [("Tangent", refs[0][0], refs[1][0])]
-        need(n == 2 and len(pts) == 2, "two curves [g, g], or two end points joined [[g, v], [g, v]]")
+        need(n == 2 and len(pts) == 2, "two curves [g, g] (tangent wherever they touch), or two end points joined smoothly [[g, v], [g, v]]")
         return [("Tangent", refs[0][0], refs[0][1], refs[1][0], refs[1][1])]
     if t == "symmetric":
         need(n == 3 and refs[0][1] and refs[1][1], "two points and a line [[g, v], [g, v], g] or a point [[g, v], [g, v], [g, v]]")
@@ -538,20 +559,22 @@ def make_constraint(sk, c):
         return [(t.capitalize(), refs[0][0], mm())]
     if t == "angle":
         if not isinstance(val, (int, float)):
-            raise ToolError("invalid_input", "angle: value, degrees.")
+            raise ToolError("invalid_input", "angle: value, a number in degrees.")
         a = math.radians(float(val))
         if n == 1 and not pts:
             return [("Angle", refs[0][0], a)]
-        need(n == 2 and not pts, "one line [g] (from +x) or two lines [g, g]")
+        need(n == 2 and not pts, "one line [g] (its angle from +x) or two lines [g, g] (from the first's direction to the second's, each start to end, counter-clockwise)")
         return [("Angle", refs[0][0], refs[1][0], a)]
     if t in ("fix", "lock", "block"):
         need(n == 1, "one point [[g, v]] (held where it is) or one geometry [g] (blocked)")
         g, p = refs[0]
+        if g < 0:
+            raise ToolError("invalid_input", f"{t}: refs one point or geometry of the sketch's own (id 0 up) — the axes, the origin and outside edges are fixed already.")
         if p is None:
             return [("Block", g)]
         at = sk.getPoint(g, p)
         return [("DistanceX", g, p, at.x), ("DistanceY", g, p, at.y)]
-    raise ToolError("invalid_input", "type: coincident, horizontal, vertical, parallel, perpendicular, tangent, equal, symmetric, point_on_object, distance, distance_x, distance_y, radius, diameter, angle, fix.")
+    raise ToolError("invalid_input", f"type {c.get('type')!r}: one of coincident, horizontal, vertical, parallel, perpendicular, tangent, equal, symmetric, point_on_object, distance, distance_x, distance_y, radius, diameter, angle, fix (also lock, block).")
 
 
 def con_index(sk, ref):
@@ -562,7 +585,7 @@ def con_index(sk, ref):
         for i, c in enumerate(sk.Constraints):
             if c.Name == ref:
                 return i
-    raise ToolError("not_found", f"constraint {ref!r}: not in {sk.Label} — sketch_state lists them (ids from 0, or their names).")
+    raise ToolError("not_found", f"constraint {ref!r}: not in {sk.Label}, which has {len(sk.Constraints)} (ids 0 to {len(sk.Constraints) - 1}) — sketch_state lists them with their ids and names.")
 
 
 # ---- the tools -------------------------------------------------------------------------------
@@ -580,7 +603,7 @@ def tools(session):
     def sketch_new(a):
         b = pc.pd_body(doc(), a.get("body"))
         if ("plane" in a) == ("face" in a):
-            raise ToolError("invalid_input", "Give plane (XY, XZ, YZ or a datum plane's name) or face ({ at, normal } on the body), one of them.")
+            raise ToolError("invalid_input", "Give plane (XY, XZ, YZ, a datum plane's name or \"Pad.Face3\") or face ({ at: [x,y,z], normal: [x,y,z] } on the body's solid), one of them, not both.")
         label = s.unique(a.get("name") or "Sketch")
         sk = b.newObject("Sketcher::SketchObject", "Sketch")
         sk.Label = label
@@ -611,14 +634,14 @@ def tools(session):
             sk.AttachmentOffset = FreeCAD.Placement(ao.Base + ao.Rotation.multVec(V(0, 0, off)), ao.Rotation)
             doc().recompute()
         if not sk.isValid():
-            raise ToolError("failed", f"The sketch would not attach to {what}: {sk.getStatusString()}.")
+            raise ToolError("failed", f"The sketch would not attach to {what}: {sk.getStatusString()} — nothing was made. A sketch needs a flat face or a plane: pick another face, or plane XY | XZ | YZ with offset.")
         return picks.finish(s, "sketch_new", lambda: {"sketch": sk.Label, "body": b.Label, "on": what, **({"offset": off} if off else {}), "frame": frame(sk.Placement), "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}, recompute=False)
 
     def sketch_add(a):
         sk = pc.sketch_of(doc(), a.get("sketch"))
         items = a.get("items")
         if not isinstance(items, list) or not items:
-            raise ToolError("invalid_input", "items: [{ kind, … }, …].")
+            raise ToolError("invalid_input", "items: a list, [{ kind: \"rectangle\", center: [0, 0], size: [40, 20] }, …] — the kinds are in sketch_add's description.")
         out = []
         for n, it in enumerate(items):
             if not isinstance(it, dict):
@@ -670,7 +693,7 @@ def tools(session):
         sk = pc.sketch_of(doc(), a.get("sketch"))
         d = a.get("distance")
         if not isinstance(d, (int, float)) or isinstance(d, bool) or abs(d) < 1e-9:
-            raise ToolError("invalid_input", "distance: mm, out from the profile (negative: in).")
+            raise ToolError("invalid_input", "distance: a number of mm other than 0, out from the profile (negative: in).")
         doc().recompute()
         geos = sk.Geometry
         ids = a.get("geometry")
@@ -679,7 +702,7 @@ def tools(session):
         edges = []
         for i in ids:
             if not isinstance(i, int) or not 0 <= i < len(geos):
-                raise ToolError("invalid_input", f"geometry: ids 0 to {len(geos) - 1} (sketch_state lists them).")
+                raise ToolError("invalid_input", f"geometry: {i!r} is not an id in {sk.Label} — 0 to {len(geos) - 1} (sketch_state lists them); leave geometry out for every non-construction one.")
             edges.append(geos[i].toShape())
         try:
             wires = [Part.Wire(w) for w in Part.sortEdges(edges)]
@@ -719,7 +742,10 @@ def tools(session):
             raise ToolError("invalid_state", f"{sk.Label} is in no body: outside geometry comes from the body's own features.")
         tip = body.Tip
         if tip is None or tip.Shape.isNull():
-            raise ToolError("invalid_state", f"{body.Label} has no solid yet to take edges from.")
+            raise ToolError("invalid_state", f"{body.Label} has no solid yet to take edges from: pd_pad a sketch first, or sketch_project from a datum or another sketch.")
+        if sk in tip.OutListRecursive:
+            # FreeCAD refuses a link that would loop (isExternalAllowed).
+            raise ToolError("invalid_state", f"{tip.Label}, the body's tip, is built from {sk.Label}: a sketch cannot take edges from a solid made after it. Make a new sketch for what follows the solid (sketch_new { face }), and bring the edges into that.")
         from . import measure as M
 
         qs = a.get("edges")
@@ -738,37 +764,44 @@ def tools(session):
                 pt = pc.vec3(q["near"], "near")
                 hits = sorted(hits, key=lambda h: h[1].distToShape(Part.Vertex(pt))[0])[:1]
             names += [d["ref"] for _, _, d in hits]
-        before = len(sk.ExternalGeometry)
+        before = ext_count(sk)
         for n in names:
             try:
                 sk.addExternal(tip.Name, n)
             except Exception as e:
-                raise ToolError("failed", f"{tip.Label}.{n} could not be brought in: {e}")
+                raise ToolError("failed", f"{tip.Label}.{n} could not be brought in: {e} — nothing was added. An edge already in the sketch is refused (sketch_state shows the ids in use); shape_query lists {body.Label}'s edges.")
         doc().recompute()
-        got = len(sk.ExternalGeometry) - before
-        ext_ids = [-3 - k for k in range(before, before + got)]
+        ext_ids = [-3 - k for k in range(before, ext_count(sk))]
         s.snapshot("sketch_external")
         return {"sketch": sk.Label, "from": f"{tip.Label}", "edges": names, "ids": ext_ids, "state": state_of(sk), "step": len(s.steps),
-                "note": "Outside geometry is referred to by these negative ids in sketch_constrain (-1 and -2 are the sketch's axes): a constraint to it follows the edge when the part changes."}
+                "note": "Outside geometry is referred to by these negative ids in sketch_constrain (-1 and -2 are the sketch's axes), in the order brought in; an edge seen end-on comes in as a point. A constraint to it follows the edge when the part changes."}
 
     def sketch_constrain(a):
         sk = pc.sketch_of(doc(), a.get("sketch"))
         cs = a.get("constraints")
         if not isinstance(cs, list) or not cs:
-            raise ToolError("invalid_input", "constraints: [{ type, refs, value, name }, …].")
+            raise ToolError("invalid_input", "constraints: a list, [{ type: \"distance\", refs: [[0, 1], [0, 2]], value: 30, name: \"len\" }, …] — the types and their refs are in sketch_constrain's description.")
         before = len(sk.Constraints)
         ng = len(sk.Geometry)
+        ne = ext_count(sk)
         added = []
         try:
             for i, c in enumerate(cs):
                 if not isinstance(c, dict):
-                    raise ToolError("invalid_input", f"constraints[{i}]: {{ type, refs, value, name }}.")
-                for g, _p in [_ref(r, "refs") for r in c.get("refs") or []]:
-                    if g >= ng:
-                        raise ToolError("invalid_input", f"constraints[{i}]: geometry {g} is not in {sk.Label} (0 to {ng - 1}; -1 and -2 are the axes).")
-                ts = make_constraint(sk, c)
+                    raise ToolError("invalid_input", f"constraints[{i}]: an object {{ type, refs, value, name }}.")
+                for g, _p in [_ref(r, f"constraints[{i}].refs") for r in c.get("refs") or []]:
+                    if g >= ng or g < -2 - ne:
+                        raise ToolError("invalid_input", f"constraints[{i}]: geometry {g} is not in {sk.Label} — its own are 0 to {ng - 1}; -1 and -2 are the axes"
+                                        + (f"; outside edges -3 to {-2 - ne}" if ne else "; it has no outside edges (sketch_external brings them in)") + ". sketch_state lists them.")
+                try:
+                    ts = make_constraint(sk, c)
+                except ToolError as e:
+                    raise ToolError(e.code, f"constraints[{i}] {e.message}") from None
                 for j, t in enumerate(ts):
-                    ci = sk.addConstraint(Sketcher.Constraint(*t))
+                    try:
+                        ci = sk.addConstraint(Sketcher.Constraint(*t))
+                    except Exception as e:
+                        raise ToolError("invalid_input", f"constraints[{i}] ({c.get('type')}): FreeCAD would not take it ({e}) — nothing was added. Check each ref's geometry kind and vertex against sketch_state (a line has vertices 1 and 2, a circle only 3).") from None
                     added.append(ci)
                     if c.get("name"):
                         sk.renameConstraint(ci, c["name"] if len(ts) == 1 else f"{c['name']}_{'xy'[j]}")
@@ -816,9 +849,15 @@ def tools(session):
         if "move" in a:
             m = a["move"]
             g = gid(m.get("geo"))
-            p = int(m.get("vertex", 0 if _geo_kind(sk.Geometry[g]) == "Line" else 3))
+            k = _geo_kind(sk.Geometry[g])
+            p = m.get("vertex", 0 if k == "Line" else 1 if k == "Point" else 3)
+            if p not in (0, 1, 2, 3) or isinstance(p, bool):
+                raise ToolError("invalid_input", "move.vertex: 0 the whole curve, 1 its start, 2 its end, 3 its centre.")
             to = pc.vec2(m.get("to"), "move.to")
-            sk.moveGeometry(g, p, to, False)
+            try:
+                sk.moveGeometry(g, p, to, False)
+            except Exception as e:
+                raise ToolError("failed", f"Geometry {g} vertex {p} would not move to {[to.x, to.y]}: {e} — its constraints hold it (sketch_state lists them; set changes a dimension, deleteConstraints frees it), or it has no such vertex.") from None
             done.append(f"moved {g}.{p}")
         if "set" in a:
             for x in a["set"] if isinstance(a["set"], list) else [a["set"]]:
@@ -826,13 +865,18 @@ def tools(session):
                 c = sk.Constraints[ci]
                 v = x.get("value")
                 if not isinstance(v, (int, float)):
-                    raise ToolError("invalid_input", "set.value: mm (degrees for an angle).")
+                    raise ToolError("invalid_input", "set.value: a number, mm (degrees for an angle).")
                 if c.Type not in ("Distance", "DistanceX", "DistanceY", "Radius", "Diameter", "Angle"):
-                    raise ToolError("invalid_input", f"constraint {ci} is {c.Type}: it has no value to set.")
+                    raise ToolError("invalid_input", f"constraint {ci} is {c.Type}: it has no value to set — only distance, distance_x, distance_y, radius, diameter and angle constraints do (sketch_state lists them with their values).")
+                if (c.Type in ("Radius", "Diameter") and v <= 0) or (c.Type == "Distance" and v == 0):
+                    raise ToolError("invalid_input", f"set: constraint {ci} is a {c.Type.lower()}: its value must be {'over 0' if c.Type != 'Distance' else 'other than 0 (coincident joins two points)'}.")
                 bound = [p for p, _e in sk.ExpressionEngine if p in (f"Constraints[{ci}]", f".Constraints[{ci}]", f"Constraints.{c.Name}", f".Constraints.{c.Name}")]
                 if bound:
                     raise ToolError("invalid_state", f"constraint {ci} is bound to an expression: param_set its parameter, or param_bind it to null first.")
-                sk.setDatum(ci, FreeCAD.Units.Quantity(f"{v} deg") if c.Type == "Angle" else FreeCAD.Units.Quantity(f"{v} mm"))
+                try:
+                    sk.setDatum(ci, FreeCAD.Units.Quantity(f"{v} deg") if c.Type == "Angle" else FreeCAD.Units.Quantity(f"{v} mm"))
+                except Exception as e:
+                    raise ToolError("failed", f"Constraint {ci} would not take {v}: {e} — the sketch does not solve with that value, so it was left as it was. Another constraint holds the same size (sketch_state lists them), or the value does not fit the shape.") from None
                 done.append(f"set {ci} = {v}")
         if "construction" in a:
             x = a["construction"]
@@ -852,7 +896,7 @@ def tools(session):
         if "delete" in a:
             ids = sorted({gid(g) for g in a["delete"]})
             sk.delGeometries(ids)
-            done.append(f"deleted geometry {ids} (later ids shift down by the count before them)")
+            done.append(f"deleted geometry {ids} with its constraints (later ids shift down by the count before them: {len(sk.Geometry)} left, 0 to {len(sk.Geometry) - 1})")
         if "fillet" in a:
             # A corner rounded: at a shared end point [g, v], or between two
             # curves near the points given; the curves are trimmed to the arc.
@@ -867,13 +911,21 @@ def tools(session):
                     g, v = x["at"]
                     sk.fillet(gid(g), int(v), r, True, False, *ch)
                 else:
-                    g1, g2 = (gid(g) for g in x.get("geos") or [])
-                    p1, p2 = (FreeCAD.Vector(*pc.vec2(q, "fillet.near"), 0) for q in x.get("near") or [])
+                    gs, nr = x.get("geos") or [], x.get("near") or []
+                    if len(gs) != 2 or len(nr) != 2:
+                        raise ValueError("geos and near take two each")
+                    g1, g2 = (gid(g) for g in gs)
+                    # pc.vec2 gives the point as a Vector already (z 0).
+                    p1, p2 = (pc.vec2(q, "fillet.near") for q in nr)
                     sk.fillet(g1, g2, p1, p2, r, True, False, *ch)
-            except ValueError:
-                raise ToolError("invalid_input", "fillet: at [geo, vertex] (a corner where two curves meet), or geos [g1, g2] with near [[x, y], [x, y]] on each, and radius.")
+            except ToolError:
+                raise
+            except (ValueError, TypeError) as e:
+                if "Not able to fillet" in str(e):
+                    raise ToolError("failed", f"No fillet of {r:g} mm fits there: {e} — a smaller radius, or a corner where exactly two curves meet (lines and arcs).") from None
+                raise ToolError("invalid_input", "fillet: at [geo, vertex] (a corner where two curves meet), or geos [g1, g2] with near [[x, y], [x, y]] (a point on each, on the side to keep), and radius.") from None
             except Exception as e:
-                raise ToolError("failed", f"No fillet of {r:g} mm fits there: {e} — a smaller radius.")
+                raise ToolError("failed", f"No fillet of {r:g} mm fits there: {e} — a smaller radius, or a corner where exactly two curves meet (lines and arcs).") from None
             if len(sk.Geometry) == n0:
                 raise ToolError("failed", f"No fillet of {r:g} mm fits there — a smaller radius, or a corner where two curves meet.")
             done.append(f"{'chamfer' if x.get('chamfer') else 'fillet r'}{r:g}: {'line' if x.get('chamfer') else 'arc'} {len(sk.Geometry) - 1}")
@@ -885,7 +937,7 @@ def tools(session):
             try:
                 sk.trim(g, FreeCAD.Vector(at[0], at[1], 0))
             except Exception as e:
-                raise ToolError("failed", f"Geometry {g} could not be trimmed at {at}: {e} — the piece to cut off lies between where other curves cross it.")
+                raise ToolError("failed", f"Geometry {g} could not be trimmed at {[at.x, at.y]}: {e} — at is a point on the piece to cut off, which must lie between (or beyond) where other curves cross it; a curve nothing crosses is deleted with delete.") from None
             done.append(f"trimmed {g} at {list(at)} ({len(sk.Geometry) - n0:+d} geometry)")
         if "split" in a:
             x = a["split"]
@@ -894,11 +946,12 @@ def tools(session):
             try:
                 sk.split(g, FreeCAD.Vector(at[0], at[1], 0))
             except Exception as e:
-                raise ToolError("failed", f"Geometry {g} could not be split at {at}: {e}.")
+                raise ToolError("failed", f"Geometry {g} could not be split at {[at.x, at.y]}: {e} — at is a point on the curve, away from its ends; lines, arcs, circles and B-splines split.") from None
             done.append(f"split {g} at {list(at)}: its second part is {len(sk.Geometry) - 1}")
         if "mirror" in a:
-            # Copies mirrored about a line, an axis, or the origin, kept
-            # symmetric by constraints.
+            # Copies mirrored about a line, an axis, or the origin. From
+            # Python FreeCAD copies the constraints among the mirrored
+            # geometry, but adds none between a copy and its original.
             x = a["mirror"]
             geos = [gid(g) for g in x.get("geos") or []]
             if not geos:
@@ -914,8 +967,8 @@ def tools(session):
                 else:
                     sk.addSymmetric(geos, ref[0], ref[1])
             except Exception as e:
-                raise ToolError("failed", f"The geometry could not be mirrored: {e}.")
-            done.append(f"mirrored {geos} about {about}: new {list(range(n0, len(sk.Geometry)))}")
+                raise ToolError("failed", f"The geometry could not be mirrored: {e} — about takes \"x\", \"y\", \"origin\" or the id of a line in the sketch.") from None
+            done.append(f"mirrored {geos} about {about}: new {list(range(n0, len(sk.Geometry)))} (free copies: no symmetric constraint ties them to the originals)")
         if "group" in a:
             # FreeCAD 1.2's Group constraint: the geometry held as one, placed
             # and sized by a construction frame line (constrain that).
@@ -932,7 +985,7 @@ def tools(session):
                 sk.addConstraint(Sketcher.Constraint("Group", [fr, 0] + [x for g in geos for x in (g, 0)]))
             except Exception:
                 sk.delGeometries([fr])
-                raise ToolError("unavailable", f"Group constraints came in FreeCAD 1.2; this is {'.'.join(FreeCAD.Version()[:3])}. Block constraints hold geometry still: set via sketch_constrain kind block.")
+                raise ToolError("unavailable", f"Group constraints came in FreeCAD 1.2; this is {'.'.join(FreeCAD.Version()[:3])}. To hold geometry still here: sketch_constrain {{ type: \"fix\", refs: [g] }} blocks one geometry where it is.") from None
             done.append(f"grouped {geos}: frame line {fr}")
         if "text" in a:
             x = a["text"]
@@ -969,11 +1022,20 @@ def tools(session):
             done.append(f"text {words!r} ({how}): geometry {n0}…{len(sk.Geometry) - 1}")
         if "exposeInternal" in a:
             for g in a["exposeInternal"]:
-                n = sk.exposeInternalGeometry(gid(g))
-                done.append(f"internal geometry of {g} restored ({n} added)")
+                n0 = len(sk.Geometry)
+                try:
+                    sk.exposeInternalGeometry(gid(g))  # answers None
+                except ToolError:
+                    raise
+                except Exception:
+                    raise ToolError("invalid_input", f"exposeInternal: geometry {g} is a {_geo_kind(sk.Geometry[g]).lower()}, which has no internal geometry — ellipses, their arcs, parabola and hyperbola arcs and B-splines do.") from None
+                done.append(f"internal geometry of {g} restored ({len(sk.Geometry) - n0} added: {list(range(n0, len(sk.Geometry)))})")
         if "removeAxesAlignment" in a:
             geos = [gid(g) for g in a["removeAxesAlignment"]]
-            sk.removeAxesAlignment(geos)
+            try:
+                sk.removeAxesAlignment(geos)
+            except Exception as e:
+                raise ToolError("failed", f"removeAxesAlignment: FreeCAD could not rewrite the constraints of {geos} ({e}) — nothing was changed.") from None
             done.append(f"axes alignment of {geos} taken off: horizontal/vertical became parallel/perpendicular")
         if not done:
             raise ToolError("invalid_input", "Give one or more of: group [geos], text { text, at, height, font }, exposeInternal [geos], removeAxesAlignment [geos], move { geo, vertex, to }, set [{ constraint, value }], construction { geo, on }, rename { constraint, name }, deleteConstraints [ids|names], delete [geometry ids], fillet { at [g, v] | geos, near; radius }, trim { geo, at }, split { geo, at }, mirror { geos, about }.")
@@ -982,7 +1044,7 @@ def tools(session):
         b = pc.body_of(sk)
         bad = pc.broken(doc())
         if bad:
-            raise ToolError("failed", f"After the edit {bad[0]['object']} fails: {bad[0]['error']} — nothing was kept.")
+            raise ToolError("failed", f"After the edit {bad[0]['object']} fails: {bad[0]['error']} — nothing was kept. A feature built on this sketch needs its profile closed and its referenced edges still there: make the edit another way, or change that feature first.")
         s.snapshot("sketch_edit")
         out = {"sketch": sk.Label, "done": done, "state": st, "geometryCount": len(sk.Geometry), "step": len(s.steps)}
         if b is not None and ng and not b.Shape.isNull():
@@ -994,51 +1056,51 @@ def tools(session):
     xyz = {"type": "array", "items": {"type": "number"}}
     face = {"type": "object", "description": "{ at: [x,y,z] a point on the face, normal: [x,y,z] its outward normal }", "properties": {"at": xyz, "normal": xyz, "tol": {"type": "number"}}, "required": ["at"], "additionalProperties": False}
     return [
-        Tool("pd_body_new", "Make an empty PartDesign body: the container a parametric part's features go in, with its own XY/XZ/YZ planes and x/y/z axes. Next: sketch_new on one of its planes.", obj({"name": {"type": "string"}}), pd_body_new, changes=True),
+        Tool("pd_body_new", "Make an empty PartDesign body: the container a parametric part's features go in, with its own XY/XZ/YZ planes and x/y/z axes. Answers body: its label (name, made unique) to pass on. Next: sketch_new on one of its planes.", obj({"name": {"type": "string"}}), pd_body_new, changes=True),
         Tool(
             "sketch_new",
-            "A new sketch in a body, on plane XY | XZ | YZ | a datum plane's name, or on a body face found by face { at: a point on it, normal: its outward normal } — never by face index, which changes after edits. offset mm along the normal; flip reverses it. A face sketch is lined up with the world: its x along the world axis that lies most in the face. The answer's frame says where sketch x/y lie in the world.",
+            "A new sketch in a body, on plane XY | XZ | YZ | a datum plane's name | \"Pad.Face3\", or on a face of the solid found by face { at: a point on it, normal: its outward normal } — never by face index, which changes after edits. One of plane or face. offset mm along the normal; flip reverses it. A face sketch is lined up with the world: its x along the world axis that lies most in the face. Answers sketch (its label) and frame: where sketch x/y and its origin lie in the world.",
             obj({"body": body, "plane": {"type": "string"}, "face": face, "offset": {"type": "number"}, "flip": {"type": "boolean"}, "name": {"type": "string"}}),
             sketch_new,
             changes=True,
         ),
         Tool(
             "sketch_add",
-            "Add geometry to a sketch, in its own x/y (mm): items [{ kind, …, construction, dims, name }]. kinds: line {from, to}; polyline {points, closed}; arc {center, radius, start, end (deg, ccw)}; arc3 {points: start, through, end}; circle {center, radius|diameter}; circle3 {points: three on it}; parabola {vertex, focal, rotation, from, to}; hyperbola {center, major, minor (semi-axes), rotation, from, to}; ellipse {center, major, minor (full sizes), rotation}; bspline {points it passes through, closed — or interpolate: false, points its poles, degree}; rectangle {center|corner, size [w,h]}; rounded_rectangle {…, radius}; polygon {center, radius (to corners), sides, rotation}; slot {from, to (end centres), radius}; arc_slot {center, radius (its middle), width, start, end}; point {at}. Shapes come with their own coincident/horizontal/vertical/tangent/equal constraints; dims: true adds their sizes as constraints (named <name>_width … when named — what param_bind binds). Answers the geometry ids per item and the solver's state. Lines: vertex 1 start, 2 end; arcs and circles: 3 centre.",
+            "Add geometry to a sketch, in its own x/y (mm; angles deg, counter-clockwise from +x): items [{ kind, …, construction, dims, name }]. kinds: line {from, to}; polyline {points, closed}; arc {center, radius, start, end} (always ccw from start to end); arc3 {points: start, through, end}; circle {center, radius|diameter}; circle3 {points: three on it}; ellipse {center, major, minor (full sizes), rotation}; parabola {vertex, focal, rotation, from, to}; hyperbola {center, major, minor (semi-axes), rotation, from, to}; bspline {points it passes through, closed — or interpolate: false, points its poles, degree}; rectangle {center|corner, size [w,h]}; rounded_rectangle {…, radius}; polygon {center, radius (to corners), sides, rotation}; slot {from, to (end centres), radius}; arc_slot {center, radius (its middle), width, start, end}; point {at}. A shape comes with its own coincident/horizontal/vertical/tangent/equal constraints; separate items are not joined to each other (sketch_constrain coincident or tangent does that). dims: true adds its sizes as constraints (named <name>_width, _height, _d, _r, _length when named — what param_bind binds). Answers added [{ ids: geometry ids from 0 in the order made (a polygon's last is its construction circle), constraints: [first, last] ids, dims }] and state (dof, closedWires, openVertices, readyForFeature). Vertices: 1 start, 2 end, 3 centre.",
             obj({"sketch": sketch, "items": {"type": "array", "items": {"type": "object"}}}, ["items"]),
             sketch_add,
             changes=True,
         ),
         Tool(
             "sketch_offset",
-            "Offset a sketch's profile by distance mm (out; negative in): its geometry ids (all but construction when left out), joined end to end; join arc (round corners, the default), tangent or intersection (sharp). Adds the offset as new geometry, joined, and answers its ids — a wall's inside from its outside, a gasket's band, a clearance round a part.",
+            "Offset a sketch's profile by distance mm (out; negative in): its geometry ids (all but construction when left out), joined end to end; join arc (round corners, the default), tangent or intersection (sharp). Answers added: the new geometry's ids. The offset is plain geometry with no constraints: it does not follow later edits unless constrained (sketch_constrain; sketch_validate fix joins its pieces).",
             obj({"sketch": sketch, "distance": {"type": "number"}, "geometry": {"type": "array", "items": {"type": "integer"}}, "join": {"type": "string", "enum": ["arc", "tangent", "intersection"]}, "construction": {"type": "boolean"}}, ["distance"]),
             sketch_offset,
             changes=True,
         ),
         Tool(
             "sketch_external",
-            "Bring edges of the body's solid into a sketch as outside geometry, to constrain to: edges [\"Edge7\" or a query { type: circle|line, radius, axis, near, inside } as shape_query takes]. Answers their ids (negative, -3 down); a constraint to them follows the part when it changes — a hole lined up with a boss, a pocket kept off a wall.",
+            "Bring edges of the body's solid (its tip) into a sketch as outside geometry to constrain to: edges [\"Edge7\" or a query { type: circle|line, radius, axis, near, inside } as shape_query takes — safer: edge numbers change with edits]. Answers ids (negative, -3 down, in order) for sketch_constrain's refs; a constraint to them follows the part. Refused when the tip is built from this sketch. From a datum, binder or other sketch: sketch_project.",
             obj({"sketch": sketch, "edges": {"type": "array", "items": {}}}, ["edges"]),
             sketch_external,
             changes=True,
         ),
         Tool(
             "sketch_constrain",
-            "Constrain a sketch: constraints [{ type, refs, value, name }]. refs as FreeCAD has them: a geometry id g, a point [g, vertex] (1 start, 2 end, 3 centre), \"origin\"; -1 the horizontal axis, -2 the vertical. types: coincident, horizontal, vertical, parallel, perpendicular, tangent, equal, symmetric, point_on_object, distance, distance_x, distance_y, radius, diameter (mm), angle (deg), fix (a point held where it is; a geometry blocked). name it to bind it to a parameter later. One that conflicts or is redundant is refused and nothing added.",
+            "Constrain a sketch: constraints [{ type, refs, value, name }]. A ref is FreeCAD's: a geometry id g, a point p = [g, vertex] (1 start, 2 end, 3 centre) or \"origin\"; -1 the horizontal axis, -2 the vertical, -3 down outside edges. types and their refs: coincident [p, p]; point_on_object [p, g]; horizontal | vertical [g] or [p, p]; parallel | perpendicular | equal [g, g]; tangent [g, g] or end points [p, p]; symmetric [p, p, g] (about a line) or [p, p, p]; distance [g] (length), [p, p] or [p, g]; distance_x | distance_y [g], [p] (from the origin) or [p, p] (second minus first); radius | diameter [g], all mm; angle [g] (from +x) or [g, g] (first to second, ccw), deg; fix [p] (a point held where it is) or [g] (blocked: add it last). name it to bind it to a parameter later. All or nothing: one that conflicts or is redundant is refused, naming what clashes, and nothing added. Answers added (constraint ids from 0) and state.",
             obj({"sketch": sketch, "constraints": {"type": "array", "items": {"type": "object"}}}, ["constraints"]),
             sketch_constrain,
             changes=True,
         ),
         Tool(
             "sketch_state",
-            "The solver's reading of a sketch — check it before a feature: dof (0 is fully constrained), conflicting / redundant / malformed constraint ids, closed wires and open vertices, readyForFeature with what to do if not; its frame in the world; detail (default true) lists geometry and constraints with ids. A pad on a sketch with dof > 0 works but moves when edited.",
+            "The solver's reading of a sketch — check it before a feature: dof (0 is fully constrained), conflicting / redundant / malformed constraint ids, closed wires and open vertices, readyForFeature with todo when not; its frame in the world; detail (default true) lists geometry and constraints with ids, values (mm; deg for angles) and refs [g, vertex]. Ids count from 0 in every sketch tool. A pad on a sketch with dof > 0 works but moves when edited.",
             obj({"sketch": sketch, "detail": {"type": "boolean"}}),
             sketch_state,
         ),
         Tool(
             "sketch_edit",
-            "Edit a sketch: move { geo, vertex (0 the whole, 1/2/3), to [x,y] }, set [{ constraint: id|name, value mm|deg }], construction { geo, on }, rename { constraint, name }, deleteConstraints [id|name], delete [geometry ids — later ids shift down, and their constraints go], fillet { at: [g, v] a corner, or geos [g1, g2] near [[x,y],[x,y]]; radius } (round a corner, the curves trimmed to it), trim { geo, at [x,y] } (cut off the piece there, between crossings), split { geo, at }, mirror { geos, about: \"x\" | \"y\" | \"origin\" | a line id } (symmetric copies); fillet chamfer: true cuts the corner straight; group [geos] (held as one, FreeCAD 1.2); text { text, at, height, font, construction } (letters as geometry); exposeInternal [geos] (an ellipse's or B-spline's construction geometry back); removeAxesAlignment [geos]. Features built on it recompute; a feature it breaks is refused with FreeCAD's error and nothing kept.",
+            "Edit a sketch; several keys may go in one call, done in this order: move { geo, vertex (0 the whole curve, 1/2/3), to [x,y] } (drags it as far as its constraints let it), set [{ constraint: id|name, value mm|deg }], construction { geo, on }, rename { constraint, name }, deleteConstraints [id|name], delete [geometry ids — their constraints go too], fillet { at: [g, v] a corner, or geos [g1, g2] near [[x,y],[x,y]]; radius; chamfer: true cuts it straight } (the curves trimmed to it), trim { geo, at [x,y] } (cuts off the piece there, between crossings), split { geo, at }, mirror { geos, about: \"x\" | \"y\" | \"origin\" | a line id } (free mirrored copies: no symmetric constraints are added), group [geos] (held as one, FreeCAD 1.2), text { text, at, height, font, construction } (letters as geometry), exposeInternal [geos] (an ellipse's axes or a B-spline's poles back as construction geometry), removeAxesAlignment [geos]. delete, fillet, trim and split renumber geometry: read sketch_state before using ids again. Answers done, state, geometryCount, and bodyAfter when features are built on it; an edit that breaks one is refused with FreeCAD's error and nothing kept.",
             obj({"sketch": sketch, "move": {"type": "object"}, "set": {}, "construction": {"type": "object"}, "rename": {"type": "object"}, "deleteConstraints": {"type": "array", "items": {}}, "delete": {"type": "array", "items": {"type": "integer"}},
                  "fillet": {"type": "object"}, "trim": {"type": "object"}, "split": {"type": "object"}, "mirror": {"type": "object"},
                  "group": {"type": "array", "items": {"type": "integer"}}, "text": {"type": "object"}, "exposeInternal": {"type": "array", "items": {"type": "integer"}}, "removeAxesAlignment": {"type": "array", "items": {"type": "integer"}}}),
