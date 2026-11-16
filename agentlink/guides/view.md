@@ -29,5 +29,6 @@ Look at the part after every change that matters, as a person would.
 - The live camera by `cmd_run { name: "Std_ViewIsometric" }` and `"Std_ViewFitAll"`: `view_snapshot` renders apart and leaves it where it was.
 - A `click` is a tap (press and release back to back), so every navigation style selects with it, Gesture included; its answer's `selected` lists what FreeCAD's selection holds after it (first 3 sub-elements). A held `press` … `release` is what turns or opens a hold menu.
 - Keys go where the call's last press went; with none, to the window's focus.
+- A step that opens a menu or dialog does not stop the call: the next steps act in it (`{menu_item:"New Sketch"}`, `{key:"Escape"}`). The answer's `open` names what is still open; close it. If other calls answer `busy`, use `gui_unstick`.
 - Toggle buttons flip on each click and keep their state over a restart: check before clicking twice.
 - Save before `agentlink_update`: unsaved changes come back as a "(recovered …)" copy in front; `doc_switch { front: true }` brings the right tab back.

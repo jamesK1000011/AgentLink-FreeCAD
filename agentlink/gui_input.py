@@ -24,15 +24,19 @@ from .protocol import ToolError, bad
 MAX_STEPS = 60
 MAX_WAIT = 3000      # ms, one wait step
 MAX_TOTAL_WAIT = 20000  # ms, all of a call's waits (a client drops a call after about 80 s)
+BUSY_AFTER = 10.0    # s past a call's own waits: the link answers it "busy" from its socket thread
 DRAG_STEPS = 12
 MAX_DRAG_STEPS = 200
 MOVE_GAP_MS = 8      # between the moves of a drag
 MAX_NOTCHES = 50
 MAX_TEXT = 2000
 ANSWER_MAX = 3000    # characters of the answer's text
+# Said with "open" in an answer: what still holds the window, and how to close it.
+OPEN_NOTE = ("A menu or dialog is still open and holds the window: more gui_input steps act inside it ({menu_item: \"text\"}, "
+             "{item: {text}} in a drop-down list, {key: \"Escape\"}), dialog_answer presses a dialog's button, gui_unstick closes it.")
 BUTTONS = ("left", "right", "middle")
 MODIFIERS = ("shift", "ctrl", "alt", "meta")
-TARGETS = ("view", "view_world", "widget", "window", "tab", "item")
+TARGETS = ("view", "view_world", "widget", "window", "tab", "item", "menu_item")
 WIDGET_KEYS = ("objectName", "text", "toolTip", "class", "under")
 TAB_KEYS = ("text", "under")
 ITEM_KEYS = ("text", "under", "column")
@@ -82,7 +86,7 @@ def _point(v, n, where):
 def parse_target(t, where):
     """A target as given, checked: { kind, value, at? }."""
     if not isinstance(t, dict):
-        raise bad(f"{where}: an object — {{ view: [x, y] }}, {{ view_world: [x, y, z] }}, {{ widget: {{ objectName, text, toolTip, class, under }}, at?: [dx, dy] }} or {{ window: [x, y] }}.")
+        raise bad(f"{where}: an object — {{ view: [x, y] }}, {{ view_world: [x, y, z] }}, {{ widget: {{ objectName, text, toolTip, class, under }}, at?: [dx, dy] }}, {{ menu_item: \"text\" }} or {{ window: [x, y] }}.")
     kinds = [k for k in TARGETS if k in t]
     if len(kinds) != 1:
         raise bad(f"{where}: one of {', '.join(TARGETS)}.")
@@ -91,6 +95,11 @@ def parse_target(t, where):
     if extra:
         why = {"at": " (at is for a widget target)", "check": " (check is for an item target)"}.get(extra[0], "")
         raise bad(f"{where}.{extra[0]}: not a field here{why}.")
+    if kind == "menu_item":
+        v = t["menu_item"]
+        if not isinstance(v, str) or not v.strip():
+            raise bad(f"{where}.menu_item: an item's text as the open menu shows it.")
+        return {"kind": "menu_item", "value": v}
     if kind in ("tab", "item"):
         keys = TAB_KEYS if kind == "tab" else ITEM_KEYS
         spec = t[kind]
@@ -369,6 +378,119 @@ def cap_answer(answer, limit=ANSWER_MAX):
     return out
 
 
+# ---- what is open in front: a menu, a drop-down list, a dialog (duck-typed, no Qt) ---------
+
+def _classes(w):
+    out = []
+    try:
+        mo = w.metaObject()
+        while mo is not None:
+            out.append(mo.className())
+            mo = mo.superClass()
+    except Exception:
+        pass
+    out.append(type(w).__name__)
+    return out
+
+
+def _has_class(w, name):
+    return w is not None and any(c == name or c.endswith("::" + name) for c in _classes(w))
+
+
+def menu_items(menu, most=30):
+    """The texts of a menu's visible items, separators left out."""
+    out = []
+    try:
+        acts = list(menu.actions())
+    except Exception:
+        return out
+    for a in acts:
+        try:
+            if (hasattr(a, "isSeparator") and a.isSeparator()) or not a.isVisible():
+                continue
+            t = (a.text() or "").replace("&", "")
+        except Exception:
+            continue
+        if t:
+            out.append(t)
+        if len(out) >= most:
+            break
+    return out
+
+
+def describe_popup(p):
+    """{ kind: menu|combo|popup, title, items? } of a popup widget."""
+    try:
+        par = p.parentWidget()
+    except Exception:
+        par = None
+    if _has_class(par, "QComboBox") or _has_class(p, "QComboBoxPrivateContainer"):
+        combo = par if _has_class(par, "QComboBox") else None
+        items, title = [], ""
+        if combo is not None:
+            try:
+                items = [combo.itemText(i) for i in range(min(combo.count(), 30))]
+                title = combo.objectName() or combo.currentText()
+            except Exception:
+                pass
+        return {"kind": "combo", "title": title or "a list", "items": items}
+    if _has_class(p, "QMenu"):
+        try:
+            title = (p.title() or "").replace("&", "")
+        except Exception:
+            title = ""
+        return {"kind": "menu", "title": title or "a menu", "items": menu_items(p)}
+    try:
+        title = p.windowTitle()
+    except Exception:
+        title = ""
+    return {"kind": "popup", "title": title or _classes(p)[0]}
+
+
+def describe_front(app, modal=None):
+    """What holds the window in front: the popup (a menu, a drop-down list),
+    else the modal dialog, as { kind, title, items | text, buttons }; None
+    when nothing is open. modal: gui_link.modal_info, for a dialog's words."""
+    if app is None:
+        return None
+    p = app.activePopupWidget()
+    m = app.activeModalWidget()
+    if p is not None:
+        info = describe_popup(p)
+        if m is not None:
+            try:
+                info["over"] = m.windowTitle()
+            except Exception:
+                pass
+        return info
+    if m is None:
+        return None
+    d = None
+    try:
+        d = modal() if modal is not None else None
+    except Exception:
+        d = None
+    info = {"kind": "dialog", "title": (d or {}).get("title") or m.windowTitle()}
+    for k in ("text", "buttons"):
+        if d and d.get(k):
+            info[k] = d[k]
+    return info
+
+
+def front_words(info):
+    """A front's description in words, for a refusal."""
+    if not info:
+        return "a menu or dialog (most likely one that a gui_input step opened)"
+    kind = {"menu": "a menu", "combo": "a drop-down list", "dialog": "the dialog", "popup": "a pop-up"}.get(info.get("kind"), "a window")
+    title = str(info.get("title") or "")
+    words = kind if not title or title in ("a menu", "a list") else f"{kind} \"{title}\""
+    if info.get("items"):
+        words += " (items: " + ", ".join(str(x) for x in info["items"][:12]) + ")"
+    elif info.get("buttons"):
+        words += " (buttons: " + ", ".join(str(x) for x in info["buttons"][:8]) + ")"
+    return words
+
+
 # ---- delivery (Qt handed in) ---------------------------------------------------------------
 
 def _enum(scope, group, name):
@@ -495,22 +617,40 @@ class Run:
     """The steps, delivered in the window. qt: a namespace of QtCore, QtGui,
     QtWidgets; gui: FreeCADGui; vector: FreeCAD.Vector; hooks: modal()
     (gui_link.modal_info), report() (report_watch.take), grab(widget)
-    (a QPixmap), answer_now(body) (the reply sent while a step's dialog
-    holds the call), shot_dir."""
+    (a QPixmap), answer_now(body) (the reply sent while a step's menu or
+    dialog holds the call), shot_dir; ticker(fn) (optional): calls fn on
+    the GUI thread every ~100 ms through queued events from a thread of its
+    own, and answers a function that stops it; seen(info) (optional): told
+    what is open in front when a step opened it and at the end.
 
-    def __init__(self, qt, gui, vector, modal, report, grab, answer_now, shot_dir):
+    A step whose event starts a nested event loop (QMenu.exec from a
+    toolbar button's arrow, QDialog.exec, a message box) cannot return
+    until that loop ends. The watch (a timer of each level, and the ticker)
+    sees it from inside that loop: the stuck step is set aside (its frame
+    does nothing more when it comes back), and the steps after it run from
+    there, so they can act on the menu or dialog; the answer goes out from
+    there too (answer_now) and says what is still open."""
+
+    def __init__(self, qt, gui, vector, modal, report, grab, answer_now, shot_dir, ticker=None, seen=None):
         self.qt, self.gui, self.vector = qt, gui, vector
         self.modal, self.report, self.grab, self.answer_now = modal, report, grab, answer_now
         self.shot_dir = shot_dir
+        self.ticker, self.seen = ticker, seen
         self.done = []
-        self.cur = None
         self.answered = False
         self.pressed = None
         self.focus_at_press = None
         self.last_point = None
         self.shots = []
-        self.level = 0
-        self.front_at_start = None
+        # The steps in hand, innermost last: { i, do, out, front, sending,
+        # detached }. A frame is detached when the watch took the steps on
+        # from inside the nested loop its event started.
+        self.frames = []
+        self.steps = []
+        self.next = 0
+        self.final = None
+        # A menu item's (menu, action), for the click's fallback.
+        self.menu_pick = None
         # What a tab or item target adds to its hit, by (widget, x, y).
         self.extra = {}
         # An item's check box clicked: (view, index, state before) until the
@@ -531,7 +671,19 @@ class Run:
         return app.activePopupWidget() or app.activeModalWidget()
 
     def _send(self, w, ev):
-        return self.qt.QtWidgets.QApplication.sendEvent(w, ev)
+        fr = self.frames[-1] if self.frames else None
+        if fr is not None:
+            fr["sending"] += 1
+        try:
+            return self.qt.QtWidgets.QApplication.sendEvent(w, ev)
+        finally:
+            if fr is not None:
+                fr["sending"] -= 1
+
+    def _detached(self):
+        """The step in hand was set aside (its event's nested loop ended and
+        the steps after it ran already): do nothing more."""
+        return bool(self.frames) and self.frames[-1]["detached"]
 
     def pump(self, ms):
         QtCore = self.qt.QtCore
@@ -540,7 +692,7 @@ class Run:
         while True:
             left = int((end - time.time()) * 1000)
             QtCore.QCoreApplication.processEvents(flags, max(1, min(left, 50)))
-            if left <= 0 or self.answered:
+            if left <= 0 or self._detached():
                 return
             time.sleep(min(0.005, left / 1000.0))
 
@@ -748,6 +900,59 @@ class Run:
                 return v, cix, text
         raise ToolError("not_found", f"No visible list, tree or table row {json.dumps(spec, ensure_ascii=False)}: window_snapshot shows what is there.")
 
+    def find_menu_item(self, text):
+        """(menu, action, text) of the open menu's item showing text (whole
+        before a part)."""
+        p = self.app().activePopupWidget()
+        if p is None or not _has_class(p, "QMenu"):
+            what = describe_popup(p)["kind"] if p is not None else None
+            raise ToolError("invalid_state", "menu_item: no menu is open" + (f" (a {what} is in front)" if what else "") + " — click what opens it first (a toolbar button's arrow, a right-click).")
+        want = _norm(text)
+        acts = []
+        for a in p.actions():
+            try:
+                if (hasattr(a, "isSeparator") and a.isSeparator()) or not a.isVisible():
+                    continue
+            except Exception:
+                continue
+            acts.append(a)
+        for loose in (False, True):
+            for a in acts:
+                have = _norm(a.text())
+                if have and (want in have if loose else want == have):
+                    try:
+                        if not a.isEnabled():
+                            raise ToolError("invalid_state", f"menu_item: \"{a.text().replace('&', '')}\" is greyed out in this menu.")
+                    except AttributeError:
+                        pass
+                    return p, a, a.text().replace("&", "")
+        raise ToolError("not_found", f"menu_item: no item {text!r} in the open menu — its items: {', '.join(menu_items(p)) or 'none'}.")
+
+    def _menu_fallback(self, out):
+        """After a click on a menu item: a menu that is still open on the
+        same item (a style or platform that wants a real hover first) gets
+        the item made current and Return, as the keyboard picks it. An item
+        that opens a submenu is left as it is."""
+        menu, act = self.menu_pick
+        self.menu_pick = None
+        hit = out.setdefault("hit", {})
+        try:
+            sub = act.menu() if hasattr(act, "menu") else None
+        except Exception:
+            sub = None
+        if sub is not None:
+            hit["menu"] = "submenu opened"
+            return
+        if self.app().activePopupWidget() is not menu or not menu.isVisible():
+            hit["menu"] = "clicked"
+            return
+        menu.setActiveAction(act)
+        for ev in key_events(self.qt, ("name", "Return"), []):
+            self._send(menu, ev)
+            if self._detached():
+                return
+        hit["menu"] = "picked with Return (the click did not take)"
+
     def _check_state(self, v, ix):
         Qt = self.qt.QtCore.Qt
         try:
@@ -838,6 +1043,13 @@ class Run:
                 x = r.x() + r.width() / 2.0
             self.extra[(id(vp), x, y)] = extra
             return vp, x, y
+        if kind == "menu_item":
+            menu, act, text = self.find_menu_item(v)
+            r = menu.actionGeometry(act)
+            x, y = r.x() + r.width() / 2.0, r.y() + r.height() / 2.0
+            self.menu_pick = (menu, act)
+            self.extra[(id(menu), x, y)] = {"class": "QMenu", "menu_item": text}
+            return menu, x, y
         if kind == "widget":
             w = self.find_widget(v)
             if isinstance(w, self.qt.QtWidgets.QAbstractScrollArea) and "at" not in t:
@@ -1009,15 +1221,18 @@ class Run:
         self._check_front(w)
         return w, x, y
 
-    def step(self, st):
+    def step(self, st, out=None):
         do = st["do"]
-        out = {"do": do}
+        out = {"do": do} if out is None else out
         self.last_point = None
         self.checking = None
+        self.menu_pick = None
         try:
             self._step(st, out)
-            if self.checking is not None and do == "click" and not self.answered:
+            if self.checking is not None and do == "click" and not self._detached():
                 self._checked(out)
+            if self.menu_pick is not None and do == "click" and not self._detached():
+                self._menu_fallback(out)
             return out
         finally:
             self.checking = None
@@ -1065,16 +1280,16 @@ class Run:
                 self._arrive(w, x, y, st["mods"])
             if do == "click":
                 self._mouse("MouseButtonPress", w, x, y, st["button"], st["mods"], focus=False)
-                if self.answered:
+                if self._detached():
                     return out
                 gw, gx, gy = self._grabbed(w, x, y)
                 self._mouse("MouseButtonRelease", gw, gx, gy, st["button"], st["mods"])
-                if st["double"] and not self.answered:
+                if st["double"] and not self._detached():
                     self.pump(MOVE_GAP_MS)
                     self._mouse("MouseButtonDblClick", w, x, y, st["button"], st["mods"], focus=False)
                     gw, gx, gy = self._grabbed(w, x, y)
                     self._mouse("MouseButtonRelease", gw, gx, gy, st["button"], st["mods"])
-                if not self.answered:
+                if not self._detached():
                     self.pump(MOVE_GAP_MS)
                     sel = self.selected()
                     if sel is not None:
@@ -1101,7 +1316,7 @@ class Run:
             b = global_point(self.qt, tw, tx, ty)
             for gx, gy in lerp_points((a.x(), a.y()), (b.x(), b.y()), st["steps"]):
                 self.pump(MOVE_GAP_MS)
-                if self.answered:
+                if self._detached():
                     return out
                 lx, ly = local_point(self.qt, w, gx, gy)
                 self._mouse("MouseMove", w, lx, ly, None, st["mods"])
@@ -1113,7 +1328,7 @@ class Run:
             evs = key_events(self.qt, st["key"], st["mods"]) if do == "key" else text_events(self.qt, st["text"])
             for ev in evs:
                 self._send(w, ev)
-                if self.answered:
+                if self._detached():
                     return out
         elif do == "wait":
             self.pump(st["ms"])
@@ -1121,15 +1336,62 @@ class Run:
             out.update(self.shot(st["name"]))
         return out
 
+    def _over(self):
+        """The windows that float over the main window in front, bottom
+        first: the modal dialog, then the open popups (a menu and its
+        submenus, a drop-down list), the active popup last."""
+        app, mw = self.app(), self.mw()
+        out = []
+        m = app.activeModalWidget()
+        if m is not None and m is not mw and self._shown(m):
+            out.append(m)
+        p = app.activePopupWidget()
+        try:
+            popup = _int(_enum(self.qt.QtCore.Qt, "WindowType", "Popup"))
+            mask = _int(_enum(self.qt.QtCore.Qt, "WindowType", "WindowType_Mask"))
+            for t in app.topLevelWidgets():
+                if t is not p and t is not mw and t not in out and self._shown(t) and _int(t.windowType()) & mask == popup:
+                    out.append(t)
+        except Exception:
+            pass
+        if p is not None and p is not mw and self._shown(p) and p not in out:
+            out.append(p)
+        return out
+
+    def _paint_over(self, pix, ws):
+        """Each window in ws painted over the main window's picture where it
+        is on the screen (a widget grab of the main window leaves out the
+        menus and dialogs over it, which are windows of their own)."""
+        QtCore, QtGui = self.qt.QtCore, self.qt.QtGui
+        mw = self.mw()
+        painter = QtGui.QPainter(pix)
+        n = 0
+        try:
+            for w in ws:
+                try:
+                    g = w.mapToGlobal(QtCore.QPoint(0, 0))
+                    o = mw.mapFromGlobal(g)
+                    painter.drawPixmap(QtCore.QPoint(int(o.x()), int(o.y())), w.grab())
+                    n += 1
+                except Exception:
+                    continue
+        finally:
+            painter.end()
+        return n
+
     def shot(self, name):
         import os
 
         os.makedirs(self.shot_dir, exist_ok=True)
         path = os.path.join(self.shot_dir, name + ".png")
         pix = self.grab(self.mw())
+        over = self._over()
+        painted = self._paint_over(pix, over) if over else 0
         if not pix.save(path, "PNG"):
             raise ToolError("failed", f"Could not write {path}")
         out = {"path": path, "size": [pix.width(), pix.height()]}
+        if painted:
+            out["over"] = painted  # menus and dialogs painted in where they are
         b = self.blocker()
         if b is not None and b.isWindow():
             extra = os.path.join(self.shot_dir, name + "-front.png")
@@ -1138,86 +1400,97 @@ class Run:
         self.shots.append(path)
         return out
 
-    # -- a step's dialog holding the call --
+    # -- a step's menu or dialog holding the call --
 
     def _front_info(self, b):
         if b is None:
             return None
         if self.app().activePopupWidget() is b:
-            items = []
-            try:
-                items = [a.text().replace("&", "") for a in b.actions() if a.text() and a.isVisible()]
-            except Exception:
-                pass
-            return {"menu": items[:20]}
+            return {"menu": menu_items(b, 20)} if _has_class(b, "QMenu") else {"popup": describe_popup(b)}
         d = self.modal()
         if d is None:
             return {"dialog": {"title": b.windowTitle()}}
         return {"dialog": {k: d[k] for k in ("class", "title", "text", "buttons") if k in d}}
 
+    def open_info(self):
+        return describe_front(self.app(), self.modal)
+
     def watch(self):
-        """On a timer: a step whose dialog or menu runs its own event loop
-        holds this call until it closes. Seen from inside that loop, the
-        answer so far goes out at once, so the agent can read the dialog
-        and answer it (dialog_answer, gui_input inside it)."""
-        if self.answered or self.cur is None:
+        """From a timer, or the ticker's queued call: a step whose event
+        started a nested loop (its sendEvent has not returned, and a menu or
+        dialog it opened is in front) holds the call until that loop ends.
+        Seen from inside the loop, the step is set aside and the steps after
+        it run from here, so they act on what it opened."""
+        if self.final is not None or not self.frames:
             return
-        QtCore = self.qt.QtCore
-        try:
-            level = QtCore.QThread.currentThread().loopLevel()
-        except Exception:
-            return
-        if level <= self.level:
+        fr = self.frames[-1]
+        if fr["detached"] or fr["sending"] <= 0:
             return
         b = self.blocker()
-        if b is None or b is self.front_at_start:
+        if b is None or b is fr["front"]:
             return
-        cur = dict(self.cur)
-        cur.update(self._front_info(b) or {})
-        body = self.answer(self.done + [cur], note="This step opened what is in front, which holds the window: the steps after it were not run. dialog_answer, or gui_input with targets inside it, goes on.")
-        if self.answer_now(body):
-            self.answered = True
-        else:
-            self.cur = None  # not answerable early (in a batch): the call waits for it to close
+        fr["detached"] = True
+        # The press went to what opened the menu, and the menu took the
+        # mouse (as a real one does): no button is held for later steps.
+        HELD.update({"widget": None, "buttons": []})
+        out = {"i": fr["i"], **fr["out"]}
+        out.update(self._front_info(b) or {})
+        self.done.append(out)
+        self._tell(self.open_info())
+        self._go()
 
-    def answer(self, steps, note=None):
+    def _tell(self, info):
+        if self.seen is not None:
+            try:
+                self.seen(info)
+            except Exception:
+                pass
+
+    def answer(self, steps, note=None, open_=None):
         out = {"steps": steps}
         if HELD["buttons"]:
             out["held"] = list(HELD["buttons"])
         if self.shots:
             out["shots"] = len(self.shots)
+        if open_:
+            out["open"] = open_
+            note = (note + " " if note else "") + OPEN_NOTE
         if note:
             out["note"] = note
         return cap_answer(out)
 
-    def run(self, steps):
+    def _go(self):
+        """Run the steps from self.next on; called by run() and again by the
+        watch from inside a step's nested loop."""
         QtCore = self.qt.QtCore
-        try:
-            self.level = QtCore.QThread.currentThread().loopLevel()
-        except Exception:
-            self.level = 0
         timer = QtCore.QTimer()
         timer.setInterval(60)
         timer.timeout.connect(self.watch)
         timer.start()
         try:
-            for i, st in enumerate(steps):
-                self.front_at_start = self.blocker()
+            while self.next < len(self.steps):
+                i = self.next
+                self.next += 1
+                st = self.steps[i]
+                fr = {"i": i, "do": st["do"], "out": {"do": st["do"]}, "front": self.blocker(), "sending": 0, "detached": False}
                 before = self.modal()
-                self.cur = {"i": i, "do": st["do"]}
+                self.frames.append(fr)
+                err = None
                 try:
-                    out = self.step(st)
+                    self.step(st, fr["out"])
                 except Exception as e:  # noqa: BLE001 - the steps before it are still answered
-                    if self.answered:
-                        break
-                    msg = e.message if isinstance(e, ToolError) else f"{type(e).__name__}: {e}"
+                    err = e
+                finally:
+                    self.frames = [f for f in self.frames if f is not fr]
+                if fr["detached"]:
+                    return  # the steps after it ran inside its loop, and answered
+                if err is not None:
+                    msg = err.message if isinstance(err, ToolError) else f"{type(err).__name__}: {err}"
                     self.done.append({"i": i, "do": st["do"], "error": msg})
                     break
-                if self.answered:
-                    break
-                out = {"i": i, **out}
+                out = {"i": i, **fr["out"]}
                 b = self.blocker()
-                if b is not None and b is not self.front_at_start:
+                if b is not None and b is not fr["front"]:
                     out.update(self._front_info(b) or {})
                 elif before is None and self.modal() is not None:
                     out.update(self._front_info(self.blocker()) or {})
@@ -1227,8 +1500,35 @@ class Run:
                 if lines:
                     out["report"] = lines
                 self.done.append(out)
-                self.cur = None
+            self._finish()
         finally:
             timer.stop()
-            self.cur = None
-        return self.answer(self.done)
+
+    def _finish(self):
+        if self.final is not None:
+            return
+        info = self.open_info()
+        self.final = self.answer(self.done, open_=info)
+        self._tell(info)
+        # Inside a step's nested loop (the steps it held were set aside):
+        # the answer goes out now, while the menu or dialog stays open.
+        if self.frames and self.answer_now(self.final):
+            self.answered = True
+
+    def run(self, steps):
+        self.steps, self.next, self.final, self.frames, self.done = list(steps), 0, None, [], []
+        stop = None
+        if self.ticker is not None:
+            try:
+                stop = self.ticker(self.watch)
+            except Exception:
+                stop = None
+        try:
+            self._go()
+        finally:
+            if stop is not None:
+                try:
+                    stop()
+                except Exception:
+                    pass
+        return self.final if self.final is not None else self.answer(self.done)

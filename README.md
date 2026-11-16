@@ -145,7 +145,7 @@ licence.
 ## What the agent can do
 
 <!-- tools:begin (scripts/tool_summary.py) -->
-Agent Link itself declares 397 tools in 30 groups; a FreeCAD build without a workbench (FEM, CAM …)
+Agent Link itself declares 398 tools in 30 groups; a FreeCAD build without a workbench (FEM, CAM …)
 serves fewer, and each installed add-on adds its own groups.
 Groups marked *lean* are listed from the start; the agent turns on the rest with `tool_groups`.
 
@@ -180,7 +180,7 @@ Groups marked *lean* are listed from the start; the agent turns on the rest with
 | `bim_gaps` | 16 | BIM components, clones, references, structural systems, pipe connectors, panel cuts and sheets, nesting, IFC B-rep flag, 2D level views, image planes, library, re-extrude, rewire, glue, trash, reorder. |
 | `fem_more` | 3 | FEM: every boundary condition, material, element, equation, solver and mesh refinement by kind; Netgen meshes, FEM mesh to mesh, mesh groups cleared; stress linearization. |
 | `unattended` | 3 | Unattended use: the pinned document, the heavy-job queue, the Addon Manager (dialog_answer and app_force_restart are in core). |
-| `dev` | 2 | For add-on developers: an installed add-on's own test suite run in a separate FreeCAD process (addon_test); mouse and keyboard input to the window's own widgets for GUI checks (gui_input). |
+| `dev` | 3 | For add-on developers: an installed add-on's own test suite run in a separate FreeCAD process (addon_test); mouse and keyboard input to the window's own widgets for GUI checks (gui_input), and closing a menu or dialog that holds the window (gui_unstick). |
 <!-- tools:end -->
 
 Each group has a guide the agent reads (`guide_read`). Any tool runs by name

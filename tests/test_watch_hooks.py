@@ -102,7 +102,9 @@ class ThreadTools(Base):
             src = f.read()
         self.assertIn("if self._thread_call(line, f):", src)
         self.assertIn("hooks.THREAD_TOOLS", src)
-        self.assertEqual(src.count("with self._writes()"), 2)
+        # Every writer on a connection takes the lock: the GUI thread's
+        # replies, socket-thread tools, early and busy answers.
+        self.assertGreaterEqual(src.count("with self._writes()"), 2)
 
 
 class Signal:

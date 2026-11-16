@@ -47,11 +47,11 @@ FAKE_HIDDEN = textwrap.dedent('''
 FAKE_WINDOW = textwrap.dedent('''
     import json, os, socket, sys, threading, time
     home, port = os.environ["AGENTLINK_HOME"], int(os.environ["AGENTLINK_WINDOW_PORT"])
-    state = {"beat": True, "dialog": None}
+    state = {"beat": True, "dialog": None, "popup": None}
     def beat():
         while True:
             if state["beat"]:
-                hb = {"pid": os.getpid(), "t": time.time(), "pairing": 1, "app": "Fake.app", "docs": [{"name": "Plate", "label": "Plate", "file": "/tmp/Plate.FCStd"}], "dialog": state["dialog"]}
+                hb = {"pid": os.getpid(), "t": time.time(), "pairing": 1, "app": "Fake.app", "docs": [{"name": "Plate", "label": "Plate", "file": "/tmp/Plate.FCStd"}], "dialog": state["dialog"], "popup": state["popup"]}
                 tmp = os.path.join(home, "heartbeat.json.tmp")
                 json.dump(hb, open(tmp, "w")); os.replace(tmp, os.path.join(home, "heartbeat.json"))
             time.sleep(0.3)
@@ -79,6 +79,18 @@ FAKE_WINDOW = textwrap.dedent('''
             if name == "behind_dialog":
                 state["dialog"] = {"class": "QMessageBox", "title": "Unsaved", "text": "Save changes?", "buttons": ["Save", "Discard"], "since": time.time()}
                 time.sleep(3600)
+            if name == "behind_menu":
+                # A toolbar dropdown's menu, open in its own event loop: the
+                # heartbeat goes on, the call waits until the menu closes.
+                state["popup"] = {"class": "QMenu", "kind": "menu", "title": "a menu", "items": ["New Sketch", "Attach sketch"], "since": time.time()}
+                while state["popup"] is not None:
+                    time.sleep(0.05)
+            if name == "gui_unstick":
+                closed = [dict((k, v) for k, v in state["popup"].items() if k in ("kind", "title", "items"))] if state["popup"] else []
+                state["popup"] = None
+                body = {"closed": closed, "open": None}
+                f.write(json.dumps({"jsonrpc": "2.0", "id": m["id"], "result": {"content": [{"type": "text", "text": json.dumps(body)}]}}) + "\\n"); f.flush()
+                continue
             if name == "dialog_answer":
                 # A window just started: its first call builds the session.
                 time.sleep(7)
@@ -112,7 +124,8 @@ class Sup(unittest.TestCase):
         self.env = {**os.environ, "AGENTLINK_HOME": self.home, "AGENTLINK_DEADLINE": "1", "AGENTLINK_GRACE": "1",
                     "AGENTLINK_WINDOW": "1" if self.window else "0", "AGENTLINK_WINDOW_PORT": str(self.port),
                     "AGENTLINK_RESTART_MARK": os.path.join(self.home, ".restarting"),
-                    "AGENTLINK_TOKEN_FILE": os.path.join(self.home, "link-token"), "AGENTLINK_DIR": AL}
+                    "AGENTLINK_TOKEN_FILE": os.path.join(self.home, "link-token"), "AGENTLINK_DIR": AL,
+                    **getattr(self, "extra_env", {})}
         with open(self.env["AGENTLINK_TOKEN_FILE"], "w") as f:
             f.write("sup-test-token\n")
         self.procs = []
@@ -296,6 +309,41 @@ class WindowSide(Sup):
         self.assertNotEqual(first, again)
         launch = json.load(open(os.path.join(self.home, "launch.json")))
         self.assertEqual(launch["why"], "hang")
+
+
+class WindowMenu(Sup):
+    window = True
+    extra_env = {"AGENTLINK_POPUP_WAIT": "3"}
+
+    def test_menu_is_closed_and_the_call_answered_busy(self):
+        """A menu that holds the window (a popup: no modal dialog, and the
+        heartbeat goes on) is closed through gui_unstick on a connection of
+        its own; the call it held is answered busy, the one queued behind it
+        is answered too, and FreeCAD is not stopped."""
+        first = self.call("ping")[1]["pid"]
+        q = self._lines()
+        t0 = time.time()
+        for i, name in ((101, "behind_menu"), (102, "ping")):
+            self.sup.stdin.write(json.dumps({"jsonrpc": "2.0", "id": i, "method": "tools/call", "params": {"name": name, "arguments": {}}}) + "\n")
+        self.sup.stdin.flush()
+        got = {}
+        while len(got) < 2 and time.time() - t0 < 25:
+            try:
+                m = json.loads(q.get(timeout=1))
+            except queue.Empty:
+                continue
+            got[m["id"]] = (m["result"].get("isError", False), json.loads(m["result"]["content"][0]["text"]))
+        self.assertEqual(set(got), {101, 102}, "both answered within 25 s")
+        err, out = got[101]
+        self.assertTrue(err)
+        self.assertEqual(out["error"]["code"], "busy")
+        msg = out["error"]["message"]
+        self.assertIn("Blocked by a menu (items: New Sketch, Attach sketch)", msg)
+        self.assertIn("closed it (gui_unstick)", msg)
+        self.assertEqual(got[102][1]["pid"], first)  # the same window, never stopped
+        time.sleep(0.8)  # the fake window's next heartbeat
+        hb = json.load(open(os.path.join(self.home, "heartbeat.json")))
+        self.assertIsNone(hb["popup"])
 
 
 if __name__ == "__main__":

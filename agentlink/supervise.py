@@ -77,6 +77,10 @@ def queue_done(tool):
     keep.save_queue(q)
 # A call stuck behind a dialog this long is answered "blocked".
 DIALOG_WAIT = 4.0
+# A call held this long by a menu (a popup in the heartbeat, which no modal
+# check sees) is answered "busy" after the menu is closed through the
+# window's socket thread (gui_unstick), never by stopping FreeCAD.
+POPUP_WAIT = float(os.environ.get("AGENTLINK_POPUP_WAIT", "10"))
 # A dialog answer's own allowance: the first call into a window that has
 # just started builds its session first (several seconds), so the answer to
 # FreeCAD's Document Recovery at start was refused on every first try.
@@ -338,6 +342,28 @@ class Window:
             c["abandoned"] = True
         self._drop()
         return True
+
+    def unstick(self, timeout=6.0):
+        """gui_unstick on a connection of its own (the one in use waits on
+        the call a menu holds): what it closed, or None when the window did
+        not answer."""
+        tmp = Window(lambda line: None)
+        tmp.off = False
+        if not tmp._open():
+            return None
+        line = json.dumps({"jsonrpc": "2.0", "id": f"__unstick{time.time()}", "method": "tools/call", "params": {"name": "gui_unstick", "arguments": {}}})
+        try:
+            tmp.sock.settimeout(timeout)
+            got = tmp._send(line, forward=False)
+        finally:
+            tmp._drop()
+        if not got:
+            return None
+        try:
+            r = json.loads(got)["result"]
+            return None if r.get("isError") else json.loads(r["content"][0]["text"])
+        except (ValueError, KeyError, TypeError):
+            return None
 
     def force_restart(self):
         """app_force_restart, run here outside FreeCAD so it works whatever
@@ -620,6 +646,24 @@ def run(script, argv):
                     if dlg and not dlg.get("pressed") and waited > (ANSWER_WAIT if _answers_dialog(c) else DIALOG_WAIT):
                         window.abandon(f"Blocked by a dialog in the FreeCAD window: \"{dlg.get('title')}\" — {str(dlg.get('text'))[:300]} (buttons: {', '.join(dlg.get('buttons') or []) or 'none'}). "
                                        f"{c['tool']} is waiting behind it. dialog_answer {{ button }} presses one of its buttons: read it and press what the job needs (Cancel backs out); app_force_restart if the window is stuck.")
+                        continue
+                    pop = (hb or {}).get("popup")
+                    held = now - max(c["start"], float(pop.get("since") or now)) if pop else 0
+                    # gui_input (or a batch of it) works inside a menu it
+                    # opened: its own waits' while first, as for a dialog.
+                    if pop and held > (ANSWER_WAIT if _answers_dialog(c) else POPUP_WAIT) and not c.get("abandoned"):
+                        # A menu holds the call (its own event loop; the
+                        # heartbeat goes on, so no hang is seen): closed
+                        # through the window's socket thread, the call
+                        # answered busy, and FreeCAD left running.
+                        from .gui_input import front_words
+
+                        got = window.unstick()
+                        what = front_words(pop)
+                        keep.log_watchdog({"event": "popup", "tool": c["tool"], "title": pop.get("title"), "closed": bool(got and got.get("closed"))})
+                        tail = (f" Agent Link closed it (gui_unstick), so the window takes calls again; {c['tool']} may not have finished: check, then call it again."
+                                if got and got.get("closed") else " Closing it did not work: gui_unstick, or app_force_restart if the window stays stuck.")
+                        window.abandon(f"Blocked by {what} in the FreeCAD window: {c['tool']} waited behind it for {int(held)} s." + tail, code="busy")
                         continue
                     last = float((hb or {}).get("t") or c["start"])
                     limit = deadline_for(c["tool"], c.get("args"))
