@@ -133,14 +133,20 @@ def _call_info(line):
     return m.get("id"), p.get("name"), p.get("arguments") or {}
 
 
-def deadline_for(tool, args=None):
-    if os.environ.get("AGENTLINK_DEADLINE"):
-        return float(os.environ["AGENTLINK_DEADLINE"])
+def deadline_for(tool, args=None, started=None):
+    """Seconds the call in hand may run before a FreeCAD with no heartbeat is
+    stopped. A call that marked itself heavy while it runs (a big Part
+    boolean: keep.mark_heavy_call) gets its estimate times three."""
     if keep is None:
         return NO_ESTIMATE
+    marked = keep.heavy_call_limit(started, time.time()) if started is not None else None
+    if os.environ.get("AGENTLINK_DEADLINE"):
+        base = float(os.environ["AGENTLINK_DEADLINE"])
+        return max(base, marked) if marked else base
     limit = _deadline(tool)
     own = keep.call_deadline(tool, args) if keep.is_heavy(tool) else None
-    return max(limit, own) if own else limit
+    limit = max(limit, own) if own else limit
+    return max(limit, marked) if marked else limit
 
 
 def _deadline(tool):
@@ -154,6 +160,69 @@ def _deadline(tool):
             pass
         return NO_ESTIMATE
     return keep.deadline("change")
+
+
+# ---- after a restart: only what was open then comes back ----------------------------------
+
+def docs_at_restart(*beats, pid=None):
+    """The heartbeat that says what was open when FreeCAD was stopped: the
+    newest of that FreeCAD's (by pid when known). An older heartbeat kept
+    from an earlier call can list documents long closed since."""
+    cands = [h for h in beats if isinstance(h, dict) and h]
+    if pid is not None:
+        cands = [h for h in cands if h.get("pid") == pid] or cands
+    if not cands:
+        return {}
+    return max(cands, key=lambda h: float(h.get("t") or 0))
+
+
+def hidden_docs(hidden, pid):
+    """The documents of hidden.json that the FreeCAD which died held: none
+    when the file is another FreeCAD's (an earlier session's)."""
+    if not isinstance(hidden, dict):
+        return []
+    if pid is not None and hidden.get("pid") not in (None, pid):
+        return []
+    return [d for d in hidden.get("docs") or [] if isinstance(d, dict) and d.get("name")]
+
+
+def temp_copy(file):
+    """A document file in a temporary folder: a recovered copy (an add-on's
+    agentlink-recovered- folders) or one of FreeCAD's own recovery files."""
+    f = str(file or "")
+    if not f:
+        return False
+    if os.path.basename(os.path.dirname(f)).startswith("agentlink-recovered-"):
+        return True
+    if "fc_recovery_file" in f.replace("\\", "/").lower():
+        return True
+    try:
+        import tempfile
+
+        tmp = os.path.realpath(tempfile.gettempdir())
+        return os.path.realpath(f).startswith(tmp + os.sep)
+    except Exception:
+        return False
+
+
+def strays(before, recovered, now_docs):
+    """Documents open in the FreeCAD just started that were not open when it
+    stopped: copies opened again from temporary folders (old recovered
+    copies). Not the copies just recovered, and not a file that was open."""
+    files = {os.path.abspath(d["file"]) for d in before or [] if isinstance(d, dict) and d.get("file")}
+    fresh = {r.get("document") for r in recovered or [] if isinstance(r, dict) and r.get("document")}
+    fresh |= {r.get("as") for r in recovered or [] if isinstance(r, dict) and r.get("as")}
+    out = []
+    for d in now_docs or []:
+        if not isinstance(d, dict) or not d.get("name"):
+            continue
+        if d.get("name") in fresh or d.get("label") in fresh:
+            continue
+        f = d.get("file") or ""
+        if not temp_copy(f) or os.path.abspath(f) in files:
+            continue
+        out.append(d)
+    return out
 
 
 def stop_pid(pid, grace=10.0):
@@ -405,7 +474,8 @@ class Window:
         """After the window died (a crash or the watchdog): started again in
         the background and its documents recovered from the newest copy that
         opens. The words for the answer."""
-        hb = self.last_hb or heartbeat() or {}
+        stopped = (self.hang or {}).get("pid")
+        hb = docs_at_restart(self.last_hb, heartbeat(), pid=stopped)
         app, docs = hb.get("app"), hb.get("docs") or []
         if keep is not None:
             keep.log_watchdog({"event": why, "tool": tool, "docs": [d.get("label") for d in docs], "app": app})
@@ -429,8 +499,34 @@ class Window:
             parts.append(f"{r.get('label')} recovered from {r.get('source')} ({r.get('time')}, {r.get('lost')})")
         for r in got.get("failed") or []:
             parts.append(f"{r.get('label')}: no copy opened ({r.get('why')})")
+        shut, left = self.close_strays(docs, got.get("recovered") or [], hb.get("pid"), t0)
+        if shut:
+            parts.append("closed again as they were not open before the restart: " + ", ".join(shut))
+        if left:
+            parts.append("not open before the restart but left open as they have changes: " + ", ".join(left))
         return "FreeCAD is back (started in the background). " + ("; ".join(parts) + ". " if parts else "No documents to recover. ") + \
             "Recovered copies open beside the files as \"(recovered …)\"; the person's own files are untouched — app_recover { accept } saves one over its file, with their OK."
+
+    def close_strays(self, before, recovered, old_pid, t0, wait=8.0):
+        """After a restart, old recovered copies the new window opened from
+        temporary folders (not open at the restart) closed again; one with
+        changes of its own is left. (closed labels, left labels)"""
+        hb, end = None, time.time() + wait
+        while time.time() < end:
+            hb = heartbeat()
+            if hb and hb.get("pid") != old_pid and float(hb.get("t") or 0) > t0:
+                break
+            hb = None
+            time.sleep(0.5)
+        if not hb:
+            return [], []
+        shut, left = [], []
+        for d in strays(before, recovered, hb.get("docs") or []):
+            got = self.ask("doc_close", {"documents": [d["name"]]}, timeout=20)
+            (shut if got is not None else left).append(d.get("label") or d["name"])
+        if (shut or left) and keep is not None:
+            keep.log_watchdog({"event": "strays", "closed": shut, "left": left})
+        return shut, left
 
     def call(self, line):
         """Send one call to the window and pass its answer on. False when the
@@ -574,7 +670,8 @@ def run(script, argv):
         why = f"stopped by signal {-code}" if code < 0 else f"exited with code {code}"
         sys.stderr.write(f"Agent Link: FreeCAD {why}; starting it again\n")
         hidden = (keep._load(keep.path("hidden.json"), {}) if keep else {}) or {}
-        docs = [d for d in hidden.get("docs") or [] if d.get("name")]
+        dead = state.get("child")
+        docs = hidden_docs(hidden, getattr(dead, "pid", None))
         t_crash = time.time()
         now = time.time()
         deaths[:] = [t for t in deaths if now - t < 60] + [now]
@@ -680,7 +777,7 @@ def run(script, argv):
                         window.abandon(f"Blocked by {what} in the FreeCAD window: {c['tool']} waited behind it for {int(held)} s." + tail, code="busy")
                         continue
                     last = float((hb or {}).get("t") or c["start"])
-                    limit = deadline_for(c["tool"], c.get("args"))
+                    limit = deadline_for(c["tool"], c.get("args"), c["start"])
                     if keep.hung(now, c["start"], max(last, c["start"]), limit) and not keep.saving():
                         pid = (hb or {}).get("pid")
                         if pid:
@@ -694,7 +791,7 @@ def run(script, argv):
                 first = min(inflight.items(), key=lambda kv: kv[1]["start"]) if inflight else None
                 for mid, h in [first] if first else []:
                     began = max(h["start"], state.get("last_reply") or 0)
-                    limit = deadline_for(h["tool"], h.get("args"))
+                    limit = deadline_for(h["tool"], h.get("args"), began)
                     if (keep.hung(now, began, began + limit, limit) and not keep.saving() and state["hang"] is None
                             and not state.get("restarting")):
                         child = state["child"]

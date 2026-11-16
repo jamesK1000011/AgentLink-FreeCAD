@@ -70,6 +70,48 @@ def memory_estimate(q, tool, size):
     return keep.estimate({"timings": {tool: pts}}, tool, min(float(size), reach))
 
 
+def _obj(doc, ref):
+    if not isinstance(ref, str) or not ref:
+        return None
+    ref = ref.split(".")[0]
+    o = doc.getObject(ref)
+    if o is None:
+        o = next((x for x in doc.Objects if x.Label == ref), None)
+    return o
+
+
+def _faces(o):
+    try:
+        sh = o.Shape
+        return 0 if sh.isNull() else len(sh.Faces)
+    except Exception:
+        return 0
+
+
+def sized_size(session, tool, args):
+    """The size a sized tool (keep.SIZED) works at: a boolean's face pairs
+    (base faces x tool faces), else the document's faces. None when it
+    cannot be read (the tool's own refusal then says why)."""
+    try:
+        doc = session.doc
+        if tool == "part_boolean":
+            names = args.get("tools")
+            names = names if isinstance(names, list) else [names]
+            tools = [_obj(doc, n) for n in names]
+            tf = [_faces(t) for t in tools if t is not None]
+            base = _obj(doc, args.get("base"))
+            if base is None:
+                # base left out: the one other solid body there is.
+                rest = [o for o in doc.Objects if o not in tools and getattr(o, "Shape", None) is not None and _faces(o) and not o.InList]
+                base = max(rest, key=_faces) if rest else None
+            if base is None or not tf:
+                return None
+            return keep.boolean_size(_faces(base), tf)
+        return size_of(session)
+    except Exception:
+        return None
+
+
 def _fmt(sec):
     return f"{int(round(sec))} s" if sec < 90 else f"{sec / 60:.0f} min"
 
@@ -79,6 +121,7 @@ class Gate:
         self.s = session
         self.offers = {}
         self.start = None
+        self.sized = None
 
     @staticmethod
     def live():
@@ -96,6 +139,8 @@ class Gate:
         return gui or bool(os.environ.get("AGENTLINK_SUPERVISED")) or bool(os.environ.get("AGENTLINK_GATE"))
 
     def before(self, tool, args):
+        if tool.name in keep.SIZED:
+            self._sized_before(tool, args)
         if not keep.is_heavy(tool.name):
             return
         if not self.live():
@@ -129,7 +174,56 @@ class Gate:
                     pass
         self.start = (now, size, _maxrss_mb())
 
+    # ---- tools heavy only at some sizes (keep.SIZED): a Part boolean of faceted solids ----
+
+    def _sized_before(self, tool, args):
+        self.sized = None
+        size = sized_size(self.s, tool.name, args)
+        if not size:
+            return
+        try:
+            q = keep.queue_state()
+        except Exception:
+            q = {}
+        est = keep.sized_estimate(q, tool.name, size)
+        if est is None:
+            return
+        now = time.time()
+        if keep.SIZED[tool.name]["ask"] and est > keep.SIZED_ASK_OVER and self.live():
+            key = keep.call_key(tool.name, args)
+            self.offers = {k: t for k, t in self.offers.items() if now - t < OFFER_KEEP}
+            if key not in self.offers:
+                self.offers[key] = now
+                raise ToolError("invalid_state", f"{tool.name} here is heavy: about {_fmt(est)} at this size ({size:,} face pairs; from {'its past runs on this Mac' if len((q.get('timings') or {}).get(tool.name) or []) >= 2 else 'a rough rule'}), "
+                                "and FreeCAD's window is frozen until OCC finishes. Lighter first: fewer faces (part_refine merges coplanar facets; a coarser mesh before part_from_mesh), "
+                                "or meshobj_boolean on the meshes. The same call again runs it as asked; the watchdog waits for it. Nothing was run.")
+        self.sized = (now, size, est)
+        if est > keep.SIZED_MARK_OVER:
+            try:
+                keep.mark_heavy_call(tool.name, est, size, t=now)
+            except Exception:
+                pass
+
+    def _sized_after(self, tool, ok):
+        got, self.sized = getattr(self, "sized", None), None
+        if got is None:
+            return
+        t0, size, est = got
+        if est > keep.SIZED_MARK_OVER:
+            keep.clear_heavy_call()
+        secs = time.time() - t0
+        # Timed where it says something: a run of a second or more.
+        if ok and secs >= 1.0:
+            try:
+                q = keep.queue_state()
+                keep.log_timing(q, tool.name, size, secs)
+                keep.save_queue(q)
+            except Exception:
+                pass
+
     def after(self, tool, args, ok):
+        if tool.name in keep.SIZED:
+            self._sized_after(tool, ok)
         if not keep.is_heavy(tool.name) or self.start is None:
             return
         t0, size, (a0, b0) = self.start

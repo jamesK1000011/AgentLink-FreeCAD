@@ -13,7 +13,10 @@
 - A result keeps the base body's label, so setups and specs follow it; the tools are removed (keep: true hides them, and a hidden body is still listed).
 - A refusal for "changed nothing" means the pieces do not overlap: move them (`part_transform move`) and try again.
 - Fillets bigger than a face beside the edge, or shells thinner than a fillet, fail: smaller sizes, or the shell before the fillet.
-- Loft profiles with different edge counts twist; start each at the matching corner.
+- Loft profiles with different edge counts twist; start each at the matching corner. `part_loft` turns each profile to run the same way round and starts each at the point nearest the one before (`aligned` says what it changed). It keeps no loft that is invalid, open, inside out or bulges more than 15% beyond its profiles: the refusal gives the reason.
+- For smooth cross-sections, use `part_wire { kind: "bspline", closed: true, points }`: one closed wire. Use 12 to 32 points for each section, and the same number for each section.
+- "sound" means valid, closed and a volume above 0. Do not fuse a body that is not sound: `part_boolean` refuses it and keeps the tool.
+- A boolean of many faces (a mesh made a solid) can take minutes, and the window does not respond until it is done. The first call gives the time and runs nothing; the same call again runs it. Use fewer faces first (`part_refine`), or do the boolean on the meshes (`meshobj_boolean`).
 
 ## Wires, splitting, repair
 - `part_wire` makes FreeCAD's own parametric curves: a helix as a sweep path (a spring, a thread), a spiral, a regular polygon (`polygon`: sides and radius), a polyline through your corners (`polyline`: points, closed), a plane to slice with, a B-spline through points. For a solid from corner points in one step, use `part_extrude { profile: { points } }`.
