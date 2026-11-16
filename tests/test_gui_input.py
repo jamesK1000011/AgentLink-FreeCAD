@@ -579,6 +579,76 @@ class ItemView(Widget):
         return Rect(0, 20 * ix.r, 200, 20)
 
 
+class Node:
+    def __init__(self, text, *kids, open_=True):
+        self.text, self.kids, self.up, self.open = text, list(kids), None, open_
+        for k in kids:
+            k.up = self
+
+
+class TIx:
+    def __init__(self, node, row):
+        self.n, self.r = node, row
+
+    def row(self):
+        return self.r
+
+    def isValid(self):
+        return self.n is not None
+
+    def parent(self):
+        up = self.n.up if self.n is not None else None
+        if up is None or up.up is None:
+            return TIx(None, -1) if up is None or up.text == "<root>" else TIx(up, up.up.kids.index(up))
+        return TIx(up, up.up.kids.index(up))
+
+    def sibling(self, r, c):
+        return self
+
+
+class TreeModel:
+    def __init__(self, root):
+        self.root = root
+
+    def _node(self, parent):
+        return self.root if parent is None or not parent.isValid() else parent.n
+
+    def rowCount(self, parent=None):
+        return len(self._node(parent).kids)
+
+    def columnCount(self, parent=None):
+        return 1
+
+    def index(self, r, c, parent=None):
+        return TIx(self._node(parent).kids[r], r)
+
+    def data(self, ix, role=0):
+        return ix.n.text if role == 0 else None
+
+
+class TreeView(ItemView):
+    def metaObject(self):
+        return Chain(["Gui::TreeWidget", "QTreeWidget", "QTreeView", "QAbstractItemView", "QWidget"])
+
+    def isExpanded(self, ix):
+        return ix.n.open
+
+    def expand(self, ix):
+        ix.n.open = True
+
+    def visualRect(self, ix):
+        rows = []
+
+        def walk(n):
+            for k in n.kids:
+                rows.append(k)
+                if k.open:
+                    walk(k)
+        walk(self.m.root)
+        i = rows.index(ix.n) if ix.n in rows else 99
+        return Rect(0, 20 * i, 200, 20)
+
+
 class Targets(unittest.TestCase):
     def setUp(self):
         gi.HELD.update({"widget": None, "buttons": []})
@@ -639,6 +709,22 @@ class Targets(unittest.TestCase):
         self.assertEqual((press.lp.x(), press.lp.y()), (100.0, 30.0))
         self.assertTrue(all(w == "list-viewport" for w, _e in self.sent))
         self.assertNotIn("check", hit)
+
+    def test_item_in_the_active_documents_shown_row_first(self):
+        # Two documents each hold a Sketch; the first's branch is folded.
+        root = Node("<root>", Node("WindowTest", Node("Body", Node("Pad", Node("Sketch")), open_=False)),
+                    Node("PadLesson", Node("Body", Node("Sketch"))))
+        tree = TreeView("tree", 10, 400, TreeModel(root), parent=self.dock)
+        self.view.m = Model([["PLA"]])
+        out = self.run.run(gi.parse_steps([{"click": {"item": {"text": "Sketch"}}}]))
+        hit = out["steps"][0]["hit"]
+        self.assertEqual((hit["document"], hit["under"], hit["matches"]), ("PadLesson", "PadLesson › Body", 2))
+        self.assertFalse(root.kids[0].kids[0].open)  # the other document's branch left folded
+        # The active document decides first, even folded.
+        self.run.gui.ActiveDocument = types.SimpleNamespace(Document=types.SimpleNamespace(Label="WindowTest"))
+        out = self.run.run(gi.parse_steps([{"click": {"item": {"text": "Sketch"}}}]))
+        self.assertEqual(out["steps"][-1]["hit"]["document"], "WindowTest")
+        self.assertTrue(tree.vp is not None)
 
     def test_item_by_column(self):
         out = self.run.run(gi.parse_steps([{"click": {"item": {"text": "1.07", "column": 1}}}]))
