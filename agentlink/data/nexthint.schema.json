@@ -1,0 +1,87 @@
+{
+ "$comment": "One entry of nexthint.json: a rule that names the likely next tools in one state of the document (agentlink/nexthint.py).",
+ "type": "object",
+ "required": [
+  "when",
+  "suggest",
+  "weight",
+  "source",
+  "date"
+ ],
+ "additionalProperties": false,
+ "properties": {
+  "when": {
+   "type": "object",
+   "description": "Facts that must all hold.",
+   "additionalProperties": {
+    "type": [
+     "string",
+     "boolean",
+     "array"
+    ],
+    "items": {
+     "type": [
+      "string",
+      "boolean"
+     ]
+    },
+    "description": "The value the fact must have, or a list of values of which it must have one."
+   }
+  },
+  "unless": {
+   "type": "object",
+   "description": "Facts of which none may hold.",
+   "additionalProperties": {
+    "type": [
+     "string",
+     "boolean",
+     "array"
+    ],
+    "items": {
+     "type": [
+      "string",
+      "boolean"
+     ]
+    },
+    "description": "The value the fact must have, or a list of values of which it must have one."
+   }
+  },
+  "suggest": {
+   "type": "array",
+   "description": "The tools, likeliest first (at most four are read).",
+   "items": {
+    "type": "object",
+    "required": [
+     "tool",
+     "why"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "tool": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+     },
+     "why": {
+      "type": "string",
+      "minLength": 3,
+      "pattern": "^.{3,60}$",
+      "description": "A few words on why, at most 60 characters."
+     }
+    }
+   }
+  },
+  "weight": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 100
+  },
+  "source": {
+   "type": "string",
+   "minLength": 1
+  },
+  "date": {
+   "type": "string",
+   "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+  }
+ }
+}

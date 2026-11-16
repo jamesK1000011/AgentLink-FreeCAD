@@ -727,6 +727,13 @@
   "headless": true,
   "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
  },
+ "draft_text": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Probe 17:37 after the fixes (cold views computed; tool point read; lettering box)"
+ },
  "draft_to_sketch": {
   "description": true,
   "docs": true,
@@ -1956,6 +1963,13 @@
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
   "note": "axes (by hand) and an out-of-reach refusal; a 100 mm tcp move from the wrist-singular pose was not reached"
  },
+ "robot_new": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "Probe 17:37 after the fixes (cold views computed; tool point read; lettering box)"
+ },
  "robot_path": {
   "description": true,
   "docs": true,
@@ -2633,7 +2647,9 @@
  "td_list": {
   "description": true,
   "docs": true,
+  "headless": true,
   "health": true,
+  "model": "Probe 17:37 after the fixes (cold views computed; tool point read; lettering box)",
   "note": "fixed after the TechDraw run, not re-run: not proven"
  },
  "td_note": {

@@ -157,6 +157,17 @@ class StdMore(Base):
         self.session.doc.recompute()
         cc = self.ok("scad_tidy", {"action": "color_code", "objects": ["S fusion"]})
         self.assertEqual(cc["coloured"][0]["is"], "Solid")
+        # As FreeCAD's own Color Shapes: nothing is left touched (the colour
+        # kept on the object is not something its shape depends on), the
+        # first time (the property is added) and again (it is set) …
+        self.assertNotIn("Touched", f.State)
+        self.ok("scad_tidy", {"action": "color_code"})
+        self.assertEqual([o.Label for o in self.session.doc.Objects if "Touched" in o.State], [])
+        # … and an object that was waiting for a recompute still is.
+        f.touch()
+        self.ok("scad_tidy", {"action": "color_code", "objects": ["S fusion"]})
+        self.assertIn("Touched", f.State)
+        self.session.doc.recompute()
         ex = self.ok("scad_tidy", {"action": "explode", "objects": ["S fusion"]})
         self.assertEqual(sorted(ex["exploded"][0]["pieces"]), ["S a", "S b"])
         # A quadric patch from points on z = 0.01 (x² + y²).

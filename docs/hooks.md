@@ -35,6 +35,7 @@ WRITERS = {"mine_export"}            # optional: their "path" is written, not re
 GEOMETRIC = set()                    # optional: their "path" is a curve, not a file
 NOT_IN_MACROS = set()                # optional: changing calls a saved macro does not replay
 PINNED_FREE = set()                  # optional: answered after the person closed the document the agent worked in (a recovery tool)
+NEXT = {"mine-after-pad": {"when": {"body": "features", "lastFeature": "pad"}, "suggest": [{"tool": "mine_check", "why": "check the new solid"}], "weight": 49, "source": "mine", "date": "2026-11-16"}}  # optional: rules for the "next" hint (agentlink/data/nexthint.json says the facts and the shape)
 # Optional, for the live echo in the FreeCAD window (any family, data or code):
 SHOWN = ("mine_check",)              # read-only tools (names or prefixes) still shown as they run
 AREAS = {"mine": "Mine"}             # prefix → the area name in a call's fallback words ("Mine do on Lid")

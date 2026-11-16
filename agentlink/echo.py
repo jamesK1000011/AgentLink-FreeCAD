@@ -171,6 +171,54 @@ def delay_ms():
     return FreeCAD.ParamGet(PREFS).GetInt("EchoDelay", 350)
 
 
+# A batch in the window: its first calls are shown at the full pace, so the
+# person sees what kind of run it is; from the fourth changing call on the
+# pause before each call is short and the paints that only let the window
+# settle are skipped (the bench still comes up, the button lights, the
+# result is selected); the batch's last call is shown at the full pace
+# again, so the window ends on a state that can be read. Measured live, a
+# changing call cost 0.35 to 2.5 s of echo, a 20-call batch 6 to 67 s.
+BATCH_FULL = 3         # changing calls of a batch shown at the full pace
+BATCH_DELAY_MS = 60    # the pause from then on (EchoBatchDelay)
+
+
+def batch_delay_ms():
+    """Mod/AgentLink EchoBatchDelay, ms: the pause before a batch's later
+    calls. 0: no wait. -1: the same as EchoDelay (a batch is then paced as
+    single calls are)."""
+    return FreeCAD.ParamGet(PREFS).GetInt("EchoBatchDelay", BATCH_DELAY_MS)
+
+
+def pace(batch, changing, full_ms, batch_ms, count=True):
+    """How one call is shown: (mode, ms) — mode "full" (the pause full_ms
+    and every settle paint) or "short" (the pause ms, no settle paints).
+    batch: the session's batch_now ({ i, n, lastChange, … }; None for a
+    call on its own); changing: whether this call changes the document
+    (only those count towards BATCH_FULL; a read shown after them is short
+    too); batch_ms: EchoBatchDelay. count: note this call in the batch
+    (its "echoed": changing calls shown so far). Plain Python."""
+    full_ms = max(0, int(full_ms or 0))
+    if not isinstance(batch, dict):
+        return "full", full_ms
+    try:
+        batch_ms = int(batch_ms)
+    except (TypeError, ValueError):
+        batch_ms = BATCH_DELAY_MS
+    seen = int(batch.get("echoed") or 0)
+    if changing and count:
+        batch["echoed"] = seen + 1
+    if batch_ms < 0:  # the same as EchoDelay
+        return "full", full_ms
+    i, n = batch.get("i"), batch.get("n")
+    last = batch.get("lastChange")
+    if isinstance(i, int) and ((isinstance(n, int) and i >= n - 1) or (isinstance(last, int) and i == last)):
+        return "full", full_ms
+    if seen < BATCH_FULL:
+        return "full", full_ms
+    # Never slower than a call on its own.
+    return "short", min(batch_ms, full_ms)
+
+
 def log():
     return list(_log)
 
@@ -472,11 +520,31 @@ def _objects(doc, names):
     return out
 
 
+# Counts the selections made here: a result's "lit for a moment" timer
+# clears the selection only while it is still that result's (at a batch's
+# short pace the next call's selection is there before the timer fires).
+_selected = [0]
+
+
+def _clear_if(mark):
+    """Clear the selection unless a newer one was made here since mark."""
+    if _selected[0] != mark:
+        return False
+    try:
+        import FreeCADGui
+
+        FreeCADGui.Selection.clearSelection()
+    except Exception:  # noqa: BLE001 - the window is closing
+        return False
+    return True
+
+
 def _select(objs):
     import FreeCADGui
 
     if not objs:
         return
+    _selected[0] += 1
     FreeCADGui.Selection.clearSelection()
     for o in objs:
         try:
@@ -533,6 +601,20 @@ class Echo:
     def __init__(self, session):
         self.s = session
         self.t0 = None
+        # How the call in hand is shown (pace()): set in before, used by
+        # after and the waits between.
+        self.mode, self.ms = "full", None
+
+    def _pace(self, tool):
+        """This call's pace, from where its batch is (session.batch_now)."""
+        try:
+            self.mode, self.ms = pace(getattr(self.s, "batch_now", None), bool(getattr(tool, "changes", False)), delay_ms(), batch_delay_ms())
+        except Exception:  # noqa: BLE001 - a preference that cannot be read: the full pace
+            self.mode, self.ms = "full", None
+
+    def _pause(self):
+        """The pause of the call in hand."""
+        _wait(delay_ms() if self.ms is None else self.ms)
 
     def live(self):
         """Shown in the window, unless an extension asks for the window to
@@ -546,6 +628,7 @@ class Echo:
 
     def before(self, tool, args):
         self.t0 = time.time()
+        self.mode, self.ms = "full", None
         if self.quiet():
             return
         if tool is None or skipped(tool.name):
@@ -556,6 +639,8 @@ class Echo:
         shown = switch or tool.name.startswith(SHOWN)
         if not shown:
             return
+        self._pace(tool)
+        short = self.mode == "short"
         try:
             import FreeCADGui
 
@@ -578,11 +663,19 @@ class Echo:
             FreeCADGui.getMainWindow().statusBar().showMessage("Agent" + where + ": " + _describe(tool.name, args), 4000)
             cmd = command_for(tool.name, args) if switch else None
             if cmd:
+                # settle: after a bench switch its toolbars must exist before
+                # a button can light — kept at the short pace too (one
+                # paint, and only when the bench did switch): without it the
+                # button would not light at all.
                 flash_command(cmd, settle=bool(wb))
             doc = self.s.doc
             _select(_objects(doc, [args.get(k) for k in ARG_KEYS if args.get(k)]))
-            _paint()
-            _wait(delay_ms())
+            if short and self.ms > 0:
+                self._pause()  # its paints show the selection and the lit button
+            else:
+                _paint()
+                if not short:
+                    self._pause()
         except Exception as e:
             FreeCAD.Console.PrintLog(f"Agent Link echo (before {tool.name}): {e}\n")
 
@@ -663,7 +756,11 @@ class Echo:
                             FreeCADGui.Selection.addSelection(o, el)
                         except Exception:
                             pass
-                    _wait(delay_ms())
+                    # The joint's two faces lit for the pause; at a batch's
+                    # short pace they stay lit and the call's last paint
+                    # shows them.
+                    if self.mode != "short":
+                        self._pause()
         elif name.startswith("bim_") and name in ("bim_level", "bim_building"):
             made = _objects(doc, [body.get("object")])
             if made:
@@ -759,7 +856,7 @@ class Echo:
                 _select(made)
                 # Lit for a moment, then the part shows in its own colours again.
                 QtCore, _QtGui, _QtW = _qt()
-                QtCore.QTimer.singleShot(1800, FreeCADGui.Selection.clearSelection)
+                QtCore.QTimer.singleShot(1800, lambda mark=_selected[0]: _clear_if(mark))
                 body_obj = next((o for o in made if o.TypeId == "PartDesign::Body"), None)
                 if body_obj is None:
                     body_obj = next((p for o in made for p in o.InList if p.TypeId == "PartDesign::Body"), None)

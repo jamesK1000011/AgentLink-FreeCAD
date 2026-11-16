@@ -599,7 +599,24 @@ def tools(s):
                 sh = o.Shape
                 kind = "empty" if sh.isNull() else ("invalid" if not sh.isValid() else next((k for k, lst in (("Solid", sh.Solids), ("Shell", sh.Shells), ("Face", sh.Faces), ("Wire", sh.Wires), ("Edge", sh.Edges), ("Vertex", sh.Vertexes)) if lst), "empty"))
                 c = colour(pal[kind])
+                # FreeCAD's own Color Shapes sets the view's colour only
+                # (FreeCAD 1.1: src/Mod/OpenSCAD/colorcodeshapes.py), which
+                # touches nothing and recomputes nothing. The colour kept on
+                # the object here (so it survives a file opened without a
+                # window) is a property write, which marks the object
+                # touched though its shape does not depend on it: an object
+                # that was clean before is marked clean again, one already
+                # waiting for a recompute keeps waiting.
+                try:
+                    was_touched = "Touched" in o.State
+                except Exception:  # noqa: BLE001
+                    was_touched = True
                 keep_colour(o, COLOR_PROP, "App::PropertyColor", c[:3])
+                if not was_touched:
+                    try:
+                        o.purgeTouched()
+                    except Exception:  # noqa: BLE001 - left touched: recompute clears it
+                        pass
                 vo = getattr(o, "ViewObject", None)
                 if vo is not None and hasattr(vo, "ShapeColor"):
                     vo.ShapeColor = c[:3]
@@ -969,7 +986,7 @@ def tools(s):
              obj({"feature": st, "after": st, "before": st}, ["feature"]), pd_reorder, changes=True),
         Tool("pd_tip", "Read (no feature) or set a body's tip: the solid feature its shape stops at, and after which new features go in. A sketch or datum given: the solid feature before it. Features past the tip are kept but left out (afterTip) — set it back to the last one when done. Reply: tip, tipWas, afterTip, volume.",
              obj({"body": st, "feature": st}), pd_tip, changes=True),
-        Tool("scad_tidy", "OpenSCAD workbench's tree tools on objects: action color_code (all shapes when no objects: coloured by validity and kind — the reply's key) | explode (a top-level Part::Fuse / MultiFuse / Compound deleted, its inputs kept, shown and moved by its placement) | expand_placements (placements pushed down to the leaves) | tolerance { vertex, edge, face mm } (a copy with tolerances raised to at least these, never lowered; the original hidden) | remove_subtree (objects and everything under them that nothing else uses — deleted for good) | replace { parent, old, new } (parent uses new where it used old). Reply by action: coloured, exploded, expanded, made, removed, replaced.",
+        Tool("scad_tidy", "OpenSCAD workbench's tree tools on objects: action color_code (all shapes when no objects: coloured by validity and kind — the reply's key; as FreeCAD's own Color Shapes it recomputes nothing and leaves no object touched that was not before) | explode (a top-level Part::Fuse / MultiFuse / Compound deleted, its inputs kept, shown and moved by its placement) | expand_placements (placements pushed down to the leaves) | tolerance { vertex, edge, face mm } (a copy with tolerances raised to at least these, never lowered; the original hidden) | remove_subtree (objects and everything under them that nothing else uses — deleted for good) | replace { parent, old, new } (parent uses new where it used old). Reply by action: coloured, exploded, expanded, made, removed, replaced.",
              obj({"action": {"type": "string", "enum": ["color_code", "explode", "expand_placements", "tolerance", "remove_subtree", "replace"]}, "objects": arr, "vertex": num, "edge": num, "face": num, "parent": st, "old": st, "new": st}, ["action"]), scad_tidy, changes=True),
         Tool("points_structure", "A structured copy of a point cloud (Points::Structured: the points in their order laid out as a grid): points, width (per row), height (rows; count / width when left out). width × height must equal the count, so it suits a cloud still in scan order. The original stays.", obj({"points": st, "width": {"type": "integer"}, "height": {"type": "integer"}, "name": st}, ["points", "width"]), points_structure, changes=True),
         Tool("surface_polynomial", "A polynomial (quadric) surface fitted by least squares to a mesh's or point cloud's points, as a 3 × 3 Bézier patch over their extent (as Reverse Engineering's Polynomial Surface): from, name. For a patch that is one smooth bowl or saddle; split a scan with meshobj_segments or meshobj_trim first. Reply: surface, points, rms and max mm off the points (along the fit plane's normal).",

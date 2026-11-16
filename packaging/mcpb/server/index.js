@@ -864,11 +864,47 @@ function restorePrevious(modDir, broken) {
   return aside
 }
 
+/** What the running hidden FreeCAD wrote of its add-ons when its server
+ *  was built (agentlink/extstate.py, ~/AgentLink/extensions.json):
+ *  { loaded: [{ extension, groups, tools }], leftOut: [{ extension, error }],
+ *  groups: { group: count } }, or {} when there is none. */
+function extensionRecord(file = path.join(AL_HOME, 'extensions.json')) {
+  try {
+    const got = JSON.parse(fs.readFileSync(file, 'utf8')).hidden
+    return got && typeof got === 'object' ? got : {}
+  } catch {
+    return {}
+  }
+}
+
+/** For an update's answer: the installed add-ons the smoke test (or, with
+ *  none run, the record of what runs) found left out, each with its error,
+ *  the tool groups gone compared with before, and a plain warning — {} when
+ *  every add-on loaded. An update never answers success over a missing
+ *  add-on without saying so (a SyntaxError in one add-on's family module
+ *  took 133 tools away behind a passed smoke test). */
+function extensionReport(before, smoke) {
+  const src = smoke && smoke.extensions ? smoke.extensions : null
+  const left = ((src ? src.leftOut : null) || []).filter((r) => r && r.extension).map((r) => ({ extension: String(r.extension), error: String(r.error || 'no error given') }))
+  if (!left.length) return {}
+  const was = (before && before.groups) || null
+  const now = (smoke && smoke.groups) || null
+  const lost = was && now ? Object.keys(was).filter((g) => was[g] && !now[g]).sort() : []
+  const names = [...new Set(left.map((r) => r.extension.replace(/\.agentlink_families$/, '')))]
+  const warning = `${names.length === 1 ? 'An installed add-on did not load, so its tools are not here' : 'Installed add-ons did not load, so their tools are not here'}: ${names.join(', ')}.`
+    + (lost.length ? ` Tool groups gone compared with before: ${lost.join(', ')}.` : '')
+    + ' leftOut gives each one\'s error. It is a fault in the add-on\'s own code or a version that does not fit this Agent Link: fix or update the add-on, then agentlink_update again; session_state repeats this while it holds.'
+  return { leftOut: left, ...(lost.length ? { lostGroups: lost } : {}), warning }
+}
+
 function smokeTest(exe, e, modDir) {
   const script = path.join(modDir, 'AgentLink', 'agentlink', 'smoke.py')
   if (!fs.existsSync(script)) return { ok: true, skipped: 'these add-ons have no smoke test' }
   const pp = pythonPath(modDir, e.FREECAD_LIB)
-  const env2 = { ...e, PYTHONPATH: pp }
+  // The add-ons that load in the FreeCAD now running: the smoke test fails
+  // when one of them no longer loads from modDir (agentlink/smoke.py).
+  const loadedBefore = (extensionRecord().loaded || []).map((r) => r && r.extension).filter((n) => typeof n === 'string' && /^[A-Za-z0-9_.]+$/.test(n))
+  const env2 = { ...e, PYTHONPATH: pp, AGENTLINK_LOADED_BEFORE: loadedBefore.join(',') }
   delete env2.AGENTLINK_SUPERVISED
   const r = spawnSync(exe, [script], { env: env2, encoding: 'utf8', timeout: 600000 })
   const lines = (r.stdout || '').split('\n').map((l) => l.trim()).filter((l) => l.startsWith('{')).reverse()
@@ -914,7 +950,7 @@ function recordVersions(before, after, outcome) {
 
 const UPDATE_TOOL = {
   name: 'agentlink_update',
-  description: 'Fetch the newest Agent Link and ScanRuler for FreeCAD from GitHub and start FreeCAD again on them, without restarting Claude: new tools and fixes from then on. Companion servers kept as git clones (those addons.json lists under companions) are brought up to their branch too and started again. The open document is lost unless saved (doc_save first). Answers the version before and after, and each companion\'s; the tool list is sent again.',
+  description: 'Fetch the newest Agent Link and ScanRuler for FreeCAD from GitHub and start FreeCAD again on them, without restarting Claude: new tools and fixes from then on. Companion servers kept as git clones (those addons.json lists under companions) are brought up to their branch too and started again. The open document is lost unless saved (doc_save first). Answers the version before and after, and each companion\'s; the tool list is sent again. An installed add-on that loaded before and no longer loads fails the update (FreeCAD stays on the version before); one that does not load for another reason is named in leftOut [{ extension, error }] with a warning and, where they can be told, lostGroups (tool groups gone compared with before) — read them: success with a warning means tools are missing.',
   inputSchema: { type: 'object', properties: {} },
 }
 
@@ -994,6 +1030,10 @@ function headless(exe, args, e, inst = {}) {
     const before = version
     try {
       fs.mkdirSync(CACHE, { recursive: true })
+      // What loads now, read before anything is replaced: the answer names
+      // what is gone afterwards.
+      const extBefore = extensionRecord()
+      let ext = {}
       const got = await update((dir) => smokeTest(exe, e, dir))
       if (!got) throw new Error('GitHub gave nothing')
       let snapshot = null
@@ -1012,8 +1052,16 @@ function headless(exe, args, e, inst = {}) {
           reply(id, { error: { code: 'failed', message: `The new add-ons (${got.version}) failed the smoke test, so FreeCAD stays on ${before}: ${(smoke.failures || []).join('; ').slice(0, 600)}. They are kept at ${aside} for a look; nothing was restarted.` } }, true)
           return
         }
-        recordVersions({ addons: before }, { addons: got.version }, smoke.skipped ? `installed (${smoke.skipped})` : 'smoke passed')
-      } else if (inst.modDir) install(inst.modDir, got.dir, got.version)
+        ext = extensionReport(extBefore, smoke)
+        recordVersions({ addons: before }, { addons: got.version }, (smoke.skipped ? `installed (${smoke.skipped})` : 'smoke passed') + (ext.leftOut ? `; add-ons left out: ${ext.leftOut.map((r) => r.extension).join(', ')}` : ''))
+      } else if (inst.modDir) {
+        install(inst.modDir, got.dir, got.version)
+        // Nothing new, so no smoke test ran: what the running FreeCAD left
+        // out when it started still holds, and is said.
+        ext = extensionReport(extBefore, { extensions: extBefore })
+      }
+      // Said after the note where there is one: a success never hides it.
+      const warn = (note) => (ext.warning ? { ...ext, note: `${note} WARNING: ${ext.warning}` } : { note })
       // Retired add-on folders set aside by this install (or, with nothing
       // new, by its sweep): said in the answer.
       const retired = lastRetired
@@ -1021,7 +1069,7 @@ function headless(exe, args, e, inst = {}) {
       const comp = updateCompanions()
       if (comp.some((c) => c.from && c.to && c.from !== c.to)) recordVersions({ companions: comp.map((c) => `${c.name}@${c.from}`) }, { companions: comp.map((c) => `${c.name}@${c.to}`) }, 'companions moved')
       if (got.version === before && !retired.length) {
-        reply(id, { before, after: version, restarted: false, ...(comp.length ? { companions: comp } : {}), note: 'Already the newest: nothing to do.' })
+        reply(id, { before, after: version, restarted: false, ...(comp.length ? { companions: comp } : {}), ...warn('Already the newest: nothing to do.') })
         return
       }
       if (got.version === before) {
@@ -1032,7 +1080,7 @@ function headless(exe, args, e, inst = {}) {
         const old = child
         child.kill()
         const forced = windowed && windowed.hung ? await forceWindow(old, windowed.hung) : null
-        reply(id, { before, after: version, restarted: true, retired, ...(comp.length ? { companions: comp } : {}), note: `Already the newest; set aside the retired add-on folders ${retired.join(', ')} and started FreeCAD again without them.${windowed && windowed.refused ? ` The window did not restart: ${windowed.refused} Then app_restart.` : ''}${forced ? ' ' + forced : ''}` })
+        reply(id, { before, after: version, restarted: true, retired, ...(comp.length ? { companions: comp } : {}), ...warn(`Already the newest; set aside the retired add-on folders ${retired.join(', ')} and started FreeCAD again without them.${windowed && windowed.refused ? ` The window did not restart: ${windowed.refused} Then app_restart.` : ''}${forced ? ' ' + forced : ''}`) })
         return
       }
       updating = true
@@ -1044,18 +1092,18 @@ function headless(exe, args, e, inst = {}) {
         // window is stopped and started again first, through this one's
         // Python side (its own process, still running).
         const forced = windowed && windowed.hung ? await forceWindow(null, windowed.hung) : null
-        reply(id, { before, after: version, restarted: true, ...(forced ? { window: forced } : {}), ...(retired.length ? { retired } : {}), launcher: 'updated: the new launcher serves from now on', ...(snapshot ? { settingsSnapshot: snapshot } : {}), ...(comp.length ? { companions: comp } : {}), note: 'FreeCAD started again on the new add-ons, under the new launcher. New tools are listed.' })
+        reply(id, { before, after: version, restarted: true, ...(forced ? { window: forced } : {}), ...(retired.length ? { retired } : {}), launcher: 'updated: the new launcher serves from now on', ...(snapshot ? { settingsSnapshot: snapshot } : {}), ...(comp.length ? { companions: comp } : {}), ...warn('FreeCAD started again on the new add-ons, under the new launcher. New tools are listed.') })
         handover(next)
         return
       }
       const old = child
       child.kill()
       const forced = windowed && windowed.hung ? await forceWindow(old, windowed.hung) : null
-      reply(id, { before, after: version, restarted: true, ...(retired.length ? { retired } : {}), ...(snapshot ? { settingsSnapshot: snapshot } : {}), ...(comp.length ? { companions: comp } : {}), ...(next === false ? { launcher: 'kept: the updated launcher did not load, so this one keeps serving (launcher.log says why)' } : {}), ...(forced ? { window: forced } : {}), note: windowed && windowed.refused
+      reply(id, { before, after: version, restarted: true, ...(retired.length ? { retired } : {}), ...(snapshot ? { settingsSnapshot: snapshot } : {}), ...(comp.length ? { companions: comp } : {}), ...(next === false ? { launcher: 'kept: the updated launcher did not load, so this one keeps serving (launcher.log says why)' } : {}), ...(forced ? { window: forced } : {}), ...warn(windowed && windowed.refused
         ? `The hidden FreeCAD runs the new add-ons, but the window did not restart and keeps the old ones: ${windowed.refused} Then app_restart.`
         : windowed
           ? 'FreeCAD started again on the new add-ons: the window reopens its documents (calls wait for it, up to 90 s), the one in front back in front. New tools are listed.'
-          : 'FreeCAD started again on the new add-ons: the document is fresh (session_state). New tools are listed.' })
+          : 'FreeCAD started again on the new add-ons: the document is fresh (session_state). New tools are listed.') })
     } catch (err) {
       reply(id, { error: { code: 'unavailable', message: `No update: ${err.message}. The add-ons in place keep serving.` } }, true)
     }
@@ -1290,7 +1338,7 @@ function startHandedOver({ stdin, stdout, state = {} }) {
   log(`took over from the launcher in this process (add-ons ${state.version || '?'})`)
   return main()
 }
-module.exports = { startHandedOver, resolveChannel, checkSources, CHANNELS, companions, bundledManifest, windowHeld }
+module.exports = { startHandedOver, resolveChannel, checkSources, CHANNELS, companions, bundledManifest, windowHeld, extensionRecord, extensionReport }
 
 /** No FreeCAD: still a server, so Claude shows why instead of a dead entry. */
 function serveError(message) {

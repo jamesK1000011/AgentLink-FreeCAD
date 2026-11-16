@@ -97,9 +97,14 @@ def load():
         ext._paths()
     except Exception as e:  # noqa: BLE001
         sys.stderr.write(f"Agent Link: extension folders not put on the path — {e}\n")
+    from .. import extstate
+
     out = []
     del EXTENSIONS[:]
     del SKIPPED[:]
+    # Which add-ons load and which are left out, with why: read by
+    # session_state, tool_groups and the update (agentlink/extstate.py).
+    extstate.reset()
     for n in NAMES:
         try:
             out.append(importlib.import_module(f"{__name__}.{n}"))
@@ -118,6 +123,7 @@ def load():
             fams = list(getattr(mod, "FAMILIES", []))
         except Exception as e:
             sys.stderr.write(f"Agent Link: extension {n} left out — {type(e).__name__}: {e}\n")
+            extstate.left_out(n, e, "import")
             continue
         from .. import hooks
 
@@ -125,11 +131,14 @@ def load():
         if not hooks.api_ok(need):
             sys.stderr.write(f"Agent Link: extension {n} left out — it needs Agent Link API {need}, this is API {hooks.API}; update one or the other\n")
             SKIPPED.append({"module": n, "needs": need, "api": hooks.API})
+            extstate.left_out(n, f"it needs Agent Link API {need}, this is API {hooks.API}: update one or the other", "api")
             continue
         _register_guides(mod)
         credit, lic = getattr(mod, "CREDIT", None), getattr(mod, "LICENSE", None)
+        extstate.loaded(n)
         for f in fams:
             f.EXTERNAL = True
+            f.EXTENSION = n
             f.CREDIT = credit
             f.LICENSE = lic
         if fams:
@@ -160,8 +169,9 @@ def declared(fams):
     HEAVY (queued, timed, given a deadline), WRITERS (their path is written,
     not read), GEOMETRIC (their path is a curve, not a file), NOT_IN_MACROS
     (changing calls a saved macro does not replay), PINNED_FREE (answered
-    after the window's pinned document was closed), and for the live echo
-    in the window SHOWN, AREAS, WORKBENCHES, COMMANDS and PAGES
+    after the window's pinned document was closed), NEXT (rules for the
+    "next" hint, agentlink/nexthint.py), and for the live echo in the
+    window SHOWN, AREAS, WORKBENCHES, COMMANDS and PAGES
     (agentlink/echo.py declare())."""
     from .. import echo, keep, paths
 
@@ -177,3 +187,12 @@ def declared(fams):
         paths.GEOMETRIC.update(getattr(f, "GEOMETRIC", ()) or ())
         PINNED_FREE.update(x for x in (getattr(f, "PINNED_FREE", ()) or ()) if isinstance(x, str) and x)
         echo.declare(f)
+        # NEXT: an add-on's own rules for the "next" hint ({ id: entry },
+        # the shape of data/nexthint.json's entries): its tools named as the
+        # likely next step in the states it says.
+        nxt = getattr(f, "NEXT", None)
+        if nxt:
+            from .. import nexthint
+
+            for words in nexthint.declare(nxt, str(getattr(f, "GROUP", None) or "an add-on")):
+                sys.stderr.write(f"Agent Link: {words} — left out\n")

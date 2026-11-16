@@ -28,6 +28,8 @@ agentlink/data/activity.json
 agentlink/data/activity.schema.json
 agentlink/data/filaments.json
 agentlink/data/filaments.schema.json
+agentlink/data/nexthint.json
+agentlink/data/nexthint.schema.json
 agentlink/data/stock.json
 agentlink/data/stock.schema.json
 agentlink/data/tool_index.json
@@ -41,6 +43,7 @@ agentlink/echo.py
 agentlink/emptywhy.py
 agentlink/exprs.py
 agentlink/ext.py
+agentlink/extstate.py
 agentlink/facepick.py
 agentlink/families/__init__.py
 agentlink/families/app.py
@@ -189,6 +192,7 @@ docs/hardening/coredoc-findings.md
 docs/hardening/diff-findings.md
 docs/hardening/draftmesh-findings.md
 docs/hardening/freecad-1.1.0-commands.txt
+docs/hardening/hubfix-findings.md
 docs/hardening/hubrest-findings.md
 docs/hardening/inventory.json
 docs/hardening/map-findings.md
@@ -264,10 +268,12 @@ tests/test_draft.py
 tests/test_echo_declare.py
 tests/test_echo_later.py
 tests/test_echo_map.py
+tests/test_echo_pace.py
 tests/test_echo_reads.py
 tests/test_exploded_view.py
 tests/test_ext.py
 tests/test_ext_root_addon.py
+tests/test_extstate.py
 tests/test_facepick.py
 tests/test_failure_trace.py
 tests/test_feature.py
@@ -293,6 +299,7 @@ tests/test_hidden_parts.py
 tests/test_history_diff_fc.py
 tests/test_hold.py
 tests/test_hooks.py
+tests/test_hubfix_small.py
 tests/test_hull3d.py
 tests/test_inspection.py
 tests/test_installed_names.py
@@ -317,6 +324,7 @@ tests/test_millsim.py
 tests/test_model.py
 tests/test_model_more.py
 tests/test_more_families.py
+tests/test_nexthint.py
 tests/test_no_addon_names.py
 tests/test_note_faces.py
 tests/test_notice.py

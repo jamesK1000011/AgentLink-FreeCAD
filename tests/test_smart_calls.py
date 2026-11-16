@@ -170,26 +170,36 @@ def test_the_hint_puts_the_pressing_first_and_stays_short():
     assert line.startswith("a dialog is in front: Unsaved document [Save, Discard, Cancel]")
     assert "sketch Outline is open in edit, 2 DoF left; a task panel is open [Close]; workbench SketcherWorkbench" in line
     assert len(line) <= nexthint.MAX
-    short = nexthint.compose({"window": True, "workbench": "PartDesignWorkbench"}, ["pd_pad", "pd_pocket", "a", "b", "c", "d"])
-    assert short == "workbench PartDesignWorkbench; active now: pd_pad, pd_pocket, a, b, c"
+    # The likely next tools come before the workbench and the status bar,
+    # at most three, each with its reason; plain names are taken too.
+    short = nexthint.compose({"window": True, "workbench": "PartDesignWorkbench"},
+                             [{"tool": "pd_pad", "why": "a closed sketch no feature uses yet"}, {"tool": "pd_pocket", "why": "cut it out of the body"}, "a", "b"])
+    assert short == "likely next: pd_pad (a closed sketch no feature uses yet), pd_pocket (cut it out of the body), a; workbench PartDesignWorkbench"
+    # With a dialog in front no tool is named: answering it is the next step.
+    assert "likely next" not in line
 
 
-def test_only_the_active_workbenchs_tools_with_an_active_command_are_named():
+def test_a_tool_whose_shown_command_is_inactive_is_passed_over():
     index = {"pd_pad": {"workbench": "PartDesignWorkbench", "commands": ["PartDesign_Pad"], "words": []},
              "pd_pocket": {"workbench": "PartDesignWorkbench", "commands": ["PartDesign_Pocket"], "words": []},
              "td_view": {"workbench": "TechDrawWorkbench", "commands": ["TechDraw_View"], "words": []},
              "pd_note": {"workbench": "PartDesignWorkbench", "commands": [], "words": []}}
-    rows = nexthint.candidates(list(index), "PartDesignWorkbench", entry=lambda n: index[n])
-    assert [n for n, _e in rows] == ["pd_pad", "pd_pocket"]
+    picks = [{"tool": n, "why": "w"} for n in ("pd_pocket", "pd_pad", "td_view", "pd_note", "gone")]
     state = {"window": True, "workbench": "PartDesignWorkbench", "active": {"PartDesign_Pad": True, "PartDesign_Pocket": False}}
-    assert nexthint.active_tools(rows, state) == ["pd_pad"]
-    assert nexthint.candidates(list(index), None, entry=lambda n: index[n]) == []
+    # pd_pocket: FreeCAD says its command cannot run now. td_view and
+    # pd_note: nothing was asked (another bench's toolbar, no command), so
+    # they stay. gone: not installed here.
+    got = nexthint.available(picks, state, exists=lambda n: n in index, entry=lambda n: index[n])
+    assert [p["tool"] for p in got] == ["pd_pad", "td_view", "pd_note"]
+    assert nexthint.commands_of(picks[:3], entry=lambda n: index[n]) == ["PartDesign_Pocket", "PartDesign_Pad", "TechDraw_View"]
 
 
 def test_the_hints_key_ignores_the_status_bar():
     a = {"window": True, "workbench": "W", "status": "one"}
     assert nexthint.key(a) == nexthint.key({**a, "status": "two"})
     assert nexthint.key(a) != nexthint.key({**a, "sketch": {"name": "S", "dof": 1}})
+    # The rules that fit are news too: a body that got its first sketch.
+    assert nexthint.key(a) != nexthint.key({**a, "rules": ["body-sketch-closed-first"]})
 
 
 # ---- the stale tool list -----------------------------------------------------------------
