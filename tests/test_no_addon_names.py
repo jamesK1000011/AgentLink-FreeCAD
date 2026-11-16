@@ -39,6 +39,8 @@ TOOLS = (
     "thickness_settings", "wear_diff", "wear_prewarp", "wear_rebuild", "wear_setup",
     # Texturizer
     "texture_check", "texture_prepare",
+    # Tutor
+    "tutor_point", "tutor_watch",
     # Workshop
     "gen_make", "gen_part",
     # Workshop Documents
@@ -57,7 +59,7 @@ TOOLS = (
 # alone is the upstream app Agent Link credits, not an add-on). AddonKit is
 # retired: its old module names stay only in provenance lines of the copies
 # that came from it.
-MODULES = ("scanrulerfc", "safetynet", "texturizer", "workshop", r"workshop_[a-z]+", "home_code", "orcalink", "collab", r"agentlink_collab")
+MODULES = ("scanrulerfc", "safetynet", "texturizer", "workshop", r"workshop_[a-z]+", "home_code", "orcalink", "collab", r"agentlink_collab", "tutor", r"agentlink_tutor")
 
 TOOL_RE = re.compile(r"\b(" + "|".join(re.escape(n) for n in sorted(TOOLS, key=len, reverse=True)) + r")\b")
 MODULE_RE = re.compile(r"(?i)\b(" + "|".join(MODULES) + r")\b")

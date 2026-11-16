@@ -64,6 +64,13 @@ def add(Gui=None):
         hooks.provide("panel_caller", CallerService())
     except Exception:  # noqa: BLE001 — no Qt (FreeCADCmd)
         pass
+    # Pointing at the window's controls and lighting the model's faces, for
+    # the echo and any add-on: the overlay painter and the 3D annotation
+    # layer (docs/hooks.md).
+    from . import annotate, overlay
+
+    hooks.provide("overlay", overlay.service())
+    hooks.provide("annotations", annotate.service())
     try:
         from PySide import QtCore
 

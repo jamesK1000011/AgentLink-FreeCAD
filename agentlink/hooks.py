@@ -18,7 +18,16 @@ Families (the tools)          FAMILIES = [module, ...] in agentlink_families;
                               names: queued heavy jobs; a path written, not
                               read; a path that is a curve, not a file).
 Readers                       register_reader(kind, fn); readers(kind)
-Services                      provide(name, obj); service(name)
+Services                      provide(name, obj); service(name); core's own
+                              for add-ons: "overlay" (agentlink/overlay.py:
+                              rings, badges, a callout over the window),
+                              "annotations" (agentlink/annotate.py: faces,
+                              edges, vertices lit in the 3D view),
+                              "panel_layout", "panel_caller"
+Finding controls              agentlink.targets: command_for, actions,
+                              buttons, menus_of, menu_path, native_menubar
+Echo                          a family's NO_ECHO (names or prefixes): its
+                              tools are never shown as they run
 Events                        on(event, fn); emit(event, *args)
 Tool extensions               extend_tool(name, properties, before, after, describe)
 Panel                         register_tab(title, factory, order, workbench)

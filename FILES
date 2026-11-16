@@ -16,6 +16,7 @@ Studio Light/Studio Light.cfg
 Studio Light/parameters/Studio Light.yaml
 agentlink/__init__.py
 agentlink/activity.py
+agentlink/annotate.py
 agentlink/ccx_io.py
 agentlink/cells.py
 agentlink/charts.py
@@ -123,6 +124,7 @@ agentlink/meshdist.py
 agentlink/meshformats.py
 agentlink/millsim.py
 agentlink/outputs.py
+agentlink/overlay.py
 agentlink/panel.py
 agentlink/panel_tabs.py
 agentlink/paths.py
@@ -140,6 +142,7 @@ agentlink/shots.py
 agentlink/smoke.py
 agentlink/store.py
 agentlink/supervise.py
+agentlink/targets.py
 agentlink/td_wait.py
 agentlink/testrun.py
 agentlink/theme.py
@@ -240,6 +243,7 @@ tests/test_no_addon_names.py
 tests/test_note_faces.py
 tests/test_notice.py
 tests/test_outputs.py
+tests/test_overlay.py
 tests/test_owner_services.py
 tests/test_panel_tabs.py
 tests/test_param.py
