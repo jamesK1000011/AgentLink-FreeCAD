@@ -86,6 +86,8 @@ def tools(session):
                 raise bad("major ≥ minor > 0 (full sizes, mm).")
             o.Placement = frame(a)
         elif kind == "polygon":
+            if a.get("points") is not None and a.get("radius") is None:
+                raise bad("polygon is a regular polygon (sides, radius to corners). For a shape through your points: part_wire { kind: \"polyline\", points, closed: true }, or part_extrude { profile: { points } } for a solid at once.")
             n = int(a.get("sides", 6))
             if n < 3:
                 raise bad("sides: 3 or more.")
@@ -113,6 +115,18 @@ def tools(session):
             o = new_obj("Part::Plane", name)
             o.Length, o.Width = picks.num(a.get("length"), "length"), picks.num(a.get("width"), "width")
             o.Placement = frame(a)
+        elif kind == "polyline":
+            pts = [picks.vec3(p, "points") for p in (a.get("points") or [])]
+            closed = bool(a.get("closed"))
+            if len(pts) > 2 and (pts[0] - pts[-1]).Length < 1e-9:
+                pts, closed = pts[:-1], True  # given closed: the last point repeats the first
+            if len(pts) < (3 if closed else 2):
+                raise bad("points: two or more [x, y, z] corners (three or more when closed).")
+            if any((pts[i] - pts[i + 1]).Length < 1e-9 for i in range(len(pts) - 1)):
+                raise bad("points: two corners in a row are the same point.")
+            o = new_obj("Part::Polygon", name)
+            o.Nodes = pts
+            o.Close = closed
         elif kind == "bspline":
             pts = [picks.vec3(p, "points") for p in (a.get("points") or [])]
             if len(pts) < 2:
@@ -122,7 +136,7 @@ def tools(session):
             o = new_obj("Part::Feature", name)
             o.Shape = c.toShape()
         else:
-            raise bad("kind: line, circle, arc, ellipse, polygon, helix, spiral, plane or bspline.")
+            raise bad("kind: line, circle, arc, ellipse, polygon, polyline, helix, spiral, plane or bspline.")
         return added(o, "part_wire", {"use": "A profile or path for part_extrude, part_revolve, part_loft, part_sweep (a helix as a path: a spring or thread), part_ruled."})
 
     # ---- split, compounds ----
@@ -378,7 +392,7 @@ def tools(session):
 
     at_n = {"at": {"type": "array", "items": {}}, "normal": {"type": "array", "items": {}}}
     return [
-        Tool("part_wire", "A wire, curve or flat face as FreeCAD's own parametric object: kind line (from, to) | circle (radius) | arc (radius, start, end degrees) | ellipse (major, minor) | polygon (sides, radius to corners) | helix (pitch, height, radius, taper, leftHanded) | spiral (growth per turn, turns, radius) | plane (length, width) | bspline (points it passes through, closed); at and normal place it. Profiles and paths for extrude, sweep, loft.",
+        Tool("part_wire", "A wire, curve or flat face as FreeCAD's own parametric object: kind line (from, to) | circle (radius) | arc (radius, start, end degrees) | ellipse (major, minor) | polygon (regular: sides, radius to corners) | polyline (points, the corners in place, closed) | helix (pitch, height, radius, taper, leftHanded) | spiral (growth per turn, turns, radius) | plane (length, width) | bspline (points it passes through, closed); at and normal place it. Profiles and paths for extrude, sweep, loft.",
              obj({"kind": {"type": "string"}, "from": {"type": "array", "items": {}}, "to": {"type": "array", "items": {}}, "radius": {"type": "number"}, "start": {"type": "number"}, "end": {"type": "number"}, "major": {"type": "number"}, "minor": {"type": "number"},
                   "sides": {"type": "integer"}, "pitch": {"type": "number"}, "height": {"type": "number"}, "taper": {"type": "number"}, "leftHanded": {"type": "boolean"}, "growth": {"type": "number"}, "turns": {"type": "number"},
                   "length": {"type": "number"}, "width": {"type": "number"}, "points": {"type": "array", "items": {}}, "closed": {"type": "boolean"}, "name": {"type": "string"}, **at_n}, ["kind"]), part_wire, changes=True),

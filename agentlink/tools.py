@@ -56,6 +56,9 @@ def _launcher():
 
 from .store import undo_on  # noqa: E402
 
+# What export_file writes a mesh (Mesh::Feature) as, by format or extension.
+MESH_OUT = ("stl", "obj", "ply", "off", "3mf", "amf")
+
 
 class Session:
     def __init__(self, doc=None, out_dir=None):
@@ -166,6 +169,7 @@ class Session:
         self.meta = {}
         self.tx = 0
         self.calls = []
+        self.__dict__.pop("_stats_cache", None)
 
     def body(self, ref):
         # Named, any solid object answers (a hidden one, a feature); left
@@ -184,7 +188,9 @@ class Session:
         for o in bs:
             if o.Label == ref or o.Name == ref or o.Label.lower() == str(ref).lower():
                 return o
-        raise ToolError("not_found", f"body {ref!r}: not here — the bodies: {', '.join(o.Label for o in bs)}.")
+        ms = [o.Label for o in self.doc.Objects if hasattr(o, "Mesh") and getattr(o, "Shape", None) is None]
+        meshes = f" Meshes (meshobj_* tools, export writes them): {', '.join(ms[:20])}." if ms else ""
+        raise ToolError("not_found", f"body {ref!r}: not here — the bodies: {', '.join(o.Label for o in bs)}.{meshes}")
 
     def unique(self, label, own=None):
         """label, or "label 2" … when another object has it (own: the object being named, which does not count)."""
@@ -197,7 +203,29 @@ class Session:
         return f"{label} {n}"
 
     def snapshot(self, tool):
-        self.steps.append({"step": len(self.steps) + 1, "tool": tool, "bodies": {o.Label: geo.stats(o.Shape) for o in self.bodies()}})
+        self.steps.append({"step": len(self.steps) + 1, "tool": tool, "bodies": {o.Label: self.stats_of(o) for o in self.bodies()}})
+
+    def stats_of(self, o):
+        """geo.stats of an object's shape, kept per object while its shape is
+        the same one (its hash: the same OCC shape and placement). A step's
+        snapshot after every call then costs nothing for the bodies the call
+        did not touch, however heavy they are (a body of 140k triangles took
+        seconds a call: its volume, area and face list each time)."""
+        sh = o.Shape
+        try:
+            key = (sh.hashCode(), sh.ShapeType)
+        except Exception:
+            return geo.stats(sh)
+        cache = self.__dict__.setdefault("_stats_cache", {})
+        hit = cache.get(o.Name)
+        if hit is not None and hit[0] == key:
+            return dict(hit[1])
+        st = geo.stats(sh)
+        cache[o.Name] = (key, st)
+        if len(cache) > 500:  # objects come and go: drop the oldest
+            for k in list(cache)[:100]:
+                cache.pop(k, None)
+        return dict(st)
 
     # ---- the tools ----
 
@@ -258,7 +286,19 @@ class Session:
                 s["ok"] = False
         return {"body": o.Label, **s, **geo.stats(o.Shape)}
 
+    def _mesh_named(self, ref):
+        """A mesh object (Mesh::Feature) by name or label, or None."""
+        if not isinstance(ref, str) or not ref:
+            return None
+        for o in self.doc.Objects:
+            if hasattr(o, "Mesh") and getattr(o, "Shape", None) is None and (o.Name == ref or o.Label == ref or o.Label.lower() == ref.lower()):
+                return o
+        return None
+
     def export_file(self, a):
+        mesh = self._mesh_named(a.get("body"))
+        if mesh is not None:
+            return self._export_mesh(mesh, a)
         o = self.body(a.get("body"))
         ext = os.path.splitext(a.get("path") or "")[1].lower().lstrip(".")
         by_ext = {"stp": "step", "step": "step", "stl": "stl"}
@@ -294,6 +334,39 @@ class Session:
             back = Mesh.Mesh(path)
             verify = {"triangles": back.CountFacets, "volume": round(back.Volume, 1), "closed": back.isSolid()}
         return {"body": o.Label, "format": fmt, "path": path, "bytes": os.path.getsize(path), "verify": verify}
+
+    def _export_mesh(self, o, a):
+        # A mesh is written as it is (STL by default, or OBJ, PLY, OFF, 3MF,
+        # AMF by the path's extension); STEP needs a body of it first.
+        ext = os.path.splitext(a.get("path") or "")[1].lower().lstrip(".")
+        fmt = (a.get("format") or ext or "stl").lower()
+        if fmt in ("step", "stp"):
+            raise ToolError("invalid_input", f"{o.Label} is a mesh: STEP needs a body — import_file it with solid: true first, or write the mesh as STL, OBJ, PLY or 3MF.")
+        if fmt not in MESH_OUT:
+            raise ToolError("invalid_input", f"{o.Label} is a mesh: format stl, obj, ply, off, 3mf or amf.")
+        path = os.path.expanduser(a.get("path") or os.path.join(self.out_dir, f"{o.Label}.{fmt}"))
+        if not os.path.isabs(path):
+            path = os.path.join(self.out_dir, path)
+        if not ext:
+            path += "." + fmt
+        from . import paths
+
+        paths.made(self, path, "export")
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        import Mesh
+
+        pl = getattr(o, "Placement", None)
+        m = o.Mesh.copy() if pl is None or pl.isIdentity() else Mesh.Mesh(o.Mesh.Topology)
+        m.write(path)
+        verify = {"triangles": m.CountFacets}
+        try:
+            back = Mesh.Mesh(path)
+            verify = {"triangles": back.CountFacets, "closed": back.isSolid()}
+            if back.isSolid():
+                verify["volume"] = round(back.Volume, 1)
+        except Exception:
+            pass
+        return {"body": o.Label, "mesh": True, "format": fmt, "path": path, "bytes": os.path.getsize(path), "verify": verify}
 
     def _bodies_in_file(self, path):
         """Each body's stats in a saved copy, opened hidden and closed."""
@@ -430,7 +503,7 @@ def make_tools(session):
         Tool("body_check", "Whether a body is sound: FreeCAD's own Check Geometry, and on top of it closed, one solid, no sliver faces (under 0.01 mm wide) or very short edges, with where each problem is.", obj({"body": body}), s.body_check),
         Tool(
             "export_file",
-            "Write a body as STEP or STL (tolerance: the chord error, mm, 0.01 by default) and read it back: verify gives the volume read and, for STEP, how far it is from the body's.",
+            "Write a body as STEP or STL (tolerance: the chord error, mm, 0.01 by default) and read it back: verify gives the volume read and, for STEP, how far it is from the body's. A mesh (Mesh::Feature) is written as it is: STL, or OBJ, PLY, OFF, 3MF, AMF by the path's extension.",
             obj({"body": body, "format": {"type": "string", "enum": ["step", "stl"]}, "path": {"type": "string"}, "tolerance": {"type": "number"}}),
             s.export_file,
             changes=True,
@@ -644,18 +717,10 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 added = sorted(t.name for t in server.tools.values() if t.group in on - was)
                 return {"on": sorted(on), "added": added, "removed": sorted(was - on), "listed": sum(1 for t in server.tools.values() if t.group in on),
                         "note": "tool_groups with no arguments shows every group and what it holds."}
-        # Names of every tool on every call cost ~6k tokens: a group's tools
-        # only when asked (group, or detail: true for all); the client lists
-        # what an enable added on its own.
-        shown = set()
-        if a.get("group"):
-            shown.add(a["group"])
-        if a.get("detail"):
-            shown = set(groups)
-        # The overview was ~3,500 tokens: every group's full "about" on
-        # every call. A listed group's tools are already in front of the
-        # agent, so it gets its count; one not listed gets a short about
-        # (what it is for), and the whole text with group: g.
+        # The whole catalogue (every group, every tool) is 6-9k tokens: a
+        # filter answers with what it asks for and nothing else.
+        # group: g -> only g (its whole about and its tools); detail: true
+        # alone -> every group with its whole about (no tool names).
         def short(t, n=110):
             t = t or ""
             if len(t) <= n:
@@ -663,17 +728,30 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             cut = t[:n].rsplit(" ", 1)[0].rstrip(",;:(")
             return cut + " …"
 
+        def tools_of(g):
+            return sorted(t.name for t in server.tools.values() if t.group == g and not getattr(t, "alias_of", None))
+
+        want = a.get("group")
+        if want:
+            if not isinstance(want, str) or want not in groups:
+                import difflib
+
+                near = difflib.get_close_matches(str(want), groups, 3)
+                raise ToolError("not_found", f"group {want!r}: not here{' — did you mean ' + ', '.join(near) if near else ''}. The groups: {', '.join(groups)}.")
+            ts = tools_of(want)
+            return {"group": want, "on": want in on, "count": len(ts), "about": info.get(want, ""), "tools": ts,
+                    **({"note": f"Not listed: tool_groups {{ enable: [\"{want}\"] }} lists it; each tool is callable by name either way."} if want not in on else {})}
         rows = []
         for g in groups:
-            ts = sorted(t.name for t in server.tools.values() if t.group == g)
-            if g in shown:
-                rows.append({"group": g, "on": g in on, "count": len(ts), "about": info.get(g, ""), "tools": ts})
+            n = len(tools_of(g))
+            if a.get("detail"):
+                rows.append({"group": g, "on": g in on, "count": n, "about": info.get(g, "")})
             elif g in on:
-                rows.append({"group": g, "on": True, "count": len(ts)})
+                rows.append({"group": g, "on": True, "count": n})
             else:
-                rows.append({"group": g, "on": False, "count": len(ts), "about": short(info.get(g, ""))})
+                rows.append({"group": g, "on": False, "count": n, "about": short(info.get(g, ""))})
         return {"groups": rows, "listed": sum(1 for t in server.tools.values() if server.groups is None or t.group in server.groups),
-                "note": "Every tool is callable by name, listed or not. group: g (or detail: true) gives a group's whole about and its tools."}
+                "note": "Every tool is callable by name, listed or not. group: g gives one group's whole about and its tools; detail: true every group's whole about."}
 
     def outputs_clean(a):
         kinds = a.get("kinds")
@@ -860,7 +938,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
     core = [
         Tool("usage_report", "What working through Agent Link has cost the agent, estimated on this side: calls, tokens (text at ~3.5 characters a token, pictures by size) and the tool list each session loads up front — per day over days (7), per session, the costliest tools, and tips to cut it. session: true gives this session alone. Not Claude's own count: the plan's usage page has that. Changes nothing.",
              obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}}), usage_report),
-        Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g, or detail: true, names their tools. Every tool is callable by name either way.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}}), tool_groups),
+        Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools); detail: true gives every group's whole about. Every tool is callable by name either way.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}}), tool_groups),
         Tool("guide_read", "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry. No topic: the index. topic: a guide whole; section: one of its ## sections.", obj({"topic": {"type": "string"}, "section": {"type": "string"}}), guide_read),
         Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }]. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it, so it stands or falls whole.", obj({"calls": {"type": "array", "items": {"type": "object"}}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}}, ["calls"]), batch),
         Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded making): shots past the last 50 and 3 days, solver and job runs past 14 days, FreeCAD backups past 7; exports only listed. To the Trash. Dry run unless dry_run: false; kinds, older_than_days narrow it. Runs on its own daily.",

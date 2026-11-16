@@ -18,6 +18,7 @@ Look at the part after every change that matters, as a person would.
 
 ## The window
 - `view_snapshot` saves the FreeCAD window's own view, as the person left it (or turned to `view`). Headless it is refused.
+- `view_snapshot { views: ["top", "front", "right", "iso"] }` (up to 6, or `"all"`) gives one grid picture, and each view's file in `paths`. It puts the person's view back after.
 
 ## traps
 - Grey on a map is unread: an open mesh, a scan past the max distance.

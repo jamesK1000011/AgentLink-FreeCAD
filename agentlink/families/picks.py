@@ -120,6 +120,29 @@ def _invalid(o):
     return hasattr(o, "isValid") and not o.isValid()
 
 
+def recompute_scoped(doc, objs):
+    """Recompute objs and what is built from them (FreeCAD adds what they are
+    built from, when that needs it) — not the rest of the document. A whole
+    recompute after a call also re-ran objects the call never touched (one
+    left touched, a heavy mesh), so a small change took as long as they did.
+    The count recomputed; the whole document when objs is empty or this
+    FreeCAD takes no list."""
+    todo = {}
+    for o in objs or ():
+        try:
+            todo.setdefault(o.Name, o)
+            for p in o.InListRecursive:
+                todo.setdefault(p.Name, p)
+        except Exception:
+            continue
+    if not todo:
+        return doc.recompute()
+    try:
+        return doc.recompute(list(todo.values()))
+    except TypeError:
+        return doc.recompute()
+
+
 def finish(session, tool, read=None, *, objs=(), refuse=None, broken=_invalid, check=None, doc=None, recompute=True, extra=None, step=True):
     """The tail every changing tool shares. Recompute (doc, the session's by
     default), refuse a broken result with nothing kept, one snapshot, then

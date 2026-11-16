@@ -5,6 +5,7 @@
 # the FreeCAD window.
 
 import difflib
+import math
 import os
 
 import FreeCAD
@@ -30,6 +31,11 @@ MORE_MESH = ("gltf", "dae", "wrl", "3ds")
 # them where those are not here, and when units or up are given.
 CORE_READERS = {"gltf": ("Import", "FreeCAD's glTF reader (Import)"), "dae": ("importDAE", "FreeCAD's Collada importer (importDAE)"),
                 "3ds": ("import3DS", "FreeCAD's 3DS importer (import3DS)")}
+
+
+def is_mesh(o):
+    """A mesh object (Mesh::Feature and kin): a Mesh, no Shape."""
+    return hasattr(o, "Mesh") and getattr(o, "Shape", None) is None
 
 
 def core_scene(d, p, fmt, before):
@@ -238,6 +244,53 @@ def errors(doc):
     return out
 
 
+# A placement's keys, in Agent Link's spelling and FreeCAD's own (Base,
+# Rotation), any case.
+PLACEMENT_KEYS = {"at": "at", "base": "at", "position": "at", "axis": "axis", "angle": "angle", "rotation": "rotation"}
+PLACEMENT_HELP = "{ at | Base: [x,y,z], axis | Axis: [x,y,z], angle | Angle: degrees } or Rotation: { axis, angle } | [x,y,z,w] (a quaternion)"
+
+
+def to_placement(cur, v, p="Placement"):
+    """A JSON placement over the current one: what is left out stays as it
+    was (a move keeps the turn). Unknown keys are refused, with the keys
+    there are."""
+    if not isinstance(v, dict):
+        raise ValueError(PLACEMENT_HELP)
+    keys = {}
+    for k, x in v.items():
+        kk = PLACEMENT_KEYS.get(str(k).lower())
+        if kk is None:
+            raise ToolError("invalid_input", f"values.{p}.{k}: not a placement key — it takes {PLACEMENT_HELP}.")
+        if kk in keys:
+            raise ToolError("invalid_input", f"values.{p}: {k} given twice (at and Base are one key, as are the others).")
+        keys[kk] = x
+    if "rotation" in keys and ("axis" in keys or "angle" in keys):
+        raise ToolError("invalid_input", f"values.{p}: Rotation, or axis and angle — not both.")
+    cur = cur if isinstance(cur, FreeCAD.Placement) else FreeCAD.Placement()
+    base = picks.vec3(keys["at"], f"{p}.at") if "at" in keys else FreeCAD.Vector(cur.Base)
+    rot = FreeCAD.Rotation(cur.Rotation)
+    if "rotation" in keys:
+        r = keys["rotation"]
+        if isinstance(r, dict):
+            rk = {str(k).lower(): x for k, x in r.items()}
+            bad = [k for k in r if str(k).lower() not in ("axis", "angle")]
+            if bad:
+                raise ToolError("invalid_input", f"values.{p}.Rotation.{bad[0]}: a rotation takes axis and angle (degrees), or [x,y,z,w].")
+            rot = FreeCAD.Rotation(picks.direction(rk.get("axis"), f"{p}.Rotation.axis", (0, 0, 1)), picks.num(rk.get("angle", 0), f"{p}.Rotation.angle"))
+        elif isinstance(r, (list, tuple)) and len(r) == 4:
+            q = [picks.num(x, f"{p}.Rotation") for x in r]
+            if sum(x * x for x in q) < 1e-12:
+                raise ToolError("invalid_input", f"values.{p}.Rotation: [0,0,0,0] is no rotation.")
+            rot = FreeCAD.Rotation(*q)
+        else:
+            raise ToolError("invalid_input", f"values.{p}.Rotation: {{ axis, angle }} or a quaternion [x,y,z,w].")
+    elif "axis" in keys or "angle" in keys:
+        axis = picks.direction(keys["axis"], f"{p}.axis") if "axis" in keys else FreeCAD.Vector(rot.Axis)
+        angle = picks.num(keys["angle"], f"{p}.angle") if "angle" in keys else math.degrees(rot.Angle)
+        rot = FreeCAD.Rotation(axis, angle)
+    return FreeCAD.Placement(base, rot)
+
+
 def to_value(o, p, v):
     """A JSON value into what the property takes, by its type."""
     t = o.getTypeIdOfProperty(p)
@@ -266,9 +319,7 @@ def to_value(o, p, v):
         if t in ("App::PropertyVector", "App::PropertyVectorDistance", "App::PropertyPosition", "App::PropertyDirection"):
             return picks.vec3(v, p)
         if t == "App::PropertyPlacement":
-            if not isinstance(v, dict):
-                raise ValueError("{ at: [x,y,z], axis: [x,y,z], angle: degrees }")
-            return FreeCAD.Placement(picks.vec3(v.get("at"), f"{p}.at", (0, 0, 0)), FreeCAD.Rotation(picks.direction(v.get("axis"), f"{p}.axis", (0, 0, 1)), picks.num(v.get("angle", 0), f"{p}.angle")))
+            return to_placement(getattr(o, p), v, p)
         if t in ("App::PropertyLink", "App::PropertyLinkGlobal", "App::PropertyLinkChild"):
             return None if v is None else picks.find(o.Document, v)
         if t in ("App::PropertyLinkList", "App::PropertyLinkListGlobal", "App::PropertyLinkListChild"):
@@ -526,7 +577,9 @@ def tools(session):
                 raise
             except Exception as e:
                 raise ToolError("invalid_input", f"values.{p}: FreeCAD refused {v!r} — {e}")
-        s.doc.recompute()
+        # Only this object and what is built from it: an unrelated object
+        # (a heavy mesh left touched) is not re-run by this call.
+        picks.recompute_scoped(s.doc, [o])
         errs = errors(s.doc)
         try:
             mine = {o.Label} | {x.Label for x in o.InListRecursive}
@@ -536,7 +589,18 @@ def tools(session):
         if own:
             raise ToolError("failed", f"The recompute failed after setting it: {own[0]['object']}: {own[0]['error']} — nothing was kept.")
         s.snapshot("object_set")
-        out = {"object": o.Label, "set": {p: {"from": before[p], "to": picks.json_safe(getattr(o, p))} for p in vals}, "step": len(s.steps)}
+        sets = {}
+        same = []
+        for p in vals:
+            after = picks.json_safe(getattr(o, p))
+            sets[p] = {"from": before[p], "to": after}
+            if after == before[p]:
+                sets[p]["unchanged"] = True
+                same.append(p)
+        out = {"object": o.Label, "set": sets, "step": len(s.steps)}
+        if same:
+            out["unchanged"] = same
+            out["warning"] = f"{', '.join(same)}: unchanged — the value is what it was (the same value given, or FreeCAD kept its own)."
         if errs:
             out["note"] = "Set. Other objects failed in the same recompute, not from this change: " + "; ".join(f"{e['object']}: {e['error']}" for e in errs[:4])
         return out
@@ -692,7 +756,12 @@ def tools(session):
                 raise ToolError("failed", f"{os.path.basename(p)} could not be read as a mesh: {e}")
             if m.CountFacets == 0:
                 raise ToolError("failed", f"{os.path.basename(p)}: no triangles read.")
-            want_solid = a.get("solid", m.CountFacets <= 20000)
+            # Predictable: a mesh file comes in as a mesh (Mesh::Feature)
+            # whatever its size; a body made of its triangles only when the
+            # caller asks (solid: true). It used to turn closed meshes of up
+            # to 20000 triangles into bodies on its own, so the same kind of
+            # file came in as one type or the other by its triangle count.
+            want_solid = a.get("solid") is True
             if want_solid:
                 if m.CountFacets > 200000:
                     raise ToolError("invalid_input", f"solid: {m.CountFacets} triangles is too many to turn into a solid here — import it as a mesh (solid: false), or decimate it first.")
@@ -748,7 +817,7 @@ def tools(session):
             raise ToolError("unavailable", f"{fmt.upper()} comes in through the FreeCAD window's importers (Draft, BIM, image planes), not headless here: open it there.")
         else:
             raise ToolError("invalid_input", f"{fmt or 'no extension'}: import_file reads STEP, IGES, BREP, STL, OBJ, 3MF, PLY, OFF, AMF, glTF/GLB, Collada, VRML, 3DS, DXF, SVG and PNG/JPG/BMP pictures; FBX: export it as glTF from the program that made it.")
-        d.recompute()
+        picks.recompute_scoped(d, made)
         s.snapshot("import_file")
         out = []
         for o in made:
@@ -761,20 +830,33 @@ def tools(session):
                     e["note"] = "Made of the mesh's triangles: measure and boolean work; fillets and face queries do not see round faces."
             elif hasattr(o, "Mesh"):
                 e["mesh"] = {"triangles": o.Mesh.CountFacets, "closed": o.Mesh.isSolid()}
-                e["note"] = "A mesh, not a body: import_file { solid: true } makes a body of it."
+                e["note"] = "A mesh (Mesh::Feature), not a body: mesh files come in as meshes unless solid: true is asked. import_file { solid: true } makes a body of it (up to 200000 triangles); meshobj_* tools work on it as it is."
             out.append(e)
         return {"path": p, "format": fmt, **({"read": took} if took else {}), "objects": out, "count": len(out), "step": len(s.steps)}
+
+    def export_pick(ref):
+        # A mesh (Mesh::Feature) is exported as it is, never refused for
+        # having no shape.
+        o = picks.find(s.doc, ref, "object")
+        if is_mesh(o):
+            return o
+        return picks.shaped(s.doc, ref)
 
     def export(a):
         names = a.get("objects")
         names = picks.ref_list(names)
-        objs = [picks.shaped(s.doc, n) for n in names] if names else [s.body(None)]
+        objs = [export_pick(n) for n in names] if names else [s.body(None)]
         fmt = (a.get("format") or "").lower()
         if not fmt and a.get("path"):
             fmt = fmt_of(a["path"])
-        fmt = fmt or "step"
+        meshes = [o for o in objs if is_mesh(o)]
+        fmt = fmt or ("stl" if meshes and len(meshes) == len(objs) else "step")
         if fmt not in EXPORTS:
             raise ToolError("invalid_input", f"format: one of {', '.join(EXPORTS)}.")
+        if meshes and fmt not in FC_MESH_OUT and fmt not in SCENE_OUT:
+            raise ToolError("invalid_input", f"{', '.join(o.Label for o in meshes)}: a mesh, written as {', '.join(list(FC_MESH_OUT) + list(SCENE_OUT))} — not {fmt.upper()}. For {fmt.upper()}, import_file the mesh again with solid: true (a body of its triangles) first.")
+        if meshes:
+            return export_meshes(objs, fmt, a)
         ext = {"step": ".step", "iges": ".iges", "brep": ".brep", **FC_MESH_OUT, **SCENE_OUT, **FLAT_OUT}[fmt]
         p = where(a.get("path") or (objs[0].Label.replace(" ", "_") + ext))
         known = {*(SOLID_FORMATS.get(fmt) or ()), *(MESH_FORMATS.get(fmt) or ()), ext.lstrip(".")}
@@ -839,6 +921,63 @@ def tools(session):
                     verify = {"triangles": m.CountFacets, "readBack": f"written; FreeCAD does not read {fmt.upper()} back to check it"}
         return {"objects": [o.Label for o in objs], "format": fmt, "path": p, "bytes": os.path.getsize(p), "verify": verify}
 
+    def export_meshes(objs, fmt, a):
+        # Meshes as they are (no re-meshing), with any shaped objects
+        # tessellated beside them; one file.
+        import Mesh
+        import MeshPart
+
+        tol = picks.number(a, "tolerance", 0.01, gt=0, msg="tolerance: the chord error, above 0 mm.")
+        ext = {**FC_MESH_OUT, **SCENE_OUT}[fmt]
+        p = where(a.get("path") or (objs[0].Label.replace(" ", "_") + ext))
+        known = {*(MESH_FORMATS.get(fmt) or ()), ext.lstrip(".")}
+        if os.path.splitext(p)[1].lower().lstrip(".") not in known:
+            p += ext
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+
+        def mesh_of(o):
+            if is_mesh(o):
+                m = o.Mesh
+                pl = getattr(o, "Placement", None)
+                # Topology gives the points placed, so a moved mesh is written
+                # where it stands, also when merged with others.
+                return m.copy() if pl is None or pl.isIdentity() else Mesh.Mesh(m.Topology)
+            return MeshPart.meshFromShape(Shape=o.Shape, LinearDeflection=tol, AngularDeflection=0.0873, Relative=False)
+
+        if fmt in SCENE_OUT:
+            from .. import meshformats
+
+            parts, tris = [], 0
+            cols = a.get("colors") or {}
+            for o in objs:
+                pts, fs = mesh_of(o).Topology
+                rgba = colour(cols.get(o.Label) or cols.get(o.Name))
+                parts.append({"name": o.Label, "V": np.array([tuple(v) for v in pts], float).reshape(-1, 3), "F": np.array(fs, int).reshape(-1, 3), **({"rgba": rgba} if rgba else {})})
+                tris += len(fs)
+            meshformats.write(p, parts)
+            V, F, info = meshformats.read(p)
+            verify = {"triangles": int(len(F)), "trianglesWritten": tris, "objects": info["nodes"], "note": "Metres, Y up, as glTF and Collada keep them."}
+        else:
+            m = Mesh.Mesh()
+            for o in objs:
+                m.addMesh(mesh_of(o))
+            m.write(p)
+            try:
+                if fmt == "wrl":
+                    from .. import meshformats
+
+                    V, F, _info = meshformats.read(p, "mm", "z")
+                    back = Mesh.Mesh()
+                    back.addFacets([[tuple(V[i]) for i in tr] for tr in F.tolist()])
+                else:
+                    back = Mesh.Mesh(p)
+                verify = {"triangles": back.CountFacets, "trianglesWritten": m.CountFacets, "closed": back.isSolid()}
+                if back.isSolid():
+                    verify["volume"] = round(back.Volume, 2)
+            except Exception:
+                verify = {"triangles": m.CountFacets, "readBack": f"written; FreeCAD does not read {fmt.upper()} back to check it"}
+        return {"objects": [o.Label for o in objs], "meshes": [o.Label for o in objs if is_mesh(o)], "format": fmt, "path": p, "bytes": os.path.getsize(p), "verify": verify}
+
     objref = {"type": "string", "description": "An object's name or label."}
     return [
         Tool("doc_new", "Start a new, empty FreeCAD document and work in it from now on; the one before stays open (save it first: doc_save). Not undoable, and not in a batch's rollback.", obj({"name": {"type": "string"}}), doc_new),
@@ -848,13 +987,13 @@ def tools(session):
         Tool("doc_save", "Save the document as .FCStd: path (relative goes in the session's folder), else where it was saved, else <label>.FCStd there (\"<label> 2.FCStd\" … when that name is taken by another file). Never over another document's file unless overwrite: true — ask the person first. What the tools recorded with the parts (materials, setups, notes) is saved with it.", obj({"path": {"type": "string"}, "overwrite": {"type": "boolean"}}), doc_save),
         Tool("object_list", "Every object in the document: name, label, type, visible, parents (what uses it) and its shape (volume, area, faces, solids, size for a solid; faces and edges else) or mesh. type: a part of the type to keep (\"Part::\", \"Sketch\").", obj({"type": {"type": "string"}}), object_list),
         Tool("object_get", "One object's properties: value (mm, degrees; placements as { at, axis, angle }; links by label; a shape as its stats), type, readOnly. filter: a word in the name or group (\"Placement\", \"Base\"), or a list of names.", obj({"object": objref, "filter": {}}, ["object"]), object_get),
-        Tool("object_set", "Set properties of an object by name: values { Length: 20, Placement: { at, axis, angle }, Refine: true, Base: \"Box\", Mode: \"…\" } — each converted to its type (numbers in mm and degrees, or strings with a unit \"1 in\"); enumerations checked; read-only ones refused. Recomputes; refused and undone when that fails. Trap: a plain shape (Part::Feature from a boolean) has no sizes to set — only placement.", obj({"object": objref, "values": {"type": "object"}}, ["object", "values"]), object_set, changes=True),
+        Tool("object_set", "Set properties of an object by name: values { Length: 20, Placement: { at, axis, angle } (or FreeCAD's Base, Axis, Angle, Rotation; what is left out is kept), Refine: true, Base: \"Box\", Mode: \"…\" } — each converted to its type (numbers in mm and degrees, or strings with a unit \"1 in\"); enumerations checked; read-only ones refused; a value that did not change is marked unchanged. Recomputes; refused and undone when that fails. Trap: a plain shape (Part::Feature from a boolean) has no sizes to set — only placement.", obj({"object": objref, "values": {"type": "object"}}, ["object", "values"]), object_set, changes=True),
         Tool("object_delete", "Delete objects (objects: names or labels). Refused while another object uses one (force: true deletes it anyway and the user breaks); recomputes and lists any error.", obj({"objects": {}, "force": {"type": "boolean"}}, ["objects"]), object_delete, changes=True),
         Tool("object_rename", "Give an object a new label (its internal name stays). Trap: setups, specs and waivers keep the old label.", obj({"object": objref, "label": {"type": "string"}}, ["object", "label"]), object_rename, changes=True),
         Tool("object_group", "Organise the document: action add | remove (objects into or out of group — made if new; kind folder (a plain group) | part (an App::Part container that moves as one)) | dissolve (the group, its objects kept) | link (count App::Link copies of object at, step [dx,dy,dz] apart — light copies that follow it) | list; visible: false hides a whole group's objects.",
              obj({"action": {"type": "string", "enum": ["add", "remove", "dissolve", "link", "list"]}, "group": {"type": "string"}, "kind": {"type": "string", "enum": ["folder", "part"]}, "objects": {"type": "array", "items": {"type": "string"}},
                   "object": {"type": "string"}, "count": {"type": "integer"}, "at": {"type": "array", "items": {}}, "step": {"type": "array", "items": {}}, "visible": {"type": "boolean"}, "name": {"type": "string"}}), object_group, changes=True),
         Tool("recompute", "Recompute the document (force: true recomputes everything) and list each object that failed, with FreeCAD's reason.", obj({"force": {"type": "boolean"}}), recompute, changes=True),
-        Tool("import_file", "Bring a file into the document: STEP, IGES, BREP as bodies (split: true makes a body of each solid); STL, OBJ, 3MF, PLY, OFF, AMF — and glTF/GLB, Collada, VRML 2, 3DS, every mesh node flattened into one in mm, Z up (units and up override what the format says; read says what was taken) — as a body made of its triangles when closed and up to 20000 triangles (solid: false keeps a mesh, solid: true forces a body up to 200000); DXF and SVG as Draft geometry; JT where this FreeCAD has its reader; PNG, JPG, BMP as an image plane width mm wide on XY, to trace over. PDF, DWG, IFC need the FreeCAD window; FBX: export it as glTF. .FCStd: doc_open.", obj({"path": {"type": "string"}, "name": {"type": "string"}, "split": {"type": "boolean"}, "solid": {"type": "boolean"}, "units": {"type": "string", "enum": ["mm", "cm", "m", "in"]}, "up": {"type": "string", "enum": ["x", "y", "z"]}, "width": {"type": "number"}}, ["path"]), import_file, changes=True),
-        Tool("export", "Write objects (the one body when left out; several go as one compound) and read it back (verify). Solids: STEP, IGES, BREP. One mesh: STL, OBJ, 3MF, PLY, OFF, VRML (wrl), X3D. A scene, a mesh per object with colors {label: \"#rrggbb\"}: glTF (glb, gltf), Collada (dae) — metres, Y up. 2D: DXF (R12) or SVG of a view (top | bottom | front | back | right | left | iso; hidden: true adds hidden lines on their own layer) or of a section at z mm (section) — circles and arcs kept as such, for laser and plasma cutting. format, or from path's extension; tolerance: the chord error, 0.01 mm.", obj({"objects": {}, "format": {"type": "string", "enum": list(EXPORTS)}, "path": {"type": "string"}, "tolerance": {"type": "number"}, "colors": {"type": "object"}, "view": {"type": "string", "enum": list(VIEWS)}, "hidden": {"type": "boolean"}, "section": {"type": "number"}}), export),
+        Tool("import_file", "Bring a file into the document: STEP, IGES, BREP as bodies (split: true makes a body of each solid); STL, OBJ, 3MF, PLY, OFF, AMF — and glTF/GLB, Collada, VRML 2, 3DS, every mesh node flattened into one in mm, Z up (units and up override what the format says; read says what was taken) — as a mesh (Mesh::Feature) unless solid: true asks for a body made of its triangles (up to 200000); DXF and SVG as Draft geometry; JT where this FreeCAD has its reader; PNG, JPG, BMP as an image plane width mm wide on XY, to trace over. PDF, DWG, IFC need the FreeCAD window; FBX: export it as glTF. .FCStd: doc_open.", obj({"path": {"type": "string"}, "name": {"type": "string"}, "split": {"type": "boolean"}, "solid": {"type": "boolean"}, "units": {"type": "string", "enum": ["mm", "cm", "m", "in"]}, "up": {"type": "string", "enum": ["x", "y", "z"]}, "width": {"type": "number"}}, ["path"]), import_file, changes=True),
+        Tool("export", "Write objects (the one body when left out; several go as one compound) and read it back (verify). Meshes (Mesh::Feature) go as they are to the mesh and scene formats (STL by default). Solids: STEP, IGES, BREP. One mesh: STL, OBJ, 3MF, PLY, OFF, VRML (wrl), X3D. A scene, a mesh per object with colors {label: \"#rrggbb\"}: glTF (glb, gltf), Collada (dae) — metres, Y up. 2D: DXF (R12) or SVG of a view (top | bottom | front | back | right | left | iso; hidden: true adds hidden lines on their own layer) or of a section at z mm (section) — circles and arcs kept as such, for laser and plasma cutting. format, or from path's extension; tolerance: the chord error, 0.01 mm.", obj({"objects": {}, "format": {"type": "string", "enum": list(EXPORTS)}, "path": {"type": "string"}, "tolerance": {"type": "number"}, "colors": {"type": "object"}, "view": {"type": "string", "enum": list(VIEWS)}, "hidden": {"type": "boolean"}, "section": {"type": "number"}}), export),
     ]

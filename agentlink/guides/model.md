@@ -2,7 +2,7 @@
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
 ## workflow
-1. Block the part out with `part_primitive` (box, cylinder …; `at` and `rotate` place it) or `part_extrude` / `part_revolve` a profile (`{ points }`, `{ circle }`, a sketch, or a body's face "Box.Face6").
+1. Block the part out with `part_primitive` (box, cylinder …; `at` and `rotate` place it; `direction [x,y,z]` points the axis of a cylinder, cone, prism or tube) or `part_extrude` / `part_revolve` a profile (`{ points }`, `{ circle }`, a sketch, or a body's face "Box.Face6").
 2. Add and remove material: `part_boolean { op, base, tools }`, or in one call `part_extrude { profile, into, op: "cut" }` for a pocket or `op: "fuse"` for a boss.
 3. Repeat and mirror with `part_transform` (linear, polar, mirror { fuse: true }).
 4. Shell with `part_thickness`, then round and bevel last: `part_fillet` / `part_chamfer` with edges picked by `shape_query` or a `query`.
@@ -16,7 +16,7 @@
 - Loft profiles with different edge counts twist; start each at the matching corner.
 
 ## Wires, splitting, repair
-- `part_wire` makes FreeCAD's own parametric curves: a helix as a sweep path (a spring, a thread), a spiral, a polygon, a plane to slice with, a B-spline through points.
+- `part_wire` makes FreeCAD's own parametric curves: a helix as a sweep path (a spring, a thread), a spiral, a regular polygon (`polygon`: sides and radius), a polyline through your corners (`polyline`: points, closed), a plane to slice with, a B-spline through points. For a solid from corner points in one step, use `part_extrude { profile: { points } }`.
 - `part_split { mode: "slice", bodies: [one], tools: [a plane or bodies] }` cuts a body into pieces; `explode: true` makes each its own body. `fragments` keeps every overlap region apart (for multi-material prints); `xor` keeps what is in an odd number.
 - `part_compound` groups bodies without fusing them, or `explode`s a multi-solid body.
 - `part_refine` merges faces split by booleans; `fix: true` also repairs tolerances and closes a shell into a solid.

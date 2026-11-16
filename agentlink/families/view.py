@@ -23,6 +23,40 @@ ALIASES = {"back": "rear", "isometric": "iso"}
 GRID = ["iso", "top", "front", "right"]
 
 
+def snap_grid(n):
+    """(columns, rows) for n pictures side by side: 2 across up to 4, then 3."""
+    cols = 1 if n <= 1 else 2 if n <= 4 else 3
+    return cols, -(-n // cols)
+
+
+def snap_combine(files, names, cols, rows, cw, ch, out):
+    """The views' PNGs in one grid PNG at out (Qt, which the window has),
+    each labelled; False when it could not be made."""
+    try:
+        from PySide import QtCore, QtGui
+    except ImportError:
+        try:
+            from PySide6 import QtCore, QtGui
+        except ImportError:
+            return False
+    try:
+        img = QtGui.QImage(cw * cols, ch * rows, QtGui.QImage.Format_RGB32)
+        img.fill(QtGui.QColor(255, 255, 255))
+        p = QtGui.QPainter(img)
+        try:
+            for i, (f, n) in enumerate(zip(files, names)):
+                x, y = (i % cols) * cw, (i // cols) * ch
+                p.drawImage(QtCore.QRect(x, y, cw, ch), QtGui.QImage(f))
+                p.setPen(QtGui.QColor(0, 0, 0))
+                p.drawText(x + 8, y + 18, n)
+                p.drawRect(x, y, cw - 1, ch - 1)
+        finally:
+            p.end()
+        return bool(img.save(out, "PNG"))
+    except Exception:  # noqa: BLE001 - the single files are still there
+        return False
+
+
 def _views(a):
     v = a.get("views", a.get("view", "iso"))
     if v == "all":
@@ -238,9 +272,38 @@ def tools(session):
                 "layers": [{"name": n, "about": about} for n, (_, about) in render.LAYERS.items()],
                 "views": list(render.VIEWS)}
 
+    SNAP_TURN = {"iso": "viewIsometric", "front": "viewFront", "rear": "viewRear", "top": "viewTop", "bottom": "viewBottom", "left": "viewLeft", "right": "viewRight"}
+
+    def snap_views(a):
+        """The views asked for: view (one) or views (a list, up to 6, or
+        "all"); [] keeps the person's view."""
+        v = a.get("views")
+        if v is None:
+            v = a.get("view")
+            v = [v] if v else []
+        elif v == "all":
+            v = list(GRID)
+        elif isinstance(v, str):
+            v = [v]
+        if not isinstance(v, list):
+            raise ToolError("invalid_input", f"views: a list of {', '.join(SNAP_TURN)} (up to 6), or \"all\".")
+        out = []
+        for n in v:
+            n = ALIASES.get(str(n).lower(), str(n).lower())
+            if n not in SNAP_TURN:
+                raise ToolError("invalid_input", f"view: one of {', '.join(SNAP_TURN)}, or left out to keep the person's view.")
+            out.append(n)
+        if len(out) > 6:
+            raise ToolError("invalid_input", "views: 1 to 6.")
+        return out
+
     def view_snapshot(a):
         import FreeCAD
 
+        views = snap_views(a)
+        w, h = int(a.get("width", 800)), int(a.get("height", 600))
+        if not (16 <= w <= 4096 and 16 <= h <= 4096):
+            raise ToolError("invalid_input", "width and height: 16 to 4096 px.")
         if not FreeCAD.GuiUp:
             raise ToolError("unavailable", "view_snapshot is the FreeCAD window's own view: there is no window (headless). view_render draws the parts without one.")
         import FreeCADGui
@@ -249,24 +312,56 @@ def tools(session):
         view = gd.activeView() if gd else None
         if view is None or not hasattr(view, "saveImage"):
             raise ToolError("unavailable", "No 3D view open for this document: open one in FreeCAD, then again — or view_render.")
-        which = a.get("view")
-        if which:
-            which = ALIASES.get(which, which)
-            turn = {"iso": "viewIsometric", "front": "viewFront", "rear": "viewRear", "top": "viewTop", "bottom": "viewBottom", "left": "viewLeft", "right": "viewRight"}
-            if which not in turn:
-                raise ToolError("invalid_input", f"view: one of {', '.join(turn)}, or left out to keep the person's view.")
-            getattr(view, turn[which])()
-            if a.get("fit", True):
-                view.fitAll()
-        w, h = int(a.get("width", 800)), int(a.get("height", 600))
-        if not (16 <= w <= 4096 and 16 <= h <= 4096):
-            raise ToolError("invalid_input", "width and height: 16 to 4096 px.")
-        p = paths.out_file(s, "view_snapshot", a.get("path") or f"snapshot_{which or 'current'}.png", ".png")
-        view.saveImage(p, w, h, a.get("background", "Current"))
-        out = {"path": p, "view": which or "as the person left it", "width": w, "height": h, "bytes": os.path.getsize(p)}
-        if a.get("inline", True):
-            with open(p, "rb") as f:
-                out["_png"] = f.read()
+        bg = a.get("background", "Current")
+        if len(views) <= 1:
+            which = views[0] if views else None
+            if which:
+                getattr(view, SNAP_TURN[which])()
+                if a.get("fit", True):
+                    view.fitAll()
+            p = paths.out_file(s, "view_snapshot", a.get("path") or f"snapshot_{which or 'current'}.png", ".png")
+            view.saveImage(p, w, h, bg)
+            out = {"path": p, "view": which or "as the person left it", "width": w, "height": h, "bytes": os.path.getsize(p)}
+            if a.get("inline", True):
+                with open(p, "rb") as f:
+                    out["_png"] = f.read()
+            return out
+        # Several views: each saved on its own, then one grid picture of them
+        # (2 across up to 4, 3 across for 5 or 6). The person's camera is put
+        # back afterwards.
+        cols, rows = snap_grid(len(views))
+        cw, ch = max(16, w // cols), max(16, h // rows)
+        try:
+            cam = view.getCamera()
+        except Exception:
+            cam = None
+        each = []
+        try:
+            for n in views:
+                getattr(view, SNAP_TURN[n])()
+                if a.get("fit", True):
+                    view.fitAll()
+                q = paths.out_file(s, "view_snapshot", f"snapshot_{n}.png", ".png")
+                view.saveImage(q, cw, ch, bg)
+                each.append(q)
+        finally:
+            if cam is not None:
+                try:
+                    view.setCamera(cam)
+                except Exception:
+                    pass
+        p = paths.out_file(s, "view_snapshot", a.get("path") or f"snapshot_{'_'.join(views)}.png", ".png")
+        combined = snap_combine(each, views, cols, rows, cw, ch, p)
+        out = {"views": views, "paths": each, "width": cw * cols, "height": ch * rows, "grid": [cols, rows],
+               "note": "The person's own view is put back."}
+        if combined:
+            out["path"] = p
+            out["bytes"] = os.path.getsize(p)
+            if a.get("inline", True):
+                with open(p, "rb") as f:
+                    out["_png"] = f.read()
+        else:
+            out["warning"] = "The views could not be put in one picture here: each view's own file is in paths."
         return out
 
     vschema = {"description": "A view (iso, top, bottom, front, rear, left, right, iso-front-left, iso-rear-left, iso-rear-right), a list of up to 6 drawn side by side, or \"all\"."}
@@ -288,5 +383,5 @@ def tools(session):
             view_render,
         ),
         Tool("view_maps", "The maps and layers view_render can draw here (add-ons add theirs), and the views.", obj({}), view_maps),
-        Tool("view_snapshot", "Save the FreeCAD window's own 3D view as the person sees it (view: turn it to a standard view first, fit true) and look at it. Needs the window; view_render draws without one.", obj({"view": {"type": "string"}, "fit": {"type": "boolean"}, "width": {"type": "integer"}, "height": {"type": "integer"}, "background": {"type": "string"}, "inline": {"type": "boolean"}, "path": {"type": "string"}}), view_snapshot),
+        Tool("view_snapshot", "Save the FreeCAD window's own 3D view as the person sees it (view: turn it to a standard view first, fit true) and look at it. views [..] (up to 6, or \"all\") gives one grid picture of them, each view's file in paths, and puts the person's view back. Needs the window; view_render draws without one.", obj({"view": {"type": "string"}, "views": {"description": "A list of views (iso, top, bottom, front, rear, left, right), up to 6, or \"all\" (iso, top, front, right): one grid picture."}, "fit": {"type": "boolean"}, "width": {"type": "integer"}, "height": {"type": "integer"}, "background": {"type": "string"}, "inline": {"type": "boolean"}, "path": {"type": "string"}}), view_snapshot),
     ]

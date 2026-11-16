@@ -91,7 +91,13 @@ class Doc(unittest.TestCase):
                 self.assertTrue(out["verify"]["closed"])
         imp = self.call("import_file", {"path": "Can.step", "name": "CanStep"})
         self.assertAlmostEqual(imp["objects"][0]["volume"], vol, delta=0.01)
-        mesh = self.call("import_file", {"path": "Can.stl", "name": "CanMesh"})
+        # A mesh file comes in as a mesh unless solid: true is asked, small or
+        # large, closed or not (no triangle count decides it).
+        plain = self.call("import_file", {"path": "Can.stl", "name": "CanPlain"})
+        self.assertEqual(plain["objects"][0]["type"], "Mesh::Feature", plain)
+        self.assertIn("solid: true", plain["objects"][0]["note"])
+        mesh = self.call("import_file", {"path": "Can.stl", "name": "CanMesh", "solid": True})
+        self.assertEqual(mesh["objects"][0]["type"], "Part::Feature", mesh)
         self.assertTrue(mesh["objects"][0]["closed"], mesh)
         self.assertAlmostEqual(mesh["objects"][0]["volume"], vol, delta=vol * 0.01)
         kept = self.call("import_file", {"path": "Can.3mf", "name": "CanMesh3mf", "solid": False})

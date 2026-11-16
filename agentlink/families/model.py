@@ -24,6 +24,8 @@ PRIMS = {
     "box": "Part::Box", "cylinder": "Part::Cylinder", "sphere": "Part::Sphere", "cone": "Part::Cone",
     "torus": "Part::Torus", "wedge": "Part::Wedge", "prism": "Part::Prism", "tube": None,
 }
+# Primitives with an axis (their +z) that direction can turn.
+AXIAL = ("cylinder", "cone", "prism", "tube")
 WEDGE = {"xmin": 0, "ymin": 0, "zmin": 0, "x2min": 2, "z2min": 2, "xmax": 10, "ymax": 10, "zmax": 10, "x2max": 8, "z2max": 8}
 
 
@@ -152,6 +154,13 @@ def tools(session):
     def part_primitive(a):
         kind = picks.choice(a, "kind", PRIMS, f"kind: one of {', '.join(PRIMS)}.")
         pl = picks.placement(a)
+        if a.get("direction") is not None:
+            # The axis (+z of the primitive) turned to point along direction,
+            # then any rotate on top of that, about at.
+            if kind not in AXIAL:
+                raise ToolError("invalid_input", f"direction: for {', '.join(AXIAL)} (their axis); a {kind} turns with rotate.")
+            aim = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), picks.direction(a.get("direction"), "direction"))
+            pl = FreeCAD.Placement(pl.Base, pl.Rotation.multiply(aim))
         label = s.unique(a.get("name") or kind.capitalize())
         d = doc()
         if kind == "box":
@@ -510,11 +519,12 @@ def tools(session):
         return finish(res, a, "part_sweep", [src, psrc])
 
     placement_in = {"at": {"type": "array", "items": {"type": "number"}}, "rotate": {"type": "object", "description": "{ axis: [x,y,z], angle: degrees } about at"}}
+    direction_in = {"direction": {"type": "array", "items": {"type": "number"}, "description": "[x,y,z]: where a cylinder's, cone's, prism's or tube's axis points from at (+z when left out); rotate turns it further."}}
     return [
         Tool(
             "part_primitive",
-            "Add a FreeCAD primitive as a body: box { size [x,y,z] } (a corner at at), cylinder { radius, height }, cone { radius, radius2 (top), height }, prism { sides, radius (to a corner), height } and tube { radius, radius2 (bore), height } (base centred at at, up +z), sphere { radius } and torus { radius, radius2 } (centred), wedge { wedge: { xmin … z2max } as FreeCAD's Part Wedge }. at [x,y,z] and rotate { axis, angle } place it. Parametric: object_set changes a size later (Length, Radius …) until a boolean bakes it.",
-            obj({"kind": {"type": "string", "enum": list(PRIMS)}, "size": {"type": "array", "items": {"type": "number"}}, "radius": {"type": "number"}, "radius2": {"type": "number"}, "height": {"type": "number"}, "sides": {"type": "integer"}, "wedge": {"type": "object"}, **placement_in, "name": {"type": "string"}}, ["kind"]),
+            "Add a FreeCAD primitive as a body: box { size [x,y,z] } (a corner at at), cylinder { radius, height }, cone { radius, radius2 (top), height }, prism { sides, radius (to a corner), height } and tube { radius, radius2 (bore), height } (base centred at at, up +z, or along direction [x,y,z]), sphere { radius } and torus { radius, radius2 } (centred), wedge { wedge: { xmin … z2max } as FreeCAD's Part Wedge }. at [x,y,z] and rotate { axis, angle } place it. Parametric: object_set changes a size later (Length, Radius …) until a boolean bakes it.",
+            obj({"kind": {"type": "string", "enum": list(PRIMS)}, "size": {"type": "array", "items": {"type": "number"}}, "radius": {"type": "number"}, "radius2": {"type": "number"}, "height": {"type": "number"}, "sides": {"type": "integer"}, "wedge": {"type": "object"}, **placement_in, **direction_in, "name": {"type": "string"}}, ["kind"]),
             part_primitive,
             changes=True,
         ),
