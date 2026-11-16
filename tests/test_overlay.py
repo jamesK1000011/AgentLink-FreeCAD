@@ -190,7 +190,9 @@ class W:
         return (0, 0) + self.size
 
     def mapTo(self, target, p):
-        return (self.pos[0] + p[0], self.pos[1] + p[1])
+        # A pair here, a QPoint where PySide imports (FreeCAD's CI).
+        x, y = (p.x(), p.y()) if hasattr(p, "x") and callable(p.x) else p
+        return (self.pos[0] + x, self.pos[1] + y)
 
     def __getattr__(self, k):  # the never-list: anything else is recorded
         if k.startswith("__"):
