@@ -307,6 +307,37 @@ class Runner(unittest.TestCase):
             testrun.find("nothing-like-it")
         self.assertEqual(e.exception.code, "not_found")
 
+    def test_folder(self):
+        # Suites in subfolders with the same file names (Workshop's tests/make,
+        # tests/parts …): one subfolder at a time.
+        for sub, n in (("make", 2), ("parts", 1)):
+            os.makedirs(os.path.join(self.root, "tests", sub))
+            with open(os.path.join(self.root, "tests", sub, "test_api.py"), "w") as f:
+                f.write("".join(f"def test_{sub}_{i}():\n    pass\n\n" for i in range(n)))
+        out = self.run_(folder="make")
+        self.assertEqual((out["passed"], out["failed"], out["errors"]), (2, 0, 0), out)
+        self.assertTrue(all("make" in f["id"] for f in out.get("failures", [])))
+        out = self.run_(folder="parts", select="test_parts_0")
+        self.assertEqual((out["passed"], out["failed"]), (1, 0), out)
+        with open(out["log"]) as f:
+            self.assertIn("folder: tests/parts", f.read())
+
+    def test_folder_refused(self):
+        os.makedirs(os.path.join(self.root, "tests", "make"))
+        outside = os.path.join(self.d, "outside")
+        os.makedirs(outside)
+        if hasattr(os, "symlink"):
+            os.symlink(outside, os.path.join(self.root, "tests", "link"))
+        for folder in ("..", "../Mine", "make/..", "/tmp", ".hidden", "make//x", "a\\b", "", 5) + (("link",) if hasattr(os, "symlink") else ()):
+            with self.assertRaises(ToolError, msg=repr(folder)) as e:
+                testrun.tests_dir("Mine", self.root, folder)
+            self.assertEqual(e.exception.code, "invalid_input", folder)
+        with self.assertRaises(ToolError) as e:
+            testrun.tests_dir("Mine", self.root, "nope")
+        self.assertEqual(e.exception.code, "not_found")
+        self.assertIn("make", str(e.exception))
+        self.assertEqual(testrun.tests_dir("Mine", self.root, "make"), os.path.join(self.root, "tests", "make"))
+
     def test_no_tests_folder(self):
         shutil.rmtree(os.path.join(self.root, "tests"))
         with self.assertRaises(ToolError) as e:

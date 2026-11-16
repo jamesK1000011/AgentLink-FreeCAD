@@ -34,6 +34,8 @@ OWN = "AgentLink"
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,80}")
 PATTERN = re.compile(r"[A-Za-z0-9_*?.\-\[\]]{1,80}\.py")
 SELECT = re.compile(r"[A-Za-z0-9_]{1,120}")
+# A subfolder of tests/: names joined by "/", none starting with "." (so no "..").
+FOLDER = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,40}(/[A-Za-z0-9_][A-Za-z0-9_-]{0,40}){0,3}")
 CMD_NAMES = ("freecadcmd", "FreeCADCmd", "freecadcmd.exe", "FreeCADCmd.exe")
 CAP = 4000  # bytes of answer
 TRACE_LINES = 15
@@ -254,14 +256,33 @@ class Job:
         return out
 
 
-def start(cmd, addon, root, own_root, roots, lib, log, pattern="test_*.py", select=None, timeout=TIMEOUT):
-    """Start root's tests in a separate process (cmd: freecadcmd, or any
-    Python for the tests here) in its own process group, and a thread that
-    stops it at timeout and writes how it ended. The Job; one at a time
-    per add-on."""
+def tests_dir(addon, root, folder=None):
+    """root's tests/ folder, or the subfolder of it folder names (a
+    relative path such as "make" or "make/slice": no "..", no absolute path,
+    and still inside tests/ once links are followed)."""
     tests = os.path.join(root, "tests")
     if not os.path.isdir(tests):
         raise ToolError("not_found", f"{addon} has no tests/ folder at {root}.")
+    if folder is None:
+        return tests
+    if not isinstance(folder, str) or not FOLDER.fullmatch(folder):
+        raise bad('folder: a subfolder of tests/, such as "make" (names joined by /; no "..", no absolute path).')
+    sub = os.path.join(tests, *folder.split("/"))
+    real, top = os.path.realpath(sub), os.path.realpath(tests)
+    if os.path.commonpath([real, top]) != top:
+        raise bad("folder: must stay inside the add-on's tests/ folder.")
+    if not os.path.isdir(sub):
+        have = sorted(n for n in os.listdir(tests) if os.path.isdir(os.path.join(tests, n)) and not n.startswith((".", "__")))
+        raise ToolError("not_found", f"{addon} has no tests/{folder} folder" + (f"; its subfolders: {', '.join(have)}." if have else "."))
+    return sub
+
+
+def start(cmd, addon, root, own_root, roots, lib, log, pattern="test_*.py", select=None, timeout=TIMEOUT, folder=None):
+    """Start root's tests (tests/, or its subfolder folder) in a separate
+    process (cmd: freecadcmd, or any Python for the tests here) in its own
+    process group, and a thread that stops it at timeout and writes how it
+    ended. The Job; one at a time per add-on."""
+    tests = tests_dir(addon, root, folder)
     with _LOCK:
         busy = next((j for j in JOBS.values() if j.addon == addon and not j.ended.is_set()), None)
         if busy:
@@ -278,7 +299,7 @@ def start(cmd, addon, root, own_root, roots, lib, log, pattern="test_*.py", sele
             f.write(f"import sys\nsys.path.insert(0, {own_root!r})\nfrom agentlink import testrun\ntestrun.main()\n")
         os.makedirs(os.path.dirname(log), exist_ok=True)
         with open(log, "w", encoding="utf-8", errors="replace") as lf:
-            lf.write(f"addon_test {addon} (job {jid}): {root}\ncommand: {cmd} {boot}\npattern: {pattern}  select: {select or '-'}  timeout: {timeout:g} s\n"
+            lf.write(f"addon_test {addon} (job {jid}): {root}\ncommand: {cmd} {boot}\nfolder: tests/{folder or ''}  pattern: {pattern}  select: {select or '-'}  timeout: {timeout:g} s\n"
                      f"PYTHONPATH: {env['PYTHONPATH']}\n\n")
             lf.flush()
             j.p = subprocess.Popen([cmd, boot], stdout=lf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, cwd=j.tmp,
