@@ -121,6 +121,7 @@ agentlink/launcher_check.py
 agentlink/layout.py
 agentlink/link_token.py
 agentlink/materials.py
+agentlink/meshbool.py
 agentlink/meshdist.py
 agentlink/meshformats.py
 agentlink/millsim.py
@@ -240,6 +241,7 @@ tests/test_live_findings.py
 tests/test_material.py
 tests/test_mcp_contract.py
 tests/test_measure.py
+tests/test_meshbool.py
 tests/test_meshdist.py
 tests/test_meshformats.py
 tests/test_meshobj.py
