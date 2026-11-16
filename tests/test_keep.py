@@ -58,6 +58,13 @@ class Dialogs(Home):
     def test_recovery_only_when_ours(self):
         self.assertEqual(keep.dialog_answer_for(self.REC, ours=True), ("press", "skip"))
         self.assertEqual(keep.dialog_answer_for(self.REC, ours=False)[0], "report")
+        # FreeCAD 1.1's dialog has no Skip: closed as Escape closes it.
+        rec11 = dict(self.REC, buttons=["Start Recovery", "Cleanup..."])
+        self.assertEqual(keep.dialog_answer_for(rec11, ours=True), ("press", "Cancel"))
+        self.assertEqual(keep.dialog_answer_for(rec11, ours=False)[0], "report")
+        # Its question about the recovery files keeps them.
+        q = {"class": "QMessageBox", "title": "Document Recovery", "text": "Remove the recovery files?", "buttons": ["Yes", "No"]}
+        self.assertEqual(keep.dialog_answer_for(q, ours=True), ("press", "no"))
 
     def test_save_on_restart_follows_the_rule(self):
         d = {"class": "QMessageBox", "title": "Unsaved document", "text": "Do you want to save your changes to document 'Bracket' before closing?", "buttons": ["Save", "Discard", "Cancel"]}

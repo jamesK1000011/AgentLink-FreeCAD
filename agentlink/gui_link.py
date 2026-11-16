@@ -47,8 +47,9 @@ def _dialog_call(line):
     that lists only the lean groups reaches dialog_answer through batch, and
     a refused batch left a harmless OK box blocking every call (GUI pass)."""
     name = _tool_name(line)
-    # gui_input runs too, and refuses any target outside what is in front.
-    if name in ("dialog_answer", "gui_input"):
+    # gui_input runs too, and refuses any target outside what is in front;
+    # gui_unstick closes what is in front.
+    if name in FRONT_CALLS:
         return True
     if name != "batch":
         return False
@@ -58,7 +59,33 @@ def _dialog_call(line):
         return False
     # gui_input in a batch too (a lean client reaches it through batch): it
     # still takes only targets inside the dialog in front.
-    return bool(calls) and all(isinstance(c, dict) and c.get("tool") in ("dialog_answer", "gui_input") for c in calls)
+    return bool(calls) and all(isinstance(c, dict) and c.get("tool") in FRONT_CALLS for c in calls)
+
+
+# What runs while a dialog or menu holds the window: it answers it.
+FRONT_CALLS = ("dialog_answer", "gui_input", "gui_unstick")
+
+
+def _thread_batch(line, tools):
+    """The calls of a batch made only of socket-thread tools (a client lists
+    tools only when it starts, so it reaches a new one through batch), or
+    None."""
+    try:
+        m = json.loads(line)
+        args = ((m.get("params") or {}).get("arguments") or {})
+    except (ValueError, AttributeError):
+        return None
+    if _tool_name(line) != "batch":
+        return None
+    calls = args.get("calls")
+    if isinstance(calls, str):
+        try:
+            calls = json.loads(calls)
+        except ValueError:
+            return None
+    if not isinstance(calls, list) or not calls or not all(isinstance(c, dict) and c.get("tool") in tools for c in calls):
+        return None
+    return calls
 
 
 # ---- what the window shows: a modal dialog, and the heartbeat (unattended use, E and F) ----
@@ -128,8 +155,8 @@ def popup_info():
         items = [a.text().replace("&", "") for a in w.actions() if a.text() and a.isVisible()]
     except Exception:
         items = []
-    return {"class": w.metaObject().className(), "title": "a menu", "text": "items: " + ", ".join(items[:20]) + " — gui_unstick, or gui_input { steps: [{ key: \"Escape\" }] }, closes it",
-            "buttons": [], "widget": w}
+    return {"class": w.metaObject().className(), "kind": "menu", "title": "a menu", "text": "items: " + ", ".join(items[:20]),
+            "items": items[:20], "buttons": [], "widget": w}
 
 
 # ---- queued calls onto the GUI thread, from any thread ----
@@ -263,6 +290,10 @@ def unstick(all_=False, wait=3.0):
     p = getattr(link, "_poster", None) if link is not None else None
     if p is None:
         raise ToolError("unavailable", "gui_unstick closes what holds the FreeCAD window, through the window's link (Agent Link > Start Link); this FreeCAD has none.")
+    if threading.current_thread() is threading.main_thread():
+        # Run on the GUI thread itself (a batch inside the menu's loop): a
+        # queued call it waited for could never run.
+        return close_front(all_)
     done, box = threading.Event(), {}
 
     def on_gui():
@@ -286,6 +317,19 @@ class _Line(str):
     GUI thread) or busy (answered from the socket thread instead)."""
 
     ticket = None
+
+
+def blocked_words(d):
+    """The refusal for a call that came while d (modal_info, popup_info)
+    holds the window."""
+    if not d:
+        return "The window is busy with a call that is waiting on a dialog: this call was not run."
+    if d.get("kind") == "menu" or d.get("title") == "a menu":
+        items = d.get("items") or []
+        return (f"Blocked by a menu in the FreeCAD window" + (f" (items: {', '.join(items[:12])})" if items else "") + ". "
+                "gui_input { steps: [{ menu_item: \"…\" }] } picks an item; gui_input { steps: [{ key: \"Escape\" }] } or gui_unstick closes it. This call was not run.")
+    return (f"Blocked by a dialog in the FreeCAD window: \"{d['title']}\" — {d['text'][:300]} (buttons: {', '.join(d['buttons']) or 'none'}). "
+            "dialog_answer { button } presses one of its buttons: read it and press what the job needs (Cancel backs out); gui_unstick cancels it; app_force_restart if the window is stuck. This call was not run.")
 
 
 def answer_now(tool, body):
@@ -568,7 +612,10 @@ class Link:
                     self._dialog = (key, time.time())
                 d["since"] = self._dialog[1]
                 s = self.session
-                act = keep.dialog_answer_for(d, ours=keep.launched_by_us(), restarting=restart_mark.read() is not None,
+                restarting = restart_mark.read() is not None
+                # Agent Link started this FreeCAD: the supervisor's relaunch or
+                # app_restart (launch mark), or a restart still reopening.
+                act = keep.dialog_answer_for(d, ours=keep.launched_by_us() or restarting, restarting=restarting,
                                              save_rule=getattr(s, "restart_save", "agent") if s else "agent", agent_docs=sorted(getattr(s, "agent_docs", ()) or ()) if s else [])
                 if act[0] == "press" and press(d, act[1]):
                     d["pressed"] = act[1]
@@ -860,12 +907,16 @@ class Link:
 
         name = _tool_name(line)
         srv = getattr(self, "server", None)
-        if name is None or name not in hooks.THREAD_TOOLS or srv is None or not hasattr(srv, "handle_light"):
+        if name is None or srv is None or not hasattr(srv, "handle_light"):
+            return False
+        calls = _thread_batch(line, hooks.THREAD_TOOLS) if name == "batch" else None
+        if name not in hooks.THREAD_TOOLS and calls is None:
             return False
 
         def run():
             try:
-                reply = srv.handle_light(json.loads(line))
+                msg = json.loads(line)
+                reply = srv.handle_light(msg) if calls is None else self._light_batch(srv, msg, calls)
             except ValueError:
                 reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}
             if reply is None:
@@ -879,6 +930,25 @@ class Link:
 
         threading.Thread(target=run, name=f"agentlink-{name}", daemon=True).start()
         return True
+
+    @staticmethod
+    def _light_batch(srv, msg, calls):
+        """A batch of socket-thread tools, answered here as batch answers:
+        { results: [{ tool, ok, result | error }], ran }, stopping at the
+        first refusal."""
+        results = []
+        for i, c in enumerate(calls):
+            r = srv.handle_light({"jsonrpc": "2.0", "id": i, "method": "tools/call", "params": {"name": c["tool"], "arguments": c.get("arguments") or {}}})
+            res = (r or {}).get("result") or {}
+            try:
+                body = json.loads(res["content"][0]["text"])
+            except (KeyError, IndexError, TypeError, ValueError):
+                body = {}
+            ok = not res.get("isError")
+            results.append({"tool": c["tool"], "ok": ok, **({"result": body} if ok else {"error": body.get("error")})})
+            if not ok:
+                return {"jsonrpc": "2.0", "id": msg.get("id"), "result": {"content": [{"type": "text", "text": compact({"results": results, "stopped": i})}]}}
+        return {"jsonrpc": "2.0", "id": msg.get("id"), "result": {"content": [{"type": "text", "text": compact({"results": results, "ran": len(results)})}]}}
 
     @staticmethod
     def _refused():
@@ -992,9 +1062,7 @@ class Link:
             mid = json.loads(line).get("id")
         except ValueError:
             mid = None
-        msg = (f"Blocked by a dialog in the FreeCAD window: \"{d['title']}\" — {d['text'][:300]} (buttons: {', '.join(d['buttons']) or 'none'}). "
-               "dialog_answer { button } presses one of its buttons: read it and press what the job needs (Cancel backs out); app_force_restart if the window is stuck. This call was not run.") if d else \
-            "The window is busy with a call that is waiting on a dialog: this call was not run."
+        msg = blocked_words(d)
         text = compact({"error": {"code": "invalid_state", "message": msg}})
         self._write(f, {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
 
@@ -1029,7 +1097,7 @@ class Link:
         if d is None and (any(c["answered"] for c in self.calls) or self.in_call):
             d = popup_info()
         if d is not None and d.get("class") != "TaskPanel":
-            self.front = {"kind": "menu" if d.get("title") == "a menu" else "dialog", "title": d.get("title"), **({"buttons": d["buttons"]} if d.get("buttons") else {})}
+            self.front = {"kind": d.get("kind") or "dialog", "title": d.get("title"), **({"items": d["items"]} if d.get("items") else {}), **({"buttons": d["buttons"]} if d.get("buttons") else {})}
         # While documents reopen after a restart, calls wait — except with a
         # dialog up: FreeCAD's Document Recovery comes up at start and holds
         # the reopening, so the dialog_answer that clears it must not wait

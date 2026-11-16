@@ -134,9 +134,16 @@ def dialog_answer_for(d, ours, restarting=False, save_rule="agent", agent_docs=(
     buttons = [b.lower().replace("&", "") for b in d.get("buttons") or []]
     if "recover" in title or "document recovery" in text or "recover" in " ".join(buttons):
         if ours:
-            for b in ("skip", "cancel", "no"):
+            # Skipped: Agent Link reopens its documents itself (the restart's
+            # reopen list, an add-on's recovered copies); the recovery files
+            # stay, and a question about removing them is answered No.
+            for b in ("skip", "cancel", "no", "close"):
                 if b in buttons:
                     return ("press", b)
+            # FreeCAD 1.1's Document Recovery has only Start Recovery and
+            # Cleanup…: closed as Escape closes it (press backs out with
+            # reject when there is no such button).
+            return ("press", "Cancel")
         return ("report", "FreeCAD's recovery dialog, in a FreeCAD the person started: it is theirs.")
     if restarting and ("save" in title or "save changes" in text or "unsaved" in text):
         name = re.search(r"['\"“]([^'\"”]+)['\"”]", d.get("text") or "")

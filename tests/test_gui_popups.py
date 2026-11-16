@@ -493,9 +493,17 @@ class LinkBusy(unittest.TestCase):
         old = getattr(agentlink_state, "link", None)
         agentlink_state.link = types.SimpleNamespace(_poster=types.SimpleNamespace(post=lambda fn: None))
         self.addCleanup(setattr, agentlink_state, "link", old)
-        with self.assertRaises(gi.ToolError) as e:
-            gui_link.unstick(wait=0.05)
-        self.assertEqual(e.exception.code, "busy")
+        got = {}
+
+        def socket_thread():
+            try:
+                gui_link.unstick(wait=0.05)
+            except gi.ToolError as e:
+                got["code"] = e.code
+        th = threading.Thread(target=socket_thread)
+        th.start()
+        th.join(2)
+        self.assertEqual(got["code"], "busy")
 
 
 class LinkWindowSide(unittest.TestCase):
@@ -554,7 +562,7 @@ class LinkWindowSide(unittest.TestCase):
         link.in_call, link.busy = True, "batch"
         link.calls.append({"id": 1, "name": "batch", "f": io.StringIO(), "answered": False})
         old = gui_link.popup_info
-        gui_link.popup_info = lambda: {"class": "QMenu", "title": "a menu", "text": "items: New Sketch", "buttons": [], "widget": self.menu}
+        gui_link.popup_info = lambda: {"class": "QMenu", "kind": "menu", "title": "a menu", "text": "items: New Sketch", "items": ["New Sketch"], "buttons": [], "widget": self.menu}
         self.addCleanup(setattr, gui_link, "popup_info", old)
         old_modal = gui_link.modal_info
         gui_link.modal_info = lambda: None
@@ -564,7 +572,11 @@ class LinkWindowSide(unittest.TestCase):
         link._handle_inbox()
         reply = json.loads(f.getvalue())
         self.assertEqual(reply["id"], 4)
-        self.assertIn("a menu", json.loads(reply["result"]["content"][0]["text"])["error"]["message"])
+        msg = json.loads(reply["result"]["content"][0]["text"])["error"]["message"]
+        self.assertTrue(msg.startswith("Blocked by a menu in the FreeCAD window (items: New Sketch)"), msg)
+        self.assertIn("gui_unstick", msg)
+        self.assertNotIn("dialog_answer", msg)
+        self.assertNotIn("app_force_restart", msg)
         self.assertEqual(line.ticket["state"], "taken")
         self.assertEqual(link.front["kind"], "menu")
 
@@ -592,6 +604,115 @@ class LinkWindowSide(unittest.TestCase):
         link.calls.append(call)
         link.expect("gui_input", 0.02, tick=0.01).join(2)
         self.assertEqual(json.loads(json.loads(f.getvalue())["result"]["content"][0]["text"])["error"]["code"], "busy")
+
+
+class UnstickThroughBatch(unittest.TestCase):
+    """A client reaches a new tool through batch: gui_unstick in a batch is
+    let through while a menu holds the window, and answered on the socket
+    thread."""
+
+    def test_front_calls(self):
+        from test_gui_link_dialog import call
+
+        self.assertTrue(gui_link._dialog_call(call("gui_unstick")))
+        self.assertTrue(gui_link._dialog_call(call("batch", {"calls": [{"tool": "gui_unstick", "arguments": {}}]})))
+        self.assertIsNotNone(gui_link._thread_batch(call("batch", {"calls": [{"tool": "gui_unstick"}]}), {"gui_unstick"}))
+        self.assertIsNone(gui_link._thread_batch(call("batch", {"calls": [{"tool": "gui_unstick"}, {"tool": "doc_new"}]}), {"gui_unstick"}))
+        self.assertIsNone(gui_link._thread_batch(call("gui_unstick"), {"gui_unstick"}))
+
+    def test_batch_answered_on_the_socket_thread(self):
+        from agentlink import hooks
+
+        hooks.register_thread_tool("gui_unstick")
+        seen = []
+
+        def light(msg):
+            seen.append((threading.current_thread() is threading.main_thread(), msg["params"]["name"]))
+            text = json.dumps({"closed": [{"kind": "menu", "title": "a menu", "items": ["New Sketch"]}], "open": None})
+            return {"jsonrpc": "2.0", "id": msg["id"], "result": {"content": [{"type": "text", "text": text}]}}
+        link = gui_link.Link.__new__(gui_link.Link)
+        link.server = types.SimpleNamespace(handle_light=light)
+        f = io.StringIO()
+        line = json.dumps({"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "batch", "arguments": {"calls": [{"tool": "gui_unstick", "arguments": {}}]}}})
+        self.assertTrue(link._thread_call(line, f))
+        for _ in range(100):
+            if f.getvalue():
+                break
+            time.sleep(0.01)
+        reply = json.loads(f.getvalue())
+        self.assertEqual(reply["id"], 8)
+        body = json.loads(reply["result"]["content"][0]["text"])
+        self.assertEqual(body["ran"], 1)
+        self.assertEqual(body["results"][0]["result"]["closed"][0]["kind"], "menu")
+        self.assertEqual(seen, [(False, "gui_unstick")])
+
+    def test_on_the_gui_thread_closes_at_once(self):
+        """Run on the GUI thread (a batch inside the menu's loop): closed
+        there, never waiting for a queued call it holds up itself."""
+        import agentlink_state
+
+        old = getattr(agentlink_state, "link", None)
+        agentlink_state.link = types.SimpleNamespace(_poster=types.SimpleNamespace(post=lambda fn: None))
+        self.addCleanup(setattr, agentlink_state, "link", old)
+        real = gui_link.close_front
+        gui_link.close_front = lambda all_=False: {"closed": [{"kind": "menu"}], "open": None}
+        self.addCleanup(setattr, gui_link, "close_front", real)
+        t0 = time.time()
+        self.assertEqual(gui_link.unstick(wait=2.0)["closed"], [{"kind": "menu"}])
+        self.assertLess(time.time() - t0, 0.5)
+
+    def test_dialog_refusal_still_names_its_buttons(self):
+        msg = gui_link.blocked_words({"class": "QMessageBox", "title": "Unsaved", "text": "Save changes?", "buttons": ["Save", "Discard"]})
+        self.assertTrue(msg.startswith("Blocked by a dialog"))
+        self.assertIn("buttons: Save, Discard", msg)
+
+
+class ArrowHit(Base):
+    """A click on a dropdown's arrow reports the button it belongs to (its
+    current action's text), not the arrow's own label."""
+
+    def tool_button(self, name, ox, oy, parent, action_text, own_text="", popup=0):
+        b = tg.Widget(name, ox, oy, 24, 24, parent=parent, cls="QToolButton")
+        b.defaultAction = lambda: types.SimpleNamespace(text=lambda: action_text) if action_text else None
+        b.text = lambda: own_text
+        b.toolTip = lambda: "<b>" + (action_text or own_text) + "</b>"
+        b.popupMode = lambda: popup
+        return b
+
+    def test_arrow_inside_its_button(self):
+        group = self.tool_button("PartDesign_CompSketches", 300, 60, self.mw, "New Sketch", popup=1)
+        arrow = self.tool_button("qt_toolbutton_menubutton", 314, 60, group, None, own_text="Create Datum")
+        out = self.run.run(self.steps({"click": {"widget": {"objectName": "qt_toolbutton_menubutton"}}}))
+        hit = out["steps"][0]["hit"]
+        self.assertEqual((hit["text"], hit["part"], hit["name"]), ("New Sketch", "menu arrow", "PartDesign_CompSketches"))
+        self.assertTrue(arrow is not None)
+
+    def test_arrow_beside_its_button(self):
+        toolbar = tg.Widget("Part Design Helper", 280, 60, 400, 24, parent=self.mw, cls="QToolBar")
+        geo = {}
+
+        def at(w, x, y, wd, ht):
+            geo[w.name] = tg.Rect(x, y, wd, ht)
+            w.geometry = lambda: geo[w.name]
+        datum = self.tool_button("PartDesign_CompDatums", 280, 60, toolbar, "Create Datum")
+        sketch = self.tool_button("PartDesign_CompSketches", 330, 60, toolbar, "New Sketch")
+        arrow = self.tool_button("qt_toolbutton_menubutton", 354, 60, toolbar, None, own_text="Create Datum")
+        at(datum, 0, 0, 24, 24)
+        at(sketch, 50, 0, 24, 24)
+        at(arrow, 74, 0, 12, 24)
+        self.qt.QtWidgets.QToolButton = tg.Widget
+        out = self.run.run(self.steps({"click": {"widget": {"objectName": "qt_toolbutton_menubutton"}}}))
+        hit = out["steps"][0]["hit"]
+        self.assertEqual((hit["text"], hit["part"]), ("New Sketch", "menu arrow"))
+
+    def test_own_arrow_and_plain_click(self):
+        self.tool_button("PartDesign_CompSketches", 300, 60, self.mw, "New Sketch", own_text="Old label", popup=1)
+        out = self.run.run(self.steps({"click": {"widget": {"objectName": "PartDesign_CompSketches"}, "at": [20, 12]}},
+                                      {"click": {"widget": {"objectName": "PartDesign_CompSketches"}, "at": [4, 12]}}))
+        a, b = out["steps"][0]["hit"], out["steps"][1]["hit"]
+        self.assertEqual((a["text"], a["part"]), ("New Sketch", "menu arrow"))
+        self.assertEqual(b["text"], "New Sketch")
+        self.assertNotIn("part", b)
 
 
 if __name__ == "__main__":

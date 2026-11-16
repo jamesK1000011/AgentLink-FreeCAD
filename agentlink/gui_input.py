@@ -1067,16 +1067,97 @@ class Run:
         p = w.mapFrom(mw, pt) if (w is mw or mw.isAncestorOf(w)) else w.mapFromGlobal(mw.mapToGlobal(pt))
         return w, p.x() + (x - int(x)), p.y() + (y - int(y))
 
+    @staticmethod
+    def _button_text(b):
+        """What a tool button shows: its current (default) action's text,
+        else its own text, else its tooltip."""
+        t = ""
+        try:
+            d = b.defaultAction() if hasattr(b, "defaultAction") else None
+            t = d.text() if d is not None else ""
+        except Exception:
+            t = ""
+        if not t:
+            try:
+                t = b.text()
+            except Exception:
+                t = ""
+        if not t:
+            try:
+                t = _plain(b.toolTip())
+            except Exception:
+                t = ""
+        return (t or "").replace("&", "")
+
+    def _arrow_owner(self, w):
+        """The tool button a dropdown's arrow part belongs to (Qt's
+        qt_toolbutton_menubutton, a tool button inside the one it opens the
+        menu of, or beside it in the toolbar), or None for any other widget.
+        The arrow's own text is not the group's: a neighbouring or default
+        label was reported for Part Design's New Sketch group."""
+        try:
+            name = w.objectName() or ""
+        except Exception:
+            return None
+        if not _has_class(w, "QToolButton"):
+            return None
+        par = w.parentWidget()
+        if _has_class(par, "QToolButton"):
+            return par
+        if not name.startswith("qt_toolbutton_menubutton") or par is None:
+            return None
+        QtW = self.qt.QtWidgets
+        try:
+            g = w.geometry()
+            best = None
+            for sib in par.findChildren(QtW.QToolButton):
+                if sib is w or sib.parentWidget() is not par or not sib.isVisible():
+                    continue
+                sg = sib.geometry()
+                gap = abs(sg.x() + sg.width() - g.x())
+                overlap = min(sg.y() + sg.height(), g.y() + g.height()) - max(sg.y(), g.y())
+                if gap <= 6 and overlap > 0 and (best is None or gap < best[0]):
+                    best = (gap, sib)
+            return best[1] if best else None
+        except Exception:
+            return None
+
+    def _arrow_part(self, w, x):
+        """True when x falls on a MenuButtonPopup tool button's own arrow."""
+        try:
+            if not _has_class(w, "QToolButton") or _int(w.popupMode()) != 1:
+                return False
+            return x >= w.width() - 14
+        except Exception:
+            return False
+
     def hit(self, w, x, y):
         g = global_point(self.qt, w, x, y)
         extra = self.extra.pop((id(w), x, y), None)
         if extra is not None:
             return {**extra, "global": [int(round(g.x())), int(round(g.y()))]}
+        owner = self._arrow_owner(w)
+        if owner is not None or self._arrow_part(w, x):
+            b = owner or w
+            out = {"class": self._props(b)["classes"][0], "text": self._button_text(b)[:60], "part": "menu arrow"}
+            try:
+                tip = _plain(b.toolTip())
+                if tip and _norm(tip) != _norm(out["text"]):
+                    out["toolTip"] = tip[:80]
+            except Exception:
+                pass
+            if b.objectName():
+                out["name"] = b.objectName()
+            place = next((u for u in self._props(b)["under"] if u), "")
+            if place:
+                out["in"] = place[:40]
+            out["global"] = [int(round(g.x())), int(round(g.y()))]
+            return out
         p = self._props(w)
         out = {"class": p["classes"][0] if p["classes"] else type(w).__name__}
         if p["objectName"]:
             out["name"] = p["objectName"]
-        t = p["text"] or (w.windowTitle() if w.isWindow() else "")
+        t = (self._button_text(w) if _has_class(w, "QToolButton") else p["text"]) or (w.windowTitle() if w.isWindow() else "")
         if t:
             out["text"] = t[:60]
         place = next((u for u in p["under"] if u), "")
