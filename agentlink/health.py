@@ -448,6 +448,19 @@ def _visible(o):
         return True
 
 
+def _holds_others(o):
+    """A container whose shape is its members' (a BIM level or building, a
+    group with a shape), or reinforcement, which lies inside its concrete on
+    purpose: no overlap of theirs is a finding (a storey "interfered" with
+    the roof it holds, the slab's bars with the house)."""
+    try:
+        if getattr(o, "Group", None):
+            return True
+        return str(getattr(o, "IfcType", "")) in ("Reinforcing Bar", "Reinforcing Mesh", "Building Storey", "Building", "Site")
+    except Exception:
+        return False
+
+
 def overlaps(changed, parts, deadline):
     """Changed parts against the other visible parts: [{ a, b, volume, box
     [x, y, z] mm, line }], and what was left unchecked. Parts inside an
@@ -458,7 +471,7 @@ def overlaps(changed, parts, deadline):
     for a in changed:
         try:
             sa = a.Shape
-            if sa.isNull() or not sa.Solids or _in_container(a):
+            if sa.isNull() or not sa.Solids or _in_container(a) or _holds_others(a):
                 continue
             ba, na = sa.BoundBox, _faces(sa)
         except Exception:
@@ -469,7 +482,7 @@ def overlaps(changed, parts, deadline):
             done.add((a.Name, b.Name))
             try:
                 sb = b.Shape
-                if sb.isNull() or not sb.Solids or not _visible(b) or _in_container(b):
+                if sb.isNull() or not sb.Solids or not _visible(b) or _in_container(b) or _holds_others(b):
                     continue
                 # Made from one another (a copy, a filter's pieces, a mesh
                 # made solid): they lie where their source does.

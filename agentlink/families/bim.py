@@ -673,10 +673,22 @@ def tools(session):
             p += ".ifc"
         os.makedirs(os.path.dirname(p), exist_ok=True)
         ex = ifc_module("exportIFC")
+        # A classification with no space in it stops FreeCAD's exporter cold
+        # (it splits "<system> <code>"): named here, before it is tried.
+        bare = [o.Label for o in doc().Objects if isinstance(getattr(o, "StandardCode", None), str) and o.StandardCode.strip() and " " not in o.StandardCode.strip()]
+        if bare:
+            raise ToolError("invalid_state", f"classification of {', '.join(bare[:6])}: FreeCAD's IFC export needs \"<system> <code>\" (\"Uniclass Ss_25_10_30\") — bim_ifc {{ objects, classification }} sets it so, \"\" clears it. Nothing was written.")
         try:
             ex.export(objs, p)
         except Exception as e:
-            raise ToolError("failed", f"IFC export failed: {e}. bim_preflight lists what an export trips on (objects with no shape, invalid solids).") from None
+            # Where FreeCAD's exporter stopped: its last line and the object it
+            # was on when one can be told ("not enough values to unpack" alone
+            # named neither, and the whole model was left to guess over).
+            import traceback as _tb
+
+            fr = _tb.extract_tb(e.__traceback__)
+            where = f" (FreeCAD's {os.path.basename(fr[-1].filename)}:{fr[-1].lineno}, in {fr[-1].name}: {(fr[-1].line or '').strip()[:120]})" if fr else ""
+            raise ToolError("failed", f"IFC export failed: {e}{where}. objects: [names] exports part of the model, which finds the object it trips on; bim_preflight lists objects with no shape and invalid solids.") from None
         import ifcopenshell
 
         f = ifcopenshell.open(p)

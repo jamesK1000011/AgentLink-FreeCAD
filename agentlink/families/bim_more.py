@@ -344,6 +344,11 @@ def tools(session):
             if a.get("type"):
                 ifc_set(o, a["type"])
             if a.get("classification") is not None:
+                # FreeCAD's IFC exporter reads it as "<system> <code>" and
+                # fails on a bare code ("not enough values to unpack": the
+                # whole export, on any model holding one).
+                if str(a["classification"]).strip() and " " not in str(a["classification"]).strip():
+                    raise bad(f"classification {a['classification']!r}: the system's name, a space, the code — \"Uniclass {a['classification']}\", \"OmniClass 21-02 10\" (FreeCAD's IFC export reads it so); \"\" clears it.")
                 for k in ("StandardCode", "Classification"):
                     if hasattr(o, k):
                         setattr(o, k, str(a["classification"]))
@@ -554,7 +559,7 @@ def tools(session):
              obj({"face": s_, "finish": {"type": "string", "enum": ["tiles", "solid", "pattern", "hatch"]}, "tile": pt, "thickness": {"type": "number"}, "joint": {"type": "number"}, "name": s_}, ["face"]), bim_covering, changes=True),
         Tool("bim_layers", "A layered build-up (multi-material): layers [{ material (name), thickness mm, density kg/m³ }] in order across the wall, put on objects (a wall takes the total as its width). Answers layers (its label), total_mm, on, skipped.",
              obj({"layers": {"type": "array", "items": {"type": "object"}}, "objects": {"type": "array", "items": s_}, "name": s_}, ["layers"]), bim_layers, changes=True),
-        Tool("bim_ifc", "Read or set BIM objects' IFC data (objects alone reads): type (FreeCAD's spaced names: Wall, Covering, \"Building Element Proxy\"; IfcWall is understood), classification (a code), properties { \"Pset_WallCommon.FireRating\": \"REI60\" } (set.property). Answers objects [{ object, ifc, classification, properties }].",
+        Tool("bim_ifc", "Read or set BIM objects' IFC data (objects alone reads): type (FreeCAD's spaced names: Wall, Covering, \"Building Element Proxy\"; IfcWall is understood), classification (\"<system> <code>\", e.g. \"Uniclass Ss_25_10_30\": FreeCAD's IFC export needs the system's name, a space and the code, and a bare code is refused; \"\" clears it), properties { \"Pset_WallCommon.FireRating\": \"REI60\" } (set.property). Answers objects [{ object, ifc, classification, properties }].",
              obj({"objects": {"type": "array", "items": s_}, "type": s_, "classification": s_, "properties": {"type": "object"}}, ["objects"]), bim_ifc, changes=True),
         Tool("bim_quantities", "Take-off of the BIM model by type | material | both: groups { count, volume_m3, mass_kg (null when a density is missing) }, totalMass_kg; detail: true adds rows with areas and perimeter. Densities come from bim_material / bim_layers. Changes nothing.",
              obj({"by": {"type": "string", "enum": ["type", "material", "both"]}, "detail": {"type": "boolean"}}), bim_quantities),
