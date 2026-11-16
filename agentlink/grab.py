@@ -10,6 +10,22 @@ import FreeCAD
 import FreeCADGui
 
 
+def stacked_over(gl, target):
+    """The visible widgets stacked above gl inside its 3D view's window: at
+    each level from gl's parent up to (not including) target, the siblings
+    after the branch that holds gl (Qt paints later children on top; raise_
+    moves a child last). The main window's own children (Agent Link's
+    overlay, docks) are left out: the GL surface paints over those."""
+    out = []
+    branch, parent = gl, gl.parentWidget() if gl is not None else None
+    while parent is not None and branch is not target and parent is not target:
+        kids = [k for k in parent.children() if hasattr(k, "isWidgetType") and k.isWidgetType()]
+        if branch in kids:
+            out += [k for k in kids[kids.index(branch) + 1:] if k.isVisible() and not k.isWindow()]
+        branch, parent = parent, parent.parentWidget()
+    return out
+
+
 def grab_window(target=None):
     gui = FreeCADGui
     target = target or gui.getMainWindow()
@@ -41,9 +57,14 @@ def grab_window(target=None):
             painter = QtGui.QPainter(pix)
             painter.drawImage(QtCore.QRect(gl.mapTo(target, QtCore.QPoint(0, 0)), gl.size()), img)
             # What floats over the view goes back on top: the agent's caption,
-            # and widgets an add-on put on the view (a number field on a grip).
+            # widgets an add-on put on the view (a number field on a grip, a
+            # callout) and anything else stacked above it.
             over = [lbl for lbl in target.findChildren(QtW.QLabel) if lbl.isVisible() and lbl.text().startswith("✦")]
             over += [w for w in gl.findChildren(QtW.QWidget) if w.isVisible() and w.parentWidget() is gl and w not in over]
+            glr = QtCore.QRect(gl.mapTo(target, QtCore.QPoint(0, 0)), gl.size())
+            for w in stacked_over(gl, target):
+                if w not in over and QtCore.QRect(w.mapTo(target, QtCore.QPoint(0, 0)), w.size()).intersects(glr):
+                    over.append(w)
             for w in over:
                 painter.drawPixmap(w.mapTo(target, QtCore.QPoint(0, 0)), w.grab())
             painter.end()
