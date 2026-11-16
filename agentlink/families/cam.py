@@ -631,7 +631,10 @@ def tools(session):
             import Path.Tool.Bit as PathToolBit  # 1.0
         except ImportError:
             PathToolBit = None
-        if PathToolBit is not None:
+        # 1.1 still answers "import Path.Tool.Bit" (an alias of the new tool
+        # bit module) but it has no Factory: cam_tool_add failed there with
+        # "has no attribute 'Factory'". Only the 1.0 module is used this way.
+        if PathToolBit is not None and hasattr(PathToolBit, "Factory"):
             if shape_file is None:
                 raise ToolError("not_found", f"No {shape} shape in this FreeCAD's CAM tool shapes.")
             return PathToolBit.Factory.Create(name, shape_file)

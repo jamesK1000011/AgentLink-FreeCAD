@@ -234,7 +234,8 @@ class DraftHardening(unittest.TestCase):
         import FreeCAD
 
         lb = self.ok("draft_label", {"target": [0, 15, 0], "at": [40, 40, 0], "object": "Hex", "show": "area"})
-        self.assertTrue(lb["text"] and "mm" in lb["text"][0], lb)
+        # an area reads in the unit FreeCAD's schema picks (cm² for 6495 mm²)
+        self.assertTrue(lb["text"] and ("mm" in lb["text"][0] or "cm" in lb["text"][0]), lb)
         self.assertIn("needs object", self.refused("draft_label", {"target": [0, 0, 0], "show": "length"}))
         st = self.ok("draft_style", {"action": "set", "name": "Shop", "values": {"FontSize": 6, "ArrowType": "Tick", "ShowUnit": False, "ExtLines": 45}})
         # As Draft 1.1 stores them: both ends, an arrow's type by its index, floats as floats.

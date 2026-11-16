@@ -380,7 +380,16 @@ def tools(session):
             out.update({"bodies": [o.Label] + made, "step": len(s.steps)})
             return out
         try:
-            res = copies[0].fuse(copies[1:]).removeSplitter() if len(copies) > 1 else copies[0]
+            res = copies[0].fuse(copies[1:]) if len(copies) > 1 else copies[0]
+            # Refined when that works: on 1.1.3 removeSplitter answers
+            # "Null shape" for copies that do not touch (five beads along a
+            # path), and the plain union is the answer there.
+            try:
+                fine = res.removeSplitter() if len(copies) > 1 else res
+                if not fine.isNull() and fine.isValid() and abs(fine.Volume - res.Volume) <= 1e-6 * max(abs(res.Volume), 1.0):
+                    res = fine
+            except Exception:
+                pass
         except Exception as e:
             raise ToolError("failed", f"The copies could not be joined: {e} — separate: true keeps them apart.")
         apart = len(res.Solids) > 1
