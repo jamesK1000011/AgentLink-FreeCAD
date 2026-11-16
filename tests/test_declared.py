@@ -33,6 +33,10 @@ class Declared(unittest.TestCase):
         echo.declare(types.SimpleNamespace())  # nothing declared: nothing changes
 
     def test_did_names_one_form(self):
+        # As if no add-on had declared these yet (SafetyNet's own, loaded
+        # earlier in the run, says "Recovery"); tearDown puts them back.
+        for k in ("app_recover", "pref_"):
+            echo.PREFIX_NAME.pop(k, None)
         echo.declare(types.SimpleNamespace(AREAS={"app_recover": "SafetyNet", "pref_": "Settings"}))
         for name, want in (("gui_input", "Window › Input"), ("report_read", "Report › Read"), ("session_state", "Session › State"),
                            ("dialog_answer", "Dialog › Answer"), ("app_recover", "SafetyNet › Recover"), ("doc_save", "Document › Save"),

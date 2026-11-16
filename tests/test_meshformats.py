@@ -144,8 +144,10 @@ DEF Box Transform {{ translation {t[0]:g} {t[1]:g} {t[2]:g} children [
         from agentlink.tools import Session, build_server
 
         self.test_glb()
+        # up given (glTF's own Y): Agent Link's reader, not FreeCAD's Import,
+        # which import_file tries first otherwise.
         server = build_server(Session(out_dir=self.dir), lean=False)
-        r = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "import_file", "arguments": {"path": os.path.join(self.dir, "box.glb")}}})["result"]
+        r = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "import_file", "arguments": {"path": os.path.join(self.dir, "box.glb"), "up": "y"}}})["result"]
         o = json.loads(r["content"][0]["text"])
         self.assertFalse(r.get("isError"), o)
         self.assertEqual(o["read"]["format"], "glb")

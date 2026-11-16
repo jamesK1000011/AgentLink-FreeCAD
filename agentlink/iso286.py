@@ -83,6 +83,16 @@ def techdraw_limits(nominal, code):
     if len(code) < 2 or not letter.isalpha() or not grade.isdigit():
         return None
     try:
+        import FreeCAD
+
+        if not getattr(FreeCAD, "GuiUp", False):
+            # TechDrawTools registers GUI commands as it loads: headless its
+            # import fails half way, leaving FreeCADGui (without the window's
+            # functions) in sys.modules for every later call to trip on.
+            return None
+    except ImportError:
+        return None
+    try:
         from TechDrawTools.TaskHoleShaftFit import ISO286
 
         iso = ISO286()
