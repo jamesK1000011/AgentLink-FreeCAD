@@ -533,6 +533,34 @@
   "health": true,
   "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
  },
+ "dimension_add": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "dimension_remove": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "dimension_set_basic": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "dimension_set_limit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
  "doc_close": {
   "description": true,
   "docs": true,
@@ -706,10 +734,66 @@
   "health": true,
   "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
  },
+ "element_construct": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "element_fit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "element_fit_marked": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "element_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "element_rename": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "element_set_visible": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "element_unlink": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
  "export": {
   "headless": true,
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "export_csv": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
  },
  "fastener_add": {
   "description": true,
@@ -1115,6 +1199,20 @@
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
   "note": "with density or material given; with neither the installed add-on answers in its own form"
+ },
+ "mesh_densify": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "mesh_use_edited": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
  },
  "meshobj_boolean": {
   "description": true,
@@ -1837,6 +1935,13 @@
   "headless": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
  },
+ "report_get": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
  "robot_export": {
   "description": true,
   "docs": true,
@@ -1918,12 +2023,145 @@
   "health": true,
   "model": "ScadProbe 16:21 (no OpenSCAD installed; the window no longer hangs)"
  },
+ "scan_cloud": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "scan_draft": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "scan_fit_surface": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "scan_heightmap": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "scan_info": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "scan_nearest": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "scan_open": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "scan_outline": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "scan_pattern": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "scan_qa": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "scan_query": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "scan_segment": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "scan_thread": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
  "section": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "section_cut": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "section_fit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "section_get": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "section_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "section_remove": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
+ },
+ "section_to_sketch": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model 17:16-17:19, first 71 of 119 calls (as expected on each; values not read one by one)"
  },
  "setup": {
   "description": true,
