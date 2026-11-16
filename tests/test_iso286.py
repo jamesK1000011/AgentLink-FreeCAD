@@ -54,11 +54,21 @@ class CoreFirst(unittest.TestCase):
             I.limits_from(10, "Q7", core=lambda n, c: None)
 
     def test_techdraw_absent_here(self):
+        """Without the window TechDraw's tools are not imported at all: their
+        import pulls in FreeCADGui, which headless lacks addCommand and
+        getMainWindow, and every later call that tries FreeCADGui broke."""
         try:
-            import TechDrawTools  # noqa: F401
-            self.skipTest("TechDraw's tools are here")
+            import FreeCAD
+
+            up = bool(getattr(FreeCAD, "GuiUp", False))
         except ImportError:
-            self.assertIsNone(I.techdraw_limits(10, "H7"))
+            up = False
+        if up:
+            self.skipTest("FreeCAD's window is up: TechDraw's tools may be here")
+        had = "FreeCADGui" in sys.modules
+        self.assertIsNone(I.techdraw_limits(10, "H7"))
+        self.assertEqual("FreeCADGui" in sys.modules, had)
+        self.assertNotIn("TechDrawTools", sys.modules)
 
 
 if __name__ == "__main__":
