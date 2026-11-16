@@ -17,8 +17,8 @@ class Health(Base):
         self.assertTrue(h["ok"], h)
         self.assertIn("Base: ", h["verdict"])
         self.assertIn("DoF left on", h["verdict"])
-        self.assertEqual(h["sketches"][0]["dof"], self.session.doc.getObjectsByLabel("Base")[0].DoF)
-        self.assertTrue(h["sketches"][0]["free"], h)
+        self.assertIn(f"{self.session.doc.getObjectsByLabel('Base')[0].DoF} DoF left on the start of lines", h["verdict"])
+        self.assertNotIn("sketches", h)
 
     def test_2_the_verdict_follows_the_solver(self):
         self.ok("sketch_new", {"plane": "XZ", "name": "Full"})
