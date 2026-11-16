@@ -10,6 +10,7 @@
 # arrive; headless (FreeCADCmd or a Python with FreeCAD) the same calls run
 # on a document of their own. Every change is one undo step.
 
+import json
 import os
 import re
 import sys
@@ -1247,9 +1248,50 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False, "names0": mine_mark[1], "t0": t_out,
                               "budget": float(budget), "first": first, "total": total, "file": a.get("file")}
         try:
-            return _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine)
+            got = _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine)
         finally:
             s.batch_now = prev
+        return _batch_to(a.get("to"), got, first)
+
+    def _batch_to(to, got, first):
+        """to: the whole answer goes to a .json file and a line per call
+        comes back — a long run's answers (each with its reading, health
+        and report) need not pass through the conversation to be kept."""
+        if not to or not isinstance(got, dict):
+            return got
+        if not isinstance(to, str) or not to.lower().endswith(".json"):
+            got["toError"] = "to: a .json file's path (relative: in the session's folder). The answers are here in full instead."
+            return got
+        path = to if os.path.isabs(os.path.expanduser(to)) else os.path.join(s.out_dir, to)
+        path = os.path.expanduser(path)
+        try:
+            from . import paths as _paths
+
+            _paths.check("batch", "to", path, s.out_dir, True)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(got, f, ensure_ascii=False, default=str)
+        except Exception as e:
+            got["toError"] = f"to: not written ({getattr(e, 'message', None) or e}). The answers are here in full instead."
+            return got
+        lines = []
+        for i, r in enumerate(got.get("results") or []):
+            row = {"i": first + i, "tool": r.get("tool"), "ok": bool(r.get("ok"))}
+            if r.get("undone"):
+                row["undone"] = True
+            if not r.get("ok"):
+                e = r.get("error") or {}
+                row["error"] = f"{e.get('code')}: {e.get('message')}" if isinstance(e, dict) else str(e)
+            else:
+                res = r.get("result")
+                h = res.get("health") if isinstance(res, dict) else None
+                if isinstance(h, dict) and h.get("verdict"):
+                    row["health"] = h["verdict"]
+            lines.append(row)
+        short = {k: v for k, v in got.items() if k != "results"}
+        short.update({"results": lines, "written": {"path": path, "bytes": os.path.getsize(path)},
+                      "note": "Each call's whole answer is in the file (results[i].result); here: ok, a refusal's words and the health verdict."})
+        return short
 
     def _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine):
         import json as _json
@@ -1343,8 +1385,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         Tool("job_start", "Run a read as a job: tool and its arguments. The answer comes back as the tool's own when it ends within 45 s, else a job id for job_status (wait: false answers with the id at once). Reads that are heavy or were slow here (over 20 s) go to a job on their own, and any read takes background: true for the same; a client drops a call after about 80 s, so a long read's answer would be lost. Only reads that leave the window and the 3D view alone (not changes, pictures or window tools); while one runs, changes to its document wait (refused, saying which job).",
              obj({"tool": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["tool"]), job_start),
         Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }], or file: a .json file holding that list (or { calls, rollback, stopOnError }), read on this side so a long run of calls (many profiles' points) is not sent through the conversation; a relative path is in the session's folder, and files are read where other tools may read. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it and removes every object it made (removed lists any undo did not reach), so it stands or falls whole. "
-             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch.",
-             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}}), batch),
+             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch. to: a .json file the whole answer is written to (relative: in the session's folder); the reply is then a line per call — ok, a refusal's words, the health verdict — so a long run's answers stay out of the conversation; read a call's result from the file when its line needs it.",
+             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}}), batch),
         Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded making): shots past the last 50 and 3 days, solver and job runs past 14 days, FreeCAD backups past 7; exports only listed. To the Trash. Dry run unless dry_run: false; kinds, older_than_days narrow it. Runs on its own daily.",
              obj({"dry_run": {"type": "boolean"}, "kinds": {"type": "array", "items": {"type": "string", "enum": list(outputs.KINDS)}}, "older_than_days": {"type": "number"}}), outputs_clean),
         Tool("history_undo", "Undo the last change (steps: how many), as FreeCAD's Edit › Undo does.", obj({"steps": {"type": "integer"}}), history("undo")),
