@@ -185,6 +185,7 @@ docs/clients/lm-studio.md
 docs/clients/opencode-ollama.md
 docs/clients/vscode.md
 docs/hardening/STATUS.md
+docs/hardening/addons-findings.md
 docs/hardening/asmtd-findings.md
 docs/hardening/bimcam-findings.md
 docs/hardening/chain-findings.md
