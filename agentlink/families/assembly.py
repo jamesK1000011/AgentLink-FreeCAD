@@ -36,10 +36,17 @@ def _view_provider(obj, kind):
     if not getattr(FreeCAD, "GuiUp", False) or getattr(obj, "ViewObject", None) is None:
         return
     try:
+        vo = obj.ViewObject
         if kind == "grounded":
-            JointObject.ViewProviderGroundedJoint(obj.ViewObject)
+            JointObject.ViewProviderGroundedJoint(vo)
         else:
-            JointObject.ViewProviderJoint(obj.ViewObject)
+            JointObject.ViewProviderJoint(vo)
+        # Setting the proxy on an object that already has its view does not
+        # run attach (it builds the joint's coordinate-system nodes,
+        # switch_JCS1 …): run it here, as FreeCAD does for a new object.
+        px = getattr(vo, "Proxy", None)
+        if px is not None and hasattr(px, "attach") and not hasattr(px, "switch_JCS1") and kind != "grounded":
+            px.attach(vo)
     except Exception:
         pass
 # Joints between two elements; gears, belts and the like need more than this
@@ -75,7 +82,7 @@ def _joints(asm):
     # without one) get FreeCAD's own, so the window's recompute works again.
     for j in getattr(g, "Group", []):
         vo = getattr(j, "ViewObject", None)
-        if vo is not None and getattr(FreeCAD, "GuiUp", False) and not hasattr(getattr(vo, "Proxy", None), "redrawJointPlacements") and hasattr(j, "JointType"):
+        if vo is not None and getattr(FreeCAD, "GuiUp", False) and not hasattr(getattr(vo, "Proxy", None), "switch_JCS1") and hasattr(j, "JointType"):
             _view_provider(j, "joint")
         elif vo is not None and getattr(FreeCAD, "GuiUp", False) and getattr(vo, "Proxy", None) in (None, 0) and hasattr(j, "ObjectToGround"):
             _view_provider(j, "grounded")
