@@ -209,6 +209,63 @@ def _temp_copy(file):
     return folder.startswith(("agentlink-recovered-", "agentlink-restore-"))
 
 
+def _unsaved_dir():
+    from .. import keep
+
+    return keep.path("unsaved")
+
+
+def _scratch(file):
+    """A file that is Agent Link's own, not the person's: a copy reopened
+    from a temporary folder, or an agent's never-saved document kept in
+    ~/AgentLink/unsaved at a restart. Saved in place and reopened by path at
+    the next restart, so it comes back once, never as a copy of a copy."""
+    f = os.path.abspath(str(file or ""))
+    if not file:
+        return False
+    if _temp_copy(f):
+        return True
+    root = os.path.abspath(_unsaved_dir())
+    return os.path.dirname(f) == root
+
+
+def unsaved_path(label, taken=()):
+    """Where an agent's never-saved document is kept at a restart: a file
+    named after its label in ~/AgentLink/unsaved, not one already used."""
+    base = re.sub(r"\s*\(recovered[^)]*\)\s*$", "", str(label or ""))
+    base = re.sub(r"[^A-Za-z0-9 _.-]+", "_", base).strip(" .") or "Unnamed"
+    folder = _unsaved_dir()
+    p = os.path.join(folder, base + ".FCStd")
+    n = 2
+    while os.path.exists(p) or p in taken:
+        p = os.path.join(folder, f"{base}-{n}.FCStd")
+        n += 1
+    return p
+
+
+def restart_plan(docs, changed, rule, mine, discard=False):
+    """[(doc, how)] for app_restart, how one of: save (over its file, by the
+    rule), keep (Agent Link's own file, saved in place), unsaved (an agent's
+    never-saved document, saved into ~/AgentLink/unsaved), drop, copy (the
+    person's: a copy reopened beside it by the reopen add-on)."""
+    plan = []
+    for d in docs:
+        if not changed(d):
+            continue
+        f = getattr(d, "FileName", "") or ""
+        if f and _scratch(f):
+            plan.append((d, "keep"))
+        elif f and (rule == "all" or (rule == "agent" and d.Name in mine)):
+            plan.append((d, "save"))
+        elif not f and discard:
+            plan.append((d, "drop"))
+        elif not f and rule != "none" and d.Name in mine:
+            plan.append((d, "unsaved"))
+        else:
+            plan.append((d, "copy"))
+    return plan
+
+
 def _carry_settings(app):
     """Run the other release headless to copy this one's settings and
     add-ons into its versioned folders (and, on a Mac, turn off the pop-up
@@ -786,18 +843,26 @@ def tools(session):
         # copies beside their files once FreeCAD is back.
         cps, reopener = hooks.service("checkpoints"), hooks.service("reopen")
         mine = set(getattr(s, "agent_docs", ()) or ())
-        plan = []
-        for d in list(FreeCAD.listDocuments().values()):
-            if not changed(d):
-                continue
-            save = d.FileName and (rule == "all" or (rule == "agent" and d.Name in mine))
-            plan.append((d, "save" if save else ("drop" if a.get("discard") and not d.FileName else "copy")))
+        # Agent Link's own files (a copy reopened from a temporary folder, an
+        # agent's never-saved document kept at the last restart) are saved
+        # in place and reopened by path: they come back once, never as a
+        # "(recovered …)" copy of a copy on every restart.
+        plan = restart_plan(list(FreeCAD.listDocuments().values()), changed, rule, mine, bool(a.get("discard")))
         lost = [d.Label for d, how in plan if how == "copy"]
         if lost and reopener is None:
             raise ToolError("invalid_state", f"{', '.join(lost)}: changed and not being saved, and nothing here keeps a copy to reopen them from (that needs an add-on that keeps checkpoints). doc_save them first, save: all (with the person's confirm), or discard: true for never-saved ones. Nothing was changed.")
-        saved, dropped = [], []
+        saved, dropped, kept = [], [], []
         for d, how in plan:
-            if how == "save":
+            if how == "keep":
+                d.save()
+                kept.append(d.Label)
+            elif how == "unsaved":
+                os.makedirs(_unsaved_dir(), exist_ok=True)
+                f = unsaved_path(d.Label, saved)
+                d.saveAs(f)
+                saved.append(f)
+                kept.append(d.Label)
+            elif how == "save":
                 if cps is not None:
                     try:
                         cps.take(s, "before restart", auto=True, doc=d)
@@ -807,11 +872,12 @@ def tools(session):
                 saved.append(d.FileName)
             elif how == "drop":
                 dropped.append(d.Label)
-        copied = reopener.keep([d for d, how in plan if how == "copy"]) if lost else []
-        # A copy opened from an add-on's temporary folder is not reopened by
-        # path: the add-on reopens what it keeps, and reopening the copy too
-        # chained "_recovered" copies on every restart.
-        reopen = [d.FileName for d in FreeCAD.listDocuments().values() if d.FileName and not _temp_copy(d.FileName)]
+        to_copy = [d for d, how in plan if how == "copy"]
+        copied = reopener.keep(to_copy) if lost else []
+        # Reopened by path: every document with a file, its own reopened
+        # copies included (saved in place above when changed), but not one
+        # the add-on keeps a copy of now: it reopens what it keeps.
+        reopen = [d.FileName for d in FreeCAD.listDocuments().values() if d.FileName and all(d is not c for c in to_copy)]
         # Calls wait for the window (and these documents) instead of going to
         # the hidden FreeCAD meanwhile; the one in front is in front again.
         from .. import restart_mark
@@ -841,6 +907,11 @@ def tools(session):
             argv = ["/bin/sh", "-c", wait + 'exec open -g -a "$0" "$@"', bundle, str(os.getpid()), cfg_from, cfg_to, *reopen]
         else:
             argv = ["/bin/sh", "-c", wait + '"$0" "$@" &', exe, str(os.getpid()), cfg_from, cfg_to, *reopen]
+        # Agent Link starts this FreeCAD: its Document Recovery at start (a
+        # crash before) is answered by the link (unattended use, F).
+        from .. import keep
+
+        keep.mark_launch(None, "app_restart")
         subprocess.Popen(argv, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_clean_env() if target else None)
         for d in list(FreeCAD.listDocuments().values()):
             FreeCAD.closeDocument(d.Name)
@@ -852,7 +923,7 @@ def tools(session):
 
             app = QtWidgets.QApplication.instance()
         QtCore.QTimer.singleShot(300, app.quit)
-        return {"restarting": True, "saved": saved, "reopens": reopen, **({"fromCopies": [c["label"] for c in copied]} if copied else {}), **({"discarded": dropped} if dropped else {}), **({"app": bundle, "settings": migrated} if target else {}), "note": "FreeCAD quits and opens again in a few seconds with these documents, its link on by itself; calls meanwhile wait for it (up to 90 s)."}
+        return {"restarting": True, "saved": saved, "reopens": reopen, **({"keptInPlace": kept} if kept else {}), **({"fromCopies": [c["label"] for c in copied]} if copied else {}), **({"discarded": dropped} if dropped else {}), **({"app": bundle, "settings": migrated} if target else {}), "note": "FreeCAD quits and opens again in a few seconds with these documents, its link on by itself; calls meanwhile wait for it (up to 90 s)."}
 
     def app_install(a):
         """Install another FreeCAD release beside this one (a Mac): started
@@ -983,7 +1054,7 @@ def tools(session):
         Tool("snapshot_latest", "The person's newest screenshot (index 2, 3 … older ones) as a picture with their marks (original: true without), with its note, numbered pins and their comments, workbench and time. Only the person takes them (camera button, Alt+Shift+S).",
              obj({"index": {"type": "integer"}, "original": {"type": "boolean"}}), snapshot_latest),
         Tool("snapshot_list", "The person's screenshots, newest first, without pictures: time, note, pins, saved path.", obj({}), snapshot_list),
-        Tool("app_restart", "Quit this FreeCAD window and open it again (new add-ons, a theme, settings that need a restart): settings written; save agent (default: the documents this session changed, each checkpointed first) | none | all (confirm: \"save all\" typed by the person) — any other changed document reopens from a copy beside its file, never saved over it (discard: true drops never-saved ones); app: another FreeCAD .app (app_install's) opens that one instead, this one's settings and add-ons carried into its folders first. Window only.",
+        Tool("app_restart", "Quit this FreeCAD window and open it again (new add-ons, a theme, settings that need a restart): settings written; save agent (default: the documents this session changed, each checkpointed first) | none | all (confirm: \"save all\" typed by the person) — the agent's never-saved documents are kept once in ~/AgentLink/unsaved, any other changed document reopens from a copy beside its file, never saved over it (discard: true drops never-saved ones); app: another FreeCAD .app (app_install's) opens that one instead, this one's settings and add-ons carried into its folders first. Window only.",
              obj({"discard": {"type": "boolean"}, "app": {"type": "string"}, "save": {"type": "string", "enum": ["agent", "none", "all"]}, "confirm": {"type": "string"}}), app_restart),
         Tool("workbench", "The workbenches, the active one, and activate: a name (Part Design, BIM, FEM …). Window only.", obj({"activate": {"type": "string"}}), workbench),
     ]

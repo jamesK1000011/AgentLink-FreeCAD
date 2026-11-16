@@ -15,6 +15,7 @@
 
 import json
 import os
+import queue
 import signal
 import subprocess
 import sys
@@ -110,6 +111,19 @@ def _is_force_restart(line):
     return bool(calls) and all(isinstance(c, dict) and c.get("tool") == "app_force_restart" for c in calls)
 
 
+def _unstick_call(line):
+    """gui_unstick alone or as a batch of nothing else: ("alone" | "batch",
+    all), else None. Answered here on a connection of its own, never behind
+    the call a menu or dialog holds."""
+    _mid, tool, args = _call_info(line)
+    if tool == "gui_unstick":
+        return ("alone", bool((args or {}).get("all")))
+    calls = (args or {}).get("calls") if tool == "batch" else None
+    if calls and all(isinstance(c, dict) and c.get("tool") == "gui_unstick" for c in calls):
+        return ("batch", any(bool((c.get("arguments") or {}).get("all")) for c in calls if isinstance(c.get("arguments"), dict)))
+    return None
+
+
 def _call_info(line):
     try:
         m = json.loads(line)
@@ -197,10 +211,10 @@ def _answers_dialog(c):
     each such call was answered "waiting behind it" before it could run
     (GUI pass, FreeCAD's Preferences opened by a command). gui_input too:
     the window takes it only aimed inside the dialog."""
-    if c.get("tool") in ("dialog_answer", "gui_input"):
+    if c.get("tool") in ("dialog_answer", "gui_input", "gui_unstick"):
         return True
     calls = (c.get("args") or {}).get("calls") if c.get("tool") == "batch" else None
-    return bool(calls) and all(isinstance(x, dict) and x.get("tool") in ("dialog_answer", "gui_input") for x in calls)
+    return bool(calls) and all(isinstance(x, dict) and x.get("tool") in ("dialog_answer", "gui_input", "gui_unstick") for x in calls)
 
 
 class Window:
@@ -343,7 +357,7 @@ class Window:
         self._drop()
         return True
 
-    def unstick(self, timeout=6.0):
+    def unstick(self, timeout=6.0, all_=False):
         """gui_unstick on a connection of its own (the one in use waits on
         the call a menu holds): what it closed, or None when the window did
         not answer."""
@@ -351,7 +365,7 @@ class Window:
         tmp.off = False
         if not tmp._open():
             return None
-        line = json.dumps({"jsonrpc": "2.0", "id": f"__unstick{time.time()}", "method": "tools/call", "params": {"name": "gui_unstick", "arguments": {}}})
+        line = json.dumps({"jsonrpc": "2.0", "id": f"__unstick{time.time()}", "method": "tools/call", "params": {"name": "gui_unstick", "arguments": {"all": True} if all_ else {}}})
         try:
             tmp.sock.settimeout(timeout)
             got = tmp._send(line, forward=False)
@@ -695,20 +709,17 @@ def run(script, argv):
     start()
     if keep is not None:
         threading.Thread(target=watchdog, daemon=True).start()
-    for line in sys.stdin:
-        msg = None
+    def urgent(line):
+        """app_force_restart and gui_unstick (alone or as a batch of
+        nothing else): answered at once, on threads of their own, even while
+        a call the window holds is in hand — the reader takes them off stdin
+        before they queue behind it."""
         try:
             msg = json.loads(line)
-            if msg.get("id") is not None and msg.get("method"):
-                pending[msg["id"]] = msg["method"]
         except ValueError:
-            pass
-        if msg and msg.get("method") == "tools/call" and keep is not None:
-            mid, tool, args = _call_info(line)
-            if hangs.get(keep.call_key(tool, args), 0) >= 2:
-                pending.pop(mid, None)
-                write(_answer(mid, "invalid_state", f"{tool} with these arguments hung FreeCAD twice this session: refused for the rest of it. Try another way (other sizes, a rough pass, fewer objects)."))
-                continue
+            return False
+        if not isinstance(msg, dict):
+            return False
         if msg and msg.get("method") == "tools/call" and _is_force_restart(line):
             # Answered here, never inside FreeCAD: the window may be the thing stuck.
             fid = msg.get("id")
@@ -722,7 +733,61 @@ def run(script, argv):
                     write(_answer(fid, "failed", f"Force restart failed: {e}"))
 
             threading.Thread(target=_force, daemon=True).start()
-            continue
+            return True
+        un = _unstick_call(line) if msg and msg.get("method") == "tools/call" and not window.off else None
+        if un is not None:
+            uid = msg.get("id")
+            pending.pop(uid, None)
+
+            def _unstick(uid=uid, how=un[0], all_=un[1]):
+                try:
+                    got = window.unstick(all_=all_)
+                except Exception as e:  # noqa: BLE001
+                    got, why = None, str(e)
+                else:
+                    why = None
+                if got is None:
+                    write(_answer(uid, "unavailable", "gui_unstick: the FreeCAD window's link did not answer" + (f" ({why})" if why else "") +
+                                  " (no window open, or something other than a menu or dialog holds it): app_force_restart."))
+                elif how == "batch":
+                    write(_result(uid, {"results": [{"tool": "gui_unstick", "ok": True, "result": got}], "ran": 1}))
+                else:
+                    write(_result(uid, got))
+
+            threading.Thread(target=_unstick, daemon=True).start()
+            return True
+        return False
+
+    lines_in = queue.Queue()
+
+    def reader():
+        for line in sys.stdin:
+            try:
+                if urgent(line):
+                    continue
+            except Exception as e:  # noqa: BLE001
+                sys.stderr.write(f"Agent Link: {e}\n")
+            lines_in.put(line)
+        lines_in.put(None)
+
+    threading.Thread(target=reader, daemon=True).start()
+    while True:
+        line = lines_in.get()
+        if line is None:
+            break
+        msg = None
+        try:
+            msg = json.loads(line)
+            if msg.get("id") is not None and msg.get("method"):
+                pending[msg["id"]] = msg["method"]
+        except ValueError:
+            pass
+        if msg and msg.get("method") == "tools/call" and keep is not None:
+            mid, tool, args = _call_info(line)
+            if hangs.get(keep.call_key(tool, args), 0) >= 2:
+                pending.pop(mid, None)
+                write(_answer(mid, "invalid_state", f"{tool} with these arguments hung FreeCAD twice this session: refused for the rest of it. Try another way (other sizes, a rough pass, fewer objects)."))
+                continue
         heavy_tool = None
         if msg and msg.get("method") == "tools/call":
             mid, tool, args = _call_info(line)

@@ -345,6 +345,34 @@ class WindowMenu(Sup):
         hb = json.load(open(os.path.join(self.home, "heartbeat.json")))
         self.assertIsNone(hb["popup"])
 
+    def test_unstick_through_batch_is_answered_beside_the_held_call(self):
+        """batch [gui_unstick] (a client reaches a new tool through batch)
+        while a menu holds the call in hand: answered at once on a
+        connection of its own, and the held call then finishes."""
+        first = self.call("ping")[1]["pid"]
+        q = self._lines()
+        self.sup.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 201, "method": "tools/call", "params": {"name": "behind_menu", "arguments": {}}}) + "\n")
+        self.sup.stdin.flush()
+        time.sleep(0.5)
+        t0 = time.time()
+        self.sup.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 202, "method": "tools/call", "params": {"name": "batch", "arguments": {"calls": [{"tool": "gui_unstick", "arguments": {}}]}}}) + "\n")
+        self.sup.stdin.flush()
+        got = {}
+        while len(got) < 2 and time.time() - t0 < 10:
+            try:
+                m = json.loads(q.get(timeout=1))
+            except queue.Empty:
+                continue
+            got[m["id"]] = (m["result"].get("isError", False), json.loads(m["result"]["content"][0]["text"]), time.time() - t0)
+        self.assertEqual(set(got), {201, 202})
+        err, out, took = got[202]
+        self.assertFalse(err, out)
+        self.assertLess(took, 2.5)  # never behind the held call, never the popup wait
+        self.assertEqual(out["results"][0]["result"]["closed"][0]["items"], ["New Sketch", "Attach sketch"])
+        self.assertFalse(got[201][0])  # the menu closed, so the held call finished
+        self.assertEqual(self.call("ping")[1]["pid"], first)
+
+
 
 if __name__ == "__main__":
     unittest.main()
