@@ -87,6 +87,38 @@ class Placement(unittest.TestCase):
         self.assertEqual(r[4], "top")
         self.inside(r)
 
+    def test_never_over_the_3d_view(self):
+        # The Mac: a Pad button on the toolbar row above the 3D view, the
+        # Combo View on the left with its tab bar; the view's GL surface
+        # paints over the overlay, so the callout must not reach into it.
+        area = (0, 0, 1400, 900)
+        view = (360, 80, 1040, 780)
+        tabs = (0, 80, 360, 26)
+        pad = (380, 40, 28, 28)
+        x, y, w, h, side = overlay.place_callout(pad, (330, 60), area, forbid=[view], soft=[tabs])
+        self.assertEqual(overlay.overlap((x, y, w, h), view), 0)
+        self.assertEqual(overlay.overlap((x, y, w, h), tabs), 0)
+        self.assertEqual(overlay.overlap((x, y, w, h), overlay.grow(pad, 6)), 0)
+        self.assertLessEqual(x + w, 1400)
+
+    def test_narrows_to_fit_a_narrow_dock(self):
+        area = (0, 0, 1200, 800)
+        view = (230, 0, 970, 800)  # everything right of a 230 px dock is 3D view
+
+        def measure(w):  # 1200 px of text, 20 px a line
+            return 16 + 20 * -(-1200 // max(1, w - 16))
+
+        x, y, w, h, _side = overlay.place_callout((240, 300, 30, 30), (330, 80), area, forbid=[view], measure=measure)
+        self.assertEqual(overlay.overlap((x, y, w, h), view), 0)
+        self.assertLessEqual(w, 230)
+        self.assertGreaterEqual(w, 180)
+        self.assertEqual(h, measure(w))
+
+    def test_no_target_avoids_the_view(self):
+        x, y, w, h, side = overlay.place_callout(None, (300, 60), (0, 0, 1200, 800), forbid=[(300, 0, 900, 800)])
+        self.assertEqual(side, "top")
+        self.assertEqual(overlay.overlap((x, y, w, h), (300, 0, 900, 800)), 0)
+
     def test_badge_inside(self):
         b = overlay.badge_at((0, 0, 20, 20), self.AREA)
         self.assertGreaterEqual(b[0], 0)
@@ -428,11 +460,18 @@ class V:
 
 
 class Face:
+    CenterOfMass = V(0.3, 0.3, 0)
+
     def tessellate(self, tol):
         return [V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)], [(0, 1, 2)]
 
 
 class Edge:
+    FirstParameter, LastParameter = 0.0, 4.0
+
+    def valueAt(self, t):
+        return V(t, 0, 0)
+
     def discretize(self, Number):
         return [V(i, 0, 0) for i in range(Number)]
 
@@ -456,6 +495,20 @@ class Annotations(unittest.TestCase):
         self.assertEqual(face.children[3].idx, [0, 1, 2, -1])
         ann.clear("mine")
         self.assertEqual(scene.children, [])
+
+    def test_badge_at_the_first_lit_centre(self):
+        scene = Node("root")
+        ann = annotate.Annotations(coin=FakeCoin(), scene=lambda: scene)
+        ann.light(types.SimpleNamespace(Label="Pad"), ["Face99", "Edge3", "Face6"], owner="mine", shape=Shape(), badge=2)
+        kids = scene.children[0].children
+        self.assertEqual([n.kind for n in kids], ["SoAnnotation"] * 3)  # edge, its badge, face
+        badge = kids[1]
+        self.assertEqual([c.kind for c in badge.children], ["SoMaterial", "SoTranslation", "SoCoordinate3", "SoMarkerSet", "SoFont", "SoText2"])
+        self.assertEqual(badge.children[1].translation, (2.0, 0, 0))
+        self.assertEqual(badge.children[5].string, "  2")
+        scene2 = Node("root")
+        annotate.Annotations(coin=FakeCoin(), scene=lambda: scene2).light(object(), ["Face6"], shape=Shape())
+        self.assertEqual(len(scene2.children[0].children), 1)  # no badge asked, none drawn
 
     def test_no_view(self):
         ann = annotate.Annotations(coin=FakeCoin(), scene=lambda: None)

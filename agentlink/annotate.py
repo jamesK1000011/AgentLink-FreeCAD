@@ -6,7 +6,7 @@ Steps stage draw here; add-ons light a face, an edge or a vertex through
 the service hooks.service("annotations"):
 
     ann = hooks.service("annotations")
-    ann.light(obj, ["Face6", "Edge3"], owner="mine", colour="#3f93e0")
+    ann.light(obj, ["Face6", "Edge3"], owner="mine", colour="#3f93e0", badge=2)
         -> {"lit": ["Face6", "Edge3"], "missing": []}
     ann.clear("mine")
 
@@ -22,6 +22,7 @@ TINT_TRANSPARENCY = 0.35
 EDGE_WIDTH = 5.0
 EDGE_POINTS = 64
 TESS = 0.1  # mm: the face's triangulation tolerance
+BADGE_FONT = 18
 
 
 def _view():
@@ -63,6 +64,19 @@ def face_mesh(face, tol=TESS):
 def edge_line(edge, n=EDGE_POINTS):
     pts = edge.discretize(Number=n) if hasattr(edge, "discretize") else []
     return [(p.x, p.y, p.z) if hasattr(p, "x") else tuple(p) for p in pts]
+
+
+def centre_of(el, kind):
+    """Where a sub-element's badge goes: a face's or edge's centre of mass
+    (an edge's middle when it has none), a vertex's point."""
+    if kind == "vertex":
+        p = el.Point
+    else:
+        p = getattr(el, "CenterOfMass", None)
+        if p is None and kind == "edge":
+            a, b = el.FirstParameter, el.LastParameter
+            p = el.valueAt((a + b) / 2.0)
+    return (p.x, p.y, p.z)
 
 
 def global_shape(obj):
@@ -109,9 +123,11 @@ class Annotations:
         self.roots[owner] = (sg, sep)
         return sep
 
-    def light(self, obj, subs, owner="", colour="#3f93e0", shape=None):
+    def light(self, obj, subs, owner="", colour="#3f93e0", shape=None, badge=None):
         """Draw each of subs (Face6, Edge3, Vertex1) of obj. {lit, missing:
-        [(sub, why)]}."""
+        [(sub, why)]}. badge: a number drawn at the first lit one's centre
+        (over the model, facing the screen), so several targets read in
+        order in the view too."""
         lit, missing = [], []
         try:
             shape = shape if shape is not None else global_shape(obj)
@@ -165,8 +181,39 @@ class Annotations:
                 for c in (co, ms):
                     node.addChild(c)
             root.addChild(node)
+            if badge is not None and not lit:
+                try:
+                    root.addChild(self._badge(centre_of(el, k), badge, col))
+                except Exception as e:  # noqa: BLE001  (the light stays; the number is a nicety)
+                    sys.stderr.write(f"Agent Link: annotation badge not drawn ({type(e).__name__}: {e})\n")
             lit.append(sub)
         return {"lit": lit, "missing": missing}
+
+    def _badge(self, at, n, col):
+        """A filled dot and the number beside it at point at."""
+        coin = self.coin()
+        node = coin.SoAnnotation()
+        mat = coin.SoMaterial()
+        mat.diffuseColor = col
+        mat.emissiveColor = col
+        tr = coin.SoTranslation()
+        tr.translation = tuple(at)
+        co = coin.SoCoordinate3()
+        co.point.setValue(0, 0, 0)
+        dot = coin.SoMarkerSet()
+        try:
+            import FreeCADGui
+
+            dot.markerIndex = FreeCADGui.getMarkerIndex("CIRCLE_FILLED", 13)
+        except Exception:
+            pass
+        font = coin.SoFont()
+        font.size = BADGE_FONT
+        txt = coin.SoText2()
+        txt.string = f"  {n}"
+        for c in (mat, tr, co, dot, font, txt):
+            node.addChild(c)
+        return node
 
     def clear(self, owner=None):
         for k in [k for k in self.roots if owner is None or k == owner]:
