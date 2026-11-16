@@ -162,6 +162,78 @@ class Assembly(unittest.TestCase):
         err, x = self.call("asm_sweep", {"joint": "Nope"})
         self.assertTrue(err)
 
+    def test_7_made_as_freecads_own_command_makes_it(self):
+        """The assembly is marked Type "Assembly", as Create Assembly does:
+        JointObject reads it to choose which part a new joint moves. A joint
+        whose b is the grounded part moves a, not the grounded one; and a
+        second joint does not put the first one's part back (the solve's own
+        undo is cleared, as the joint panel's OK does)."""
+        import FreeCAD
+        import Part
+
+        FreeCAD.newDocument("Typed")
+        self.session.switch(FreeCAD.ActiveDocument)
+        add_body(self.session, "T base", Part.makeBox(40, 40, 10))
+        add_body(self.session, "T mid", Part.makeBox(20, 20, 10, FreeCAD.Vector(100, 0, 50)))
+        add_body(self.session, "T top", Part.makeBox(10, 10, 10, FreeCAD.Vector(-80, 0, 90)))
+        err, n = self.call("asm_new", {"parts": ["T base", "T mid", "T top"], "name": "Typed"})
+        self.assertFalse(err, n)
+        asm = next(o for o in self.session.doc.Objects if o.TypeId == "Assembly::AssemblyObject")
+        self.assertEqual(asm.Type, "Assembly")
+        base0 = self.session.body("T base").Placement.copy()
+        up, down = {"kind": "face", "normal": [0, 0, 1]}, {"kind": "face", "normal": [0, 0, -1]}
+        # a is the free part, b the grounded one: the free part moves
+        err, r = self.call("asm_joint", {"kind": "fixed", "a": {"part": "T mid", "element": down}, "b": {"part": "T base", "element": up}})
+        print("\ngrounded b:", json.dumps(r))
+        self.assertFalse(err, r)
+        self.assertEqual(r["solve"], "solved")
+        self.assertIn("T mid", r["moved"])
+        self.assertNotIn("T base", r["moved"])
+        self.assertTrue(self.session.body("T base").Placement.isSame(base0, 1e-6))
+        mid = self.session.body("T mid")
+        self.assertAlmostEqual(mid.Shape.BoundBox.ZMin, 10, delta=1e-3)
+        mid1 = mid.Placement.copy()
+        # the next joint leaves the first one's part where its joint put it
+        err, r2 = self.call("asm_joint", {"kind": "fixed", "a": {"part": "T mid", "element": up}, "b": {"part": "T top", "element": down}})
+        print("second:", json.dumps(r2))
+        self.assertFalse(err, r2)
+        self.assertIn("T top", r2["moved"])
+        self.assertTrue(self.session.body("T mid").Placement.isSame(mid1, 1e-4))
+        self.assertAlmostEqual(self.session.body("T mid").Shape.BoundBox.ZMin, 10, delta=1e-3)
+        self.assertAlmostEqual(self.session.body("T top").Shape.BoundBox.ZMin, 20, delta=1e-3)
+        err, c = self.call("asm_check", {})
+        self.assertFalse(err, c)
+        self.assertEqual(c["verdict"], "clear", c)
+        self.assertNotIn("notConnected", c)
+
+    def test_8_a_linked_part_is_checked_where_its_link_stands(self):
+        """A part held through an App::Link answers Shape with its target's
+        own, placed where the target is: asm_check reads it where the link
+        stands instead."""
+        import FreeCAD
+        import Part
+
+        FreeCAD.newDocument("Linked")
+        self.session.switch(FreeCAD.ActiveDocument)
+        add_body(self.session, "L base", Part.makeBox(20, 20, 20))
+        src = add_body(self.session, "L block", Part.makeBox(10, 10, 10, FreeCAD.Vector(200, 0, 0)))
+        err, n = self.call("asm_new", {"parts": ["L base"]})
+        self.assertFalse(err, n)
+        asm = next(o for o in self.session.doc.Objects if o.TypeId == "Assembly::AssemblyObject")
+        lk = asm.newObject("App::Link", "Link")
+        lk.LinkedObject = src
+        lk.Label = "L link"
+        # the link stands 195 mm back along x: the block (at x 200 … 210) lands inside the base
+        lk.Placement = FreeCAD.Placement(FreeCAD.Vector(-195, 5, 5), FreeCAD.Rotation())
+        self.session.doc.recompute()
+        err, c = self.call("asm_check", {})
+        print("\nlinked:", json.dumps(c))
+        self.assertFalse(err, c)
+        self.assertEqual(c["verdict"], "fix", c)
+        pair = next(h for h in c["overlaps"] if "L link" in h["parts"])
+        self.assertEqual(sorted(pair["parts"]), ["L base", "L link"])
+        self.assertAlmostEqual(pair["volume"], 1000, delta=1)
+
 
 if __name__ == "__main__":
     unittest.main()

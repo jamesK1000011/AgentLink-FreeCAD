@@ -333,8 +333,9 @@ def _unheld_solids(st, shape):
             continue
     return out
 
-# The tools that run CalculiX: only their answers carry its lines.
-SOLVERS = ("fea_solve", "fea_modes", "fea_buckle", "fea_heat", "fea_shell", "fea_frame", "fea_parts", "fea_native")
+# The study's tools that set up or read and never run CalculiX: every other
+# fea_ tool's answer carries its lines.
+NOT_SOLVERS = ("fea_setup", "fea_hold", "fea_load", "fea_clear", "fea_results", "fea_probe", "fea_chart", "fea_export", "fea_refine")
 
 
 def _health(session, tool, changed):
@@ -343,7 +344,8 @@ def _health(session, tool, changed):
     error lines in the refusal."""
     tail = getattr(session, "_ccx_tail", None)
     session._ccx_tail = None  # read once: a later call is not told an earlier solve's lines
-    if not tail or str(getattr(tool, "name", "")) not in SOLVERS:
+    name = str(getattr(tool, "name", ""))
+    if not tail or not name.startswith("fea_") or name in NOT_SOLVERS:
         return None
     warn = [x for x in str(tail).split(" | ") if "WARNING" in x.upper() or "ERROR" in x.upper()]
     if not warn:

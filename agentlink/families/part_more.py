@@ -94,7 +94,7 @@ def add(s, shape, label):
 def elements(s, refs, what):
     refs = picks.ref_list(refs)
     if not isinstance(refs, list) or not refs:
-        raise bad(f"{what}: [\"Box.Face3\", …] or whole objects by name.")
+        raise bad(f"refs: [\"Box.Face3\", \"Box.Edge2\", …] ({what}, numbered from 1 as shape_query lists them) or whole objects by name.")
     out = []
     for r in refs:
         label, sub, sh = picks.resolve(s, r)
@@ -116,7 +116,7 @@ def tools(s):
             tool_o = picks.shaped(doc(s), a["with"], "with")
             other = tool_o.Shape
         else:
-            raise bad("with (a body) or plane { normal, at }.")
+            raise bad("with (another body's name) or plane { normal: [x,y,z], at: [x,y,z] }: what the body is cut by.")
         if tool_o is not None and a.get("parametric", True):
             o = doc(s).addObject("Part::Section", "Section")
             o.Base, o.Tool = b, tool_o
@@ -127,10 +127,11 @@ def tools(s):
         else:
             sh = b.Shape.section(other)
             if not sh.Edges:
-                raise ToolError("invalid_state", f"The plane misses {b.Label}: no section.")
+                bb = b.Shape.BoundBox
+                raise ToolError("invalid_state", f"The plane misses {b.Label}: no section. Its box runs {[round(bb.XMin, 3), round(bb.YMin, 3), round(bb.ZMin, 3)]} to {[round(bb.XMax, 3), round(bb.YMax, 3), round(bb.ZMax, 3)]} — plane.at inside it. Nothing was added.")
             o = add(s, sh, a.get("name") or f"{b.Label} section")
         if not sh.Edges:
-            raise ToolError("invalid_state", f"{b.Label} and {a.get('with')} do not meet: no section curves.")
+            raise ToolError("invalid_state", f"{b.Label} and {a.get('with')} do not meet: no section curves (measure gives the gap between them; part_transform moves one). Nothing was added.")
         out = {"section": o.Label, **shape_stats(sh)}
         if a.get("face") and sh.Edges:
             try:
@@ -150,11 +151,11 @@ def tools(s):
     def offset2d(a):
         src = picks.shaped(doc(s), a.get("shape"), "shape")
         if a.get("distance") is None:
-            raise bad("distance: mm (+ out, - in).")
+            raise bad("distance: mm, + outward, - inward.")
         d = float(a["distance"])
         sh = src.Shape
         if not (sh.Wires or sh.Faces):
-            raise ToolError("invalid_state", f"{src.Label}: a wire, sketch or flat face to offset.")
+            raise ToolError("invalid_state", f"shape: {src.Label} has no wire or face — a wire, sketch or flat face by name (part_extract copies a body's face out; part_section cuts an outline).")
         join = {"arc": 0, "tangent": 1, "intersection": 2}.get(a.get("join", "arc"))
         if join is None:
             raise bad("join: arc | tangent | intersection.")
@@ -166,7 +167,7 @@ def tools(s):
                 face = Part.makeFace(loops, "Part::FaceMakerBullseye")
                 grown = face.makeOffset2D(d, join, False, False, bool(a.get("intersection", False)))
             except Exception as e:
-                raise ToolError("invalid_state", f"No offset of {src.Label} by {d} mm: {e} — a loop shrunk past its own width vanishes.")
+                raise ToolError("invalid_state", f"No offset of {src.Label} by {d} mm: {e} — a loop shrunk past half its own width vanishes, and the outline must be flat. Nothing was added.")
             if a.get("fill"):
                 res = grown.cut(face) if d > 0 else face.cut(grown)
             else:
@@ -185,7 +186,7 @@ def tools(s):
         if o.Shape.isNull() or not (o.Shape.Edges):
             msg = "; ".join(str(x) for x in (o.getStatusString(),)) if hasattr(o, "getStatusString") else ""
             doc(s).removeObject(o.Name)
-            raise ToolError("invalid_state", f"No offset of {src.Label} by {d} mm ({msg}) — a wire shrunk past its own width vanishes; a non-flat wire cannot be offset in 2D.")
+            raise ToolError("invalid_state", f"No offset of {src.Label} by {d} mm ({msg}) — a wire shrunk past half its own width vanishes; a wire that is not flat cannot be offset in 2D (part_offset grows a solid). Nothing was added.")
         if not a.get("parametric", True):
             sh2 = o.Shape.copy()
             doc(s).removeObject(o.Name)
@@ -201,7 +202,7 @@ def tools(s):
         elif build in ("shell", "solid"):
             faces = [f for p in parts for f in p.Faces]
             if not faces:
-                raise bad("refs: faces for a shell or solid.")
+                raise bad(f"refs: no face among them — build {build} takes faces (\"Box.Face3\") or whole objects with faces.")
             sh = Part.makeShell(faces)
             tol = float(a.get("tolerance", 0.01))
             if not sh.isClosed():
@@ -213,19 +214,21 @@ def tools(s):
             if build == "solid":
                 shells = sh.Shells or [sh]
                 if not shells[0].isClosed():
-                    raise ToolError("invalid_state", f"The {len(faces)} faces leave a gap: a solid needs a closed shell (tolerance {tol} mm did not close it).")
+                    raise ToolError("invalid_state", f"The {len(faces)} faces leave a gap: a solid needs a closed shell, and tolerance {tol} mm did not close it — every face of the solid in refs, or a larger tolerance; build: \"shell\" keeps the open shell to look at. Nothing was added.")
                 sh = Part.makeSolid(shells[0])
                 if sh.Volume < 0:
                     sh.reverse()
         elif build == "wire":
             edges = [e for p in parts for e in p.Edges]
+            if not edges:
+                raise bad("refs: no edge among them — build wire takes edges (\"Box.Edge2\"), faces or whole objects.")
             ws = [Part.Wire(es) for es in Part.sortEdges(edges)]
             sh = ws[0] if len(ws) == 1 else Part.makeCompound(ws)
         elif build == "face":
             edges = [e for p in parts for e in p.Edges]
             ws = [Part.Wire(es) for es in Part.sortEdges(edges)]
             if not all(w.isClosed() for w in ws):
-                raise ToolError("invalid_state", "The edges are not closed loops: no face.")
+                raise ToolError("invalid_state", f"The edges make {len(ws)} wire(s), not all closed: no face — every edge of each loop in refs; build: \"wire\" shows what they join into. Nothing was added.")
             sh = Part.makeFace(ws, "Part::FaceMakerBullseye")
         else:
             raise bad("build: copy | wire | face | shell | solid.")
@@ -237,20 +240,20 @@ def tools(s):
         b = picks.solid_body(s, a.get("body"))
         faces = a.get("faces")
         if not faces:
-            raise bad("faces: [\"Face12\", …] of the body — the bosses, holes, fillets to take away.")
+            raise bad("faces: [\"Face12\", …] of the body, numbered from 1 (shape_query { kind: \"face\" } lists them) — every face of the boss, hole or fillet to take away.")
         subs = []
         for f in faces:
             head, sub = picks.split_ref(f)
             if sub is None or not sub.startswith("Face"):
-                raise bad(f"{f}: a face reference.")
+                raise bad(f"faces: {f!r} is not a face — \"Face12\".")
             subs.append(picks.element(b.Shape, sub, b.Label))
         before = b.Shape
         try:
             res = before.defeaturing(subs)
         except Exception as e:
-            raise ToolError("invalid_state", f"Defeaturing refused: {e} — pick every face of the feature (a hole's wall, a fillet's band).")
+            raise ToolError("invalid_state", f"Defeaturing refused: {e} — pick every face of the feature together (a hole's wall and its floor, a fillet's whole band); the faces around it must be able to grow over the gap. Nothing was changed.")
         if res.isNull() or not res.Solids or res.isSame(before):
-            raise ToolError("invalid_state", "Defeaturing left the body as it was: pick all faces of one feature together.")
+            raise ToolError("invalid_state", "Defeaturing left the body as it was: pick all faces of one feature together (a hole's wall and floor, a fillet's whole band). Nothing was changed.")
         out = picks.bake(s, b, res, a.get("name"))
         s.snapshot("part_defeature")
         return {"body": out.Label, "facesBefore": len(before.Faces), "facesAfter": len(res.Faces),
@@ -274,7 +277,7 @@ def tools(s):
                     shells = []
             closed = [x for x in shells if x.isClosed()]
             if not closed:
-                raise ToolError("invalid_state", f"{b.Label} has no closed shell: sew it first (fix op sew) or close the gaps.")
+                raise ToolError("invalid_state", f"{b.Label} has no closed shell: part_fix {{ op: \"sew\", tolerance }} joins its faces first; gaps wider than the tolerance need a face (surface_fill). Nothing was changed.")
             solids = [Part.makeSolid(x) for x in closed]
             for x in solids:
                 if x.Volume < 0:
@@ -293,7 +296,7 @@ def tools(s):
             tol = float(a.get("tolerance", 0.001))
             sh.fix(tol, tol, tol)
         else:
-            raise bad("op: reverse | solid | sew | fix.")
+            raise bad("op: reverse (flip inside out) | solid (closed shells made solids) | sew (faces joined at tolerance) | fix (ShapeFix at tolerance).")
         if op == "reverse":
             if b.TypeId == "Part::Feature" and not a.get("name"):
                 b.Shape = sh
@@ -316,7 +319,7 @@ def tools(s):
                  "plane": ["Part::DatumPlane", "PartDesign::Plane"],
                  "csys": ["Part::LocalCoordinateSystem", "PartDesign::CoordinateSystem"]}
         if kind not in types:
-            raise bad("kind: point | line | plane | csys.")
+            raise bad("kind: point | line | plane | csys (a coordinate system).")
         pl = picks.placement(a)
         if a.get("normal") is not None and kind in ("plane", "line"):
             n = picks.direction(a["normal"], "normal")
@@ -352,26 +355,50 @@ def tools(s):
         if a.get("to") and not (hasattr(o, "AttachmentSupport") or hasattr(o, "Support")):
             raise ToolError("invalid_state", "This FreeCAD cannot attach a datum here: " + "; ".join(tried))
         if a.get("to"):
-            label, sub, _ = picks.resolve(s, a["to"])
+            label, sub, el = picks.resolve(s, a["to"])
             target = picks.find(doc(s), label)
             prop = "AttachmentSupport" if hasattr(o, "AttachmentSupport") else "Support"
             setattr(o, prop, [(target, sub or "")])
             mode = a.get("mode")
             if not mode or mode == "Deactivated":
                 elt = (sub or "")[:4]
-                mode = {("point", "Vert"): "Vertex", ("point", "Edge"): "CenterOfCurvature", ("point", "Face"): "CenterOfMass",
-                        ("line", "Edge"): "TwoPointLine", ("line", "Face"): "NormalToSurface", ("line", "Vert"): "ObjectZ",
+                # One reference: FreeCAD's attacher modes that take a single
+                # element (Attacher.cpp). A circle's or arc's edge has an
+                # axis and a centre of curvature; a straight one has not.
+                round_edge = False
+                if elt == "Edge":
+                    try:
+                        round_edge = isinstance(el.Curve, Part.Circle)
+                    except Exception:
+                        round_edge = False
+                if (kind, elt) == ("line", "Face"):
+                    # A line normal to a face is FreeCAD's FaceNormal, which
+                    # takes a face and a vertex: two references.
+                    raise bad("A line datum on a face needs mode: FreeCAD's line normal to a face (FaceNormal) takes a face and a vertex, and to is one reference. "
+                              "mode AxisOfInertia1 | AxisOfInertia2 | AxisOfInertia3 (through the face's centre of mass) or ObjectZ (the object's own z); "
+                              "or to an edge (a straight one: the line along it; a circle's: its axis); or leave to out and place it with at and normal.")
+                mode = {("point", "Vert"): "Vertex", ("point", "Edge"): "CenterOfCurvature" if round_edge else "CenterOfMass", ("point", "Face"): "CenterOfMass",
+                        ("line", "Edge"): "AxisOfCurvature" if round_edge else "TwoPointLine", ("line", "Vert"): "ObjectZ",
                         ("plane", "Face"): "FlatFace", ("plane", "Edge"): "NormalToEdge", ("plane", "Vert"): "Translate",
                         ("csys", "Face"): "FlatFace", ("csys", "Edge"): "NormalToEdge", ("csys", "Vert"): "Translate"}.get((kind, elt), "ObjectXY")
             try:
                 o.MapMode = mode
             except Exception:
-                raise bad(f"mode {mode!r}: not a mode for a {kind} datum — one of {', '.join(o.getEnumerationsOfProperty('MapMode')[:30])}.")
+                raise bad(f"mode {mode!r}: not a FreeCAD attachment mode — the modes: {', '.join(o.getEnumerationsOfProperty('MapMode'))}.")
             o.AttachmentOffset = pl
         o.Label = s.unique(a.get("name") or f"Datum {kind}")
         doc(s).recompute()
         if a.get("to") and getattr(o, "MapMode", "") == "Deactivated":
             tried.append("left unattached")
+        elif a.get("to"):
+            failed = False
+            try:
+                failed = not o.isValid()
+            except Exception:
+                failed = False
+            if failed:
+                raise ToolError("failed", f"The {kind} datum would not attach to {a['to']} as {o.MapMode}: {o.getStatusString()} — nothing was kept. With one reference: a plane or csys takes FlatFace (a flat face), "
+                                "NormalToEdge (an edge), Translate (a vertex), ObjectXY (a whole object); a line TwoPointLine (a straight edge), AxisOfCurvature (a circle or arc); a point Vertex, CenterOfCurvature, CenterOfMass.")
         s.snapshot("part_datum")
         return {"datum": o.Label, "kind": kind, "type": o.TypeId, "made": made,
                 "placement": picks.placement_json(o.Placement), **({"mode": o.MapMode} if a.get("to") else {}),
@@ -379,16 +406,16 @@ def tools(s):
 
     body = {"type": "string"}
     return [
-        Tool("part_section", "Section curves where a body meets another body (with, parametric Part::Section) or a plane { normal, at }: the curves' edges, length, closed loops; face: true also fills the closed loops into a face (its area). Cut-lines, intersection checks, outlines at a height.",
+        Tool("part_section", "Section curves where a body meets another body (with: a parametric Part::Section; parametric: false for a plain shape) or a plane { normal, at }; face: true also fills the closed loops into a face. Refused when they do not meet. Reply: section, edges, length_mm, closedLoops, area_mm2. Cut-lines, outlines at a height.",
              obj({"body": body, "with": body, "plane": {"type": "object"}, "face": {"type": "boolean"}, "approximate": {"type": "boolean"}, "parametric": {"type": "boolean"}, "name": body}, ["body"]), section, changes=True),
-        Tool("part_offset2d", "Offset a wire, sketch or flat face in its plane (Part::Offset2D): distance mm (+ out, − in), join arc | tangent | intersection, fill: true for the band between the two, intersection: true to merge loops that meet. Kerf and clearance outlines, gasket bands.",
+        Tool("part_offset2d", "Offset a flat wire, sketch or face in its plane (Part::Offset2D; a closed wire goes through its face, as a plain shape): distance mm (+ out, − in), join arc | tangent | intersection, fill: true for the band between the two, intersection: true to offset several wires as one. Refused when the loop vanishes or is not flat. Kerf and clearance outlines, gasket bands.",
              obj({"shape": body, "distance": {"type": "number"}, "join": {"type": "string", "enum": ["arc", "tangent", "intersection"]}, "fill": {"type": "boolean"}, "intersection": {"type": "boolean"}, "parametric": {"type": "boolean"}, "name": body}, ["shape", "distance"]), offset2d, changes=True),
-        Tool("part_extract", "Copy elements out as a body of their own (Part's element copy and shape builder): refs [\"Box.Face3\", \"Box.Edge2\", whole objects]; build copy (as they are) | wire (edges joined) | face (closed edges filled) | shell (faces sewn) | solid (a closed shell made a solid).",
+        Tool("part_extract", "Copy elements out as a plain body of their own (Part's element copy and shape builder): refs [\"Box.Face3\", \"Box.Edge2\", whole objects], numbered from 1; build copy (as they are) | wire (edges joined) | face (closed edge loops filled) | shell (faces sewn at tolerance mm, 0.01) | solid (a closed shell made a solid; refused with a gap). Reply: shape, counts, valid.",
              obj({"refs": {"type": "array", "items": {}}, "build": {"type": "string", "enum": ["copy", "wire", "face", "shell", "solid"]}, "tolerance": {"type": "number"}, "name": body}, ["refs"]), extract, changes=True),
-        Tool("part_defeature", "Take features off a solid by their faces (Part defeaturing): faces [\"Face12\", …] — every face of a hole, boss or fillet together; the gap closes as if the feature was never there. For simplifying imported STEP bodies before FEA or CAM.",
+        Tool("part_defeature", "Take features off a solid by their faces (Part defeaturing): faces [\"Face12\", …] numbered from 1 — every face of a hole, boss or fillet together; the faces around grow over the gap. Renumbers faces; refused when OCC cannot close it. For simplifying imported bodies before FEA or CAM.",
              obj({"body": body, "faces": {"type": "array", "items": {"type": "string"}}, "name": body}, ["faces"]), defeature, changes=True),
-        Tool("part_fix", "Repair a shape: op reverse (flip its orientation) | solid (a closed shell or faces made a solid) | sew (faces joined at tolerance mm) | fix (ShapeFix tolerances). Reports valid and closed.",
+        Tool("part_fix", "Repair a shape: op reverse (flip an inside-out solid) | solid (closed shells or faces made solids) | sew (faces joined within tolerance mm, 0.01) | fix (ShapeFix at tolerance, 0.001). Reply: valid, closed, solids, notes.",
              obj({"body": body, "op": {"type": "string", "enum": ["reverse", "solid", "sew", "fix"]}, "tolerance": {"type": "number"}, "name": body}, ["body", "op"]), fix, changes=True),
-        Tool("part_datum", "A datum: kind point | line | plane | csys, at [x,y,z], normal (plane/line) or axis + angle, or attached to a face/edge/vertex (to \"Box.Face6\", mode a FreeCAD MapMode) with the placement as its offset. Reference geometry for attachments, sketches and measurements.",
+        Tool("part_datum", "A datum: kind point | line | plane | csys, at [x,y,z], normal (plane, line) or axis + angle; or attached by one reference (to \"Box.Face6\", an edge, a vertex), the placement then its offset. mode: a FreeCAD MapMode, by default by what to is (FlatFace, NormalToEdge, Translate; a line along a straight edge or a circle's axis; a point at a vertex or centre); a line on a face needs mode. Refused when it cannot attach.",
              obj({"kind": {"type": "string", "enum": ["point", "line", "plane", "csys"]}, "at": {"type": "array", "items": {"type": "number"}}, "normal": {}, "axis": {}, "angle": {"type": "number"}, "to": body, "mode": body, "name": body}), datum, changes=True),
     ]

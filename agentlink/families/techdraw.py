@@ -338,11 +338,71 @@ def edge_info(e, sc):
     return out
 
 
+def arc_turn(e):
+    """How much of a turn a round edge of a view covers: 1.0 a whole
+    circle, 0.5 a slot's end. None for an edge that is not round."""
+    cu = getattr(e, "Curve", None)
+    try:
+        r = float(cu.Radius)
+        return e.Length / (2 * math.pi * r) if r > 0 else None
+    except Exception:
+        return None
+
+
+def whole_circles(es):
+    """Indexes of the round edges that are a whole circle, or that with the
+    other edges on the same centre and radius make one up (the hidden-line
+    pass can hand a hole's circle over in pieces). A slot's two ends lie on
+    different centres and stay arcs."""
+    groups = {}
+    two_pi = 2 * math.pi
+    for i, e in enumerate(es):
+        t = arc_turn(e)
+        if t is None:
+            continue
+        cu = e.Curve
+        ctr = getattr(cu, "Location", None) or cu.Center
+        span = None  # a whole circle by itself
+        if t < 0.999:
+            # where round the centre it runs: about its middle, half its
+            # turn either way (two arcs lying on one another — a visible
+            # and a hidden rim — cover the same stretch, not a circle)
+            try:
+                m = e.valueAt((e.FirstParameter + e.LastParameter) / 2)
+            except Exception:
+                continue
+            mid = math.atan2(m.y - ctr.y, m.x - ctr.x) % two_pi
+            span = (mid - t * math.pi, mid + t * math.pi)
+        groups.setdefault((round(ctr.x, 3), round(ctr.y, 3), round(float(cu.Radius), 3)), []).append((i, span))
+    out = set()
+    for g in groups.values():
+        if not any(sp is None for _, sp in g):
+            cuts = []
+            for _, (a0, a1) in g:
+                if a0 < 0:
+                    cuts += [(a0 + two_pi, two_pi), (0.0, a1)]
+                elif a1 > two_pi:
+                    cuts += [(a0, two_pi), (0.0, a1 - two_pi)]
+                else:
+                    cuts.append((a0, a1))
+            covered, reach = 0.0, 0.0
+            for a0, a1 in sorted(cuts):
+                if a1 > reach:
+                    covered += a1 - max(a0, reach)
+                    reach = a1
+            if covered < 0.999 * two_pi:
+                continue
+        out.update(i for i, _ in g)
+    return out
+
+
 def resolve_ref(v, r, cache, want="any"):
     """A view geometry reference: "Edge3" | "Vertex5", or { point: [x,y,z] }
     (the nearest vertex), { circle: { diameter, near } }, { edge: { through:
     [p, q] } } (the edge nearest both points' middle) — returns "EdgeN" /
-    "VertexN"."""
+    "VertexN". want "circle": a { circle } must be a whole circle (a
+    diameter callout), so an arc of the same size — a slot's end, a fillet —
+    is never taken for a hole."""
     if isinstance(r, str):
         if r.startswith(("Edge", "Vertex")) and r[4 if r.startswith("Edge") else 6:].isdigit():
             n = int(r[4:] if r.startswith("Edge") else r[6:])
@@ -355,7 +415,7 @@ def resolve_ref(v, r, cache, want="any"):
         raise bad("reference: \"Edge3\" | \"Vertex5\" | { point: [x,y,z] } | { circle: { diameter, near } } | { edge: { through: [p, q] } }.")
     fr = frame_of(v, cache)
     if fr is None:
-        raise ToolError("unavailable", f"{v.Label} has no geometry yet (recompute, or a hidden view).")
+        raise ToolError("unavailable", f"{v.Label} has no geometry yet: its bodies are empty or hidden, or its lines are still being worked out — td_list shows its edge count; recompute, then again.")
     sc = fr[0]
     if "point" in r:
         q = to_view(fr, v, vec(r["point"], "point"))
@@ -399,19 +459,28 @@ def resolve_ref(v, r, cache, want="any"):
         dia = c.get("diameter")
         near = to_view(fr, v, vec(c["near"], "near")) if c.get("near") is not None else None
         hits = []
-        for i, e in enumerate(edges_of(v)):
+        es = edges_of(v)
+        whole = whole_circles(es) if want == "circle" else None
+        arcs = 0
+        for i, e in enumerate(es):
             cu = getattr(e, "Curve", None)
             if not (hasattr(cu, "Radius") and (hasattr(cu, "Location") or hasattr(cu, "Center"))):
                 continue
             if dia is not None and abs(2 * cu.Radius / sc - float(dia)) > max(0.01, 0.002 * float(dia)):
                 continue
+            if whole is not None and i not in whole:
+                arcs += 1
+                continue
             ctr = getattr(cu, "Location", None) or cu.Center
             hits.append((math.hypot(ctr.x - near[0], ctr.y - near[1]) if near else 0.0, i))
+        if not hits and arcs:
+            raise ToolError("not_found", f"No whole circle{f' of ⌀{dia}' if dia else ''} in {v.Label}: the {arcs} round edge{'s' if arcs != 1 else ''} of that size {'are arcs' if arcs != 1 else 'is an arc'} (a slot's end, a fillet), and a diameter is for a whole circle — "
+                            f"type: \"radius\" dimensions an arc; td_geometry {{ kind: \"circles\" }} lists each as circle or arc.")
         if not hits:
             raise ToolError("not_found", f"No circle{f' of ⌀{dia}' if dia else ''} in {v.Label} — td_geometry {{ kind: \"circles\" }} lists them.")
         hits.sort()
         if len(hits) > 1 and near is None and len({h[0] for h in hits}) == 1:
-            raise bad(f"{len(hits)} circles match: add near: [x, y, z].")
+            raise bad(f"{len(hits)} circles match in {v.Label}: add near: [x, y, z] (a point on the part by the one meant) inside circle.")
         return f"Edge{hits[0][1]}"
     if "edge" in r:
         th = (r["edge"] or {}).get("through")
@@ -752,7 +821,7 @@ def hatch_regions(v, X, Y, H):
 
     out = []
     try:
-        if v.isDerivedFrom("TechDraw::DrawViewSection") and str(getattr(v, "CutSurfaceDisplay", "Hatch")) != "None":
+        if v.isDerivedFrom("TechDraw::DrawViewSection") and str(getattr(v, "CutSurfaceDisplay", "SvgHatch")) not in ("None", "Hide"):
             src = source_shapes(v)
             if src is not None:
                 o, n = V(v.SectionOrigin), V(v.SectionNormal)
@@ -1226,7 +1295,7 @@ def tools(session):
     def bodies_for(refs):
         objs = [s.body(r) for r in refs] if refs else s.bodies()
         if not objs:
-            raise ToolError("not_found", "No body in the document to draw.")
+            raise ToolError("not_found", "No body in the document to draw: bodies names them (session_state lists what there is); part_primitive or pd_body_new makes one.")
         return objs
 
     def direction(d, what="direction"):
@@ -1325,7 +1394,7 @@ def tools(session):
         try:
             texts = dict(t.EditableTexts)
         except Exception:
-            raise ToolError("invalid_state", f"{page.Label}'s template has no editable fields (a blank one).")
+            raise ToolError("invalid_state", f"{page.Label}'s template has no editable fields (a blank one): td_note writes text on the page instead, or make the page on a template with a title block (td_page {{ action: \"templates\" }}).")
         pre = a.get("preset")
         if a.get("export"):
             data = load_presets()
@@ -1437,6 +1506,9 @@ def tools(session):
             [o for o in doc().Objects if o.isDerivedFrom("TechDraw::DrawViewPart")]
         ext = float(a.get("extend", 2.0)) if a.get("on", True) else 0.0
         out = []
+        late = [v for v in views if not edges_of(v)]
+        if late:
+            recompute(late)  # their lines, before the circles are counted
         for v in views:
             if MARKS_PROP not in v.PropertiesList:
                 v.addProperty("App::PropertyFloat", MARKS_PROP, "AgentLink", "Centre marks on its circles: how far past each, mm (0: none)")
@@ -1451,7 +1523,9 @@ def tools(session):
         faces = picks.ref_list(faces)
         src = source_shapes(v)
         if src is None:
-            raise bad(f"{v.Label} shows no shape.")
+            raise bad(f"{v.Label} shows no shape: its Source is empty — td_view puts bodies on a page.")
+        if not edges_of(v):
+            recompute([v])  # the view's own lines place the faces on the paper
         for f in faces:
             if not str(f).startswith("Face"):
                 raise bad("faces: the part's own faces, \"Face6\" (shape_query finds them).")
@@ -1506,7 +1580,10 @@ def tools(session):
         want = a.get("views") or ["front", "top", "right"]
         bad_ = [w for w in want if w not in PROJ_ITEMS]
         if bad_:
-            raise bad(f"views: any of {', '.join(PROJ_ITEMS)}.")
+            raise bad(f"views: any of {', '.join(PROJ_ITEMS)} — not {', '.join(str(w) for w in bad_)}.")
+        want = list(dict.fromkeys(want))  # one of each: TechDraw makes a projection once
+        # which way is front, read before anything is made
+        front_z, front_x = direction(a.get("front", "front"), "front")
         g = doc().addObject("TechDraw::DrawProjGroup", "ProjGroup")
         page.addView(g)
         g.Source = objs
@@ -1521,16 +1598,18 @@ def tools(session):
         if a.get("scale"):
             g.ScaleType = "Custom"
             g.Scale = float(a["scale"])
+        # The front's direction before the others are added: TechDraw works
+        # each secondary view's direction out from the front's as it is when
+        # the view is added (DrawProjGroup::addProjection), not afterwards.
+        try:
+            anchor = g.Anchor
+            anchor.Direction = front_z
+            anchor.XDirection = front_x
+        except Exception:
+            pass
         for w in want:
             if PROJ_ITEMS[w] != "Front":
                 g.addProjection(PROJ_ITEMS[w])
-        try:
-            anchor = g.Anchor
-            z, x = direction(a.get("front", "front"), "front")
-            anchor.Direction = z
-            anchor.XDirection = x
-        except Exception:
-            pass
         W, H = paper_size(page)
         g.X, g.Y = place_xy(page, a.get("at"), (W * 0.4, H * 0.55))
         g.AutoDistribute = True
@@ -1584,10 +1663,13 @@ def tools(session):
         off = {"Right": (W * 0.25, 0), "Left": (-W * 0.25, 0), "Up": (0, H * 0.3), "Down": (0, -H * 0.3)}.get(side or "Right", (W * 0.25, 0))
         sv.X, sv.Y = place_xy(page, a.get("at"), (min(W - 20, max(20, bxp + off[0])), min(H - 20, max(20, byp + off[1]))))
         if a.get("hatch") is False:
-            try:
-                sv.CutSurfaceDisplay = "None"
-            except Exception:
-                pass
+            # TechDraw's own word is Hide (Hide | Color | SvgHatch | PatHatch)
+            for word in ("Hide", "None"):
+                try:
+                    sv.CutSurfaceDisplay = word
+                    break
+                except Exception:
+                    continue
         recompute([base, sv])
         out = view_reading(sv)
         out.update({"symbol": sym, "base": base.Label, "through": [num(origin.x, 3), num(origin.y, 3), num(origin.z, 3)], "normal": [num(normal.x), num(normal.y), num(normal.z)]})
@@ -1612,7 +1694,7 @@ def tools(session):
         page = page_holding(base)
         r = float(a.get("radius", 0) or 0)
         if r <= 0:
-            raise bad("radius: the circle drawn around the detail, mm on the part, over 0.")
+            raise bad("radius: the circle drawn around the detail, mm on the part, over 0 — e.g. td_detail { view, center: [x, y, z], radius: 8 }.")
         sym = str(a.get("symbol") or next_letter(doc(), "detail"))
         dv = doc().addObject("TechDraw::DrawViewDetail", "Detail")
         page.addView(dv)
@@ -1687,13 +1769,23 @@ def tools(session):
         refs = a.get("refs") or []
         if not edges_of(v):
             recompute([v])
-        names = [resolve_ref(v, r, frames) for r in refs]
+        names = [resolve_ref(v, r, frames, "circle" if typ == "Diameter" else "any") for r in refs]
         if typ in ("Radius", "Diameter") and not (len(names) == 1 and names[0].startswith("Edge")):
-            raise bad(f"{typ.lower()}: one circle or arc — refs [{{ circle: {{ diameter, near }} }}] or [\"Edge7\"].")
+            raise bad(f"{typ.lower()}: one circle or arc — refs [{{ circle: {{ diameter, near }} }}] or [\"Edge7\"] (td_geometry {{ kind: \"circles\" }} lists them); got {len(names)} reference{'s' if len(names) != 1 else ''}.")
+        arc_note = None
+        if typ in ("Radius", "Diameter"):
+            es_ = edges_of(v)
+            k_ = int(names[0][4:])
+            turn = arc_turn(es_[k_]) if k_ < len(es_) else None
+            if turn is None and type(getattr(es_[k_], "Curve", None)).__name__ in ("Line", "LineSegment"):
+                raise bad(f"{typ.lower()}: {names[0]} of {v.Label} is a straight edge — td_geometry {{ kind: \"circles\" }} lists the circles and arcs.")
+            if typ == "Diameter" and k_ not in whole_circles(es_):
+                # named outright, so it is made as asked (TechDraw allows it) and said
+                arc_note = f"{names[0]} is an arc{f' of {turn * 360:.0f}°' if turn else ''}, not a whole circle: a diameter on it reads as a hole's size — type: \"radius\" is the usual callout for an arc."
         if typ == "Angle" and not (len(names) == 2 and all(n.startswith("Edge") for n in names)):
-            raise bad("angle: two straight edges.")
+            raise bad("angle: refs two straight edges of the view ([\"Edge2\", \"Edge5\"] or { edge: { through: [p, q] } } each); td_geometry { kind: \"lines\" } lists them.")
         if typ.startswith("Distance") and not (len(names) == 2 or (len(names) == 1 and names[0].startswith("Edge"))):
-            raise bad(f"{typ}: two vertices (or an edge and a vertex), or one straight edge.")
+            raise bad(f"{typ}: refs two vertices (or an edge and a vertex), or one straight edge — got {len(names)}; td_geometry {{ kind: \"vertices\" }} lists the points, or name them by the part: {{ point: [x, y, z] }}.")
         d = doc().addObject("TechDraw::DrawViewDimension", "Dimension")
         d.Type = typ
         d.MeasureType = "Projected"
@@ -1707,17 +1799,17 @@ def tools(session):
             raw = float(d.getRawValue())
         except Exception as e:
             doc().removeObject(d.Name)
-            raise ToolError("failed", f"TechDraw cannot measure that: {e} — nothing was kept.")
+            raise ToolError("failed", f"TechDraw cannot measure {', '.join(names)} of {v.Label} as {typ}: {e} — nothing was kept. td_geometry shows what each reference is (a radius or diameter wants a round edge, an angle two lines).")
         src = apply_tol(d, a, raw)
         recompute()
-        return done("td_dim", {**dim_reading(d), **({"fitFrom": src} if src else {})})
+        return done("td_dim", {**dim_reading(d), **({"fitFrom": src} if src else {}), **({"note": arc_note} if arc_note else {})})
 
     def td_dimset(a):
         """Several dimensions at once along one direction: a chain (each to the
         next) or a baseline (each from the first), stacked so they do not cross."""
         refs = a.get("refs") or []
         if len(refs) < 3:
-            raise bad("refs: three or more points along the part, in order (td_dim takes two).")
+            raise bad(f"refs: three or more points along the part, in order — got {len(refs)} (td_dim takes two).")
         typ = picks.choice(a, "type", ("horizontal", "vertical"), "type: horizontal | vertical.", "horizontal")
         style = picks.choice(a, "style", ("chain", "baseline"), "style: chain (each to the next) | baseline (each from the first).", "chain")
         v = view_of(doc(), a.get("view"))
@@ -1725,6 +1817,8 @@ def tools(session):
         off = float(a.get("offset", 10.0))  # page mm from the view's edge to the first line
         gap = float(a.get("spacing", 7.0))
         pairs = [(refs[i], refs[i + 1]) for i in range(len(refs) - 1)] if style == "chain" else [(refs[0], r) for r in refs[1:]]
+        if not edges_of(v):
+            recompute([v])
         es = edges_of(v)
         import Part as _P
 
@@ -1980,7 +2074,7 @@ def tools(session):
         ss = SH.find(doc(), a.get("sheet"))
         rng = a.get("range") or C.bounds(SH.filled(ss))
         if not rng:
-            raise ToolError("invalid_state", f"{ss.Label} is empty.")
+            raise ToolError("invalid_state", f"{ss.Label} is empty: sheet_set fills its cells (asm_bom makes a parts list), then td_table again.")
         try:
             (r0, c0), (r1, c1) = C.parse_range(rng)
         except C.AddressError as e:
@@ -2305,7 +2399,7 @@ def tools(session):
             recompute()
             d = next((o for o in doc().Objects if o.Name not in before and o.isDerivedFrom("TechDraw::DrawViewDimension")), None)
             if d is None:
-                raise ToolError("failed", "TechDraw made no extent dimension: refs edges of the view, or none for the whole view.")
+                raise ToolError("failed", f"TechDraw made no extent dimension on {v.Label}: refs edges of the view (td_geometry lists them), or none for the whole view; a view with no edges has no extent.")
             return done("td_dim_special", {"kind": kind, **dim_reading(d)})
         names = [resolve_ref(v, r, frames) for r in (a.get("refs") or [])]
         d = doc().addObject("TechDraw::DrawViewDimension", "Dimension")
@@ -2585,7 +2679,10 @@ def tools(session):
                 if not n.startswith("Edge"):
                     raise bad(f"{r}: an edge.")
                 if hasattr(v, "formatGeometricEdge"):
-                    v.formatGeometricEdge(int(n[4:]), STY[st], w, c[:3], st != "none")
+                    # TechDraw reads a colour of three as alpha 0, and from 1.1
+                    # alpha 0 is see-through (1 is solid): the edge styled
+                    # would vanish from the page. Before 1.1 alpha 0 was solid.
+                    v.formatGeometricEdge(int(n[4:]), STY[st], w, tuple(c[:3]) + ((1.0 if native_ok() else 0.0),), st != "none")
                 out.append(n)
             keep = json.loads(getattr(v, "AgentLinkEdgeStyles", "{}") or "{}")
             for n in out:
@@ -2621,11 +2718,15 @@ def tools(session):
             # FreeCAD's own centerlines too, where the view has them.
             for t in a.get("centerlines") or []:
                 try:
+                    # getCenterLine hands over the view's own centerline, so
+                    # the change is made on it; replaceCenterLine is not in
+                    # FreeCAD 1.1's Python (used where a release has it)
                     cl = v.getCenterLine(t)
                     cl.Extension = float(cl.Extension) + by
-                    v.replaceCenterLine(cl)
+                    if hasattr(v, "replaceCenterLine"):
+                        v.replaceCenterLine(cl)
                 except Exception as e:
-                    raise bad(f"centerline {t!r}: {e}")
+                    raise bad(f"centerlines: {t!r} is not a centerline tag of {v.Label} ({e}) — these are FreeCAD's own centerlines' tags; td_cosmetic's lines go by items (their order from 0).")
             recompute()
             return done("td_lines", {"view": v.Label, act + "ed" if act == "extend" else "shortened": changed, "by": abs(by)})
         if act == "erase":
@@ -2666,76 +2767,76 @@ def tools(session):
 
 
     return [
-        Tool("td_page", "TechDraw pages: action new { paper A4|A3|A2|A1|A0|Letter|ANSIB… , orientation landscape|portrait, standard iso|asme, blank, template (a path), projection first|third, scale, name } on the build's own templates; list; read (views and title-block fields); templates.",
+        Tool("td_page", "TechDraw pages: action new { paper A4|A3|A2|A1|A0|Letter|ANSIB…, orientation landscape|portrait, standard iso|asme, blank, template (an SVG path, or a name from templates), projection first|third, scale (the page's: views take it unless given their own), name } on the build's own templates, sample title-block texts cleared; list; read { page } (views and title-block fields); templates. Page positions are mm from the paper's bottom-left corner, y up.",
              obj({"action": {"type": "string", "enum": ["new", "list", "read", "templates"]}, "page": {"type": "string"}, "paper": {"type": "string"}, "orientation": {"type": "string"}, "standard": {"type": "string"}, "blank": {"type": "boolean"},
                   "template": {"type": "string"}, "projection": {"type": "string"}, "scale": {"type": "number"}, "name": {"type": "string"}}), td_page, changes=True),
-        Tool("td_title", "The title block: fields { name: value } by the template's own field names (no fields: lists them); preset \"mine\" fills from a saved one, with save: true saves the page's as it (not its title, sheet number, scale or date, unless given in fields), delete: true removes it; import / export a presets file (JSON).",
+        Tool("td_title", "The title block: fields { name: value } by the template's own field names, which differ by template (no fields: lists them; an unknown name is refused with the list); preset \"mine\" fills from a saved one, with save: true saves the page's as it (not its title, sheet number, scale or date, unless given in fields), delete: true removes it; import / export a presets file (JSON). Ask the person for names and numbers.",
              obj({"page": {"type": "string"}, "fields": {"type": "object"}, "preset": {"type": "string"}, "save": {"type": "boolean"}, "delete": {"type": "boolean"}, "import": {"type": "string"}, "export": {"type": "string"}}), td_title, changes=True),
-        Tool("td_view", "Put a view of bodies on a page: direction front|top|right|left|rear|bottom|iso or [x, y, z] (part toward viewer), scale, at [x, y] page mm (bottom-left origin), hidden (dashed hidden lines), name.",
+        Tool("td_view", "Put a view of bodies on a page: bodies (all when left out), direction front|top|right|left|rear|bottom|iso or [x, y, z] (part toward viewer), scale (left out: the page's), at [x, y] page mm (its centre, bottom-left origin), hidden (dashed hidden lines), name. Answers its label (what other td_ tools take), size on the paper and edges — 0 edges: the bodies are empty or hidden. Its lines are waited for (up to 30 s in the window).",
              obj({"page": {"type": "string"}, "bodies": {"type": "array", "items": {"type": "string"}}, "direction": {"type": ["string", "array"]}, "scale": {"type": "number"}, "at": {"type": "array", "items": {}}, "hidden": {"type": "boolean"}, "name": {"type": "string"}}), td_view, changes=True),
-        Tool("td_centermarks", "Centre marks (thin chain crosses) on the holes and round edges of views (all part views when left out): extend mm past each circle (2); on: false takes them off.",
+        Tool("td_centermarks", "Centre marks (thin chain crosses) on the holes and round edges of views (all part views when left out): extend mm past each circle (2); on: false takes them off. Whole circles and arcs past a half turn only. Drawn by td_export, not in the window.",
              obj({"views": {}, "extend": {"type": "number"}, "on": {"type": "boolean"}}), td_centermarks, changes=True),
-        Tool("td_hatch", "Hatch faces of the part in a view (thin lines spacing mm apart at angle degrees; a section's cut is hatched by itself): view, faces [\"Face6\" …] — none takes it off.",
+        Tool("td_hatch", "Hatch faces of the part in a view (thin lines spacing mm apart at angle degrees; a section's cut is hatched by itself): view, faces [\"Face6\" …] (the part's own, from shape_query) — none takes it off. Drawn by td_export, not in the window; a face seen edge-on is warned of.",
              obj({"view": {"type": "string"}, "faces": {}, "spacing": {"type": "number"}, "angle": {"type": "number"}}, ["view"]), td_hatch, changes=True),
-        Tool("td_weld", f"A weld symbol on a leader from a feature of a view (on, as td_balloon takes it; at the leader's end on the page): kind {', '.join(gdt.WELDS)}, size (left of it), length (right: \"50\" or \"50-100\" for pitch), side arrow | other | both, allAround, field (a site weld), tail (process, \"GMAW\").",
+        Tool("td_weld", f"A weld symbol on a leader from a feature of a view (on, as td_dim takes it; at the leader's end on the page), drawn by td_export (the window shows the leader only): kind {', '.join(gdt.WELDS)}, size (left of it), length (right: \"50\" or \"50-100\" for pitch), side arrow | other | both, allAround, field (a site weld), tail (process, \"GMAW\").",
              obj({"view": {"type": "string"}, "on": {}, "at": {"type": "array", "items": {}}, "kind": {"type": "string", "enum": list(gdt.WELDS)}, "size": {}, "length": {},
                   "side": {"type": "string", "enum": ["arrow", "other", "both"]}, "allAround": {"type": "boolean"}, "field": {"type": "boolean"}, "tail": {"type": "string"},
                   "textSize": {"type": "number"}, "name": {"type": "string"}}, ["view", "kind"]), td_weld, changes=True),
-        Tool("td_bim", "A BIM section plane drawn on a page (a building plan or section): section, scale (0.02 = 1:50), at, render Wireframe | Solid, fill (cut faces hatched), spaces, hidden.",
+        Tool("td_bim", "A BIM section plane drawn on a page (a building plan or section): section (from bim_section), scale (0.02 = 1:50), at, render Wireframe | Solid, fill (cut faces hatched), spaces, hidden. Warns when it drew nothing.",
              obj({"page": {"type": "string"}, "section": {"type": "string"}, "scale": {"type": "number"}, "at": {"type": "array", "items": {}}, "render": {"type": "string"},
                   "fill": {"type": "boolean"}, "spaces": {"type": "boolean"}, "hidden": {"type": "boolean"}, "name": {"type": "string"}}, ["section"]), td_bim, changes=True),
-        Tool("td_projection", "A projection group (views kept aligned): views [front, top, right, left, rear, bottom, iso …], projection first|third (default the page's), front (which way is front: a direction), scale, at.",
+        Tool("td_projection", "A projection group (views kept aligned): views [front, top, right, left, rear, bottom, iso, isoLeft …] (front always; default front, top, right), projection first|third (default the page's), front (which way is front: a direction), bodies, scale, at. Answers items: each one's label (Front, Top, FrontTopRight …) is the view td_dim and td_section take.",
              obj({"page": {"type": "string"}, "bodies": {"type": "array", "items": {"type": "string"}}, "views": {"type": "array", "items": {"type": "string"}}, "projection": {"type": "string"}, "front": {"type": ["string", "array"]}, "scale": {"type": "number"}, "at": {"type": "array", "items": {}}}), td_projection, changes=True),
-        Tool("td_section", "A section view cut from a view: normal of the cut plane, toward who looks at the section (\"x\" | \"-y\" | [x,y,z]; it lies across the base view), through [x, y, z] a point of the plane (default the part's middle), symbol (A …), at, hatch false.",
+        Tool("td_section", "A section view cut from a view: normal of the cut plane, toward who looks at the section (\"x\" | \"-y\" | [x,y,z]; it lies across the base view, not along its direction), through [x, y, z] a point of the plane (default the part's middle), symbol (A …), at, hatch false. Answers its label (Section A) and edges; 0 edges: the plane misses the part.",
              obj({"view": {"type": "string"}, "normal": {"type": ["string", "array"]}, "through": {"type": "array", "items": {}}, "symbol": {"type": "string"}, "at": {"type": "array", "items": {}}, "hatch": {"type": "boolean"}}, ["view", "normal"]), td_section, changes=True),
-        Tool("td_detail", "A detail view: a circle of radius (mm on the part) around center [x, y, z] (a point on the part) or anchor [x, y] (td_geometry's view mm), drawn larger (scale, default twice the base), symbol (B …), at.",
+        Tool("td_detail", "A detail view: a circle of radius (mm on the part) around center [x, y, z] (a point on the part) or anchor [x, y] (td_geometry's view mm), drawn larger (scale, default twice the base), symbol (B …), at. 0 edges in the answer: the circle misses the part.",
              obj({"view": {"type": "string"}, "center": {"type": "array", "items": {}}, "anchor": {"type": "array", "items": {}}, "radius": {"type": "number"}, "scale": {"type": "number"}, "symbol": {"type": "string"}, "at": {"type": "array", "items": {}}}, ["view", "radius"]), td_detail, changes=True),
-        Tool("td_geometry", "A view's geometry, to dimension against: kind edges | circles | lines | vertices, each with its ref (Edge3, Vertex5), kind, ends or centre and diameter (mm on the part). Changes nothing.",
+        Tool("td_geometry", "A view's geometry, to dimension against: kind edges | circles (each marked circle or arc) | lines | vertices, each with its ref (Edge3, Vertex5: zero-based), kind, ends or centre and diameter (mm on the part); limit (120). The numbers move when the part changes: read them just before use, or name geometry by the part (byPoint). Changes nothing.",
              obj({"view": {"type": "string"}, "kind": {"type": "string"}, "limit": {"type": "integer"}}, ["view"]), td_geometry),
-        Tool("td_dim", "A dimension on a view, measured by TechDraw so it follows the part: type distance | horizontal | vertical | radius | diameter | angle; refs [\"Vertex1\", \"Vertex4\"] or by the part: { point: [x,y,z] }, { circle: { diameter, near } }, { edge: { through: [p, q] } }; at [dx, dy] (its text from the view's centre, page mm); tolerance at once: plus/minus, fit \"H7\", basic, label, format \"%.1f\".",
+        Tool("td_dim", "A dimension on a view, measured by TechDraw so it follows the part: type distance | horizontal | vertical (two points or one straight edge) | radius | diameter (one round edge) | angle (two straight edges); refs [\"Vertex1\", \"Vertex4\"] or by the part, which holds when numbers move: { point: [x,y,z] }, { circle: { diameter, near } }, { center: { diameter, near } }, { edge: { through: [p, q] } }. A diameter by { circle } takes whole circles only: an arc of that size (a slot's end) is refused — use radius. at [dx, dy] (its text from the view's centre, page mm); tolerance at once: plus/minus, fit \"H7\", basic, label, format \"%.1f\". Lengths in an iso view read foreshortened (td_dim_special axo_length). Answers dimension (its name), measured, text; unmeasurable is refused, nothing kept.",
              obj({"view": {"type": "string"}, "type": {"type": "string"}, "refs": {"type": "array", "items": ref_schema}, "at": {"type": "array", "items": {}}, "plus": {"type": "number"}, "minus": {"type": "number"}, "fit": {"type": "string"},
                   "basic": {"type": "boolean"}, "label": {"type": "string"}, "format": {"type": "string"}}, ["view", "refs"]), td_dim, changes=True),
-        Tool("td_dimset", "Several dimensions along one direction at once: style chain (each point to the next) or baseline (each from the first, stacked lanes); type horizontal | vertical; refs three or more points in order (as td_dim takes them); offset mm off the view, spacing between lanes, format.",
+        Tool("td_dimset", "Several dimensions along one direction at once: style chain (each point to the next) or baseline (each from the first, stacked lanes); type horizontal | vertical; refs three or more points in order (as td_dim takes them); offset mm off the view (10), spacing between lanes (7), format. Answers each dimension and overall.",
              obj({"view": {"type": "string"}, "refs": {"type": "array", "items": {}}, "type": {"type": "string", "enum": ["horizontal", "vertical"]}, "style": {"type": "string", "enum": ["chain", "baseline"]},
                   "offset": {"type": "number"}, "spacing": {"type": "number"}, "format": {"type": "string"}}, ["view", "refs"]), td_dimset, changes=True),
-        Tool("td_tolerance", "Tolerance a dimension: plus/minus (mm; equal = ±), fit \"H7\" | \"g6\" (ISO 286 deviations for its measured size), basic: true (a boxed theoretically exact size, for GD&T), label (text instead of the value), format \"%.2f\"; clear: true first resets it.",
+        Tool("td_tolerance", "Tolerance a dimension (by its name or label): plus/minus (mm; equal = ±), fit \"H7\" | \"g6\" (ISO 286 deviations for its measured size), basic: true (a boxed theoretically exact size, for GD&T), label (text instead of the value), format \"%.2f\"; clear: true first resets it.",
              obj({"dimension": {"type": "string"}, "plus": {"type": "number"}, "minus": {"type": "number"}, "fit": {"type": "string"}, "basic": {"type": "boolean"}, "label": {"type": "string"}, "format": {"type": "string"}, "clear": {"type": "boolean"}}, ["dimension"]), td_tolerance, changes=True),
-        Tool("td_gdt", "A feature control frame (ISO 1101 / ASME Y14.5): frame [{ characteristic (flatness, straightness, circularity, cylindricity, profile_line, profile_surface, parallelism, perpendicularity, angularity, position, concentricity, symmetry, circular_runout, total_runout), tolerance mm, diameter (⌀ zone), modifier M|L|…, datums [\"A\", \"B|M\"] }] (rows stack: composite); with a leader to on (a view ref) or under dimension; at.",
+        Tool("td_gdt", "A feature control frame (ISO 1101 / ASME Y14.5): frame [{ characteristic (flatness, straightness, circularity, cylindricity, profile_line, profile_surface, parallelism, perpendicularity, angularity, position, concentricity, symmetry, circular_runout, total_runout), tolerance mm, diameter (⌀ zone), modifier M|L|…, datums [\"A\", \"B|M\"] }] (rows stack: composite); with a leader to on (a view ref) or under dimension; at. Form tolerances take no datum, orientation and runout need one (refused, saying which). Answers reads: the frame in words.",
              obj({"view": {"type": "string"}, "on": ref_schema, "dimension": {"type": "string"}, "frame": {"type": "array", "items": {"type": "object"}}, "characteristic": {"type": "string"}, "tolerance": {"type": "number"}, "diameter": {"type": "boolean"},
                   "modifier": {"type": "string"}, "datums": {"type": "array", "items": {"type": "string"}}, "at": {"type": "array", "items": {}}, "height": {"type": "number"}}), td_gdt, changes=True),
-        Tool("td_datum", "A datum feature symbol: letter, on the feature (\"Edge3\" or { edge: { through } }, { point }), at.",
+        Tool("td_datum", "A datum feature symbol: view, letter, on the feature (\"Edge3\" or { edge: { through } }, { point }), at. The triangle stands on the feature, the letter outward.",
              obj({"view": {"type": "string"}, "letter": {"type": "string"}, "on": ref_schema, "at": {"type": "array", "items": {}}, "height": {"type": "number"}}, ["view", "letter", "on"]), td_datum, changes=True),
-        Tool("td_note", "A note on the page: text (\\n splits lines), size (mm), at.", obj({"page": {"type": "string"}, "text": {"type": "string"}, "size": {"type": "number"}, "at": {"type": "array", "items": {}}}, ["text"]), td_note, changes=True),
-        Tool("td_balloon", "A balloon pointing at a feature of a view: on (a ref), text (default the page's next number), at [dx, dy] from the view's centre.",
+        Tool("td_note", "A note on the page: text (\\n splits lines), size (mm, 5), at [x, y] page mm. td_leader points one at a feature.", obj({"page": {"type": "string"}, "text": {"type": "string"}, "size": {"type": "number"}, "at": {"type": "array", "items": {}}}, ["text"]), td_note, changes=True),
+        Tool("td_balloon", "A balloon pointing at a feature of a view: view, on (a ref as td_dim takes), text (default the page's next number), at [dx, dy] from the view's centre.",
              obj({"view": {"type": "string"}, "on": ref_schema, "text": {"type": "string"}, "at": {"type": "array", "items": {}}}, ["view", "on"]), td_balloon, changes=True),
-        Tool("td_table", "A spreadsheet's cells as a table on the page (a parts list, a revision table): sheet, range (default its used cells), size, at. It follows the sheet.",
+        Tool("td_table", "A spreadsheet's cells as a table on the page (a parts list from asm_bom, a revision table): sheet, range (default its used cells), size, at. It follows the sheet; an empty sheet is refused.",
              obj({"page": {"type": "string"}, "sheet": {"type": "string"}, "range": {"type": "string"}, "size": {"type": "number"}, "at": {"type": "array", "items": {}}}), td_table, changes=True),
-        Tool("td_list", "A page's views (with size and scale), dimensions (measured, text, tolerance), GD&T, other objects and title block. Changes nothing.", obj({"page": {"type": "string"}}), td_list),
-        Tool("td_cosmetic", "Cosmetic geometry on a view (kept with it, drawn in the export): items [{ kind line (from, to: points on the part) | circle (center on the part, radius mm) | centerline (edges: a shaft's or hole's two side lines; extend mm) | thread (edges: the two outline lines of a side view, or circle: the end view's round edge; internal: true for a tapped hole; pitch, ISO coarse by default; length mm) , style thin | visible | hidden | center }]; clear: true drops the earlier ones.",
+        Tool("td_list", "A page's views (label, scale, size, edge count; a group's items), dimensions (name, refs, measured, text, tolerance), GD&T, other objects and title block. Changes nothing.", obj({"page": {"type": "string"}}), td_list),
+        Tool("td_cosmetic", "Cosmetic geometry on a view (FreeCAD's own cosmetic edges from 1.1, so in the window too; always in td_export): items [{ kind line (from, to: points on the part) | circle (center on the part, radius mm) | centerline (edges: a shaft's or hole's two side lines; extend mm) | thread (edges: the two outline lines of a side view, or circle: the end view's round edge; internal: true for a tapped hole; pitch, ISO coarse by default; length mm) , style thin | visible | hidden | center }]; clear: true drops the earlier ones. td_lines takes them by order, from 0.",
              obj({"view": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}, "clear": {"type": "boolean"}}, ["view"]), td_cosmetic, changes=True),
-        Tool("td_leader", "A leader line from a feature of a view (on: a ref as td_balloon takes) to at [x, y] page mm, with text (\\n splits lines) at its end — a note pointing at something.",
+        Tool("td_leader", "A leader line from a feature of a view (on: a ref as td_dim takes) to at [x, y] page mm, with text (\\n splits lines) at its end — a note pointing at something.",
              obj({"view": {"type": "string"}, "on": {}, "at": {"type": "array", "items": {}}, "text": {"type": "string"}, "size": {"type": "number"}}, ["view", "on"]), td_leader, changes=True),
-        Tool("td_finish", "A surface texture symbol (ISO 1302) on a surface's edge in a view: ra (\"1.6\" or \"Rz 6.3\"), removal required (machined) | prohibited | any, process (\"ground\"), lay = | perpendicular | crossed | multi | circular | radial | particulate, allowance mm; placed off the part on a leader (at [x, y] page mm to choose where; onSurface: true stands it on the edge itself).",
+        Tool("td_finish", "A surface texture symbol (ISO 1302) on a surface's edge in a view (on): ra (\"1.6\" or \"Rz 6.3\"), removal required (machined) | prohibited | any, process (\"ground\"), lay = | perpendicular | crossed | multi | circular | radial | particulate, allowance mm; placed off the part on a leader (at [x, y] page mm to choose where; onSurface: true stands it on the edge itself).",
              obj({"view": {"type": "string"}, "on": {}, "ra": {"type": "string"}, "removal": {"type": "string", "enum": ["required", "prohibited", "any"]}, "process": {"type": "string"},
                   "lay": {"type": "string"}, "allowance": {"type": "string"}, "height": {"type": "number"}, "at": {"type": "array", "items": {}}, "onSurface": {"type": "boolean"}}, ["view", "on"]), td_finish, changes=True),
-        Tool("td_area", "Write a face's area on the drawing with a leader to it: face (\"Body.Face3\" on the part), view, unit mm2 | cm2 | m2, decimals, format (\"A = {value} {unit}\"), at.",
+        Tool("td_area", "Write a face's area on the drawing with a leader to it: face (\"Body.Face3\" on the part), view, unit mm2 | cm2 | m2, decimals, format (\"A = {value} {unit}\"), at. Written as text: it does not follow the part afterwards.",
              obj({"view": {"type": "string"}, "face": {"type": "string"}, "unit": {"type": "string", "enum": ["mm2", "cm2", "m2"]}, "decimals": {"type": "integer"}, "format": {"type": "string"},
                   "size": {"type": "number"}, "at": {"type": "array", "items": {}}}, ["view", "face"]), td_area, changes=True),
-        Tool("td_dim_format", "Dimension text: decimals n, more +1/−1, prefix diameter (⌀) | square (□) | count (n×, with count) | any text, removePrefix, format (a whole format, \"%.2f mm\").",
+        Tool("td_dim_format", "Dimension text: dims, then decimals n (0 to 9), more +1/−1, prefix diameter (⌀) | square (□) | count (n×, with count) | any text, removePrefix, format (a whole format, \"%.2f mm\"). A prefix is text only: it does not check what the dimension is on.",
              obj({"dims": {"type": "array", "items": {"type": "string"}}, "decimals": {"type": "integer"}, "more": {"type": "integer"}, "prefix": {"type": "string"}, "count": {"type": "integer"}, "removePrefix": {"type": "boolean"}, "format": {"type": "string"}}, ["dims"]), td_dim_format, changes=True),
-        Tool("td_dim_special", "Special dimensions: kind extent_h / extent_v (the view's whole width or height, or refs edges'), chamfer_h / chamfer_v (refs a chamfer's two points: \"2 x45°\"), arc_length (refs one arc: ◠ its length), axo_length (refs [edge, extension-line edge] in an iso view: the true length). at [dx, dy].",
+        Tool("td_dim_special", "Special dimensions: kind extent_h / extent_v (the view's whole width or height, or refs edges'), chamfer_h / chamfer_v (refs a chamfer's two points: \"2 x45°\"), arc_length (refs one arc: ◠ its length), axo_length (refs [edge, extension-line edge] in an iso view: the true length, not the foreshortened one). at [dx, dy]. Arc and axo lengths are text, re-read from the part when a td_ tool changes the drawing.",
              obj({"view": {"type": "string"}, "kind": {"type": "string", "enum": ["extent_h", "extent_v", "chamfer_h", "chamfer_v", "arc_length", "axo_length"]}, "refs": {"type": "array", "items": {}}, "at": {"type": "array", "items": {}}, "decimals": {"type": "integer"}}, ["view", "kind"]), td_dim_special, changes=True),
-        Tool("td_dim_align", "Line dimensions' texts up: direction horizontal (all at the first's height) | vertical | oblique (on the line through the first two).",
+        Tool("td_dim_align", "Line dimensions' texts up: dims (the first sets the line), direction horizontal (all at the first's height) | vertical | oblique (three or more, on the line through the first two).",
              obj({"dims": {"type": "array", "items": {"type": "string"}}, "direction": {"type": "string", "enum": ["horizontal", "vertical", "oblique"]}}, ["dims"]), td_dim_align, changes=True),
-        Tool("td_dim_repair", "Point a dimension at new references (after the model changed): refs as td_dim takes them; the old ones are kept if TechDraw cannot measure the new.",
+        Tool("td_dim_repair", "Point a dimension at new references (after the model changed and its numbers moved): refs as td_dim takes them, view to move it to another; the old ones are put back if TechDraw cannot measure the new.",
              obj({"dimension": {"type": "string"}, "view": {"type": "string"}, "refs": {"type": "array", "items": {}}}, ["dimension", "refs"]), td_dim_repair, changes=True),
-        Tool("td_view_more", "More views on a page: kind broken { view, breaks, gap } | draft { object (a Draft object) } | clip { width, height, frame } | clip_add / clip_remove { clip, view } | image { path, width, height } | symbol { path (an SVG), scale } | share { view } (the view also on this page) | lock { view, locked } | stack { view, to top|bottom|up|down } | move { view, page } (to another page), at [x, y].",
+        Tool("td_view_more", "More views on a page: kind broken { view, breaks, gap } | draft { object (a Draft object) } | clip { width, height, frame } | clip_add / clip_remove { clip, view } | image { path, width, height } | symbol { path (an SVG), scale } | share { view } (the view also on this page, with its dimensions) | lock { view, locked } | stack { view, to top|bottom|up|down } | move { view, page } (to another page; a group's item takes its group), at [x, y].",
              obj({"kind": {"type": "string", "enum": ["broken", "draft", "clip", "clip_add", "clip_remove", "image", "symbol", "share", "lock", "stack", "move"]}, "locked": {"type": "boolean"}, "to": {"type": "string", "enum": ["top", "bottom", "up", "down"]}, "page": {"type": "string"}, "view": {"type": "string"}, "object": {"type": "string"}, "breaks": {"type": "array", "items": {"type": "string"}},
                   "gap": {"type": "number"}, "clip": {"type": "string"}, "width": {"type": "number"}, "height": {"type": "number"}, "frame": {"type": "boolean"}, "path": {"type": "string"}, "scale": {"type": "number"}, "direction": {"type": "array", "items": {"type": "number"}}, "at": {"type": "array", "items": {}}, "name": {"type": "string"}}, ["kind"]), td_view_more, changes=True),
-        Tool("td_lines", "A view's lines: action align_h / align_v { refs two points or an edge } (the view turned so they line up) | style { refs edges, style solid|dashed|dotted|dashdot|dashdotdot|none, weight mm, color } | extend / shorten { items (td_cosmetic's lines by order), by mm, centerlines } | erase { items, tags } (cosmetic lines gone).",
+        Tool("td_lines", "A view's lines: action align_h / align_v { refs two points or an edge } (the view turned so they line up) | style { refs edges, style solid|dashed|dotted|dashdot|dashdotdot|none, weight mm, color } | extend / shorten { items (td_cosmetic's lines by order from 0; all when left out), by mm, centerlines } | erase { items, tags } (cosmetic lines gone; all td_cosmetic's when items is left out).",
              obj({"view": {"type": "string"}, "action": {"type": "string", "enum": ["align_h", "align_v", "style", "extend", "shorten", "erase"]}, "refs": {"type": "array", "items": {}}, "style": {"type": "string"}, "weight": {"type": "number"}, "color": {},
                   "items": {"type": "array", "items": {"type": "integer"}}, "by": {"type": "number"}, "centerlines": {"type": "array", "items": {"type": "string"}}, "tags": {"type": "array", "items": {"type": "string"}}}, ["view", "action"]), td_lines, changes=True),
-        Tool("td_section_position", "Line a section view up with its base view (straight across or below it).", obj({"section": {"type": "string"}}, ["section"]), td_section_position, changes=True),
-        Tool("td_export", "Write a page out: formats [svg, pdf, dxf] (DXF by TechDraw; SVG and PDF drawn here from the same objects, no window needed), name. Files go to the out folder.",
+        Tool("td_section_position", "Line a section view up with its base view: straight across when it sits beside it, straight above or below when over it.", obj({"section": {"type": "string"}}, ["section"]), td_section_position, changes=True),
+        Tool("td_export", "Write a page out: formats [svg, pdf, dxf], name. DXF is TechDraw's own. SVG and PDF are drawn here from the page's objects (TechDraw's own PDF and SVG export needs the window): views, dimensions, symbols, notes, tables, centre marks, hatching and the title block's fields, without the template's artwork. Files go to the session's folder; notes says what was skipped.",
              obj({"page": {"type": "string"}, "formats": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}}), td_export),
     ]

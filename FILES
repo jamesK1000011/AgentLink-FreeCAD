@@ -172,8 +172,15 @@ docs/clients/lm-studio.md
 docs/clients/opencode-ollama.md
 docs/clients/vscode.md
 docs/hardening/STATUS.md
+docs/hardening/asmtd-findings.md
 docs/hardening/inventory.json
+docs/hardening/models/asmtd-assembly-model.json
+docs/hardening/models/asmtd-techdraw-model.json
+docs/hardening/models/part-model.json
+docs/hardening/models/partdesign-model.json
 docs/hardening/models/sketcher-model.json
+docs/hardening/part-findings.md
+docs/hardening/partdesign-findings.md
 docs/hardening/sketcher-findings.md
 docs/hardening/status.json
 docs/hooks.md
@@ -279,6 +286,7 @@ tests/test_overlay.py
 tests/test_owner_services.py
 tests/test_panel_tabs.py
 tests/test_param.py
+tests/test_part_hardening.py
 tests/test_paths.py
 tests/test_pref_import.py
 tests/test_protocol.py
