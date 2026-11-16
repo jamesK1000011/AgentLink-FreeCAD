@@ -48,12 +48,15 @@ def tools(s):
         pattern = a.get("pattern") or "test_*.py"
         select = a.get("select") or None
         timeout = a.get("timeout", testrun.TIMEOUT)
+        folder = a.get("folder") or None
         if not testrun.PATTERN.fullmatch(str(pattern)):
             raise bad("pattern: a file name glob ending in .py, no folders (test_*.py by default).")
         if select is not None and not testrun.SELECT.fullmatch(str(select)):
             raise bad("select: letters, digits and _ (part of a test's name).")
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout <= testrun.TIMEOUT_MAX:
             raise bad(f"timeout: seconds, over 0 and at most {testrun.TIMEOUT_MAX:g} ({testrun.TIMEOUT:g} by default).")
+        if folder is not None and not testrun.FOLDER.fullmatch(str(folder)):
+            raise bad('folder: a subfolder of tests/, such as "make" (names joined by /; no "..").')
         mod = mod_dir()
         installed = installed_names(mod)
         root = testrun.root_for(addon, mod, OWN_ROOT, installed)
@@ -66,7 +69,7 @@ def tools(s):
             raise ToolError("unavailable", "No FreeCAD command-line binary (freecadcmd) beside this FreeCAD, in FREECAD_APP or on the PATH.")
         roots = [os.path.join(mod, n) for n in sorted((installed or set()) - {"AgentLink", "AddonManager"}) if os.path.isdir(os.path.join(mod, n))]
         log = keep.path("tests", f"{addon}-{keep.stamp()}.log")
-        return testrun.wait(testrun.start(cmd, addon, root, OWN_ROOT, roots, lib, log, pattern, select, float(timeout)), testrun.START_WAIT, _pump())
+        return testrun.wait(testrun.start(cmd, addon, root, OWN_ROOT, roots, lib, log, pattern, select, float(timeout), folder), testrun.START_WAIT, _pump())
 
     def gui_input(a):
         from .. import gui_input as gi
@@ -120,10 +123,10 @@ def tools(s):
         Tool("addon_test",
              "An installed add-on's own tests (its tests/ folder) run in the background in a separate FreeCAD command-line process, never this "
              "FreeCAD: documents, the window and settings are untouched, and the tests get a fresh ~/AgentLink. addon starts a run: its folder "
-             "in FreeCAD's Mod folder (one the launcher installed) or AgentLink; pattern: test files (test_*.py); select: only tests whose id "
+             "in FreeCAD's Mod folder (one the launcher installed) or AgentLink; folder: only this subfolder of tests/ (e.g. make); pattern: test files (test_*.py); select: only tests whose id "
              f"holds it; timeout: seconds ({testrun.TIMEOUT:g}, at most {testrun.TIMEOUT_MAX:g}). It answers at once with the job (the result "
              f"itself when it finishes within {testrun.START_WAIT:g} s); job answers how it stands (counts so far, or the counts, the time and each "
              f"failure's last traceback lines), waiting up to {testrun.STATUS_WAIT:g} s for the end. Neither: the recent jobs. The full log is "
              "under ~/AgentLink/tests; a run is stopped at its timeout or when FreeCAD quits.",
-             obj({"addon": st, "job": st, "pattern": st, "select": st, "timeout": {"type": "number"}}), addon_test),
+             obj({"addon": st, "job": st, "folder": st, "pattern": st, "select": st, "timeout": {"type": "number"}}), addon_test),
     ]
