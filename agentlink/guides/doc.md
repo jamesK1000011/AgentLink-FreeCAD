@@ -15,6 +15,7 @@
 - `doc_save` before `doc_new` or `doc_open`: those switch the session to another document.
 
 ## traps
+- `import_file` of a DXF reads lines, arcs, circles, ellipses, polylines (2D and 3D, closed ones closed) and splines itself. A drawing with blocks, text or dimensions goes through FreeCAD's importer. `read` says which, and what failed. Many objects come back as counts and the first few names.
 - `doc_new` and `doc_open` are not undo steps and a batch's rollback does not reach past them.
 - A mesh file always comes in as a mesh, whatever its size. Use `import_file { solid: true }` for a body (up to 200000 triangles), or the mesh tools (`meshobj_info`, `meshobj_repair` …) on the mesh.
 - A body imported from a mesh is made of triangles: measure, section and booleans work; fillets and `shape_query` by radius do not see round faces.

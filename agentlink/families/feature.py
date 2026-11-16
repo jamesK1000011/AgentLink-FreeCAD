@@ -105,7 +105,7 @@ def tools(session):
             if a.get("upToFace") is not None:
                 if tip is None:
                     raise ToolError("invalid_state", "upToFace: the body has no faces yet.")
-                up_face = pc.find_faces(tip.Shape, [a["upToFace"]])[0]
+                up_face = pc.find_faces(pc.ref_shape(b, tip.Shape), [a["upToFace"]], pc.ref_names(b, tip))[0]
             f = new(b, f"PartDesign::{kind}", kind)
             f.Profile = sk
             typ = a.get("type", "length")
@@ -232,9 +232,9 @@ def tools(session):
             tip, shape = pc.tip_shape(b)
             before = pc.volume(b)
             if kind in ("Fillet", "Chamfer"):
-                subs = pc.find_edges(shape, a.get("edges"))
+                subs = pc.find_edges(pc.ref_shape(b, shape), a.get("edges"), pc.ref_names(b, tip))
             else:
-                subs = pc.find_faces(shape, a.get("faces"))
+                subs = pc.find_faces(pc.ref_shape(b, shape), a.get("faces"), pc.ref_names(b, tip))
             f = new(b, f"PartDesign::{kind}", kind)
             f.Base = (tip, subs)
             tool = {"Fillet": "pd_fillet", "Chamfer": "pd_chamfer", "Draft": "pd_draft", "Thickness": "pd_thickness"}[kind]
@@ -449,12 +449,13 @@ def tools(session):
     sketch = {"type": "string", "description": "The sketch, in the body."}
     xyz = {"type": "array", "items": {"type": "number"}}
     face = {"type": "object", "description": "{ at: [x,y,z] a point on the face, normal: [x,y,z] outward }", "properties": {"at": xyz, "normal": xyz, "tol": {"type": "number"}}, "required": ["at"], "additionalProperties": False}
-    faces = {"type": "array", "items": face, "description": "faces by where they are: [{ at, normal }]"}
+    faces = {"description": "faces: [{ at, normal }] by where they are, a reference shape_query gives (\"Face8\", \"Body.Face8\") or a list of them, or shape_query's filters ({ type, normal, near, x, y, z, … })"}
+    edges = {"description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, … })"}
     plane = {"description": "XY | XZ | YZ, a datum plane's name, or a face { at, normal }"}
     feats = {"type": "array", "items": {"type": "string"}}
     reading = " Answers the body's volume (mm³), faces and size after; a failure is refused with FreeCAD's error and nothing kept."
     ext = {"body": body, "sketch": sketch, "type": {"type": "string"}, "length": {"type": "number"}, "length2": {"type": "number"}, "sides": {"type": "string", "enum": ["one", "two", "symmetric"]},
-           "reversed": {"type": "boolean"}, "upToFace": face, "taper": {"type": "number"}}
+           "reversed": {"type": "boolean"}, "upToFace": {"description": "The face to go up to: { at, normal }, \"Face8\", or shape_query's filters."}, "taper": {"type": "number"}}
     return [
         Tool("pd_pad", "Pad a closed sketch into the body: type length (length mm) | up_to_last | up_to_first | up_to_face (upToFace { at, normal }); sides one | two (length2) | symmetric; reversed; taper deg. A pad inside the body already adds nothing and is refused; an open sketch fails — sketch_state first." + reading, obj(ext), sketched("Pad", True), changes=True),
         Tool("pd_pocket", "Pocket a closed sketch out of the body: type length | through_all | up_to_first | up_to_face; sides; reversed. It cuts against the sketch's normal: a pocket that cuts nothing (pointing away from the material) is refused — reversed: true, or sketch on the face it enters." + reading, obj(ext), sketched("Pocket", False), changes=True),
@@ -465,13 +466,13 @@ def tools(session):
         Tool("pd_hole", "Holes at the centre of every circle of a sketch on the face they enter, drilled against its normal: diameter mm, or thread \"M5\" (ISO; \"M8x1\" fine) — threaded (default true; cosmetic unless modelThread) or a clearance hole (threaded: false, fit close|normal|loose); depth mm | \"through\"; drillPoint flat|angled; cut counterbore|countersink with cutDiameter, cutDepth, countersinkAngle (a thread size gives standard ones)." + reading,
              obj({"body": body, "sketch": sketch, "diameter": {"type": "number"}, "thread": {"type": "string"}, "threaded": {"type": "boolean"}, "modelThread": {"type": "boolean"}, "fit": {"type": "string"}, "depth": {"type": ["number", "string"]}, "drillPoint": {"type": "string"}, "cut": {"type": "string"},
                   "cutDiameter": {"type": "number"}, "cutDepth": {"type": "number"}, "countersinkAngle": {"type": "number"}, "reversed": {"type": "boolean"}}), pd_hole, changes=True),
-        Tool("pd_fillet", "Round edges of the body: edges [{ near: [x,y,z] } the edge nearest a point | { face: { at, normal } } every edge of a face | { all: true }, kind: line|circle to filter], radius mm. Refer to edges by where they are — never by index, which changes after every edit." + reading,
-             obj({"body": body, "edges": {"type": "array", "items": {"type": "object"}}, "radius": {"type": "number"}}, ["edges"]), dressup("Fillet"), changes=True),
+        Tool("pd_fillet", "Round edges of the body: edges [{ near: [x,y,z] } the edge nearest a point | { face: { at, normal } } every edge of a face | { all: true }, kind: line|circle to filter], or what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items) or its filters ({ type: circle, radius: 3 } every such edge; with near, the nearest); radius mm. References are good until the next edit: query again after one." + reading,
+             obj({"body": body, "edges": edges, "radius": {"type": "number"}}, ["edges"]), dressup("Fillet"), changes=True),
         Tool("pd_chamfer", "Bevel edges of the body: edges as pd_fillet; size mm; size2 for two distances or angle deg for distance and angle." + reading,
-             obj({"body": body, "edges": {"type": "array", "items": {"type": "object"}}, "size": {"type": "number"}, "size2": {"type": "number"}, "angle": {"type": "number"}}, ["edges"]), dressup("Chamfer"), changes=True),
-        Tool("pd_draft", "Taper faces for moulding: faces [{ at, normal }], angle deg, neutral plane (XY default, a datum plane, or a face query), pull direction x|y|z, reversed." + reading,
+             obj({"body": body, "edges": edges, "size": {"type": "number"}, "size2": {"type": "number"}, "angle": {"type": "number"}}, ["edges"]), dressup("Chamfer"), changes=True),
+        Tool("pd_draft", "Taper faces for moulding: faces [{ at, normal }] (or shape_query's references or filters), angle deg, neutral plane (XY default, a datum plane, or a face query), pull direction x|y|z, reversed." + reading,
              obj({"body": body, "faces": faces, "angle": {"type": "number"}, "neutral": plane, "pull": {"type": "string"}, "reversed": {"type": "boolean"}}, ["faces"]), dressup("Draft"), changes=True),
-        Tool("pd_thickness", "Shell the body: faces [{ at, normal }] to open (removed), thickness mm of the wall, inward unless outward: true; join arc|intersection." + reading,
+        Tool("pd_thickness", "Shell the body: faces [{ at, normal }] (or shape_query's references or filters) to open (removed), thickness mm of the wall, inward unless outward: true; join arc|intersection." + reading,
              obj({"body": body, "faces": faces, "thickness": {"type": "number"}, "outward": {"type": "boolean"}, "join": {"type": "string"}}, ["faces"]), dressup("Thickness"), changes=True),
         Tool("pd_mirrored", "Mirror features (by name) across a plane: XY | XZ | YZ, a datum plane, or a face query. The copies must meet the body." + reading,
              obj({"body": body, "features": feats, "plane": plane}, ["features"]), transformed("Mirrored"), changes=True),

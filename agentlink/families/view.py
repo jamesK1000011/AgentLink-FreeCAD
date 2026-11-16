@@ -29,6 +29,72 @@ def snap_grid(n):
     return cols, -(-n // cols)
 
 
+def png_size(path):
+    """(width, height) of a PNG file from its header, or None."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(24)
+    except OSError:
+        return None
+    if len(head) < 24 or head[:8] != b"\x89PNG\r\n\x1a\n" or head[12:16] != b"IHDR":
+        return None
+    return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+
+
+def snap_size(w, h, n, cell=False):
+    """(columns, rows, cell width, cell height) for n views: width and
+    height are the whole picture (the grid), or each view's with cell."""
+    cols, rows = snap_grid(n)
+    if cell:
+        return cols, rows, w, h
+    return cols, rows, max(16, w // cols), max(16, h // rows)
+
+
+def fit_png(path, w, h):
+    """The PNG at path made exactly w x h when it is not (a window on a
+    HiDPI screen saves at its pixel ratio): True when it is now. Qt, which
+    the window has."""
+    got = png_size(path)
+    if got == (w, h):
+        return True
+    try:
+        from PySide import QtCore, QtGui
+    except ImportError:
+        try:
+            from PySide6 import QtCore, QtGui
+        except ImportError:
+            return False
+    try:
+        img = QtGui.QImage(path)
+        if img.isNull():
+            return False
+        img = img.scaled(w, h, QtCore.Qt.IgnoreAspectRatio, QtCore.Qt.SmoothTransformation)
+        try:
+            img.setDevicePixelRatio(1.0)
+        except Exception:  # noqa: BLE001
+            pass
+        return bool(img.save(path, "PNG")) and png_size(path) == (w, h)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def snap_fit(view, w, h):
+    """Fit the parts to a picture w x h, not to the window: fitAll fits the
+    window's shape, so a picture of another shape (a grid's cell, a tall
+    one from a wide window) came out with the part a third of the frame.
+    Coin's viewAll on the camera for that viewport, the window's fitAll
+    when Coin cannot be reached."""
+    view.fitAll()
+    try:
+        from pivy import coin
+
+        cam = view.getCameraNode()
+        cam.viewAll(view.getSceneGraph(), coin.SbViewportRegion(int(w), int(h)))
+        return True
+    except Exception:  # noqa: BLE001 - the window's own fit stands
+        return False
+
+
 def snap_combine(files, names, cols, rows, cw, ch, out):
     """The views' PNGs in one grid PNG at out (Qt, which the window has),
     each labelled; False when it could not be made."""
@@ -41,6 +107,10 @@ def snap_combine(files, names, cols, rows, cw, ch, out):
             return False
     try:
         img = QtGui.QImage(cw * cols, ch * rows, QtGui.QImage.Format_RGB32)
+        try:
+            img.setDevicePixelRatio(1.0)
+        except Exception:  # noqa: BLE001
+            pass
         img.fill(QtGui.QColor(255, 255, 255))
         p = QtGui.QPainter(img)
         try:
@@ -318,10 +388,14 @@ def tools(session):
             if which:
                 getattr(view, SNAP_TURN[which])()
                 if a.get("fit", True):
-                    view.fitAll()
+                    snap_fit(view, w, h)
             p = paths.out_file(s, "view_snapshot", a.get("path") or f"snapshot_{which or 'current'}.png", ".png")
             view.saveImage(p, w, h, bg)
-            out = {"path": p, "view": which or "as the person left it", "width": w, "height": h, "bytes": os.path.getsize(p)}
+            fit_png(p, w, h)
+            got = png_size(p) or (w, h)
+            out = {"path": p, "view": which or "as the person left it", "width": got[0], "height": got[1], "bytes": os.path.getsize(p)}
+            if got != (w, h):
+                out["warning"] = f"Asked {w} x {h}; FreeCAD saved {got[0]} x {got[1]} and it could not be resized here."
             if a.get("inline", True):
                 with open(p, "rb") as f:
                     out["_png"] = f.read()
@@ -329,8 +403,11 @@ def tools(session):
         # Several views: each saved on its own, then one grid picture of them
         # (2 across up to 4, 3 across for 5 or 6). The person's camera is put
         # back afterwards.
-        cols, rows = snap_grid(len(views))
-        cw, ch = max(16, w // cols), max(16, h // rows)
+        # width and height are the whole picture; cell: true makes them each
+        # view's (the grid then cols x that).
+        cols, rows, cw, ch = snap_size(w, h, len(views), bool(a.get("cell")))
+        if cw * cols > 8192 or ch * rows > 8192:
+            raise ToolError("invalid_input", f"cell {cw} x {ch} in a {cols} x {rows} grid is {cw * cols} x {ch * rows} px: 8192 at most each way.")
         try:
             cam = view.getCamera()
         except Exception:
@@ -340,9 +417,10 @@ def tools(session):
             for n in views:
                 getattr(view, SNAP_TURN[n])()
                 if a.get("fit", True):
-                    view.fitAll()
+                    snap_fit(view, cw, ch)
                 q = paths.out_file(s, "view_snapshot", f"snapshot_{n}.png", ".png")
                 view.saveImage(q, cw, ch, bg)
+                fit_png(q, cw, ch)
                 each.append(q)
         finally:
             if cam is not None:
@@ -352,9 +430,16 @@ def tools(session):
                     pass
         p = paths.out_file(s, "view_snapshot", a.get("path") or f"snapshot_{'_'.join(views)}.png", ".png")
         combined = snap_combine(each, views, cols, rows, cw, ch, p)
-        out = {"views": views, "paths": each, "width": cw * cols, "height": ch * rows, "grid": [cols, rows],
+        out = {"views": views, "paths": each, "width": cw * cols, "height": ch * rows, "grid": [cols, rows], "cell": [cw, ch],
+               "sizeIs": "each view's (cell: true)" if a.get("cell") else "the whole grid (cell: true makes it each view's)",
                "note": "The person's own view is put back."}
         if combined:
+            got = png_size(p)
+            if got and got != (cw * cols, ch * rows):
+                fit_png(p, cw * cols, ch * rows)
+                got = png_size(p) or got
+            if got:
+                out["width"], out["height"] = got
             out["path"] = p
             out["bytes"] = os.path.getsize(p)
             if a.get("inline", True):
@@ -383,5 +468,5 @@ def tools(session):
             view_render,
         ),
         Tool("view_maps", "The maps and layers view_render can draw here (add-ons add theirs), and the views.", obj({}), view_maps),
-        Tool("view_snapshot", "Save the FreeCAD window's own 3D view as the person sees it (view: turn it to a standard view first, fit true) and look at it. views [..] (up to 6, or \"all\") gives one grid picture of them, each view's file in paths, and puts the person's view back. Needs the window; view_render draws without one.", obj({"view": {"type": "string"}, "views": {"description": "A list of views (iso, top, bottom, front, rear, left, right), up to 6, or \"all\" (iso, top, front, right): one grid picture."}, "fit": {"type": "boolean"}, "width": {"type": "integer"}, "height": {"type": "integer"}, "background": {"type": "string"}, "inline": {"type": "boolean"}, "path": {"type": "string"}}), view_snapshot),
+        Tool("view_snapshot", "Save the FreeCAD window's own 3D view as the person sees it (view: turn it to a standard view first, fit true) and look at it. views [..] (up to 6, or \"all\") gives one grid picture of them, each view's file in paths, and puts the person's view back. width and height (800 x 600) are the whole picture — the grid with several views, split among them; cell: true makes them each view's size instead. The answer gives the sizes as saved. Needs the window; view_render draws without one.", obj({"cell": {"type": "boolean", "description": "width and height are each view's in the grid, not the whole grid's."}, "view": {"type": "string"}, "views": {"description": "A list of views (iso, top, bottom, front, rear, left, right), up to 6, or \"all\" (iso, top, front, right): one grid picture."}, "fit": {"type": "boolean"}, "width": {"type": "integer"}, "height": {"type": "integer"}, "background": {"type": "string"}, "inline": {"type": "boolean"}, "path": {"type": "string"}}), view_snapshot),
     ]

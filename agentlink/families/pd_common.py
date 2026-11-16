@@ -96,6 +96,30 @@ def tip_shape(body, need=True):
     return tip, tip.Shape
 
 
+def ref_shape(body, shape):
+    """The shape to find faces and edges on: the Body's own (where
+    shape_query and session_state read them: the Body's placement in it),
+    the tip's when the Body has not caught up. The numbering is the
+    same."""
+    try:
+        bs = body.Shape
+        if not bs.isNull() and len(bs.Edges) == len(shape.Edges) and len(bs.Faces) == len(shape.Faces):
+            return bs
+    except Exception:
+        pass
+    return shape
+
+
+def ref_names(body, *objs):
+    """The names a reference may carry for this body: "Body.Face8",
+    "Pad.Face8" (its tip)."""
+    out = []
+    for o in (body,) + objs:
+        if o is not None:
+            out += [o.Label, o.Name]
+    return tuple(out)
+
+
 # ---- the body's origin ---------------------------------------------------------------------
 
 def origin_feature(body, role):
@@ -187,55 +211,73 @@ def find_face(shape, q, tol=0.5):
     raise ToolError("not_found", f"No face within {tol} mm of {geo.vec(p)}" + (f" facing {geo.vec(n)}" if n is not None else "") + f". Nearest faces: {near or 'none'} — give a point on the face and its outward normal.")
 
 
-def find_edges(shape, queries):
-    """Edge names (Edge1 …) for queries: { near: [x,y,z] } the edge nearest
-    a point (within 1 mm), { face: { at, normal } } every edge of a face,
-    { all: true } every edge. kind: line | circle filters any of them."""
-    if not isinstance(queries, list) or not queries:
-        raise ToolError("invalid_input", "edges: [{ near: [x,y,z] } | { face: { at, normal } } | { all: true }, …], kind: line | circle to filter.")
+EDGE_KEYS = ("near", "face", "all", "kind", "tol")
+FACE_KEYS = ("at", "normal", "tol")
+
+
+def _edges_legacy(shape, q):
+    """The older edge forms: { near } the edge nearest a point (within 1
+    mm), { face: { at, normal } } every edge of a face, { all: true };
+    kind: line | circle filters any of them."""
     edges = shape.Edges
-    picked = []
-    for q in queries:
-        if not isinstance(q, dict):
-            raise ToolError("invalid_input", "edges: each one a query object, not an index — indices change after edits.")
-        if q.get("all"):
-            idx = list(range(len(edges)))
-        elif "near" in q:
-            p = Part.Vertex(vec3(q["near"], "edges.near"))
-            ds = sorted((e.distToShape(p)[0], i) for i, e in enumerate(edges))
-            tol = float(q.get("tol", 1.0))
-            if not ds or ds[0][0] > tol:
-                close = [{"edge": geo.vec(edges[i].CenterOfMass), "distance": round(d, 3)} for d, i in ds[:4]]
-                raise ToolError("not_found", f"No edge within {tol} mm of {q['near']}: nearest edges (their mid-points) {close} — give a point on the edge.")
-            idx = [ds[0][1]]
-        elif "face" in q:
-            _, f = find_face(shape, q["face"])
-            idx = [i for i, e in enumerate(edges) if any(e.isSame(fe) for fe in f.Edges)]
-        else:
-            raise ToolError("invalid_input", "edges: each one { near } | { face } | { all: true }.")
-        kind = q.get("kind")
-        if kind:
-            want = {"line": "Line", "circle": "Circle"}.get(kind)
-            if not want:
-                raise ToolError("invalid_input", "edges.kind: line or circle.")
-            idx = [i for i in idx if type(edges[i].Curve).__name__ == want]
-        for i in idx:
-            if i not in picked:
-                picked.append(i)
-    if not picked:
-        raise ToolError("not_found", "The queries matched no edge (kind filtered them all out?).")
-    return [f"Edge{i + 1}" for i in picked]
+    if q.get("all"):
+        idx = list(range(len(edges)))
+    elif "near" in q:
+        p = Part.Vertex(vec3(q["near"], "edges.near"))
+        ds = sorted((e.distToShape(p)[0], i) for i, e in enumerate(edges))
+        tol = float(q.get("tol", 1.0))
+        if not ds or ds[0][0] > tol:
+            close = [{"edge": geo.vec(edges[i].CenterOfMass), "distance": round(d, 3)} for d, i in ds[:4]]
+            raise ToolError("not_found", f"No edge within {tol} mm of {q['near']}: nearest edges (their mid-points) {close} — give a point on the edge.")
+        idx = [ds[0][1]]
+    elif "face" in q:
+        _, f = find_face(shape, q["face"])
+        idx = [i for i, e in enumerate(edges) if any(e.isSame(fe) for fe in f.Edges)]
+    else:
+        raise ToolError("invalid_input", "edges: each one { near } | { face } | { all: true }, a reference (\"Edge3\", \"Body.Edge3\") or shape_query's filters.")
+    kind = q.get("kind")
+    if kind:
+        want = {"line": "Line", "circle": "Circle"}.get(kind)
+        if not want:
+            raise ToolError("invalid_input", "edges.kind: line or circle.")
+        idx = [i for i in idx if type(edges[i].Curve).__name__ == want]
+    return [(f"Edge{i + 1}", edges[i]) for i in idx]
 
 
-def find_faces(shape, queries):
-    if not isinstance(queries, list) or not queries:
-        raise ToolError("invalid_input", "faces: [{ at: [x,y,z], normal: [x,y,z] }, …] — by where they are, not by index.")
-    out = []
-    for q in queries:
-        i, _ = find_face(shape, q)
-        if f"Face{i + 1}" not in out:
-            out.append(f"Face{i + 1}")
-    return out
+def find_edges(shape, queries, names=()):
+    """Edge names (Edge1 …) for queries (families/refs.py): a reference
+    "Edge3" / "Body.Edge3" (a face's reference: its edges), shape_query's
+    filters, or the older { near: [x,y,z] } the edge nearest a point (within
+    1 mm), { face: { at, normal } } every edge of a face, { all: true } every
+    edge, kind: line | circle filtering any of them; one or a list."""
+    from . import refs
+
+    if not queries:
+        raise ToolError("invalid_input", "edges: [{ near: [x,y,z] } | { face: { at, normal } } | { all: true } | \"Edge3\" | shape_query's filters { type, radius, axis, … }, …], kind: line | circle to filter.")
+    try:
+        got = refs.pick(shape, queries, "edge", "edges", legacy=lambda q: _edges_legacy(shape, q), is_legacy=refs.legacy_of(EDGE_KEYS), names=names)
+    except ToolError as e:
+        if e.message == "edges: nothing matched.":
+            raise ToolError("not_found", "The queries matched no edge (kind filtered them all out?).") from None
+        raise
+    return [n for n, _ in got]
+
+
+def find_faces(shape, queries, names=()):
+    """Face names for queries (families/refs.py): a reference "Face8" /
+    "Body.Face8", shape_query's filters, or the older { at: [x,y,z],
+    normal: [x,y,z] } — by where they are; one or a list."""
+    from . import refs
+
+    if not queries:
+        raise ToolError("invalid_input", "faces: [{ at: [x,y,z], normal: [x,y,z] } | \"Face8\" | shape_query's filters { type, normal, near, … }, …] — by where they are, not by index.")
+
+    def legacy(q):
+        i, f = find_face(shape, q)
+        return [(f"Face{i + 1}", f)]
+
+    return [n for n, _ in refs.pick(shape, queries, "face", "faces", legacy=legacy,
+                                    is_legacy=refs.legacy_of(FACE_KEYS, lambda q: "at" in q), names=names)]
 
 
 # ---- after a change ------------------------------------------------------------------------

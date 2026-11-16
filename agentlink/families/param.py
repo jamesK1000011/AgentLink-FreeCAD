@@ -6,6 +6,7 @@
 
 import re
 
+from .. import exprs
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import pd_common as pc
@@ -53,6 +54,15 @@ def value_of(ss, name):
         u = str(v).split(" ", 1)
         return round(float(v.Value), 6) + 0.0, (u[1] if len(u) > 1 else "")
     return v, ""
+
+
+def qualified(doc, expr, keep=()):
+    """expr with the Params sheet's names written in full (exprs.qualify):
+    "size / 2" -> "Params.size / 2". (expression, {bare: full})."""
+    ss = sheet(doc)
+    if ss is None or not isinstance(expr, str):
+        return expr, {}
+    return exprs.qualify(expr, [n for _, n in rows(ss)], ss.Name, keep)
 
 
 def users(doc, ss, name):
@@ -173,26 +183,35 @@ def tools(session):
             o.setExpression(path, None)
             check(doc(), f"Unbinding {target}")
             return picks.finish(s, "param_bind", lambda: {"target": target, "expression": None, "bodies": bodies_now()}, recompute=False)
+        given = str(expr)
+        # A parameter by its bare name ("size") is the Params sheet's
+        # (Params.size), as param_set answers it.
+        expr, named = qualified(doc(), given)
         try:
-            o.evalExpression(str(expr))
+            o.evalExpression(expr)
         except Exception as e:
-            raise ToolError("invalid_input", f"{expr!r} does not evaluate: {e} — refer to a parameter as {SHEET}.<name> (param_list), or to any sheet's cell as <Sheet>.<alias> or <Sheet>.A1 (sheet_list).")
+            ss = sheet(doc())
+            have = [n for _, n in rows(ss)] if ss else []
+            raise ToolError("invalid_input", f"{given!r} does not evaluate: {e} — a parameter by its name ({', '.join(have[:12]) or 'none yet: param_set makes one'}) or as {SHEET}.<name>, or any sheet's cell as <Sheet>.<alias> or <Sheet>.A1 (sheet_list).")
         try:
-            o.setExpression(path, str(expr))
+            o.setExpression(path, expr)
         except Exception as e:
-            raise ToolError("invalid_input", f"{target} = {expr!r}: {e}")
+            raise ToolError("invalid_input", f"{target} = {given!r}: {e}")
         check(doc(), f"Binding {target} to {expr}")
         try:
             now = picks.num_json(o.getDatum(path.split(".", 1)[1])) if path.startswith("Constraints.") else picks.num_json(getattr(o, path))
         except Exception:
             now = None
-        return picks.finish(s, "param_bind", lambda: {"target": target, "expression": expr, "value": now, "bodies": bodies_now()}, recompute=False)
+        out = {"target": target, "expression": expr, "value": now}
+        if named:
+            out["read"] = {"as": named, "note": "A bare name is the Params sheet's parameter."}
+        return picks.finish(s, "param_bind", lambda: {**out, "bodies": bodies_now()}, recompute=False)
 
     return [
         Tool("param_set", "Set a named parameter in the Params spreadsheet (made when first needed): name, value (a number with unit mm | deg | \"\", or an expression over others, \"width / 2\"), note. Everything bound to it recomputes; a value that breaks a feature is refused with FreeCAD's error and nothing kept. Answers its reference (Params.<name>) and who uses it.",
              obj({"name": {"type": "string"}, "value": {"type": ["number", "string"]}, "unit": {"type": "string"}, "note": {"type": "string"}}, ["name", "value"]), param_set, changes=True),
         Tool("param_list", "The parameters: name, value, unit, what they are set to, and which properties use them. Changes nothing.", obj({}), param_list),
         Tool("param_remove", "Remove a parameter no property uses (unbind its users first).", obj({"name": {"type": "string"}}, ["name"]), param_remove, changes=True),
-        Tool("param_bind", "Bind a property or a named sketch constraint to an expression: target \"Pad.Length\" | \"Sketch.width\" (a constraint's name), expression \"Params.width\" or \"Params.width / 2 + 1\"; null unbinds (the value stays). A bound value is then changed by param_set, not edited directly.",
+        Tool("param_bind", "Bind a property or a named sketch constraint to an expression: target \"Pad.Length\" | \"Sketch.width\" (a constraint's name), expression \"width\" (a parameter by its name), \"Params.width\" or \"width / 2 + 1\"; null unbinds (the value stays). A bound value is then changed by param_set, not edited directly.",
              obj({"target": {"type": "string"}, "expression": {"type": ["string", "null"]}}, ["target", "expression"]), param_bind, changes=True),
     ]

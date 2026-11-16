@@ -18,6 +18,12 @@ from .protocol import ToolError
 
 OFFER_OVER = 120.0
 OFFER_KEEP = 600.0
+# Heavy tools never refused on an estimate: a picture is the job itself (no
+# rougher pass to offer), and its time follows its views and pixels, not the
+# document's faces the estimate is read against — a 17 s render was put at
+# 6 min from an earlier slow run, and every render took two calls. They are
+# still queued, timed and given a heavy call's deadline.
+NO_OFFER = {"view_render", "steps_render"}
 
 
 def _maxrss_mb():
@@ -157,7 +163,11 @@ class Gate:
         key = keep.call_key(tool.name, args)
         now = time.time()
         self.offers = {k: t for k, t in self.offers.items() if now - t < OFFER_KEEP}
-        if est and est > OFFER_OVER and key not in self.offers:
+        # Inside a batch the batch is the plan: a heavy call in it runs as
+        # asked (a refused estimate stopped the batch and rolled back the
+        # good steps before it).
+        in_batch = bool(getattr(self.s, "batch_now", None))
+        if est and est > OFFER_OVER and key not in self.offers and tool.name not in NO_OFFER and not in_batch:
             self.offers[key] = now
             rough = keep.estimate(q, tool.name, max(1, size / 4.0)) or est / 4.0
             raise ToolError("invalid_state", f"{tool.name} takes about {_fmt(est)} here at this size (from its past runs on this Mac); a rough pass (a coarser mesh, fewer points) takes about {_fmt(rough)} — run that first? The same call again runs it as asked. Nothing was run.")

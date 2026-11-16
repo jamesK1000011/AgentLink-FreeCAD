@@ -1238,7 +1238,7 @@ def tools(session):
         s._agentlink_heat = {"body": o.Label, "stats": geo.stats(shape), "field": {"points": [nodes[n] for n in ids], "celsius": [T[n] for n in ids]}}
         return out
 
-    query = {"type": "object", "description": "Faces by query: { near: [x,y,z], radius }, { normal: [nx,ny,nz], x|y|z: plane, largest }, or { faces: [\"Face3\"] }"}
+    query = {"description": "Faces by query: { near: [x,y,z], radius }, { normal: [nx,ny,nz], x|y|z: plane, largest }, { faces: [\"Face3\"] }; or what shape_query answers — \"Face8\", \"Body.Face8\", a list of them, its items — or its filters ({ type: cylinder, radius: 3 }, { type: plane, normal, z }, …)"}
     # ---- buckling, local refinement, export, FreeCAD's own FEM objects ----
 
     def fea_buckle(a):
@@ -1720,7 +1720,7 @@ def tools(session):
         ),
         Tool(
             "fea_hold",
-            "Hold faces: faces by query — { near: [x,y,z] }, { normal: [0,0,-1], z: 0 }, { faces: [\"Face1\"] }; kind fixed (no movement at all, the default) | slide (held only along the face's normal, x/y/z: a roller, a smooth floor, a symmetry plane) | pin (dofs [\"x\",\"y\",\"z\"] held, the rest free) | move (move [dx,dy,dz] mm, null for free: a set displacement, a press fit). Adds to the holds (replace: true starts again; clear: true drops them). Answers the faces picked, with area and centre. A rigid hold makes stress no real mount does: peaks at a hold read high.",
+            "Hold faces: faces by query — { near: [x,y,z] }, { normal: [0,0,-1], z: 0 }, { faces: [\"Face1\"] }, shape_query's references (\"Face8\", a list) or its filters ({ type: cylinder, radius: 3 }); kind fixed (no movement at all, the default) | slide (held only along the face's normal, x/y/z: a roller, a smooth floor, a symmetry plane) | pin (dofs [\"x\",\"y\",\"z\"] held, the rest free) | move (move [dx,dy,dz] mm, null for free: a set displacement, a press fit). Adds to the holds (replace: true starts again; clear: true drops them). Answers the faces picked, with area and centre. A rigid hold makes stress no real mount does: peaks at a hold read high.",
             obj({"faces": query, "kind": {"type": "string", "enum": ["fixed", "slide", "pin", "move"]}, "dofs": {"type": "array", "items": {"type": "string"}}, "move": {"type": "array", "items": {}}, "replace": {"type": "boolean"}, "clear": {"type": "boolean"}}),
             fea_hold,
             changes=True,

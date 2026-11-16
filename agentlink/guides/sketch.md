@@ -8,6 +8,7 @@
 4. `sketch_state` before a feature: `readyForFeature`, `dof`, conflicts, open vertices.
 
 ## traps
+- A constraint that over-constrains the sketch is refused, and nothing is added. The refusal names each constraint that clashes, new and existing, with what it holds. Drop one of them.
 - A pad works on a sketch with dof > 0, but the profile can slide when a value changes. Fix it to the origin and dimension it for a parametric part.
 - A constraint that conflicts or is redundant is refused and nothing is added. Read the constraint ids in the message and change or delete one of them.
 - Deleting geometry renumbers every later id. Read `sketch_state` again before you constrain more.

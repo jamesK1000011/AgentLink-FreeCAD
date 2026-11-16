@@ -128,12 +128,22 @@ def query(session, a, default_kind="face"):
     """The elements of a body that pass every filter asked: [(index, element, description)], and the body."""
     o = picks.solid_body(session, a.get("body")) if a.get("body") or not a.get("of") else None
     of = a.get("of")
+    el = None
     if of:
         label, sub, el = picks.resolve(session, of, a.get("body"))
         if not sub or not sub.startswith("Face"):
             raise ToolError("invalid_input", "of: a face (\"Face6\" or \"Box.Face6\") whose edges or vertices to take.")
         o = picks.shaped(session.doc, label)
-    shape = o.Shape
+    kind, out = filter_shape(o.Shape, a, default_kind, of_el=el)
+    return o, kind, out
+
+
+def filter_shape(shape, a, default_kind="face", of_el=None):
+    """The elements of a shape that pass every filter in a (shape_query's:
+    kind, type, normal, axis, within, radius, area, length, near, inside,
+    x/y/z with tol, sort): (kind, [(index, element, description)]). of_el:
+    a face whose edges or vertices only are taken. The one filter every
+    tool that takes faces or edges shares (families/refs.py)."""
     kind = (a.get("kind") or default_kind).lower()
     if kind not in KIND_ATTR:
         raise ToolError("invalid_input", "kind: face, edge or vertex.")
@@ -162,8 +172,8 @@ def query(session, a, default_kind="face"):
     tol = picks.num(a.get("tol", 0.01), "tol")
     cos_w = math.cos(math.radians(within))
     pool = getattr(shape, KIND_ATTR[kind])
-    if of:
-        pool_of = getattr(el, KIND_ATTR[kind])
+    if of_el is not None:
+        pool_of = getattr(of_el, KIND_ATTR[kind])
         pool = [x for x in pool if any(x.isSame(y) for y in pool_of)]
     out = []
     for x in pool:
@@ -217,7 +227,7 @@ def query(session, a, default_kind="face"):
             out.sort(key=lambda t: t[2].get(key, math.inf if not rev else -math.inf), reverse=rev)
         else:
             raise ToolError("invalid_input", "sort: area, radius, length, distance, x, y or z; a leading - for the largest first.")
-    return o, kind, out
+    return kind, out
 
 
 def describe(label, sub, sh):

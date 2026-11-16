@@ -330,11 +330,26 @@ def tools(session):
         return out
 
     def write_cells(ss, cells, text):
+        from . import param as P
+
+        params = P.sheet(doc())
         for addr, v in cells.items():
             try:
                 body = C.content(v, text=text)
             except C.AddressError as e:
                 raise bad(f"{addr}: {e}.")
+            if params is not None and ss is not params and body.startswith("="):
+                # A parameter by its bare name in another sheet's formula is
+                # the Params sheet's (=size*2 -> =Params.size*2), unless the
+                # sheet has an alias of that name itself.
+                def own(n):
+                    try:
+                        return bool(ss.getCellFromAlias(n))
+                    except Exception:
+                        return False
+
+                names = [n for _, n in P.rows(params)]
+                body = "=" + P.exprs.qualify(body[1:], names, params.Name, [n for n in names if own(n)])[0]
             if body == "":
                 ss.clear(addr)
             else:
