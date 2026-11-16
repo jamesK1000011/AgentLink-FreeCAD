@@ -30,5 +30,6 @@ Look at the part after every change that matters, as a person would.
 - A `click` is a tap (press and release back to back), so every navigation style selects with it, Gesture included; its answer's `selected` lists what FreeCAD's selection holds after it (first 3 sub-elements). A held `press` … `release` is what turns or opens a hold menu.
 - Keys go where the call's last press went; with none, to the window's focus.
 - A step that opens a menu or dialog does not stop the call: the next steps act in it (`{menu_item:"New Sketch"}`, `{key:"Escape"}`). The answer's `open` names what is still open; close it. If other calls answer `busy`, use `gui_unstick`.
+- Dev only, two agents on one link (a teacher and a student who stands in for the person): the student adds `as: "person"` to each `gui_input`. The window events of that call and its `call_done` are the person's; the calls of the teacher stay the agent's, also when they come between or during the calls of the student. The answer shows `as: "person"`.
 - Toggle buttons flip on each click and keep their state over a restart: check before clicking twice.
 - Save before `agentlink_update`: the person's unsaved changes come back as a "(recovered …)" copy in front; `doc_switch { front: true }` brings the right tab back. The agent's never-saved documents come back once, from ~/AgentLink/unsaved.
