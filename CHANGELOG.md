@@ -101,6 +101,8 @@ The first tagged release, 0.3.0 (the version in `package.xml`,
 
 ### Fixed
 
+- `fea_setup` on a body that already has a study says what it kept (its holds and loads, added to from then on) or dropped (with `reset: true`, or a study on another body); `fea_hold` and `fea_load` refuse an identical hold or load already in the study, which applied it twice (a 100 N load added again came to 200 N).
+- The SVGs Agent Link writes (charts, drawing sheets, GD&T symbols) name Helvetica alone: the generic sans-serif made Qt warn of a missing "Sans-serif" family in the Report view.
 - A panel whose dock FreeCAD restored wider than 420 px at start (a content's size hint once grew one to about 640 px) is put back to 354 px once, at the first placement after the window shows; a width dragged later in the session stays. `scripts/sync_shared.py` copies Agent Link's shared files (layout.py) over the add-ons' copies in checkouts given to it, keeping each copy's licence line (`--check` only reports).
 - A `gui_input` click in the 3D view with the Gesture navigation style opened the view's context menu instead of selecting: the style times a press by the wall clock at each event, and the click's focus change ran between press and release. The pointer's arrival and focus now come first, with the window caught up, then press and release back to back; the click's answer says what was `selected`.
 - The agent's caption over the 3D view no longer raises "Internal C++ object already deleted" in the Report view when its document is closed before the caption fades.
