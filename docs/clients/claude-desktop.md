@@ -2,8 +2,11 @@
 # Claude Desktop
 
 **On a Mac, the extension is simplest**: download `freecad-agentlink.mcpb`
-from the newest `agentlink-v…` release and double-click it. It finds FreeCAD,
-installs the add-on and keeps it up to date. Nothing below is needed.
+from the newest `agentlink-v…` [release of AgentLink-FreeCAD](https://github.com/jamesK1000011/AgentLink-FreeCAD/releases) and
+double-click it. It finds FreeCAD, installs the add-on and the add-ons
+bundled with it (Workshop, ScanRuler for FreeCAD by way of Stefan Hermann's
+ScanRuler, CNC Kitchen, Texturizer, Tutor, Agent Link for OrcaSlicer) and
+keeps them up to date. Nothing below is needed.
 
 Otherwise (Windows, or a Mac without the extension): **Settings > Developer
 > Edit Config** opens `claude_desktop_config.json`
