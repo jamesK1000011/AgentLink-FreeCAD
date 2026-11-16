@@ -297,6 +297,13 @@
   "health": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
  },
+ "bim_quantities": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse re-run 16:25 after the fixes (hip ridge 1154.7)"
+ },
  "bim_rebar": {
   "description": true,
   "docs": true,
@@ -310,6 +317,13 @@
   "headless": true,
   "health": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_roof": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ArchHouse re-run 16:25 after the fixes (hip ridge 1154.7)"
  },
  "bim_schedule": {
   "description": true,
@@ -384,6 +398,12 @@
   "headless": true,
   "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
  },
+ "cam_edit": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CamWalkthrough re-run 16:24 after the fixes"
+ },
  "cam_job": {
   "description": true,
   "docs": true,
@@ -438,6 +458,12 @@
   "headless": true,
   "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
  },
+ "cam_setup": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "CamWalkthrough re-run 16:24 after the fixes"
+ },
  "cam_sim": {
   "description": true,
   "docs": true,
@@ -486,6 +512,13 @@
   "health": true,
   "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
  },
+ "doc_close": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc re-run 16:36 after the fixes"
+ },
  "doc_graph": {
   "description": true,
   "docs": true,
@@ -499,6 +532,13 @@
   "headless": true,
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "doc_merge": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc re-run 16:36 after the fixes"
  },
  "doc_new": {
   "description": true,
@@ -515,6 +555,13 @@
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
   "note": "open and recent"
  },
+ "doc_revert": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc re-run 16:36 after the fixes"
+ },
  "doc_save": {
   "description": true,
   "docs": true,
@@ -527,7 +574,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "model": "CoreDoc re-run 16:36 after the fixes"
  },
  "draft_2d_view": {
   "description": true,
@@ -901,6 +948,13 @@
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
  },
+ "material_set": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "CoreDoc re-run 16:36 after the fixes"
+ },
  "measure": {
   "description": true,
   "docs": true,
@@ -987,6 +1041,12 @@
   "headless": true,
   "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
  },
+ "meshobj_project": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening re-run 16:25 after the fixes"
+ },
  "meshobj_refine": {
   "description": true,
   "docs": true,
@@ -999,11 +1059,23 @@
   "headless": true,
   "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
  },
+ "meshobj_sections": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening re-run 16:25 after the fixes"
+ },
  "meshobj_segments": {
   "description": true,
   "docs": true,
   "headless": true,
   "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_smooth": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening re-run 16:25 after the fixes"
  },
  "meshobj_split": {
   "description": true,
@@ -1016,6 +1088,12 @@
   "docs": true,
   "headless": true,
   "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+ },
+ "meshobj_trim": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "model": "MeshHardening re-run 16:25 after the fixes"
  },
  "object_align": {
   "description": true,
@@ -1295,6 +1373,9 @@
  "part_sweep": {
   "description": true,
   "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "SweepProbe 15:52 (bent rod 965.35 mm3)",
   "note": "failed in the Part model, fixed after, not re-run: not proven"
  },
  "part_thickness": {
@@ -1622,6 +1703,11 @@
   "headless": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
  },
+ "scad_code": {
+  "description": true,
+  "docs": true,
+  "note": "needs OpenSCAD, not installed on the Mac: only its refusal ran"
+ },
  "scad_export": {
   "description": true,
   "docs": true,
@@ -1629,12 +1715,33 @@
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
  },
+ "scad_import": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScadProbe 16:21 (no OpenSCAD installed; the window no longer hangs)"
+ },
+ "scad_op": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScadProbe 16:21 (no OpenSCAD installed; the window no longer hangs)"
+ },
  "scad_status": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "scad_tidy": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScadProbe 16:21 (no OpenSCAD installed; the window no longer hangs)"
  },
  "section": {
   "description": true,
