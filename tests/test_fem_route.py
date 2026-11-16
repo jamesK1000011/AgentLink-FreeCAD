@@ -34,6 +34,18 @@ SCRIPT = textwrap.dedent("""
     assert "fea_refine" in S.fem_route_why(dict(plain, refine=[{}]), {})
     assert "pinned" in S.fem_route_why(dict(plain, holds=[{"faces": "x", "kind": "pinned"}]), {})
     assert "spin" in S.fem_route_why(dict(plain, loads=[{"kind": "spin", "spin": 100}]), {})
+    # A second setup says what it kept or dropped; an identical hold or load is spotted.
+    h = {"faces": "bottom", "kind": "fixed"}
+    ld = {"kind": "force", "faces": "top", "force": [0, 0, -100]}
+    assert S._same_in(dict(ld), [ld]) and not S._same_in(dict(ld, force=[0, 0, -50]), [ld])
+    assert S._same_in({"kind": "fixed", "faces": "bottom"}, [h])
+    old = {"body": "Pad", "holds": [h], "loads": [ld]}
+    kept = S._setup_said(old, True, False)["kept"]
+    assert (kept["holds"], kept["loads"]) == (1, 1), kept
+    dropped = S._setup_said(old, False, True)["dropped"]
+    assert dropped["loads"] == [ld] and dropped["why"] == "reset: true", dropped
+    assert S._setup_said(old, False, False)["dropped"]["why"] == "the study was on Pad"
+    assert S._setup_said({}, True, False) == {}
     print("OK")
 """)
 

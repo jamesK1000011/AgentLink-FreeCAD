@@ -140,6 +140,28 @@ def fem_route_why(st, a):
     return None
 
 
+def _same_in(item, items):
+    """Whether an identical hold or load is already in the list."""
+    import json
+
+    key = json.dumps(item, sort_keys=True, default=str)
+    return any(json.dumps(x, sort_keys=True, default=str) == key for x in items or [])
+
+
+def _setup_said(old, keep, reset):
+    """What fea_setup did with the study before: its holds and loads kept
+    (the same body, no reset) or dropped (another body, or reset: true),
+    said either way so a second setup never doubles them silently."""
+    holds, loads = len(old.get("holds") or []), len(old.get("loads") or [])
+    if not (holds or loads):
+        return {}
+    if keep:
+        return {"kept": {"holds": holds, "loads": loads,
+                         "note": "The study's holds and loads from before are kept: fea_hold / fea_load add to them (an identical one is refused); reset: true starts the study fresh."}}
+    return {"dropped": {"holds": old.get("holds") or [], "loads": old.get("loads") or [],
+                        "why": "reset: true" if reset else f"the study was on {old.get('body')}"}}
+
+
 def tools(session):
     s = session
 
@@ -172,6 +194,7 @@ def tools(session):
         _save(s.doc, st)
         s.snapshot("fea_setup")
         out = {"study": st, "material": {"id": mid, "name": c["name"], "E": c["E"], "nu": c.get("nu"), "yield": c.get("yield"), "from": said}}
+        out.update(_setup_said(old, keep, bool(a.get("reset"))))
         if mesh > least / 2:
             out["warning"] = f"mesh {mesh:g} mm is over half the part's least size ({least:.1f} mm): too coarse to read stress — {round(least / 3, 2)} mm or less."
         out["next"] = "fea_hold the faces it is held by, fea_load what pushes on it, then fea_solve."
@@ -220,6 +243,8 @@ def tools(session):
             note = "These faces are moved by that much (a set displacement): the answer reads the force it takes as stress."
         else:
             raise ToolError("invalid_input", "kind: fixed | slide (held along the face normal only) | pin (dofs held) | move (set displacement).")
+        if not a.get("replace") and _same_in(h, st["holds"]):
+            raise ToolError("invalid_state", f"That hold is already in the study (holds: {len(st['holds'])}): adding it again changes nothing real — replace: true to start the holds over, or clear: true.")
         st["holds"] = ([] if a.get("replace") else st["holds"]) + [h]
         _save(s.doc, st)
         s.snapshot("fea_hold")
@@ -317,6 +342,8 @@ def tools(session):
             else:
                 raise ToolError("invalid_input", "gravity: true (1 g down -z), a number of g down -z, or [gx, gy, gz] in g.")
             ld["gravity"] = g
+        if not a.get("replace") and _same_in(ld, st["loads"]):
+            raise ToolError("invalid_state", f"That load is already in the study (loads: {len(st['loads'])}): adding it again would apply it twice — replace: true to start the loads over, or clear: true.")
         st["loads"] = ([] if a.get("replace") else st["loads"]) + [ld]
         _save(s.doc, st)
         s.snapshot("fea_load")
@@ -1636,7 +1663,7 @@ def tools(session):
                   "friction": {"type": "number"}, "tolerance": {"type": "number"}, "mesh": {"type": "number"}, "name": {"type": "string"}}, ["bodies"]), fea_parts, changes=True),
         Tool(
             "fea_setup",
-            "Start (or change) a strength study of one body: material (the body's by default), mesh (largest element edge, mm; a third of the least size by default). reset: true drops the holds and loads. " + TRAPS,
+            "Start (or change) a strength study of one body: material (the body's by default), mesh (largest element edge, mm; a third of the least size by default). The same body's holds and loads are kept (said as kept); reset: true drops them (said as dropped). " + TRAPS,
             obj({"body": {"type": "string"}, "material": {"type": "string"}, "mesh": {"type": "number"}, "reset": {"type": "boolean"}}),
             fea_setup,
             changes=True,

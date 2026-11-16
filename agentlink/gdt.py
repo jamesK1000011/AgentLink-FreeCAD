@@ -62,7 +62,9 @@ class Figure:
         for pts in self.filled:
             out.append('<path fill="black" d="M' + " L".join(f"{x:.3f},{y:.3f}" for x, y in pts) + ' Z"/>')
         out.append("</g>")
-        out.append('<g font-family="Helvetica, Arial, sans-serif" fill="black" stroke="none">')
+        # One family that exists on macOS: Qt's SVG renderer (TechDraw) warns of a
+        # missing "Sans-serif" for the generic name in the Report view.
+        out.append('<g font-family="Helvetica" fill="black" stroke="none">')
         for x, y, h, s, anchor in self.texts:
             out.append(f'<text x="{x:.3f}" y="{y:.3f}" font-size="{h:.3f}" text-anchor="{anchor}">{_esc(s)}</text>')
         out.append("</g></svg>")

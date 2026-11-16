@@ -72,7 +72,7 @@ def svg(series, x=None, kind="line", title="", xlabel="", ylabel="", width=640, 
     def Y(v):
         return T + ph - (v - ylo) / (yhi - ylo) * ph
 
-    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" font-family="Helvetica, Arial, sans-serif" font-size="11">',
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" font-family="Helvetica" font-size="11">',
            f'<rect width="{width}" height="{height}" fill="white"/>']
     if title:
         out.append(f'<text x="{width / 2:.1f}" y="22" text-anchor="middle" font-size="14" font-weight="bold">{_esc(title)}</text>')
