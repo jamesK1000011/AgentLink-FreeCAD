@@ -603,6 +603,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         server.groups = (set(lean_groups) if lean else all_groups) - replaced
         server.replaced = replaced
     server.on_call = session.record_call
+    server.session = session
     session.server = server
     try:
         from .heavy import Gate

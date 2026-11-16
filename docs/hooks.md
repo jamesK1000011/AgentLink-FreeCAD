@@ -122,11 +122,12 @@ All optional. Every hook catches and logs your exceptions.
 |---|---|
 | `register_reader(kind, fn)` | Answer a question by kind (`"wall"`: the thinnest wall of a shape; `"thread_scan"`: a thread read from a scan). Return `None` to pass; the first answer wins. |
 | `provide(name, obj)` / `service(name)` | Offer or use a named service (`process_of`, `checkpoints`, `reopen`, `material_cards`, `frame_solver`, `encased`). Absent gives `None`. |
-| `on(event, fn)` | `after_change(session, tool)`, `setting_changing(tool, path)`, `setting_changed(path, name, old, new, tool=, restart=, applies=)`, `reply_written(session)`, `docs_changed(session)`, `call_done(session, tool, ok)`. |
+| `on(event, fn)` | `after_change(session, tool)`, `setting_changing(tool, path)`, `setting_changed(path, name, old, new, tool=, restart=, applies=)`, `reply_written(session)`, `docs_changed(session)`, `call_done(session, tool, ok, changed)`. |
 | `extend_tool(name, properties, before, after, describe)` | Add arguments to a tool another family owns. `before(args, session)` may return changed arguments; `after(args, answer, session)` may return a fuller answer; `describe` is a sentence added to the tool's description. The owner never sees your arguments. |
 | `register_tab(title, factory, order, workbench=None)` | A tab in Agent Link's panel: `factory(panel)` returns a QWidget; its `fill()`, if it has one, runs each time the tab comes up. Agent Link's own tabs sit at Notes 10, Steps 20, Review 50 and Activity 95, and keep 15 (between Notes and Steps) free for an add-on; an add-on's `order` places its tab between them (at the same order Agent Link's comes first, and a core tab's title is not taken). `panel._call(tool, args)` runs a tool as the person's click, answering `(ok, result)`. With `workbench` (a workbench name as `FreeCADGui.activeWorkbench().name()` gives it, or several) the tab shows only while that workbench is active; Notes, Steps and Activity show everywhere. |
 | `tab_in(title, *workbenches)` | Show a tab (an add-on's, or Agent Link's Review) in more workbenches. |
 | `service("panel_layout")` | Agent Link's placer (`agentlink/layout.py`): `show(key, dock, workbench)`, `hide(key)`, `toggle()`, `reveal(key)`. An add-on's own panel placed through it shares one place with the others by the `Mod/AgentLink` `PanelLayout` setting (`right`, `left-tab`, `left-slide`). |
+| `register_rider(owner, fn)` / `unregister_rider(owner)` | A short line that joins every answer while your add-on has something in hand (`lesson: step 3/7 passed`); see [The rider line](#the-rider-line). |
 | `register_reviewer(fn)` | `fn(session, body)` gives the Review tab its verdict (`{"verdict": "pass"/"warn"/"fail", "findings": [...], "figures": {...}, "process": ...}`), or `None` to pass. Reviewers are asked in the order they registered; the first answer that is not `None` is shown. With none, the tab says so and offers the core `body_check`. |
 | `guard_setting(path, name)` | A setting `pref_set` must not change (`path` as `pref_set` takes it, e.g. `"Mod/MyAddon"`): one that widens what the agent may do or which code FreeCAD loads. |
 | `remember(session, kind, value)` / `analysis(session, kind)` | Last results by kind, for example the last FEA solve. |
@@ -142,7 +143,7 @@ menu, raises the window or goes full screen.
 | Service | Methods | Notes |
 |---|---|---|
 | `overlay` (`agentlink/overlay.py`) | `show(specs, say=None, ms=None, owner="")` → `{handle, shown: [i], hidden: [(i, why)]}`; `flash(widget, ms=1300)`; `menu(titles, badge=None, owner="", handle=None)` → `{handle}`, `{native: True}` or `{missing: title}`; `clear(owner=None, handle=None)`; `visible(widget)` → `None` or why (`hidden`, `covered`, `in another window`); `colours()` | One transparent, mouse-transparent child of the main window draws a 3 px ring in the theme's accent (`ThemeAccentColor1`, else the palette's highlight; a colour-blind-safe stand-in under 3:1 contrast) with a 2 px halo, black on a light window and white on a dark one (the theme's name decides, since FreeCAD's light themes are stylesheets over a palette that may stay dark), a numbered badge, and one callout (wrapped at 320 px, the app font and at least 13 px, inside the window, on the target's free side, never over the 3D view, whose GL surface paints over the overlay: it goes to the docks or toolbar area beside it, down to 180 px wide with more lines, and keeps off tab bars and the menubar where it can). A spec is `{widget, rect?, viewport?, badge?}`: `rect` a callable giving `(x, y, w, h)` in `viewport` (default the widget) coordinates, such as a tree row's `visualItemRect`. Rects follow their widgets (Move, Resize, Show, Hide, and a 250 ms timer); a hidden target stays listed and is drawn when it shows. A menu is ringed at its menubar title, then inside each menu the person opens on the way; the native macOS menubar cannot be drawn over (`native`). The echo's lit buttons are drawn here (`flash`): no widget's stylesheet is changed. |
-| `annotations` (`agentlink/annotate.py`) | `light(obj, ["Face6", "Edge3", "Vertex1"], owner="", colour="#rrggbb", badge=None)` → `{lit, missing: [(sub, why)]}`; `badge` draws that number at the first lit element's centre; `clear(owner=None)` | Coin nodes under an `SoAnnotation` in the 3D view's scene graph, where the panel's note pins and Steps stage draw: a face tinted, an edge thick, a vertex marked, at the shape's place in the scene. Never in the document, never FreeCAD's selection. |
+| `annotations` (`agentlink/annotate.py`) | `light(obj, ["Face6", "Edge3", "Vertex1"], owner="", colour="#rrggbb", badge=None)` → `{lit, missing: [(sub, why)]}`; `badge` draws that number on the first lit element, a disc and a bold number sized for the screen's pixel ratio, at the point of it nearest its centre that the view shows with room around it (not under another part; without a view, the nearest point on it); `clear(owner=None)` | Coin nodes under an `SoAnnotation` in the 3D view's scene graph, where the panel's note pins and Steps stage draw: a face tinted, an edge thick, a vertex marked, at the shape's place in the scene. Never in the document, never FreeCAD's selection. |
 | `panel_layout`, `panel_caller` | see above | |
 
 `agentlink.targets` finds the window's controls for the echo and for
@@ -167,6 +168,30 @@ once for each new thing, and `None` the rest of the time. The provider is
 given 0.2 s: a slower one never holds an answer up, and a line it gives late
 rides on the next answer. A provider that raises is logged and skipped.
 
+### The rider line
+
+`notice` is one service with one provider and a line given once. The rider
+line is for any number of add-ons that follow a job alongside the agent: each
+registers `register_rider(owner, fn)`, and after every call `fn(tool)` is
+asked (with the tool's name) for a short line, or `None` when the add-on has
+nothing in hand. The lines of every active provider join the answer as
+`"rider"`, separated by ` · `; each is cut to 80 characters and the whole to
+200. Providers are asked on the thread that answers, after `call_done`, so
+keep them to reading what you hold in memory. Registering again under the
+same owner replaces the provider; one that raises is logged and skipped.
+Give a line only while it says something new if every answer would
+otherwise carry it.
+
+### The test flag `AGENTLINK_AS_USER`
+
+For tests only, off by default. With `AGENTLINK_AS_USER=1` in the
+environment of the FreeCAD that serves, every call the agent makes runs as
+the person's (`session.by` is `"person"` while it runs, as for a panel
+click, and `call_done` sees it so), and Agent Link logs once that the flag
+is on. An add-on that tells the person's actions from the agent's (a lesson
+the person works through) can then be tested end to end by an agent. Never
+set it for real use: the add-on can no longer tell who did what.
+
 An entry is `{ id, name, file, step, tx, session, … }`: `file` a saved copy
 Agent Link can open, `session` the `id()` of the session that took it and
 `step`/`tx` that session's step and undo count then.
@@ -179,6 +204,7 @@ Agent Link can open, `session` the `id()` of the session that took it and
 | `setting_changing(tool, path)` | Before `pref_set`, `pref_reset`, `pref_pack` or `pref_import` changes anything: a snapshot taken now is the state before. |
 | `setting_changed(path, name, old, new, tool=, restart=, applies=)` | After each value changed; `restart` when it shows only after FreeCAD restarts, `applies` `"at next launch"` headless. |
 | `reply_written(session)` | After each reply of the stdio server (the hidden FreeCAD): say what it holds for whoever restarts it after a crash. |
+| `call_done(session, tool, ok, changed)` | After every call through the server (`Server.call`: the agent's, a panel click's, a batch's inner calls), refusals too, before the answer's notice and rider lines are asked. `ok` is False for a refusal; `changed` is True when the call went through and changed the document (its undo count moved, the session's document is another, or the tool changes it by its kind). `session.by` says whose call it was. Not told for a name that is no tool. |
 
 ### Tools from Python
 

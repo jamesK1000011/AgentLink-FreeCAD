@@ -14,6 +14,13 @@ A face is its triangulation tinted under an SoAnnotation (drawn over the
 model, offset so it never flickers into it); an edge a thick line; a
 vertex a marker. Shapes are taken where they sit in the scene (the body's
 placement included).
+
+A badge is drawn in screen space at the screen's pixel density (a disc and
+a bold number, legible at any zoom on a Retina screen), at a point of the
+element the person can see from where the camera is when it is drawn: the
+point nearest the element's centre whose pixel shows that element, not one
+hidden under another part (a screw over the face's middle). Without a view
+to ask, the point of the element nearest its centre.
 """
 
 import sys
@@ -22,7 +29,9 @@ TINT_TRANSPARENCY = 0.35
 EDGE_WIDTH = 5.0
 EDGE_POINTS = 64
 TESS = 0.1  # mm: the face's triangulation tolerance
-BADGE_FONT = 18
+BADGE_FONT = 22  # logical pixels; times the screen's pixel ratio
+BADGE_DISC = 21  # logical pixels across, likewise
+BADGE_SAMPLES = 48  # points of a face or edge tried for a visible one
 
 
 def _view():
@@ -79,6 +88,120 @@ def centre_of(el, kind):
     return (p.x, p.y, p.z)
 
 
+def candidates(el, kind, n=BADGE_SAMPLES):
+    """Points of a sub-element where its badge may go, nearest its centre
+    first: a face's triangle middles (always on the face, unlike the centre
+    of mass of a ring or an L), an edge's points along it, a vertex's point."""
+    if kind == "vertex":
+        return [centre_of(el, kind)]
+    c = centre_of(el, kind)
+    if kind == "edge":
+        pts = edge_line(el, max(n, 2))
+    else:
+        points, idx = face_mesh(el)
+        pts = []
+        for i in range(0, len(idx), 4):
+            a, b, d = (points[j] for j in idx[i:i + 3])
+            pts.append(tuple((a[k] + b[k] + d[k]) / 3.0 for k in range(3)))
+    if not pts:
+        return [c]
+    pts.sort(key=lambda p: sum((p[k] - c[k]) ** 2 for k in range(3)))
+    if len(pts) > n:  # the nearest half, then the rest evenly spread
+        head, rest = pts[:n // 2], pts[n // 2:]
+        k = n - len(head)
+        pts = head + [rest[int(i * len(rest) / k)] for i in range(k)]
+    return pts if kind == "face" else [c] + pts
+
+
+def _names(obj):
+    """obj's name and the names the view may report for its pixels: its
+    body's, and the body's tip."""
+    out = {getattr(obj, "Name", None)}
+    for o in [obj] + list(getattr(obj, "InList", None) or []):
+        out.add(getattr(o, "Name", None))
+        out.add(getattr(getattr(o, "Tip", None), "Name", None))
+    out.discard(None)
+    return out
+
+
+BADGE_CLEAR = 14  # logical pixels around the badge's point that should show the element too
+PICKS_MAX = 160  # pixels asked of the view at most, per badge
+
+
+def visible_point(view, obj, sub, points, clear=BADGE_CLEAR):
+    """The first of points whose pixel, and the pixels clear away from it on
+    four sides, show obj's sub in view (room for the badge, not hard by a
+    screw's rim); else the first whose own pixel does; else None.
+    view: FreeCAD's 3D view (getPointOnScreen, getObjectInfo, getSize)."""
+    if view is None or not points:
+        return None
+    try:
+        import FreeCAD
+
+        vec = FreeCAD.Vector
+    except ImportError:
+        vec = None
+    names = _names(obj)
+    try:
+        w, h = view.getSize()
+    except Exception:
+        w = h = None
+    picks = [0]
+
+    def shows(x, y):
+        if w is not None and not (0 <= x < w and 0 <= y < h):
+            return False
+        picks[0] += 1
+        try:
+            info = view.getObjectInfo((int(x), int(y)))
+        except Exception:
+            return False
+        return bool(info) and info.get("Component") == sub and info.get("Object") in names
+
+    first = None
+    for p in points:
+        if picks[0] >= PICKS_MAX:
+            break
+        try:
+            x, y = view.getPointOnScreen(vec(*p) if vec else p)
+        except Exception:
+            continue
+        if not shows(x, y):
+            continue
+        if first is None:
+            first = p
+        if all(shows(x + dx, y + dy) for dx, dy in ((clear, 0), (-clear, 0), (0, clear), (0, -clear))):
+            return p
+    return first
+
+
+def _ratio():
+    """The screen's pixel ratio (2 on a Retina screen), 1 when unknown."""
+    try:
+        import FreeCADGui
+
+        mw = FreeCADGui.getMainWindow()
+        r = float(mw.devicePixelRatioF() if hasattr(mw, "devicePixelRatioF") else mw.devicePixelRatio())
+        return r if r >= 1 else 1.0
+    except Exception:
+        return 1.0
+
+
+def _disc(want):
+    """FreeCAD's filled-circle marker of the largest size it has up to want
+    pixels (it falls back to 9 for a size it lacks)."""
+    import FreeCADGui
+
+    small = FreeCADGui.getMarkerIndex("CIRCLE_FILLED", 9)
+    size = int(want) | 1
+    while size > 9:
+        got = FreeCADGui.getMarkerIndex("CIRCLE_FILLED", size)
+        if got != small:
+            return got
+        size -= 2
+    return small
+
+
 def global_shape(obj):
     """obj's shape where it is drawn (its placement and its body's)."""
     try:
@@ -95,9 +218,11 @@ def global_shape(obj):
 class Annotations:
     """hooks.service("annotations"). coin and scene are given in tests."""
 
-    def __init__(self, coin=None, scene=None):
+    def __init__(self, coin=None, scene=None, view=None, ratio=None):
         self._coin = coin
         self._scene_fn = scene or _scene
+        self._view_fn = view or (_view if scene is None else (lambda: None))
+        self._ratio_fn = ratio or _ratio
         self.roots = {}  # owner -> (scene graph, separator)
 
     def coin(self):
@@ -125,9 +250,9 @@ class Annotations:
 
     def light(self, obj, subs, owner="", colour="#3f93e0", shape=None, badge=None):
         """Draw each of subs (Face6, Edge3, Vertex1) of obj. {lit, missing:
-        [(sub, why)]}. badge: a number drawn at the first lit one's centre
-        (over the model, facing the screen), so several targets read in
-        order in the view too."""
+        [(sub, why)]}. badge: a number drawn on the first lit one, at a
+        point of it the person can see (badge_at), over the model and facing
+        the screen, so several targets read in order in the view too."""
         lit, missing = [], []
         try:
             shape = shape if shape is not None else global_shape(obj)
@@ -183,15 +308,30 @@ class Annotations:
             root.addChild(node)
             if badge is not None and not lit:
                 try:
-                    root.addChild(self._badge(centre_of(el, k), badge, col))
+                    root.addChild(self._badge(self.badge_at(obj, sub, el, k), badge, col))
                 except Exception as e:  # noqa: BLE001  (the light stays; the number is a nicety)
                     sys.stderr.write(f"Agent Link: annotation badge not drawn ({type(e).__name__}: {e})\n")
             lit.append(sub)
         return {"lit": lit, "missing": missing}
 
+    def badge_at(self, obj, sub, el, kind):
+        """Where the badge goes: the point of the element nearest its centre
+        that the view shows (not under another part), else the nearest on it."""
+        pts = candidates(el, kind)
+        try:
+            view = self._view_fn()
+        except Exception:
+            view = None
+        return visible_point(view, obj, sub, pts) or pts[0]
+
     def _badge(self, at, n, col):
-        """A filled dot and the number beside it at point at."""
+        """A filled disc and the bold number beside it at point at, both in
+        screen pixels times the screen's pixel ratio."""
         coin = self.coin()
+        try:
+            ratio = float(self._ratio_fn())
+        except Exception:
+            ratio = 1.0
         node = coin.SoAnnotation()
         mat = coin.SoMaterial()
         mat.diffuseColor = col
@@ -202,13 +342,12 @@ class Annotations:
         co.point.setValue(0, 0, 0)
         dot = coin.SoMarkerSet()
         try:
-            import FreeCADGui
-
-            dot.markerIndex = FreeCADGui.getMarkerIndex("CIRCLE_FILLED", 13)
+            dot.markerIndex = _disc(BADGE_DISC * ratio)
         except Exception:
             pass
         font = coin.SoFont()
-        font.size = BADGE_FONT
+        font.name = "Arial:Bold"
+        font.size = round(BADGE_FONT * ratio)
         txt = coin.SoText2()
         txt.string = f"  {n}"
         for c in (mat, tr, co, dot, font, txt):
