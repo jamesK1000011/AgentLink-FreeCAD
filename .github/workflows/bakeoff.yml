@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# The bake-off that gates the pins (packaging/pins): every add-on the Claude
+# extension installs, checked out at its pin, on FreeCAD from conda-forge,
+# headless. Each add-on's tests run with every neighbour on the path (which
+# no single repository's CI can do), then the extension's launcher test,
+# the extension built from the pinned checkouts and checked for privacy and
+# identity, and the bake-off brief (ScanRuler's scripts/bakeoff, read from
+# its freecad-spike) against the pinned Agent Link. One job.
+#
+# A pin bump: on a pins-* branch first, fast-forwarded to main once this is
+# green (main is the extension's update channel: what is there installs at
+# the next agentlink_update). Moved here from ScanRuler's freecad-bakeoff.yml
+# on 16 Nov 2026; Agent Link's own suite stays in ci.yml.
+name: Bake-off
+
+on:
+  push:
+    branches: [main, 'pins-*']
+    paths:
+      - 'packaging/**'
+      - '.github/workflows/bakeoff.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bakeoff-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bakeoff:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v5
+      - name: The add-ons at their pins (the list is packaging/addons.json)
+        run: |
+          mkdir -p pinned
+          python3 -c "
+          import json
+          seen = set()
+          for s in json.load(open('packaging/addons.json'))['sources']:
+              if s['repo'] not in seen:
+                  seen.add(s['repo']); print(s['repo'], open(s['pin']).read().strip())
+          " | while read -r repo ref; do
+            git clone -q "https://github.com/jamesK1000011/$repo" "pinned/$repo"
+            git -C "pinned/$repo" checkout -q "$ref"
+            echo "$repo $(git -C "pinned/$repo" log -1 --format='%h %s' | cut -c1-100)"
+          done
+      - name: ScanRuler's bake-off brief (scripts/bakeoff only)
+        run: |
+          git clone -q --depth 1 --filter=blob:none --sparse --branch freecad-spike https://github.com/jamesK1000011/scanruler scanruler
+          git -C scanruler sparse-checkout set scripts/bakeoff
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: fc
+          create-args: >-
+            -c conda-forge
+            freecad
+            python=3.11
+            calculix
+            gmsh
+            numpy
+          cache-environment: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: FreeCAD imports, every add-on on the path as in Mod
+        run: |
+          p=$GITHUB_WORKSPACE/pinned
+          echo "FREECAD_LIB=$CONDA_PREFIX/lib" >> "$GITHUB_ENV"
+          echo "AGENTLINK_RENDERS=$GITHUB_WORKSPACE/bakeoff-out/freecad/renders" >> "$GITHUB_ENV"
+          echo "PYTHONPATH=$p/AgentLink-FreeCAD:$p/Texturizer-FreeCAD:$p/Tutor-FreeCAD:$p/ScanRuler-FreeCAD:$p/Workshop-FreeCAD:$p/AgentLink-OrcaSlicer" >> "$GITHUB_ENV"
+          echo "AGENTLINK_ORCALINK=$p/AgentLink-OrcaSlicer" >> "$GITHUB_ENV"
+          python -c "import sys; sys.path.append('$CONDA_PREFIX/lib'); import FreeCAD, Part, MeshPart; print('FreeCAD', FreeCAD.Version()[:3])"
+      - name: PrusaSlicer, for the slice tool
+        # The apt mirror sometimes hangs: the slice tests skip without it.
+        timeout-minutes: 6
+        continue-on-error: true
+        run: sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update -qq && sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 install -y -qq --no-install-recommends prusa-slicer xvfb libopengl0 libegl1 libgl1 > /dev/null
+      - name: OrcaSlicer, for the slice tool
+        # The latest release's Linux AppImage, unpacked (no FUSE on the
+        # runner); the Orca slice tests skip without it.
+        timeout-minutes: 6
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name=$(gh api repos/OrcaSlicer/OrcaSlicer/releases/latest -q '[.assets[].name | select(endswith(".AppImage"))] | map(select(test("aarch64") | not)) | (map(select(test("2404"))) + .)[0]')
+          gh release download --repo OrcaSlicer/OrcaSlicer --pattern "$name" --dir "$RUNNER_TEMP/orca"
+          cd "$RUNNER_TEMP/orca" && chmod +x "$name" && "./$name" --appimage-extract > /dev/null
+          sudo apt-get install -y -qq --no-install-recommends libwebkit2gtk-4.1-0 libgstreamer-plugins-base1.0-0 > /dev/null || true
+          echo "AGENTLINK_ORCASLICER=$RUNNER_TEMP/orca/squashfs-root/AppRun" >> "$GITHUB_ENV"
+      - name: The add-ons' own tests, all installed together
+        # A hung test stops here, not at 45 minutes.
+        timeout-minutes: 20
+        run: |
+          p=$GITHUB_WORKSPACE/pinned
+          code=0
+          python -X faulthandler -m unittest discover -s $p/Texturizer-FreeCAD/tests > "$RUNNER_TEMP/addons.log" 2>&1 || code=$?
+          AGENTLINK_SRC=$p/AgentLink-FreeCAD python -X faulthandler -m unittest discover -s $p/Tutor-FreeCAD/tests >> "$RUNNER_TEMP/addons.log" 2>&1 || code=$?
+          AGENTLINK_DIR=$p/AgentLink-FreeCAD python -X faulthandler -m unittest discover -s $p/Workshop-FreeCAD/tests >> "$RUNNER_TEMP/addons.log" 2>&1 || code=$?
+          for d in parts make electronics documents safetynet; do AGENTLINK_HOME="$(mktemp -d)" AGENTLINK_DIR=$p/AgentLink-FreeCAD python -X faulthandler -m unittest discover -s $p/Workshop-FreeCAD/tests/$d >> "$RUNNER_TEMP/addons.log" 2>&1 || code=$?; done
+          python -X faulthandler -m unittest discover -s $p/AgentLink-OrcaSlicer/tests -p test_freecad_bridge.py >> "$RUNNER_TEMP/addons.log" 2>&1 || code=$?
+          python -X faulthandler -m unittest discover -s $p/ScanRuler-FreeCAD/tests >> "$RUNNER_TEMP/addons.log" 2>&1 || code=$?
+          grep -E '^(Ran|OK|FAILED|ERROR:|FAIL:)' "$RUNNER_TEMP/addons.log" | tail -n 60
+          test "$code" -eq 0
+      - name: The Claude extension's launcher, against a fake FreeCAD
+        run: node packaging/mcpb/test/launcher.test.mjs
+      - name: The extension, built from the pinned add-ons and checked
+        run: |
+          mkdir -p dist
+          sh packaging/mcpb/build.sh "$PWD/pinned" "$PWD/dist/freecad-agentlink.mcpb"
+          set -- dist/
+          for f in pinned/*/.github/privacy/images.txt; do [ -f "$f" ] && set -- --images "$f" "$@"; done
+          python3 .github/privacy/check.py "$@"
+      - name: The brief, headless
+        working-directory: scanruler
+        run: node scripts/bakeoff/run-freecad.mjs --out "$GITHUB_WORKSPACE/bakeoff-out/freecad" --python python --addon "$GITHUB_WORKSPACE/pinned/AgentLink-FreeCAD"
+      - name: Server log
+        if: always()
+        run: tail -n 80 bakeoff-out/freecad/server.log || true

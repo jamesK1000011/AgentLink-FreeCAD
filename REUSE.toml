@@ -11,6 +11,16 @@ SPDX-License-Identifier = "LGPL-2.1-or-later"
 # agentlink/icons/CREDITS.md; no source paths were copied. Licence texts: LICENSES/.
 
 [[annotations]]
+path = ["packaging/addons.json", "packaging/pins/*", "packaging/mcpb/manifest.json"]
+SPDX-FileCopyrightText = "Agent Link contributors"
+SPDX-License-Identifier = "LGPL-2.1-or-later"
+# The Claude extension's manifest, add-on list and pins (JSON and bare
+# commit ids, which cannot carry a comment). Moved here from ScanRuler's
+# freecad-spike on 16 Nov 2026 with the launcher (packaging/mcpb/server,
+# test, build.sh), all of it written for this project, and relicensed from
+# AGPL-3.0-only to LGPL-2.1-or-later by its maintainer.
+
+[[annotations]]
 path = "packaging/mcpb/icon.png"
 SPDX-FileCopyrightText = "Agent Link contributors"
 SPDX-License-Identifier = "LGPL-2.1-or-later"

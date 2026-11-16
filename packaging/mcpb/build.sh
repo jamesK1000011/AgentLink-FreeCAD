@@ -1,0 +1,54 @@
+#!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Build Agent Link for FreeCAD as a Claude Desktop extension (.mcpb): the
+# launcher, this manifest, and the add-ons it installs. The add-ons come
+# from packaging/addons.json: each source's folder in its checkout
+# is copied to addons/<dest> by its FILES list (what git tracks, nothing
+# else lying in the folder). Usage:
+#   build.sh CHECKOUTS OUT
+# CHECKOUTS holds one checkout per repo, named as the repo (e.g.
+# CHECKOUTS/AgentLink-FreeCAD), each at its pin in packaging/pins. A repo
+# missing there is left out and fetched at the first update;
+# AgentLink-FreeCAD is required. Licence: the launcher, this script and the
+# manifest are LGPL-2.1-or-later; the bundle holds each add-on under its own.
+set -e
+HERE=$(cd "$(dirname "$0")" && pwd)
+CHECKOUTS=${1:?a folder with one checkout per repo, named as the repo}
+OUT=${2:-$HERE/freecad-agentlink.mcpb}
+AGENTLINK="$CHECKOUTS/AgentLink-FreeCAD"
+[ -f "$AGENTLINK/FILES" ] || { echo "no AgentLink-FreeCAD checkout in $CHECKOUTS" >&2; exit 1; }
+STAGE=$(mktemp -d)
+cp "$HERE/manifest.json" "$STAGE/"
+mkdir -p "$STAGE/server" "$STAGE/addons"
+cp "$HERE/server/index.js" "$STAGE/server/"
+copy() { # copy SRC DEST: the files FILES lists, tests too (addon_test runs them)
+  [ -f "$1/FILES" ] || return 0
+  grep -v -E '^#|^$|(^|/)__pycache__/' "$1/FILES" | while read -r f; do
+    mkdir -p "$STAGE/addons/$2/$(dirname "$f")"
+    cp "$1/$f" "$STAGE/addons/$2/$f"
+  done
+}
+python3 -c "
+import json, sys
+for s in json.load(open(sys.argv[1]))['sources']:
+    print(s['repo'], s.get('folder') or '.', s['dest'])
+" "$HERE/../addons.json" | while read -r repo folder dest; do
+  copy "$CHECKOUTS/$repo/$folder" "$dest"
+done
+# The icon, kept beside this script (Agent Link's workbench icon at 512 px).
+if [ -f "$HERE/icon.png" ]; then
+  cp "$HERE/icon.png" "$STAGE/icon.png"
+  python3 -c "
+import json, sys
+p = sys.argv[1]
+m = json.load(open(p))
+m['icon'] = 'icon.png'
+json.dump(m, open(p, 'w'), indent=2, ensure_ascii=False)
+" "$STAGE/manifest.json"
+fi
+VERSION=$(python3 -c "import json;print(json.load(open('$HERE/manifest.json'))['version'])")
+echo "$VERSION+$(git -C "$AGENTLINK" rev-parse --short HEAD)+$(git -C "$HERE" rev-parse --short HEAD)" > "$STAGE/addons/VERSION"
+rm -f "$OUT"
+(cd "$STAGE" && zip -qr "$OUT" .)
+rm -rf "$STAGE"
+echo "$OUT"
