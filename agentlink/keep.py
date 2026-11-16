@@ -489,6 +489,31 @@ def estimate(q, tool, size):
     return max(0.0, a + b * float(size))
 
 
+def estimate_range(q, tool, size, last=12):
+    """(low, typical, high) seconds for a job of this size, from the time
+    per unit of size of its last runs here (fastest, middle, slowest), or
+    None with no runs. A range, so one slow run (a render that hit a busy
+    Mac) does not stand as the estimate."""
+    pts = [(s, t) for s, t in ((q.get("timings") or {}).get(tool) or [])[-last:] if s > 0 and t >= 0]
+    if not pts:
+        return None
+    rates = sorted(t / s for s, t in pts)
+    mid = rates[len(rates) // 2] if len(rates) % 2 else (rates[len(rates) // 2 - 1] + rates[len(rates) // 2]) / 2.0
+    return rates[0] * float(size), mid * float(size), rates[-1] * float(size)
+
+
+def said_range(r):
+    """An estimate_range in words: "about 20 s (12–40 s from 5 runs)"."""
+    if not r:
+        return None
+    lo, mid, hi = r
+
+    def f(x):
+        return f"{x:.0f} s" if x < 90 else f"{x / 60:.0f} min"
+
+    return f"about {f(mid)}" + ("" if f(lo) == f(hi) else f" ({f(lo)} to {f(hi)})")
+
+
 def admit(q, preset, busy_person, thermal, pressure):
     """Whether a new heavy job may start now: (True, None) or (False, why)."""
     if q.get("held"):

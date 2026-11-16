@@ -56,6 +56,59 @@ def _launcher():
 
 from .store import undo_on  # noqa: E402
 
+
+def undo_mark(doc):
+    """(undo count, the names of the objects there) — what take_back
+    returns the document to."""
+    try:
+        return doc.UndoCount, {o.Name for o in doc.Objects}
+    except Exception:
+        return None, None
+
+
+def take_back(doc, u0, names0):
+    """Back to undo_mark's (u0, names0): undo steps made since (a call's own
+    sub-transactions), then remove every object made since that undo did not
+    reach (made outside the undo stack, or in a transaction that was
+    committed under the batch). The labels removed."""
+    if doc is None or names0 is None:
+        return []
+    try:
+        while u0 is not None and doc.UndoCount > u0:
+            n = doc.UndoCount
+            doc.undo()
+            if doc.UndoCount >= n:
+                break
+    except Exception:
+        pass
+    removed = []
+    try:
+        left = [o for o in doc.Objects if o.Name not in names0]
+    except Exception:
+        return removed
+    # Users first: an object something else is built from goes after it.
+    for _ in range(3):
+        if not left:
+            break
+        rest = []
+        for o in reversed(left):
+            try:
+                name, label = o.Name, o.Label
+                if any(p.Name not in names0 and p in left and p is not o for p in o.InList):
+                    rest.append(o)
+                    continue
+                doc.removeObject(name)
+                removed.append(label)
+            except Exception:
+                rest.append(o)
+        left = [o for o in reversed(rest)]
+    if removed:
+        try:
+            doc.recompute()
+        except Exception:
+            pass
+    return removed
+
 # What export_file writes a mesh (Mesh::Feature) as, by format or extension.
 MESH_OUT = ("stl", "obj", "ply", "off", "3mf", "amf")
 
@@ -90,11 +143,16 @@ class Session:
         if not tool.changes:
             return fn()
         start = self.doc
+        u0, names0 = undo_mark(start)
         self.doc.openTransaction(tool.name)
         try:
             out = fn()
         except BaseException:
             self.doc.abortTransaction()
+            # A call that opened a transaction of its own inside (which
+            # commits the outer one) or made objects outside the undo stack
+            # left them behind the abort: taken away too.
+            take_back(start, u0, names0)
             raise
         self.doc.commitTransaction()
         if self.doc is start:
@@ -145,7 +203,7 @@ class Session:
             # Built into another solid (a boolean, the next feature): not a
             # part of its own. A drawing, a folder or a spreadsheet using it
             # leaves it one.
-            if any(p.TypeId not in passive and self._solid(p) and self._consumes(p, o) for p in o.InList):
+            if any(p.TypeId not in passive and self._solid(p) and not self._own_feature(p, o) and self._consumes(p, o) for p in o.InList):
                 continue
             try:
                 parent = o.getParentGeoFeatureGroup()
@@ -162,7 +220,26 @@ class Session:
     # is attached (a screw on a hole's edge — Fasteners' BaseObject —, a
     # part attached to a face). The Body a Fasteners screw sat on was left
     # out of the parts (view_render drew the screws only).
-    REFERENCE_ONLY = ("AttachmentSupport", "Support", "BaseObject", "MapReference")
+    # A PartDesign feature's hidden _Body link names the Body it sits in
+    # (FreeCAD 1.x): the feature is not built from its Body, so the Body
+    # (one solid or a deliberate AllowCompound of several) stays a part —
+    # session_state and view_render left a 2-solid Body out and drew only
+    # the screws on it.
+    REFERENCE_ONLY = ("AttachmentSupport", "Support", "BaseObject", "MapReference", "_Body")
+
+    @staticmethod
+    def _own_feature(p, o):
+        """p is one of o's own features (o a PartDesign Body holding it):
+        a feature never consumes the Body it sits in."""
+        try:
+            if getattr(o, "TypeId", "") != "PartDesign::Body":
+                return False
+            if p in (getattr(o, "Group", None) or []):
+                return True
+            g = p.getParentGeoFeatureGroup()
+            return g is o
+        except Exception:
+            return False
 
     @staticmethod
     def _consumes(p, o):
@@ -264,7 +341,7 @@ class Session:
             "document": self.doc.Name,
             "label": self.doc.Label,
             "freecad": ".".join(FreeCAD.Version()[:3]),
-            "bodies": [{"name": o.Label, **geo.stats(o.Shape), **({"encased": self.meta[o.Label]["encased"]["what"]} if self.meta.get(o.Label, {}).get("encased") else {})} for o in self.bodies()],
+            "bodies": [self._body_row(o) for o in self.bodies()],
             "step": len(self.steps),
             "outDir": self.out_dir,
             "where": getattr(self, "where", "hidden"),
@@ -272,6 +349,26 @@ class Session:
             **({"note": "The hidden FreeCAD answered: the FreeCAD window is closed, or its link is off or still starting, so this is not the document on screen."} if getattr(self, "where", "hidden") == "hidden" and os.environ.get("AGENTLINK_SUPERVISED") else {}),
             **({"launcher": _launcher()} if a.get("launcher") else {}),
         }
+
+    @staticmethod
+    def allows_compound(o):
+        """A PartDesign Body set to hold several solids on purpose
+        (AllowCompound true)."""
+        return getattr(o, "TypeId", "") == "PartDesign::Body" and bool(getattr(o, "AllowCompound", False))
+
+    def _body_row(self, o):
+        """One body for session_state: its stats, and with more than one
+        solid, how many and whether the Body means it (AllowCompound)."""
+        row = {"name": o.Label, **self.stats_of(o)}
+        if row.get("solids", 1) > 1:
+            n = row["solids"]
+            row["multiSolid"] = (f"{n} solids in one Body, on purpose (AllowCompound true): each is checked on its own" if self.allows_compound(o)
+                                 else f"{n} solids in one object: pieces that do not touch")
+        if o.Name != o.Label:
+            row["object"] = o.Name
+        if self.meta.get(o.Label, {}).get("encased"):
+            row["encased"] = self.meta[o.Label]["encased"]["what"]
+        return row
 
     def _unattended_state(self):
         """The machine preset, the heavy-job queue and a dialog in front
@@ -307,14 +404,41 @@ class Session:
         on top of it what it does not look for: slivers under 0.01 mm, very
         short edges, one closed solid."""
         o = self.body(a.get("body"))
-        s = geo.soundness(o.Shape)
-        ok, said = geo.core_check(o.Shape)
+        sh = o.Shape
+        intended = self.allows_compound(o) and len(sh.Solids) > 1
+        s = geo.soundness(sh, solids_intended=intended)
+        if intended:
+            # A deliberate split (Body.AllowCompound): counted, each solid
+            # checked on its own.
+            s["intended"] = f"{len(sh.Solids)} solids in one Body on purpose (AllowCompound true): each checked on its own below."
+            s["each"] = geo.each_solid(sh)
+            bad = [e for e in s["each"] if not e["ok"]]
+            for e in bad:
+                s["problems"].append(f"Solid {e['solid']} (at {e['at']}): {'; '.join(e['problems'])}")
+            if bad:
+                s["ok"] = False
+        ok, said = geo.core_check(sh)
         if ok is not None:
             s["checkGeometry"] = {"ok": ok, **({"problems": said} if said else {})}
             if not ok:
-                s["problems"] = [f"FreeCAD's Check Geometry: {'; '.join(said[:3])}"] + s["problems"]
-                s["ok"] = False
-        return {"body": o.Label, **s, **geo.stats(o.Shape)}
+                # BOP's own findings on a shape BRepCheck calls valid and
+                # closed (a curve off its surface where a counterbore breaks
+                # a chamfer) are a warning with where, not a broken body.
+                soft = geo.soft_bop(said) and s["valid"] and s["closed"]
+                if soft:
+                    s["checkGeometry"]["warning"] = True
+                    where = geo.bop_where(sh, said)
+                    s.setdefault("warnings", []).append(
+                        f"FreeCAD's Check Geometry (its BOP check) reports {'; '.join(said[:3])}, but the shape is valid by BRepCheck and closed: "
+                        "a tolerance finding, usually where two features meet at a sharp intersection — printing, exporting and measuring are fine; "
+                        "a later boolean or fillet at that spot may need a smaller step."
+                        + (f" Where: {', '.join(w['element'] + ' at ' + str(w['at']) for w in where)}." if where else ""))
+                    if where:
+                        s["checkGeometry"]["where"] = where
+                else:
+                    s["problems"] = [f"FreeCAD's Check Geometry: {'; '.join(said[:3])}"] + s["problems"]
+                    s["ok"] = False
+        return {"body": o.Label, **s, **self.stats_of(o)}
 
     def _mesh_named(self, ref):
         """A mesh object (Mesh::Feature) by name or label, or None."""
@@ -527,10 +651,10 @@ def make_tools(session):
     s = session
     body = {"type": "string", "description": "A body's name; may be left out when there is one."}
     return [
-        Tool("session_state", "What the document holds: each body's volume, area, faces, solids and size (mm), the step count and where files go. launcher: true adds the Claude extension's launcher as seen from here (the copy fetched from GitHub, whether it can load, its log's last lines). Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
+        Tool("session_state", "What the document holds: each body's volume, area, faces, solids and size (mm) — every shown body, a Body of several solids too (multiSolid says how many and whether AllowCompound means it), a part attached to another (a screw) beside it — the step count, jobs running and where files go. launcher: true adds the Claude extension's launcher as seen from here (the copy fetched from GitHub, whether it can load, its log's last lines). Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
         Tool("app_force_restart", "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang): run by Agent Link outside FreeCAD; the documents come back from their newest saved copies, as after a crash. For a window that is stuck; app_restart quits a working one cleanly.", obj({}), _force_restart_here),
         Tool("report_read", "FreeCAD's Report view in the window: its last lines (last, 40 by default), or only the warnings and errors (problems: true). New problem lines also come back on each answer as \"report\". Window only.", obj({"last": {"type": "integer"}, "problems": {"type": "boolean"}}), _report_read),
-        Tool("body_check", "Whether a body is sound: FreeCAD's own Check Geometry, and on top of it closed, one solid, no sliver faces (under 0.01 mm wide) or very short edges, with where each problem is.", obj({"body": body}), s.body_check),
+        Tool("body_check", "Whether a body is sound: FreeCAD's own Check Geometry, and on top of it closed, one solid, no sliver faces (under 0.01 mm wide) or very short edges, with where each problem is. A Body with AllowCompound true may hold several solids on purpose: they are counted and each checked (each), not a problem. A BOP-only finding (InvalidCurveOnSurface, where a counterbore breaks a chamfer) on a shape BRepCheck calls valid and closed is a warning with where, not a failure.", obj({"body": body}), s.body_check),
         Tool(
             "export_file",
             "Write a body as STEP or STL (tolerance: the chord error, mm, 0.01 by default) and read it back: verify gives the volume read and, for STEP, how far it is from the body's. A mesh (Mesh::Feature) is written as it is: STL, or OBJ, PLY, OFF, 3MF, AMF by the path's extension.",
@@ -558,7 +682,7 @@ GROUP_OF = {
 # Old names still callable but not listed (the listing carries one tool a job).
 ALIASES = {"export_file": "export"}
 GROUP_INFO = {
-    "core": "The session, groups, guides, batches, undo, soundness, export. Always listed.",
+    "core": "The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed.",
 }
 # Listed by default (lean): core, the groups a part's make-check-verdict loop
 # needs, and the pictures to check it by.
@@ -646,6 +770,9 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
     from . import hooks
 
     tools = make_tools(session)
+    # job_status answers on the link's own thread: at once, even while the
+    # window's thread is busy (agentlink/jobs.py).
+    hooks.register_thread_tool("job_status")
     for t in tools:
         t.group = GROUP_OF.get(t.name, t.group)
     info = dict(GROUP_INFO)
@@ -815,6 +942,26 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             text = "## " + hit[0]
         return {"topic": topic, "text": text}
 
+    def job_status(a):
+        from . import jobs
+
+        return jobs.status(a)
+
+    def job_start(a):
+        from . import jobs
+        from .protocol import check_input
+
+        name = a.get("tool")
+        t = server.tools.get(name)
+        if t is None:
+            raise ToolError("not_found", f"{name}: no such tool — tool_groups lists them.")
+        args = dict(a.get("arguments") or {})
+        t = t.for_call(args)
+        check_input(t.schema, args)
+        if not jobs.wanted(t, args, s, asked=True):
+            raise ToolError("invalid_input", f"{name} cannot run as a job: only a read that leaves the window and the 3D view alone can (not a change, a picture, a window tool or a batch).")
+        return server._as_job(t, args, wait=0 if a.get("wait") is False else None)
+
     def batch(a):
         import json as _json
 
@@ -875,6 +1022,11 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         start = s.doc
         made = 0
         results = []
+        # What the document held before: a rollback takes away every object
+        # the batch made, including those undo does not reach (a call's own
+        # sub-transaction, objects made outside the undo stack) — an empty
+        # sketch was left behind after a rollback.
+        mine_mark = undo_mark(start)
         def undo_count(d):
             # A call can close the document under the batch (app_restart,
             # doc_close): read as gone, not as an error after the fact.
@@ -888,7 +1040,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         # Kept and put back: another batch can run inside this one's call
         # while a menu's or dialog's loop holds it.
         prev = getattr(s, "batch_now", None)
-        mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False}
+        mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False, "names0": mine_mark[1]}
         try:
             return _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine)
         finally:
@@ -926,6 +1078,9 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                     while undone < made and start.UndoCount > 0:
                         start.undo()
                         undone += 1
+                    left = take_back(start, None, mine.get("names0"))
+                    if left:
+                        out["removed"] = left
                     if s.doc is start:
                         s.tx = max(0, s.tx - undone)
                         s.calls = [x for x in s.calls if x["tx"] <= s.tx]
@@ -970,7 +1125,11 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
              obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}}), usage_report),
         Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools); detail: true gives every group's whole about. Every tool is callable by name either way.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}}), tool_groups),
         Tool("guide_read", "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry. No topic: the index. topic: a guide whole; section: one of its ## sections.", obj({"topic": {"type": "string"}, "section": {"type": "string"}}), guide_read),
-        Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }]. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it, so it stands or falls whole.", obj({"calls": {"type": "array", "items": {"type": "object"}}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}}, ["calls"]), batch),
+        Tool("job_status", "A long read run as a job: job (its id) answers its status — running (seconds so far, the time expected from past runs here) or done with the tool's own answer (or its error); wait: seconds (up to 30) to wait for it first. No job: every job kept (an hour after it ends). Answered at once even while FreeCAD is busy. Changes nothing.",
+             obj({"job": {"type": "string"}, "wait": {"type": "number"}}), job_status),
+        Tool("job_start", "Run a read as a job: tool and its arguments. The answer comes back as the tool's own when it ends within 45 s, else a job id for job_status (wait: false answers with the id at once). Reads that are heavy or were slow here (over 20 s) go to a job on their own, and any read takes background: true for the same; a client drops a call after about 80 s, so a long read's answer would be lost. Only reads that leave the window and the 3D view alone (not changes, pictures or window tools); while one runs, changes to its document wait (refused, saying which job).",
+             obj({"tool": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["tool"]), job_start),
+        Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }]. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it and removes every object it made (removed lists any undo did not reach), so it stands or falls whole.", obj({"calls": {"type": "array", "items": {"type": "object"}}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}}, ["calls"]), batch),
         Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded making): shots past the last 50 and 3 days, solver and job runs past 14 days, FreeCAD backups past 7; exports only listed. To the Trash. Dry run unless dry_run: false; kinds, older_than_days narrow it. Runs on its own daily.",
              obj({"dry_run": {"type": "boolean"}, "kinds": {"type": "array", "items": {"type": "string", "enum": list(outputs.KINDS)}}, "older_than_days": {"type": "number"}}), outputs_clean),
         Tool("history_undo", "Undo the last change (steps: how many), as FreeCAD's Edit › Undo does.", obj({"steps": {"type": "integer"}}), history("undo")),

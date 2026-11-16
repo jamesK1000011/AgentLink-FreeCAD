@@ -3,7 +3,7 @@
 
 ## workflow
 1. `pd_body_new`, then `sketch_new { plane: "XY" }` — or on a face of the body: `face: { at: [x,y,z], normal: [0,0,1] }`. The answer's `frame` says where sketch x/y lie in the world.
-2. `sketch_add` the profile: rectangle, rounded_rectangle, circle, polygon, slot, polyline … Shapes come with their own coincident/horizontal/vertical constraints. `dims: true, name: "plate"` adds their sizes as named constraints (`plate_width`).
+2. `sketch_add` the profile: rectangle, rounded_rectangle, circle, polygon, slot, polyline … Shapes come with their own coincident/horizontal/vertical constraints (a polyline's sides that run along x or y are held horizontal or vertical). `dims: true, name: "plate"` adds their sizes as named constraints (`plate_width`).
 3. `sketch_constrain` the rest: refs are FreeCAD's — geometry id, `[id, vertex]` (1 start, 2 end, 3 centre), `"origin"`; -1 the horizontal axis, -2 the vertical.
 4. `sketch_state` before a feature: `readyForFeature`, `dof`, conflicts, open vertices.
 
@@ -31,4 +31,4 @@
 - `sketch_extend { geo, end, by | to }` lengthens a line to a length or to another curve; `sketch_join` turns two ends into one B-spline.
 - `sketch_carbon { from }` copies another sketch in. `sketch_project { from: "<binder>" }` brings a binder's or datum's edges in to constrain to (another body: pd_binder first).
 - `sketch_validate` is Sketcher's Validate. Run it when a pad says the profile is open: `fix: true` closes gaps that should be coincident and drops degenerate or redundant pieces; `autoconstrain: true` adds the obvious constraints.
-- `sketch_add` also takes arc3 and circle3 (through three points), parabola and hyperbola. `sketch_bspline` raises or lowers a B-spline's degree and inserts or changes knots. `sketch_merge` joins sketches into one, `sketch_mirror` makes a mirrored copy, `sketch_attach` moves a sketch onto another plane or face.
+- `sketch_add` also takes arc3 and circle3 (through three points), parabola and hyperbola. `sketch_bspline` raises or lowers a B-spline's degree and inserts or changes knots. `sketch_merge` joins sketches into one, `sketch_mirror` makes a mirrored copy, `sketch_attach` moves a sketch onto another plane or face; a face is bound to the feature that made it (or `face: { at, normal, feature }`, or `plane: "Pad.Face3"`), so the sketch does not hang on the tip, and a sketch that sits before that feature is moved after it.

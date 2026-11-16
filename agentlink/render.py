@@ -351,11 +351,56 @@ def compose(layers, views, width, height, frame=None, section=None, mapinfo=None
 
 # ---- the parts as a layer -------------------------------------------------------------------
 
+_COLOURS = list(PALETTE)
+
+
+def colour(i):
+    """The i-th part's colour: the palette, then hues stepped by the golden
+    angle at two lightnesses, each kept only when no earlier colour is close
+    to it — never a repeat (a seventh part came out the first's orange, a
+    screw the same as the stem)."""
+    import colorsys
+
+    k = len(_COLOURS) - len(PALETTE)
+    while len(_COLOURS) <= i:
+        h = (0.95 + k * 0.381966) % 1.0
+        s, v = (0.45, 0.80) if k % 2 == 0 else (0.62, 0.60)
+        c = tuple(round(x, 3) for x in colorsys.hsv_to_rgb(h, s, v))
+        k += 1
+        if k > 400 or not any(_close(c, u, 0.1) for u in _COLOURS):
+            _COLOURS.append(c)
+    return _COLOURS[i]
+
+
+def _close(a, b, tol=0.08):
+    return all(abs(float(x) - float(y)) <= tol for x, y in zip(a, b))
+
+
+def distinct_colours(layers):
+    """Each layer drawn in one colour (no per-vertex map colours) gets a
+    colour no earlier layer has: an add-on layer that came with a part's
+    colour, or a body past the palette, is given the next free one. In
+    place; the layers."""
+    used = []
+    k = 0
+    for l in layers:
+        if l.get("colors") is not None:
+            continue
+        c = l.get("color")
+        if c is None or any(_close(c, u) for u in used):
+            while any(_close(colour(k), u) for u in used):
+                k += 1
+            c = colour(k)
+            l["color"] = c
+        used.append(tuple(c))
+    return layers
+
+
 def body_layer(o, i, tol=0.05):
     pts, tris = o.Shape.tessellate(tol)
     V = np.array([[p.x, p.y, p.z] for p in pts], dtype=float)
     F = np.array(tris, dtype=np.int64).reshape(-1, 3)
-    return {"name": o.Label, "V": V, "F": F, "color": PALETTE[i % len(PALETTE)], "creases": True}
+    return {"name": o.Label, "V": V, "F": F, "color": colour(i), "creases": True}
 
 
 def vertex_normals(V, F):

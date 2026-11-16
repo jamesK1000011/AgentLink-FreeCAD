@@ -95,9 +95,68 @@ def core_check(shape):
         return False, lines[:10] or [type(e).__name__]
 
 
-def soundness(shape):
+# BOP check findings that are tolerance matters on a shape BRepCheck
+# calls valid: a 3D curve that strays from its face's surface more than its
+# tolerance (where a counterbore breaks a chamfer). Kept strict: a
+# self-intersection or a bad face stays a problem.
+SOFT_BOP = ("BOPAlgo_InvalidCurveOnSurface",)
+
+
+def soft_bop(lines):
+    """Every line of a failed check names only soft BOP findings (or is a
+    heading with no finding of its own)."""
+    import re
+
+    found = False
+    for ln in lines or ():
+        kinds = re.findall(r"BOPAlgo_\w+|BRepCheck_\w+", ln)
+        if not kinds:
+            continue
+        if any(k not in SOFT_BOP for k in kinds):
+            return False
+        found = True
+    return found
+
+
+def bop_where(shape, lines, n=3):
+    """Where a soft BOP finding is: the elements the check's lines name
+    (Edge12, Face3) with their centres; else the edges whose tolerance OCC
+    widened most (where a curve and its surface disagree)."""
+    import re
+
+    out = []
+    for ln in lines or ():
+        for kind, i in re.findall(r"\b(Edge|Face|Vertex)(\d+)\b", ln):
+            try:
+                el = shape.getElement(f"{kind}{i}")
+                out.append({"element": f"{kind}{i}", "at": vec(el.CenterOfMass if kind != "Vertex" else el.Point)})
+            except Exception:
+                pass
+    if out:
+        return out[:n]
+    try:
+        tol = sorted(((float(getattr(e, "Tolerance", 0.0)), i, e) for i, e in enumerate(shape.Edges)), key=lambda t: -t[0])
+        return [{"element": f"Edge{i + 1}", "at": vec(e.CenterOfMass), "tolerance": round(t, 5)} for t, i, e in tol[:n] if t > 1e-6]
+    except Exception:
+        return []
+
+
+def each_solid(shape):
+    """Each solid of a compound checked as soundness checks one: valid,
+    closed, a volume above 0, where it is."""
+    out = []
+    for i, so in enumerate(shape.Solids):
+        r = soundness(so)
+        out.append({"solid": i + 1, "ok": r["ok"], "valid": r["valid"], "closed": r["closed"], "volume": r["volume"],
+                    "at": vec(so.BoundBox.Center), **({"problems": r["problems"]} if r["problems"] else {})})
+    return out
+
+
+def soundness(shape, solids_intended=False):
     """Valid, closed, one solid, a volume above 0, no slivers: as a body
-    check reads it, and what "sound" means wherever a tool reports it."""
+    check reads it, and what "sound" means wherever a tool reports it.
+    solids_intended: several solids are meant (a Body with AllowCompound),
+    so their count is no problem."""
     shells = shape.Shells
     closed = bool(shells) and all(s.isClosed() for s in shells)
     narrow = narrow_faces(shape)
@@ -107,7 +166,7 @@ def soundness(shape):
         problems.append("The shape is not valid: a boolean or loft left it broken. Rebuild the last step.")
     if not closed:
         problems.append("The shape is not closed: it has open edges, so it has no inside to print or weigh.")
-    if len(shape.Solids) != 1:
+    if len(shape.Solids) != 1 and not (solids_intended and shape.Solids):
         problems.append(f"{len(shape.Solids)} solids where one is meant: pieces that do not touch, or none.")
     try:
         volume = shape.Volume

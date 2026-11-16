@@ -5,14 +5,15 @@
 - `session_state` first: what the document holds and the step count.
 - Tools come in groups. `tool_groups` lists them and turns them on. `tool_groups { group }` gives one group only, with its tools; `detail: true` gives the full text of each group. Every tool can be called by name whether it is listed or not.
 - Every change is one undo step: `history_undo`, `history_redo` (and checkpoints where an add-on offers them). `history_diff` says what a change did, so you don't have to describe the part again.
-- `batch` runs several calls in one, rolled back whole if one is refused. Use it for a run of edits you can predict.
+- `batch` runs several calls in one, rolled back whole if one is refused: every object it made is taken away too. Use it for a run of edits you can predict.
+- A long read (a heavy one, one slow here before, or any read with `background: true`) runs as a job: its answer comes back as usual when it ends within 45 s, else a job id — `job_status { job, wait: 25 }` gives the answer when it is done. A client drops a call after about 80 s, so never just call a long read again. While a job reads the document, changes to it are refused until it ends.
 - Answers are in millimetres, grams and degrees. A refusal names what to change.
 
 ## A part, made and judged
 1. Make it with the modelling tools: `pd_body_new`, `sketch_new`, `pd_pad` …, or `part_primitive`. Add-ons may add generators of their own; `tool_groups` lists them.
 2. Ask how it will be made. Don't assume a part is printed.
 3. Ask what it is made of and record it: `material_set`.
-4. `body_check` after every change. Look too: `view_render { views: "all" }`, and `{ map: "wall" }` or `{ zoom: { at } }` on a spot.
+4. `body_check` after every change (a Body with AllowCompound true may hold several solids on purpose: each is checked). Look too: `view_render { views: "all" }`, and `{ map: "wall" }` or `{ zoom: { at } }` on a spot.
 5. Write `export` for STEP or STL (or any format it lists). Starting a print or a cut is the person's call.
 
 ## What is here, by task

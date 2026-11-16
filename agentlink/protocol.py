@@ -220,6 +220,17 @@ def compact(obj):
         return json.dumps(_finite(obj), separators=(",", ":"), ensure_ascii=False, allow_nan=False)
 
 
+def failed_words(name, e):
+    """A tool's own failure as a sentence. A bare KeyError said only the
+    key ("asm_joint failed: 'M8x25-Screw219'"): it is an object or entry
+    looked up by a name that is no longer there."""
+    if isinstance(e, KeyError):
+        key = e.args[0] if e.args else "?"
+        return (f"{name} failed: it looked up {key!r} and found nothing by that name — an object renamed or removed while it ran "
+                "(a workbench that relabels its objects on recompute does this). Nothing was kept; session_state or asm_list gives the names as they are now.")
+    return f"{name} failed: {e}"
+
+
 class Server:
     def __init__(self, name, version, tools, instructions="", run=None, groups=None, resources=None, guard=None):
         self.name = name
@@ -400,20 +411,47 @@ class Server:
         t0 = time.time()
         tool = tool.for_call(args)
         try:
+            # background: true on any read the tool does not take itself:
+            # run it as a job (agentlink/jobs.py).
+            asked = False
+            if "background" in args and "background" not in (tool.schema.get("properties") or {}):
+                asked = args.pop("background") in (True, "true")
             check_input(tool.schema, args)
             if self.guard is not None:
                 self.guard(tool, args)
+            from . import jobs
+
+            s = self.session
+            as_job = False
+            if s is not None:
+                jobs.guard_change(tool, args, s)
+                as_job = jobs.wanted(tool, args, s, asked=asked)
+            elif asked:
+                raise ToolError("invalid_input", "background: a job needs a session.")
+            if asked and not as_job:
+                raise ToolError("invalid_input", f"background: {name} cannot run as a job — only a read that leaves the window and the 3D view alone can (not a change, a picture or a window tool).")
             gate = self.gate
             if gate is not None:
-                gate.before(tool, args)
+                gate.as_job = as_job
+                try:
+                    gate.before(tool, args)
+                finally:
+                    gate.as_job = False
             try:
-                out = self.run(tool, lambda: tool.fn(args))
+                if as_job:
+                    out = self.run(tool, lambda: self._as_job(tool, args))
+                else:
+                    out = self.run(tool, lambda: tool.fn(args))
             except BaseException:
                 if gate is not None:
                     gate.after(tool, args, False)
                 raise
             if gate is not None:
-                gate.after(tool, args, True)
+                # A job logs its own time when it ends (the call may have
+                # answered before it did).
+                gate.after(tool, args, not as_job)
+            if s is not None and not as_job:
+                jobs.note_slow(tool, args, s, time.time() - t0)
             if self.on_call is not None:
                 try:
                     self.on_call(tool, args)
@@ -425,7 +463,7 @@ class Server:
             return self.refusal("invalid_input", str(e))
         except Exception as e:
             traceback.print_exc(file=sys.stderr)
-            return self.refusal("failed", f"{name} failed: {e}", _test_trace())
+            return self.refusal("failed", failed_words(name, e), _test_trace())
         image = None
         if isinstance(out, dict):
             # A picture for the agent to look at: image content beside the
@@ -442,6 +480,22 @@ class Server:
 
             content.append({"type": "image", "data": base64.b64encode(image).decode("ascii"), "mimeType": "image/png"})
         return {"content": content}
+
+    def _as_job(self, tool, args, wait=None):
+        """Run tool on a worker thread (agentlink/jobs.py): its answer when
+        it ends within JOB_WAIT, else the job's id and how to wait for it."""
+        from . import jobs
+
+        job = jobs.start(tool, args, self.session)
+        if jobs.wait_for(job, jobs.JOB_WAIT if wait is None else wait):
+            if job["status"] == "failed":
+                raise ToolError(job["error"]["code"], job["error"]["message"])
+            out = job["result"]
+            if isinstance(out, dict):
+                out = dict(out)
+                out.setdefault("job", job["job"])
+            return out
+        return {**jobs.summary(job), "note": f"{tool.name} is still running (past {jobs.JOB_WAIT:.0f} s, longer than a call may wait): it goes on as a job; nothing else was changed."}
 
     @staticmethod
     def refusal(code, message, trace=None):

@@ -141,13 +141,74 @@ def plane_ref(body, ref, what="plane"):
         key = ref.upper().replace("_PLANE", "")
         if key in PLANES:
             return (origin_feature(body, PLANES[key]), [""]), key
+        if "." in ref and ref.rsplit(".", 1)[1].startswith("Face"):
+            # "Pad.Face3": that feature's face, as the reference names it.
+            name, sub = ref.rsplit(".", 1)
+            o = in_body(body, name, None, "feature")
+            try:
+                o.Shape.getElement(sub)
+            except Exception:
+                raise ToolError("invalid_input", f"{what}: {o.Label} has no {sub}.")
+            return (o, [sub]), f"{o.Label}.{sub}"
         o = in_body(body, ref, ["PartDesign::Plane"], "datum plane")
         return (o, [""]), o.Label
     if isinstance(ref, dict):
         tip, shape = tip_shape(body)
         i, f = find_face(shape, ref)
-        return (tip, [f"Face{i + 1}"]), f"face at {geo.vec(f.CenterOfMass)}"
+        own, j = face_owner(body, ref, tip, f)
+        return (own, [f"Face{j + 1}"]), f"face at {geo.vec(f.CenterOfMass)}" + ("" if own is tip else f" ({own.Label}'s)")
     raise ToolError("invalid_input", f"{what}: XY, XZ, YZ, a datum plane's name, or a face {{ at: [x,y,z], normal: [x,y,z] }}.")
+
+
+def solid_features(body, upto=None):
+    """The body's features with a solid, in the body's order, up to and
+    including upto (the tip when left out)."""
+    upto = upto if upto is not None else getattr(body, "Tip", None)
+    out = []
+    for o in list(body.Group):
+        try:
+            if o.isDerivedFrom("PartDesign::Feature") and not o.Shape.isNull() and o.Shape.Solids:
+                out.append(o)
+        except Exception:
+            pass
+        if o is upto:
+            break
+    return out
+
+
+def same_face(a, b, tol=1e-4):
+    """Two faces that are the same face: the same area, centre and edge
+    count (a face a later feature left as it was)."""
+    try:
+        return (abs(a.Area - b.Area) <= tol * max(1.0, b.Area) and (a.CenterOfMass - b.CenterOfMass).Length <= tol
+                and len(a.Edges) == len(b.Edges))
+    except Exception:
+        return False
+
+
+def face_owner(body, ref, tip, face):
+    """The feature that owns a face of the body: the one the reference names
+    (feature: "Pad"), else the earliest feature in the body whose shape has
+    that same face; the tip when no earlier one has it. Bound to the tip, a
+    sketch's support pointed at a feature built after it (or at itself once
+    the sketch's own feature became the tip), and FreeCAD warned on every
+    recompute. (feature, face index)."""
+    named = ref.get("feature") if isinstance(ref, dict) else None
+    if named:
+        o = in_body(body, named, None, "feature")
+        i, _ = find_face(o.Shape, ref)
+        return o, i
+    for o in solid_features(body, tip):
+        if o is tip:
+            break
+        try:
+            i, g = find_face(o.Shape, ref)
+        except ToolError:
+            continue
+        if same_face(g, face):
+            return o, i
+    i, _ = find_face(tip.Shape, ref)
+    return tip, i
 
 
 def axis_ref(body, ref, sketch=None, what="axis"):
@@ -324,8 +385,15 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
         out["volumeChange"] = round(delta, 2)
         if must_change == "add" and delta <= 1e-6:
             raise ToolError("failed", f"{feat.Label} added no material — it lies inside the body already. Nothing was kept. {hint}".strip())
+        dress = feat is not None and getattr(feat, "TypeId", "") in DRESSUPS
         if must_change == "cut" and delta >= -1e-6:
-            raise ToolError("failed", f"{feat.Label} cut nothing — the profile does not meet the body that way. Nothing was kept. {hint}".strip())
+            what = ("removed no material — the wall did not hollow the body" if dress
+                    else "cut nothing — the profile does not meet the body that way")
+            raise ToolError("failed", f"{feat.Label} {what}. Nothing was kept. {hint}".strip())
+        if must_change == "changed" and abs(delta) <= 1e-6:
+            # A fillet or chamfer may add material (an inside corner, concave)
+            # or take it away (an outside one): only no change at all is wrong.
+            raise ToolError("failed", f"{feat.Label} left the body as it was — the edges it was given round or bevel nothing. Nothing was kept. {hint}".strip())
     return picks.finish(session, tool, out, recompute=False)
 
 

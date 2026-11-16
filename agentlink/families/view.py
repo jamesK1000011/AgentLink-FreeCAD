@@ -149,6 +149,24 @@ def _vec(v, what):
     return [float(x) for x in v]
 
 
+# Render timings are kept under their own key, by triangles x views: the
+# old view_render timings were logged against the document's faces.
+RENDER_KEY = "view_render:work"
+
+
+def render_work(layers, views, w, h):
+    """A render's work: the triangles drawn times the views, plus the
+    pixels filled (a big picture of a small part still takes its time)."""
+    tris = sum(int(len(l["F"])) for l in layers)
+    return max(1, tris * max(1, len(views)) + (int(w) * int(h) * max(1, len(views))) // 50)
+
+
+def _said(r):
+    from .. import keep
+
+    return keep.said_range(r) + " from past renders here"
+
+
 def _bodies(s, a):
     refs = a.get("objects")
     if refs is None:
@@ -233,6 +251,9 @@ def tools(session):
     s = session
 
     def view_render(a):
+        import time as _time
+
+        t0 = _time.time()
         views = _views(a)
         w, h = int(a.get("width", 900 if len(views) > 1 else 800)), int(a.get("height", 700 if len(views) > 1 else 600))
         if not (64 <= w <= 3000 and 64 <= h <= 3000):
@@ -317,6 +338,19 @@ def tools(session):
                 raise ToolError("invalid_input", f"layers: {', '.join(render.LAYERS) or 'none here'} (the parts are always drawn; objects picks which).")
         if not layers:
             raise ToolError("not_found", "Nothing to draw: no body is shown, and no scan or other layer is loaded.")
+        render.distinct_colours(layers)
+        # The work: triangles drawn times views — what a render's time
+        # follows. Logged against it (heavy.WORK), and the time it should
+        # take said from past renders here at that work.
+        work = render_work(layers, views, w, h)
+        expected = None
+        try:
+            from .. import keep
+
+            expected = keep.estimate_range(keep.queue_state(), RENDER_KEY, work)
+        except Exception:
+            pass
+        s.heavy_work = (RENDER_KEY, work)
 
         img, across, drawn = render.compose(layers, views, w, h, frame=frame, section=section, mapinfo=mapinfo)
         data = render.png(img)
@@ -324,7 +358,9 @@ def tools(session):
         os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
         with open(p, "wb") as f:
             f.write(data)
-        out = {"path": p, "views": views, "mmAcross": across, "layers": shown, "width": w, "height": h, "bytes": len(data)}
+        out = {"path": p, "views": views, "mmAcross": across, "layers": shown, "width": w, "height": h, "bytes": len(data),
+               "time": {"took": round(_time.time() - t0, 1), "triangles": int(sum(len(l["F"]) for l in layers)),
+                        **({"expected": _said(expected)} if expected else {})}}
         if summary:
             out["map"] = summary
         if section:
@@ -456,7 +492,8 @@ def tools(session):
             "Draw the parts as a picture and look at it — works headless. views: one or several (\"all\": iso, top, front, right, each fitted). "
             "map: wall (thickness, red thin), stress (the last fea_solve), heat (the last fea_heat), or one an add-on adds (view_maps lists them) — with a legend, and the worst spot's at; range [lo, hi] fixes the colours. "
             "section { axis x|y|z, offset mm, flip } cuts it open (solid cut faces hatched). zoom { at, size mm } frames a spot — a finding's at. "
-            "objects: which bodies (all shown when left out); layers: which add-on layers (a scan …). The PNG comes back as an image (inline false: the file only) and is written to path.",
+            "objects: which bodies (every shown body when left out: a Body of several solids, screws and other attached parts, each in a colour of its own); layers: which add-on layers (a scan …). The PNG comes back as an image (inline false: the file only) and is written to path. "
+            "time says what it took and, from past renders here at the same triangles and views, what to expect.",
             obj({
                 "view": vschema, "views": vschema,
                 "map": {"type": "string"}, "range": {"type": "array", "items": {"type": "number"}},

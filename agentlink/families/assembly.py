@@ -80,10 +80,27 @@ def ref_element(doc, r):
         return part, None, name
 
 
+def _stem(label):
+    """A label without the counter a workbench adds as it relabels
+    ("M8x25-Screw219" -> "m8x25-screw")."""
+    import re
+
+    return re.sub(r"[\s_-]*\d+$", "", str(label)).lower()
+
+
 def _part(asm, ref):
-    for o in _parts(asm):
+    parts = _parts(asm)
+    for o in parts:
         if ref in (o.Label, o.Name) or str(ref).lower() == o.Label.lower():
             return o
+    # A label a workbench has since counted up (Fasteners relabels its
+    # screws on each recompute): the one part whose label differs only by
+    # that counter.
+    near = [o for o in parts if _stem(o.Label) == _stem(ref)]
+    if len(near) == 1:
+        return near[0]
+    if len(near) > 1:
+        raise ToolError("invalid_input", f"part {ref!r}: {len(near)} parts of {asm.Label} carry that label with another number ({', '.join(f'{o.Label} (object {o.Name})' for o in near)}) — name one by its object name, which stays the same when a workbench relabels it.")
     raise ToolError("not_found", f"part {ref!r} is not in {asm.Label}: its parts are {', '.join(o.Label for o in _parts(asm)) or 'none'} (asm_add puts one in).")
 
 
@@ -115,7 +132,7 @@ def _element(session, part, q, what):
     if not isinstance(q, dict):
         raise ToolError("invalid_input", f"{what}: a face or edge — \"Face6\", or a query {{ kind: face|edge, normal, near, radius, type }} as shape_query takes.")
     query = {k: v for k, v in q.items() if k not in ("part",)}
-    query["body"] = part.Label
+    query["body"] = part.Name  # by Name: a label can change on recompute
     _, _, hits = M.query(session, query)
     if not hits:
         raise ToolError("not_found", f"{what}: no {query.get('kind', 'face')} of {part.Label} matches {q} — shape_query {{ body: \"{part.Label}\" }} lists them.")
@@ -237,7 +254,10 @@ def tools(session):
             ends.append((part, el))
         if ends[0][0] is ends[1][0]:
             raise ToolError("invalid_input", "a and b are on the same part: a joint is between two parts.")
-        before = {o.Label: o.Placement.copy() for o in _parts(asm)}
+        # Keyed by Name: a workbench that relabels its objects on recompute
+        # (Fasteners counts its screws' labels up) made a lookup by label
+        # after the solve fail with a bare KeyError.
+        before = {o.Name: o.Placement.copy() for o in _parts(asm)}
         j = _joints(asm).newObject("App::FeaturePython", a.get("name") or KINDS[kind])
         JointObject.Joint(j, JointObject.JointTypes.index(KINDS[kind]))
         if a.get("name"):
@@ -327,7 +347,9 @@ def tools(session):
             raise ToolError("failed", f"The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. A joint that repeats what another holds is redundant; asm_list shows the joints.")
         moved = {}
         for o in _parts(asm):
-            b = before[o.Label]
+            b = before.get(o.Name)
+            if b is None:
+                continue  # a part the solve brought in: nothing to compare
             if not o.Placement.isSame(b, 1e-6):
                 moved[o.Label] = {"from": geo.vec(b.Base), "to": _placement(o), "by": round((o.Placement.Base - b.Base).Length, 4)}
         hits, _ = _overlaps(_parts(asm))

@@ -262,7 +262,10 @@ def tools(session):
                 f.Reversed = not a.get("outward", False)
                 f.Join = "Intersection" if a.get("join") == "intersection" else "Arc"
                 hint = "A wall thicker than a fillet's radius or a thin feature fails: thinner, or join: intersection."
-            change = "cut" if kind in ("Fillet", "Chamfer") or (kind == "Thickness" and not a.get("outward")) else None
+            # A fillet or chamfer on an inside (concave) corner adds material,
+            # on an outside one removes it: either way is right. An inward
+            # shell always removes some.
+            change = "changed" if kind in ("Fillet", "Chamfer") else ("cut" if kind == "Thickness" and not a.get("outward") else None)
             out = pc.settle(s, b, f, tool, before, change, hint=hint)
             out["on"] = subs
             return out
@@ -271,17 +274,50 @@ def tools(session):
 
     def originals(b, refs):
         if not isinstance(refs, list) or not refs:
-            raise ToolError("invalid_input", "features: [names] — the features to repeat (feature_list names them).")
+            raise ToolError("invalid_input", "features: [names] — the features to repeat (feature_list names them) — or \"all\" for the whole body.")
         return [pc.in_body(b, r, ["PartDesign::"]) for r in refs]
+
+    def whole_body(f, b):
+        """The whole body transformed: FreeCAD 1.1's own mode (the
+        Transformed feature's TransformMode, "Transform body") where it has
+        it, else every additive and subtractive feature up to the tip as the
+        originals. What was used."""
+        if "TransformMode" in f.PropertiesList:
+            try:
+                modes = list(f.getEnumerationsOfProperty("TransformMode") or [])
+            except Exception:
+                modes = []
+            # "Transform body" (not "Transform tool shapes", the features).
+            pick = next((m for m in modes if "body" in m.lower()), None) or next((m for m in modes if "whole" in m.lower()), None)
+            if pick:
+                f.TransformMode = pick
+                return f"the whole body (FreeCAD's TransformMode \"{pick}\")"
+        feats = [o for o in pc.solid_features(b, upto=None) if o is not f and o.isDerivedFrom("PartDesign::FeatureAddSub")]
+        if not feats:
+            raise ToolError("invalid_state", f"{b.Label} has no pad, pocket or other additive or subtractive feature to repeat.")
+        f.Originals = feats
+        return f"every additive and subtractive feature ({', '.join(o.Label for o in feats)}); fillets and chamfers are not repeated this way"
 
     def transformed(kind):
         def run(a):
             b = pc.pd_body(doc(), a.get("body"))
             pc.tip_shape(b)
             before = pc.volume(b)
-            orig = originals(b, a.get("features"))
+            refs = a.get("features")
+            whole = isinstance(refs, str) and refs.strip().lower() in ("all", "body", "whole body")
+            if isinstance(refs, str) and not whole:
+                refs = [refs]
+            orig = None if whole else originals(b, refs)
+            prior = b.Tip
             f = new(b, f"PartDesign::{kind}", kind)
-            f.Originals = orig
+            if whole:
+                b.Tip = prior  # read the features up to the old tip
+                try:
+                    took = whole_body(f, b)
+                finally:
+                    b.Tip = f
+            else:
+                f.Originals = orig
             if kind == "Mirrored":
                 f.MirrorPlane = pc.plane_ref(b, a.get("plane", "YZ"), "plane")[0]
                 tool = "pd_mirrored"
@@ -306,6 +342,8 @@ def tools(session):
                 if a.get("reversed"):
                     f.Reversed = True
             out = pc.settle(s, b, f, tool, before, None, hint="Each copy must meet the body (a pattern of a pocket must land on material).")
+            if whole:
+                out["repeated"] = took
             return out
 
         return run
@@ -453,6 +491,8 @@ def tools(session):
     edges = {"description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, … })"}
     plane = {"description": "XY | XZ | YZ, a datum plane's name, or a face { at, normal }"}
     feats = {"type": "array", "items": {"type": "string"}}
+    # The transforms also take "all": the whole body.
+    feats_all = {"description": "[feature names], or \"all\": the whole body (every feature up to the tip)", "anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "string", "enum": ["all"]}]}
     reading = " Answers the body's volume (mm³), faces and size after; a failure is refused with FreeCAD's error and nothing kept."
     ext = {"body": body, "sketch": sketch, "type": {"type": "string"}, "length": {"type": "number"}, "length2": {"type": "number"}, "sides": {"type": "string", "enum": ["one", "two", "symmetric"]},
            "reversed": {"type": "boolean"}, "upToFace": {"description": "The face to go up to: { at, normal }, \"Face8\", or shape_query's filters."}, "taper": {"type": "number"}}
@@ -466,20 +506,20 @@ def tools(session):
         Tool("pd_hole", "Holes at the centre of every circle of a sketch on the face they enter, drilled against its normal: diameter mm, or thread \"M5\" (ISO; \"M8x1\" fine) — threaded (default true; cosmetic unless modelThread) or a clearance hole (threaded: false, fit close|normal|loose); depth mm | \"through\"; drillPoint flat|angled; cut counterbore|countersink with cutDiameter, cutDepth, countersinkAngle (a thread size gives standard ones)." + reading,
              obj({"body": body, "sketch": sketch, "diameter": {"type": "number"}, "thread": {"type": "string"}, "threaded": {"type": "boolean"}, "modelThread": {"type": "boolean"}, "fit": {"type": "string"}, "depth": {"type": ["number", "string"]}, "drillPoint": {"type": "string"}, "cut": {"type": "string"},
                   "cutDiameter": {"type": "number"}, "cutDepth": {"type": "number"}, "countersinkAngle": {"type": "number"}, "reversed": {"type": "boolean"}}), pd_hole, changes=True),
-        Tool("pd_fillet", "Round edges of the body: edges [{ near: [x,y,z] } the edge nearest a point | { face: { at, normal } } every edge of a face | { all: true }, kind: line|circle to filter], or what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items) or its filters ({ type: circle, radius: 3 } every such edge; with near, the nearest); radius mm. References are good until the next edit: query again after one." + reading,
+        Tool("pd_fillet", "Round edges of the body: edges [{ near: [x,y,z] } the edge nearest a point | { face: { at, normal } } every edge of a face | { all: true }, kind: line|circle to filter], or what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items) or its filters ({ type: circle, radius: 3 } every such edge; with near, the nearest); radius mm. References are good until the next edit: query again after one. An inside (concave) corner gains material, an outside one loses it: both are right." + reading,
              obj({"body": body, "edges": edges, "radius": {"type": "number"}}, ["edges"]), dressup("Fillet"), changes=True),
-        Tool("pd_chamfer", "Bevel edges of the body: edges as pd_fillet; size mm; size2 for two distances or angle deg for distance and angle." + reading,
+        Tool("pd_chamfer", "Bevel edges of the body: edges as pd_fillet; size mm; size2 for two distances or angle deg for distance and angle. On an inside (concave) corner it adds material, on an outside one it removes it: only a chamfer that changes nothing is refused." + reading,
              obj({"body": body, "edges": edges, "size": {"type": "number"}, "size2": {"type": "number"}, "angle": {"type": "number"}}, ["edges"]), dressup("Chamfer"), changes=True),
         Tool("pd_draft", "Taper faces for moulding: faces [{ at, normal }] (or shape_query's references or filters), angle deg, neutral plane (XY default, a datum plane, or a face query), pull direction x|y|z, reversed." + reading,
              obj({"body": body, "faces": faces, "angle": {"type": "number"}, "neutral": plane, "pull": {"type": "string"}, "reversed": {"type": "boolean"}}, ["faces"]), dressup("Draft"), changes=True),
         Tool("pd_thickness", "Shell the body: faces [{ at, normal }] (or shape_query's references or filters) to open (removed), thickness mm of the wall, inward unless outward: true; join arc|intersection." + reading,
              obj({"body": body, "faces": faces, "thickness": {"type": "number"}, "outward": {"type": "boolean"}, "join": {"type": "string"}}, ["faces"]), dressup("Thickness"), changes=True),
-        Tool("pd_mirrored", "Mirror features (by name) across a plane: XY | XZ | YZ, a datum plane, or a face query. The copies must meet the body." + reading,
-             obj({"body": body, "features": feats, "plane": plane}, ["features"]), transformed("Mirrored"), changes=True),
-        Tool("pd_linear_pattern", "Repeat features in a line: direction x|y|z, occurrences (the original counted), spacing mm between copies or length mm first to last, reversed." + reading,
-             obj({"body": body, "features": feats, "direction": {"type": "string"}, "occurrences": {"type": "integer"}, "spacing": {"type": "number"}, "length": {"type": "number"}, "reversed": {"type": "boolean"}}, ["features"]), transformed("LinearPattern"), changes=True),
-        Tool("pd_polar_pattern", "Repeat features around an axis: axis x|y|z (the body's), occurrences, angle deg (360 spreads them evenly round), reversed." + reading,
-             obj({"body": body, "features": feats, "axis": {"type": "string"}, "occurrences": {"type": "integer"}, "angle": {"type": "number"}, "reversed": {"type": "boolean"}}, ["features"]), transformed("PolarPattern"), changes=True),
+        Tool("pd_mirrored", "Mirror features (by name) across a plane: XY | XZ | YZ, a datum plane, or a face query; features: \"all\" mirrors the whole body (FreeCAD 1.1's transform-the-body mode, else every pad and pocket up to the tip). The copies must meet the body." + reading,
+             obj({"body": body, "features": feats_all, "plane": plane}, ["features"]), transformed("Mirrored"), changes=True),
+        Tool("pd_linear_pattern", "Repeat features in a line: direction x|y|z, occurrences (the original counted), spacing mm between copies or length mm first to last, reversed; features: \"all\" repeats the whole body." + reading,
+             obj({"body": body, "features": feats_all, "direction": {"type": "string"}, "occurrences": {"type": "integer"}, "spacing": {"type": "number"}, "length": {"type": "number"}, "reversed": {"type": "boolean"}}, ["features"]), transformed("LinearPattern"), changes=True),
+        Tool("pd_polar_pattern", "Repeat features around an axis: axis x|y|z (the body's), occurrences, angle deg (360 spreads them evenly round), reversed; features: \"all\" repeats the whole body." + reading,
+             obj({"body": body, "features": feats_all, "axis": {"type": "string"}, "occurrences": {"type": "integer"}, "angle": {"type": "number"}, "reversed": {"type": "boolean"}}, ["features"]), transformed("PolarPattern"), changes=True),
         Tool("pd_loft", "Loft through sketches: profile (the first), sections [the rest, in order], ruled, closed; subtractive: true cuts it. Sketches should have the same edge count." + reading,
              obj({"body": body, "profile": sketch, "sections": {"type": "array", "items": {"type": "string"}}, "ruled": {"type": "boolean"}, "closed": {"type": "boolean"}, "subtractive": {"type": "boolean"}}, ["profile", "sections"]), swept("Loft"), changes=True),
         Tool("pd_pipe", "Sweep a profile sketch along a path sketch (all its edges); subtractive: true cuts it. The profile should sit across the path's start." + reading,

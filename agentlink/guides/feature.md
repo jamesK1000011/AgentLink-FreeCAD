@@ -3,7 +3,7 @@
 
 ## workflow
 1. Make a sketch ready (`sketch_state` reads `readyForFeature`), then `pd_pad`, `pd_pocket`, `pd_revolution`, `pd_groove`, `pd_hole`, `pd_loft` or `pd_pipe`.
-2. Finish with `pd_fillet` / `pd_chamfer` (edges), `pd_draft` / `pd_thickness` (faces), and `pd_mirrored` / `pd_linear_pattern` / `pd_polar_pattern` (features by name).
+2. Finish with `pd_fillet` / `pd_chamfer` (edges), `pd_draft` / `pd_thickness` (faces), and `pd_mirrored` / `pd_linear_pattern` / `pd_polar_pattern` (features by name, or `features: "all"` for the whole body — FreeCAD 1.1's transform-the-body mode, else every pad and pocket up to the tip).
 3. Each answer gives the body's volume, faces and size after the change, and the volume change.
 4. `feature_list` shows the history. `feature_edit` changes values. `feature_suppress` and `feature_remove` take features out.
 

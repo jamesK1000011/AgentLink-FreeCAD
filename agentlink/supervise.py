@@ -153,7 +153,10 @@ def _deadline(tool):
     if keep.is_heavy(tool):
         try:
             q = keep.queue_state()
-            pts = (q.get("timings") or {}).get(tool) or []
+            tm = q.get("timings") or {}
+            # A tool timed against its own work (view_render's triangles x
+            # views, heavy.WORK) keeps those runs under "tool:work".
+            pts = (tm.get(tool) or []) + (tm.get(tool + ":work") or [])
             if pts:
                 return keep.deadline("heavy", max(t for _, t in pts))
         except Exception:
