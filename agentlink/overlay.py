@@ -637,7 +637,10 @@ class Overlay:
                 return f" (its row has no size yet: {int(rw)} x {int(rh)} at {int(x)}, {int(y)}; the view is {int(pr[2])} x {int(pr[3])})"
             return f" (its row is at {int(x)}, {int(y)}, {int(rw)} x {int(rh)}; the view shows 0, 0 to {int(pr[2])}, {int(pr[3])})"
         except Exception as e:  # noqa: BLE001
-            return f" ({type(e).__name__})"
+            import traceback
+
+            at = traceback.extract_tb(e.__traceback__)[-1]
+            return f" ({type(e).__name__}: {str(e)[:120]} at {at.name}:{at.lineno})"
 
     def _refresh(self):
         try:
