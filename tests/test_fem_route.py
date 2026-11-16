@@ -46,6 +46,18 @@ SCRIPT = textwrap.dedent("""
     assert dropped["loads"] == [ld] and dropped["why"] == "reset: true", dropped
     assert S._setup_said(old, False, False)["dropped"]["why"] == "the study was on Pad"
     assert S._setup_said({}, True, False) == {}
+    # Holds and loads whose face query matches nothing now are named.
+    def pick(shape, q, what):
+        if q.get("z") == 20:
+            raise ValueError("no flat face")
+        return [("Face5", None)]
+    st = {"holds": [{"faces": {"normal": [0, 0, -1], "z": 0}, "kind": "fixed"}],
+          "loads": [{"kind": "force", "faces": {"normal": [0, 0, 1], "z": 20}, "force": [0, 0, -100]}, {"kind": "gravity", "gravity": [0, 0, -1]}]}
+    lost = S.unmatched(st, None, pick)
+    assert lost == ["Load 1: no face at z = 20 facing +Z now; the part changed? fea_load it again (replace: true), or clear: true."], lost
+    assert S.unmatched(dict(st, loads=st["loads"][1:]), None, pick) == []
+    assert S._query_words({"faces": ["Face6"]}) == "Face6"
+    assert S._query_words({"near": [1, 2, 3], "normal": [0.3, 0, 1]}) == "facing [0.3, 0, 1] near [1, 2, 3]"
     print("OK")
 """)
 

@@ -24,9 +24,14 @@ SCRIPT = textwrap.dedent("""
     from agentlink.families import notes as N
 
     class Face:
-        # a flat face: z = level, facing up or down
-        def __init__(self, z, up=True):
-            self.z, self.up = z, up
+        # a flat face: z = level, facing up or down (hole: a round gap at the middle)
+        def __init__(self, z, up=True, hole=0):
+            self.z, self.up, self.hole = z, up, hole
+
+    class Side:
+        # a wall at x, facing +X
+        def __init__(self, x):
+            self.x, self.up, self.z = x, None, None
 
     class Shape:
         def __init__(self, faces, maps=None, volume=1000.0):
@@ -50,7 +55,19 @@ SCRIPT = textwrap.dedent("""
         def dist(f, p):
             return abs(p[2] - f.z), [p[0], p[1], f.z]
         @staticmethod
+        def project(f, p):
+            if isinstance(f, Side):
+                return abs(p[0] - f.x), [f.x, p[1], p[2]]
+            if f.hole and (p[0] ** 2 + p[1] ** 2) ** 0.5 < f.hole:
+                return None  # lands in the hole: off the face
+            return abs(p[2] - f.z), [p[0], p[1], f.z]
+        @staticmethod
+        def size(shape):
+            return 0.0
+        @staticmethod
         def normal(f, p):
+            if isinstance(f, Side):
+                return [1, 0, 0]
             return [0, 0, 1 if f.up else -1]
 
     store = {}
@@ -92,6 +109,22 @@ SCRIPT = textwrap.dedent("""
     N.follow(None, shape_of, G)
     assert n["face"] == "Face3" and "lost" not in n
     assert N.follow(None, shape_of, G) == []
+    # A note from before anchors (no mapped name, no normal), on the top
+    # (Face6, z = 20) of a pad: a hole makes the top Face5 and a side Face6,
+    # the pad goes 20 -> 22. Its first re-find follows it to the new top,
+    # the pin moves up, and the mapped name is kept from then on.
+    old = {"id": 2, "body": "Pad", "face": "Face6", "at": [-9.77, -5.21, 20.0]}
+    store["notes"] = {"next": 3, "notes": [old]}
+    shapes["Pad"] = Shape([("Face1", Side(21)), ("Face4", Face(0, up=False, hole=3)), ("Face5", Face(22, hole=3)), ("Face6", Side(-21))],
+                          {"Face5": "PadTop;:H2", "Face4": "PadBottom;:H2"}, volume=8000)
+    assert N.follow(None, shape_of, G) == [2]
+    assert old["face"] == "Face5" and old["at"] == [-9.77, -5.21, 22.0] and "lost" not in old, old
+    assert old["anchor"]["mapped"] == "PadTop;:H2" and old["anchor"]["normal"] == [0, 0, 1], old["anchor"]
+    # Nothing near any more (cut down to 10): lost, not guessed.
+    shapes["Pad"] = Shape([("Face1", Side(21)), ("Face2", Face(10, hole=3))], volume=4000)
+    old["anchor"].pop("mapped")
+    N.follow(None, shape_of, G)
+    assert "lost" in old and old["face"] == "Face5", old
     print("OK")
 """)
 
