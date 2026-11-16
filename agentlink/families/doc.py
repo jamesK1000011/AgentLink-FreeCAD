@@ -25,6 +25,36 @@ MESH_FORMATS = {"stl": ("stl",), "obj": ("obj",), "3mf": ("3mf",), "ply": ("ply"
                 # read by meshformats, not FreeCAD's Mesh module
                 "gltf": ("gltf", "glb"), "dae": ("dae",), "wrl": ("wrl", "vrml"), "3ds": ("3ds",)}
 MORE_MESH = ("gltf", "dae", "wrl", "3ds")
+# Read by FreeCAD's own importers first (glTF: Import's ReaderGltf; Collada
+# and 3DS: BIM's importers, Collada needing pycollada); meshformats reads
+# them where those are not here, and when units or up are given.
+CORE_READERS = {"gltf": ("Import", "FreeCAD's glTF reader (Import)"), "dae": ("importDAE", "FreeCAD's Collada importer (importDAE)"),
+                "3ds": ("import3DS", "FreeCAD's 3DS importer (import3DS)")}
+
+
+def core_scene(d, p, fmt, before):
+    """(new objects, None) when FreeCAD's own importer read the file into d,
+    else ([], why not)."""
+    mod_name, _who = CORE_READERS[fmt]
+    import importlib
+
+    mod = None
+    for name in (mod_name, "importers." + mod_name):
+        try:
+            mod = importlib.import_module(name)
+            break
+        except Exception:  # noqa: BLE001 - not in this build
+            continue
+    if mod is None:
+        return [], f"{mod_name} is not in this FreeCAD"
+    try:
+        mod.insert(p, d.Name)
+    except Exception as e:  # noqa: BLE001 - a missing dependency (pycollada) or a file it cannot read
+        return [], f"{mod_name}: {e}"
+    new = [o for o in d.Objects if o.Name not in before]
+    if not new:
+        return [], f"{mod_name} read nothing"
+    return new, None
 EXPORTS = ("step", "iges", "brep", "stl", "obj", "3mf", "ply", "off", "wrl", "x3d", "glb", "gltf", "dae", "dxf", "svg")
 # Written by FreeCAD's Mesh module as one mesh; by meshformats a mesh (and
 # colour) per object; by flat2d a 2D projection.
@@ -627,7 +657,13 @@ def tools(session):
         base = a.get("name") or os.path.splitext(os.path.basename(p))[0]
         made = []
         took = None
-        if fmt in SOLID_FORMATS:
+        core_made, core_why = [], None
+        if fmt in CORE_READERS and a.get("units") is None and a.get("up") is None and not a.get("solid"):
+            core_made, core_why = core_scene(d, p, fmt, before)
+        if core_made:
+            made = core_made
+            took = {"reader": CORE_READERS[fmt][1]}
+        elif fmt in SOLID_FORMATS:
             sh = Part.Shape()
             try:
                 sh.read(p)
@@ -647,6 +683,7 @@ def tools(session):
                     from .. import meshformats
 
                     V, F, took = meshformats.read(p, a.get("units"), a.get("up"))
+                    took = {**(took or {}), "reader": "Agent Link's own reader (meshformats)", **({"coreNotUsed": core_why} if core_why else {})}
                     m = Mesh.Mesh()
                     m.addFacets([[tuple(V[i]) for i in t] for t in F.tolist()])
                 else:
