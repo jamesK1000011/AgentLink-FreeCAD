@@ -159,6 +159,7 @@ docs/packaging.md
 docs/records.md
 package.xml
 pyproject.toml
+scripts/sync_shared.py
 scripts/tool_summary.py
 scripts/tool_tables.py
 server.json
@@ -247,6 +248,7 @@ tests/test_sketch_gaps.py
 tests/test_std_more.py
 tests/test_strength.py
 tests/test_supervise_unattended.py
+tests/test_sync_shared.py
 tests/test_techdraw.py
 tests/test_techdraw_gaps.py
 tests/test_theme.py

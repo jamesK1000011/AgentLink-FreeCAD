@@ -400,6 +400,35 @@ class Placer(unittest.TestCase):
         self.switch("ScanRulerWorkbench")
         self.assertEqual(self.mw.combo.current(), "Tasks")  # a task runs: left to FreeCAD
 
+    def test_too_wide_at_start_goes_back_once(self):
+        self.mw.shown = True
+        self.mw.combo_dock.w = 640  # saved that wide by a size-hint bug
+        self.switch("SafetyNetWorkbench")
+        self.p.show("sn", self.dock("SafetyNet"), "SafetyNetWorkbench")
+        self.assertEqual(self.mw.combo_dock.w, layout.START_WIDTH)
+        self.mw.combo_dock.w = 600  # the person drags it wide later: it stays
+        self.p.show("sn2", self.dock("Other"), "SafetyNetWorkbench")
+        self.assertEqual(self.mw.combo_dock.w, 600)
+
+    def test_right_panel_too_wide_at_start(self):
+        self.mw.shown = True
+        self.params.v["PanelLayout"] = "right"
+        d = self.dock("SafetyNet")
+        d.w = 700
+        self.switch("SafetyNetWorkbench")
+        self.p.show("sn", d, "SafetyNetWorkbench")
+        self.assertEqual(d.w, layout.START_WIDTH)
+
+    def test_normal_width_left_alone_and_waits_for_the_window(self):
+        self.mw.combo_dock.w = 400
+        self.switch("SafetyNetWorkbench")
+        self.p.show("sn", self.dock("SafetyNet"), "SafetyNetWorkbench")
+        self.assertFalse(self.p._start_done)  # the window is not shown yet
+        self.mw.shown = True
+        self.p._at_start()
+        self.assertEqual(self.mw.combo_dock.w, 400)
+        self.assertEqual((layout.start_width(421), layout.start_width(420), layout.start_width(None)), (layout.START_WIDTH, None, None))
+
     def test_slide_out_narrows_the_combo_view(self):
         self.params.v["PanelLayout"] = "left-slide"
         self.mw.combo_dock.w = 270
