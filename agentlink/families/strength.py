@@ -320,8 +320,31 @@ def _unheld_solids(st, shape):
             continue
     return out
 
+def _health(session, tool, changed):
+    """CalculiX's own warning lines after a solve that went through (the
+    shared health check, agentlink/health.py). A refused solve carries its
+    error lines in the refusal."""
+    if not str(getattr(tool, "name", "")).startswith("fea_"):
+        return None
+    tail = getattr(session, "_ccx_tail", None)
+    if not tail:
+        return None
+    session._ccx_tail = None
+    warn = [x for x in str(tail).split(" | ") if "WARNING" in x.upper() or "ERROR" in x.upper()]
+    if not warn:
+        return [{"line": "CalculiX ran clean"}]
+    return [{"line": "CalculiX: " + " | ".join(warn[:3]), "red": any("ERROR" in x.upper() for x in warn),
+             "todo": "read the lines: a part free to move wants more held faces (fea_hold); a bad element a coarser or finer mesh"}]
+
+
 def tools(session):
     s = session
+    try:
+        from .. import health
+
+        health.register("strength", _health)
+    except Exception:
+        pass
 
     def fea_setup(a):
         o = s.body(a.get("body"))

@@ -41,6 +41,23 @@ def _settled(fn):
             pass
     return out
 
+def _with_health(session, tool, args):
+    """tool.fn(args) with the shared health check round it; a health module
+    that will not load or run leaves the answer as the tool gave it."""
+    try:
+        from . import health
+
+        m = health.mark(session)
+    except Exception:
+        return tool.fn(args)
+    try:
+        out = tool.fn(args)
+    except BaseException:
+        health.drop(m)
+        raise
+    return health.attach(session, tool, m, out)
+
+
 class ToolError(Exception):
     """A refusal the agent can act on: a code (invalid_input, not_found,
     failed) and a message that says what to do next."""
@@ -466,6 +483,12 @@ class Server:
             try:
                 if as_job:
                     out = self.run(tool, lambda: self._as_job(tool, args))
+                elif tool.changes and s is not None and tool.name != "batch":
+                    # The shared health check (agentlink/health.py) round
+                    # every changing call, on the thread the tool runs on:
+                    # what FreeCAD says went red, onto the answer as "health".
+                    # A batch's calls each carry their own.
+                    out = self.run(tool, lambda: _settled(lambda: _with_health(s, tool, args)))
                 else:
                     out = self.run(tool, lambda: _settled(lambda: tool.fn(args)))
             except BaseException:
@@ -627,6 +650,12 @@ def add_report(reply, lines):
         if not isinstance(body, dict):
             return
         body["report"] = lines
+        try:
+            from . import health
+
+            health.note_report(body, lines)
+        except Exception:
+            pass
         content[0]["text"] = compact(body)
     except Exception:
         pass

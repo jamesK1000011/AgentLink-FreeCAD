@@ -105,6 +105,7 @@ agentlink/guides/strength.md
 agentlink/guides/surface.md
 agentlink/guides/techdraw.md
 agentlink/guides/view.md
+agentlink/health.py
 agentlink/heavy.py
 agentlink/hooks.py
 agentlink/hull3d.py
@@ -170,11 +171,15 @@ docs/clients/generic.md
 docs/clients/lm-studio.md
 docs/clients/opencode-ollama.md
 docs/clients/vscode.md
+docs/hardening/STATUS.md
+docs/hardening/inventory.json
+docs/hardening/status.json
 docs/hooks.md
 docs/packaging.md
 docs/records.md
 package.xml
 pyproject.toml
+scripts/hardening_status.py
 scripts/live/README.md
 scripts/live/ROLES.md
 scripts/live/agentlink.json
@@ -235,6 +240,8 @@ tests/test_gui_popups.py
 tests/test_gui_saved.py
 tests/test_gui_shell.py
 tests/test_guides.py
+tests/test_health.py
+tests/test_health_fc.py
 tests/test_heavy_memory.py
 tests/test_hidden_parts.py
 tests/test_hooks.py

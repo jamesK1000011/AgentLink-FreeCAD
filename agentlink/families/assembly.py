@@ -323,8 +323,33 @@ def _overlaps(parts, clearance=0.0):
     return out, near
 
 
+def _health(session, tool, changed):
+    """The assembly solver's own status after a call of this family (the
+    shared health check, agentlink/health.py): one line an assembly."""
+    if not str(getattr(tool, "group", "")).startswith("assembly"):
+        return None
+    out = []
+    asms = [o for o in session.doc.Objects if o.TypeId == "Assembly::AssemblyObject"][:3]
+    for asm in asms:
+        code, words = _status(asm)
+        line = f"{asm.Label}: assembly {words}"
+        if code == 0:
+            out.append({"line": line})
+        elif code == -6:
+            out.append({"line": line, "red": True, "todo": "asm_ground { part } fixes one part so the solver has a frame"})
+        else:
+            out.append({"line": line, "red": True, "todo": "asm_check names the joints and what is left free; asm_joint_remove the one that clashes"})
+    return out
+
+
 def tools(session):
     s = session
+    try:
+        from .. import health
+
+        health.register("assembly", _health)
+    except Exception:
+        pass
 
     def doc():
         if s.doc is None:
