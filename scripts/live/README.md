@@ -38,6 +38,8 @@ They are data, not code: an agent connected to Agent Link replays them with the 
 - Checks: `equals`, `contains` (text or list), `atLeast` / `atMost` (numbers), `exists: true|false`, and `noneContain: [words]` for a list of lines, with `ignoreLinesWith: [texts]` to skip lines that aren't ours.
 - FreeCAD itself logs `(qt.qpa.fonts) … missing font family "Sans" / "Sans-serif"` (seen when a sketch is made and when TechDraw draws its own templates; none of the add-ons name those families any more): Report view checks ignore those lines.
 - `role` (two-role scripts, `ROLES.md`): `"tutor"` steps are the teacher agent's calls; `"student"` steps are `gui_input` calls with `as: "person"`, sent on their own. `direct: true`: each call on its own, not in a batch (a waiting `tutor_watch`). `parallel`: the call waits while the next step runs. `look`: what the shot should show. `$name` values are filled in from earlier answers (the script's `conventions` say how).
+- A call may carry `allow: ["not_found"]`: a refusal with that code does not fail the step (closing a document that is not open, in `reset`). The step still lists it under `allowedRefusals`.
+- A `gui_input` step that opens a dialog does not stop the replay: the step's calls after it and the steps after it run inside the dialog's own loop (the step that answers the dialog runs). A step answered `busy` is run again once after a short wait. Whatever is still open at the end is closed with `gui_unstick`, and `leftOpen` says what it was. `live_run` always answers with its own steps and totals.
 - `shot`: a `gui_input` shot of the window after the step, to look at when a check fails.
 - Waits: `gui_input` takes at most 3000 ms per wait; repeat waits for longer.
 

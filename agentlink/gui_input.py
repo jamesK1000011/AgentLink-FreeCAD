@@ -480,6 +480,14 @@ def describe_front(app, modal=None):
         return info
     if m is None:
         return None
+    try:
+        cls = m.metaObject().className()
+        if "ProgressDialog" in cls or "ProgressBar" in cls or not m.isVisible():
+            # A progress dialog (a job's own; it closes by itself) or one
+            # not shown: no dialog that holds the person's window.
+            return {"kind": "progress", "title": m.windowTitle()}
+    except Exception:
+        pass
     d = None
     try:
         d = modal() if modal is not None else None

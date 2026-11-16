@@ -116,6 +116,10 @@ def tools(s):
                     s.done_by = hooks.PERSON
         else:
             out = run.run(steps)
+        if not run.answered:
+            # Done on its own: its deadline no longer stands over a batch
+            # (or a live_run) that goes on after it.
+            gui_link.expect_done("gui_input")
         if run.shots and a.get("inline", True) and not run.answered:
             try:
                 with open(run.shots[-1], "rb") as f:
@@ -179,7 +183,37 @@ def tools(s):
         vars_ = a.get("vars") or {}
         if not isinstance(vars_, dict):
             raise bad("vars: { name: value } for the script's $names (without the $).")
-        out = ls.run(script, chosen, call, vars_, bool(a.get("stopOnFail", False)), shot if getattr(FreeCAD, "GuiUp", False) else None)
+        gui = bool(getattr(FreeCAD, "GuiUp", False))
+        live = None
+        if gui:
+            import time as _t
+
+            from .. import gui_input as gi
+            from .. import gui_link
+
+            def front():
+                QtGui, QtWidgets = gui_link._qt()
+                f = gi.describe_front(QtWidgets.QApplication.instance(), gui_link.modal_info)
+                return None if not f or f.get("kind") == "progress" else f
+
+            def sleep(sec):
+                # The window's own events go on meanwhile (a progress
+                # dialog closing, a job finishing).
+                QtGui, QtWidgets = gui_link._qt()
+                end = _t.time() + sec
+                while _t.time() < end:
+                    QtWidgets.QApplication.processEvents()
+                    _t.sleep(0.05)
+
+            live = types.SimpleNamespace(push=gui_link.CONTINUE.append, pop=gui_link.CONTINUE.pop,
+                                         batch_now=lambda: getattr(s, "batch_now", None), front=front,
+                                         unstick=lambda: call("gui_unstick", {"all": True}), sleep=sleep)
+        prev = getattr(s, "live_now", None)
+        s.live_now = True
+        try:
+            out = ls.run(script, chosen, call, vars_, bool(a.get("stopOnFail", False)), shot if gui else None, live)
+        finally:
+            s.live_now = prev
         out["file"] = p
         return out
 
@@ -212,6 +246,7 @@ def tools(s):
              "steps: only these (names or numbers from 0; all by default; run reset first, as the scripts expect). Each step's calls go to batch (rollback: false, stopOnError: false), or one by one when the step is direct; "
              "$names are filled in from vars { name: value } and from earlier answers (a $name the script declares, kept from the latest answer that has that key: $next); a step that needs one not known yet is skipped and says which. "
              "Two-role steps (role: student, parallel) are skipped: they need two agents (ROLES.md). Every expect is checked (equals, contains, atLeast, atMost, exists, noneContain with ignoreLinesWith; paths with dots, [*] any item, [-1] the last). "
+             "A call with allow: [codes] may be refused with one of them without failing its step (allowedRefusals; reset closes documents that may not be open). A gui_input that opens a dialog does not end the replay: the step's calls after it and the next steps run inside the dialog's loop, so the step that answers it runs; a step answered busy is run again once after a short wait; anything left open at the end is closed (gui_unstick) and said in leftOpen. The answer is always live_run's own summary. "
              "Answers per step pass, fail or skipped, a failing check's call, path, wanted and got, refused calls, the step's shot (a window picture, in the window) and look (what it should show), and the totals. stopOnFail: true stops at the first failing step. It changes the document as the script does.",
              obj({"script": st, "steps": {"type": "array", "items": {}}, "vars": {"type": "object"}, "stopOnFail": {"type": "boolean"}}, ["script"]), live_run),
         Tool("addon_test",

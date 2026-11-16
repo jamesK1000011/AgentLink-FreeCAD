@@ -13,7 +13,10 @@
               "WindowTest"
             ],
             "discard": true
-          }
+          },
+          "allow": [
+            "not_found"
+          ]
         }
       ],
       "expect": []
@@ -76,7 +79,10 @@
               "Unnamed"
             ],
             "discard": true
-          }
+          },
+          "allow": [
+            "not_found"
+          ]
         },
         {
           "tool": "doc_save",
