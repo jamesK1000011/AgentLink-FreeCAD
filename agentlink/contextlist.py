@@ -30,8 +30,9 @@ What is shown in context mode (compute()):
 4. Thin context (the owner's rule): when half or more of the tools read could
    not be told (notChecked, or the budget ran out), or no tool was chosen,
    the list gets LARGER: the classic lean list is added.
-5. A token cap (ToolListCap, tokens; CAP_TOKENS): over it, the tail of the
-   ranked list is left out and said.
+5. A token cap (ToolListCap, tokens; CAP_TOKENS) on the extra workbench
+   tools only: the base, the likely next tools, those that apply, the
+   companions and (thin context) the classic list are always shown.
 
 Nothing is unreachable: tool_find returns any tool, tool_groups { tool }
 gives its whole definition, and every tool is callable by name (directly,
@@ -156,10 +157,11 @@ def compute(session, state=None):
         objects = len(doc.Objects) if doc is not None else 0
     except Exception:  # noqa: BLE001
         objects = 0
-    names = list(nexts)
+    must = list(nexts)   # always shown, whatever the cap
+    rest = []            # shown while the cap lets them in, in this order
     if objects == 0:
         how["start"] = True
-        names += list(START)
+        must += list(START)
     else:
         cand, how = appliesnow.chosen(server, state)
         how = dict(how)
@@ -177,23 +179,31 @@ def compute(session, state=None):
         nots = [n for n in cand if by.get(n) == "not"]
         applies = [n for n in cand if by.get(n) == "applies"]
         rest = [n for n in cand if by.get(n) != "applies" and n not in nots]
-        names += applies + rest + list(COMPANIONS)
+        must += applies + list(COMPANIONS)
         how["read"] = {"chosen": len(cand), "applies": len(applies), "not": len(nots), "unknown": unread}
         if not cand or unread * 2 >= len(cand):
+            # Thin context: the list gets larger, never smaller than the classic one.
             how["fallback"] = "lean"
-            names += _lean(server)
+            must += _lean(server)
     # Order kept, duplicates and BASE out, only tools that exist here.
-    seen, out = set(BASE), []
-    for n in names:
-        if n not in seen and n in server.tools and not getattr(server.tools[n], "alias_of", None):
-            seen.add(n)
-            out.append(n)
+    seen = set(BASE)
+
+    def keep(names):
+        out = []
+        for n in names:
+            if n not in seen and n in server.tools and not getattr(server.tools[n], "alias_of", None):
+                seen.add(n)
+                out.append(n)
+        return out
+
+    kept = keep(must)
+    rest = keep(rest)
     cap = cap_tokens() - tokens_of(server.tools[n] for n in BASE if n in server.tools)
-    total, kept = 0, []
-    for n in out:
+    total = tokens_of(server.tools[n] for n in kept)
+    for i, n in enumerate(rest):
         k = tokens_of([server.tools[n]])
         if total + k > cap:
-            how["capped"] = len(out) - len(kept)
+            how["capped"] = len(rest) - i
             break
         total += k
         kept.append(n)

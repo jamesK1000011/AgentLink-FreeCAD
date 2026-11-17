@@ -115,10 +115,12 @@ class ContextList(unittest.TestCase):
         for n in big:
             self.server.add(_tool(n, "feature", "x" * 3500))
         appliesnow.chosen = lambda server, state: (list(big), {})
-        appliesnow.take = lambda session, state=None, names=None, budget=None: {"by": {n: "applies" for n in big}}
+        # t0 applies; the rest cannot be told: thin, so the classic list is added and the cap cuts the rest only.
+        appliesnow.take = lambda session, state=None, names=None, budget=None: {"by": {"t0": "applies"}}
         contextlist.apply(self.server, self.s)
         self.assertIn("capped", self.s._ctx_how)
-        self.assertLessEqual(contextlist.tokens_of(self.server.listed()), contextlist.CAP_TOKENS + 200)
+        self.assertIn("t0", self.names())
+        self.assertIn("view_snapshot", self.names())  # thin: the classic list is never cut by the cap
 
 
 if __name__ == "__main__":
