@@ -437,7 +437,7 @@ class Server:
         before = (getattr(s, "tx", None), getattr(s, "doc", None)) if s is not None else None
         from . import around
 
-        with _as_user(s), _acting(s):
+        with _as_user(s), _acting(s), _hang_trace(s, params.get("name")):
             result = self._call(params)
             with around.part("callDone"):  # the add-ons' call_done handlers
                 self._done(params, result, before)
@@ -693,6 +693,54 @@ class _Nothing:
         return None
 
     def __exit__(self, *exc):
+        return False
+
+
+class _hang_trace:
+    """While a call runs: should it still be running after 60 s, Python's
+    own stack of every thread is written to <outDir>/crash/hang-<tool>.txt
+    (faulthandler: it writes from a watchdog thread, so a call stuck inside
+    FreeCAD on the GUI thread still leaves where it was). A call that ends
+    in time leaves nothing. Nested calls (a batch's) each re-arm it; the
+    outer one is armed again as an inner one ends."""
+
+    _stack = []
+
+    def __init__(self, session, name):
+        self.session, self.name, self.f = session, str(name or "call"), None
+
+    def __enter__(self):
+        try:
+            import faulthandler
+            import os
+            import re
+
+            out = getattr(self.session, "out_dir", None)
+            if not out or self.name == "batch":
+                return self
+            d = os.path.join(out, "crash")
+            os.makedirs(d, exist_ok=True)
+            self.path = os.path.join(d, "hang-" + re.sub(r"[^A-Za-z0-9_]", "_", self.name) + ".txt")
+            self.f = open(self.path, "w")
+            faulthandler.dump_traceback_later(60, repeat=False, file=self.f)
+        except Exception:
+            self.f = None
+        return self
+
+    def __exit__(self, *exc):
+        if self.f is None:
+            return False
+        try:
+            import faulthandler
+            import os
+
+            faulthandler.cancel_dump_traceback_later()
+            empty = self.f.tell() == 0
+            self.f.close()
+            if empty:
+                os.remove(self.path)
+        except Exception:
+            pass
         return False
 
 
