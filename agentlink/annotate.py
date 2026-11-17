@@ -238,6 +238,7 @@ class Annotations:
         self._view_fn = view or (_view if scene is None else (lambda: None))
         self._ratio_fn = ratio or _ratio
         self.roots = {}  # owner -> (scene graph, separator)
+        self.fields = {}  # owner -> the last field's nodes (field_facts)
 
     def coin(self):
         if self._coin is None:
@@ -250,7 +251,7 @@ class Annotations:
         coin = self.coin()
         sg = self._scene_fn()
         got = self.roots.get(owner)
-        if got is not None and got[0] is sg:
+        if got is not None and holds(sg, got[0], got[1]):
             return got[1]
         if got is not None:
             self.clear(owner)
@@ -485,7 +486,53 @@ class Annotations:
         for c in (mat, bind, hints, co, fs):
             sep.addChild(c)
         root.addChild(sep)
+        self.fields[owner] = {"sep": sep, "off": off, "mat": mat, "bind": bind, "co": co, "fs": fs, "perFace": bool(per_face)}
         return len(F)
+
+    def field_facts(self, owner, hidden=()):
+        """Where the last field of owner sits and how it is drawn, read from
+        the scene (round 8: a map made of 19998 triangles was not seen). The
+        chain of nodes from the view's top to the field (type and name),
+        each switch's whichChild on it, whether a hidden object's node
+        (hidden: those objects' RootNode) is on it, how many of our roots
+        hang in the scene graph, the material binding, the colour, point
+        and index counts, the polygon offset. Never raises."""
+        out = {}
+        try:
+            got = self.fields.get(owner)
+            if not got:
+                return {"field": None}
+            sg = self._scene_fn()
+            top = self._full_scene() or sg
+            out["annotationRoots"] = sum(1 for k in _kids(sg) if _name_of(k) == "AgentLinkAnnotations") if sg is not None else 0
+            have = self.roots.get(owner)
+            out["rootInScene"] = bool(have and holds(sg, have[0], have[1]))
+            path = _path_to(self.coin(), top, got["sep"])
+            out["inScene"] = path is not None
+            path = path or []
+            out["chain"] = [f"{_type_of(n)}:{_name_of(n)}" if _name_of(n) else _type_of(n) for n in path]
+            out["switches"] = [{"node": f"{_type_of(n)}:{_name_of(n)}", "whichChild": _which(n)} for n in path if "Switch" in _type_of(n)]
+            out["throughHidden"] = [str(lb) for lb, rn in hidden if rn is not None and any(_same(n, rn) for n in path)]
+            out["binding"] = _value(got["bind"].value)
+            out["perFace"] = got["perFace"]
+            out["colours"] = _count(got["mat"].diffuseColor)
+            out["points"] = _count(got["co"].point)
+            out["indices"] = _count(got["fs"].coordIndex)
+            out["materialIndex"] = _count(got["fs"].materialIndex)
+            out["offset"] = [_value(got["off"].factor), _value(got["off"].units)]
+            out["children"] = len(_kids(got["sep"]))
+        except Exception as e:  # noqa: BLE001
+            out["error"] = f"{type(e).__name__}: {e}"
+        return out
+
+    def _full_scene(self):
+        """The scene the view renders, with its camera and lights (the
+        render manager's), or None."""
+        try:
+            v = self._view_fn()
+            return v.getViewer().getSoRenderManager().getSceneGraph()
+        except Exception:  # noqa: BLE001
+            return None
 
     def legend(self, owner, title, unit, lo, hi, stops, ticks=LEGEND_TICKS):
         """A colour scale drawn in screen space at the right of the 3D view,
@@ -585,6 +632,8 @@ class Annotations:
         return cam
 
     def clear(self, owner=None):
+        for k in [k for k in self.fields if owner is None or k == owner]:
+            self.fields.pop(k, None)
         for k in [k for k in self.roots if owner is None or k == owner]:
             sg, sep = self.roots.pop(k)
             try:
@@ -629,6 +678,121 @@ def legend_layout(ratio):
     y1 = min(2.4, half_h - 2.4)
     y0 = max(-3.4, -half_h + 0.8)
     return {"x0": x1 - 0.35, "x1": x1, "y0": y0, "y1": y1, "title_y": y1 + 0.35}
+
+
+def holds(sg, kept, sep):
+    """Whether sg, the scene graph now, is the one sep was put in (kept). A
+    pivy proxy is made anew at every getSceneGraph(): "is" was never true
+    there, so each drawing for an owner took away the one before it (round
+    8: the colour scale took away the stress and curvature maps; a map
+    alone, the segments, was seen). The same scene when it still has sep
+    as a child. Never raises."""
+    if sg is None:
+        return False
+    if sg is kept:
+        return True
+    try:
+        return sg.findChild(sep) >= 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _same(a, b):
+    """The same scene node behind two proxies. Never raises."""
+    if a is b:
+        return True
+    try:
+        return int(a.this) == int(b.this)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _kids(node):
+    try:
+        if hasattr(node, "getNumChildren"):
+            return [node.getChild(i) for i in range(node.getNumChildren())]
+    except Exception:  # noqa: BLE001
+        return []
+    return list(getattr(node, "children", None) or ())
+
+
+def _type_of(node):
+    try:
+        return node.getTypeId().getName().getString()
+    except Exception:  # noqa: BLE001
+        return str(getattr(node, "kind", type(node).__name__))
+
+
+def _name_of(node):
+    try:
+        return node.getName().getString()
+    except Exception:  # noqa: BLE001
+        return str(getattr(node, "name", "") or "")
+
+
+def _value(field):
+    try:
+        return field.getValue()
+    except Exception:  # noqa: BLE001
+        return field
+
+
+def _count(field):
+    try:
+        return int(field.getNum())
+    except Exception:  # noqa: BLE001
+        vals = getattr(field, "vals", None)
+        return len(vals) if isinstance(vals, (list, tuple)) else None
+
+
+def _which(node):
+    try:
+        return int(node.whichChild.getValue())
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        return str(node.getField("whichChild").get())
+    except Exception:  # noqa: BLE001
+        return getattr(node, "whichChild", None)
+
+
+PATH_LOOK_MOST = 50000
+
+
+def _path_to(coin, top, node):
+    """The nodes from top down to node, or None. Coin's SoSearchAction on
+    a real scene; a walk of children on stand-ins."""
+    if top is None:
+        return None
+    if hasattr(top, "getNumChildren"):
+        try:
+            sa = coin.SoSearchAction()
+            sa.setNode(node)
+            sa.setInterest(coin.SoSearchAction.FIRST)
+            sa.setSearchingAll(True)  # into switches that are off, too
+            sa.apply(top)
+            p = sa.getPath()
+            if p is None:
+                return None
+            return [p.getNode(i) for i in range(p.getLength())]
+        except Exception:  # noqa: BLE001
+            pass
+    seen = [0]
+
+    def walk(n, trail):
+        seen[0] += 1
+        if seen[0] > PATH_LOOK_MOST:
+            return None
+        trail = trail + [n]
+        if _same(n, node):
+            return trail
+        for k in _kids(n):
+            got = walk(k, trail)
+            if got is not None:
+                return got
+        return None
+
+    return walk(top, [])
 
 
 def _unpickable(coin):

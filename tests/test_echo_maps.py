@@ -93,6 +93,91 @@ class FieldInFront(unittest.TestCase):
         self.assertEqual(find(sep, "SoPickStyle").style, 2)
 
 
+class Proxy:
+    """What pivy hands back at each getSceneGraph(): a new proxy for the
+    same node (so "is" is never true between two calls)."""
+
+    def __init__(self, node):
+        self._n = node
+
+    def addChild(self, c):
+        self._n.addChild(c)
+
+    def removeChild(self, c):
+        self._n.removeChild(c)
+
+    def findChild(self, c):
+        return next((i for i, k in enumerate(self._n.children) if k is c), -1)
+
+    @property
+    def children(self):
+        return self._n.children
+
+
+class OneRootPerOwner(unittest.TestCase):
+    def test_the_scale_keeps_the_map(self):
+        # Round 8 (fem 034, mesh 012): the scale drawn after the map took the
+        # map away; the scene graph's proxy is new at every call.
+        scene = SceneNode("root")
+        ann = annotate.Annotations(coin=Coin(skip=True), scene=lambda: Proxy(scene), view=View)
+        self.assertEqual(ann.field("o", [(0, 0, 0), (1, 0, 0), (0, 1, 0)], [(0, 1, 2)], [(1, 0, 0)] * 3), 1)
+        self.assertTrue(ann.legend("o", "VON MISES", "MPa", 0, 444, echo.FEM_STOPS))
+        self.assertEqual(len(scene.children), 1)
+        ks = [c.kind for c in scene.children[0].children]
+        self.assertEqual(ks, ["SoSeparator", "SoSkipBoundingGroup"])
+        facts = ann.field_facts("o")
+        self.assertEqual(facts["annotationRoots"], 1)  # one root: the map and the scale in it
+        self.assertTrue(facts["rootInScene"])
+        ann.clear("o")
+        self.assertEqual(scene.children, [])
+
+    def test_a_new_scene_starts_again(self):
+        a, b = SceneNode("a"), SceneNode("b")
+        now = [a]
+        ann = annotate.Annotations(coin=Coin(), scene=lambda: Proxy(now[0]))
+        ann.field("o", [(0, 0, 0), (1, 0, 0), (0, 1, 0)], [(0, 1, 2)], [(1, 0, 0)] * 3)
+        now[0] = b
+        ann.field("o", [(0, 0, 0), (1, 0, 0), (0, 1, 0)], [(0, 1, 2)], [(1, 0, 0)] * 3)
+        self.assertEqual((len(a.children), len(b.children)), (0, 1))
+
+    def test_holds(self):
+        sep = SceneNode("s")
+        root = SceneNode("r")
+        root.addChild(sep)
+        self.assertTrue(annotate.holds(Proxy(root), object(), sep))
+        self.assertFalse(annotate.holds(Proxy(SceneNode("x")), object(), sep))
+        self.assertFalse(annotate.holds(None, None, sep))
+
+
+class FieldFacts(unittest.TestCase):
+    def test_chain_switches_hidden_and_drawing(self):
+        top = SceneNode("SoSeparator")
+        sel = SceneNode("SoFCUnifiedSelection")
+        sel.name = "Selection"
+        vp = SceneNode("SoFCSelectionRoot")
+        sw = SceneNode("SoFCSwitch")
+        sw.whichChild = -1
+        top.addChild(sel)
+        sel.addChild(vp)
+        vp.addChild(sw)
+        ann = annotate.Annotations(coin=Coin(), scene=lambda: sw, view=lambda: None)
+        ann._full_scene = lambda: top
+        ann.field("o", [(0, 0, 0), (1, 0, 0), (0, 1, 0)], [(0, 1, 2)], [(1, 0, 0)] * 3)
+        f = ann.field_facts("o", [("Box", vp)])
+        self.assertTrue(f["inScene"])
+        self.assertEqual(f["chain"][:4], ["SoSeparator", "SoFCUnifiedSelection:Selection", "SoFCSelectionRoot", "SoFCSwitch"])
+        self.assertEqual(f["chain"][-1], "SoSeparator")
+        self.assertEqual(f["switches"], [{"node": "SoFCSwitch:", "whichChild": -1}])
+        self.assertEqual(f["throughHidden"], ["Box"])
+        self.assertEqual(f["binding"], "PER_VERTEX_INDEXED")
+        self.assertEqual((f["colours"], f["points"], f["indices"], f["materialIndex"]), (3, 3, 4, 4))
+        self.assertEqual(f["offset"], list(annotate.FIELD_OFFSET))
+
+    def test_no_field(self):
+        ann = annotate.Annotations(coin=Coin(), scene=lambda: None)
+        self.assertEqual(ann.field_facts("o"), {"field": None})
+
+
 class Legend(unittest.TestCase):
     def test_values_and_layout(self):
         self.assertEqual([t for _y, t in annotate.legend_labels(0, 444, 5)], ["0", "111", "222", "333", "444"])
@@ -161,6 +246,9 @@ class _Svc:
     def legend(self, owner, title, unit, lo, hi, stops):
         self.calls.append(("legend", title, unit, lo, hi))
         return {"labels": ["a"], "title": title}
+
+    def field_facts(self, owner, hidden=()):
+        return {"inScene": True, "throughHidden": [lb for lb, _n in hidden]}
 
     def light(self, obj, subs, owner="", colour="", shape=None, badge=None):
         self.calls.append(("light", obj.Label, list(subs), colour))
@@ -261,6 +349,31 @@ class Stress(WithStandIns):
         self.assertEqual(self.gui.cleared, 1)
         leg = [c for c in self.svc.calls if c[0] == "legend"][0]
         self.assertEqual(leg[1:3], ("VON MISES", "MPa"))
+        self.assertEqual(got["range"], [0.0, 444.0])
+        self.assertEqual(got["selectedAfter"], 1)  # the stand-in keeps its one
+        self.assertTrue(got["scene"]["inScene"])
+
+    def test_scale_tops_at_the_solves_peak(self):
+        # fem 034 round 8: the scale's 406 against the caption's 432.
+        body = types.SimpleNamespace(Label="Box", Name="Box", Document=types.SimpleNamespace(Name="D"),
+                                     ViewObject=types.SimpleNamespace(Visibility=True, RootNode="vp"))
+        s = types.SimpleNamespace(_agentlink_fea={"body": "Box", "field": {"vonMises": [0.0, 120.0, 432.4]}}, body=lambda n: body)
+        V = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]
+        had = render.MAPS.get("stress")
+        render.MAPS["stress"] = (lambda s_, a: {"layers": [{"V": V, "F": [(0, 1, 2)], "values": [0.0, 200.0, 405.7]}],
+                                               "unit": "MPa", "cmap": "jet", "label": "VON MISES"}, "")
+        try:
+            doc = types.SimpleNamespace(Objects=[], getObject=lambda n: None, getObjectsByLabel=lambda lb: [])
+            got = echo.fem_result_shown(doc, {"solvedBy": "Agent Link's own CalculiX deck"}, s)
+        finally:
+            if had is None:
+                render.MAPS.pop("stress", None)
+            else:
+                render.MAPS["stress"] = had
+        self.assertEqual(got["range"], [0.0, 432.4])
+        leg = [c for c in self.svc.calls if c[0] == "legend"][0]
+        self.assertEqual(leg[4], 432.4)
+        self.assertEqual(got["scene"]["throughHidden"], ["Box"])
 
 
 class Curvature(WithStandIns):
@@ -285,6 +398,8 @@ class Curvature(WithStandIns):
         self.assertTrue(got["legend"] and got["framed"])
         self.assertEqual(got["selectionCleared"], 1)
         self.assertEqual(framed[0], (50.0, 0.0, 0.0, 60.0, 10.0, 0.0))
+        self.assertIn("scene", got)
+        self.assertIn("selectedAfter", got)
 
     def test_not_on_the_persons_document(self):
         echo.FreeCAD.ActiveDocument = types.SimpleNamespace(Name="Theirs")
