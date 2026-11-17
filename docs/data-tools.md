@@ -13,6 +13,11 @@ three files now hold only what the entries call by name. So are the Mesh family 
 the FreeCAD Mesh calls are named helpers (`plane_sides`, `own_boolean`, `edge_loops`, `flatten_apart`;
 `in_box`, `fitted`, `curve_through`, `grid_mesh`), the checks, the order and the answer are the entries.
 
+So are Part Design and Sketcher: the 19 feature tools (`families/feature.py`), the 8 sketch tools
+(`families/sketch.py`) and `std_more.py`'s pd_move_feature, pd_reorder, pd_tip and pd_shaft. What is left in
+those files is the solver's reading, the geometry builders (one shape each), the constraints by name and
+the small FreeCAD-API functions the entries call.
+
 ## Two kinds of entry
 
 **A wrapper** (`runner`: `make`, `apply`, `command`, `read`) is one FreeCAD command: `target`, `args`,
@@ -64,7 +69,7 @@ A field may not hold `:` or `!` outside brackets: work such a value out in a `le
 | `when` + `then` / `else` | a branch | points or a base sketch in bim_roof, bim_space, bim_structure |
 | `choose` | a branch by a value | `{"choose": "=kind", "of": {"column": […], "beam": […]}, "else": […]}` (bim_structure); the five ops of bim_edit |
 | `each` | a loop | the two directions of bim_grid; each object in bim_ifc |
-| `try` | a fallback, or an error turned into a refusal | FreeCAD's rebar, else plain bars (bim_rebar, `"on": "refusal"`); a face that will not close (bim_panel) |
+| `try` | a fallback, or an error turned into a refusal; `"on": "failure"`: any error but a refusal made inside; `"reraise": true`: undo in `except`, then the error goes on | FreeCAD's rebar, else plain bars (bim_rebar, `"on": "refusal"`); a face that will not close (bim_panel); the constraints a refused sketch_constrain takes back (`reraise`) |
 | `answer` | the answer, ending the run | each op of bim_edit; `list` in bim_trash |
 
 `"when"` on any step runs it only then, so most branches are one line.
@@ -145,6 +150,9 @@ after the first, or a refusal that cleans up: those are `=`, `choose`, `answer.t
   (from git) and the new entry on a stand-in FreeCAD (`tests/_bim_standin.py`), comparing the answer or
   refusal, every maker call, object added or removed and property set in order, and the objects left.
   Every `refuse` in a converted entry is reached by at least one case.
+- `tests/test_datapd_data.py`: the same for the Part Design and Sketcher tools, 581 cases on their own
+  stand-in (`tests/_datapd_standin.py`: a body's volume is a sum of what each feature adds, a sketch's
+  solver counts), every `refuse` reached.
 - The stand-in is not FreeCAD: it proves order and words, not Arch's behaviour. The live model
   (`docs/hardening/models/bimcam-bim-model.json`) on FreeCAD is the proof of that.
 - `tests/test_datamesh_data.py` is the same proof for Mesh and Points (`tests/_datamesh_standin.py`,

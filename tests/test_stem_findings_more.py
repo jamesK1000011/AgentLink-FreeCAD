@@ -591,9 +591,10 @@ class OnStandIns(unittest.TestCase):
         self.assertIn("as it was", out["same"])
         self.assertNotIn("profile", out["same"])
         self.assertNotIn("profile", out["shell"])
-        import re
-        src = open(os.path.join(ROOT, "agentlink", "families", "feature.py")).read()
-        self.assertTrue(re.search(r'change = "changed" if kind in \("Fillet", "Chamfer"\)', src))
+        # The two tools ask for "changed" (either sign), not "cut": they are data now (agentlink/data/tools.json).
+        from agentlink import runners
+        for name in ("pd_fillet", "pd_chamfer"):
+            self.assertEqual(runners.entries()[name]["answer"]["with"][4], "changed", name)
 
     def test_extra_polyline_holds_its_axis_sides(self):
         out = run_stub("""
