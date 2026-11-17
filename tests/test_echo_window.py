@@ -146,14 +146,18 @@ class Buttons(unittest.TestCase):
                    and not echo.command_for(n, examples.get(n, {}))]
         self.assertEqual(missing, [])
 
-    def test_the_last_ring_goes_out_on_every_call(self):
+    def test_the_last_ring_goes_out_on_a_changing_call_only(self):
+        """Round 3: a read (or a picture of the window) leaves the last
+        change's ring lit; the next changing call puts it out."""
         cleared = []
         saved = echo.rings_off, echo.enabled
         echo.rings_off = lambda: cleared.append(1)
         echo.enabled = lambda: True
         try:
             e = echo.Echo(types.SimpleNamespace(doc=None))
-            e.before(types.SimpleNamespace(name="feature_list", changes=False), {})  # a read: no ring of its own
+            e.before(types.SimpleNamespace(name="feature_list", changes=False), {})  # a read: the ring stays
+            self.assertEqual(cleared, [])
+            e.before(types.SimpleNamespace(name="note_add", changes=True), {})  # a change: put out
         finally:
             echo.rings_off, echo.enabled = saved
         self.assertEqual(cleared, [1])
@@ -480,7 +484,7 @@ class After(unittest.TestCase):
         timer = types.SimpleNamespace(singleShot=lambda ms, fn: None)
         echo._qt = lambda: (types.SimpleNamespace(QTimer=timer), None, None)
         echo._model_tab_back = lambda: False
-        echo.fit = lambda animate=True, selection=False: self.fits.append("all") or "all"
+        echo.fit = lambda animate=True, selection=False: self.fits.append("selection" if selection else "all") or ("selection" if selection else "all")
         echo.fit_on = lambda objs, animate=True: self.fits.append(("on", [o.Name for o in objs])) or ("selection" if objs else False)
         self.session = types.SimpleNamespace(doc=self.doc, batch_now=None)
         self.echo = echo.Echo(self.session)
@@ -526,7 +530,7 @@ class After(unittest.TestCase):
         tr = self.session.echo_trace
         self.assertIn("viewsError", tr)
         self.assertEqual(tr["made"], ["Groove"])                 # the feature, not the body (P6)
-        self.assertEqual(self.fits, [("on", ["Groove"])])         # framed on it (P5)
+        self.assertEqual(self.fits, ["selection"])                # framed on it (P5)
         self.assertIn(("sel", "Doc", "Groove"), self.log)
 
     def test_a_multitransform_leaves_its_body_shown(self):

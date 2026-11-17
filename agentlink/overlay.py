@@ -339,6 +339,21 @@ class Board:
         return items, calls, hidden
 
 
+def paint_key(board, host, mapper):
+    """What a painter on host draws, as a value to compare: its marks'
+    rects, badges and styles and its callouts' words. Plain Python."""
+    marks = []
+    for m in board.marks:
+        if m.host is not host:
+            continue
+        try:
+            marks.append((mapper(m), m.badge, m.style))
+        except Exception:  # noqa: BLE001
+            marks.append((None, m.badge, m.style))
+    says = tuple(sorted(str(t) for _o, t, _u in board.says.values())) if host is None else ()
+    return (tuple(marks), says)
+
+
 # ---- the service ------------------------------------------------------------
 
 class Overlay:
@@ -821,12 +836,29 @@ def _painter_class():
 
         def sync(self):
             par = self.parentWidget()
+            moved = False
             if par is not None and self.geometry() != par.rect():
                 self.setGeometry(par.rect())
+                moved = True
             if not self.isVisible():
                 self.show()
-            self.raise_()  # above the docks, inside its own window only
-            self.update()
+                moved = True
+            try:
+                kids = [k for k in par.children() if hasattr(k, "isWidgetType") and k.isWidgetType()] if par is not None else []
+                on_top = bool(kids) and kids[-1] is self
+            except Exception:  # noqa: BLE001
+                on_top = False
+            if not on_top:
+                self.raise_()  # above the docks, inside its own window only
+                moved = True
+            # Painted again only when what it draws moved or changed: this
+            # layer covers the whole window, and each repaint of it repaints
+            # the window under it — four times a second for as long as a
+            # ring stayed lit, the 3D view's scene included.
+            sig = paint_key(self.ov.board, self.host, self.ov._map)
+            if moved or sig != getattr(self, "_sig", None):
+                self._sig = sig
+                self.update()
 
         def paintEvent(self, _ev):
             try:

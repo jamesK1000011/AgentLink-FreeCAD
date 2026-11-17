@@ -226,10 +226,33 @@ def _longest(name, pairs):
 SKIP = {"batch", "session_state", "tool_groups", "guide_read"}
 NO_ECHO = set()
 
+# Tools that look at the window or the session and leave it as it is: a
+# picture of the window, the Report view, the session's state. They show
+# nothing of their own and put nothing out — the ring, the words and the
+# selection of the last changing call stay as they were, so a picture taken
+# right after a change shows that change (round 2 put the ring out at the
+# start of every call, the snapshot's own too: no picture had a ring).
+# Add-ons declare theirs as WATCH (names or prefixes).
+WATCH = {"window_snapshot", "view_snapshot", "view_render", "view_maps", "snapshot_latest", "snapshot_list",
+         "report_read", "usage_report", "job_status", "crash_collect", "doc_graph", "steps_list", "note_list"}
+
+# How long what the echo shows for a changing call stays: the lit button,
+# the words over the 3D view and in the status bar. Until the next changing
+# call's own echo puts them out, or this long with no call at all (a ring
+# lit for 1.3 s and words for 2.6 s were gone before the picture of the
+# call was taken whenever the call or the batch around it took longer).
+HOLD_MS = 30000
+
 
 def skipped(name):
     """Whether a call of this tool is left out of the echo."""
     return name in SKIP or bool(_longest(name, ((k, True) for k in NO_ECHO)))
+
+
+def watching(name):
+    """Whether a call of this tool only looks (WATCH): no echo of its own,
+    and nothing of the last change's put out."""
+    return isinstance(name, str) and (name in WATCH or bool(_longest(name, ((k, True) for k in WATCH if k.endswith("_")))))
 
 
 # Read-only tools that still show something (a view, a picture).
@@ -250,14 +273,34 @@ def switches_bench(tool):
 
 # What a tool's arguments and answer name: the objects to select.
 ARG_KEYS = ("body", "sketch", "object", "base", "target", "feature", "page", "op", "joint")
-OUT_KEYS = ("feature", "sketch", "object", "body", "created", "page", "view", "joint", "op", "sub")
+OUT_KEYS = ("feature", "sketch", "object", "body", "created", "page", "view", "joint", "op", "sub",
+            # Mesh, Surface, Draft, BIM and Spreadsheet answers name what
+            # they made under these (meshobj keep/finish: "mesh"; the Mesh
+            # Info panel stayed empty because no mesh was ever selected).
+            "mesh", "surface", "layer", "projection", "sections", "pieces", "views", "made")
 # More of the same for single tools, where the answer (or, for a call that
 # moves a thing, its arguments) names what was made or changed under a key
 # of its own. A value is a name or a list of names.
 OUT_MORE = {"pd_datum": ("datum",), "pd_datum_plane": ("plane",), "pd_binder": ("binder",), "pd_shaft": ("shaft",),
             "pd_move_feature": ("moved",), "pd_tip": ("tip",), "pd_reorder": ("feature",),
             "asm_add": ("added",), "asm_sub": ("as",), "asm_new_part": ("inAssembly", "part"), "asm_bom": ("sheet",),
-            "asm_explode": ("view",)}
+            "asm_explode": ("view",), "asm_new": ("assembly",), "bim_material": ("on",), "draft_fix": ("object", "dimension"),
+            "fea_parts": ("parts",), "meshobj_split": ("pieces",)}
+# What a changing call made when its answer names nothing: the objects new
+# in the document since before it, at most NEW_MOST of those shown, in a
+# document of at most NEW_LOOK_MOST objects.
+NEW_MOST, NEW_LOOK_MOST = 20, 5000
+# Tools whose answer names a spreadsheet: its view comes to the front.
+SHEET_TOOLS = ("sheet_", "asm_bom", "bim_schedule")
+# Tools that make a flat plan of a model (a 2D view at Z = 0, a cut sheet):
+# looked at from the top.
+PLAN_TOOLS = ("draft_2d_view", "bim_views", "bim_panel_out")
+# Families whose results are looked for under other things (a room under
+# the roof, a surface inside a solid, a mesh copy on its source). Not Part
+# Design (a feature is inside its body by nature), sketches (edited face
+# on), drawing pages, assemblies (their parts touch) or CAM (the stock is
+# made see-through by the CAM step itself).
+UNCOVERED = ("bim_", "surface_", "meshobj_", "draft_", "part_", "fea_", "import_", "points_", "insp_", "material_")
 # The keys that name the bodies a Part Design call worked in.
 BODY_KEYS = ("body", "to", "from")
 
@@ -305,7 +348,9 @@ def sub_names(name, body, args=None):
 
     if name == "sketch_constrain":
         out = [f"Constraint{i + 1}" for i in ints(b.get("added")) if i >= 0]
-    elif name == "sketch_external":
+    elif name in ("sketch_external", "sketch_project"):
+        # Both answer outside geometry ids (-3 down): sketch_project's
+        # projected lines were never selected when read as Edge ids.
         out = [f"ExternalEdge{-i - 2}" for i in ints(b.get("ids")) if i <= -3]
     elif name.startswith("sketch_"):
         ids = []
@@ -492,7 +537,9 @@ def declare(fam):
     its tools, or command_for(name, args) -> command or None; NO_BUTTON,
     names or prefixes of its tools that light no button at all; NO_ECHO,
     names or prefixes of its tools never shown as they run (no bench,
-    button, caption or selection; still in Activity); PAGES,
+    button, caption or selection; still in Activity); WATCH, names or
+    prefixes of its tools that only look at the window (a picture of it):
+    they leave the last change's ring, words and selection as they are; PAGES,
     prefixes of its tools that work on a drawing page; PHRASES, {tool or
     prefix: template or templates} of what its calls did, in the Activity
     tab's words (agentlink/activity.py: "Sliced {object}")."""
@@ -511,6 +558,7 @@ def declare(fam):
             COMMANDS.setdefault(k, v)
     NO_BUTTON.update(k for k in (getattr(fam, "NO_BUTTON", None) or ()) if isinstance(k, str) and k)
     NO_ECHO.update(k for k in (getattr(fam, "NO_ECHO", None) or ()) if isinstance(k, str) and k)
+    WATCH.update(k for k in (getattr(fam, "WATCH", None) or ()) if isinstance(k, str) and k)
     from . import activity
 
     activity.declare(fam)
@@ -598,14 +646,22 @@ def caption_box(view_w, view_h, cap_w, cap_h):
     return most, x, y
 
 
-def caption(text, ms=2600):
-    """A line of text over the 3D view, bottom right, fading after ms."""
+def caption(text, ms=HOLD_MS):
+    """A line of text over the 3D view, bottom right, gone after ms (or
+    when newer words take its place)."""
     global _caption
     QtCore, _QtGui, QtW = _qt()
     host = _view_widget()
     if host is None:
         return
     if _caption is None or _caption.parent() is not host:
+        if _caption is not None:
+            # Words held on another view (a page, the last document's 3D
+            # view) go: only one caption is ever up.
+            try:
+                _caption.hide()
+            except RuntimeError:  # its view was closed
+                pass
         _caption = QtW.QLabel(host)
         _caption.setStyleSheet("QLabel { background: rgba(20,22,26,200); color: #f2f2f2; border-radius: 6px; padding: 6px 10px; font-size: 13px; }")
         _caption.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
@@ -641,7 +697,7 @@ def _hide_later(lbl, text, no=None):
 STATUS_HEAD = "Agent"
 
 
-def say(words, ms=2600, where=""):
+def say(words, ms=HOLD_MS, where=""):
     """The words over the 3D view and in the status bar (each on its own:
     no 3D view in front still gives the status bar its words). Returns the
     words."""
@@ -657,9 +713,10 @@ def say(words, ms=2600, where=""):
 
 
 def rings_off():
-    """The buttons the echo lit for an earlier call, put out: a ring lasts
-    1.3 s and calls come faster, so the next call's picture had the last
-    call's button lit (New Body for a move, a primitive for a pattern).
+    """The buttons the echo lit for an earlier call, put out: called at the
+    start of each changing call only (a ring is held until then, HOLD_MS),
+    so a pattern never shows the primitive's ring, and a read or a picture
+    of the window between two changes leaves the last change's ring lit.
     Never raises."""
     try:
         from . import overlay
@@ -670,8 +727,10 @@ def rings_off():
         return False
 
 
-def flash_command(cmd, ms=1300, settle=False):
-    """Light the toolbar button and the menu item that run cmd. settle:
+def flash_command(cmd, ms=HOLD_MS, settle=False, menu_ms=1300):
+    """Light the toolbar button and the menu item that run cmd: the button
+    for ms (held until the next changing call puts it out: rings_off),
+    the menu item for menu_ms. settle:
     the bench was just switched, so one paint first, for its toolbars and
     menus to exist before their button can light. The button is lit on the
     overlay (agentlink/overlay.py), never by its stylesheet, so a theme's
@@ -685,7 +744,7 @@ def flash_command(cmd, ms=1300, settle=False):
     painter = overlay.service()
     flashed = False
     how, unseen = "none", []
-    for act in targets.actions(cmd):
+    for act in _actions(cmd, QtW):
         for w in targets.associated(act):
             if isinstance(w, QtW.QToolButton):
                 if painter.flash(w, ms):
@@ -720,8 +779,28 @@ def flash_command(cmd, ms=1300, settle=False):
         f = QtGui.QFont(old)
         f.setBold(True)
         a.setFont(f)
-        QtCore.QTimer.singleShot(ms, lambda a=a, old=old: _later(a, "setFont", old))
+        QtCore.QTimer.singleShot(menu_ms, lambda a=a, old=old: _later(a, "setFont", old))
     return how
+
+
+def _actions(cmd, QtW):
+    """The QActions that run cmd: FreeCAD's own list for the command
+    (Gui.Command.get(cmd).getAction(), no walk over the window) when one of
+    them has a toolbar button, else every action of the window named cmd
+    (targets.actions: a walk over all of the window's actions, thousands,
+    on every changing call)."""
+    from . import targets
+
+    try:
+        import FreeCADGui
+
+        c = FreeCADGui.Command.get(cmd)
+        acts = [a for a in (c.getAction() if c is not None else None) or [] if a is not None]
+        if any(isinstance(w, QtW.QToolButton) for a in acts for w in targets.associated(a)):
+            return acts
+    except Exception:  # noqa: BLE001  (an older FreeCAD, a stand-in)
+        pass
+    return targets.actions(cmd)
 
 
 def overflow_flash(buttons, painter, ms, QtW):
@@ -824,12 +903,20 @@ def _fit_selection(v):
     try:
         if not FreeCADGui.Selection.getSelection():
             return False
+        # FreeCAD frames the box its view providers give (View3DInventorViewer
+        # ::viewSelection) and does nothing when that box is not valid (a
+        # sketch in edit: its shape node is empty), with no word of it — the
+        # view stayed 5 mm wide on the origin after a new sketch's first
+        # lines. A camera that did not move is a frame not made.
+        cam0 = _camera(v)
         send = getattr(v, "sendMessage", None)
         if callable(send):
             if send("ViewSelection") is False:
                 return False
         else:
             FreeCADGui.SendMsgToActiveView("ViewSelection")
+        if cam0 is not None and _camera(v) == cam0:
+            return False
     except Exception:  # noqa: BLE001
         return False
     try:
@@ -865,6 +952,282 @@ def framed(objs):
         except Exception:  # noqa: BLE001
             continue
     return out
+
+
+def _camera(v):
+    """The view's camera as text (Coin's own dump), to tell whether a frame
+    moved it; None when the view cannot say."""
+    try:
+        fn = getattr(v, "getCamera", None)
+        return fn() if callable(fn) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# ---- a sketch framed whole (round 3, item 3) ------------------------------------------------
+
+SKETCH_EMPTY_MM = 100.0  # a new, empty sketch: this much of its plane around its origin
+
+
+def box_of(points):
+    """(xmin, ymin, zmin, xmax, ymax, zmax) of (x, y, z) points, or None.
+    Plain Python."""
+    pts = [p for p in points or () if isinstance(p, (tuple, list)) and len(p) == 3]
+    if not pts:
+        return None
+    return (min(p[0] for p in pts), min(p[1] for p in pts), min(p[2] for p in pts),
+            max(p[0] for p in pts), max(p[1] for p in pts), max(p[2] for p in pts))
+
+
+def grown(box, margin=0.08, least=2.0):
+    """box grown by margin of its largest side on each side, and to least mm
+    at the smallest (a point or a single line still gets a view around it).
+    Plain Python."""
+    if box is None:
+        return None
+    x0, y0, z0, x1, y1, z1 = box
+    big = max(x1 - x0, y1 - y0, z1 - z0, least)
+    pad = big * margin
+    out = []
+    for lo, hi in ((x0, x1), (y0, y1), (z0, z1)):
+        if hi - lo < least:
+            mid = (lo + hi) / 2.0
+            lo, hi = mid - least / 2.0, mid + least / 2.0
+        out.append((lo - pad, hi + pad))
+    return (out[0][0], out[1][0], out[2][0], out[0][1], out[1][1], out[2][1])
+
+
+def _corners(bb):
+    return [(x, y, z) for x in (bb.XMin, bb.XMax) for y in (bb.YMin, bb.YMax) for z in (bb.ZMin, bb.ZMax)]
+
+
+def sketch_box(sk):
+    """The box of a sketch's own geometry in the document's coordinates (its
+    lines as they are now, whether or not the sketch was recomputed, and
+    whether or not it is open: a sketch in edit draws its lines apart from
+    its shape, so FreeCAD's Fit selection found no box). An empty sketch:
+    SKETCH_EMPTY_MM of its plane around its origin. None when it cannot be
+    read."""
+    try:
+        pl = sk.getGlobalPlacement()
+    except Exception:  # noqa: BLE001
+        try:
+            pl = sk.Placement
+        except Exception:  # noqa: BLE001
+            return None
+    local = []
+    try:
+        geos = list(getattr(sk, "Geometry", None) or [])
+    except Exception:  # noqa: BLE001
+        geos = []
+    for g in geos:
+        try:
+            bb = g.toShape().BoundBox
+            if bb.isValid():
+                local += _corners(bb)
+        except Exception:  # noqa: BLE001  (a geometry with no shape: skipped)
+            continue
+    if not local:
+        h = SKETCH_EMPTY_MM / 2.0
+        local = [(x, y, 0.0) for x in (-h, h) for y in (-h, h)]
+    try:
+        pts = []
+        for x, y, z in local:
+            p = pl.multVec(FreeCAD.Vector(x, y, z))
+            pts.append((p.x, p.y, p.z))
+        return box_of(pts)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def frame_box(v, box):
+    """The view framed on box (grown()), its direction kept: Coin's own
+    viewBoundingBox on the view's camera, as FreeCAD's Fit selection does.
+    True when done. Never raises."""
+    box = grown(box)
+    if v is None or box is None:
+        return False
+    try:
+        from pivy import coin
+
+        cam = v.getCameraNode()
+        w, h = v.getSize() if callable(getattr(v, "getSize", None)) else (1, 1)
+        aspect = float(w) / float(h) if h else 1.0
+        cam.viewBoundingBox(coin.SbBox3f(*box), aspect, 1.0)
+        return True
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (frame box): {e}\n")
+        return False
+
+
+# ---- a result hidden under other things (round 3, item 4) ---------------------------------
+
+# Objects the echo made see-through for a result under them: (object, the
+# Transparency it had), put back at the next changing call (restore_covers).
+_covers = []
+COVER_ALPHA = 80      # how see-through a cover is made (FreeCAD's Transparency, 0-100)
+COVERS_MOST = 30      # at most this many made see-through for one call
+COVER_LOOK_MOST = 400  # documents with more shown objects than this are not searched
+
+
+def _box(o):
+    """An object's box (Shape, else Mesh, else Part's reading of a link), or
+    None."""
+    try:
+        for attr in ("Shape", "Mesh"):
+            sh = getattr(o, attr, None)
+            if sh is None:
+                continue
+            bb = sh.BoundBox
+            if bb.isValid() and bb.DiagonalLength > 0:
+                return bb
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def covers(made_boxes, others):
+    """Of others ([(key, box)]: the shown objects that are not the result),
+    the keys of those that hide a result: their box holds the middle of a
+    result's box and is at least nine tenths of its size (a roof over a room,
+    a solid round a surface inside it, a source mesh under its copy). Boxes
+    are (xmin, ymin, zmin, xmax, ymax, zmax). Plain Python."""
+    out = []
+    for key, b in others:
+        for m in made_boxes:
+            mid = [(m[i] + m[i + 3]) / 2.0 for i in range(3)]
+            inside = all(b[i] - 1e-6 <= mid[i] <= b[i + 3] + 1e-6 for i in range(3))
+            size_m = max(m[i + 3] - m[i] for i in range(3))
+            size_b = max(b[i + 3] - b[i] for i in range(3))
+            if inside and size_b >= 0.9 * size_m:
+                out.append(key)
+                break
+    return out
+
+
+def _tuple(bb):
+    return (bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax)
+
+
+# Boxes of the objects looked at by uncover(), by (document, name): kept
+# while the object's shape is the same one (its hash; a mesh's counts), so a
+# BIM model's hundred walls are not measured again on every call.
+_boxes = {}
+BOXES_MOST = 4000
+
+
+def _stamp(o):
+    try:
+        sh = getattr(o, "Shape", None)
+        if sh is not None:
+            return ("s", sh.hashCode())
+        m = getattr(o, "Mesh", None)
+        if m is not None:
+            return ("m", m.CountPoints, m.CountFacets)
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _box_of(o):
+    """o's box as a tuple, or None; from _boxes when its shape is the same."""
+    try:
+        key = (o.Document.Name, o.Name)
+    except Exception:  # noqa: BLE001
+        key = None
+    st = _stamp(o) if key is not None else None
+    if st is not None and key in _boxes and _boxes[key][0] == st:
+        return _boxes[key][1]
+    b = _box(o)
+    t = _tuple(b) if b is not None else None
+    if st is not None:
+        if len(_boxes) > BOXES_MOST:
+            _boxes.clear()
+        _boxes[key] = (st, t)
+    return t
+
+
+def uncover(doc, made):
+    """What hides a result made see-through, as view state only (each cover's
+    ViewObject.Transparency; FreeCAD does not mark a document modified for
+    it), put back at the next changing call. The result itself, what it is
+    built from and what it is part of are never touched. Returns the labels
+    made see-through. Never raises."""
+    done = []
+    try:
+        boxes = [(o, _box(o)) for o in made or ()]
+        mine = [_tuple(b) for _o, b in boxes if b is not None]
+        if not mine:
+            return done
+        near = set()
+        for o in made:
+            for attr in ("InListRecursive", "OutListRecursive"):
+                try:
+                    near.update(id(x) for x in getattr(o, attr, None) or ())
+                except Exception:  # noqa: BLE001
+                    continue
+            near.add(id(o))
+        shown = []
+        for o in list(getattr(doc, "Objects", ()) or ()):
+            if id(o) in near or not _seen(o):
+                continue
+            shown.append(o)
+            if len(shown) > COVER_LOOK_MOST:
+                return done
+        others = []
+        for o in shown:
+            vo = getattr(o, "ViewObject", None)
+            try:
+                if "Transparency" not in getattr(vo, "PropertiesList", ()) or int(vo.Transparency or 0) >= COVER_ALPHA:
+                    continue
+            except Exception:  # noqa: BLE001
+                continue
+            b = _box_of(o)
+            if b is not None:
+                others.append((o, b))
+        for o in covers(mine, others)[:COVERS_MOST]:
+            vo = o.ViewObject
+            _covers.append((o, int(vo.Transparency or 0)))
+            vo.Transparency = COVER_ALPHA
+            done.append(getattr(o, "Label", "?"))
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (uncover): {e}\n")
+    return done
+
+
+def restore_covers():
+    """What uncover() made see-through, put back as it was. The labels put
+    back. Never raises."""
+    back = []
+    while _covers:
+        o, was = _covers.pop()
+        try:
+            o.ViewObject.Transparency = was
+            back.append(o.Label)
+        except Exception:  # noqa: BLE001  (deleted since)
+            continue
+    return back
+
+
+SEGMENT_COLOURS = [(0.90, 0.62, 0.0), (0.34, 0.71, 0.91), (0.0, 0.62, 0.45), (0.94, 0.89, 0.26),
+                   (0.0, 0.45, 0.70), (0.84, 0.37, 0.0), (0.80, 0.47, 0.65), (0.6, 0.6, 0.6)]
+
+
+def segments_shown(made):
+    """A mesh's segments each in its own colour, as Mesh's own segment
+    tools show them (ViewProviderMesh.highlightSegments: the scene only, no
+    property). The labels coloured. Never raises."""
+    done = []
+    for o in made or ():
+        try:
+            n = int(o.Mesh.countSegments())
+            if n <= 0:
+                continue
+            o.ViewObject.highlightSegments([SEGMENT_COLOURS[i % len(SEGMENT_COLOURS)] for i in range(n)])
+            done.append(o.Label)
+        except Exception:  # noqa: BLE001
+            continue
+    return done
 
 
 # ---- a body's tip shown (P4) ----------------------------------------------------------------
@@ -1175,6 +1538,10 @@ def enter_edit(gd, obj):
     v = getattr(gd, "ActiveView", None)
     with _Still(v):
         gd.setEdit(obj.Name)
+    try:
+        _agent_edits.add((obj.Document.Name, obj.Name))  # opened by the agent: it may leave it (leave_agent_edit)
+    except Exception:  # noqa: BLE001
+        pass
     did = "opened"
     try:
         rot = obj.getGlobalPlacement().Rotation
@@ -1202,6 +1569,188 @@ def edit_document():
     except Exception:  # noqa: BLE001
         pass
     return None
+
+
+# ---- a sketch the agent left open in another document (A1/S9, round 3) --------------------
+
+# The sketches the echo itself opened for editing: (document name, object
+# name). Only one of these is ever left by the echo for a call in another
+# document; a sketch the person opened is never closed from here. An entry
+# goes when its sketch is no longer the one in edit (closed by anyone).
+_agent_edits = set()
+# Calls that drive the window as a person would (a command, a menu entry,
+# a click, a dialog): a sketch open then is part of that flow.
+FLOWS = ("cmd_", "menu_", "gui_", "dialog_")
+
+
+def edit_to_leave(name, args, call_doc, edit_doc, edit_obj, mine, flow=False):
+    """Whether the echo leaves the sketch edit_obj (open in document edit_doc,
+    by name) before a call that works in call_doc: only when the echo itself
+    opened that edit (mine: _agent_edits), it is in another document than
+    the call's, the call does not name the sketch, and no command, menu,
+    click or dialog flow is running (flow, or a FLOWS call). A sketch left in
+    edit keeps FreeCAD's task dialog open for the whole application, and
+    every Part and Assembly button stays grey in every document. Plain
+    Python."""
+    if flow or not isinstance(name, str) or name.startswith(FLOWS):
+        return False
+    if not call_doc or not edit_doc or call_doc == edit_doc or edit_obj is None:
+        return False
+    if (edit_doc, getattr(edit_obj, "Name", None)) not in mine:
+        return False
+    a = args if isinstance(args, dict) else {}
+    ids = {getattr(edit_obj, "Name", None), getattr(edit_obj, "Label", None)} - {None, ""}
+    return not (ids & {n for v in a.values() for n in _names(v)})
+
+
+def _flow_running():
+    """A modal dialog is up (a menu's or a dialog's own loop): a flow the
+    person or the agent is in the middle of."""
+    try:
+        _QtCore, _QtGui, QtW = _qt()
+        return QtW.QApplication.activeModalWidget() is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _prune_edits():
+    """_agent_edits kept to the sketch still in edit, if the echo opened it."""
+    try:
+        ed = edit_document()
+        obj = getattr(ed.getInEdit(), "Object", None) if ed is not None else None
+        key = (ed.Document.Name, obj.Name) if obj is not None else None
+    except Exception:  # noqa: BLE001
+        key = None
+    for k in list(_agent_edits):
+        if k != key:
+            _agent_edits.discard(k)
+    return key
+
+
+def leave_agent_edit(name, args, call_doc):
+    """The sketch the echo opened in another document left (resetEdit on
+    that document) when edit_to_leave says so. "<doc>.<sketch>" when it was
+    left, else None. Never raises."""
+    try:
+        key = _prune_edits()
+        if key is None:
+            return None
+        ed = edit_document()
+        obj = getattr(ed.getInEdit(), "Object", None)
+        doc_name = getattr(call_doc, "Name", None)
+        if not edit_to_leave(name, args, doc_name, key[0], obj, _agent_edits, _flow_running()):
+            return None
+        ed.resetEdit()
+        _agent_edits.discard(key)
+        return f"{key[0]}.{key[1]}"
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (leave edit): {e}\n")
+        return None
+
+
+# ---- the Sketcher's edit toolbars (round 3, item 2) ----------------------------------------
+
+# FreeCAD 1.1.3's Sketcher toolbars shown only while a sketch is in edit
+# (src/Mod/Sketcher/Gui/Workbench.cpp editModeToolbarNames). Their shown or
+# hidden state is saved when a sketch is left in the Sketcher bench
+# (leaveEditMode, SaveState) — a sketch closed while they were not up (the
+# bench brought up while the sketch was open in another document, where
+# Workbench::activated does not make them available) saves them hidden,
+# and from then on no sketch shows them.
+SKETCH_EDIT_BARS = ("Edit Mode", "Geometries", "Constraints", "Sketcher Tools", "B-Spline Tools", "Visual Helpers",
+                    "Sketcher Edit Tools")
+
+
+def bars_to_show(bars):
+    """Of [(name, shown)] for the toolbars found, the names to show: all of
+    the Sketcher's edit toolbars when none of them is up (a person who hides
+    one or two keeps that). Plain Python."""
+    found = [(n, v) for n, v in bars if n in SKETCH_EDIT_BARS]
+    if not found or any(v for _n, v in found):
+        return []
+    return [n for n, _v in found]
+
+
+def sketch_bars_shown():
+    """The Sketcher's edit toolbars put up while a sketch is in edit and none
+    of them shows (shown as the toolbar's own show(), as its entry in the
+    toolbars' menu does). The names shown, or None. Never raises."""
+    try:
+        import FreeCADGui
+
+        gd = FreeCADGui.ActiveDocument
+        ed = gd.getInEdit() if gd is not None else None
+        if getattr(getattr(ed, "Object", None), "TypeId", "") != "Sketcher::SketchObject":
+            return None
+        _QtCore, _QtGui, QtW = _qt()
+        bars = [b for b in FreeCADGui.getMainWindow().findChildren(QtW.QToolBar) if b.objectName() in SKETCH_EDIT_BARS]
+        names = bars_to_show([(b.objectName(), b.isVisible()) for b in bars])
+        for b in bars:
+            if b.objectName() in names:
+                b.show()
+        return names or None
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (sketch toolbars): {e}\n")
+        return None
+
+
+# ---- the view in front: a page, a spreadsheet, the 3D view (round 3, item 4) ----------------
+
+def _is_3d(sub):
+    try:
+        w = sub.widget()
+        return w is not None and (w.metaObject().className() == "Gui::View3DInventor" or type(w).__name__ == "View3DInventor")
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def view_title_is(title, label):
+    """Whether an MDI view's title ("Unnamed : 1[*]") is a view of the
+    document labelled label. Plain Python."""
+    t = str(title or "").replace("[*]", "").strip()
+    return bool(label) and (t == label or t.startswith(label + " : "))
+
+
+def front_3d(doc):
+    """The 3D view of doc brought to the front when a drawing page or a
+    spreadsheet is in front (a part_ call after a page left the page up: the
+    window's active sub-window is None while FreeCAD is not the application
+    in front, so the old check never saw the page). "3D view" when it was,
+    else None. Never raises."""
+    try:
+        import FreeCADGui
+
+        _QtCore, _QtGui, QtW = _qt()
+        area = FreeCADGui.getMainWindow().findChild(QtW.QMdiArea)
+        if area is None:
+            return None
+        cur = area.activeSubWindow() or area.currentSubWindow()
+        if cur is None or _is_3d(cur):
+            return None
+        label = getattr(doc, "Label", None)
+        subs = [s for s in area.subWindowList() if _is_3d(s)]
+        mine = [s for s in subs if view_title_is(s.widget().windowTitle(), label)]
+        if not mine:
+            return None
+        area.setActiveSubWindow(mine[0])
+        return "3D view"
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (3D view to front): {e}\n")
+        return None
+
+
+def show_view_of(o):
+    """o's own view brought to the front (a page, a spreadsheet: what a
+    double-click on its tree row opens). Its label, or None."""
+    vo = getattr(o, "ViewObject", None)
+    if vo is None:
+        return None
+    try:
+        vo.doubleClicked()
+        return o.Label
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (view of {getattr(o, 'Label', '?')}): {e}\n")
+        return None
 
 
 def _workbench_for(name):
@@ -1252,12 +1801,6 @@ def _edited(gd):
     """The object open for editing in the window's document gd, or None."""
     ed = gd.getInEdit() if gd is not None else None
     return getattr(ed, "Object", None) if ed is not None else None
-
-
-def _clear_later(ms=1800):
-    QtCore, _QtGui, _QtW = _qt()
-    QtCore.QTimer.singleShot(ms, lambda mark=_selected[0]: _clear_if(mark))
-    return ms
 
 
 def _on():
@@ -1385,22 +1928,38 @@ class Echo:
         self.t0 = time.time()
         self.mode, self.ms = "full", None
         self.tr = {}
+        self._names0 = self._doc0 = None
+        self._front_other = False
         if self.quiet():
+            return
+        if tool is None or skipped(tool.name) or watching(tool.name):
+            # A look at the window or the session (a picture, session_state):
+            # the last change's ring, words, selection and trace stay as
+            # they are, so that look shows them (session_state reads the
+            # trace: emptied here, it always read None).
             return
         try:
             self.s.echo_trace = None  # never the last call's
         except Exception:  # noqa: BLE001
             pass
-        if tool is None or skipped(tool.name):
-            return
         if not _on() or not self.live():
             return
         tr = self._trace(tool.name)
         args = args if isinstance(args, dict) else {}
-        # The last call's lit button put out, whatever this call lights (or
-        # does not): a ring lasts 1.3 s and calls come faster, so a pattern
-        # showed the primitive's ring and a move New Body's (P7, N1, A10).
-        rings_off()
+        changing = bool(getattr(tool, "changes", False))
+        if changing:
+            # What the last change showed, put out now that another change
+            # comes: its lit button (held until here), the covers made
+            # see-through for its result. A read leaves them (round 3).
+            rings_off()
+            self._step(tr, "coversBack", restore_covers)
+            # A sketch the agent left open in another document greys every
+            # Part and Assembly button: left first (A1/S9, round 3).
+            self._step(tr, "leftEdit", leave_agent_edit, tool.name, args, self.s.doc)
+            try:
+                self._names0 = self._names_now()
+            except Exception:  # noqa: BLE001
+                self._names0 = None
         switch = switches_bench(tool)
         shown = switch or tool.name.startswith(SHOWN)
         if not shown:
@@ -1421,6 +1980,8 @@ class Echo:
                     self._mode(tool.name, args)
                 except Exception as e:  # noqa: BLE001  (the words still come)
                     tr["modeError"] = f"{type(e).__name__}: {e}"
+                if tool.name.startswith("sketch_"):
+                    self._step(tr, "sketchBars", sketch_bars_shown)
             say(_describe(tool.name, args, None, getattr(tool, "activity", None)), where=self._where())
             cmd = command_for(tool.name, args) if switch else None
             if cmd:
@@ -1430,6 +1991,11 @@ class Echo:
                 # button would not light at all.
                 tr["button"] = [cmd, flash_command(cmd, settle=bool(wb))]
             _select(_objects(self.s.doc, [args.get(k) for k in ARG_KEYS if args.get(k)]))
+            if not switch:
+                # A read that shows something (a view, a measure): its words
+                # and selection are painted by the call itself and the
+                # paints after it; no pause of its own.
+                return
             if short and self.ms > 0:
                 self._pause()  # its paints show the selection and the lit button
             else:
@@ -1440,23 +2006,40 @@ class Echo:
             tr["beforeError"] = f"{type(e).__name__}: {e}"
             _plog(f"Agent Link echo (before {tool.name}): {e}\n")
 
-    def _views(self, name, args, body):
-        """The window a person would be looking at: a TechDraw tool's page
-        open in its tab, everything else in the 3D view; a FEM analysis
-        made active."""
-        import FreeCADGui
+    def _names_now(self):
+        """The names of the agent's document's objects, when it is the one in
+        front (what a changing call made is told from them after it: many
+        tools' answers name their result under a key of their own, or not
+        at all)."""
+        doc = self.s.doc
+        if doc is None or FreeCAD.ActiveDocument is None or FreeCAD.ActiveDocument.Name != doc.Name:
+            return None
+        objs = list(doc.Objects)
+        self._doc0 = doc.Name
+        return {o.Name for o in objs} if len(objs) <= NEW_LOOK_MOST else None
 
-        QtCore, _QtGui, QtW = _qt()
+    def _views(self, name, args, body, made=()):
+        """The window a person would be looking at: a TechDraw tool's page
+        open in its tab; a spreadsheet a call made or filled open in its
+        tab (sheet_ tools, a BOM, a BIM schedule); everything else in the
+        3D view of the agent's document, brought back to the front when a
+        page or a sheet was (a part_ call after a page left the page up); a
+        FEM analysis made active. What was brought up, for the trace."""
         doc = self.s.doc
         page_ref = (body or {}).get("page") or (args or {}).get("page")
-        if name.startswith(tuple(PAGES)) and isinstance(page_ref, str):
-            page = _objects(doc, [page_ref])
-            if page and page[0].ViewObject:
-                try:
-                    page[0].ViewObject.doubleClicked()
-                except Exception:
-                    pass
-            return
+        if name.startswith(tuple(PAGES)):
+            page = _objects(doc, [page_ref]) if isinstance(page_ref, str) else []
+            page = page or [o for o in made if getattr(o, "TypeId", "") == "TechDraw::DrawPage"]
+            return show_view_of(page[0]) if page else None
+        sheet = [o for o in made if getattr(o, "TypeId", "") == "Spreadsheet::Sheet"]
+        if not sheet and name.startswith(SHEET_TOOLS):
+            ref = (body or {}).get("sheet") or (args or {}).get("sheet")
+            sheet = [o for o in _objects(doc, [ref]) if getattr(o, "TypeId", "") == "Spreadsheet::Sheet"]
+        if sheet and name.startswith(SHEET_TOOLS):
+            return show_view_of(sheet[0])
+        page = [o for o in made if getattr(o, "TypeId", "") == "TechDraw::DrawPage"]
+        if page:
+            return show_view_of(page[0])
         an = (body or {}).get("analysis")
         if an:
             obj = _objects(doc, [an])
@@ -1467,17 +2050,9 @@ class Echo:
                     FemGui.setActiveAnalysis(obj[0])
                 except Exception:
                     pass
-        # Back to the 3D view when a drawing page is in front.
-        area = FreeCADGui.getMainWindow().findChild(QtW.QMdiArea)
-        if area is None:
-            return
-        cur = area.activeSubWindow()
-        if cur is not None and type(cur.widget()).__name__ != "View3DInventor":
-            for sub in area.subWindowList():
-                if type(sub.widget()).__name__ == "View3DInventor":
-                    area.setActiveSubWindow(sub)
-                    break
+        got = front_3d(doc)
         self._container(name, args or {}, body or {})
+        return got
 
     def _container(self, name, args, body):
         """What a person would have made active for the work: an assembly
@@ -1584,6 +2159,7 @@ class Echo:
                 v = getattr(gd, "ActiveView", None)
             with _Still(v):
                 gd.resetEdit()
+            _prune_edits()
             self._left_sketch = True
             self.tr["edit"] = "closed for this call"
 
@@ -1613,7 +2189,7 @@ class Echo:
                 _plog(f"Agent Link activity words ({name}): {e}\n")
             _note({"time": datetime.datetime.now().strftime("%H:%M:%S"), "tool": name, "ok": ok, "what": _tag(self.s) + what,
                    "result": result, "call": call, "ms": int((time.time() - (self.t0 or time.time())) * 1000)})
-        if name == "batch" or tool is None or skipped(name):
+        if name == "batch" or tool is None or skipped(name) or watching(name):
             return
         if not _on() or not self.live():
             return
@@ -1646,12 +2222,14 @@ class Echo:
         if not ok:
             # The words before the call said what was to be done: now that
             # it was refused, they say so (nothing else is shown).
-            self._step(tr, "words", say, refused_words(what, result), 2600, where)
+            self._step(tr, "words", say, refused_words(what, result), HOLD_MS, where)
             return
         if not tool.changes:
             # A read, a check or an export: its own words and what came of
-            # it, in place of the last change's (A3, N2, S8).
-            self._step(tr, "words", say, read_words(what, result), 2600, where)
+            # it, in place of the last change's (A3, N2, S8), and what it
+            # read selected. The last change's ring stays lit.
+            self._step(tr, "words", say, read_words(what, result), HOLD_MS, where)
+            self._step(tr, "readShown", self._read_shown, name, args, body)
             return
         import FreeCADGui
 
@@ -1659,41 +2237,142 @@ class Echo:
         # The window's view effects only where the agent's document is the
         # one in front (K): the person's own document is left alone.
         if FreeCAD.ActiveDocument is None or doc is None or FreeCAD.ActiveDocument.Name != doc.Name:
-            self._step(tr, "words", say, what, 2600, where)
+            self._step(tr, "words", say, what, HOLD_MS, where)
             _paint()
             return
-        named = self._step(tr, "named", lambda: _objects(doc, out_names(name, args, body))) or []
-        made = result_of(named)
+        # (Objects are kept out of the trace: it goes into a batch's answer
+        # as JSON; their names go in.)
+        try:
+            named = _objects(doc, out_names(name, args, body))
+        except Exception as e:  # noqa: BLE001
+            named = []
+            tr["namedError"] = f"{type(e).__name__}: {e}"
+        made, how = result_of(named), "answer"
+        if not made:
+            # An answer that names nothing (or under a key of its own): what
+            # is new in the document, else what the call worked on.
+            try:
+                made, how = self._new_objects(doc), "new"
+            except Exception as e:  # noqa: BLE001
+                made, how = [], "new"
+                tr["newObjectsError"] = f"{type(e).__name__}: {e}"
+        if not made:
+            made, how = [o for o in _objects(doc, [args.get(k) for k in ARG_KEYS if args.get(k)])], "worked on"
         tr["made"] = [getattr(o, "Name", "?") for o in made]
-        self._step(tr, "views", self._views, name, args, body)
+        if made:
+            tr["madeFrom"] = how
+        self._front_other = bool(self._step(tr, "views", self._views, name, args, body, made)) and name.startswith(tuple(PAGES) + SHEET_TOOLS)
         gd = FreeCADGui.ActiveDocument
         # A tool that makes a sketch opens it (S5: a mirror or a merge
         # showed the old one), the camera facing it.
         if name in NEW_SKETCH and gd is not None:
             self._step(tr, "edit", self._open_new_sketch, gd, made)
+        if name == "sketch_attach" and gd is not None:
+            # Put on another plane while open: opened again, so the camera
+            # faces the plane it is on now (sk 053 was seen edge-on).
+            self._step(tr, "edit", self._reopen_sketch, gd, args)
+        if name.startswith("sketch_"):
+            self._step(tr, "sketchBars", sketch_bars_shown)
         # Part Design bodies left showing their tip (P4).
         if name.startswith(("pd_", "feature_", "sketch_attach")):
             self._step(tr, "tipShown", lambda: [b.Name for b in bodies_of(doc, args, body, named) if tip_shown(b)])
         self._step(tr, "datumsHidden", datums_after, doc, named)
         if name == "asm_explode" and args.get("collapse") is True:
             self._step(tr, "explodeLinesOff", explode_lines_off, doc)
-        sketch = self._step(tr, "inEdit", _edited, gd) if name.startswith("sketch_") else None
+        sketch = None
+        if name.startswith("sketch_"):
+            try:
+                sketch = _edited(gd)
+            except Exception as e:  # noqa: BLE001
+                tr["inEditError"] = f"{type(e).__name__}: {e}"
+            if getattr(sketch, "TypeId", "Sketcher::SketchObject") != "Sketcher::SketchObject":
+                sketch = None
+            if sketch is not None:
+                tr["inEdit"] = getattr(sketch, "Name", "?")  # a name: the trace is read as JSON
         subs = sub_names(name, body, args) if sketch is not None else []
-        if made:
-            self._step(tr, "selected", self._select_made, made)
+        if made and sketch is None:
             self._step(tr, "active", self._active_body, made)
-        self._step(tr, "fit", self._frame, tr, name, made, sketch if subs else None)
-        if subs:
-            self._step(tr, "subsSelected", _select_subs, sketch, subs)
-        if made or subs:
-            # Lit for a moment, then the part shows in its own colours again.
-            self._step(tr, "clearLater", _clear_later)
+        if name.startswith(PLAN_TOOLS):
+            self._step(tr, "plan", self._plan, made)
+        self._step(tr, "fit", self._frame, tr, name, made, sketch, subs)
+        if made and how != "worked on" and name.startswith(UNCOVERED):
+            self._step(tr, "uncovered", uncover, doc, made)
+        if name == "meshobj_segments":
+            self._step(tr, "segments", segments_shown, made)
         self._step(tr, "modelTab", _model_tab_back)
         # What was done, said again now that it is done (and naming what it
-        # made): at a batch's pace the words set before the call were gone
-        # from the view and the status bar by the time the result showed.
-        self._step(tr, "words", say, what, 2600, where)
-        _paint()
+        # made): held until the next changing call (HOLD_MS).
+        self._step(tr, "words", say, what, HOLD_MS, where)
+        if self.mode != "short":
+            # At a batch's short pace the next call's pause paints it (and a
+            # picture of the window paints before it grabs): no paint here.
+            _paint()
+
+    def _new_objects(self, doc):
+        """The objects new in doc since before the call (its names then:
+        _names_now), shown ones first, at most NEW_MOST."""
+        before = getattr(self, "_names0", None)
+        if before is None or getattr(self, "_doc0", None) != getattr(doc, "Name", None):
+            return []  # another document now (doc_open, doc_new): not this call's results
+        objs = list(doc.Objects)
+        if len(objs) > NEW_LOOK_MOST:
+            return []
+        new = [o for o in objs if o.Name not in before]
+        shown = [o for o in new if _seen(o)]
+        return (shown or new)[:NEW_MOST]
+
+    def _read_shown(self, name, args, body):
+        """What a read worked on, selected (its page in front for a TechDraw
+        read): the object it names, not a whole Part Design body, and only
+        in the agent's document when it is the one in front. The labels."""
+        doc = self.s.doc
+        if doc is None or FreeCAD.ActiveDocument is None or FreeCAD.ActiveDocument.Name != doc.Name:
+            return None
+        if name.startswith(tuple(PAGES)):
+            ref = (body or {}).get("page") or (args or {}).get("page")
+            page = _objects(doc, [ref]) if isinstance(ref, str) else []
+            return show_view_of(page[0]) if page else None
+        objs = [o for o in _objects(doc, [args.get(k) for k in ARG_KEYS if args.get(k)])
+                if getattr(o, "TypeId", "") not in ("PartDesign::Body", "Sketcher::SketchObject")]
+        if not objs:
+            return None
+        import FreeCADGui
+
+        try:
+            now = [x.Name for x in FreeCADGui.Selection.getSelection()]
+        except Exception:  # noqa: BLE001
+            now = None
+        if now == [o.Name for o in objs]:
+            return None
+        _select(objs)
+        return [o.Label for o in objs]
+
+    def _reopen_sketch(self, gd, args):
+        ed = gd.getInEdit()
+        sk = getattr(ed, "Object", None) if ed is not None else None
+        if sk is None:
+            found = _objects(self.s.doc, [args.get("sketch")])
+            sk = found[0] if found else None
+        if getattr(sk, "TypeId", "") != "Sketcher::SketchObject":
+            return None
+        if ed is not None:
+            gd.resetEdit()
+        return enter_edit(gd, sk)
+
+    def _plan(self, made):
+        """A flat plan made (a 2D view, a cut sheet): seen from the top."""
+        import FreeCADGui
+
+        gd = FreeCADGui.ActiveDocument
+        v = getattr(gd, "ActiveView", None) if gd is not None else None
+        if v is None or not made or gd.getInEdit() is not None:
+            return None
+        d = v.getViewDirection()
+        if abs(d.z) > 0.999:
+            return None
+        with _Still(v):
+            v.viewTop()
+        return "top"
 
     def _open_new_sketch(self, gd, made):
         sk = next((o for o in made if getattr(o, "TypeId", "") == "Sketcher::SketchObject"), None)
@@ -1704,33 +2383,59 @@ class Echo:
             return "already open"
         return enter_edit(gd, sk)
 
-    def _frame(self, tr, name, made, sketch):
-        """The view turned and framed (Mod/AgentLink Follow; the Activity
-        tab's check box): on what the call made (P5: the whole document
-        left a new part a few pixels wide), on the open sketch whole when
-        the call drew in it; the whole document when there is nothing with
-        a size to frame. Returns how it was framed, or None (not done)."""
-        if not FreeCAD.ParamGet(PREFS).GetBool("Follow", True) or name.startswith(tuple(PAGES)):
-            return None
-        from . import around
+    def _frame(self, tr, name, made, sketch, subs):
+        """What the call made selected (once: each selection runs the tree's
+        and the 3D view's updates), and the view turned and framed on it
+        (Mod/AgentLink Follow; the Activity tab's check box): an open
+        sketch whole (its own lines' box: sketch_box), else what the call
+        made (P5), else the whole document. Nothing that it could select
+        and nothing new: the last call's selection is cleared, never left
+        standing for this one. Returns how it was framed, or None."""
+        import FreeCADGui
 
+        follow = (FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and not name.startswith(tuple(PAGES))
+                  and not getattr(self, "_front_other", False))
+        animate = fit_animated(getattr(self.s, "batch_now", None), self.mode)
         self._left_sketch = False
-        self._step(tr, "turned", self._turn, made)
-        with around.part("fit"):
-            animate = fit_animated(getattr(self.s, "batch_now", None), self.mode)
-            if sketch is not None and fit_on([sketch], animate):
-                return "sketch"
-            if fit_on(framed(made), animate):
-                if made:
-                    _select(made)  # fit_on's own selection put back as the result's
-                return "made"
-            if made:
+        if sketch is not None:
+            how = None
+            if follow:
+                gd = FreeCADGui.ActiveDocument
+                v = getattr(gd, "ActiveView", None) if gd is not None else None
+                if frame_box(v, sketch_box(sketch)):
+                    how = "sketch"
+                elif fit_on([sketch], animate):
+                    how = "sketch (fit selection)"
+            if subs:
+                tr["subsSelected"] = _select_subs(sketch, subs)
+            elif made:
                 _select(made)
-            return "all" if fit(animate=animate) else None
+            return how
+        if not made:
+            _selected[0] += 1
+            FreeCADGui.Selection.clearSelection()
+            if follow:
+                from . import around
 
-    def _select_made(self, made):
-        _select(made)
-        return [getattr(o, "Name", "?") for o in made]
+                with around.part("fit"):
+                    return "all" if fit(animate=animate) else None
+            return None
+        shown = framed(made)
+        _select(shown or made)
+        tr["selected"] = [getattr(o, "Name", "?") for o in made]
+        how = None
+        if follow:
+            from . import around
+
+            self._step(tr, "turned", self._turn, made)
+            with around.part("fit"):
+                if shown and fit(animate=animate, selection=True) == "selection":
+                    how = "made"
+                else:
+                    how = "all" if fit(animate=animate) else None
+        if shown and len(shown) != len(made):
+            _select(made)
+        return how
 
     def _active_body(self, made):
         """The body the work went into made active, as a person's
