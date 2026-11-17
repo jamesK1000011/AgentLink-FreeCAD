@@ -147,3 +147,25 @@ class Honest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BareViews(unittest.TestCase):
+    """echo.attach_bare_views: a Python view provider that never attached
+    (no Proxy, DisplayMode not among its modes) gets Proxy 0 and a mode."""
+
+    def test_attach(self):
+        bare = types.SimpleNamespace(Proxy=None, DisplayMode="None", PropertiesList=["Proxy", "DisplayMode"],
+                                     listDisplayModes=lambda: ["Shaded", "Wireframe", "Flat Lines", "Points"])
+        fine = types.SimpleNamespace(Proxy=None, DisplayMode="Shaded", PropertiesList=["Proxy", "DisplayMode"],
+                                     listDisplayModes=lambda: ["Shaded"])
+        own = types.SimpleNamespace(Proxy=object(), DisplayMode="None", PropertiesList=["Proxy", "DisplayMode"],
+                                    listDisplayModes=lambda: ["Shaded"])
+        doc = types.SimpleNamespace(Objects=[types.SimpleNamespace(Name="Textured", ViewObject=bare),
+                                             types.SimpleNamespace(Name="Box", ViewObject=fine),
+                                             types.SimpleNamespace(Name="Own", ViewObject=own),
+                                             types.SimpleNamespace(Name="NoView", ViewObject=None)])
+        self.assertEqual(echo.attach_bare_views(doc), ["Textured: Shaded"])
+        self.assertEqual(bare.Proxy, 0)
+        self.assertEqual(bare.DisplayMode, "Shaded")
+        self.assertEqual(fine.Proxy, None)
+        self.assertEqual(echo.attach_bare_views(None), [])
