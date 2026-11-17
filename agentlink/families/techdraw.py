@@ -1041,7 +1041,7 @@ def draw_item(doc, sh, v, H):
         PX, PY = abs_xy(par) if par is not None else (0.0, 0.0)
         sc = view_scale(par) if par is not None and hasattr(par, "Scale") else 1.0
         ox, oy = PX + float(v.X) * sc, PY + float(v.Y) * sc
-        pts = [(ox + p.x, H - (oy + p.y)) for p in v.WayPoints]
+        pts = [(ox + p.x, H - oy + p.y) for p in v.WayPoints]  # WayPoints run y down, as the svg
         if len(pts) >= 2:
             sh.line(pts, "thin")
             if str(getattr(v, "StartSymbol", "")).lower() not in ("none", "no symbol", "-1"):
@@ -1278,6 +1278,52 @@ def edge_on(v, src, faces):
     return flat
 
 
+def leader_points(dx, dy, shoulder=5.0):
+    """A leader's WayPoints for an end dx, dy page mm (y up) from its start:
+    a slanted run, then a horizontal shoulder this long into the end, as
+    drawn by hand (TechDraw would flatten a two-point leader whole) —
+    [(x, y)] page mm from the first point, y DOWN, as FreeCAD keeps them:
+    DrawLeaderLine::makeLeader stores invertY of the page deltas and
+    QGILeaderLine::getWayPointsFromFeature draws them as they are. A y-up
+    delta drew the leader mirrored, its end away from the note set at the
+    end (td 046-048: text above the plate, symbol off its leader, the
+    weld's tiles under the part)."""
+    ex, ey = float(dx), -float(dy) + 0.0
+    sh = abs(float(shoulder)) if ex >= 0 else -abs(float(shoulder))
+    if abs(ex) > abs(sh) + 1:
+        return [(0.0, 0.0), (ex - sh, ey), (ex, ey)]
+    return [(0.0, 0.0), (ex, ey)]
+
+
+def free_spot(busy, paper, want, w, h, dx=0.0, dy=0.0, side_of=None, away=None):
+    """A page point near want (page mm, y up) where a box w x h — its centre
+    dx, dy from the point, dx turned to the point's side of side_of when
+    given (a note right of its leader's end when the end is right of the
+    feature) — lies on the paper (5 mm in) and clear of every busy box
+    (cx, cy, w, h) by 1 mm. Rings of 4 mm out to 60 mm, 16 ways each, first
+    the way from away to want. want itself when nothing is free."""
+    W, H = paper
+
+    def free(x, y):
+        cx = x + (dx if side_of is None else (abs(dx) if x >= side_of else -abs(dx)))
+        cy = y + dy
+        if cx - w / 2 < 5 or cx + w / 2 > W - 5 or cy - h / 2 < 5 or cy + h / 2 > H - 5:
+            return False
+        return all(not (abs(cx - bx) < (w + bw) / 2 + 1 and abs(cy - by) < (h + bh) / 2 + 1) for bx, by, bw, bh in busy)
+
+    x0, y0 = float(want[0]), float(want[1])
+    if free(x0, y0):
+        return x0, y0
+    a0 = math.atan2(y0 - away[1], x0 - away[0]) if away is not None and (x0, y0) != tuple(away) else 0.0
+    for r in range(4, 64, 4):
+        for k in sorted(range(16), key=lambda k: min(k, 16 - k)):
+            a = a0 + k * math.pi / 8
+            x, y = x0 + r * math.cos(a), y0 + r * math.sin(a)
+            if free(x, y):
+                return round(x, 2), round(y, 2)
+    return x0, y0
+
+
 def flip_y(v, cache, pts):
     """Points worked out on the view's indexed geometry, multiplied to paper
     mm (k), as paper mm y down: the indexed geometry runs y up from FreeCAD
@@ -1291,15 +1337,88 @@ def native_marks(v, on):
     """FreeCAD's own centre marks of a view switched on or off in the window
     (ViewProviderViewPart.ArcCenterMarks: a small cross at each circle's
     centre, as the Decorations/ShowCenterMarks preference sets it for new views).
+    Switched on, the crosses are made at least 1.5 times the vertex size
+    (CenterScale; FreeCAD's default 0.5 gives arms of about 1 mm at a 0.5 mm
+    line, hidden under a diameter dimension's lines at the holes, td 038).
     False where there is no window."""
     vo = getattr(v, "ViewObject", None) if getattr(FreeCAD, "GuiUp", False) else None
     if vo is None or not hasattr(vo, "ArcCenterMarks"):
         return False
     try:
         vo.ArcCenterMarks = bool(on)
-        return True
     except Exception:
         return False
+    if on and hasattr(vo, "CenterScale"):
+        try:
+            if float(vo.CenterScale) < 1.5:
+                vo.CenterScale = 1.5
+        except Exception:
+            pass
+    return True
+
+
+def mark_facts(v):
+    """Where FreeCAD itself has a centre for its crosses (a headless fact
+    for a picture with no cross at a hole): FreeCAD keeps a centre vertex
+    for each Circle edge of the view (App/GeometryObject.cpp 566-571,
+    QGIViewPart::drawAllVertexes draws it as a cross) unless an end point
+    already sits there. centres: the circles' and arcs' centres in the
+    view's indexed geometry; marked: how many of them have that vertex;
+    scale: the view's CenterScale where there is a window."""
+    out = {}
+    try:
+        cs, seen = [], set()
+        for e in edges_of(v):
+            c = getattr(e, "Curve", None)
+            if c is None or not hasattr(c, "Radius") or not hasattr(c, "Center"):
+                continue
+            k = (round(c.Center.x, 2), round(c.Center.y, 2))
+            if k not in seen:
+                seen.add(k)
+                cs.append(c.Center)
+        vs = vertices_of(v)
+        out["centres"] = len(cs)
+        out["marked"] = sum(1 for c in cs if any(abs(p.x - c.x) < 0.01 and abs(p.y - c.y) < 0.01 for p in vs))
+    except Exception:
+        pass
+    vo = getattr(v, "ViewObject", None) if getattr(FreeCAD, "GuiUp", False) else None
+    try:
+        if vo is not None and hasattr(vo, "CenterScale"):
+            out["scale"] = round(float(vo.CenterScale), 2)
+    except Exception:
+        pass
+    return out
+
+
+def broken_3d(d):
+    """A dimension's 3D references (References3D) that name an element its
+    object's shape does not have — what FreeCAD's "Shape index N out of
+    bound M" (Part/App/TopoShapeExpansion.cpp getSubTopoShape, from
+    TechDraw's ReferenceEntry::hasGeometry) reports in the Report view when
+    the dimension recomputes. [] when all resolve or there are none."""
+    out = []
+    try:
+        refs = list(getattr(d, "References3D", []) or [])
+    except Exception:
+        return out
+    for item in refs:
+        try:
+            o, subs = item
+        except Exception:
+            continue
+        for sub in (subs if isinstance(subs, (list, tuple)) else [subs]):
+            sub = str(sub or "")
+            kind = next((k for k in ("Edge", "Vertex", "Face") if sub.startswith(k) and sub[len(k):].isdigit()), None)
+            if o is None or kind is None:
+                continue
+            try:
+                sh = o.Shape
+                have = len(getattr(sh, kind + ("es" if kind == "Vertex" else "s")))
+            except Exception:
+                have = 0
+            if int(sub[len(kind):]) > have:
+                out.append(f"{o.Label}.{sub}: {o.Label} has {have} {kind.lower()}{'s' if have != 1 else ''}")
+    return out
 
 
 # A weld kind's symbol in FreeCAD's own AWS set (Mod/TechDraw/Symbols/Welding/AWS):
@@ -1321,18 +1440,62 @@ def weld_svg(kind, above):
     return None
 
 
+def weld_tiles(doc, w):
+    """A weld symbol's two tiles (TechDraw::DrawTileWeld, made by FreeCAD as
+    the symbol joins the document, DrawWeldSymbol::onSettingDocument): those
+    whose TileParent is the symbol — the symbol's InList may not hold them
+    yet right after addObject."""
+    out = []
+    inlist = list(getattr(w, "InList", []) or [])
+    for o in inlist + list(getattr(doc, "Objects", []) or []):
+        try:
+            if any(o is x for x in out) or not o.isDerivedFrom("TechDraw::DrawTileWeld"):
+                continue
+            par = getattr(o, "TileParent", None)
+            if any(o is x for x in inlist) or par is w or getattr(par, "Name", None) == w.Name:
+                out.append(o)
+        except Exception:
+            continue
+    return out
+
+
+def tile_reading(tiles, vo=None):
+    """What a weld symbol's tiles hold, as FreeCAD will draw them (a headless
+    fact for a picture that shows no size): row (0 arrow side, -1 other
+    side), the symbol file's name, the texts left (size) and right (length),
+    and the view provider's tile text size in mm where there is a window."""
+    rows = []
+    for t in tiles:
+        try:
+            rows.append({"row": int(getattr(t, "TileRow", 0)), "symbol": os.path.basename(str(getattr(t, "SymbolFile", "") or "")) or None,
+                         "left": str(getattr(t, "LeftText", "") or ""), "right": str(getattr(t, "RightText", "") or "")})
+        except Exception:
+            continue
+    rows.sort(key=lambda r: -r["row"])
+    out = {"tiles": rows}
+    try:
+        if vo is not None and hasattr(vo, "TileFontSize"):
+            out["tileTextMm"] = round(float(getattr(vo.TileFontSize, "Value", vo.TileFontSize)), 2)
+    except Exception:
+        pass
+    return out
+
+
 def native_weld(doc, page, ln, spec):
     """FreeCAD's own weld symbol (TechDraw::DrawWeldSymbol, its two tiles
     made by FreeCAD as it joins the document) on a leader, as the
     TechDraw_WeldSymbol command makes it (src/Mod/TechDraw/Gui/
     TaskWeldingSymbol.cpp createWeldingSymbol, updateTiles): AllAround,
     FieldWeld, TailText, and the arrow-side tile (row 0) and other-side tile
-    (row -1) with the kind's symbol and size / length. Returns (the symbol or
-    None, whether FreeCAD has the kind's symbol)."""
+    (row -1) with the kind's symbol and size / length. The tiles' text size
+    (ViewProviderWeld.TileFontSize, by default the label size x 0.75) is
+    raised to the asked text size: the size "3" was not seen in the window
+    (td 048). Returns (the symbol or None, whether FreeCAD has the kind's
+    symbol, what the tiles hold)."""
     try:
         w = doc.addObject("TechDraw::DrawWeldSymbol", "WeldSymbol")
     except Exception:
-        return None, False
+        return None, False, {}
     try:
         w.Leader = ln
         w.AllAround = bool(spec.get("allAround"))
@@ -1344,10 +1507,11 @@ def native_weld(doc, page, ln, spec):
             doc.removeObject(w.Name)
         except Exception:
             pass
-        return None, False
+        return None, False, {}
     side = spec.get("side", "arrow")
     found = True
-    for tile in [o for o in w.InList if o.isDerivedFrom("TechDraw::DrawTileWeld")]:
+    tiles = weld_tiles(doc, w)
+    for tile in tiles:
         row = int(getattr(tile, "TileRow", 0))
         if (row == 0 and side not in ("arrow", "both")) or (row != 0 and side not in ("other", "both")):
             continue
@@ -1361,7 +1525,16 @@ def native_weld(doc, page, ln, spec):
             tile.RightText = str(spec.get("length") or "")
         except Exception:
             found = False
-    return w, found
+    vo = getattr(w, "ViewObject", None) if getattr(FreeCAD, "GuiUp", False) else None
+    if vo is not None and hasattr(vo, "TileFontSize"):
+        try:
+            want = float(spec.get("h") or 3.5)
+            have = float(getattr(vo.TileFontSize, "Value", vo.TileFontSize))
+            if have < want:
+                vo.TileFontSize = want
+        except Exception:
+            pass
+    return w, found, tile_reading(tiles, vo)
 
 
 def weld_wrong(spec):
@@ -1823,6 +1996,11 @@ def tools(session):
             pass
         if d.TheoreticalExact:
             out["basic"] = True
+        broken = broken_3d(d)
+        if broken:
+            out["broken3d"] = broken
+            out["why"] = ("Its 3D references name elements the model no longer has: FreeCAD's own "
+                          "\"Shape index N out of bound M\" in the Report view comes from this dimension when it recomputes.")
         try:
             over, under = float(d.OverTolerance.Value), float(d.UnderTolerance.Value)
             if d.EqualTolerance and over:
@@ -1852,13 +2030,8 @@ def tools(session):
         vx, vy = abs_xy(view)
         # anchored at the feature: X, Y in the view's unscaled frame, y up
         ln.X, ln.Y = p_from[0] / sc, -p_from[1] / sc
-        start = V(0, 0, 0)
-        end = V(to_page[0] - (vx + p_from[0]), to_page[1] - (vy - p_from[1]), 0)
-        # a slanted run, then a short horizontal shoulder into the frame, as
-        # drawn by hand; TechDraw would flatten a two-point leader whole
-        shoulder = abs(float(shoulder)) if end.x >= 0 else -abs(float(shoulder))
-        elbow = V(end.x - shoulder, end.y, 0) if abs(end.x) > abs(shoulder) + 1 else V(end.x, end.y, 0)
-        ln.WayPoints = [start, elbow, end] if elbow != end else [start, end]
+        pts = leader_points(to_page[0] - (vx + p_from[0]), to_page[1] - (vy - p_from[1]), shoulder)
+        ln.WayPoints = [V(x, y, 0) for x, y in pts]
         try:
             ln.AutoHorizontal = False
         except Exception:
@@ -1871,6 +2044,86 @@ def tools(session):
                 except Exception:
                     continue
         return ln
+
+    def paper_half(v):
+        """A part view's half width and half height on the paper (mm): its
+        indexed geometry is in part mm (unscaled from FreeCAD 1.1), the
+        page and a dimension's X, Y in paper mm — td_dimset's lanes took
+        the part's half size as paper mm and sat inside the part at scale 2,
+        on a radius dimension's text (td 036: "30" over "R3")."""
+        es = edges_of(v)
+        if not es:
+            return None
+        bb = __import__("Part").makeCompound(es).BoundBox
+        xs, ys = [], []
+        for x in (bb.XMin, bb.XMax):
+            for y in (bb.YMin, bb.YMax):
+                px, py = to_paper(v, frames, (x, y))
+                xs.append(px)
+                ys.append(py)
+        return (max(xs) - min(xs)) / 2, (max(ys) - min(ys)) / 2
+
+    def busy_boxes(page, skip=()):
+        """What already takes room on a page, as boxes (cx, cy, w, h) in
+        page mm, y up: part views (their lines), dimension texts, notes,
+        symbols, balloons and detail circles. Sizes of texts are guessed
+        from their characters (0.6 of the height each)."""
+        skip = {getattr(o, "Name", o) for o in skip}
+        out = []
+
+        def add(cx, cy, w, h):
+            out.append((float(cx), float(cy), max(float(w), 1.0), max(float(h), 1.0)))
+
+        items = []
+        for o in list(getattr(page, "Views", []) or []):
+            items.append(o)
+            if o.isDerivedFrom("TechDraw::DrawProjGroup"):
+                items += list(getattr(o, "Views", []) or [])
+        for o in items:
+            if getattr(o, "Name", None) in skip:
+                continue
+            try:
+                if o.isDerivedFrom("TechDraw::DrawViewPart"):
+                    half = paper_half(o)
+                    if half:
+                        X, Y = abs_xy(o)
+                        add(X, Y, 2 * half[0], 2 * half[1])
+                    if o.isDerivedFrom("TechDraw::DrawViewDetail") and getattr(o, "BaseView", None) is not None:
+                        b = o.BaseView
+                        bs = view_scale(b)
+                        bx, by = abs_xy(b)
+                        A = o.AnchorPoint
+                        r = float(getattr(o.Radius, "Value", o.Radius)) * bs
+                        add(bx + A.x * bs, by + A.y * bs, 2 * r, 2 * r)
+                elif o.TypeId == "TechDraw::DrawViewDimension":
+                    par = o.References2D[0][0] if o.References2D else None
+                    X, Y = abs_xy(par) if par is not None else (0.0, 0.0)
+                    try:
+                        t = str(o.getText() or "")
+                    except Exception:
+                        t = "00.00"
+                    add(X + float(o.X), Y + float(o.Y), len(t) * 3.5 * 0.6 + 2, 5.5)
+                elif o.isDerivedFrom("TechDraw::DrawViewAnnotation"):
+                    lines = [str(x) for x in (o.Text or [""])]
+                    h = float(getattr(o, "TextSize", 3.5) or 3.5)
+                    add(o.X, o.Y, max(len(x) for x in lines) * h * 0.6 + 2, len(lines) * h * 1.3 + 1)
+                elif o.isDerivedFrom("TechDraw::DrawViewBalloon"):
+                    par = getattr(o, "SourceView", None)
+                    X, Y = abs_xy(par) if par is not None else (0.0, 0.0)
+                    sc = view_scale(par) if par is not None else 1.0
+                    add(X + float(o.X) * sc, Y + float(o.Y) * sc, 10, 10)
+                elif o.isDerivedFrom("TechDraw::DrawViewSymbol") and not o.isDerivedFrom("TechDraw::DrawSVGTemplate"):
+                    add(o.X, o.Y, 18, 10)
+            except Exception:
+                continue
+        return out
+
+    def clear_xy(page, want, w, h, dx=0.0, dy=0.0, side_of=None, skip=(), away=None):
+        """A page point near want where a box w x h lies on nothing the page
+        holds (busy_boxes; free_spot says how). Labels placed by fixed
+        offsets lay on each other and on the part (td 036, 037, 043, 046,
+        047)."""
+        return free_spot(busy_boxes(page, skip), paper_size(page), want, w, h, dx, dy, side_of, away)
 
     def ref_point(v, r):
         """A view-geometry point for a reference: a vertex, an edge's middle,
@@ -2073,12 +2326,14 @@ def tools(session):
                "next_balloon": next_balloon, "make_compound": lambda shapes: __import__("Part").makeCompound(shapes),
                "doc": doc, "recompute": recompute, "done": done, "place_xy": place_xy, "view_reading": view_reading, "page_reading": page_reading,
                "bodies_for": bodies_for, "direction": direction, "leader": leader, "ref_point": ref_point,
+               "clear_xy": clear_xy, "paper_half": paper_half,
                "unique": lambda label, *own: s.unique(label, *own), "local": lambda p: paths.local(s, p),
                "pages": lambda: pages(doc()), "page_of": lambda ref: page_of(doc(), ref), "view_of": lambda ref: view_of(doc(), ref),
                "obj_of": lambda ref, types=None, what="object": obj_of(doc(), ref, types, what), "ref_list": picks.ref_list,
                "isfile": os.path.isfile, "relpath": os.path.relpath, "basename": os.path.basename, "sep": os.sep, "dumps": json.dumps,
                # the family's
                "flip_y": lambda v, pts: flip_y(v, frames, pts), "native_marks": native_marks, "native_weld": lambda page, ln, spec: native_weld(doc(), page, ln, spec),
+               "tile_reading": tile_reading, "mark_facts": mark_facts, "broken_3d": broken_3d,
                "PAPERS": PAPERS, "PROJ_ITEMS": PROJ_ITEMS, "MARKS_PROP": MARKS_PROP, "HATCH_PROP": HATCH_PROP, "WELD_PROP": WELD_PROP,
                "template_root": template_root, "templates": templates, "find_template": find_template, "template_path": template_path,
                "clear_samples": clear_samples, "load_presets": load_presets, "save_presets": save_presets, "set_enum": set_enum,

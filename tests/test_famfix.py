@@ -178,12 +178,14 @@ class TechDrawPaper(unittest.TestCase):
             return W()
     added = []
     page = types.SimpleNamespace(addView=added.append)
-    w, found = td.native_weld(Doc(), page, "leader", {"kind": "fillet", "size": "5", "length": "50", "side": "arrow", "allAround": True, "field": False, "tail": "GMAW"})
-    w2, found2 = td.native_weld(Doc(), page, "leader", {"kind": "bevel", "side": "both"})
+    w, found, facts = td.native_weld(Doc(), page, "leader", {"kind": "fillet", "size": "5", "length": "50", "side": "arrow", "allAround": True, "field": False, "tail": "GMAW"})
+    w2, found2, _ = td.native_weld(Doc(), page, "leader", {"kind": "bevel", "side": "both"})
     rows = [[t.TileRow, os.path.basename(t.SymbolFile), t.LeftText, t.RightText] for t in w.InList]
-    print(json.dumps([found, rows, w.Leader, w.AllAround, w.TailText, len(added), found2, td.weld_svg("plug", False) is not None]))
+    print(json.dumps([found, rows, w.Leader, w.AllAround, w.TailText, len(added), found2, td.weld_svg("plug", False) is not None, facts]))
 ''')
-        self.assertEqual(got, [True, [[0, "filletUp.svg", "5", "50"], [-1, "blank", "", ""]], "leader", True, "GMAW", 2, False, True])
+        self.assertEqual(got, [True, [[0, "filletUp.svg", "5", "50"], [-1, "blank", "", ""]], "leader", True, "GMAW", 2, False, True,
+                               {"tiles": [{"row": 0, "symbol": "filletUp.svg", "left": "5", "right": "50"},
+                                          {"row": -1, "symbol": "blank", "left": "", "right": ""}]}])
 
     def test_the_balloon_in_the_views_unscaled_frame(self):
         steps = json.dumps(entries()["td_balloon"]["steps"])
@@ -192,7 +194,7 @@ class TechDrawPaper(unittest.TestCase):
 
     def test_the_weld_and_the_marks_reach_the_window(self):
         e = entries()
-        self.assertIn({"let": {"ws, has_svg": "=native_weld(page_holding(v), ln, spec)"}}, e["td_weld"]["steps"])
+        self.assertIn({"let": {"ws, has_svg, tiles": "=native_weld(page_holding(v), ln, spec)"}}, e["td_weld"]["steps"])
         self.assertIn("native_marks(v, ext > 0)", json.dumps(e["td_centermarks"]["steps"]))
 
 

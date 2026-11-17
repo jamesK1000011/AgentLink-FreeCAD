@@ -368,11 +368,14 @@ class Annotations:
             node.addChild(c)
         return node
 
-    def marks(self, owner, points=(), lines=(), colour="#e8a33d", size=9):
+    def marks(self, owner, points=(), lines=(), colour="#e8a33d", size=9, labels=()):
         """Scene-only marks (round 6): a marker at each point (x, y, z) and a
-        line through each list of points, drawn over the model. For what has
+        line through each list of points, drawn over the model, and a word
+        beside each point of labels [((x, y, z), text)] (a line and dots
+        alone did not say what they were: core 0081-0092). For what has
         no drawing of its own (a robot with no model file: its base and
-        tool point, the trajectory). The count drawn, 0 with no 3D view."""
+        tool point, the trajectory). The count drawn (labels not counted),
+        0 with no 3D view."""
         root = self._root(owner)
         if root is None:
             return 0
@@ -415,6 +418,25 @@ class Annotations:
             sep.addChild(ms)
             node.addChild(sep)
             n += len(pts)
+        try:
+            ratio = float(self._ratio_fn())
+        except Exception:  # noqa: BLE001
+            ratio = 1.0
+        for at, text in labels or ():
+            try:
+                sep = coin.SoSeparator()
+                tr = coin.SoTranslation()
+                tr.translation = tuple(float(c) for c in at)
+                font = coin.SoFont()
+                font.name = "Arial:Bold"
+                font.size = round(BADGE_FONT * 0.7 * ratio)
+                txt = coin.SoText2()
+                txt.string = "  " + str(text)
+                for c in (tr, font, txt):
+                    sep.addChild(c)
+                node.addChild(sep)
+            except Exception:  # noqa: BLE001
+                continue
         root.addChild(node)
         return n
 
