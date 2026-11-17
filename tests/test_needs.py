@@ -523,7 +523,7 @@ class Filter(unittest.TestCase):
 
 
 # Upper bounds, in tokens at 3.5 characters each: a later change cannot bloat these without saying so here.
-BOUNDS = {"line": 45, "full": 800, "report": 260, "needsReply": 260, "nowReply": 1500, "oneCard": 900, "leanListing": 7400, "everything": 90000, "toolGroupsCard": 740}
+BOUNDS = {"line": 45, "full": 800, "report": 260, "needsReply": 260, "nowReply": 1500, "oneCard": 900, "leanListing": 7450, "everything": 90000, "toolGroupsCard": 740}
 # The three states, without arguments: every Part Design and Sketcher tool begins by finding the body or the sketch its
 # arguments name, so none of the 32 can be told before a call (they are told with arguments: Agreement). The filter
 # has something to say where a tool's first check is of the document alone: test_a_state_the_filter_tells.
@@ -623,7 +623,7 @@ def _walk(x):
 # 150 before needs, arguments and the meter's clause were added: the lean listing grew by 154; report_read's clause on known faults added 16).
 # The token pass (docs/hardening/tokens-findings.md) added 216 to the lean listing: batch's read/at, lines "full" and the
 # file batch's record reply (+168), tool_groups' said (+22), guide_read's index wording (+26).
-COSTS = {"dataTools": 383, "dataToolsTokens": 79008, "codedTools": 21, "codedToolsTokens": 8699, "leanTools": 20, "leanListingTokens": 7382,
+COSTS = {"dataTools": 383, "dataToolsTokens": 79008, "codedTools": 21, "codedToolsTokens": 8723, "leanTools": 20, "leanListingTokens": 7406,
          "oneCardMedian": 178, "oneCardLargest": 824, "toolGroupsCard": 734, "usageReportCard": 178}
 
 

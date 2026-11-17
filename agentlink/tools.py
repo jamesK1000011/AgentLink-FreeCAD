@@ -2035,6 +2035,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 if isinstance(got, dict):
                     got["builds"] = h.builds
         if isinstance(got, dict):
+            if isinstance(a.get("title"), str) and a["title"].strip():
+                got.setdefault("title", a["title"].strip()[:120])  # kept in its record, for a person reading it later
             record.write(got, final=True)
             if record.ok and record.path:
                 got["record"] = record.path
@@ -2460,8 +2462,9 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
              "lines: \"refused\" (with to): the reply lists only the calls that were refused or whose health is not clean, with counts { ok, refused } for the rest — for a long run whose answers are read from the file; \"all\" (the default) keeps a line per call; \"counts\": the counts alone. "
              "A batch from a file answers that way without to too, from its record (written names it; a line per call unless lines says otherwise), and so does a batch of calls given lines; "
              "lines: \"full\" gives every call's whole answer in the reply instead (with to, written there as well). "
-             "read: a .json file (a batch's record or a to file) with at: a dotted path in it (\"results.3.result\"; results count from that part's first call) answers that part ({ read, at, value }) and runs nothing — the way back to any answer a reply left out.",
-             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}, "lines": {"type": "string", "enum": ["all", "refused", "counts", "full"]}, "build": {"type": "string", "enum": ["end", "each"]}, "read": {"type": "string"}, "at": {"type": "string"}}), batch),
+             "read: a .json file (a batch's record or a to file) with at: a dotted path in it (\"results.3.result\"; results count from that part's first call) answers that part ({ read, at, value }) and runs nothing — the way back to any answer a reply left out. "
+             "title: a few words for the person; kept in the record.",
+             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}, "lines": {"type": "string", "enum": ["all", "refused", "counts", "full"]}, "build": {"type": "string", "enum": ["end", "each"]}, "read": {"type": "string"}, "at": {"type": "string"}, "title": {"type": "string"}}), batch),
         Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded making): shots past the last 50 and 3 days, solver and job runs past 14 days, FreeCAD backups past 7; exports only listed. To the Trash. Dry run unless dry_run: false; kinds, older_than_days narrow it. Runs on its own daily.",
              obj({"dry_run": {"type": "boolean"}, "kinds": {"type": "array", "items": {"type": "string", "enum": list(outputs.KINDS)}}, "older_than_days": {"type": "number"}}), outputs_clean),
         Tool("history_undo", "Undo the last change (steps: how many), as FreeCAD's Edit › Undo does.", obj({"steps": {"type": "integer"}}), history("undo")),
