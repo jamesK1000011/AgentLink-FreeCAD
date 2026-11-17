@@ -149,7 +149,7 @@ class Words(unittest.TestCase):
         self.assertEqual(activity.outcome("fea_chart", True, {"body": "Box", "kind": "histogram", "field": "displacement", "unit": "mm", "nodes": 796, "min": 0.0, "max": 88.25}),
                          "Histogram of displacement 0 … 88.25 mm, 796 nodes")
         self.assertEqual(activity.outcome("fea_chart", True, {"kind": "line", "field": "vonMises", "unit": "MPa", "nodes": 796, "samples": 9, "max": 432.1}),
-                         "Line of von Mises up to 432 MPa, 9 samples")
+                         "Line of von Mises up to 432 MPa, 9 samples from the nearest nodes")
         self.assertEqual(activity.call_value("fem_linearize", {"membrane": 1.2, "bending": 215.7, "thickness": 1000, "points": 21}),
                          "membrane 1.2 MPa, bending 216 MPa through 1000 mm")
         self.assertEqual(activity.call_value("fea_native", {"analysis": "Box native", "solver": "calculix", "objects": ["a", "b", "c", "d", "e"]}),

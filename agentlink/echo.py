@@ -1043,6 +1043,53 @@ def _hide_later(lbl, text, no=None):
 STATUS_HEAD = "Agent"
 
 
+# Calls that may bring another document to the front on purpose: the
+# documents' own tools, the window's tools, a batch (its calls are checked
+# one by one), the IFC opener.
+FRONT_FREE = ("doc_", "app_", "gui_", "cmd_", "menu_", "dialog_", "live_", "window_", "workbench", "selection", "batch", "ifc_open")
+
+
+def keeps_front(tool):
+    """Whether a call must leave the front document as it found it: every
+    read and every look (report_read, a picture, session_state), but those
+    in FRONT_FREE. Plain Python."""
+    name = str(getattr(tool, "name", "") or "")
+    if not name or name.startswith(FRONT_FREE):
+        return False
+    return bool(skipped(name) or watching(name) or not getattr(tool, "changes", False))
+
+
+def front_doc_name():
+    """The active document's name, or None. Never raises."""
+    try:
+        d = FreeCAD.ActiveDocument
+        return d.Name if d is not None else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def front_kept(was):
+    """The active document put back to was when a read changed it, both in
+    FreeCAD and in the window (FreeCADGui.setActiveDocument brings its view
+    to the front): {was, came}, or None when nothing changed (or was is
+    closed now). Never raises."""
+    try:
+        now = front_doc_name()
+        if not was or now == was or was not in FreeCAD.listDocuments():
+            return None
+        FreeCAD.setActiveDocument(was)
+        try:
+            import FreeCADGui
+
+            FreeCADGui.setActiveDocument(was)
+        except Exception:  # noqa: BLE001
+            pass
+        return {"was": was, "came": now}
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (front kept): {e}\n")
+        return None
+
+
 def say(words, ms=HOLD_MS, where=""):
     """The words over the 3D view and in the status bar (each on its own:
     no 3D view in front still gives the status bar its words). Returns the
@@ -3183,7 +3230,12 @@ def reselect():
         if not rows or len(rows) > RESELECT_MOST:
             return None
         _selected[0] += 1
-        FreeCADGui.Selection.clearSelection()
+        # Only the active document's selection: another document's is left
+        # as it is (round 10; with no name FreeCAD clears every document's).
+        try:
+            FreeCADGui.Selection.clearSelection(rows[0][0])
+        except TypeError:
+            FreeCADGui.Selection.clearSelection()
         done = []
         for d, o, sub in rows:
             try:
@@ -4340,7 +4392,7 @@ def _fem_solid(doc, res, session=None):
             if res not in group:
                 continue
             for o in group:
-                if o is mesh or not str(getattr(o, "TypeId", "")).startswith("Fem::FemMeshObject"):
+                if o is mesh or not _is_fem_mesh(o):
                     continue
                 for k in ("Shape", "Part"):
                     part = getattr(o, k, None)
@@ -4386,6 +4438,34 @@ def _solid_surface(o, cap=20000):
         return None
 
 
+SURFACE_FACES_MOST = 64  # faces asked for their nodes (FemMesh.getNodesByFace) before every node is used
+
+
+def _surface_nodes(res, solid, P, vals):
+    """The result's nodes on the solid's faces (FemMesh.getNodesByFace) and
+    their values, for a map on the surface: (points, values, True). Round 10
+    (r9fem-3): with every node, a surface point between surface nodes of a
+    coarse mesh (333 mm) took an inner node's value, lower in bending, and
+    the map read in patches. Every node (P, vals, False) when the solid has
+    more than SURFACE_FACES_MOST faces, FreeCAD cannot say, or fewer than 3
+    are found. Never raises."""
+    try:
+        fm = res.Mesh.FemMesh
+        faces = list(getattr(getattr(solid, "Shape", None), "Faces", None) or ())
+        if not faces or len(faces) > SURFACE_FACES_MOST or not hasattr(fm, "getNodesByFace"):
+            return P, vals, False
+        ids = set()
+        for f in faces:
+            ids.update(int(n) for n in fm.getNodesByFace(f) or ())
+        keep = [i for i, n in enumerate(res.NodeNumbers) if int(n) in ids]
+        if len(keep) < 3:
+            return P, vals, False
+        return [P[i] for i in keep], [vals[i] for i in keep], True
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (FEM surface nodes): {e}\n")
+        return P, vals, False
+
+
 def fem_result_scene_map(doc, res, vals, label, unit, hide, session=None):
     """A FEM result's field (vals, one per res.NodeNumbers) drawn on its
     solid in the scene only, with its scale (round 9, r8fem-1/5).
@@ -4410,12 +4490,14 @@ def fem_result_scene_map(doc, res, vals, label, unit, hide, session=None):
             return None
         from . import render
 
-        sv = render.nearest_values(layer["V"], P, vals)
+        SP, SV, on = _surface_nodes(res, solid, P, vals)
+        sv = render.nearest_values(layer["V"], SP, SV)
         got = _scene_map(session, layer, sv, vals, label, unit, list(hide) + [solid])
         if got is None:
             return None
         got["map"] = f"{label} on {getattr(res.Mesh, 'Label', 'the result mesh')}"
-        got["colouredBy"] = "scene (the result's nodes on the solid)"
+        got["colouredBy"] = ("scene: each surface point its nearest surface node's value" if on
+                             else "scene: each surface point its nearest node's value")
         return got
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (FEM result scene map): {e}\n")
@@ -4439,30 +4521,113 @@ def fem_node_colours(mesh, ids, vals):
         return f"{type(e).__name__}: {e}"
 
 
-def fem_one_surface(doc, keep=()):
-    """One surface where a FEM mesh lies on its solid (round 9: yellow
-    z-fighting patches on every FEM picture, the Gmsh mesh and the solid
-    drawn over each other). A shown FEM mesh (not a result's) whose solid is
-    shown too: the mesh hidden, or the solid when the call made or named the
-    mesh (keep). View state, shown again at the next change (scene_clear).
-    The labels hidden. Never raises."""
-    out = []
+def _is_fem_mesh(o):
+    """A FEM mesh of any kind: FreeCAD's FemMeshObject and every kind made
+    from it — a result's mesh (Fem::FemMeshObjectPython), a Gmsh or Netgen
+    mesh (FreeCAD 1.1: Fem::FemMeshShapeBaseObjectPython; before it
+    Fem::FemMeshObjectPython, Fem::FemMeshShapeNetgenObject). Round 10
+    (r9fem-4/5): the old test, a TypeId starting "Fem::FemMeshObject", missed
+    FreeCAD 1.1's Gmsh mesh, so it stayed on its solid. Never raises."""
+    try:
+        fn = getattr(o, "isDerivedFrom", None)
+        if fn is not None and fn("Fem::FemMeshObject"):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    return str(getattr(o, "TypeId", "")).startswith("Fem::FemMesh")
+
+
+def _fem_draws(o):
+    """Whether a shown FEM view draws a surface: a mesh with nodes (a Gmsh
+    mesh not yet meshed draws nothing), any post object. Never raises."""
+    if not _is_fem_mesh(o):
+        return True
+    try:
+        fm = getattr(o, "FemMesh", None)
+        if fm is None:
+            return True
+        n = getattr(fm, "NodeCount", None)
+        return n is None or int(n) > 0
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _mesh_solid(m):
+    """The solid a Gmsh or Netgen mesh is made from (its Shape link, before
+    FreeCAD 1.1 its Part), or None."""
+    for k in ("Shape", "Part"):
+        p = getattr(m, k, None)
+        if p is not None and hasattr(p, "TypeId") and hasattr(p, "ViewObject") and hasattr(p, "Name"):
+            return p
+    return None
+
+
+def fem_surfaces(doc):
+    """Each solid's FEM views {solid name: (solid, [views])}: the meshes made
+    from it, and — through the analysis that holds such a mesh — that
+    analysis' result meshes and post objects (the result and its pipeline
+    lie on the same surface). Never raises."""
+    groups = {}
     try:
         objs = list(getattr(doc, "Objects", None) or ())
-        res_meshes = {getattr(getattr(o, "Mesh", None), "Name", None) for o in objs
-                      if str(getattr(o, "TypeId", "")).startswith("Fem::FemResultObject")}
+        owner = {}
+        for o in objs:
+            if _is_fem_mesh(o):
+                sol = _mesh_solid(o)
+                if sol is not None:
+                    owner[o.Name] = sol
+        for an in objs:
+            if not str(getattr(an, "TypeId", "")).startswith("Fem::FemAnalysis"):
+                continue
+            group = list(getattr(an, "Group", None) or ())
+            sol = next((owner[o.Name] for o in group if getattr(o, "Name", None) in owner), None)
+            if sol is None:
+                continue
+            for o in group:
+                if str(getattr(o, "TypeId", "")).startswith("Fem::FemResultObject"):
+                    rm = getattr(o, "Mesh", None)
+                    if rm is not None and getattr(rm, "Name", None) and rm.Name not in owner:
+                        owner[rm.Name] = sol
+                elif _is_fem_view(o) and o.Name not in owner:
+                    owner[o.Name] = sol
+                    # a pipeline's filters (clips, warps) draw on it too
+                    for f in getattr(o, "Group", None) or ():
+                        if _is_fem_view(f) and getattr(f, "Name", None) and f.Name not in owner:
+                            owner[f.Name] = sol
+        for o in objs:
+            sol = owner.get(getattr(o, "Name", None))
+            if sol is not None and sol is not o:
+                groups.setdefault(sol.Name, (sol, []))[1].append(o)
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (FEM surfaces): {e}\n")
+    return groups
+
+
+def fem_one_surface(doc, keep=()):
+    """At most one surface drawn per solid after a FEM call with no map
+    (round 9: yellow z-fighting patches on every FEM picture, the Gmsh mesh,
+    the result's mesh and the solid drawn over each other; round 10,
+    r9fem-4/5: still there, as FreeCAD 1.1's Gmsh mesh was not taken for a
+    mesh). Kept: a mesh the call made or named (keep) when it has nodes, else
+    the solid when it is shown, else the first view with nodes; every other
+    shown FEM view on that solid (a mesh, a result's mesh, a post object) and
+    the solid hidden. A mesh with no nodes yet draws nothing and is left as
+    it is. View state, shown again at the next change (scene_clear).
+    {hidden: [labels], kept: {solid: label}} when a solid has FEM views, else
+    []. Never raises."""
+    hidden, kept_by = [], {}
+    try:
         kept = {getattr(k, "Name", k) for k in keep or ()}
-        for m in objs:
-            if not str(getattr(m, "TypeId", "")).startswith("Fem::FemMeshObject") or m.Name in res_meshes or not _seen(m):
-                continue
-            solid = next((p for p in (getattr(m, "Shape", None), getattr(m, "Part", None))
-                          if p is not None and hasattr(p, "TypeId") and hasattr(p, "ViewObject")), None)
-            if solid is None or not _seen(solid):
-                continue
-            out += hide_for_scene([solid] if m.Name in kept else [m])
+        for _n, (solid, views) in fem_surfaces(doc).items():
+            drawn = [v for v in views if _seen(v) and _fem_draws(v)]
+            pick = next((v for v in drawn if v.Name in kept and _is_fem_mesh(v)), None)
+            if pick is None:
+                pick = solid if _seen(solid) else (drawn[0] if drawn else None)
+            kept_by[getattr(solid, "Label", solid.Name)] = getattr(pick, "Label", None) if pick is not None else None
+            hidden += hide_for_scene([v for v in drawn + [solid] if v is not pick])
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (FEM one surface): {e}\n")
-    return out
+    return {"hidden": hidden, "kept": kept_by} if kept_by else []
 
 
 def fem_result_shown(doc, body, session=None, name=None):
@@ -4598,7 +4763,7 @@ def _is_fem_view(o):
     object (a result pipeline, a filter): what lies on the part's surface
     under a map or draws a colour bar of its own."""
     t = str(getattr(o, "TypeId", ""))
-    return t.startswith("Fem::FemMeshObject") or t.startswith("Fem::FemPost")
+    return _is_fem_mesh(o) or t.startswith("Fem::FemPost")
 
 
 def fem_bars_away(doc, all_=False):
@@ -4979,6 +5144,7 @@ class Echo:
         self.tr = {}
         self._names0 = self._doc0 = None
         self._front_other = False
+        self._front0 = front_doc_name()
         if self.quiet():
             return
         if tool is None or skipped(tool.name) or watching(tool.name):
@@ -5257,6 +5423,14 @@ class Echo:
             return
         if tool is None:
             return
+        if keeps_front(tool):
+            # A read never brings another document to the front (round 10,
+            # r9echo-11): whatever made it the active one during the call
+            # is undone, and said in the log.
+            kept = front_kept(getattr(self, "_front0", None))
+            if kept:
+                self.front_kept = kept
+                _plog(f"Agent Link echo ({name}): the active document came to {kept['came']} during a read; {kept['was']} put back\n")
         if skipped(name) or watching(name):
             # A look (a picture, the session, a guide): its own words with a
             # value from its answer (round 7: the frame kept the last call's
@@ -5357,6 +5531,10 @@ class Echo:
             if name.startswith(("fea_", "fem_")) and self.s.doc is not None:
                 ours = isinstance(tr.get("femMap"), dict) and bool(tr["femMap"].get("legend"))
                 self._step(tr, "femBarsAway", fem_bars_away, self.s.doc, ours)
+                if not ours and FreeCAD.ActiveDocument is not None and FreeCAD.ActiveDocument.Name == self.s.doc.Name:
+                    # A FEM read with no map (fea_buckle, r9fem-5): one surface
+                    # per solid as after a change (round 10).
+                    self._step(tr, "femOneSurface", fem_one_surface, self.s.doc)
             return
         import FreeCADGui
 
@@ -5628,6 +5806,9 @@ class Echo:
             if not ok:
                 reply["isError"] = True
             self.t0 = job.get("started") or time.time()
+            # The front now is the one to keep: the job ended at its own time,
+            # after calls that may have changed it on purpose (doc_switch).
+            self._front0 = front_doc_name()
             self.after(tool, args, reply)
             tr = getattr(self, "tr", None)
             if isinstance(tr, dict):
