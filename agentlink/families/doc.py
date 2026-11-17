@@ -253,6 +253,15 @@ def doc_names(docs):
     return ", ".join(d.Label if d.Name == d.Label and labels.count(d.Label) == 1 else f"{d.Label} ({d.Name})" for d in docs) or "none"
 
 
+def open_labels(docs):
+    """Open documents as a list of labels; a label two of them share is
+    given as "Label (Name)" for each, the name being what doc_switch and
+    doc_close tell them apart by."""
+    docs = list(docs)
+    labels = [d.Label for d in docs]
+    return [d.Label if labels.count(d.Label) == 1 else f"{d.Label} ({d.Name})" for d in docs]
+
+
 def errors(doc):
     out = []
     for o in doc.Objects:
@@ -682,7 +691,10 @@ def tools(session):
             # and its last entry was a document this work never touched.
             back = next((still[n] for n in reversed(s.__dict__.get("doc_trail", [])) if n in still), None)
             switch(back or (left[-1] if left else FreeCAD.newDocument("Unnamed")))
-        out = {"closed": closed, "document": s.doc.Name, "label": s.doc.Label, "open": [d.Label for d in FreeCAD.listDocuments().values()]}
+        # Two open documents may share a label (two files of one name): each
+        # is then listed as "Label (Name)", so one document does not read as
+        # listed twice.
+        out = {"closed": closed, "document": s.doc.Name, "label": s.doc.Label, "open": open_labels(FreeCAD.listDocuments().values())}
         if unsaved:
             out["discarded"] = unsaved
             out["note"] = "Closed without saving (discard: true): the changes since each one's last save are gone."
@@ -1336,7 +1348,7 @@ def tools(session):
     objref = {"type": "string", "description": "An object's name or label."}
     return [
         Tool("doc_new", "Start a new, empty FreeCAD document and work in it from now on. name becomes its label; FreeCAD makes the internal name from it (spaces and odd characters become _, a number is added when taken): the reply's document is that name, label the label. The document before stays open, unsaved changes and all (doc_switch returns to it). Not undoable, and not in a batch's rollback.", obj({"name": {"type": "string"}}), doc_new),
-        Tool("doc_close", "Close open documents. documents: each by internal name, label or .FCStd path (the current one when left out); a label two documents share is refused with their names. A document changed since its save (or never saved and not empty) is refused and nothing is closed: doc_save first, or discard: true closes WITHOUT saving and the changes are lost (there is no save input here). Work moves to another open document (reply: document, label, open; discarded lists what lost changes). Not undoable.",
+        Tool("doc_close", "Close open documents. documents: each by internal name, label or .FCStd path (the current one when left out); a label two documents share is refused with their names. A document changed since its save (or never saved and not empty) is refused and nothing is closed: doc_save first, or discard: true closes WITHOUT saving and the changes are lost (there is no save input here). Work moves to another open document (reply: document, label, open — the labels of the documents still open, each as \"Label (Name)\" where two share a label; discarded lists what lost changes). Not undoable.",
              obj({"documents": {"type": "array", "items": {"type": "string"}}, "discard": {"type": "boolean"}}), doc_close),
         Tool("doc_open", "Open a FreeCAD document (path, .FCStd; relative: the session's folder) and work in it from now on. It is recomputed and each object's error listed (errors); a file just opened is left unmodified by that. A file already open is not read again: the open document is used with its unsaved changes (doc_revert goes back to the file). Other formats: import_file. recent: true lists the recent files instead. Reply: document (internal name), label, objects, bodies, errors. Not undoable.", obj({"path": {"type": "string"}, "recent": {"type": "boolean"}}), doc_open),
         Tool("doc_save", "Save the current document as .FCStd: path (relative goes in the session's folder; .FCStd added), else where it was saved, else <label>.FCStd there (\"<label> 2.FCStd\" … when taken). Saving under a new file name makes FreeCAD relabel the document after the file (reply: label, labelWas); its internal name stays. Never over another document's file unless overwrite: true — ask the person first. Materials, setups and notes the tools recorded are saved with it. Reply: path, bytes, touched / modified.", obj({"path": {"type": "string"}, "overwrite": {"type": "boolean"}}), doc_save),

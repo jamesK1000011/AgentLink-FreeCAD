@@ -47,6 +47,9 @@ SKETCHES_BEFORE = 300 # sketches whose reading is kept from before the call
 MAX_SHAPES = 12       # and the time budget ends it sooner
 MAX_AMBER = 3         # yellow lines in the verdict; the rest are counted
 SKETCH_GEO = 400      # a sketch's per-geometry freedom is read up to this many
+FREEFORM_MAX = 300    # control points of free-form faces up to which a shape's geometry check or an overlap runs here
+SLOW_S = 2.0          # one check on one shape past this is remembered, and not run on that shape again here
+MS_BY = 500           # a check this long says where its time went (msBy)
 
 SOLVE = {0: "solved", -1: "the solver failed", -2: "redundant constraints", -3: "conflicting constraints",
          -4: "over-constrained", -5: "malformed constraints"}
@@ -59,6 +62,7 @@ TASK_WORDS = re.compile(r"(error|warning|invalid|failed|cannot|could not|conflic
 # its calls' marks nest, each reading the log from where it started.
 SOLVER_LABEL = re.compile(r"(under-?constrained|over-?constrained|fully constrained|degrees? of freedom|redundant|conflicting|malformed|empty sketch)", re.I)
 _seen = {"log": [], "depth": 0}
+_marks = []  # the marks open now, innermost last
 _extra = []  # [(owner, fn)] — families' own readings
 
 
@@ -158,6 +162,14 @@ def mark(session):
     doc = getattr(session, "doc", None)
     m = {"doc": None, "bad": {}, "t": time.time(), "watched": _watch(), "since": len(_seen["log"]), "open": True}
     _seen["depth"] += 1
+    # Every change and recompute in order, for the objects the call leaves
+    # waiting for a recompute (agentlink/changes.py).
+    try:
+        from . import changes
+
+        m["watch"] = changes.open()
+    except Exception:
+        m["watch"] = None
     try:
         m["doc"] = doc.Name
         objs = doc.Objects
@@ -171,7 +183,25 @@ def mark(session):
         pass
     m["shapes"] = _part_hashes(doc)
     m["sketches"] = _sketch_sigs(doc)
+    _marks.append(m)
     return m
+
+
+def failing_before(doc):
+    """The names of doc's objects that were already failing when the call
+    in hand began (the innermost open mark on doc): what a guard that
+    refuses a change for breaking something must not count — they are the
+    verdict's "still failing from before this call". Empty when no call is
+    marked on doc (the check off, or a document past MAX_OBJECTS): a guard
+    then counts every failing object, as it always did."""
+    try:
+        name = doc.Name
+    except Exception:
+        return set()
+    for m in reversed(_marks):
+        if m.get("open") and m.get("doc") == name:
+            return set(m.get("bad") or ())
+    return set()
 
 
 def _key(o):
@@ -190,22 +220,141 @@ def _key(o):
     return k + (vol,)
 
 
+# _key by (document, object), kept while the object's shape is the very
+# one it was read from (geometry.shape_key: the OCC shape's hash, its
+# counts and box). Before every changing call each part's key was worked
+# out afresh, volume and all: in a document of heavy shapes that was most
+# of a second a call, whatever the call did. A part a call recomputed is
+# read afresh after it (_key_fresh), so the kept value is never older than
+# the part's last recompute through a call.
+_keys = {}
+
+
+def _key_kept(doc_name, o):
+    from . import geometry as geo
+
+    try:
+        full = geo.shape_key(o.Shape)
+    except Exception:
+        return _key(o)
+    hit = _keys.get((doc_name, o.Name))
+    if hit is not None and hit[0] == full:
+        return hit[1]
+    k = _key(o)
+    _keys[(doc_name, o.Name)] = (full, k)
+    if len(_keys) > 2000:
+        for old in list(_keys)[:500]:
+            _keys.pop(old, None)
+    return k
+
+
+def _key_fresh(doc_name, o):
+    """_key read from the shape now, and kept for the next call's mark."""
+    k = _key(o)
+    try:
+        from . import geometry as geo
+
+        _keys[(doc_name, o.Name)] = (geo.shape_key(o.Shape), k)
+    except Exception:
+        _keys.pop((doc_name, o.Name), None)
+    return k
+
+
 def _part_hashes(doc):
-    """{part name: its shape's hash} — the same OCC shape in the same place
-    hashes the same, so a part a call recomputed without changing (a Body
-    whose new sketch left its tip alone) is told from one it changed."""
+    """{part name: its shape's key} — a part a call recomputed without
+    changing (a Body whose new sketch left its tip alone) is told from one
+    it changed."""
     out = {}
     try:
         from .tools import Session
 
+        name = doc.Name
         for o in Session.bodies_in(doc):
             try:
-                out[o.Name] = _key(o)
+                out[o.Name] = _key_kept(name, o)
             except Exception:
                 continue
     except Exception:
         pass
     return out
+
+
+# ---- checks that can run long ------------------------------------------------------------
+# One OCC call cannot be stopped once it runs, so the time budget can only
+# decide what is started. Two things keep a single check from taking the
+# call with it (a swept helical spring of 3 faces held one answer for 44 s,
+# live): a shape with large free-form faces is not given FreeCAD's geometry
+# check (shape.check with its BOP self-intersection pass) or an overlap
+# boolean here at all, and a check that did run long on a shape is not run
+# on that shape again. Each is named as unchecked, with the tool that runs
+# it in full; nothing is passed over in silence.
+
+ANALYTIC = ("Plane", "Cylinder", "Cone", "Sphere", "Toroid")
+_slow = {}  # (document, object, check) -> (the shape's key then, seconds)
+
+
+def freeform(sh, stop=None):
+    """How much free-form surface a shape carries: the control points of
+    its B-spline and Bézier faces, a swept or revolved face by its profile
+    curve's, any other non-analytic face as 100. Planes, cylinders, cones,
+    spheres and tori count nothing. stop: a total past which counting ends
+    (the answer is then only "more than stop")."""
+    total = 0
+    try:
+        faces = sh.Faces
+    except Exception:
+        return 0
+    for f in faces:
+        try:
+            su = f.Surface
+            kind = type(su).__name__
+            if kind in ANALYTIC:
+                continue
+            if kind in ("BSplineSurface", "BezierSurface"):
+                total += int(su.NbUPoles) * int(su.NbVPoles)
+            elif kind in ("SurfaceOfExtrusion", "SurfaceOfRevolution"):
+                c = su.BasisCurve
+                total += int(getattr(c, "NbPoles", 0) or 0) if type(c).__name__ in ("BSplineCurve", "BezierCurve") else (0 if type(c).__name__ in ("Line", "Circle", "LineSegment", "ArcOfCircle") else 100)
+            else:
+                total += 100
+        except Exception:
+            total += 100
+        if stop is not None and total > stop:
+            break
+    return total
+
+
+def _slow_key(o):
+    try:
+        return _key(o)[:-1]  # kind, counts and box: not the volume (it may be what is slow)
+    except Exception:
+        return None
+
+
+def was_slow(doc_name, o, check):
+    """Seconds check took on o's shape as it is now, when that was long;
+    else None."""
+    hit = _slow.get((doc_name, o.Name, check))
+    if hit is None:
+        return None
+    if hit[0] != _slow_key(o):
+        _slow.pop((doc_name, o.Name, check), None)
+        return None
+    return hit[1]
+
+
+def timed(doc_name, o, check, fn):
+    """fn() run and timed; one that took long is remembered for o's shape."""
+    t = time.time()
+    try:
+        return fn()
+    finally:
+        took = time.time() - t
+        if took >= SLOW_S:
+            _slow[(doc_name, o.Name, check)] = (_slow_key(o), round(took, 1))
+            if len(_slow) > 500:
+                for old in list(_slow)[:100]:
+                    _slow.pop(old, None)
 
 
 # ---- the readings -----------------------------------------------------------------------
@@ -428,9 +577,14 @@ def _faces(sh):
             return 0
 
 
-def shape_reading(o, deadline):
+def _in_full(o):
+    return f'body_check {{ body: "{_label(o)}" }} runs it in full (as a job: background: true)'
+
+
+def shape_reading(o, deadline, doc_name=""):
     """One part's shape after its recompute: valid, closed, solids, and
-    self-intersection when it is small enough to check in time."""
+    self-intersection when it is small enough to check in time. What is
+    not checked is named (unchecked), never passed over."""
     r = {"object": _label(o), "red": False}
     try:
         sh = o.Shape
@@ -445,10 +599,13 @@ def shape_reading(o, deadline):
         solids = sh.Solids
     except Exception:
         solids = []
+    slow_valid = was_slow(doc_name, o, "valid")
     if n > FACES_VALID:
         skipped.append(f"validity ({n} faces, over {FACES_VALID}): body_check as a job")
+    elif slow_valid is not None:
+        skipped.append(f"validity (it took {slow_valid:g} s on this shape before): {_in_full(o)}")
     else:
-        valid = bool(sh.isValid())
+        valid = bool(timed(doc_name, o, "valid", sh.isValid))
         words.append("valid" if valid else "NOT valid")
         if not valid:
             r["red"] = True
@@ -492,17 +649,30 @@ def shape_reading(o, deadline):
             kind = "shape"
         words.append(f"no solid ({kind})")
         r["amber"] = True
-    if n <= FACES_SELF and not r["red"] and time.time() < deadline:
+    slow_self = was_slow(doc_name, o, "check") if n <= FACES_SELF and not r["red"] else None
+    if n <= FACES_SELF and not r["red"] and time.time() >= deadline:
+        skipped.append(f"FreeCAD's geometry check (out of time): {_in_full(o)}")
+    elif n <= FACES_SELF and not r["red"] and slow_self is not None:
+        skipped.append(f"FreeCAD's geometry check (it took {slow_self:g} s on this shape before): {_in_full(o)}")
+    elif n <= FACES_SELF and not r["red"] and freeform(sh, FREEFORM_MAX) > FREEFORM_MAX:
+        skipped.append(f"FreeCAD's geometry check (large free-form faces, a sweep or a loft: its self-intersection pass can take minutes): {_in_full(o)}")
+    elif n <= FACES_SELF and not r["red"]:
         try:
             from . import geometry as geo
 
             # Several solids are checked one by one: together, solids that
             # touch read as one shape cutting itself.
             ok, said = True, []
-            for piece in (solids if len(solids) > 1 else [sh]):
-                k, lines_ = geo.core_check(piece)
-                if k is False:
-                    ok, said = False, said + lines_
+
+            def run_check():
+                good, words = True, []
+                for piece in (solids if len(solids) > 1 else [sh]):
+                    k, lines_ = geo.core_check(piece)
+                    if k is False:
+                        good, words = False, words + lines_
+                return good, words
+
+            ok, said = timed(doc_name, o, "check", run_check)
             said = [ln for ln in said if "found the following errors" not in ln]
             if ok is False and geo.soft_bop(said):
                 # A tolerance finding on a shape BRepCheck calls valid (a
@@ -566,6 +736,13 @@ def overlaps(changed, parts, deadline):
     overlap."""
     out, skipped, tried = [], [], 0
     done = set()
+    weights = {}
+
+    def weight(o, sh):
+        if o.Name not in weights:
+            weights[o.Name] = freeform(sh, FREEFORM_MAX)
+        return weights[o.Name]
+
     for a in changed:
         try:
             sa = a.Shape
@@ -593,6 +770,11 @@ def overlaps(changed, parts, deadline):
                     continue
                 if tried >= MAX_PAIRS or time.time() > deadline:
                     skipped.append(f"{_label(a)} × {_label(b)} (out of time)")
+                    continue
+                # A boolean on large free-form faces (a swept spring) can
+                # take many seconds and cannot be stopped: left to clearance.
+                if weight(a, sa) + weight(b, sb) > FREEFORM_MAX:
+                    skipped.append(f"{_label(a)} × {_label(b)} (large free-form faces)")
                     continue
                 tried += 1
                 c = sa.common(sb)
@@ -665,6 +847,13 @@ def _close(m):
     if not m or not m.get("open"):
         return set()
     m["open"] = False
+    _marks[:] = [x for x in _marks if x is not m]
+    try:
+        from . import changes
+
+        m["events"], m["whole"] = changes.close(m.get("watch"))
+    except Exception:
+        m["events"], m["whole"] = [], False
     seen = set(_seen["log"][m.get("since", 0):])
     _seen["depth"] = max(0, _seen["depth"] - 1)
     if _seen["depth"] == 0:
@@ -672,9 +861,58 @@ def _close(m):
     return seen
 
 
+def _input(o, prop):
+    """Whether a change of o's property prop marks o for a recompute:
+    FreeCAD touches an object on a change of any property that is not an
+    Output one (FreeCAD 1.1 source: src/App/DocumentObject.cpp, onChanged).
+    True when it cannot be read."""
+    try:
+        if "Output" in (o.getPropertyStatus(prop) or []) or "Output" in (o.getTypeOfProperty(prop) or []):
+            return False
+    except Exception:
+        pass
+    return True
+
+
+def waiting(m, doc_name):
+    """The names of doc_name's objects the call itself left waiting for a
+    recompute: made and never recomputed, or changed (an input property)
+    after their last recompute in the call. None when the call was not
+    seen whole — then an object the call recomputed is taken as up to date,
+    as before.
+
+    Why the order matters: a document's recompute signals each object and
+    then clears its mark (Document::recompute: signalRecomputedObject,
+    purgeTouched), so a mark still there afterwards was set later; one
+    object's own recompute (Document::recomputeFeature) signals and leaves
+    the mark, and that object is up to date."""
+    if not m.get("whole"):
+        return None
+    try:
+        from . import changes
+
+        since, recomputed = changes.after_recompute(m.get("events") or [], doc_name)
+    except Exception:
+        return None
+    return {"since": since, "recomputed": recomputed}
+
+
+def _waits(o, w):
+    """Whether o, which the call made or recomputed and which is still
+    marked touched, waits for a recompute (w: waiting()'s)."""
+    if w is None or o.Name not in w["since"]:
+        return False
+    if o.Name not in w["recomputed"]:
+        return True  # made by the call and never recomputed
+    if _in_container(o):
+        return False  # a part an assembly's solver placed: the assembly's own way
+    return any(_input(o, p) for p in w["since"][o.Name])
+
+
 def check(session, tool, m):
     """The health of the document after a changing call, or None when the
-    call recomputed nothing and nothing is red. m: mark()'s."""
+    call recomputed nothing and nothing is red (attach() then says "nothing
+    red", so every changing call's answer carries a health). m: mark()'s."""
     if m is None:
         return None
     seen_now = _close(m)
@@ -697,9 +935,16 @@ def check(session, tool, m):
     if names0 is not None:
         touched_names |= {n for n in by_name if n not in names0}
     changed = [o for o in objs if o.Name in touched_names]  # in the document's order
+    left_waiting = waiting(m, doc_name)
 
     h, lines, todos, unchecked = {}, [], [], []
     red = False
+    by, lap = {}, [time.time()]
+
+    def took(name):
+        now = time.time()
+        by[name] = by.get(name, 0) + int((now - lap[0]) * 1000)
+        lap[0] = now
 
     # 1. State flags and recompute errors.
     errors, pending = [], []
@@ -713,8 +958,12 @@ def check(session, tool, m):
                     # Still touched after the call recomputed it is that
                     # object's own way (some Python features, links moved by
                     # an assembly's solver): another recompute changes
-                    # nothing, so it is not asked for.
-                    if "Touched" in o.State and o.Name not in touched_names and not _holds_only(o):
+                    # nothing, so it is not asked for. One the call changed
+                    # after its last recompute, or made and never
+                    # recomputed, does wait — said now, not by the next
+                    # call's reading (a drawing's template and dimensions
+                    # showed one call late).
+                    if "Touched" in o.State and not _holds_only(o) and (o.Name not in touched_names or _waits(o, left_waiting)):
                         pending.append(_label(o))
                 except Exception:
                     pass
@@ -740,6 +989,7 @@ def check(session, tool, m):
         todos.append("recompute brings them up to date")
 
     failing_now = {e["object"] for e in errors}
+    took("state")
 
     # 2. Sketches the call recomputed. Red ones are all named, yellow ones up
     # to MAX_AMBER, and the clean ones named when few and counted when many.
@@ -776,6 +1026,8 @@ def check(session, tool, m):
     if len(sketches) > MAX_SKETCHES:
         unchecked.append(f"{len(sketches) - MAX_SKETCHES} more sketches: sketch_state")
 
+    took("sketches")
+
     # 3. Shapes the call recomputed: the parts they belong to.
     try:
         from .tools import Session
@@ -793,7 +1045,7 @@ def check(session, tool, m):
         try:
             if o.Name not in part_names or o.TypeId in CONTAINERS or _label(o) in failing_now:
                 continue
-            if o.Name in shapes0 and shapes0[o.Name] == _key(o):
+            if o.Name in shapes0 and shapes0[o.Name] == _key_fresh(doc_name, o):
                 continue  # recomputed, and the same shape as before the call
         except Exception:
             continue
@@ -804,7 +1056,7 @@ def check(session, tool, m):
             late += 1
             continue
         try:
-            r = shape_reading(p, deadline)
+            r = shape_reading(p, deadline, doc_name)
         except Exception:
             r = None
         if not r:
@@ -822,6 +1074,7 @@ def check(session, tool, m):
     if late:
         unchecked.append(f"{late} more part{'s' if late != 1 else ''}' shapes (out of time): body_check")
 
+    took("shapes")
     lines += amber[:MAX_AMBER]
     if len(amber) > MAX_AMBER:
         lines.append(f"{len(amber) - MAX_AMBER} more with freedom left or several solids (sketch_state, body_check)")
@@ -851,6 +1104,8 @@ def check(session, tool, m):
         if skipped:
             unchecked.append("interference of " + "; ".join(skipped[:3]) + (" …" if len(skipped) > 3 else "") + ": clearance")
 
+    took("overlap")
+
     # 5. The families' own readings (assembly solver, CalculiX …).
     for _owner, fn in list(_extra):
         try:
@@ -863,6 +1118,8 @@ def check(session, tool, m):
                         todos.append(x["todo"])
         except Exception:
             continue
+
+    took("families")
 
     # 6. The window.
     w = window()
@@ -893,9 +1150,14 @@ def check(session, tool, m):
     except Exception:
         nxt = None
 
+    took("window")
     if not lines and not unchecked and not nxt:
         return None
     out = {"ok": not red, "verdict": "; ".join(lines) if lines else "nothing red"}
+    if unchecked:
+        # Said in the verdict too: a reading that left a check out is not
+        # the same as one that ran it.
+        out["verdict"] += f"; {len(unchecked)} check{'s' if len(unchecked) != 1 else ''} not run here (unchecked names {'them' if len(unchecked) != 1 else 'it'} and the tool that does)"
     if nxt:
         out["next"] = nxt
     todos = [t for i, t in enumerate(todos) if t and t not in todos[:i]]
@@ -907,21 +1169,36 @@ def check(session, tool, m):
     ms = int((time.time() - t0) * 1000)
     if ms >= 200:
         out["ms"] = ms
+    if ms >= MS_BY:
+        # Where a long check's time went: state (the objects' flags),
+        # sketches, shapes (validity and FreeCAD's geometry check),
+        # overlap, families (the add-ons' own readings), window (the
+        # window's warnings and the next hint).
+        out["msBy"] = {k: v for k, v in by.items() if v >= 20}
     return out
 
 
 def attach(session, tool, m, out):
     """check() put onto a tool's answer as "health" (a dict answer only; an
-    answer that already carries one keeps it). Never raises."""
+    answer that already carries one keeps it): always there after a
+    changing call while the check is on — "nothing red" when there is
+    nothing to say, and the reason when the check itself failed. Never
+    raises."""
     try:
         if m is None or not isinstance(out, dict) or "health" in out:
             _close(m)
             return out
         h = check(session, tool, m)
-        if h is not None:
-            out["health"] = h
-    except Exception:
+        # Nothing recomputed and nothing red is said too: an answer of a
+        # changing call with no health at all read as a check that did not
+        # run (a drawing with a section, live).
+        out["health"] = h if h is not None else {"ok": True, "verdict": "nothing red"}
+    except Exception as e:
         _close(m)
+        try:
+            out["health"] = {"ok": None, "verdict": f"the health check did not run ({type(e).__name__}: {str(e)[:120]}): recompute lists what is failing; body_check and sketch_state read the result"}
+        except Exception:
+            pass
     return out
 
 

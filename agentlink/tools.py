@@ -20,7 +20,7 @@ import FreeCAD
 import Part
 
 from . import geometry as geo
-from . import keep, store
+from . import changes, docstates, keep, store
 from .protocol import Tool, ToolError
 
 
@@ -127,8 +127,8 @@ class Session:
         new one of its own (headless)."""
         self.doc = doc or FreeCAD.newDocument("AgentLink")
         undo_on(self.doc)
-        # Each family's own state for the session, under its group's name.
-        self.family_state = {}
+        # Each family's own state, under its group's name: one dict per
+        # document (the family_state property below; agentlink/docstates.py).
         self.out_dir = out_dir or os.getcwd()
         self.steps = []  # [{step, tool, bodies: {name: stats}}]
         self.meta = {}  # body name -> {encased: …, generator: …}
@@ -148,6 +148,31 @@ class Session:
         # it as the person's (hooks.as_person); add-ons read it.
         self.by = "agent"
 
+    # ---- the document, and each family's state for it ----
+    # However the session comes to another document (doc_new, doc_open,
+    # doc_close, doc_switch, doc_revert, the window link, an add-on setting
+    # doc itself), the families' state of the one it leaves is set aside
+    # with that document and the one it arrives in gets its own back, or an
+    # empty one: agentlink/docstates.py says how, and how an add-on that
+    # settles its own state is left to.
+
+    @property
+    def doc(self):
+        return self.__dict__.get("_doc")
+
+    @doc.setter
+    def doc(self, doc):
+        self.__dict__["_doc"] = doc
+        docstates.settle(self, doc)
+
+    @property
+    def family_state(self):
+        return docstates.settle(self, self.__dict__.get("_doc"))
+
+    @family_state.setter
+    def family_state(self, state):
+        docstates.put(self, self.__dict__.get("_doc"), state)
+
     # ---- every change one undo step ----
 
     def execute(self, tool, fn):
@@ -155,18 +180,33 @@ class Session:
             return fn()
         start = self.doc
         u0, names0 = undo_mark(start)
+        undo0 = changes.undo_names(start)
+        watch = changes.open()
         self.doc.openTransaction(tool.name)
         try:
             out = fn()
         except BaseException:
+            changes.close(watch)
             self.doc.abortTransaction()
+            # With no step pending the abort leaves the call's name standing
+            # as the application's active transaction, and the next change
+            # anyone made became a step under it (FreeCAD 1.1): closed here.
+            changes.close_active(True)
             # A call that opened a transaction of its own inside (which
             # commits the outer one) or made objects outside the undo stack
             # left them behind the abort: taken away too.
             take_back(start, u0, names0)
             raise
-        self.doc.commitTransaction()
-        if self.doc is start:
+        from . import around
+
+        t_step = time.time()
+        seen, whole = changes.close(watch)
+        # A call that changed nothing leaves no undo step (FreeCAD makes none,
+        # or an empty one that is dropped here): history_undo then takes back
+        # the last call that did change something, not this one.
+        made, why = changes.finish(self.doc, start, seen, whole, u0, undo0)
+        self.last_step = {"tool": tool.name, "made": made, **({"why": why} if why else {})}
+        if self.doc is start and made:
             self.tx += 1
         try:
             self.agent_docs.add(self.doc.Name)
@@ -174,7 +214,9 @@ class Session:
             pass
         from . import hooks
 
-        hooks.emit("after_change", self, tool.name)
+        around.add("undoStep", time.time() - t_step)
+        with around.part("afterChange"):  # the add-ons' handlers: an auto-save, notes followed
+            hooks.emit("after_change", self, tool.name)
         return out
 
     def record_call(self, tool, args):
@@ -351,10 +393,8 @@ class Session:
     def switch(self, doc):
         """Work in another document from now on: its own undo, steps and
         families' state."""
-        self.doc = doc
+        self.doc = doc  # the families' state follows (the doc property)
         undo_on(self.doc)
-        # Each family's own state for the session, under its group's name.
-        self.family_state = {}
         self.steps = []
         self.meta = {}
         self.tx = 0
@@ -394,7 +434,10 @@ class Session:
         return f"{label} {n}"
 
     def snapshot(self, tool):
-        self.steps.append({"step": len(self.steps) + 1, "tool": tool, **self._step_of(self.doc, self.steps[-1] if self.steps else None)})
+        from . import around
+
+        with around.part("snapshot"):  # every body's numbers and the features' values, for history_diff
+            self.steps.append({"step": len(self.steps) + 1, "tool": tool, **self._step_of(self.doc, self.steps[-1] if self.steps else None)})
 
     def _step_of(self, doc, previous=None, cached=True):
         """What a step keeps of a document for history_diff: each body's
@@ -2066,6 +2109,10 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 if plan == "hold":
                     held = hold.active or hold.begin(s.doc)
             u0 = undo_count(doc) or 0
+            from . import around as _around
+
+            t_call = time.time()
+            _around.start()
             if miss is None:
                 r = server.call({"name": c["tool"], "arguments": args})
                 if mine.get("answered"):
@@ -2097,7 +2144,17 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                     row["toError"] = f"to: not written ({e}). The answer is here in full instead."
             results.append(row)
             if mine.get("record") is not None:
-                mine["record"].write({"running": True, "ran": len(results), "results": results})
+                with _around.part("record"):
+                    mine["record"].write({"running": True, "ran": len(results), "results": results})
+            # Where the time went when what runs round the tool took long
+            # (the echo and its view fit, the health check, the add-ons'
+            # hooks, this record): agentlink/around.py.
+            try:
+                split = _around.split((time.time() - t_call) * 1000, body.get("ms") if isinstance(body, dict) else 0, _around.take())
+                if split is not None:
+                    row["around"] = split
+            except Exception:
+                pass
             if hold is not None and hold.active and s.doc is not hold.doc:
                 entry = hold.build(f"after call {first + i} ({c['tool']}): it moved to another document")
                 if _hold.build_failed(entry) and stop and ok:
@@ -2148,7 +2205,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         Tool("job_start", "Run a read as a job: tool and its arguments. The answer comes back as the tool's own when it ends within 45 s, else a job id for job_status (wait: false answers with the id at once). Reads that are heavy or were slow here (over 20 s) go to a job on their own, and any read takes background: true for the same; a client drops a call after about 80 s, so a long read's answer would be lost. Only reads that leave the window and the 3D view alone (not changes, pictures or window tools); while one runs, changes to its document wait (refused, saying which job).",
              obj({"tool": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["tool"]), job_start),
         Tool("batch", "Run several tools in one call, in order: calls [{ tool, arguments }], or file: a .json file holding that list (or { calls, rollback, stopOnError }), read on this side so a long run of calls (many profiles' points) is not sent through the conversation; a relative path is in the session's folder, and files are read where other tools may read. The first refused stops the rest (stopOnError: false runs them all), and with rollback (the default) undoes what the batch changed before it and removes every object it made (removed lists any undo did not reach), so it stands or falls whole. "
-             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); a heavy read (a tool that runs as a job on its own: a wall-thickness or deviation reading) runs as a job inside the batch too, and the batch waits for it while its budget lasts — still running then, the answer carries the job id (job_status gives its answer) and where to go on; no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch. In the FreeCAD window each changing call is shown as it runs (its workbench, its button lit, its result selected) with a pause so a person can follow, which costs about 0.4 s and up to 2.5 s a call: a long batch runs faster from its fourth changing call on — those are still shown, with a pause of 60 ms (the person's EchoBatchDelay preference, ms; 0 none, -1 the full pause throughout) — and its last changing call is shown at the full pace again, so the window ends on a state that can be read; one batch of 20 calls is therefore much quicker in the window than 20 calls sent singly. to: a .json file the whole answer is written to (relative: in the session's folder); the reply is then a line per call — ok, a refusal's words, the health verdict — and keeps the batch's own note beside it (where it stopped and how to go on: next, notRun, heavy), so a long run's answers stay out of the conversation; read a call's result from the file when its line needs it. Every batch also keeps what ran in a record of its own, batches/<date>-<time>.json in the session's folder (the reply's record is its path; the newest 20 are kept), rewritten as each call ends: when a batch's answer never arrives — a call the client dropped, FreeCAD stopped and started again — read the newest record to see which calls ran (running: true and ran: n while it was under way, each call's whole result in results) before running anything again. "
+             f"Limits: with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default); a heavy read (a tool that runs as a job on its own: a wall-thickness or deviation reading) runs as a job inside the batch too, and the batch waits for it while its budget lasts — still running then, the answer carries the job id (job_status gives its answer) and where to go on; no call starts past budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}) — the answer then carries notRun and next, what ran stays, and from: next (with the same file or calls) goes on. Each changing call's result carries its own health; a batch does not run another batch. A call whose surroundings took long (500 ms or more round the tool itself) also carries around {{ wall, outside {{ ms, echoBefore, echoAfter, fit, callDone, notice, meter, record, other }}, inside {{ healthMark, health, snapshot, undoStep, afterChange, outputs }}, tool }} in ms: wall is the whole call, outside what its own ms does not count (the echo in the window and its view fit, add-ons told of the call, this batch's record), inside the hub's share of its ms (the health check before and after, the step kept for history_diff, the undo step, add-ons told of the change), tool what is left for the tool — read it before deciding a document is too slow to work in. In the FreeCAD window each changing call is shown as it runs (its workbench, its button lit, its result selected) with a pause so a person can follow, which costs about 0.4 s and up to 2.5 s a call: a long batch runs faster from its fourth changing call on — those are still shown, with a pause of 60 ms (the person's EchoBatchDelay preference, ms; 0 none, -1 the full pause throughout) — and its last changing call is shown at the full pace again, so the window ends on a state that can be read; one batch of 20 calls is therefore much quicker in the window than 20 calls sent singly. to: a .json file the whole answer is written to (relative: in the session's folder); the reply is then a line per call — ok, a refusal's words, the health verdict (a verdict's standing part, \"N objects still failing from before this call: …\", is given at the first line it shows in and again only when it changes; healthNote says so when it was left out of later lines, and a line that had nothing else reads \"as before\") — and keeps the batch's own note beside it (where it stopped and how to go on: next, notRun, heavy), so a long run's answers stay out of the conversation; read a call's result from the file when its line needs it. Every batch also keeps what ran in a record of its own, batches/<date>-<time>.json in the session's folder (the reply's record is its path; the newest 20 are kept), rewritten as each call ends: when a batch's answer never arrives — a call the client dropped, FreeCAD stopped and started again — read the newest record to see which calls ran (running: true and ran: n while it was under way, each call's whole result in results) before running anything again. "
              "Chaining, so an answer one call needs from another does not pass through the conversation: (1) a call may carry to — { tool, arguments, to: \"outline.json\" } writes that call's whole answer to the .json file (relative: in the session's folder; written where tools may write) and its result here is only { written: { path, bytes }, keys (an object's) or length (a list's), and health when it had a verdict }; a refused call writes nothing, and a rollback leaves the files. "
              "(2) Anywhere inside a call's arguments, { \"$file\": \"outline.json\" } is replaced by that JSON file's contents and { \"$file\": \"outline.json\", \"$at\": \"loops.0.points\" } by the part at that dotted path of keys and list indices (from 0; -1 is the last); the file is read as the call is about to run, so it may be one an earlier call of this batch wrote, and is read where tools may read. "
              "(3) { \"$from\": 2, \"$at\": \"bodies.0.name\" } takes the same from the answer of call 2 of this batch (calls are numbered from 0 through the whole list, as from and next count; only an earlier call, and only one run in this part of the batch — across parts use to and $file). A reference stands alone as the value ($file or $from, with $at); one that cannot be followed — no file, no key, no index, a refused call — refuses that call, saying what is there (the keys or the length at the deepest level reached), and counts as a refusal for stopOnError and rollback; a file or answer over 20 MB is refused. The arguments are checked after the references are filled in. "

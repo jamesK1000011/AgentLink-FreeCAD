@@ -44,10 +44,13 @@ def _settled(fn):
 def _with_health(session, tool, args):
     """tool.fn(args) with the shared health check round it; a health module
     that will not load or run leaves the answer as the tool gave it."""
+    from . import around
+
     try:
         from . import health
 
-        m = health.mark(session)
+        with around.part("healthMark"):
+            m = health.mark(session)
     except Exception:
         return tool.fn(args)
     try:
@@ -55,7 +58,8 @@ def _with_health(session, tool, args):
     except BaseException:
         health.drop(m)
         raise
-    return health.attach(session, tool, m, out)
+    with around.part("health"):
+        return health.attach(session, tool, m, out)
 
 
 class ToolError(Exception):
@@ -431,12 +435,17 @@ class Server:
         t0 = time.time()
         s = self.session
         before = (getattr(s, "tx", None), getattr(s, "doc", None)) if s is not None else None
+        from . import around
+
         with _as_user(s), _acting(s):
             result = self._call(params)
-            self._done(params, result, before)
-        _add_notice(result)
-        _add_rider(result, params.get("name"))
+            with around.part("callDone"):  # the add-ons' call_done handlers
+                self._done(params, result, before)
+        with around.part("notice"):
+            _add_notice(result)
+            _add_rider(result, params.get("name"))
         if self.meter is not None:
+            tm = time.time()
             try:
                 content = result.get("content") or []
                 text = "".join(c.get("text", "") for c in content if c.get("type") == "text")
@@ -450,6 +459,7 @@ class Server:
                 self.meter.call(str(params.get("name")), compact(params.get("arguments") or {}), text, data, err, (time.time() - t0) * 1000)
             except Exception:
                 pass
+            around.add("meter", time.time() - tm)
         return result
 
     def handle_light(self, msg):

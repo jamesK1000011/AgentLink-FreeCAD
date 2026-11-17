@@ -380,6 +380,27 @@ def broken(doc):
     return out
 
 
+def newly_broken(doc):
+    """broken(doc) less the objects that were already failing when the call
+    in hand began (the hub's health check knows them: health.failing_before).
+    What a guard refuses a change for: a change is not to blame for what
+    was red before it, and a document with one old failure in it refused
+    every guarded change (a cell set in a new, empty sheet, live)."""
+    try:
+        from .. import health
+
+        was = health.failing_before(doc)
+    except Exception:
+        was = set()
+    if not was:
+        return broken(doc)
+    labels = set()
+    for o in doc.Objects:
+        if o.Name in was:
+            labels.add(o.Label)
+    return [b for b in broken(doc) if b["object"] not in labels]
+
+
 def body_reading(body):
     s = body.Shape
     if s is None or s.isNull() or not s.Solids:
@@ -392,7 +413,7 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
     feature or anything after it failed; else the body's reading."""
     doc = session.doc
     doc.recompute()
-    bad = broken(doc)
+    bad = newly_broken(doc)  # not what was failing before the call
     if bad:
         mine = [b for b in bad if feat is not None and b["object"] == feat.Label]
         first = (mine or bad)[0]

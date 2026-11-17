@@ -82,6 +82,41 @@ TO_NOTE = ("Each call's whole answer is in the file (results[i].result; a call w
            "here: ok, a refusal's words and the health verdict.")
 
 
+# The part of a health verdict that stands from call to call: the objects
+# that were failing before the call (agentlink/health.py words it).
+STANDING = re.compile(r"^\d+ objects? still failing from before this call: ")
+STANDING_NOTE = ("A line's health leaves out the part \"… still failing from before this call: …\" when it is the same as in the "
+                 "last line that gave it: it is said at the first call it shows in and again only when it changes "
+                 "(\"as before\": nothing else was said). The file has every verdict whole.")
+
+
+def brief_verdicts(verdicts):
+    """A run of health verdicts for a batch's compact lines: the standing
+    part (STANDING) is kept where it first shows and where it changes, and
+    left out where it repeats the last one given; the rest of each verdict
+    is untouched. A verdict that was only the repeated part reads "as
+    before". Returns (the verdicts, whether anything was left out); None
+    stays None."""
+    out, last, cut = [], None, False
+    for v in verdicts:
+        if not isinstance(v, str):
+            out.append(v)
+            continue
+        parts = v.split("; ")
+        standing = next((p for p in parts if STANDING.match(p)), None)
+        if standing is None:
+            out.append(v)
+            continue
+        if standing != last:
+            last = standing
+            out.append(v)
+            continue
+        rest = [p for p in parts if p is not standing]
+        out.append("; ".join(rest) if rest else "as before")
+        cut = True
+    return out, cut
+
+
 def to_reply(got, first, path, size):
     """A batch's answer as batch { to } gives it back once the whole of it
     is in the file at path: a line per call (ok, a refusal's words, the
@@ -106,8 +141,16 @@ def to_reply(got, first, path, size):
             if isinstance(r.get("written"), dict):
                 row["written"] = r["written"].get("path")
         lines.append(row)
+    # A standing "still failing from before" part once, not on every line
+    # (40 lines each repeated two objects' names, live).
+    brief, cut = brief_verdicts([row.get("health") for row in lines])
+    for row, v in zip(lines, brief):
+        if v is not None:
+            row["health"] = v
     short = {k: v for k, v in got.items() if k != "results"}
     short.update({"results": lines, "written": {"path": path, "bytes": size}})
+    if cut:
+        short["healthNote"] = STANDING_NOTE
     if isinstance(got.get("note"), str) and got["note"].strip():
         short["toNote"] = TO_NOTE
     else:

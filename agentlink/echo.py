@@ -219,6 +219,24 @@ def pace(batch, changing, full_ms, batch_ms, count=True):
     return "short", min(batch_ms, full_ms)
 
 
+def fit_animated(batch, mode):
+    """Whether the view fit after a change may run FreeCAD's fit animation.
+    A call on its own, and a batch's last shown call at the full pace: yes.
+    Any other call of a batch: no — the view jumps to the same framing.
+
+    FreeCAD's fit with animations on (the default) is ten nested event
+    loops of 20 ms, each with a full redraw of the scene (FreeCAD 1.1
+    source: src/Gui/View3DInventorViewer.cpp, viewAll and animatedViewAll
+    (10, 20)): in a document of heavy shapes that was seconds a call,
+    outside the call's own ms. Plain Python."""
+    if mode != "full":
+        return False
+    if not isinstance(batch, dict):
+        return True
+    i, n, last = batch.get("i"), batch.get("n"), batch.get("lastChange")
+    return isinstance(i, int) and ((isinstance(n, int) and i >= n - 1) or (isinstance(last, int) and i == last))
+
+
 def log():
     return list(_log)
 
@@ -485,10 +503,12 @@ def _later(obj, method, value):
         pass
 
 
-def fit():
+def fit(animate=True):
     """Frame the part in the 3D view in front — only a live 3D view of an
     open document, and not while a restart is reopening documents (a view
-    being made or torn down then crashes FreeCAD in its fit animation)."""
+    being made or torn down then crashes FreeCAD in its fit animation).
+    animate: False frames it at once: the view's animation is switched off
+    for the fit and put back as it was (fit_animated says when)."""
     try:
         import FreeCADGui
 
@@ -502,7 +522,22 @@ def fit():
         v = gd.ActiveView
         if v is None or not hasattr(v, "getSceneGraph") or not hasattr(v, "fitAll"):
             return False
-        v.fitAll()
+        was = None
+        if not animate:
+            try:
+                was = bool(v.isAnimationEnabled())
+                if was:
+                    v.setAnimationEnabled(False)
+            except Exception:
+                was = None
+        try:
+            v.fitAll()
+        finally:
+            if was:
+                try:
+                    v.setAnimationEnabled(True)
+                except Exception:
+                    pass
         return True
     except Exception as e:
         FreeCAD.Console.PrintLog(f"Agent Link fit: {e}\n")
@@ -869,7 +904,10 @@ class Echo:
             # Follow the work: the view framed on the part after each change
             # (Mod/AgentLink Follow; the Activity tab's check box).
             if FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and not name.startswith(tuple(PAGES)):
-                fit()
+                from . import around
+
+                with around.part("fit"):
+                    fit(animate=fit_animated(getattr(self.s, "batch_now", None), self.mode))
             _paint()
         except Exception as e:
             FreeCAD.Console.PrintLog(f"Agent Link echo (after {name}): {e}\n")
@@ -894,9 +932,13 @@ def wrap(server, session):
         tool = server.tools.get(name)
         if tool is not None:
             tool = tool.for_call(args)  # a changing tool's read shows as a read
-        echo.before(tool, args)
+        from . import around
+
+        with around.part("echoBefore"):
+            echo.before(tool, args)
         reply = plain(params)
-        echo.after(tool, args, reply)
+        with around.part("echoAfter"):  # its view fit is in "fit" as well
+            echo.after(tool, args, reply)
         return reply
 
     server.call = call

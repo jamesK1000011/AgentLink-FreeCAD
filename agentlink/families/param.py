@@ -156,11 +156,11 @@ def tools(session):
 
     def check(doc_, what, refs=None):
         doc_.recompute()
-        if refs and pc.broken(doc_):
+        if refs and pc.newly_broken(doc_):
             found = pc.repair_refs(doc_, refs)
             if found:
                 repaired.update(found)
-        bad = pc.broken(doc_)
+        bad = pc.newly_broken(doc_)  # not what was failing before the call
         if bad:
             raise ToolError("failed", f"{what} breaks {bad[0]['object']}: {why(doc_, bad[0])}" + (f" (and {', '.join(b['object'] for b in bad[1:])})" if len(bad) > 1 else "") + " — nothing was kept. Choose a value the features can take.")
 
