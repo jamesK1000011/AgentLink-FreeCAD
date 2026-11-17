@@ -37,8 +37,16 @@
 # attribute "_<key>_documents" — a key whose session has that attribute is
 # carried along too.
 #
+# The session's own record of a document goes the same way, by the same
+# book: its steps (what history_diff compares), meta, tx (undo steps made in
+# it), calls (the changing calls, for a macro) and checks (what history_diff
+# says to run again). They are the document's, not the session's: carried
+# into the next document they gave a history_diff across two documents, a
+# macro of calls made in two, and an undo count that was another stack's.
+# session.steps, .meta, .tx, .calls and .checks are properties over own().
+#
 # Plain Python: the session calls settle() from its doc and family_state
-# properties (agentlink/tools.py).
+# properties, and own() from those five (agentlink/tools.py).
 
 OWN = set()  # keys their add-on settles itself (hooks.own_document_state)
 
@@ -85,10 +93,18 @@ def settles_itself(session, key):
         return False
 
 
+OWN_KEYS = ("steps", "meta", "tx", "calls", "checks")
+
+
+def fresh():
+    """The session's own record of a document it has done nothing in yet."""
+    return {"steps": [], "meta": {}, "tx": 0, "calls": [], "checks": {}}
+
+
 def _book(session):
     b = session.__dict__.get(_ATTR)
     if b is None:
-        b = session.__dict__[_ATTR] = {"owner": None, "name": None, "state": {}, "parked": {}}
+        b = session.__dict__[_ATTR] = {"owner": None, "name": None, "state": {}, "parked": {}, "own": fresh(), "own_parked": {}}
     return b
 
 
@@ -113,18 +129,23 @@ def settle(session, doc):
         b["owner"], b["name"] = doc, name_of(doc)
         return state
     carried = {k: state.pop(k) for k in [k for k in state if settles_itself(session, k)]}
-    parked = b["parked"]
+    parked, own_parked = b["parked"], b["own_parked"]
     if is_open(old, was):
         if state:
             _emit("document_state_leaving", session, old, state)
         parked[was] = (old, state)
+        own_parked[was] = (old, b["own"])
     for n in [n for n, (d, _st) in parked.items() if not is_open(d, n)]:
         del parked[n]  # closed: what its families kept in the file is there
+    for n in [n for n, (d, _rec) in own_parked.items() if not is_open(d, n)]:
+        del own_parked[n]  # closed: its undo stack and steps went with it
     name = name_of(doc)
     rec = parked.pop(name, None)
     restored = rec is not None and rec[0] is doc
     new = rec[1] if restored else {}
     new.update(carried)
+    mine = own_parked.pop(name, None)
+    b["own"] = mine[1] if mine is not None and mine[0] is doc else fresh()
     b["owner"], b["name"], b["state"] = doc, name, new
     _emit("document_state_entered", session, doc, new, restored)
     return new
@@ -137,6 +158,29 @@ def put(session, doc, state):
     settle(session, doc)
     b["state"] = state if isinstance(state, dict) else {}
     return b["state"]
+
+
+def own(session, doc):
+    """The session's own record of doc, the document it is in now: { steps,
+    meta, tx, calls, checks }."""
+    settle(session, doc)
+    return _book(session)["own"]
+
+
+def own_of(session, doc):
+    """The session's own record of an open document, the one it is in or
+    one it left (set aside): for a batch that takes back its steps in the
+    document it started in after a call moved the session on. None for a
+    document the session never worked in, or one closed since."""
+    b = _book(session)
+    if doc is None:
+        return None
+    if b["owner"] is doc:
+        return b["own"]
+    for n, (d, rec) in b["own_parked"].items():
+        if d is doc and is_open(d, n):
+            return rec
+    return None
 
 
 def set_aside(session):

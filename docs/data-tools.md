@@ -80,7 +80,17 @@ The hub's own core tools are data where the steps say them cleanly (`tests/test_
 `queue_go`. Named helpers there are the readers and writers of files (`mesh_read`, `mesh_solid`, `solid_written`, `scene_written`, `merged_meshes`,
 `flat_write`), what goes with a deleted object (`along`, `shown_again`), which open document a name means (`doc_hits`, `doc_by`, `back_to`), and
 the window's own calls (`active_view`, `shots`: each view saved and the person's camera put back). Kept as code, in the same files: `view_render`
-(the picture itself), `gui_input` and `live_run` (one algorithm each over Qt's event loop) and `addon` (an installer that puts back what it moved).
+(the picture itself) and `gui_input` and `live_run` (one algorithm each over Qt's event loop).
+
+So are the application tools (`tests/test_dataapp_data.py`): 14 of the 17 of `families/app.py` (`pref_get`, `pref_set`, `pref_reset`, `pref_pack`, `cmd_list`,
+`cmd_run`, `menu_list`, `menu_run`, `workbench`, `show`, `selection`, `window_snapshot`, `snapshot_latest`, `snapshot_list`) and `addon` of
+`families/unattended.py`. `cmd_run`'s entry has the whole of its rule for a greyed-out command, `Sketcher_LeaveSketch` included (no sketch open: answered,
+not refused; a drawing tool still on: ended and the sketch closed). Named helpers there are a command's reading (`is_active`, `in_edit`, `selected`,
+`cmd_row`, `cmd_matches`), the menu bar walked as Qt has it (`walk`, `find_action`, `bare`), a setting written by its type (`set_value`) or taken out
+(`removed`), and for `addon` the Addon Manager's modules (`manager`, `catalog`), its installer run (`installer_run`) and the rollback (`set_aside`,
+`put_back`: the add-on moved aside before an update and put back when the install or the smoke test fails, each as the `first` of its refusal). Kept as
+code in `app.py`: `app_restart` (one run of the machine's own state, ending with FreeCAD told to quit), `app_install` (a background installer process and
+its state file) and `pref_import` (one merge over settings files).
 
 ## Two kinds of entry
 
@@ -137,6 +147,16 @@ A field may not hold `:` or `!` outside brackets: work such a value out in a `le
 | `answer` | the answer, ending the run | each op of bim_edit; `list` in bim_trash |
 
 `"when"` on any step runs it only then, so most branches are one line.
+
+**A refusal's code** says what kind it is: `invalid_input` (left out: the call is wrong), `not_found`, `invalid_state`, `unavailable`, `failed`, and the two
+that say whose call it is — `not_allowed`, the person's own to say or set (a confirm they must type, a setting they guard), and `refused`, what the tool
+never does from here, said with the tool that does:
+
+    {"refuse": {"fmt": "confirm: \"{want}\", word for word, typed by the person — {why}. Nothing was changed."}, "code": "not_allowed",
+     "when": "=(a.confirm or '').strip() != want"}                                                         addon
+    {"refuse": {"fmt": "{name} is not run from here: {refused(name)}."}, "code": "refused", "when": "=refused(name)"}     cmd_run
+
+Any other code is found when the entry is loaded (`runners.CODES`, and the schema's list).
 
 **Refusals that clean up.** A check that fails after something was made says what to remove first:
 

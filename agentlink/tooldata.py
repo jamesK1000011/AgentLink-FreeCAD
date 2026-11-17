@@ -66,7 +66,8 @@ handlers and needs none of this.
   when e is truthy.
     let      {"name": e, …} values in order; "p, q": e unpacks
     refuse   the refusal's message, in its place in the order; with when,
-             code (invalid_input when left out) and first (steps that undo
+             code (invalid_input when left out; runners.CODES lists them,
+             not_allowed and refused among them) and first (steps that undo
              what the call already made). {"fmt": "…{field}…"} fills it.
     make     a maker by dotted name ("Arch.makeStairs"; "=expression" for
              one chosen by input) with call, kw, as ("o"), headless

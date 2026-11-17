@@ -250,6 +250,9 @@ server.json
 tests/_bim_before.py
 tests/_bim_cases.py
 tests/_bim_standin.py
+tests/_dataapp_before.py
+tests/_dataapp_cases.py
+tests/_dataapp_standin.py
 tests/_dataasm_before.py
 tests/_dataasm_cases.py
 tests/_dataasm_standin.py
@@ -320,6 +323,7 @@ tests/test_core_guards.py
 tests/test_core_guards_fc.py
 tests/test_core_readers.py
 tests/test_crash_logs.py
+tests/test_dataapp_data.py
 tests/test_dataasm_data.py
 tests/test_datacam_data.py
 tests/test_datacore_data.py
@@ -374,6 +378,7 @@ tests/test_hold.py
 tests/test_hooks.py
 tests/test_hubfix2.py
 tests/test_hubfix2_fc.py
+tests/test_hubfix3.py
 tests/test_hubfix_small.py
 tests/test_hull3d.py
 tests/test_inspection.py

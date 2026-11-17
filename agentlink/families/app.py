@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 import FreeCAD
 
-from .. import paths
+from .. import paths, runners
 from ..protocol import Tool, ToolError
 from ..tools import obj
 
@@ -541,337 +541,162 @@ def _settings_changed(tool, path, name, before, after):
     return entry
 
 
+# ---- what the data entries call (agentlink/data/tools.json) ----------------------------------------
+
+def subgroups(g):
+    """A parameter group's subgroups by name, sorted, to walk down; None
+    where this FreeCAD cannot say."""
+    try:
+        return sorted(g.GetGroups())
+    except Exception:
+        return None
+
+
+def stored(g, name):
+    """One stored setting of a group as { type, value }; {} when it is not
+    stored (FreeCAD's default applies)."""
+    return _contents(g).get(name, {})
+
+
+def removed(g, kind, name):
+    """A stored value taken out of its group by its kind (Boolean, Integer,
+    Unsigned, Float, String): FreeCAD's default applies again. Nothing for a
+    setting that is not stored."""
+    rem = {"Boolean": g.RemBool, "Integer": g.RemInt, "Unsigned": g.RemUnsigned, "Float": g.RemFloat, "String": g.RemString}.get(kind)
+    if rem:
+        rem(name)
+
+
+def cmd_matches(gui, name, q):
+    """Whether a command is one cmd_list's query asks for: q in its name,
+    or in its menu text or tip (a command that cannot say what it is does
+    not match by those)."""
+    if not q or q in name.lower():
+        return True
+    try:
+        info = gui.Command.get(name).getInfo()
+    except Exception:
+        return False
+    return bool(info) and q in (str(info.get("menuText", "")) + str(info.get("toolTip", ""))).lower()
+
+
+def cmd_row(gui, name):
+    """A command as cmd_list answers it: its name, menu text (without the
+    shortcut's mark), tip (no markup, 160 characters) and shortcut; the
+    name alone for one that cannot say."""
+    row = {"name": name}
+    try:
+        info = gui.Command.get(name).getInfo()
+        row["menu"] = re.sub(r"&(?!&)", "", str(info.get("menuText", "")))
+        tip = str(info.get("toolTip", "")).strip()
+        if tip:
+            row["tip"] = re.sub(r"<[^>]+>", "", tip)[:160]
+        if info.get("shortcutText"):
+            row["shortcut"] = info["shortcutText"]
+    except Exception:
+        pass
+    return row
+
+
+def is_active(gui, name):
+    """Whether a command is active now (its button not greyed): True or
+    False, or None for one that cannot say (it is run). FreeCAD runs a
+    command only while it is active: Gui.runCommand on an inactive one does
+    nothing and says nothing, so this is read first."""
+    try:
+        c = gui.Command.get(name)
+        return bool(c.isActive()) if c is not None else None
+    except Exception:  # noqa: BLE001 - a command that cannot say: run it
+        return None
+
+
+def in_edit(gui):
+    """What the document in front has open for editing (a sketch's view
+    provider), or None: nothing, or no document in front."""
+    try:
+        return gui.ActiveDocument.getInEdit() if gui.ActiveDocument else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def selected(gui):
+    """The window's selection for a refusal's words: up to six of
+    Object.Face1,Edge2; none where it cannot be read."""
+    try:
+        return [f"{x.ObjectName}{'.' + ','.join(x.SubElementNames) if x.SubElementNames else ''}" for x in gui.Selection.getSelectionEx("*")][:6]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def bare(text):
+    """A menu's title as the person reads it: without the & that marks its
+    shortcut letter."""
+    return re.sub(r"&(?!&)", "", text).strip()
+
+
+def dock_panels(mw):
+    """The window's dock panels (Report view, Model, an add-on's), for
+    window_snapshot's part."""
+    from PySide import QtGui
+
+    QtW = getattr(__import__("PySide", fromlist=["QtWidgets"]), "QtWidgets", QtGui)
+    return mw.findChildren(QtW.QDockWidget)
+
+
+def grab(target):
+    """A picture of the window or one of its panels, drawn by Qt itself
+    (agentlink/grab.py): it works in the background, no screen recording."""
+    from ..grab import grab_window
+
+    return grab_window(target)
+
+
+def shots():
+    """The person's screenshots as their index lists them
+    (~/AgentLink/shots/index.json), oldest first; none when there is no
+    index or it does not read."""
+    try:
+        with open(os.path.join(os.path.expanduser("~/AgentLink"), "shots", "index.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def read_bytes(path):
+    """A file's bytes (a picture for the answer)."""
+    with open(path, "rb") as f:
+        return f.read()
+
+
 def tools(session):
     s = session
 
-    def pref_get(a):
-        path, g = _group(a.get("path"))
-        out = {"path": path, "values": _contents(g)}
+    def working():
+        """The name of the document the session works in; None when it has
+        none, or the one it had is gone."""
         try:
-            out["groups"] = sorted(g.GetGroups())
-        except Exception:
-            pass
-        if a.get("name"):
-            v = out["values"].get(a["name"])
-            if v is None:
-                raise ToolError("not_found", f"No setting '{a['name']}' in {path} (FreeCAD's default applies until one is set): " + ", ".join(sorted(out["values"])[:40]))
-            return {"path": path, "name": a["name"], **v}
-        return out
-
-    def pref_set(a):
-        path, g = _group(a.get("path"))
-        values = dict(a.get("values") or {})
-        if a.get("name"):
-            values[a["name"]] = a.get("value")
-        if not values:
-            raise ToolError("invalid_input", "name and value, or values { name: value } (path: the group, \"BaseApp/Preferences/…\"; pref_get { path } lists its settings and types).")
-        hit = [k for k in values if guarded(path, k)]
-        if hit:
-            raise ToolError("not_allowed", f"{', '.join(hit)}: the person's to set (Edit > Preferences, or Agent Link's panel) — they decide what an agent may do, what code FreeCAD loads and what programs it runs. Nothing was changed.")
-        _settings_changing("pref_set", path)
-        done = {}
-        later = []
-        for k, v in values.items():
-            before = _contents(g).get(k, {}).get("value")
-            kind = _set(g, k, v, a.get("type"))
-            done[k] = {"was": before, "now": _contents(g).get(k, {}).get("value"), "type": kind}
-            if _settings_changed("pref_set", path, k, before, done[k]["now"]).get("applies"):
-                later.append(k)
-        out = {"path": path, "set": done, "note": "Most settings take effect at once; a few (the theme, the stylesheet, toolbars) only after FreeCAD restarts. An add-on that keeps a settings history can list the changes and take them back."}
-        if later:
-            out["appliesAtNextLaunch"] = later
-        return out
-
-    def pref_reset(a):
-        path, g = _group(a.get("path"))
-        names = a.get("names") or []
-        if not names:
-            raise ToolError("invalid_input", "names: the settings to take back to FreeCAD's defaults (path: their group; pref_get { path } lists what is stored).")
-        hit = [k for k in names if guarded(path, k)]
-        if hit:
-            raise ToolError("not_allowed", f"{', '.join(hit)}: the person's to reset (Edit > Preferences, or Agent Link's panel). Nothing was changed.")
-        _settings_changing("pref_reset", path)
-        have = _contents(g)
-        absent = [k for k in names if k not in have]
-        for k in names:
-            kind = _contents(g).get(k, {}).get("type", "")
-            before = _contents(g).get(k, {}).get("value")
-            {"Boolean": g.RemBool, "Integer": g.RemInt, "Unsigned": g.RemUnsigned, "Float": g.RemFloat, "String": g.RemString}.get(kind, lambda _n: None)(k)
-            _settings_changed("pref_reset", path, k, before, None)
-        out = {"path": path, "reset": [k for k in names if k not in absent]}
-        if absent:
-            out["notSet"] = absent
-            out["note"] = "notSet: not stored in this group, so already at FreeCAD's default (or the name or path is wrong: pref_get { path } lists what is stored)."
-        return out
-
-    def pref_pack(a):
-        have = packs()
-        name = a.get("apply")
-        if not name:
-            return {"packs": sorted(have), "next": "pref_pack { apply: name } sets its values; restart FreeCAD for the theme and stylesheet."}
-        if name not in have:
-            raise ToolError("not_found", f"apply: no preference pack '{name}' — the packs: " + (", ".join(sorted(have)) or "none") + ".")
-        _settings_changing("pref_pack", "BaseApp/Preferences")
-        n = apply_cfg(have[name])
-        _settings_changed("pref_pack", "BaseApp/Preferences", f"pack {name}", None, f"{n} values")
-        return {"applied": name, "values": n, "note": "Restart FreeCAD for the stylesheet and theme to take hold; navigation and colours change now."}
-
-    def cmd_list(a):
-        gui = _gui()
-        q = str(a.get("query", "")).lower()
-        rows = []
-        for name in sorted(gui.listCommands()):
-            if q and q not in name.lower():
-                info = None
-                try:
-                    info = gui.Command.get(name).getInfo()
-                except Exception:
-                    pass
-                if not info or q not in (str(info.get("menuText", "")) + str(info.get("toolTip", ""))).lower():
-                    continue
-            row = {"name": name}
-            try:
-                info = gui.Command.get(name).getInfo()
-                row["menu"] = re.sub(r"&(?!&)", "", str(info.get("menuText", "")))
-                tip = str(info.get("toolTip", "")).strip()
-                if tip:
-                    row["tip"] = re.sub(r"<[^>]+>", "", tip)[:160]
-                if info.get("shortcutText"):
-                    row["shortcut"] = info["shortcutText"]
-            except Exception:
-                pass
-            if refused(name):
-                row["refused"] = refused(name)
-            rows.append(row)
-            if len(rows) >= int(a.get("limit", 80)):
-                break
-        return {"commands": rows, "count": len(rows), "workbench": gui.activeWorkbench().name()}
-
-    def cmd_run(a):
-        gui = _gui()
-        name = a.get("name", "")
-        if refused(name):
-            raise ToolError("refused", f"{name} is not run from here: {refused(name)}.")
-        if name not in gui.listCommands():
-            near = [n for n in gui.listCommands() if name and name.lower() in n.lower()][:8]
-            raise ToolError("not_found", f"No command '{name}' in this FreeCAD" + (f" — did you mean {', '.join(near)}?" if near else "") + " cmd_list { query } finds them; a workbench's commands exist only once it has been activated (workbench { activate }).")
-        # FreeCAD runs a command only while it is active (its button not
-        # greyed): Gui.runCommand on an inactive one does nothing and says
-        # nothing, so that is read first and said.
-        active = None
-        try:
-            c = gui.Command.get(name)
-            active = bool(c.isActive()) if c is not None else None
-        except Exception:  # noqa: BLE001 - a command that cannot say: run it
-            active = None
-        if active is False and name == "Sketcher_LeaveSketch":
-            # Greyed out with no sketch open (nothing to leave: said, not
-            # refused) or while one of the sketch's drawing tools is still
-            # on (a person presses Esc, then Close: both done here).
-            editing = None
-            try:
-                editing = gui.ActiveDocument.getInEdit() if gui.ActiveDocument else None
-            except Exception:  # noqa: BLE001
-                editing = None
-            if editing is None:
-                return {"ran": None, "already": "no sketch is open for editing, so there is nothing to close", "workbench": gui.activeWorkbench().name(), "document": FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None}
-            left = getattr(getattr(editing, "Object", None), "Name", None)
-            gui.ActiveDocument.resetEdit()
-            FreeCAD.ActiveDocument and FreeCAD.ActiveDocument.recompute()
-            gui.updateGui()
-            return {"ran": name, "wasActive": False, "closed": left, "note": "A drawing tool of the sketch was still on: it was ended and the sketch closed.", "workbench": gui.activeWorkbench().name(), "document": FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None}
-        if active is False:
-            sel = []
-            try:
-                sel = [f"{x.ObjectName}{'.' + ','.join(x.SubElementNames) if x.SubElementNames else ''}" for x in gui.Selection.getSelectionEx("*")][:6]
-            except Exception:  # noqa: BLE001
-                pass
-            raise ToolError("invalid_state", f"{name} is not active just now (its button is greyed out), so FreeCAD would do nothing: it needs another selection ({', '.join(sel) if sel else 'nothing is selected'}: selection {{ objects }}), an open document or view, another workbench ({gui.activeWorkbench().name()} is active: workbench {{ activate }}), or no task panel open. Nothing was run.")
-        front = FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None
-        before = len(FreeCAD.ActiveDocument.Objects) if FreeCAD.ActiveDocument else 0
-        gui.runCommand(name, int(a.get("index", 0)))
-        FreeCAD.ActiveDocument and FreeCAD.ActiveDocument.recompute()
-        gui.updateGui()
-        out = {"ran": name, "wasActive": active, "workbench": gui.activeWorkbench().name(), "document": FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None}
-        if FreeCAD.ActiveDocument is not None and FreeCAD.ActiveDocument.Name == front:
-            out["objectsAdded"] = len(FreeCAD.ActiveDocument.Objects) - before
-        try:
-            if s.doc is not None and out["document"] and out["document"] != s.doc.Name:
-                out["note"] = f"The command ran on the document in front ({out['document']}), not the one the session works in ({s.doc.Name}): doc_switch {{ document, front: true }} brings that one to the front first."
+            return s.doc.Name if s.doc is not None else None
         except Exception:  # noqa: BLE001
-            pass
-        return out
+            return None
 
-    def menu_list(a):
-        bar = _menubar()
-        out = []
-        top = a.get("menu")
-        for act in bar.actions():
-            title = re.sub(r"&(?!&)", "", act.text()).strip()
-            if not title or act.menu() is None:
-                continue
-            if top and title.lower() != str(top).lower():
-                continue
-            act.menu().aboutToShow.emit()
-            _actions(act.menu(), [title], out)
-        if top and not out:
-            have = [re.sub(r"&(?!&)", "", x.text()).strip() for x in bar.actions() if x.menu() is not None and x.text()]
-            raise ToolError("not_found", f"No menu '{top}' in the {_gui().activeWorkbench().name()} workbench's menu bar: {', '.join(have)}.")
-        return {"items": out if top else out[: int(a.get("limit", 400))], "count": len(out)}
+    def bench_ready(key):
+        """A workbench made ready to load unattended (echo.bench_ready):
+        OpenSCAD's first start would otherwise ask Finder for the program and wait."""
+        from .. import echo
 
-    def menu_run(a):
-        path = a.get("path") or []
-        if not path:
-            raise ToolError("invalid_input", "path: the menu's titles, e.g. [\"View\", \"Standard views\", \"Fit all\"].")
-        act = _find_action(path)
-        name = act.objectName()
-        if refused(name):
-            raise ToolError("refused", f"'{' > '.join(path)}' ({name}) is not run from here: {refused(name)}.")
-        if act.menu() is not None:
-            raise ToolError("invalid_input", f"'{' > '.join(path)}' is a menu, not an item: menu_list {{ menu: \"{path[0]}\" }} shows its items.")
-        if not act.isEnabled():
-            raise ToolError("invalid_state", f"'{' > '.join(path)}' is greyed out just now, so pressing it would do nothing: it needs a selection (selection {{ objects }}), an open document, or its task panel closed first. Nothing was pressed.")
-        act.trigger()
-        _gui().updateGui()
-        return {"pressed": path, "command": name or None, "checked": act.isChecked() if act.isCheckable() else None}
+        echo.bench_ready(key)
 
-    def workbench(a):
-        gui = _gui()
-        if a.get("activate"):
-            want = str(a["activate"]).lower().replace(" ", "")
-            names = gui.listWorkbenches()
-            hit = next((k for k, w in names.items() if k.lower() == want or k.lower() == want + "workbench" or getattr(w, "MenuText", "").lower().replace(" ", "") == want), None)
-            if hit is None:
-                raise ToolError("not_found", f"activate: no workbench {a['activate']!r} — the workbenches: " + ", ".join(sorted(getattr(w, "MenuText", k) for k, w in names.items())) + ".")
-            was = gui.activeWorkbench().name()
-            from .. import echo
-
-            echo.bench_ready(hit)  # OpenSCAD's first start would otherwise ask Finder for the program and wait
-            ok = gui.activateWorkbench(hit)
-            if ok is False or gui.activeWorkbench().name() != hit:
-                raise ToolError("failed", f"FreeCAD did not switch to {hit} (still {gui.activeWorkbench().name()}): the workbench failed to load — report_read {{ problems: true }} shows its error.")
-            wbs = gui.listWorkbenches()
-            return {"active": hit, "was": was, "workbenches": sorted(getattr(w, "MenuText", k) for k, w in wbs.items())}
-        wbs = gui.listWorkbenches()
-        return {"active": gui.activeWorkbench().name(), "workbenches": sorted(getattr(w, "MenuText", k) for k, w in wbs.items())}
-
-    def show(a):
-        """Show or hide objects in the window, as the eye in the tree does.
-        A PartDesign body shows its tip (its finished part), not its history."""
-        _gui()
-        doc = s.doc
-        names = a.get("objects")
-        if names in (None, "all"):
-            objs, unknown = [o for o in doc.Objects if o.TypeId in ("PartDesign::Body",) or (hasattr(o, "Shape") and not o.InList and o.TypeId not in ("App::Origin", "App::Line", "App::Plane"))], []
-        else:
-            objs, unknown = named_objects(doc, names)
-            if unknown and not objs:
-                raise ToolError("not_found", f"No object {', '.join(repr(str(n)) for n in unknown)} in {doc.Label}.")
-        on = bool(a.get("visible", True))
-        done = []
-        for o in objs:
-            if not getattr(o, "ViewObject", None):
-                continue
-            o.ViewObject.Visibility = on
-            if on and o.TypeId == "PartDesign::Body" and o.Tip is not None:
-                o.Tip.ViewObject.Visibility = True
-            done.append(o.Label)
-        import FreeCADGui
-
-        FreeCADGui.updateGui()
-        out = {"visible" if on else "hidden": done}
-        if unknown:
-            out["unknown"] = [str(n) for n in unknown]
-            out["note"] = "Not found, so left out; the rest done."
-        return out
-
-    def selection(a):
-        import FreeCADGui
-
-        _gui()
-        if not a.get("objects"):
-            if a.get("clear", True):
-                FreeCADGui.Selection.clearSelection()
-                return {"selected": [], "cleared": True}
-            # clear: false and no objects: read what is selected, sub-elements too.
-            rows = [{"object": x.Object.Label, **({"elements": list(x.SubElementNames)} if x.SubElementNames else {})} for x in FreeCADGui.Selection.getSelectionEx(s.doc.Name)]
-            return {"selected": [r["object"] for r in rows], "detail": rows, "document": s.doc.Name}
-        names = a.get("objects")
-        if not (isinstance(names, list) and all(isinstance(n, str) and n for n in names)):
-            raise ToolError("invalid_input", "objects: a list of names or labels (whole objects; none clears the selection).")
-        # Found first, so a wrong name leaves the selection as it was.
-        objs = []
-        for n in names:
-            o = s.doc.getObject(n) or next((x for x in s.doc.Objects if x.Label == n), None)
-            if o is None:
-                raise ToolError("not_found", f"objects: no object '{n}' in {s.doc.Label} — object_list names them. The selection was left as it was.")
-            objs.append(o)
-        FreeCADGui.Selection.clearSelection()
-        for o in objs:
-            FreeCADGui.Selection.addSelection(o)
-        # Read from the session's document by name: with no name FreeCAD
-        # answers for the document in front, which may be another.
-        got = [x.Object.Label for x in FreeCADGui.Selection.getSelectionEx(s.doc.Name)]
-        out = {"selected": got, "document": s.doc.Name}
-        if len(got) != len(set(o.Name for o in objs)):
-            out["note"] = "Not every object took the selection (one with no view in the window cannot be selected)."
-        return out
-
-    def window_snapshot(a):
-        """The whole FreeCAD window as the person sees it — toolbars, tree,
-        panels, the 3D view — drawn by Qt itself, so it works in the
-        background with no screen-recording permission. part: one dock
-        panel by its title (e.g. "Report view", "Agent Link")."""
-        gui = _gui()
-        mw = gui.getMainWindow()
-        target = mw
-        if a.get("part"):
-            want = str(a["part"]).lower()
-            from PySide import QtGui
-
-            QtW = getattr(__import__("PySide", fromlist=["QtWidgets"]), "QtWidgets", QtGui)
-            docks = mw.findChildren(QtW.QDockWidget)
-            target = next((d for d in docks if d.windowTitle().lower() == want or d.objectName().lower() == want), None)
-            if target is None:
-                raise ToolError("not_found", f"part: no panel titled {a['part']!r} — the panels: " + ", ".join(sorted(d.windowTitle() for d in docks if d.windowTitle())) + ".")
-        from ..grab import grab_window
-
-        pix = grab_window(target)
-        out = paths.local(s, a.get("path") or os.path.join(s.out_dir, "window.png"))
-        if not pix.save(out, "PNG"):
-            raise ToolError("failed", f"Could not write {out}")
-        res = {"path": out, "width": pix.width(), "height": pix.height()}
-        if a.get("inline", True):
-            with open(out, "rb") as f:
-                res["_png"] = f.read()
-        return res
-
-    def _shots():
-        try:
-            with open(os.path.join(os.path.expanduser("~/AgentLink"), "shots", "index.json"), encoding="utf-8") as f:
-                return json.load(f)
-        except (OSError, ValueError):
-            return []
-
-    def snapshot_latest(a):
-        rows = _shots()
-        if not rows:
-            raise ToolError("not_found", "No screenshots yet: the person takes one with the camera button (Agent Link toolbar) or Alt+Shift+S.")
-        k = int(a.get("index", 1))
-        if not 1 <= k <= len(rows):
-            raise ToolError("invalid_input", f"index: 1 to {len(rows)}.")
-        r = dict(rows[-k])
-        path = r["original"] if a.get("original") else r["path"]
-        r.pop("marks", None)
-        if os.path.isfile(path):
-            with open(path, "rb") as f:
-                r["_png"] = f.read()
-        if not r.get("done"):
-            r["note"] = (r.get("note") or "") + " (the person is still marking it up)"
-        return r
-
-    def snapshot_list(a):
-        return {"shots": [{k: v for k, v in r.items() if k != "marks"} for r in reversed(_shots())]}
+    # pref_get, pref_set, pref_reset, pref_pack, cmd_list, cmd_run, menu_list, menu_run, show, selection, window_snapshot, snapshot_latest,
+    # snapshot_list and workbench are data: these are what their entries call. cmd_run's Sketcher_LeaveSketch case is in its entry.
+    helpers = {
+        "window": _gui, "doc": lambda: s.doc, "front": lambda: FreeCAD.ActiveDocument, "working": working,
+        "group": _group, "contents": _contents, "subgroups": subgroups, "stored": stored, "set_value": _set, "removed": removed, "guarded": guarded,
+        "changing": _settings_changing, "changed": _settings_changed, "packs": packs, "apply_cfg": apply_cfg,
+        "refused": refused, "cmd_matches": cmd_matches, "cmd_row": cmd_row, "is_active": is_active, "in_edit": in_edit, "selected": selected,
+        "menubar": _menubar, "bare": bare, "walk": _actions, "find_action": _find_action, "bench_ready": bench_ready,
+        "named_objects": named_objects, "dock_panels": dock_panels, "grab": grab, "local": lambda p: paths.local(s, p),
+        "out_file": lambda name: os.path.join(s.out_dir, name), "read_bytes": read_bytes, "isfile": os.path.isfile, "shots": shots,
+    }
 
     def app_restart(a):
         """Quit this FreeCAD and start it again (new add-on code, a theme):
@@ -1119,32 +944,8 @@ def tools(session):
     return [
         Tool("app_install", "Install another FreeCAD release beside this one on a Mac: version (\"1.1.3\", \"latest\") from FreeCAD's GitHub release, SHA-256 checked; the current FreeCAD.app kept as \"FreeCAD <version>.app\". It downloads in the background (minutes): the call answers started, and a call with no arguments reads its state (downloading … installed | failed) and the app's path. Then app_restart { app } switches the window over; with the window closed, open: an .app carries settings over and opens it. Elsewhere than macOS it is refused. Ask the person before installing.",
              obj({"version": {"type": "string"}, "open": {"type": "string"}}), app_install, changes=False),
-        Tool("pref_get", "Read FreeCAD's settings (the parameter tree Edit > Preferences writes): path a group (\"BaseApp/Preferences/View\"; BaseApp/Preferences when left out) answers values { name: { type Boolean | Integer | Unsigned | Float | String, value } } and groups (its subgroups, to walk down); name: one setting. Only settings ever changed are stored: one that is absent is at FreeCAD's default (refused as not found, with the names stored). Works headless. Changes nothing.",
-             obj({"path": {"type": "string"}, "name": {"type": "string"}}), pref_get),
-        Tool("pref_set", "Change FreeCAD's settings: path (the group), then name + value or values { name: value }. The type follows the stored setting's own; for one not stored yet give type (bool, int, uint, float, string) or it is taken from the value — a wrong type is stored beside the right one and FreeCAD ignores it, so check with pref_get. Reply: set { name: { was, now, type } }, appliesAtNextLaunch. Most apply at once; the theme, stylesheet, language and toolbars after app_restart. Refused for the person's own: Agent Link's ExtensionRepos, the switches add-ons guard, the Addon Manager's groups, the macro folder and program paths (…BinaryPath, …Executable).",
-             obj({"path": {"type": "string"}, "name": {"type": "string"}, "value": {}, "values": {"type": "object"}, "type": {"type": "string"}}), pref_set, changes=True),
         Tool("pref_import", "Bring settings over from another settings file: by default the user.cfg of the release before this one (after a FreeCAD upgrade), or path. Merged in, the file's values winning; this FreeCAD's settings are copied to a backup first (reply: backup) and the guarded ones stay as they were; macros the new release lacks are copied too (macros: false not). Reply: from, groups, backup, macros, guardedKept. Some (theme, toolbars) show after app_restart.",
              obj({"path": {"type": "string"}, "macros": {"type": "boolean"}}), pref_import),
-        Tool("pref_reset", "Take settings back to FreeCAD's defaults by removing the stored values: path (the group), names. Reply: reset, notSet (names not stored there: already at the default, or misspelt). Guarded settings are refused as in pref_set.", obj({"path": {"type": "string"}, "names": {"type": "array", "items": {"type": "string"}}}, ["names"]), pref_reset),
-        Tool("pref_pack", "Preference packs (themes and their settings; FreeCAD's own, saved ones and add-ons'): with nothing, packs lists their names; apply: name sets every value the pack holds (reply: values, how many). The stylesheet and theme show after app_restart; navigation and colours at once. There is no un-apply: an add-on that keeps a settings history can take it back.", obj({"apply": {"type": "string"}}), pref_pack, changes=True),
-        Tool("cmd_list", "FreeCAD's commands (every toolbar button and menu item is one): name, menu text, tip, shortcut, and refused (why cmd_run will not run it). query: part of a name or words of its menu text or tip; limit (80). Only commands of workbenches already activated in this run exist (workbench { activate } loads one). Reply: commands, count, workbench (the active one). Window only. Changes nothing.",
-             obj({"query": {"type": "string"}, "limit": {"type": "integer"}}), cmd_list),
-        Tool("cmd_run", "Run a FreeCAD command by name (Std_ViewFitAll, Std_ViewIsometric, PartDesign_Pad …) as pressing its button would: on the window's current selection (selection sets it) and the document in front (doc_switch { front: true }), in the active workbench. A command that is not active (greyed out) is refused, since FreeCAD would silently do nothing; commands that open a modal dialog, run macros or quit are refused with the tool for the job. Many modelling commands open a task panel and wait: dialog_answer presses its OK or Cancel. index: the item of a group command (0). Reply: ran, wasActive, workbench, document, objectsAdded — a command gives no result of its own, so read the model after (session_state). The headless tools do modelling better; this is for view and window commands. Window only.",
-             obj({"name": {"type": "string"}, "index": {"type": "integer"}}, ["name"]), cmd_run, changes=True),
-        Tool("menu_list", "The window's menu bar as the person sees it in the active workbench: items [{ path: [titles], command (its name for cmd_run), enabled: false when greyed, checked for toggles }]; menu: one top menu only (all of it; without it, the first limit 400 items). Menus change with the workbench. Window only. Changes nothing.",
-             obj({"menu": {"type": "string"}, "limit": {"type": "integer"}}), menu_list),
-        Tool("menu_run", "Press a menu item by its path of titles ([\"View\", \"Standard views\", \"Fit all\"]; as menu_list gives them, case and a trailing … aside). A greyed item is refused (it would do nothing), a submenu too, and what cmd_run refuses (modal dialogs, macros, quit). Reply: pressed, command, checked (a toggle's state after). Acts on the selection and the document in front, as cmd_run. Window only.",
-             obj({"path": {"type": "array", "items": {"type": "string"}}}, ["path"]), menu_run, changes=True),
-        Tool("show", "Show or hide objects in the window as the tree's eye does: objects (names or labels; left out or \"all\": every body and top-level shape), visible (true; false hides). A PartDesign body shown also shows its tip, the finished part. Reply: visible or hidden [labels], unknown (names not found; the rest still done). Hidden parts are left out of view_render and of checks that go by what is shown. Window only.",
-             obj({"objects": {}, "visible": {"type": "boolean"}}), show, changes=True),
-        Tool("selection", "Set the window's selection for cmd_run and menu_run to act on: objects [names or labels] replaces it with those whole objects (faces and edges are picked with gui_input clicks); no objects clears it; clear: false with no objects reads it instead (detail gives the picked faces and edges). A wrong name is refused and the selection left as it was. Reply: selected [labels], document. Window only.",
-             obj({"objects": {"type": "array", "items": {"type": "string"}}, "clear": {"type": "boolean"}}), selection),
-        Tool("window_snapshot", "A picture of the FreeCAD window as the person sees it (toolbars, tree, panels, 3D view), or part: one dock panel by its title (\"Report view\", \"Model\", \"Agent Link\"; a wrong title lists them). Drawn by Qt in the background: no screen recording, the window need not be in front. path: a .png (window.png in the session's folder); inline: false leaves the picture out of the reply. Reply: path, width, height. For how something looks, never as proof a step worked: read state for that. Window only.",
-             obj({"part": {"type": "string"}, "path": {"type": "string"}, "inline": {"type": "boolean"}}), window_snapshot),
-        Tool("snapshot_latest", "The person's newest screenshot (index 2, 3 … for older ones) as a picture with their marks (original: true without), with its note, numbered pins and their comments, workbench and time; a note says when they are still marking it up. Only the person takes them (the camera button, Alt+Shift+S): none yet is refused. Changes nothing.",
-             obj({"index": {"type": "integer"}, "original": {"type": "boolean"}}), snapshot_latest),
-        Tool("snapshot_list", "The person's screenshots, newest first, without the pictures: time, note, pins, saved path. snapshot_latest { index } shows one. Changes nothing.", obj({}), snapshot_list),
         Tool("app_restart", "Quit this FreeCAD window and open it again, with the same documents (new add-on code, a theme, a setting that needs a restart). Window only; the call answers first, then FreeCAD quits about 0.3 s later and is back in a few seconds with its link on by itself (calls made meanwhile wait for it, up to 90 s; then session_state says where things stand). What happens to documents, by save: agent (the default) saves the documents this session changed, each checkpointed first; none saves nothing; all saves every changed document and needs confirm: \"save all\" typed by the person, since it writes over files the agent did not change. In every case nothing of the person's is lost or written over: the agent's never-saved documents are kept once in ~/AgentLink/unsaved and reopened from there, and any other changed document reopens from a copy beside its file, which the add-on that keeps checkpoints makes (without that add-on the call is refused, nothing changed, and says to doc_save them first); discard: true drops the never-saved ones instead. A task panel or sketch left open is not carried over. app: the path of another FreeCAD .app (one app_install put there) opens that release instead; it must first pass the smoke test with these add-ons, else the call is refused and the window stays where it is; this one's settings and add-ons are carried into its folders. Reply: restarting true, saved (documents written), reopens (what will be opened again), keptInPlace, fromCopies, discarded, app and settings (with app), note. Use it only when a restart is needed: every open task panel, the undo history and the selection are gone afterwards. A window that no longer answers at all is app_force_restart's job, not this one's.",
              obj({"discard": {"type": "boolean"}, "app": {"type": "string"}, "save": {"type": "string", "enum": ["agent", "none", "all"]}, "confirm": {"type": "string"}}), app_restart),
-        Tool("workbench", "The window's workbenches: with nothing, active (its internal name, e.g. PartDesignWorkbench) and workbenches (their menu names); activate: a menu name or internal name (\"Part Design\", \"BIM\", \"FEM\") switches to it, loading it the first time (seconds; its commands and menus exist only from then on). Reply: active, was. Changing tools switch workbench by themselves; this is for cmd_run and menu_run. Window only.", obj({"activate": {"type": "string"}}), workbench),
-    ]
+    ] + runners.tools(GROUP, s, helpers)

@@ -14,7 +14,8 @@
 # took more than SLOW_READ, or that the watchdog stopped FreeCAD in before
 # (keep.stopped_before); any read with background: true; job_start
 # { tool, arguments } for any read. Never a picture or a window tool (Qt
-# and the 3D view are the GUI thread's), never a change. While a job runs,
+# and the 3D view are the GUI thread's), never a change, never a read that
+# drives the document on the way (IN_PLACE below). While a job runs,
 # changing calls on the document are refused (the worker reads it).
 
 import threading
@@ -38,24 +39,134 @@ NOT_JOBS_PREFIX = ("gui_", "window_", "dialog_", "view_", "app_", "doc_", "job_"
 
 _lock = threading.Lock()
 JOBS = {}
+# The queue's file is read, changed and written back here from two threads
+# (a job's own as it ends, the call's as it logs a time): one at a time, or
+# the later write put back what the other had just changed.
+_queue_lock = threading.Lock()
 
 
-# Reads that leave the document as it was but move its parts on the way
-# (each pose placed, recomputed and put back): they change nothing, yet they
-# drive the document and the 3D view, which only the GUI thread may do. On a
-# worker thread, with the GUI thread waiting for the job inside a batch,
-# asm_sweep stopped FreeCAD for good (the watchdog started it again, three
-# times). They run in place.
-MOVES_PARTS = {"asm_sweep", "asm_motion"}
+# Reads that must run in place, on the GUI thread: each changes nothing by
+# its kind (changes: false), yet on the way it drives the document, the
+# window or the selection, which only the GUI thread may do. On a worker
+# thread, with the GUI thread waiting for the job inside a batch, asm_sweep
+# stopped FreeCAD for good (the watchdog started it again, three times).
+# name → what it does on the way (said in background's refusal). Found by
+# reading each read's code against FreeCAD 1.1's source; tests/
+# test_hubfix3.py scans every read (the hub's Tool(…) calls and the entries
+# of data/tools.json with the helpers they call) for the same signs and
+# fails on one that is neither here, nor kept from jobs by its name
+# (NOT_JOBS_PREFIX, outputs.SHOT_TOOLS), nor listed there as looked at.
+IN_PLACE = {
+    # poses placed, recomputed and put back (assembly.py sweep_run; assembly_more.py)
+    "asm_sweep": "moves the parts through each pose and puts them back",
+    "asm_motion": "moves the parts through each frame",
+    # AssemblyObject::solve places the parts and redraws the joints
+    # (src/Mod/Assembly/App/AssemblyObject.cpp: setNewPlacements,
+    # redrawJointPlacements). exportAsASMT writes no property, but builds
+    # the assembly's solver model afresh in the object itself (mbdAssembly,
+    # objectPartMap), the one a solve or a drag in the window works in.
+    "asm_list": "solves the assembly on the way, which places its parts",
+    "asm_check": "solves the assembly on the way, which places its parts",
+    "asm_export": "builds the assembly's solver model afresh, the one a solve or a drag in the window uses",
+    # SketchObject::solve writes the solved geometry back and signals the
+    # sketch's view (src/Mod/Sketcher/App/SketchObject.cpp).
+    "sketch_state": "solves the sketch on the way",
+    # views recomputed and Qt's events pumped while TechDraw's threads land
+    # (techdraw.py recompute, settle, warm).
+    "td_list": "recomputes views that have no lines yet",
+    "td_geometry": "recomputes the page's views",
+    "td_export": "recomputes the page's views",
+    # FreeCAD.setActiveDocument signals the window (src/App/Application.cpp;
+    # src/Gui/Application.cpp slotActiveDocument activates an MDI window);
+    # cam_post also sets the job's PostProcessorArgs and puts them back.
+    "cam_list": "makes its document FreeCAD's active one",
+    "cam_library": "makes its document FreeCAD's active one",
+    "cam_post": "sets the job's post-processor arguments for the run and puts them back",
+    # each point set on the robot's Tcp and axes, then put back and recomputed
+    "robot_run": "moves the robot through the trajectory and puts its axes back",
+    # FreeCAD.GuiUp switched off for the whole process while it writes
+    "scad_export": "switches FreeCAD's window flag off while it writes",
+    # exportIFC works on FreeCAD.ActiveDocument and recomputes it
+    # (src/Mod/BIM/importers/exportIFC.py).
+    "bim_export": "recomputes the document as FreeCAD's IFC exporter does",
+    # the notes' faces looked for again and written back into the document
+    "note_list": "writes the notes it followed back into the document",
+    # its wait pumps Qt's events so the window keeps painting
+    "addon_test": "keeps the window painting while it waits",
+    # the OpenSCAD program it found is written to FreeCAD's settings
+    # (openscad.py exe): a setting's observers run on the writing thread
+    "scad_status": "writes the OpenSCAD program it found into FreeCAD's settings",
+    # a checkpoint older than the session is read from its saved copy: a
+    # document opened, recomputed and closed (tools.py _step_in_file)
+    "history_diff": "opens a checkpoint's saved copy beside the document, and closes it",
+    # now: true reads the window's selection and state (nexthint.py)
+    "tool_groups": "reads the window's selection and state for now: true",
+    # FreeCAD's undo and redo, a recompute and the step's snapshot
+    "history_undo": "undoes steps in the document",
+    "history_redo": "redoes steps in the document",
+    # the window itself: selection, workbench, menus and commands (Qt), the
+    # Report view's widget, what the window is in the middle of (next)
+    "selection": "sets the window's selection",
+    "workbench": "reads and activates the window's workbenches",
+    "cmd_list": "reads the window's commands",
+    "menu_list": "reads the window's menus",
+    "report_read": "reads the window's Report view",
+    "session_state": "reads the window (workbench, selection, what is open) for next",
+    # settings written: every observer of the parameter group runs on the
+    # writing thread, the window's own among them
+    "pref_import": "writes settings the window listens to",
+    "pref_reset": "writes settings the window listens to",
+    # runs other tools, changes among them
+    "live_run": "runs a script of calls, changes among them",
+    "addon": "drives FreeCAD's Addon Manager",
+}
+MOVES_PARTS = IN_PLACE  # its first name, when it held asm_sweep and asm_motion alone
+
+# Reads that run in place only as the document stands: a strength study of
+# one solid of a body of several keeps a hidden helper object, made or
+# refreshed (its Shape set) at the start of each of these (strength.py
+# solid_holder). Any other study only reads, and the solve stays a job.
+def _study_of_one_solid(session):
+    from . import store
+
+    return bool((store.read(session.doc, "fea", None) or {}).get("of"))
 
 
-def eligible(tool, args):
+IN_PLACE_WHEN = {
+    "fea_heat": (_study_of_one_solid, "refreshes the hidden helper of a study of one solid"),
+    "fea_buckle": (_study_of_one_solid, "refreshes the hidden helper of a study of one solid"),
+    "fea_modes": (_study_of_one_solid, "refreshes the hidden helper of a study of one solid"),
+}
+
+
+def in_place(name, why):
+    """An add-on's read that drives the document or the window on the way
+    (poses tried and put back, a solve, a recompute, the selection): never
+    run as a job. why: a few words for background's refusal, after the
+    tool's name ("moves the parts and puts them back")."""
+    IN_PLACE[str(name)] = str(why)
+
+
+def why_in_place(name, session=None):
+    """What a read does on the way that keeps it on the GUI thread, or None."""
+    why = IN_PLACE.get(name)
+    if why is None and session is not None and name in IN_PLACE_WHEN:
+        test, words = IN_PLACE_WHEN[name]
+        try:
+            why = words if test(session) else None
+        except Exception:
+            why = None  # no document, no study: nothing to refresh
+    return why
+
+
+def eligible(tool, args, session=None):
     """A read that may run on a worker thread: changes nothing and touches
-    neither Qt nor the 3D view."""
+    neither the document, Qt nor the 3D view on the way (session: as its
+    document stands, where that decides it)."""
     from . import outputs
 
     name = tool.name
-    if name in outputs.SHOT_TOOLS or name.startswith(NOT_JOBS_PREFIX) or name == "batch" or name in MOVES_PARTS:
+    if name in outputs.SHOT_TOOLS or name.startswith(NOT_JOBS_PREFIX) or name == "batch" or why_in_place(name, session) is not None:
         return False
     try:
         return not tool.changes_for(args or {})
@@ -73,13 +184,13 @@ def writes_file(tool, args):
     return tool.name in paths.WRITERS or (args or {}).get("action") == "export"
 
 
-def background_refusal(tool, args, in_batch):
+def background_refusal(tool, args, in_batch, session=None):
     """Why background: true was not taken for this call, and what to do
     instead — by what the call is: a read asked for inside a batch (plain,
     or one that writes a file: the calls after it wait for the file, so it
     belongs in the batch's order), or a call that can never be a job."""
     name = tool.name
-    if in_batch and eligible(tool, args):
+    if in_batch and eligible(tool, args, session):
         if writes_file(tool, args):
             return (f"background: not inside a batch, which is one answer. {name} writes a file: leave background out and it runs here in its place, "
                     f"the file written before the next call starts. (On its own, {name} with background: true runs as a job: it answers with a job id past 45 s, "
@@ -93,6 +204,10 @@ def background_refusal(tool, args, in_batch):
     if changing:
         return (f"background: {name} changes the document, so it cannot run as a job (only a read that leaves the window and the 3D view alone can) — "
                 "leave background out: it runs as a plain call" + (", here in the batch's order." if in_batch else "."))
+    why = why_in_place(name, session)
+    if why:
+        return (f"background: {name} cannot run as a job — it changes nothing, but it {why}, which only the window's own thread may do. "
+                "Leave background out" + (": it runs here in the batch's order." if in_batch else ": it runs as a plain call."))
     return (f"background: {name} cannot run as a job — only a read that leaves the window and the 3D view alone can (not a change, a picture or a window tool). "
             "Leave background out" + (": it runs here in the batch's order." if in_batch else "."))
 
@@ -110,7 +225,7 @@ def wanted(tool, args, session, asked=False):
     """Whether this call runs as a job: asked (background: true, job_start),
     or a heavy read, or a read slow before. Never inside a batch (the batch
     is one answer)."""
-    if not eligible(tool, args):
+    if not eligible(tool, args, session):
         return False
     if getattr(session, "batch_now", None):
         return False
@@ -136,17 +251,18 @@ def running(doc=None):
 def _queue(add=None, drop=None):
     """The heavy queue's "running" list carries the job while it runs."""
     try:
-        q = keep.queue_state()
-        # A job dies with its FreeCAD: one this process does not know is a
-        # leftover of a FreeCAD that was stopped, and would hold the queue's
-        # one slot (and the person's "held") for good.
-        with _lock:
-            mine = set(JOBS)
-        r = [x for x in (q.get("running") or []) if not (drop and x.get("job") == drop) and (x.get("job") is None or x.get("job") in mine)]
-        if add:
-            r.append(add)
-        q["running"] = r
-        keep.save_queue(q)
+        with _queue_lock:
+            q = keep.queue_state()
+            # A job dies with its FreeCAD: one this process does not know is a
+            # leftover of a FreeCAD that was stopped, and would hold the queue's
+            # one slot (and the person's "held") for good.
+            with _lock:
+                mine = set(JOBS)
+            r = [x for x in (q.get("running") or []) if not (drop and x.get("job") == drop) and (x.get("job") is None or x.get("job") in mine)]
+            if add:
+                r.append(add)
+            q["running"] = r
+            keep.save_queue(q)
     except Exception:
         pass
 
@@ -176,10 +292,18 @@ def start(tool, args, session, fn=None):
         JOBS[jid] = job
     _queue(add={"tool": tool.name, "job": jid, "t": job["started"]})
     call = fn or (lambda: tool.fn(args))
+    # Where its thread is, should it still run after a minute
+    # (protocol.hang_trace: <outDir>/crash/hang-job-<tool>.txt). A job runs
+    # outside the call that started it, so the call's own watch ends with
+    # the call's answer and never saw a job that hung.
+    from .protocol import hang_trace
+
+    watch = hang_trace(getattr(session, "out_dir", None), tool.name, "job")
 
     def work():
         try:
-            out = call()
+            with watch:
+                out = call()
             job["result"] = out
             job["status"] = "done"
         except ToolError as e:
@@ -195,9 +319,10 @@ def start(tool, args, session, fn=None):
             secs = job["finished"] - job["started"]
             if job["status"] == "done" and secs >= 1.0:
                 try:
-                    q = keep.queue_state()
-                    keep.log_timing(q, tool.name, size, secs)
-                    keep.save_queue(q)
+                    with _queue_lock:
+                        q = keep.queue_state()
+                        keep.log_timing(q, tool.name, size, secs)
+                        keep.save_queue(q)
                 except Exception:
                     pass
             _queue(drop=jid)
@@ -257,14 +382,15 @@ def note_slow(tool, args, session, secs):
     """A read that took longer than SLOW_READ, not a heavy tool: its time
     logged, so the next call of its size goes to a job at once (a read past
     a client's 80 s never got its answer back)."""
-    if secs <= SLOW_READ or keep.is_heavy(tool.name) or not eligible(tool, args):
+    if secs <= SLOW_READ or keep.is_heavy(tool.name) or not eligible(tool, args, session):
         return
     try:
         from . import heavy
 
-        q = keep.queue_state()
-        keep.log_timing(q, tool.name, heavy.size_of(session), secs)
-        keep.save_queue(q)
+        with _queue_lock:
+            q = keep.queue_state()
+            keep.log_timing(q, tool.name, heavy.size_of(session), secs)
+            keep.save_queue(q)
     except Exception:
         pass
 

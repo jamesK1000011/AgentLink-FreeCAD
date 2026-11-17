@@ -240,6 +240,37 @@ for a key whose book is kept on the session under the attribute
 state of the document the session is in (an add-on that reopened a document
 from a copy puts back the state it kept).
 
+The session's own record of a document goes the same way and by the same
+book: `session.steps` (what `history_diff` compares), `session.meta`,
+`session.tx` (undo steps made in this document), `session.calls` (its
+changing calls, for a macro) and `session.checks` are the document's. A new
+or opened document starts at nothing (its `calls` begin with the `doc_new` or
+`doc_open` that made it), and one the session comes back to while it stayed
+open finds its own again; `session.switch(doc)` no longer empties them. An
+add-on that reopens a document from a copy and puts the record back
+(`session.steps, session.meta, session.calls = kept` after `switch`) works as
+before: the names are properties over the record of the document the session
+is in. `agentlink.docstates.own_of(session, doc)` reaches the record of a
+document the session left open.
+
+### Reads that must run in place
+
+A read (`"changes": false`) may be run on a worker thread as a job
+(`background: true`, `job_start`, a heavy or slow read on its own). One that
+changes nothing in the end but drives the document or the window on the way
+— poses tried and put back, a solve, a recompute, the selection, a view, a
+document made active, a setting written — must not: only FreeCAD's GUI
+thread may do those, and such a read on a worker thread stopped FreeCAD's
+window. Say so from your `agentlink_families` module:
+
+```python
+from agentlink import jobs
+jobs.in_place("mygroup_fit_check", "moves the parts through each pose and puts them back")
+```
+
+The words are said in `background`'s refusal after the tool's name. Agent
+Link's own are in `agentlink/jobs.py` (`IN_PLACE`), each with what it does.
+
 ### Events Agent Link emits
 
 | Event | When |

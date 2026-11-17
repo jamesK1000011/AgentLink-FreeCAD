@@ -18,7 +18,7 @@
    "properties": {"when": {"description": "The step runs only when this is truthy."}},
    "oneOf": [
     {"required": ["let"], "properties": {"let": {"type": "object", "description": "Values by name, in order; \"p, q\" unpacks."}}},
-    {"required": ["refuse"], "properties": {"refuse": {"$ref": "#/$defs/message"}, "code": {"enum": ["invalid_input", "not_found", "invalid_state", "unavailable", "failed"]},
+    {"required": ["refuse"], "properties": {"refuse": {"$ref": "#/$defs/message"}, "code": {"enum": ["invalid_input", "not_found", "invalid_state", "unavailable", "failed", "not_allowed", "refused"]},
                                            "first": {"$ref": "#/$defs/steps", "description": "What to undo before the refusal."}}},
     {"required": ["make"], "properties": {"make": {"type": "string", "description": "A maker's dotted name (Arch.makeStairs), or =expression giving one."}, "call": {"type": "array"},
                                          "kw": {"type": "object"}, "as": {"type": "string"}, "headless": {"type": "boolean", "description": "Through the family's headless_call."}}},

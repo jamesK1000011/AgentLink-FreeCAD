@@ -21350,6 +21350,299 @@
     {"when": "=fmt in SOLID_FORMATS", "then": [{"let": {"verify": "=solid_written(shape, fmt, p, vol)"}}], "else": [{"when": "=fmt in FLAT_OUT", "then": [{"let": {"verify": "=flat_write(objs, fmt, p, a)"}}], "else": [{"do": "=mesh_modules()"}, {"let": {"tol": "=num(a.get('tolerance', 0.01), 'tolerance')"}}, {"refuse": "tolerance: the chord error, above 0 mm.", "when": "=tol <= 0"}, {"let": {"verify": "=scene_written(objs, shape, p, tol, a.get('colors') or {}) if fmt in SCENE_OUT else mesh_written(shape, p, tol, fmt, vol)"}}]}]}
    ],
    "answer": {"fields": {"objects": "=[o.Label for o in objs]", "format": "=fmt", "path": "=p", "bytes": "=filesize(p)", "verify": "=verify"}}
+  },
+  "pref_get": {
+   "group": "app",
+   "description": "Read FreeCAD's settings (the parameter tree Edit > Preferences writes): path a group (\"BaseApp/Preferences/View\"; BaseApp/Preferences when left out) answers values { name: { type Boolean | Integer | Unsigned | Float | String, value } } and groups (its subgroups, to walk down); name: one setting. Only settings ever changed are stored: one that is absent is at FreeCAD's default (refused as not found, with the names stored). Works headless. Changes nothing.",
+   "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "name": {"type": "string"}}, "required": [], "additionalProperties": false},
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"path, g": "=group(a.path)"}},
+    {"let": {"values": "=contents(g)", "groups": "=subgroups(g)"}},
+    {"when": "=a.name", "then": [{"let": {"v": "=values.get(a.name)"}}, {"refuse": {"fmt": "No setting '{a.name}' in {path} (FreeCAD's default applies until one is set): {', '.join(sorted(values)[:40])}"}, "code": "not_found", "when": "=v is None"}, {"answer": {"fields": {"path": "=path", "name": "=a.name", "...v": "=v"}}}]}
+   ],
+   "answer": {"fields": {"path": "=path", "values": "=values", "groups": {"when": "=groups is not None", "value": "=groups"}}}
+  },
+  "pref_set": {
+   "group": "app",
+   "description": "Change FreeCAD's settings: path (the group), then name + value or values { name: value }. The type follows the stored setting's own; for one not stored yet give type (bool, int, uint, float, string) or it is taken from the value — a wrong type is stored beside the right one and FreeCAD ignores it, so check with pref_get. Reply: set { name: { was, now, type } }, appliesAtNextLaunch. Most apply at once; the theme, stylesheet, language and toolbars after app_restart. Refused for the person's own: Agent Link's ExtensionRepos, the switches add-ons guard, the Addon Manager's groups, the macro folder and program paths (…BinaryPath, …Executable).",
+   "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "name": {"type": "string"}, "value": {}, "values": {"type": "object"}, "type": {"type": "string"}}, "required": [], "additionalProperties": false},
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"path, g": "=group(a.path)"}},
+    {"let": {"values": "=dict(a.values or {})"}},
+    {"do": "=values.update({a.name: a.value})", "when": "=a.name"},
+    {"refuse": "name and value, or values { name: value } (path: the group, \"BaseApp/Preferences/…\"; pref_get { path } lists its settings and types).", "when": "=not values"},
+    {"let": {"hit": "=[k for k in values if guarded(path, k)]"}},
+    {"refuse": {"fmt": "{', '.join(hit)}: the person's to set (Edit > Preferences, or Agent Link's panel) — they decide what an agent may do, what code FreeCAD loads and what programs it runs. Nothing was changed."}, "code": "not_allowed", "when": "=hit"},
+    {"do": "=changing('pref_set', path)"},
+    {"let": {"done": "={}", "later": "=[]"}},
+    {"each": "k, v", "in": "=list(values.items())", "steps": [{"let": {"before": "=stored(g, k).get('value')"}}, {"let": {"kind": "=set_value(g, k, v, a.type)"}}, {"do": "=done.update({k: {'was': before, 'now': stored(g, k).get('value'), 'type': kind}})"}, {"push": {"later": "=k"}, "when": "=changed('pref_set', path, k, before, done[k]['now']).get('applies')"}]}
+   ],
+   "answer": {"fields": {"path": "=path", "set": "=done", "note": "Most settings take effect at once; a few (the theme, the stylesheet, toolbars) only after FreeCAD restarts. An add-on that keeps a settings history can list the changes and take them back.", "appliesAtNextLaunch": {"when": "=later", "value": "=later"}}}
+  },
+  "pref_reset": {
+   "group": "app",
+   "description": "Take settings back to FreeCAD's defaults by removing the stored values: path (the group), names. Reply: reset, notSet (names not stored there: already at the default, or misspelt). Guarded settings are refused as in pref_set.",
+   "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "names": {"type": "array", "items": {"type": "string"}}}, "required": ["names"], "additionalProperties": false},
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"path, g": "=group(a.path)"}},
+    {"let": {"names": "=a.names or []"}},
+    {"refuse": "names: the settings to take back to FreeCAD's defaults (path: their group; pref_get { path } lists what is stored).", "when": "=not names"},
+    {"let": {"hit": "=[k for k in names if guarded(path, k)]"}},
+    {"refuse": {"fmt": "{', '.join(hit)}: the person's to reset (Edit > Preferences, or Agent Link's panel). Nothing was changed."}, "code": "not_allowed", "when": "=hit"},
+    {"do": "=changing('pref_reset', path)"},
+    {"let": {"have": "=contents(g)"}},
+    {"let": {"absent": "=[k for k in names if k not in have]"}},
+    {"each": "k", "in": "=names", "steps": [{"let": {"row": "=stored(g, k)"}}, {"do": ["=removed(g, row.get('type', ''), k)", "=changed('pref_reset', path, k, row.get('value'), None)"]}]}
+   ],
+   "answer": {"fields": {"path": "=path", "reset": "=[k for k in names if k not in absent]", "notSet": {"when": "=absent", "value": "=absent"}, "note": {"when": "=absent", "value": "notSet: not stored in this group, so already at FreeCAD's default (or the name or path is wrong: pref_get { path } lists what is stored)."}}}
+  },
+  "pref_pack": {
+   "group": "app",
+   "description": "Preference packs (themes and their settings; FreeCAD's own, saved ones and add-ons'): with nothing, packs lists their names; apply: name sets every value the pack holds (reply: values, how many). The stylesheet and theme show after app_restart; navigation and colours at once. There is no un-apply: an add-on that keeps a settings history can take it back.",
+   "inputSchema": {"type": "object", "properties": {"apply": {"type": "string"}}, "required": [], "additionalProperties": false},
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"have": "=packs()", "name": "=a.apply"}},
+    {"answer": {"fields": {"packs": "=sorted(have)", "next": "pref_pack { apply: name } sets its values; restart FreeCAD for the theme and stylesheet."}}, "when": "=not name"},
+    {"refuse": {"fmt": "apply: no preference pack '{name}' — the packs: {', '.join(sorted(have)) or 'none'}."}, "code": "not_found", "when": "=name not in have"},
+    {"do": "=changing('pref_pack', 'BaseApp/Preferences')"},
+    {"let": {"n": "=apply_cfg(have[name])"}},
+    {"do": "=changed('pref_pack', 'BaseApp/Preferences', 'pack ' + name, None, str(n) + ' values')"}
+   ],
+   "answer": {"fields": {"applied": "=name", "values": "=n", "note": "Restart FreeCAD for the stylesheet and theme to take hold; navigation and colours change now."}}
+  },
+  "cmd_list": {
+   "group": "app",
+   "description": "FreeCAD's commands (every toolbar button and menu item is one): name, menu text, tip, shortcut, and refused (why cmd_run will not run it). query: part of a name or words of its menu text or tip; limit (80). Only commands of workbenches already activated in this run exist (workbench { activate } loads one). Reply: commands, count, workbench (the active one). Window only. Changes nothing.",
+   "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}}, "required": [], "additionalProperties": false},
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"gui": "=window()"}},
+    {"let": {"q": "=str(a.get('query', '')).lower()", "rows": "=[]", "full": false}},
+    {"each": "name", "in": "=sorted(gui.listCommands())", "steps": [{"when": "=not full and cmd_matches(gui, name, q)", "then": [{"let": {"row": "=cmd_row(gui, name)"}}, {"put": {"refused": "=refused(name)"}, "into": "row", "when": "=refused(name)"}, {"push": {"rows": "=row"}}, {"let": {"full": "=len(rows) >= int(a.get('limit', 80))"}}]}]}
+   ],
+   "answer": {"fields": {"commands": "=rows", "count": "=len(rows)", "workbench": "=gui.activeWorkbench().name()"}}
+  },
+  "cmd_run": {
+   "group": "app",
+   "description": "Run a FreeCAD command by name (Std_ViewFitAll, Std_ViewIsometric, PartDesign_Pad …) as pressing its button would: on the window's current selection (selection sets it) and the document in front (doc_switch { front: true }), in the active workbench. A command that is not active (greyed out) is refused, since FreeCAD would silently do nothing; commands that open a modal dialog, run macros or quit are refused with the tool for the job. Many modelling commands open a task panel and wait: dialog_answer presses its OK or Cancel. index: the item of a group command (0). Reply: ran, wasActive, workbench, document, objectsAdded — a command gives no result of its own, so read the model after (session_state). The headless tools do modelling better; this is for view and window commands. Window only.",
+   "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "index": {"type": "integer"}}, "required": ["name"], "additionalProperties": false},
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"gui": "=window()"}},
+    {"let": {"name": "=a.get('name', '')"}},
+    {"refuse": {"fmt": "{name} is not run from here: {refused(name)}."}, "code": "refused", "when": "=refused(name)"},
+    {"when": "=name not in gui.listCommands()", "then": [{"let": {"near": "=[n for n in gui.listCommands() if name and name.lower() in n.lower()][:8]"}}, {"let": {"meant": "=(' — did you mean ' + ', '.join(near) + '?') if near else ''"}}, {"refuse": {"fmt": "No command '{name}' in this FreeCAD{meant} cmd_list {{ query }} finds them; a workbench's commands exist only once it has been activated (workbench {{ activate }})."}, "code": "not_found"}]},
+    {"let": {"active": "=is_active(gui, name)"}},
+    {"when": "=active is False and name == 'Sketcher_LeaveSketch'", "then": [{"let": {"editing": "=in_edit(gui)"}}, {"answer": {"fields": {"ran": null, "already": "no sketch is open for editing, so there is nothing to close", "workbench": "=gui.activeWorkbench().name()", "document": "=front().Name if front() else None"}}, "when": "=editing is None"}, {"let": {"left": "=get(get(editing, 'Object', None), 'Name', None)"}}, {"do": ["=gui.ActiveDocument.resetEdit()", "=front() and front().recompute()", "=gui.updateGui()"]}, {"answer": {"fields": {"ran": "=name", "wasActive": false, "closed": "=left", "note": "A drawing tool of the sketch was still on: it was ended and the sketch closed.", "workbench": "=gui.activeWorkbench().name()", "document": "=front().Name if front() else None"}}}]},
+    {"when": "=active is False", "then": [{"let": {"sel": "=selected(gui)"}}, {"refuse": {"fmt": "{name} is not active just now (its button is greyed out), so FreeCAD would do nothing: it needs another selection ({', '.join(sel) if sel else 'nothing is selected'}: selection {{ objects }}), an open document or view, another workbench ({gui.activeWorkbench().name()} is active: workbench {{ activate }}), or no task panel open. Nothing was run."}, "code": "invalid_state"}]},
+    {"let": {"was": "=front().Name if front() else None", "before": "=len(front().Objects) if front() else 0"}},
+    {"do": ["=gui.runCommand(name, int(a.get('index', 0)))", "=front() and front().recompute()", "=gui.updateGui()"]},
+    {"let": {"res": "={'ran': name, 'wasActive': active, 'workbench': gui.activeWorkbench().name(), 'document': front().Name if front() else None}"}},
+    {"put": {"objectsAdded": "=len(front().Objects) - before"}, "into": "res", "when": "=front() is not None and front().Name == was"},
+    {"let": {"ran_in": "=res['document']", "works_in": "=working()"}},
+    {"put": {"note": {"fmt": "The command ran on the document in front ({ran_in}), not the one the session works in ({works_in}): doc_switch {{ document, front: true }} brings that one to the front first."}}, "into": "res", "when": "=works_in is not None and ran_in and ran_in != works_in"}
+   ],
+   "answer": {"fields": {"...res": "=res"}}
+  },
+  "menu_list": {
+   "group": "app",
+   "description": "The window's menu bar as the person sees it in the active workbench: items [{ path: [titles], command (its name for cmd_run), enabled: false when greyed, checked for toggles }]; menu: one top menu only (all of it; without it, the first limit 400 items). Menus change with the workbench. Window only. Changes nothing.",
+   "inputSchema": {"type": "object", "properties": {"menu": {"type": "string"}, "limit": {"type": "integer"}}, "required": [], "additionalProperties": false},
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"bar": "=menubar()"}},
+    {"let": {"items": "=[]", "top": "=a.menu"}},
+    {"each": "act", "in": "=bar.actions()", "steps": [{"let": {"title": "=bare(act.text())"}}, {"do": ["=act.menu().aboutToShow.emit()", "=walk(act.menu(), [title], items)"], "when": "=title and act.menu() is not None and (not top or title.lower() == str(top).lower())"}]},
+    {"when": "=top and not items", "then": [{"let": {"have": "=[bare(x.text()) for x in bar.actions() if x.menu() is not None and x.text()]"}}, {"refuse": {"fmt": "No menu '{top}' in the {window().activeWorkbench().name()} workbench's menu bar: {', '.join(have)}."}, "code": "not_found"}]}
+   ],
+   "answer": {"fields": {"items": "=items if top else items[:int(a.get('limit', 400))]", "count": "=len(items)"}}
+  },
+  "menu_run": {
+   "group": "app",
+   "description": "Press a menu item by its path of titles ([\"View\", \"Standard views\", \"Fit all\"]; as menu_list gives them, case and a trailing … aside). A greyed item is refused (it would do nothing), a submenu too, and what cmd_run refuses (modal dialogs, macros, quit). Reply: pressed, command, checked (a toggle's state after). Acts on the selection and the document in front, as cmd_run. Window only.",
+   "inputSchema": {"type": "object", "properties": {"path": {"type": "array", "items": {"type": "string"}}}, "required": ["path"], "additionalProperties": false},
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"path": "=a.path or []"}},
+    {"refuse": "path: the menu's titles, e.g. [\"View\", \"Standard views\", \"Fit all\"].", "when": "=not path"},
+    {"let": {"act": "=find_action(path)"}},
+    {"let": {"name": "=act.objectName()", "shown": "=' > '.join(path)"}},
+    {"refuse": {"fmt": "'{shown}' ({name}) is not run from here: {refused(name)}."}, "code": "refused", "when": "=refused(name)"},
+    {"refuse": {"fmt": "'{shown}' is a menu, not an item: menu_list {{ menu: \"{path[0]}\" }} shows its items."}, "when": "=act.menu() is not None"},
+    {"refuse": {"fmt": "'{shown}' is greyed out just now, so pressing it would do nothing: it needs a selection (selection {{ objects }}), an open document, or its task panel closed first. Nothing was pressed."}, "code": "invalid_state", "when": "=not act.isEnabled()"},
+    {"do": ["=act.trigger()", "=window().updateGui()"]}
+   ],
+   "answer": {"fields": {"pressed": "=path", "command": "=name or None", "checked": "=act.isChecked() if act.isCheckable() else None"}}
+  },
+  "show": {
+   "group": "app",
+   "description": "Show or hide objects in the window as the tree's eye does: objects (names or labels; left out or \"all\": every body and top-level shape), visible (true; false hides). A PartDesign body shown also shows its tip, the finished part. Reply: visible or hidden [labels], unknown (names not found; the rest still done). Hidden parts are left out of view_render and of checks that go by what is shown. Window only.",
+   "inputSchema": {"type": "object", "properties": {"objects": {}, "visible": {"type": "boolean"}}, "required": [], "additionalProperties": false},
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=window()"},
+    {"let": {"d": "=doc()", "names": "=a.objects"}},
+    {"when": "=names in (None, 'all')", "then": [{"let": {"objs": "=[o for o in d.Objects if o.TypeId in ('PartDesign::Body',) or (has(o, 'Shape') and not o.InList and o.TypeId not in ('App::Origin', 'App::Line', 'App::Plane'))]", "unknown": "=[]"}}], "else": [{"let": {"objs, unknown": "=named_objects(d, names)"}}, {"refuse": {"fmt": "No object {', '.join([repr(str(n)) for n in unknown])} in {d.Label}."}, "code": "not_found", "when": "=unknown and not objs"}]},
+    {"let": {"on": "=bool(a.get('visible', True))", "done": "=[]"}},
+    {"each": "o", "in": "=objs", "steps": [{"when": "=get(o, 'ViewObject', None)", "then": [{"set": {"o.ViewObject.Visibility": "=on"}}, {"set": {"o.Tip.ViewObject.Visibility": true}, "when": "=on and o.TypeId == 'PartDesign::Body' and o.Tip is not None"}, {"push": {"done": "=o.Label"}}]}]},
+    {"do": "=window().updateGui()"},
+    {"let": {"res": "={('visible' if on else 'hidden'): done}"}},
+    {"put": {"unknown": "=[str(n) for n in unknown]", "note": "Not found, so left out; the rest done."}, "into": "res", "when": "=unknown"}
+   ],
+   "answer": {"fields": {"...res": "=res"}}
+  },
+  "selection": {
+   "group": "app",
+   "description": "Set the window's selection for cmd_run and menu_run to act on: objects [names or labels] replaces it with those whole objects (faces and edges are picked with gui_input clicks); no objects clears it; clear: false with no objects reads it instead (detail gives the picked faces and edges). A wrong name is refused and the selection left as it was. Reply: selected [labels], document. Window only.",
+   "inputSchema": {"type": "object", "properties": {"objects": {"type": "array", "items": {"type": "string"}}, "clear": {"type": "boolean"}}, "required": [], "additionalProperties": false},
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"sel": "=window().Selection"}},
+    {"when": "=not a.objects", "then": [{"when": "=a.get('clear', True)", "then": [{"do": "=sel.clearSelection()"}, {"answer": {"fields": {"selected": [], "cleared": true}}}]}, {"let": {"rows": "=[dict([('object', x.Object.Label)] + ([('elements', list(x.SubElementNames))] if x.SubElementNames else [])) for x in sel.getSelectionEx(doc().Name)]"}}, {"answer": {"fields": {"selected": "=[r['object'] for r in rows]", "detail": "=rows", "document": "=doc().Name"}}}]},
+    {"let": {"names": "=a.objects"}},
+    {"refuse": "objects: a list of names or labels (whole objects; none clears the selection).", "when": "=not (is_list(names) and all([is_str(n) and n for n in names]))"},
+    {"let": {"objs": "=[]"}},
+    {"each": "n", "in": "=names", "steps": [{"let": {"o": "=doc().getObject(n) or first([x for x in doc().Objects if x.Label == n])"}}, {"refuse": {"fmt": "objects: no object '{n}' in {doc().Label} — object_list names them. The selection was left as it was."}, "code": "not_found", "when": "=o is None"}, {"push": {"objs": "=o"}}]},
+    {"do": "=sel.clearSelection()"},
+    {"each": "o", "in": "=objs", "steps": [{"do": "=sel.addSelection(o)"}]},
+    {"let": {"got": "=[x.Object.Label for x in sel.getSelectionEx(doc().Name)]"}}
+   ],
+   "answer": {"fields": {"selected": "=got", "document": "=doc().Name", "note": {"when": "=len(got) != len(set([o.Name for o in objs]))", "value": "Not every object took the selection (one with no view in the window cannot be selected)."}}}
+  },
+  "window_snapshot": {
+   "group": "app",
+   "description": "A picture of the FreeCAD window as the person sees it (toolbars, tree, panels, 3D view), or part: one dock panel by its title (\"Report view\", \"Model\", \"Agent Link\"; a wrong title lists them). Drawn by Qt in the background: no screen recording, the window need not be in front. path: a .png (window.png in the session's folder); inline: false leaves the picture out of the reply. Reply: path, width, height. For how something looks, never as proof a step worked: read state for that. Window only.",
+   "inputSchema": {"type": "object", "properties": {"part": {"type": "string"}, "path": {"type": "string"}, "inline": {"type": "boolean"}}, "required": [], "additionalProperties": false},
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"mw": "=window().getMainWindow()"}},
+    {"let": {"target": "=mw"}},
+    {"when": "=a.part", "then": [{"let": {"want": "=str(a.part).lower()", "docks": "=dock_panels(mw)"}}, {"let": {"target": "=first([d for d in docks if d.windowTitle().lower() == want or d.objectName().lower() == want])"}}, {"refuse": {"fmt": "part: no panel titled {a.part!r} — the panels: {', '.join(sorted([d.windowTitle() for d in docks if d.windowTitle()]))}."}, "code": "not_found", "when": "=target is None"}]},
+    {"let": {"pix": "=grab(target)"}},
+    {"let": {"file": "=local(a.path or out_file('window.png'))"}},
+    {"refuse": {"fmt": "Could not write {file}"}, "code": "failed", "when": "=not pix.save(file, 'PNG')"}
+   ],
+   "answer": {"fields": {"path": "=file", "width": "=pix.width()", "height": "=pix.height()", "_png": {"when": "=a.get('inline', True)", "value": "=read_bytes(file)"}}}
+  },
+  "snapshot_latest": {
+   "group": "app",
+   "description": "The person's newest screenshot (index 2, 3 … for older ones) as a picture with their marks (original: true without), with its note, numbered pins and their comments, workbench and time; a note says when they are still marking it up. Only the person takes them (the camera button, Alt+Shift+S): none yet is refused. Changes nothing.",
+   "inputSchema": {"type": "object", "properties": {"index": {"type": "integer"}, "original": {"type": "boolean"}}, "required": [], "additionalProperties": false},
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"rows": "=shots()"}},
+    {"refuse": "No screenshots yet: the person takes one with the camera button (Agent Link toolbar) or Alt+Shift+S.", "code": "not_found", "when": "=not rows"},
+    {"let": {"k": "=int(a.get('index', 1))"}},
+    {"refuse": {"fmt": "index: 1 to {len(rows)}."}, "when": "=not 1 <= k <= len(rows)"},
+    {"let": {"r": "=dict(rows[-k])"}},
+    {"let": {"path": "=r['original'] if a.original else r['path']"}},
+    {"do": "=r.pop('marks', None)"},
+    {"put": {"_png": "=read_bytes(path)"}, "into": "r", "when": "=isfile(path)"},
+    {"put": {"note": "=(r.get('note') or '') + ' (the person is still marking it up)'"}, "into": "r", "when": "=not r.get('done')"}
+   ],
+   "answer": {"fields": {"...r": "=r"}}
+  },
+  "snapshot_list": {
+   "group": "app",
+   "description": "The person's screenshots, newest first, without the pictures: time, note, pins, saved path. snapshot_latest { index } shows one. Changes nothing.",
+   "inputSchema": {"type": "object", "properties": {}, "required": [], "additionalProperties": false},
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [],
+   "answer": {"fields": {"shots": "=[{k: v for k, v in r.items() if k != 'marks'} for r in reversed(shots())]"}}
+  },
+  "workbench": {
+   "group": "app",
+   "description": "The window's workbenches: with nothing, active (its internal name, e.g. PartDesignWorkbench) and workbenches (their menu names); activate: a menu name or internal name (\"Part Design\", \"BIM\", \"FEM\") switches to it, loading it the first time (seconds; its commands and menus exist only from then on). Reply: active, was. Changing tools switch workbench by themselves; this is for cmd_run and menu_run. Window only.",
+   "inputSchema": {"type": "object", "properties": {"activate": {"type": "string"}}, "required": [], "additionalProperties": false},
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/app.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"gui": "=window()"}},
+    {"when": "=a.activate", "then": [{"let": {"want": "=str(a.activate).lower().replace(' ', '')", "names": "=gui.listWorkbenches()"}}, {"let": {"hit": "=first([k for k, w in names.items() if k.lower() == want or k.lower() == want + 'workbench' or get(w, 'MenuText', '').lower().replace(' ', '') == want])"}}, {"refuse": {"fmt": "activate: no workbench {a.activate!r} — the workbenches: {', '.join(sorted([get(w, 'MenuText', k) for k, w in names.items()]))}."}, "code": "not_found", "when": "=hit is None"}, {"let": {"was": "=gui.activeWorkbench().name()"}}, {"do": "=bench_ready(hit)"}, {"let": {"ok": "=gui.activateWorkbench(hit)"}}, {"refuse": {"fmt": "FreeCAD did not switch to {hit} (still {gui.activeWorkbench().name()}): the workbench failed to load — report_read {{ problems: true }} shows its error."}, "code": "failed", "when": "=ok is False or gui.activeWorkbench().name() != hit"}, {"answer": {"fields": {"active": "=hit", "was": "=was", "workbenches": "=sorted([get(w, 'MenuText', k) for k, w in gui.listWorkbenches().items()])"}}}]}
+   ],
+   "answer": {"fields": {"active": "=gui.activeWorkbench().name()", "workbenches": "=sorted([get(w, 'MenuText', k) for k, w in gui.listWorkbenches().items()])"}}
+  },
+  "addon": {
+   "group": "unattended",
+   "description": "FreeCAD's Addon Manager without its dialog (FreeCAD 1.1 and newer; works headless): action list (the folders in the Mod folder, with version; managedBy marks Agent Link's own, updated by agentlink_update, not here) | search { query } (part of a name, in the official catalog, fetched once a day) | install { name, url? (https / git address or a folder; else the catalog), branch?, confirm: \"install <name>\" } | update { name, confirm: \"update <name>\" } (from where it was installed; one copied into the Mod folder by hand has no recorded source, and its first update takes url, which is then recorded) | remove { name, confirm: \"remove <name>\" }. confirm must be typed by the person, word for word: an add-on is code FreeCAD runs. Each install or update is then loaded in a separate headless FreeCAD (a smoke test, a minute or so) and rolled back when that fails. A new add-on's workbench shows in the window only after app_restart. Reply: installed / updated / removed, folder, smoke.",
+   "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["list", "search", "install", "update", "remove"]}, "name": {"type": "string"}, "query": {"type": "string"}, "url": {"type": "string"}, "branch": {"type": "string"}, "confirm": {"type": "string"}}, "required": [], "additionalProperties": false},
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/unattended.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"action": "=a.get('action', 'list')"}},
+    {"let": {"fci, addon_class, inst, uninst": "=manager()"}},
+    {"when": "=action == 'list'", "then": [{"let": {"folder, rows": "=in_mod(fci)"}}, {"answer": {"fields": {"folder": "=folder", "installed": "=rows"}}}]},
+    {"when": "=action == 'search'", "then": [{"let": {"q": "=str(a.query or '').lower()", "cat": "=catalog(fci)"}}, {"let": {"ids": "=cat.get_available_addon_ids()"}}, {"let": {"hits": "=[i for i in ids if q in i.lower()] if q else ids"}}, {"answer": {"fields": {"found": "=len(hits)", "addons": "=[{'name': i, 'branches': cat.get_available_branches(i)[:4]} for i in hits[:30]]", "note": "addon { action: install, name, confirm: \"install <name>\" } typed by the person installs one."}}}]},
+    {"let": {"name": "=a.name"}},
+    {"refuse": "name: the add-on's name (its folder in Mod: letters, digits, - and _).", "when": "=not name or not well_named(name)"},
+    {"refuse": {"fmt": "{name} is kept up to date by agentlink_update, not here."}, "when": "=name in OURS"},
+    {"let": {"where": "=join(fci.DataPaths().mod_dir, name)"}},
+    {"when": "=action in ('install', 'remove', 'update')", "then": [{"let": {"want": "=action + ' ' + name", "why": "='it takes their add-on away' if action == 'remove' else 'an add-on is code FreeCAD runs'"}}, {"refuse": {"fmt": "confirm: \"{want}\", word for word, typed by the person — {why}. Nothing was changed."}, "code": "not_allowed", "when": "=(a.confirm or '').strip() != want"}]},
+    {"when": "=action == 'remove'", "then": [{"refuse": {"fmt": "{name} is not installed: addon {{ action: \"list\" }} names what is (the folder names in Mod)."}, "code": "not_found", "when": "=not isdir(where)"}, {"let": {"ok": "=uninstalled(uninst, addon_class, name)"}}, {"do": "=record({'addon': name}, None, 'removed' if ok else 'remove failed')"}, {"refuse": {"fmt": "The Addon Manager could not remove {name}."}, "code": "failed", "when": "=not ok"}, {"answer": {"fields": {"removed": "=name", "note": "Gone from the Mod folder; app_restart (window) takes it out of the running FreeCAD."}}}]},
+    {"refuse": "action: list | search { query } | install { name, url?, branch?, confirm: \"install <name>\" } | update { name, confirm: \"update <name>\" } | remove { name, confirm: \"remove <name>\" } — confirm is typed by the person.", "when": "=action not in ('install', 'update')"},
+    {"refuse": {"fmt": "{name} is installed already: addon {{ action: \"update\", name, confirm: \"update {name}\" }} brings it up to date."}, "code": "invalid_state", "when": "=action == 'install' and isdir(where)"},
+    {"refuse": {"fmt": "{name} is not installed: addon {{ action: \"install\", name, confirm: \"install {name}\" }} (addon {{ action: \"list\" }} names what is)."}, "code": "not_found", "when": "=action == 'update' and not isdir(where)"},
+    {"let": {"url": "=a.url", "branch": "=a.branch or ''"}},
+    {"let": {"sources_file": "=kept_file('addon-sources.json')"}},
+    {"let": {"sources": "=loaded(sources_file)"}},
+    {"when": "=action == 'update'", "then": [{"let": {"known": "=(sources.get(name) or {}).get('url')"}}, {"refuse": "update takes no url: it comes from where the add-on was installed from. To change where it comes from, remove it and install it from the new address (each with the person's confirm).", "when": "=url and name in sources"}, {"let": {"url": "=known", "branch": "=branch or (sources.get(name) or {}).get('branch') or ''"}, "when": "=not url"}]},
+    {"when": "=url", "then": [{"refuse": "url: an https or git address of the add-on's repository, or a folder on this computer.", "when": "=not (url.startswith(('https://', 'git@')) or isdir(expanduser(url)))"}, {"let": {"ad": "=addon_at(addon_class, name, url, branch)"}}], "else": [{"let": {"cat": "=catalog(fci)"}}, {"let": {"by_hand": "=' It was put in the Mod folder by hand, so no source is recorded: update { name, url, confirm } once names where it comes from.' if action == 'update' else ''"}}, {"refuse": {"fmt": "{name} is not in FreeCAD's add-on catalog (names are exact, capitals too): addon {{ action: \"search\", query }} finds it, or give its url (git or a folder).{by_hand}"}, "code": "not_found", "when": "=name not in cat.get_available_addon_ids()"}, {"let": {"ad": "=cat.get_addon_from_id(name, branch or None)"}}]},
+    {"let": {"kept": "=set_aside(where, name) if action == 'update' else None"}},
+    {"let": {"ok, err": "=installer_run(inst, ad)"}},
+    {"when": "=not ok or not isdir(where)", "then": [{"let": {"said": "=(': ' + err) if err else ''", "end": "=' — the version before is back.' if kept else '.'"}}, {"refuse": {"fmt": "The Addon Manager could not {action} {name}{said}{end}"}, "first": [{"do": ["=put_back(where, kept)", "=record({'addon': name}, None, action + ' failed')"]}], "code": "failed"}]},
+    {"let": {"res": "=smoke_here()"}},
+    {"when": "=not res.get('ok')", "then": [{"let": {"failures": "='; '.join(res.get('failures') or [])[:500]", "end": "='. The version before is back.' if kept else '. It was removed again.'"}}, {"refuse": {"fmt": "{name} broke the smoke test after its {action}: {failures}{end}"}, "first": [{"do": ["=put_back(where, kept)", "=record({'addon': name}, {'addon': name}, 'smoke failed: rolled back')"]}], "code": "failed"}]},
+    {"do": "=record({'addon': name}, {'addon': name, 'url': get(ad, 'url', url)}, action + ': smoke passed')"},
+    {"when": "=action == 'install' or bool(a.url and name not in sources)", "then": [{"do": ["=sources.update({name: {'url': url or None, 'branch': branch or None}})", "=saved(sources_file, sources)"]}]}
+   ],
+   "answer": {"fields": {"...done": "={('installed' if action == 'install' else 'updated'): name}", "folder": "=where", "smoke": "passed", "previous": {"when": "=kept", "value": "=kept"}, "note": "In the Mod folder and checked headless; app_restart (window) loads it there."}}
   }
  }
 }

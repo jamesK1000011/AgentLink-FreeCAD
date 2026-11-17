@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
 """batch { to, lines: "refused" }: the reply keeps only what needs reading."""
 import unittest
 

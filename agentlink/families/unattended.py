@@ -18,8 +18,7 @@ import time
 import FreeCAD
 
 from .. import keep, runners
-from ..protocol import Tool, ToolError, bad
-from ..tools import obj
+from ..protocol import ToolError
 
 GROUP = "unattended"
 INFO = "Unattended use: the pinned document, the heavy-job queue, the Addon Manager (dialog_answer and app_force_restart are in core)."
@@ -282,112 +281,62 @@ def tools(s):
             return smoke.against(app=exe.split(".app/")[0] + ".app", addon_dirs=[here])
         return smoke.against(python=exe, lib=os.environ.get("FREECAD_LIB"), addon_dirs=[here])
 
-    def addon(a):
-        action = a.get("action", "list")
-        fci, Addon, inst, uninst = _am()
-        if action == "list":
-            d, rows = _installed(fci)
-            return {"folder": d, "installed": rows}
-        if action == "search":
-            from AddonCatalog import AddonCatalog
+    # ---- addon is data (agentlink/data/tools.json): what its entry calls on top of the above ----
 
-            q = str(a.get("query") or "").lower()
-            cat = AddonCatalog(_catalog(fci))
-            ids = cat.get_available_addon_ids()
-            hits = [i for i in ids if q in i.lower()] if q else ids
-            return {"found": len(hits), "addons": [{"name": i, "branches": cat.get_available_branches(i)[:4]} for i in hits[:30]],
-                    "note": "addon { action: install, name, confirm: \"install <name>\" } typed by the person installs one."}
-        name = a.get("name")
-        if not name or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,60}", str(name)):
-            raise bad("name: the add-on's name (its folder in Mod: letters, digits, - and _).")
-        if name in OURS:
-            raise ToolError("invalid_input", f"{name} is kept up to date by agentlink_update, not here.")
-        mod = fci.DataPaths().mod_dir
-        where = os.path.join(mod, name)
-        if action in ("install", "remove", "update"):
-            # An update is new code FreeCAD runs too: the person's word, as
-            # for an install.
-            want = f"{action} {name}"
-            if (a.get("confirm") or "").strip() != want:
-                raise ToolError("not_allowed", f"confirm: \"{want}\", word for word, typed by the person — " + ("it takes their add-on away" if action == "remove" else "an add-on is code FreeCAD runs") + ". Nothing was changed.")
-        if action == "remove":
-            if not os.path.isdir(where):
-                raise ToolError("not_found", f"{name} is not installed: addon {{ action: \"list\" }} names what is (the folder names in Mod).")
-            ok = uninst.AddonUninstaller(Addon(name)).run()
-            keep.record_versions({"addon": name}, None, "removed" if ok else "remove failed")
-            if not ok:
-                raise ToolError("failed", f"The Addon Manager could not remove {name}.")
-            return {"removed": name, "note": "Gone from the Mod folder; app_restart (window) takes it out of the running FreeCAD."}
-        if action not in ("install", "update"):
-            raise bad("action: list | search { query } | install { name, url?, branch?, confirm: \"install <name>\" } | update { name, confirm: \"update <name>\" } | remove { name, confirm: \"remove <name>\" } — confirm is typed by the person.")
-        if action == "install" and os.path.isdir(where):
-            raise ToolError("invalid_state", f"{name} is installed already: addon {{ action: \"update\", name, confirm: \"update {name}\" }} brings it up to date.")
-        if action == "update" and not os.path.isdir(where):
-            raise ToolError("not_found", f"{name} is not installed: addon {{ action: \"install\", name, confirm: \"install {name}\" }} (addon {{ action: \"list\" }} names what is).")
-        url, branch = a.get("url"), a.get("branch") or ""
-        sources_file = keep.path("addon-sources.json")
-        sources = keep._load(sources_file, {}) or {}
-        if action == "update":
-            # An update comes from where the add-on came from, never a new address.
-            # One installed by hand (copied into the Mod folder) has no
-            # recorded source: install refused it as installed already and
-            # update found no place to fetch it from, each pointing at the
-            # other. Its first update may name where it comes from; that
-            # is recorded, and later updates take no url as before.
-            if url and not (sources.get(name) or {}).get("url"):
-                pass
-            elif url:
-                raise bad("update takes no url: it comes from where the add-on was installed from. To change where it comes from, remove it and install it from the new address (each with the person's confirm).")
-            else:
-                url, branch = (sources.get(name) or {}).get("url"), branch or (sources.get(name) or {}).get("branch") or ""
-        if url:
-            if not (url.startswith(("https://", "git@")) or os.path.isdir(os.path.expanduser(url))):
-                raise bad("url: an https or git address of the add-on's repository, or a folder on this computer.")
-            ad = Addon(name, os.path.expanduser(url) if os.path.isdir(os.path.expanduser(url)) else url, branch=branch)
-        else:
-            from AddonCatalog import AddonCatalog
+    def catalog(fci):
+        """FreeCAD's add-on catalog as the Addon Manager reads it
+        (AddonCatalog over the official cache, fetched once a day)."""
+        from AddonCatalog import AddonCatalog
 
-            cat = AddonCatalog(_catalog(fci))
-            if name not in cat.get_available_addon_ids():
-                raise ToolError("not_found", f"{name} is not in FreeCAD's add-on catalog (names are exact, capitals too): addon {{ action: \"search\", query }} finds it, or give its url (git or a folder)." + (" It was put in the Mod folder by hand, so no source is recorded: update { name, url, confirm } once names where it comes from." if action == "update" else ""))
-            ad = cat.get_addon_from_id(name, branch or None)
-        # The add-on as it is kept aside first (update), so a failed smoke
-        # test puts it back (G).
-        kept = None
-        if action == "update":
-            kept = keep.path("addons-previous", f"{name}-{keep.stamp()}")
-            os.makedirs(os.path.dirname(kept), exist_ok=True)
-            shutil.move(where, kept)
+        return AddonCatalog(_catalog(fci))
+
+    def well_named(name):
+        """Whether name can be an add-on's folder in Mod: letters, digits,
+        - and _, nothing that climbs out of the folder."""
+        return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,60}", str(name)))
+
+    def addon_at(addon_class, name, url, branch):
+        """The Addon Manager's Addon for name at an address the person gave:
+        a folder on this computer (~ expanded) when url is one, else the git
+        address as written."""
+        folder = os.path.expanduser(url)
+        return addon_class(name, folder if os.path.isdir(folder) else url, branch=branch)
+
+    def uninstalled(uninst, addon_class, name):
+        """The Addon Manager's uninstaller run on the add-on of that name:
+        whether it took it out of Mod."""
+        return uninst.AddonUninstaller(addon_class(name)).run()
+
+    def set_aside(where, name):
+        """The installed add-on moved out of Mod into
+        ~/AgentLink/addons-previous before its update, so a failed install
+        or smoke test can put it back; where it went."""
+        kept = keep.path("addons-previous", f"{name}-{keep.stamp()}")
+        os.makedirs(os.path.dirname(kept), exist_ok=True)
+        shutil.move(where, kept)
+        return kept
+
+    def installer_run(inst, ad):
+        """The Addon Manager's installer run on one add-on: (ok, None), or
+        (False, the error's words) when it raised."""
         try:
-            ok = inst.AddonInstaller(ad).run()
+            return inst.AddonInstaller(ad).run(), None
         except Exception as e:
-            ok, err = False, str(e)
-        else:
-            err = None
-        if not ok or not os.path.isdir(where):
-            if os.path.isdir(where):
-                shutil.rmtree(where, ignore_errors=True)
-            if kept:
-                shutil.move(kept, where)
-            keep.record_versions({"addon": name}, None, f"{action} failed")
-            raise ToolError("failed", f"The Addon Manager could not {action} {name}" + (f": {err}" if err else "") + (" — the version before is back." if kept else "."))
-        res = _smoke_here()
-        if not res.get("ok"):
-            shutil.rmtree(where, ignore_errors=True)
-            if kept:
-                shutil.move(kept, where)
-            keep.record_versions({"addon": name}, {"addon": name}, "smoke failed: rolled back")
-            raise ToolError("failed", f"{name} broke the smoke test after its {action}: " + "; ".join(res.get("failures") or [])[:500] + (". The version before is back." if kept else ". It was removed again."))
-        keep.record_versions({"addon": name}, {"addon": name, "url": getattr(ad, "url", url)}, f"{action}: smoke passed")
-        if action == "install" or (url and not (sources.get(name) or {}).get("url")):
-            # (an update that named the source of one put in by hand: kept too)
-            sources[name] = {"url": url or None, "branch": branch or None}
-            keep._save(sources_file, sources)
-        return {action + "ed" if action == "install" else "updated": name, "folder": where, "smoke": "passed", **({"previous": kept} if kept else {}),
-                "note": "In the Mod folder and checked headless; app_restart (window) loads it there."}
+            return False, str(e)
 
-    st = {"type": "string"}
-    return [
-        Tool("addon", "FreeCAD's Addon Manager without its dialog (FreeCAD 1.1 and newer; works headless): action list (the folders in the Mod folder, with version; managedBy marks Agent Link's own, updated by agentlink_update, not here) | search { query } (part of a name, in the official catalog, fetched once a day) | install { name, url? (https / git address or a folder; else the catalog), branch?, confirm: \"install <name>\" } | update { name, confirm: \"update <name>\" } (from where it was installed; one copied into the Mod folder by hand has no recorded source, and its first update takes url, which is then recorded) | remove { name, confirm: \"remove <name>\" }. confirm must be typed by the person, word for word: an add-on is code FreeCAD runs. Each install or update is then loaded in a separate headless FreeCAD (a smoke test, a minute or so) and rolled back when that fails. A new add-on's workbench shows in the window only after app_restart. Reply: installed / updated / removed, folder, smoke.",
-             obj({"action": {"type": "string", "enum": ["list", "search", "install", "update", "remove"]}, "name": st, "query": st, "url": st, "branch": st, "confirm": st}), addon),
-    ] + runners.tools(GROUP, s, helpers)
+    def put_back(where, kept):
+        """The rollback: what a failed install or update left in Mod taken
+        out, and the version set aside before an update moved back."""
+        if os.path.isdir(where):
+            shutil.rmtree(where, ignore_errors=True)
+        if kept:
+            shutil.move(kept, where)
+
+    helpers.update({
+        "manager": _am, "in_mod": _installed, "catalog": catalog, "well_named": well_named, "OURS": OURS,
+        "join": os.path.join, "isdir": os.path.isdir, "expanduser": os.path.expanduser,
+        "addon_at": addon_at, "uninstalled": uninstalled, "record": lambda before, after, why: keep.record_versions(before, after, why),
+        "kept_file": lambda name: keep.path(name), "loaded": lambda file: keep._load(file, {}) or {}, "saved": lambda file, data: keep._save(file, data),
+        "set_aside": set_aside, "installer_run": installer_run, "put_back": put_back, "smoke_here": _smoke_here,
+    })
+    return runners.tools(GROUP, s, helpers)
