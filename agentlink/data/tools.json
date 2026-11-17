@@ -15788,7 +15788,7 @@
     {"do": ["=st.update({'holds': ([] if a.replace else st['holds']) + [h]})", "=save(st)"]},
     {"do": "=snapshot(tool)"}
    ],
-   "answer": {"fields": {"held": "=picked", "kind": "=kind", "holds": "=len(st['holds'])", "note": "=note", "window": "Kept with the study as Agent Link's data: FreeCAD has no constraint object for it, so the window draws no symbol on the faces; fea_native builds FreeCAD's own analysis, whose holds and loads are drawn."}}
+   "answer": {"fields": {"held": "=picked", "kind": "=kind", "holds": "=len(st['holds'])", "note": "=note", "window": "Kept with the study as Agent Link's data: FreeCAD has no constraint object for it, so the window draws no symbol on the faces; with a window open, Agent Link tints the held faces and their edges in the 3D view only, until the next change; fea_native builds FreeCAD's own analysis, whose holds and loads are drawn."}}
   },
   "fea_load": {
    "group": "strength",

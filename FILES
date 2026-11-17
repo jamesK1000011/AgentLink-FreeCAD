@@ -429,6 +429,7 @@ tests/test_echo_declare.py
 tests/test_echo_hold.py
 tests/test_echo_later.py
 tests/test_echo_map.py
+tests/test_echo_maps.py
 tests/test_echo_pace.py
 tests/test_echo_reads.py
 tests/test_echo_rings.py
