@@ -850,6 +850,7 @@ class Echo:
             # as when a person pushes it: closing the sketch first left
             # Sketcher_LeaveSketch greyed out and refused.)
             gd.resetEdit()
+            self._left_sketch = True
 
     def after(self, tool, args, reply):
         if self.quiet():
@@ -906,11 +907,47 @@ class Echo:
             if FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and not name.startswith(tuple(PAGES)):
                 from . import around
 
+                # The sketch was closed for this call and the camera still
+                # looks straight down on it: a pad then shows as a flat
+                # outline and nobody sees that it is a solid. Turned to the
+                # isometric view once, as a person turns it to look.
+                if getattr(self, "_left_sketch", False):
+                    self._left_sketch = False
+                    try:
+                        if made and any(getattr(o, "Shape", None) is not None and o.Shape.Solids for o in made):
+                            FreeCADGui.ActiveDocument.ActiveView.viewIsometric()
+                    except Exception:
+                        pass
+                _model_tab_back()
+
                 with around.part("fit"):
                     fit(animate=fit_animated(getattr(self.s, "batch_now", None), self.mode))
             _paint()
         except Exception as e:
             FreeCAD.Console.PrintLog(f"Agent Link echo (after {name}): {e}\n")
+
+
+def _model_tab_back():
+    """The Model tab in front again when the Tasks tab shows nothing: FreeCAD
+    raises Tasks for a task dialog or a sketch and leaves it up, empty, when
+    that ends, with the tree (and what was just made in it) behind it. Left
+    alone while a dialog or an edit is open, and when the person's own tab
+    (any other than Tasks) is in front."""
+    try:
+        import FreeCADGui
+
+        if FreeCADGui.Control.activeDialog() or (FreeCADGui.ActiveDocument and FreeCADGui.ActiveDocument.getInEdit() is not None):
+            return False
+        _QtCore, _QtGui, QtW = _qt()
+        mw = FreeCADGui.getMainWindow()
+        for tabs in mw.findChildren(QtW.QTabWidget):
+            titles = [tabs.tabText(i).replace("&", "") for i in range(tabs.count())]
+            if "Model" in titles and "Tasks" in titles and tabs.currentIndex() == titles.index("Tasks"):
+                tabs.setCurrentIndex(titles.index("Model"))
+                return True
+    except Exception:
+        pass
+    return False
 
 
 def _tag(session):
