@@ -47,7 +47,7 @@ SKETCHES_BEFORE = 300 # sketches whose reading is kept from before the call
 MAX_SHAPES = 12       # and the time budget ends it sooner
 MAX_AMBER = 3         # yellow lines in the verdict; the rest are counted
 SKETCH_GEO = 400      # a sketch's per-geometry freedom is read up to this many
-FREEFORM_MAX = 300    # control points of free-form faces up to which a shape's geometry check or an overlap runs here
+FREEFORM_MAX = 120    # control points of free-form faces up to which a shape's geometry check or an overlap runs here
 SLOW_S = 2.0          # one check on one shape past this is remembered, and not run on that shape again here
 MS_BY = 500           # a check this long says where its time went (msBy)
 
@@ -283,6 +283,8 @@ def _part_hashes(doc):
 # One OCC call cannot be stopped once it runs, so the time budget can only
 # decide what is started. Two things keep a single check from taking the
 # call with it (a swept helical spring of 3 faces held one answer for 44 s,
+# (FREEFORM_MAX was 300: a helical spring swept live came in under it, one
+# B-spline face, and its check still took 45.8 s; 120 since.)
 # live): a shape with large free-form faces is not given FreeCAD's geometry
 # check (shape.check with its BOP self-intersection pass) or an overlap
 # boolean here at all, and a check that did run long on a shape is not run
