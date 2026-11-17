@@ -1783,6 +1783,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             if not isinstance(args, dict):
                 raise ToolError("invalid_input", f"calls.{i}.arguments ({c['tool']}): an object. Nothing was run.")
             one = {"tool": c["tool"], "arguments": args}
+            if c.get("profile"):
+                one["profile"] = True
             if c.get("to") is not None:
                 # This call's whole answer to a file of its own (chain.py).
                 words = _chain.to_name(c["to"], i)

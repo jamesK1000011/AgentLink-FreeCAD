@@ -16,10 +16,10 @@ import Part
 from .. import iso286
 from .. import paths
 from .. import store
-from ..protocol import Tool, ToolError, bad
+from .. import runners
+from ..protocol import ToolError, bad
 from ..materials import DENSITY
 
-from ..tools import obj
 from . import assembly as A
 from . import picks
 from .picks import r4
@@ -204,560 +204,399 @@ def _exploded_view(asm, which, moves):
         return None, f"FreeCAD's Exploded View could not be made here: {e}"
 
 
+def joint_of(asm, name):
+    """The assembly's joint of that label or object name; a grounding is
+    not one. Refused in its own words where there is none (five tools
+    share it)."""
+    j = next((x for x in A._joints(asm).Group if name in (x.Label, x.Name)), None)
+    if j is None or getattr(j, "ObjectToGround", None) is not None:
+        raise ToolError("not_found", f"joint {name!r} is not a joint of {asm.Label} — asm_list names its joints (label or object name).")
+    return j
+
+
+def pair_fit(pa, ea, pb, eb, fit, size):
+    """How two parts' elements go together, one algorithm: with a round
+    element, the hole and the shaft of about one size (within 20%) on its
+    axis — the pair nearest in diameter, then the longest engaged — as
+    { kind: round, hole, shaft, clearance, as, engagement, axisOffset }, and
+    with fit ("H7/g6"; size the nominal, else the larger diameter to the
+    nearest 0.05 mm) each held to ISO 286 (fit, verdict, fix). Two flat
+    faces: their gap and angle. Refuses in its own words where neither is
+    so, where no hole and shaft are found, or the fit is not one."""
+    def round_axis(el):
+        g = getattr(el, "Surface", None) if isinstance(el, Part.Face) else getattr(el, "Curve", None)
+        return axis_of(el) if el is not None and hasattr(g, "Radius") else None
+
+    ax = round_axis(ea) or round_axis(eb)
+    if ax is None:
+        # two flat faces: how they sit on one another
+        if isinstance(ea, Part.Face) and isinstance(eb, Part.Face):
+            d, pts, _ = ea.distToShape(eb)
+            na, nb = axis_of(ea)[1], axis_of(eb)[1]
+            ang = math.degrees(math.acos(max(-1.0, min(1.0, abs(na.dot(nb)) / (na.Length * nb.Length or 1)))))
+            return {"kind": "faces", "parts": [pa.Label, pb.Label], "gap": r4(d), "angle": r4(ang), "contact": d < 1e-4 and ang < 0.01,
+                    "note": "Flat faces: the gap between them and how far from parallel." if d > 1e-4 else "Flat faces in contact."}
+        raise ToolError("invalid_input", f"{pa.Label} and {pb.Label}: neither element is round (a hole's face or rim, a pin's face), and they are not two flat faces — name the round ones with pairs: [{{ a: {{ part, element: {{ kind: \"face\", type: \"cylinder\" }} }}, b }}].")
+    pt, d = ax
+    ca, cb = cylinders(pa, pt, d), cylinders(pb, pt, d)
+    best = None
+    for fa in ca:
+        for fb in cb:
+            if fa[2] == fb[2]:
+                continue  # both holes, or both shafts
+            hole, shaft = (fa, fb) if not fa[2] else (fb, fa)
+            D, dd = 2 * hole[1], 2 * shaft[1]
+            if abs(D - dd) > max(0.5, 0.2 * D):
+                continue
+            lo, hi = max(fa[3][0], fb[3][0]), min(fa[3][1], fb[3][1])
+            eng = max(0.0, hi - lo)
+            key = (abs(D - dd), -eng)
+            if best is None or key < best[0]:
+                best = (key, hole, shaft, eng, (pa if hole is fa else pb), (pb if hole is fa else pa))
+    if best is None:
+        raise ToolError("not_found", f"No hole and shaft of about one size (within 20%) on the axis through {vec(pt)} between {pa.Label} and {pb.Label}: one part needs a cylindrical hole there and the other a pin — shape_query {{ body, kind: \"face\", type: \"cylinder\" }} lists each part's round faces with their radii.")
+    _, hole, shaft, eng, ph, ps = best
+    D, dd = 2 * hole[1], 2 * shaft[1]
+    c = D - dd
+    out = {"kind": "round", "hole": {"part": ph.Label, "diameter": r4(D)}, "shaft": {"part": ps.Label, "diameter": r4(dd)},
+           "clearance": r4(c), "as": "clearance" if c > 1e-6 else "interference" if c < -1e-6 else "line to line",
+           "engagement": r4(eng), "axisOffset": r4(abs(hole[4] - shaft[4]))}
+    if fit:
+        hc, sc = fit_of(fit)
+        # the size both are made to: the larger, to the nearest 0.05 mm
+        # (10 for a 10.000 hole on a 9.98 pin; 6.35 for a quarter inch)
+        N = float(size) if size else round(round(max(D, dd) / 0.05) * 0.05, 3)
+        try:
+            hes, hei = iso286.limits(N, hc)
+            ses, sei = iso286.limits(N, sc)
+        except ValueError as e:
+            raise bad(f"fit: {e}")
+        lo_c, hi_c = (N + hei) - (N + ses), (N + hes) - (N + sei)
+        kind = "clearance" if lo_c >= 0 else "interference" if hi_c <= 0 else "transition"
+        hole_ok = N + hei - 1e-9 <= D <= N + hes + 1e-9
+        shaft_ok = N + sei - 1e-9 <= dd <= N + ses + 1e-9
+        out["fit"] = {"code": f"{hc}/{sc}", "nominal": r4(N), "type": kind, "clearanceRange": [r4(lo_c), r4(hi_c)],
+                      "hole": {"limits": [r4(N + hei), r4(N + hes)], "ok": hole_ok},
+                      "shaft": {"limits": [r4(N + sei), r4(N + ses)], "ok": shaft_ok}}
+        out["verdict"] = "pass" if hole_ok and shaft_ok else "fix"
+        if not (hole_ok and shaft_ok):
+            tips = []
+            if not hole_ok:
+                tips.append(f"the hole is ⌀{D:g}, {hc} wants {N + hei:g} … {N + hes:g}")
+            if not shaft_ok:
+                tips.append(f"the shaft is ⌀{dd:g}, {sc} wants {N + sei:g} … {N + ses:g}")
+            out["fix"] = "; ".join(tips) + " — modelled at nominal sizes is usual: size them into the band, or say the fit is for the drawing only."
+    return out
+
+
+def limits_of(j):
+    """A joint's kind and the limits FreeCAD keeps on it that are on:
+    { angleMin, angleMax, lengthMin, lengthMax }."""
+    kind = str(getattr(j, "JointType", "")).lower()
+    out = {}
+    if getattr(j, "EnableAngleMin", False):
+        out["angleMin"] = r4(j.AngleMin)
+    if getattr(j, "EnableAngleMax", False):
+        out["angleMax"] = r4(j.AngleMax)
+    if getattr(j, "EnableLengthMin", False):
+        out["lengthMin"] = r4(j.LengthMin)
+    if getattr(j, "EnableLengthMax", False):
+        out["lengthMax"] = r4(j.LengthMax)
+    return kind, out
+
+
+def moving_group(doc, asm, j):
+    """What asm_pose moves on a joint: the part that is not grounded (the
+    second unless it is) with the parts joined beyond it, short of grounded
+    parts and the part it moves on, and the axis read off its element (the
+    other's where it has none). ({ name: part }, (point, direction));
+    (None, None) where no axis or no moving part can be read."""
+    p1, e1, _ = A.ref_element(doc, j.Reference1)
+    p2, e2, _ = A.ref_element(doc, j.Reference2)
+    grounded = A._grounded(asm)
+    fixed_side, moving, el = (p1, p2, e2) if p2 not in grounded else (p2, p1, e1)
+    ax = axis_of(el) if el is not None else None
+    if ax is None:
+        ax = axis_of(e1 if el is e2 else e2)
+    if ax is None or moving is None:
+        return None, None
+    group, todo = {moving.Name: moving}, [moving]
+    others = [x for x in A._joints(asm).Group if x is not j and getattr(x, "ObjectToGround", None) is None]
+    while todo:
+        cur = todo.pop()
+        for x in others:
+            q1, _, _ = A.ref_element(doc, getattr(x, "Reference1", None))
+            q2, _, _ = A.ref_element(doc, getattr(x, "Reference2", None))
+            for here, there in ((q1, q2), (q2, q1)):
+                if here is not None and there is not None and here.Name == cur.Name and there.Name not in group and there not in grounded and there is not fixed_side:
+                    group[there.Name] = there
+                    todo.append(there)
+    return group, ax
+
+
+def pose_move(doc, j, group, centre, axis, turning, by):
+    """The move that takes a joint by degrees or mm: about (or along) the
+    axis through centre — JCS1's z where the joint's frames can be read,
+    the axis the value is read on; a part on the first reference's side
+    moves the other way. (the placement to multiply each part's by, the
+    axis one long)."""
+    fr = joint_frames(j)
+    sign = 1.0
+    if fr is not None:
+        centre, axis = fr[0].Base, fr[0].Rotation.multVec(V(0, 0, 1))
+        p1, _, _ = A.ref_element(doc, j.Reference1)
+        if p1 is not None and p1.Name in group:
+            sign = -1.0
+    axis = V(axis)
+    axis.normalize()
+    if turning:
+        rot = FreeCAD.Rotation(axis, sign * by)
+        return FreeCAD.Placement(centre - rot.multVec(centre), rot), axis
+    return FreeCAD.Placement(axis * (sign * by), FreeCAD.Rotation()), axis
+
+
+def standing(j):
+    """Where a joint stands before a motion is played, to put it back to:
+    read off its frames (a revolute's angle, else its slide), else what
+    asm_pose has counted on it, else 0."""
+    kind = str(getattr(j, "JointType", "")).lower()
+    v = joint_value(j, kind == "revolute")
+    return v if v is not None else (float(getattr(j, POSE, 0.0)) if POSE in j.PropertiesList else 0.0)
+
+
+def key_frames(keys, between):
+    """The frames of a saved motion: between steps from each key pose to
+    the next, straight-line, the last key itself closing the last run; a
+    joint a key leaves out holds what the other key says."""
+    frames = []
+    for i in range(len(keys) - 1):
+        k0, k1 = keys[i]["poses"], keys[i + 1]["poses"]
+        for st in range(between if i < len(keys) - 2 else between + 1):
+            f = st / between
+            frames.append({j: k0.get(j, k1.get(j, 0.0)) + (k1.get(j, k0.get(j, 0.0)) - k0.get(j, k1.get(j, 0.0))) * f for j in set(k0) | set(k1)})
+    return frames
+
+
+def play(pose, asm, frames, start, clearance, placements, keep):
+    """A motion played: each frame's joints posed in turn (pose: asm_pose
+    itself, overlaps allowed), the overlaps of each frame read, and — unless
+    keep — every joint put back to where it stood whatever happened (which
+    is why this is code: the steps have no "finally").
+    (a row a frame, the frames that clash)."""
+    rows, clash_at = [], []
+    try:
+        for n, fr in enumerate(frames):
+            for jn, v in sorted(fr.items()):
+                pose({"assembly": asm.Label, "joint": jn, "to": v, "allowOverlap": True})
+            hits, _ = A._overlaps(A._parts(asm), float(clearance))
+            row = {"frame": n, "poses": {k: r4(v) for k, v in fr.items()}}
+            if hits:
+                row["overlaps"] = ["/".join(h["parts"]) for h in hits]
+                clash_at.append(n)
+            if placements:
+                row["parts"] = {o.Label: A._placement(o) for o in A._parts(asm)}
+            rows.append(row)
+    finally:
+        if not keep:
+            for jn, v in start.items():
+                try:
+                    pose({"assembly": asm.Label, "joint": jn, "to": v, "allowOverlap": True})
+                except ToolError:
+                    pass
+    return rows, clash_at
+
+
+def write_json(p, value):
+    """value written to the file p as JSON."""
+    with open(p, "w") as f:
+        json.dump(value, f, indent=1)
+
+
+def collapse(doc, asm, parts):
+    """An exploded assembly put back: each part where asm_explode found it,
+    the joints it turned off back on, and the record emptied."""
+    kept = json.loads(asm.getPropertyByName(EXPLODED))
+    for o in parts:
+        if o.Name in kept:
+            m = kept[o.Name]
+            o.Placement = FreeCAD.Placement(V(*m["base"]), FreeCAD.Rotation(*m["q"]))
+    for jn in kept.get("__joints_off__", []):
+        jo = doc.getObject(jn)
+        if jo is not None:
+            _suppress(jo, False)
+    setattr(asm, EXPLODED, "")
+
+
+def bounds(parts):
+    """The box round every part where it stands."""
+    bb = FreeCAD.BoundBox()
+    for o in parts:
+        bb.add(A._shape(o).BoundBox)
+    return bb
+
+
+def where_parts_sit(parts):
+    """Each part's placement as asm_explode keeps it to collapse to:
+    { name: { base [x, y, z], q (the rotation's quaternion) } }."""
+    return {o.Name: {"base": [o.Placement.Base.x, o.Placement.Base.y, o.Placement.Base.z], "q": list(o.Placement.Rotation.Q)} for o in parts}
+
+
+def axis_dir(ax):
+    """An axis given as "x" | "y" | "z" or [x, y, z], as a vector (not yet
+    one long: the entry refuses a null one)."""
+    return V(*{"x": (1, 0, 0), "y": (0, 1, 0), "z": (0, 0, 1)}[ax]) if isinstance(ax, str) and ax in "xyz" and len(ax) == 1 else V(*ax)
+
+
+def stacked(parts, which, grounded, C, d, gap, factor):
+    """The moves of an explosion along an axis d (one long): the parts
+    stacked in the order they sit, each a gap past the last — gap mm, else
+    the largest part's size along d times (factor - 1). With a grounded
+    part the others go out from its side; with none, both ways from the
+    middle. { name: vector }."""
+    order = sorted(which, key=lambda o: (A._shape(o).BoundBox.Center - C).dot(d))
+    size = max((max(abs(A._shape(o).BoundBox.XLength * d.x), abs(A._shape(o).BoundBox.YLength * d.y), abs(A._shape(o).BoundBox.ZLength * d.z)) for o in parts), default=10.0)
+    gap = float(gap or size * (factor - 1))
+    mid = (len(order) - 1) / 2.0
+    ref_ground = [(A._shape(o).BoundBox.Center - C).dot(d) for o in grounded] or [0.0]
+    g0 = sum(ref_ground) / len(ref_ground)
+    moves = {}
+    for i, o in enumerate(order):
+        side = (A._shape(o).BoundBox.Center - C).dot(d) - g0
+        k = (i - mid) if not grounded else (i + 1 if side >= 0 else -(len(order) - i))
+        moves[o.Name] = d * (k * gap)
+    return moves
+
+
+def spread(which, bb, factor):
+    """The moves of an explosion from the middle: each part (factor - 1)
+    times further out from the box's centre; one that sits on the centre
+    goes up. { name: vector }."""
+    moves = {}
+    for o in which:
+        v = A._shape(o).BoundBox.Center - bb.Center
+        if v.Length < 1e-6:
+            v = V(0, 0, 1) * (bb.ZLength * 0.5 + 1)
+        moves[o.Name] = v * (factor - 1)
+    return moves
+
+
+def joints_off(asm):
+    """Every joint of the assembly still in the solve left out of it (and
+    put back on collapse): otherwise the next solve, from any assembly
+    tool, pulls an exploded assembly back together. Their names."""
+    off = []
+    for jo in (A._joints(asm).Group if A._joints(asm) is not None else []):
+        if getattr(jo, "ObjectToGround", None) is None and hasattr(jo, "JointType") and not _is_suppressed(jo):
+            _suppress(jo, True)
+            off.append(jo.Name)
+    return off
+
+
+def keep_exploded(asm, kept):
+    """Where the parts sat, kept on the assembly (in the file) as JSON, so
+    it collapses after reopening too."""
+    if EXPLODED not in asm.PropertiesList:
+        asm.addProperty("App::PropertyString", EXPLODED, "AgentLink", "Where the parts sat before asm_explode, to collapse to (JSON)")
+    setattr(asm, EXPLODED, json.dumps(kept))
+
+
+def bom_object(asm):
+    """FreeCAD's own bill of materials (an Assembly::BomObject in the
+    assembly's BomGroup, made where there is none): (it, True), or
+    (None, False) on a FreeCAD without one."""
+    bom = None
+    try:
+        grp = next((o for o in asm.Group if o.TypeId == "Assembly::BomGroup"), None) or asm.newObject("Assembly::BomGroup", "Bills of Materials")
+        bom = grp.newObject("Assembly::BomObject", "Bill of Materials")
+        return bom, True
+    except Exception:
+        return bom, False
+
+
+def bom_row(o, mats):
+    """A part's row of the bill: its material as recorded (material_set),
+    mass in g from its volume where the material's density is known, and
+    volume in cm³."""
+    m = mats.get(o.Label)
+    vol = o.Shape.Volume / 1000.0
+    return {"name": o.Label, "material": m or "", "mass": (round(vol * DENSITY[m], 2) if m in DENSITY else ""), "volume": round(vol, 3)}
+
+
+def fill_native(doc, bom, rows, mats):
+    """Material, Mass (g) and Volume (cm3) filled into FreeCAD's BOM by
+    name, row by row as it generated them (custom columns are kept by
+    FreeCAD across regenerations); a part inside a sub-assembly is found in
+    the document by its label."""
+    from .. import cells as Cc
+
+    def nested(label):
+        o = next((x for x in doc.Objects if x.Label == label and hasattr(x, "Shape") and not x.Shape.isNull() and x.Shape.Solids
+                  and x.TypeId not in ("Assembly::AssemblyObject", "Assembly::AssemblyLink")), None)
+        return None if o is None else bom_row(o, mats)
+
+    hdr = [bom.getContents(Cc.name(1, c)).lstrip("'") for c in range(1, len(bom.columnsNames) + 1)]
+    name_col = hdr.index("Name") + 1 if "Name" in hdr else 2
+    r = 2
+    while bom.getContents(Cc.name(r, name_col)):
+        nm = bom.getContents(Cc.name(r, name_col)).lstrip("'")
+        row = next((x for x in rows if x["name"] == nm), None) or nested(nm)
+        if row:
+            for colname, key in (("Material", "material"), ("Mass (g)", "mass"), ("Volume (cm3)", "volume")):
+                if colname in hdr and row[key] != "":
+                    bom.set(Cc.name(r, hdr.index(colname) + 1), str(row[key]) if key != "material" else "'" + row[key])
+        r += 1
+
+
+def fill_sheet(bom, rows):
+    """A plain spreadsheet filled as the bill, where FreeCAD has no BOM
+    object: the header, then a row a part."""
+    from .. import cells as Cc
+
+    hdr = ["Index", "Name", "Quantity", "Material", "Mass (g)", "Volume (cm3)"]
+    for c, h in enumerate(hdr, 1):
+        bom.set(Cc.name(1, c), "'" + h)
+    for i, row in enumerate(rows, 2):
+        vals = [str(i - 1), row["name"], "1", row["material"], row["mass"], row["volume"]]
+        for c, v in enumerate(vals, 1):
+            if v != "":
+                bom.set(Cc.name(i, c), ("'" + v) if c in (2, 4) else str(v))
+
+
 def tools(session):
     s = session
 
     def doc():
+        """The session's document."""
         return s.doc
 
-    def joint_of(asm, name):
-        j = next((x for x in A._joints(asm).Group if name in (x.Label, x.Name)), None)
-        if j is None or getattr(j, "ObjectToGround", None) is not None:
-            raise ToolError("not_found", f"joint {name!r} is not a joint of {asm.Label} — asm_list names its joints (label or object name).")
-        return j
+    made = []
 
-    # ---- fits ----
+    def pose(args):
+        """asm_pose itself, as asm_motion's play calls it."""
+        return next(t for t in made if t.name == "asm_pose").fn(args)
 
-    def pair_fit(pa, ea, pb, eb, fit, size):
-        def round_axis(el):
-            g = getattr(el, "Surface", None) if isinstance(el, Part.Face) else getattr(el, "Curve", None)
-            return axis_of(el) if el is not None and hasattr(g, "Radius") else None
-
-        ax = round_axis(ea) or round_axis(eb)
-        if ax is None:
-            # two flat faces: how they sit on one another
-            if isinstance(ea, Part.Face) and isinstance(eb, Part.Face):
-                d, pts, _ = ea.distToShape(eb)
-                na, nb = axis_of(ea)[1], axis_of(eb)[1]
-                ang = math.degrees(math.acos(max(-1.0, min(1.0, abs(na.dot(nb)) / (na.Length * nb.Length or 1)))))
-                return {"kind": "faces", "parts": [pa.Label, pb.Label], "gap": r4(d), "angle": r4(ang), "contact": d < 1e-4 and ang < 0.01,
-                        "note": "Flat faces: the gap between them and how far from parallel." if d > 1e-4 else "Flat faces in contact."}
-            raise ToolError("invalid_input", f"{pa.Label} and {pb.Label}: neither element is round (a hole's face or rim, a pin's face), and they are not two flat faces — name the round ones with pairs: [{{ a: {{ part, element: {{ kind: \"face\", type: \"cylinder\" }} }}, b }}].")
-        pt, d = ax
-        ca, cb = cylinders(pa, pt, d), cylinders(pb, pt, d)
-        best = None
-        for fa in ca:
-            for fb in cb:
-                if fa[2] == fb[2]:
-                    continue  # both holes, or both shafts
-                hole, shaft = (fa, fb) if not fa[2] else (fb, fa)
-                D, dd = 2 * hole[1], 2 * shaft[1]
-                if abs(D - dd) > max(0.5, 0.2 * D):
-                    continue
-                lo, hi = max(fa[3][0], fb[3][0]), min(fa[3][1], fb[3][1])
-                eng = max(0.0, hi - lo)
-                key = (abs(D - dd), -eng)
-                if best is None or key < best[0]:
-                    best = (key, hole, shaft, eng, (pa if hole is fa else pb), (pb if hole is fa else pa))
-        if best is None:
-            raise ToolError("not_found", f"No hole and shaft of about one size (within 20%) on the axis through {vec(pt)} between {pa.Label} and {pb.Label}: one part needs a cylindrical hole there and the other a pin — shape_query {{ body, kind: \"face\", type: \"cylinder\" }} lists each part's round faces with their radii.")
-        _, hole, shaft, eng, ph, ps = best
-        D, dd = 2 * hole[1], 2 * shaft[1]
-        c = D - dd
-        out = {"kind": "round", "hole": {"part": ph.Label, "diameter": r4(D)}, "shaft": {"part": ps.Label, "diameter": r4(dd)},
-               "clearance": r4(c), "as": "clearance" if c > 1e-6 else "interference" if c < -1e-6 else "line to line",
-               "engagement": r4(eng), "axisOffset": r4(abs(hole[4] - shaft[4]))}
-        if fit:
-            hc, sc = fit_of(fit)
-            # the size both are made to: the larger, to the nearest 0.05 mm
-            # (10 for a 10.000 hole on a 9.98 pin; 6.35 for a quarter inch)
-            N = float(size) if size else round(round(max(D, dd) / 0.05) * 0.05, 3)
-            try:
-                hes, hei = iso286.limits(N, hc)
-                ses, sei = iso286.limits(N, sc)
-            except ValueError as e:
-                raise bad(f"fit: {e}")
-            lo_c, hi_c = (N + hei) - (N + ses), (N + hes) - (N + sei)
-            kind = "clearance" if lo_c >= 0 else "interference" if hi_c <= 0 else "transition"
-            hole_ok = N + hei - 1e-9 <= D <= N + hes + 1e-9
-            shaft_ok = N + sei - 1e-9 <= dd <= N + ses + 1e-9
-            out["fit"] = {"code": f"{hc}/{sc}", "nominal": r4(N), "type": kind, "clearanceRange": [r4(lo_c), r4(hi_c)],
-                          "hole": {"limits": [r4(N + hei), r4(N + hes)], "ok": hole_ok},
-                          "shaft": {"limits": [r4(N + sei), r4(N + ses)], "ok": shaft_ok}}
-            out["verdict"] = "pass" if hole_ok and shaft_ok else "fix"
-            if not (hole_ok and shaft_ok):
-                tips = []
-                if not hole_ok:
-                    tips.append(f"the hole is ⌀{D:g}, {hc} wants {N + hei:g} … {N + hes:g}")
-                if not shaft_ok:
-                    tips.append(f"the shaft is ⌀{dd:g}, {sc} wants {N + sei:g} … {N + ses:g}")
-                out["fix"] = "; ".join(tips) + " — modelled at nominal sizes is usual: size them into the band, or say the fit is for the drawing only."
-        return out
-
-    def asm_fits(a):
-        asm = A._assembly(doc(), a.get("assembly"))
-        fit, size = a.get("fit"), a.get("size")
-        rows = []
-        if a.get("pairs"):
-            for i, p in enumerate(a["pairs"]):
-                ends = []
-                for side in ("a", "b"):
-                    e = (p or {}).get(side)
-                    if not isinstance(e, dict) or "part" not in e:
-                        raise bad(f"pairs[{i}].{side}: {{ part, element }}.")
-                    part = A._part(asm, e["part"])
-                    el = A._element(s, part, e.get("element", {"kind": "face"}), f"pairs[{i}].{side}.element")
-                    ends.append((part, part.Shape.getElement(el)))
-                rows.append(pair_fit(ends[0][0], ends[0][1], ends[1][0], ends[1][1], p.get("fit", fit), p.get("size", size)))
-        else:
-            js = [joint_of(asm, a["joint"])] if a.get("joint") else [j for j in A._joints(asm).Group if getattr(j, "ObjectToGround", None) is None]
-            for j in js:
-                pa, ea, _ = A.ref_element(doc(), getattr(j, "Reference1", None))
-                pb, eb, _ = A.ref_element(doc(), getattr(j, "Reference2", None))
-                if pa is None or pb is None:
-                    continue
-                try:
-                    r = pair_fit(pa, ea, pb, eb, fit, size)
-                except ToolError as e:
-                    if a.get("joint"):
-                        raise
-                    r = {"skipped": e.message}
-                rows.append({"joint": j.Label, "kind": str(getattr(j, "JointType", "")).lower(), **r})
-        if not rows:
-            raise ToolError("not_found", f"No joints in {asm.Label} to read fits from: name pairs [{{ a, b }}] instead.")
-        verdicts = [r.get("verdict") for r in rows if r.get("verdict")]
-        out = {"assembly": asm.Label, "fits": rows}
-        if verdicts:
-            out["verdict"] = "pass" if all(v == "pass" for v in verdicts) else "fix"
-        return out
-
-    # ---- poses and limits ----
-
-    def limits_of(j):
-        kind = str(getattr(j, "JointType", "")).lower()
-        out = {}
-        if getattr(j, "EnableAngleMin", False):
-            out["angleMin"] = r4(j.AngleMin)
-        if getattr(j, "EnableAngleMax", False):
-            out["angleMax"] = r4(j.AngleMax)
-        if getattr(j, "EnableLengthMin", False):
-            out["lengthMin"] = r4(j.LengthMin)
-        if getattr(j, "EnableLengthMax", False):
-            out["lengthMax"] = r4(j.LengthMax)
-        return kind, out
-
-    def asm_limits(a):
-        asm = A._assembly(doc(), a.get("assembly"))
-        j = joint_of(asm, a.get("joint"))
-        kind = str(getattr(j, "JointType", "")).lower()
-        if "EnableAngleMin" not in j.PropertiesList:
-            raise ToolError("unavailable", f"{j.Label} has no limits in this FreeCAD (joint limits came with the 1.0 Assembly workbench): asm_sweep {{ from, to }} checks a range without them.")
-        turning = kind == "revolute" or (kind == "cylindrical" and a.get("turn"))
-        if kind not in ("revolute", "slider", "cylindrical"):
-            raise bad(f"{j.Label} is {kind}: limits are for revolute (degrees), slider (mm) and cylindrical (mm; turn: true for degrees) joints — asm_list shows each joint's kind.")
-        pre = "Angle" if turning else "Length"
-        for end in ("min", "max"):
-            if end in a:
-                v = a[end]
-                setattr(j, f"Enable{pre}{end.capitalize()}", v is not None)
-                if v is not None:
-                    setattr(j, f"{pre}{end.capitalize()}", float(v))
-        lo, hi = getattr(j, f"{pre}Min"), getattr(j, f"{pre}Max")
-        if getattr(j, f"Enable{pre}Min") and getattr(j, f"Enable{pre}Max") and float(lo) > float(hi):
-            raise bad(f"min ({float(lo):g}) is over max ({float(hi):g}) on {j.Label}: give min below max (null clears one). Nothing was kept.")
-        doc().recompute()
-        code, said = A._status(asm)
-        if code != 0:
-            raise ToolError("failed", f"With those limits {asm.Label} does not solve: {said} — nothing was kept. The joint may stand outside them now (asm_pose {{ joint, by: 0 }} reads where it is): asm_pose it inside first, or widen them.")
-        return picks.finish(s, "asm_limits", lambda: {"joint": j.Label, "kind": kind, "limits": limits_of(j)[1], "unit": "degrees" if turning else "mm", "solve": said}, recompute=False)
-
-    def moving_group(asm, j):
-        p1, e1, _ = A.ref_element(doc(), j.Reference1)
-        p2, e2, _ = A.ref_element(doc(), j.Reference2)
-        grounded = A._grounded(asm)
-        fixed_side, moving, el = (p1, p2, e2) if p2 not in grounded else (p2, p1, e1)
-        ax = axis_of(el) if el is not None else None
-        if ax is None:
-            ax = axis_of(e1 if el is e2 else e2)
-        if ax is None or moving is None:
-            raise ToolError("failed", f"The axis of {j.Label} could not be read from its elements.")
-        group, todo = {moving.Name: moving}, [moving]
-        others = [x for x in A._joints(asm).Group if x is not j and getattr(x, "ObjectToGround", None) is None]
-        while todo:
-            cur = todo.pop()
-            for x in others:
-                q1, _, _ = A.ref_element(doc(), getattr(x, "Reference1", None))
-                q2, _, _ = A.ref_element(doc(), getattr(x, "Reference2", None))
-                for here, there in ((q1, q2), (q2, q1)):
-                    if here is not None and there is not None and here.Name == cur.Name and there.Name not in group and there not in grounded and there is not fixed_side:
-                        group[there.Name] = there
-                        todo.append(there)
-        return group, ax
-
-    def asm_pose(a):
-        asm = A._assembly(doc(), a.get("assembly"))
-        if is_exploded(asm):
-            raise ToolError("invalid_state", f"{asm.Label} is exploded (its joints are off while it is): asm_explode {{ collapse: true }} first.")
-        j = joint_of(asm, a.get("joint"))
-        kind = str(getattr(j, "JointType", "")).lower()
-        if kind not in ("revolute", "slider", "cylindrical"):
-            raise bad(f"{j.Label} is {kind}: a pose turns a revolute joint (degrees) or slides a slider or cylindrical one (mm; turn: true turns it) — asm_list shows each joint's kind.")
-        turning = kind == "revolute" or (kind == "cylindrical" and a.get("turn"))
-        unit = "degrees" if turning else "mm"
-        # Where the joint is now, read off the parts (as the solver and its
-        # limits read it), not a counter of our own moves: the person or the
-        # solver may have moved it since.
-        now = joint_value(j, turning)
-        counted = False
-        if now is None:
-            if POSE not in j.PropertiesList:
-                j.addProperty("App::PropertyFloat", POSE, "AgentLink", "How far asm_pose has moved this joint (degrees or mm), where the joint's frames cannot be read")
-            now, counted = float(getattr(j, POSE)), True
-        if a.get("home"):
-            target = 0.0
-        elif a.get("to") is not None:
-            target = float(a["to"])
-        elif a.get("by") is not None:
-            target = now + float(a["by"])
-        else:
-            raise bad("to (the joint's own zero, where its frames line up — the zero its limits use), by (from where it is), or home: true.")
-        if turning and not counted:
-            target = wrap180(target)
-        _, lim = limits_of(j)
-        lo = lim.get("angleMin" if turning else "lengthMin")
-        hi = lim.get("angleMax" if turning else "lengthMax")
-        if (lo is not None and target < lo - 1e-9) or (hi is not None and target > hi + 1e-9):
-            raise bad(f"{target:g} is outside {j.Label}'s limits [{lo if lo is not None else '-'} … {hi if hi is not None else '-'}] (it is at {now:.4g} {unit} now).")
-        group, (centre, axis) = moving_group(asm, j)
-        step = (wrap180(target - now) if turning and not counted else target - now)
-        fr = joint_frames(j)
-        sign = 1.0
-        if fr is not None:
-            # Along JCS1's z, the axis the value is read on; a part on the
-            # first reference's side moves the other way.
-            centre, axis = fr[0].Base, fr[0].Rotation.multVec(V(0, 0, 1))
-            p1, _, _ = A.ref_element(doc(), j.Reference1)
-            if p1 is not None and p1.Name in group:
-                sign = -1.0
-        axis = V(axis)
-        axis.normalize()
-        if turning:
-            rot = FreeCAD.Rotation(axis, sign * step)
-            move = FreeCAD.Placement(centre - rot.multVec(centre), rot)
-        else:
-            move = FreeCAD.Placement(axis * (sign * step), FreeCAD.Rotation())
-        for o in group.values():
-            o.Placement = move.multiply(o.Placement)
-        if counted:
-            setattr(j, POSE, target)
-        doc().recompute()
-        code, said = A._status(asm)
-        if code != 0:
-            raise ToolError("failed", f"Posed, {asm.Label} does not solve: {said} — nothing was kept. Another joint holds this one where it is: asm_list shows them, asm_sweep tries a range without keeping it.")
-        got = joint_value(j, turning)
-        if got is not None and not counted:
-            off = abs(wrap180(got - target)) if turning else abs(got - target)
-            if off > (0.05 if turning else 0.005):
-                raise ToolError("failed", f"{j.Label} ended at {got:.4g} {unit}, not {target:g}: the solver moved it back, so another joint (a closed loop, a coupling) or its limits hold it — nothing was kept. Pose the joint that drives the loop, or asm_list to see what else joins these parts.")
-        hits, _ = A._overlaps(A._parts(asm))
-        if hits and not a.get("allowOverlap"):
-            raise ToolError("failed", f"At {target:g} {'°' if turning else 'mm'} parts overlap ({', '.join('/'.join(h['parts']) for h in hits)}) — nothing was kept. asm_sweep finds the clear range; allowOverlap: true keeps it anyway.")
-        s.snapshot("asm_pose")
-        out = {"joint": j.Label, "pose": r4(got if got is not None and not counted else target), "was": r4(now), "unit": unit, "along": vec(axis), "moved": sorted(o.Label for o in group.values()),
-               "parts": {o.Label: A._placement(o) for o in group.values()}, "solve": said, "step": len(s.steps)}
-        if counted:
-            out["note"] = "This FreeCAD's joint frames could not be read: the pose is counted from where asm_pose first found the joint."
-        if hits:
-            out["overlaps"] = hits
-        return out
-
-    # ---- exploded layout ----
-
-    def asm_explode(a):
-        asm = A._assembly(doc(), a.get("assembly"))
-        parts = A._parts(asm)
-        if a.get("collapse"):
-            if EXPLODED not in asm.PropertiesList or not asm.getPropertyByName(EXPLODED):
-                raise ToolError("invalid_state", f"{asm.Label} is not exploded: nothing to collapse (asm_explode {{ factor }} or {{ axis }} spreads it).")
-            kept = json.loads(asm.getPropertyByName(EXPLODED))
-            for o in parts:
-                if o.Name in kept:
-                    m = kept[o.Name]
-                    o.Placement = FreeCAD.Placement(V(*m["base"]), FreeCAD.Rotation(*m["q"]))
-            for jn in kept.get("__joints_off__", []):
-                jo = doc().getObject(jn)
-                if jo is not None:
-                    _suppress(jo, False)
-            setattr(asm, EXPLODED, "")
-            doc().recompute()
-            code, said = A._status(asm)
-            return picks.finish(s, "asm_explode", lambda: {"assembly": asm.Label, "collapsed": True, "solve": said}, recompute=False)
-        if EXPLODED in asm.PropertiesList and asm.getPropertyByName(EXPLODED):
-            raise ToolError("invalid_state", f"{asm.Label} is already exploded: asm_explode {{ collapse: true }} first, then explode it the new way.")
-        grounded = A._grounded(asm)
-        which = [A._part(asm, p) for p in a["parts"]] if a.get("parts") else [o for o in parts if o not in grounded]
-        if not which:
-            raise bad("Nothing to move: every part is grounded — name the ones to move in parts (asm_list lists them).")
-        factor = float(a.get("factor", 1.6))
-        if not 1.0 < factor <= 10:
-            raise bad(f"factor: how far out, over 1 and at most 10 (got {factor:g}); 1.6 spreads the parts by 60% of where they sit from the middle.")
-        bb = FreeCAD.BoundBox()
-        for o in parts:
-            bb.add(A._shape(o).BoundBox)
-        C = bb.Center
-        kept = {o.Name: {"base": [o.Placement.Base.x, o.Placement.Base.y, o.Placement.Base.z], "q": list(o.Placement.Rotation.Q)} for o in parts}
-        moves = {}
-        if a.get("axis") is not None:
-            ax = a["axis"]
-            d = V(*{"x": (1, 0, 0), "y": (0, 1, 0), "z": (0, 0, 1)}[ax]) if isinstance(ax, str) and ax in "xyz" and len(ax) == 1 else V(*ax)
-            if d.Length < 1e-9:
-                raise bad("axis: \"x\" | \"y\" | \"z\" or [x, y, z].")
-            d.normalize()
-            # stacked along the axis in the order they sit, each a gap past the last
-            order = sorted(which, key=lambda o: (A._shape(o).BoundBox.Center - C).dot(d))
-            size = max((max(abs(A._shape(o).BoundBox.XLength * d.x), abs(A._shape(o).BoundBox.YLength * d.y), abs(A._shape(o).BoundBox.ZLength * d.z)) for o in parts), default=10.0)
-            gap = float(a.get("gap") or size * (factor - 1))
-            mid = (len(order) - 1) / 2.0
-            ref_ground = [(A._shape(o).BoundBox.Center - C).dot(d) for o in grounded] or [0.0]
-            g0 = sum(ref_ground) / len(ref_ground)
-            for i, o in enumerate(order):
-                side = (A._shape(o).BoundBox.Center - C).dot(d) - g0
-                k = (i - mid) if not grounded else (i + 1 if side >= 0 else -(len(order) - i))
-                moves[o.Name] = d * (k * gap)
-        else:
-            for o in which:
-                v = A._shape(o).BoundBox.Center - C
-                if v.Length < 1e-6:
-                    v = V(0, 0, 1) * (bb.ZLength * 0.5 + 1)
-                moves[o.Name] = v * (factor - 1)
-        # FreeCAD's own Exploded View (Assembly ▸ Create Exploded View): a
-        # move step a part, applied by it; the placements moved here only
-        # where it is not (an older FreeCAD, or a step it would not take).
-        view, why = _exploded_view(asm, which, moves)
-        if view is None:
-            for o in which:
-                o.Placement = FreeCAD.Placement(o.Placement.Base + moves[o.Name], o.Placement.Rotation)
-        else:
-            kept["__view__"] = view.Name
-        # The joints are left out of the solve while exploded (and put back
-        # on collapse): otherwise the next solve, from any assembly tool,
-        # pulls the parts back together.
-        off = []
-        for jo in (A._joints(asm).Group if A._joints(asm) is not None else []):
-            if getattr(jo, "ObjectToGround", None) is None and hasattr(jo, "JointType") and not _is_suppressed(jo):
-                _suppress(jo, True)
-                off.append(jo.Name)
-        kept["__joints_off__"] = off
-        if EXPLODED not in asm.PropertiesList:
-            asm.addProperty("App::PropertyString", EXPLODED, "AgentLink", "Where the parts sat before asm_explode, to collapse to (JSON)")
-        setattr(asm, EXPLODED, json.dumps(kept))
-        doc().recompute()
-        s.snapshot("asm_explode")
-        return {"assembly": asm.Label, "exploded": {o.Label: vec(moves[o.Name]) for o in which}, "step": len(s.steps),
-                **({"view": view.Label, "by": "FreeCAD's Exploded View (Assembly)"} if view is not None else {"by": "placements moved here", "whyNotFreeCADs": why}),
-                "jointsOff": len(off), "note": "Its joints are off while exploded, so no solve pulls the parts back: view_render to look, a drawing of it (td_page, td_view), then asm_explode { collapse: true }. Kept in the file, so it collapses after reopening too."}
-
-    # ---- bill of materials ----
-
-    def asm_bom(a):
-        asm = A._assembly(doc(), a.get("assembly"))
-        cols = ["Index", "Name", "Quantity"] + [c for c in (a.get("columns") or []) if isinstance(c, str)]
-        bom = None
-        try:
-            grp = next((o for o in asm.Group if o.TypeId == "Assembly::BomGroup"), None) or asm.newObject("Assembly::BomGroup", "Bills of Materials")
-            bom = grp.newObject("Assembly::BomObject", "Bill of Materials")
-            native = True
-        except Exception:
-            native = False
-        if bom is None:
-            bom = doc().addObject("Spreadsheet::Sheet", "BOM")
-        bom.Label = s.unique(a.get("name") or f"{asm.Label} BOM")
-        mats = store.materials(doc())
-        rows = []
-        for o in A._parts(asm):
-            m = mats.get(o.Label)
-            vol = o.Shape.Volume / 1000.0
-            rows.append({"name": o.Label, "material": m or "", "mass": (round(vol * DENSITY[m], 2) if m in DENSITY else ""), "volume": round(vol, 3)})
-        def nested(label):
-            # a row for a part inside a sub-assembly: found in the document by its label
-            o = next((x for x in doc().Objects if x.Label == label and hasattr(x, "Shape") and not x.Shape.isNull() and x.Shape.Solids
-                      and x.TypeId not in ("Assembly::AssemblyObject", "Assembly::AssemblyLink")), None)
-            if o is None:
-                return None
-            m = mats.get(o.Label)
-            vol = o.Shape.Volume / 1000.0
-            return {"name": o.Label, "material": m or "", "mass": (round(vol * DENSITY[m], 2) if m in DENSITY else ""), "volume": round(vol, 3)}
-
-        if native:
-            bom.columnsNames = cols + [c for c in ("Material", "Mass (g)", "Volume (cm3)") if c not in cols]
-            doc().recompute()
-            # custom columns: filled by name, kept by FreeCAD across regenerations
-            from .. import cells as Cc
-
-            hdr = [bom.getContents(Cc.name(1, c)).lstrip("'") for c in range(1, len(bom.columnsNames) + 1)]
-            name_col = hdr.index("Name") + 1 if "Name" in hdr else 2
-            r = 2
-            while bom.getContents(Cc.name(r, name_col)):
-                nm = bom.getContents(Cc.name(r, name_col)).lstrip("'")
-                row = next((x for x in rows if x["name"] == nm), None) or nested(nm)
-                if row:
-                    for colname, key in (("Material", "material"), ("Mass (g)", "mass"), ("Volume (cm3)", "volume")):
-                        if colname in hdr and row[key] != "":
-                            bom.set(Cc.name(r, hdr.index(colname) + 1), str(row[key]) if key != "material" else "'" + row[key])
-                r += 1
-            doc().recompute()
-        else:
-            from .. import cells as Cc
-
-            hdr = ["Index", "Name", "Quantity", "Material", "Mass (g)", "Volume (cm3)"]
-            for c, h in enumerate(hdr, 1):
-                bom.set(Cc.name(1, c), "'" + h)
-            for i, row in enumerate(rows, 2):
-                vals = [str(i - 1), row["name"], "1", row["material"], row["mass"], row["volume"]]
-                for c, v in enumerate(vals, 1):
-                    if v != "":
-                        bom.set(Cc.name(i, c), ("'" + v) if c in (2, 4) else str(v))
-            doc().recompute()
-        s.snapshot("asm_bom")
-        out = {"bom": bom.Label, "sheet": bom.Name, "native": native, "parts": rows, "step": len(s.steps),
-               "next": "td_table { sheet } puts it on a drawing; sheet_read reads it."}
-        if any(not r["material"] for r in rows):
-            out["note"] = "Parts with no material recorded have no mass: material_set records one."
-        return out
-
-    # ---- sub-assemblies ----
-
-    def asm_sub(a):
-        parent = A._assembly(doc(), a.get("assembly"))
-        sub = A._assembly(doc(), a.get("sub"))
-        if sub is parent:
-            raise bad(f"sub: another assembly than the one it goes into — both name {parent.Label}. assembly is the one that receives, sub the one put in.")
-        if any(getattr(o, "LinkedObject", None) is parent for o in sub.Group):
-            raise bad(f"{parent.Label} is already inside {sub.Label}: an assembly cannot hold itself — swap assembly and sub, or build a third assembly to hold both.")
-        rigid = a.get("rigid", True)
-        kind = "Assembly::AssemblyLink"
-        try:
-            link = parent.newObject(kind, sub.Label)
-        except Exception:
-            kind = "App::Link"
-            link = parent.newObject(kind, sub.Label)
-        link.LinkedObject = sub
-        link.Label = s.unique(a.get("name") or sub.Label)
-        if "Rigid" in link.PropertiesList:
-            link.Rigid = bool(rigid)
-        elif not rigid:
-            raise ToolError("unavailable", "This FreeCAD links a sub-assembly as one rigid part only (flexible sub-assemblies came with the Assembly workbench's AssemblyLink).")
-        doc().recompute()
-        code, said = A._status(parent)
-        s.snapshot("asm_sub")
-        return {"assembly": parent.Label, "sub": sub.Label, "as": link.Label, "type": kind, "rigid": bool(getattr(link, "Rigid", True)), "solve": said, "step": len(s.steps),
-                "next": f"asm_check {{ assembly: \"{parent.Label}\" }} checks its parts where they stand; asm_bom itemises them. object_set its Placement to place it: asm_joint and asm_ground take bodies put in with asm_new or asm_add, not a sub-assembly."}
-
-    asm_ref = {"type": "string", "description": "The assembly's label; may be left out when there is one."}
-    end = {"type": "object"}
-    # ---- saved motions and the solver's own file ----
-
-    def motions():
-        return store.read(doc(), "motions", {}) or {}
-
-    def asm_motion(a):
-        action = a.get("action", "list")
-        allm = motions()
-        if action == "list":
-            return {"motions": [{"name": k, "keys": len(v["keys"]), "joints": sorted({j for key in v["keys"] for j in key["poses"]})} for k, v in allm.items()]}
-        name = a.get("name")
-        if not name:
-            raise bad(f"name: the motion's name, needed for action {action} (asm_motion {{ action: \"list\" }} names the saved ones).")
-        if action == "delete":
-            allm.pop(name, None)
-            store.write(doc(), "motions", allm)
-            s.snapshot("asm_motion")
-            return {"deleted": name}
-        if action == "save":
-            keys = a.get("keys")
-            if not isinstance(keys, list) or len(keys) < 2 or not all(isinstance(k, dict) for k in keys):
-                raise bad("keys: two or more key poses in order, each { joint: value, … } (degrees or mm from each joint's own zero, as asm_pose).")
-            asm = A._assembly(doc(), a.get("assembly"))
-            for k in keys:
-                for jn in k:
-                    joint_of(asm, jn)
-            allm[name] = {"assembly": asm.Label, "keys": [{"poses": {j: float(v) for j, v in k.items()}} for k in keys]}
-            store.write(doc(), "motions", allm)
-            s.snapshot("asm_motion")
-            return {"saved": name, "keys": len(keys), "assembly": asm.Label}
-        if action != "play":
-            raise bad("action: save (keys) | play | list | delete.")
-        mo = allm.get(name)
-        if mo is None:
-            raise ToolError("not_found", f"motion {name!r} is not saved in this document: asm_motion {{ action: \"list\" }} names them, action save with keys makes one.")
-        asm = A._assembly(doc(), mo["assembly"])
-        between = int(a.get("steps", 6))
-        frames = []
-        keys = mo["keys"]
-        for i in range(len(keys) - 1):
-            k0, k1 = keys[i]["poses"], keys[i + 1]["poses"]
-            for st in range(between if i < len(keys) - 2 else between + 1):
-                f = st / between
-                frames.append({j: k0.get(j, k1.get(j, 0.0)) + (k1.get(j, k0.get(j, 0.0)) - k0.get(j, k1.get(j, 0.0))) * f for j in set(k0) | set(k1)})
-        start = {}
-        for jn in {j for fr in frames for j in fr}:
-            jo = joint_of(asm, jn)
-            kind = str(getattr(jo, "JointType", "")).lower()
-            v = joint_value(jo, kind == "revolute")
-            start[jn] = v if v is not None else (float(getattr(jo, POSE, 0.0)) if POSE in jo.PropertiesList else 0.0)
-        out_frames, clash_at = [], []
-        try:
-            for n, fr in enumerate(frames):
-                for jn, v in sorted(fr.items()):
-                    asm_pose({"assembly": asm.Label, "joint": jn, "to": v, "allowOverlap": True})
-                hits, _ = A._overlaps(A._parts(asm), float(a.get("clearance", 0)))
-                row = {"frame": n, "poses": {k: r4(v) for k, v in fr.items()}}
-                if hits:
-                    row["overlaps"] = ["/".join(h["parts"]) for h in hits]
-                    clash_at.append(n)
-                if a.get("placements"):
-                    row["parts"] = {o.Label: A._placement(o) for o in A._parts(asm)}
-                out_frames.append(row)
-        finally:
-            if not a.get("keep"):
-                for jn, v in start.items():
-                    try:
-                        asm_pose({"assembly": asm.Label, "joint": jn, "to": v, "allowOverlap": True})
-                    except ToolError:
-                        pass
-        res = {"motion": name, "frames": len(out_frames), "clashFrames": clash_at, "verdict": "clear" if not clash_at else f"parts overlap in {len(clash_at)} of {len(out_frames)} frames",
-               "frameList": out_frames[: int(a.get("limit", 40))], "left": "at the last frame" if a.get("keep") else "as it was"}
-        if a.get("path"):
-            pth = paths.made(s, a["path"] if os.path.isabs(os.path.expanduser(a["path"])) else os.path.join(s.out_dir, a["path"]))
-            with open(os.path.expanduser(pth), "w") as f:
-                json.dump({"motion": name, "assembly": asm.Label, "frames": out_frames}, f, indent=1)
-            res["path"] = pth
-        return res
-
-    def asm_export(a):
-        asm = A._assembly(doc(), a.get("assembly"))
-        p = a.get("path") or f"{asm.Label.replace(' ', '_')}.asmt"
-        p = p if os.path.isabs(os.path.expanduser(p)) else os.path.join(s.out_dir, p)
-        p = paths.made(s, os.path.expanduser(p))
-        fn = getattr(asm, "exportAsASMT", None)
-        if fn is None:
-            raise ToolError("unavailable", "This FreeCAD's assembly cannot write its solver's file (exportAsASMT is FreeCAD 1.0 and newer).")
-        try:
-            fn(p)
-        except Exception as e:
-            raise ToolError("failed", f"The assembly would not write its solver file to {p}: {e} — check the folder can be written (path), and asm_check that the assembly solves.")
-        if not os.path.isfile(p):
-            raise ToolError("failed", f"FreeCAD wrote no file at {p} and gave no error: an assembly with nothing grounded or no joints has little to write — asm_list shows what it holds; try another path.")
-        return {"path": p, "bytes": os.path.getsize(p), "format": "OndselSolver .asmt",
-                "note": "The solver's own description of the parts and joints: for OndselSolver or MbD tools, and for reporting a solve problem."}
-
-    return [
-        Tool("asm_fits", "Fits: for each joint (or joint, or pairs [{ a: { part, element }, b }] for parts with no joint), the hole and the shaft it puts together — found as cylindrical faces of about one size on the joint's axis — as fits [{ hole, shaft: { part, diameter }, clearance (minus: interference), engagement mm, axisOffset }]; with fit \"H7/g6\" (size: the nominal, else read off the parts to 0.05 mm) each held to ISO 286: the fit's type and clearanceRange, each part's limits and ok, verdict pass | fix. Flat faces: their gap and angle. A joint with nothing round is skipped with the reason. Parts drawn at nominal size fail a shaft band like g6: say so, do not hide it. Changes nothing.",
-             obj({"assembly": asm_ref, "joint": {"type": "string"}, "pairs": {"type": "array", "items": {"type": "object", "properties": {"a": end, "b": end, "fit": {"type": "string"}, "size": {"type": "number"}}}},
-                  "fit": {"type": "string"}, "size": {"type": "number"}}), asm_fits),
-        Tool("asm_motion", "Saved motions of an assembly, kept by Agent Link in the document (not FreeCAD's own Simulation object): action save (name, keys: two or more [{ joint: value, … }, …] in order, degrees or mm from each joint's own zero, as asm_pose) | play (name: steps between keys, 6; clearance; keep: true leaves it at the last frame, else every joint is put back; placements: true adds every part's place per frame; path writes the frames as JSON; limit: frames listed, 40) | list (the default) | delete. Play poses each joint in turn (asm_pose, so only revolute, slider and cylindrical joints) and answers frames, frameList [{ frame, poses, overlaps }], clashFrames and a verdict. Frames × pairs of parts is the cost: keep steps low on big assemblies.",
-             obj({"assembly": asm_ref, "action": {"type": "string", "enum": ["save", "play", "list", "delete"]}, "name": {"type": "string"}, "keys": {"type": "array", "items": {"type": "object"}},
-                  "steps": {"type": "integer"}, "clearance": {"type": "number"}, "keep": {"type": "boolean"}, "placements": {"type": "boolean"}, "path": {"type": "string"}, "limit": {"type": "integer"}}), asm_motion, changes=True),
-        Tool("asm_export", "Write the assembly as its solver's own file (OndselSolver .asmt, FreeCAD's Export ASMT): path (relative goes in the session's folder; <assembly>.asmt when left out). Parts, grounded parts and joints as the solver reads them — for other solvers, and for reporting a solve problem. Reply: path, bytes. Changes nothing in the document.",
-             obj({"assembly": asm_ref, "path": {"type": "string"}}), asm_export),
-        Tool("asm_pose", "Move a revolute joint (degrees) or slider / cylindrical one (mm; turn: true turns a cylindrical) and leave it there: to (from the joint's own zero, where its two frames line up — the zero its limits use; angles wrap to -180 … 180), by (from where it is now, read off the parts), or home: true (to 0). The part and those joined beyond it are moved, then the assembly is solved: refused, nothing kept, when the solver moves it back (a closed loop or coupling holds it), when outside the joint's limits, or when parts would overlap (allowOverlap: true keeps it). Not while exploded. Reply: pose, was, unit, moved, parts' placements, solve.",
-             obj({"assembly": asm_ref, "joint": {"type": "string"}, "to": {"type": "number"}, "by": {"type": "number"}, "home": {"type": "boolean"}, "turn": {"type": "boolean"}, "allowOverlap": {"type": "boolean"}}, ["joint"]), asm_pose, changes=True),
-        Tool("asm_limits", "A joint's limits, FreeCAD's own (EnableAngleMin/AngleMin … EnableLengthMax/LengthMax): min and max — degrees for revolute, mm for slider and cylindrical (turn: true for a cylindrical's angle); null clears one; an end left out stays as it is. Counted from the joint's own zero (where its two frames line up), as asm_pose's to. Refused, nothing kept, when min is over max or the assembly no longer solves (the joint stands outside them). asm_sweep sweeps between them when from/to are left out. Reply: limits, unit, solve.",
-             obj({"assembly": asm_ref, "joint": {"type": "string"}, "min": {"type": ["number", "null"]}, "max": {"type": ["number", "null"]}, "turn": {"type": "boolean"}}, ["joint"]), asm_limits, changes=True),
-        Tool("asm_explode", "Spread an assembly's parts out to see how it goes together: factor (1.6: 60% further from the middle; over 1, at most 10), or along an axis \"x\" | \"y\" | \"z\" | [x,y,z] stacked in the order they sit with gap mm; parts (default every one not grounded). Made as FreeCAD's own Exploded View (Assembly: a move step a part) where this FreeCAD has it (by says which). The parts stay moved and the joints are suppressed until collapse: true puts both back (kept in the file) — do not asm_joint, asm_pose or asm_sweep in between. Reply: exploded { part: [dx, dy, dz] }, view, jointsOff.",
-             obj({"assembly": asm_ref, "factor": {"type": "number"}, "axis": {"type": ["string", "array"]}, "gap": {"type": "number"}, "parts": {"type": "array", "items": {"type": "string"}}, "collapse": {"type": "boolean"}}), asm_explode, changes=True),
-        Tool("asm_sub", "Put an assembly into another as a sub-assembly (FreeCAD's Assembly::AssemblyLink): sub (the assembly to put in), assembly (the one it goes into), rigid (true, the default: it moves as one part; false: its own joints still move), name. It is linked, not moved: the sub stays an assembly of its own. Reply: as (its label in the parent), type, rigid, solve. asm_check checks its parts where they stand; asm_bom itemises them. asm_joint and asm_ground do not take a sub-assembly as a part yet: place it with object_set (Placement).",
-             obj({"assembly": asm_ref, "sub": {"type": "string"}, "rigid": {"type": "boolean"}, "name": {"type": "string"}}, ["assembly", "sub"]), asm_sub, changes=True),
-        Tool("asm_bom", "The bill of materials: FreeCAD's own BOM object (Assembly::BomObject, a spreadsheet the workbench regenerates on recompute) with Index, Name, Quantity, and Material, Mass (g) and Volume (cm3) filled from the materials recorded (material_set); columns adds more (\"File Name\"; \".Label2\" — a name starting with a dot — reads that property off each part; any other name is a column FreeCAD keeps for values filled in by hand); name. Each call makes a new one. Reply: bom, sheet (the object's name for sheet_read and td_table { sheet }), native, parts [{ name, material, mass, volume }]; a part with no material has no mass.",
-             obj({"assembly": asm_ref, "columns": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}}), asm_bom, changes=True),
-    ]
+    # What the tools' entries (agentlink/data/tools.json, "family": "assembly_more") call by name.
+    # FreeCAD's own are reached when called, not here.
+    helpers = {"doc": doc, "unique": lambda label: s.unique(label), "snapshot": lambda tool: s.snapshot(tool), "step": lambda: len(s.steps),
+               "settled": lambda tool, read: picks.finish(s, tool, read, recompute=False), "r4": r4, "vec": vec, "prop": lambda o, name: getattr(o, name),
+               "in_session": lambda p: p if os.path.isabs(os.path.expanduser(p)) else os.path.join(s.out_dir, p), "noted": lambda p: paths.made(s, p),
+               "expanduser": lambda p: os.path.expanduser(p), "isfile": lambda p: os.path.isfile(p), "filesize": lambda p: os.path.getsize(p), "write_json": write_json,
+               "motions": lambda: store.read(doc(), "motions", {}) or {}, "keep_motions": lambda allm: store.write(doc(), "motions", allm),
+               "materials": lambda: store.materials(doc()),
+               # FreeCAD's own
+               "placement": lambda *x: FreeCAD.Placement(*x),
+               # assembly.py's
+               "assembly": lambda ref: A._assembly(doc(), ref), "part_of": A._part, "element": lambda part, q, what: A._element(s, part, q, what), "joints": A._joints,
+               "parts": A._parts, "grounded": A._grounded, "status": A._status, "overlaps": A._overlaps, "placement_of": A._placement,
+               "ref_pair": lambda r: A.ref_element(doc(), r)[:2],
+               # the family's
+               "joint_of": joint_of, "pair_fit": pair_fit, "limits_of": limits_of, "joint_value": joint_value, "wrap180": wrap180, "is_exploded": is_exploded,
+               "moving_group": lambda asm, j: moving_group(doc(), asm, j), "pose_move": lambda j, *rest: pose_move(doc(), j, *rest), "standing": standing,
+               "key_frames": key_frames, "play": lambda *x: play(pose, *x), "collapse": lambda asm, parts: collapse(doc(), asm, parts), "bounds": bounds,
+               "where_parts_sit": where_parts_sit, "axis_dir": axis_dir, "unit": A.unit, "stacked": stacked, "spread": spread, "exploded_view": _exploded_view,
+               "joints_off": joints_off, "keep_exploded": keep_exploded, "bom_object": bom_object, "bom_row": bom_row,
+               "fill_native": lambda bom, rows, mats: fill_native(doc(), bom, rows, mats), "fill_sheet": fill_sheet,
+               # tables
+               "POSE": POSE}
+    made.extend(runners.tools(GROUP, s, helpers, family="assembly_more"))
+    return made
