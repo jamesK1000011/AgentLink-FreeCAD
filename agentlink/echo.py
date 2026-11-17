@@ -2089,14 +2089,25 @@ def segments_drawn(doc, args, body):
     None. Never raises."""
     try:
         a = args if isinstance(args, dict) else {}
-        if str(a.get("kind", "planar")) != "planar":
+        kind = str(a.get("kind", "planar"))
+        if kind not in ("planar", "curvature"):
             return None
         objs = _objects(doc, [(body or {}).get("mesh"), a.get("mesh")])
         o = next((x for x in objs if getattr(x, "Mesh", None) is not None), None)
         if o is None or o.Mesh.CountFacets > SEGMENTS_FACETS_MOST:
             return None
         m = o.Mesh
-        segs = m.getPlanarSegments(float(a.get("deviation", 0.01)), int(a.get("minFacets", 20)))
+        least = int(a.get("minFacets", 20))
+        if kind == "curvature":
+            # Round 7 (mesh 12-035): the curvature regions were never drawn
+            # (only planar was searched again here). The tool's own search
+            # (tools.json meshobj_segments: both curvatures within tolerance
+            # of 0).
+            tol = float(a.get("tolerance", 0.01))
+            segs = m.getSegmentsByCurvature([(0.0, 0.0, tol, tol, least)])
+        else:
+            segs = m.getPlanarSegments(float(a.get("deviation", 0.01)), least)
+        segs = [list(x) for x in segs or () if len(x)]
         if not segs:
             return None
         # Mesh.Points are where the mesh is drawn already: MeshObject's point
@@ -2118,9 +2129,103 @@ def segments_drawn(doc, args, body):
         drawn = scene_field(V, F, cols, per_face=True)
         if not drawn:
             return None
-        return {"regions": len(segs), "triangles": drawn, "facets": int(m.CountFacets), "inFront": True}
+        return {"kind": kind, "regions": len(segs), "triangles": drawn, "facets": int(m.CountFacets), "inFront": True}
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (mesh segments): {e}\n")
+        return None
+
+
+SCENE_MARKS_MOST = 400
+FRAME_COLOUR = "#0072b2"
+
+
+def scene_marks_shown(body):
+    """An add-on's answer that makes no document object but has a shape to
+    show (round 7, make 04-085: a frame's members existed only in its add-on's deck,
+    so the view kept the last bodies, Block and Bracket): its "sceneMarks"
+    { lines [[[x, y, z], …], …], points [[x, y, z], …], labels [[[x, y, z],
+    text], …] } drawn in the scene only (annotations, in front) and the view
+    framed on them; put away at the next change. {lines, points, labels,
+    framed} or None. Never raises."""
+    try:
+        sm = (body or {}).get("sceneMarks") if isinstance(body, dict) else None
+        if not isinstance(sm, dict):
+            return None
+
+        def pt(p):
+            if isinstance(p, (list, tuple)) and len(p) == 3 and all(isinstance(c, (int, float)) and not isinstance(c, bool) for c in p):
+                return tuple(float(c) for c in p)
+            return None
+
+        lines = []
+        for line in list(sm.get("lines") or ())[:SCENE_MARKS_MOST]:
+            got = [q for q in (pt(p) for p in (line if isinstance(line, (list, tuple)) else ())) if q is not None]
+            if len(got) >= 2:
+                lines.append(got)
+        points = [q for q in (pt(p) for p in list(sm.get("points") or ())[:SCENE_MARKS_MOST]) if q is not None]
+        labels = []
+        for item in list(sm.get("labels") or ())[:SCENE_MARKS_MOST]:
+            if isinstance(item, (list, tuple)) and len(item) == 2 and pt(item[0]) is not None and isinstance(item[1], str):
+                labels.append((pt(item[0]), item[1][:60]))
+        if not lines and not points:
+            return None
+        try:
+            from . import annotate
+
+            annotate.service().clear(SCENE_OWNER)  # one drawing at a time
+        except Exception:  # noqa: BLE001
+            pass
+        drawn = scene_marks(points + [p for p, _t in labels], lines, FRAME_COLOUR, labels=labels)
+        everything = points + [p for line in lines for p in line]
+        framed = False
+        try:
+            import FreeCADGui
+
+            if FreeCAD.ParamGet(PREFS).GetBool("Follow", True):
+                gd = FreeCADGui.ActiveDocument
+                v = getattr(gd, "ActiveView", None) if gd is not None else None
+                framed = frame_box(v, box_of(everything))
+        except Exception:  # noqa: BLE001
+            framed = False
+        return {"lines": len(lines), "points": len(points), "labels": [t for _p, t in labels][:6], "drawn": drawn,
+                "framed": bool(framed), "box": [round(x, 1) for x in box_of(everything) or ()]}
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (scene marks shown): {e}\n")
+        return None
+
+
+BOUNDARY_COLOUR = "#d55e00"
+BOUNDARY_WIDTH = 4
+
+
+def boundary_drawn(made):
+    """meshobj_boundary's rim wires drawn over the model (round 7, mesh
+    12-013: the Boundary compound is a 2 px dark line on the mesh's own edge,
+    under a see-through cover and two meshes on the same faces, so no rim was
+    seen): each wire as a line in the scene only (scene_marks, an
+    annotation: drawn in front), the object's own line made wider, both put
+    back at the next change. {loops, points, colour, inFront} or None. Never
+    raises."""
+    try:
+        lines = []
+        for o in made or ():
+            sh = getattr(o, "Shape", None)
+            if sh is None or sh.isNull() or list(getattr(sh, "Faces", None) or ()):
+                continue
+            for w in list(getattr(sh, "Wires", None) or ()):
+                pts = [tuple(float(c) for c in v.Point) for v in (getattr(w, "OrderedVertexes", None) or w.Vertexes)]
+                if len(pts) >= 2 and w.isClosed():
+                    pts.append(pts[0])
+                if len(pts) >= 2:
+                    lines.append(pts)
+            set_view_prop(o, "LineWidth", float(BOUNDARY_WIDTH), at_least=True)
+        if not lines:
+            return None
+        drawn = scene_marks((), lines, BOUNDARY_COLOUR)
+        return {"loops": len(lines), "points": sum(len(x) for x in lines), "drawn": drawn,
+                "colour": BOUNDARY_COLOUR, "inFront": True}
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (mesh boundary): {e}\n")
         return None
 
 
@@ -4147,6 +4252,9 @@ class Echo:
             # read selected. The last change's ring stays lit.
             self._step(tr, "words", say, read_words(what, result), HOLD_MS, where)
             self._step(tr, "readShown", self._read_shown, name, args, body)
+            # An add-on's read with a shape of its own and no object (an
+            # answer's sceneMarks): drawn and framed (round 7, make 04-085).
+            self._step(tr, "sceneMarks", scene_marks_shown, body)
             if name in READ_MAPS:
                 # A read whose answer is a map (curvature): drawn on the model
                 # in the scene only, put away at the next change (round 6).
@@ -4247,6 +4355,8 @@ class Echo:
             self._step(tr, "holdMarked", hold_marked, doc, body)
         if name.startswith(("pd_", "feature_")):
             self._step(tr, "profilesHidden", profiles_hidden, named)
+        if name == "meshobj_boundary":
+            self._step(tr, "rimDrawn", boundary_drawn, made)
         if name == "meshobj_segments" and (self._step(tr, "segments", segments_shown, made)
                                            or self._step(tr, "segmentsDrawn", segments_drawn, doc, args, body)
                                            or body.get("kept")):
