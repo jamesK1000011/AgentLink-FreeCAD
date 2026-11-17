@@ -16,8 +16,8 @@ import JointObject  # FreeCAD's Assembly workbench
 import UtilsAssembly  # noqa: F401  — the joints' own helpers load through it
 
 from .. import geometry as geo
-from ..protocol import Tool, ToolError
-from ..tools import obj
+from .. import runners
+from ..protocol import ToolError
 from . import measure as M
 from . import picks
 
@@ -386,6 +386,202 @@ def _health(session, tool, changed):
     return out
 
 
+def ref_label(doc, r):
+    """A joint's reference as asm_list shows it, "Part.Element": either
+    form, [asm, ["Part.Face6", …]] (1.0) or [part, ["Face6", …]]; a
+    reference with no element is its part's label; None for none."""
+    if not r:
+        return None
+    o, subs = r[0], (r[1] if len(r) > 1 else [])
+    if not subs:
+        return o.Label
+    path = subs[0].split(".")
+    if o.TypeId == "Assembly::AssemblyObject" and len(path) > 1:
+        p = doc.getObject(path[0])
+        return f"{p.Label if p else path[0]}.{path[-1]}"
+    return f"{o.Label}.{path[-1]}"
+
+
+def joint_axis(el):
+    """Where a joint on this element turns and slides, as asm_joint puts
+    it: a flat face's middle and normal; a round edge's or face's axis; a
+    straight edge's start and run. None for anything else."""
+    if isinstance(el, Part.Face):
+        srf = el.Surface
+        if isinstance(srf, Part.Plane):
+            u0, u1, v0, v1 = el.ParameterRange
+            n = el.normalAt((u0 + u1) / 2, (v0 + v1) / 2)
+            return el.CenterOfMass, n
+        if hasattr(srf, "Axis") and hasattr(srf, "Center"):
+            return srf.Center, srf.Axis
+    if isinstance(el, Part.Edge) and hasattr(el.Curve, "Axis"):
+        return el.Curve.Center, el.Curve.Axis
+    if isinstance(el, Part.Edge):
+        p0 = el.valueAt(el.FirstParameter)
+        return p0, el.valueAt(el.LastParameter) - p0
+    return None
+
+
+def unit(v):
+    """A copy of v, one long."""
+    v = V(v)
+    v.normalize()
+    return v
+
+
+def radius_of(part, el):
+    """The radius of a part's round element (an edge's curve, a face's
+    surface), for a coupling's figures left out; None where it has none."""
+    try:
+        g = part.Shape.getElement(el)
+        c = getattr(g, "Curve", None) or getattr(g, "Surface", None)
+        return float(c.Radius)
+    except Exception:
+        return None
+
+
+def joint_refs(asm, ends):
+    """The two references a joint is given, from (part, element) pairs.
+    1.0 reads a reference from the assembly down (the part's name, then the
+    element); later releases from the part itself."""
+    if _release() < (1, 1):
+        return [[asm, [f"{part.Name}.{el}", f"{part.Name}.{el}"]] for part, el in ends]
+    return [[part, [el, el]] for part, el in ends]
+
+
+def turn_over(doc, asm, j):
+    """As the joint panel's Reverse button does: the part turned over on
+    the joint, then solved; the solver keeps the nearer way round. The
+    solve's (code, words)."""
+    j.Proxy.flipOnePart(j)
+    doc.recompute()
+    return _status(asm)
+
+
+COUPLE = ("gears", "belt", "rackpinion", "screw")
+
+
+def carried(doc, asm, j, moving, fixed_side, grounded):
+    """What moves with a joint's moving part: the parts joined to it by
+    other joints, short of grounded parts and the part it turns on. A
+    coupling drives its other part, it does not carry it along.
+    ({ name: part }, the other joints that carry, the couplings)."""
+    group, todo = {moving.Name: moving}, [moving]
+    all_j = [x for x in _joints(asm).Group if x is not j and getattr(x, "ObjectToGround", None) is None]
+    couplings = [x for x in all_j if str(getattr(x, "JointType", "")).lower() in COUPLE]
+    others = [x for x in all_j if x not in couplings]
+    while todo:
+        cur = todo.pop()
+        for x in others:
+            q1 = ref_element(doc, getattr(x, "Reference1", None))[0]
+            q2 = ref_element(doc, getattr(x, "Reference2", None))[0]
+            for here, there in ((q1, q2), (q2, q1)):
+                if here is not None and there is not None and here.Name == cur.Name and there.Name not in group and there not in grounded and there is not fixed_side:
+                    group[there.Name] = there
+                    todo.append(there)
+    return group, others, couplings
+
+
+def driven_parts(doc, couplings, others, group, turning):
+    """Parts driven through a coupling: each on its own joint (revolute or
+    slider to something that stays), moved by the coupling's ratio — gears
+    turn the other way by r1 / r2, a belt the same way; a rack slides
+    r · π / 180 mm a degree of its pinion, a screw's nut pitch / 360.
+    [{ part, how: turn | slide, factor, centre, axis, via }]."""
+    driven = []
+    for c in couplings:
+        q1 = ref_element(doc, getattr(c, "Reference1", None))[0]
+        q2 = ref_element(doc, getattr(c, "Reference2", None))[0]
+        if q1 is None or q2 is None:
+            continue
+        if q1.Name in group and q2.Name not in group:
+            dvn, first = q2, True
+        elif q2.Name in group and q1.Name not in group:
+            dvn, first = q1, False
+        else:
+            continue
+        own = None
+        for x in others:
+            r1_, e1_ = ref_element(doc, getattr(x, "Reference1", None))[:2]
+            r2_, e2_ = ref_element(doc, getattr(x, "Reference2", None))[:2]
+            if str(getattr(x, "JointType", "")).lower() not in ("revolute", "slider", "cylindrical"):
+                continue
+            if r1_ is not None and r1_.Name == dvn.Name and (r2_ is None or r2_.Name not in group):
+                own = (x, e1_)
+            elif r2_ is not None and r2_.Name == dvn.Name and (r1_ is None or r1_.Name not in group):
+                own = (x, e2_)
+            if own:
+                break
+        if own is None or own[1] is None:
+            continue
+        dax = joint_axis(own[1])
+        if dax is None:
+            continue
+        ck = str(c.JointType).lower()
+        r1v, r2v = float(getattr(c, "Distance", 0) or 0), float(getattr(c, "Distance2", 0) or 0)
+        if ck in ("gears", "belt"):
+            if r1v <= 0 or r2v <= 0:
+                continue
+            ratio = (r1v / r2v) if first else (r2v / r1v)
+            factor, how = (-ratio if ck == "gears" else ratio), "turn"
+        elif ck == "rackpinion":
+            factor, how = (r1v * math.pi / 180.0), "slide"  # mm a degree of the pinion
+        else:
+            factor, how = (r1v / 360.0), "slide"  # screw: mm a degree
+        if not turning and how == "turn":
+            continue
+        dc, dv = dax
+        driven.append({"part": dvn, "how": how, "factor": factor, "centre": dc, "axis": unit(dv), "via": c.Label})
+    return driven
+
+
+def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, clearance):
+    """The sweep itself: the group turned about (or slid along) the axis to
+    each of steps + 1 values from lo to hi, the driven parts by their
+    ratio, every pair of parts checked for overlap at each, and every part
+    put back after whatever happened (which is why this is code: the steps
+    have no "finally"). Values count from where the joint was made: an
+    asm_pose since is taken off. A row a step: { at, driven, overlaps,
+    closer }."""
+    kept = {o.Name: o.Placement.copy() for o in _parts(asm)}
+    rows = []
+    try:
+        posed = float(getattr(j, "AgentLinkPose", 0.0) or 0.0)
+        for k in range(steps + 1):
+            v = lo + (hi - lo) * k / steps
+            if turning:
+                r = FreeCAD.Rotation(axis, v - posed)
+                move = FreeCAD.Placement(centre - r.multVec(centre), r)
+            else:
+                move = FreeCAD.Placement(axis * (v - posed), FreeCAD.Rotation())
+            for o in group.values():
+                o.Placement = move.multiply(kept[o.Name])
+            row = {"at": round(v, 3)}
+            for d in driven:
+                amount = (v - posed) * d["factor"]
+                if d["how"] == "turn":
+                    r = FreeCAD.Rotation(d["axis"], amount)
+                    dm = FreeCAD.Placement(d["centre"] - r.multVec(d["centre"]), r)
+                else:
+                    dm = FreeCAD.Placement(d["axis"] * amount, FreeCAD.Rotation())
+                d["part"].Placement = dm.multiply(kept[d["part"].Name])
+                row.setdefault("driven", {})[d["part"].Label] = round(amount, 3)
+            doc.recompute()
+            hits, near = _overlaps(_parts(asm), clearance)
+            if hits:
+                row["overlaps"] = [{"parts": h["parts"], "volume": h["volume"]} for h in hits]
+            if clearance > 0 and near:
+                row["closer"] = near
+            rows.append(row)
+    finally:
+        for o in _parts(asm):
+            if o.Name in kept:
+                o.Placement = kept[o.Name]
+        doc.recompute()
+        _status(asm)
+    return rows
+
+
 def tools(session):
     s = session
     try:
@@ -396,449 +592,26 @@ def tools(session):
         pass
 
     def doc():
+        """The session's document; refused when there is none."""
         if s.doc is None:
             raise ToolError("invalid_state", "No document: doc_new first.")
         return s.doc
 
-    def asm_new(a):
-        refs = a.get("parts") or []
-        if not isinstance(refs, list) or not refs:
-            raise ToolError("invalid_input", "parts: the bodies to put together, by label — session_state lists them.")
-        parts = [s.body(r) for r in refs]
-        asm = doc().addObject("Assembly::AssemblyObject", (a.get("name") or "Assembly").replace(" ", "_"))
-        asm.Label = a.get("name") or "Assembly"
-        _typed(asm)
-        _joints(asm)
-        for o in parts:
-            for p in list(o.InList):
-                if p.TypeId == "Assembly::AssemblyObject" and p is not asm:
-                    raise ToolError("invalid_state", f"{o.Label} is in {p.Label} already: a part is in one assembly. Join it there (asm_joint {{ assembly: \"{p.Label}\" }}), or put {p.Label} itself into another with asm_sub. Nothing was made.")
-            asm.addObject(o)
-        ground = a.get("ground", parts[0].Label)
-        if ground:
-            g = _joints(asm).newObject("App::FeaturePython", "GroundedJoint")
-            JointObject.GroundedJoint(g, _part(asm, ground))
-            _view_provider(g, "grounded")
-        doc().recompute()
-        return {"assembly": asm.Label, "parts": [o.Label for o in parts], "grounded": [o.Label for o in _grounded(asm)],
-                "next": "asm_joint between the parts' faces and edges; each joint solves the assembly."}
-
-    def asm_add(a):
-        asm = _assembly(doc(), a.get("assembly"))
-        added = []
-        for r in a.get("parts") or []:
-            o = s.body(r)
-            if o in asm.Group:
-                continue
-            asm.addObject(o)
-            added.append(o.Label)
-        if not added:
-            raise ToolError("invalid_input", f"parts: bodies not in {asm.Label} yet, by label — every one named is in it already (asm_list lists its parts; session_state the bodies).")
-        doc().recompute()
-        return {"assembly": asm.Label, "added": added, "parts": [o.Label for o in _parts(asm)]}
-
-    def asm_ground(a):
-        asm = _assembly(doc(), a.get("assembly"))
-        o = _part(asm, a.get("part"))
-        want = a.get("grounded", True)
-        jg = _joints(asm)
-        have = [j for j in jg.Group if getattr(j, "ObjectToGround", None) == o]
-        if want and not have:
-            g = jg.newObject("App::FeaturePython", "GroundedJoint")
-            JointObject.GroundedJoint(g, o)
-            _view_provider(g, "grounded")
-        if not want:
-            for j in have:
-                doc().removeObject(j.Name)
-        doc().recompute()
-        return {"assembly": asm.Label, "grounded": [x.Label for x in _grounded(asm)]}
-
-    def asm_joint(a):
-        asm = _typed(_assembly(doc(), a.get("assembly")))
-        kind = str(a.get("kind", "")).lower()
-        if kind not in OFFERED:
-            raise ToolError("invalid_input", f"kind: one of {', '.join(OFFERED)} (got {a.get('kind')!r}).")
-        if not _grounded(asm):
-            raise ToolError("invalid_state", f"No part of {asm.Label} is grounded: asm_ground {{ part }} the one that stays put first.")
-        ends = []
-        for side in ("a", "b"):
-            e = a.get(side)
-            if not isinstance(e, dict) or "part" not in e:
-                raise ToolError("invalid_input", f"{side}: {{ part, element }} — element \"Face6\" or a query {{ kind: face|edge, normal, near, radius, type }}.")
-            part = _part(asm, e["part"])
-            el = _element(s, part, e.get("element", {"kind": "face", **{k: v for k, v in e.items() if k not in ('part', 'element')}}), f"{side}.element")
-            ends.append((part, el))
-        if ends[0][0] is ends[1][0]:
-            raise ToolError("invalid_input", f"a and b are both on {ends[0][0].Label}: a joint is between two parts of the assembly (asm_list names them).")
-        # Keyed by Name: a workbench that relabels its objects on recompute
-        # (Fasteners counts its screws' labels up) made a lookup by label
-        # after the solve fail with a bare KeyError.
-        before = {o.Name: o.Placement.copy() for o in _parts(asm)}
-        j = _joints(asm).newObject("App::FeaturePython", a.get("name") or KINDS[kind])
-        JointObject.Joint(j, JointObject.JointTypes.index(KINDS[kind]))
-        _view_provider(j, "joint")
-        if a.get("name"):
-            j.Label = a["name"]
-        if kind == "distance":
-            j.Distance = picks.num(a.get("distance", 0), "distance")
-        if kind == "angle":
-            j.Angle = picks.num(a.get("angle", 90), "angle")
-        if kind in ("rackpinion", "screw", "gears", "belt"):
-            # the couplings' figures: a pitch radius, a lead, or each wheel's radius
-            # — read off round elements when not given
-            def radius_of(part, el):
-                try:
-                    g = part.Shape.getElement(el)
-                    c = getattr(g, "Curve", None) or getattr(g, "Surface", None)
-                    return float(c.Radius)
-                except Exception:
-                    return None
-
-            r1 = a.get("radius1") if a.get("radius1") is not None else (a.get("pitch") if kind == "screw" else radius_of(*ends[0]))
-            if r1 is None or float(r1) <= 0:
-                raise ToolError("invalid_input", {"rackpinion": "radius1: the pinion's pitch radius, mm (or give its round edge).",
-                                                  "screw": "pitch: mm the nut moves per turn.",
-                                                  "gears": "radius1: the first gear's pitch radius, mm (or give its round edge).",
-                                                  "belt": "radius1: the first pulley's radius, mm (or give its round edge)."}[kind])
-            j.Distance = float(r1)
-            if kind in ("gears", "belt"):
-                r2 = a.get("radius2") if a.get("radius2") is not None else radius_of(*ends[1])
-                if r2 is None or float(r2) <= 0:
-                    raise ToolError("invalid_input", "radius2: the second wheel's radius, mm (or give its round edge).")
-                j.Distance2 = float(r2)
-        off = a.get("offset")
-        rot = a.get("rotate")
-
-        if off is not None or rot is not None:
-            j.Offset2 = FreeCAD.Placement(V(0, 0, picks.num(off or 0, "offset")), FreeCAD.Rotation(V(0, 0, 1), picks.num(rot or 0, "rotate")))
-
-        def turn_over():
-            # As the task panel's Reverse button does: the part turned over on
-            # the joint, then solved; the solver keeps the nearer way round.
-            j.Proxy.flipOnePart(j)
-            doc().recompute()
-            return _status(asm)
-
-        # 1.0 reads a reference from the assembly down (the part's name, then
-        # the element); later releases from the part itself.
-        if _release() < (1, 1):
-            refs = [[asm, [f"{part.Name}.{el}", f"{part.Name}.{el}"]] for part, el in ends]
-        else:
-            refs = [[part, [el, el]] for part, el in ends]
-        try:
-            j.Proxy.setJointConnectors(j, refs)
-        except Exception as e:
-            raise ToolError("failed", f"FreeCAD could not make the {kind} joint between {ends[0][0].Label}.{ends[0][1]} and {ends[1][0].Label}.{ends[1][1]}: {e}")
-        # The joint's frames on each element, worked out again here: later
-        # releases leave that to the window's selection, which there is none
-        # of headless.
-        try:
-            j.Proxy.updateJCSPlacements(j)
-        except Exception:
-            pass
-        # As the joint panel's OK does: the placements the solve kept for its
-        # own undo are dropped, or the next joint made starts by putting the
-        # parts back where they were before this one (Joint.__init__ calls
-        # setJointConnectors with nothing, which undoes the last solve).
-        try:
-            asm.clearUndo()
-        except Exception:
-            pass
-        doc().recompute()
-        code, said = _status(asm)
-        flipped = False
-        if code == 0 and a.get("reverse"):
-            code, said = turn_over()
-            flipped = True
-        # FreeCAD lines the joint's frames up as the elements' geometry
-        # runs, which can put a lid into its box instead of on it. Two parts
-        # overlapping after the solve, and no reverse said: the other way is
-        # tried, and kept when it overlaps less.
-        if code == 0 and a.get("reverse") is None and kind in REVERSIBLE:
-            first, _ = _overlaps(_parts(asm))
-            if first:
-                vol0 = sum(h["volume"] for h in first)
-                kept = {o.Name: o.Placement.copy() for o in _parts(asm)}
-                code2, said2 = turn_over()
-                second, _ = _overlaps(_parts(asm))
-                if code2 == 0 and sum(h["volume"] for h in second) < vol0 - 1e-6:
-                    code, said, flipped = code2, said2, True
-                else:
-                    for o in _parts(asm):
-                        o.Placement = kept[o.Name]
-                    doc().recompute()
-                    code, said = _status(asm)
-        if code != 0:
-            hint = ("asm_ground { part } holds one part first." if code == -6 else
-                    "The solver could not put the parts where all the joints ask: this one fights another on the same parts (asm_list shows them; asm_joint_remove takes one out), "
-                    "or the elements cannot meet that way — pick other elements, or for parts far out of place try reverse: true.")
-            raise ToolError("failed", f"The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. {hint}")
-        moved = {}
-        for o in _parts(asm):
-            b = before.get(o.Name)
-            if b is None:
-                continue  # a part the solve brought in: nothing to compare
-            if not o.Placement.isSame(b, 1e-6):
-                moved[o.Label] = {"from": geo.vec(b.Base), "to": _placement(o), "by": round((o.Placement.Base - b.Base).Length, 4)}
-        hits, _ = _overlaps(_parts(asm))
-        hits = [h for h in hits if not h.get("thread")]
-        out = {"joint": j.Label, "kind": kind, "a": f"{ends[0][0].Label}.{ends[0][1]}", "b": f"{ends[1][0].Label}.{ends[1][1]}", "solve": said, "moved": moved}
-        if flipped:
-            out["flipped"] = True if a.get("reverse") else "turned over to stop the parts overlapping (reverse: false keeps it as FreeCAD first put it)"
-        if hits:
-            out["overlaps"] = hits
-            out["warning"] = "Parts overlap after the solve: a face picked the wrong way round, or the parts do not fit — reverse: true flips the second part, or check the sizes."
-        return out
-
-    def asm_list(a):
-        asm = _assembly(doc(), a.get("assembly"))
-        joints = []
-        for j in _joints(asm).Group:
-            if getattr(j, "ObjectToGround", None) is not None:
-                continue
-            r1, r2 = getattr(j, "Reference1", None), getattr(j, "Reference2", None)
-
-            def ref(r):
-                if not r:
-                    return None
-                o, subs = r[0], (r[1] if len(r) > 1 else [])
-                if not subs:
-                    return o.Label
-                path = subs[0].split(".")
-                if o.TypeId == "Assembly::AssemblyObject" and len(path) > 1:
-                    p = doc().getObject(path[0])
-                    return f"{p.Label if p else path[0]}.{path[-1]}"
-                return f"{o.Label}.{path[-1]}"
-
-            joints.append({"joint": j.Label, "kind": str(getattr(j, "JointType", "?")).lower(), "a": ref(r1), "b": ref(r2), "suppressed": bool(getattr(j, "Suppressed", False))})
-        code, said = _status(asm)
-        return {"assembly": asm.Label, "parts": [{"part": o.Label, "placement": _placement(o), "grounded": o in _grounded(asm)} for o in _parts(asm)], "joints": joints, "solve": said}
-
-    def _ref_element(r):
-        return ref_element(doc(), r)[:2]
-
-    def _axis(el):
-        """Where a joint on this element turns and slides, as asm_joint puts
-        it: a flat face's middle and normal; a round edge's or face's axis."""
-        import Part
-
-        if isinstance(el, Part.Face):
-            srf = el.Surface
-            if isinstance(srf, Part.Plane):
-                u0, u1, v0, v1 = el.ParameterRange
-                n = el.normalAt((u0 + u1) / 2, (v0 + v1) / 2)
-                return el.CenterOfMass, n
-            if hasattr(srf, "Axis") and hasattr(srf, "Center"):
-                return srf.Center, srf.Axis
-        if isinstance(el, Part.Edge) and hasattr(el.Curve, "Axis"):
-            return el.Curve.Center, el.Curve.Axis
-        if isinstance(el, Part.Edge):
-            p0 = el.valueAt(el.FirstParameter)
-            return p0, el.valueAt(el.LastParameter) - p0
-        return None
-
-    def asm_sweep(a):
-        asm = _assembly(doc(), a.get("assembly"))
-        name = a.get("joint")
-        j = next((x for x in _joints(asm).Group if x.Label == name or x.Name == name), None)
-        if j is None or getattr(j, "ObjectToGround", None) is not None:
-            raise ToolError("not_found", f"joint {name!r}: not in {asm.Label} — asm_list names them.")
-        kind = str(getattr(j, "JointType", "")).lower()
-        if kind not in ("revolute", "slider", "cylindrical"):
-            raise ToolError("invalid_input", f"{j.Label} is {kind}: a sweep moves a revolute (turning, degrees), slider or cylindrical (sliding, mm) joint.")
-        turning = kind == "revolute" or (kind == "cylindrical" and a.get("turn"))
-        # left out, the joint's own limits (asm_limits) bound the sweep
-        pre = "Angle" if turning else "Length"
-        lim_lo = getattr(j, f"{pre}Min", None) if getattr(j, f"Enable{pre}Min", False) else None
-        lim_hi = getattr(j, f"{pre}Max", None) if getattr(j, f"Enable{pre}Max", False) else None
-        lo = float(a.get("from", lim_lo if lim_lo is not None else 0))
-        hi = float(a.get("to", lim_hi if lim_hi is not None else (90 if turning else 10)))
-        steps = int(a.get("steps", 12))
-        if not 1 <= steps <= 72:
-            raise ToolError("invalid_input", f"steps: 1 to 72 (got {steps}); each step checks every pair of parts — for a closer look sweep a shorter from/to range.")
-        clearance = float(a.get("clearance", 0))
-        p1, e1 = _ref_element(j.Reference1)
-        p2, e2 = _ref_element(j.Reference2)
-        grounded = _grounded(asm)
-        # The part that moves: the second, unless it is the grounded one.
-        fixed_side, moving, el = (p1, p2, e1) if p2 not in grounded else (p2, p1, e2)
-        ax = _axis(el) if el is not None else None
-        if ax is None or moving is None:
-            raise ToolError("failed", f"The axis of {j.Label} could not be read from its elements.")
-        centre, axis = ax
-        axis = V(axis)
-        axis.normalize()
-        # What moves with it: parts joined to it by other joints, short of
-        # grounded parts and the part it turns on.
-        group, todo = {moving.Name: moving}, [moving]
-        COUPLE = ("gears", "belt", "rackpinion", "screw")
-        all_j = [x for x in _joints(asm).Group if x is not j and getattr(x, "ObjectToGround", None) is None]
-        couplings = [x for x in all_j if str(getattr(x, "JointType", "")).lower() in COUPLE]
-        # a coupling drives its other part, it does not carry it along
-        others = [x for x in all_j if x not in couplings]
-        while todo:
-            cur = todo.pop()
-            for x in others:
-                q1, _ = _ref_element(getattr(x, "Reference1", None))
-                q2, _ = _ref_element(getattr(x, "Reference2", None))
-                for here, there in ((q1, q2), (q2, q1)):
-                    if here is not None and there is not None and here.Name == cur.Name and there.Name not in group and there not in grounded and there is not fixed_side:
-                        group[there.Name] = there
-                        todo.append(there)
-        # Parts driven through a coupling: each on its own joint (revolute or
-        # slider to something that stays), moved by the coupling's ratio.
-        driven = []
-        for c in couplings:
-            q1, _ = _ref_element(getattr(c, "Reference1", None))
-            q2, _ = _ref_element(getattr(c, "Reference2", None))
-            if q1 is None or q2 is None:
-                continue
-            if q1.Name in group and q2.Name not in group:
-                dvn, first = q2, True
-            elif q2.Name in group and q1.Name not in group:
-                dvn, first = q1, False
-            else:
-                continue
-            own = None
-            for x in others:
-                r1_, e1_ = _ref_element(getattr(x, "Reference1", None))
-                r2_, e2_ = _ref_element(getattr(x, "Reference2", None))
-                if str(getattr(x, "JointType", "")).lower() not in ("revolute", "slider", "cylindrical"):
-                    continue
-                if r1_ is not None and r1_.Name == dvn.Name and (r2_ is None or r2_.Name not in group):
-                    own = (x, e1_)
-                elif r2_ is not None and r2_.Name == dvn.Name and (r1_ is None or r1_.Name not in group):
-                    own = (x, e2_)
-                if own:
-                    break
-            if own is None or own[1] is None:
-                continue
-            dax = _axis(own[1])
-            if dax is None:
-                continue
-            ck = str(c.JointType).lower()
-            r1v, r2v = float(getattr(c, "Distance", 0) or 0), float(getattr(c, "Distance2", 0) or 0)
-            if ck in ("gears", "belt"):
-                if r1v <= 0 or r2v <= 0:
-                    continue
-                ratio = (r1v / r2v) if first else (r2v / r1v)
-                factor, how = (-ratio if ck == "gears" else ratio), "turn"
-            elif ck == "rackpinion":
-                factor, how = (r1v * math.pi / 180.0), "slide"  # mm a degree of the pinion
-            else:
-                factor, how = (r1v / 360.0), "slide"  # screw: mm a degree
-            if not turning and how == "turn":
-                continue
-            dc, dv = dax
-            dv = V(dv)
-            dv.normalize()
-            driven.append({"part": dvn, "how": how, "factor": factor, "centre": dc, "axis": dv, "via": c.Label})
-        kept = {o.Name: o.Placement.copy() for o in _parts(asm)}
-        out_steps = []
-        try:
-            # values from where the joint was made: an asm_pose since is taken off
-            posed = float(getattr(j, "AgentLinkPose", 0.0) or 0.0)
-            for k in range(steps + 1):
-                v = lo + (hi - lo) * k / steps
-                if turning:
-                    r = FreeCAD.Rotation(axis, v - posed)
-                    move = FreeCAD.Placement(centre - r.multVec(centre), r)
-                else:
-                    move = FreeCAD.Placement(axis * (v - posed), FreeCAD.Rotation())
-                for o in group.values():
-                    o.Placement = move.multiply(kept[o.Name])
-                row = {"at": round(v, 3)}
-                for d in driven:
-                    amount = (v - posed) * d["factor"]
-                    if d["how"] == "turn":
-                        r = FreeCAD.Rotation(d["axis"], amount)
-                        dm = FreeCAD.Placement(d["centre"] - r.multVec(d["centre"]), r)
-                    else:
-                        dm = FreeCAD.Placement(d["axis"] * amount, FreeCAD.Rotation())
-                    d["part"].Placement = dm.multiply(kept[d["part"].Name])
-                    row.setdefault("driven", {})[d["part"].Label] = round(amount, 3)
-                doc().recompute()
-                hits, near = _overlaps(_parts(asm), clearance)
-                if hits:
-                    row["overlaps"] = [{"parts": h["parts"], "volume": h["volume"]} for h in hits]
-                if clearance > 0 and near:
-                    row["closer"] = near
-                out_steps.append(row)
-        finally:
-            for o in _parts(asm):
-                if o.Name in kept:
-                    o.Placement = kept[o.Name]
-            doc().recompute()
-            _status(asm)
-        unit = "degrees" if turning else "mm"
-        bad = [r["at"] for r in out_steps if r.get("overlaps")]
-        clear_run = []
-        for r in out_steps:
-            if r.get("overlaps"):
-                break
-            clear_run.append(r["at"])
-        out = {"joint": j.Label, "kind": kind, "unit": unit, "from": lo, "to": hi, "moves": sorted(o.Label for o in group.values()),
-               **({"driven": [{"part": d["part"].Label, "via": d["via"], d["how"] + "s": "degrees" if d["how"] == "turn" else "mm",
-                               "per": round(d["factor"], 5)} for d in driven]} if driven else {}),
-               "axis": {"through": [round(c, 3) for c in centre], "along": [round(c, 4) for c in axis]}, "steps": out_steps,
-               "verdict": "collides" if bad else "clear",
-               "note": f"{' and '.join(sorted(o.Label for o in group.values()))} turned (or slid) about the joint's axis and put back after. Steps are {abs(hi - lo) / steps:g} {unit} apart: a collision between two steps is not seen — more steps to look closer. A chain of moving joints beyond this one is carried along rigidly, not solved."}
-        if bad:
-            out["collidesAt"] = bad
-            out["clearFromStart"] = [clear_run[0], clear_run[-1]] if clear_run else None
-        return out
-
-    def asm_joint_remove(a):
-        asm = _assembly(doc(), a.get("assembly"))
-        name = a.get("joint")
-        hit = next((j for j in _joints(asm).Group if name in (j.Label, j.Name)), None)
-        if hit is None:
-            raise ToolError("not_found", f"joint {name!r} is not in {asm.Label}: asm_list lists its joints (a grounding is taken off with asm_ground {{ part, grounded: false }}).")
-        doc().removeObject(hit.Name)
-        doc().recompute()
-        code, said = _status(asm)
-        return {"assembly": asm.Label, "removed": name, "solve": said}
-
-    def asm_check(a):
-        asm = _assembly(doc(), a.get("assembly"))
-        clearance = picks.num(a.get("clearance", 0), "clearance")
-        code, said = _status(asm)
-        parts, hidden, left = _check_parts(asm)
-        hits, near = _overlaps(parts, clearance)
-        # each part's own object (a linked part's is its link), where it is the assembly's own
-        own = [x for x in (getattr(o, "obj", o) for o in parts) if x in asm.Group]
-        free = [o.Label for o in own if o not in _grounded(asm) and not asm.isPartConnected(o)] if hasattr(asm, "isPartConnected") else []
-        out = {"assembly": asm.Label, "solve": said, "parts": len(parts), "overlaps": hits}
-        if hidden:
-            out["hidden"] = f"checked though hidden: {', '.join(hidden)}"
-        if left:
-            out["notChecked"] = f"no solid to check: {', '.join(left)}"
-        if clearance > 0:
-            out["closerThan"] = {"clearance": clearance, "pairs": near}
-        if free:
-            out["notConnected"] = free
-            out["note"] = "Parts joined to nothing grounded float free: a joint to the grounded part, or asm_ground."
-        real = [h for h in hits if not h.get("thread")]
-        if len(real) < len(hits):
-            out["threads"] = len(hits) - len(real)
-        out["verdict"] = "clear" if not real and said == "solved" else "fix"
-        return out
-
-    part_end = {"type": "object", "description": "{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of several."}
-    asm_ref = {"type": "string", "description": "The assembly's label; may be left out when there is one."}
-    return [
-        Tool("asm_new", "Put bodies together in a new assembly (FreeCAD's Assembly workbench): parts by label — the bodies themselves move into it (not links), and a body is in one assembly only. The first is grounded (held fixed) unless ground names another or is false; with nothing grounded no joint solves. Reply: assembly, parts, grounded. Then asm_joint between them.",
-             obj({"parts": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}, "ground": {}}, ["parts"]), asm_new, changes=True),
-        Tool("asm_add", "Put more bodies into an assembly: parts by label (moved in, not linked; ones already in are skipped). They float free until asm_joint ties them to a grounded part. Reply: added, parts.", obj({"assembly": asm_ref, "parts": {"type": "array", "items": {"type": "string"}}}, ["parts"]), asm_add, changes=True),
-        Tool("asm_ground", "Hold a part fixed where it stands (grounded: true, the default) or let it move again (false). An assembly needs at least one grounded part: with none every solve answers \"no part is grounded\". Reply: grounded, every part held.", obj({"assembly": asm_ref, "part": {"type": "string"}, "grounded": {"type": "boolean"}}, ["part"]), asm_ground, changes=True),
-        Tool("asm_joint",
-             "Join two parts and solve (needs a grounded part): kind fixed (no motion), revolute (turns about the joint's axis), cylindrical (turns and slides), slider (slides only), ball, distance (distance mm between the elements; round faces count from their surface), parallel, perpendicular, angle (angle degrees, 90); couplings, which tie one motion to another for asm_sweep and need each part's own revolute or slider too: rackpinion (radius1, the pinion's pitch radius), screw (pitch mm a turn), gears and belt (radius1, radius2 — read off round edges when left out). a and b each a part and a face or edge on it — a flat face puts the joint at its middle along its normal; a round edge or cylindrical face, on its axis. offset mm along b's joint normal and rotate degrees about it; reverse: true turns the moved part over (false keeps FreeCAD's way; left out, it is turned over when that stops parts overlapping). Which part moves: the one not yet joined to a grounded part (a when neither is), with what is joined to it; a grounded part never. Reply: joint, solve, moved { part: from, to, by }, flipped, overlaps with a warning. Unsolved is refused, nothing kept. FreeCAD 1.1's solver answers only solved or solver error — not freedom left, nor a joint that repeats another: asm_check and asm_sweep show what still moves.",
-             obj({"assembly": asm_ref, "kind": {"type": "string", "enum": OFFERED}, "a": part_end, "b": part_end, "offset": {"type": "number"}, "rotate": {"type": "number"}, "distance": {"type": "number"}, "angle": {"type": "number"}, "radius1": {"type": "number"}, "radius2": {"type": "number"}, "pitch": {"type": "number"}, "reverse": {"type": "boolean"}, "name": {"type": "string"}}, ["kind", "a", "b"]),
-             asm_joint, changes=True),
-        Tool("asm_list", "An assembly: parts [{ part, placement { at, axis, angle degrees }, grounded }], joints [{ joint, kind, a, b as Part.Element, suppressed }] and solve. It runs the solver to answer solve, which puts a part dragged off its joints back; nothing else changes.", obj({"assembly": asm_ref}), asm_list),
-        Tool("asm_joint_remove", "Remove a joint (by label or object name; asm_list lists them) and solve again. Parts stay where they stand; one left joined to nothing grounded floats free (asm_check: notConnected). Reply: removed, solve.", obj({"assembly": asm_ref, "joint": {"type": "string"}}, ["joint"]), asm_joint_remove, changes=True),
-        Tool("asm_sweep", "Move a revolute joint through angles (from, to degrees; 0 to 90, or its asm_limits) or a slider or cylindrical one along its axis (mm; 0 to 10; turn: true turns a cylindrical) in steps (12, at most 72), checking every pair of parts for overlap at each (clearance mm also lists pairs closer). from and to count from where the joint stands now. The moving part carries the parts joined beyond it rigidly; gears, belt, rackpinion and screw drive theirs by ratio; a closed loop (a four-bar) is not followed. Reply: moves, driven, axis, steps [{ at, overlaps, closer }], verdict clear | collides, collidesAt, clearFromStart; every part is put back. Does the lid open fully, does the arm swing past the post. Each step cuts every pair of parts (a call is dropped after about 80 s): with many parts, fewer steps or a shorter range, not a job.",
-             obj({"assembly": asm_ref, "joint": {"type": "string"}, "from": {"type": "number"}, "to": {"type": "number"}, "steps": {"type": "integer"}, "clearance": {"type": "number"}, "turn": {"type": "boolean"}}, ["joint"]), asm_sweep),
-        Tool("asm_check", "Check an assembly: every part of it, shown or hidden (hidden names those checked though hidden), inside App::Parts and sub-assemblies and through links too, each where it stands: solve; overlaps [{ parts, volume mm³, at }] (a screw's thread in a tapped hole is marked thread and not counted against the verdict); with clearance mm, closerThan pairs; notConnected, parts joined to nothing grounded (the solver leaves them and their joints out without a word). verdict clear | fix. Freedom left is not counted (FreeCAD 1.1 does not report it): asm_sweep shows what a joint lets move. Every pair of parts is cut against each other, so dozens of parts take a while. view_render shows it; section cuts it open at a fit.",
-             obj({"assembly": asm_ref, "clearance": {"type": "number"}}), asm_check),
-    ]
+    # What the tools' entries (agentlink/data/tools.json, group "assembly", no family) call by name.
+    # FreeCAD's and the Assembly workbench's own are reached when called, not here.
+    helpers = {"doc": doc, "body": lambda ref: s.body(ref), "num": picks.num, "vec": lambda v: geo.vec(v),
+               # FreeCAD's own and the Assembly workbench's
+               "V": lambda *x: FreeCAD.Vector(*x), "placement": lambda *x: FreeCAD.Placement(*x), "rotation": lambda *x: FreeCAD.Rotation(*x),
+               "grounded_joint": lambda g, o: JointObject.GroundedJoint(g, o),
+               "joint_proxy": lambda j, kind: JointObject.Joint(j, JointObject.JointTypes.index(KINDS[kind])),
+               # the family's
+               "assembly": lambda ref: _assembly(doc(), ref), "typed": _typed, "joints": _joints, "parts": _parts, "part_of": _part, "grounded": _grounded,
+               "placement_of": _placement, "element": lambda part, q, what: _element(s, part, q, what), "status": _status, "overlaps": _overlaps,
+               "check_parts": _check_parts, "view_provider": _view_provider, "ref_label": lambda r: ref_label(doc(), r),
+               "ref_pair": lambda r: ref_element(doc(), r)[:2], "joint_axis": joint_axis, "unit": unit, "radius_of": radius_of, "joint_refs": joint_refs,
+               "turn_over": lambda asm, j: turn_over(doc(), asm, j), "carried": lambda asm, j, moving, fixed, grounded: carried(doc(), asm, j, moving, fixed, grounded),
+               "driven_parts": lambda couplings, others, group, turning: driven_parts(doc(), couplings, others, group, turning),
+               "sweep_run": lambda asm, j, *rest: sweep_run(doc(), asm, j, *rest),
+               # tables
+               "OFFERED": OFFERED, "KINDS": KINDS, "REVERSIBLE": REVERSIBLE}
+    return runners.tools(GROUP, s, helpers)

@@ -30,6 +30,13 @@ So are Part Design and Sketcher: the 19 feature tools (`families/feature.py`), t
 those files is the solver's reading, the geometry builders (one shape each), the constraints by name and
 the small FreeCAD-API functions the entries call.
 
+The Assembly family is data too: the 8 tools of `families/assembly.py` and the 8 of `families/assembly_more.py`
+(`"family": "assembly_more"`; both files are the group `assembly`). What is left there is the Assembly workbench's own
+reading (`joint_axis`, `joint_refs`, `joint_value`, `moving_group`, `pose_move`), the algorithms (`pair_fit`: the hole and
+shaft on an axis held to ISO 286; `carried`, `driven_parts`: what a joint carries and what its couplings drive; `stacked`,
+`spread`: an explosion's moves; `fill_native`: the BOM's columns) and the two loops that must put the parts back whatever
+happens (`sweep_run`, `play`). `tests/test_dataasm_data.py` is their proof, on a stand-in with no solver.
+
 ## Two kinds of entry
 
 **A wrapper** (`runner`: `make`, `apply`, `command`, `read`) is one FreeCAD command: `target`, `args`,

@@ -13635,6 +13635,803 @@
     {"set": {"st.Points": "=o.Points", "st.Width": "=w", "st.Height": "=h", "st.Label": "=unique(a.name or o.Label + ' structured', st)"}}
    ],
    "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"points": "=st.Label", "width": "=w", "height": "=h"}}
+  },
+  "asm_new": {
+   "group": "assembly",
+   "description": "Put bodies together in a new assembly (FreeCAD's Assembly workbench): parts by label — the bodies themselves move into it (not links), and a body is in one assembly only. The first is grounded (held fixed) unless ground names another or is false; with nothing grounded no joint solves. Reply: assembly, parts, grounded. Then asm_joint between them.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "parts": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "name": {
+      "type": "string"
+     },
+     "ground": {}
+    },
+    "required": [
+     "parts"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/assembly.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"refs": "=a.parts or []"}},
+    {"refuse": "parts: the bodies to put together, by label — session_state lists them.", "when": "=not is_list(refs) or not refs"},
+    {"let": {"bodies": "=[body(r) for r in refs]"}},
+    {"let": {"asm": "=doc().addObject('Assembly::AssemblyObject', (a.name or 'Assembly').replace(' ', '_'))"}},
+    {"set": {"asm.Label": "=a.name or 'Assembly'"}},
+    {"do": ["=typed(asm)", "=joints(asm)"]},
+    {"each": "o", "in": "=bodies", "steps": [{"each": "p", "in": "=list(o.InList)", "steps": [{"refuse": {"fmt": "{o.Label} is in {p.Label} already: a part is in one assembly. Join it there (asm_joint {{ assembly: \"{p.Label}\" }}), or put {p.Label} itself into another with asm_sub. Nothing was made."}, "code": "invalid_state", "when": "=p.TypeId == 'Assembly::AssemblyObject' and p is not asm"}]}, {"do": "=asm.addObject(o)"}]},
+    {"let": {"ground": "=a.get('ground', bodies[0].Label)"}},
+    {"when": "=ground", "then": [{"let": {"g": "=joints(asm).newObject('App::FeaturePython', 'GroundedJoint')"}}, {"do": ["=grounded_joint(g, part_of(asm, ground))", "=view_provider(g, 'grounded')"]}]},
+    {"do": "=doc().recompute()"}
+   ],
+   "answer": {"fields": {"assembly": "=asm.Label", "parts": "=[o.Label for o in bodies]", "grounded": "=[o.Label for o in grounded(asm)]", "next": "asm_joint between the parts' faces and edges; each joint solves the assembly."}}
+  },
+  "asm_add": {
+   "group": "assembly",
+   "description": "Put more bodies into an assembly: parts by label (moved in, not linked; ones already in are skipped). They float free until asm_joint ties them to a grounded part. Reply: added, parts.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "parts": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "parts"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/assembly.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)", "added": []}},
+    {"each": "r", "in": "=a.parts or []", "steps": [{"let": {"o": "=body(r)"}}, {"when": "=o not in asm.Group", "then": [{"do": "=asm.addObject(o)"}, {"push": {"added": "=o.Label"}}]}]},
+    {"refuse": {"fmt": "parts: bodies not in {asm.Label} yet, by label — every one named is in it already (asm_list lists its parts; session_state the bodies)."}, "when": "=not added"},
+    {"do": "=doc().recompute()"}
+   ],
+   "answer": {"fields": {"assembly": "=asm.Label", "added": "=added", "parts": "=[o.Label for o in parts(asm)]"}}
+  },
+  "asm_ground": {
+   "group": "assembly",
+   "description": "Hold a part fixed where it stands (grounded: true, the default) or let it move again (false). An assembly needs at least one grounded part: with none every solve answers \"no part is grounded\". Reply: grounded, every part held.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "part": {
+      "type": "string"
+     },
+     "grounded": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "part"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/assembly.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)"}},
+    {"let": {"o": "=part_of(asm, a.part)", "want": "=a.get('grounded', True)", "jg": "=joints(asm)"}},
+    {"let": {"have": "=[j for j in jg.Group if get(j, 'ObjectToGround') == o]"}},
+    {"when": "=want and not have", "then": [{"let": {"g": "=jg.newObject('App::FeaturePython', 'GroundedJoint')"}}, {"do": ["=grounded_joint(g, o)", "=view_provider(g, 'grounded')"]}]},
+    {"when": "=not want", "then": [{"each": "j", "in": "=have", "steps": [{"do": "=doc().removeObject(j.Name)"}]}]},
+    {"do": "=doc().recompute()"}
+   ],
+   "answer": {"fields": {"assembly": "=asm.Label", "grounded": "=[x.Label for x in grounded(asm)]"}}
+  },
+  "asm_joint": {
+   "group": "assembly",
+   "description": "Join two parts and solve (needs a grounded part): kind fixed (no motion), revolute (turns about the joint's axis), cylindrical (turns and slides), slider (slides only), ball, distance (distance mm between the elements; round faces count from their surface), parallel, perpendicular, angle (angle degrees, 90); couplings, which tie one motion to another for asm_sweep and need each part's own revolute or slider too: rackpinion (radius1, the pinion's pitch radius), screw (pitch mm a turn), gears and belt (radius1, radius2 — read off round edges when left out). a and b each a part and a face or edge on it — a flat face puts the joint at its middle along its normal; a round edge or cylindrical face, on its axis. offset mm along b's joint normal and rotate degrees about it; reverse: true turns the moved part over (false keeps FreeCAD's way; left out, it is turned over when that stops parts overlapping). Which part moves: the one not yet joined to a grounded part (a when neither is), with what is joined to it; a grounded part never. Reply: joint, solve, moved { part: from, to, by }, flipped, overlaps with a warning. Unsolved is refused, nothing kept. FreeCAD 1.1's solver answers only solved or solver error — not freedom left, nor a joint that repeats another: asm_check and asm_sweep show what still moves.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "fixed",
+       "revolute",
+       "cylindrical",
+       "slider",
+       "ball",
+       "distance",
+       "parallel",
+       "perpendicular",
+       "angle",
+       "rackpinion",
+       "screw",
+       "gears",
+       "belt"
+      ]
+     },
+     "a": {
+      "type": "object",
+      "description": "{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of several."
+     },
+     "b": {
+      "type": "object",
+      "description": "{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of several."
+     },
+     "offset": {
+      "type": "number"
+     },
+     "rotate": {
+      "type": "number"
+     },
+     "distance": {
+      "type": "number"
+     },
+     "angle": {
+      "type": "number"
+     },
+     "radius1": {
+      "type": "number"
+     },
+     "radius2": {
+      "type": "number"
+     },
+     "pitch": {
+      "type": "number"
+     },
+     "reverse": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "a",
+     "b"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/assembly.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=typed(assembly(a.assembly))", "kind": "=str(a.get('kind', '')).lower()"}},
+    {"refuse": {"fmt": "kind: one of {', '.join(OFFERED)} (got {a.kind!r})."}, "when": "=kind not in OFFERED"},
+    {"refuse": {"fmt": "No part of {asm.Label} is grounded: asm_ground {{ part }} the one that stays put first."}, "code": "invalid_state", "when": "=not grounded(asm)"},
+    {"let": {"ends": []}},
+    {"each": "side", "in": ["a", "b"], "steps": [{"let": {"e": "=a.get(side)"}}, {"refuse": {"fmt": "{side}: {{ part, element }} — element \"Face6\" or a query {{ kind: face|edge, normal, near, radius, type }}."}, "when": "=not is_dict(e) or 'part' not in e"}, {"let": {"prt": "=part_of(asm, e['part'])"}}, {"let": {"el": "=element(prt, e.get('element', dict([('kind', 'face')] + [(k, v) for k, v in e.items() if k not in ('part', 'element')])), side + '.element')"}}, {"push": {"ends": "=(prt, el)"}}]},
+    {"refuse": {"fmt": "a and b are both on {ends[0][0].Label}: a joint is between two parts of the assembly (asm_list names them)."}, "when": "=ends[0][0] is ends[1][0]"},
+    {"let": {"before": "={o.Name: o.Placement.copy() for o in parts(asm)}"}},
+    {"let": {"j": "=joints(asm).newObject('App::FeaturePython', a.name or KINDS[kind])"}},
+    {"do": ["=joint_proxy(j, kind)", "=view_provider(j, 'joint')"]},
+    {"set": {"j.Label": "=a.name"}, "when": "=a.name"},
+    {"set": {"j.Distance": "=num(a.get('distance', 0), 'distance')"}, "when": "=kind == 'distance'"},
+    {"set": {"j.Angle": "=num(a.get('angle', 90), 'angle')"}, "when": "=kind == 'angle'"},
+    {"when": "=kind in ('rackpinion', 'screw', 'gears', 'belt')", "then": [{"let": {"r1": "=a.radius1 if a.radius1 is not None else (a.pitch if kind == 'screw' else radius_of(ends[0][0], ends[0][1]))"}}, {"let": {"no_r1": "=r1 is None or float(r1) <= 0"}}, {"refuse": "radius1: the pinion's pitch radius, mm (or give its round edge).", "when": "=no_r1 and kind == 'rackpinion'"}, {"refuse": "pitch: mm the nut moves per turn.", "when": "=no_r1 and kind == 'screw'"}, {"refuse": "radius1: the first gear's pitch radius, mm (or give its round edge).", "when": "=no_r1 and kind == 'gears'"}, {"refuse": "radius1: the first pulley's radius, mm (or give its round edge).", "when": "=no_r1 and kind == 'belt'"}, {"set": {"j.Distance": "=float(r1)"}}, {"when": "=kind in ('gears', 'belt')", "then": [{"let": {"r2": "=a.radius2 if a.radius2 is not None else radius_of(ends[1][0], ends[1][1])"}}, {"refuse": "radius2: the second wheel's radius, mm (or give its round edge).", "when": "=r2 is None or float(r2) <= 0"}, {"set": {"j.Distance2": "=float(r2)"}}]}]},
+    {"let": {"off": "=a.offset", "rot": "=a.rotate"}},
+    {"set": {"j.Offset2": "=placement(V(0, 0, num(off or 0, 'offset')), rotation(V(0, 0, 1), num(rot or 0, 'rotate')))"}, "when": "=off is not None or rot is not None"},
+    {"let": {"refs": "=joint_refs(asm, ends)"}},
+    {"try": [{"do": "=j.Proxy.setJointConnectors(j, refs)"}], "except": [{"refuse": {"fmt": "FreeCAD could not make the {kind} joint between {ends[0][0].Label}.{ends[0][1]} and {ends[1][0].Label}.{ends[1][1]}: {error}"}, "code": "failed"}]},
+    {"try": [{"do": "=j.Proxy.updateJCSPlacements(j)"}]},
+    {"try": [{"do": "=asm.clearUndo()"}]},
+    {"do": "=doc().recompute()"},
+    {"let": {"code, said": "=status(asm)", "flipped": false}},
+    {"when": "=code == 0 and a.reverse", "then": [{"let": {"code, said": "=turn_over(asm, j)", "flipped": true}}]},
+    {"when": "=code == 0 and a.reverse is None and kind in REVERSIBLE", "then": [{"let": {"first_hits": "=overlaps(parts(asm))[0]"}}, {"when": "=first_hits", "then": [{"let": {"vol0": "=sum(h['volume'] for h in first_hits)", "kept": "={o.Name: o.Placement.copy() for o in parts(asm)}"}}, {"let": {"code2, said2": "=turn_over(asm, j)"}}, {"let": {"second": "=overlaps(parts(asm))[0]"}}, {"when": "=code2 == 0 and sum(h['volume'] for h in second) < vol0 - 1e-6", "then": [{"let": {"code": "=code2", "said": "=said2", "flipped": true}}], "else": [{"each": "o", "in": "=parts(asm)", "steps": [{"set": {"o.Placement": "=kept[o.Name]"}}]}, {"do": "=doc().recompute()"}, {"let": {"code, said": "=status(asm)"}}]}]}]},
+    {"refuse": {"fmt": "The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. asm_ground {{ part }} holds one part first."}, "code": "failed", "when": "=code == -6"},
+    {"refuse": {"fmt": "The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. The solver could not put the parts where all the joints ask: this one fights another on the same parts (asm_list shows them; asm_joint_remove takes one out), or the elements cannot meet that way — pick other elements, or for parts far out of place try reverse: true."}, "code": "failed", "when": "=code != 0"},
+    {"let": {"moved": "={o.Label: {'from': vec(b.Base), 'to': placement_of(o), 'by': round((o.Placement.Base - b.Base).Length, 4)} for o in parts(asm) for b in [before.get(o.Name)] if b is not None and not o.Placement.isSame(b, 1e-6)}"}},
+    {"let": {"hits": "=[h for h in overlaps(parts(asm))[0] if not h.get('thread')]"}}
+   ],
+   "answer": {"fields": {"joint": "=j.Label", "kind": "=kind", "a": {"fmt": "{ends[0][0].Label}.{ends[0][1]}"}, "b": {"fmt": "{ends[1][0].Label}.{ends[1][1]}"}, "solve": "=said", "moved": "=moved", "flipped": {"when": "=flipped", "value": "=True if a.reverse else 'turned over to stop the parts overlapping (reverse: false keeps it as FreeCAD first put it)'"}, "overlaps": {"when": "=hits", "value": "=hits"}, "warning": {"when": "=hits", "value": "Parts overlap after the solve: a face picked the wrong way round, or the parts do not fit — reverse: true flips the second part, or check the sizes."}}}
+  },
+  "asm_list": {
+   "group": "assembly",
+   "description": "An assembly: parts [{ part, placement { at, axis, angle degrees }, grounded }], joints [{ joint, kind, a, b as Part.Element, suppressed }] and solve. It runs the solver to answer solve, which puts a part dragged off its joints back; nothing else changes.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/assembly.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)", "rows": []}},
+    {"each": "j", "in": "=joints(asm).Group", "steps": [{"push": {"rows": "={'joint': j.Label, 'kind': str(get(j, 'JointType', '?')).lower(), 'a': ref_label(get(j, 'Reference1')), 'b': ref_label(get(j, 'Reference2')), 'suppressed': bool(get(j, 'Suppressed', False))}"}, "when": "=get(j, 'ObjectToGround') is None"}]},
+    {"let": {"code, said": "=status(asm)"}}
+   ],
+   "answer": {"fields": {"assembly": "=asm.Label", "parts": "=[{'part': o.Label, 'placement': placement_of(o), 'grounded': o in grounded(asm)} for o in parts(asm)]", "joints": "=rows", "solve": "=said"}}
+  },
+  "asm_joint_remove": {
+   "group": "assembly",
+   "description": "Remove a joint (by label or object name; asm_list lists them) and solve again. Parts stay where they stand; one left joined to nothing grounded floats free (asm_check: notConnected). Reply: removed, solve.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "joint": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "joint"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/assembly.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)", "name": "=a.joint"}},
+    {"let": {"hit": "=first([j for j in joints(asm).Group if name in (j.Label, j.Name)])"}},
+    {"refuse": {"fmt": "joint {name!r} is not in {asm.Label}: asm_list lists its joints (a grounding is taken off with asm_ground {{ part, grounded: false }})."}, "code": "not_found", "when": "=hit is None"},
+    {"do": ["=doc().removeObject(hit.Name)", "=doc().recompute()"]},
+    {"let": {"code, said": "=status(asm)"}}
+   ],
+   "answer": {"fields": {"assembly": "=asm.Label", "removed": "=name", "solve": "=said"}}
+  },
+  "asm_sweep": {
+   "group": "assembly",
+   "description": "Move a revolute joint through angles (from, to degrees; 0 to 90, or its asm_limits) or a slider or cylindrical one along its axis (mm; 0 to 10; turn: true turns a cylindrical) in steps (12, at most 72), checking every pair of parts for overlap at each (clearance mm also lists pairs closer). from and to count from where the joint stands now. The moving part carries the parts joined beyond it rigidly; gears, belt, rackpinion and screw drive theirs by ratio; a closed loop (a four-bar) is not followed. Reply: moves, driven, axis, steps [{ at, overlaps, closer }], verdict clear | collides, collidesAt, clearFromStart; every part is put back. Does the lid open fully, does the arm swing past the post. Each step cuts every pair of parts (a call is dropped after about 80 s): with many parts, fewer steps or a shorter range, not a job.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "joint": {
+      "type": "string"
+     },
+     "from": {
+      "type": "number"
+     },
+     "to": {
+      "type": "number"
+     },
+     "steps": {
+      "type": "integer"
+     },
+     "clearance": {
+      "type": "number"
+     },
+     "turn": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "joint"
+    ],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/assembly.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)", "name": "=a.joint"}},
+    {"let": {"j": "=first([x for x in joints(asm).Group if x.Label == name or x.Name == name])"}},
+    {"refuse": {"fmt": "joint {name!r}: not in {asm.Label} — asm_list names them."}, "code": "not_found", "when": "=j is None or get(j, 'ObjectToGround') is not None"},
+    {"let": {"kind": "=str(get(j, 'JointType', '')).lower()"}},
+    {"refuse": {"fmt": "{j.Label} is {kind}: a sweep moves a revolute (turning, degrees), slider or cylindrical (sliding, mm) joint."}, "when": "=not kind in ('revolute', 'slider', 'cylindrical')"},
+    {"let": {"turning": "=kind == 'revolute' or (kind == 'cylindrical' and a.turn)"}},
+    {"let": {"pre": "='Angle' if turning else 'Length'"}},
+    {"let": {"lim_lo": "=get(j, pre + 'Min') if get(j, 'Enable' + pre + 'Min', False) else None", "lim_hi": "=get(j, pre + 'Max') if get(j, 'Enable' + pre + 'Max', False) else None"}},
+    {"let": {"lo": "=float(a.get('from', lim_lo if lim_lo is not None else 0))", "hi": "=float(a.get('to', lim_hi if lim_hi is not None else (90 if turning else 10)))", "steps": "=int(a.get('steps', 12))"}},
+    {"refuse": {"fmt": "steps: 1 to 72 (got {steps}); each step checks every pair of parts — for a closer look sweep a shorter from/to range."}, "when": "=not 1 <= steps <= 72"},
+    {"let": {"clearance": "=float(a.get('clearance', 0))", "p1, e1": "=ref_pair(j.Reference1)", "p2, e2": "=ref_pair(j.Reference2)", "held": "=grounded(asm)"}},
+    {"let": {"fixed_side, moving, el": "=(p1, p2, e1) if p2 not in held else (p2, p1, e2)"}},
+    {"let": {"ax": "=joint_axis(el) if el is not None else None"}},
+    {"refuse": {"fmt": "The axis of {j.Label} could not be read from its elements."}, "code": "failed", "when": "=ax is None or moving is None"},
+    {"let": {"centre": "=ax[0]", "axis": "=unit(ax[1])"}},
+    {"let": {"group, others, couplings": "=carried(asm, j, moving, fixed_side, held)"}},
+    {"let": {"driven": "=driven_parts(couplings, others, group, turning)"}},
+    {"let": {"rows": "=sweep_run(asm, j, group, driven, centre, axis, turning, lo, hi, steps, clearance)"}},
+    {"let": {"unit_": "='degrees' if turning else 'mm'", "bad": "=[r['at'] for r in rows if r.get('overlaps')]", "moves": "=sorted(o.Label for o in group.values())"}},
+    {"let": {"clear_run": "=[r['at'] for r in rows[:first([i for i, r in enumerate(rows) if r.get('overlaps')], len(rows))]]"}}
+   ],
+   "answer": {"fields": {"joint": "=j.Label", "kind": "=kind", "unit": "=unit_", "from": "=lo", "to": "=hi", "moves": "=moves", "driven": {"when": "=driven", "value": "=[{'part': d['part'].Label, 'via': d['via'], d['how'] + 's': 'degrees' if d['how'] == 'turn' else 'mm', 'per': round(d['factor'], 5)} for d in driven]"}, "axis": "={'through': [round(c, 3) for c in centre], 'along': [round(c, 4) for c in axis]}", "steps": "=rows", "verdict": "='collides' if bad else 'clear'", "note": {"fmt": "{' and '.join(moves)} turned (or slid) about the joint's axis and put back after. Steps are {abs(hi - lo) / steps:g} {unit_} apart: a collision between two steps is not seen — more steps to look closer. A chain of moving joints beyond this one is carried along rigidly, not solved."}, "collidesAt": {"when": "=bad", "value": "=bad"}, "clearFromStart": {"when": "=bad", "value": "=[clear_run[0], clear_run[-1]] if clear_run else None"}}}
+  },
+  "asm_check": {
+   "group": "assembly",
+   "description": "Check an assembly: every part of it, shown or hidden (hidden names those checked though hidden), inside App::Parts and sub-assemblies and through links too, each where it stands: solve; overlaps [{ parts, volume mm³, at }] (a screw's thread in a tapped hole is marked thread and not counted against the verdict); with clearance mm, closerThan pairs; notConnected, parts joined to nothing grounded (the solver leaves them and their joints out without a word). verdict clear | fix. Freedom left is not counted (FreeCAD 1.1 does not report it): asm_sweep shows what a joint lets move. Every pair of parts is cut against each other, so dozens of parts take a while. view_render shows it; section cuts it open at a fit.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "clearance": {
+      "type": "number"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/assembly.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)", "clearance": "=num(a.get('clearance', 0), 'clearance')"}},
+    {"let": {"code, said": "=status(asm)", "found, hidden, left": "=check_parts(asm)"}},
+    {"let": {"hits, near": "=overlaps(found, clearance)"}},
+    {"let": {"own": "=[x for x in [get(o, 'obj', o) for o in found] if x in asm.Group]"}},
+    {"let": {"free": "=[o.Label for o in own if o not in grounded(asm) and not asm.isPartConnected(o)] if has(asm, 'isPartConnected') else []", "real": "=[h for h in hits if not h.get('thread')]"}}
+   ],
+   "answer": {"fields": {"assembly": "=asm.Label", "solve": "=said", "parts": "=len(found)", "overlaps": "=hits", "hidden": {"when": "=hidden", "value": {"fmt": "checked though hidden: {', '.join(hidden)}"}}, "notChecked": {"when": "=left", "value": {"fmt": "no solid to check: {', '.join(left)}"}}, "closerThan": {"when": "=clearance > 0", "value": {"clearance": "=clearance", "pairs": "=near"}}, "notConnected": {"when": "=free", "value": "=free"}, "note": {"when": "=free", "value": "Parts joined to nothing grounded float free: a joint to the grounded part, or asm_ground."}, "threads": {"when": "=len(real) < len(hits)", "value": "=len(hits) - len(real)"}, "verdict": "='clear' if not real and said == 'solved' else 'fix'"}}
+  },
+  "asm_fits": {
+   "group": "assembly",
+   "description": "Fits: for each joint (or joint, or pairs [{ a: { part, element }, b }] for parts with no joint), the hole and the shaft it puts together — found as cylindrical faces of about one size on the joint's axis — as fits [{ hole, shaft: { part, diameter }, clearance (minus: interference), engagement mm, axisOffset }]; with fit \"H7/g6\" (size: the nominal, else read off the parts to 0.05 mm) each held to ISO 286: the fit's type and clearanceRange, each part's limits and ok, verdict pass | fix. Flat faces: their gap and angle. A joint with nothing round is skipped with the reason. Parts drawn at nominal size fail a shaft band like g6: say so, do not hide it. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "joint": {
+      "type": "string"
+     },
+     "pairs": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "a": {
+         "type": "object"
+        },
+        "b": {
+         "type": "object"
+        },
+        "fit": {
+         "type": "string"
+        },
+        "size": {
+         "type": "number"
+        }
+       }
+      }
+     },
+     "fit": {
+      "type": "string"
+     },
+     "size": {
+      "type": "number"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/assembly_more.py)",
+   "date": "2026-11-16",
+   "family": "assembly_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)", "fit": "=a.fit", "size": "=a.size", "rows": []}},
+    {"when": "=a.pairs", "then": [{"each": "p", "in": "=a.pairs", "index": "i", "steps": [{"let": {"ends": []}}, {"each": "side", "in": ["a", "b"], "steps": [{"let": {"e": "=(p or {}).get(side)"}}, {"refuse": {"fmt": "pairs[{i}].{side}: {{ part, element }}."}, "when": "=not is_dict(e) or 'part' not in e"}, {"let": {"prt": "=part_of(asm, e['part'])"}}, {"let": {"el": "=element(prt, e.get('element', {'kind': 'face'}), 'pairs[' + str(i) + '].' + side + '.element')"}}, {"push": {"ends": "=(prt, prt.Shape.getElement(el))"}}]}, {"push": {"rows": "=pair_fit(ends[0][0], ends[0][1], ends[1][0], ends[1][1], p.get('fit', fit), p.get('size', size))"}}]}], "else": [{"let": {"js": "=[joint_of(asm, a['joint'])] if a.joint else [j for j in joints(asm).Group if get(j, 'ObjectToGround') is None]"}}, {"each": "j", "in": "=js", "steps": [{"let": {"pa, ea": "=ref_pair(get(j, 'Reference1'))", "pb, eb": "=ref_pair(get(j, 'Reference2'))"}}, {"when": "=pa is not None and pb is not None", "then": [{"when": "=a.joint", "then": [{"let": {"r": "=pair_fit(pa, ea, pb, eb, fit, size)"}}], "else": [{"try": [{"let": {"r": "=pair_fit(pa, ea, pb, eb, fit, size)"}}], "on": "refusal", "except": [{"let": {"r": "={'skipped': error.message}"}}]}]}, {"push": {"rows": "=dict([('joint', j.Label), ('kind', str(get(j, 'JointType', '')).lower())] + list(r.items()))"}}]}]}]},
+    {"refuse": {"fmt": "No joints in {asm.Label} to read fits from: name pairs [{{ a, b }}] instead."}, "code": "not_found", "when": "=not rows"},
+    {"let": {"verdicts": "=[r.get('verdict') for r in rows if r.get('verdict')]"}}
+   ],
+   "answer": {"fields": {"assembly": "=asm.Label", "fits": "=rows", "verdict": {"when": "=verdicts", "value": "='pass' if all(v == 'pass' for v in verdicts) else 'fix'"}}}
+  },
+  "asm_motion": {
+   "group": "assembly",
+   "description": "Saved motions of an assembly, kept by Agent Link in the document (not FreeCAD's own Simulation object): action save (name, keys: two or more [{ joint: value, … }, …] in order, degrees or mm from each joint's own zero, as asm_pose) | play (name: steps between keys, 6; clearance; keep: true leaves it at the last frame, else every joint is put back; placements: true adds every part's place per frame; path writes the frames as JSON; limit: frames listed, 40) | list (the default) | delete. Play poses each joint in turn (asm_pose, so only revolute, slider and cylindrical joints) and answers frames, frameList [{ frame, poses, overlaps }], clashFrames and a verdict. Frames × pairs of parts is the cost: keep steps low on big assemblies.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "action": {
+      "type": "string",
+      "enum": [
+       "save",
+       "play",
+       "list",
+       "delete"
+      ]
+     },
+     "name": {
+      "type": "string"
+     },
+     "keys": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "steps": {
+      "type": "integer"
+     },
+     "clearance": {
+      "type": "number"
+     },
+     "keep": {
+      "type": "boolean"
+     },
+     "placements": {
+      "type": "boolean"
+     },
+     "path": {
+      "type": "string"
+     },
+     "limit": {
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/assembly_more.py)",
+   "date": "2026-11-16",
+   "family": "assembly_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"action": "=a.get('action', 'list')", "allm": "=motions()"}},
+    {"when": "=action == 'list'", "then": [{"answer": {"fields": {"motions": "=[{'name': k, 'keys': len(v['keys']), 'joints': sorted({j for key in v['keys'] for j in key['poses']})} for k, v in allm.items()]"}}}]},
+    {"let": {"name": "=a.name"}},
+    {"refuse": {"fmt": "name: the motion's name, needed for action {action} (asm_motion {{ action: \"list\" }} names the saved ones)."}, "when": "=not name"},
+    {"when": "=action == 'delete'", "then": [{"do": ["=allm.pop(name, None)", "=keep_motions(allm)", "=snapshot('asm_motion')"]}, {"answer": {"fields": {"deleted": "=name"}}}]},
+    {"when": "=action == 'save'", "then": [{"let": {"keys": "=a.get('keys')"}}, {"refuse": "keys: two or more key poses in order, each { joint: value, … } (degrees or mm from each joint's own zero, as asm_pose).", "when": "=not is_list(keys) or len(keys) < 2 or not all(is_dict(k) for k in keys)"}, {"let": {"asm": "=assembly(a.assembly)"}}, {"each": "k", "in": "=keys", "steps": [{"each": "jn", "in": "=k", "steps": [{"do": "=joint_of(asm, jn)"}]}]}, {"do": ["=allm.update({name: {'assembly': asm.Label, 'keys': [{'poses': {j: float(v) for j, v in k.items()}} for k in keys]}})", "=keep_motions(allm)", "=snapshot('asm_motion')"]}, {"answer": {"fields": {"saved": "=name", "keys": "=len(keys)", "assembly": "=asm.Label"}}}]},
+    {"refuse": "action: save (keys) | play | list | delete.", "when": "=action != 'play'"},
+    {"let": {"mo": "=allm.get(name)"}},
+    {"refuse": {"fmt": "motion {name!r} is not saved in this document: asm_motion {{ action: \"list\" }} names them, action save with keys makes one."}, "code": "not_found", "when": "=mo is None"},
+    {"let": {"asm": "=assembly(mo['assembly'])", "between": "=int(a.get('steps', 6))"}},
+    {"let": {"frames": "=key_frames(mo['keys'], between)"}},
+    {"let": {"start": "={jn: standing(joint_of(asm, jn)) for jn in {j for fr in frames for j in fr}}"}},
+    {"let": {"rows, clash": "=play(asm, frames, start, a.get('clearance', 0), a.placements, a.keep)"}},
+    {"let": {"verdict": {"if": ["=not clash", "clear", {"fmt": "parts overlap in {len(clash)} of {len(rows)} frames"}]}}}
+   ],
+   "answer": {"fields": {"motion": "=name", "frames": "=len(rows)", "clashFrames": "=clash", "verdict": "=verdict", "frameList": "=rows[:int(a.get('limit', 40))]", "left": "='at the last frame' if a.keep else 'as it was'"}, "then": [{"when": "=a.path", "then": [{"let": {"pth": "=noted(in_session(a.path))"}}, {"do": "=write_json(expanduser(pth), {'motion': name, 'assembly': asm.Label, 'frames': rows})"}, {"put": {"path": "=pth"}}]}]}
+  },
+  "asm_export": {
+   "group": "assembly",
+   "description": "Write the assembly as its solver's own file (OndselSolver .asmt, FreeCAD's Export ASMT): path (relative goes in the session's folder; <assembly>.asmt when left out). Parts, grounded parts and joints as the solver reads them — for other solvers, and for reporting a solve problem. Reply: path, bytes. Changes nothing in the document.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "path": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/assembly_more.py)",
+   "date": "2026-11-16",
+   "family": "assembly_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)"}},
+    {"let": {"p": "=noted(expanduser(in_session(a.path or asm.Label.replace(' ', '_') + '.asmt')))", "can": "=get(asm, 'exportAsASMT') is not None"}},
+    {"refuse": "This FreeCAD's assembly cannot write its solver's file (exportAsASMT is FreeCAD 1.0 and newer).", "code": "unavailable", "when": "=not can"},
+    {"try": [{"do": "=asm.exportAsASMT(p)"}], "except": [{"refuse": {"fmt": "The assembly would not write its solver file to {p}: {error} — check the folder can be written (path), and asm_check that the assembly solves."}, "code": "failed"}]},
+    {"refuse": {"fmt": "FreeCAD wrote no file at {p} and gave no error: an assembly with nothing grounded or no joints has little to write — asm_list shows what it holds; try another path."}, "code": "failed", "when": "=not isfile(p)"}
+   ],
+   "answer": {"fields": {"path": "=p", "bytes": "=filesize(p)", "format": "OndselSolver .asmt", "note": "The solver's own description of the parts and joints: for OndselSolver or MbD tools, and for reporting a solve problem."}}
+  },
+  "asm_pose": {
+   "group": "assembly",
+   "description": "Move a revolute joint (degrees) or slider / cylindrical one (mm; turn: true turns a cylindrical) and leave it there: to (from the joint's own zero, where its two frames line up — the zero its limits use; angles wrap to -180 … 180), by (from where it is now, read off the parts), or home: true (to 0). The part and those joined beyond it are moved, then the assembly is solved: refused, nothing kept, when the solver moves it back (a closed loop or coupling holds it), when outside the joint's limits, or when parts would overlap (allowOverlap: true keeps it). Not while exploded. Reply: pose, was, unit, moved, parts' placements, solve.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "joint": {
+      "type": "string"
+     },
+     "to": {
+      "type": "number"
+     },
+     "by": {
+      "type": "number"
+     },
+     "home": {
+      "type": "boolean"
+     },
+     "turn": {
+      "type": "boolean"
+     },
+     "allowOverlap": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "joint"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/assembly_more.py)",
+   "date": "2026-11-16",
+   "family": "assembly_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)"}},
+    {"refuse": {"fmt": "{asm.Label} is exploded (its joints are off while it is): asm_explode {{ collapse: true }} first."}, "code": "invalid_state", "when": "=is_exploded(asm)"},
+    {"let": {"j": "=joint_of(asm, a.joint)"}},
+    {"let": {"kind": "=str(get(j, 'JointType', '')).lower()"}},
+    {"refuse": {"fmt": "{j.Label} is {kind}: a pose turns a revolute joint (degrees) or slides a slider or cylindrical one (mm; turn: true turns it) — asm_list shows each joint's kind."}, "when": "=not kind in ('revolute', 'slider', 'cylindrical')"},
+    {"let": {"turning": "=kind == 'revolute' or (kind == 'cylindrical' and a.turn)"}},
+    {"let": {"unit_": "='degrees' if turning else 'mm'", "now": "=joint_value(j, turning)", "counted": false}},
+    {"when": "=now is None", "then": [{"do": "=j.addProperty('App::PropertyFloat', POSE, 'AgentLink', 'How far asm_pose has moved this joint (degrees or mm), where the joint\\'s frames cannot be read')", "when": "=POSE not in j.PropertiesList"}, {"let": {"now": "=float(prop(j, POSE))", "counted": true}}]},
+    {"refuse": "to (the joint's own zero, where its frames line up — the zero its limits use), by (from where it is), or home: true.", "when": "=not a.home and a.to is None and a.by is None"},
+    {"let": {"target": "=0.0 if a.home else (float(a['to']) if a.to is not None else now + float(a['by']))"}},
+    {"let": {"target": "=wrap180(target)"}, "when": "=turning and not counted"},
+    {"let": {"lim": "=limits_of(j)[1]"}},
+    {"let": {"lo": "=lim.get('angleMin' if turning else 'lengthMin')", "hi": "=lim.get('angleMax' if turning else 'lengthMax')"}},
+    {"refuse": {"fmt": "{target:g} is outside {j.Label}'s limits [{lo if lo is not None else '-'} … {hi if hi is not None else '-'}] (it is at {now:.4g} {unit_} now)."}, "when": "=(lo is not None and target < lo - 1e-9) or (hi is not None and target > hi + 1e-9)"},
+    {"let": {"group, ax": "=moving_group(asm, j)"}},
+    {"refuse": {"fmt": "The axis of {j.Label} could not be read from its elements."}, "code": "failed", "when": "=ax is None"},
+    {"let": {"by": "=wrap180(target - now) if turning and not counted else target - now"}},
+    {"let": {"move, axis": "=pose_move(j, group, ax[0], ax[1], turning, by)"}},
+    {"each": "o", "in": "=group.values()", "steps": [{"set": {"o.Placement": "=move.multiply(o.Placement)"}}]},
+    {"do": {"set": ["=j", "=POSE", "=target"]}, "when": "=counted"},
+    {"do": "=doc().recompute()"},
+    {"let": {"code, said": "=status(asm)"}},
+    {"refuse": {"fmt": "Posed, {asm.Label} does not solve: {said} — nothing was kept. Another joint holds this one where it is: asm_list shows them, asm_sweep tries a range without keeping it."}, "code": "failed", "when": "=code != 0"},
+    {"let": {"got": "=joint_value(j, turning)"}},
+    {"when": "=got is not None and not counted", "then": [{"let": {"off": "=abs(wrap180(got - target)) if turning else abs(got - target)"}}, {"refuse": {"fmt": "{j.Label} ended at {got:.4g} {unit_}, not {target:g}: the solver moved it back, so another joint (a closed loop, a coupling) or its limits hold it — nothing was kept. Pose the joint that drives the loop, or asm_list to see what else joins these parts."}, "code": "failed", "when": "=off > (0.05 if turning else 0.005)"}]},
+    {"let": {"hits": "=overlaps(parts(asm))[0]"}},
+    {"refuse": {"fmt": "At {target:g} {'°' if turning else 'mm'} parts overlap ({', '.join('/'.join(h['parts']) for h in hits)}) — nothing was kept. asm_sweep finds the clear range; allowOverlap: true keeps it anyway."}, "code": "failed", "when": "=hits and not a.allowOverlap"},
+    {"do": "=snapshot('asm_pose')"}
+   ],
+   "answer": {"fields": {"joint": "=j.Label", "pose": "=r4(got if got is not None and not counted else target)", "was": "=r4(now)", "unit": "=unit_", "along": "=vec(axis)", "moved": "=sorted(o.Label for o in group.values())", "parts": "={o.Label: placement_of(o) for o in group.values()}", "solve": "=said", "step": "=step()", "note": {"when": "=counted", "value": "This FreeCAD's joint frames could not be read: the pose is counted from where asm_pose first found the joint."}, "overlaps": {"when": "=hits", "value": "=hits"}}}
+  },
+  "asm_limits": {
+   "group": "assembly",
+   "description": "A joint's limits, FreeCAD's own (EnableAngleMin/AngleMin … EnableLengthMax/LengthMax): min and max — degrees for revolute, mm for slider and cylindrical (turn: true for a cylindrical's angle); null clears one; an end left out stays as it is. Counted from the joint's own zero (where its two frames line up), as asm_pose's to. Refused, nothing kept, when min is over max or the assembly no longer solves (the joint stands outside them). asm_sweep sweeps between them when from/to are left out. Reply: limits, unit, solve.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "joint": {
+      "type": "string"
+     },
+     "min": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "max": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "turn": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "joint"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/assembly_more.py)",
+   "date": "2026-11-16",
+   "family": "assembly_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)"}},
+    {"let": {"j": "=joint_of(asm, a.joint)"}},
+    {"let": {"kind": "=str(get(j, 'JointType', '')).lower()"}},
+    {"refuse": {"fmt": "{j.Label} has no limits in this FreeCAD (joint limits came with the 1.0 Assembly workbench): asm_sweep {{ from, to }} checks a range without them."}, "code": "unavailable", "when": "='EnableAngleMin' not in j.PropertiesList"},
+    {"let": {"turning": "=kind == 'revolute' or (kind == 'cylindrical' and a.turn)"}},
+    {"refuse": {"fmt": "{j.Label} is {kind}: limits are for revolute (degrees), slider (mm) and cylindrical (mm; turn: true for degrees) joints — asm_list shows each joint's kind."}, "when": "=not kind in ('revolute', 'slider', 'cylindrical')"},
+    {"let": {"pre": "='Angle' if turning else 'Length'"}},
+    {"each": "end", "in": ["min", "max"], "steps": [{"when": "=end in a", "then": [{"let": {"v": "=a[end]"}}, {"do": {"set": ["=j", "='Enable' + pre + end.capitalize()", "=v is not None"]}}, {"do": {"set": ["=j", "=pre + end.capitalize()", "=float(v)"]}, "when": "=v is not None"}]}]},
+    {"let": {"lo": "=prop(j, pre + 'Min')", "hi": "=prop(j, pre + 'Max')"}},
+    {"refuse": {"fmt": "min ({float(lo):g}) is over max ({float(hi):g}) on {j.Label}: give min below max (null clears one). Nothing was kept."}, "when": "=prop(j, 'Enable' + pre + 'Min') and prop(j, 'Enable' + pre + 'Max') and float(lo) > float(hi)"},
+    {"do": "=doc().recompute()"},
+    {"let": {"code, said": "=status(asm)"}},
+    {"refuse": {"fmt": "With those limits {asm.Label} does not solve: {said} — nothing was kept. The joint may stand outside them now (asm_pose {{ joint, by: 0 }} reads where it is): asm_pose it inside first, or widen them."}, "code": "failed", "when": "=code != 0"}
+   ],
+   "answer": {"via": "settled", "with": ["=tool", "$fields"], "late": true, "fields": {"joint": "=j.Label", "kind": "=kind", "limits": "=limits_of(j)[1]", "unit": "='degrees' if turning else 'mm'", "solve": "=said"}}
+  },
+  "asm_explode": {
+   "group": "assembly",
+   "description": "Spread an assembly's parts out to see how it goes together: factor (1.6: 60% further from the middle; over 1, at most 10), or along an axis \"x\" | \"y\" | \"z\" | [x,y,z] stacked in the order they sit with gap mm; parts (default every one not grounded). Made as FreeCAD's own Exploded View (Assembly: a move step a part) where this FreeCAD has it (by says which). The parts stay moved and the joints are suppressed until collapse: true puts both back (kept in the file) — do not asm_joint, asm_pose or asm_sweep in between. Reply: exploded { part: [dx, dy, dz] }, view, jointsOff.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "factor": {
+      "type": "number"
+     },
+     "axis": {
+      "type": [
+       "string",
+       "array"
+      ]
+     },
+     "gap": {
+      "type": "number"
+     },
+     "parts": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "collapse": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/assembly_more.py)",
+   "date": "2026-11-16",
+   "family": "assembly_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)"}},
+    {"let": {"all_parts": "=parts(asm)"}},
+    {"when": "=a.collapse", "then": [{"refuse": {"fmt": "{asm.Label} is not exploded: nothing to collapse (asm_explode {{ factor }} or {{ axis }} spreads it)."}, "code": "invalid_state", "when": "=not is_exploded(asm)"}, {"do": ["=collapse(asm, all_parts)", "=doc().recompute()"]}, {"let": {"code, said": "=status(asm)"}}, {"answer": {"via": "settled", "with": ["=tool", "$fields"], "late": true, "fields": {"assembly": "=asm.Label", "collapsed": true, "solve": "=said"}}}]},
+    {"refuse": {"fmt": "{asm.Label} is already exploded: asm_explode {{ collapse: true }} first, then explode it the new way."}, "code": "invalid_state", "when": "=is_exploded(asm)"},
+    {"let": {"held": "=grounded(asm)"}},
+    {"let": {"which": "=[part_of(asm, p) for p in a['parts']] if a.parts else [o for o in all_parts if o not in held]"}},
+    {"refuse": "Nothing to move: every part is grounded — name the ones to move in parts (asm_list lists them).", "when": "=not which"},
+    {"let": {"factor": "=float(a.get('factor', 1.6))"}},
+    {"refuse": {"fmt": "factor: how far out, over 1 and at most 10 (got {factor:g}); 1.6 spreads the parts by 60% of where they sit from the middle."}, "when": "=not 1.0 < factor <= 10"},
+    {"let": {"bb": "=bounds(all_parts)", "kept": "=where_parts_sit(all_parts)"}},
+    {"when": "=a.axis is not None", "then": [{"let": {"d": "=axis_dir(a.axis)"}}, {"refuse": "axis: \"x\" | \"y\" | \"z\" or [x, y, z].", "when": "=d.Length < 1e-9"}, {"let": {"moves": "=stacked(all_parts, which, held, bb.Center, unit(d), a.gap, factor)"}}], "else": [{"let": {"moves": "=spread(which, bb, factor)"}}]},
+    {"let": {"view, why": "=exploded_view(asm, which, moves)"}},
+    {"when": "=view is None", "then": [{"each": "o", "in": "=which", "steps": [{"set": {"o.Placement": "=placement(o.Placement.Base + moves[o.Name], o.Placement.Rotation)"}}]}], "else": [{"do": "=kept.update({'__view__': view.Name})"}]},
+    {"let": {"off": "=joints_off(asm)"}},
+    {"do": ["=kept.update({'__joints_off__': off})", "=keep_exploded(asm, kept)", "=doc().recompute()", "=snapshot('asm_explode')"]}
+   ],
+   "answer": {"fields": {"assembly": "=asm.Label", "exploded": "={o.Label: vec(moves[o.Name]) for o in which}", "step": "=step()", "view": {"when": "=view is not None", "value": "=view.Label"}, "by": "=\"FreeCAD's Exploded View (Assembly)\" if view is not None else 'placements moved here'", "whyNotFreeCADs": {"when": "=view is None", "value": "=why"}, "jointsOff": "=len(off)", "note": "Its joints are off while exploded, so no solve pulls the parts back: view_render to look, a drawing of it (td_page, td_view), then asm_explode { collapse: true }. Kept in the file, so it collapses after reopening too."}}
+  },
+  "asm_sub": {
+   "group": "assembly",
+   "description": "Put an assembly into another as a sub-assembly (FreeCAD's Assembly::AssemblyLink): sub (the assembly to put in), assembly (the one it goes into), rigid (true, the default: it moves as one part; false: its own joints still move), name. It is linked, not moved: the sub stays an assembly of its own. Reply: as (its label in the parent), type, rigid, solve. asm_check checks its parts where they stand; asm_bom itemises them. asm_joint and asm_ground do not take a sub-assembly as a part yet: place it with object_set (Placement).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "sub": {
+      "type": "string"
+     },
+     "rigid": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "assembly",
+     "sub"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/assembly_more.py)",
+   "date": "2026-11-16",
+   "family": "assembly_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"parent": "=assembly(a.assembly)"}},
+    {"let": {"sub": "=assembly(a.sub)"}},
+    {"refuse": {"fmt": "sub: another assembly than the one it goes into — both name {parent.Label}. assembly is the one that receives, sub the one put in."}, "when": "=sub is parent"},
+    {"refuse": {"fmt": "{parent.Label} is already inside {sub.Label}: an assembly cannot hold itself — swap assembly and sub, or build a third assembly to hold both."}, "when": "=any(get(o, 'LinkedObject') is parent for o in sub.Group)"},
+    {"let": {"rigid": "=a.get('rigid', True)", "kind": "Assembly::AssemblyLink"}},
+    {"try": [{"let": {"link": "=parent.newObject(kind, sub.Label)"}}], "except": [{"let": {"kind": "App::Link"}}, {"let": {"link": "=parent.newObject(kind, sub.Label)"}}]},
+    {"set": {"link.LinkedObject": "=sub", "link.Label": "=unique(a.name or sub.Label)"}},
+    {"when": "='Rigid' in link.PropertiesList", "then": [{"set": {"link.Rigid": "=bool(rigid)"}}], "else": [{"refuse": "This FreeCAD links a sub-assembly as one rigid part only (flexible sub-assemblies came with the Assembly workbench's AssemblyLink).", "code": "unavailable", "when": "=not rigid"}]},
+    {"do": "=doc().recompute()"},
+    {"let": {"code, said": "=status(parent)"}},
+    {"do": "=snapshot('asm_sub')"}
+   ],
+   "answer": {"fields": {"assembly": "=parent.Label", "sub": "=sub.Label", "as": "=link.Label", "type": "=kind", "rigid": "=bool(get(link, 'Rigid', True))", "solve": "=said", "step": "=step()", "next": {"fmt": "asm_check {{ assembly: \"{parent.Label}\" }} checks its parts where they stand; asm_bom itemises them. object_set its Placement to place it: asm_joint and asm_ground take bodies put in with asm_new or asm_add, not a sub-assembly."}}}
+  },
+  "asm_bom": {
+   "group": "assembly",
+   "description": "The bill of materials: FreeCAD's own BOM object (Assembly::BomObject, a spreadsheet the workbench regenerates on recompute) with Index, Name, Quantity, and Material, Mass (g) and Volume (cm3) filled from the materials recorded (material_set); columns adds more (\"File Name\"; \".Label2\" — a name starting with a dot — reads that property off each part; any other name is a column FreeCAD keeps for values filled in by hand); name. Each call makes a new one. Reply: bom, sheet (the object's name for sheet_read and td_table { sheet }), native, parts [{ name, material, mass, volume }]; a part with no material has no mass.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string",
+      "description": "The assembly's label; may be left out when there is one."
+     },
+     "columns": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/assembly_more.py)",
+   "date": "2026-11-16",
+   "family": "assembly_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)"}},
+    {"let": {"cols": "=['Index', 'Name', 'Quantity'] + [c for c in (a.columns or []) if is_str(c)]", "bom, native": "=bom_object(asm)"}},
+    {"add": "Spreadsheet::Sheet", "name": "BOM", "as": "bom", "when": "=bom is None"},
+    {"set": {"bom.Label": "=unique(a.name or asm.Label + ' BOM')"}},
+    {"let": {"mats": "=materials()"}},
+    {"let": {"rows": "=[bom_row(o, mats) for o in parts(asm)]"}},
+    {"when": "=native", "then": [{"set": {"bom.columnsNames": "=cols + [c for c in ('Material', 'Mass (g)', 'Volume (cm3)') if c not in cols]"}}, {"do": ["=doc().recompute()", "=fill_native(bom, rows, mats)", "=doc().recompute()"]}], "else": [{"do": ["=fill_sheet(bom, rows)", "=doc().recompute()"]}]},
+    {"do": "=snapshot('asm_bom')"}
+   ],
+   "answer": {"fields": {"bom": "=bom.Label", "sheet": "=bom.Name", "native": "=native", "parts": "=rows", "step": "=step()", "next": "td_table { sheet } puts it on a drawing; sheet_read reads it.", "note": {"when": "=any(not r['material'] for r in rows)", "value": "Parts with no material recorded have no mass: material_set records one."}}}
   }
  }
 }
