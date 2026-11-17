@@ -27,6 +27,7 @@ sys.path.insert(0, ROOT)
 
 BASE = "2097f32"  # the commit whose handlers were converted
 sys.path.insert(0, HERE)
+import _meant  # noqa: E402
 from _datafem_cases import CONVERTED, FILES, KEPT  # noqa: E402
 
 
@@ -75,7 +76,7 @@ class FemData(unittest.TestCase):
             t = runners.tool(name, e, {})
             b = self.before[name]
             self.assertEqual(t.name, b["name"], name)
-            self.assertEqual(t.description.encode("utf-8"), b["description"].encode("utf-8"), name)
+            self.assertEqual(t.description.encode("utf-8"), _meant.description(name, b["description"]).encode("utf-8"), name)  # meant changes: tests/_meant.py
             self.assertEqual(t.schema, b["inputSchema"], name)
             self.assertEqual(json.dumps(t.schema), json.dumps(b["inputSchema"]), name)  # the order of every key too
             self.assertIs(t.changes, b["changes"], name)
@@ -133,6 +134,13 @@ class FemData(unittest.TestCase):
                 placed += 1
                 self.assertNotRegex(json.dumps(c["old"], ensure_ascii=False), r"\(strength\.py:\d+\)", c["case"])
                 c = {**c, "new": json.loads(where.sub(r"\1", text))}
+            # Meant difference (famfix): fea_modes, fea_buckle and fea_heat say that their results
+            # are files and the answer only, with no FEM objects in the tree ("kept").
+            res = c["new"]["result"]
+            if c["tool"] in ("fea_modes", "fea_buckle", "fea_heat") and res[0] == "ok" and isinstance(res[1], dict) and "kept" in res[1]:
+                self.assertNotIn("kept", c["old"]["result"][1], c["case"])
+                self.assertIn("no FEM objects in the document's tree", res[1]["kept"], c["case"])
+                c = {**c, "new": {**c["new"], "result": [res[0], {k: v for k, v in res[1].items() if k != "kept"}] + list(res[2:])}}
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
         self.assertGreaterEqual(placed, 1)

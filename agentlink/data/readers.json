@@ -387,6 +387,7 @@
     "named",
     "plain_bars",
     "prism",
+    "rebar_line",
     "settype",
     "window_props"
    ],
@@ -770,7 +771,8 @@
     "in_place",
     "keep",
     "new_mesh",
-    "show"
+    "show",
+    "tinted"
    ],
    "source": "scripts/tool_needs.py; the family's code",
    "date": "2026-11-16"
@@ -1261,6 +1263,8 @@
     "hide_cut",
     "leader",
     "native_cosmetic",
+    "native_marks",
+    "native_weld",
     "next_balloon",
     "own_prop",
     "recompute",

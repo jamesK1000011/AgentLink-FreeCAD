@@ -36,8 +36,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # The readers' pin: sha256 of readers.json's entries (each family's readers and changers, and the methods), as
 # scripts/tool_needs.py writes them. A helper or a method that joins or leaves a list changes it: read why
 # (`python3 scripts/tool_needs.py --why name`), then put the new value here.
-PIN = "2d39f4c25a6fd136000cfb6cba2697245163e44e55013b8a9cf6d739c4b0d08f"
-COUNTS = {"readers": 881, "changers": 136, "families": 36}
+PIN = "c411e7267839bb41b3e4890e566439b161b02fe4cd2e66f649a37b49ab518c23"
+COUNTS = {"readers": 881, "changers": 140, "families": 36}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -623,7 +623,7 @@ def _walk(x):
 # 150 before needs, arguments and the meter's clause were added: the lean listing grew by 154; report_read's clause on known faults added 16).
 # The token pass (docs/hardening/tokens-findings.md) added 216 to the lean listing: batch's read/at, lines "full" and the
 # file batch's record reply (+168), tool_groups' said (+22), guide_read's index wording (+26).
-COSTS = {"dataTools": 383, "dataToolsTokens": 78323, "codedTools": 21, "codedToolsTokens": 8699, "leanTools": 20, "leanListingTokens": 7382,
+COSTS = {"dataTools": 383, "dataToolsTokens": 78901, "codedTools": 21, "codedToolsTokens": 8699, "leanTools": 20, "leanListingTokens": 7382,
          "oneCardMedian": 177, "oneCardLargest": 824, "toolGroupsCard": 734, "usageReportCard": 178}
 
 

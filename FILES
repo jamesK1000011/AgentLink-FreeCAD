@@ -225,6 +225,7 @@ docs/hardening/diff-findings.md
 docs/hardening/draftmesh-findings.md
 docs/hardening/echo2-findings.md
 docs/hardening/echo3-findings.md
+docs/hardening/famfix-findings.md
 docs/hardening/freecad-1.1.0-commands.txt
 docs/hardening/hubfix-findings.md
 docs/hardening/hubfix2-findings.md
@@ -362,6 +363,7 @@ tests/_datatd_before.py
 tests/_datatd_cases.py
 tests/_datatd_standin.py
 tests/_fc.py
+tests/_meant.py
 tests/_pd_base.py
 tests/test_activity_words.py
 tests/test_addon_test.py
@@ -417,6 +419,7 @@ tests/test_ext_root_addon.py
 tests/test_extstate.py
 tests/test_facepick.py
 tests/test_failure_trace.py
+tests/test_famfix.py
 tests/test_feature.py
 tests/test_feature_more.py
 tests/test_fem_more.py

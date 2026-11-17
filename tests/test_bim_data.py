@@ -23,6 +23,7 @@ sys.path.insert(0, ROOT)
 
 BASE = "b2d3dbd"  # the commit whose handlers were converted (the three family files are the same at 9b4bc52)
 sys.path.insert(0, HERE)
+import _meant  # noqa: E402
 from _bim_cases import CONVERTED, KEPT  # noqa: E402
 
 
@@ -67,7 +68,7 @@ class BimData(unittest.TestCase):
             t = runners.tool(name, e, {})
             b = self.before[name]
             self.assertEqual(t.name, b["name"], name)
-            self.assertEqual(t.description.encode("utf-8"), b["description"].encode("utf-8"), name)
+            self.assertEqual(t.description.encode("utf-8"), _meant.description(name, b["description"]).encode("utf-8"), name)  # meant changes: tests/_meant.py
             self.assertEqual(t.schema, b["inputSchema"], name)
             self.assertEqual(json.dumps(t.schema), json.dumps(b["inputSchema"]), name)  # the order of every key too
             self.assertIs(t.changes, b["changes"], name)

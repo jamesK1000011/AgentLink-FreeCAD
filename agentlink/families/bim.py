@@ -453,6 +453,49 @@ def tools(session):
             o.addProperty("App::PropertyString", "IfcType", "IFC", "IFC type")
         return o
 
+    def rebar_line(p0, p1, bar):
+        """The base line for FreeCAD's rebar: a Draft wire from p0 to p1,
+        labelled as bar and hidden; bar itself where Draft cannot make one.
+        FreeCAD's rebar reads its length from its base's Length (a Draft
+        wire), a sketch's geometry or a helix (Mod/BIM/ArchRebar.py
+        getLengthOfRebar); a plain Part::Feature line has none, and FreeCAD
+        printed "Cannot calculate rebar length from its base object" at each
+        recompute."""
+        try:
+            import Draft
+        except ImportError:
+            return bar
+        try:
+            w = headless_call(Draft.make_wire, [p0, p1], closed=False, face=False)
+        except ToolError:
+            return bar
+        if w is None:
+            return bar
+        w.Label = bar.Label
+        if getattr(w, "ViewObject", None) is not None:
+            w.ViewObject.Visibility = False
+        return w
+
+    def lies_over(made, before):
+        """Whether what an import made lies where the document's own shapes
+        already were (their boxes cross): an IFC is read in its own
+        coordinates, so a file exported from this document lands on it."""
+        def box(objs):
+            bb = None
+            for o in objs:
+                sh = getattr(o, "Shape", None)
+                if not isinstance(sh, Part.Shape) or sh.isNull():
+                    continue
+                b = sh.BoundBox
+                if not b.isValid():
+                    continue
+                bb = FreeCAD.BoundBox(b) if bb is None else (bb.add(b) or bb)
+            return bb
+
+        new = box(made)
+        old = box([o for o in doc().Objects if o.Name in before])
+        return bool(new is not None and old is not None and new.intersect(old))
+
     def plain_bars(bar, p0, p1, spread, first, span, n, dia):
         """FreeCAD's rebar loads its GUI here: the same n bars made as solids
         on bar, an Arch component typed Reinforcing Bar."""
@@ -495,7 +538,7 @@ def tools(session):
                # the family's
                "shape": shape, "proxy_name": proxy_name, "settype": settype, "have": have, "walls": walls, "wall_run": wall_run, "wall_side": wall_side,
                "window_shape": window_shape, "window_props": window_props, "component": component, "prism": prism, "drop": drop,
-               "ccw": ccw, "roof_runs": roof_runs, "roof_ridge": roof_ridge, "rgb": rgb, "plain_bars": plain_bars,
+               "ccw": ccw, "roof_runs": roof_runs, "roof_ridge": roof_ridge, "rgb": rgb, "plain_bars": plain_bars, "rebar_line": rebar_line, "lies_over": lies_over,
                "quantities": quantities, "kind_totals": kind_totals, "cell": cell,
                "where": where, "folder_for": folder_for, "ifc_module": ifc_module, "ifc_open": ifc_open, "ifc_bodies": ifc_bodies, "stopped": stopped}
     return runners.tools(GROUP, s, helpers)

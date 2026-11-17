@@ -125,6 +125,64 @@ def failed_at(e, own=__file__):
     return f" ({os.path.basename(own)}:{here[-1].lineno})" if here else ""
 
 
+FEM_VIEWS_BROKEN = ("FreeCAD cannot draw a FEM mesh in this session any more (\"Cannot add static property\": FreeCAD's own fault, left by the first "
+                    "FEM mesh made here while a document observer was listening; it lasts until FreeCAD is restarted): nothing was made. Restart FreeCAD "
+                    "(app_force_restart), then call this again — fea_solve still solves meanwhile, by Agent Link's own deck.")
+_fem_views = {"ready": False}
+
+
+def _static_property_fault(e):
+    """Whether an error is FreeCAD's "Cannot add static property"."""
+    return "Cannot add static property" in str(e)
+
+
+def fem_views_ready(doc):
+    """FreeCAD's FEM mesh view (ViewProviderFemMesh, the view of every Gmsh,
+    Netgen and result mesh) made once with Agent Link's window observer off.
+
+    FreeCAD 1.1.3's ViewProviderFemMesh constructor sets a colour between
+    registering its properties (src/Mod/Fem/Gui/ViewProviderFemMesh.cpp
+    195-205). That change is signalled to every Python window observer
+    (src/Gui/ViewProvider.cpp 588-594), and FreeCAD asks the view for the
+    property's name first (src/Gui/DocumentObserverPython.cpp 225), which
+    merges the class's property table (src/App/PropertyContainer.cpp 437-479).
+    The next property the constructor registers then throws "Cannot add
+    static property" (PropertyContainer.cpp 420-423) — on the first FEM mesh
+    of the session, and on every one after it, since the table stays short.
+    Agent Link's change watch (changes.py) is such an observer during each
+    changing call. Made once here without it, the table is whole and later
+    meshes are made with the observer on. An error: ToolError when the table
+    is already short (only a restart mends it)."""
+    if _fem_views["ready"] or not getattr(FreeCAD, "GuiUp", False):
+        return
+    from .. import changes
+
+    g = changes._state.get("gui")
+    import FreeCADGui
+
+    if g is not None:
+        try:
+            FreeCADGui.removeDocumentObserver(g)
+        except Exception:
+            g = None
+    try:
+        import Fem  # noqa: F401 - registers the FEM types
+
+        o = doc.addObject("Fem::FemMeshObject", "AgentLinkFemView")
+        doc.removeObject(o.Name)
+        _fem_views["ready"] = True
+    except Exception as e:  # noqa: BLE001
+        if _static_property_fault(e):
+            raise ToolError("unavailable", FEM_VIEWS_BROKEN) from None
+        raise
+    finally:
+        if g is not None:
+            try:
+                FreeCADGui.addDocumentObserver(g)
+            except Exception:
+                pass
+
+
 def mark_helper(o):
     """An object Agent Link keeps for a study (a compound of parts, one
     solid studied alone): hidden, and not a part of its own to
@@ -796,6 +854,10 @@ def tools(session):
             doc.removeObject(old.Name)
         for old in [x for x in doc.Objects if x.Label.startswith(f"{o.Label} force direction")]:
             doc.removeObject(old.Name)
+        try:
+            fem_views_ready(doc)
+        except ToolError as e:
+            raise RuntimeError(e.message) from None  # the route fails; the own deck solves
         an = ObjectsFem.makeAnalysis(doc, "Analysis")
         an.Label = label
         names = ("makeSolverCalculiXCcxTools", "makeSolverCalculixCcxTools", "makeSolverCcxTools", "makeSolverCalculiX", "makeSolverCalculix")
@@ -1399,8 +1461,15 @@ def tools(session):
         return mo.Label
 
     def native_mesh(F, an, o, st):
-        """The analysis's Gmsh mesh object of the body, at the study's size, second order."""
-        mesh = F.makeMeshGmsh(s.doc, "Mesh")
+        """The analysis's Gmsh mesh object of the body, at the study's size,
+        second order. FreeCAD's "Cannot add static property" here (see
+        fem_views_ready) is a refusal that says to restart FreeCAD."""
+        try:
+            mesh = F.makeMeshGmsh(s.doc, "Mesh")
+        except Exception as e:  # noqa: BLE001
+            if _static_property_fault(e):
+                raise ToolError("unavailable", FEM_VIEWS_BROKEN) from None
+            raise
         if "Shape" in mesh.PropertiesList:
             mesh.Shape = o
         else:
@@ -1572,7 +1641,7 @@ def tools(session):
                "edge_nodes": edge_nodes, "shell_deck": shell_deck, "shell_solve": shell_solve, "shell_peaks": shell_peaks,
                "parts_holder": parts_holder, "touching": touching, "overlapping": overlapping,
                "doc": lambda: s.doc, "objects_fem": objects_fem, "ELMER_EQUATIONS": ELMER_EQUATIONS, "FLUIDS": FLUIDS, "new_analysis": lambda a, o: _analysis(s.doc, a, o),
-               "solver_makers": lambda F: [n for n in dir(F) if n.startswith("makeSolver")], "native_material": native_material, "native_mesh": native_mesh, "fixed_on": fixed_on,
+               "solver_makers": lambda F: [n for n in dir(F) if n.startswith("makeSolver")], "native_material": native_material, "native_mesh": native_mesh, "fixed_on": fixed_on, "fem_views_ready": lambda: fem_views_ready(s.doc),
                "pressure_on": pressure_on, "temperature_on": temperature_on, "gravity_on": gravity_on, "force_on": force_on,
                "elmer_conditions": lambda an, o, a, eqs: _elmer_conditions(s.doc, an, o, o.Shape, a, eqs), "elmer_write": _elmer_write,
                "reset_tails": reset_tails, "unheld_solids": _unheld_solids, "unheld_words": unheld_words, "ccx_hint": ccx_hint, "solve_run": solve_run, "peaks": peaks,
