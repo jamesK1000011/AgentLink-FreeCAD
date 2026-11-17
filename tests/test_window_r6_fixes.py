@@ -121,7 +121,9 @@ class TechDrawFacts(unittest.TestCase):
     on = td.native_marks(v, True)
     print(json.dumps([on, vo.ArcCenterMarks, vo.CenterScale, td.mark_facts(v)]))
 ''')
-        self.assertEqual(got, [True, True, 1.5, {"centres": 2, "marked": 1, "scale": 1.5}])
+        # Round 8: FreeCAD's own crosses (which mark a slot's ends too) are
+        # off; the chain lines are cosmetic lines (none in this stand-in).
+        self.assertEqual(got, [True, False, 0.5, {"centres": 2, "marked": 1, "scale": 0.5, "crosses": False}])
 
     def test_weld_tiles_read_back_and_text_raised(self):
         got = in_a_process(TD + '''

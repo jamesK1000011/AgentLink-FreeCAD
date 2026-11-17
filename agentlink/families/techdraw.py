@@ -872,10 +872,13 @@ def circle_centres(v):
     import Part
 
     seen, out = set(), []
+    ours = cosmetic_keys(v)
     for e in v.getVisibleEdges() or []:
         c = getattr(e, "Curve", None)
         if not isinstance(c, Part.Circle):
             continue
+        if ours and edge_key(e) in ours:
+            continue  # a td_cosmetic circle drawn on the view: no hole to mark
         span = abs(e.LastParameter - e.FirstParameter)
         if span < math.pi * 1.01:
             continue
@@ -932,10 +935,17 @@ def edge_key(e):
 def cosmetic_keys(v):
     """Where td_cosmetic's native edges lie, to keep them out of the visible
     lines (they are drawn from the JSON, in their own style)."""
-    if COSMETIC_PROP not in v.PropertiesList or not getattr(v, COSMETIC_PROP):
-        return set()
     keys = set()
-    for c in json.loads(getattr(v, COSMETIC_PROP)):
+    rows = []
+    for prop in (COSMETIC_PROP, MARKS_TAGS_PROP):
+        # td_cosmetic's figures, and the centre marks' lines in the window
+        # (native_marks; td_export draws those from MARKS_PROP).
+        try:
+            if prop in v.PropertiesList and getattr(v, prop):
+                rows += json.loads(getattr(v, prop))
+        except Exception:
+            continue
+    for c in rows:
         if not c.get("tags"):
             continue
         if c.get("circle"):
@@ -1414,27 +1424,68 @@ def flip_y(v, cache, pts):
     return [(x, y * ys + 0.0) for x, y in pts]
 
 
-def native_marks(v, on):
-    """FreeCAD's own centre marks of a view switched on or off in the window
-    (ViewProviderViewPart.ArcCenterMarks: a small cross at each circle's
-    centre, as the Decorations/ShowCenterMarks preference sets it for new views).
-    Switched on, the crosses are made at least 1.5 times the vertex size
-    (CenterScale; FreeCAD's default 0.5 gives arms of about 1 mm at a 0.5 mm
-    line, hidden under a diameter dimension's lines at the holes, td 038).
-    False where there is no window."""
+MARKS_TAGS_PROP = "AgentLinkCenterMarkLines"
+
+
+def mark_lines(v, ext):
+    """The centre marks as td_export draws them: for each whole circle (and
+    arc past a half turn: circle_centres) a horizontal and a vertical line
+    through its centre, ext mm past it — paper mm from the view's centre, y
+    down. A slot's half-turn ends get none."""
+    out = []
+    try:
+        got = circle_centres(v)
+    except Exception:
+        return out  # a view with no lines to read
+    for (cx, cy), r in got:
+        out.append([(cx - r - ext, cy), (cx + r + ext, cy)])
+        out.append([(cx, cy - r - ext), (cx, cy + r + ext)])
+    return out
+
+
+def native_marks(v, on, ext=2.0):
+    """The centre marks in the window: the same chain lines td_export draws
+    (mark_lines), as FreeCAD's own cosmetic lines in its centre-line style,
+    and FreeCAD's own crosses (ViewProviderViewPart.ArcCenterMarks) off.
+    Those crosses mark every circle edge's centre, a slot's half-turn ends
+    too (App/GeometryObject.cpp 566-571: each Circle and arc gets a centre
+    vertex), which a drawing does not (window round 8, td 06-070). on:
+    false takes ours away. The lines' tags are kept in MARKS_TAGS_PROP, so a
+    second call replaces them and td_export leaves them out of the visible
+    lines (cosmetic_keys). True when the window was changed; False where
+    there is no window."""
     vo = getattr(v, "ViewObject", None) if getattr(FreeCAD, "GuiUp", False) else None
     if vo is None or not hasattr(vo, "ArcCenterMarks"):
         return False
     try:
-        vo.ArcCenterMarks = bool(on)
+        vo.ArcCenterMarks = False
     except Exception:
         return False
-    if on and hasattr(vo, "CenterScale"):
-        try:
-            if float(vo.CenterScale) < 1.5:
-                vo.CenterScale = 1.5
-        except Exception:
-            pass
+    old = []
+    try:
+        if MARKS_TAGS_PROP in (getattr(v, "PropertiesList", None) or ()) and getattr(v, MARKS_TAGS_PROP):
+            old = json.loads(getattr(v, MARKS_TAGS_PROP))
+    except Exception:
+        old = []
+    for c in old:
+        drop_native(v, dict(c))
+    rows = []
+    if on:
+        for pts in mark_lines(v, float(ext)):
+            prim = {"pts": pts, "style": "center"}
+            tags = native_cosmetic(v, prim)
+            if tags:
+                rows.append({"pts": [list(p) for p in pts], "tags": tags})
+    try:
+        if MARKS_TAGS_PROP not in (getattr(v, "PropertiesList", None) or ()):
+            v.addProperty("App::PropertyString", MARKS_TAGS_PROP, "AgentLink", "Centre mark lines made in the window (their tags)")
+            try:
+                v.setEditorMode(MARKS_TAGS_PROP, 2)
+            except Exception:
+                pass
+        setattr(v, MARKS_TAGS_PROP, json.dumps(rows) if rows else "")
+    except Exception:
+        pass
     return True
 
 
@@ -1564,6 +1615,16 @@ def mark_facts(v):
     try:
         if vo is not None and hasattr(vo, "CenterScale"):
             out["scale"] = round(float(vo.CenterScale), 2)
+        if vo is not None and hasattr(vo, "ArcCenterMarks"):
+            # FreeCAD's own crosses (every arc's too): off since round 8.
+            out["crosses"] = bool(vo.ArcCenterMarks)
+    except Exception:
+        pass
+    try:
+        if MARKS_TAGS_PROP in (getattr(v, "PropertiesList", None) or ()):
+            raw = getattr(v, MARKS_TAGS_PROP)
+            # The chain lines in the window: two a marked circle.
+            out["lines"] = len(json.loads(raw)) if raw else 0
     except Exception:
         pass
     return out
@@ -2265,6 +2326,12 @@ def tools(session):
         says: measured is that length, and what TechDraw itself measures
         between its points is beside it (chord, projected)."""
         out = {"dimension": d.Name, "label": d.Label, "type": d.Type, "refs": ref_names(d), "view": d.References2D[0][0].Label if d.References2D else None}
+        try:
+            # Where its text is, mm from its view's centre (round 8: a FACT
+            # for texts found stacked on one spot, td 06-070).
+            out["at"] = [num(d.X, 2), num(d.Y, 2)]
+        except Exception:
+            pass
         if cold:
             out["notReady"] = True
             v3 = model_measure(d)
@@ -2512,6 +2579,30 @@ def tools(session):
             t = "00.00"
         return X + float(d.X), Y + float(d.Y), len(t) * 3.5 * 0.6 + 2, 5.5
 
+    def stacked_dims(page):
+        """Dimensions on the page whose texts lie on one spot (round 8, td
+        06-070: the two 30 mm chain dimensions, at -30 and +30 after
+        td_dim_align, were both at the view's centre by td_export, over the
+        datum box): [{ dims [labels], at [X, Y] from their view's centre }],
+        a FACT read before the files are written. Nothing is moved here."""
+        rows = [d for d in list(getattr(page, "Views", []) or []) if getattr(d, "TypeId", "") == "TechDraw::DrawViewDimension"]
+        boxes = []
+        for d in rows:
+            try:
+                boxes.append((d, text_box(d)))
+            except Exception:
+                continue
+        out, used = [], set()
+        for i, (d, (x, y, w, h)) in enumerate(boxes):
+            if d.Name in used:
+                continue
+            same = [e for e, (x2, y2, w2, h2) in boxes[i + 1:]
+                    if e.Name not in used and abs(x - x2) < (w + w2) / 4 and abs(y - y2) < (h + h2) / 4]
+            if same:
+                used.update([d.Name] + [e.Name for e in same])
+                out.append({"dims": [d.Label] + [e.Label for e in same], "at": [num(d.X, 2), num(d.Y, 2)]})
+        return out
+
     def nudge_out(d, most=30.0):
         """A radius' or diameter's text that now lies on something (its text
         grew: "1× ⌀6.0" ran into the detail circle's B, td 066) moved out
@@ -2715,6 +2806,28 @@ def tools(session):
 
         return C.bounds(SH.filled(ss))
 
+    def table_cells(t, ss):
+        """A FACT for a table drawn empty (round 8, td 06-070): of the
+        sheet's filled cells in the table's range, how many have their text
+        in the table's drawing (its Symbol, which FreeCAD builds from the
+        sheet's cell properties: a sheet not recomputed has none, and the
+        table draws empty cells). { cells, drawn }, or None."""
+        from .. import cells as C
+
+        try:
+            svg = str(getattr(t, "Symbol", "") or "")
+            n = drawn = 0
+            for addr in C.cells_in(f"{t.CellStart}:{t.CellEnd}"):
+                text = str(ss.getContents(addr) or "").lstrip("'=")
+                if not text:
+                    continue
+                n += 1
+                if text in svg:
+                    drawn += 1
+            return {"cells": n, "drawn": drawn}
+        except Exception:
+            return None
+
     def range_corners(rng):
         """A range's two corners ((row, column), (row, column)) and None; or None and what is wrong with it."""
         from .. import cells as C
@@ -2741,7 +2854,7 @@ def tools(session):
                "paper_of3d": paper_of3d, "dims_of": dims_of, "resolve": lambda ref: picks.resolve(s, ref), "area_text": area_text,
                "without_prefix": without_prefix, "with_decimals": with_decimals, "more_decimals": more_decimals, "prefixed": prefixed,
                "anchor_at": anchor_at, "one_dim": one_dim, "sheet_find": sheet_find, "filled_bounds": filled_bounds, "range_corners": range_corners,
-               "cell_name": cell_name, "range_text": range_text, "apply_tol": apply_tol, "dim_reading": dim_reading, "symbol": symbol,
+               "cell_name": cell_name, "range_text": range_text, "apply_tol": apply_tol, "dim_reading": dim_reading, "stacked_dims": stacked_dims, "table_cells": table_cells, "symbol": symbol,
                "next_letter": lambda kind: next_letter(doc(), kind), "resolve_ref": lambda v, r, kind="any": resolve_ref(v, r, frames, kind),
                "gscale": lambda v: gscale(v, frames), "V": V, "vec": vec, "num": num, "view_scale": view_scale, "vertices_of": vertices_of,
                "edge_info": edge_info, "arc_turn": arc_turn, "whole_circles": whole_circles, "describe": gdt.describe, "DIM_TYPES": DIM_TYPES,
