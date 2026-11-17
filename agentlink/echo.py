@@ -10,6 +10,7 @@
 # logged, the call goes on.
 
 import datetime
+import math
 import time
 
 try:
@@ -1445,8 +1446,9 @@ def scene_clear():
         from . import annotate
 
         svc = annotate.service()
-        had = SCENE_OWNER in getattr(svc, "roots", {})
+        had = SCENE_OWNER in getattr(svc, "roots", {}) or CAM_OWNER in getattr(svc, "roots", {})
         svc.clear(SCENE_OWNER)
+        svc.clear(CAM_OWNER)
     except Exception:  # noqa: BLE001
         pass
     while _view_props:
@@ -2994,7 +2996,7 @@ def _jobs(doc):
         return []
 
 
-def cam_shown(doc, objs, job_ref=None):
+def cam_shown(doc, objs, job_ref=None, tr=None):
     """What CAM's own GUI does when it makes an operation and edits a job
     (src/Mod/CAM/Path/Op/Gui/Base.py Create: the operation's
     ViewObject.Visibility = True — CAM's App-side Create, which the tools
@@ -3047,11 +3049,219 @@ def cam_shown(doc, objs, job_ref=None):
             # FreeCAD draws a path 1 px wide in dark green by default
             # (src/Mod/CAM/Gui/ViewProviderPath.cpp 153-165, DefaultPathLineWidth
             # 1): drawn 3 px wide until the next change.
-            if set_view_prop(op, "LineWidth", PATH_WIDTH, at_least=True):
+            if set_view_prop(op, "LineWidth", int(PATH_WIDTH), at_least=True):
                 done.append(f"{op.Label} {PATH_WIDTH:g} px")
+        # Round 7: every shown operation of the job(s) — its own drawing
+        # rebuilt, and its path drawn in the scene as well (cam 008-032: no
+        # path seen in three rounds although FreeCAD's view was shown).
+        shown_ops = []
+        for j in jobs:
+            for op in list(getattr(getattr(j, "Operations", None), "Group", None) or ()):
+                if op not in shown_ops and is_path_op(op) and _seen(op) and bool(getattr(op, "Active", True)):
+                    shown_ops.append(op)
+        for op in ops:
+            if op not in shown_ops and _seen(op):
+                shown_ops.append(op)
+        redrawn = [op.Label for op in shown_ops if path_redraw(op)]
+        if redrawn:
+            done.append("redrawn: " + ", ".join(redrawn))
+        drawn = cam_scene_paths(shown_ops)
+        if isinstance(tr, dict):
+            tr["camPaths"] = drawn
+            tr["camView"] = cam_view_facts(shown_ops)
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (CAM path shown): {e}\n")
     return done
+
+
+CAM_OWNER = "echo-cam"
+CAM_FEED = "#00c000"   # FreeCAD's feed moves are dark green (0,170,0); a little brighter over the model
+CAM_RAPID = "#c00000"  # its rapids dark red (170,0,0)
+CAM_POINTS = 20000     # points drawn per operation at most
+CAM_ALL_POINTS = 60000  # and for all of them
+ARC_STEP = math.pi / 16  # an arc drawn as chords of at most this angle
+
+
+def path_redraw(op):
+    """FreeCAD's own drawing of an operation rebuilt from its Path
+    (ViewProviderDocumentObjectPy update: updateData for every property, so
+    ViewProviderPath::updateVisual(true) fills its coordinates and line
+    indices again), its display mode applied again (setDisplayMode
+    "Waypoints" -> the mode switch on its one child) and shown. View state
+    only. True when done. Never raises."""
+    try:
+        vo = getattr(op, "ViewObject", None)
+        if vo is None or not bool(vo.Visibility):
+            return False
+        props = getattr(vo, "PropertiesList", None) or ()
+        if "DisplayMode" in props:
+            try:
+                vo.DisplayMode = vo.DisplayMode
+            except Exception:  # noqa: BLE001
+                pass
+        for prop in ("StartIndex", "ShowCount"):
+            if prop in props:
+                try:
+                    if int(getattr(vo, prop) or 0) != 0:
+                        set_view_prop(op, prop, 0)
+                except Exception:  # noqa: BLE001
+                    pass
+        try:
+            vo.update()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            vo.show()
+        except Exception:  # noqa: BLE001
+            pass
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def path_lines(op, cap=CAM_POINTS):
+    """An operation's path as polylines: (feeds, rapids), each a list of
+    point lists in the document's coordinates (the object's Placement put
+    on). Arcs (G2/G3 with I, J in the XY plane) as chords; drilling cycles
+    as their rapid over, feed down and retract. At most cap points. Never
+    raises: what was read up to an error."""
+    feeds, rapids = [], []
+    n = 0
+    try:
+        cmds = list(op.Path.Commands)
+    except Exception:  # noqa: BLE001
+        return feeds, rapids
+    try:
+        pl = getattr(op, "Placement", None)
+        moved = pl is not None and not pl.isIdentity()
+    except Exception:  # noqa: BLE001
+        pl, moved = None, False
+
+    def put(p):
+        if not moved:
+            return p
+        try:
+            v = pl.multVec(FreeCAD.Vector(*p))
+            return (v.x, v.y, v.z)
+        except Exception:  # noqa: BLE001
+            return p
+
+    state = {"kind": None, "run": None}
+
+    def add(kind, a, b_pts):
+        nonlocal n
+        if state["kind"] != kind or state["run"] is None:
+            run = [put(a)]
+            (feeds if kind == "feed" else rapids).append(run)
+            state["kind"], state["run"] = kind, run
+            n += 1
+        for q in b_pts:
+            state["run"].append(put(q))
+            n += 1
+
+    x = y = z = None
+    retract_initial = True
+    for c in cmds:
+        if n >= cap:
+            break
+        try:
+            name = c.Name.upper()
+            p = c.Parameters
+            if name in ("G98", "G99"):
+                retract_initial = name == "G98"
+                continue
+            if name in ("G73", "G81", "G82", "G83", "G85", "G86", "G89"):
+                if None in (x, y, z) or "Z" not in p:
+                    continue
+                nx, ny, bottom = p.get("X", x), p.get("Y", y), p["Z"]
+                r = p.get("R", z)
+                top = max(z, r)
+                add("rapid", (x, y, z), [(x, y, top), (nx, ny, top), (nx, ny, r)])
+                add("feed", (nx, ny, r), [(nx, ny, bottom)])
+                back = top if retract_initial else r
+                add("rapid", (nx, ny, bottom), [(nx, ny, back)])
+                x, y, z = nx, ny, back
+                continue
+            if name not in ("G0", "G00", "G1", "G01", "G2", "G02", "G3", "G03"):
+                continue
+            nx, ny, nz = p.get("X", x), p.get("Y", y), p.get("Z", z)
+            if None in (x, y, z):
+                x, y, z = nx, ny, nz
+                state["run"] = None
+                continue
+            if None in (nx, ny, nz):
+                continue
+            kind = "rapid" if name in ("G0", "G00") else "feed"
+            pts = [(nx, ny, nz)]
+            if name in ("G2", "G02", "G3", "G03") and ("I" in p or "J" in p):
+                cx, cy = x + p.get("I", 0.0), y + p.get("J", 0.0)
+                rad = math.hypot(x - cx, y - cy)
+                a0, a1 = math.atan2(y - cy, x - cx), math.atan2(ny - cy, nx - cx)
+                cw = name in ("G2", "G02")
+                sweep = ((a0 - a1) if cw else (a1 - a0)) % (2 * math.pi) or 2 * math.pi
+                k = max(2, int(math.ceil(sweep / ARC_STEP)))
+                pts = []
+                for i in range(1, k + 1):
+                    t = i / k
+                    a = a0 - sweep * t if cw else a0 + sweep * t
+                    pts.append((cx + rad * math.cos(a), cy + rad * math.sin(a), z + (nz - z) * t))
+                pts[-1] = (nx, ny, nz)
+            add(kind, (x, y, z), pts)
+            x, y, z = nx, ny, nz
+        except Exception:  # noqa: BLE001
+            continue
+    return feeds, rapids
+
+
+def cam_scene_paths(ops, cap_all=CAM_ALL_POINTS):
+    """Each operation's path drawn in the 3D view's scene only (feeds green,
+    rapids red, over the model), the drawing of the last call put away
+    first and again at the next changing call (scene_clear): {label:
+    points drawn}. A path FreeCAD's own view provider does not show (cam
+    008-032) is seen this way. Never raises."""
+    out = {}
+    try:
+        from . import annotate
+
+        svc = annotate.service()
+        svc.clear(CAM_OWNER)
+        left = cap_all
+        for op in ops or ():
+            if left <= 0:
+                break
+            feeds, rapids = path_lines(op, cap=min(CAM_POINTS, left))
+            pts = sum(len(r) for r in feeds) + sum(len(r) for r in rapids)
+            if not pts:
+                out[op.Label] = 0
+                continue
+            got = 0
+            if feeds:
+                got += svc.marks(CAM_OWNER, (), feeds, CAM_FEED)
+            if rapids:
+                got += svc.marks(CAM_OWNER, (), rapids, CAM_RAPID)
+            out[op.Label] = pts if got else 0
+            left -= pts
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (CAM paths drawn): {e}\n")
+    return out
+
+
+def cam_view_facts(ops, limit=4):
+    """The probe's view block (families/cam.py path_view) for the first few
+    operations, read after the echo's own changes: {label: facts}. Empty
+    where the CAM family cannot be loaded. Never raises."""
+    out = {}
+    try:
+        from .families import cam as camfam
+
+        for op in list(ops or ())[:limit]:
+            try:
+                out[op.Label] = camfam.path_view(op)
+            except Exception as e:  # noqa: BLE001
+                out[getattr(op, "Label", "?")] = f"{type(e).__name__}: {e}"
+    except Exception as e:  # noqa: BLE001
+        out["error"] = f"{type(e).__name__}: {e}"
+    return out
 
 
 PATH_WIDTH = 3.0
@@ -3493,7 +3703,7 @@ class Echo:
         elif name.startswith("cam_"):
             refs = [body.get(k) for k in ("op", "dressup", "object") if isinstance(body.get(k), str)]
             refs += [args.get(k) for k in ("op",) if isinstance(args.get(k), str)]
-            shown = cam_shown(doc, list(made) + _objects(doc, refs), body.get("job") or args.get("job"))
+            shown = cam_shown(doc, list(made) + _objects(doc, refs), body.get("job") or args.get("job"), getattr(self, "tr", None))
             if shown and isinstance(getattr(self, "tr", None), dict):
                 self.tr["camShown"] = shown
         # BIM: no level or building is made active here any more. BIM's own

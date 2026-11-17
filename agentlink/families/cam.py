@@ -178,7 +178,43 @@ def path_seen(x):
     view = path_view(x)
     if view is not None:
         out["view"] = view
+        nothing = view_why(view)
+        if nothing and out["shown"]:
+            out["shown"] = False
+            out["shownWhy"] = nothing
     return out
+
+
+def view_why(view):
+    """Why the window draws nothing of a path, from path_view's facts; None
+    when they show nothing against it (or were not read)."""
+    try:
+        if "vp" in view and view["vp"] is None:
+            return view.get("vpWhy") or "no view provider"
+        if view.get("Visibility") is False:
+            return "its view is hidden (ViewObject.Visibility false)"
+        sw = (view.get("modeSwitch") or {}).get("whichChild")
+        if isinstance(sw, int) and sw < 0:
+            return "FreeCAD's drawing of it is switched off (its display mode switch is -1)"
+        pts = [n for n in view.get("coordPoints") or () if isinstance(n, int)]
+        if pts and max(pts) == 0:
+            return "its drawing holds 0 points (the view provider was not filled from the path)"
+        idx = [n for n in view.get("lineIndices") or () if isinstance(n, int)]
+        if idx and max(idx) == 0:
+            return "its drawing has no line to draw (0 line indices: ShowCount or StartIndex past the path)"
+        if view.get("inScene") is False:
+            return "its drawing is not in the 3D view's scene"
+        for u in view.get("sceneSwitches") or ():
+            w = u.get("whichChild") if isinstance(u, dict) else None
+            on = u.get("childOnPath") if isinstance(u, dict) else None
+            # -1 none, -2 inherit, -3 all (SO_SWITCH_NONE / INHERIT / ALL)
+            if isinstance(w, int) and (w == -1 or (w >= 0 and isinstance(on, int) and w != on)):
+                return f"a switch above it in the 3D view's scene is off for it (depth {u.get('depth')}, whichChild {w})"
+        if "box" in view and view["box"] is None:
+            return "nothing of its drawing has a size in the scene (an empty bounding box)"
+    except Exception:  # noqa: BLE001
+        return None
+    return None
 
 
 VIEW_BUDGET = 0.3  # s: the view facts stop being gathered past this
