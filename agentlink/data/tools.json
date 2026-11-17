@@ -4109,6 +4109,1259 @@
     {"set": {"g.Group": "=new"}}
    ],
    "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"group": "=g.Label", "order": "=[o.Label for o in g.Group]"}}
+  },
+  "meshobj_unwrap": {
+   "group": "mesh",
+   "description": "Lay a surface flat as a cutting pattern (sheet, fabric, leather): of a body's face \"Body.Face3\" or an open mesh in one piece. A plane, cylinder or cone face rolls out exactly; other faces and meshes go through FreeCAD's flatmesh (up to 50,000 triangles, run apart with a 5 minute limit; a closed mesh is refused). Reply: area3d, areaFlat, stretch { mean, max % }, outlines, size, pattern (the wire object; make: false keeps none); path .svg or .dxf writes it. tolerance mm tessellates a face (0.1).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "of": {
+      "type": "string"
+     },
+     "path": {
+      "type": "string"
+     },
+     "make": {
+      "type": "boolean"
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "iterations": {
+      "type": "integer"
+     },
+     "weight": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "of"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "This FreeCAD has no flatmesh (MeshPart's unwrapping): it was built without it.", "when": "=not has_module('flatmesh')", "code": "unavailable"},
+    {"let": {"ref": "=a.of"}},
+    {"refuse": "of: a mesh's name, or a body's face \"Body.Face3\".", "when": "=not is_str(ref)"},
+    {"let": {"mo": "=first([x for x in meshes() if ref in (x.Label, x.Name)])"}},
+    {"when": "=mo is not None", "then": [{"let": {"label": "=mo.Label", "sub": null, "el": null}}], "else": [{"let": {"label, sub, el": "=resolve(ref)"}}, {"refuse": {"fmt": "of: {ref} is a whole body — name one of its faces (\"{label}.Face3\"; shape_query lists them), or a mesh."}, "when": "=not (sub and sub.startswith('Face'))"}]},
+    {"let": {"surface": "=surface_kind(el) if el is not None else None"}},
+    {"when": "=surface in ('Cylinder', 'Cone', 'Plane')", "then": [{"let": {"items, more": "=flat_pattern(el, a.get('tolerance', 0.05))"}}, {"let": {"x0, y0, x1, y1": "=bounds(items)", "fa": "=outline_area(items[0]['points'])"}}, {"let": {"out": {"of": "=ref", "surface": "=surface.lower()", "exact": true, "area3d": "=round(el.Area, 3)", "areaFlat": "=round(fa, 3)", "stretch": {"mean": 0.0, "max": "=round(abs(fa / el.Area - 1) * 100, 3)", "unit": "%"}, "outlines": "=len(items)", "size": ["=round(x1 - x0, 3)", "=round(y1 - y0, 3)"]}}}, {"do": "=out.update(more)"}, {"when": "=a.path", "then": [{"let": {"pth, writer": "=write_pattern(items, a.path)"}}, {"put": {"writer": "=writer"}, "into": "out", "when": "=writer is not None"}, {"put": {"path": "=pth"}, "into": "out"}]}, {"when": "=a.get('make', True)", "then": [{"add": "Part::Feature", "name": "Pattern", "as": "p"}, {"set": {"p.Label": "=unique(a.name or label + ' flat')", "p.Shape": "=make_compound([closed_polygon(it['points']) for it in items])"}}, {"do": ["=doc().recompute()", "=snapshot(tool)"]}, {"put": {"pattern": "=p.Label"}, "into": "out"}]}], "else": [{"when": "=el is not None", "then": [{"let": {"P, F": "=face_arrays(el, float(a.get('tolerance', 0.1)))"}}], "else": [{"let": {"m": "=mesh_of(label).Mesh"}}, {"refuse": {"fmt": "{label} is a closed mesh, which cannot be laid flat in one piece: meshobj_trim or meshobj_segments {{ keep: true }} gives an open patch of it to unwrap."}, "when": "=m.isSolid()", "code": "invalid_state"}, {"refuse": {"fmt": "{label} is {m.countComponents()} separate pieces: meshobj_split, then unwrap one."}, "when": "=m.countComponents() != 1", "code": "invalid_state"}, {"refuse": {"fmt": "{label} has {m.CountFacets} triangles: the unwrapping is given up to 50,000 (it runs apart from FreeCAD with a 5 minute limit) — meshobj_decimate {{ copy: true }} first."}, "when": "=m.CountFacets > 50000", "code": "invalid_state"}, {"let": {"P, F": "=arrays(m)"}}]}, {"refuse": "of: a surface with area.", "when": "=len(F) < 2"}, {"let": {"Q, loops, stop, why": "=flatten_apart(P, F, int(a.get('iterations', 5)), float(a.get('weight', 0.95)))"}}, {"refuse": "No Python to run the unwrapping in apart from FreeCAD here (none beside FreeCAD's program or in its bundle): unwrap a cylinder, cone or flat face (\"Body.Face3\") instead — those are laid flat exactly, without it.", "when": "=stop == 'python'", "code": "unavailable"}, {"refuse": "The unwrapping ran over 5 minutes: a coarser tolerance, or a smaller surface.", "when": "=stop == 'time'", "code": "failed"}, {"refuse": {"fmt": "FreeCAD's unwrapping could not lay this surface flat: {why} — split it into simpler faces (a cone or cylinder side unwraps; a whole sphere does not)."}, "when": "=stop == 'stopped'", "code": "failed"}, {"let": {"st": "=stretch(P, Q, F)", "items": "=[{'kind': 'line', 'points': b.tolist(), 'closed': True, 'layer': 'cut'} for b in loops if len(b) >= 3]"}}, {"let": {"out": {"of": "=ref", "area3d": "=st.area3d", "areaFlat": "=st.areaFlat", "stretch": {"mean": "=st.mean", "max": "=st.max", "unit": "%"}, "outlines": "=len(items)"}}}, {"let": {"x0, y0, x1, y1": "=bounds(items)"}}, {"put": {"size": ["=round(x1 - x0, 3)", "=round(y1 - y0, 3)"]}, "into": "out"}, {"when": "=a.path", "then": [{"let": {"pth, writer": "=write_pattern(items, a.path)"}}, {"put": {"writer": "=writer"}, "into": "out", "when": "=writer is not None"}, {"put": {"path": "=pth"}, "into": "out"}]}, {"when": "=a.get('make', True)", "then": [{"add": "Part::Feature", "name": "Pattern", "as": "p"}, {"set": {"p.Label": "=unique(a.name or label + ' flat')", "p.Shape": "=make_compound([closed_polygon(it['points']) for it in items])"}}, {"do": ["=doc().recompute()", "=snapshot(tool)"]}, {"put": {"pattern": "=p.Label"}, "into": "out"}]}, {"put": {"note": "Doubly curved: it cannot lie flat without stretching — the most stretched spots are where a cut or dart would help."}, "into": "out", "when": "=out['stretch']['max'] > 5"}]}
+   ],
+   "answer": {"fields": {"...": "=out"}}
+  },
+  "meshobj_from_shape": {
+   "group": "mesh",
+   "description": "Mesh a body (MeshPart) into a new mesh object: method standard (deflection mm off the surface, 0.05; angle deg, 15) | mefisto (maxLength mm: even triangles, but it can leave faces with small holes open: the reply warns) | netgen (fineness verycoarse … veryfine; unavailable where FreeCAD lacks it). A flat-sided body meshes to two triangles a face (a box: 12); a small deflection on a large curved body makes hundreds of thousands (reply: heavy). Reply: mesh, points, facets, solid, components, area, volume, box.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "method": {
+      "type": "string"
+     },
+     "deflection": {
+      "type": "number"
+     },
+     "angle": {
+      "type": "number"
+     },
+     "maxLength": {
+      "type": "number"
+     },
+     "fineness": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"src": "=(first([o for o in doc().Objects if a.body in (o.Label, o.Name) and has(o, 'Shape')]) if a.body else (bodies()[0] if len(bodies()) == 1 else None))"}},
+    {"let": {"have": "=', '.join([o.Label for o in bodies()[:20]]) or 'none'"}, "when": "=src is None"},
+    {"refuse": {"fmt": "body: the shape to mesh, by label — the bodies: {have}."}, "when": "=src is None"},
+    {"refuse": {"fmt": "body: {src.Label} has no faces to mesh."}, "when": "=src.Shape.isNull() or not src.Shape.Faces"},
+    {"let": {"how": "=a.get('method', 'standard')"}},
+    {"choose": "=how", "of": {"standard": [{"let": {"defl": "=num(a.get('deflection', 0.05), 'deflection')", "ang": "=num(a.get('angle', 15), 'angle')"}}, {"refuse": "deflection: mm the triangles may stand off the surface, over 0 (0.05); angle: degrees between neighbouring triangles on a curve, over 0 to 90 (15).", "when": "=defl <= 0 or not 0 < ang <= 90"}, {"let": {"kw": "={'Shape': src.Shape, 'LinearDeflection': defl, 'AngularDeflection': radians(ang), 'Relative': False}"}}], "mefisto": [{"let": {"ml": "=num(a.get('maxLength', 2.0), 'maxLength')"}}, {"refuse": "maxLength: mm, the longest triangle edge, over 0 (2).", "when": "=ml <= 0"}, {"let": {"kw": "={'Shape': src.Shape, 'MaxLength': ml}"}}], "netgen": [{"let": {"fine": {"verycoarse": 0, "coarse": 1, "moderate": 2, "fine": 3, "veryfine": 4}}}, {"refuse": {"fmt": "fineness: {', '.join(fine)}."}, "when": "=a.get('fineness', 'moderate') not in fine"}, {"let": {"kw": "={'Shape': src.Shape, 'Fineness': fine[a.get('fineness', 'moderate')], 'SecondOrder': 0, 'Optimize': 1, 'AllowQuad': 0}"}}]}, "else": [{"refuse": "method: standard (deflection, angle), mefisto (maxLength: even triangles) or netgen (fineness)."}]},
+    {"try": [{"let": {"m": "=mesh_shape(kw)"}}], "except": [{"refuse": {"fmt": "{how} meshing failed: {error} — this FreeCAD may lack Netgen; mefisto gives even triangles too."}, "when": "=how == 'netgen'", "code": "unavailable"}, {"refuse": {"fmt": "{how} meshing failed: {error}"}, "code": "failed"}]},
+    {"let": {"n": "=new_mesh(m, a.name or src.Label + ' mesh')"}},
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]},
+    {"let": {"r": "=reading(m)"}}
+   ],
+   "answer": {"fields": {"mesh": "=n.Label", "from": "=src.Label", "method": "=how", "...": "=r", "step": "=steps_n()", "warning": {"when": "=src.Shape.Solids and src.Shape.isClosed() and (not m.isSolid() or m.hasNonManifolds())", "value": {"fmt": "The solid meshed open or non-manifold with {how} ({r.get('components', '?')} components): method standard (or netgen) meshes it closed; meshobj_info shows the problems."}}, "heavy": {"when": "=m.CountFacets > 200000", "value": {"fmt": "{m.CountFacets} triangles: the repair, boolean, segment and section tools slow down past about {200000} — a coarser deflection / maxLength, or meshobj_decimate."}}}}
+  },
+  "meshobj_info": {
+   "group": "mesh",
+   "description": "A mesh's size and the Mesh workbench's evaluation: points, facets, solid (closed), components, area, volume, box; evaluation { nonManifolds, selfIntersections, flippedNormals, corruptedFacets, … }, problems, verdict clean or next. Changes nothing. The self-intersection test is slow on a dense mesh (not measured): background: true runs it as a job.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)"}},
+    {"let": {"e, problems": "=evaluation(o.Mesh)"}}
+   ],
+   "answer": {"fields": {"mesh": "=o.Label", "...": "=reading(o.Mesh)", "evaluation": "=e", "problems": "=problems", "next": {"when": "=problems", "value": "meshobj_repair fixes them."}, "verdict": {"when": "=not problems", "value": "clean"}}}
+  },
+  "meshobj_repair": {
+   "group": "mesh",
+   "description": "Repair a mesh as Evaluate & Repair does: fix any of normals, duplicates, nonmanifolds, selfintersections, degenerate, folds, indices, pointsonedges (default: those), holes (loops up to maxHoleEdges, 50, filled flat), islands (pieces of minFacets, 10, or fewer triangles dropped). Each step is kept only if it leaves no more open or overloaded edges (undone says which). Reply: did, fixed, problems (left), edges { open, overloaded }, before. In place; copy: true leaves the original. Evaluates twice: slow on a dense mesh, and a change cannot run as a job.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "fix": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "maxHoleEdges": {
+      "type": "integer"
+     },
+     "minFacets": {
+      "type": "integer"
+     },
+     "copy": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)", "m": "=o.Mesh.copy()"}},
+    {"let": {"repairs": ["normals", "duplicates", "nonmanifolds", "selfintersections", "degenerate", "folds", "indices", "pointsonedges", "holes", "islands"]}},
+    {"let": {"e0, p0": "=evaluation(m)", "want": "=a.fix or [r for r in repairs if r not in ('holes', 'islands')]"}},
+    {"let": {"unknown": "=[w for w in want if w not in repairs] if is_list(want) else [want]"}},
+    {"refuse": {"fmt": "fix: a list of any of {', '.join(repairs)} — not {', '.join([str(u) for u in unknown])}."}, "when": "=unknown"},
+    {"let": {"did": [], "undone": [], "state": "=edges_state(m)"}},
+    {"let": {"start": "=dict(state)"}},
+    {"each": "w", "in": "=want", "steps": [{"let": {"prev": "=m.copy()", "failed": false}}, {"try": [{"do": "=repair_step(m, w, a)"}], "except": [{"let": {"m": "=prev", "failed": true}}, {"push": {"undone": {"fmt": "{w}: failed ({error})"}}}]}, {"when": "=not failed", "then": [{"let": {"now": "=edges_state(m)"}}, {"when": "=worse(now, state)", "then": [{"let": {"m": "=prev"}}, {"push": {"undone": {"fmt": "{w}: undone — it left {now['open']} open and {now['bad']} overloaded edges, {now['facets']} facets (before: {state['open']}, {state['bad']}, {state['facets']})"}}}], "else": [{"let": {"state": "=now"}}, {"push": {"did": "=w"}}]}]}]},
+    {"let": {"e1, p1": "=evaluation(m)"}},
+    {"let": {"out": {"did": "=did", "problems": "=p1", "fixed": "=[p for p in p0 if p not in p1]", "edges": {"open": "=state['open']", "overloaded": "=state['bad']"}}}},
+    {"put": {"undone": "=undone"}, "into": "out", "when": "=undone"},
+    {"when": "=not did", "then": [{"answer": {"fields": {"mesh": "=o.Label", "...reading": "=reading(o.Mesh)", "...out": "=out", "changed": false, "note": "No step left the mesh better without making it worse; it is unchanged."}}}]}
+   ],
+   "answer": {"via": "keep", "with": ["=o", "=m", "=tool", "=a", "=out", {"problems": "=p0", "facets": "=o.Mesh.CountFacets", "edges": {"open": "=start['open']", "overloaded": "=start['bad']"}}]}
+  },
+  "meshobj_decimate": {
+   "group": "mesh",
+   "description": "Fewer triangles: reduction (share to remove, 0.5) or facets (how many to keep); tolerance (0.1) caps the error one collapse may add, so it can stop short of the count (the reply's note says so: raise tolerance). Reply: reduced \"n → m triangles\", the mesh's reading, before.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "reduction": {
+      "type": "number"
+     },
+     "facets": {
+      "type": "integer"
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "copy": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)", "m": "=o.Mesh.copy()"}},
+    {"let": {"n0": "=m.CountFacets"}},
+    {"when": "=a.facets", "then": [{"let": {"target": "=int(a.facets)"}}, {"refuse": {"fmt": "facets: fewer than now ({n0}), 4 or more."}, "when": "=not 4 <= target < n0"}, {"let": {"red": "=1 - target / n0"}}], "else": [{"let": {"red": "=num(a.get('reduction', 0.5), 'reduction')"}}, {"refuse": "reduction: the share of triangles to remove, 0 … 1 (or facets: how many to keep).", "when": "=not 0 < red < 1"}]},
+    {"let": {"tol": "=num(a.get('tolerance', 0.1), 'tolerance')"}},
+    {"refuse": "tolerance: over 0 — the error one collapse may add (0.1); a larger one lets more triangles go.", "when": "=tol <= 0"},
+    {"do": "=m.decimate(tol, red)"},
+    {"let": {"extra": {"reduced": {"fmt": "{n0} → {m.CountFacets} triangles"}}, "want": "=n0 * (1 - red)"}},
+    {"put": {"note": {"fmt": "Stopped at {m.CountFacets}, short of the {int(want)} asked: tolerance {tol:g} holds the rest (flat regions go first). A larger tolerance removes more, at the cost of shape."}}, "into": "extra", "when": "=m.CountFacets > want * 1.1 + 4"}
+   ],
+   "answer": {"via": "keep", "with": ["=o", "=m", "=tool", "=a", "=extra", {"facets": "=n0"}]}
+  },
+  "meshobj_refine": {
+   "group": "mesh",
+   "description": "More triangles: rounds 1 … 3, each putting a point in the middle of every triangle (about three times as many; refused past 2,000,000); optimize: true swaps edges to even their shapes. The surface does not change. Reply: refined \"n → m triangles\".",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "rounds": {
+      "type": "integer"
+     },
+     "optimize": {
+      "type": "boolean"
+     },
+     "copy": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)", "m": "=o.Mesh.copy()"}},
+    {"let": {"n0": "=m.CountFacets", "rounds": "=a.get('rounds', 1)"}},
+    {"refuse": "rounds: 1 … 3 (each puts a point in the middle of every triangle: about three times as many).", "when": "=not is_int(rounds) or not 1 <= rounds <= 3"},
+    {"refuse": {"fmt": "{o.Label} has {n0} triangles: {rounds} round(s) would make about {n0 * 3 ** rounds} (over 2,000,000). Fewer rounds, or meshobj_decimate first."}, "when": "=n0 * 3 ** rounds > 2000000", "code": "invalid_state"},
+    {"each": "i", "in": "=range(rounds)", "steps": [{"do": "=m.refine()"}]},
+    {"do": "=m.optimizeTopology(-1.0)", "when": "=a.optimize"}
+   ],
+   "answer": {"via": "keep", "with": ["=o", "=m", "=tool", "=a", {"refined": {"fmt": "{n0} → {m.CountFacets} triangles"}}]}
+  },
+  "meshobj_smooth": {
+   "group": "mesh",
+   "description": "Smooth a mesh: method taubin (default; shrinks far less than laplace, but a coarse mesh still loses volume; lambda 0.6307, mu 0.0424) | laplace (lambda; shrinks), iterations (3). Reply: volumeChange mm³ on a closed mesh, warning past 2%.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "method": {
+      "type": "string"
+     },
+     "iterations": {
+      "type": "integer"
+     },
+     "lambda": {
+      "type": "number"
+     },
+     "mu": {
+      "type": "number"
+     },
+     "copy": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)", "m": "=o.Mesh.copy()"}},
+    {"let": {"meth": "=a.get('method', 'taubin')", "it": "=a.get('iterations', 3)"}},
+    {"refuse": "iterations: a whole number, 1 … 200 (3).", "when": "=not is_int(it) or not 1 <= it <= 200"},
+    {"choose": "=meth", "of": {"laplace": [{"do": "=m.smooth(Method='Laplace', Iteration=it, Lambda=float(a.get('lambda', 0.6307)))"}], "taubin": [{"do": "=m.smooth(Method='Taubin', Iteration=it, Lambda=float(a.get('lambda', 0.6307)), Micro=float(a.get('mu', 0.0424)))"}]}, "else": [{"refuse": "method: taubin (shrinks far less) or laplace (shrinks)."}]},
+    {"let": {"vol0": "=o.Mesh.Volume if o.Mesh.isSolid() else None", "extra": {"method": "=meth", "iterations": "=it"}}},
+    {"when": "=vol0", "then": [{"put": {"volumeChange": "=round(m.Volume - vol0, 3)"}, "into": "extra"}, {"put": {"warning": {"fmt": "The volume changed by {100 * (m.Volume - vol0) / vol0:.1f}%: smoothing pulls a coarse mesh in (taubin less than laplace). Fewer iterations, or meshobj_refine first; history_undo takes it back."}}, "into": "extra", "when": "=abs(m.Volume - vol0) > 0.02 * abs(vol0)"}]}
+   ],
+   "answer": {"via": "keep", "with": ["=o", "=m", "=tool", "=a", "=extra"]}
+  },
+  "meshobj_edit": {
+   "group": "mesh",
+   "description": "Edit a mesh on a copy, as ScanRuler's Mesh Tools do: action begin { mesh } (a copy made, the original hidden; every meshobj tool given the original's name then changes the copy) | use (the copy put in place of the original) | discard (the copy dropped) | state (default: what is being edited).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "begin",
+       "use",
+       "discard",
+       "state"
+      ]
+     },
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"act": "=a.get('action', 'state')", "ed": "=editing()"}},
+    {"when": "=act == 'state'", "then": [{"answer": {"fields": {"editing": "=[{'mesh': k, 'copy': v} for k, v in ed.items()]"}}}]},
+    {"let": {"ref": "=a.mesh"}},
+    {"when": "=act == 'begin'", "then": [{"let": {"o": "=mesh_of(ref)"}}, {"refuse": {"fmt": "{o.Label} is being edited already: use or discard first."}, "when": "=o.Label in ed or o.Label in ed.values()", "code": "invalid_state"}, {"let": {"c": "=new_mesh(o.Mesh.copy(), o.Label + ' (editing)')"}}, {"do": ["=show(o, False)", "=ed.update({o.Label: c.Label})", "=edit_store(ed)", "=doc().recompute()"]}, {"answer": {"fields": {"editing": "=o.Label", "copy": "=c.Label", "...": "=reading(c.Mesh)", "note": {"fmt": "Every meshobj tool given {o.Label} now changes the copy (each step undoable); use puts it in place of the original, discard drops it."}}}}]},
+    {"let": {"orig": "=(first([k for k, v in ed.items() if ref in (k, v)]) if ref else (first(ed) if len(ed) == 1 else None))"}},
+    {"refuse": "No edit of that mesh: meshobj_edit { action: begin, mesh } starts one.", "when": "=orig is None and ref", "code": "invalid_state"},
+    {"refuse": {"fmt": "mesh: which edit — {', '.join(ed) or 'none'}."}, "when": "=orig is None", "code": "invalid_state"},
+    {"let": {"o": "=first([x for x in meshes() if x.Label == orig])", "c": "=first([x for x in meshes() if x.Label == ed[orig]])"}},
+    {"choose": "=act", "of": {"use": [{"refuse": "The original or its copy is gone: discard.", "when": "=o is None or c is None", "code": "not_found"}, {"let": {"before": "=reading(o.Mesh)"}}, {"set": {"o.Mesh": "=c.Mesh.copy()"}}, {"do": "=doc().removeObject(c.Name)"}], "discard": [{"do": "=doc().removeObject(c.Name)", "when": "=c is not None"}, {"let": {"before": null}}]}, "else": [{"refuse": "action: begin, use, discard or state."}]},
+    {"do": ["=show(o, True)", "=ed.pop(orig)", "=edit_store(ed)", "=doc().recompute()", "=snapshot('meshobj_edit')"]}
+   ],
+   "answer": {"fields": {"mesh": "=orig", "used": {"when": "=act == 'use'", "value": true}, "discarded": {"when": "=act != 'use'", "value": true}, "now": {"when": "=act == 'use' and o is not None", "value": "=reading(o.Mesh)"}, "before": {"when": "=act == 'use' and o is not None", "value": "=before"}}}
+  },
+  "meshobj_trim": {
+   "group": "mesh",
+   "description": "Cut a mesh with a plane: at [x,y,z] on it, normal (the side it points to is removed); close: true caps the cut flat (loops up to maxHoleEdges, 1000); preview: true answers wouldRemove / wouldCut / wouldKeep and changes nothing. Refused when nothing would be left. Reply: removed (triangles wholly on that side), cut (triangles the plane crossed, each kept in part), solid, warning when the cap did not close it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "normal": {
+      "type": "array",
+      "items": {}
+     },
+     "close": {
+      "type": "boolean"
+     },
+     "maxHoleEdges": {
+      "type": "integer"
+     },
+     "preview": {
+      "type": "boolean"
+     },
+     "copy": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)", "m": "=o.Mesh.copy()"}},
+    {"let": {"p": "=vec(a.at, 'at', (0, 0, 0))", "n": "=vec(a.normal, 'normal', (0, 0, 1))"}},
+    {"refuse": "normal: not zero — the side it points to is removed.", "when": "=n.Length < 1e-9"},
+    {"let": {"gone, crossed": "=plane_sides(m, p, n)"}},
+    {"do": ["=m.trimByPlane(p, n)", "=merge_cut(m)"]},
+    {"refuse": {"fmt": "The plane leaves nothing of {o.Label}: all of it lies on the side normal points to. Turn normal round, or move at. Nothing was changed."}, "when": "=m.CountFacets == 0", "code": "failed"},
+    {"when": "=a.preview", "then": [{"let": {"bb": "=m.BoundBox"}}, {"answer": {"fields": {"mesh": "=o.Label", "preview": true, "wouldRemove": "=gone", "wouldCut": "=crossed", "wouldKeep": "=m.CountFacets", "keptBox": ["=round(bb.XLength, 2)", "=round(bb.YLength, 2)", "=round(bb.ZLength, 2)"], "note": "Nothing changed: the same call without preview cuts."}}}]},
+    {"let": {"extra": {"removed": "=gone", "cut": "=crossed"}}},
+    {"when": "=a.close and not m.isSolid()", "then": [{"do": "=cap(m, int(a.get('maxHoleEdges', 1000)))"}, {"put": {"warning": "The cut is not fully closed: a loop longer than maxHoleEdges, or the mesh was open before the cut. meshobj_boundary shows the loops left."}, "into": "extra", "when": "=not m.isSolid()"}]},
+    {"put": {"note": "='Capped flat where the plane passed.' if a.close else 'Cut open where the plane passed; close: true fills the cut.'"}, "into": "extra"}
+   ],
+   "answer": {"via": "keep", "with": ["=o", "=m", "=tool", "=a", "=extra"]}
+  },
+  "meshobj_transform": {
+   "group": "mesh",
+   "description": "Scale (a factor or [x,y,z]), rotate { axis, angle degrees }, move [x,y,z], mirror \"x\" | \"y\" | \"z\" a mesh's points, in that order, about the document's origin and axes. A mirror keeps the triangles facing out. In place; copy: true makes a new mesh.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "scale": {
+      "type": [
+       "number",
+       "array"
+      ]
+     },
+     "rotate": {
+      "type": "object"
+     },
+     "move": {
+      "type": "array",
+      "items": {}
+     },
+     "mirror": {
+      "type": "string"
+     },
+     "copy": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)", "m": "=o.Mesh.copy()"}},
+    {"let": {"mat": "=matrix()", "flips": 0}},
+    {"refuse": "One or more of scale (a factor or [x, y, z]), rotate { axis, angle }, move [x, y, z], mirror \"x\" | \"y\" | \"z\".", "when": "=not any(a.get(k) is not None for k in ('scale', 'rotate', 'move', 'mirror'))"},
+    {"when": "=a.scale is not None", "then": [{"let": {"f": "=[a.scale, a.scale, a.scale] if is_num(a.scale) else a.scale"}}, {"refuse": "scale: a factor, or [x, y, z] — none of them 0. About the origin: move it back after, or scale a mesh centred there.", "when": "=not (is_list(f) and len(f) == 3 and all(is_num(x) and x != 0 for x in f))"}, {"do": "=mat.scale(float(f[0]), float(f[1]), float(f[2]))"}, {"let": {"flips": "=flips + len([x for x in f if float(x) < 0])"}}]},
+    {"when": "=a.rotate", "then": [{"let": {"r": "=a.rotate"}}, {"refuse": "rotate: { axis: [x, y, z] (default z), angle: degrees } — about the origin.", "when": "=not is_dict(r) or is_bool(r.get('angle', 0)) or not is_number(r.get('angle', 0))"}, {"let": {"ax": "=vec(r.get('axis'), 'rotate.axis', (0, 0, 1))"}}, {"refuse": "rotate.axis: not [0, 0, 0].", "when": "=ax.Length < 1e-9"}, {"let": {"mat": "=rotation(ax, float(r.get('angle', 0))).toMatrix().multiply(mat)"}}]},
+    {"let": {"mat": "=shift(vec(a.move, 'move')).multiply(mat)"}, "when": "=a.move"},
+    {"when": "=a.mirror", "then": [{"refuse": "mirror: \"x\", \"y\" or \"z\" — the axis whose sign flips (x mirrors across the YZ plane through the origin).", "when": "=a.mirror not in ('x', 'y', 'z')"}, {"let": {"mat": "=mirror_matrix(a.mirror).multiply(mat)", "flips": "=flips + 1"}}]},
+    {"do": "=m.transform(through_placement(m, mat))"},
+    {"do": "=m.flipNormals()", "when": "=flips % 2"}
+   ],
+   "answer": {"via": "keep", "with": ["=o", "=m", "=tool", "=a"]}
+  },
+  "meshobj_boolean": {
+   "group": "mesh",
+   "description": "A boolean of two closed meshes (meshobj_info: solid true): a, b, op union | intersection | difference (a minus b); a new mesh, a and b kept. Dense scans as they are: only the triangles the other mesh crosses are cut (built for scans of 100,000 triangles and more; time not measured, and a change cannot run as a job). Reply: how (which engine made it), solid, volume.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "a": {
+      "type": "string"
+     },
+     "b": {
+      "type": "string"
+     },
+     "op": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "a",
+     "b"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"x": "=mesh_of(a.a)", "y": "=mesh_of(a.b)", "op": "=a.get('op', 'union')"}},
+    {"refuse": "Mesh booleans need closed meshes: meshobj_repair { fix: [\"holes\"] } first.", "when": "=not (x.Mesh.isSolid() and y.Mesh.isSolid())", "code": "invalid_state"},
+    {"refuse": "op: union, intersection or difference.", "when": "=op not in ('union', 'intersection', 'difference')"},
+    {"let": {"res, why, nothing": "=own_boolean(x.Mesh, y.Mesh, op)", "how": "mesh (Agent Link's boolean: only the triangles the other mesh crosses are cut)"}},
+    {"refuse": {"fmt": "The {op} left nothing: the meshes do not overlap that way."}, "when": "=nothing", "code": "failed"},
+    {"when": "=res is None", "then": [{"let": {"how": {"fmt": "FreeCAD's mesh boolean (Agent Link's refused: {why})"}, "res": "=freecad_boolean(x.Mesh, y.Mesh, op)"}}, {"when": "=res is None or res.CountFacets == 0 or not res.isSolid() or evaluation(res)[1]", "then": [{"refuse": {"fmt": "The mesh {op} came out broken ({why}), and the meshes are too dense to go through solids (maxFacets)."}, "when": "=max(x.Mesh.CountFacets, y.Mesh.CountFacets) > int(a.get('maxFacets', 60000))", "code": "failed"}, {"try": [{"let": {"r": "=solid_boolean(x.Mesh, y.Mesh, op)"}}], "except": [{"refuse": {"fmt": "The {op} failed both as meshes and as solids: {error}"}, "code": "failed"}]}, {"refuse": {"fmt": "The {op} left nothing: the meshes do not overlap that way."}, "when": "=r.isNull() or not r.Solids or r.Volume < 1e-9", "code": "failed"}, {"let": {"res": "=mesh_shape({'Shape': r, 'LinearDeflection': float(a.get('deflection', 0.05)), 'AngularDeflection': 0.3, 'Relative': False})", "how": {"fmt": "through solids (Agent Link's boolean refused: {why}; FreeCAD's mesh boolean came out broken)"}}}]}]},
+    {"let": {"n": "=new_mesh(res, a.name or x.Label + ' ' + op + ' ' + y.Label)"}}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"mesh": "=n.Label", "op": "=op", "how": "=how", "...": "=reading(res)"}}
+  },
+  "meshobj_sections": {
+   "group": "mesh",
+   "description": "Cross-sections of a mesh as wires: normal (default z), count evenly spaced (5) or at [distances from the origin along normal], up to 500; tolerance mm joins cut ends (0.01). Reply: slices [{ at, loops, length }], sections (the wire compound; export writes DXF, part_face makes a face).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "normal": {
+      "type": "array",
+      "items": {}
+     },
+     "count": {
+      "type": "integer"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)"}},
+    {"let": {"m": "=o.Mesh", "n": "=vec(a.normal, 'normal', (0, 0, 1))"}},
+    {"refuse": "normal: not [0, 0, 0] — the direction the slices are stacked along.", "when": "=n.Length < 1e-9"},
+    {"do": "=n.normalize()"},
+    {"let": {"lo, hi": "=reach(m.BoundBox, n)"}},
+    {"when": "=a.at is not None", "then": [{"let": {"ds": "=a.at"}}, {"refuse": {"fmt": "at: [distances] mm from the origin along normal, 1 … 500 of them — {o.Label} reaches from {lo:.4g} to {hi:.4g}."}, "when": "=not (is_list(ds) and 1 <= len(ds) <= 500 and all(is_num(d) for d in ds))"}, {"let": {"ds": "=[float(d) for d in ds]"}}], "else": [{"let": {"k": "=a.get('count', 5)"}}, {"refuse": "count: 1 … 500 slices, evenly spaced between the mesh's ends (or at: [distances]).", "when": "=not is_int(k) or not 1 <= k <= 500"}, {"let": {"ds": "=[lo + (hi - lo) * (i + 1) / (k + 1) for i in range(k)]"}}]},
+    {"let": {"tol": "=num(a.get('tolerance', 0.01), 'tolerance')"}},
+    {"refuse": "tolerance: mm within which cut ends are joined into one loop, over 0 (0.01, FreeCAD's own).", "when": "=tol <= 0"},
+    {"let": {"polys": "=m.crossSections([(n * d, n) for d in ds], tol, True)", "wires": [], "rows": []}},
+    {"each": "d, sec", "in": "=zip(ds, polys)", "steps": [{"let": {"ws": "=loops(sec)"}}, {"let": {"wires": "=wires + ws"}}, {"push": {"rows": {"at": "=round(d, 4)", "loops": "=len(ws)", "length": "=round(sum(w.Length for w in ws), 3)"}}}]},
+    {"refuse": {"fmt": "No section met {o.Label} at those distances ({lo:.3g} … {hi:.3g} along {xyz(n)})."}, "when": "=not wires", "code": "failed"},
+    {"add": "Part::Feature", "name": "Sections", "as": "c"},
+    {"set": {"c.Label": "=unique(a.name or o.Label + ' sections')", "c.Shape": "=compound(wires)"}}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"sections": "=c.Label", "normal": "=xyz(n)", "slices": "=rows", "use": "export writes them as DXF; part_face makes one a face."}}
+  },
+  "meshobj_split": {
+   "group": "mesh",
+   "description": "Split a mesh into its separate pieces, a mesh object each, largest first (minFacets leaves out smaller ones; over 100 pieces is refused: raise minFacets). The original is hidden, not removed. Reply: pieces, facets.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "minFacets": {
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)"}},
+    {"let": {"parts": "=o.Mesh.getSeparateComponents()"}},
+    {"refuse": {"fmt": "{o.Label} is one piece."}, "when": "=len(parts) < 2"},
+    {"let": {"least": "=a.get('minFacets', 1)"}},
+    {"refuse": "minFacets: a whole number, 1 or more — pieces with fewer triangles are left out.", "when": "=not is_int(least) or least < 1"},
+    {"let": {"parts": "=sorted([p for p in parts if p.CountFacets >= least], key=lambda x: -x.CountFacets)"}},
+    {"refuse": {"fmt": "minFacets: no piece of {o.Label} has {least} triangles or more."}, "when": "=not parts"},
+    {"refuse": {"fmt": "{o.Label} has {len(parts)} pieces of {least} or more triangles (the 100th has {parts[99].CountFacets}): over 100 objects. Give minFacets above that to keep the real parts, or meshobj_repair {{ fix: [\"islands\"], minFacets }} to drop the crumbs first. Nothing was made."}, "when": "=len(parts) > 100", "code": "invalid_state"},
+    {"let": {"made": "=[new_mesh(p, o.Label + ' ' + str(i)).Label for i, p in enumerate(parts, 1)]"}},
+    {"set": {"o.Visibility": false}, "when": "=has(o, 'Visibility')"}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"from": "=o.Label", "pieces": "=made", "facets": "=[p.CountFacets for p in parts][:20]", "note": {"fmt": "{o.Label} is hidden, not removed; the pieces are largest first."}}}
+  },
+  "meshobj_segments": {
+   "group": "mesh",
+   "description": "Find a mesh's flat regions: kind planar (deviation mm off a fitted plane, 0.01; about the noise on a scan) | curvature (both curvatures within tolerance 1/mm of 0); minFacets (20). Reply: segments (count), largest [{ facets, area, center, normal }] up to top (12); keep: true makes those meshes. On a scan: where to put a sketch. Slow on a dense mesh (every region is walked; not measured).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "kind": {
+      "type": "string"
+     },
+     "deviation": {
+      "type": "number"
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "minFacets": {
+      "type": "integer"
+     },
+     "top": {
+      "type": "integer"
+     },
+     "keep": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)"}},
+    {"let": {"m": "=o.Mesh", "kind": "=a.get('kind', 'planar')", "least": "=a.get('minFacets', 20)", "top": "=a.get('top', 12)"}},
+    {"each": "k, v", "in": "=[('minFacets', least), ('top', top)]", "steps": [{"refuse": {"fmt": "{k}: a whole number, 1 or more."}, "when": "=not is_int(v) or v < 1"}]},
+    {"choose": "=kind", "of": {"planar": [{"let": {"dev": "=num(a.get('deviation', 0.01), 'deviation')"}}, {"refuse": "deviation: mm a triangle may stand off its region's plane, over 0 (0.01; a scan needs about its noise, 0.05 … 0.3).", "when": "=dev <= 0"}, {"let": {"segs": "=m.getPlanarSegments(dev, least)"}}], "curvature": [{"let": {"tol": "=num(a.get('tolerance', 0.01), 'tolerance')"}}, {"refuse": "tolerance: 1/mm either principal curvature may be off zero, over 0 (0.01: flatter than a 100 mm radius).", "when": "=tol <= 0"}, {"try": [{"let": {"segs": "=m.getSegmentsByCurvature([(0.0, 0.0, tol, tol, least)])"}}], "except": [{"refuse": {"fmt": "Curvature segmentation failed here: {error} — kind planar finds flat regions."}, "code": "failed"}]}]}, "else": [{"refuse": "kind: planar (flat regions by distance from a fitted plane: deviation mm) or curvature (flat regions by curvature: tolerance 1/mm)."}]},
+    {"let": {"found": []}},
+    {"each": "seg", "in": "=segs", "steps": [{"let": {"sub": "=m.meshFromSegment(list(seg))"}}, {"push": {"found": [{"facets": "=len(seg)", "area": "=round(sub.Area, 3)", "center": "=xyz(sub.BoundBox.Center)", "normal": "=xyz(mean_normal(sub))"}, "=sub"]}}]},
+    {"let": {"found": "=sorted(found, key=lambda r: -r[0]['area'])"}},
+    {"let": {"rows": "=[r[0] for r in found]"}},
+    {"let": {"out": {"mesh": "=o.Label", "kind": "=kind", "segments": "=len(rows)", "largest": "=rows[:top]"}}},
+    {"put": {"note": "='No flat region of that size: a larger deviation (a scan\\'s noise), or a smaller minFacets.' if kind == 'planar' else 'No flat region of that size: a larger tolerance, or a smaller minFacets.'"}, "into": "out", "when": "=not rows"},
+    {"when": "=a.keep and rows", "then": [{"put": {"kept": "=[new_mesh(r[1], o.Label + ' segment ' + str(i)).Label for i, r in enumerate(found[:top], 1)]"}, "into": "out"}, {"do": "=finish(tool, out)"}]},
+    {"put": {"use": "A flat segment's normal and centre place a sketch (sketch_new { face }) or a datum plane on a scan."}, "into": "out"}
+   ],
+   "answer": {"fields": {"...": "=out"}}
+  },
+  "meshobj_curvature": {
+   "group": "mesh",
+   "description": "A mesh's curvature: flatPercent (points under flat, 0.001 1/mm), tightestRadius and medianRadius mm, meanCurvature { min, max }. view_render { map: \"curvature\" } colours it. Changes nothing; on a dense mesh background: true runs it as a job.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "flat": {
+      "type": "number"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)"}},
+    {"refuse": {"fmt": "{o.Label} has no triangles."}, "when": "=o.Mesh.CountFacets == 0", "code": "invalid_state"}
+   ],
+   "answer": {"fields": {"mesh": "=o.Label", "...": "=curvature_stats(o.Mesh, a.get('flat', 1e-3))", "next": "view_render { map: \"curvature\", objects: [the mesh] } colours it."}}
+  },
+  "meshobj_project": {
+   "group": "mesh",
+   "description": "Project a wire, sketch or body's edges onto a mesh along direction [x,y,z] (default down, [0,0,-1]); kept as wires on its surface. Reply: projection, wires, length.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "shape": {
+      "type": "string"
+     },
+     "direction": {
+      "type": "array",
+      "items": {}
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "shape"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)"}},
+    {"let": {"src": "=first([x for x in doc().Objects if a.shape in (x.Label, x.Name) and has(x, 'Shape')])"}},
+    {"refuse": "shape: a wire, sketch or body with edges to project, by label.", "when": "=src is None or not src.Shape.Edges"},
+    {"let": {"d": "=vec(a.direction, 'direction', (0, 0, -1))"}},
+    {"refuse": "direction: not [0, 0, 0] — the way the edges are thrown onto the mesh (default down, [0, 0, -1]).", "when": "=d.Length < 1e-9"},
+    {"try": [{"let": {"polys": "=project_on(src.Shape, o.Mesh, d)"}}], "except": [{"refuse": {"fmt": "The projection failed: {error}"}, "code": "failed"}]},
+    {"let": {"wires": "=polylines(polys)"}},
+    {"refuse": {"fmt": "Nothing of {src.Label} landed on {o.Label} along {xyz(d)}: the shape must lie over the mesh seen along direction (turn direction round if it is on the other side)."}, "when": "=not wires", "code": "failed"},
+    {"add": "Part::Feature", "name": "Projection", "as": "c"},
+    {"set": {"c.Label": "=unique(a.name or src.Label + ' on ' + o.Label)", "c.Shape": "=compound(wires)"}}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"projection": "=c.Label", "wires": "=len(wires)", "length": "=round(sum(w.Length for w in wires), 3)"}}
+  },
+  "meshobj_primitive": {
+   "group": "mesh",
+   "description": "A mesh primitive (the Mesh workbench's regular solids): kind box (size [x,y,z], a corner at at) | sphere (radius, centred) | cylinder | cone (radius at the base, radius2 at the top, height; base centre at at, up +z) | torus (radius, radius2 the tube; centred, axis z); segments round (48). Reply: mesh, facets, solid, volume, box.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "box",
+       "sphere",
+       "cylinder",
+       "cone",
+       "torus"
+      ]
+     },
+     "size": {
+      "type": "array",
+      "items": {}
+     },
+     "radius": {
+      "type": "number"
+     },
+     "radius2": {
+      "type": "number"
+     },
+     "height": {
+      "type": "number"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "segments": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"kind": "=a.get('kind', 'box')", "at": "=vec(a.at, 'at', (0, 0, 0))", "n": "=a.get('segments', 48)"}},
+    {"refuse": "segments: how many steps round, 3 … 720 (48).", "when": "=not is_int(n) or not 3 <= n <= 720"},
+    {"choose": "='round' if kind in ('cylinder', 'cone') else kind", "of": {"box": [{"let": {"size": "=a.get('size', [10, 10, 10])"}}, {"refuse": "size: [x, y, z] mm, each over 0.", "when": "=not (is_list(size) and len(size) == 3 and all(is_num(c) and c > 0 for c in size))"}, {"let": {"x, y, z": "=[float(c) for c in size]"}}, {"try": [{"let": {"m": "=mesh_box(x, y, z)"}}, {"do": "=m.translate(x / 2, y / 2, z / 2)"}], "except": [{"refuse": {"fmt": "{kind}: {error}"}}]}], "sphere": [{"let": {"r": "=num(a.get('radius', 5), 'radius')"}}, {"refuse": "radius: the radius, mm, over 0.", "when": "=r <= 0"}, {"try": [{"let": {"m": "=mesh_sphere(r, n)"}}], "except": [{"refuse": {"fmt": "{kind}: {error}"}}]}], "round": [{"let": {"r1": "=num(a.get('radius', 5), 'radius')"}}, {"refuse": "radius: the radius at the base, mm, over 0.", "when": "=r1 <= 0"}, {"let": {"h": "=num(a.get('height', 10), 'height')"}}, {"refuse": "height: the height, mm, over 0.", "when": "=h <= 0"}, {"let": {"r2": "=r1 if kind == 'cylinder' else num(a.get('radius2', 0), 'radius2')"}}, {"refuse": "radius2: the radius at the top, 0 (a point) or more.", "when": "=r2 < 0"}, {"let": {"edge": "=max(0.5, max(h, r1, r2) / 40.0)"}}, {"try": [{"let": {"m": "=mesh_cylinder(r1, h, 1, edge, n) if kind == 'cylinder' else mesh_cone(r1, r2, h, 1, edge, n)"}}, {"do": "=m.rotate(0, -pi / 2, 0)"}], "except": [{"refuse": {"fmt": "{kind}: {error}"}}]}], "torus": [{"let": {"r1": "=num(a.get('radius', 10), 'radius')"}}, {"refuse": "radius: the ring's radius, mm, over 0.", "when": "=r1 <= 0"}, {"let": {"r2": "=num(a.get('radius2', 2), 'radius2')"}}, {"refuse": "radius2: the tube's radius, mm, over 0.", "when": "=r2 <= 0"}, {"refuse": "radius2: the tube's radius, under radius (the ring's).", "when": "=r2 >= r1"}, {"try": [{"let": {"m": "=mesh_torus(r1, r2, n)"}}, {"do": "=m.rotate(0, pi / 2, 0)", "when": "=m.BoundBox.ZLength > m.BoundBox.XLength + 1e-6 or m.BoundBox.XLength < m.BoundBox.YLength - 1e-6"}, {"let": {"c": "=m.BoundBox.Center"}}, {"do": "=m.translate(-c.x, -c.y, -c.z)"}], "except": [{"refuse": {"fmt": "{kind}: {error}"}}]}]}, "else": [{"refuse": "kind: box | sphere | cylinder | cone | torus."}]},
+    {"do": "=m.translate(at.x, at.y, at.z)"},
+    {"let": {"o": "=new_mesh(m, a.name or 'Mesh ' + kind)"}}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"mesh": "=o.Label", "kind": "=kind", "...": "=reading(m)"}}
+  },
+  "meshobj_merge": {
+   "group": "mesh",
+   "description": "Put meshes into one mesh object where they stand (not fused: components stay apart; meshobj_boolean union fuses): meshes [names]; remove: true drops the originals. Reply: components, facets.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "meshes": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "remove": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "meshes"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"refs": "=a.meshes"}},
+    {"refuse": "meshes: two or more to put into one (not fused: meshobj_boolean union for that).", "when": "=not is_list(refs) or len(refs) < 2"},
+    {"let": {"objs": "=[mesh_of(r) for r in refs]"}},
+    {"refuse": "meshes: each one once.", "when": "=len({o.Name for o in objs}) < len(objs)"},
+    {"let": {"m": "=in_place(objs[0].Mesh)"}},
+    {"each": "o", "in": "=objs[1:]", "steps": [{"do": "=m.addMesh(in_place(o.Mesh))"}]},
+    {"let": {"n": "=new_mesh(m, a.name or 'Merged mesh')"}},
+    {"each": "o", "in": "=objs if a.remove else []", "steps": [{"do": "=doc().removeObject(o.Name)"}]}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"mesh": "=n.Label", "...": "=reading(m)"}}
+  },
+  "meshobj_boundary": {
+   "group": "mesh",
+   "description": "A mesh's open edges as wires (Reverse Engineering's mesh boundary): loops, openEdges, boundaries [{ edges, length, closed, centre, area }] longest first (20); keep (default) makes them a wire compound to fill, sweep or fit. A closed mesh answers loops 0.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "keep": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)"}},
+    {"let": {"pts": "=o.Mesh.Topology[0]", "edges": "=open_edges(o.Mesh)"}},
+    {"refuse": {"fmt": "{o.Label} has no triangles."}, "when": "=edges is None", "code": "invalid_state"},
+    {"when": "=not edges", "then": [{"answer": {"fields": {"mesh": "=o.Label", "loops": 0, "note": "No open edges: the mesh is closed."}}}]},
+    {"let": {"chains": "=edge_loops(edges)", "wires": [], "info": []}},
+    {"each": "c", "in": "=chains", "steps": [{"let": {"w": "=polygon([V(pts[i]) for i in c])", "closed": "=c[0] == c[-1]"}}, {"push": {"wires": "=w"}}, {"let": {"item": {"edges": "=len(c) - 1", "length": "=round(w.Length, 3)", "closed": "=closed", "centre": "=[round(x, 3) for x in w.BoundBox.Center]"}}}, {"try": [{"put": {"area": "=round(face(w).Area, 3)"}, "into": "item"}], "except": [], "when": "=closed"}, {"push": {"info": "=item"}}]},
+    {"let": {"info": "=sorted(info, key=lambda r: -r['length'])"}},
+    {"let": {"out": {"mesh": "=o.Label", "loops": "=len(chains)", "openEdges": "=len(edges)", "boundaries": "=info[:20]"}}},
+    {"when": "=a.get('keep', True)", "then": [{"add": "Part::Feature", "name": "Boundary", "as": "b"}, {"set": {"b.Shape": "=make_compound(wires)", "b.Label": "=unique(a.name or o.Label + ' boundary')"}}, {"do": ["=doc().recompute()", "=snapshot(tool)"]}, {"put": {"wires": "=b.Label"}, "into": "out"}]}
+   ],
+   "answer": {"fields": {"...": "=out"}}
+  },
+  "meshobj_export": {
+   "group": "mesh",
+   "description": "Write a document mesh to a file, the format by path's extension: stl (binary), ast, obj, ply, off, 3mf, amf, smf, wrl, x3d, iv, nas … (default <label>.stl in the out folder), where it stands, in mm. Reply: file, format, bytes, facets. Changes nothing; background: true runs a big one as a job.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string",
+      "description": "The mesh's label; may be left out when there is one."
+     },
+     "path": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/meshobj.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=mesh_of(a.mesh)"}},
+    {"let": {"writes": ["stl", "ast", "obj", "off", "ply", "3mf", "amf", "smf", "iv", "x3d", "x3dz", "xhtml", "wrl", "vrml", "wrz", "nas", "bdf", "py", "asy", "bms", "idtf", "mgl"], "want": "=a.path or o.Label + '.stl'"}},
+    {"let": {"ext": "=file_ext(want)"}},
+    {"refuse": {"fmt": "path: its extension picks the format — one of {', '.join(writes)} (stl is binary, ast its text form). Not .{ext or '(none)'}."}, "when": "=ext not in writes"},
+    {"refuse": {"fmt": "{o.Label} has no triangles to write."}, "when": "=o.Mesh.CountFacets == 0", "code": "invalid_state"},
+    {"let": {"p": "=out_file(tool, want)"}},
+    {"try": [{"do": "=o.Mesh.write(p)"}], "except": [{"refuse": {"fmt": "Not written: {error} — formats by extension: {', '.join(writes)}."}, "code": "failed"}]},
+    {"refuse": {"fmt": "FreeCAD wrote no file at {p} (.{ext}): try stl, obj, ply or 3mf."}, "when": "=not isfile(p)", "code": "failed"}
+   ],
+   "answer": {"fields": {"mesh": "=o.Label", "file": "=p", "format": "=ext", "bytes": "=filesize(p)", "facets": "=o.Mesh.CountFacets", "note": "Written where the mesh stands (its placement applied), in mm. import_file reads it back."}}
+  },
+  "points_import": {
+   "group": "points",
+   "description": "Read a point cloud file: path .asc / .xyz / .txt / .csv (x y z a line), .pcd, .ply, .e57 (where FreeCAD has the E57 library). every: keep every n-th point; scale: mm per file unit (1000 for metres). Positions only. The whole file is read into memory: thin a huge one with every. Answers object, points (kept), read, min, max, box.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string"
+     },
+     "every": {
+      "type": "integer"
+     },
+     "scale": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/points.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "path: a file (in the session's output folder when relative).", "when": "=not a.path"},
+    {"let": {"p": "=local(a.path)"}},
+    {"refuse": {"fmt": "path {a.path!r}: no such file (a relative path is looked for in the session's output folder; give the full path of a file elsewhere)."}, "when": "=not isfile(p)", "code": "not_found"},
+    {"let": {"reads": ["asc", "xyz", "txt", "csv", "pcd", "ply", "e57"], "ext": "=file_ext(p)", "base": "=basename(p)"}},
+    {"refuse": {"fmt": "path: .{ext or '(no ending)'} is not read here — one of {', '.join(reads)}. A mesh (.stl, .obj) is opened with import_file and sampled with points_sample."}, "when": "=ext not in reads"},
+    {"let": {"k": "=int(a.get('every', 1))"}},
+    {"refuse": "every: keep every n-th point, 1 or more.", "when": "=k < 1"},
+    {"let": {"scale": "=num(a.get('scale', 1.0), 'scale')"}},
+    {"refuse": "scale: what one file unit is in mm, above 0 (1000 for metres, 25.4 for inches).", "when": "=scale <= 0"},
+    {"try": [{"let": {"P": "=read_file(p) if ext != 'e57' else read_e57(p)"}}], "except": [{"refuse": {"fmt": "{base} could not be read: {error} (E57 needs a FreeCAD built with the E57 library; save the scan as .ply or .pcd instead)."}, "when": "=ext == 'e57'", "code": "failed"}, {"refuse": {"fmt": "{base} could not be read: {error}. A text file needs x y z on each line; a .ply its vertices' x, y, z; a compressed .pcd saved as ascii or binary."}, "code": "failed"}]},
+    {"refuse": {"fmt": "{base}: no points read (no line had three numbers)."}, "when": "=not len(P)", "code": "failed"},
+    {"let": {"P": "=finite(P)"}},
+    {"refuse": {"fmt": "{base}: every point is NaN or infinite."}, "when": "=not len(P)", "code": "failed"},
+    {"let": {"total": "=len(P)"}},
+    {"let": {"P": "=P[::k] * scale"}},
+    {"let": {"o": "=make(P, a.name or stem(p))"}}
+   ],
+   "answer": {"via": "finish_as_is", "with": ["=tool", "$fields"], "late": true, "fields": {"...": "=reading(o, P)", "read": "=total"}}
+  },
+  "points_sample": {
+   "group": "points",
+   "description": "A point cloud spread evenly over a body's, surface's or mesh's faces (object): count (5000; up to 2000000), noise mm (to try a fit as a scan would see it), seed, tolerance mm (faceting of curved faces, 0.01). Answers object, points, min, max, box.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "object": {
+      "type": "string"
+     },
+     "count": {
+      "type": "integer"
+     },
+     "noise": {
+      "type": "number"
+     },
+     "seed": {
+      "type": "integer"
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "object"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/points.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=find(a.object, 'object')", "n": "=int(a.get('count', 5000))"}},
+    {"refuse": "count: 3 … 2000000 points.", "when": "=not 3 <= n <= 2000000"},
+    {"refuse": "noise: mm of scatter (one standard deviation), 0 or more.", "when": "=float(a.get('noise', 0)) < 0"},
+    {"when": "=o.isDerivedFrom('Mesh::Feature')", "then": [{"let": {"pts, tri": "=o.Mesh.Topology"}}], "else": [{"let": {"sh": "=get(o, 'Shape')"}}, {"refuse": {"fmt": "object: {o.Label} has no faces to sample; give a body, a surface or a mesh."}, "when": "=not is_shape(sh) or sh.isNull() or not sh.Faces"}, {"let": {"tol": "=num(a.get('tolerance', 0.01), 'tolerance')"}}, {"refuse": "tolerance: mm the sampled facets may stray from curved faces, above 0 (0.01).", "when": "=tol <= 0"}, {"let": {"pts, tri": "=sh.tessellate(tol)"}}]},
+    {"refuse": {"fmt": "object: {o.Label} gave no triangles to sample."}, "when": "=not len(tri)"},
+    {"let": {"noise": "=float(a.get('noise', 0))"}},
+    {"let": {"P": "=sampled(pts, tri, n, int(a.get('seed', 1)), noise)"}},
+    {"let": {"c": "=make(P, a.name or o.Label + ' points')"}}
+   ],
+   "answer": {"via": "finish_as_is", "with": ["=tool", "$fields"], "late": true, "fields": {"...": "=reading(c, P)", "from": "=o.Label", "noise": {"when": "=noise", "value": "=noise"}}}
+  },
+  "points_info": {
+   "group": "points",
+   "description": "A point cloud's points (count), min, max, box (mm, where it stands in the document), centre and spacing (typical gap between neighbours). Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "points": {
+      "type": "string",
+      "description": "The point cloud's label (the only one when left out)."
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/points.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=cloud(a.points)"}},
+    {"let": {"P": "=array_of(o)"}},
+    {"let": {"out": "=reading(o, P)"}},
+    {"put": {"spacing": "=round(spacing(P), 4)", "centre": "=[round(float(x), 3) for x in P.mean(axis=0)]"}, "into": "out", "when": "=len(P) >= 2"}
+   ],
+   "answer": {"fields": {"...": "=out"}}
+  },
+  "points_crop": {
+   "group": "points",
+   "description": "Keep part of a cloud, filters combined: box [[min], [max]], near [x, y, z] with radius, plane { at, normal } (the side the normal points to); outside: true keeps the rest. specks { radius, least } drops points with fewer than least neighbours; thin mm keeps one point per cell. The cloud itself is cut down unless replace: false. Answers from, kept, min, max, box; refused, nothing changed, when no point is left.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "points": {
+      "type": "string",
+      "description": "The point cloud's label (the only one when left out)."
+     },
+     "box": {
+      "type": "array",
+      "items": {}
+     },
+     "near": {
+      "type": "array",
+      "items": {}
+     },
+     "radius": {
+      "type": "number"
+     },
+     "plane": {
+      "type": "object"
+     },
+     "outside": {
+      "type": "boolean"
+     },
+     "thin": {
+      "type": "number"
+     },
+     "specks": {
+      "type": "object"
+     },
+     "replace": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/points.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=cloud(a.points)"}},
+    {"let": {"P": "=array_of(o)"}},
+    {"let": {"keep": "=everything(P)"}},
+    {"when": "=a.box is not None", "then": [{"let": {"b": "=a.box"}}, {"refuse": "box: [[xmin, ymin, zmin], [xmax, ymax, zmax]] in mm, document coordinates (points_info gives the cloud's min and max).", "when": "=not (is_list(b) and len(b) == 2 and all(is_list(x) and len(x) == 3 for x in b))"}, {"let": {"keep": "=both(keep, in_box(P, b))"}}]},
+    {"when": "=a.near is not None", "then": [{"refuse": "radius: mm round near to keep (near and radius go together).", "when": "=a.radius is None"}, {"let": {"r": "=num(a.radius, 'radius')"}}, {"refuse": "radius: mm, above 0.", "when": "=r <= 0"}, {"let": {"keep": "=both(keep, within(P, xyz(a.near, 'near'), r))"}}]},
+    {"when": "=a.plane is not None", "then": [{"let": {"pl": "=a.plane"}}, {"refuse": "plane: { at [x, y, z], normal [x, y, z] }: the side the normal points to is kept.", "when": "=not is_dict(pl)"}, {"try": [{"let": {"n": "=unit(pl.get('normal', [0, 0, 1]))"}}], "on": ["TypeError", "ValueError"], "except": [{"refuse": "plane.normal: a direction [x, y, z], not zero."}]}, {"let": {"keep": "=both(keep, in_front(P, xyz(pl.get('at', [0, 0, 0]), 'plane.at'), n))"}}]},
+    {"let": {"filtered": "=any(a.get(k) is not None for k in ('box', 'near', 'plane'))"}},
+    {"refuse": "Nothing to do: give box, near + radius, plane, thin or specks.", "when": "=not filtered and not a.thin and not a.specks"},
+    {"refuse": "outside: true needs a box, near + radius or plane to be outside of.", "when": "=a.outside and not filtered"},
+    {"let": {"keep": "=inverse(keep)"}, "when": "=a.outside"},
+    {"let": {"Q": "=P[keep]", "dropped": 0}},
+    {"when": "=a.specks", "then": [{"let": {"sp": "=a.specks"}}, {"let": {"rr": "=float(sp.get('radius', 1.0))", "least": "=int(sp.get('least', 4))"}}, {"let": {"Q, dropped, why": "=without_specks(Q, rr, least)"}}, {"refuse": {"fmt": "specks: {why}"}, "when": "=why is not None"}]},
+    {"when": "=a.thin", "then": [{"let": {"vx": "=num(a.thin, 'thin')"}}, {"refuse": "thin: the cell size in mm, above 0 — one point kept per cell.", "when": "=vx <= 0"}, {"let": {"Q": "=thinned(Q, vx)"}}]},
+    {"when": "=not len(Q)", "then": [{"let": {"lo": "=[round(float(x), 2) for x in P.min(axis=0)]", "hi": "=[round(float(x), 2) for x in P.max(axis=0)]"}}, {"refuse": {"fmt": "Nothing left after the crop: no point was kept, and the cloud is unchanged. It spans {lo} … {hi}; check the box or plane against that."}, "code": "failed"}]},
+    {"when": "=a.get('replace', True)", "then": [{"let": {"pk": "=kernel(Q)"}}, {"set": {"o.Placement": "=placement()", "o.Points": "=pk"}}, {"do": "=doc().recompute()"}, {"let": {"c": "=o"}}], "else": [{"let": {"c": "=make(Q, a.name or o.Label + ' cropped')"}}]}
+   ],
+   "answer": {"via": "finish_as_is", "with": ["=tool", "$fields"], "late": true, "fields": {"...": "=reading(c, Q)", "from": "=int(len(P))", "kept": "=int(len(Q))", "specksDropped": {"when": "=a.specks", "value": "=dropped"}}}
+  },
+  "points_fit": {
+   "group": "points",
+   "description": "Fit a shape through all of a cloud's points (crop to the one feature first): shape plane (centre, normal) | sphere (centre, diameter) | cylinder (base, axis, diameter, length; axis is a hint) | surface (a B-spline sheet over the points' own plane, one side only: degree 3, poles 6, smooth; 200000 points at most) | curve (a B-spline along a line of points; a loop closes itself: degree, tolerance). Answers rms and max (the points' distance from it, mm; a large max means the crop holds more than the feature); tolerance adds verdict fits | does not fit. make: true keeps the shape as an object (a surface or curve always is).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "points": {
+      "type": "string",
+      "description": "The point cloud's label (the only one when left out)."
+     },
+     "shape": {
+      "type": "string",
+      "enum": [
+       "plane",
+       "sphere",
+       "cylinder",
+       "surface",
+       "curve"
+      ]
+     },
+     "axis": {
+      "type": "array",
+      "items": {}
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "make": {
+      "type": "boolean"
+     },
+     "degree": {
+      "type": "integer"
+     },
+     "poles": {
+      "type": "integer"
+     },
+     "smooth": {
+      "type": "boolean"
+     },
+     "weight": {
+      "type": "number"
+     },
+     "iterations": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/points.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=cloud(a.points)"}},
+    {"let": {"P": "=array_of(o)"}},
+    {"let": {"kind": "=a.get('shape', 'plane')"}},
+    {"refuse": "shape: plane | sphere | cylinder | surface (a free B-spline) | curve (a B-spline through a line of points).", "when": "=kind not in ('plane', 'sphere', 'cylinder', 'surface', 'curve')"},
+    {"refuse": "tolerance: mm, above 0.", "when": "=a.tolerance is not None and float(a.tolerance) <= 0"},
+    {"let": {"hint": null}},
+    {"when": "=kind == 'cylinder' and a.axis is not None", "then": [{"let": {"hint": "=xyz(a.axis, 'axis')"}}, {"refuse": "axis: a direction [x, y, z], not zero (leave it out to let the fit find it).", "when": "=not norm(hint)"}]},
+    {"let": {"f, why": "=fitted(kind, P, hint)"}},
+    {"refuse": {"fmt": "{why} points_info counts the cloud; points_crop narrows it to the one feature."}, "when": "=why is not None", "code": "failed"},
+    {"let": {"out": {"points": "=o.Label", "shape": "=kind"}, "body": null, "kept": "=a.make"}},
+    {"choose": "=kind", "of": {"surface": [{"let": {"RE": "=reverse_engineering()"}}, {"refuse": "Reverse Engineering is not in this FreeCAD build: fit a plane, sphere or cylinder, or points_mesh for a mesh.", "when": "=RE is None", "code": "unavailable"}, {"let": {"ud": "=int(a.get('degree', 3))"}}, {"let": {"nu": "=int(a.get('poles', 6))"}}, {"refuse": "degree 1 or more, and poles more than the degree (6 poles for degree 3).", "when": "=ud < 1 or nu <= ud"}, {"refuse": {"fmt": "The cloud has {len(P)} points; a surface of {nu} × {nu} poles needs {nu * nu} or more. Fewer poles, or more points."}, "when": "=len(P) < nu * nu"}, {"refuse": {"fmt": "{len(P)} points is more than a surface fit takes in one call (200000): points_crop {{ thin }} first; the fit gains nothing from more."}, "when": "=len(P) > 200000"}, {"let": {"pk": "=kernel(P)"}}, {"try": [{"let": {"srf": "=RE.approxSurface(Points=pk, UDegree=ud, VDegree=ud, NbUPoles=nu, NbVPoles=nu, Smooth=bool(a.get('smooth', True)), Weight=float(a.get('weight', 0.1)), Iterations=int(a.get('iterations', 5)))"}}], "except": [{"refuse": {"fmt": "The surface could not be fitted: {error}. It fits one sheet seen from one side (like a height field over the points' own plane): crop to such a patch, or use fewer poles."}, "code": "failed"}]}, {"let": {"face": "=srf.toShape()"}}, {"let": {"d": "=distances(face, P)"}}, {"put": {"degree": "=ud", "poles": ["=nu", "=nu"], "rms": "=rms(d)", "max": "=round(float(d.max()), 4)", "sampled": "=int(len(d))", "area": "=round(face.Area, 3)"}}, {"let": {"body": "=face", "kept": true}}], "curve": [{"let": {"tol": "=float(a.get('tolerance', 0.1))", "ring": "=ring_order(P)"}}, {"let": {"loop": "=a.get('closed', ring is not None)"}}, {"refuse": "closed: these points do not go round a centre (a gap wider than 45° seen from it, or points near the middle); leave closed out for an open curve.", "when": "=loop and ring is None"}, {"let": {"Q": "=along(P, ring if loop else chain_order(P))"}}, {"refuse": {"fmt": "curve: four or more points along a line, not {len(Q)}."}, "when": "=len(Q) < 4"}, {"try": [{"let": {"c": "=curve_through(Q, loop, a.get('degree', 3), tol)"}}], "except": [{"refuse": {"fmt": "No curve through these points: {error}. A larger tolerance, or crop to the one line of points."}, "code": "failed"}]}, {"let": {"edge": "=c.toShape()"}}, {"let": {"d": "=distances(edge, P)"}}, {"put": {"length": "=round(edge.Length, 3)", "poles": "=c.NbPoles", "degree": "=c.Degree", "closed": "=bool(loop)", "rms": "=rms(d)", "max": "=round(float(d.max()), 4)"}}, {"let": {"body": "=edge", "kept": true}}], "plane": [{"put": {"centre": "=[round(float(x), 4) for x in f['centre']]", "normal": "=[round(float(x), 4) for x in f['normal']]"}}, {"let": {"body": "=plane_patch(P, f)"}, "when": "=a.make"}], "sphere": [{"put": {"centre": "=[round(float(x), 4) for x in f['centre']]", "radius": "=round(f['radius'], 4)", "diameter": "=round(2 * f['radius'], 4)"}}, {"let": {"body": "=sphere(f['radius'], vec(f['centre']))"}, "when": "=a.make"}], "cylinder": [{"put": {"base": "=[round(float(x), 4) for x in f['base']]", "axis": "=[round(float(x), 4) for x in f['axis']]", "radius": "=round(f['radius'], 4)", "diameter": "=round(2 * f['radius'], 4)", "length": "=round(f['length'], 4)"}}, {"let": {"body": "=cylinder(f['radius'], max(f['length'], 1e-3), vec(f['base']), vec(f['axis']))"}, "when": "=a.make"}]}},
+    {"put": {"rms": "=round(f['rms'], 4)", "max": "=round(f['max'], 4)"}, "when": "=f is not None"},
+    {"put": {"verdict": "='fits' if out['max'] <= float(a.tolerance) else 'does not fit'", "tolerance": "=float(a.tolerance)"}, "when": "=a.tolerance is not None"},
+    {"when": "=body is not None and kept", "then": [{"add": "Part::Feature", "name": "Fit", "as": "b"}, {"set": {"b.Label": "=unique(a.name or o.Label + ' ' + kind)", "b.Shape": "=body"}}, {"put": {"body": "=b.Label"}}, {"do": "=finish(tool, out)"}]}
+   ],
+   "answer": {"fields": {"...": "=out"}}
+  },
+  "points_merge": {
+   "group": "points",
+   "description": "Join two or more point clouds into a new one: points [labels]; remove: true deletes the originals. Answers points (its label), count, box.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "points": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "remove": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "points"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/points.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"refs": "=a.points"}},
+    {"refuse": "points: two or more clouds to join, a list of labels.", "when": "=not is_list(refs) or len(refs) < 2"},
+    {"let": {"srcs": "=[cloud(r) for r in refs]"}},
+    {"refuse": "points: each cloud once.", "when": "=len({c.Name for c in srcs}) < len(srcs)"},
+    {"let": {"P": "=stacked(srcs)"}},
+    {"let": {"o": "=make(P, a.name or 'Merged points')"}},
+    {"each": "c", "in": "=srcs if a.remove else []", "steps": [{"do": "=doc().removeObject(c.Name)"}]}
+   ],
+   "answer": {"via": "finish_as_is", "with": ["=tool", "$fields"], "late": true, "fields": {"points": "=o.Label", "count": "=int(len(P))", "...": "={k: v for k, v in reading(o, P).items() if k in ('min', 'max', 'box')}", "from": "=list(refs)", "removed": "=bool(a.remove)"}}
+  },
+  "points_mesh": {
+   "group": "points",
+   "description": "A mesh through a point cloud: method height (one side of a surface: a height field on the points' own plane, one vertex per cell mm, about six points a cell by default) | hull (convex) | poisson (closed; only in a FreeCAD built with PCL; depth). Answers mesh, facets, area, closed. Then meshobj_repair / part_from_mesh.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "points": {
+      "type": "string",
+      "description": "The point cloud's label (the only one when left out)."
+     },
+     "method": {
+      "type": "string",
+      "enum": [
+       "height",
+       "hull",
+       "poisson"
+      ]
+     },
+     "cell": {
+      "type": "number"
+     },
+     "depth": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/points.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=cloud(a.points)"}},
+    {"let": {"P": "=array_of(o)"}},
+    {"let": {"method": "=a.get('method', 'height')"}},
+    {"refuse": "method: height (one side, gridded) | hull (convex) | poisson (needs FreeCAD built with PCL).", "when": "=method not in ('height', 'hull', 'poisson')"},
+    {"refuse": {"fmt": "{o.Label} has {len(P)} points: a mesh needs four or more."}, "when": "=len(P) < 4"},
+    {"choose": "=method", "of": {"height": [{"refuse": "cell: mm, above 0 (left out: about six points to a cell).", "when": "=a.cell is not None and float(a.cell) <= 0"}, {"let": {"V, T, cell": "=grid_mesh(P, float(a.cell) if a.cell else None)"}}, {"refuse": {"fmt": "No triangles at a {cell:g} mm cell: a larger cell (points_info gives the spacing; two or three times it), or the points are not a surface seen from one side."}, "when": "=not T", "code": "failed"}, {"refuse": {"fmt": "A {cell:g} mm cell makes {len(T)} triangles: a larger cell (2000000 at most)."}, "when": "=len(T) > 2000000"}, {"let": {"m": "=triangles_mesh(V, T)", "note": {"fmt": "A height field on the points' own plane, one vertex per {cell:g} mm cell: for a scan of one side (terrain, a panel, a face)."}}}], "hull": [{"let": {"V, T": "=hull(P)"}}, {"let": {"m": "=triangles_mesh(V, T)", "note": "The convex hull: the shrink-wrap round every point."}}], "poisson": [{"try": [{"let": {"m": "=poisson(P, a.get('depth', 8))"}}], "except": [{"refuse": {"fmt": "Poisson reconstruction is not in this FreeCAD build ({error}): it needs a FreeCAD compiled with the Point Cloud Library. method height or hull instead."}, "code": "unavailable"}]}, {"let": {"note": "Poisson reconstruction: a closed surface through the cloud."}, "when": "=m.isSolid()"}, {"let": {"note": "Poisson reconstruction: a surface through the cloud that did not come back closed — meshobj_info says why, meshobj_repair { fix: [\"duplicates\", \"degenerate\", \"holes\"] } usually closes it."}, "when": "=not m.isSolid()"}]}},
+    {"add": "Mesh::Feature", "name": "Mesh", "as": "mo"},
+    {"set": {"mo.Mesh": "=m", "mo.Label": "=unique(a.name or o.Label + ' mesh')"}},
+    {"do": ["=doc().recompute()", "=snapshot('points_mesh')"]}
+   ],
+   "answer": {"fields": {"mesh": "=mo.Label", "method": "=method", "facets": "=int(m.CountFacets)", "points": "=int(m.CountPoints)", "area": "=round(m.Area, 3)", "closed": "=bool(m.isSolid())", "note": "=note", "step": "=steps_n()"}}
+  },
+  "points_export": {
+   "group": "points",
+   "description": "Write a point cloud (mm, where it stands) to path: .ply (binary, 32-bit floats), .pcd, .asc / .xyz, .csv; <label>.ply in the output folder by default. Read back: answers count, readBack (should match), maxError. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "points": {
+      "type": "string",
+      "description": "The point cloud's label (the only one when left out)."
+     },
+     "path": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/points.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=cloud(a.points)"}},
+    {"let": {"P": "=array_of(o)"}},
+    {"let": {"p": "=local(a.path or o.Label.replace(' ', '_') + '.ply')"}},
+    {"let": {"ext": "=file_ext(p)"}},
+    {"refuse": {"fmt": "path: .{ext or '(no ending)'} is not a format written here; end it .ply, .pcd, .asc, .xyz or .csv."}, "when": "=ext not in ('asc', 'xyz', 'pcd', 'ply', 'csv')"},
+    {"refuse": {"fmt": "{o.Label} has no points to write."}, "when": "=not len(P)", "code": "invalid_state"},
+    {"do": ["=makedirs(dirname(p))", "=write_points(p, P)"]},
+    {"let": {"out": {"points": "=o.Label", "path": "=p", "bytes": "=filesize(p)", "count": "=int(len(P))"}}},
+    {"try": [{"let": {"back": "=read_file(p)"}}, {"put": {"readBack": "=int(len(back))"}}, {"when": "=len(back) == len(P)", "then": [{"put": {"maxError": "=round(float(abs(back - P).max()), 6)"}}], "else": [{"put": {"warning": {"fmt": "The file reads back as {len(back)} points, not {len(P)}."}}}]}], "except": [{"put": {"warning": {"fmt": "The file could not be read back: {error}"}}}]}
+   ],
+   "answer": {"fields": {"...": "=out"}}
   }
  }
 }
