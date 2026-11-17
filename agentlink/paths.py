@@ -77,7 +77,9 @@ def local(session, p, expand=True, kind=None):
     A path in the output folder with nothing there yet is noted, and recorded
     as the call's output if it exists after the call (agentlink/outputs.py):
     kind shot, run or export, else told by the tool and the name."""
-    q = os.path.expanduser(p) if expand else p
+    # "~/x" is always the person's home (paths.check reads it so): never a
+    # folder named "~" in the output folder (live 17 Nov, bim_export).
+    q = os.path.expanduser(p) if expand or str(p).startswith("~") else p
     q = q if os.path.isabs(q) else os.path.join(session.out_dir, q)
     return made(session, q, kind)
 
