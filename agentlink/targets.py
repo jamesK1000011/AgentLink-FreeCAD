@@ -86,9 +86,15 @@ def actions(cmd, mw=None):
 def associated(act):
     """The widgets an action shows in (its buttons, its menus)."""
     try:
-        return list(act.associatedWidgets() if hasattr(act, "associatedWidgets") else act.associatedObjects())
+        found = list(act.associatedWidgets() if hasattr(act, "associatedWidgets") else act.associatedObjects())
     except RuntimeError:
         return []
+    try:
+        from . import overlay
+
+        return [w for w in found if overlay.alive(w)]
+    except Exception:  # noqa: BLE001  (no overlay module in a stand-in)
+        return found
 
 
 def buttons(cmd, mw=None):

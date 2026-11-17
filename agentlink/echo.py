@@ -1039,7 +1039,10 @@ def flash_command(cmd, ms=HOLD_MS, settle=False, menu_ms=1300):
             elif isinstance(w, QtW.QMenu):
                 # The menu item and its menu's title in bold for a moment
                 # (no menu is opened: that would take the person's input).
-                lit += [act, w.menuAction()]
+                # Only the item itself: QMenu.menuAction() on a menu that FreeCAD
+                # is rebuilding gave back a dead action and FreeCAD crashed
+                # (17 Nov, SIGSEGV in PySide's wrapper for it).
+                lit += [act]
     if flashed:
         how = "button"
     else:
