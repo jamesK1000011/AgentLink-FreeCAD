@@ -12684,6 +12684,7 @@
          "kind": "=kind",
          "job": "=job.Label",
          "...": "=stats",
+         "...seen": "=path_seen(op)",
          "tool": "=op.ToolController.Label if get(op, 'ToolController') is not None else None",
          "depths": {"start": "=qty(op.StartDepth, 'mm')", "final": "=qty(op.FinalDepth, 'mm')", "stepDown": "=qty(op.StepDown, 'mm') if has(op, 'StepDown') else None"},
          "faces": {"when": "=a.faces is not None", "value": "=op.Base[0][1] if op.Base else []"},
@@ -12731,7 +12732,7 @@
    "runner": "steps",
    "steps": [
     {"let": {"job": "=job_of(a.job)"}},
-    {"let": {"ops": "=[merged({'op': op.Label, 'type': op_type(op), 'active': bool(get(op, 'Active', True))}, path_stats(commands(op), tc_for(op))) for op in job.Operations.Group]"}}
+    {"let": {"ops": "=[merged({'op': op.Label, 'type': op_type(op), 'active': bool(get(op, 'Active', True))}, path_stats(commands(op), tc_for(op)), path_seen(op)) for op in job.Operations.Group]"}}
    ],
    "answer": {"fields": {"job": "=job.Label", "stock": "=stock_out(job)", "tool": "=tool_out(tc_of(job))", "ops": "=ops", "minutes": "=round(sum(o['minutes'] for o in ops), 2)"}}
   },
@@ -13120,6 +13121,7 @@
      "before": "={k: before[k] for k in ('cutMm', 'minutes')}",
      "after": "={k: after[k] for k in ('cutMm', 'minutes')}",
      "tags": {"when": "=kind == 'tags' and has(dr, 'Positions')", "value": "=len(dr.Positions)"},
+     "...seen": "=path_seen(dr)",
      "note": "cam_post writes the dressed path; cam_sim checks it."
     }
    }

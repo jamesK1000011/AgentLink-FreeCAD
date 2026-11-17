@@ -684,6 +684,9 @@ class Server:
 
         job = jobs.start(tool, args, self.session)
         if jobs.wait_for(job, jobs.JOB_WAIT if wait is None else wait):
+            # Its answer goes back in this call: the echo shows it with the
+            # call (agentlink/echo.py), not again when the job's end is heard.
+            jobs.answered(job)
             if job["status"] == "failed":
                 raise ToolError(job["error"]["code"], job["error"]["message"])
             out = job["result"]

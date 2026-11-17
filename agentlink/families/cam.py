@@ -139,6 +139,37 @@ def path_stats(commands, tc):
     return out
 
 
+def path_seen(x):
+    """What a person could see of an operation's or dressup's path, told
+    without a picture (round 6, cam 008-032 showed no toolpath): path {
+    moves: the motion commands (G0-G3 and cycles), length: mm of them },
+    shown: FreeCAD draws it (the object's Visibility, and every group it is
+    in shown), and why not when it is not."""
+    cmds = list(x.Path.Commands) if getattr(x, "Path", None) is not None else []
+    moves = [c for c in cmds if c.Name.upper() in ("G0", "G00", "G1", "G01", "G2", "G02", "G3", "G03") + CYCLES]
+    st = path_stats(cmds, None)
+    out = {"path": {"moves": len(moves), "length": round(st["cutMm"] + st["rapidMm"], 1)}}
+    why = None
+    try:
+        if not bool(getattr(x, "Visibility", True)):
+            why = f"{x.Label} is hidden"
+        elif not bool(getattr(x, "Active", True)):
+            why = f"{x.Label} is not Active"
+        elif not moves:
+            why = f"{x.Label} has no moves (recompute, or nothing to cut)"
+        else:
+            for p in getattr(x, "InListRecursive", None) or ():
+                if "Operations" in (getattr(p, "PropertiesList", None) or ()) and not bool(getattr(p, "Visibility", True)):
+                    why = f"its job {p.Label} is hidden (CAM hides the job's operations with it)"
+                    break
+    except Exception:  # noqa: BLE001
+        pass
+    out["shown"] = why is None
+    if why:
+        out["shownWhy"] = why
+    return out
+
+
 def tools(session):
     s = session
 
@@ -584,7 +615,7 @@ def tools(session):
                "vector": lambda xs: FreeCAD.Vector(*xs), "path_module": path_module,
                # the family's
                "OPS": OPS, "POSTS": POSTS, "SHAPES": SHAPES, "BIT_PROPS": BIT_PROPS, "DRESSUPS": DRESSUPS, "HINTS": HINTS, "CUTS": ("G1", "G2", "G3", "G01", "G02", "G03") + CYCLES,
-               "path_stats": path_stats, "tc_of": tc_of, "tc_for": tc_for, "base_op": base_op, "set_tool": set_tool, "tool_out": tool_out, "stock_out": stock_out,
+               "path_stats": path_stats, "path_seen": path_seen, "tc_of": tc_of, "tc_for": tc_for, "base_op": base_op, "set_tool": set_tool, "tool_out": tool_out, "stock_out": stock_out,
                "commands": commands, "op_type": op_type, "with_tool": with_tool, "face_names": face_names, "where": where, "make_op": make_op, "enum_of": enum_of, "stack_of": stack_of,
                "sim_tool": sim_tool, "sim_run": sim_run, "sim_picture": sim_picture, "post_factory": post_factory, "by_job": by_job, "post_script": post_script,
                "postables": postables, "shape_file": shape_file, "bit_factory": bit_factory, "toolbit": toolbit, "bit_of": bit_of, "write_tools": write_tools,

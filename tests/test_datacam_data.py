@@ -120,6 +120,7 @@ class CamData(unittest.TestCase):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
+            c = _without_seen(c)
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
@@ -305,6 +306,33 @@ def _main(mode):
         rows.append(row)
     print(json.dumps(rows, ensure_ascii=False))
 
+
+
+SEEN = ("path", "shown", "shownWhy")
+
+
+def _without_seen(c):
+    """Meant difference (round 6): cam_op, cam_dressup and each cam_list row
+    say what a person could see of the path (path { moves, length }, shown,
+    shownWhy), which the handlers did not. Checked for shape, then left out
+    so the rest compares byte for byte."""
+    res = c["new"]["result"]
+    if res[0] != "ok" or not isinstance(res[1], dict):
+        return c
+
+    def strip(d):
+        if not isinstance(d, dict) or "path" not in d or "shown" not in d:
+            return d
+        assert set(d["path"]) == {"moves", "length"}, d["path"]
+        assert isinstance(d["shown"], bool)
+        return {k: v for k, v in d.items() if k not in SEEN}
+
+    body = dict(res[1])
+    if c["tool"] in ("cam_op", "cam_dressup"):
+        body = strip(body)
+    if c["tool"] == "cam_list" and isinstance(body.get("ops"), list):
+        body["ops"] = [strip(o) for o in body["ops"]]
+    return {**c, "new": {**c["new"], "result": [res[0], body] + list(res[2:])}}
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] in ("--before", "--behave", "--helpers"):

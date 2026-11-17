@@ -20,6 +20,8 @@ INFO = "Robot: six-axis robots (KUKA models, your own kinematics), moves by axes
 
 V = FreeCAD.Vector
 MODELS = ("kr16", "kr125", "kr210", "kr500")
+NO_MODEL = ("no robot model file is set (RobotVrmlFile empty: this FreeCAD ships no KUKA picture, or the built-in default robot), "
+            "so FreeCAD draws no arm; the window marks its base, tool point and trajectories instead.")
 
 
 def lib_file(model, ext):
@@ -115,7 +117,10 @@ def tools(session):
         """A robot as the tools answer it: robot, axes, tcp (the tool point; flange beside it when a tool is set), and FreeCAD's error when it has one."""
         t = tool_of(o)
         return {"robot": o.Label, "axes": axes_of(o), "tcp": pl_out(o.Tcp.multiply(t) if t else o.Tcp), **({"flange": pl_out(o.Tcp)} if t else {}),
-                **({"error": o.Error} if getattr(o, "Error", "") else {})}
+                **({"error": o.Error} if getattr(o, "Error", "") else {}),
+                # No model file: FreeCAD draws no arm at all (ViewProviderRobotObject draws only the VRML file;
+                # src/Mod/Robot/Gui/ViewProviderRobotObject.cpp 168-200), so a window shows nothing of it.
+                **({"drawn": False, "drawnWhy": NO_MODEL} if not str(getattr(o, "RobotVrmlFile", "") or "") else {})}
 
     def sweep(o, t, n):
         """A trajectory followed by a robot at n points by time, each solved

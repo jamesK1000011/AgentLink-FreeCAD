@@ -451,6 +451,48 @@ def _short_num(v):
     return str(v)
 
 
+def fem_value(b):
+    """A strength answer's figure (round 6, fem 030, 034): the peak stress
+    ("max 41.2 MPa, safety 6.1"), the first frequencies ("3 modes: 12.3, 45.6,
+    78.9 Hz"), the hottest point. None for any other answer. Plain Python."""
+    def num(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+    vm = b.get("vonMisesMax")
+    mpa = vm.get("MPa") if isinstance(vm, dict) else b.get("vonMisesMaxMPa")
+    if num(mpa):
+        out = f"max {_short_num(mpa)} MPa"
+        if num(b.get("safety")):
+            out += f", safety {_short_num(b['safety'])}"
+        return out
+    modes = b.get("modes")
+    if isinstance(modes, list) and modes and all(isinstance(m, dict) for m in modes):
+        hz = [m.get("hz") for m in modes if num(m.get("hz"))]
+        if hz:
+            return f"{len(modes)} modes: {', '.join(_short_num(h) for h in hz[:3])} Hz"
+        lf = [m.get("factor") for m in modes if num(m.get("factor"))]
+        if lf:
+            return f"lowest load factor {_short_num(lf[0])}"
+    hot = b.get("hottest")
+    if isinstance(hot, dict) and num(hot.get("celsius")):
+        return f"hottest {_short_num(hot['celsius'])} °C"
+    return None
+
+
+def cam_value(b):
+    """A CAM simulation's answer in a few words (round 6, cam 013: "clear"
+    said less than round 3's "75 % left, up to 9 mm"): the verdict, what was
+    removed, what is left over the part. None for any other answer. Plain
+    Python."""
+    if not isinstance(b.get("removedMm3"), (int, float)) or not isinstance(b.get("verdict"), str):
+        return None
+    out = [b["verdict"], f"{_short_num(b['removedMm3'])} mm³ removed"]
+    left = (b.get("part") or {}).get("left") if isinstance(b.get("part"), dict) else None
+    if isinstance(left, dict) and isinstance(left.get("share"), (int, float)):
+        out.append(f"{round(100 * left['share'])} % left, up to {_short_num(left.get('most', 0))} mm")
+    return ", ".join(out)
+
+
 def key_value(body):
     """The answer's key value in a few words ("24 g", "152 facets", "3
     found", "wrote house.ifc"), or None. A file shows as its name, never its
@@ -458,6 +500,9 @@ def key_value(body):
     b = body if isinstance(body, dict) else {}
     if isinstance(b.get("result"), (int, float)) and not isinstance(b.get("result"), bool) and isinstance(b.get("to"), str):
         return plain(f"{_short_num(b['result'])} {b['to']}")
+    fem = fem_value(b) or cam_value(b)
+    if fem:
+        return fem
     for k, fmt in KEY_NUMBERS:
         v = b.get(k)
         if isinstance(v, (int, float)) and not isinstance(v, bool):

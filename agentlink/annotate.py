@@ -354,6 +354,95 @@ class Annotations:
             node.addChild(c)
         return node
 
+    def marks(self, owner, points=(), lines=(), colour="#e8a33d", size=9):
+        """Scene-only marks (round 6): a marker at each point (x, y, z) and a
+        line through each list of points, drawn over the model. For what has
+        no drawing of its own (a robot with no model file: its base and
+        tool point, the trajectory). The count drawn, 0 with no 3D view."""
+        root = self._root(owner)
+        if root is None:
+            return 0
+        coin = self.coin()
+        col = rgbf(colour)
+        node = coin.SoAnnotation()
+        mat = coin.SoMaterial()
+        mat.diffuseColor = col
+        mat.emissiveColor = col
+        node.addChild(mat)
+        st = coin.SoDrawStyle()
+        st.lineWidth = EDGE_WIDTH
+        st.pointSize = size
+        node.addChild(st)
+        n = 0
+        for line in lines or ():
+            pts = [tuple(float(c) for c in p) for p in line]
+            if len(pts) < 2:
+                continue
+            sep = coin.SoSeparator()
+            co = coin.SoCoordinate3()
+            co.point.setValues(0, len(pts), pts)
+            ls = coin.SoLineSet()
+            ls.numVertices.setValue(len(pts))
+            sep.addChild(co)
+            sep.addChild(ls)
+            node.addChild(sep)
+            n += 1
+        pts = [tuple(float(c) for c in p) for p in points or ()]
+        if pts:
+            sep = coin.SoSeparator()
+            co = coin.SoCoordinate3()
+            co.point.setValues(0, len(pts), pts)
+            ms = coin.SoMarkerSet()
+            try:
+                ms.markerIndex = coin.SoMarkerSet.CIRCLE_FILLED_9_9
+            except Exception:  # noqa: BLE001
+                pass
+            sep.addChild(co)
+            sep.addChild(ms)
+            node.addChild(sep)
+            n += len(pts)
+        root.addChild(node)
+        return n
+
+    def field(self, owner, V, F, colours, per_face=False):
+        """A coloured triangle mesh drawn in the scene only (round 6): V
+        (n, 3) points, F (m, 3) triangles, colours (n, 3) per point, or
+        (m, 3) per triangle with per_face. A result's colour map shown on
+        the model in the window, never as a property of a document object.
+        The triangles drawn, 0 with no 3D view."""
+        root = self._root(owner)
+        if root is None:
+            return 0
+        coin = self.coin()
+        V = [tuple(float(c) for c in p) for p in V]
+        F = [tuple(int(i) for i in t) for t in F]
+        cols = [tuple(float(c) for c in x) for x in colours]
+        if not V or not F:
+            return 0
+        sep = coin.SoSeparator()
+        # Drawn a hair in front of the surface it lies on (the body or mesh
+        # it colours stays shown under it), as the face tint is.
+        sep.addChild(coin.SoPolygonOffset())
+        mat = coin.SoMaterial()
+        mat.diffuseColor.setValues(0, len(cols), cols)
+        bind = coin.SoMaterialBinding()
+        bind.value = coin.SoMaterialBinding.PER_FACE if per_face else coin.SoMaterialBinding.PER_VERTEX_INDEXED
+        hints = coin.SoShapeHints()
+        hints.vertexOrdering = coin.SoShapeHints.COUNTERCLOCKWISE
+        co = coin.SoCoordinate3()
+        co.point.setValues(0, len(V), V)
+        fs = coin.SoIndexedFaceSet()
+        idx = []
+        for t in F:
+            idx += [t[0], t[1], t[2], -1]
+        fs.coordIndex.setValues(0, len(idx), idx)
+        if not per_face:
+            fs.materialIndex.setValues(0, len(idx), idx)
+        for c in (mat, bind, hints, co, fs):
+            sep.addChild(c)
+        root.addChild(sep)
+        return len(F)
+
     def clear(self, owner=None):
         for k in [k for k in self.roots if owner is None or k == owner]:
             sg, sep = self.roots.pop(k)

@@ -49,6 +49,9 @@ class Rings(unittest.TestCase):
         Sheet buttons: every tool of those families now has its command."""
         fams = tools_by_family()
         reads = {"sheet_chart", "sheet_list", "sheet_read"}  # reads keep the last change's ring
+        # Round 6: typing in cells, inserting rows, clearing have no toolbar
+        # button (the Alias button they lit was another job's).
+        reads |= {"sheet_set", "sheet_rows", "sheet_clear"}
         for fam in ("meshobj", "surface", "points", "sheet"):
             missing = [n for n in fams[fam] if not echo.command_for(n, {}) and n not in reads]
             self.assertEqual(missing, [], fam)

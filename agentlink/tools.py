@@ -1794,6 +1794,23 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             raise ToolError("invalid_input", f"{name} cannot run as a job: only a read that leaves the window and the 3D view alone can (not a change, a picture, a window tool or a batch) — call {name} itself.")
         return server._as_job(t, args, wait=0 if a.get("wait") is False else None)
 
+    def _echo_job(tool_, args_, got):
+        """A heavy read a batch runs as a job, shown in the window as the
+        batch's other calls are (they go through server.call, which the echo
+        wraps; this one does not): got None before it starts, else
+        { isError, body } once its answer is in. Never raises."""
+        ec = getattr(server, "echo", None)
+        if ec is None or tool_ is None:
+            return
+        try:
+            if got is None:
+                ec.before(tool_, dict(args_ or {}))
+            else:
+                ec.after(tool_, dict(args_ or {}), {"content": [{"type": "text", "text": json.dumps(got["body"], default=str)}],
+                                                    **({"isError": True} if got["isError"] else {})})
+        except Exception:  # noqa: BLE001  (the window's words never stop a batch)
+            pass
+
     def _batch_path(p):
         """A batch's own file (a call's to, a $file): in the session's
         folder when relative."""
@@ -2207,12 +2224,17 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 if hold is not None:
                     hold.build("before a heavy read")
                 job = None
+                tt = None
                 if hmiss is None and left >= 5:
                     try:
                         from .protocol import check_input as _check
 
                         tt = _t.for_call(dict(hargs))
                         _check(tt.schema, dict(hargs))
+                        # The window shows it as any call of the batch: its
+                        # words before (the last call's words stayed over its
+                        # whole run: an add-on's checks and slicing, fea_shell, round 4).
+                        _echo_job(tt, hargs, None)
                         job = _jobs.start(tt, dict(hargs), s)
                     except ToolError as e:
                         hmiss = {"code": e.code, "message": e.message}
@@ -2240,6 +2262,11 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 if hok and isinstance(hbody, dict):
                     hbody = dict(hbody)
                     hbody.setdefault("job", job["job"])
+                if job is not None:
+                    # Its answer is here, in the batch: the window shows it now
+                    # (words, what it read selected), never again at its end.
+                    _jobs.answered(job)
+                    _echo_job(tt, hargs, {"isError": not hok, "body": hbody if hok else {"error": hmiss}})
                 answers[first + i] = {"ok": hok, "tool": c["tool"], "size": 0, **({"answer": hbody} if hok else {"error": (hmiss or {}).get("message")})}
                 row = {"tool": c["tool"], "ok": hok, **({"result": hbody} if hok else {"error": hmiss})}
                 if hok and c.get("to"):

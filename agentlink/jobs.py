@@ -43,6 +43,26 @@ JOBS = {}
 # (a job's own as it ends, the call's as it logs a time): one at a time, or
 # the later write put back what the other had just changed.
 _queue_lock = threading.Lock()
+# Called with a job's record when it ends, on the job's own thread (the
+# window's echo: agentlink/echo.py job_listener, which hands it to the GUI
+# thread). A listener never stops a job.
+LISTENERS = []
+
+
+def listen(fn):
+    """fn(job) when a job ends (its own thread)."""
+    if fn not in LISTENERS:
+        LISTENERS.append(fn)
+
+
+def answered(job):
+    """The job's answer was given back in a call (the call that waited for
+    it, or a batch that did): the window showed it with that call, so a
+    listener leaves it."""
+    try:
+        job["answered"] = True
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # Reads that must run in place, on the GUI thread: each changes nothing by
@@ -295,7 +315,9 @@ def start(tool, args, session, fn=None):
     jid = "job-" + uuid.uuid4().hex[:8]
     doc = getattr(getattr(session, "doc", None), "Name", None)
     job = {"job": jid, "tool": tool.name, "status": "running", "started": time.time(), "size": size, "doc": doc,
-           "estimate": keep.said_range(r) if r else None, "done": threading.Event()}
+           "estimate": keep.said_range(r) if r else None, "done": threading.Event(),
+           # Its arguments, for the window's words when it ends (never in an answer: summary leaves them).
+           "args": dict(args or {}) if isinstance(args, dict) else {}}
     with _lock:
         JOBS[jid] = job
     _queue(add={"tool": tool.name, "job": jid, "t": job["started"]})
@@ -335,6 +357,11 @@ def start(tool, args, session, fn=None):
                     pass
             _queue(drop=jid)
             job["done"].set()
+            for fn in list(LISTENERS):
+                try:
+                    fn(job)
+                except Exception:  # noqa: BLE001  (the window's words never stop a job)
+                    pass
 
     threading.Thread(target=work, name=f"agentlink-job-{tool.name}", daemon=True).start()
     return job
