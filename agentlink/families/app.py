@@ -664,6 +664,22 @@ def tools(session):
             active = bool(c.isActive()) if c is not None else None
         except Exception:  # noqa: BLE001 - a command that cannot say: run it
             active = None
+        if active is False and name == "Sketcher_LeaveSketch":
+            # Greyed out with no sketch open (nothing to leave: said, not
+            # refused) or while one of the sketch's drawing tools is still
+            # on (a person presses Esc, then Close: both done here).
+            editing = None
+            try:
+                editing = gui.ActiveDocument.getInEdit() if gui.ActiveDocument else None
+            except Exception:  # noqa: BLE001
+                editing = None
+            if editing is None:
+                return {"ran": None, "already": "no sketch is open for editing, so there is nothing to close", "workbench": gui.activeWorkbench().name(), "document": FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None}
+            left = getattr(getattr(editing, "Object", None), "Name", None)
+            gui.ActiveDocument.resetEdit()
+            FreeCAD.ActiveDocument and FreeCAD.ActiveDocument.recompute()
+            gui.updateGui()
+            return {"ran": name, "wasActive": False, "closed": left, "note": "A drawing tool of the sketch was still on: it was ended and the sketch closed.", "workbench": gui.activeWorkbench().name(), "document": FreeCAD.ActiveDocument.Name if FreeCAD.ActiveDocument else None}
         if active is False:
             sel = []
             try:
