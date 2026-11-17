@@ -116,6 +116,14 @@ class MiscData(unittest.TestCase):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
+            # Meant difference (round 6): a robot with no model file says so
+            # (drawn false, drawnWhy): FreeCAD draws nothing of its arm.
+            res = c["new"]["result"]
+            if c["tool"].startswith("robot_") and res[0] == "ok" and isinstance(res[1], dict) and "drawn" in res[1]:
+                self.assertNotIn("drawn", c["old"]["result"][1], c["case"])
+                self.assertIs(res[1]["drawn"], False, c["case"])
+                self.assertIn("no robot model file is set", res[1]["drawnWhy"], c["case"])
+                c = {**c, "new": {**c["new"], "result": [res[0], {k: v for k, v in res[1].items() if k not in ("drawn", "drawnWhy")}] + list(res[2:])}}
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
