@@ -846,6 +846,8 @@ def install():
             if k == "Placement":
                 self.__dict__[k] = Placement()
                 return self.__dict__[k]
+            if k == "PropertiesList":
+                return [p for p in self.__dict__ if p[:1].isupper() and p not in ("Name", "TypeId", "InList", "OutList")]
             raise AttributeError(k)
 
         def isDerivedFrom(self, t):
@@ -853,6 +855,12 @@ def install():
 
         def getStatusString(self):
             return "Valid"
+
+        def getEnumerationsOfProperty(self, p):
+            return list(self.__dict__.get("enums", {}).get(p, []))
+
+        def setPropertyStatus(self, prop, status):
+            trace.append(f"{self.Name}.setPropertyStatus({prop!r}, {status!r})")
 
         def addProperty(self, type_, name, group="", doc=""):
             trace.append(f"{self.Name}.addProperty({type_!r}, {name!r})")
@@ -872,7 +880,7 @@ def install():
             while any(o.Name == n for o in self.Objects):
                 i += 1
                 n = f"{base}{i:03d}"
-            o = Obj(n, type_, **kw)
+            o = state.get("classes", {}).get(type_, Obj)(n, type_, **kw)  # another stand-in's own kinds (tests/_datatd_standin.py)
             self.Objects.append(o)
             return o
 
@@ -1000,5 +1008,5 @@ def install():
 
     meshbool.boolean = boolean
 
-    return types.SimpleNamespace(trace=trace, state=state, Session=Session, Obj=Obj, Shape=Shape, Vec=Vec, Mesh=FakeMesh, Cloud=Cloud, cube=cube,
+    return types.SimpleNamespace(trace=trace, state=state, Session=Session, Obj=Obj, Doc=Doc, Box=Box, flag=flag, show=show, part=part, fc=fc, CUBE_P=CUBE_P, Shape=Shape, Vec=Vec, Mesh=FakeMesh, Cloud=Cloud, cube=cube,
                                  open_cube=open_cube, solid_shape=solid_shape, wire_shape=wire_shape, faced=faced, Placement=Placement, mods=mods, log=log)

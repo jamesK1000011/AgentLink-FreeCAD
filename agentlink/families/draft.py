@@ -6,14 +6,13 @@
 # by Part's own functions so they run without the window.
 
 import glob
-import math
 import os
 
 import FreeCAD
 import Part
 
-from ..protocol import Tool, ToolError
-from ..tools import obj
+from .. import runners
+from ..protocol import ToolError
 from . import measure as M
 from . import picks
 
@@ -198,279 +197,6 @@ def tools(session):
                 hits = sorted(hits, key=lambda h: h[1].distToShape(Part.Vertex(p))[0])
         return hits[0][1]
 
-    def draft_text(a):
-        o = s.body(a.get("body"))
-        text = a.get("text")
-        if not isinstance(text, str) or not text.strip():
-            raise ToolError("invalid_input", "text: the lettering.")
-        size = picks.num(a.get("size", 6), "size")
-        depth = picks.num(a.get("depth", 0.6), "depth")
-        if size <= 0 or depth <= 0:
-            raise ToolError("invalid_input", "size (letter height) and depth: mm, over 0.")
-        mode = picks.choice(a, "mode", ("emboss", "engrave"), "mode: emboss (raised) or engrave (cut in).", "emboss")
-        face = pick_face(o, a.get("face") or {"normal": [0, 0, 1]})
-        at = picks.vec3(a["at"], "at") if a.get("at") is not None else None
-        pl, n = face_frame(face, at)
-        font = font_file(a.get("font"))
-        letters = text_faces(text, font, size, float(a.get("tracking", 0)))
-        bb = letters.BoundBox
-        # Centred on the place, turned by rotate degrees about the face's normal.
-        letters.translate(V(-(bb.XMin + bb.XMax) / 2, -(bb.YMin + bb.YMax) / 2, 0))
-        if a.get("rotate"):
-            letters.rotate(V(0, 0, 0), V(0, 0, 1), float(a["rotate"]))
-        letters = letters.copy()
-        letters.transformShape(pl.toMatrix())
-        lb = letters.BoundBox
-        solid = letters.extrude(n * (depth if mode == "emboss" else -depth))
-        # The lettering's real extent: its outline on the face and its depth out of (or into) it.
-        eb = solid.BoundBox
-        eb = ([eb.XMin, eb.YMin, eb.ZMin], [eb.XMax, eb.YMax, eb.ZMax])
-        if mode == "engrave":
-            # Started a hair above the face, so the cut opens cleanly.
-            solid.translate(n * 0.01)
-        before = o.Shape.Volume
-        # Letters running off the face: said, not refused — a label may wrap an edge on purpose.
-        out_of_face = [p for p in (V(lb.XMin, lb.YMin, lb.ZMin), V(lb.XMax, lb.YMax, lb.ZMax)) if face.distToShape(Part.Vertex(p))[0] > 0.05]
-        try:
-            res = o.Shape.fuse(solid) if mode == "emboss" else o.Shape.cut(solid)
-            res = res.removeSplitter()
-        except Exception as e:
-            raise ToolError("failed", f"The lettering could not be {'joined to' if mode == 'emboss' else 'cut into'} {o.Label}: {e}")
-        if not res.isValid() or not res.Solids:
-            raise ToolError("failed", "The result is not a valid solid: smaller letters, a shallower depth, or another font.")
-        done = picks.bake(s, o, res, a.get("name"))
-        s.doc.recompute()
-        s.snapshot("draft_text")
-        out = {"body": done.Label, "text": text, "mode": mode, "font": os.path.basename(font), "size": size, "depth": depth,
-               "volumeChange": round(done.Shape.Volume - before, 2), "box": {"min": [round(v, 2) for v in eb[0]], "max": [round(v, 2) for v in eb[1]]},
-               "step": len(s.steps)}
-        if out_of_face:
-            out["warning"] = "The lettering runs past the face's edge: smaller size, or shorter text."
-        stroke = size * 0.12
-        if stroke < 0.4:
-            out["printNote"] = f"Strokes about {stroke:.2f} mm wide: under a 0.4 mm nozzle's line — print letters at least {math.ceil(0.4 / 0.12)} mm tall, or expect them to blur."
-        out["view"] = "view_render { zoom: { at: the box's middle, size } } to look at it."
-        return out
-
-    def draft_outline(a):
-        if not a.get("path"):
-            raise ToolError("invalid_input", "path: an .svg or .dxf with closed outlines (a logo, a shape).")
-        flat, open_ = outline_faces(a["path"])
-        bb = flat.BoundBox
-        w, h = picks.num(a["width"], "width") if a.get("width") is not None else None, picks.num(a["height"], "height") if a.get("height") is not None else None
-        k = 1.0
-        if w:
-            k = w / bb.XLength
-        elif h:
-            k = h / bb.YLength
-        if k != 1.0:
-            flat = flat.copy()
-            flat.scale(k)
-        if a.get("mirror"):
-            flat = flat.mirror(V(0, 0, 0), V(1, 0, 0))
-        bb = flat.BoundBox
-        depth = picks.number(a, "depth", 0.6, gt=0, msg="depth: mm, over 0.")
-        mode = picks.choice(a, "mode", ("emboss", "engrave", "extrude"), "mode: emboss (raised on a face), engrave (cut in), or extrude (a part of its own).", "emboss" if a.get("body") else "extrude")
-        out = {"outlines": len(flat.Faces), "size": [round(bb.XLength, 2), round(bb.YLength, 2)], "scale": round(k, 5), "mode": mode, "depth": depth}
-        if open_:
-            out["openCurvesLeftOut"] = open_
-        # The narrowest stroke: what an inward offset of half a line leaves.
-        try:
-            thin = flat.makeOffset2D(-0.2, 0, False, False, False)
-            lost = 1 - (thin.Area / flat.Area) if flat.Area else 0
-            if lost > 0.5:
-                out["printNote"] = "Much of the artwork is under 0.4 mm across: thin strokes will blur or vanish — scale it up (width), or thicken the artwork."
-        except Exception:
-            out["printNote"] = "Parts of the artwork are under 0.4 mm across (thinner than a printed line): scale it up, or expect them to blur."
-        if mode == "extrude":
-            solid = flat.extrude(V(0, 0, depth))
-            o = s.doc.addObject("Part::Feature", (a.get("name") or "Outline").replace(" ", "_"))
-            o.Label = a.get("name") or "Outline"
-            o.Shape = solid
-            s.doc.recompute()
-            s.snapshot("draft_outline")
-            out.update({"body": o.Label, "volume": round(solid.Volume, 2), "step": len(s.steps)})
-            return out
-        o = s.body(a.get("body"))
-        face = pick_face(o, a.get("face") or {"normal": [0, 0, 1]})
-        at = picks.vec3(a["at"], "at") if a.get("at") is not None else None
-        solid, lb = place_on(o, face, flat, at, a.get("rotate"), depth, mode)
-        before = o.Shape.Volume
-        off = [p for p in (V(lb.XMin, lb.YMin, lb.ZMin), V(lb.XMax, lb.YMax, lb.ZMax)) if face.distToShape(Part.Vertex(p))[0] > 0.05]
-        try:
-            res = (o.Shape.fuse(solid) if mode == "emboss" else o.Shape.cut(solid)).removeSplitter()
-        except Exception as e:
-            raise ToolError("failed", f"The outline could not be {'joined to' if mode == 'emboss' else 'cut into'} {o.Label}: {e}")
-        if not res.isValid() or not res.Solids:
-            raise ToolError("failed", "The result is not a valid solid: a smaller size or a shallower depth.")
-        done = picks.bake(s, o, res, a.get("name"))
-        s.doc.recompute()
-        s.snapshot("draft_outline")
-        out.update({"body": done.Label, "volumeChange": round(done.Shape.Volume - before, 2),
-                    "box": {"min": [round(v, 2) for v in (lb.XMin, lb.YMin, lb.ZMin)], "max": [round(v, 2) for v in (lb.XMax, lb.YMax, lb.ZMax)]}, "step": len(s.steps),
-                    "view": "view_render { zoom: { at: the box's middle, size } } to look at it."})
-        if off:
-            out["warning"] = "The outline runs past the face's edge: a smaller width."
-        return out
-
-    def draft_array(a):
-        o = s.body(a.get("body"))
-        base = o.Shape
-        kind = a.get("kind", "grid")
-        places = []
-        if kind == "grid":
-            n = [int(x) for x in (a.get("count") or [2, 1, 1])] + [1, 1]
-            n = n[:3]
-            if any(k < 1 for k in n) or n[0] * n[1] * n[2] < 2:
-                raise ToolError("invalid_input", "count: [nx, ny, nz], each 1 or more, two copies or more in all.")
-            bb = base.BoundBox
-            gap = picks.num(a.get("gap", 2), "gap")
-            step = a.get("spacing")
-            step = picks.vec3(step, "spacing") if step is not None else V(bb.XLength + gap, bb.YLength + gap, bb.ZLength + gap)
-            for i in range(n[0]):
-                for j in range(n[1]):
-                    for k in range(n[2]):
-                        places.append(FreeCAD.Placement(V(i * step.x, j * step.y, k * step.z), FreeCAD.Rotation()))
-        elif kind == "polar":
-            count = int(a.get("count", 6))
-            if count < 2:
-                raise ToolError("invalid_input", "count: 2 or more copies round the circle.")
-            angle = float(a.get("angle", 360))
-            centre = picks.vec3(a["center"], "center") if a.get("center") is not None else V(0, 0, 0)
-            axis = picks.vec3(a["axis"], "axis") if a.get("axis") is not None else V(0, 0, 1)
-            each = angle / count if abs(angle) >= 360 - 1e-9 else angle / (count - 1)
-            for i in range(count):
-                r = FreeCAD.Rotation(axis, each * i)
-                places.append(FreeCAD.Placement(centre - r.multVec(centre), r))
-        elif kind == "path":
-            ref = a.get("path")
-            if not ref:
-                raise ToolError("invalid_input", "path: an edge (\"Body.Edge3\"), a sketch or wire, or { points: [[x,y,z] …] }.")
-            w = _curve(ref, "path", a.get("bodyOfPath"))
-            count = int(a.get("count", 5))
-            if count < 2:
-                raise ToolError("invalid_input", "count: 2 or more copies along the path.")
-            pts = w.discretize(Number=count if not w.isClosed() else count + 1)[:count]
-            start = pts[0]
-            align = bool(a.get("align"))
-            e0 = w.Edges[0]
-            t0 = e0.tangentAt(e0.FirstParameter)
-            for p in pts:
-                if align:
-                    best = min(w.Edges, key=lambda e: e.distToShape(Part.Vertex(p))[0])
-                    t = best.tangentAt(best.Curve.parameter(p))
-                    rot = FreeCAD.Rotation(t0, t)
-                    places.append(FreeCAD.Placement(p - rot.multVec(start), rot))
-                else:
-                    places.append(FreeCAD.Placement(p - start, FreeCAD.Rotation()))
-        else:
-            raise ToolError("invalid_input", "kind: grid (count [nx, ny, nz], gap or spacing), polar (count, angle, center, axis) or path (path, count, align).")
-        copies = []
-        for pl in places:
-            c = base.copy()
-            c.transformShape(pl.toMatrix())
-            copies.append(c)
-        out = {"kind": kind, "copies": len(copies)}
-        if a.get("separate"):
-            made = []
-            for i, c in enumerate(copies[1:], 2):
-                n = s.doc.addObject("Part::Feature", f"{o.Name}_{i}")
-                n.Label = f"{o.Label} {i}"
-                n.Shape = c
-                made.append(n.Label)
-            s.doc.recompute()
-            s.snapshot("draft_array")
-            out.update({"bodies": [o.Label] + made, "step": len(s.steps)})
-            return out
-        try:
-            res = copies[0].fuse(copies[1:]) if len(copies) > 1 else copies[0]
-            # Refined when that works: on 1.1.3 removeSplitter answers
-            # "Null shape" for copies that do not touch (five beads along a
-            # path), and the plain union is the answer there.
-            try:
-                fine = res.removeSplitter() if len(copies) > 1 else res
-                if not fine.isNull() and fine.isValid() and abs(fine.Volume - res.Volume) <= 1e-6 * max(abs(res.Volume), 1.0):
-                    res = fine
-            except Exception:
-                pass
-        except Exception as e:
-            raise ToolError("failed", f"The copies could not be joined: {e} — separate: true keeps them apart.")
-        apart = len(res.Solids) > 1
-        if apart and not a.get("allowApart"):
-            out["note"] = f"The copies do not touch: one body of {len(res.Solids)} separate solids. separate: true makes each its own body (to print or move apart)."
-        done = picks.bake(s, o, res, a.get("name"))
-        s.doc.recompute()
-        s.snapshot("draft_array")
-        bb = done.Shape.BoundBox
-        out.update({"body": done.Label, "solids": len(res.Solids), "volume": round(done.Shape.Volume, 2), "size": [round(bb.XLength, 2), round(bb.YLength, 2), round(bb.ZLength, 2)], "step": len(s.steps)})
-        return out
-
-    def draft_fonts(a):
-        have = fonts()
-        q = (a.get("name") or "").lower()
-        hit = [f for f in have if q in os.path.basename(f).lower()] if q else have
-        # Names only (font takes a name), 25 at a time: 60 names with full
-        # paths were ~1,700 tokens. name: filters; paths: true adds them.
-        lim = int(a.get("limit", 25))
-        out = {"fonts": [os.path.basename(f) for f in hit[:lim]], "found": len(hit), "default": os.path.basename(font_file(None)) if have else None}
-        if a.get("paths"):
-            out["paths"] = hit[:lim]
-        if len(hit) > lim:
-            out["more"] = f"{len(hit) - lim} more: name filters (\"Sans\"), limit raises it."
-        return out
-
-    def surface_fill(a):
-        edges = []
-        for i, r in enumerate(a.get("edges") or []):
-            label, sub, el = picks.resolve(s, r, a.get("body"))
-            if not isinstance(el, Part.Edge) and not (hasattr(el, "Edges") and el.Edges and sub is None):
-                raise ToolError("invalid_input", f"edges.{i}: an edge (\"Box.Edge3\") or an object whose edges bound it (a sketch, a wire).")
-            edges += [el] if isinstance(el, Part.Edge) else list(el.Edges)
-        if len(edges) < 1:
-            raise ToolError("invalid_input", "edges: the boundary — edges (\"Body.Edge3\") or a sketch whose closed outline bounds the surface.")
-        runs = Part.sortEdges(edges)
-        if len(runs) != 1:
-            # the first run alone was filled, the other edges dropped without a word
-            raise ToolError("invalid_input", f"edges: they form {len(runs)} separate runs, not one closed boundary — give the edges of one loop (an inner loop cannot be a hole here; part_face makes a flat face with holes).")
-        try:
-            w = Part.Wire(runs[0])
-        except Exception:
-            w = None
-        if w is None or not w.isClosed():
-            gap = ""
-            if w is not None and len(w.Vertexes) >= 2:
-                vs = w.OrderedVertexes
-                gap = f" (its ends are {vs[0].Point.distanceToPoint(vs[-1].Point):.4g} mm apart)"
-            raise ToolError("invalid_input", f"edges: they do not close into one boundary{gap}: add the missing edge, or snap the ends together.")
-        try:
-            face = Part.makeFilledFace(w.Edges)
-        except Exception as e:
-            raise ToolError("failed", f"No surface fills that boundary: {e} — fewer, smoother edges; surface_boundary takes 2 to 4 curves, surface_sections a row of them.")
-        if face.isNull() or face.Area < 1e-9:
-            raise ToolError("failed", "The filled surface came out empty: the boundary may fold over itself.")
-        t = a.get("thickness")
-        if t is not None:
-            t = picks.num(t, "thickness")
-            if t == 0:
-                raise ToolError("invalid_input", "thickness: mm, not 0 (negative: the other side); leave it out for the surface alone.")
-            try:
-                solid = face.makeOffsetShape(t, 1e-3, fill=True)
-            except Exception as e:
-                raise ToolError("failed", f"The surface could not be thickened by {t:g} mm: {e} — a thinner one, or the other side (negative).")
-            shape = solid
-        else:
-            shape = face
-        o = s.doc.addObject("Part::Feature", (a.get("name") or "Surface").replace(" ", "_"))
-        o.Label = a.get("name") or "Surface"
-        o.Shape = shape
-        s.doc.recompute()
-        s.snapshot("surface_fill")
-        out = {"object": o.Label, "area": round(face.Area, 2), "solid": bool(shape.Solids), "step": len(s.steps)}
-        if shape.Solids:
-            out["volume"] = round(shape.Volume, 2)
-        return out
-
-
     def _curve(r, what, body=None):
         """An edge or wire from a reference ("Body.Edge3", a sketch) or
         { points: [[x,y,z] …], closed } (a smooth curve through them)."""
@@ -541,77 +267,52 @@ def tools(session):
             out["next"] = "thickness: mm to make it a solid to print — or surface_thicken { surface } later."
         return out
 
-    def surface_loft(a):
-        curves = a.get("curves") or []
-        if not isinstance(curves, list) or len(curves) < 2:
-            raise ToolError("invalid_input", "curves: two or more, in order — edges (\"Body.Edge3\"), sketches, or { points: [[x,y,z] …], closed }.")
-        if a.get("closed") and len(curves) < 3:
-            raise ToolError("invalid_input", "closed: true runs the surface from the last curve back to the first, which needs three or more curves.")
-        wires = [_curve(r, f"curves.{i}", a.get("body")) for i, r in enumerate(curves)]
-        closed = [w.isClosed() for w in wires]
-        if len(set(closed)) > 1:
-            raise ToolError("invalid_input", f"curves: all open or all closed — curves {[i for i, c in enumerate(closed) if c]} are closed, the rest open.")
-        try:
-            shape = Part.makeLoft(wires, False, bool(a.get("ruled")), bool(a.get("closed")))
-        except Exception as e:
-            raise ToolError("failed", f"No surface goes through those curves: {e} — curves that run the same way, in order, with the same number of pieces each, loft best.")
-        return _finish(shape, a, "surface_loft", {"curves": len(wires), "through": "closed curves (a tube)" if closed[0] else "open curves (a sheet)"})
-
-    def surface_points(a):
-        rows = a.get("rows")
-        if not isinstance(rows, list) or len(rows) < 2 or not all(isinstance(r, list) for r in rows):
-            raise ToolError("invalid_input", "rows: a grid of points, row by row — [[[x,y,z] …], [[x,y,z] …] …], two or more rows of the same length.")
-        n = len(rows[0])
-        if n < 2 or any(len(r) != n for r in rows):
-            raise ToolError("invalid_input", f"rows: each row the same length ({n}), two or more points each.")
-        pts = [[FreeCAD.Vector(*picks.vec3(p, f"rows.{i}.{j}")) for j, p in enumerate(r)] for i, r in enumerate(rows)]
-        tol = float(a.get("tolerance", 0.0))
-        bs = Part.BSplineSurface()
-        deg = min(3, len(rows) - 1, n - 1)
-        try:
-            if tol > 0:
-                bs.approximate(Points=pts, DegMin=deg, DegMax=deg, Tolerance=tol)
+    def along_path(w, count, align):
+        """Where count copies go along a curve: the first stays, the rest
+        are moved to points spread along it (a closed curve's last point is
+        its first, so it is left out); align turns each as the curve turns
+        from its start."""
+        pts = w.discretize(Number=count if not w.isClosed() else count + 1)[:count]
+        start = pts[0]
+        e0 = w.Edges[0]
+        t0 = e0.tangentAt(e0.FirstParameter)
+        places = []
+        for p in pts:
+            if align:
+                best = min(w.Edges, key=lambda e: e.distToShape(Part.Vertex(p))[0])
+                t = best.tangentAt(best.Curve.parameter(p))
+                rot = FreeCAD.Rotation(t0, t)
+                places.append(FreeCAD.Placement(p - rot.multVec(start), rot))
             else:
-                bs.interpolate(pts)
-        except Exception as e:
-            raise ToolError("failed", f"No surface fits those points: {e} — rows that run the same way, without points on top of each other.")
-        face = bs.toShape()
-        worst = max(face.distToShape(Part.Vertex(p))[0] for r in pts for p in r)
-        return _finish(face, a, "surface_points", {"grid": [len(rows), n], "fitted": "through every point" if tol <= 0 else f"within {tol:g} mm", "farthestPoint": round(worst, 4)})
+                places.append(FreeCAD.Placement(p - start, FreeCAD.Rotation()))
+        return places
 
-    def surface_thicken(a):
-        ref = a.get("surface")
-        if not ref:
-            raise ToolError("invalid_input", "surface: an object (\"Surface\") or a body's face (\"Body.Face3\").")
-        label, sub, el = picks.resolve(s, ref, a.get("body"))
-        shape = el if isinstance(el, (Part.Face, Part.Shell)) else getattr(el, "Shape", el)
-        if not getattr(shape, "Faces", None):
-            raise ToolError("invalid_input", f"surface: {ref} has no faces to thicken.")
-        if a.get("thickness") is None:
-            raise ToolError("invalid_input", "thickness: mm.")
-        return _finish(shape if isinstance(shape, Part.Face) or len(shape.Faces) == 1 else Part.Shell(shape.Faces), a, "surface_thicken", {"from": ref})
+    def refined(res, several):
+        """A union of copies with its coplanar faces merged when that works:
+        on 1.1.3 removeSplitter answers "Null shape" for copies that do not
+        touch (five beads along a path), and the plain union is the answer
+        there."""
+        try:
+            fine = res.removeSplitter() if several else res
+            if not fine.isNull() and fine.isValid() and abs(fine.Volume - res.Volume) <= 1e-6 * max(abs(res.Volume), 1.0):
+                return fine
+        except Exception:
+            pass
+        return res
 
-    face_q = {"description": "The face: \"Face6\", or a query { normal, near, area … } as shape_query takes (the largest match, or the nearest with near). Default: the largest face facing up."}
-    return [
-        Tool("draft_text", "Letter a flat face of a body: text from a TrueType font (font: a name or .ttf path; draft_fonts lists them), size mm (the font's size: capitals come out near 0.7 of it), depth mm, mode emboss (raised, default) or engrave (cut in), face (default the largest facing up), centred on it or at [x,y,z], rotate degrees, tracking. The body becomes the lettered solid (one boolean, not parametric; slow for long text on a detailed body). Reply: volumeChange, box (the real extent), font; warning when letters run off the face, printNote when strokes are under a printed line.",
-             obj({"body": {"type": "string"}, "text": {"type": "string"}, "face": face_q, "at": {"type": "array", "items": {"type": "number"}}, "size": {"type": "number"}, "depth": {"type": "number"},
-                  "mode": {"type": "string", "enum": ["emboss", "engrave"]}, "font": {"type": "string"}, "rotate": {"type": "number"}, "tracking": {"type": "number"}, "name": {"type": "string"}}, ["text"]),
-             draft_text, changes=True),
-        Tool("draft_outline", "Bring a logo or shape from an SVG or DXF file (closed outlines; holes kept; text must be paths): scaled to width or height mm (neither: the file's own size), then mode emboss (raised on a body's face, the largest facing up by default), engrave (cut in), or extrude (a part of its own, depth mm thick; the default without body). face, at, rotate as draft_text; mirror flips it. Reply: outlines, size, scale, openCurvesLeftOut, volume or volumeChange, printNote when strokes are under a printed line.",
-             obj({"path": {"type": "string"}, "body": {"type": "string"}, "face": face_q, "at": {"type": "array", "items": {"type": "number"}}, "width": {"type": "number"}, "height": {"type": "number"},
-                  "depth": {"type": "number"}, "mode": {"type": "string", "enum": ["emboss", "engrave", "extrude"]}, "rotate": {"type": "number"}, "mirror": {"type": "boolean"}, "name": {"type": "string"}}, ["path"]),
-             draft_outline, changes=True),
-        Tool("draft_array", "Copies of a whole body as plain solids: kind grid (count [nx, ny, nz]; gap mm between them, 2, or spacing [dx, dy, dz] from one to the next), polar (count round center about axis; angle degrees, 360, a smaller one spans first to last), or path (count along a curve: an edge, a sketch or { points }; align turns each with it). Joined into the body by default (one boolean: slow past a few dozen detailed copies); separate: true makes each its own body. Reply: copies, solids, volume, size. Copies that follow the original: draft_link_array; inside one part: pd_linear_pattern, pd_polar_pattern.",
-             obj({"body": {"type": "string"}, "kind": {"type": "string", "enum": ["grid", "polar", "path"]}, "count": {}, "gap": {"type": "number"}, "spacing": {"type": "array", "items": {"type": "number"}},
-                  "angle": {"type": "number"}, "center": {"type": "array", "items": {"type": "number"}}, "axis": {"type": "array", "items": {"type": "number"}}, "path": {}, "bodyOfPath": {"type": "string"},
-                  "align": {"type": "boolean"}, "separate": {"type": "boolean"}, "name": {"type": "string"}}), draft_array, changes=True),
-        Tool("draft_fonts", "The TrueType fonts on this computer by file name (name filters; limit, 25; paths: true adds their paths), and the one draft_text takes by default. Reply: fonts, found, default.", obj({"name": {"type": "string"}, "limit": {"type": "integer"}, "paths": {"type": "boolean"}}), draft_fonts),
-        Tool("surface_loft", "A plain surface through curves in order (Part's loft; not parametric): curves, each an edge (\"Body.Edge3\"), a sketch, or { points: [[x,y,z] …], closed } for a smooth curve through them; all open (a sheet) or all closed (a tube), running the same way. ruled: straight between; closed: true joins the last back to the first (3 or more); thickness mm makes it a solid (side out, in or both). Reply: object, area, solid, volume, size, through; warnings under 0.8 mm or when the solid is not valid.",
-             obj({"curves": {"type": "array", "items": {}}, "body": {"type": "string"}, "ruled": {"type": "boolean"}, "closed": {"type": "boolean"}, "thickness": {"type": "number"}, "side": {"type": "string", "enum": ["out", "in", "both"]}, "name": {"type": "string"}}, ["curves"]), surface_loft, changes=True),
-        Tool("surface_points", "A plain smooth surface through a grid of points, row by row (rows: [[[x,y,z] …] …], two or more rows of one length): through every point, or with tolerance mm within that of them for a smoother one. thickness and side make it a solid. Reply: grid, fitted, farthestPoint mm (how far the worst point is off it), area.",
-             obj({"rows": {"type": "array", "items": {}}, "tolerance": {"type": "number"}, "thickness": {"type": "number"}, "side": {"type": "string", "enum": ["out", "in", "both"]}, "name": {"type": "string"}}, ["rows"]), surface_points, changes=True),
-        Tool("surface_thicken", "Make a surface a solid: surface an object (\"Surface\") or one face (\"Body.Face3\"), thickness mm over 0, side out (along its normal), in, or both (half each way). A new plain object; it cannot be thicker inward than its tightest bend. Reply: object, solid, volume, area, size; warnings under two printed lines (0.8 mm) or when the solid is not valid.",
-             obj({"surface": {"type": "string"}, "body": {"type": "string"}, "thickness": {"type": "number"}, "side": {"type": "string", "enum": ["out", "in", "both"]}, "name": {"type": "string"}}, ["surface", "thickness"]), surface_thicken, changes=True),
-        Tool("surface_fill", "A plain surface filled across one closed boundary (Part's filled face; not parametric): edges (\"Body.Edge3\" …) or a sketch or wire whose outline bounds it, bent as smoothly as the edges allow; thickness mm makes it a solid (negative: the other side). Edges that leave a gap or form more than one loop are refused. Reply: object, area, solid, volume.",
-             obj({"edges": {"type": "array", "items": {}}, "body": {"type": "string"}, "thickness": {"type": "number"}, "name": {"type": "string"}}, ["edges"]), surface_fill, changes=True),
-    ]
+    # The tools themselves are data (agentlink/data/tools.json, "family":
+    # "draft"; run by agentlink/runners.py's steps runner: docs/data-tools.md).
+    # What their entries call by name:
+    helpers = {"doc": lambda: s.doc, "body": lambda ref: s.body(ref), "bake": lambda base, shape, name=None: picks.bake(s, base, shape, name),
+               "snapshot": lambda tool: s.snapshot(tool), "step": lambda: len(s.steps), "finish": _finish, "num": picks.num, "vec3": picks.vec3,
+               "resolve": lambda ref, body=None: picks.resolve(s, ref, body), "basename": os.path.basename,
+               # FreeCAD's own
+               "V": V, "placement": FreeCAD.Placement, "rotation": FreeCAD.Rotation, "vertex": Part.Vertex, "as_wire": Part.Wire, "as_shell": Part.Shell,
+               "sort_edges": Part.sortEdges, "filled_face": Part.makeFilledFace, "make_loft": Part.makeLoft, "bspline_surface": Part.BSplineSurface,
+               "is_edge": lambda x: isinstance(x, Part.Edge), "is_face": lambda x: isinstance(x, Part.Face),
+               "is_surface": lambda x: isinstance(x, (Part.Face, Part.Shell)),
+               # the family's
+               "fonts": fonts, "font_file": font_file, "text_faces": text_faces, "face_frame": face_frame, "outline_faces": outline_faces, "place_on": place_on,
+               "pick_face": pick_face, "curve": _curve, "point": lambda p, what: FreeCAD.Vector(*picks.vec3(p, what)), "along_path": along_path,
+               "refined": refined}
+    return runners.tools(GROUP, s, helpers, family="draft")

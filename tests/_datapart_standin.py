@@ -57,6 +57,9 @@ def install():
                 x, y, z = x.x, x.y, x.z
             self.x, self.y, self.z = float(x), float(y), float(z)
 
+        def __iter__(self):
+            return iter((self.x, self.y, self.z))
+
         def __sub__(self, o):
             return Vec(self.x - o.x, self.y - o.y, self.z - o.z)
 
@@ -110,6 +113,11 @@ def install():
         def multiply(self, o):
             return Rotation(self, o)
 
+        def multVec(self, v):
+            """v turned (about z, by this rotation's angle; a rotation made any other way leaves it)."""
+            c, s_ = math.cos(self.Angle), math.sin(self.Angle)
+            return Vec(round(v.x * c - v.y * s_, 9), round(v.x * s_ + v.y * c, 9), v.z)
+
         def __repr__(self):
             return f"Rotation({', '.join(show(x) for x in self.a)})"
 
@@ -144,6 +152,9 @@ def install():
         def multiply(self, o):
             p = Placement(self.Base + o.Base, Rotation(self.Rotation, o.Rotation), self.centre)
             return p
+
+        def toMatrix(self):
+            return Matrix(self)
 
         def __repr__(self):
             return f"Placement({show(self.Base)}, {show(self.Rotation)}{'' if self.centre is None else ', ' + show(self.centre)})"
@@ -202,6 +213,7 @@ def install():
         def __init__(self, p):
             self.Point = p
             self.ShapeType = "Vertex"
+            self.box = Box((p.x, p.y, p.z), (p.x, p.y, p.z))
 
         def __repr__(self):
             return f"Vertex({show(self.Point)})"
@@ -209,6 +221,9 @@ def install():
     class Curve:
         def __init__(self, kind):
             self.kind = kind
+
+        def parameter(self, p):
+            return 0.5
 
     class Shape:
         """One class for every kind: a tag (what made it), its ShapeType,
@@ -244,7 +259,9 @@ def install():
                 f.edges_of = self  # a face's edges are its solid's own (the first four, here)
                 return f
             if kind == "Edge":
-                return Shape(t, "Edge", self.box.lo, self.box.hi, edges=1, closed=False)
+                e = Shape(t, "Edge", self.box.lo, self.box.hi, edges=1, closed=False)
+                e.of_closed = self.closed  # one edge of an outline that closes
+                return e
             if kind == "Wire":
                 return Shape(t, "Wire", self.box.lo, self.box.hi, edges=max(self.nedges, 1), closed=self.closed, pts=self.pts)
             if kind == "Shell":
@@ -334,10 +351,29 @@ def install():
             return Vec(self.normal)
 
         def discretize(self, Number=10):
-            return list(self.pts)
+            """Number points from the first of its points to the last (a closed curve's last is its first)."""
+            if len(self.pts) < 2:
+                return list(self.pts)
+            p, q = self.pts[0], (self.pts[0] if self.closed else self.pts[-1])
+            mid = self.pts[len(self.pts) // 2]
+            return [p + (mid - p) * (2 * i / (Number - 1)) if 2 * i <= Number - 1 else mid + (q - mid) * (2 * i / (Number - 1) - 1) for i in range(Number)]
+
+        def tangentAt(self, t):
+            return Vec(1, 0, 0) if t == 0.0 else Vec(0, 1, 0)
+
+        def transformShape(self, m):
+            log("transformShape", self, m)
+            base = m.ops[0][1].Base if m.ops and isinstance(m.ops[0][1], Placement) else Vec()
+            self.box = self.box.moved(base)
+
+        def makeOffset2D(self, *a):
+            log("makeOffset2D", self, *a)
+            fails("makeOffset2D")
+            return self._like(f"thinned {self.tag}", area=self.Area * flag("thin_share", 0.9))
 
         def removeSplitter(self):
             log("removeSplitter", self)
+            fails("removeSplitter")
             return self
 
         def distToShape(self, o):
@@ -444,6 +480,12 @@ def install():
             log("makeOffsetShape", self, d, tol, **kw)
             fails("makeOffsetShape")
             mode = flag("offset", "solid")
+            if self.ShapeType in ("Face", "Shell"):  # a surface given thickness (fill), or moved over (no fill)
+                if not kw.get("fill"):
+                    return self._like(f"offset({self.tag})")
+                made = mode == "solid"
+                return Shape(f"thickened({self.tag})", "Solid" if made else "Shell", self.box.lo, self.box.hi, volume=abs(d) * self.Area if made else 0.0, area=2 * self.Area,
+                             faces=6, edges=12, solids=1 if made else 0, valid=not flag("thick_invalid"), closed=made)
             return self._like(f"offset({self.tag})", volume=self.Volume + d * self.Area, solids=0 if mode in ("faces", "none") else self.nsolids,
                               faces=0 if mode == "none" else self.nfaces, null=mode == "null")
 
@@ -527,7 +569,7 @@ def install():
         fails("Wire")
         e = list(edges)
         w = wire(f"wire of {', '.join(x.tag for x in e)}", [p for x in e for p in (x.pts or [Vec(*x.box.lo), Vec(*x.box.hi)])],
-                 closed=all(x.closed for x in e) if not flag("open_wires") else False)
+                 closed=all(x.closed or getattr(x, "of_closed", False) for x in e) if not flag("open_wires") else False)
         return w
 
     def make_face(wires, maker=None):
@@ -565,7 +607,7 @@ def install():
         log("makeCylinder", r, h)
         return solid(f"cylinder {r:g}x{h:g}", (-r, -r, 0), (r, r, h), volume=math.pi * r * r * h, faces=3, edges=3)
 
-    def make_loft(ws, solid_, ruled, loop, deg):
+    def make_loft(ws, solid_, ruled, loop, deg=5):
         log("makeLoft", [w.tag for w in ws], solid_, ruled, loop, deg)
         plan = flag("loft", {})
         key = f"{'ruled' if ruled else 'smooth'}{deg}"
@@ -781,7 +823,11 @@ def install():
             self.steps.append({"tool": tool})
 
         def body(self, ref):
+            from agentlink.families import picks
             from agentlink.protocol import ToolError
+
+            if ref is not None:
+                return picks.solid_body(self, ref)
 
             shown = [o for o in self.doc.Objects if getattr(o, "Shape", None) is not None and o.Shape.Solids and o.Visibility]
             if len(shown) == 1:
@@ -806,8 +852,52 @@ def install():
     fc.Console = types.SimpleNamespace(PrintMessage=lambda *a: None, PrintWarning=lambda *a: None, PrintError=lambda *a: None, PrintLog=lambda *a: None)
     fc.ParamGet = lambda p: types.SimpleNamespace(GetBool=lambda *a: False, GetInt=lambda *a: 0, GetString=lambda *a: "", GetFloat=lambda *a: 0.0)
     fc.Version = lambda: ["1", "1", "3"]
-    part.Shape, part.Vertex, part.makePolygon, part.makeCircle, part.Wire, part.makeFace, part.Face = Shape, Vertex, make_polygon, make_circle, make_wire, make_face, face_of
-    part.Shell, part.Solid, part.Compound, part.makeCompound, part.makeCylinder, part.makeLoft = make_shell, make_solid, make_compound, make_compound, make_cylinder, make_loft
+    class Kind(type):
+        """Part.Edge, Part.Wire, Part.Face …: isinstance asks a shape's kind; called, it is the kind's maker."""
+
+        def __instancecheck__(cls, x):
+            return isinstance(x, Shape) and x.ShapeType == cls.__name__
+
+        def __call__(cls, *a):
+            return cls.maker(*a)
+
+    def kind(name, maker=None):
+        return Kind(name, (), {"maker": staticmethod(maker)})
+
+    part.Shape, part.Vertex, part.makePolygon, part.makeCircle, part.makeFace = Shape, Vertex, make_polygon, make_circle, make_face
+    part.Edge, part.Wire, part.Face, part.Shell, part.Solid = kind("Edge"), kind("Wire", make_wire), kind("Face", face_of), kind("Shell", make_shell), kind("Solid", make_solid)
+    part.Compound, part.makeCompound, part.makeCylinder, part.makeLoft = make_compound, make_compound, make_cylinder, make_loft
+
+    def sort_edges(edges):
+        """Runs of edges that join end to end: one, unless a case says how many."""
+        n = min(flag("runs", 1), len(edges))
+        return [list(edges[i::n]) for i in range(n)]
+
+    def filled_face(edges):
+        log("makeFilledFace", [e.tag for e in edges])
+        fails("makeFilledFace")
+        return Shape("filled face", "Face", (0, 0, 0), (10, 10, 2), area=flag("filled_area", 120.0), faces=1, edges=len(edges), solids=0, shells=0, null=flag("filled_area", 1) == 0)
+
+    class LineSegment:
+        def __init__(self, p, q):
+            self.p, self.q = p, q
+
+        def toShape(self):
+            return wire("line", [self.p, self.q], closed=False, kind="Edge")
+
+    class BSplineSurface:
+        def approximate(self, **kw):
+            log("BSplineSurface.approximate", **{k: (v if k != "Points" else f"{len(v)}x{len(v[0])}") for k, v in kw.items()})
+            fails("surface_fit")
+
+        def interpolate(self, pts):
+            log("BSplineSurface.interpolate", f"{len(pts)}x{len(pts[0])}")
+            fails("surface_fit")
+
+        def toShape(self):
+            return Shape("fitted surface", "Face", (0, 0, 0), (10, 10, 3), area=110.0, faces=1, edges=4, solids=0, shells=0)
+
+    part.sortEdges, part.makeFilledFace, part.LineSegment, part.BSplineSurface, part.Plane = sort_edges, filled_face, LineSegment, BSplineSurface, type("Plane", (), {})
     part.BSplineCurve, part.Line = BSplineCurve, type("Line", (), {})
     part.__sortEdges__ = lambda edges: list(edges)
 
