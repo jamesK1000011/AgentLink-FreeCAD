@@ -173,9 +173,12 @@
     "file_size",
     "file_stem",
     "isfile",
-    "model"
+    "model",
+    "resumable"
    ],
-   "changers": [],
+   "changers": [
+    "saved_to"
+   ],
    "source": "scripts/tool_needs.py; the family's code",
    "date": "2026-11-16"
   },

@@ -479,6 +479,7 @@ tests/test_hull3d.py
 tests/test_inspection.py
 tests/test_installed_names.py
 tests/test_iso286.py
+tests/test_judge_r8.py
 tests/test_keep.py
 tests/test_layout.py
 tests/test_layout_placer.py

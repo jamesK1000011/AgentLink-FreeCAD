@@ -24,7 +24,8 @@ EXPECT = {
                                                                         {"symbol": "Finish", "kind": "finish", "reads": "ra 1.6 lay =", "on": "Edge2"}, {"symbol": "Odd", "kind": "odd", "reads": "odd", "on": None}],
                                             "other": [{"object": "Note", "type": "DrawViewAnnotation"}]},
     ("td_list", "views just opened, worked out"): {"computed": "3 views had no lines yet (a document just opened keeps a view's settings, not its lines): worked out here in 0 s before reading."},
-    ("td_list", "views that stay without lines"): {"notReady": "No lines yet for Front, Front, Top: their edge counts and the dimensions on them are left out, not zero. "
+    ("td_list", "views that stay without lines"): {"notReady": "No lines yet for Front, Front, Top: their edge counts are left out, not zero, and so are the drawn values of the dimensions on them "
+                                                               "(listed, each with notReady; model3d is the part's own value through its 3D references). "
                                                                "A view whose source has no shape or whose page has KeepUpdated off stays so; otherwise recompute, then td_list again."},
     ("td_export", "TechDraw's DXF writer stops"): {"files": {"dxf": {"path": "<out>/Drawing.dxf", "bytes": 1619}},
                                                    "notes": ["Front: 'Shape' object has no attribute 'discretize'", "TechDraw's DXF writer failed (no DXF here): written here instead"]},

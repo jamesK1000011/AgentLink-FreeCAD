@@ -7,6 +7,7 @@
 # everything not touched stay as they were. The agent never needs the
 # FreeCAD objects for this; bim_import brings a file in to look at.
 
+import json
 import os
 
 from .. import paths
@@ -22,6 +23,52 @@ except ImportError:  # the family is left out without IfcOpenShell
 
 GROUP = "bim"
 INFO = "IFC edited in place: open, find, change attributes / property sets / materials / storeys / classification, remove, diff, save."
+
+
+# The IFC file a document edits, kept in the document's Meta (saved with the
+# .FCStd; outside undo, as a session's own bookkeeping is): { path, schema,
+# saved }. The open file itself lives only in the session, so a document
+# saved and opened again (or another session on it) finds the link here and
+# the ifc_ tools open the file again from it: the last copy ifc_save wrote,
+# else the file ifc_open opened. Edits never saved to a file are not in it.
+LINK = "AgentLinkIfc"
+
+
+def link_of(doc):
+    """The IFC link a document holds, or None."""
+    try:
+        raw = (doc.Meta or {}).get(LINK) if doc is not None else None
+    except Exception:
+        return None
+    if not raw:
+        return None
+    try:
+        v = json.loads(raw)
+    except ValueError:
+        return None
+    return v if isinstance(v, dict) and v.get("path") else None
+
+
+def link_file(link):
+    """The file a link opens again: the last copy saved, else the one opened; None when neither is there."""
+    for p in ((link or {}).get("saved"), (link or {}).get("path")):
+        if p and os.path.isfile(p):
+            return p
+    return None
+
+
+def keep_link(doc, link):
+    """The link written to the document's Meta (left as it is when it already says so)."""
+    if doc is None:
+        return
+    try:
+        m = dict(doc.Meta or {})
+        raw = json.dumps(link, separators=(",", ":"))
+        if m.get(LINK) != raw:
+            m[LINK] = raw
+            doc.Meta = m
+    except Exception:
+        pass
 
 
 def run(f, usage, **kw):
@@ -141,6 +188,9 @@ def tools(session):
         """The IFC file open in this session: { file, path, edits }."""
         m = getattr(s, "_agentlink_ifc", None)
         if not m:
+            ln = link_of(s.doc)
+            if ln:
+                raise ToolError("invalid_state", f"This document edited {os.path.basename(ln['path'])}, which is no longer there: ifc_open {{ path }} again.")
             raise ToolError("invalid_state", "No IFC file is open in this session: ifc_open { path } first (bim_export writes one from the model).")
         return m
 
@@ -178,8 +228,24 @@ def tools(session):
         return els
 
     def opened(f, path):
-        """The file kept as the one open in this session, no edits yet."""
+        """The file kept as the one open in this session, no edits yet, and
+        linked from the document (LINK) so a reopened one finds it."""
         s._agentlink_ifc = {"file": f, "path": path, "edits": 0}
+        keep_link(s.doc, {"path": path, "schema": str(getattr(f, "schema", "") or "")})
+
+    def resumable():
+        """Whether no file is open in this session but the document links one that is there."""
+        return not getattr(s, "_agentlink_ifc", None) and link_file(link_of(s.doc)) is not None
+
+    def resume():
+        """The linked file opened again (a document saved and opened again, a new session)."""
+        ln = link_of(s.doc)
+        s._agentlink_ifc = {"file": ifcopenshell.open(link_file(ln)), "path": ln["path"], "edits": 0}
+
+    def saved_to(dst):
+        """The copy ifc_save wrote, linked: the one opened again next time."""
+        m = getattr(s, "_agentlink_ifc", None) or {}
+        keep_link(s.doc, {**(link_of(s.doc) or {"path": m.get("path")}), "saved": dst})
 
     # What the tools' entries (agentlink/data/tools.json, "family": "ifc") call by name.
     # IfcOpenShell's own are reached when called, not here.
@@ -188,6 +254,6 @@ def tools(session):
                # IfcOpenShell's own
                "ifc_file": lambda path: ifcopenshell.open(path), "api": lambda f, usage, **kw: run(f, usage, **kw), "get_pset": lambda el, name: uel.get_pset(el, name),
                # the family's
-               "model": model, "opened": opened, "select": select, "row": row, "real_classification": real_classification, "differences": differences,
+               "model": model, "opened": opened, "resumable": resumable, "resume": resume, "saved_to": saved_to, "select": select, "row": row, "real_classification": real_classification, "differences": differences,
                "both": lambda ia, ib: ia.keys() & ib.keys()}
     return runners.tools(GROUP, s, helpers, family="ifc")

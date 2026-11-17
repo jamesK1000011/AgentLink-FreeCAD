@@ -1600,6 +1600,71 @@ def broken_3d(d):
     return out
 
 
+def _sub_shape(o, sub):
+    """One element of an object's shape by its name ("Edge3", "Vertex2"), or None."""
+    try:
+        sh = o.Shape
+    except Exception:
+        return None
+    for kind, many in (("Edge", "Edges"), ("Vertex", "Vertexes")):
+        if sub.startswith(kind) and sub[len(kind):].isdigit():
+            try:
+                return getattr(sh, many)[int(sub[len(kind):]) - 1]
+            except Exception:
+                break
+    try:
+        return sh.getElement(sub)
+    except Exception:
+        return None
+
+
+def _ends(x):
+    vs = getattr(x, "Vertexes", None)
+    if vs:
+        return vs[0].Point, vs[-1].Point
+    p = getattr(x, "Point", None)
+    return (p, p) if p is not None else None
+
+
+def model_measure(d):
+    """What a dimension measures, read from the part through its 3D
+    references (References3D) — for a dimension whose view has no lines
+    yet (a document just opened), when the drawing cannot say. The true 3D
+    value: a Projected dimension of an edge not parallel to the view reads
+    shorter on the drawing. None where it has no 3D references, or for
+    DistanceX/Y/Z, Angle3Pt and Area (those need the view's direction)."""
+    subs = []
+    try:
+        for o, ss in list(getattr(d, "References3D", []) or []):
+            for sub in (ss if isinstance(ss, (list, tuple)) else [ss]):
+                subs.append(_sub_shape(o, str(sub or "")))
+    except Exception:
+        return None
+    if not subs or any(x is None for x in subs):
+        return None
+    t = str(getattr(d, "Type", ""))
+    try:
+        if t in ("Radius", "Diameter") and len(subs) == 1:
+            r = float(subs[0].Curve.Radius)
+            return r * 2 if t == "Diameter" else r
+        if t == "Distance" and len(subs) == 1:
+            a, b = _ends(subs[0])
+            return (b - a).Length
+        if t == "Distance" and len(subs) == 2:
+            try:
+                return float(subs[0].distToShape(subs[1])[0])
+            except Exception:
+                pa, pb = getattr(subs[0], "Point", None), getattr(subs[1], "Point", None)
+                return (pb - pa).Length if pa is not None and pb is not None else None
+        if t == "Angle" and len(subs) == 2:
+            (a1, b1), (a2, b2) = _ends(subs[0]), _ends(subs[1])
+            u, w = b1 - a1, b2 - a2
+            return math.degrees(u.getAngle(w))
+    except Exception:
+        return None
+    return None
+
+
 # A weld kind's symbol in FreeCAD's own AWS set (Mod/TechDraw/Symbols/Welding/AWS):
 # the file's stem, with Up / Down where it has both.
 WELD_SVG = {"fillet": "fillet", "square": "Square", "v": "V", "plug": "plug", "surfacing": "bead"}
@@ -2167,16 +2232,56 @@ def tools(session):
                 d.UnderTolerance = m
         return src
 
-    def dim_reading(d):
-        out = {"dimension": d.Name, "label": d.Label, "type": d.Type, "refs": ref_names(d), "view": d.References2D[0][0].Label if d.References2D else None}
+    def special_reading(d, out):
+        """A td_dim_special dimension's row made to say what it measures.
+        FreeCAD 1.1.3 has no arc-length dimension type: its own Arc Length
+        tool (TechDraw_ExtensionCreateLengthArc, makeArcLengthDimension in
+        CommandExtensionDims.cpp) makes a Distance between the arc's ends
+        whose text (Arbitrary) is the arc's length, as td_dim_special does."""
         try:
-            out["measured"] = num(d.getRawValue(), 4)
-        except Exception as e:
-            out["error"] = str(e)
-        try:
-            out["text"] = d.getText()
+            spec = json.loads(getattr(d, SPECIAL_PROP)) if SPECIAL_PROP in d.PropertiesList else None
         except Exception:
-            pass
+            spec = None
+        if not isinstance(spec, dict) or spec.get("kind") not in ("arc_length", "axo_length"):
+            return
+        v = doc().getObject(spec.get("view", ""))
+        L = special_length(v, spec, frames) if v is not None else None
+        if L is None:
+            return
+        arc = spec["kind"] == "arc_length"
+        if "measured" in out:
+            out["chord" if arc else "projected"] = out["measured"]
+        out["measured"] = num(L, 4)
+        out["measures"] = "arc length" if arc else "true length"
+        out["how"] = ("FreeCAD has no arc-length type: as its own Arc Length tool does, a Distance between the arc's ends (chord) with the arc's length as its text."
+                      if arc else "A Distance along the view's edge with the model edge's true length as its text (projected: as the view shows it).")
+
+    def dim_reading(d, cold=False):
+        """A dimension's row. cold: its view has no lines yet, so neither
+        the drawing's value nor its text can be read (never 0 as if
+        measured): notReady, and the part's own value through its 3D
+        references where it has them (model3d). A special dimension
+        (td_dim_special: arc_length, axo_length) measures what its text
+        says: measured is that length, and what TechDraw itself measures
+        between its points is beside it (chord, projected)."""
+        out = {"dimension": d.Name, "label": d.Label, "type": d.Type, "refs": ref_names(d), "view": d.References2D[0][0].Label if d.References2D else None}
+        if cold:
+            out["notReady"] = True
+            v3 = model_measure(d)
+            if v3 is not None:
+                out["model3d"] = num(v3, 4)
+            if getattr(d, "Arbitrary", False):
+                out["text"] = d.FormatSpec
+        else:
+            try:
+                out["measured"] = num(d.getRawValue(), 4)
+            except Exception as e:
+                out["error"] = str(e)
+            try:
+                out["text"] = d.getText()
+            except Exception:
+                pass
+            special_reading(d, out)
         if d.TheoreticalExact:
             out["basic"] = True
         broken = broken_3d(d)
@@ -2515,7 +2620,7 @@ def tools(session):
         frames.clear()
         for d in page.Views:
             try:
-                if d.TypeId == "TechDraw::DrawViewDimension" and d.References2D and d.References2D[0][0].Name in warmed:
+                if d.isDerivedFrom("TechDraw::DrawViewDimension") and d.References2D and d.References2D[0][0].Name in warmed:
                     d.recompute()
             except Exception:
                 pass
