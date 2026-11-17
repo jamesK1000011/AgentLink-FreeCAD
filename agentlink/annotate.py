@@ -21,6 +21,10 @@ element the person can see from where the camera is when it is drawn: the
 point nearest the element's centre whose pixel shows that element, not one
 hidden under another part (a screw over the face's middle). Without a view
 to ask, the point of the element nearest its centre.
+
+A result's colour map (field) is drawn pulled in front of the surface it
+lies on and never picked; its colour scale (legend) in screen space at the
+right of the view, as FreeCAD's colour bar sits, left out of Fit all.
 """
 
 import sys
@@ -32,6 +36,16 @@ TESS = 0.1  # mm: the face's triangulation tolerance
 BADGE_FONT = 22  # logical pixels; times the screen's pixel ratio
 BADGE_DISC = 21  # logical pixels across, likewise
 BADGE_SAMPLES = 48  # points of a face or edge tried for a visible one
+# A field drawn this far in front of its surface (SoPolygonOffset factor,
+# units; negative pulls towards the camera).
+FIELD_OFFSET = (-1.0, -4.0)
+LEGEND_TICKS = 5
+LEGEND_FONT = 13  # logical pixels; times the screen's pixel ratio
+LEGEND_GAP = 0.12  # screen units (10 the view's height) between bar and words
+LEGEND_RATIO = 1.6  # a view's width / height when none tells
+LEGEND_HEIGHT_PX = 800
+LEGEND_PANEL_TRANSPARENCY = 0.15
+LEGEND_INK = (0.08, 0.08, 0.08)
 
 
 def _view():
@@ -420,9 +434,17 @@ class Annotations:
         if not V or not F:
             return 0
         sep = coin.SoSeparator()
-        # Drawn a hair in front of the surface it lies on (the body or mesh
-        # it colours stays shown under it), as the face tint is.
-        sep.addChild(coin.SoPolygonOffset())
+        sep.addChild(_unpickable(coin))
+        # Pulled in front of the surface it lies on (round 7). A plain
+        # SoPolygonOffset (factor 1, units 1) pushes polygons away from the
+        # camera: under a mesh in Shaded mode (no offset) the map was never
+        # seen (mesh 009, 012), and on a Part body or a mesh in Flat Lines
+        # (the same 1, 1: ViewProviderExt.cpp 504, Mesh ViewProvider.cpp 466)
+        # it fought the faces and the selection's green in stripes (fem 034).
+        off = coin.SoPolygonOffset()
+        off.factor = FIELD_OFFSET[0]
+        off.units = FIELD_OFFSET[1]
+        sep.addChild(off)
         mat = coin.SoMaterial()
         mat.diffuseColor.setValues(0, len(cols), cols)
         bind = coin.SoMaterialBinding()
@@ -443,6 +465,103 @@ class Annotations:
         root.addChild(sep)
         return len(F)
 
+    def legend(self, owner, title, unit, lo, hi, stops, ticks=LEGEND_TICKS):
+        """A colour scale drawn in screen space at the right of the 3D view,
+        as FreeCAD's own colour bar sits (SoFCColorBar.cpp: the foreground's
+        orthographic camera, height 10): the bar in the map's colours (stops:
+        [(t 0..1, (r, g, b))], low at the bottom), ticks values from lo to hi
+        beside it, the title and the unit above it, on a pale panel. Scene
+        only (round 7, fem 034: no colour scale): left out of the view's
+        bounding box (FreeCAD's SoSkipBoundingGroup, so Fit all ignores it),
+        never picked, over the model. {labels, title} drawn, or None with no
+        3D view."""
+        root = self._root(owner)
+        if root is None:
+            return None
+        coin = self.coin()
+        w, h = self._size()
+        lay = legend_layout(w / float(h) if h else LEGEND_RATIO)
+        heading = f"{title} ({unit})" if unit else str(title)
+        labels = legend_labels(lo, hi, ticks)
+        font = round(LEGEND_FONT * self._ratio())
+        per_px = 10.0 / float(h or LEGEND_HEIGHT_PX)
+        chars = max([len(t) for _y, t in labels] + [1])
+        left = lay["x0"] - LEGEND_GAP - chars * 0.6 * font * per_px - 0.15
+        left = min(left, lay["x1"] - len(heading) * 0.6 * font * per_px - 0.15)
+        hud = coin.SoAnnotation()
+        for c in (_unpickable(coin), self._hud_camera(), _base_colour_light(coin)):
+            hud.addChild(c)
+        # the pale panel behind it all
+        hud.addChild(_quad(coin, left, lay["y0"] - 0.3, lay["x1"] + 0.15, lay["title_y"] + 0.45, [(0.97, 0.97, 0.97)] * 4, LEGEND_PANEL_TRANSPARENCY))
+        # the bar: a strip of quads, colours per vertex, low at the bottom
+        stops = sorted((float(t), tuple(float(c) for c in rgb)) for t, rgb in stops) or [(0.0, (0, 0, 1)), (1.0, (1, 0, 0))]
+        pts, cols, idx = [], [], []
+        for i, (t, rgb) in enumerate(stops):
+            y = lay["y0"] + (lay["y1"] - lay["y0"]) * t
+            pts += [(lay["x0"], y, 0.0), (lay["x1"], y, 0.0)]
+            cols += [rgb, rgb]
+            if i:
+                a = 2 * (i - 1)
+                idx += [a, a + 1, a + 3, a + 2, -1]
+        bar = coin.SoSeparator()
+        mat = coin.SoMaterial()
+        mat.diffuseColor.setValues(0, len(cols), cols)
+        bind = coin.SoMaterialBinding()
+        bind.value = getattr(coin.SoMaterialBinding, "PER_VERTEX_INDEXED", 0)
+        co = coin.SoCoordinate3()
+        co.point.setValues(0, len(pts), pts)
+        fs = coin.SoIndexedFaceSet()
+        fs.coordIndex.setValues(0, len(idx), idx)
+        fs.materialIndex.setValues(0, len(idx), idx)
+        for c in (mat, bind, co, fs):
+            bar.addChild(c)
+        hud.addChild(bar)
+        # the words, dark on the pale panel
+        ink = coin.SoBaseColor()
+        ink.rgb = LEGEND_INK
+        hud.addChild(ink)
+        f = coin.SoFont()
+        f.name = "Arial"
+        f.size = font
+        hud.addChild(f)
+        right = getattr(coin.SoText2, "RIGHT", 1)
+        for t, text in labels:
+            y = lay["y0"] + (lay["y1"] - lay["y0"]) * t
+            hud.addChild(_text(coin, (lay["x0"] - LEGEND_GAP, y - 0.5 * font * per_px * 0.7, 0.0), text, right))
+        hud.addChild(_text(coin, (lay["x1"], lay["title_y"], 0.0), heading, right))
+        group = _skip_bounding(coin)
+        group.addChild(hud)
+        root.addChild(group)
+        return {"labels": [t for _y, t in labels], "title": heading}
+
+    def _size(self):
+        """The 3D view's size in pixels, (LEGEND_RATIO x 1) x LEGEND_HEIGHT_PX
+        when no view tells."""
+        try:
+            v = self._view_fn()
+            w, h = v.getSize()
+            if w > 0 and h > 0:
+                return int(w), int(h)
+        except Exception:  # noqa: BLE001
+            pass
+        return int(LEGEND_HEIGHT_PX * LEGEND_RATIO), LEGEND_HEIGHT_PX
+
+    def _ratio(self):
+        try:
+            return float(self._ratio_fn())
+        except Exception:  # noqa: BLE001
+            return 1.0
+
+    def _hud_camera(self):
+        """The camera FreeCAD's foreground uses (View3DInventorViewer.cpp
+        527-531): screen y from -5 to 5, x as far as the view is wide."""
+        cam = self.coin().SoOrthographicCamera()
+        cam.position = (0.0, 0.0, 5.0)
+        cam.height = 10.0
+        cam.nearDistance = 0.0
+        cam.farDistance = 10.0
+        return cam
+
     def clear(self, owner=None):
         for k in [k for k in self.roots if owner is None or k == owner]:
             sg, sep = self.roots.pop(k)
@@ -450,6 +569,98 @@ class Annotations:
                 sg.removeChild(sep)
             except Exception as e:  # noqa: BLE001  (a closed view)
                 sys.stderr.write(f"Agent Link: annotations not removed ({type(e).__name__}: {e})\n")
+
+
+# ---- the colour scale (round 7) --------------------------------------------
+
+
+
+def legend_value(v):
+    """A scale's number, short: 444, 12.3, 0.0123, 1.2e-05."""
+    v = float(v)
+    a = abs(v)
+    if a == 0:
+        return "0"
+    if a >= 100:
+        return f"{v:.0f}"
+    if a >= 1e-3:
+        return f"{v:.3g}"
+    return f"{v:.2g}"
+
+
+def legend_labels(lo, hi, n=LEGEND_TICKS):
+    """[(t 0..1 up the bar, words)] for n ticks from lo to hi (at least 2)."""
+    n = max(2, int(n))
+    lo, hi = float(lo), float(hi)
+    return [(i / (n - 1.0), legend_value(lo + (hi - lo) * i / (n - 1.0))) for i in range(n)]
+
+
+def legend_layout(ratio):
+    """Where the bar goes in the foreground camera's units (the view's height
+    is 10, from -5 to 5; its width 10 x ratio): at the right edge, below the
+    navigation cube's corner, as FreeCAD's colour bar (SoFCColorBar.cpp
+    getBounds). {x0, x1, y0, y1, title_y}."""
+    r = float(ratio) if ratio and ratio > 0 else LEGEND_RATIO
+    half_w = 5.0 * r if r >= 1 else 5.0
+    half_h = 5.0 if r >= 1 else 5.0 / r
+    x1 = half_w - 0.35
+    y1 = min(2.4, half_h - 2.4)
+    y0 = max(-3.4, -half_h + 0.8)
+    return {"x0": x1 - 0.35, "x1": x1, "y0": y0, "y1": y1, "title_y": y1 + 0.35}
+
+
+def _unpickable(coin):
+    ps = coin.SoPickStyle()
+    ps.style = getattr(coin.SoPickStyle, "UNPICKABLE", 2)
+    return ps
+
+
+def _base_colour_light(coin):
+    lm = coin.SoLightModel()
+    lm.model = getattr(coin.SoLightModel, "BASE_COLOR", 0)
+    return lm
+
+
+def _quad(coin, x0, y0, x1, y1, cols, transparency=0.0):
+    sep = coin.SoSeparator()
+    mat = coin.SoMaterial()
+    mat.diffuseColor.setValues(0, len(cols), cols)
+    mat.transparency = transparency
+    co = coin.SoCoordinate3()
+    pts = [(x0, y0, 0.0), (x1, y0, 0.0), (x1, y1, 0.0), (x0, y1, 0.0)]
+    co.point.setValues(0, 4, pts)
+    fs = coin.SoIndexedFaceSet()
+    fs.coordIndex.setValues(0, 5, [0, 1, 2, 3, -1])
+    for c in (mat, co, fs):
+        sep.addChild(c)
+    return sep
+
+
+def _text(coin, at, words, justification):
+    sep = coin.SoSeparator()
+    tr = coin.SoTranslation()
+    tr.translation = tuple(at)
+    t = coin.SoText2()
+    t.string = str(words)
+    t.justification = justification
+    sep.addChild(tr)
+    sep.addChild(t)
+    return sep
+
+
+def _skip_bounding(coin):
+    """FreeCAD's SoSkipBoundingGroup set to leave its children out of the
+    bounding box (Fit all, the clipping planes), else a plain group. The
+    legend's coordinates are the screen's, not the model's."""
+    try:
+        t = coin.SoType.fromName("SoSkipBoundingGroup")
+        if not t.isBad():
+            g = t.createInstance()
+            g.getField("mode").set("EXCLUDE_BBOX")
+            return g
+    except Exception:  # noqa: BLE001
+        pass
+    return coin.SoGroup()
 
 
 _SERVICE = None

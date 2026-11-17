@@ -1479,6 +1479,73 @@ def scene_clear():
 _hid_for_scene = []
 
 
+def scene_legend(title, unit, lo, hi, stops):
+    """A colour scale for the scene's map (annotate.legend: screen space, at
+    the right of the 3D view), put away with it. {labels, title} or None.
+    Never raises."""
+    try:
+        from . import annotate
+
+        return annotate.service().legend(SCENE_OWNER, title, unit, lo, hi, stops)
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (scene legend): {e}\n")
+        return None
+
+
+def map_stops(cmap="jet", n=9):
+    """[(t, (r, g, b))] up a map's colours, as render.colours_for colours
+    it. Never raises."""
+    try:
+        import numpy as np
+
+        from . import render
+
+        t = np.linspace(0.0, 1.0, n)
+        return [(float(a), tuple(float(c) for c in col)) for a, col in zip(t, render.colours_for(t, 0.0, 1.0, cmap))]
+    except Exception:  # noqa: BLE001
+        return [(0.0, (0.0, 0.0, 1.0)), (1.0, (1.0, 0.0, 0.0))]
+
+
+# FreeCAD's own result colours for a value from 0 to its largest
+# (ViewProviderFemMeshPyImp.cpp calcColor: green at 0, yellow at half, red).
+FEM_STOPS = [(0.0, (0.0, 1.0, 0.0)), (0.5, (1.0, 1.0, 0.0)), (1.0, (1.0, 0.0, 0.0))]
+
+
+def selection_cleared():
+    """Nothing selected while a map is shown: the selection's green covered
+    it (fem 034). How many were selected. Never raises."""
+    try:
+        import FreeCADGui
+
+        n = len(FreeCADGui.Selection.getSelectionEx() or ())
+        _selected[0] += 1
+        FreeCADGui.Selection.clearSelection()
+        return n
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (selection cleared): {e}\n")
+        return None
+
+
+def framed_on_points(points):
+    """The view framed on a map's points (numpy (n, 3)), its direction
+    kept, nothing selected for it; only with Follow on. Never raises."""
+    try:
+        import numpy as np
+
+        import FreeCADGui
+
+        P = np.asarray(points, dtype=float).reshape(-1, 3)
+        if not len(P) or not FreeCAD.ParamGet(PREFS).GetBool("Follow", True):
+            return False
+        lo, hi = P.min(axis=0), P.max(axis=0)
+        gd = FreeCADGui.ActiveDocument
+        v = getattr(gd, "ActiveView", None) if gd is not None else None
+        return frame_box(v, tuple(float(x) for x in (*lo, *hi)))
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (map frame): {e}\n")
+        return False
+
+
 def hide_for_scene(objs):
     """objs hidden (view state) while the scene's colours stand for them;
     their labels. Never raises."""
@@ -1874,6 +1941,10 @@ def map_shown(session, name, args):
         fn = (render.MAPS.get(name) or (None,))[0]
         if fn is None:
             return None
+        doc = getattr(session, "doc", None)
+        front = getattr(FreeCAD, "ActiveDocument", None)
+        if doc is not None and front is not None and getattr(front, "Name", None) != getattr(doc, "Name", None):
+            return None  # the person's document in front: its view is left alone (K)
         m = fn(session, dict(args or {}))
         import numpy as np
 
@@ -1900,10 +1971,30 @@ def map_shown(session, name, args):
             drawn += scene_field(layer["V"], layer["F"], render.colours_for(vals, lo, hi, m.get("cmap", "jet")))
         if not drawn:
             return None
-        return {"map": name, "range": [round(lo, 6), round(hi, 6)], "triangles": drawn}
+        out = {"map": name, "range": [round(lo, 6), round(hi, 6)], "triangles": drawn,
+               "label": str(m.get("label") or name), "unit": str(m.get("unit") or "")}
+        # The scale beside it, the mapped mesh framed (mesh 012: the camera
+        # stayed on another mesh), nothing selected over it (round 7).
+        out["legend"] = bool(scene_legend(out["label"], out["unit"], lo, hi, map_stops(m.get("cmap", "jet"))))
+        out["framed"] = bool(framed_on_points(np.concatenate([np.asarray(L["V"], dtype=float).reshape(-1, 3)
+                                                               for L in m.get("layers") or ()])))
+        out["selectionCleared"] = selection_cleared()
+        return out
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (map {name}): {e}\n")
         return None
+
+
+def map_words(words, shown):
+    """A read's words with its map's range: "…; CURVATURE (MEAN) -0.1 … 0.1
+    1/mm". Plain Python."""
+    try:
+        from .annotate import legend_value
+
+        lo, hi = shown["range"]
+        return f"{words}; {shown.get('label', 'map')} {legend_value(lo)} … {legend_value(hi)} {shown.get('unit', '')}".rstrip()
+    except Exception:  # noqa: BLE001
+        return words
 
 
 SEGMENTS_FACETS_MOST = 300000
@@ -1929,10 +2020,13 @@ def segments_drawn(doc, args, body):
         segs = m.getPlanarSegments(float(a.get("deviation", 0.01)), int(a.get("minFacets", 20)))
         if not segs:
             return None
-        pl = o.Placement if hasattr(o, "Placement") else None
+        # Mesh.Points are where the mesh is drawn already: MeshObject's point
+        # iterator applies its transform, the Placement (Mesh.cpp 2152,
+        # MeshFeature.cpp 65). Placing them again drew a moved mesh's
+        # colours elsewhere.
         V = []
         for p in m.Points:
-            q = pl.multVec(p.Vector) if pl is not None else p.Vector
+            q = p.Vector
             V.append((q.x, q.y, q.z))
         F, cols = [], []
         facets = m.Facets
@@ -1942,9 +2036,10 @@ def segments_drawn(doc, args, body):
             for k in seg:
                 F.append(tuple(facets[int(k)].PointIndices))
                 cols.append(c)
-        if not scene_field(V, F, cols, per_face=True):
+        drawn = scene_field(V, F, cols, per_face=True)
+        if not drawn:
             return None
-        return len(segs)
+        return {"regions": len(segs), "triangles": drawn, "facets": int(m.CountFacets), "inFront": True}
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (mesh segments): {e}\n")
         return None
@@ -3290,6 +3385,44 @@ def set_view_prop(o, prop, value, at_least=False):
 # ---- a FEM result coloured, as FreeCAD's own result panel colours it (round 4) -------------
 
 FEM_RESULT_TOOLS = ("fea_solve", "fea_native")
+HOLD_COLOUR = "#0072b2"
+
+
+def hold_marked(doc, body):
+    """fea_hold's faces marked in the scene only (round 7, fem 005: a hold is
+    Agent Link's data, not a FreeCAD constraint object, so nothing drew it):
+    each held face tinted and its edges drawn thick (annotate.light), on the
+    study's body; for a solid studied alone (its hidden helper) a mark at each
+    face's centre. Put away at the next change. {body, lit} or {marks}, or
+    None. Never raises."""
+    try:
+        b = body if isinstance(body, dict) else {}
+        held = [h for h in b.get("held") or () if isinstance(h, dict) and h.get("face")]
+        if not held:
+            return None
+        from . import annotate, store
+
+        st = store.read(doc, "fea", None) or {}
+        o = None if st.get("of") else next(iter(_objects(doc, [st.get("body")])), None)
+        if o is None or not _seen(o):
+            pts = [tuple(float(c) for c in h["centre"]) for h in held if isinstance(h.get("centre"), (list, tuple))]
+            n = scene_marks(pts, colour=HOLD_COLOUR) if pts else 0
+            return {"marks": n} if n else None
+        shape = annotate.global_shape(o)
+        subs = [h["face"] for h in held]
+        for f in list(subs):
+            try:
+                face = shape.getElement(f)
+                subs += [f"Edge{i}" for i, e in enumerate(shape.Edges, 1)
+                         if f"Edge{i}" not in subs and any(e.isSame(fe) for fe in face.Edges)]
+            except Exception:  # noqa: BLE001
+                continue
+        got = annotate.service().light(o, subs, owner=SCENE_OWNER, colour=HOLD_COLOUR, shape=shape)
+        lit = got.get("lit") or []
+        return {"body": o.Label, "lit": lit} if lit else None
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (hold marked): {e}\n")
+        return None
 
 
 def fem_result_shown(doc, body, session=None):
@@ -3336,7 +3469,11 @@ def fem_result_shown(doc, body, session=None):
                     if part is not None and hasattr(part, "TypeId"):
                         hide.append(part)
             hid = hide_for_scene(hide)
-            return {"result": res.Label, "hidden": hid}
+            vm = [float(x) for x in res.vonMises]
+            lo, hi = min(0.0, min(vm)), max(0.0, max(vm))
+            leg = scene_legend("VON MISES", "MPa", lo, hi if hi > lo else lo + 1e-6, FEM_STOPS)
+            return {"result": res.Label, "hidden": hid, "range": [round(lo, 3), round(hi, 3)], "legend": bool(leg),
+                    "selectionCleared": selection_cleared()}
         r = getattr(session, "_agentlink_fea", None) if session is not None else None
         if not r or "field" not in r:
             return None
@@ -3363,7 +3500,17 @@ def fem_result_shown(doc, body, session=None):
         drawn = scene_field(layer["V"], layer["F"], cols)
         if not drawn:
             return None
-        return {"map": "stress (Agent Link's own solve)", "range": [round(lo, 3), round(hi, 3)], "triangles": drawn}
+        # The body under the map hidden while it stands (its faces and the
+        # selection's green fought the map in stripes: fem 034), the scale
+        # beside it, nothing selected (round 7).
+        hid = []
+        try:
+            hid = hide_for_scene([session.body(r["body"])])
+        except Exception:  # noqa: BLE001
+            pass
+        leg = scene_legend(str(m.get("label") or "VON MISES"), str(m.get("unit") or "MPa"), lo, hi, map_stops(m.get("cmap", "jet")))
+        return {"map": "stress (Agent Link's own solve)", "range": [round(lo, 3), round(hi, 3)], "triangles": drawn,
+                "hidden": hid, "legend": bool(leg), "selectionCleared": selection_cleared()}
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (FEM result): {e}\n")
         return None
@@ -3825,7 +3972,9 @@ class Echo:
             if name in READ_MAPS:
                 # A read whose answer is a map (curvature): drawn on the model
                 # in the scene only, put away at the next change (round 6).
-                self._step(tr, "mapShown", map_shown, self.s, READ_MAPS[name], args)
+                shown = self._step(tr, "mapShown", map_shown, self.s, READ_MAPS[name], args)
+                if shown:
+                    self._step(tr, "words", say, map_words(read_words(what, result), shown), HOLD_MS, where)
             return
         import FreeCADGui
 
@@ -3915,6 +4064,8 @@ class Echo:
             # Only a call that leaves a result: a later fea_ change (fea_parts,
             # fea_clear) put away the colours (scene_clear) and draws none.
             self._step(tr, "femResult", fem_result_shown, doc, body, self.s)
+        if name == "fea_hold":
+            self._step(tr, "holdMarked", hold_marked, doc, body)
         if name.startswith(("pd_", "feature_")):
             self._step(tr, "profilesHidden", profiles_hidden, named)
         if name == "meshobj_segments" and (self._step(tr, "segments", segments_shown, made)
