@@ -513,6 +513,33 @@ def save_queue(q):
     _save(path("queue.json"), q)
 
 
+# The hold's words once no heavy job runs (round 7: "A heavy job is running
+# (…, since 12:44)" stayed in the status bar and in session_state long
+# after that job ended).
+HELD_IDLE = "No heavy job runs now; new heavy jobs wait for your go (one ran while you were working in the window)"
+
+
+def settled_notice(q):
+    """q with its hold's notice put right once nothing runs: the "is
+    running" words replaced by HELD_IDLE (the hold itself stays until
+    queue_go). True when changed. Plain Python."""
+    if q.get("running") or not q.get("held"):
+        return False
+    if str(q.get("notice") or "").startswith("A heavy job is running"):
+        q["notice"] = HELD_IDLE
+        return True
+    return False
+
+
+def status_line(q):
+    """The status bar's line for the heavy queue: the hold's notice only while
+    a heavy job runs, else None (the line is not said again, so it goes).
+    Plain Python."""
+    if q.get("held") and q.get("notice") and q.get("running"):
+        return "Agent Link: " + str(q["notice"]) + " (say go in chat)."
+    return None
+
+
 def log_timing(q, tool, size, seconds, keep=40):
     t = q.setdefault("timings", {}).setdefault(tool, [])
     t.append([float(size), float(seconds)])

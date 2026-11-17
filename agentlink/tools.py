@@ -2382,6 +2382,10 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 row["profile"] = mine.pop("profile")
                 if getattr(s, "echo_trace", None) is not None:
                     row["echo"] = s.echo_trace  # what the window echo saw and did for this call
+                look = getattr(s, "echo_look", None)
+                if isinstance(look, dict) and look.get("tool") == c.get("tool"):
+                    row["echoLook"] = look  # a look's own words (its trace above is the last change's)
+                    s.echo_look = None
             results.append(row)
             if mine.get("record") is not None:
                 with _around.part("record"):

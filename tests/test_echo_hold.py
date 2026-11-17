@@ -84,11 +84,14 @@ class Replay(unittest.TestCase):
         self.assertTrue(captions and all(ms == echo.HOLD_MS for _c, _t, ms in captions))  # held, not 2.6 s
         trace = self.session.echo_trace
         del self.events[:]
-        self.call(snap, {"part": "window"}, {"path": "shot.png"})
-        # The snapshot put nothing out, said nothing, selected nothing, and
-        # left the change's trace for session_state.
-        self.assertEqual(self.events, [])
+        self.call(snap, {"part": "window"}, {"path": "shot.png", "width": 1400, "height": 852})
+        # The snapshot put nothing out, selected nothing, and left the
+        # change's trace for session_state; it says only its own words, with
+        # a value (round 7: the frame kept the last call's caption).
+        self.assertEqual([e[0] for e in self.events], ["caption", "status"])
+        self.assertIn("1400 x 852 px", self.events[0][1])
         self.assertIs(self.session.echo_trace, trace)
+        self.assertEqual(self.session.echo_look["tool"], "window_snapshot")
         # The next change puts the ring out and says its own words.
         self.call(Tool("pd_pocket", True), {"sketch": "Corner"}, {"feature": "Pocket"})
         self.assertEqual(self.events.count(("ringsOff",)), 1)

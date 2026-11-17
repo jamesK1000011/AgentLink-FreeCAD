@@ -546,4 +546,5 @@ tests/test_usage_strip.py
 tests/test_view.py
 tests/test_watch_hooks.py
 tests/test_window_r6_fixes.py
+tests/test_window_r7_echo.py
 tests/test_window_route.py

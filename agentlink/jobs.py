@@ -290,6 +290,7 @@ def _queue(add=None, drop=None):
             if add:
                 r.append(add)
             q["running"] = r
+            keep.settled_notice(q)
             keep.save_queue(q)
     except Exception:
         pass

@@ -174,7 +174,7 @@ class RobotAndAppearance(unittest.TestCase):
         e = src("agentlink", "echo.py")
         self.assertIn('COLOUR_TOOLS = ("object_appearance",)', e)
         self.assertIn('tr["selectionCleared"]', e)
-        self.assertIn("scene_marks(marks + [w[0] for w in words[2:]], lines, labels=words)", e)
+        self.assertIn("scene_marks(list(dict.fromkeys(marks + [w[0] for w in words])), lines, labels=words)", e)
         self.assertIn("    if _watcher_type(o):\n        return False", e)
         a = src("agentlink", "annotate.py")
         self.assertIn('def marks(self, owner, points=(), lines=(), colour="#e8a33d", size=9, labels=()):', a)
