@@ -39,7 +39,7 @@ class ReadValues(unittest.TestCase):
             ("tool_groups", {"tools": [{}, {}, {}]}, "Read the tool groups: 3 tools found"),
             ("usage_report", {"calls": 12, "tokens": 3400, "errors": 4}, "Read the usage report: 12 calls, 3400 tokens, 4 refusals"),
             ("report_read", {"found": True, "count": 120, "problems": 0}, "Read the Report view: 0 problems, 120 lines"),
-            ("view_maps", {"maps": [{}] * 4, "layers": [{}]}, "Made a colour map: 4 maps, 1 layer"),
+            ("view_maps", {"maps": [{}] * 4, "layers": [{}]}, "Listed the colour maps: 4 maps, 1 layer"),
             ("snapshot_list", {"shots": []}, "Listed your screenshots: no screenshots"),
             ("note_list", {"notes": [{}]}, "Read the notes: 1 note"),
             ("job_status", {"job": "job-1", "tool": "scan_qa", "status": "done", "took": 12.5}, "scan_qa done in 12.5 s"),

@@ -107,6 +107,10 @@ class Phrases(unittest.TestCase):
     def test_the_wanted_phrases(self):
         cases = [
             (("dialog_answer", {"button": "OK"}, {"pressed": "OK", "dialog": {"title": "Note"}}), "Answered the Note dialog: OK"),
+            # Nothing open, nothing pressed (round 8, 00-130): a look, not an answer.
+            (("dialog_answer", {"button": "Cancel"}, {"dialog": None, "note": "No dialog or task panel is open in the FreeCAD window."}),
+             "Looked for an open dialog to press Cancel"),
+            (("view_maps", {}, {"maps": [{}], "layers": []}), "Listed the colour maps"),
             (("doc_save", {}, {"document": "WindowTest", "path": "/Users/someone/AgentLink/WindowTest.FCStd"}), "Saved WindowTest"),
             (("doc_close", {"documents": ["WindowTest"], "discard": True}, {}), "Closed WindowTest (not saved)"),
             (("object_set", {"object": "Pad", "values": {"Length": 24}}, {}), "Set Pad Length to 24 mm"),
@@ -131,7 +135,7 @@ class Phrases(unittest.TestCase):
 
     def test_fallback_is_a_friendly_name_and_main_argument(self):
         self.assertEqual(activity.did("meshobj_smooth", {"object": "Scan", "iterations": [3]}), "Mesh smooth on Scan")
-        self.assertEqual(activity.did("sheet_import", {"path": "/home/someone/x.csv"}), "Imported Spreadsheet on x.csv")
+        self.assertEqual(activity.did("sheet_import", {"path": "/data/x.csv"}), "Imported Spreadsheet from x.csv")  # a read: from its file (round 8)
         self.assertEqual(activity.did("zz_frob_list", {}), "Listed Zz frob")
 
     def test_command_text_from_its_name(self):

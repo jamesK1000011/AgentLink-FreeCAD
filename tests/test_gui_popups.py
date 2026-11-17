@@ -477,6 +477,28 @@ class LinkBusy(unittest.TestCase):
         th.join(1)
         self.assertEqual(f.getvalue(), "")
 
+    def test_deadline_lifted_between_ticks(self):
+        # expect_done pops "deadline" on the GUI thread while the watch
+        # thread sleeps: the watch ends quietly (it raised KeyError
+        # 'deadline' at gui_link.py:1102 in the Report view, picture 08-021).
+        import threading
+
+        link, f = self.link(), io.StringIO()
+        call = {"id": 9, "name": "gui_input", "f": f, "answered": False}
+        link.calls.append(call)
+        errors = []
+        old_hook = threading.excepthook
+        threading.excepthook = lambda a: errors.append(a.exc_type)
+        self.addCleanup(setattr, threading, "excepthook", old_hook)
+        th = link.expect("gui_input", 0.05, tick=0.01)
+        call.pop("deadline")
+        th.join(1)
+        self.assertFalse(th.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(f.getvalue(), "")
+        self.assertFalse(call["answered"])
+        self.assertIsNone(link._stuck())  # the busy test reads it the same safe way
+
     def test_unstick_without_a_link(self):
         import agentlink_state
 

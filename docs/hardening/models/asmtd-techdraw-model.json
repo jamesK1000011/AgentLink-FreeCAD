@@ -1061,9 +1061,10 @@
      330,
      80
     ],
-    "name": "ClipBox"
+    "name": "ClipBox",
+    "frame": false
    },
-   "expect": "a clip group on the page"
+   "expect": "a clip group on the page, its frame off (round 8: an empty framed clip stood on the page in every later picture and in td_export's PDF, 06-070)"
   },
   {
    "tool": "td_list",

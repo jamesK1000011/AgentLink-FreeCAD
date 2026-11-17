@@ -324,6 +324,11 @@ def _special(name, args, body):
         title = _word(_amp(info.get("title") or "")) if info else None
         where = f"the {title} dialog" if title and "dialog" not in title.lower() else (title or "the dialog")
         btn = _word(a.get("button"))
+        if btn and not b.get("pressed") and not info and "dialog" in b and b["dialog"] is None:
+            # Nothing open, nothing pressed (round 8, 00-130: "Answered the
+            # dialog: Cancel" read as a press): the look, and the button
+            # it would have pressed.
+            return f"Looked for an open dialog to press {_amp(btn)}"
         if btn:
             return f"Answered {where}: {_amp(btn)}"
         return f"Read {where}" if title else "Looked for an open dialog"
@@ -404,8 +409,11 @@ def friendly(name):
 
 def fallback(name, args):
     a = args if isinstance(args, dict) else {}
-    main = next((w for w in (_word(a.get(k)) for k in MAIN_ARGS) if w), None)
-    return friendly(name) + (f" on {main}" if main else "")
+    key, main = next(((k, w) for k, w in ((k, _word(a.get(k))) for k in MAIN_ARGS) if w), (None, None))
+    # A read's file is what it read from (round 8, 04-013: "Read Gcode on
+    # …-sliced.3mf" for G-code read out of the sliced project).
+    on = "from" if key == "path" and not writes(name) else "on"
+    return friendly(name) + (f" {on} {main}" if main else "")
 
 
 _JOB_ID = re.compile(r"^job-[0-9a-f]{8}$")
@@ -533,6 +541,63 @@ def cam_value(b):
     return ", ".join(out)
 
 
+def views_value(b):
+    """A projection group's views in a few words (round 8, td_projection:
+    "Put standard views on the drawing" gave none): how many, their labels
+    and the projection ("3 views (Front, Top and Right), third angle"). Any
+    answer with a projection and items [{ view }]. None for any other.
+    Plain Python."""
+    items = b.get("items")
+    if not isinstance(b.get("projection"), str) or not isinstance(items, list) or not items:
+        return None
+    labels = [str(x["view"]) for x in items if isinstance(x, dict) and isinstance(x.get("view"), str)]
+    if not labels:
+        return None
+    out = f"{_count(len(labels), 'view')} ({_and([plain(_amp(x)) for x in labels], 4)})"
+    return out + f", {plain(b['projection']).lower()}"
+
+
+def print_value(b):
+    """A sliced print's figures (round 8, 04-013, 04-015, 02-010: "Read
+    Gcode on …-sliced.3mf" gave none): a G-code read's layer count and
+    heights, the layer it read (its height and moves), its picture's file;
+    a slice's layers and filament. Any answer with a whole-number layers
+    and a [first, last] z, or layers with filamentG. None for any other.
+    Plain Python."""
+    def num(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+    n = b.get("layers")
+    if not isinstance(n, int) or isinstance(n, bool):
+        return None
+    z = b.get("z")
+    has_z = isinstance(z, list) and len(z) == 2 and all(num(x) for x in z)
+    if not has_z and not num(b.get("filamentG")):
+        return None
+    out = _count(n, "layer")
+    lay = b.get("layer") if isinstance(b.get("layer"), dict) else None
+    if lay and num(lay.get("layer")):
+        out = f"layer {lay['layer']} of {n}"
+        if num(lay.get("z")):
+            out += f" at z {_short_num(float(lay['z']))} mm"
+        moves = lay.get("moves")
+        k = len(moves) if isinstance(moves, list) else moves if num(moves) else None
+        if k is not None:
+            out += f", {_count(int(k), 'move')}"
+    elif has_z:
+        out += f", z {_short_num(float(z[0]))} to {_short_num(float(z[1]))} mm"
+    feats = b.get("features")
+    if not lay and isinstance(feats, (list, dict)) and feats:
+        out += f", {_count(len(feats), 'feature')}"
+    if num(b.get("filamentG")):
+        out += f", {_short_num(float(b['filamentG']))} g of filament"
+    if isinstance(b.get("move"), dict) and isinstance(b["move"].get("kind"), str):
+        out += f", move: {plain(b['move']['kind'])}"
+    if isinstance(b.get("svg"), str) and b["svg"].strip():
+        out += f", drew {_file_name(b['svg'])}"
+    return out
+
+
 def mesh_value(b):
     """A mesh read's count in a few words (round 7, mesh 12-013, 12-035: the
     captions "Mesh boundary on Half rim", "Mesh segments on curvature" gave
@@ -554,6 +619,16 @@ def mesh_value(b):
             if num(top.get("area")):
                 out += f", {_short_num(top['area'])} mm²"
         return out
+    if num(b.get("area3d")) and num(b.get("areaFlat")):
+        # meshobj_unwrap (round 8, 00-174, 00-191, unwrap-0: "Mesh unwrap"
+        # or only its file): the areas, 3D and flat, and the stretch.
+        out = f"area {_short_num(b['area3d'])} mm², flat {_short_num(b['areaFlat'])} mm²"
+        st = b.get("stretch") if isinstance(b.get("stretch"), dict) else {}
+        if num(st.get("max")):
+            out += f", stretch max {_short_num(st['max'])} %"
+            if num(st.get("mean")) and st["mean"]:
+                out += f" (mean {_short_num(st['mean'])} %)"
+        return out
     if num(b.get("segments")) and isinstance(b.get("largest"), list):
         n = int(b["segments"])
         return f"{n} segment{'' if n == 1 else 's'}"
@@ -567,7 +642,7 @@ def key_value(body):
     b = body if isinstance(body, dict) else {}
     if isinstance(b.get("result"), (int, float)) and not isinstance(b.get("result"), bool) and isinstance(b.get("to"), str):
         return plain(f"{_short_num(b['result'])} {b['to']}")
-    fem = fem_value(b) or cam_value(b) or mesh_value(b)
+    fem = fem_value(b) or cam_value(b) or mesh_value(b) or print_value(b) or views_value(b)
     if fem:
         return fem
     for k, fmt in KEY_NUMBERS:

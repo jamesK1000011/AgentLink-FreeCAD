@@ -747,7 +747,9 @@ PREFIX_NAME = {"pd": "Part Design", "part": "Part", "sketch": "Sketch", "bim": "
                "history": "History", "usage": "Usage", "tool": "Tools", "guide": "Guide", "batch": "Batch",
                "crash": "Crash", "queue": "Queue", "addon": "Add-ons", "app": "FreeCAD", "cmd": "Command",
                "menu": "Menu", "body": "Body", "export": "Export", "outputs": "Outputs", "measure": "Measure",
-               "fem": "FEM", "scad": "OpenSCAD", "param": "Parameter", "robot": "Robot", "link": "Link"}
+               "fem": "FEM", "scad": "OpenSCAD", "param": "Parameter", "robot": "Robot", "link": "Link",
+               # A file format's own spelling ("Read Gcode" in 04-013).
+               "gcode": "G-code"}
 
 
 def declare(fam):
@@ -806,6 +808,11 @@ def declare(fam):
         keys = (v,) if isinstance(v, str) else tuple(x for x in (v or ()) if isinstance(x, str))
         if isinstance(k, str) and keys:
             SELECTS[k] = tuple(dict.fromkeys(tuple(SELECTS.get(k, ())) + keys))
+    # Round 8: SEE_THROUGH, {tool: answer key} naming the body a tool cut
+    # inside (a channel, a cavity): that body made see-through for the call.
+    for k, v in dict(getattr(fam, "SEE_THROUGH", None) or {}).items():
+        if isinstance(k, str) and k and isinstance(v, str) and v:
+            SEE_THROUGH.setdefault(k, v)
     fn = getattr(fam, "WORDS", None)
     if callable(fn) and fn not in WORDS_FNS:
         WORDS_FNS.append(fn)
@@ -823,6 +830,10 @@ def declare(fam):
 SELECTS = {}
 WORDS_FNS = []
 SELECT_FNS = []
+# Declared by add-ons (declare, round 8): {tool: answer key} naming the body
+# whose result is inside it (an add-on's channel cut through a solid block
+# was not seen, 03-015).
+SEE_THROUGH = {}
 
 
 def declared_words(name, args, body):
@@ -1588,7 +1599,53 @@ def tree_shown(doc, args, body):
     if kids:
         _select(kids)
         out["selected"] = len(kids)
+        # The tree brought up to the selection now, then the group's row
+        # opened and scrolled to the top of the tree, so its rows show in
+        # their new order (round 8, 05-060: the tree stayed at the top of
+        # its document list, the house's rows out of sight).
+        views_follow()
+        got = tree_rows(mw, QtW, g[0])
+        if got:
+            out.update(got)
     return out
+
+
+def tree_rows(mw, QtW, group, most=12):
+    """In FreeCAD's Model tree (Gui::TreeWidget), group's row opened and
+    scrolled to the top: { rows: [its children's labels as the tree shows
+    them, in order], scrolled } — a FACT that the order is in sight. None
+    when no row was found. Never raises."""
+    try:
+        label = str(getattr(group, "Label", "") or "")
+        for t in mw.findChildren(QtW.QTreeWidget):
+            try:
+                if t.metaObject().className() != "Gui::TreeWidget" or not t.isVisible():
+                    continue
+            except RuntimeError:
+                continue
+            row = None
+            for it in t.selectedItems() or []:
+                p = it.parent()
+                if p is not None and p.text(0) == label:
+                    row = p
+                    break
+            if row is None:
+                hits = [x for x in t.findItems(label, _match_flags(QtW), 0) or []]
+                row = hits[0] if hits else None
+            if row is None:
+                continue
+            row.setExpanded(True)
+            t.scrollToItem(row, QtW.QAbstractItemView.PositionAtTop)
+            return {"rows": [row.child(i).text(0) for i in range(min(row.childCount(), most))], "scrolled": True}
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (tree rows): {e}\n")
+    return None
+
+
+def _match_flags(QtW):
+    """Qt's MatchExactly | MatchRecursive, for QTreeWidget.findItems."""
+    QtCore, _QtGui, _QtW = _qt()
+    return QtCore.Qt.MatchExactly | QtCore.Qt.MatchRecursive
 
 
 def scene_field(V, F, colours, per_face=False):
@@ -2422,6 +2479,121 @@ def boundary_drawn(made):
                 "colour": BOUNDARY_COLOUR, "inFront": True}
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (mesh boundary): {e}\n")
+        return None
+
+
+def see_through(doc, name, body, made):
+    """The body a call cut inside (SEE_THROUGH: its answer's key) made
+    see-through for this call, as view state (FreeCAD's Transparency, put
+    back at the next change as uncover's covers are), so what was cut in it
+    shows (round 8, 03-015: an add-on's channel inside a solid green
+    block). What else the call made (a printed trace in the channel) is
+    left selected, the body not: its green drew over the inside. A FACT:
+    { body, transparency, selected } or None. Never raises."""
+    try:
+        import FreeCADGui
+
+        key = SEE_THROUGH.get(name)
+        b = body if isinstance(body, dict) else {}
+        ref = b.get(key) if key else None
+        if not isinstance(ref, str) or not ref:
+            return None
+        objs = [o for o in _objects(doc, [ref]) if not _hidden(o)]
+        if not objs:
+            return None
+        o = objs[0]
+        vo = getattr(o, "ViewObject", None)
+        if vo is None or "Transparency" not in (getattr(vo, "PropertiesList", None) or ()):
+            return None
+        was = int(vo.Transparency or 0)
+        if was < COVER_ALPHA:
+            _covers.append((o.Document.Name, o.Name, was))
+            vo.Transparency = COVER_ALPHA
+        rest = [x for x in made or () if x is not o and not _hidden(x)]
+        _selected[0] += 1
+        FreeCADGui.Selection.clearSelection()
+        for x in rest:
+            _add_sel(x)
+        return {"body": o.Label, "transparency": int(vo.Transparency or 0), "selected": [x.Label for x in rest]}
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (see through): {e}\n")
+        return None
+
+
+def mesh_info_box():
+    """The Mesh workbench's own "Mesh Info" box (src/Mod/Mesh/Gui/
+    Workbench.cpp: MeshInfoWatcher, a task watcher shown whenever no task
+    is open) put away when no mesh is selected: it stood empty after
+    meshobj_unwrap of a body's face (round 8, 00-174, 00-191). With a mesh
+    selected it shows that mesh's points, facets and bounds, and is kept.
+    FreeCAD's own Control.clearTaskWatcher() takes it away; the workbench
+    adds it again when it is next brought up. "kept (a mesh selected)",
+    "put away", or None. Never raises."""
+    try:
+        import FreeCADGui
+
+        if FreeCADGui.activeWorkbench().name() != "MeshWorkbench":
+            return None
+        if FreeCADGui.Control.activeDialog():
+            return None
+        if any(getattr(o, "TypeId", "") == "Mesh::Feature" for o in FreeCADGui.Selection.getSelection()):
+            return "kept (a mesh selected: it shows its values)"
+        FreeCADGui.Control.clearTaskWatcher()
+        return "put away"
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (mesh info box): {e}\n")
+        return None
+
+
+def unwrap_shown(doc, args, body, made, animate=True):
+    """meshobj_unwrap's piece shown (round 8, 00-174, unwrap-0: with make:
+    false nothing was new, so the whole document was framed, 9.6 m across,
+    and the full sphere stood over the trimmed cap): the face or mesh it
+    laid flat selected (the face as "Foot.Face6"), with the flat pattern it
+    made when there is one, and the view framed on those; whatever stands
+    over the piece made see-through; the Mesh Info box filled (a mesh
+    selected) or put away (mesh_info_box). A FACT for one live run:
+    { selected, framed, size (mm of the framed box), uncovered, meshInfo }.
+    Never raises."""
+    try:
+        import FreeCADGui
+
+        a = args if isinstance(args, dict) else {}
+        b = body if isinstance(body, dict) else {}
+        of = a.get("of") if isinstance(a.get("of"), str) else b.get("of")
+        r = _ref(of)
+        src = [o for o in _objects(doc, [r[0] if r else of]) if not _hidden(o)]
+        pats = [o for o in _objects(doc, [b.get("pattern")]) if not _hidden(o)] if isinstance(b.get("pattern"), str) else []
+        pats += [o for o in made or () if o not in pats and o not in src and not _hidden(o)]
+        if not src and not pats:
+            return None
+        _selected[0] += 1
+        FreeCADGui.Selection.clearSelection()
+        picked = []
+        for o in src:
+            if _add_sel(o, r[1] if r else ""):
+                picked.append(f"{o.Label}.{r[1]}" if r else o.Label)
+        for o in pats:
+            if _add_sel(o):
+                picked.append(o.Label)
+        out = {"selected": picked}
+        boxes = [_tuple(x) for x in (_box(o) for o in src + pats) if x is not None]
+        if boxes:
+            u = _union(boxes)
+            out["size"] = [round(float(u[3] - u[0]), 3), round(float(u[4] - u[1]), 3), round(float(u[5] - u[2]), 3)]
+        if FreeCAD.ParamGet(PREFS).GetBool("Follow", True):
+            how = fit(animate=animate, selection=True)
+            out["framed"] = "the piece" if how == "selection" else how or "not framed"
+        if src:
+            got = uncover(doc, src)
+            if got:
+                out["uncovered"] = got
+        info = mesh_info_box()
+        if info:
+            out["meshInfo"] = info
+        return out
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (unwrap shown): {e}\n")
         return None
 
 
@@ -4961,6 +5133,9 @@ class Echo:
             self._step(tr, "plan", self._plan, made)
         if name.startswith("robot_"):
             self._step(tr, "robotFramed", self._robot_frame, doc, args, body, made)
+        elif name == "meshobj_unwrap" and self._step(tr, "unwrapShown", unwrap_shown, doc, args, body, made,
+                                                     fit_animated(getattr(self.s, "batch_now", None), self.mode)):
+            tr["fit"] = "unwrap"
         else:
             self._step(tr, "fit", self._frame, tr, name, made, sketch, subs)
         if name in OUTLINE_TOOLS:
@@ -5009,6 +5184,8 @@ class Echo:
         if name in PIECE_TOOLS and self._step(tr, "piecesColoured", pieces_coloured, made):
             _selected[0] += 1
             FreeCADGui.Selection.clearSelection()
+        if name in SEE_THROUGH:
+            self._step(tr, "seeThrough", see_through, doc, name, body, made)
         if name in COLOUR_TOOLS:
             # The selection's green drew over the new colours (core 0032: Block
             # selected, blue and the red face hidden): nothing left selected.

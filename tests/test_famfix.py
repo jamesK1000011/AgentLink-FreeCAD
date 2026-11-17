@@ -152,7 +152,7 @@ class TechDrawPaper(unittest.TestCase):
     off = td.native_marks(types.SimpleNamespace(ViewObject=vo), False)
     print(json.dumps([on, vo.ArcCenterMarks, off]))
 ''')
-        self.assertEqual(got, [True, True, False])
+        self.assertEqual(got, [True, False, False])  # round 8: FreeCAD's own crosses off, ours drawn
 
     def test_freecads_own_weld_symbol(self):
         got = in_a_process(self.BODY + '''
@@ -195,7 +195,7 @@ class TechDrawPaper(unittest.TestCase):
     def test_the_weld_and_the_marks_reach_the_window(self):
         e = entries()
         self.assertIn({"let": {"ws, has_svg, tiles": "=native_weld(page_holding(v), ln, spec)"}}, e["td_weld"]["steps"])
-        self.assertIn("native_marks(v, ext > 0)", json.dumps(e["td_centermarks"]["steps"]))
+        self.assertIn("native_marks(v, ext > 0, ext)", json.dumps(e["td_centermarks"]["steps"]))
 
 
 class Entries(unittest.TestCase):

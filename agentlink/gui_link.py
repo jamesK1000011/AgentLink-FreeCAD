@@ -1041,7 +1041,9 @@ class Link:
         if getattr(self, "stuck", None):
             return "a nested event loop that did not end (" + str(self.stuck.get("why") or "")[:160] + ")"
         now = time.time()
-        if any(c.get("deadline") and now > c["deadline"] and not c.get("finished") for c in calls):
+        # c.get once: expect_done (another thread) can pop the deadline
+        # between a test and a read.
+        if any((c.get("deadline") or now + 1) < now and not c.get("finished") for c in calls):
             return gi.front_words(front)
         return None
 
@@ -1133,13 +1135,20 @@ class Link:
         def watch():
             while not call.get("finished"):
                 time.sleep(tick)
-                if call.get("finished") or call["answered"]:
+                if call.get("finished") or call.get("answered"):
                     return
-                if time.time() > call["deadline"]:
+                # expect_done (the GUI thread) pops the deadline when the
+                # call returned on its own: lifted, so this watch ends. A
+                # plain call["deadline"] raised KeyError here (Report view,
+                # thread agentlink-busy-call) when the pop came between ticks.
+                deadline = call.get("deadline")
+                if deadline is None:
+                    return
+                if time.time() > deadline:
                     from . import gui_input as gi
 
                     with self._writes():
-                        if call["answered"] or call.get("finished"):
+                        if call.get("answered") or call.get("finished") or call.get("deadline") is None:
                             return
                         try:
                             call["f"].write(compact(self.busy_reply(call["id"], gi.front_words(getattr(self, "front", None)), ran=True)) + "\n")

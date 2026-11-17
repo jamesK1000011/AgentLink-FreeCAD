@@ -9067,7 +9067,7 @@
   },
   "td_centermarks": {
    "group": "techdraw",
-   "description": "Centre marks (thin chain crosses) on the holes and round edges of views (all part views when left out): extend mm past each circle (2); on: false takes them off. Whole circles and arcs past a half turn only. Drawn by td_export; in the window FreeCAD's own centre marks of the view are switched on (or off) instead — a small cross at each centre (its ArcCenterMarks), not the chain lines.",
+   "description": "Centre marks (thin chain crosses) on the holes and round edges of views (all part views when left out): extend mm past each circle (2); on: false takes them off. Whole circles and arcs past a half turn only. Drawn by td_export; in the window the same chain lines are drawn as FreeCAD's own cosmetic centre lines on those circles only, and FreeCAD's own crosses of the view (its ArcCenterMarks, which mark every arc's centre, a slot's ends too) are switched off.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -9092,9 +9092,10 @@
     {"let": {"ext": "=float(a.get('extend', 2.0)) if a.get('on', True) else 0.0", "rows": []}},
     {"let": {"late": "=[v for v in views if not edges_of(v)]"}},
     {"do": "=recompute(late)", "when": "=late"},
-    {"each": "v", "in": "=views", "steps": [{"do": ["=own_prop(v, MARKS_PROP, 'App::PropertyFloat', 'Centre marks on its circles: how far past each, mm (0: none)')", "=setprop(v, MARKS_PROP, ext)"]}, {"let": {"shown": "=native_marks(v, ext > 0)"}}, {"push": {"rows": {"view": "=v.Label", "circles": "=len(circle_centres(v))", "window": "=shown", "marks": "=mark_facts(v)"}}}]}
+    {"each": "v", "in": "=views", "steps": [{"do": ["=own_prop(v, MARKS_PROP, 'App::PropertyFloat', 'Centre marks on its circles: how far past each, mm (0: none)')", "=setprop(v, MARKS_PROP, ext)"]}, {"let": {"shown": "=native_marks(v, ext > 0, ext)"}}, {"push": {"rows": {"view": "=v.Label", "circles": "=len(circle_centres(v))", "window": "=shown", "marks": "=mark_facts(v)"}}}]},
+    {"do": "=recompute(views)"}
    ],
-   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"views": "=rows", "extend": "=ext", "note": "Drawn as thin chain lines by td_export; in the window FreeCAD's own centre marks are switched on (window: true), a small cross at each centre."}}
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"views": "=rows", "extend": "=ext", "note": "Drawn as thin chain lines by td_export, and in the window as FreeCAD's own cosmetic centre lines on the same circles (window: true; marks.lines counts them); FreeCAD's own crosses, which mark a slot's ends too, are off (marks.crosses)."}}
   },
   "td_hatch": {
    "group": "techdraw",
@@ -9963,6 +9964,7 @@
     {"refuse": {"fmt": "{ss.Label} is empty: sheet_set fills its cells (asm_bom makes a parts list), then td_table again."}, "when": "=not rng", "code": "invalid_state"},
     {"let": {"corners, wrong": "=range_corners(rng)"}},
     {"refuse": {"fmt": "range: {wrong}."}, "when": "=wrong is not None"},
+    {"do": "=ss.recompute()"},
     {"add": "TechDraw::DrawViewSpreadsheet", "name": "Table", "as": "t"},
     {"do": "=page.addView(t)"},
     {"set": {"t.Source": "=ss", "t.CellStart": "=cell_name(corners[0])", "t.CellEnd": "=cell_name(corners[1])", "t.TextSize": "=float(a.size or 3.5)"}},
@@ -9971,7 +9973,7 @@
     {"set": {"t.X": "=px", "t.Y": "=py"}},
     {"do": "=recompute()"}
    ],
-   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"table": "=t.Name", "sheet": "=ss.Label", "range": "=range_text(corners[0], corners[1])", "at": ["=num(t.X, 2)", "=num(t.Y, 2)"], "note": "It follows the sheet: change cells with sheet_set."}}
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"table": "=t.Name", "sheet": "=ss.Label", "range": "=range_text(corners[0], corners[1])", "at": ["=num(t.X, 2)", "=num(t.Y, 2)"], "shown": "=table_cells(t, ss)", "note": "It follows the sheet: change cells with sheet_set."}}
   },
   "td_section_position": {
    "group": "techdraw",
@@ -14490,7 +14492,7 @@
   },
   "td_export": {
    "group": "techdraw",
-   "description": "Write a page out: formats [svg, pdf, dxf], name. DXF is TechDraw's own. SVG and PDF are drawn here from the page's objects (TechDraw's own PDF and SVG export needs the window): views, dimensions, symbols, notes, tables, centre marks, hatching and the title block's fields, without the template's artwork. Files go to the session's folder; notes says what was skipped.",
+   "description": "Write a page out: formats [svg, pdf, dxf], name. DXF is TechDraw's own. SVG and PDF are drawn here from the page's objects (TechDraw's own PDF and SVG export needs the window): views, dimensions, symbols, notes, tables, centre marks, hatching and the title block's fields, without the template's artwork. Files go to the session's folder; notes says what was skipped; stacked names dimensions whose texts lie on one spot (td_dim_align or object_set X, Y moves one).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -14520,10 +14522,11 @@
     {"do": "=recompute(list(page.Views))"},
     {"let": {"base": "=join(out_dir(), (a.name or page.Label).replace(' ', '-'))", "files": {}, "notes": []}},
     {"let": {"sheet, skipped": "=page_sheet(page)"}},
+    {"let": {"stacked": "=stacked_dims(page)"}},
     {"do": "=notes.extend(skipped)", "when": "=skipped"},
     {"each": "k", "in": "=kinds", "steps": [{"let": {"p": "=made(base + '.' + k)", "own": true}}, {"when": "=k == 'dxf'", "then": [{"try": [{"do": "=write_dxf_page(page, p)"}, {"when": "=isfile(p) and getsize(p) > 0", "then": [{"put": {"dxf": {"path": "=p", "bytes": "=getsize(p)", "by": "TechDraw"}}, "into": "files"}, {"let": {"own": false}}]}], "except": [{"push": {"notes": {"fmt": "TechDraw's DXF writer failed ({error}): written here instead"}}}]}]}, {"when": "=own", "then": [{"do": ["=write_out(p, drawn(sheet, k))", "=files.update({k: {'path': p, 'bytes': getsize(p)}})"]}]}]}
    ],
-   "answer": {"fields": {"page": "=page.Label", "files": "=files", "wrote": "=basename(base) + ' ' + ', '.join([('.' + k) + ' ' + (str(round(f['bytes'] / 1024)) + ' kB' if f['bytes'] >= 1024 else str(f['bytes']) + ' B') for k, f in files.items()])", "notes": {"when": "=notes", "value": "=notes"}}}
+   "answer": {"fields": {"page": "=page.Label", "files": "=files", "wrote": "=basename(base) + ' ' + ', '.join([('.' + k) + ' ' + (str(round(f['bytes'] / 1024)) + ' kB' if f['bytes'] >= 1024 else str(f['bytes']) + ' B') for k, f in files.items()])", "notes": {"when": "=notes", "value": "=notes"}, "stacked": {"when": "=stacked", "value": "=stacked"}}}
   },
   "td_cosmetic": {
    "group": "techdraw",
