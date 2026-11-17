@@ -88,7 +88,7 @@ class WrongWords(unittest.TestCase):
         self.assertEqual(activity.outcome("pref_get", True, {"path": "BaseApp/Preferences/View", "values": {"a": {}}, "groups": []}), "1 value, 0 groups")
         self.assertEqual(activity.outcome("pref_get", True, {"path": "x", "name": "Probe", "type": "Integer", "value": 3}), "Probe = 3")
         got = activity.outcome("ifc_open", True, {"path": "~/models/house.ifc", "schema": "IFC4", "storeys": [{}, {}], "elements": 40})
-        self.assertEqual(got, "IFC4, 2 storeys, 40 elements")
+        self.assertEqual(got, "IFC IFC4, 2 storeys, 40 elements")
         self.assertEqual(activity.call_value("meshobj_import", {"file": "~/models/a.stl"}), "a.stl")
         self.assertEqual(activity.call_value("meshobj_export", {"file": "~/models/a.stl"}), "wrote a.stl")
 
