@@ -852,7 +852,27 @@ class Echo:
             # (A command or a menu entry acts in the mode the window is in,
             # as when a person pushes it: closing the sketch first left
             # Sketcher_LeaveSketch greyed out and refused.)
-            gd.resetEdit()
+            # FreeCAD turns the camera back to where it was before the
+            # sketch, animated. Inside a batch the next fit cut that turn off
+            # at its first frame and the view stayed flat on the sketch: the
+            # turn is made at once there (animation off for this one step).
+            v, was = None, None
+            if getattr(self.s, "batch_now", None):
+                try:
+                    v = gd.ActiveView
+                    was = bool(v.isAnimationEnabled())
+                    if was:
+                        v.setAnimationEnabled(False)
+                except Exception:
+                    v, was = None, None
+            try:
+                gd.resetEdit()
+            finally:
+                if v is not None and was:
+                    try:
+                        v.setAnimationEnabled(True)
+                    except Exception:
+                        pass
             self._left_sketch = True
 
     def after(self, tool, args, reply):
@@ -921,7 +941,13 @@ class Echo:
                             # Set, not animated: viewIsometric starts a turn
                             # that the fit just below cut off at its first
                             # frame inside a batch (the view stayed flat).
-                            FreeCADGui.ActiveDocument.ActiveView.setCameraOrientation(FreeCAD.Rotation(0.424708, 0.17592, 0.339851, 0.820473))
+                            # Only when the camera still looks straight
+                            # along an axis (a person's own tilted view is
+                            # left as it is).
+                            gv2 = FreeCADGui.ActiveDocument.ActiveView
+                            d = gv2.getViewDirection()
+                            if max(abs(d.x), abs(d.y), abs(d.z)) > 0.999:
+                                gv2.setCameraOrientation(FreeCAD.Rotation(0.424708, 0.17592, 0.339851, 0.820473))
                     except Exception:
                         pass
                 _model_tab_back()
