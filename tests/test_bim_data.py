@@ -266,7 +266,7 @@ def _main(mode):
         missing = {}
         for name, e in runners.entries().items():
             key = (e["group"], e.get("family"))
-            if e["group"] in ("bim", "bim_gaps"):
+            if e["group"] in ("bim", "bim_gaps") and e.get("family") != "ifc":  # ifc.py's own: tests/test_datamisc_data.py
                 lost = sorted(runners.calls(e) - set(seen.get(key, {})))
                 if lost:
                     missing[name] = lost

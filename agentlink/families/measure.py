@@ -11,8 +11,8 @@ import Part
 from .. import geometry as geo
 from .. import store
 from ..materials import MASS_DENSITY
-from ..protocol import Tool, ToolError
-from ..tools import obj
+from .. import runners
+from ..protocol import ToolError
 from . import picks
 
 
@@ -46,10 +46,12 @@ KIND_ATTR = {"face": "Faces", "edge": "Edges", "vertex": "Vertexes"}
 
 
 def r(x, n=3):
+    """x rounded to n places, a float; never -0.0."""
     return round(float(x), n) + 0.0
 
 
 def surface_type(f):
+    """A face's surface in these tools' words (plane, cylinder, cone …); "unknown" when it has none to read."""
     try:
         return SURFACES.get(type(f.Surface).__name__, type(f.Surface).__name__.lower())
     except Exception:
@@ -57,6 +59,7 @@ def surface_type(f):
 
 
 def curve_type(e):
+    """An edge's curve in these tools' words (line, circle, ellipse …); "unknown" when it has none to read."""
     try:
         return CURVES.get(type(e.Curve).__name__, type(e.Curve).__name__.lower())
     except Exception:
@@ -77,11 +80,13 @@ def face_normal(f, at=None):
 
 
 def line_dir(e):
+    """A straight edge's direction, from its first vertex to its last (its tangent at the start when it has one vertex)."""
     d = e.Vertexes[-1].Point - e.Vertexes[0].Point if len(e.Vertexes) > 1 else e.tangentAt(e.FirstParameter)
     return d.normalize() if d.Length > 1e-12 else d
 
 
 def describe_face(f, i):
+    """What a face is, as shape_query and measure answer it: ref, type, area, centroid, and what its surface has (normal; radius, axis, centre …)."""
     t = surface_type(f)
     out = {"ref": f"Face{i}", "type": t, "area": r(f.Area, 2), "centroid": geo.vec(f.CenterOfMass)}
     s = f.Surface
@@ -99,6 +104,7 @@ def describe_face(f, i):
 
 
 def describe_edge(e, i):
+    """What an edge is: ref, type, length, mid, and a line's direction or a circle's centre, axis, radius and whether it closes."""
     t = curve_type(e)
     mid = e.valueAt((e.FirstParameter + e.LastParameter) / 2)
     out = {"ref": f"Edge{i}", "type": t, "length": r(e.Length), "mid": geo.vec(mid)}
@@ -114,6 +120,7 @@ def describe_edge(e, i):
 
 
 def rng(v, name):
+    """A filter's range from a number (± a small tolerance) or [least, most]; None when not asked."""
     if v is None:
         return None
     if isinstance(v, (int, float)) and not isinstance(v, bool):
@@ -231,6 +238,7 @@ def filter_shape(shape, a, default_kind="face", of_el=None):
 
 
 def describe(label, sub, sh):
+    """What measure reads of one reference: a point, a whole body (volume, area, box) or an element (describe_face, describe_edge, a vertex's place), a round one with its diameter."""
     if label == "point":
         return {"point": geo.vec(sh.Point)}
     if sub is None:
@@ -248,6 +256,7 @@ def describe(label, sub, sh):
 
 
 def angle_between(u, v, undirected=False):
+    """The angle between two unit vectors in degrees (0–180); undirected: between two lines, 0–90."""
     c = max(-1.0, min(1.0, u.dot(v)))
     deg = math.degrees(math.acos(c))
     if undirected:
@@ -280,268 +289,75 @@ def inertia(shape, rho):
     return m, c, I
 
 
+# FreeCAD's Measure objects by kind: the type, how many elements it takes (0: one or more) and the property that holds the result.
+KEEP = {"distance": ("Measure::MeasureDistance", 2, "Distance"), "angle": ("Measure::MeasureAngle", 2, "Angle"),
+        "length": ("Measure::MeasureLength", 0, "Length"), "area": ("Measure::MeasureArea", 0, "Area"),
+        "radius": ("Measure::MeasureRadius", 1, "Radius"), "diameter": ("Measure::MeasureDiameter", 1, "Diameter"),
+        "position": ("Measure::MeasurePosition", 1, "Position")}
+
+# What each of FreeCAD's Measure objects accepts (its isValidSelection).
+TAKES = {"distance": "two of: a vertex, an edge, a flat or cylindrical face", "angle": "two straight edges or flat faces",
+         "length": "edges", "area": "faces", "radius": "one circular edge (a circle or arc, not a cylindrical face)",
+         "diameter": "one circular edge (a circle or arc, not a cylindrical face)", "position": "one vertex"}
+
+
+def wrong(kind, sub, el):
+    """Why FreeCAD's Measure object of this kind does not take the element, or None."""
+    what = "a face" if sub.startswith("Face") else "an edge" if sub.startswith("Edge") else "a vertex"
+    if sub.startswith("Face"):
+        t = surface_type(el)
+        if kind == "area" or (kind == "angle" and t == "plane") or (kind == "distance" and t in ("plane", "cylinder")):
+            return None
+        return f"{what} ({t})"
+    if sub.startswith("Edge"):
+        t = curve_type(el)
+        if kind in ("length", "distance") or (kind == "angle" and t == "line") or (kind in ("radius", "diameter") and t == "circle"):
+            return None
+        return f"{what} ({t})"
+    return None if kind in ("position", "distance") else what
+
+
 def tools(session):
+    """The measuring tools are data (agentlink/data/tools.json, group
+    "measure"; run by agentlink/runners.py's steps runner): each entry has
+    the tool's words, its checks with their refusals, the order of its steps
+    and its answer. What is here is what those entries call by name
+    (docs/data-tools.md)."""
     s = session
-    body = {"type": "string", "description": "A body's name or label; may be left out when there is one."}
-    ref = {"description": "\"Face12\" / \"Edge3\" (with body), \"Box.Face12\", a body's name, or a point [x, y, z]."}
 
-    def shape_query(a):
-        o, kind, hits = query(s, a)
-        limit = int(picks.number(a, "limit", 20, ge=1, le=500, msg="limit: how many to list, 1 … 500 (20 by default); found counts them all."))
-        return {"body": o.Label, "kind": kind, "found": len(hits), "items": [d for _, _, d in hits[:limit]], **({"more": len(hits) - limit} if len(hits) > limit else {})}
+    def recorded(label):
+        """The material material_set recorded for a body, or None."""
+        return store.materials(s.doc).get(label)
 
-    def measure(a):
-        if "a" not in a:
-            raise ToolError("invalid_input", "a: what to measure — a reference or a point; b: a second one for a distance or an angle.")
-        la, sa, ea = picks.resolve(s, a["a"], a.get("body"))
-        da = describe(la, sa, ea)
-        if a.get("b") is None:
-            return {"a": da}
-        lb, sb, eb = picks.resolve(s, a["b"], a.get("body"))
-        db = describe(lb, sb, eb)
-        if la == lb and sa == sb and la != "point":
-            raise ToolError("invalid_input", f"a and b are the same ({da.get('ref') or la}): give two different things, or a alone to read one.")
-        dist, pairs, _ = ea.distToShape(eb)
-        out = {"a": da, "b": db, "distance": r(dist), "from": geo.vec(pairs[0][0]), "to": geo.vec(pairs[0][1])}
-        fa = sa and sa.startswith("Face") and da.get("type") == "plane"
-        fb = sb and sb.startswith("Face") and db.get("type") == "plane"
-        la_ = sa and sa.startswith("Edge") and da.get("type") == "line"
-        lb_ = sb and sb.startswith("Edge") and db.get("type") == "line"
-        if fa and fb:
-            na, nb = picks.V(*da["normal"]), picks.V(*db["normal"])
-            out["angle"] = angle_between(na, nb)
-            if out["angle"] < 0.01 or out["angle"] > 179.99:
-                out["gap"] = r(abs((ea.CenterOfMass - eb.CenterOfMass).dot(na)))
-                out["note"] = "Parallel faces: gap is the distance between their planes; distance the least between the faces as bounded."
-        elif la_ and lb_:
-            out["angle"] = angle_between(picks.V(*da["dir"]), picks.V(*db["dir"]), True)
-        elif (fa and lb_) or (fb and la_):
-            n = picks.V(*(da if fa else db)["normal"])
-            dvec = picks.V(*(db if fa else da)["dir"])
-            out["angle"] = round(90 - angle_between(n, dvec, True), 3)
-            out["angleIs"] = "between the line and the face's plane"
-        if "center" in da and "center" in db:
-            out["centers"] = r((picks.V(*da["center"]) - picks.V(*db["center"])).Length)
-        return out
+    def printed(label):
+        """The body's print setup, when it has one (a printed part with no material is taken as PLA)."""
+        return store.setup_of(s.doc, label, "print")
 
-    def section(a):
-        o = picks.solid_body(s, a.get("body"))
-        n = picks.direction(a.get("normal"), "normal", (0, 0, 1))
-        if a.get("at") is not None:
-            p = picks.vec3(a["at"], "at")
-        else:
-            p = n * picks.num(a.get("offset", 0.0), "offset")
-        sh = o.Shape
-        bb = sh.BoundBox
-        L = bb.DiagonalLength + (p - bb.Center).Length + 1.0
-        plane = Part.Plane(p, n)
-        cut = sh.common(plane.toShape(-L, L, -L, L))
-        faces = cut.Faces
-        if not faces:
-            raise ToolError("not_found", f"The plane through {geo.vec(p)} normal {geo.vec(n)} misses {o.Label} (box {geo.box_of(sh)['min']} to {geo.box_of(sh)['max']}): move at.")
-        tol = picks.number(a, "tolerance", 0.05, gt=0, msg="tolerance: the chord error of the outlines, above 0 mm (0.05 by default).")
-        outlines = []
-        cap = int(picks.number(a, "maxPoints", 400, ge=3, le=20000, msg="maxPoints: the most points an outline is given as, 3 … 20000 (400 by default)."))
-        for f in faces:
-            for w in f.Wires:
-                pts = w.discretize(Deflection=tol)
-                if len(pts) > cap:
-                    pts = w.discretize(Number=cap)
-                uv = [[r(x, 3) for x in plane.parameter(q)] for q in pts]
-                outlines.append({"outer": w.isSame(f.OuterWire), "length": r(w.Length), "points": uv})
-        u = plane.value(1, 0) - plane.value(0, 0)
-        v = plane.value(0, 1) - plane.value(0, 0)
-        return {
-            "body": o.Label,
-            "area": r(sum(f.Area for f in faces), 2),
-            "regions": len(faces),
-            "plane": {"origin": geo.vec(p), "normal": geo.vec(n), "u": geo.vec(u), "v": geo.vec(v)},
-            "outlines": outlines,
-            "note": "Points are [u, v] in the plane: a point is origin + u·U + v·V. outer: false marks a hole.",
-        }
+    def card(ref):
+        """A FreeCAD library card (its id or name) or a custom material of
+        this document, as material_set records them; None when it is neither."""
+        from . import material as _material
 
-    def measure_mass(a):
-        o = picks.solid_body(s, a.get("body"))
-        # The add-on that owns mass (its "mass_properties" service: as
-        # printed, inserts included) answers when it is installed and no
-        # density or material is given here.
-        if a.get("density") is None and a.get("material") is None:
-            got = _deferred(s, "mass_properties", {"body": o.Label})
-            if got is not None:
-                return got
-        if a.get("density") is not None:
-            rho = picks.num(a["density"], "density")
-            src = "given"
-        else:
-            mat = (a.get("material") or store.materials(s.doc).get(o.Label) or "").lower()
-            assumed = False
-            if not mat and store.setup_of(s.doc, o.Label, "print"):
-                # Printed and no material said: PLA, as the review and the
-                # strength study assume — and said so.
-                mat, assumed = "pla", True
-            if not mat:
-                raise ToolError("invalid_input", f"material or density: what {o.Label} is made of — {', '.join(MASS_DENSITY)}, or a material_list id or name — or density in g/cm³ (material_set records it with the part, and then neither is needed).")
-            if mat in MASS_DENSITY:
-                rho, src = MASS_DENSITY[mat], (f"assumed {mat}: printed, and no material_set" if assumed else mat)
-            else:
-                # A FreeCAD library card (its id or name) or a custom
-                # material, as material_set records them: its own density.
-                from . import material as _material
+        return _material.card(s.doc, ref)
 
-                raw = a.get("material") or store.materials(s.doc).get(o.Label)
-                c = _material.card(s.doc, raw)
-                if c is None:
-                    raise ToolError("invalid_input", f"material {raw!r}: not a stock key ({', '.join(MASS_DENSITY)}), a FreeCAD library card (material_list finds ids and names) or a custom material of this document — or give density in g/cm³.")
-                if not c.get("density"):
-                    raise ToolError("invalid_input", f"material {c.get('name', raw)!r}: its card has no density — give density in g/cm³ (material_get {{ id }} shows what the card holds).")
-                rho, src = float(c["density"]), f"{c.get('name', raw)} ({c.get('source') or 'material card'})"
-        if rho <= 0:
-            raise ToolError("invalid_input", "density: above 0, g/cm³.")
-        m, c, I = inertia(o.Shape, rho)
-        out = {
-            "body": o.Label,
-            "density": rho,
-            "densityFrom": src,
-            "volume": r(o.Shape.Volume, 2),
-            "area": r(o.Shape.Area, 2),
-            "mass": r(m, 3),
-            "centerOfMass": geo.vec(c),
-            "inertia": [[r(x, 1) for x in row] for row in I],
-            "units": "mm, mm³, mm², g; inertia g·mm² about the centre of mass, in the document's axes",
-        }
-        if len(o.Shape.Solids) == 1:
-            try:
-                pp = o.Shape.Solids[0].PrincipalProperties
-                k = rho / 1000.0
-                out["principal"] = {"moments": [r(x * k, 1) for x in pp["Moments"]], "axes": [geo.vec(pp[f"{n}Axis"]) for n in ("First", "Second", "Third")]}
-            except Exception:
-                pass
-        return out
+    def addon_mass(label):
+        """The answer of the add-on that owns mass for this body (its
+        "mass_properties" service: as printed, inserts included), or None
+        when none is installed or it failed for a reason of its own."""
+        return _deferred(s, "mass_properties", {"body": label})
 
-    def clearance(a):
-        oa = picks.solid_body(s, a.get("a"))
-        ob = picks.solid_body(s, a.get("b"))
-        if oa is ob:
-            raise ToolError("invalid_input", "a and b: two different bodies (measure { a, b } measures between two faces or edges of one body).")
-        dist, pairs, _ = oa.Shape.distToShape(ob.Shape)
-        out = {"a": oa.Label, "b": ob.Label, "distance": r(dist), "from": geo.vec(pairs[0][0]), "to": geo.vec(pairs[0][1])}
-        if dist < 1e-6:
-            common = oa.Shape.common(ob.Shape)
-            vol = common.Volume if common.Solids else 0.0
-            if vol > 1e-6:
-                out.update(state="interference", interference=r(vol, 3), interferenceBox=geo.box_of(common))
-            else:
-                out["state"] = "touching"
-        else:
-            out["state"] = "clear"
-        need = a.get("min")
-        if need is not None:
-            out["meets"] = out["state"] == "clear" and dist >= picks.num(need, "min")
-        return out
+    def prop(o, name):
+        """A property by a name worked out in the call (a Measure object's result)."""
+        return getattr(o, name)
 
-    KEEP = {"distance": ("Measure::MeasureDistance", 2, "Distance"), "angle": ("Measure::MeasureAngle", 2, "Angle"),
-            "length": ("Measure::MeasureLength", 0, "Length"), "area": ("Measure::MeasureArea", 0, "Area"),
-            "radius": ("Measure::MeasureRadius", 1, "Radius"), "diameter": ("Measure::MeasureDiameter", 1, "Diameter"),
-            "position": ("Measure::MeasurePosition", 1, "Position")}
-
-    # What each of FreeCAD's Measure objects accepts (its isValidSelection).
-    TAKES = {"distance": "two of: a vertex, an edge, a flat or cylindrical face", "angle": "two straight edges or flat faces",
-             "length": "edges", "area": "faces", "radius": "one circular edge (a circle or arc, not a cylindrical face)",
-             "diameter": "one circular edge (a circle or arc, not a cylindrical face)", "position": "one vertex"}
-
-    def wrong(kind, sub, el):
-        """Why FreeCAD's Measure object of this kind does not take the element, or None."""
-        what = "a face" if sub.startswith("Face") else "an edge" if sub.startswith("Edge") else "a vertex"
-        if sub.startswith("Face"):
-            t = surface_type(el)
-            if kind == "area" or (kind == "angle" and t == "plane") or (kind == "distance" and t in ("plane", "cylinder")):
-                return None
-            return f"{what} ({t})"
-        if sub.startswith("Edge"):
-            t = curve_type(el)
-            if kind in ("length", "distance") or (kind == "angle" and t == "line") or (kind in ("radius", "diameter") and t == "circle"):
-                return None
-            return f"{what} ({t})"
-        return None if kind in ("position", "distance") else what
-
-    def measure_keep(a):
-        """A measurement kept in the document (FreeCAD's Measure objects): it follows the model."""
-        kind = picks.choice(a, "kind", KEEP, f"kind: {', '.join(KEEP)}.", "distance")
-        tid, n, out_prop = KEEP[kind]
-        refs = a.get("of") or []
-        refs = picks.ref_list(refs)
-        if (n and len(refs) != n) or (not n and not refs):
-            raise ToolError("invalid_input", f"of: {n or 'one or more'} element(s) for kind {kind} — {TAKES[kind]}, each as \"Body.Face3\" / \"Body.Edge2\" / \"Body.Vertex1\".")
-        links = []
-        for r in refs:
-            if not isinstance(r, str):
-                raise ToolError("invalid_input", f"of: each an element by name (\"Body.Edge2\"), not {r!r} — FreeCAD's Measure objects are tied to faces, edges and vertices, not free points (measure {{ a, b }} takes points).")
-            label, sub, el = picks.resolve(session, r)
-            if not sub:
-                raise ToolError("invalid_input", f"of: {r!r} names a whole object; kind {kind} takes {TAKES[kind]} (\"{label}.Edge2\": shape_query finds them).")
-            why = wrong(kind, sub, el)
-            if why:
-                raise ToolError("invalid_input", f"of: {label}.{sub} is {why}; kind {kind} takes {TAKES[kind]}." + (" measure { a } reads a cylinder's radius without keeping it." if kind in ("radius", "diameter") else ""))
-            o = picks.find(session.doc, label)
-            links.append((o, [sub]))
-        try:
-            m = session.doc.addObject(tid, kind.capitalize())
-        except Exception as e:
-            raise ToolError("unavailable", f"This FreeCAD has no {tid} ({e}): " + ("FreeCAD 1.1 keeps a radius but not a diameter — kind radius on the same edge, or " if kind == "diameter" else "")
-                            + "measure { a, b } answers the same without keeping it.") from None
-        if n == 2:
-            m.Element1, m.Element2 = links
-        elif n == 1:
-            m.Element = links[0]
-        else:
-            m.Elements = links
-        m.Label = session.unique(a.get("name") or f"{kind.capitalize()} {' – '.join(refs)}", m)
-        session.doc.recompute()
-        if "Invalid" in (getattr(m, "State", None) or []) or (hasattr(m, "isValid") and not m.isValid()):
-            try:
-                why = m.getStatusString()
-            except Exception:  # noqa: BLE001
-                why = "it did not compute"
-            session.doc.removeObject(m.Name)
-            raise ToolError("failed", f"FreeCAD's {tid.split('::')[-1]} could not measure {', '.join(refs)}: {why} — nothing was kept. measure {{ a, b }} reads the same without keeping it.")
-        v = getattr(m, out_prop)
-        val = [round(c, 4) for c in v] if hasattr(v, "x") else round(float(getattr(v, "Value", v)), 4)
-        session.snapshot("measure_keep")
-        return {"measure": m.Label, "kind": kind, "of": refs, "value": val,
-                "unit": {"angle": "°", "area": "mm²", "position": "mm"}.get(kind, "mm"), "step": len(session.steps)}
-
-
-    return [
-        Tool("measure_keep", "Keep a measurement in the document as one of FreeCAD's Measure objects (it follows the model and shows in the tree and the window). kind distance (two of: vertex, edge, flat or cylindrical face) | angle (two straight edges or flat faces) | length (one or more edges, summed) | area (one or more faces, summed) | radius (one circular edge, not a cylinder's face) | position (one vertex) | diameter (FreeCAD 1.1 has none: refused, use radius). of: the elements, [\"Body.Face3\", …] (a bare \"Face3\" when there is one body) — elements only, no points or whole objects. Trap: it is tied to face and edge numbers, which change after modelling steps; a measurement that then fails shows in health. Reply: measure (its label), value, unit. measure reads the same without keeping it.",
-             obj({"kind": {"type": "string", "enum": ["distance", "angle", "length", "area", "radius", "diameter", "position"]}, "of": {}, "name": {"type": "string"}}, ["of"]), measure_keep, changes=True),
-        Tool(
-            "shape_query",
-            "Find a body's faces, edges or vertices by what they are; the refs it answers (\"Face12\", \"Edge3\", counted from 1) are what other tools take. kind face|edge|vertex; type plane, cylinder, cone, sphere, torus, bspline (faces) or line, circle, ellipse, bspline (edges); normal [x,y,z] (flat or curved faces, outward at the centre) or axis (a line's direction, a circle's or cylinder's axis, either way) within degrees (1); radius, area, length a number or [least, most]; x / y / z the centre's coordinate within tol (0.01); near [x,y,z] or { point, within } (nearest first); inside { min, max } (the centre in that box); of \"Face6\" that face's edges or vertices. sort area|radius|length|distance|x|y|z, -key largest first; limit (20; found counts all, more the rest). Reply items: ref, type, area / length, centroid / mid, normal, radius, axis, center. Trap: numbers change after any modelling step — query again rather than reuse old ones. Changes nothing.",
-            obj({"body": body, "kind": {"type": "string", "enum": ["face", "edge", "vertex"]}, "type": {}, "normal": {}, "axis": {}, "within": {"type": "number"}, "radius": {}, "area": {}, "length": {}, "near": {}, "inside": {"type": "object"}, "x": {"type": "number"}, "y": {"type": "number"}, "z": {"type": "number"}, "tol": {"type": "number"}, "of": {"type": "string"}, "sort": {"type": "string"}, "limit": {"type": "integer"}}),
-            shape_query,
-        ),
-        Tool(
-            "measure",
-            "Measure one thing or between two. a alone: a face's area (radius, diameter, axis when round; normal when flat), an edge's length (radius for a circle), a body's volume, area and box. a and b: the least distance (mm) with its two points (from, to), the angle in degrees between flat faces (their outward normals: 180 for opposite faces of a plate) or straight edges (0–90), or a line and a face's plane; gap between parallel faces' planes; centers between round ones' centres. References: \"Face12\" with body, \"Box.Face12\", a body's name (the whole shape) or a point [x,y,z]. Changes nothing; measure_keep keeps one in the document.",
-            obj({"a": ref, "b": ref, "body": body}, ["a"]),
-            measure,
-        ),
-        Tool(
-            "section",
-            "Cut a body with a plane and read the cut: area mm², regions, and the outlines as [u, v] polylines in the plane (outer: false marks a hole; a point is origin + u·U + v·V, the reply's plane gives origin, normal, u, v). normal [x,y,z] or \"+z\" (default); at a point on the plane, or offset mm along the normal from the origin; tolerance the chord error (0.05 mm); maxPoints per outline (400). A plane that misses the body is refused with the body's box. Changes nothing (part_section makes the cut an object).",
-            obj({"body": body, "normal": {}, "at": {"type": "array", "items": {"type": "number"}}, "offset": {"type": "number"}, "tolerance": {"type": "number"}, "maxPoints": {"type": "integer"}}),
-            section,
-        ),
-        Tool(
-            "measure_mass",
-            "Volume mm³, area, mass g, centre of mass and inertia (g·mm² about the centre of mass, document axes; principal moments and axes for one solid) of a body taken as solid through: FreeCAD's own shape mass is only the volume, so the density comes from material (" + ", ".join(MASS_DENSITY) + ", or a material_list id or name) or density g/cm³, else the material material_set recorded (a printed part with none is taken as PLA and says so). With neither given and an add-on that owns mass installed, its answer (as printed, inserts included) comes instead, marked from. Reply: density, densityFrom, volume, mass, centerOfMass, inertia. Changes nothing.",
-            obj({"body": body, "material": {"type": "string"}, "density": {"type": "number"}}),
-            measure_mass,
-        ),
-        Tool(
-            "clearance",
-            "The least distance between two bodies a and b (mm), with its two points (from, to); state clear | touching | interference — then interference is the overlapping volume in mm³ and interferenceBox its box. min mm: meets says whether they are clear by at least that. One boolean on the two bodies: slow on bodies of many thousands of faces. Changes nothing; asm_check covers a whole assembly.",
-            obj({"a": body, "b": body, "min": {"type": "number"}}, ["a", "b"]),
-            clearance,
-        ),
-    ]
+    # What the tools' entries call by name. Part's own is reached when called, not here.
+    helpers = {"doc": lambda: s.doc, "unique": lambda label, own=None: s.unique(label, own), "snapshot": lambda tool: s.snapshot(tool), "step": lambda: len(s.steps),
+               "find": lambda ref: picks.find(s.doc, ref), "resolve": lambda ref, body=None: picks.resolve(s, ref, body), "solid_body": lambda ref: picks.solid_body(s, ref),
+               "num": picks.num, "vec3": picks.vec3, "direction": picks.direction, "ref_list": picks.ref_list,
+               # FreeCAD's own, and the readings every answer is given in
+               "vector": lambda xyz: picks.V(*xyz), "plane_through": lambda p, n: Part.Plane(p, n), "vec": geo.vec, "box_of": geo.box_of, "r": r,
+               # the family's
+               "query": lambda a: query(s, a), "describe": describe, "angle_between": angle_between, "inertia": inertia, "wrong": wrong, "prop": prop,
+               "addon_mass": addon_mass, "recorded": recorded, "printed": printed, "card": card,
+               "KEEP": KEEP, "TAKES": TAKES, "MASS_DENSITY": MASS_DENSITY}
+    return runners.tools(GROUP, s, helpers)
