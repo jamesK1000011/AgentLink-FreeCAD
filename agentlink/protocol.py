@@ -489,6 +489,15 @@ class Server:
             result = self._call(params)
             with around.part("callDone"):  # the add-ons' call_done handlers
                 self._done(params, result, before)
+            if s is not None and getattr(self, "shown", None) is not None and getattr(s, "doc", None) is not before[1]:
+                # Another document in front (doc_new, doc_open, doc_switch, doc_close are no changes
+                # to a document, so the list did not follow them): the context list again.
+                try:
+                    from . import contextlist
+
+                    contextlist.after_call(s, params.get("name"))
+                except Exception:
+                    pass
         with around.part("notice"):
             _add_notice(result)
             _add_rider(result, params.get("name"))

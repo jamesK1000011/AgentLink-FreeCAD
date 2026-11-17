@@ -97,6 +97,22 @@ class ContextList(unittest.TestCase):
         self.assertFalse(r["result"].get("isError"))
         self.assertEqual(contextlist.stats(self.s)["hiddenCalls"], 1)
 
+    def test_new_document_moves_the_list(self):
+        self.s.doc = _Doc(3)
+        appliesnow.chosen = lambda server, state: (["pd_pad"], {})
+        appliesnow.take = lambda session, state=None, names=None, budget=None: {"by": {"pd_pad": "applies"}}
+        contextlist.apply(self.server, self.s)
+        self.assertIn("pd_pad", self.names())
+
+        def new_doc(a):
+            self.s.doc = _Doc(0)
+            return {"document": "D2"}
+
+        self.server.add(Tool("doc_switch", "switch", {"type": "object", "properties": {}, "required": [], "additionalProperties": False}, new_doc, group="doc"))
+        self.server.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "doc_switch", "arguments": {}}})
+        self.assertNotIn("pd_pad", self.names())
+        self.assertIn("doc_new", self.names())
+
     def test_enabled_group_stays_listed(self):
         contextlist.apply(self.server, self.s)
         self.server.groups = {"core", "view", "strength"}
