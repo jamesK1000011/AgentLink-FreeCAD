@@ -260,6 +260,8 @@ docs/hardening/tutor-rest-model.json
 docs/hardening/unproven-findings.md
 docs/hardening/unproven-run-findings.md
 docs/hardening/window-pd-findings.md
+docs/hardening/window-pd2-findings.md
+docs/hardening/window-skasm-findings.md
 docs/hardening/workshop-rest-model.json
 docs/hooks.md
 docs/packaging.md
