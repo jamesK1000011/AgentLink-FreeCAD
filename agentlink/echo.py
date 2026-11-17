@@ -958,7 +958,22 @@ class Echo:
                             gv2 = FreeCADGui.ActiveDocument.ActiveView
                             d = gv2.getViewDirection()
                             if max(abs(d.x), abs(d.y), abs(d.z)) > 0.999:
-                                gv2.setCameraOrientation(FreeCAD.Rotation(0.424708, 0.17592, 0.339851, 0.820473))
+                                # At once, animation off for this one
+                                # step: with it on the turn only begins
+                                # here (the direction read just after was
+                                # unchanged, live) and the fit cut it off.
+                                was_anim = None
+                                try:
+                                    was_anim = bool(gv2.isAnimationEnabled())
+                                    if was_anim:
+                                        gv2.setAnimationEnabled(False)
+                                except Exception:
+                                    was_anim = None
+                                try:
+                                    gv2.viewIsometric()
+                                finally:
+                                    if was_anim:
+                                        gv2.setAnimationEnabled(True)
                                 d1 = gv2.getViewDirection()
                                 tr["turnedTo"] = [round(d1.x, 3), round(d1.y, 3), round(d1.z, 3)]
                     except Exception as e:  # noqa: BLE001
