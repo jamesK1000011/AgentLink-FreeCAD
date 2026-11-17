@@ -153,13 +153,14 @@ licence.
 ## What the agent can do
 
 <!-- tools:begin (scripts/tool_summary.py) -->
-Agent Link itself declares 403 tools in 30 groups; a FreeCAD build without a workbench (FEM, CAM …)
+Agent Link itself declares 404 tools in 31 groups; a FreeCAD build without a workbench (FEM, CAM …)
 serves fewer, and each installed add-on adds its own groups.
 Groups marked *lean* are listed from the start; the agent turns on the rest with `tool_groups`.
 
 | Group | Tools | What it holds |
 |---|---:|---|
 | `core` *lean* | 17 | The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed. |
+| `find` | 1 | tool_find: any tool by plain words, its card, the groups. Listed in the static base (ToolListMode static). |
 | `doc` | 12 | The document: new, open, save; objects listed, read, set, renamed, deleted; recompute; import and export files. |
 | `model` | 27 | Part modelling: primitives, booleans, move/rotate/mirror/scale/arrays, fillets and chamfers, offset and shell, extrude, revolve, loft, sweep. |
 | `measure` | 6 | Find faces and edges (the references other tools take), measure between them, sections, mass properties, clearance. |

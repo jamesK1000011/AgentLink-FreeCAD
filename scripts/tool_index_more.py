@@ -455,6 +455,7 @@ TOOLS = {
     "td_weld": (["TechDraw_WeldSymbol"], "welding symbol"),
     "text_document": (["Std_TextDocument"], "notes readme text"),
     "tool_groups": ([], "tools find search list enable"),
+    "tool_find": ([], "tools find search card words listing"),
     "units_convert": (["Std_UnitsCalculator"], "unit inch mm calculator conversion"),
     "usage_report": ([], "tokens cost calls"),
     "varset_new": (["Std_VarSet"], "variables variable set"),

@@ -383,6 +383,7 @@ def hub_reads():
 
 # Flagged by the scan and safe on a worker thread, each with why.
 LOOKED_AT = {
+    "tool_find": "reads the selection (getSelectionEx) only to rank the tools that fit it; it selects and changes nothing",
     "bim_profiles": "its one maker step is ArchProfile.readPresets, which reads FreeCAD's profile table (a CSV) and makes nothing",
     "bim_schedule": "a changing tool; its read (no sheet) is quantities() alone — the sheet and its recompute are the changing call's",
     "bim_library": "a changing tool; its read (no insert) lists the library's files",
