@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Where a call's time goes besides the tool's own work: the parts of the hub
 # that run round every call (the echo in the window and its view fit, the
-# health check, the undo step, the add-ons' hooks, the batch's record), each
-# timed under a name. A batch puts the split on a call's row as "around"
+# health check, the undo step, the add-ons' hooks, the batch's record, the
+# applies-now filter: appliesNow, and its meter: appliesMeter), each timed
+# under a name. A batch puts the split on a call's row as "around"
 # when what ran round the tool took long (agentlink/tools.py), so a slow
 # document can be read from the answers instead of guessed at.
 #
@@ -16,7 +17,7 @@ _owner = [None]
 
 # Parts that run inside a call's own "ms" (the server times the tool with
 # them); every other part runs outside it.
-INSIDE = ("healthMark", "health", "snapshot", "undoStep", "afterChange", "outputs")
+INSIDE = ("healthMark", "health", "snapshot", "undoStep", "afterChange", "outputs", "appliesNow")
 
 
 def start():

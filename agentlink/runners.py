@@ -460,7 +460,14 @@ def _assign(names, v, env):
 
 def _steps(steps, env, helpers):
     for st in steps:
-        _step(st, env, helpers)
+        try:
+            _step(st, env, helpers)
+        except ToolError as e:
+            # The step a refusal came from, innermost first: what tells a leading check's refusal from a later
+            # one's (agentlink/needs.py leading()).
+            if getattr(e, "step", None) is None:
+                e.step = st
+            raise
 
 
 def _step(st, env, helpers):
@@ -548,10 +555,26 @@ def run_steps(name, e, a, helpers):
 RUN = {"make": run_make, "apply": run_apply, "command": run_command, "read": run_read, "steps": run_steps}
 
 
+# The last refusal a data tool raised: (tool, the step it came from or None). Read once by the meter of
+# agentlink/appliesnow.py, which tells a leading check's refusal from a later one's.
+REFUSED = [None]
+
+
 def tool(name, e, helpers):
     run = RUN[e["runner"]]
-    return Tool(name, e["description"], e["inputSchema"], lambda a: run(name, e, a, helpers), changes=e["changes"], group=e["group"],
-                reads=e.get("reads"), activity=e.get("activity"))
+
+    def call(a):
+        try:
+            return run(name, e, a, helpers)
+        except ToolError as err:
+            REFUSED[0] = (name, getattr(err, "step", None))
+            raise
+
+    t = Tool(name, e["description"], e["inputSchema"], call, changes=e["changes"], group=e["group"], reads=e.get("reads"), activity=e.get("activity"))
+    # The entry and its family's helpers stay on the tool: a dry reading of its leading checks is made from
+    # them (agentlink/needs.py), and from nothing else.
+    t.entry, t.helpers = e, helpers
+    return t
 
 
 def tools(group, session, helpers, data=None, family=None):

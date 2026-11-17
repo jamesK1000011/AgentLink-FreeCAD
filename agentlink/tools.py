@@ -1457,8 +1457,19 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 raise ToolError("unavailable", "Usage is not kept here (AGENTLINK_USAGE=off).")
             out = server.meter.session_totals()
             out["byTool"] = out["byTool"][:12]
-            return {"session": server.meter.session_id, **out}
-        return usage.report(int(a.get("days", 7)))
+            return {"session": server.meter.session_id, **out, **_applies_report()}
+        return {**usage.report(int(a.get("days", 7))), **_applies_report()}
+
+    def _applies_report():
+        """This session's applies-now meter (agentlink/appliesnow.py): what
+        the filter said of each called tool against what the call did."""
+        try:
+            from . import appliesnow
+
+            m = getattr(session, "_applies_meter", None)
+            return {"appliesNow": m.report()} if m is not None and m.calls else {}
+        except Exception:  # noqa: BLE001
+            return {}
 
     def tool_groups(a):
         groups = sorted({t.group for t in server.tools.values()})
@@ -1530,6 +1541,37 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                     raise ToolError("not_found", f"tool {n!r}: not here{' — did you mean ' + ', '.join(near) if near else ''}. tool_groups {{ find: \"words\" }} searches every tool by what it does.")
                 cards.append(card(t))
             return {"tools": cards, "note": "Callable by name as they are, listed or not: directly, or batch { calls: [{ tool, arguments }] } where the client only sends listed tools."}
+        asked = a.get("needs")
+        if asked is not None or a.get("arguments") is not None:
+            # One tool's own leading checks, read against the document as it is and never run
+            # (agentlink/needs.py): with arguments, the checks of that call.
+            if not isinstance(asked, str) or not asked:
+                raise ToolError("invalid_input", "needs: a tool's name (with arguments: {…} for one call's checks) — tool_groups { find: \"words\" } finds names.")
+            t = server.tools.get(asked)
+            if t is None:
+                import difflib
+
+                near = difflib.get_close_matches(asked, list(server.tools), 4)
+                raise ToolError("not_found", f"needs {asked!r}: not here{' — did you mean ' + ', '.join(near) if near else ''}. tool_groups {{ find: \"words\" }} searches every tool by what it does.")
+            given = a.get("arguments")
+            if given is not None and not isinstance(given, dict):
+                raise ToolError("invalid_input", "arguments: the call's arguments as an object, or left out for what can be told without them.")
+            from . import around as _around, needs as _needs
+
+            with _around.part("needs"):
+                if given is not None:
+                    import copy
+
+                    given = copy.deepcopy(given)
+                    try:
+                        from .protocol import check_input
+
+                        check_input(t.schema, given)  # the call's first check: its inputs by the tool's own schema
+                    except ToolError as e:
+                        return {"tool": t.name, "applies": False, "wouldRefuse": [{"code": e.code, "words": e.message}], "notChecked": [],
+                                "note": "Read, not run: the tool's own schema refuses these arguments."}
+                got = _needs.public(_needs.of_tool(t, given))
+            return {**got, "note": "Read from the tool's own leading checks, not run: advice — the call itself is the authority."}
         find = a.get("find")
         now = a.get("now")
         if now is not None and not isinstance(now, bool):
@@ -1550,14 +1592,28 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 out = {"tool": r["name"], "group": r["group"], "does": first_sentence(r["description"])}
                 if why:
                     out["fits"] = ", ".join(why)
+                if r["name"] in told:
+                    out["applies"] = told[r["name"]]
                 return out
+
+            # What each shown tool's own leading checks say of the document now (agentlink/appliesnow.py): a tool
+            # one of them refuses is moved after the others it was shown with, and marked. Nothing is dropped.
+            from . import appliesnow as _applies, around as _around
+
+            told = {}
+
+            def applying(shown, name_of):
+                with _around.part("appliesNow"):
+                    shown, known = _applies.order(shown, session, name_of)
+                told.update(known)
+                return shown
 
             card_note = "tool_groups { tool: name } gives a tool's whole description and inputs; each is callable by name without enabling its group."
             if not now:
                 hits = toolindex.rank(rows, find)
                 if not hits:
                     return {"find": find, "tools": [], "note": "Nothing by those words. Fewer or plainer words (FreeCAD's own name for the command or workbench works), or tool_groups with no arguments for the groups and what each holds."}
-                return {"find": find, "count": len(hits), "tools": [row(r) for r, _m, _s in hits[:limit]], "note": card_note}
+                return {"find": find, "count": len(hits), "tools": [row(r) for r, _m, _s in applying(hits[:limit], lambda h: h[0]["name"])], "note": card_note}
             # What fits the present state. With find: the search's hits,
             # those that fit first; alone: every tool that fits.
             hits = toolindex.rank(rows, find) if find is not None else [(r, 0, 0.0) for r in rows]
@@ -1593,9 +1649,17 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 scored.append((-m, -(sc + 2 * fit), r["name"], r, why))
             scored.sort(key=lambda h: h[:3])
             seen_now = {"workbench": state["workbench"], "editing": state["editing"], "selected": state["selected"]} if state["window"] else {"window": False}
-            out = {**({"find": find} if find is not None else {}), "now": seen_now, "count": len(scored), "tools": [row(r, why) for _m, _s, _n, r, why in scored[:limit]]}
+            out = {**({"find": find} if find is not None else {}), "now": seen_now, "count": len(scored),
+                   "tools": [row(r, why) for _m, _s, _n, r, why in applying(scored[:limit], lambda h: h[2])]}
             if picks:
                 out["next"] = [{"tool": p["tool"], "why": p["why"]} for p in picks]
+            if find is None:
+                # The live filter's reading in full: tool names by class, capped.
+                try:
+                    with _around.part("appliesNow"):
+                        out["appliesNow"] = _applies.full(session, state)
+                except Exception:  # noqa: BLE001
+                    pass
             if not scored:
                 out["note"] = ("Nothing by those words. Fewer or plainer words, or leave find out for what fits now." if find is not None
                                else "Nothing fits this state in particular: tool_groups { find: \"words\" } searches every tool, session_state says what the document holds.")
@@ -2263,9 +2327,9 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         return run
 
     core = [
-        Tool("usage_report", "What working through Agent Link has cost the agent, estimated on this side: calls, tokens (text at ~3.5 characters a token, pictures by size) and the tool list each session loads up front — per day over days (7), per session, the costliest tools, and tips to cut it. session: true gives this session alone. Not Claude's own count: the plan's usage page has that. Changes nothing.",
+        Tool("usage_report", "What working through Agent Link has cost the agent, estimated on this side: calls, tokens (text at ~3.5 characters a token, pictures by size) and the tool list each session loads up front — per day over days (7), per session, the costliest tools, and tips to cut it. session: true gives this session alone. Not Claude's own count: the plan's usage page has that. Changes nothing. appliesNow: this session's meter of the applies-now filter (notThenAnswered must stay near zero).",
              obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}}), usage_report),
-        Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools, each with one line of what it does); detail: true gives every group's whole about. The cheap way to a tool that is not listed is find, card, call: find: \"words\" searches every tool (best first; group narrows it, limit 1-40, 10 by default) by its name, FreeCAD's own names for its commands and workbench (\"PartDesign_Fillet\", \"techdraw\", \"drawing\"), search words and description — tools matching every word come before those matching some — and answers name, group and what it does; tool: name (or up to 20 names) answers that tool's whole description and inputSchema; then call it by name. now: true (alone or with find) answers the tools that fit the present state, best first, each with fits (why): first the likely next step by the document's own state, the same ranking as session_state's next (next [{ tool, why }], at most three; fits then starts \"likely next: …\"), then the active workbench, a sketch open in edit, the selection, and whether the tool's FreeCAD command reports itself active — without a window it goes by the document's objects only and says so. With no arguments the answer also names installed add-ons that brought no tools (addonsWithoutTools [{ extension, error }] and warning), when there are any. None of these lists anything, so a group's other descriptions are not loaded: enable a group only when a task uses most of it. Every tool is callable by name either way. Changes nothing but which tools are listed.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}}), tool_groups),
+        Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools, each with one line of what it does); detail: true gives every group's whole about. The cheap way to a tool that is not listed is find, card, call: find: \"words\" searches every tool (best first; group narrows it, limit 1-40, 10 by default) by its name, FreeCAD's own names for its commands and workbench (\"PartDesign_Fillet\", \"techdraw\", \"drawing\"), search words and description — tools matching every word come before those matching some — and answers name, group and what it does; tool: name (or up to 20 names) answers that tool's whole description and inputSchema; then call it by name. now: true (alone or with find) answers the tools that fit the present state, best first, each with fits (why): first the likely next step by the document's own state, the same ranking as session_state's next (next [{ tool, why }], at most three; fits then starts \"likely next: …\"), then the active workbench, a sketch open in edit, the selection, and whether the tool's FreeCAD command reports itself active — without a window it goes by the document's objects only and says so. With no arguments the answer also names installed add-ons that brought no tools (addonsWithoutTools [{ extension, error }] and warning), when there are any. None of these lists anything, so a group's other descriptions are not loaded: enable a group only when a task uses most of it. Every tool is callable by name either way. Changes nothing but which tools are listed. needs: tool reads that tool's own leading checks against the document now, never run — { applies: true | false | null (not checked), wouldRefuse [{ code, words }], notChecked }; arguments: {…} reads that call's checks too; advice only. find's hits that would refuse now come last, with applies: false; now: true carries appliesNow, the full form of the health's appliesNow line.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}, "needs": {"type": "string"}, "arguments": {"type": "object"}}), tool_groups),
         Tool("guide_read", "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry. No topic: the index — per guide its sections, what the guide and each section cost to read (tokens and sectionTokens: approximate, characters / 4), start (its \"Start here\" section, where it has one: a short map of what to read first; named first in sections) and later (sections meant for one moment of a task, each with when; firstReadTokens is the guide without them). "
              "topic: a guide whole; section: one of its ## sections by the start of its name, or a list of them in one answer (section: [\"Start here\", \"traps\"]). The cheap way through a long guide: its Start here section, then the sections it names, the later ones when their moment comes. "
              "topic as a list reads several guides in order in one call (with section: that section of each guide that has it; missing names the rest), up to about 55 000 characters — the answer is read [{ topic, text }], with next: the topics not reached; guide_read { topic: next } reads on. Changes nothing.",

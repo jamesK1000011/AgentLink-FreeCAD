@@ -17,6 +17,7 @@ Studio Light/parameters/Studio Light.yaml
 agentlink/__init__.py
 agentlink/activity.py
 agentlink/annotate.py
+agentlink/appliesnow.py
 agentlink/around.py
 agentlink/batchrec.py
 agentlink/ccx_io.py
@@ -32,6 +33,8 @@ agentlink/data/filaments.json
 agentlink/data/filaments.schema.json
 agentlink/data/nexthint.json
 agentlink/data/nexthint.schema.json
+agentlink/data/readers.json
+agentlink/data/readers.schema.json
 agentlink/data/stock.json
 agentlink/data/stock.schema.json
 agentlink/data/tool_index.json
@@ -147,6 +150,7 @@ agentlink/meshbool.py
 agentlink/meshdist.py
 agentlink/meshformats.py
 agentlink/millsim.py
+agentlink/needs.py
 agentlink/nexthint.py
 agentlink/outputs.py
 agentlink/overlay.py
@@ -197,6 +201,7 @@ docs/hardening/addons5-findings.md
 docs/hardening/asmtd-findings.md
 docs/hardening/bimcam-findings.md
 docs/hardening/chain-findings.md
+docs/hardening/context-findings.md
 docs/hardening/coredoc-findings.md
 docs/hardening/data2-findings.md
 docs/hardening/dataapp-findings.md
@@ -273,6 +278,7 @@ scripts/release.py
 scripts/sync_shared.py
 scripts/tool_index.py
 scripts/tool_index_more.py
+scripts/tool_needs.py
 scripts/tool_summary.py
 scripts/tool_tables.py
 server.json
@@ -433,6 +439,7 @@ tests/test_millsim.py
 tests/test_model.py
 tests/test_model_more.py
 tests/test_more_families.py
+tests/test_needs.py
 tests/test_nexthint.py
 tests/test_no_addon_names.py
 tests/test_note_faces.py

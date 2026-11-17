@@ -435,6 +435,14 @@ class Server:
     def call(self, params):
         t0 = time.time()
         s = self.session
+        prior = None
+        if self.meter is not None and s is not None:
+            try:
+                from . import appliesnow
+
+                prior = appliesnow.before_call(s)  # what the applies-now filter last said, before this call moves it
+            except Exception:
+                prior = None
         before = (getattr(s, "tx", None), getattr(s, "doc", None)) if s is not None else None
         from . import around
 
@@ -461,6 +469,15 @@ class Server:
             except Exception:
                 pass
             around.add("meter", time.time() - tm)
+            if s is not None:
+                # What the applies-now filter last said of this tool, against what the call did.
+                with around.part("appliesMeter"):
+                    try:
+                        from . import appliesnow
+
+                        appliesnow.after_call(s, str(params.get("name")), bool(result.get("isError")), prior, params.get("arguments"))
+                    except Exception:
+                        pass
         return result
 
     def handle_light(self, msg):
@@ -575,6 +592,7 @@ class Server:
                 # call is (jobs.background_refusal): a read that writes a
                 # file belongs in the batch's order, a change is never a job.
                 raise ToolError("invalid_input", jobs.background_refusal(tool, args, getattr(s, "batch_now", None) is not None, s))
+            changes0 = getattr(s, "_applies_seq", 0)
             gate = self.gate
             if gate is not None:
                 gate.as_job = as_job
@@ -605,6 +623,16 @@ class Server:
                     gate.after(tool, args, not as_job)
             if s is not None and not as_job:
                 jobs.note_slow(tool, args, s, time.time() - t0)
+            if s is not None and not as_job and (tool.changes or (tool.name == "batch" and getattr(s, "_applies_seq", 0) != changes0)):
+                # Which tools apply to the document as it is now, read from their own leading checks: one short
+                # line beside the health's next (agentlink/appliesnow.py). A batch's answer carries it once.
+                try:
+                    from . import appliesnow
+
+                    with _ar.part("appliesNow"):
+                        appliesnow.push(s, tool, out, count=tool.name != "batch")
+                except Exception:
+                    pass
             if self.on_call is not None:
                 try:
                     with _ar.part("onCall"):
