@@ -107,6 +107,9 @@ _ALLOWED = (ast.Expression, ast.Constant, ast.Name, ast.Load, ast.Store, ast.Att
             ast.comprehension, ast.Lambda, ast.arguments, ast.arg, *_COMPS, *_BIN, *_CMP, *_UNARY)
 
 _parsed = {}
+# A run's value under this name (no expression can read or set it: names starting with "_" are refused) is
+# called with (value, method name) before any method of a value is: agentlink/needs.py's dry reading.
+GUARD = "_guard"
 
 
 def parse(text):
@@ -237,7 +240,10 @@ def _ev(n, env, h):
             if fn is None:
                 raise NameError(f"{f.id}(): not a function of the expressions nor a helper of this family")
         else:
-            fn = getattr(_ev(f.value, env, h), f.attr)  # a value's own method (never a dict's item)
+            x = _ev(f.value, env, h)
+            if GUARD in env:
+                env[GUARD](x, f.attr)  # a dry reading (agentlink/needs.py): which methods it takes on which values
+            fn = getattr(x, f.attr)  # a value's own method (never a dict's item)
         return fn(*[_ev(x, env, h) for x in n.args], **{k.arg: _ev(k.value, env, h) for k in n.keywords})
     if t is ast.Lambda:
         names = [x.arg for x in n.args.args]

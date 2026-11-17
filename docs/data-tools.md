@@ -225,6 +225,150 @@ The entry should still read as the tool. Keep code — as a named helper, or the
 A tool is not kept as code for having arithmetic, two makers chosen by input, a second object made
 after the first, or a refusal that cleans up: those are `=`, `choose`, `answer.then` and `refuse.first`.
 
+## What a tool needs: read from the tool, never described twice
+
+An entry's leading steps are its checks: the `refuse` steps, and the `let` steps they depend on, that come before its
+first step that changes the document. `agentlink/needs.py` evaluates **those same steps** against the document as it is,
+through the runners' own evaluator, without running the tool. Nothing else says what a tool needs: there is no table of
+refusal words or of states (one was tried and ruled out: it can fit the cases it was made from and drift from what the
+entry does).
+
+    tool_groups { needs: "fea_hold" }
+    → { "tool": "fea_hold", "applies": false,
+        "wouldRefuse": [{ "code": "invalid_state", "words": "No strength study: fea_setup { body } first." }], "notChecked": [] }
+
+    tool_groups { needs: "pd_pad", arguments: { "sketch": "Top", "type": "through_all" } }     the checks of that call too
+
+| `applies` | Means |
+|---|---|
+| `false` | one of the leading checks refuses now; `wouldRefuse` has its code and its words, as the call gives them (the first 300 characters) |
+| `true` | every leading check was read, there was at least one, and all pass. `notChecked` then says how many of the tool's checks come after its first change: only the call tells those |
+| `null` | not checked, never a guess: a leading step needs the call's arguments, calls a helper that is not a known reader, or raised; or the tool has no leading check to read; or it is not a steps entry |
+
+It is advice. It hides no tool, blocks no call and does not change `tools/list`; the tool's own refusal is the authority.
+
+**Never guess, never change.** A step is evaluated only when every helper it calls is a *pure reader*, every method it
+calls is a known reading and every function is one of the expressions' own (`maker` imports nothing in a reading).
+`agentlink/data/readers.json` holds the lists; `scripts/tool_needs.py` derives them from the helpers' code (`--why name`
+says why a helper is or is not a reader; `--check` fails when the file is stale) and `tests/test_needs.py` pins them, so a
+helper joins a list only by someone reading why. A helper that is not listed is never called: the reading hands the
+evaluator the readers and puts a stop in every other helper's place.
+
+- *readers* (878): the code, and all it calls in this package, only reads names, attributes and items, builds new values,
+  and calls listed functions and methods.
+- *changers* (137): helpers that are not readers because their code writes — it sets a FreeCAD property or calls one of
+  FreeCAD's own writing methods (`newObject`, `recompute`, `solve`, `addGeometry`, `SetString` …). A step that calls one is
+  where the leading part ends, as `make`, `add` and `set` are, and a `do` that is not a reading, a refusal with `first`,
+  and an answer.
+- everything else is *unknown*: the reading stops there as not checked.
+- methods are taken by name. Python's own (`lower`, `get`, `items` …) are taken on a Python value only: the reading checks
+  the receiver before each call (`expr.GUARD`). A sketch's `split` and `join` change the sketch — the only two names in
+  FreeCAD 1.1's `*PyImp.cpp` files that write and are also a string's — so they are a string's only by their arguments
+  (`split` with at most one, or a text first; `join` with exactly one).
+
+**Arguments.** Before a call they are unknown, so without `arguments` a step that reads `a`, or a value made from it, is
+not evaluated and the tool is not checked for that part. Most tools begin by finding what an argument names
+(`body(a.body)`, `sketch_of(a.sketch)`, `find(a.sheet)`), so most cannot be told before a call. With `arguments` those
+steps are evaluated too, after the tool's own schema check.
+
+How the 370 steps entries stand, from `tools.json` and `readers.json` alone (`needs.census()`; 13 more entries are
+wrappers, not checked):
+
+| | Entries | |
+|---|---|---|
+| whole without arguments | 60 | no leading step reads the arguments; 51 of them have no leading refusal at all (their checks are in their helpers, or after their first change): such a tool reads as not checked unless a reader helper runs before its first change |
+| need arguments | 194 | read to the end of their leading part once the arguments are given |
+| blocked | 116 | a leading step calls a helper that is neither a reader nor a changer; read as far as that step |
+
+Of the 773 leading refusals written in the entries, 36 read no argument: a strength study that is not set up (11 tools),
+a workbench or a maker this FreeCAD does not have, results not solved yet, no variable set. Per family:
+
+| Family | Tools | Readers | Changers | Leading refusals | of them without arguments | Whole without arguments | Need arguments | Blocked |
+|---|---|---|---|---|---|---|---|---|
+| app | 14 | 17 | 1 | 16 | 0 | 3 | 5 | 6 |
+| assembly | 8 | 18 | 6 | 1 | 0 | 0 | 7 | 1 |
+| assembly_more | 8 | 30 | 9 | 6 | 0 | 1 | 6 | 1 |
+| bim | 22 | 32 | 10 | 43 | 5 | 0 | 11 | 5 |
+| bim_gaps | 16 | 22 | 7 | 17 | 0 | 1 | 7 | 4 |
+| bim_more | 9 | 26 | 5 | 22 | 3 | 2 | 6 | 1 |
+| cam | 12 | 27 | 9 | 0 | 0 | 12 | 0 | 0 |
+| cam_more | 6 | 21 | 2 | 18 | 4 | 0 | 4 | 2 |
+| dev | 2 | 4 | 0 | 1 | 0 | 1 | 1 | 0 |
+| doc | 13 | 46 | 8 | 24 | 0 | 4 | 4 | 5 |
+| draft | 22 | 27 | 5 | 21 | 0 | 12 | 1 | 8 |
+| feature | 19 | 32 | 5 | 50 | 0 | 0 | 13 | 6 |
+| feature_more | 7 | 24 | 4 | 22 | 0 | 0 | 7 | 0 |
+| fem_more | 3 | 17 | 1 | 9 | 2 | 1 | 2 | 0 |
+| ifc | 6 | 6 | 0 | 13 | 0 | 0 | 0 | 6 |
+| inspection | 6 | 19 | 2 | 12 | 0 | 1 | 3 | 2 |
+| material | 4 | 9 | 2 | 12 | 0 | 0 | 1 | 3 |
+| measure | 6 | 19 | 0 | 10 | 0 | 0 | 3 | 3 |
+| mesh | 21 | 37 | 5 | 70 | 1 | 1 | 11 | 8 |
+| model | 11 | 30 | 2 | 47 | 1 | 0 | 2 | 9 |
+| model_more | 10 | 34 | 3 | 50 | 0 | 1 | 7 | 2 |
+| notes | 7 | 10 | 1 | 7 | 0 | 1 | 3 | 3 |
+| openscad | 5 | 17 | 5 | 10 | 0 | 1 | 2 | 2 |
+| param | 6 | 17 | 3 | 17 | 2 | 1 | 4 | 1 |
+| part_more | 6 | 24 | 1 | 18 | 0 | 0 | 4 | 2 |
+| points | 8 | 38 | 1 | 46 | 0 | 0 | 1 | 7 |
+| robot | 6 | 21 | 2 | 14 | 0 | 0 | 5 | 1 |
+| sheet | 11 | 31 | 3 | 23 | 0 | 0 | 3 | 8 |
+| sketch | 8 | 32 | 4 | 15 | 0 | 0 | 8 | 0 |
+| sketch_more | 12 | 16 | 4 | 34 | 3 | 0 | 10 | 2 |
+| std_more | 28 | 45 | 4 | 55 | 2 | 5 | 19 | 3 |
+| strength | 16 | 31 | 11 | 25 | 11 | 9 | 3 | 4 |
+| surface | 6 | 11 | 1 | 15 | 0 | 0 | 6 | 0 |
+| techdraw | 32 | 69 | 10 | 23 | 1 | 2 | 24 | 6 |
+| unattended | 5 | 11 | 1 | 1 | 0 | 0 | 1 | 4 |
+| view | 2 | 8 | 0 | 6 | 1 | 1 | 0 | 1 |
+| **all** | **383** | **878** | **137** | **773** | **36** | **60** | **194** | **116** |
+
+**The live filter** (`agentlink/appliesnow.py`). After each changing call the reading is taken for a small set of tools,
+within a time budget, and one short line goes into the answer's health beside `next` — group names and counts, never a
+tool's text:
+
+    "appliesNow": { "groups": { "strength": 8 }, "not": 4, "notChecked": 7, "ms": 3 }
+
+`groups`: the tools that apply, by group; `not`: those a leading check refuses now; `notChecked`; `partial`: the tools the
+budget ran out before. It is said when it is not what was last said (as `next` is); a batch's answer carries it once, at
+the top, and its calls carry none. `tool_groups { now: true }` gives the same reading in full (`appliesNow`: names by
+class, 20 a class, 6 refusals with their first words, `more` counting the rest); `tool_groups { find }` moves the hits
+that would be refused now after the others it shows and marks them `applies: false` — the order only, nothing dropped,
+and a hit that applies does not overtake one that could not be told.
+
+- *Which tools:* those the tool index puts in the active workbench; then in the workbenches the index links to it (one
+  whose FreeCAD commands the active workbench's tools also do the work of, or the other way round: Sketcher and Part
+  Design); then in the workbenches of the document's own objects. At most 150, in that order; with no window, the
+  document's workbenches alone. Tools the index gives no workbench (document, view, hub) are not in the pushed set.
+- *Budget:* 150 ms (`AppliesNowBudget`, Mod/AgentLink); a reading that took over 40 ms is not taken again in the pushed
+  filter, since one helper cannot be stopped half-way. Timed as `appliesNow` (inside a call's `ms`) and `appliesMeter`
+  in `agentlink/around.py`.
+- *Off:* preference `AppliesNow` = false (Mod/AgentLink), or `AGENTLINK_APPLIES=off`. The readings on request stay.
+
+**The meter** (the overfit measure). Every call records what the filter's last reading said of the tool (applies, not,
+notChecked, notEvaluated) and what happened: answered; refused by a leading check, by a later one, or otherwise. A
+refusal's place is told by reading the tool again with the call's arguments: the same step refusing is a leading check's
+refusal. The counts are kept per session, written to `applies_meter.json` in the session's folder (the newest 20
+sessions; written whole and put in place in one step) and `usage_report` carries them as `appliesNow`:
+`notThenAnswered` (calls marked not that then answered — a wrong reading: must stay near zero, with the tools),
+`appliesThenLeadingRefusal`, `coverage` (the share of calls whose tool the filter had told either way) and `stale`
+(calls after a change the filter had not read yet: inside a batch).
+
+**What it costs**, at 3.5 characters a token (`tests/test_needs.py` pins upper bounds, so a later change cannot bloat
+these without saying so):
+
+| | Tokens | Bound |
+|---|---|---|
+| every definition (383 data tools; 21 written in code, from their source) | 78,323 + 8,457 | 90,000 |
+| the lean listing a session loads at its start (core and view, 20 tools) | 7,139 (6,985 before `needs`, `arguments` and the meter's clause) | 7,400 |
+| one tool fetched (`tool_groups { tool }`): the median data tool; the largest | 177; 824 | 900 |
+| the pushed `appliesNow` line: empty document; a sketch in edit; a body with a pad (stand-in) | none; 17; 17 | 45 |
+| the `appliesNow` block of a `now` reply, the same three states | 84; 207; 200 (303 before a strength study) | 800 |
+| one `needs` reply | 42 for `fea_hold` | 260 |
+
+The three stand-in states say `notChecked: 32` and nothing else: every Part Design and Sketcher tool waits for its
+arguments. The whole `now` reply (its ten tool rows too) is measured only where FreeCAD is importable (bound 1,500).
+
 ## Proof
 
 - `tests/test_runners.py`: the evaluator (what it reads and what it refuses), messages, and each step
@@ -242,10 +386,17 @@ after the first, or a refusal that cleans up: those are `=`, `choose`, `answer.t
 - `tests/test_datamesh_data.py` is the same proof for Mesh and Points (`tests/_datamesh_standin.py`,
   `_datamesh_cases.py`, `_datamesh_before.py`; numpy is real there, the mesh and the cloud are stand-ins).
 
+- `tests/test_needs.py`: the readers' lists are the ones the code gives and are pinned; each step kind read dry; and every
+  case of five stand-in suites (1,797 cases: Part Design and Sketcher, Mesh and Points, TechDraw, CAM, BIM) read with its
+  arguments and then run — a reading of `false` (556) is the call's refusal, code and words; a reading of `true` (585) is
+  never refused before the tool's first change; 656 could not be told; no reading changes the document. A stand-in
+  proves the walk and the words, not that a helper is pure on FreeCAD: that rests on the helpers' code as read.
+
 ## Adding or converting a tool
 
 1. Write the entry: description, schema, `steps`, `answer`. Refusal texts go in `refuse` steps.
 2. Anything that is geometry or FreeCAD-API logic: a small function in the family module, named in its
    helpers dict, with a docstring.
-3. `python3 scripts/tool_index.py --check`, and cases for the tool in `tests/_bim_cases.py` (or the
+3. `python3 scripts/tool_needs.py` when a helper was added or changed (it rewrites `readers.json`; put the new pin in
+   `tests/test_needs.py` after reading `--why`), `python3 scripts/tool_index.py --check`, and cases for the tool in `tests/_bim_cases.py` (or the
    family's own test) — the normal path and each refusal.
