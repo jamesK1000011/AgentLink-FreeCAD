@@ -2208,6 +2208,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                     row["toError"] = f"to: not written ({e}). The answer is here in full instead."
             if mine.get("profile") is not None:
                 row["profile"] = mine.pop("profile")
+                if getattr(s, "echo_trace", None) is not None:
+                    row["echo"] = s.echo_trace  # what the window echo saw and did for this call
             results.append(row)
             if mine.get("record") is not None:
                 with _around.part("record"):

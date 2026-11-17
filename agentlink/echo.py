@@ -935,6 +935,15 @@ class Echo:
                 # outline and nobody sees that it is a solid. Turned to the
                 # isometric view once, as a person turns it to look.
                 self._left_sketch = False
+                tr = {"mode": self.mode, "made": [getattr(o, "Name", "?") for o in made]}
+                try:
+                    self.s.echo_trace = tr
+                    tr["inEdit"] = FreeCADGui.ActiveDocument.getInEdit() is not None
+                    d0 = FreeCADGui.ActiveDocument.ActiveView.getViewDirection()
+                    tr["dir"] = [round(d0.x, 3), round(d0.y, 3), round(d0.z, 3)]
+                    tr["solids"] = [len(o.Shape.Solids) if getattr(o, "Shape", None) is not None else None for o in made]
+                except Exception as e:  # noqa: BLE001
+                    tr["error"] = f"{type(e).__name__}: {e}"
                 # (Whenever a solid was made or changed and no sketch is
                 # open: the sketch may have been closed by an earlier call.)
                 if FreeCADGui.ActiveDocument is not None and FreeCADGui.ActiveDocument.getInEdit() is None:
@@ -950,8 +959,10 @@ class Echo:
                             d = gv2.getViewDirection()
                             if max(abs(d.x), abs(d.y), abs(d.z)) > 0.999:
                                 gv2.setCameraOrientation(FreeCAD.Rotation(0.424708, 0.17592, 0.339851, 0.820473))
-                    except Exception:
-                        pass
+                                d1 = gv2.getViewDirection()
+                                tr["turnedTo"] = [round(d1.x, 3), round(d1.y, 3), round(d1.z, 3)]
+                    except Exception as e:  # noqa: BLE001
+                        tr["turnError"] = f"{type(e).__name__}: {e}"
                 _model_tab_back()
 
                 with around.part("fit"):
