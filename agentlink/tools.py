@@ -178,11 +178,14 @@ class Session:
     def execute(self, tool, fn):
         if not tool.changes:
             return fn()
-        start = self.doc
-        u0, names0 = undo_mark(start)
-        undo0 = changes.undo_names(start)
-        watch = changes.open()
-        self.doc.openTransaction(tool.name)
+        from . import around as _ar
+
+        with _ar.part("txOpen"):
+            start = self.doc
+            u0, names0 = undo_mark(start)
+            undo0 = changes.undo_names(start)
+            watch = changes.open()
+            self.doc.openTransaction(tool.name)
         try:
             out = fn()
         except BaseException:
@@ -2114,7 +2117,9 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             t_call = time.time()
             _around.start()
             if miss is None:
+                _t_sc = time.time()
                 r = server.call({"name": c["tool"], "arguments": args})
+                mine["serverCallMs"] = int((time.time() - _t_sc) * 1000)
                 if mine.get("answered"):
                     # Answered already, from inside this call: the batch stops here.
                     if hold is not None:
@@ -2152,6 +2157,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             try:
                 split = _around.split((time.time() - t_call) * 1000, body.get("ms") if isinstance(body, dict) else 0, _around.take())
                 if split is not None:
+                    if mine.get("serverCallMs") is not None:
+                        split["serverCall"] = mine.pop("serverCallMs")
                     row["around"] = split
             except Exception:
                 pass

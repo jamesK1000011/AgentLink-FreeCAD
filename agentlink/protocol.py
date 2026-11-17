@@ -551,16 +551,20 @@ class Server:
             asked = False
             if "background" in args and "background" not in (tool.schema.get("properties") or {}):
                 asked = args.pop("background") in (True, "true")
+            from . import around as _ar
+
             check_input(tool.schema, args)
             if self.guard is not None:
-                self.guard(tool, args)
+                with _ar.part("guard"):
+                    self.guard(tool, args)
             from . import jobs
 
             s = self.session
             as_job = False
             if s is not None:
-                jobs.guard_change(tool, args, s)
-                as_job = jobs.wanted(tool, args, s, asked=asked)
+                with _ar.part("jobCheck"):
+                    jobs.guard_change(tool, args, s)
+                    as_job = jobs.wanted(tool, args, s, asked=asked)
             elif asked:
                 raise ToolError("invalid_input", "background: a job needs a session.")
             if asked and not as_job:
@@ -574,7 +578,8 @@ class Server:
             if gate is not None:
                 gate.as_job = as_job
                 try:
-                    gate.before(tool, args)
+                    with _ar.part("gateBefore"):
+                        gate.before(tool, args)
                 finally:
                     gate.as_job = False
             try:
@@ -595,12 +600,14 @@ class Server:
             if gate is not None:
                 # A job logs its own time when it ends (the call may have
                 # answered before it did).
-                gate.after(tool, args, not as_job)
+                with _ar.part("gateAfter"):
+                    gate.after(tool, args, not as_job)
             if s is not None and not as_job:
                 jobs.note_slow(tool, args, s, time.time() - t0)
             if self.on_call is not None:
                 try:
-                    self.on_call(tool, args)
+                    with _ar.part("onCall"):
+                        self.on_call(tool, args)
                 except Exception:
                     pass
         except ToolError as e:
