@@ -342,7 +342,7 @@ class EchoThroughOverlay(unittest.TestCase):
         echo.flash_command("PartDesign_Pad", ms=900)
         self.assertEqual(flashed, [(btn, 900)])
         self.assertEqual(btn.sheets, [])
-        self.assertTrue(act.f.bold and title.f.bold)  # the menu item and its title, bold for a moment
+        self.assertTrue(act.f.bold)  # the menu item, bold for a moment (the title is left: menuAction() on a menu being rebuilt crashed FreeCAD)
 
 
 class EchoSkip(unittest.TestCase):
