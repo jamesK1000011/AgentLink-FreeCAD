@@ -41,6 +41,11 @@
   "health": true,
   "model": "unproven-hub model, run 5, answers read: list (one repository, loaded agentlink_collab 0.1.0) and add with no repo refused before anything is written. Not run: add, remove, sync"
  },
+ "app_recover": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
  "asm_add": {
   "description": true,
   "docs": true,
@@ -284,6 +289,10 @@
   "health": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
  },
+ "bim_library": {
+  "headless": true,
+  "note": "17 Nov: re-run after the hub fixes"
+ },
  "bim_list": {
   "description": true,
   "docs": true,
@@ -303,6 +312,10 @@
   "headless": true,
   "health": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_nest": {
+  "headless": true,
+  "note": "17 Nov: re-run after the hub fixes"
  },
  "bim_opening": {
   "description": true,
@@ -619,12 +632,16 @@
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
  },
+ "cmd_list": {
+  "headless": true,
+  "note": "17 Nov: re-run after the hub fixes"
+ },
  "cmd_run": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: cmd_run Sketcher_LeaveSketch with the sketch open (ran, wasActive true) and with none (ran null, already \u2026), Std_ViewIsometric (ran, objectsAdded 0), an unknown command refused, Std_Delete refused as greyed with nothing selected (Bracket still there after); menu_list View: 111 items with paths, commands, enabled and checked, an unknown menu refused listing the nine menus; menu_run View > Standard views > Fit all pressed Std_ViewFitAll (the titles matched without regard to case; 2 s), a submenu and an unknown item refused. Not run: the refusal of Std_Quit and the like"
+  "model": "unproven-hub model, run 5, answers read: cmd_run Sketcher_LeaveSketch with the sketch open (ran, wasActive true) and with none (ran null, already …), Std_ViewIsometric (ran, objectsAdded 0), an unknown command refused, Std_Delete refused as greyed with nothing selected (Bracket still there after); menu_list View: 111 items with paths, commands, enabled and checked, an unknown menu refused listing the nine menus; menu_run View > Standard views > Fit all pressed Std_ViewFitAll (the titles matched without regard to case; 2 s), a submenu and an unknown item refused. Not run: the refusal of Std_Quit and the like"
  },
  "compound_explode": {
   "description": true,
@@ -885,7 +902,7 @@
   "docs": true,
   "headless": true,
   "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
-  "note": "area shown as FreeCAD formats it (64.95 cm\u00b2)"
+  "note": "area shown as FreeCAD formats it (64.95 cm²)"
  },
  "draft_layer": {
   "description": true,
@@ -906,6 +923,10 @@
   "headless": true,
   "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
   "note": "14 ops ran; upgrade left two wires where ends were 1.1e-7 mm apart (FreeCAD's tolerance; the note for it was added after and not run)"
+ },
+ "draft_outline": {
+  "headless": true,
+  "note": "17 Nov: re-run after the hub fixes"
  },
  "draft_plane": {
   "description": true,
@@ -1169,6 +1190,10 @@
   "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
   "note": "von Mises 2.69 MPa is right (the model compared it with the larger bending stress, 3.0); docs: body not read line by line in the FEM pass"
  },
+ "fea_solve": {
+  "headless": true,
+  "note": "17 Nov: re-run after the hub fixes"
+ },
  "feature_edit": {
   "description": true,
   "docs": true,
@@ -1257,28 +1282,28 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_curvature": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_detect_edges": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_dimension_add": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_edges": {
   "description": true,
@@ -1292,77 +1317,77 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_export": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_fit": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_note_add": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_objects": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_open_image": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_profile": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_remove": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_render": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_report": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "flat_set_alignment": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying — bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 — and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
  },
  "gen_make": {
   "description": true,
@@ -1547,6 +1572,10 @@
   "headless": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
  },
+ "job_start": {
+  "headless": true,
+  "note": "17 Nov: re-run after the hub fixes"
+ },
  "kicad_import": {
   "description": true,
   "docs": true,
@@ -1567,6 +1596,36 @@
   "headless": true,
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "macro_approve": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
+ "macro_list": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
+ "macro_run": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
+ "macro_save": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
+ "macro_show": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
+ "macro_unapprove": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
  },
  "manual_check": {
   "description": true,
@@ -1595,6 +1654,11 @@
   "headless": true,
   "health": true,
   "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+ },
+ "mass_calibrate": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
  },
  "mass_properties": {
   "description": true,
@@ -1665,14 +1729,14 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: cmd_run Sketcher_LeaveSketch with the sketch open (ran, wasActive true) and with none (ran null, already \u2026), Std_ViewIsometric (ran, objectsAdded 0), an unknown command refused, Std_Delete refused as greyed with nothing selected (Bracket still there after); menu_list View: 111 items with paths, commands, enabled and checked, an unknown menu refused listing the nine menus; menu_run View > Standard views > Fit all pressed Std_ViewFitAll (the titles matched without regard to case; 2 s), a submenu and an unknown item refused. Not run: the refusal of Std_Quit and the like"
+  "model": "unproven-hub model, run 5, answers read: cmd_run Sketcher_LeaveSketch with the sketch open (ran, wasActive true) and with none (ran null, already …), Std_ViewIsometric (ran, objectsAdded 0), an unknown command refused, Std_Delete refused as greyed with nothing selected (Bracket still there after); menu_list View: 111 items with paths, commands, enabled and checked, an unknown menu refused listing the nine menus; menu_run View > Standard views > Fit all pressed Std_ViewFitAll (the titles matched without regard to case; 2 s), a submenu and an unknown item refused. Not run: the refusal of Std_Quit and the like"
  },
  "menu_run": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: cmd_run Sketcher_LeaveSketch with the sketch open (ran, wasActive true) and with none (ran null, already \u2026), Std_ViewIsometric (ran, objectsAdded 0), an unknown command refused, Std_Delete refused as greyed with nothing selected (Bracket still there after); menu_list View: 111 items with paths, commands, enabled and checked, an unknown menu refused listing the nine menus; menu_run View > Standard views > Fit all pressed Std_ViewFitAll (the titles matched without regard to case; 2 s), a submenu and an unknown item refused. Not run: the refusal of Std_Quit and the like"
+  "model": "unproven-hub model, run 5, answers read: cmd_run Sketcher_LeaveSketch with the sketch open (ran, wasActive true) and with none (ran null, already …), Std_ViewIsometric (ran, objectsAdded 0), an unknown command refused, Std_Delete refused as greyed with nothing selected (Bracket still there after); menu_list View: 111 items with paths, commands, enabled and checked, an unknown menu refused listing the nine menus; menu_run View > Standard views > Fit all pressed Std_ViewFitAll (the titles matched without regard to case; 2 s), a submenu and an unknown item refused. Not run: the refusal of Std_Quit and the like"
  },
  "mesh_apply_reduced": {
   "description": true,
@@ -2648,6 +2712,11 @@
   "health": true,
   "model": "unproven-hub model, run 5, answers read on Mod/AgentLink/LiveTest: pref_set Probe null to 3 (int) and 3 to 4 with the stored type, pref_get reads Integer 3 and a whole group with its subgroups, a guarded name (ProbeExecutable) and a call with no name refused; pref_reset reset [Probe], notSet [NeverSet], the guarded name refused, and pref_get then refuses Probe (the group is as before the run); pref_pack lists six packs and refuses a wrong name. Not run: pref_pack apply"
  },
+ "pref_history": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
  "pref_pack": {
   "description": true,
   "docs": true,
@@ -2661,6 +2730,11 @@
   "headless": true,
   "health": true,
   "model": "unproven-hub model, run 5, answers read on Mod/AgentLink/LiveTest: pref_set Probe null to 3 (int) and 3 to 4 with the stored type, pref_get reads Integer 3 and a whole group with its subgroups, a guarded name (ProbeExecutable) and a call with no name refused; pref_reset reset [Probe], notSet [NeverSet], the guarded name refused, and pref_get then refuses Probe (the group is as before the run); pref_pack lists six packs and refuses a wrong name. Not run: pref_pack apply"
+ },
+ "pref_rollback": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
  },
  "pref_set": {
   "description": true,
@@ -2676,12 +2750,38 @@
   "health": true,
   "model": "Workshop Electronics model, run 2, answers read: board 50 x 30 x 1.6, 2 copper layers, holes 3.2, 3.2 and 2.2, J1 and C1 tall, R1 and U1 with no height, moved [-125,115]; enclosure 56 x 36 x 21.6 with M3 standoffs and the J1 opening; a Part::Box refused with the plain-copy call, the channel 46.14 mm open both ends, 138.67 mm3 out, 4,406 ohm of filament, awg 22 fits, awg 99 refused before any cut, a path outside refused; order zips with 3 gerbers, drill, BOM, CPL, DRC not run (no kicad-cli)"
  },
+ "printer_add": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
  "printer_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
+ "printer_pause": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
+ "printer_send": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
+ "printer_status": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
+ "printer_stop": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
  },
  "recompute": {
   "description": true,
@@ -2722,35 +2822,35 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_body_names": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_body_set": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_build": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_feature_add": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_feature_clear": {
   "description": true,
@@ -2771,21 +2871,21 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_feature_remove": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_feature_rollback": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_feature_schema": {
   "description": true,
@@ -2799,28 +2899,28 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_feature_update": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_import_step": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_parameter_add": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_parameter_list": {
   "description": true,
@@ -2841,14 +2941,14 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_parameter_set": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact — Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) — and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "robot_export": {
   "description": true,
@@ -3378,6 +3478,11 @@
   "health": true,
   "model": "Workshop Make model: bracket sliced by OrcaSlicer 2.5.0 with profiles written from the setup: 50 layers, 17.82 g (Make estimate 17.1), 2 h 7 min; project 3mf written and read back with its presets and statistics"
  },
+ "slice_open": {
+  "headless": true,
+  "model": "WorkshopRest",
+  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
  "slice_read": {
   "description": true,
   "docs": true,
@@ -3692,7 +3797,8 @@
  "td_view_more": {
   "description": true,
   "docs": true,
-  "note": "stack fixed after the TechDraw run, not re-run: not proven"
+  "headless": true,
+  "note": "17 Nov: re-run after the hub fixes"
  },
  "td_weld": {
   "headless": true,
@@ -3832,6 +3938,11 @@
   "health": true,
   "model": "bike-stem-1 lesson, demo mode, 18 steps to \"lesson complete\" live on FreeCAD 1.1.3 (rings on the tree rows of steps 13-14, Close step)"
  },
+ "tutor_point": {
+  "headless": true,
+  "model": "TutorRest",
+  "note": "17 Nov: tutor-rest model, 17 calls, each answer as expected"
+ },
  "units_convert": {
   "description": true,
   "docs": true,
@@ -3900,5 +4011,9 @@
   "headless": true,
   "health": true,
   "model": "unproven-hub model, run 5, answers read: selection set to Bracket, read back with detail, a wrong name refused with the selection kept (read again), cleared; show hides Bracket (session_state: hidden, bodies []), shows it with Ghost answered as unknown, and refuses when nothing named exists; window_snapshot: the whole window (1712 x 2082) twice, the Report view panel alone (1712 x 420), a wrong panel refused listing the six panels. Not read: the pictures themselves"
+ },
+ "workbench": {
+  "headless": true,
+  "note": "17 Nov: re-run after the hub fixes"
  }
 }

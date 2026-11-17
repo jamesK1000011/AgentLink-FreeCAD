@@ -1,0 +1,292 @@
+{
+ "tutorial": "No tutorial: tutor_point and tutor_watch, the two Tutor tools no model had proven (the tutor tool itself was proven by the bike-stem-1 lesson). tutor_point is called on a plain box first (face, edge, tree, command, view), then inside a running bike-stem-1 lesson in demo mode (toolbar button of another workbench, tree row, workbench selector, task panel button, dock).",
+ "reference": null,
+ "conventions": {
+  "run": "Agent Link for FreeCAD's batch or one call at a time, in order, with FreeCAD's window open (tutor_point only draws; without a window every target comes back in missing). REFUSED in expect means an error with that code.",
+  "shown or missing": "Where a target lands depends on the window (which tab is in front, which toolbars are up), so expect says what each entry must hold and that the two lists together hold every n once; a target in missing with a why is a right answer, a target in neither list is a fault.",
+  "watch mode": "tutor_watch is run with watch mode off, as its description asks (the person turns it on). withWatchOn lists the calls to add when the person says to turn watch on."
+ },
+ "expected": {
+  "lesson": "agentlink_tutor.course.bike-stem-1",
+  "steps": 18,
+  "firstStep": "sketch",
+  "secondStep": "circle",
+  "topFaceOfPartBox": "Face6"
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "TutorRest"
+   },
+   "expect": "a new empty document"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     40,
+     20,
+     10
+    ],
+    "name": "PointBox"
+   },
+   "expect": "body 'PointBox', volume 8000, box [40, 20, 10]"
+  },
+  {
+   "tool": "tutor_point",
+   "arguments": {
+    "targets": [
+     {
+      "face": {
+       "normal": [
+        0,
+        0,
+        1
+       ],
+       "largest": true
+      },
+      "of": "PointBox"
+     },
+     {
+      "tree": "PointBox"
+     },
+     {
+      "cmd": "Std_ViewFitAll"
+     },
+     {
+      "view": "3d"
+     }
+    ],
+    "say": "This is the top face of the box."
+   },
+   "expect": "shown and missing together hold n 1, 2, 3, 4. n 1: kind 'face', on 'Face6 of PointBox' (a Part box's top face), lit in the 3D view. n 2: kind 'tree', on 'tree PointBox'. n 3: kind 'cmd', on 'Std_ViewFitAll button'. n 4: kind 'view', on '3d view'. Each entry of missing has why (the Model tab is not in front, hidden, covered …) and is NOT marked on screen. until 'the next tutor_point'; callout 'bubble' or 'overlay' (with callout_why when the bubble could not show). Nothing is selected, no workbench switches, the cursor does not move, the document is unchanged"
+  },
+  {
+   "tool": "tutor_point",
+   "arguments": {
+    "targets": [
+     {
+      "edge": {
+       "longest": true
+      },
+      "of": "PointBox"
+     }
+    ],
+    "say": "A long edge.",
+    "ms": 3000,
+    "clear": false
+   },
+   "expect": "shown [{ n 1, kind 'edge', on naming an edge of PointBox }]; until '3000 ms'; clear: false keeps the rings of call 2 (the face stays lit until the 3 s end)"
+  },
+  {
+   "tool": "tutor_point",
+   "arguments": {
+    "targets": [
+     {
+      "face": {
+       "normal": [
+        0,
+        0,
+        1
+       ]
+      }
+     }
+    ]
+   },
+   "expect": "REFUSED invalid_input: 'targets[0]: target face: of, beside face, names the object: {face: {...}, of: \"Pad\"}'"
+  },
+  {
+   "tool": "tutor_point",
+   "arguments": {
+    "targets": [
+     {
+      "cmd": "Std_ViewFitAll"
+     }
+    ],
+    "ms": 100
+   },
+   "expect": "REFUSED invalid_input: 'ms: 500 to 120000, or leave it out to keep them until the next call'"
+  },
+  {
+   "tool": "tutor_point",
+   "arguments": {
+    "targets": [
+     {
+      "view": "3d"
+     },
+     {
+      "view": "3d"
+     },
+     {
+      "view": "3d"
+     },
+     {
+      "view": "3d"
+     },
+     {
+      "view": "3d"
+     },
+     {
+      "view": "3d"
+     },
+     {
+      "view": "3d"
+     }
+    ]
+   },
+   "expect": "REFUSED invalid_input: 'targets: at most 6 at once (this has 7); ring the rest in a second call with clear: false'"
+  },
+  {
+   "tool": "tutor_point",
+   "arguments": {
+    "targets": [
+     {
+      "cmd": "No_Such_Command"
+     }
+    ],
+    "say": "This command does not exist."
+   },
+   "expect": "ACCEPTED with nothing ringed: shown []; missing [{ n 1, kind 'cmd', on 'No_Such_Command button', why 'no command No_Such_Command in this FreeCAD' }]; note 'nothing ringed; any words for them are in the callout'"
+  },
+  {
+   "tool": "tutor_point",
+   "arguments": {},
+   "expect": "{ cleared: true }: every ring, the callout and the lit face are gone"
+  },
+  {
+   "tool": "tutor",
+   "arguments": {
+    "action": "start",
+    "lesson": "bike-stem-1",
+    "mode": "demo"
+   },
+   "expect": "lesson 'agentlink_tutor.course.bike-stem-1', mode 'demo', step '1/18', id 'sketch', say beginning 'Push New Sketch', document 'a new document BikeStem: TutorRest holds other work' (BikeStem_2 … when that name is in use), targets, check pending or fail"
+  },
+  {
+   "tool": "tutor",
+   "arguments": {
+    "action": "next"
+   },
+   "expect": "demo does step 1 with the lesson's own call (sketch_new on XZ): did names it, check pass for 'sketch', and step '2/18' (id 'circle') is in front now or after the next status; prepared says what it made ready (the workbench, a tab)"
+  },
+  {
+   "tool": "tutor_point",
+   "arguments": {
+    "targets": [
+     {
+      "cmd": "Sketcher_CreateCircle"
+     },
+     {
+      "tree": "Sketch"
+     },
+     {
+      "wb": "SketcherWorkbench"
+     },
+     {
+      "task": {
+       "button": "close"
+      }
+     },
+     {
+      "dock": "Report view"
+     }
+    ],
+    "say": "Create circle is here."
+   },
+   "expect": "shown and missing together hold n 1 to 5 with kinds cmd, tree, wb, task, dock in that order: 'Sketcher_CreateCircle button' (shown when the Sketcher toolbar is up; a ▾ or » ringed in its place is said in note), 'tree Sketch' (shown, or missing with 'the Model tab is not in front'-like why while the sketch's Tasks tab is in front), 'workbench Sketcher', the task panel's Close button (shown while the sketch is open in edit, else missing with why), 'panel Report view' (shown, or missing 'Report view is closed'). Read missing: those are not on screen. It replaces the lesson step's own rings until the next tutor call"
+  },
+  {
+   "tool": "tutor_point",
+   "arguments": {},
+   "expect": "{ cleared: true }"
+  },
+  {
+   "tool": "tutor_watch",
+   "arguments": {},
+   "expect": "{ watching: false, say: 'Watch mode is off. The person turns it on in the Tutor tab (Let Claude watch), or ask them and use tutor {action: \"watch\", on: true}.' } and nothing else: no events key. Watch mode is the person's to turn on, so the model leaves it off"
+  },
+  {
+   "tool": "tutor_watch",
+   "arguments": {
+    "since": 0,
+    "wait": 30
+   },
+   "expect": "REFUSED invalid_input: 'wait: 0 to 25 seconds' (checked before the watch flag, so it is refused with watch off too)"
+  },
+  {
+   "tool": "tutor_watch",
+   "arguments": {
+    "until": "later"
+   },
+   "expect": "REFUSED invalid_input: until is one of any, milestone — not 'later' (Agent Link's own check of the enum names the two)"
+  },
+  {
+   "tool": "tutor",
+   "arguments": {
+    "action": "stop"
+   },
+   "expect": "the lesson is stopped (state 'stopped'); a status after it answers no lesson running. The BikeStem document stays open with its one sketch"
+  }
+ ],
+ "withWatchOn": {
+  "when": "Only after the person says in chat to turn watch mode on (the Tutor tab's Let Claude watch does the same). Run after call 16.",
+  "calls": [
+   {
+    "tool": "tutor",
+    "arguments": {
+     "action": "watch",
+     "on": true
+    },
+    "expect": "{ watching: true }; a badge in the status bar shows it"
+   },
+   {
+    "tool": "tutor_watch",
+    "arguments": {
+     "since": 0,
+     "wait": 0
+    },
+    "expect": "{ watching: true, events: [], next: 0 } when they have done nothing yet (the agent's own calls leave no events)"
+   },
+   {
+    "tool": "tutor_watch",
+    "arguments": {
+     "since": 0,
+     "wait": 20,
+     "until": "milestone"
+    },
+    "expect": "ask the person to click the box and then add any object (Part › Cube) inside 20 s: events holds { n, k 'sel', o 'PointBox' or the object they clicked } and { n, k 'new', o, ty, m 1 }; next is the last n; with no action from him it answers events [] after 20 s"
+   },
+   {
+    "tool": "tutor_watch",
+    "arguments": {
+     "since": {
+      "$from": 2,
+      "$at": "next"
+     },
+     "wait": 0
+    },
+    "expect": "events only after that n: [] when they did nothing more; no missed key (the $from index counts inside this list: call 2 of withWatchOn)"
+   },
+   {
+    "tool": "tutor",
+    "arguments": {
+     "action": "watch",
+     "on": false
+    },
+    "expect": "{ watching: false }; the badge is gone and the buffer is cleared"
+   },
+   {
+    "tool": "tutor_watch",
+    "arguments": {},
+    "expect": "{ watching: false, say } again"
+   }
+  ]
+ },
+ "notCovered": [
+  "tutor_watch with watch mode on (events, next, more, missed): watch mode is the person's to turn on and its events are only the person's own actions in the window, so a proof needs the person at the Mac: the six calls in withWatchOn.",
+  "tutor_point targets menu (on macOS the menubar cannot be drawn over: the path goes into the callout as words, note 'menu: native'), sub ('Face6' by name) and ext (an add-on's own kind): not called here; menu is worth one live call ({ menu: \"Std_ViewFitAll\" }) to read the native-menubar words.",
+  "tutor_point's ms end (the rings gone after 3 s) and what the person sees: read from the window (window_snapshot { inline: false } right after call 2 and again 4 s after call 3), not from an answer."
+ ]
+}

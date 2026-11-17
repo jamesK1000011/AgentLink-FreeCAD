@@ -256,9 +256,11 @@ docs/hardening/sheetfem-findings.md
 docs/hardening/sketcher-findings.md
 docs/hardening/status-findings.md
 docs/hardening/status.json
+docs/hardening/tutor-rest-model.json
 docs/hardening/unproven-findings.md
 docs/hardening/unproven-run-findings.md
 docs/hardening/window-pd-findings.md
+docs/hardening/workshop-rest-model.json
 docs/hooks.md
 docs/packaging.md
 docs/records.md

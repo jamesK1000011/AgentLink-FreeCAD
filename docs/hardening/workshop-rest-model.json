@@ -1,0 +1,402 @@
+{
+ "tutorial": "No tutorial: the 16 Workshop tools (Make: mass_calibrate, slice_open, printer_*; SafetyNet: macro_*, pref_history, pref_rollback, app_recover) that no model had proven. One small box, a test macro, a test settings key and a dummy printer on the Mac's own loopback address.",
+ "reference": null,
+ "conventions": {
+  "run": "Agent Link for FreeCAD's batch, in order; { $from, $at } takes a value from an earlier call's answer (agentlink/chain.py). REFUSED in expect means the call must answer an error with that code.",
+  "printers": "Every printer_* call names the dummy printer (alink-hardening-dummy, http://127.0.0.1:9, kind moonraker, no key) so that a printer the person keeps is never the one a call falls to. The only network traffic is call 36: one request to 127.0.0.1 port 9, refused by the Mac itself. pause, stop and start are never sent with their confirm.",
+  "settings": "pref_rollback is only called with a `to` that has no snapshot. Calls 27 and 29 set and remove the test-only key Mod/AgentLink/LiveTest/Probe so that pref_history has a known newest row; leave those two calls and call 28 out if no settings write at all is wanted (pref_history is then proven by call 26 alone).",
+  "leftBehind": "the macro file alink-hardening-probe.FCMacro in FreeCAD's macro folder (no tool deletes a macro; it is not approved, so Agent Link will not run it); one checkpoint of WorkshopRest; alink-probe-box.step in the session's folder. No printer, no setting."
+ },
+ "expected": {
+  "box": {
+   "size": [
+    42,
+    20,
+    10
+   ],
+   "volume_mm3": 8400,
+   "pla_g_per_cm3": 1.24,
+   "mass_g": 10.416
+  },
+  "calibration": {
+   "grams": 11,
+   "scale": 1.0561,
+   "key": "solid:pla"
+  },
+  "macro": {
+   "name": "alink-hardening-probe",
+   "calls": 1,
+   "constants": {
+    "LENGTH": 42
+   }
+  }
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "WorkshopRest"
+   },
+   "expect": "a new empty document; its changing calls start from none (the list macro_save reads is kept per document)"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     42,
+     20,
+     10
+    ],
+    "name": "Probe box"
+   },
+   "expect": "body 'Probe box', volume 8400, box [42, 20, 10]"
+  },
+  {
+   "tool": "macro_save",
+   "arguments": {
+    "name": "alink-hardening-probe",
+    "params": {
+     "length": 42
+    },
+    "overwrite": true
+   },
+   "expect": "macro 'alink-hardening-probe'; path ends alink-hardening-probe.FCMacro in FreeCAD's macro folder; calls 1 (the part_primitive: doc_new is not a changing call); constants { LENGTH: 42 }; approved false; note names macro_approve with confirm \"approve alink-hardening-probe\" typed by the person. overwrite: true only replaces this model's own macro from an earlier run"
+  },
+  {
+   "tool": "macro_save",
+   "arguments": {
+    "name": "alink-hardening-probe"
+   },
+   "expect": "REFUSED invalid_state: 'A macro named alink-hardening-probe is there already', naming overwrite: true"
+  },
+  {
+   "tool": "macro_save",
+   "arguments": {
+    "name": "../escape"
+   },
+   "expect": "REFUSED invalid_input: name: letters, digits, spaces, - and _ … no folders. No file written"
+  },
+  {
+   "tool": "macro_list",
+   "arguments": {},
+   "expect": "folder (FreeCAD's macro folder); macros holds { name 'alink-hardening-probe', state 'no', about beginning 'alink-hardening-probe: made by Agent Link' and saying 'from 1 calls' }. The person's own macros are listed too, each approved | changed | no"
+  },
+  {
+   "tool": "macro_show",
+   "arguments": {
+    "name": "alink-hardening-probe"
+   },
+   "expect": "name, state 'no', constants { LENGTH: 42 }, calls 1; text holds the line LENGTH = 42, 'import agentlink' and agentlink.run('part_primitive', {'kind': 'box', 'size': [LENGTH, 20, 10], 'name': 'Probe box'}) — the 42 replaced by its name"
+  },
+  {
+   "tool": "macro_show",
+   "arguments": {
+    "name": "alink-no-such-macro"
+   },
+   "expect": "REFUSED not_found: 'No macro alink-no-such-macro in <folder>: macro_list lists them.'"
+  },
+  {
+   "tool": "macro_run",
+   "arguments": {
+    "name": "alink-hardening-probe"
+   },
+   "expect": "REFUSED not_allowed: 'alink-hardening-probe is not run: it has not been approved', naming macro_approve { name, confirm: \"approve alink-hardening-probe\" } typed by the person. Nothing ran: object_list would still show one body"
+  },
+  {
+   "tool": "macro_approve",
+   "arguments": {
+    "name": "alink-hardening-probe",
+    "confirm": ""
+   },
+   "expect": "REFUSED not_allowed: confirm: \"approve alink-hardening-probe\", word for word, typed by the person … 'Nothing was changed.' The empty confirm is on purpose: the approval is the person's, so the model never sends the right words (see notCovered)"
+  },
+  {
+   "tool": "macro_approve",
+   "arguments": {
+    "name": "alink-no-such-macro",
+    "confirm": ""
+   },
+   "expect": "REFUSED not_found: 'No macro alink-no-such-macro: macro_list lists them.' (the file is looked for before the confirm is read)"
+  },
+  {
+   "tool": "macro_unapprove",
+   "arguments": {
+    "name": "alink-hardening-probe"
+   },
+   "expect": "unapproved 'alink-hardening-probe', was false (it was never approved; was true only if the person approved it in an earlier run)"
+  },
+  {
+   "tool": "macro_list",
+   "arguments": {},
+   "expect": "the row for alink-hardening-probe still has state 'no'"
+  },
+  {
+   "tool": "macro_run",
+   "arguments": {
+    "name": "alink-no-such-macro"
+   },
+   "expect": "REFUSED not_found: 'No macro alink-no-such-macro: macro_list lists them.'"
+  },
+  {
+   "tool": "mass_properties",
+   "arguments": {
+    "body": "Probe box"
+   },
+   "expect": "bodies[0]: body 'Probe box', mass 10.42 (8400 mm³ x 1.24 g/cm³ = 10.416 g, solid: the body is in no print setup), volume 8400, com [21, 10, 5], density 1.24, as 'solid'; a note that no material was set and PLA was taken"
+  },
+  {
+   "tool": "mass_calibrate",
+   "arguments": {
+    "body": "Probe box",
+    "grams": 11
+   },
+   "expect": "calibrated 'solid:pla' (no print setup, so the key is the material), scale 1.0561 (11 / 10.416), expected 10.42, weighed 11, encased 0, for 'solid pla', note that every mass reading now matches the scales"
+  },
+  {
+   "tool": "mass_properties",
+   "arguments": {
+    "body": "Probe box"
+   },
+   "expect": "bodies[0].mass 11.0 (10.416 x 1.0561); as ends 'calibrated ×1.056 to a weighed print of Probe box (11 g)'; volume still 8400"
+  },
+  {
+   "tool": "mass_calibrate",
+   "arguments": {
+    "body": "Probe box",
+    "grams": 1
+   },
+   "expect": "REFUSED invalid_input: 'The print weighed 1 g against 10.42 g expected (×0.10): too far to be the same part and settings' (the estimate here is the uncalibrated one); the calibration of call 15 stays"
+  },
+  {
+   "tool": "mass_calibrate",
+   "arguments": {
+    "body": "Probe box"
+   },
+   "expect": "REFUSED invalid_input: 'grams: what the print weighed on the scales (with anything encased in it).'"
+  },
+  {
+   "tool": "mass_calibrate",
+   "arguments": {
+    "body": "Probe box",
+    "reset": true
+   },
+   "expect": "reset 'solid:pla'; was { scale 1.0561, grams 11, body 'Probe box', expected 10.42, encased 0.0 }; note 'Readings go back to the material's own figures.'"
+  },
+  {
+   "tool": "mass_properties",
+   "arguments": {
+    "body": "Probe box"
+   },
+   "expect": "bodies[0].mass 10.42 again and as 'solid' with no 'calibrated' in it"
+  },
+  {
+   "tool": "slice_open",
+   "arguments": {
+    "path": "alink-no-such-project.3mf"
+   },
+   "expect": "REFUSED not_found: '<session folder>/alink-no-such-project.3mf: no such file.' No slicer window opens. (In a FreeCAD with no window the refusal is invalid_state 'slice_open needs the FreeCAD window' instead: the Mac has the window, so not_found is the answer to read.)"
+  },
+  {
+   "tool": "history_checkpoint",
+   "arguments": {
+    "name": "workshop rest model"
+   },
+   "expect": "checkpoint (an id), name 'workshop rest model', step, file (a .FCStd copy under the session's checkpoints), bytes, note. The person's files are not touched; this gives app_recover a copy to list for this document"
+  },
+  {
+   "tool": "app_recover",
+   "arguments": {},
+   "expect": "action list by default: documents (newest copy first), one of them { document 'WorkshopRest', label 'WorkshopRest', copies [ { source 'checkpoint', time, path = the file call 22 answered } … ] } (an auto-save copy may be listed beside it); note naming auto and accept. Nothing is opened, saved or changed"
+  },
+  {
+   "tool": "app_recover",
+   "arguments": {
+    "action": "auto"
+   },
+   "expect": "REFUSED invalid_input: 'documents: [{ name, label, file }] — the documents to bring back'. Nothing is opened"
+  },
+  {
+   "tool": "app_recover",
+   "arguments": {
+    "action": "accept",
+    "document": "WorkshopRest",
+    "confirm": ""
+   },
+   "expect": "REFUSED invalid_state: 'WorkshopRest is not a recovered copy.' Nothing is saved (the check comes before the confirm is read)"
+  },
+  {
+   "tool": "pref_history",
+   "arguments": {
+    "limit": 3
+   },
+   "expect": "changes: at most 3 rows, newest first, each { change (a number), time, tool, and path / name / from / to where the change had them }; note naming pref_rollback { to: change }. An empty list is right on a Mac where Agent Link has never changed a setting. Changes nothing"
+  },
+  {
+   "tool": "pref_set",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+    "name": "Probe",
+    "value": 7,
+    "type": "int"
+   },
+   "expect": "set { Probe: { was null (not stored), now 7, type int } }: a test-only key under Mod/AgentLink/LiveTest (the same one hubrest-model.json calls 13 to 15 use), removed again in call 29"
+  },
+  {
+   "tool": "pref_history",
+   "arguments": {
+    "limit": 1
+   },
+   "expect": "changes has one row: tool 'pref_set', path naming …/Mod/AgentLink/LiveTest, name 'Probe', to 7, and a change number one above the newest of call 26 (or 1 when that list was empty); no restart key (Probe needs none)"
+  },
+  {
+   "tool": "pref_reset",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+    "names": [
+     "Probe"
+    ]
+   },
+   "expect": "reset lists Probe; notSet empty: the settings are as they were before call 27"
+  },
+  {
+   "tool": "pref_rollback",
+   "arguments": {
+    "to": 999999
+   },
+   "expect": "REFUSED not_found: 'to 999999: no settings snapshot for it — pref_history lists the changes with theirs.' FreeCAD does not restart and no setting changes"
+  },
+  {
+   "tool": "pref_rollback",
+   "arguments": {
+    "to": "19000101-000000"
+   },
+   "expect": "REFUSED not_found: \"to '19000101-000000': no settings snapshot for it\" (no snapshot is that old). Nothing changes"
+  },
+  {
+   "tool": "pref_rollback",
+   "arguments": {
+    "to": ""
+   },
+   "expect": "REFUSED invalid_input: 'to: a change's number (pref_history) or a time, YYYYMMDD-HHMMSS.'"
+  },
+  {
+   "tool": "printer_add",
+   "arguments": {
+    "name": "alink-hardening-dummy",
+    "kind": "moonraker",
+    "url": "http://127.0.0.1:9",
+    "check": false
+   },
+   "expect": "added { name 'alink-hardening-dummy', kind 'moonraker', url 'http://127.0.0.1:9', auth 'none' }, replaced false (true if an earlier run left it), kept '.agentlink-printers.json'; NO reached key (check: false: it is not tried). The address is this Mac's own loopback, port 9, where nothing listens: no printer can be at it"
+  },
+  {
+   "tool": "printer_add",
+   "arguments": {
+    "name": "alink-hardening-dummy-2",
+    "kind": "bambu",
+    "url": "http://127.0.0.1:9",
+    "check": false
+   },
+   "expect": "REFUSED unavailable: Bambu Lab printers take jobs over their own LAN-mode protocol … slice_with { slicer: \"bambustudio\" }. Nothing is kept"
+  },
+  {
+   "tool": "printer_add",
+   "arguments": {
+    "name": "alink-hardening-dummy-2",
+    "kind": "octoprint",
+    "url": "http://127.0.0.1:9",
+    "check": false
+   },
+   "expect": "REFUSED invalid_input: 'key: OctoPrint needs an API key'. Nothing is kept (no key is ever written in this model)"
+  },
+  {
+   "tool": "printer_status",
+   "arguments": {
+    "printer": "alink-hardening-dummy"
+   },
+   "expect": "REFUSED unavailable: 'http://127.0.0.1:9: can't reach it (… Connection refused …) — is it on and on this network, and the address right?' One GET to the Mac's own loopback, answered at once; no printer is asked"
+  },
+  {
+   "tool": "printer_status",
+   "arguments": {
+    "printer": "alink-no-such-printer"
+   },
+   "expect": "REFUSED not_found: \"printer 'alink-no-such-printer': not kept — the printers: …\" listing alink-hardening-dummy (and the person's own, by name only, never a key)"
+  },
+  {
+   "tool": "printer_pause",
+   "arguments": {
+    "printer": "alink-hardening-dummy",
+    "confirm": ""
+   },
+   "expect": "REFUSED invalid_input: confirm: \"pause alink-hardening-dummy\", word for word — ask the person first. Nothing is sent (the confirm is checked before the network)"
+  },
+  {
+   "tool": "printer_stop",
+   "arguments": {
+    "printer": "alink-hardening-dummy",
+    "confirm": ""
+   },
+   "expect": "REFUSED invalid_input: confirm: \"stop alink-hardening-dummy\", word for word — ask the person first. Nothing is sent"
+  },
+  {
+   "tool": "printer_send",
+   "arguments": {
+    "printer": "alink-hardening-dummy",
+    "file": "alink-no-such.gcode"
+   },
+   "expect": "REFUSED not_found: '<session folder>/alink-no-such.gcode: no such file — slice it first.' Nothing is sent"
+  },
+  {
+   "tool": "export",
+   "arguments": {
+    "objects": [
+     "Probe box"
+    ],
+    "format": "step",
+    "path": "alink-probe-box.step"
+   },
+   "expect": "format 'step', path ends alink-probe-box.step in the session's folder, bytes over 0, verify with volume 8400"
+  },
+  {
+   "tool": "printer_send",
+   "arguments": {
+    "printer": "alink-hardening-dummy",
+    "file": {
+     "$from": 41,
+     "$at": "path"
+    }
+   },
+   "expect": "REFUSED invalid_input: 'file: G-code only (.gcode, .gco, .g, .bgcode).' Nothing is sent (the file's kind is checked before the network)"
+  },
+  {
+   "tool": "printer_list",
+   "arguments": {
+    "remove": "alink-hardening-dummy"
+   },
+   "expect": "removed 'alink-hardening-dummy'; printers no longer holds it (the person's own printers, if any, are listed unchanged, without keys)"
+  },
+  {
+   "tool": "printer_list",
+   "arguments": {},
+   "expect": "printers without alink-hardening-dummy: the list is as it was before call 33"
+  },
+  {
+   "tool": "printer_status",
+   "arguments": {
+    "printer": "alink-hardening-dummy"
+   },
+   "expect": "REFUSED not_found: with no printer kept 'No printer kept yet: printer_add { name, kind, url, key } first.'; with the person's own kept, \"printer 'alink-hardening-dummy': not kept — the printers: …\""
+  }
+ ],
+ "notCovered": [
+  "macro_approve accepted and macro_run running the macro: the approval is the person's typed words (macro_approve's description: confirm \"approve <name>\" typed by them, never by the agent). When the person types `approve alink-hardening-probe` in chat, run: macro_show { name } for them to read, macro_approve { name: \"alink-hardening-probe\", confirm: \"approve alink-hardening-probe\" } (expect approved, sha256), doc_new { name: \"MacroRun\" }, macro_run { name: \"alink-hardening-probe\", params: { LENGTH: 60 } } (expect ran, calls 1, params, bodies ['Probe box'] with box [60, 20, 10], checkpoint), macro_run { name, params: { WIDTH: 5 } } (REFUSED invalid_input: WIDTH not among the named sizes (LENGTH)), then macro_unapprove { name } (was true) and macro_run again (REFUSED not_allowed).",
+  "pref_rollback putting settings back: it writes the whole settings file and restarts FreeCAD, and it has no dry form (only `to` and `save`). A safe proof needs a throwaway FreeCAD profile (a second user config folder), not the person's: pref_set a test key, pref_history, pref_rollback { to: that change }, then pref_get shows the key gone after the restart.",
+  "slice_open opening a project: it starts OrcaSlicer's own window in front of the person and has no quiet form (its slicer enum is orcaslicer | bambustudio, so there is no 'not installed' road to read on a Mac that has OrcaSlicer). A proof needs the person at the Mac and their word: slice_with { body, slicer: \"orcaslicer\", project: true, name: \"probe-orca\" } on a body in a print setup, then slice_open { path: \"probe-orca.3mf\" } (expect opened, in 'orcaslicer', next naming slice_read).",
+  "printer_status answering a state, printer_send uploading, printer_pause / printer_stop accepted: each needs a real printer (or a stand-in server speaking Moonraker's API on the Mac) and, for start, pause and stop, the person's own confirm. Without one, only the refusals above can be run. A safe proof: a local Moonraker stand-in on 127.0.0.1 (the repository's tests/make/test_printer.py runs one), kept under a dummy name, with no printer behind it.",
+  "printer_send with a real .gcode to the dummy (REFUSED unavailable after the file checks): needs a G-code file, which only a slicer writes; slice or slice_with first when one is wanted.",
+  "app_recover auto and accept: they open recovered copies and save over the person's file; only list and the two refusals are run here (the task asks for the read-only use).",
+  "mass_calibrate with a print setup (key setup:S1) and with encased parts: workshop-make-model.json builds those; here the body is in no setup on purpose, so the key is solid:pla."
+ ]
+}
