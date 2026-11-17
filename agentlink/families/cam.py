@@ -13,12 +13,11 @@ import os
 import FreeCAD
 
 import Path  # noqa: F401  — FreeCAD's CAM workbench
-import Path.Main.Job as PathJob
-import Path.Tool.Controller as PathToolController
+import Path.Main.Job  # noqa: F401  — as before the tools were data: no family on a FreeCAD whose CAM has no such job
+import Path.Tool.Controller  # noqa: F401
 
-from .. import paths
-from ..protocol import Tool, ToolError
-from ..tools import obj
+from .. import paths, runners
+from ..protocol import ToolError
 from . import measure as M
 from . import picks
 
@@ -144,16 +143,21 @@ def tools(session):
     s = session
 
     def doc():
+        """The session's document, made FreeCAD's active one."""
         if s.doc is None:
             raise ToolError("invalid_state", "No document: doc_new first.")
         FreeCAD.setActiveDocument(s.doc.Name)
         return s.doc
 
     def tc_of(job):
+        """The job's first tool controller, or None."""
         group = job.Tools.Group if hasattr(job, "Tools") else []
         return group[0] if group else None
 
     def set_tool(tc, t):
+        """A tool controller's sizes, feeds, speed and number from an input
+        record; shared by cam_job, cam_tool and cam_tool_add, so each of its
+        inputs is checked here, in its own words."""
         if t.get("diameter") is not None:
             d = picks.number(t, "diameter", what="tool.diameter", gt=0, msg="tool.diameter: the end mill's, mm, over 0.")
             tc.Tool.Diameter = d
@@ -169,73 +173,61 @@ def tools(session):
             tc.ToolNumber = int(t["number"])
 
     def tool_out(tc):
+        """A tool controller as the answers give it, or None."""
         if tc is None:
             return None
         return {"name": tc.Label, "number": tc.ToolNumber, "diameter": _q(tc.Tool.Diameter, "mm"), "feed": _q(tc.HorizFeed, "mm/min"), "plunge": _q(tc.VertFeed, "mm/min"), "rpm": tc.SpindleSpeed}
 
     def stock_out(job):
+        """The job's stock as its box: min, max, size."""
         bb = job.Stock.Shape.BoundBox
         return {"min": [round(bb.XMin, 3), round(bb.YMin, 3), round(bb.ZMin, 3)], "max": [round(bb.XMax, 3), round(bb.YMax, 3), round(bb.ZMax, 3)], "size": [round(bb.XLength, 3), round(bb.YLength, 3), round(bb.ZLength, 3)]}
 
-    def cam_job(a):
-        d = doc()
-        o = s.body(a.get("body"))
-        tool = a.get("tool") or {}
-        if not isinstance(tool, dict) or tool.get("diameter") is None:
-            raise ToolError("invalid_input", "tool: { diameter (mm), feed and plunge (mm/min), rpm } — the end mill the person will use; ask if not said.")
-        st = a.get("stock") or {}
-        if not isinstance(st, dict):
-            raise ToolError("invalid_input", "stock: { margin, top, bottom } in mm, each 0 or more.")
-        margin = picks.number(st, "margin", 2.0, what="stock.margin", ge=0, msg="stock.margin: mm of stock round the part on each side, 0 or more.")
-        top = picks.number(st, "top", 1.0, what="stock.top", ge=0, msg="stock.top: mm of stock over the part, 0 or more.")
-        bottom = picks.number(st, "bottom", 0.0, what="stock.bottom", ge=0, msg="stock.bottom: mm of stock under the part, 0 or more.")
-        job = PathJob.Create(a.get("name") or "Job", [o], None)
-        if a.get("name"):
-            job.Label = a["name"]
-        note = None
-        if not hasattr(job.Stock, "ExtXneg"):
-            # The person's CAM preferences name a default stock (a box or cylinder of fixed
-            # size) instead of one round the part: replaced by FreeCAD's own stock from the part.
-            import Path.Main.Stock as PathStock
+    def commands(x):
+        """An operation's or dressup's path commands; none when it has no path."""
+        return list(x.Path.Commands) if getattr(x, "Path", None) is not None else []
 
-            try:
-                old = job.Stock
-                job.Stock = PathStock.CreateFromBase(job)
-                d.removeObject(old.Name)
-            except Exception as e:
-                note = f"The stock is the default from FreeCAD's CAM preferences, not one round the part (margin, top and bottom were not applied: {e})."
-        if hasattr(job.Stock, "ExtXneg"):
-            job.Stock.ExtXneg = job.Stock.ExtXpos = job.Stock.ExtYneg = job.Stock.ExtYpos = margin
-            job.Stock.ExtZpos, job.Stock.ExtZneg = top, bottom
-        tc = tc_of(job)
-        if tc is None:
-            tc = PathToolController.Create()
-            job.Proxy.addToolController(tc)
-        set_tool(tc, {"feed": 600, "plunge": 200, "rpm": 12000, **tool})
-        d.recompute()
-        return {"job": job.Label, "body": o.Label, "model": job.Model.Group[0].Label if job.Model.Group else None, "stock": stock_out(job), "tool": tool_out(tc),
-                **({"note": note} if note else {}),
-                "next": "cam_op { kind: profile | pocket | adaptive | face | drill } — each computed as it is added; then cam_sim and cam_post."}
+    def op_type(op):
+        """What kind of operation or dressup it is: its FreeCAD class."""
+        return op.Proxy.__class__.__name__ if hasattr(op, "Proxy") else op.TypeId
 
-    def faces_of(o, qs, what):
-        names = []
-        for q in qs if isinstance(qs, list) else [qs]:
-            if isinstance(q, str):
-                names.append(q)
-                continue
-            query = {**q, "body": o.Label}
-            query.setdefault("kind", "face")
-            _, _, hits = M.query(s, query)
-            if not hits:
-                raise ToolError("not_found", f"{what}: no face of {o.Label} matches {q} — shape_query {{ body, kind: \"face\" }} lists them with their normals and heights.")
-            if q.get("near") is not None and len(hits) > 1:
-                # near: the one closest to the point, not every match.
-                import Part
+    def path_module(name):
+        """One of the CAM workbench's own modules by its dotted name (an
+        operation's, a dressup's, the stock's): ImportError where this
+        FreeCAD has none."""
+        if not name.startswith("Path."):
+            raise ImportError(f"{name} is not one of CAM's modules")
+        return importlib.import_module(name)
 
-                pt = picks.vec3(q["near"] if isinstance(q["near"], list) else q["near"].get("point"), "near")
-                hits = sorted(hits, key=lambda h: h[1].distToShape(Part.Vertex(pt))[0])[:1]
-            names += [d["ref"] for _, _, d in hits]
-        return names
+    def with_tool(tc, make):
+        """make() with tc as the tool controller FreeCAD finds. With more than
+        one tool FreeCAD asks which in a dialog (and headless fails), or takes
+        the one selected in the window: for this one call its finder answers
+        tc, and is put back after."""
+        import PathScripts.PathUtils as PathUtils
+
+        orig_find = PathUtils.findToolController
+        PathUtils.findToolController = lambda *args, **kw: tc
+        try:
+            return make()
+        finally:
+            PathUtils.findToolController = orig_find
+
+    def face_names(o, q):
+        """The faces of o one entry of faces names: a name as it is, or what
+        shape_query finds for a filter (with near, the one closest to the
+        point, not every match). None found: an empty list."""
+        if isinstance(q, str):
+            return [q]
+        query = {**q, "body": o.Label}
+        query.setdefault("kind", "face")
+        _, _, hits = M.query(s, query)
+        if q.get("near") is not None and len(hits) > 1:
+            import Part
+
+            pt = picks.vec3(q["near"] if isinstance(q["near"], list) else q["near"].get("point"), "near")
+            hits = sorted(hits, key=lambda h: h[1].distToShape(Part.Vertex(pt))[0])[:1]
+        return [d["ref"] for _, _, d in hits]
 
     HINTS = {"helix": "helix bores round holes: give the hole's wall (a cylinder face), with a tool smaller than the hole",
              "thread": "thread milling needs a round hole's wall and a thread-mill tool",
@@ -244,216 +236,70 @@ def tools(session):
              "vcarve": "V-carving follows letters or a sketch (base) with a V-bit (cam_tool_add)",
              "engrave": "engraving follows letters, a sketch or a wire (base)"}
 
-    def cam_op(a):
+    def where(e):
+        """An error with the file and line FreeCAD raised it at."""
+        import traceback
+
+        fr = traceback.extract_tb(e.__traceback__)[-1]
+        return f"{e} ({os.path.basename(fr.filename)}:{fr.lineno})"
+
+    def make_op(mod, kind, name, job):
+        """A new operation of mod in the job. FreeCAD 1.0's hole operations
+        look for holes in Create before the operation knows its model, and
+        fail; those are built the way newer releases do."""
         d = doc()
-        before = {o.Name for o in d.Objects}
-        try:
-            return cam_op_(a)
-        except ToolError:
-            raise
-        except Exception as e:
-            job = _job(d, a.get("job"))
-            for o in [o for o in d.Objects if o.Name not in before]:
-                if o in job.Operations.Group:
-                    job.Operations.removeObject(o)
-                d.removeObject(o.Name)
-            d.recompute()
-            kind = str(a.get("kind", "")).lower()
-            import traceback
-
-            fr = traceback.extract_tb(e.__traceback__)[-1]
-            e = f"{e} ({os.path.basename(fr.filename)}:{fr.lineno})"
-            raise ToolError("failed", f"The {kind} would not compute: {e}" + (f" — {HINTS[kind]}." if kind in HINTS else ".") + " Nothing was kept.") from None
-
-    def make_op(d, mod, kind, a, job):
         cls = {"drill": "ObjectDrilling", "helix": "ObjectHelix", "thread": "ObjectThreadMilling", "tapping": "ObjectTapping"}.get(kind)
         if cls and hasattr(mod, cls):
-            # FreeCAD 1.0's hole ops look for holes in Create before the op knows
-            # its model, and fail; built the way newer releases do.
-            nm = a.get("name") or kind.capitalize()
+            nm = name or kind.capitalize()
             op = d.addObject("Path::FeaturePython", nm)
             op.Proxy = getattr(mod, cls)(op, nm, job)
             if getattr(op.Proxy, "model", None) is None:
                 op.Proxy.job, op.Proxy.model = job, job.Model.Group
             return op
-        return mod.Create(a.get("name") or kind.capitalize(), None, job)
+        return mod.Create(name or kind.capitalize(), None, job)
 
-    def cam_op_(a):
-        d = doc()
-        job = _job(d, a.get("job"))
-        kind = str(a.get("kind", "")).lower()
-        if kind not in OPS:
-            raise ToolError("invalid_input", f"kind: one of {', '.join(OPS)}.")
-        if a.get("side") is not None and a["side"] not in ("outside", "inside"):
-            raise ToolError("invalid_input", "side: outside | inside (profile: which side of the outline the cutter runs; adaptive: where it clears).")
-        if a.get("stepOver") is not None and not 0 < picks.num(a["stepOver"], "stepOver") <= 100:
-            raise ToolError("invalid_input", "stepOver: percent of the tool's diameter, above 0 up to 100.")
-        if a.get("stepDown") is not None and picks.num(a["stepDown"], "stepDown") <= 0:
-            raise ToolError("invalid_input", "stepDown: mm per pass, above 0.")
-        if not job.Model.Group or not job.Tools.Group:
-            raise ToolError("invalid_state", f"{job.Label} has lost its model or its tool: cam_job makes a whole one.")
+    def enum_of(o, prop):
+        """The values an enumeration property takes; None when it is not one."""
         try:
-            mod = importlib.import_module(OPS[kind])
-        except ImportError as e:
-            raise ToolError("unavailable", f"{kind} is not in this FreeCAD's CAM ({e})" + (": 3D surface and waterline need OpenCamLib (ocl) installed." if kind in ("surface", "waterline") else "."))
-        model = job.Model.Group[0]
-        base_body = s.body(a.get("body")) if a.get("body") else None
-        src = base_body or model
-        want_tc = None
-        if a.get("tool"):
-            want_tc = next((x for x in job.Tools.Group if a["tool"] in (x.Label, x.Name, getattr(getattr(x, "Tool", None), "Label", None))), None)
-            if want_tc is None:
-                raise ToolError("not_found", f"tool {a['tool']!r}: the job's tools are {', '.join(x.Label for x in job.Tools.Group)} (cam_tool_add adds one).")
-        # With more than one tool FreeCAD asks which in a dialog (and headless
-        # fails): the op is made with the one asked for, else the job's first.
-        import PathScripts.PathUtils as PathUtils
+            return o.getEnumerationsOfProperty(prop)
+        except Exception:
+            return None
 
-        chosen = want_tc or job.Tools.Group[0]
-        orig_find = PathUtils.findToolController
-        PathUtils.findToolController = lambda *args, **kw: chosen
-        try:
-            op = make_op(d, mod, kind, a, job)
-        finally:
-            PathUtils.findToolController = orig_find
-        if a.get("name"):
-            op.Label = a["name"]
-        if want_tc is not None:
-            op.ToolController = want_tc
-        if a.get("base"):
-            # what an engraving or V-carve follows: letters (draft_text's ShapeString), a sketch, a wire
-            objs = [picks.find(d, r, "base") for r in picks.ref_list(a["base"])]
-            empty = [x.Label for x in objs if getattr(x, "Shape", None) is None or x.Shape.isNull() or not x.Shape.Edges]
-            if empty:
-                raise ToolError("invalid_input", f"base: {', '.join(empty)} has no edges to follow (letters from draft_text, a sketch or a wire).")
-            if kind == "engrave" and hasattr(op, "BaseShapes"):
-                op.BaseShapes = objs
-            else:
-                op.Base = [(x, [f"Face{i + 1}" for i in range(len(x.Shape.Faces))] or [f"Edge{i + 1}" for i in range(len(x.Shape.Edges))]) for x in objs]
-        if a.get("faces") is not None:
-            op.Base = [(model, faces_of(src, a["faces"], "faces"))]
-        for k, v in (a.get("props") or {}).items():
-            if k not in op.PropertiesList:
-                raise ToolError("invalid_input", f"props.{k}: {op.Label} has no such property (object_get lists them).")
-            try:
-                setattr(op, k, v)
-            except Exception as e:
-                try:
-                    allowed = op.getEnumerationsOfProperty(k)
-                except Exception:
-                    allowed = None
-                raise ToolError("invalid_input", f"props.{k} = {v!r}: {e}" + (f" — one of {', '.join(map(str, allowed))}." if allowed else f" (it is a {op.getTypeIdOfProperty(k).split('::')[-1]}; lengths take a number in mm or \"5 mm\").")) from None
-        if kind == "profile":
-            op.Side = "Inside" if a.get("side") == "inside" else "Outside"
-        if kind == "adaptive":
-            op.Side = "Inside" if a.get("side", "inside") == "inside" else "Outside"
-            op.OperationType = "Profiling" if a.get("finish") else "Clearing"  # the two FreeCAD has (Adaptive.py)
-        if kind in ("drill", "helix", "thread", "tapping") and a.get("faces") is None:
-            op.Proxy.findAllHoles(op)
-            if not op.Base:
-                raise ToolError("failed", f"No holes the tool ({_q(op.ToolController.Tool.Diameter, 'mm')} mm) fits, upright (along Z), in {model.Label}: give faces (the holes' walls), or a smaller tool (cam_tool, or cam_tool_add and tool). Nothing was kept.")
-        if a.get("stepDown") is not None and hasattr(op, "StepDown"):
-            op.StepDown = f"{picks.num(a['stepDown'], 'stepDown')} mm"
-        if a.get("stepOver") is not None and hasattr(op, "StepOver"):
-            so = picks.num(a["stepOver"], "stepOver")
-            # A percent, and a whole one on some operations (the pocket's is
-            # an integer property: 50.0 was refused "type must be int").
-            try:
-                op.StepOver = so
-            except TypeError:
-                op.StepOver = int(round(so))
-        if a.get("finalDepth") is not None:
-            op.setExpression("FinalDepth", None)
-            op.FinalDepth = f"{picks.num(a['finalDepth'], 'finalDepth')} mm"
-        if a.get("stockToLeave") is not None and hasattr(op, "StockToLeave"):
-            op.StockToLeave = f"{picks.num(a['stockToLeave'], 'stockToLeave')} mm"
-        d.recompute()
-        cmds = list(op.Path.Commands) if getattr(op, "Path", None) is not None else []
-        moves = [c for c in cmds if c.Name.upper() in ("G1", "G2", "G3", "G01", "G02", "G03") + CYCLES]
-        if kind in ("probe", "custom"):
-            # Not cuts: a probe's G38 touches, custom's own lines.
-            out = {"op": op.Label, "kind": kind, "job": job.Label, "commands": len(cmds), "first": [c.toGCode() for c in cmds[:8]]}
-            if not cmds:
-                raise ToolError("failed", f"The {kind} made no G-code: " + ("props.Gcode — its lines." if kind == "custom" else "props PointCountX / PointCountY / OutputFileName.") + " Nothing was kept.")
-            return out
-        if not moves:
-            raise ToolError("failed", f"The {kind} made no cutting moves: {'the faces are not ones it can cut' if a.get('faces') is not None else 'nothing found to cut — give faces'}; or the tool ({_q(op.ToolController.Tool.Diameter, 'mm')} mm) is too big for them; or finalDepth is not below the start ({_q(op.StartDepth, 'mm')} → {_q(op.FinalDepth, 'mm')}). report_read has FreeCAD's own reason. Nothing was kept.")
-        out = {"op": op.Label, "kind": kind, "job": job.Label, **path_stats(cmds, op.ToolController),
-               "tool": op.ToolController.Label if getattr(op, "ToolController", None) is not None else None,
-               "depths": {"start": _q(op.StartDepth, "mm"), "final": _q(op.FinalDepth, "mm"), "stepDown": _q(getattr(op, "StepDown", None), "mm") if hasattr(op, "StepDown") else None}}
-        if a.get("faces") is not None:
-            out["faces"] = op.Base[0][1] if op.Base else []
-        bb = job.Stock.Shape.BoundBox
-        if "cutBox" in out and out["cutBox"]["min"][2] < bb.ZMin - 1e-6:
-            out["warning"] = f"It cuts down to z {out['cutBox']['min'][2]}, below the stock's bottom ({round(bb.ZMin, 3)}): into the fixture — set finalDepth."
-        return out
+    def stack_of(top, tuples):
+        """One of the job's operations with what it is stacked on: a dressup
+        on a dressup on an operation, outermost first (the job lists the
+        outermost). tuples: a Base that is a tuple is faces, not a path, as a
+        list always is."""
+        y, stack = top, [top]
+        while getattr(y, "Base", None) is not None and not isinstance(y.Base, (list, tuple) if tuples else list) and hasattr(y.Base, "Path"):
+            y = y.Base
+            stack.append(y)
+        return stack
 
-    def cam_list(a):
-        job = _job(doc(), a.get("job"))
-        ops = []
-        for op in job.Operations.Group:
-            cmds = list(op.Path.Commands) if getattr(op, "Path", None) is not None else []
-            ops.append({"op": op.Label, "type": op.Proxy.__class__.__name__ if hasattr(op, "Proxy") else op.TypeId, "active": bool(getattr(op, "Active", True)), **path_stats(cmds, tc_for(op))})
-        total = round(sum(o["minutes"] for o in ops), 2)
-        return {"job": job.Label, "stock": stock_out(job), "tool": tool_out(tc_of(job)), "ops": ops, "minutes": total}
+    # ---- the simulation (cam_sim) ----
 
-    def cam_tool(a):
-        job = _job(doc(), a.get("job"))
-        tc = tc_of(job)
-        set_tool(tc, a)
-        doc().recompute()
-        return {"job": job.Label, "tool": tool_out(tc), "note": "Every operation was computed again with the tool as it is now: cam_list for their paths."}
+    def sim_tool(op, job):
+        """An operation with its cutter for the height map: (op, diameter mm,
+        ball-ended)."""
+        tc = tc_for(op) or tc_of(job)
+        tool = tc.Tool
+        d = float(_q(tool.Diameter, "mm"))
+        shape = str(getattr(tool, "ShapeName", "") or getattr(tool, "ShapeType", "") or getattr(tool, "BitShape", "") or tool.Label).lower()
+        return (op, d, "ball" in shape)
 
-    def cam_remove(a):
-        d = doc()
-        job = _job(d, a.get("job"))
-        # The job lists the outermost of each stack (a dressup on a dressup on an operation):
-        # naming any of them takes the whole stack out, so nothing is left outside the job.
-        hit, chain = None, []
-        for top in job.Operations.Group:
-            y, stack = top, [top]
-            while getattr(y, "Base", None) is not None and not isinstance(y.Base, (list, tuple)) and hasattr(y.Base, "Path"):
-                y = y.Base
-                stack.append(y)
-            if any(a.get("op") in (c.Label, c.Name) for c in stack):
-                hit, chain = top, stack
-                break
-        if hit is None:
-            raise ToolError("not_found", f"op {a.get('op')!r}: the job's operations are {', '.join(op.Label for op in job.Operations.Group) or 'none'}.")
-        job.Operations.removeObject(hit)
-        gone = [c.Label for c in chain]
-        for c in chain:
-            extra = getattr(c, "Stock", None) if c is not chain[-1] else None  # a boundary dressup's own stock
-            d.removeObject(c.Name)
-            if extra is not None and getattr(extra, "Name", None) and d.getObject(extra.Name) is not None:
-                d.removeObject(extra.Name)
-        d.recompute()
-        return {"job": job.Label, "removed": gone, "ops": [op.Label for op in job.Operations.Group]}
-
-
-    def cam_sim(a):
+    def sim_run(job, cutters, res):
+        """The job cut on a height map of res mm cells (Agent Link's millsim):
+        the stock's top from above, each operation's moves run through it in
+        order, then the cut stock against the part. Answers per (each op's
+        removed volume and crashes), crashes, removed, part (gouge and left),
+        low (the lowest cut) and the map, heights and difference for the
+        picture."""
         import numpy as np
 
-        from .. import millsim, render
+        from .. import millsim
 
-        job = _job(doc(), a.get("job"))
-        ops = [op for op in job.Operations.Group if getattr(op, "Active", True) and getattr(op, "Path", None) is not None]
-        if not ops:
-            raise ToolError("invalid_state", f"{job.Label} has no operations: cam_op first.")
         sb = job.Stock.Shape.BoundBox
-        tools_of = []
-        for op in ops:
-            tc = tc_for(op) or tc_of(job)
-            tool = tc.Tool
-            d = float(_q(tool.Diameter, "mm"))
-            shape = str(getattr(tool, "ShapeName", "") or getattr(tool, "ShapeType", "") or getattr(tool, "BitShape", "") or tool.Label).lower()
-            tools_of.append((op, d, "ball" in shape))
-        res = a.get("resolution")
-        if res is None:
-            res = max(min(d for _, d, _ in tools_of) / 6.0, math.sqrt(sb.XLength * sb.YLength / 250000.0), 0.05)
-        res = float(res)
-        if res <= 0:
-            raise ToolError("invalid_input", "resolution: mm per cell, over 0.")
-        pad = max(d for _, d, _ in tools_of)
+        pad = max(d for _, d, _ in cutters)
         grid = millsim.Grid(sb.XMin - pad, sb.YMin - pad, sb.XMax + pad, sb.YMax + pad, res)
         sp, sf = job.Stock.Shape.tessellate(0.05)
         H = millsim.top_of_mesh(grid, [(v.x, v.y, v.z) for v in sp], sf, floor=sb.ZMin)
@@ -465,7 +311,7 @@ def tools(session):
             part = top if part is None else np.maximum(part, top)
         removed, crashes, per = 0.0, [], []
         here = None  # the tool's place at the end of the last op
-        for op, d, ball in tools_of:
+        for op, d, ball in cutters:
             segs = millsim.moves([(c.Name, dict(c.Parameters)) for c in op.Path.Commands], here)
             if segs:
                 here = segs[-1][2]
@@ -473,27 +319,18 @@ def tools(session):
             removed += rem
             per.append({"op": op.Label, "tool": d, **({"ballEnd": True} if ball else {}), "removedMm3": round(rem, 1), **({"crashes": len(cr)} if cr else {})})
             crashes += [{"op": op.Label, "at": [round(x, 2) for x in c[0]], "intoStockMm": round(c[1], 2)} for c in cr]
-        out = {"job": job.Label, "resolution": round(res, 3), "ops": per, "removedMm3": round(removed, 1)}
         cmp_, diff = millsim.compare(grid, H, part if part is not None else np.full_like(H, -np.inf), sb.ZMin, tol=max(0.02, res / 10))
-        out["part"] = cmp_
-        findings = []
-        if crashes:
-            out["crashes"] = crashes[:5]
-            findings.append(f"{len(crashes)} rapid move(s) go through stock — a crash on the machine: the first in {crashes[0]['op']} at {crashes[0]['at']}. Raise the clearance or safe height.")
-        if "gouge" in cmp_:
-            g = cmp_["gouge"]
-            findings.append(f"It cuts into the part: {g['deepest']} mm deep at {g['at'][:2]}, over {g['areaMm2']} mm². Check that operation's faces, side and depths.")
-        low = float(np.min(H))
-        if low < sb.ZMin - 0.05:
-            findings.append(f"It cuts {round(sb.ZMin - low, 2)} mm under the stock's bottom: into the spoilboard or vise — set finalDepth.")
-        if "left" in cmp_ and cmp_["left"]["share"] > 0.02:
-            l = cmp_["left"]
-            out["note"] = f"Material is left over the part on {round(100 * l['share'])}% of it, up to {l['most']} mm (at {l['at'][:2]}): a face op for a stock top, a finishing pass or a smaller tool for corners — or none, if that is meant."
-        out["verdict"] = "fix" if findings else "clear"
-        out["findings"] = findings
-        # The picture: from above, each spot of the part coloured by what is
-        # left on it (blue gouged, green right, red left over); off the part
-        # the cut stock in grey, lighter higher.
+        return {"per": per, "crashes": crashes, "removed": removed, "part": cmp_, "low": float(np.min(H)), "grid": grid, "H": H, "diff": diff}
+
+    def sim_picture(run, sb):
+        """The simulation's picture as PNG bytes: from above, each spot of
+        the part coloured by what is left on it (blue gouged, green right,
+        red left over); off the part the cut stock in grey, lighter higher."""
+        import numpy as np
+
+        from .. import render
+
+        cmp_, diff, H, grid = run["part"], run["diff"], run["H"], run["grid"]
         span = max(0.1, abs(cmp_.get("gouge", {}).get("deepest", 0.0)), cmp_.get("left", {}).get("most", 0.0))
         t = (diff + span) / (2 * span)
         img = render.jet(np.nan_to_num(t, nan=0.5))
@@ -508,109 +345,73 @@ def tools(session):
         canvas = np.full((h + 70, max(w, 420), 3), 0.12)
         canvas[:h, :w] = img
         render.legend(canvas, -span, span, "mm", "jet", "LEFT ON THE PART", h + 40)
-        data = render.png(canvas)
-        path = paths.made(s, a.get("path") or os.path.join(s.out_dir, f"{job.Label}_sim.png"), None if a.get("path") else "shot")
+        return render.png(canvas)
+
+    def write_bytes(path, data):
+        """data written as the file path."""
         with open(path, "wb") as f:
             f.write(data)
-        out["picture"] = path
-        if a.get("inline", True):
-            out["_png"] = data
-        return out
 
-    def cam_post(a):
-        d = doc()
-        job = _job(d, a.get("job"))
-        name = picks.choice(a, "post", POSTS, f"post: one of {', '.join(POSTS)} — the person's machine's controller.", "grbl")
-        ops = [op for op in job.Operations.Group if getattr(op, "Active", True)]
-        if not ops:
-            raise ToolError("invalid_state", "No operations in the job: cam_op first.")
-        path = paths.out_file(s, "cam_post", a.get("path") or os.path.join(s.out_dir, f"{job.Label.replace(' ', '_')}.nc"), expand=False)
+    def write_text(path, text):
+        """text written as the file path (UTF-8)."""
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    # ---- posting (cam_post) ----
+
+    def post_factory():
+        """FreeCAD 1.x's post-processor factory; None on a FreeCAD without it."""
         try:
             from Path.Post.Processor import PostProcessorFactory
         except ImportError:
-            PostProcessorFactory = None
+            return None
+        return PostProcessorFactory
 
-        def by_job():
-            """FreeCAD 1.x: the job's post-processor object builds the list to post — the
-            work offsets (Fixtures), each tool change, the active operations in the job's
-            order — and runs the controller's script or class on it, as the Post command
-            does. With a window up a post-processor opens its editor dialog unless told
-            not to: --no-show-editor is added to the job's own arguments for this run."""
-            old = str(job.PostProcessorArgs or "")
-            touched = "Touched" in job.State
-            args = " ".join(x for x in old.split() if x != "--show-editor")
-            if "--no-show-editor" not in args.split():
-                args = (args + " --no-show-editor").strip()
-            job.PostProcessorArgs = args
-            try:
-                pp = PostProcessorFactory.get_post_processor(job, name)
-                sections = pp.export() if pp is not None else None
-            finally:
-                job.PostProcessorArgs = old
-                if not touched:
-                    job.purgeTouched()
-            return "\n".join(g for _, g in (sections or []) if isinstance(g, str))
-
-        def by_script():
-            """The controller's script given the tool controllers and operations in order
-            (no work offsets): FreeCAD 1.0's way, and the fallback."""
-            try:
-                post = importlib.import_module(f"Path.Post.scripts.{name}_post")
-                importlib.reload(post)
-            except ImportError:
-                raise ToolError("unavailable", f"FreeCAD here has no {name} post-processor: post is one of {', '.join(POSTS)}.") from None
-            if not hasattr(post, "export"):
-                raise ToolError("failed", f"The {name} post-processor made no G-code for this job (report_read has FreeCAD's reason).")
-            postables = []
-            seen_tc = None
-            for op in ops:
-                tc = tc_for(op)
-                if tc is not None and tc is not seen_tc:
-                    postables.append(tc)
-                    seen_tc = tc
-                postables.append(op)
-            return post.export(postables, "-", "--no-show-editor")
-
-        how = "job"
+    def by_job(job, name, factory):
+        """FreeCAD 1.x: the job's post-processor object builds the list to post — the
+        work offsets (Fixtures), each tool change, the active operations in the job's
+        order — and runs the controller's script or class on it, as the Post command
+        does. With a window up a post-processor opens its editor dialog unless told
+        not to: --no-show-editor is added to the job's own arguments for this run."""
+        old = str(job.PostProcessorArgs or "")
+        touched = "Touched" in job.State
+        args = " ".join(x for x in old.split() if x != "--show-editor")
+        if "--no-show-editor" not in args.split():
+            args = (args + " --no-show-editor").strip()
+        job.PostProcessorArgs = args
         try:
-            gcode = by_job() if PostProcessorFactory is not None and hasattr(job, "PostProcessorArgs") and getattr(job, "Fixtures", None) else ""
-            if not isinstance(gcode, str) or not gcode.strip():
-                how = "script"
-                gcode = by_script()
-        except ToolError:
-            raise
-        except Exception as e:
-            raise ToolError("failed", f"The {name} post-processor stopped: {e}. cam_list shows each operation's path; an operation with no moves, or one whose tool was removed, stops a post.") from None
-        last_tc = next((tc_for(op) for op in reversed(ops) if tc_for(op) is not None), None)
-        if not isinstance(gcode, str) or not gcode.strip():
-            raise ToolError("failed", f"The {name} post-processor wrote nothing: every operation's path is empty (cam_list), or all are switched off (cam_edit {{ action: \"active\" }}).")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(gcode)
-        cmds = [c for op in ops for c in op.Path.Commands]
-        stats = path_stats(cmds, last_tc)
-        bb = job.Stock.Shape.BoundBox
-        tcs = []
+            pp = factory.get_post_processor(job, name)
+            sections = pp.export() if pp is not None else None
+        finally:
+            job.PostProcessorArgs = old
+            if not touched:
+                job.purgeTouched()
+        return "\n".join(g for _, g in (sections or []) if isinstance(g, str))
+
+    def post_script(name):
+        """The controller's post script, loaded afresh (FreeCAD 1.0's way,
+        and the fallback); None where this FreeCAD has none of that name."""
+        try:
+            post = importlib.import_module(f"Path.Post.scripts.{name}_post")
+            importlib.reload(post)
+        except ImportError:
+            return None
+        return post
+
+    def postables(ops):
+        """What a post script is given: the operations in order, each new
+        tool controller before the first operation that uses it (no work
+        offsets)."""
+        out = []
+        seen_tc = None
         for op in ops:
             tc = tc_for(op)
-            if tc is not None and tc.Label not in [t["name"] for t in tcs]:
-                tcs.append({"name": tc.Label, "number": tc.ToolNumber})
-        out = {"job": job.Label, "post": name, "path": path, "lines": len(gcode.splitlines()), "bytes": len(gcode.encode()), **({"units": "inch (G20)"} if "G20" in gcode.split() else {"units": "mm (G21)"} if "G21" in gcode.split() else {}), "via": how, **stats,
-               "ops": [o.Label for o in ops], "tools": tcs, "fixtures": list(getattr(job, "Fixtures", []) or []) if how == "job" else [], "stock": stock_out(job)}
-        warnings = []
-        if "cutBox" in stats:
-            lo, hi = stats["cutBox"]["min"], stats["cutBox"]["max"]
-            r = _q(last_tc.Tool.Diameter, "mm") / 2 if last_tc is not None else 0
-            if lo[2] < bb.ZMin - 1e-6:
-                warnings.append(f"Cuts below the stock's bottom (z {lo[2]} < {round(bb.ZMin, 3)}): into the fixture or the spoil board.")
-            if lo[0] - r < bb.XMin - 25 or hi[0] + r > bb.XMax + 25 or lo[1] - r < bb.YMin - 25 or hi[1] + r > bb.YMax + 25:
-                warnings.append("Cuts reach far outside the stock: check the operations.")
-        if warnings:
-            out["warnings"] = warnings
-        out["note"] = "Check it in a simulator or the controller's preview before running; zero the machine on the stock as the job sets it (cam_list stock). Running it is the person's."
+            if tc is not None and tc is not seen_tc:
+                out.append(tc)
+                seen_tc = tc
+            out.append(op)
         return out
 
-    jobref = {"type": "string", "description": "The job's label; may be left out when there is one."}
-    faces = {"description": "The faces to work: [\"Face6\"] or queries [{ normal: [0,0,1], z: 12 }] as shape_query takes; left out, the whole part (profile: its outline; drill: every hole)."}
     # ---- more tools, dressups, setup ----
 
     SHAPES = ("endmill", "ballend", "bullnose", "v-bit", "chamfer", "drill", "thread-mill", "radius", "dovetail", "reamer", "tap", "slittingsaw", "taperedballnose")
@@ -618,10 +419,9 @@ def tools(session):
     BIT_PROPS = {"angle": (("CuttingEdgeAngle", "TipAngle"), "°"), "length": (("Length",), "mm"), "cuttingLength": (("CuttingEdgeHeight",), "mm"),
                  "tipDiameter": (("TipDiameter",), "mm"), "cornerRadius": (("CornerRadius", "CuttingRadius", "TorusRadius"), "mm")}
 
-    def make_bit(shape, name):
-        """A tool bit of a shape from CAM's shape library, across the tool
-        systems of 1.0 and later."""
-        shape_file = None
+    def shape_file(shape):
+        """A tool shape's file in CAM's shape library (FreeCAD 1.0's tool
+        bits are made from one), or None."""
         import Path as _P
 
         mod_dir = os.path.dirname(os.path.dirname(os.path.abspath(_P.__file__)))  # …/Mod/CAM
@@ -631,78 +431,34 @@ def tools(session):
         for root in roots:
             f = os.path.join(root, f"{shape}.fcstd")
             if os.path.isfile(f):
-                shape_file = f
-                break
+                return f
+        return None
+
+    def bit_factory():
+        """FreeCAD 1.0's tool bit factory, or None. 1.1 still answers
+        "import Path.Tool.Bit" (an alias of the new tool bit module) but it
+        has no Factory: cam_tool_add failed there with "has no attribute
+        'Factory'". Only the 1.0 module is used this way."""
         try:
             import Path.Tool.Bit as PathToolBit  # 1.0
         except ImportError:
-            PathToolBit = None
-        # 1.1 still answers "import Path.Tool.Bit" (an alias of the new tool
-        # bit module) but it has no Factory: cam_tool_add failed there with
-        # "has no attribute 'Factory'". Only the 1.0 module is used this way.
-        if PathToolBit is not None and hasattr(PathToolBit, "Factory"):
-            if shape_file is None:
-                raise ToolError("not_found", f"No {shape} shape in this FreeCAD's CAM tool shapes.")
-            return PathToolBit.Factory.Create(name, shape_file)
-        try:
-            from Path.Tool.toolbit import ToolBit  # later releases
+            return None
+        return PathToolBit.Factory if hasattr(PathToolBit, "Factory") else None
 
-            try:
-                bit = ToolBit.from_shape_id(shape, name)
-            except TypeError:
-                bit = ToolBit.from_shape_id(shape)
-            o = bit.attach_to_doc(FreeCAD.ActiveDocument)
-            if getattr(o, "ViewObject", None) is not None:
-                o.ViewObject.Visibility = False  # as FreeCAD's own tool controller does with its bit
-            return o
-        except Exception as e:
-            raise ToolError("unavailable", f"This FreeCAD's tool bits could not be made here ({e}): cam_tool changes the job's first tool instead.")
+    def toolbit(shape, name):
+        """A tool bit of a shape the way releases after 1.0 make one, put in
+        the document and hidden as FreeCAD's own tool controller does with
+        its bit."""
+        from Path.Tool.toolbit import ToolBit  # later releases
 
-    def cam_tool_add(a):
-        d = doc()
-        job = _job(d, a.get("job"))
-        shape = picks.choice(a, "shape", SHAPES, f"shape: one of {', '.join(SHAPES)}.", "endmill")
-        if a.get("diameter") is None:
-            raise ToolError("invalid_input", "diameter: the tool's, mm — ask the person which tool.")
-        name = a.get("name") or f"{shape} {a['diameter']} mm"
-        dia = picks.number(a, "diameter", gt=0, msg="diameter: the tool's, mm, over 0.")
-        bit = make_bit(shape, name)
-        bit.Diameter = f"{dia} mm"
-        # Each shape has its own parameters (FreeCAD 1.1: Path/Tool/shape/models; 1.0: the
-        # shape files): the first of an input's names the bit has is set, and an input
-        # this shape has no place for is answered as skipped, not dropped silently.
-        skipped = []
-        for k in ("angle", "length", "cuttingLength", "tipDiameter", "cornerRadius"):
-            if a.get(k) is None:
-                continue
-            prop = next((pn for pn in BIT_PROPS[k][0] if pn in bit.PropertiesList), None)
-            if prop is None:
-                skipped.append(k)
-                continue
-            setattr(bit, prop, f"{float(a[k])} {BIT_PROPS[k][1]}")
-        if a.get("flutes") is not None:
-            if "Flutes" in bit.PropertiesList:
-                bit.Flutes = int(a["flutes"])
-            else:
-                skipped.append("flutes")
-        tc = PathToolController.Create(name, bit)
-        job.Proxy.addToolController(tc)
-        # The name is the controller's (what cam_op { tool } asks for). In 1.1
-        # the bit is a document object that took the label first, and the
-        # controller came out "Drill 5 2" — the name given then found nothing.
-        # The bit steps aside as "<name> bit".
         try:
-            if getattr(bit, "Label", None) == name and bit is not tc:
-                bit.Label = s.unique(f"{name} bit", bit)
-        except Exception:
-            pass
-        # FreeCAD bumps a taken label's digits ("V60" to "V063"): "V60 2" says it plainly
-        tc.Label = s.unique(name, tc)
-        set_tool(tc, {"feed": 600, "plunge": 200, "rpm": 12000, "number": len(job.Tools.Group), **{k: a[k] for k in ("feed", "plunge", "rpm", "number") if a.get(k) is not None}})
-        d.recompute()
-        return {"job": job.Label, "tool": tool_out(tc), "shape": shape, "tools": [x.Label for x in job.Tools.Group],
-                **({"skipped": skipped, "skippedWhy": f"a {shape} has no such size in this FreeCAD; object_get {{ object: \"{bit.Label}\" }} lists what it has"} if skipped else {}),
-                "next": f"cam_op {{ …, tool: \"{tc.Label}\" }} uses it."}
+            bit = ToolBit.from_shape_id(shape, name)
+        except TypeError:
+            bit = ToolBit.from_shape_id(shape)
+        o = bit.attach_to_doc(FreeCAD.ActiveDocument)
+        if getattr(o, "ViewObject", None) is not None:
+            o.ViewObject.Visibility = False
+        return o
 
     def bit_of(tc):
         """A tool controller's tool as the plain record cam_tool_add takes."""
@@ -730,48 +486,29 @@ def tools(session):
             rec["flutes"] = int(b.Flutes)
         return rec
 
-    def cam_library(a):
-        """The job's tools out to a file, or a file's tools into the job: the
-        person's own tool set, kept outside any one document."""
+    def write_tools(p, recs):
+        """The tool records written as Agent Link's own tool file."""
         import json
 
-        d = doc()
-        job = _job(d, a.get("job"))
-        act = a.get("action", "export")
-        p = a.get("path") or "cam-tools.json"
-        p = paths.made(s, p if os.path.isabs(p) else os.path.join(s.out_dir, p))
-        if act == "export":
-            tools_ = [bit_of(tc) for tc in job.Tools.Group]
-            os.makedirs(os.path.dirname(p), exist_ok=True)
-            with open(p, "w", encoding="utf-8") as f:
-                json.dump({"agentlink": "cam-tools", "version": 1, "tools": tools_}, f, indent=1)
-            return {"job": job.Label, "path": p, "tools": tools_}
-        if act == "import":
-            try:
-                with open(p, encoding="utf-8") as f:
-                    data = json.load(f)
-            except (OSError, ValueError) as e:
-                raise ToolError("invalid_input", f"path: {p} is not a tool file ({e}); action export writes one from a job (a relative path is in the session's output folder).") from None
-            recs = data.get("tools") if isinstance(data, dict) else data
-            if not isinstance(recs, list) or not recs:
-                raise ToolError("invalid_input", "path: a file of tools — { tools: [{ name, shape, diameter, feed, plunge, rpm, number … }] }.")
-            have = {x.Label for x in job.Tools.Group}
-            added, skipped, unknown = [], [], []
-            for r in recs:
-                if not isinstance(r, dict):
-                    raise ToolError("invalid_input", "path: each tool is { name, shape, diameter, feed, plunge, rpm, number … }.")
-                if r.get("name") in have and not a.get("replace"):
-                    skipped.append(r.get("name"))
-                    continue
-                args = {k: v for k, v in r.items() if k in ("shape", "diameter", "angle", "tipDiameter", "cornerRadius", "length", "cuttingLength", "flutes", "feed", "plunge", "rpm", "number", "name") and v is not None}
-                if args.get("shape", "endmill") not in SHAPES or args.get("diameter") is None:
-                    unknown.append(r.get("name") or str(r.get("shape")))
-                    continue
-                args["job"] = job.Label
-                added.append(cam_tool_add(args)["tool"])
-            return {"job": job.Label, "path": p, "added": added, **({"skipped": skipped, "note": "Already in the job by name: replace: true adds them again."} if skipped else {}),
-                    **({"notAdded": unknown, "notAddedWhy": f"no diameter, or a shape cam_tool_add does not make ({', '.join(SHAPES)})"} if unknown else {})}
-        raise ToolError("invalid_input", "action: export (the job's tools to path) | import (path's tools into the job).")
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"agentlink": "cam-tools", "version": 1, "tools": recs}, f, indent=1)
+
+    def read_tools(p):
+        """A tool file's content, as (content, None); (None, the error) when
+        it cannot be read or is not JSON."""
+        import json
+
+        try:
+            with open(p, encoding="utf-8") as f:
+                return json.load(f), None
+        except (OSError, ValueError) as e:
+            return None, e
+
+    def one_tool(args):
+        """cam_tool_add run for one record of a tool file: its entry's own
+        steps, so an imported tool is made and checked as an added one."""
+        return runners.run_steps("cam_tool_add", runners.entries()["cam_tool_add"], args, helpers)
 
     DRESSUPS = {"tags": "Path.Dressup.Tags", "dogbone": "Path.Dressup.DogboneII", "boundary": "Path.Dressup.Boundary", "array": "Path.Dressup.Array",
                 "ramp": "Path.Dressup.Gui.RampEntry", "leadinout": "Path.Dressup.Gui.LeadInOut"}
@@ -784,277 +521,73 @@ def tools(session):
         return x
 
     def tc_for(x):
+        """The tool controller an operation, or the one under a dressup, runs with."""
         return getattr(base_op(x), "ToolController", None) or getattr(x, "ToolController", None)
 
-    def cam_dressup(a):
-        d = doc()
-        job = _job(d, a.get("job"))
-        want = a.get("op")
-        # The job lists the outermost of each stack: a dressup goes on top of any already there.
-        top = None
-        for x in job.Operations.Group:
-            y, chain = x, [x]
-            while getattr(y, "Base", None) is not None and not isinstance(y.Base, list) and hasattr(y.Base, "Path"):
-                y = y.Base
-                chain.append(y)
-            if any(want in (c.Label, c.Name) for c in chain):
-                top = x
-                break
-        if top is None:
-            raise ToolError("not_found", f"op {want!r}: the job's operations are {', '.join(x.Label for x in job.Operations.Group) or 'none (cam_op adds one)'}.")
-        op = top
-        kind = picks.choice(a, "kind", DRESSUPS, f"kind: {', '.join(DRESSUPS)} — tags (holding tabs: count, width, height), dogbone (inside corners cleared), boundary (moves kept inside the stock), array (copies), ramp (entry instead of plunging), leadinout.")
+    def dress(mod, op, job, kind):
+        """A dressup of mod on op, however this FreeCAD makes it: the
+        module's Create, or its ObjectDressup on a new object (ramp entry and
+        lead in/out keep their Create with their commands; made as those
+        do). An error where the module has neither."""
+        if hasattr(mod, "Create"):
+            return mod.Create(op)
+        if hasattr(mod, "ObjectDressup"):
+            dr = doc().addObject("Path::FeaturePython", f"{kind.capitalize()}Dressup")
+            proxy = mod.ObjectDressup(dr)
+            dr.Base = op
+            job.Proxy.addOperation(dr, op)
+            if hasattr(proxy, "setup"):
+                try:
+                    proxy.setup(dr)
+                except TypeError:
+                    proxy.setup(dr, True)
+            return dr
+        raise AttributeError("no way to make it here")
+
+    def undress(job, dr, op):
+        """A dressup taken back off: out of the job and the document, its
+        operation back in the job."""
+        job.Operations.removeObject(dr)
+        if op not in job.Operations.Group:
+            job.Proxy.addOperation(op)
+        doc().removeObject(dr.Name)
+        doc().recompute()
+
+    def place(job, new, after):
+        """new moved to just after another of the job's operations (last
+        when that one is not listed)."""
+        g = [o for o in job.Operations.Group if o is not new]
+        i = g.index(after) + 1 if after in g else len(g)
+        job.Operations.Group = g[:i] + [new] + g[i:]
+
+    def custom_module():
+        """CAM's custom G-code operation module; None where this FreeCAD has none."""
         try:
-            mod = importlib.import_module(DRESSUPS[kind])
-        except ImportError as e:
-            raise ToolError("unavailable", f"The {kind} dressup lives in FreeCAD's GUI and is not there headless ({e}) — add it in the CAM workbench (adaptive ops enter helically anyway).")
-        before = path_stats(list(op.Path.Commands), tc_for(op))
-        try:
-            if hasattr(mod, "Create"):
-                dr = mod.Create(op)
-            elif hasattr(mod, "ObjectDressup"):
-                # Ramp entry and lead in/out keep their Create with their commands; made as those do.
-                dr = d.addObject("Path::FeaturePython", f"{kind.capitalize()}Dressup")
-                proxy = mod.ObjectDressup(dr)
-                dr.Base = op
-                job.Proxy.addOperation(dr, op)
-                if hasattr(proxy, "setup"):
-                    try:
-                        proxy.setup(dr)
-                    except TypeError:
-                        proxy.setup(dr, True)
-            else:
-                raise AttributeError("no way to make it here")
-        except Exception as e:
-            raise ToolError("failed", f"The {kind} dressup would not go on {op.Label}: {e}") from None
-        if dr is None:
-            raise ToolError("failed", f"FreeCAD made no {kind} dressup on {op.Label}" + (": tags go on a profile's path." if kind == "tags" else ": it is not a path this dressup takes (report_read has FreeCAD's reason)."))
-        if dr not in job.Operations.Group:
-            try:
-                job.Proxy.addOperation(dr, op, True)
-            except TypeError:
-                job.Proxy.addOperation(dr, op)
-        if op in job.Operations.Group:
-            job.Operations.removeObject(op)
-        if kind == "tags":
-            for k, prop, unit in (("width", "Width", "mm"), ("height", "Height", "mm"), ("angle", "Angle", "°")):
-                if a.get(k) is not None and prop in dr.PropertiesList:
-                    setattr(dr, prop, f"{float(a[k])} {unit}")
-            if a.get("count") is not None:
-                n = int(a["count"])
-                if n < 1:
-                    raise ToolError("invalid_input", "count: 1 or more tags.")
-                # generateTags spreads count tags of the width, height and angle just set
-                # (setup(obj, True) would put FreeCAD's default count and sizes back).
-                if hasattr(dr.Proxy, "generateTags"):
-                    dr.Proxy.generateTags(dr, n)
-        if kind == "boundary" and getattr(dr, "Stock", None) is not None:
-            # FreeCAD's boundary starts as the model's own box, which keeps
-            # nothing of a path round the outside: made the job's stock (or
-            # margin mm round the model) unless props give another.
-            js = job.Stock
-            m = a.get("margin")
-            for k in ("ExtXneg", "ExtXpos", "ExtYneg", "ExtYpos", "ExtZneg", "ExtZpos"):
-                if hasattr(dr.Stock, k):
-                    v = float(m) if m is not None else (float(getattr(js, k)) if hasattr(js, k) else 0.0)
-                    setattr(dr.Stock, k, v + (1.0 if k == "ExtZpos" else 0.0))
-        if kind == "dogbone" and a.get("style") and "Style" in dr.PropertiesList:
-            dr.Style = a["style"]
-        for k, v in (a.get("props") or {}).items():
-            if k not in dr.PropertiesList:
-                raise ToolError("invalid_input", f"props.{k}: the {kind} dressup has no such property (object_get {{ object: \"{dr.Label}\" }} lists them).")
-            try:
-                setattr(dr, k, v)
-            except Exception as e:
-                raise ToolError("invalid_input", f"props.{k} = {v!r}: {e}") from None
-        d.recompute()
-        cmds = list(dr.Path.Commands) if getattr(dr, "Path", None) is not None else []
-        after = path_stats(cmds, tc_for(dr))
+            from Path.Op import Custom
+        except ImportError:
+            return None
+        return Custom
 
-        def undo(why):
-            job.Operations.removeObject(dr)
-            if op not in job.Operations.Group:
-                job.Proxy.addOperation(op)
-            d.removeObject(dr.Name)
-            d.recompute()
-            raise ToolError("failed", why + " Nothing was kept.")
+    def custom_create(Custom, label, job):
+        """A custom G-code operation in the job, across the releases' two
+        ways of saying which job."""
+        return Custom.Create(label, parentJob=job) if "parentJob" in Custom.Create.__code__.co_varnames else Custom.Create(label)
 
-        if not cmds:
-            undo(f"The {kind} dressup made no path from {op.Label}.")
-        if before["cutMm"] > 0 and after["cutMm"] <= 0:
-            undo(f"The {kind} dressup left no cutting at all on {op.Label}" + (" — every move is outside its boundary (the stock): the path runs past the stock's edge; give the stock more margin (cam_job stock.margin) or a boundary of your own (props)." if kind == "boundary" else "."))
-        out = {"dressup": dr.Label, "kind": kind, "on": op.Label, "before": {k: before[k] for k in ("cutMm", "minutes")}, "after": {k: after[k] for k in ("cutMm", "minutes")}}
-        if kind == "tags" and hasattr(dr, "Positions"):
-            out["tags"] = len(dr.Positions)
-        out["note"] = "cam_post writes the dressed path; cam_sim checks it."
-        return out
-
-    def cam_setup(a):
-        d = doc()
-        job = _job(d, a.get("job"))
-        out = {"job": job.Label}
-        if not any(a.get(k) is not None for k in ("fixtures", "coolant", "safeHeight", "clearance", "order")):
-            raise ToolError("invalid_input", "Nothing to set: fixtures [\"G54\" …], coolant none | flood | mist, safeHeight, clearance (mm over the stock's top) or order [op labels].")
-        if a.get("fixtures"):
-            fx = [str(x).upper() for x in a["fixtures"]]
-            if not all(x in ("G54", "G55", "G56", "G57", "G58", "G59") for x in fx):
-                raise ToolError("invalid_input", "fixtures: work offsets G54 … G59 (each one runs the job again in that offset).")
-            job.Fixtures = fx
-            out["fixtures"] = fx
-        if a.get("coolant"):
-            mode = {"none": "None", "flood": "Flood", "mist": "Mist"}.get(a["coolant"])
-            if mode is None:
-                raise ToolError("invalid_input", "coolant: none, flood or mist.")
-            n = 0
-            # The job lists the outermost of each stack: under a dressup it is the
-            # operation that carries CoolantMode (a dressup has none, and the
-            # post reads the base operation's).
-            for top in job.Operations.Group:
-                op = base_op(top)
-                if "CoolantMode" in op.PropertiesList:
-                    op.CoolantMode = mode
-                    n += 1
-            out["coolant"] = {"mode": mode, "ops": n}
-        sh = getattr(job, "SetupSheet", None)
-        if sh is not None:
-            if a.get("safeHeight") is not None and "SafeHeightOffset" in sh.PropertiesList:
-                v = picks.number(a, "safeHeight", ge=0, msg="safeHeight: mm above the stock's top, 0 or more.")
-                sh.SafeHeightOffset = f"{v} mm"
-                out["safeHeightOffset"] = a["safeHeight"]
-            if a.get("clearance") is not None and "ClearanceHeightOffset" in sh.PropertiesList:
-                v = picks.number(a, "clearance", ge=0, msg="clearance: mm above the stock's top, 0 or more.")
-                sh.ClearanceHeightOffset = f"{v} mm"
-                out["clearanceOffset"] = a["clearance"]
-            if "safeHeightOffset" in out or "clearanceOffset" in out:
-                out["note"] = "Every operation whose SafeHeight / ClearanceHeight follows the setup sheet (the default: the stock's top plus this offset) was computed again with it; one given its own height in props keeps it."
-        if a.get("order"):
-            ops = list(job.Operations.Group)
-            byname = {o.Label: o for o in ops}
-            want = [byname[n] for n in a["order"] if n in byname]
-            if len(want) != len(ops) or len(set(a["order"])) != len(ops):
-                raise ToolError("invalid_input", f"order: every op once — {', '.join(byname)}.")
-            job.Operations.Group = want
-            out["order"] = [o.Label for o in want]
-        d.recompute()
-        return out
-
-    def cam_edit(a):
-        d = doc()
-        job = _job(d, a.get("job"))
-        action = a.get("action")
-        ops = list(job.Operations.Group)
-
-        def op_of(ref):
-            hit = next((o for o in ops if ref in (o.Label, o.Name)), None)
-            if hit is None:
-                raise ToolError("not_found", f"op {ref!r}: cam_list lists them — {', '.join(o.Label for o in ops)}.")
-            return hit
-
-        def place(new, after):
-            g = [o for o in job.Operations.Group if o is not new]
-            i = g.index(after) + 1 if after in g else len(g)
-            job.Operations.Group = g[:i] + [new] + g[i:]
-
-        def custom(label, lines, after):
-            try:
-                from Path.Op import Custom
-            except ImportError:
-                raise ToolError("unavailable", "This FreeCAD's CAM has no custom G-code operation.") from None
-            # A stop or comment runs with the tool of the operation it follows (the
-            # job's last, or first tool, when none is named). Left to FreeCAD it takes
-            # the controller selected in the window or asks in a dialog: a stop after
-            # the pocket took the drill's, and the posted file changed tools for it.
-            ops_now = list(job.Operations.Group)
-            lead = after if after is not None else (ops_now[-1] if ops_now else None)
-            tc0 = (tc_for(lead) if lead is not None else None) or next(iter(job.Tools.Group), None)
-            import PathScripts.PathUtils as PathUtils
-
-            orig_find = PathUtils.findToolController
-            PathUtils.findToolController = lambda *args, **kw: tc0
-            try:
-                o = Custom.Create(label, parentJob=job) if "parentJob" in Custom.Create.__code__.co_varnames else Custom.Create(label)
-            finally:
-                PathUtils.findToolController = orig_find
-            if tc0 is not None and "ToolController" in o.PropertiesList:
-                o.ToolController = tc0
-            if o not in job.Operations.Group:
-                job.Operations.addObject(o)
-            o.Gcode = lines
-            o.Label = s.unique(label, o)
-            if after is not None:
-                place(o, after)
-            return o
-
-        if action == "active":
-            o = op_of(a.get("op"))
-            o.Active = bool(a.get("on", True))
-            out = {"op": o.Label, "active": bool(o.Active)}
-        elif action == "copy":
-            o = op_of(a.get("op"))
-            c = d.copyObject(o, False)
-            if c not in job.Operations.Group:
-                job.Operations.addObject(c)
-            c.Label = s.unique(a.get("name") or f"{o.Label} copy", c)
-            for k, v in (a.get("props") or {}).items():
-                if k in c.PropertiesList:
-                    setattr(c, k, v)
-            place(c, o)
-            out = {"op": c.Label, "from": o.Label}
-        elif action in ("comment", "stop"):
-            after = op_of(a["after"]) if a.get("after") else None
-            if action == "comment":
-                text = str(a.get("text", "")).replace("(", "[").replace(")", "]")
-                if not text:
-                    raise ToolError("invalid_input", "text: the comment.")
-                o = custom(a.get("name") or "Comment", [f"({text})"], after)
-            else:
-                code = "M1" if a.get("optional") else "M0"
-                lines = ([f"({str(a['text']).replace('(', '[').replace(')', ']')})"] if a.get("text") else []) + [code]
-                o = custom(a.get("name") or ("Optional stop" if a.get("optional") else "Stop"), lines, after)
-            out = {"op": o.Label, "gcode": list(o.Gcode)}
-        elif action == "start":
-            o = op_of(a.get("op"))
-            if "StartPoint" not in o.PropertiesList:
-                raise ToolError("invalid_input", f"{o.Label} takes no start point.")
-            p = a.get("at")
-            if p is None:
-                o.UseStartPoint = False
-                out = {"op": o.Label, "startPoint": None}
-            else:
-                o.StartPoint = FreeCAD.Vector(*[float(c) for c in p])
-                o.UseStartPoint = True
-                out = {"op": o.Label, "startPoint": [float(c) for c in p]}
-        else:
-            raise ToolError("invalid_input", "action: active (op, on) | copy (op, props) | comment (text, after) | stop (text, optional: M1, after) | start (op, at [x,y,z] or none).")
-        d.recompute()
-        s.snapshot("cam_edit")
-        out["ops"] = [x.Label + ("" if getattr(x, "Active", True) else " (off)") for x in job.Operations.Group]
-        return out
-
-    return [
-        Tool("cam_job", "Start a CAM job for a body (FreeCAD works on a clone of it, model): stock { margin mm each side (2), top (1), bottom (0) } round the part; tool { diameter mm, feed and plunge mm/min (600, 200), rpm (12000), number }, the job's first end mill (ask the person; the defaults are gentle). The stock's top is stock.max[2]. Then cam_op.",
-             obj({"body": {"type": "string"}, "tool": {"type": "object"}, "stock": {"type": "object"}, "name": {"type": "string"}}, ["tool"]), cam_job, changes=True),
-        Tool("cam_op", "Add an operation to the job and compute it. kind: profile (the outline or the faces given; side outside | inside) | pocket (down to the faces given: a pocket's floor) | adaptive (side inside | outside; finish: true a profiling pass) | face | drill (every hole the tool fits when faces are left out) | helix | engrave, vcarve (follow base: letters, a sketch) | slot | deburr | thread | surface, waterline (need OpenCamLib) | pocket3d, tapping, probe, custom (props.Gcode); mill_facing, flute where this FreeCAD has them. faces: [\"Face6\"] or shape_query filters. tool: one of the job's by label. stepDown mm, stepOver %, finalDepth mm (a Z height, not a depth), stockToLeave mm; props { Property: value } for any other (object_get lists them). Answers cutMm, minutes, cutZ [low, high], cutBox, depths, and a warning when it cuts under the stock; refused with nothing kept when it makes no cutting moves. A big adaptive or 3D op can take a minute.",
-             obj({"job": jobref, "kind": {"type": "string", "enum": list(OPS)}, "faces": faces, "tool": {"type": "string"}, "base": {"type": "array", "items": {"type": "string"}}, "props": {"type": "object"}, "body": {"type": "string"}, "side": {"type": "string", "enum": ["outside", "inside"]}, "finish": {"type": "boolean"}, "stepDown": {"type": "number"}, "stepOver": {"type": "number"}, "finalDepth": {"type": "number"}, "stockToLeave": {"type": "number"}, "name": {"type": "string"}}, ["kind"]),
-             cam_op, changes=True),
-        Tool("cam_list", "The job: stock, tool (its first), ops in running order with type, active, cutMm, minutes, cutZ, and the total minutes (rapids at 3000 mm/min). Changes nothing.", obj({"job": jobref}), cam_list),
-        Tool("cam_tool", "Change the job's first tool: diameter mm, feed, plunge mm/min, rpm, number. Every operation is computed again. A tool from cam_tool_add is changed with object_set.",
-             obj({"job": jobref, "diameter": {"type": "number"}, "feed": {"type": "number"}, "plunge": {"type": "number"}, "rpm": {"type": "number"}, "number": {"type": "integer"}}), cam_tool, changes=True),
-        Tool("cam_tool_add", "Add a tool to the job: shape endmill | ballend | bullnose | v-bit | chamfer | drill | thread-mill | radius | dovetail | reamer | tap | slittingsaw | taperedballnose, diameter mm, angle (v-bit, chamfer, a drill's tip), tipDiameter, cornerRadius, length, cuttingLength, flutes, feed, plunge, rpm, number, name. Ask the person which tools they have. Answers tool (its name is what cam_op { tool } takes) and skipped (sizes this shape does not have).",
-             obj({"job": jobref, "shape": {"type": "string"}, "diameter": {"type": "number"}, "angle": {"type": "number"}, "tipDiameter": {"type": "number"}, "cornerRadius": {"type": "number"}, "flutes": {"type": "integer"},
-                  "length": {"type": "number"}, "cuttingLength": {"type": "number"}, "feed": {"type": "number"}, "plunge": {"type": "number"}, "rpm": {"type": "number"}, "number": {"type": "integer"}, "name": {"type": "string"}}, ["diameter"]), cam_tool_add, changes=True),
-        Tool("cam_library", "The person's tool set as a JSON file (Agent Link's own, not FreeCAD's .fctl): action export (the job's tools to path; cam-tools.json by default) | import (path's tools into the job; one already there by name is skipped unless replace: true).",
-             obj({"job": jobref, "action": {"type": "string", "enum": ["export", "import"]}, "path": {"type": "string"}, "replace": {"type": "boolean"}}), cam_library, changes=True, reads={"action": [None, "export"]}),
-        Tool("cam_dressup", "Dress an operation's path (op; the dressup goes outermost and takes its place in the job). kind: tags (holding tabs on a profile: count, width, height, angle) | dogbone (inside corners: style) | boundary (moves kept inside the stock, or margin mm round the part) | array | ramp, leadinout (where FreeCAD has them without its window). props for the dressup's own. Answers before and after { cutMm, minutes }, tags; refused when it leaves no cutting.",
-             obj({"job": jobref, "op": {"type": "string"}, "kind": {"type": "string"}, "count": {"type": "integer"}, "width": {"type": "number"}, "height": {"type": "number"}, "angle": {"type": "number"}, "style": {"type": "string"}, "margin": {"type": "number"}, "props": {"type": "object"}}, ["op", "kind"]), cam_dressup, changes=True),
-        Tool("cam_setup", "The job's setup, any of: fixtures [\"G54\" …] (work offsets: the job is posted once in each), coolant none | flood | mist, safeHeight and clearance (mm above the stock's top), order [every op's label once].",
-             obj({"job": jobref, "fixtures": {"type": "array", "items": {"type": "string"}}, "coolant": {"type": "string"}, "safeHeight": {"type": "number"}, "clearance": {"type": "number"}, "order": {"type": "array", "items": {"type": "string"}}}), cam_setup, changes=True),
-        Tool("cam_edit", "Edit the job's operations. action: active { op, on } (off leaves it out of the G-code) | copy { op, props, name } | comment { text, after } | stop { text, optional, after } (M0, or M1 when optional) | start { op, at [x, y, z] } (left out clears it). Answers op and ops (the running order).",
-             obj({"job": jobref, "action": {"type": "string", "enum": ["active", "copy", "comment", "stop", "start"]}, "op": {"type": "string"}, "on": {"type": "boolean"}, "props": {"type": "object"},
-                  "text": {"type": "string"}, "optional": {"type": "boolean"}, "after": {"type": "string"}, "at": {"type": "array", "items": {"type": "number"}}, "name": {"type": "string"}}, ["action"]), cam_edit, changes=True),
-        Tool("cam_remove", "Remove an operation (op) from the job with every dressup stacked on it; naming a dressup removes the whole stack too.", obj({"job": jobref, "op": {"type": "string"}}, ["op"]), cam_remove, changes=True),
-        Tool("cam_sim", "Simulate the job's active operations on the stock (Agent Link's own 3-axis height map from above, not FreeCAD's simulator): rapids through stock (crashes), cuts into the part (gouges) or under the stock, and what is left over the part. Answers verdict fix | clear, findings, ops, part { gouge, left }, picture (a PNG from above: blue gouged, green right, red left over). resolution mm per cell (a sixth of the smallest tool, about 250000 cells at most by default; finer costs time by its square). Undercuts cannot be seen. Before cam_post.",
-             obj({"job": jobref, "resolution": {"type": "number"}, "inline": {"type": "boolean"}, "path": {"type": "string"}}), cam_sim),
-        Tool("cam_post", "Write the job's G-code with FreeCAD's post-processor: post grbl (default) | linuxcnc | mach3_mach4 | marlin | smoothie | centroid | generic, to path (<job>.nc in the output folder). Posted as FreeCAD's Post command does: each work offset, a tool change at each new tool (a comment for grbl and marlin), active ops in order; mm (G21), feeds per minute. Answers path, lines, units, tools, fixtures, minutes, warnings (cuts under or far outside the stock). Running it is the person's.",
-             obj({"job": jobref, "post": {"type": "string", "enum": POSTS}, "path": {"type": "string"}}), cam_post),
-    ]
+    # What the tools' entries (agentlink/data/tools.json) call by name.
+    helpers = {"doc": doc, "job_of": lambda ref: _job(doc(), ref), "body": lambda ref: s.body(ref), "find": lambda ref, what: picks.find(doc(), ref, what),
+               "unique": lambda label, own=None: s.unique(label, own), "snapshot": lambda tool: s.snapshot(tool), "num": picks.num, "ref_list": picks.ref_list,
+               "merged": lambda *ds: {k: v for d in ds for k, v in d.items()}, "setprop": setattr, "qty": _q,
+               "in_out": lambda name: os.path.join(s.out_dir, name), "isabs": os.path.isabs,
+               "out_path": lambda p, kind=None: paths.made(s, p, kind), "post_path": lambda p: paths.out_file(s, "cam_post", p, expand=False),
+               "write_bytes": write_bytes, "write_text": write_text,
+               # FreeCAD's own
+               "vector": lambda xs: FreeCAD.Vector(*xs), "path_module": path_module,
+               # the family's
+               "OPS": OPS, "POSTS": POSTS, "SHAPES": SHAPES, "BIT_PROPS": BIT_PROPS, "DRESSUPS": DRESSUPS, "HINTS": HINTS, "CUTS": ("G1", "G2", "G3", "G01", "G02", "G03") + CYCLES,
+               "path_stats": path_stats, "tc_of": tc_of, "tc_for": tc_for, "base_op": base_op, "set_tool": set_tool, "tool_out": tool_out, "stock_out": stock_out,
+               "commands": commands, "op_type": op_type, "with_tool": with_tool, "face_names": face_names, "where": where, "make_op": make_op, "enum_of": enum_of, "stack_of": stack_of,
+               "sim_tool": sim_tool, "sim_run": sim_run, "sim_picture": sim_picture, "post_factory": post_factory, "by_job": by_job, "post_script": post_script,
+               "postables": postables, "shape_file": shape_file, "bit_factory": bit_factory, "toolbit": toolbit, "bit_of": bit_of, "write_tools": write_tools,
+               "read_tools": read_tools, "one_tool": one_tool, "dress": dress, "undress": undress, "place": place, "custom_module": custom_module,
+               "custom_create": custom_create}
+    return runners.tools(GROUP, s, helpers)
