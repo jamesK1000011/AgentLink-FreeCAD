@@ -810,7 +810,10 @@ class Echo:
                 if editing is not None:
                     gd.resetEdit()
                 gd.setEdit(target.Name)
-        elif editing is not None and not name.startswith(("sketch_", "view_", "note_", "measure")):
+        elif editing is not None and not name.startswith(("sketch_", "view_", "note_", "measure", "cmd_", "menu_")):
+            # (A command or a menu entry acts in the mode the window is in,
+            # as when a person pushes it: closing the sketch first left
+            # Sketcher_LeaveSketch greyed out and refused.)
             gd.resetEdit()
 
     def after(self, tool, args, reply):
