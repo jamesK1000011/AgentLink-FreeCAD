@@ -513,6 +513,127 @@ def save_queue(q):
     _save(path("queue.json"), q)
 
 
+# The queue file is read and written by the supervisor (its main thread and
+# its watchdog) and by each FreeCAD (a job's start and end, a heavy call's
+# timing). Round 8 (00-042): the watchdog read the queue with fea_buckle
+# running, asked macOS how long the person had been idle, and wrote it back
+# held — after fea_buckle's end had been written in between: "A heavy job is
+# running (fea_buckle, since 13:06)" stayed in the status bar for good. Each
+# read-change-write now holds this lock (a file lock: any process), the
+# slow part (asking macOS) done before it.
+QUEUE_LOCK_WAIT = 5.0
+_lock_depth = __import__("threading").local()
+
+
+class queue_lock:
+    """with queue_lock(): one read-change-write of queue.json at a time,
+    across processes (fcntl.flock on queue.lock) and threads. Re-entrant in
+    a thread. Past QUEUE_LOCK_WAIT s it goes on unlocked rather than hold
+    a call up (held: False in that case). Never raises."""
+
+    def __enter__(self):
+        self.f = None
+        self.held = False
+        depth = getattr(_lock_depth, "n", 0)
+        _lock_depth.n = depth + 1
+        if depth:
+            self.held = True  # the outer one holds it
+            return self
+        try:
+            import fcntl
+
+            os.makedirs(home(), exist_ok=True)
+            self.f = open(path("queue.lock"), "a+")
+            t0 = time.time()
+            while True:
+                try:
+                    fcntl.flock(self.f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    self.held = True
+                    break
+                except OSError:
+                    if time.time() - t0 > QUEUE_LOCK_WAIT:
+                        break
+                    time.sleep(0.02)
+        except Exception:  # noqa: BLE001 — no fcntl (Windows) or no home: unlocked, as before
+            pass
+        return self
+
+    def __exit__(self, *exc):
+        _lock_depth.n = max(0, getattr(_lock_depth, "n", 1) - 1)
+        if self.f is not None:
+            try:
+                import fcntl
+
+                fcntl.flock(self.f, fcntl.LOCK_UN)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                self.f.close()
+            except Exception:  # noqa: BLE001
+                pass
+        return False
+
+
+def update_queue(fn):
+    """queue.json read, fn(q) run on it, written back, under queue_lock:
+    fn's value. fn returning False leaves the file as it was."""
+    with queue_lock():
+        q = queue_state()
+        got = fn(q)
+        if got is not False:
+            save_queue(q)
+        return got
+
+
+def pid_alive(pid):
+    """Whether a process of this id still runs (signal 0). Plain Python."""
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+# A heavy call the supervisor let through is "running" in the queue until its
+# answer comes back (queue_done); one with no call in hand for this long is a
+# leftover (its end lost): taken out (stale_running).
+STALE_AFTER = 15.0
+
+
+def stale_running(q, busy, now=None, me=None):
+    """q's running entries that are leftovers, taken out of q: a
+    supervisor's own (no job) when it has no call in hand (busy false) and
+    it is older than STALE_AFTER; a job's whose process is gone. The
+    entries taken out. Plain Python."""
+    now = time.time() if now is None else now
+    me = os.getpid() if me is None else me
+    keep_, gone = [], []
+    for r in q.get("running") or []:
+        if not isinstance(r, dict):
+            gone.append(r)
+            continue
+        start = float(r.get("start") or r.get("t") or 0)
+        if r.get("job") is not None:
+            dead = r.get("pid") is not None and not pid_alive(r.get("pid"))
+        else:
+            mine = r.get("pid") in (None, me)
+            dead = mine and not busy and now - start > STALE_AFTER
+        (gone if dead else keep_).append(r)
+    if gone:
+        q["running"] = keep_
+    return gone
+
+
 # The hold's words once no heavy job runs (round 7: "A heavy job is running
 # (…, since 12:44)" stayed in the status bar and in session_state long
 # after that job ended).
@@ -531,13 +652,25 @@ def settled_notice(q):
     return False
 
 
-def status_line(q):
+def status_line(q, alive=None):
     """The status bar's line for the heavy queue: the hold's notice only while
     a heavy job runs, else None (the line is not said again, so it goes).
+    alive(entry): whether a running entry is a job still running (the
+    window's own jobs it can tell); a leftover does not keep the line.
     Plain Python."""
-    if q.get("held") and q.get("notice") and q.get("running"):
+    running = q.get("running") or []
+    if alive is not None:
+        running = [r for r in running if _alive_or_unknown(alive, r)]
+    if q.get("held") and q.get("notice") and running:
         return "Agent Link: " + str(q["notice"]) + " (say go in chat)."
     return None
+
+
+def _alive_or_unknown(alive, r):
+    try:
+        return bool(alive(r))
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def log_timing(q, tool, size, seconds, keep=40):

@@ -292,17 +292,30 @@ def read_frd_blocks(text, name):
 
 # ---- steady heat -----------------------------------------------------------------------
 
-def deck_heat(mesh_text, k, temps, fluxes, films, start=20.0):
-    """A steady heat-transfer step on the same mesh, as DC3D10 elements.
+HEAT_ELEMENTS = ("DC3D10", "C3D10")
+
+
+def deck_heat(mesh_text, k, temps, fluxes, films, start=20.0, element="DC3D10", elastic=None):
+    """A steady heat-transfer step on the same mesh. element: DC3D10 (a
+    heat-transfer tetrahedron) or C3D10 (the mesh as written, as FreeCAD's
+    own CalculiX writer runs a *HEAT TRANSFER step:
+    femsolver/calculix/write_step_equation.py); elastic (E, nu) is written
+    for C3D10, whose material CalculiX may check for it (unused by the step).
     Units mm, tonne, s: k in W/(m·K) is the same number in mW/(mm·K);
     temps {node: °C}, fluxes [(element, face, mW/mm²)] into the part, films
     [(element, face, h mW/(mm²·K), air °C)]."""
-    mesh = mesh_text.replace("TYPE=C3D10", "TYPE=DC3D10").replace("type=C3D10", "type=DC3D10")
+    if element == "DC3D10":
+        mesh = mesh_text.replace("TYPE=C3D10", "TYPE=DC3D10").replace("type=C3D10", "type=DC3D10")
+    else:
+        mesh = mesh_text
     nodes, _ = read_mesh(mesh_text)
+    mat = ["*MATERIAL, NAME=PART"]
+    if element != "DC3D10":
+        e, nu = elastic or (1000.0, 0.3)
+        mat += ["*ELASTIC", f"{float(e):.6g}, {float(nu):.6g}"]
     out = [mesh.rstrip(), "",
            "** Agent Link: steady heat",
-           "*NSET, NSET=AGALL", _rows(sorted(nodes)),
-           "*MATERIAL, NAME=PART",
+           "*NSET, NSET=AGALL", _rows(sorted(nodes))] + mat + [
            "*CONDUCTIVITY",
            f"{k:.6g}",
            "*SOLID SECTION, ELSET=Evolumes, MATERIAL=PART",
@@ -325,6 +338,52 @@ def read_temperatures(frd):
     """{node: °C} from the last NDTEMP block of an .frd."""
     blocks = read_frd_blocks(frd, "NDTEMP")
     return {n: v[0] for n, v in blocks[-1].items()} if blocks else {}
+
+
+def frd_times(frd, name="NDTEMP"):
+    """The step time of each block of one result in an .frd, in order (the
+    " 100C" line before it; None where it cannot be read): a heat step that
+    stopped short shows a last time under 1."""
+    times, t = [], None
+    for line in (frd or "").splitlines():
+        if line.startswith("  100C"):
+            parts = line.split()
+            try:
+                t = float(parts[2])
+            except (IndexError, ValueError):
+                t = None
+            continue
+        if line.startswith(" -4"):
+            if line[5:13].strip() == name:
+                times.append(t)
+            t = None
+    return times
+
+
+def held_check(temps, T, tol=None):
+    """Whether the solved temperatures T {node: °C} hold the temperatures
+    given (temps {node: °C}), per value given: [{celsius, nodes, read [min,
+    max], missing}], and ok. tol: 0.1 % of the span given, at least 0.01 °C.
+    Plain Python."""
+    groups = {}
+    for n, c in (temps or {}).items():
+        groups.setdefault(float(c), []).append(n)
+    if tol is None:
+        vals = list(groups) or [0.0]
+        tol = max(0.01, 1e-3 * (max(vals) - min(vals)))
+    rows, ok = [], True
+    for c in sorted(groups, reverse=True):
+        got = [T[n] for n in groups[c] if n in T]
+        row = {"celsius": c, "nodes": len(groups[c])}
+        if got:
+            row["read"] = [round(min(got), 4), round(max(got), 4)]
+        missing = len(groups[c]) - len(got)
+        if missing:
+            row["missing"] = missing
+        if not got or missing or max(abs(x - c) for x in got) > tol:
+            ok = False
+        rows.append(row)
+    return rows, ok
 
 
 # ---- several parts: each its own material, tied or in contact -------------------------

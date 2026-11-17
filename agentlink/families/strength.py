@@ -1322,12 +1322,49 @@ def tools(session):
             films += [(e, fn, hc, ta) for e, fn in (tuple(x) for x in m["femmesh"].getccxVolumesByFace(f))]
         return films
 
-    def heat_solve(m, k, temps, fluxes, films, start, timeout):
-        """The heat step run on the mesh: the deck written, CalculiX run, each node's temperature read."""
-        with open(os.path.join(m["wd"], "job.inp"), "w") as f:
-            f.write(ccx_io.deck_heat(m["mesh_text"], k, temps, fluxes, films, start=start))
-        frd, _ = _run(m["ccx"], m["wd"], timeout, "heat step")
-        return {n: t for n, t in ccx_io.read_temperatures(frd).items() if n in m["nodes"]}
+    def heat_solve(m, k, temps, fluxes, films, start, timeout, card=None):
+        """The heat step run on the mesh: the deck written, CalculiX run, each
+        node's temperature read. Checked against the temperatures given: a
+        held node must read what it was held at (live, 17 Nov: "hottest
+        23.96 °C" with one end held at 100 °C). The mesh as FreeCAD's own
+        CalculiX writer runs a heat step (C3D10) first, then as heat-transfer
+        elements (DC3D10); what each gave is kept in m["check"] (heat_facts).
+        A run whose held nodes do not read their temperatures is refused,
+        never answered."""
+        c = card or {}
+        elastic = (float(c["E"]), float(c.get("nu") or 0.3)) if c.get("E") else None
+        tries, last_T, last_err = [], {}, None
+        for element in ccx_io.HEAT_ELEMENTS[::-1]:
+            with open(os.path.join(m["wd"], "job.inp"), "w") as f:
+                f.write(ccx_io.deck_heat(m["mesh_text"], k, temps, fluxes, films, start=start, element=element, elastic=elastic))
+            try:
+                frd, _ = _run(m["ccx"], m["wd"], timeout, "heat step")
+            except ToolError as e:
+                last_err = e
+                tries.append({"element": element, "refused": e.message[:200]})
+                continue
+            T = {n: t for n, t in ccx_io.read_temperatures(frd).items() if n in m["nodes"]}
+            times = ccx_io.frd_times(frd)
+            held, ok = ccx_io.held_check(temps, T) if T else ([], False)
+            row = {"element": element, "blocks": len(times), "stepTime": times[-1] if times else None, "nodes": len(T), "held": held, "holds": ok}
+            if T:
+                row["range"] = [round(min(T.values()), 4), round(max(T.values()), 4)]
+            tries.append(row)
+            last_T = T
+            if T and (ok or not temps):
+                m["check"] = {"element": element, "tries": tries}
+                return T
+        m["check"] = {"element": None, "tries": tries}
+        if not last_T and last_err is not None:
+            raise last_err
+        if last_T and temps:
+            raise ToolError("failed", f"CalculiX's temperatures do not hold the faces given (each run: {tries}) — the answer would be wrong, so none is given; see job.frd in {m['wd']}.")
+        return last_T
+
+    def heat_facts(m):
+        """What the heat step's runs gave (heat_solve): the element used and
+        each run's held check, for the answer."""
+        return m.get("check") if hasattr(m, "get") else None
 
     def keep_heat(o, shape, T, nodes):
         """The temperatures kept with the session, the field for view_render map heat."""
@@ -1692,7 +1729,7 @@ def tools(session):
                "plastic_strain": plastic_strain, "part_rows": part_rows, "keep_solve": keep_solve,
                "now": lambda: time.time(), "merged": lambda *ds: {k: v for d in ds for k, v in d.items()}, "where": _where,
                "meshed": meshed, "modes_run": modes_run, "mode_rows": mode_rows, "buckle_run": buckle_run, "bulge_rows": bulge_rows,
-               "hold_temperature": hold_temperature, "heated": heated, "rest_faces": rest_faces, "film_faces": film_faces, "heat_solve": heat_solve, "keep_heat": keep_heat,
+               "hold_temperature": hold_temperature, "heated": heated, "rest_faces": rest_faces, "film_faces": film_faces, "heat_solve": heat_solve, "heat_facts": heat_facts, "keep_heat": keep_heat,
                "probe": Probe, "solved_body": solved_body, "field_values": field_values, "histogram": histogram, "distance": distance, "chart_svg": chart_svg,
                "safe_name": lambda text: "".join(ch if ch.isalnum() else "_" for ch in text), "ensure_out": lambda: os.makedirs(s.out_dir, exist_ok=True),
                "csv_text": lambda rows: "\n".join(",".join(str(c) for c in row) for row in rows) + "\n", "write_text": write_text,

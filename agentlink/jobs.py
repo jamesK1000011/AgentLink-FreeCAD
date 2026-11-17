@@ -18,6 +18,7 @@
 # drives the document on the way (IN_PLACE below). While a job runs,
 # changing calls on the document are refused (the worker reads it).
 
+import os
 import threading
 import time
 import uuid
@@ -283,14 +284,23 @@ def running(doc=None):
 def _queue(add=None, drop=None):
     """The heavy queue's "running" list carries the job while it runs."""
     try:
-        with _queue_lock:
+        with _queue_lock, keep.queue_lock():
             q = keep.queue_state()
             # A job dies with its FreeCAD: one this process does not know is a
             # leftover of a FreeCAD that was stopped, and would hold the queue's
-            # one slot (and the person's "held") for good.
+            # one slot (and the person's "held") for good. Another FreeCAD's
+            # running job (its pid alive) is its own to take out.
             with _lock:
                 mine = set(JOBS)
-            r = [x for x in (q.get("running") or []) if not (drop and x.get("job") == drop) and (x.get("job") is None or x.get("job") in mine)]
+            me = os.getpid()
+
+            def kept(x):
+                if drop and x.get("job") == drop:
+                    return False
+                if x.get("job") is None or x.get("job") in mine:
+                    return True
+                return x.get("pid") not in (None, me) and keep.pid_alive(x.get("pid"))
+            r = [x for x in (q.get("running") or []) if isinstance(x, dict) and kept(x)]
             if add:
                 r.append(add)
             q["running"] = r
@@ -325,7 +335,7 @@ def start(tool, args, session, fn=None):
            "args": dict(args or {}) if isinstance(args, dict) else {}}
     with _lock:
         JOBS[jid] = job
-    _queue(add={"tool": tool.name, "job": jid, "t": job["started"]})
+    _queue(add={"tool": tool.name, "job": jid, "t": job["started"], "pid": os.getpid()})
     call = fn or (lambda: tool.fn(args))
     # Where its thread is, should it still run after a minute
     # (protocol.hang_trace: <outDir>/crash/hang-job-<tool>.txt). A job runs
@@ -354,7 +364,7 @@ def start(tool, args, session, fn=None):
             secs = job["finished"] - job["started"]
             if job["status"] == "done" and secs >= 1.0:
                 try:
-                    with _queue_lock:
+                    with _queue_lock, keep.queue_lock():
                         q = keep.queue_state()
                         keep.log_timing(q, tool.name, size, secs)
                         keep.save_queue(q)
@@ -483,9 +493,10 @@ def note_slow(tool, args, session, secs):
     try:
         from . import heavy
 
-        with _queue_lock:
+        size = heavy.size_of(session)
+        with _queue_lock, keep.queue_lock():
             q = keep.queue_state()
-            keep.log_timing(q, tool.name, heavy.size_of(session), secs)
+            keep.log_timing(q, tool.name, size, secs)
             keep.save_queue(q)
     except Exception:
         pass

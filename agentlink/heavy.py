@@ -391,9 +391,10 @@ class Gate:
         # Timed where it says something: a run of a second or more.
         if ok and secs >= 1.0:
             try:
-                q = keep.queue_state()
-                keep.log_timing(q, tkey, size, secs)
-                keep.save_queue(q)
+                with keep.queue_lock():
+                    q = keep.queue_state()
+                    keep.log_timing(q, tkey, size, secs)
+                    keep.save_queue(q)
             except Exception:
                 pass
 
@@ -416,18 +417,19 @@ class Gate:
             except Exception:
                 pass
         try:
-            q = keep.queue_state()
-            keep.log_timing(q, key, size, secs)
             a1, b1 = _maxrss_mb()
             # What this job added to the high-water mark, not the process's
             # lifetime peak (ru_maxrss never falls): a job that stayed under
             # an earlier peak adds nothing and is not logged.
             peak = max(a1 - a0, b1 - b0, 0.0)
-            if peak > 0 and key == tool.name:
-                mem = {"timings": q.get(MEMORY_KEY) or {}}
-                keep.log_timing(mem, tool.name, size, peak)
-                q[MEMORY_KEY] = mem["timings"]
-            keep.save_queue(q)
+            with keep.queue_lock():  # the supervisor writes the same file (round 8)
+                q = keep.queue_state()
+                keep.log_timing(q, key, size, secs)
+                if peak > 0 and key == tool.name:
+                    mem = {"timings": q.get(MEMORY_KEY) or {}}
+                    keep.log_timing(mem, tool.name, size, peak)
+                    q[MEMORY_KEY] = mem["timings"]
+                keep.save_queue(q)
         except Exception:
             pass
 

@@ -1133,6 +1133,7 @@
     "element",
     "faces_normal",
     "field_values",
+    "heat_facts",
     "histogram",
     "merged",
     "nearest_edges",
