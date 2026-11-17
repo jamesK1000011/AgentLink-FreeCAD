@@ -4201,19 +4201,158 @@ def solve_peak(r):
         return None
 
 
+def _fem_solid(doc, res, session=None):
+    """The solid a FEM result lies on: the Shape of a FEM mesh in the
+    analysis holding res (FreeCAD 1.1's Gmsh mesh links its part by Shape,
+    older ones by Part), else the last solve's body. None when none is
+    found. Never raises."""
+    try:
+        mesh = getattr(res, "Mesh", None)
+        for an in [o for o in getattr(doc, "Objects", None) or () if getattr(o, "TypeId", "") == "Fem::FemAnalysis"]:
+            group = list(getattr(an, "Group", None) or ())
+            if res not in group:
+                continue
+            for o in group:
+                if o is mesh or not str(getattr(o, "TypeId", "")).startswith("Fem::FemMeshObject"):
+                    continue
+                for k in ("Shape", "Part"):
+                    part = getattr(o, k, None)
+                    if part is not None and hasattr(part, "TypeId") and hasattr(part, "Shape"):
+                        return part
+        r = getattr(session, "_agentlink_fea", None) if session is not None else None
+        if r and r.get("body"):
+            return session.body(r["body"])
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _result_points(res):
+    """A FEM result's node positions (mm) in its NodeNumbers order, read
+    from its own mesh (res.Mesh.FemMesh.Nodes), or None when a node is
+    missing. Never raises."""
+    try:
+        nodes = res.Mesh.FemMesh.Nodes
+        out = []
+        for n in list(res.NodeNumbers):
+            p = nodes.get(int(n))
+            if p is None:
+                return None
+            out.append((float(p.x), float(p.y), float(p.z)))
+        return out or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _solid_surface(o, cap=20000):
+    """A solid's surface as triangles, split evenly so a map has points to
+    show (as the stress map of view_render: render.body_layer, subdivide).
+    {V, F}, or None. Never raises."""
+    try:
+        from . import render
+
+        L = render.body_layer(o, 0, tol=0.05)
+        V, F = render.subdivide(L["V"], L["F"], render.even_length(L["V"], L["F"], cap), cap=cap)
+        return {"V": V, "F": F} if len(F) else None
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (FEM surface): {e}\n")
+        return None
+
+
+def fem_result_scene_map(doc, res, vals, label, unit, hide, session=None):
+    """A FEM result's field (vals, one per res.NodeNumbers) drawn on its
+    solid in the scene only, with its scale (round 9, r8fem-1/5).
+
+    FreeCAD's way (setNodeColorByScalars on the result's mesh view) needs
+    FreeCAD's FEM mesh view. In the window (FreeCAD 1.1.3, 17 Nov) the FEM
+    meshes had a plain geometry view (ccx_run: "Gui.ViewProviderGeometryObject
+    object has no attribute HighlightedNodes"), so resulttools.show_result
+    raised and no map and no scale were drawn after fea_solve; fem_linearize
+    showed the result mesh grey. The scene map is what fea_probe and
+    fea_chart draw (seen right in r8fem-2/4): each surface point takes its
+    nearest node's value. hide (the FEM meshes, post objects) and the solid
+    are hidden under it, so one surface is drawn (no z-fighting). {map,
+    label, unit, range, hidden, legend, colouredBy}, or None."""
+    try:
+        P = _result_points(res)
+        solid = _fem_solid(doc, res, session)
+        if not P or solid is None or len(P) != len(vals):
+            return None
+        layer = _solid_surface(solid)
+        if layer is None:
+            return None
+        from . import render
+
+        sv = render.nearest_values(layer["V"], P, vals)
+        got = _scene_map(session, layer, sv, vals, label, unit, list(hide) + [solid])
+        if got is None:
+            return None
+        got["map"] = f"{label} on {getattr(res.Mesh, 'Label', 'the result mesh')}"
+        got["colouredBy"] = "scene (the result's nodes on the solid)"
+        return got
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (FEM result scene map): {e}\n")
+        return None
+
+
+def fem_node_colours(mesh, ids, vals):
+    """FreeCAD's own result colours on a result mesh
+    (ViewProviderFemMesh.setNodeColorByScalars), the mesh shown. None when
+    done, else why not (the view has no such method: a plain geometry
+    view). Never raises."""
+    try:
+        vo = getattr(mesh, "ViewObject", None)
+        fn = getattr(vo, "setNodeColorByScalars", None)
+        if fn is None:
+            return f"{getattr(mesh, 'Label', 'the mesh')}'s view ({type(vo).__name__}) cannot colour nodes"
+        fn(list(ids), list(vals))
+        vo.Visibility = True
+        return None
+    except Exception as e:  # noqa: BLE001
+        return f"{type(e).__name__}: {e}"
+
+
+def fem_one_surface(doc, keep=()):
+    """One surface where a FEM mesh lies on its solid (round 9: yellow
+    z-fighting patches on every FEM picture, the Gmsh mesh and the solid
+    drawn over each other). A shown FEM mesh (not a result's) whose solid is
+    shown too: the mesh hidden, or the solid when the call made or named the
+    mesh (keep). View state, shown again at the next change (scene_clear).
+    The labels hidden. Never raises."""
+    out = []
+    try:
+        objs = list(getattr(doc, "Objects", None) or ())
+        res_meshes = {getattr(getattr(o, "Mesh", None), "Name", None) for o in objs
+                      if str(getattr(o, "TypeId", "")).startswith("Fem::FemResultObject")}
+        kept = {getattr(k, "Name", k) for k in keep or ()}
+        for m in objs:
+            if not str(getattr(m, "TypeId", "")).startswith("Fem::FemMeshObject") or m.Name in res_meshes or not _seen(m):
+                continue
+            solid = next((p for p in (getattr(m, "Shape", None), getattr(m, "Part", None))
+                          if p is not None and hasattr(p, "TypeId") and hasattr(p, "ViewObject")), None)
+            if solid is None or not _seen(solid):
+                continue
+            out += hide_for_scene([solid] if m.Name in kept else [m])
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (FEM one surface): {e}\n")
+    return out
+
+
 def fem_result_shown(doc, body, session=None, name=None):
     """A strength result shown in colour in the window (round 6, item 2;
     fem 030, 034: none was ever seen).
 
     FreeCAD's own result, where the solve kept one (fea_solve by FreeCAD's
-    FEM route, fea_native run): coloured by von Mises with femresult.
-    resulttools.show_result (the Results panel's choice:
-    setNodeColorByScalars on the result's own mesh, which it shows). The
-    importer leaves that mesh hidden and the post pipeline, the study's
-    solid and its FEM mesh shown (src/Mod/Fem/feminout/importCcxFrdResults.py
-    100-111), all on the same surface: the colours were under them. Those are
-    hidden now while the colours stand (view state, shown again at the next
-    changing call: scene_clear).
+    FEM route, fea_native run): its von Mises at its nodes drawn on the
+    solid in the scene (fem_result_scene_map, round 9: in the window the
+    result mesh's view could not colour nodes, so resulttools.show_result
+    raised and r8fem-1 showed no map). The importer leaves the result mesh
+    hidden and the post pipeline, the study's solid and its FEM mesh shown
+    (src/Mod/Fem/feminout/importCcxFrdResults.py 100-111), all on the same
+    surface: all of them are hidden while the colours stand (view state,
+    shown again at the next changing call: scene_clear). Where no solid or
+    node positions are found, FreeCAD's own colours (setNodeColorByScalars,
+    fem_node_colours) if its view can; else the last solve's field below.
 
     Agent Link's own deck keeps no FEM object (its answer says "kept"): the
     last solve's field (session._agentlink_fea) is drawn as the stress map
@@ -4237,28 +4376,29 @@ def fem_result_shown(doc, body, session=None, name=None):
         results = [o for an in analyses for o in (getattr(an, "Group", None) or ())
                    if str(getattr(o, "TypeId", "")).startswith("Fem::FemResultObject") and getattr(o, "Mesh", None) is not None
                    and len(getattr(o, "vonMises", None) or ()) > 0]
+        why = None
         if results and not (isinstance(b.get("solvedBy"), str) and "own CalculiX deck" in b["solvedBy"]):
             res = results[-1]
-            from femresult import resulttools
-
-            resulttools.show_result(res, "Sabs")
-            an = next((a for a in analyses if res in (getattr(a, "Group", None) or ())), None)
-            hide = []
-            for o in list(getattr(an, "Group", None) or ()) if an is not None else []:
-                t = str(getattr(o, "TypeId", ""))
-                if o is res.Mesh or o is res:
-                    continue
-                if t.startswith("Fem::FemMeshObject") or t.startswith("Fem::FemPostPipeline"):
-                    hide.append(o)
-                    part = getattr(o, "Shape", None) if t.startswith("Fem::FemMeshObject") else None
-                    if part is not None and hasattr(part, "TypeId"):
-                        hide.append(part)
-            hid = hide_for_scene(hide)
             vm = [float(x) for x in res.vonMises]
-            lo, hi = min(0.0, min(vm)), max(0.0, max(vm))
-            leg = scene_legend("VON MISES", "MPa", lo, hi if hi > lo else lo + 1e-6, FEM_STOPS)
-            return {"result": res.Label, "hidden": hid, "range": [round(lo, 3), round(hi, 3)], "legend": bool(leg),
-                    "selectionCleared": selection_cleared()}
+            # Every FEM mesh and post object shown (the analysis' Gmsh mesh,
+            # the result's mesh, its pipeline) under the map, and the solid:
+            # one surface drawn (round 9: z-fighting patches).
+            views = [o for o in doc.Objects if _is_fem_view(o) and _seen(o)]
+            got = fem_result_scene_map(doc, res, vm, "VON MISES", "MPa", views, session)
+            if got is not None:
+                got["result"] = res.Label
+                return got
+            # No solid or no node positions: FreeCAD's own colours on the
+            # result's mesh, where its view can (a FEM mesh view).
+            why = fem_node_colours(res.Mesh, res.NodeNumbers, vm)
+            if why is None:
+                solid = _fem_solid(doc, res, session)
+                hid = hide_for_scene([o for o in views if o is not res.Mesh] + ([solid] if solid is not None else []))
+                lo, hi = min(0.0, min(vm)), max(0.0, max(vm))
+                leg = scene_legend("VON MISES", "MPa", lo, hi if hi > lo else lo + 1e-6, fem_stops(lo, hi))
+                return {"map": f"VON MISES on {res.Mesh.Label}", "result": res.Label, "hidden": hid, "range": [round(lo, 3), round(hi, 3)],
+                        "legend": bool(leg), "colouredBy": "FreeCAD", "selectionCleared": selection_cleared()}
+            # Neither: the last solve's own field below (the same solve).
         r = getattr(session, "_agentlink_fea", None) if session is not None else None
         if not r or "field" not in r or name not in (None, "fea_solve"):
             return None
@@ -4296,12 +4436,15 @@ def fem_result_shown(doc, body, session=None, name=None):
         hid, under = [], []
         try:
             under = [session.body(r["body"])]
-            hid = hide_for_scene(under)
         except Exception:  # noqa: BLE001
             pass
+        # The FEM meshes shown on it too (round 9: z-fighting patches).
+        hid = hide_for_scene(under + [o for o in getattr(doc, "Objects", None) or () if _is_fem_view(o) and _seen(o)])
         leg = scene_legend(str(m.get("label") or "VON MISES"), str(m.get("unit") or "MPa"), lo, hi, map_stops(m.get("cmap", "jet")))
         out = {"map": "stress (Agent Link's own solve)", "range": [round(lo, 3), round(hi, 3)], "triangles": drawn,
                "hidden": hid, "legend": bool(leg), "selectionCleared": selection_cleared()}
+        if why:
+            out["freecadColours"] = why
         out["selectedAfter"] = selected_now()
         out["scene"] = scene_facts(under)
         return out
@@ -4484,26 +4627,27 @@ def fem_read_map(doc, name, args, body, session):
             if not vals:
                 return {"map": None, "why": f"{res.Label} holds no {field}"}
             vals = [float(v) for v in vals]
-            mvo = res.Mesh.ViewObject
-            mvo.Visibility = True
-            mvo.setNodeColorByScalars(list(res.NodeNumbers), vals)
-            lo, hi = min(0.0, min(vals)), max(0.0, max(vals))
             label, unit = _fem_labels(field)
-            under = [o for o in others if o is not res.Mesh]
-            # The solid under the result (the analysis' mesh names it: its
-            # Shape), as fem_result_shown hides it.
-            parts = []
-            for o in under:
-                part = getattr(o, "Shape", None) if str(getattr(o, "TypeId", "")).startswith("Fem::FemMeshObject") else None
-                if part is not None and hasattr(part, "TypeId") and part not in parts:
-                    parts.append(part)
-            hid = hide_for_scene(under + parts)
-            leg = scene_legend(label, unit, lo, hi if hi > lo else lo + 1e-6, fem_stops(lo, hi))
+            # Drawn in the scene as fea_probe's map is (round 9, r8fem-5: the
+            # window's result mesh view could not colour its nodes, so the
+            # mesh stood grey on the solid); FreeCAD's own colours only
+            # where no solid or node positions are found.
+            got = fem_result_scene_map(doc, res, vals, label, unit, others, session)
+            if got is None:
+                why = fem_node_colours(res.Mesh, res.NodeNumbers, vals)
+                if why is not None:
+                    return {"map": None, "why": why}
+                lo, hi = min(0.0, min(vals)), max(0.0, max(vals))
+                solid = _fem_solid(doc, res, session)
+                hid = hide_for_scene([o for o in others if o is not res.Mesh] + ([solid] if solid is not None else []))
+                leg = scene_legend(label, unit, lo, hi if hi > lo else lo + 1e-6, fem_stops(lo, hi))
+                got = {"map": f"{label} on {res.Mesh.Label}", "label": label, "unit": unit, "range": [round(lo, 4), round(hi, 4)],
+                       "hidden": hid, "legend": bool(leg), "colouredBy": "FreeCAD", "selectionCleared": selection_cleared()}
             p0, p1 = a.get("from"), a.get("to")
             marks = scene_marks([tuple(p0), tuple(p1)], lines=[[tuple(p0), tuple(p1)]], labels=[(tuple(p0), "from"), (tuple(p1), "to")]) \
                 if isinstance(p0, (list, tuple)) and isinstance(p1, (list, tuple)) else 0
-            return {"map": f"{label} on {res.Mesh.Label}", "label": label, "unit": unit, "range": [round(lo, 4), round(hi, 4)],
-                    "hidden": hid, "legend": bool(leg), "lineMarked": bool(marks), "selectionCleared": selection_cleared()}
+            got["lineMarked"] = bool(marks)
+            return got
         if name == "fea_heat":
             r = getattr(session, "_agentlink_heat", None)
             fn = (render.MAPS.get("heat") or (None,))[0]
@@ -5167,6 +5311,11 @@ class Echo:
             # is drawn (round 8, 03-012…03-042, 00-033).
             ours = any(isinstance(tr.get(k), dict) and tr[k].get("legend") for k in ("femResult", "femMap"))
             self._step(tr, "femBarsAway", fem_bars_away, doc, ours)
+            if not ours:
+                # No map: a FEM mesh and its solid not drawn over each other
+                # (round 9, r8fem-6/7: yellow z-fighting patches). A map hides
+                # both itself.
+                self._step(tr, "femOneSurface", fem_one_surface, doc, named)
         if name == "fea_hold":
             self._step(tr, "holdMarked", hold_marked, doc, body)
             self._step(tr, "holdFramed", hold_framed, doc, body)
