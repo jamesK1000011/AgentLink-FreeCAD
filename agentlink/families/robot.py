@@ -11,8 +11,8 @@ import FreeCAD
 import Robot  # noqa: F401 — the family stands on the Robot module; left out without it
 
 from .. import paths
-from ..protocol import Tool, ToolError, bad
-from ..tools import obj
+from .. import runners
+from ..protocol import bad
 from . import picks
 
 GROUP = "robot"
@@ -23,6 +23,7 @@ MODELS = ("kr16", "kr125", "kr210", "kr500")
 
 
 def lib_file(model, ext):
+    """A KUKA model's file (csv: kinematics, wrl: its picture) in this FreeCAD's Robot library, or None when it ships none."""
     roots = []
     for base in (FreeCAD.getResourceDir(), FreeCAD.getHomePath(), os.path.join(FreeCAD.getHomePath(), "share")):
         roots += [os.path.join(base, "Mod", "Robot", "Lib", "Kuka"), os.path.join(base, "data", "Mod", "Robot", "Lib", "Kuka")]
@@ -36,6 +37,7 @@ def lib_file(model, ext):
 
 
 def placement(a, what):
+    """A placement from { at, ypr | axis + angle }: a robot's base, a tool, a tcp, a waypoint."""
     if not isinstance(a, dict):
         raise bad(f"{what}: {{ at: [x, y, z] mm, ypr: [yaw, pitch, roll] degrees }} (or axis and angle in place of ypr).")
     at = picks.vec3(a.get("at", [0, 0, 0]), f"{what}.at")
@@ -53,22 +55,31 @@ def placement(a, what):
 
 
 def pl_out(pl):
+    """A placement as the tools answer it: at [x, y, z] and ypr [yaw, pitch, roll]."""
     y, p, r = pl.Rotation.toEuler()
     return {"at": [round(c, 3) for c in pl.Base], "ypr": [round(y, 3), round(p, 3), round(r, 3)]}
 
 
 def axes_of(o):
+    """A robot's six axis angles, degrees."""
     return [round(float(getattr(o, f"Axis{i}")), 3) for i in range(1, 7)]
 
 
 def tools(session):
+    """The robot tools are data (agentlink/data/tools.json, group "robot";
+    run by agentlink/runners.py's steps runner): each entry has the tool's
+    words, its checks with their refusals, the order of its steps and its
+    answer. What is here is what those entries call by name
+    (docs/data-tools.md)."""
     s = session
     doc = lambda: s.doc  # noqa: E731
 
     def robots():
+        """The document's robots."""
         return [o for o in doc().Objects if o.isDerivedFrom("Robot::RobotObject")]
 
     def robot(ref):
+        """The robot ref names, or the only one when ref is left out."""
         if not ref:
             rs = robots()
             if len(rs) == 1:
@@ -80,6 +91,7 @@ def tools(session):
         return o
 
     def trajectory(ref):
+        """The trajectory object ref names."""
         o = picks.find(doc(), ref, "trajectory")
         if not hasattr(o, "Trajectory"):
             have = ", ".join(x.Label for x in doc().Objects if hasattr(x, "Trajectory")) or "there are none (robot_path makes one)"
@@ -100,147 +112,19 @@ def tools(session):
         o.Axis1 = float(o.Axis1)
 
     def state(o):
+        """A robot as the tools answer it: robot, axes, tcp (the tool point; flange beside it when a tool is set), and FreeCAD's error when it has one."""
         t = tool_of(o)
         return {"robot": o.Label, "axes": axes_of(o), "tcp": pl_out(o.Tcp.multiply(t) if t else o.Tcp), **({"flange": pl_out(o.Tcp)} if t else {}),
                 **({"error": o.Error} if getattr(o, "Error", "") else {})}
 
-    def robot_new(a):
-        model = a.get("model", "kr16")
-        kin = a.get("kinematics")
-        if not kin and model not in MODELS and model != "puma":
-            raise bad(f"model: {', '.join(MODELS)} (KUKA files, where this FreeCAD ships them) or puma (FreeCAD's built-in default robot); or kinematics, a CSV of your own.")
-        if kin:
-            kin = paths.local(s, kin) if isinstance(kin, str) else kin
-            if not isinstance(kin, str) or not os.path.isfile(kin):
-                raise ToolError("not_found", f"kinematics: {kin} — no such file. A CSV: one header line, then six lines (axis 1 … 6) of a, alpha, d, theta, rotDir, maxAngle, minAngle, velocity (Denavit-Hartenberg, mm and degrees).")
-        o = doc().addObject("Robot::RobotObject", "Robot")
-        o.Label = s.unique(a.get("name") or f"Robot {model}", o)
-        how = None
-        if kin:
-            o.RobotKinematicFile = kin
-            how = f"kinematics from {os.path.basename(kin)}"
-        elif model in MODELS:
-            f = lib_file(model, "csv")
-            if f:
-                o.RobotKinematicFile = f
-                w = lib_file(model, "wrl")
-                if w:
-                    o.RobotVrmlFile = w
-                how = f"KUKA {model.upper()} (FreeCAD's library)"
-        if how is None:
-            # With no kinematics file FreeCAD's robot is its built-in default,
-            # a KUKA IR 500 (Robot6Axis.cpp), whatever the model asked for.
-            if not a.get("name"):
-                o.Label = s.unique("Robot (FreeCAD default)", o)
-            how = "FreeCAD's built-in default robot (a KUKA IR 500: about 2.8 m reach)" + ("" if model == "puma" else f" — this FreeCAD ships no {model.upper()} file; give kinematics for the real one")
-        if a.get("at") is not None or a.get("ypr") is not None:
-            o.Base = placement(a, "robot")
-        if a.get("tool") is not None:
-            # the tool's point from the flange (a gripper's fingertips, a torch's tip)
-            o.Tool = placement(a["tool"], "tool")
-        # A new robot's Tcp is worked out only when an axis is set (RobotObject::onChanged):
-        # until then it reads [0, 0, 0], not where the tool point is at the home pose.
-        settle(o)
-        return picks.finish(s, "robot_new", lambda: {**state(o), "model": how})
-
-    def robot_move(a):
-        o = robot(a.get("robot"))
-        if sum(1 for k in ("axes", "tcp") if a.get(k) is not None) + (1 if a.get("home") else 0) > 1:
-            raise bad("axes, tcp or home: one of them a call.")
-        if a.get("axes") is not None:
-            ax = a["axes"]
-            if not (isinstance(ax, list) and len(ax) == 6 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in ax)):
-                raise bad("axes: six angles in degrees, axis 1 … 6.")
-            for i, v in enumerate(ax, start=1):
-                setattr(o, f"Axis{i}", float(v))
-        elif a.get("tcp") is not None:
-            o.Error = ""
-            want = placement(a["tcp"], "tcp")
-            t = tool_of(o)
-            # tcp is the tool's point: the flange goes where that puts it
-            # (as FreeCAD's own simulation does: position × Tool⁻¹).
-            o.Tcp = want.multiply(t.inverse()) if t else want
-            # the solver can answer whole extra turns (16439°): the same pose, each axis within ±180°
-            for i in range(1, 7):
-                v = float(getattr(o, f"Axis{i}"))
-                setattr(o, f"Axis{i}", ((v + 180.0) % 360.0) - 180.0)
-        elif a.get("home"):
-            # The home pose the person set (Robot's Set home position), else all axes at 0.
-            home = [float(v) for v in (getattr(o, "Home", None) or [])]
-            for i in range(1, 7):
-                setattr(o, f"Axis{i}", home[i - 1] if len(home) == 6 else 0.0)
-        else:
-            raise bad("axes [six degrees], tcp { at, ypr | axis + angle }, or home: true.")
-        doc().recompute()
-        out = state(o)
-        if a.get("tcp") is not None:
-            got = o.Tcp.multiply(t) if t else o.Tcp
-            miss = (got.Base - want.Base).Length
-            out["reached"] = miss < 0.1 and not getattr(o, "Error", "")
-            if not out["reached"]:
-                out["off_mm"] = round(miss, 3)
-                out["note"] = "Not reached: the axes are as they were. Out of the arm's reach or past an axis limit, or the solver did not get there from this pose (100 steps): move in smaller steps, or set axes near the pose first."
-        return picks.finish(s, "robot_move", lambda: {**out}, recompute=False)
-
-    def robot_path(a):
-        name = a.get("name") or "Trajectory"
-        if a.get("edges"):
-            refs = {}
-            for r in picks.ref_list(a["edges"]):
-                label, sub, _ = picks.resolve(s, r)
-                x = picks.find(doc(), label)
-                if sub and not sub.startswith("Edge"):
-                    raise bad(f"edges: {label}.{sub} is not an edge — \"{label}.Edge3\", or \"{label}\" for all its edges (shape_query {{ kind: \"edge\" }} lists them).")
-                subs = [sub] if sub else [f"Edge{i + 1}" for i in range(len(x.Shape.Edges))]
-                refs.setdefault(x, []).extend(subs)
-            if len(refs) != 1:
-                raise bad("edges: of one object (FreeCAD's edge trajectory follows one shape): part_compound joins several first.")
-            # FreeCAD's type is Robot::Edge2TracObject (Edge2TracObject.cpp);
-            # the longer name is tried after it, for a build that has that.
-            o = None
-            for tid in ("Robot::Edge2TracObject", "Robot::Edge2TrajectoryObject"):
-                try:
-                    o = doc().addObject(tid, "Edge2Trajectory")
-                    break
-                except Exception:  # noqa: BLE001 - not this build's name for it
-                    continue
-            if o is None:
-                raise ToolError("unavailable", "This FreeCAD's Robot module has no edge trajectory (Robot::Edge2TracObject): give waypoints instead.")
-            o.Source = next(iter(refs.items()))
-            o.SegValue = float(a.get("deviation", 0.5))
-            o.UseRotation = bool(a.get("useRotation", False))
-        else:
-            wps = a.get("waypoints") or []
-            if not isinstance(wps, list) or not all(isinstance(w, dict) for w in wps):
-                raise bad("waypoints: a list of { at: [x,y,z], ypr: [yaw, pitch, roll], type, speed, cont }.")
-            if len(wps) < 2:
-                raise bad("waypoints: two or more { at, ypr, type LIN | PTP | CIRC, speed mm/s, cont } — or edges, a shape's edges to follow.")
-            pts = []
-            for i, w in enumerate(wps):
-                kind = str(w.get("type", "LIN")).upper()
-                if kind not in ("LIN", "PTP", "CIRC", "WAIT"):
-                    raise bad(f"waypoints.{i}.type: LIN, PTP, CIRC or WAIT.")
-                wp = Robot.Waypoint(placement(w, f"waypoints.{i}"), kind, w.get("name") or "Pt")
-                wp.Velocity = picks.number(w, "speed", 1000, gt=0, msg=f"waypoints.{i}.speed: mm/s, above 0 (1000 by default).")
-                wp.Cont = bool(w.get("cont", False))
-                pts.append(wp)
-            o = doc().addObject("Robot::TrajectoryObject", "Trajectory")
-            o.Trajectory = Robot.Trajectory(pts)
-        o.Label = s.unique(name, o)
-        doc().recompute()
-        tr = o.Trajectory
-        return picks.finish(s, "robot_path", lambda: {"trajectory": o.Label, "waypoints": len(tr.Waypoints), "length": round(tr.Length, 2), "seconds": round(tr.Duration, 3)}, recompute=False)
-
-    def robot_run(a):
-        o = robot(a.get("robot"))
-        t = trajectory(a.get("trajectory"))
+    def sweep(o, t, n):
+        """A trajectory followed by a robot at n points by time, each solved
+        by inverse kinematics from the one before, the tool point on the
+        path: the lowest and highest angle each axis took, the points it
+        missed (out of reach, past an axis limit, or not followed to) and
+        the worst miss in mm. The robot's axes are left where the last
+        point put them."""
         tr = t.Trajectory
-        if tr.Duration <= 0:
-            raise ToolError("invalid_state", f"{t.Label} has no duration (fewer than two waypoints, or all at one place): robot_path makes one with waypoints and speeds.")
-        n = int(a.get("samples", 100))
-        if not 2 <= n <= 5000:
-            raise bad("samples: 2 … 5000.")
-        before = axes_of(o)
         lows, highs, misses, worst = [1e9] * 6, [-1e9] * 6, [], 0.0
         base = t.Base if hasattr(t, "Base") else FreeCAD.Placement()
         tool = tool_of(o)
@@ -259,102 +143,39 @@ def tools(session):
             for i, v in enumerate(axes_of(o)):
                 v = ((v + 180.0) % 360.0) - 180.0  # whole extra turns are the same pose
                 lows[i], highs[i] = min(lows[i], v), max(highs[i], v)
-        for i, v in enumerate(before, start=1):
-            setattr(o, f"Axis{i}", v)
-        doc().recompute()
-        out = {"robot": o.Label, "trajectory": t.Label, "seconds": round(tr.Duration, 3), "samples": n,
-               "axes": [{"axis": i + 1, "from": round(lows[i], 2), "to": round(highs[i], 2)} for i in range(6)],
-               "verdict": "reaches all" if not misses else f"misses {len(misses)} of {n} points"}
-        if misses:
-            out["misses"] = misses[:20]
-            out["worst_mm"] = round(worst, 3)
-            out["note"] = ("Out of reach or past an axis limit there (or the solver could not follow a jump between samples: more samples): "
-                           "move the path closer to the robot (robot_trajectory dress, move) or turn the tool. Positions are in the robot's own frame, its origin at its foot.")
-        return out
+        return lows, highs, misses, worst
 
-    def robot_trajectory(a):
-        op = a.get("op")
-        if op == "join":
-            srcs = [trajectory(r) for r in (a.get("trajectories") or [])]
-            if len(srcs) < 2:
-                raise bad("trajectories: two or more trajectories by name, run one after another in that order.")
-            o = doc().addObject("Robot::TrajectoryCompound", "Trajectory")
-            o.Source = srcs
-        elif op == "dress":
-            src = trajectory(a.get("trajectory"))
-            try:
-                o = doc().addObject("Robot::TrajectoryDressUpObject", "Trajectory")
-            except Exception:
-                o = doc().addObject("Robot::TrajectoryDressUp", "Trajectory")
-            o.Source = src
-            if a.get("speed") is not None:
-                o.UseSpeed = True
-                o.Speed = float(a["speed"])
-            if a.get("acceleration") is not None:
-                o.UseAcceleration = True
-                o.Acceleration = float(a["acceleration"])
-            if a.get("cont") is not None:
-                try:
-                    o.ContType = "Continues" if a["cont"] else "Discontinues"
-                except Exception:
-                    pass
-            if a.get("move") is not None or a.get("ypr") is not None:
-                at = [float(c) for c in (a.get("move") or [0, 0, 0])]
-                y, p_, r = (float(c) for c in (a.get("ypr") or [0, 0, 0]))
-                o.PosAdd = FreeCAD.Placement(V(*at), FreeCAD.Rotation(y, p_, r))
-                # FreeCAD's own names (TrajectoryDressUpObject.cpp), its
-                # misspelling included; the right spelling is taken too.
-                add = a.get("add") or ("AddPosition" if a.get("ypr") is None else "AddOrintation" if a.get("move") is None else "AddPositionAndOrientation")
-                add = {"AddOrientation": "AddOrintation"}.get(add, add)
-                if add not in ("DontChange", "UseOrientation", "AddPosition", "AddOrintation", "AddPositionAndOrientation"):
-                    doc().removeObject(o.Name)
-                    raise bad("add: UseOrientation (ypr replaces each waypoint's orientation) | AddPosition (move added) | AddOrientation (ypr turned on top) | AddPositionAndOrientation (both) | DontChange.")
-                o.AddType = add
-        else:
-            raise bad("op: join (trajectories, one after another) | dress (trajectory: a copy with speed mm/s, acceleration, cont, move [x,y,z] / ypr added to every point).")
-        o.Label = s.unique(a.get("name") or ("Joined trajectory" if op == "join" else "Dressed trajectory"), o)
-        doc().recompute()
-        tr = o.Trajectory
-        s.snapshot("robot_trajectory")
-        return {"trajectory": o.Label, "waypoints": int(tr.size()) if hasattr(tr, "size") else len(tr.Waypoints), "seconds": round(tr.Duration, 3),
-                "length_mm": round(tr.Length, 1) if hasattr(tr, "Length") else None, "step": len(s.steps)}
+    def posed(at, turn):
+        """The placement a dress-up adds to every waypoint: moved by at, turned by [yaw, pitch, roll]."""
+        y, p_, r = turn
+        return FreeCAD.Placement(V(*at), FreeCAD.Rotation(y, p_, r))
 
-    def robot_export(a):
-        o = robot(a.get("robot"))
-        t = trajectory(a.get("trajectory"))
-        p = a.get("path") or f"{t.Label.replace(' ', '_')}.src"
-        p = p if os.path.isabs(p) else os.path.join(s.out_dir, p)
-        if not p.lower().endswith(".src"):
-            p += ".src"
-        paths.made(s, p)
-        os.makedirs(os.path.dirname(p), exist_ok=True)
-        try:
-            import KukaExporter
+    def krl(o, t, path, full):
+        """A trajectory written as KUKA KRL by FreeCAD's exporter: its compact form, or the full one."""
+        import KukaExporter
 
-            (KukaExporter.ExportFullSub if a.get("full") else KukaExporter.ExportCompactSub)(o, t, p)
-        except Exception as e:
-            raise ToolError("failed", f"KRL export failed: {e}") from None
-        if not os.path.isfile(p):
-            # FreeCAD 1.1's ExportFullSub is a stub: it writes nothing.
-            raise ToolError("unavailable", "This FreeCAD's full KRL export writes no file (KukaExporter.ExportFullSub is empty in 1.1): leave full out for the compact form." if a.get("full") else "FreeCAD's KRL exporter wrote no file.")
-        with open(p, encoding="utf-8", errors="replace") as f:
-            text = f.read()
-        return {"path": p, "lines": text.count("\n"), "moves": text.count("LIN ") + text.count("PTP "),
-                "note": "KUKA KRL. Check it in the controller's simulator before running; running it is the person's."}
+        (KukaExporter.ExportFullSub if full else KukaExporter.ExportCompactSub)(o, t, path)
 
-    tcp = {"type": "object", "description": "{ at [x,y,z], ypr [yaw, pitch, roll] | axis + angle }"}
-    return [
-        Tool("robot_trajectory", "Combine or adjust trajectories as new objects that follow their sources (FreeCAD's compound and dress-up): op join (trajectories [names], in order) | dress (trajectory, with any of: speed mm/s and acceleration for every waypoint, cont true | false, move [x,y,z] added to every waypoint and/or ypr [yaw, pitch, roll] turned on top of each one's orientation — the same path at another place or angle; add: UseOrientation makes ypr replace the orientations instead). Reply: trajectory, waypoints, seconds, length_mm.",
-             obj({"op": {"type": "string", "enum": ["join", "dress"]}, "trajectories": {"type": "array", "items": {"type": "string"}}, "trajectory": {"type": "string"}, "speed": {"type": "number"},
-                  "acceleration": {"type": "number"}, "cont": {"type": "boolean"}, "move": {"type": "array", "items": {}}, "ypr": {"type": "array", "items": {}}, "add": {"type": "string"}, "name": {"type": "string"}}, ["op"]), robot_trajectory, changes=True),
-        Tool("robot_new", "A six-axis robot (Robot::RobotObject): model kr16 | kr125 | kr210 | kr500 (KUKA kinematics and picture, where this FreeCAD ships the files) | puma (only a name for the built-in default below: no Puma's kinematics), or kinematics: a CSV of your own (a header line, then six lines of a, alpha, d, theta, rotDir, maxAngle, minAngle, velocity; mm and degrees). Without a file the robot is FreeCAD's built-in default, a KUKA IR 500 — the reply's model says which was used. tool { at, ypr }: the tool's point from the flange (a gripper's tip), which tcp in robot_move and robot_run then means. at, ypr are stored as its Base, but FreeCAD's kinematics do not use it: positions are always in the robot's own frame, origin at its foot. Reply: robot, axes [6 degrees], tcp { at, ypr }, model.",
-             obj({"model": {"type": "string"}, "kinematics": {"type": "string"}, "at": {"type": "array", "items": {}}, "ypr": {"type": "array", "items": {}}, "tool": tcp, "name": {"type": "string"}}), robot_new, changes=True),
-        Tool("robot_move", "Move a robot (the one there is when robot is left out): axes [six degrees] (forward: tcp in the reply is where the tool point lands), tcp { at [x,y,z] mm, ypr [yaw, pitch, roll] degrees or axis + angle } (inverse kinematics from the pose it is in, within the axes' limits: reached false and off_mm when it could not get there, the axes then as they were), or home: true (the home pose set in FreeCAD, else all axes 0). An orientation left out means none (tool axes along the robot's) — usually unreachable: read tcp.ypr from the reply of an axes move and keep it. Reply: axes, tcp, reached.",
-             obj({"robot": {"type": "string"}, "axes": {"type": "array", "items": {}}, "tcp": tcp, "home": {"type": "boolean"}}), robot_move, changes=True),
-        Tool("robot_path", "A trajectory object: waypoints [{ at, ypr, type LIN | PTP | CIRC | WAIT (LIN by default), speed mm/s (1000), cont, name }], two or more, in the robot's frame — or edges [\"Body.Edge3\", …] (or an object for all its edges; one object only) to follow, deviation mm (0.5) from curved ones, useRotation for the edges' own orientation. Reply: trajectory, waypoints, length mm, seconds. robot_run checks a robot can follow it.",
-             obj({"waypoints": {"type": "array", "items": {}}, "edges": {"type": "array", "items": {"type": "string"}}, "deviation": {"type": "number"}, "useRotation": {"type": "boolean"}, "name": {"type": "string"}}), robot_path, changes=True),
-        Tool("robot_run", "Check a trajectory on a robot without moving it for good: samples (100; 2 … 5000) points along it by time, each solved by inverse kinematics from the one before, the tool point (robot_new tool) on the path. Reply: verdict (reaches all | misses n of N), misses [{ t, at, off_mm }] (the first 20), worst_mm, each axis's range of angles used, seconds. A miss is a point out of reach or past an axis limit, or one the solver could not follow to. The robot's axes are put back as they were.",
-             obj({"robot": {"type": "string"}, "trajectory": {"type": "string"}, "samples": {"type": "integer"}}, ["trajectory"]), robot_run),
-        Tool("robot_export", "Write a trajectory as KUKA KRL (.src) with FreeCAD's exporter: path (relative: the session's folder; .src added); every waypoint is written as a LIN move with its speed, whatever its type (FreeCAD's compact form; full: true is refused where FreeCAD's full form writes nothing, as in 1.1). Positions are the waypoints as they are (no tool or base applied). Reply: path, lines, moves. Simulate it on the controller before running; running it is the person's.",
-             obj({"robot": {"type": "string"}, "trajectory": {"type": "string"}, "path": {"type": "string"}, "full": {"type": "boolean"}}, ["trajectory"]), robot_export),
-    ]
+    def read_text(path):
+        """A written file's text."""
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return f.read()
+
+    def prop(o, name):
+        """A property by a name worked out in the call (an axis by its number)."""
+        return getattr(o, name)
+
+    # What the tools' entries (agentlink/data/tools.json, group "robot") call by name.
+    # FreeCAD's and Robot's own are reached when called, not here.
+    helpers = {"doc": doc, "unique": lambda label, own=None: s.unique(label, own), "snapshot": lambda tool: s.snapshot(tool), "step": lambda: len(s.steps),
+               "finish": lambda tool, read: picks.finish(s, tool, read), "settled": lambda tool, read: picks.finish(s, tool, read, recompute=False),
+               "find": lambda ref: picks.find(doc(), ref), "resolve": lambda ref: picks.resolve(s, ref), "ref_list": picks.ref_list, "num": picks.num,
+               "local": lambda p: paths.local(s, p), "made": lambda p: paths.made(s, p), "out_dir": lambda: s.out_dir, "isfile": lambda p: os.path.isfile(p),
+               "isabs": lambda p: os.path.isabs(p), "join": lambda *parts: os.path.join(*parts), "basename": lambda p: os.path.basename(p),
+               "dirname": lambda p: os.path.dirname(p), "make_folder": lambda p: os.makedirs(p, exist_ok=True), "read_text": read_text,
+               # Robot's own
+               "waypoint": lambda pl, kind, name: Robot.Waypoint(pl, kind, name), "trajectory_of": lambda points: Robot.Trajectory(points), "krl": krl,
+               # the family's
+               "robot": robot, "trajectory": trajectory, "tool_of": tool_of, "settle": settle, "state": state, "sweep": sweep, "posed": posed, "prop": prop,
+               "placement": placement, "axes_of": axes_of, "lib_file": lib_file, "MODELS": MODELS}
+    return runners.tools(GROUP, s, helpers)

@@ -19,8 +19,8 @@ import numpy as np
 
 from .. import render
 from .. import paths
-from ..protocol import Tool, ToolError, bad
-from ..tools import obj
+from .. import runners
+from ..protocol import ToolError, bad
 from . import picks
 from .picks import r4
 
@@ -32,6 +32,7 @@ BIG = 1e30  # Inspection marks a point out of reach with ±FLT_MAX
 
 
 def kind_of(o):
+    """What an object is to Inspection: a mesh, points, a shape, or None when it is none of them."""
     if o.isDerivedFrom("Mesh::Feature"):
         return "mesh"
     if o.isDerivedFrom("Points::Feature"):
@@ -103,6 +104,7 @@ def worst(P, d, n=5, lo=None, hi=None, spacing=None):
 
 
 def inspections(doc):
+    """The document's Inspection features, in order."""
     return [o for o in doc.Objects if o.TypeId == "Inspection::Feature"]
 
 
@@ -115,6 +117,7 @@ def tol_props(o):
 
 
 def band(o):
+    """An inspection's tolerance band (low, high) in mm; (None, None) when it has none set."""
     if all(p in o.PropertiesList for p in TOL_PROP):
         lo, hi = float(o.ToleranceLow), float(o.ToleranceHigh)
         if hi > lo:
@@ -158,11 +161,122 @@ def _map(s, a):
 render.register_map("inspection", _map, "An Inspection feature's distances on its actual (insp_run): objects [the inspection], else the last.")
 
 
+def has_faces(o):
+    """Whether an object is a body with faces to split an inspection by (a mesh or a cloud has none)."""
+    import Part
+
+    return isinstance(getattr(o, "Shape", None), Part.Shape) and bool(o.Shape.Faces)
+
+
+def faces_mesh(bodies, deflection):
+    """The bodies' faces tessellated into one triangle mesh: (vertices,
+    triangles, the face each triangle is of, as "Body.Face4")."""
+    V, F, owner = [], [], []
+    for nb in bodies:
+        for k, fc in enumerate(nb.Shape.Faces, start=1):
+            vs, ts = fc.tessellate(float(deflection))
+            base = len(V)
+            V += [(p.x, p.y, p.z) for p in vs]
+            F += [(base + i, base + j, base + m) for i, j, m in ts]
+            owner += [f"{nb.Label}.Face{k}"] * len(ts)
+    return V, F, owner
+
+
+def by_face(o, mesh, reach, lo, hi):
+    """An inspection's measured points sorted to the face each lies nearest
+    (within reach mm), a row a face: its points, mean, min, max, rms and,
+    with a band, outOfTolerance and verdict — the faces that are off first."""
+    from .. import meshdist
+
+    V, F, owner = mesh
+    d = np.asarray(o.Distances, dtype=float)
+    P = points_of(o.Actual)
+    ok = np.abs(d) < BIG
+    tri, _dist, _sg = meshdist.nearest(P[ok], np.array(V), np.array(F), reach)
+    rows = {}
+    for pi, ti in zip(np.nonzero(ok)[0], tri):
+        if ti < 0:
+            continue
+        r = rows.setdefault(owner[ti], [])
+        r.append(d[pi])
+    out = []
+    for face, vals in rows.items():
+        v = np.array(vals)
+        row = {"face": face, "points": int(v.size), "mean": r4(v.mean()), "min": r4(v.min()), "max": r4(v.max()), "rms": r4(np.sqrt((v * v).mean()))}
+        if lo is not None:
+            bad_ = int(((v < lo) | (v > hi)).sum())
+            row["outOfTolerance"] = bad_
+            row["verdict"] = "pass" if bad_ == 0 else "fail"
+        out.append(row)
+    key = (lambda r: -r.get("outOfTolerance", 0) * 1e9 - abs(r["mean"])) if lo is not None else (lambda r: -abs(r["mean"]))
+    out.sort(key=key)
+    return out
+
+
+def lined_up(o):
+    """Whether an inspection's distances are one to a point of its actual (they are not after the actual changed)."""
+    P = points_of(o.Actual)
+    return P is not None and len(P) == len(np.asarray(o.Distances, dtype=float))
+
+
+def point_rows(o):
+    """A row a measured point for the report: x, y, z, the distance, and its
+    status — out_of_reach, or with a tolerance band ok, over or under."""
+    d = np.asarray(o.Distances, dtype=float)
+    P = points_of(o.Actual)
+    lo, hi = band(o)
+    rows = []
+    for i, v in enumerate(d):
+        x, y, z = (P[i] if P is not None and i < len(P) else (float("nan"),) * 3)
+        if abs(v) >= BIG:
+            st, val = "out_of_reach", ""
+        elif lo is not None:
+            st, val = ("over" if v > hi else "under" if v < lo else "ok"), f"{v:.5f}"
+        else:
+            st, val = "", f"{v:.5f}"
+        rows.append([f"{x:.5f}", f"{y:.5f}", f"{z:.5f}", val, st])
+    return rows
+
+
+def write_csv(path, header, rows):
+    """header and rows written as a CSV file; answers how many rows."""
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(header)
+        for row in rows:
+            w.writerow(row)
+    return len(rows)
+
+
+def write_json(path, data):
+    """data written as a JSON file."""
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2)
+
+
+def read_points(module, path):
+    """A point cloud read from a file by FreeCAD's Points module (its Points class, or read on a build without it)."""
+    return module.Points(path) if hasattr(module, "Points") else module.read(path)
+
+
+def points_module():
+    """FreeCAD's Points module, loaded when a scan of points is read."""
+    import Points
+
+    return Points
+
+
 def tools(session):
+    """The inspection tools are data (agentlink/data/tools.json, group
+    "inspection"; run by agentlink/runners.py's steps runner): each entry
+    has the tool's words, its checks with their refusals, the order of its
+    steps and its answer. What is here is what those entries call by name
+    (docs/data-tools.md)."""
     s = session
     doc = lambda: s.doc  # noqa: E731
 
     def find(ref, what="object"):
+        """An object by its label or name (the label in any case too)."""
         for o in doc().Objects:
             if ref in (o.Label, o.Name):
                 return o
@@ -172,6 +286,7 @@ def tools(session):
         raise ToolError("not_found", f"{what} {ref!r}: not here — session_state and object_list name what there is.")
 
     def ins_of(ref):
+        """The inspection ref names, or the only one when ref is None."""
         all_ = inspections(doc())
         if ref is None:
             if len(all_) == 1:
@@ -183,6 +298,7 @@ def tools(session):
         return o
 
     def tol_of(a):
+        """The call's tolerance as a band (low, high): ±t from a number, [low, high] as given; (None, None) when left out."""
         t = a.get("tolerance")
         if t is None:
             return None, None
@@ -195,8 +311,9 @@ def tools(session):
         raise bad("tolerance: ±t (a number) or [low, high] mm, low < high.")
 
     def mesh_of_body(o, deflection, spacing, cap):
-        # Tessellated, then split until no edge is over spacing: a flat face
-        # is measured across it, not only at its corners.
+        """A body as a hidden mesh in the document, to be measured at its
+        vertices: tessellated, then split until no edge is over spacing (a
+        flat face is measured across it, not only at its corners)."""
         L = render.body_layer(o, 0, tol=deflection)
         T, F = render.subdivide(L["V"], L["F"], spacing, cap=cap)
         m = Mesh.Mesh([[tuple(T[i]) for i in tri] for tri in F])
@@ -210,6 +327,10 @@ def tools(session):
         return f
 
     def reading(o, n_worst=5):
+        """An inspection's numbers as every tool here answers them: its
+        label, name, actual, nominals, search radius and thickness, the
+        statistics of its distances (stats), the worst spots, and a note
+        when over 5% of the points are out of reach."""
         lo, hi = band(o)
         d = np.asarray(o.Distances, dtype=float)
         out = {"inspection": o.Label, "name": o.Name, "actual": o.Actual.Label if o.Actual else None, "nominals": [x.Label for x in o.Nominals],
@@ -222,224 +343,16 @@ def tools(session):
                            "a larger search_radius, or align the actual first (object_align, or an add-on's alignment).")
         return out
 
-    def insp_run(a):
-        if a.get("file"):
-            p = paths.in_file(s, "insp_run", a["file"], "file")
-            if not os.path.isfile(p):
-                raise ToolError("not_found", f"{p}: no such file.")
-            ext = os.path.splitext(p)[1].lower()
-            if ext in (".stl", ".obj", ".ply", ".off", ".3mf", ".amf"):
-                act = doc().addObject("Mesh::Feature", "Actual")
-                act.Mesh = Mesh.Mesh(p)
-            elif ext in (".asc", ".pcd", ".xyz", ".txt", ".e57"):
-                import Points
-
-                act = doc().addObject("Points::Feature", "Actual")
-                act.Points = Points.Points(p) if hasattr(Points, "Points") else Points.read(p)
-            else:
-                raise bad(f"file: {ext or 'no extension'} is not read here — a mesh (stl, obj, ply, off, 3mf, amf) or points (asc, pcd, xyz, txt, e57). import_file brings other formats in; then actual names the object.")
-            act.Label = s.unique(os.path.splitext(os.path.basename(p))[0])
-        elif a.get("actual"):
-            act = find(a["actual"], "actual")
-        else:
-            raise bad("actual: the measured thing (a mesh, points or a body), or file: a scan to read.")
-        k = kind_of(act)
-        if k is None:
-            raise bad(f"actual: {act.Label} is a {act.TypeId} — the actual is a mesh, a point cloud or an object with a shape (object_list names them).")
-        meshed = None
-        if k == "shape":
-            # A body is measured at the vertices of a mesh of it, kept in the
-            # document (hidden): each distance then has its point.
-            defl = float(a.get("deflection", 0.1))
-            if not 0.001 <= defl <= 5:
-                raise bad("deflection: how closely the body's mesh follows it, 0.001 … 5 mm.")
-            diag = act.Shape.BoundBox.DiagonalLength
-            spacing = float(a.get("spacing") or max(diag / 100.0, 0.2))
-            if spacing <= 0:
-                raise bad("spacing: mm between measured points on the body, over 0.")
-            cap = int(a.get("cap", 60000))
-            meshed = mesh_of_body(act, defl, spacing, max(1000, min(cap, 400000)))
-            act_used = meshed
-        else:
-            act_used = act
-        noms = [find(n, "nominal") for n in (a.get("nominals") or [])]
-        if not noms:
-            raise bad("nominals: what it should be — bodies, meshes or points (a list of names).")
-        for n in noms:
-            if kind_of(n) is None:
-                raise bad(f"nominals: {n.Label} is a {n.TypeId} — each is a body (an object with a shape), a mesh or a point cloud.")
-            if n is act:
-                raise bad(f"nominals: {n.Label} is the actual itself — the nominal is what it should be (the design), the actual what was measured or made.")
-        r = picks.num(a.get("search_radius", 1.0), "search_radius")
-        if r <= 0:
-            raise bad("search_radius: mm, over 0 — points further than this from every nominal are out of reach.")
-        lo, hi = tol_of(a)
-        if lo is not None and max(abs(lo), abs(hi)) > r:
-            raise bad(f"tolerance reaches past search_radius ({r:g} mm): points out of tolerance would read as out of reach. Raise search_radius.")
-        f = doc().addObject("Inspection::Feature", "Inspection")
-        f.Label = s.unique(a.get("name") or f"Inspection of {act.Label}")
-        f.Actual = act_used
-        f.Nominals = noms
-        f.SearchRadius = r
-        if a.get("thickness") is not None:
-            f.Thickness = picks.num(a["thickness"], "thickness")
-        tol_props(f)
-        if lo is not None:
-            f.ToleranceLow, f.ToleranceHigh = lo, hi
-        doc().recompute()
-        if not len(f.Distances):
-            raise ToolError("failed", f"Inspection measured no points: {act.Label} holds none" + (" (the file read as empty — is it a mesh FreeCAD reads?)" if a.get("file") else "") + " — nothing was kept.")
-        s.snapshot("insp_run")
-        out = reading(f, int(a.get("worst", 5)))
-        if meshed is not None:
-            out["measuredOn"] = f"{meshed.Label}: {len(meshed.Mesh.Points)} points about {spacing:.3g} mm apart (spacing), hidden"
-            out["how"] = (f"{act.Label} was tessellated first (a mesh at deflection {defl:g} mm, split to spacing {spacing:.3g} mm, {len(meshed.Mesh.Points)} points) "
-                          "and FreeCAD's Inspection read each point's distance to the nominals — the body's faces are not sampled directly. "
-                          "Timed against the body's B-spline poles: a large free-form body is given a longer deadline (and a coarser deflection or larger spacing is quicker).")
-        if a.get("thickness") is not None:
-            out["thicknessNote"] = "Thickness is stored on the feature, but FreeCAD 1.1's Inspection does not use it when measuring: the distances are the same with or without it."
-        out["next"] = "view_render { map: \"inspection\" } to see it; insp_faces says which faces are off; insp_export for a report."
-        out["step"] = len(s.steps)
-        return out
-
-    def insp_update(a):
-        o = ins_of(a.get("inspection"))
-        if not any(k in a for k in ("search_radius", "thickness", "tolerance", "nominals")):
-            raise bad("Nothing to change: search_radius, thickness, tolerance (±t, [low, high] or null to clear) or nominals — insp_read reads it as it is.")
-        # Checked before anything is set, so a refusal changes nothing.
-        r = float(o.SearchRadius)
-        if a.get("search_radius") is not None:
-            r = picks.num(a["search_radius"], "search_radius")
-            if r <= 0:
-                raise bad("search_radius: mm, over 0 — points further than this from every nominal are out of reach.")
-        lo, hi = band(o)
-        if a.get("tolerance") is not None:
-            lo, hi = tol_of(a)
-        elif "tolerance" in a:
-            lo = hi = None
-        if lo is not None and max(abs(lo), abs(hi)) > r:
-            raise bad(f"tolerance reaches past search_radius ({r:g} mm): points out of tolerance would read as out of reach. Raise search_radius in the same call.")
-        noms = None
-        if a.get("nominals"):
-            noms = [find(n, "nominal") for n in a["nominals"]]
-            for n in noms:
-                if kind_of(n) is None:
-                    raise bad(f"nominals: {n.Label} is a {n.TypeId} — each is a body (an object with a shape), a mesh or a point cloud.")
-                if n is o.Actual:
-                    raise bad(f"nominals: {n.Label} is this inspection's actual.")
-        if a.get("search_radius") is not None:
-            o.SearchRadius = r
-        if a.get("thickness") is not None:
-            o.Thickness = picks.num(a["thickness"], "thickness")
-        if "tolerance" in a:
-            tol_props(o)
-            o.ToleranceLow, o.ToleranceHigh = (0.0, 0.0) if lo is None else (lo, hi)
-        if noms is not None:
-            o.Nominals = noms
-        o.touch()
-        return picks.finish(s, "insp_update", lambda: reading(o, int(a.get("worst", 5))))
-
-    def insp_list(a):
-        out = []
-        for o in inspections(doc()):
-            r = reading(o, 0)
-            out.append({k: r[k] for k in ("inspection", "actual", "nominals", "points", "rms", "inTolerancePercent", "verdict", "outOfReachPercent") if k in r})
-        return {"inspections": out} if out else {"inspections": [], "note": "None yet: insp_run { actual, nominals }."}
-
-    def insp_read(a):
-        return reading(ins_of(a.get("inspection")), int(a.get("worst", 10)))
-
-    def insp_faces(a):
-        """An inspection split by the nominal body's faces: which faces are off, and by how much."""
-        from .. import meshdist
-
-        o = ins_of(a.get("inspection"))
-        d = np.asarray(o.Distances, dtype=float)
-        P = points_of(o.Actual)
-        if P is None or len(P) != len(d):
-            raise ToolError("invalid_state", f"{o.Label}: its points and distances do not line up — insp_update to measure again.")
-        noms = [x for x in (o.Nominals or []) if isinstance(getattr(x, "Shape", None), __import__("Part").Shape) and x.Shape.Faces]
-        if a.get("body"):
-            nb = find(a["body"], "body")
-            if not isinstance(getattr(nb, "Shape", None), __import__("Part").Shape) or not nb.Shape.Faces:
-                raise bad(f"body: {nb.Label} ({nb.TypeId}) has no faces to split the inspection by.")
-            noms = [nb]
-        if not noms:
-            raise ToolError("invalid_input", "This inspection's nominals hold no body with faces (meshes and points have none): body names a body whose faces to split by.")
-        lo, hi = band(o)
-        V, F, owner = [], [], []
-        for nb in noms:
-            for k, fc in enumerate(nb.Shape.Faces, start=1):
-                vs, ts = fc.tessellate(float(a.get("deflection", 0.05)))
-                base = len(V)
-                V += [(p.x, p.y, p.z) for p in vs]
-                F += [(base + i, base + j, base + m) for i, j, m in ts]
-                owner += [f"{nb.Label}.Face{k}"] * len(ts)
-        ok = np.abs(d) < BIG
-        reach = float(a.get("reach", max(1.0, float(getattr(o, "SearchRadius", 1.0) or 1.0))))
-        tri, _dist, _sg = meshdist.nearest(P[ok], np.array(V), np.array(F), reach)
-        rows = {}
-        for pi, ti in zip(np.nonzero(ok)[0], tri):
-            if ti < 0:
-                continue
-            r = rows.setdefault(owner[ti], [])
-            r.append(d[pi])
-        out = []
-        for face, vals in rows.items():
-            v = np.array(vals)
-            row = {"face": face, "points": int(v.size), "mean": r4(v.mean()), "min": r4(v.min()), "max": r4(v.max()), "rms": r4(np.sqrt((v * v).mean()))}
-            if lo is not None:
-                bad_ = int(((v < lo) | (v > hi)).sum())
-                row["outOfTolerance"] = bad_
-                row["verdict"] = "pass" if bad_ == 0 else "fail"
-            out.append(row)
-        key = (lambda r: -r.get("outOfTolerance", 0) * 1e9 - abs(r["mean"])) if lo is not None else (lambda r: -abs(r["mean"]))
-        out.sort(key=key)
-        if not out:
-            raise ToolError("not_found", f"{o.Label}: no measured point lies within {reach:g} mm of a face of {', '.join(x.Label for x in noms)} — a larger reach, or the body is not where the actual is.")
-        res = {"inspection": o.Label, "faces": out[: int(a.get("limit", 30))], "facesMeasured": len(out)}
-        if lo is not None:
-            res["failing"] = [r["face"] for r in out if r.get("verdict") == "fail"]
-        res["note"] = "mean is how far the face sits off (+ outside the nominal, - inside); a spread between min and max is its form error."
-        return res
-
-    def insp_export(a):
-        o = ins_of(a.get("inspection"))
-        base = (a.get("name") or o.Label).replace(" ", "-")
-        d = np.asarray(o.Distances, dtype=float)
-        P = points_of(o.Actual)
-        lo, hi = band(o)
-        rep = reading(o, int(a.get("worst", 10)))
-        csv_path = paths.made(s, os.path.join(s.out_dir, base + ".csv"))
-        with open(csv_path, "w", newline="", encoding="utf-8") as fh:
-            w = csv.writer(fh)
-            w.writerow(["x", "y", "z", "distance_mm", "status"])
-            for i, v in enumerate(d):
-                x, y, z = (P[i] if P is not None and i < len(P) else (float("nan"),) * 3)
-                if abs(v) >= BIG:
-                    st, val = "out_of_reach", ""
-                elif lo is not None:
-                    st, val = ("over" if v > hi else "under" if v < lo else "ok"), f"{v:.5f}"
-                else:
-                    st, val = "", f"{v:.5f}"
-                w.writerow([f"{x:.5f}", f"{y:.5f}", f"{z:.5f}", val, st])
-        json_path = paths.made(s, os.path.join(s.out_dir, base + ".json"))
-        with open(json_path, "w", encoding="utf-8") as fh:
-            json.dump(rep, fh, indent=2)
-        return {"inspection": o.Label, "files": {"csv": {"path": csv_path, "rows": int(d.size)}, "json": {"path": json_path}},
-                "summary": {k: rep[k] for k in ("rms", "min", "max", "inTolerancePercent", "verdict") if k in rep}}
-
-    return [
-        Tool("insp_run", "Inspect with FreeCAD's own Inspection feature (left in the document): actual — a mesh, points or a body — or file (a scan: stl, obj, ply, off, 3mf, amf, asc, pcd, xyz) against nominals [bodies, meshes, points]. Nothing is aligned: put the actual where the nominal is first (object_align). search_radius mm (1; FreeCAD's own default is 0.05): a point further than that from every nominal reads out of reach, so it must reach past the tolerance. tolerance ±t or [low, high] mm gives the verdict. Distances are signed: + outside a solid nominal (material added), − inside. A mesh or scan is measured at its vertices; a body is meshed first (deflection 0.1 mm, points every spacing mm, default 1% of its size, at most cap 60000) and that hidden mesh measured (how says so). thickness is stored but FreeCAD 1.1 does not use it. Cost grows with points × nominal faces: a free-form body against a big scan takes minutes — raise spacing first. Reply: points, measured, outOfReach, min, max, mean, rms, stdDev, inTolerancePercent, verdict (pass only when all are in tolerance and none out of reach), worst [{ at, distance }], health.",
-             obj({"actual": {"type": "string"}, "file": {"type": "string"}, "nominals": {"type": "array", "items": {"type": "string"}}, "search_radius": {"type": "number"}, "thickness": {"type": "number"},
-                  "tolerance": {"type": ["number", "array"]}, "deflection": {"type": "number"}, "spacing": {"type": "number"}, "cap": {"type": "integer"}, "name": {"type": "string"}, "worst": {"type": "integer"}}, ["nominals"]), insp_run, changes=True),
-        Tool("insp_update", "Change an inspection and measure again: search_radius, thickness, tolerance (±t or [low, high]; null clears), nominals — at least one; inspection may be left out when there is one. Checked before anything is set (a tolerance past the search radius is refused). Reply: as insp_run.",
-             obj({"inspection": {"type": "string"}, "search_radius": {"type": "number"}, "thickness": {"type": "number"}, "tolerance": {"type": ["number", "array", "null"]}, "nominals": {"type": "array", "items": {"type": "string"}}, "worst": {"type": "integer"}}), insp_update, changes=True),
-        Tool("insp_read", "One inspection's numbers (the one there is when inspection is left out): points, measured, outOfReach, min, max, mean, rms, stdDev, p95abs, histogram, tolerance, inTolerancePercent, over, under, verdict, worst spots (worst: how many, 10). Distances in mm, + outside the nominal. Changes nothing.",
-             obj({"inspection": {"type": "string"}, "worst": {"type": "integer"}}), insp_read),
-        Tool("insp_list", "The inspections in the document, a line each: inspection, actual, nominals, points, rms, inTolerancePercent, verdict, outOfReachPercent. Changes nothing.", obj({}), insp_list),
-        Tool("insp_faces", "An inspection split by the nominal body's faces: each face (\"Body.Face4\") with its points, mean offset (+ the actual sits outside there), min, max, rms and, with a tolerance, outOfTolerance and verdict — the faces that are off first; failing lists them. A face off evenly is displaced; one with min and max far apart is out of form. body: which body when the nominals hold several or none; reach mm (the search radius): how near a face a point must be to count for it; limit (30). Changes nothing.",
-             obj({"inspection": {"type": "string"}, "body": {"type": "string"}, "reach": {"type": "number"}, "deflection": {"type": "number"}, "limit": {"type": "integer"}}), insp_faces),
-        Tool("insp_export", "Write an inspection out to the session's folder: <name>.csv with a row a point (x, y, z, distance_mm, status ok | over | under | out_of_reach) and <name>.json with insp_read's numbers. name: the files' base name (the inspection's label by default). Reply: files { csv { path, rows }, json { path } }, summary. The document is not changed.",
-             obj({"inspection": {"type": "string"}, "name": {"type": "string"}, "worst": {"type": "integer"}}), insp_export),
-    ]
+    # What the tools' entries (agentlink/data/tools.json, group "inspection") call by name.
+    # Mesh's and Points' own are reached when called, not here.
+    helpers = {"doc": doc, "unique": lambda label, own=None: s.unique(label, own), "snapshot": lambda tool: s.snapshot(tool), "step": lambda: len(s.steps),
+               "finish": lambda tool, read: picks.finish(s, tool, read), "num": picks.num,
+               "in_file": lambda tool, p, key: paths.in_file(s, tool, p, key), "made": lambda name: paths.made(s, os.path.join(s.out_dir, name)),
+               "isfile": lambda p: os.path.isfile(p), "file_ext": lambda p: os.path.splitext(p)[1].lower(), "file_stem": lambda p: os.path.splitext(os.path.basename(p))[0],
+               # FreeCAD's own
+               "read_mesh": lambda p: Mesh.Mesh(p), "points_module": points_module, "read_points": read_points,
+               # the family's
+               "find": find, "ins_of": ins_of, "tol_of": tol_of, "mesh_of_body": mesh_of_body, "reading": reading, "inspections": lambda: inspections(doc()),
+               "kind_of": kind_of, "band": band, "tol_props": tol_props, "has_faces": has_faces, "faces_mesh": faces_mesh, "by_face": by_face, "lined_up": lined_up,
+               "point_rows": point_rows, "write_csv": write_csv, "write_json": write_json}
+    return runners.tools(GROUP, s, helpers)

@@ -16329,6 +16329,1311 @@
     {"let": {"written": "=elmer_write(o, mesh, solver, bool(a.run), float(a.get('timeout', 600))) if kind == 'elmer' and (a.write or a.run) else {}"}}
    ],
    "answer": {"fields": {"analysis": "=an.Label", "solver": "=kind", "objects": "=made", "next": "='write: true meshes it and writes Elmer\\'s case here; with ElmerSolver installed, run: true solves it. Or open it in the FEM workbench.' if kind == 'elmer' else 'In FreeCAD\\'s FEM workbench: mesh it (double-click the mesh), then run the solver — the same study fea_solve runs headless.'", "equations": {"when": "=kind == 'elmer'", "value": "=eqs"}, "...written": "=written", "skipped": {"when": "=skipped", "value": "=skipped"}}}
+  },
+  "measure_keep": {
+   "group": "measure",
+   "description": "Keep a measurement in the document as one of FreeCAD's Measure objects (it follows the model and shows in the tree and the window). kind distance (two of: vertex, edge, flat or cylindrical face) | angle (two straight edges or flat faces) | length (one or more edges, summed) | area (one or more faces, summed) | radius (one circular edge, not a cylinder's face) | position (one vertex) | diameter (FreeCAD 1.1 has none: refused, use radius). of: the elements, [\"Body.Face3\", …] (a bare \"Face3\" when there is one body) — elements only, no points or whole objects. Trap: it is tied to face and edge numbers, which change after modelling steps; a measurement that then fails shows in health. Reply: measure (its label), value, unit. measure reads the same without keeping it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "distance",
+       "angle",
+       "length",
+       "area",
+       "radius",
+       "diameter",
+       "position"
+      ]
+     },
+     "of": {},
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "of"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/measure.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"kind": "=a.get('kind', 'distance')"}},
+    {"refuse": "kind: distance, angle, length, area, radius, diameter, position.", "when": "=kind not in KEEP"},
+    {"let": {"tid, n, out_prop": "=KEEP[kind]", "refs": "=ref_list(a.of or [])"}},
+    {"refuse": {"fmt": "of: {n or 'one or more'} element(s) for kind {kind} — {TAKES[kind]}, each as \"Body.Face3\" / \"Body.Edge2\" / \"Body.Vertex1\"."}, "when": "=(n and len(refs) != n) or (not n and not refs)"},
+    {"let": {"links": "=[]"}},
+    {"each": "ref", "in": "=refs", "steps": [{"refuse": {"fmt": "of: each an element by name (\"Body.Edge2\"), not {ref!r} — FreeCAD's Measure objects are tied to faces, edges and vertices, not free points (measure {{ a, b }} takes points)."}, "when": "=not is_str(ref)"}, {"let": {"label, sub, el": "=resolve(ref)"}}, {"refuse": {"fmt": "of: {ref!r} names a whole object; kind {kind} takes {TAKES[kind]} (\"{label}.Edge2\": shape_query finds them)."}, "when": "=not sub"}, {"let": {"why": "=wrong(kind, sub, el)"}}, {"refuse": {"fmt": "of: {label}.{sub} is {why}; kind {kind} takes {TAKES[kind]}.{also}"}, "first": [{"let": {"also": "=\" measure { a } reads a cylinder's radius without keeping it.\" if kind in ('radius', 'diameter') else ''"}}], "when": "=why"}, {"push": {"links": "=(find(label), [sub])"}}]},
+    {"try": [{"let": {"m": "=doc().addObject(tid, kind.capitalize())"}}], "on": "error", "except": [{"refuse": {"fmt": "This FreeCAD has no {tid} ({error}): {instead}measure {{ a, b }} answers the same without keeping it."}, "code": "unavailable", "first": [{"let": {"instead": "='FreeCAD 1.1 keeps a radius but not a diameter — kind radius on the same edge, or ' if kind == 'diameter' else ''"}}]}]},
+    {"when": "=n == 2", "then": [{"set": {"m.Element1": "=links[0]", "m.Element2": "=links[1]"}}], "else": [{"when": "=n == 1", "then": [{"set": {"m.Element": "=links[0]"}}], "else": [{"set": {"m.Elements": "=links"}}]}]},
+    {"set": {"m.Label": "=unique(a.name or kind.capitalize() + ' ' + ' – '.join(refs), m)"}},
+    {"do": "=doc().recompute()"},
+    {"when": "='Invalid' in (get(m, 'State', None) or []) or (has(m, 'isValid') and not m.isValid())", "then": [{"try": [{"let": {"why": "=m.getStatusString()"}}], "on": "error", "except": [{"let": {"why": "it did not compute"}}]}, {"do": "=doc().removeObject(m.Name)"}, {"let": {"what": "=tid.split('::')[-1]"}}, {"refuse": {"fmt": "FreeCAD's {what} could not measure {', '.join(refs)}: {why} — nothing was kept. measure {{ a, b }} reads the same without keeping it."}, "code": "failed"}]},
+    {"let": {"v": "=prop(m, out_prop)"}},
+    {"let": {"val": "=[round(c, 4) for c in v] if has(v, 'x') else round(float(get(v, 'Value', v)), 4)"}},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"measure": "=m.Label", "kind": "=kind", "of": "=refs", "value": "=val", "unit": "={'angle': '°', 'area': 'mm²', 'position': 'mm'}.get(kind, 'mm')", "step": "=step()"}}
+  },
+  "shape_query": {
+   "group": "measure",
+   "description": "Find a body's faces, edges or vertices by what they are; the refs it answers (\"Face12\", \"Edge3\", counted from 1) are what other tools take. kind face|edge|vertex; type plane, cylinder, cone, sphere, torus, bspline (faces) or line, circle, ellipse, bspline (edges); normal [x,y,z] (flat or curved faces, outward at the centre) or axis (a line's direction, a circle's or cylinder's axis, either way) within degrees (1); radius, area, length a number or [least, most]; x / y / z the centre's coordinate within tol (0.01); near [x,y,z] or { point, within } (nearest first); inside { min, max } (the centre in that box); of \"Face6\" that face's edges or vertices. sort area|radius|length|distance|x|y|z, -key largest first; limit (20; found counts all, more the rest). Reply items: ref, type, area / length, centroid / mid, normal, radius, axis, center. Trap: numbers change after any modelling step — query again rather than reuse old ones. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "face",
+       "edge",
+       "vertex"
+      ]
+     },
+     "type": {},
+     "normal": {},
+     "axis": {},
+     "within": {
+      "type": "number"
+     },
+     "radius": {},
+     "area": {},
+     "length": {},
+     "near": {},
+     "inside": {
+      "type": "object"
+     },
+     "x": {
+      "type": "number"
+     },
+     "y": {
+      "type": "number"
+     },
+     "z": {
+      "type": "number"
+     },
+     "tol": {
+      "type": "number"
+     },
+     "of": {
+      "type": "string"
+     },
+     "sort": {
+      "type": "string"
+     },
+     "limit": {
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/measure.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o, kind, hits": "=query(a)"}},
+    {"let": {"limit": "=num(a.get('limit', 20), 'limit')"}},
+    {"refuse": "limit: how many to list, 1 … 500 (20 by default); found counts them all.", "when": "=limit < 1 or limit > 500"},
+    {"let": {"limit": "=int(limit)"}}
+   ],
+   "answer": {"fields": {"body": "=o.Label", "kind": "=kind", "found": "=len(hits)", "items": "=[hit[2] for hit in hits[:limit]]", "more": {"when": "=len(hits) > limit", "value": "=len(hits) - limit"}}}
+  },
+  "measure": {
+   "group": "measure",
+   "description": "Measure one thing or between two. a alone: a face's area (radius, diameter, axis when round; normal when flat), an edge's length (radius for a circle), a body's volume, area and box. a and b: the least distance (mm) with its two points (from, to), the angle in degrees between flat faces (their outward normals: 180 for opposite faces of a plate) or straight edges (0–90), or a line and a face's plane; gap between parallel faces' planes; centers between round ones' centres. References: \"Face12\" with body, \"Box.Face12\", a body's name (the whole shape) or a point [x,y,z]. Changes nothing; measure_keep keeps one in the document.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "a": {
+      "description": "\"Face12\" / \"Edge3\" (with body), \"Box.Face12\", a body's name, or a point [x, y, z]."
+     },
+     "b": {
+      "description": "\"Face12\" / \"Edge3\" (with body), \"Box.Face12\", a body's name, or a point [x, y, z]."
+     },
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     }
+    },
+    "required": [
+     "a"
+    ],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/measure.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "a: what to measure — a reference or a point; b: a second one for a distance or an angle.", "when": "='a' not in a"},
+    {"let": {"la, sa, ea": "=resolve(a['a'], a.body)"}},
+    {"let": {"da": "=describe(la, sa, ea)"}},
+    {"answer": {"fields": {"a": "=da"}}, "when": "=a.b is None"},
+    {"let": {"lb, sb, eb": "=resolve(a.b, a.body)"}},
+    {"let": {"db": "=describe(lb, sb, eb)"}},
+    {"refuse": {"fmt": "a and b are the same ({da.get('ref') or la}): give two different things, or a alone to read one."}, "when": "=la == lb and sa == sb and la != 'point'"},
+    {"let": {"dist, pairs, info": "=ea.distToShape(eb)"}},
+    {"let": {"out": "={'a': da, 'b': db, 'distance': r(dist), 'from': vec(pairs[0][0]), 'to': vec(pairs[0][1])}"}},
+    {"let": {"flat_a": "=sa and sa.startswith('Face') and da.get('type') == 'plane'", "flat_b": "=sb and sb.startswith('Face') and db.get('type') == 'plane'", "line_a": "=sa and sa.startswith('Edge') and da.get('type') == 'line'", "line_b": "=sb and sb.startswith('Edge') and db.get('type') == 'line'"}},
+    {"when": "=flat_a and flat_b", "then": [{"let": {"na": "=vector(da['normal'])", "nb": "=vector(db['normal'])"}}, {"put": {"angle": "=angle_between(na, nb)"}}, {"put": {"gap": "=r(abs((ea.CenterOfMass - eb.CenterOfMass).dot(na)))", "note": "Parallel faces: gap is the distance between their planes; distance the least between the faces as bounded."}, "when": "=out['angle'] < 0.01 or out['angle'] > 179.99"}], "else": [{"when": "=line_a and line_b", "then": [{"put": {"angle": "=angle_between(vector(da['dir']), vector(db['dir']), True)"}}], "else": [{"when": "=(flat_a and line_b) or (flat_b and line_a)", "then": [{"let": {"normal": "=vector((da if flat_a else db)['normal'])", "along": "=vector((db if flat_a else da)['dir'])"}}, {"put": {"angle": "=round(90 - angle_between(normal, along, True), 3)", "angleIs": "between the line and the face's plane"}}]}]}]},
+    {"put": {"centers": "=r((vector(da['center']) - vector(db['center'])).Length)"}, "when": "='center' in da and 'center' in db"}
+   ],
+   "answer": {"fields": {"...out": "=out"}}
+  },
+  "section": {
+   "group": "measure",
+   "description": "Cut a body with a plane and read the cut: area mm², regions, and the outlines as [u, v] polylines in the plane (outer: false marks a hole; a point is origin + u·U + v·V, the reply's plane gives origin, normal, u, v). normal [x,y,z] or \"+z\" (default); at a point on the plane, or offset mm along the normal from the origin; tolerance the chord error (0.05 mm); maxPoints per outline (400). A plane that misses the body is refused with the body's box. Changes nothing (part_section makes the cut an object).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "normal": {},
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "offset": {
+      "type": "number"
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "maxPoints": {
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/measure.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=solid_body(a.body)"}},
+    {"let": {"n": "=direction(a.normal, 'normal', (0, 0, 1))"}},
+    {"let": {"p": "=vec3(a['at'], 'at') if a.at is not None else n * num(a.get('offset', 0.0), 'offset')"}},
+    {"let": {"sh": "=o.Shape"}},
+    {"let": {"bb": "=sh.BoundBox"}},
+    {"let": {"far": "=bb.DiagonalLength + (p - bb.Center).Length + 1.0", "plane": "=plane_through(p, n)"}},
+    {"let": {"cut": "=sh.common(plane.toShape(-far, far, -far, far))"}},
+    {"let": {"faces": "=cut.Faces"}},
+    {"refuse": {"fmt": "The plane through {vec(p)} normal {vec(n)} misses {o.Label} (box {box_of(sh)['min']} to {box_of(sh)['max']}): move at."}, "code": "not_found", "when": "=not faces"},
+    {"let": {"tol": "=num(a.get('tolerance', 0.05), 'tolerance')"}},
+    {"refuse": "tolerance: the chord error of the outlines, above 0 mm (0.05 by default).", "when": "=tol <= 0"},
+    {"let": {"outlines": "=[]", "cap": "=num(a.get('maxPoints', 400), 'maxPoints')"}},
+    {"refuse": "maxPoints: the most points an outline is given as, 3 … 20000 (400 by default).", "when": "=cap < 3 or cap > 20000"},
+    {"let": {"cap": "=int(cap)"}},
+    {"each": "f", "in": "=faces", "steps": [{"each": "w", "in": "=f.Wires", "steps": [{"let": {"pts": "=w.discretize(Deflection=tol)"}}, {"let": {"pts": "=w.discretize(Number=cap)"}, "when": "=len(pts) > cap"}, {"let": {"uv": "=[[r(x, 3) for x in plane.parameter(q)] for q in pts]"}}, {"push": {"outlines": "={'outer': w.isSame(f.OuterWire), 'length': r(w.Length), 'points': uv}"}}]}]},
+    {"let": {"u": "=plane.value(1, 0) - plane.value(0, 0)", "v": "=plane.value(0, 1) - plane.value(0, 0)"}}
+   ],
+   "answer": {"fields": {"body": "=o.Label", "area": "=r(sum([f.Area for f in faces]), 2)", "regions": "=len(faces)", "plane": {"origin": "=vec(p)", "normal": "=vec(n)", "u": "=vec(u)", "v": "=vec(v)"}, "outlines": "=outlines", "note": "Points are [u, v] in the plane: a point is origin + u·U + v·V. outer: false marks a hole."}}
+  },
+  "measure_mass": {
+   "group": "measure",
+   "description": "Volume mm³, area, mass g, centre of mass and inertia (g·mm² about the centre of mass, document axes; principal moments and axes for one solid) of a body taken as solid through: FreeCAD's own shape mass is only the volume, so the density comes from material (pla, petg, abs, asa, pa6-cf, tpu-95a, nylon, pc, pom, acrylic, hdpe, steel, stainless, aluminium, aluminum, brass, copper, titanium, cast-iron, oak, pine, plywood, or a material_list id or name) or density g/cm³, else the material material_set recorded (a printed part with none is taken as PLA and says so). With neither given and an add-on that owns mass installed, its answer (as printed, inserts included) comes instead, marked from. Reply: density, densityFrom, volume, mass, centerOfMass, inertia. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "material": {
+      "type": "string"
+     },
+     "density": {
+      "type": "number"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/measure.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=solid_body(a.body)"}},
+    {"when": "=a.density is None and a.material is None", "then": [{"let": {"got": "=addon_mass(o.Label)"}}, {"answer": {"fields": {"...got": "=got"}}, "when": "=got is not None"}]},
+    {"when": "=a.density is not None", "then": [{"let": {"rho": "=num(a.density, 'density')", "src": "given"}}], "else": [{"let": {"mat": "=(a.material or recorded(o.Label) or '').lower()", "assumed": "=False"}}, {"let": {"mat": "pla", "assumed": "=True"}, "when": "=not mat and printed(o.Label)"}, {"refuse": {"fmt": "material or density: what {o.Label} is made of — {', '.join(MASS_DENSITY)}, or a material_list id or name — or density in g/cm³ (material_set records it with the part, and then neither is needed)."}, "when": "=not mat"}, {"when": "=mat in MASS_DENSITY", "then": [{"let": {"rho": "=MASS_DENSITY[mat]", "src": "=('assumed ' + mat + ': printed, and no material_set') if assumed else mat"}}], "else": [{"let": {"raw": "=a.material or recorded(o.Label)"}}, {"let": {"c": "=card(raw)"}}, {"refuse": {"fmt": "material {raw!r}: not a stock key ({', '.join(MASS_DENSITY)}), a FreeCAD library card (material_list finds ids and names) or a custom material of this document — or give density in g/cm³."}, "when": "=c is None"}, {"refuse": {"fmt": "material {c.get('name', raw)!r}: its card has no density — give density in g/cm³ (material_get {{ id }} shows what the card holds)."}, "when": "=not c.get('density')"}, {"let": {"rho": "=float(c['density'])", "src": {"fmt": "{c.get('name', raw)} ({c.get('source') or 'material card'})"}}}]}]},
+    {"refuse": "density: above 0, g/cm³.", "when": "=rho <= 0"},
+    {"let": {"mass, centre, tensor": "=inertia(o.Shape, rho)"}},
+    {"let": {"out": "={'body': o.Label, 'density': rho, 'densityFrom': src, 'volume': r(o.Shape.Volume, 2), 'area': r(o.Shape.Area, 2), 'mass': r(mass, 3), 'centerOfMass': vec(centre), 'inertia': [[r(x, 1) for x in row] for row in tensor]}"}},
+    {"put": {"units": "mm, mm³, mm², g; inertia g·mm² about the centre of mass, in the document's axes"}},
+    {"try": [{"let": {"pp": "=o.Shape.Solids[0].PrincipalProperties"}}, {"put": {"principal": "={'moments': [r(x * (rho / 1000.0), 1) for x in pp['Moments']], 'axes': [vec(pp[n + 'Axis']) for n in ('First', 'Second', 'Third')]}"}}], "on": "error", "when": "=len(o.Shape.Solids) == 1"}
+   ],
+   "answer": {"fields": {"...out": "=out"}}
+  },
+  "clearance": {
+   "group": "measure",
+   "description": "The least distance between two bodies a and b (mm), with its two points (from, to); state clear | touching | interference — then interference is the overlapping volume in mm³ and interferenceBox its box. min mm: meets says whether they are clear by at least that. One boolean on the two bodies: slow on bodies of many thousands of faces. Changes nothing; asm_check covers a whole assembly.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "a": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "b": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "min": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "a",
+     "b"
+    ],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/measure.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"oa": "=solid_body(a.get('a'))"}},
+    {"let": {"ob": "=solid_body(a.b)"}},
+    {"refuse": "a and b: two different bodies (measure { a, b } measures between two faces or edges of one body).", "when": "=oa is ob"},
+    {"let": {"dist, pairs, info": "=oa.Shape.distToShape(ob.Shape)"}},
+    {"let": {"out": "={'a': oa.Label, 'b': ob.Label, 'distance': r(dist), 'from': vec(pairs[0][0]), 'to': vec(pairs[0][1])}"}},
+    {"when": "=dist < 1e-6", "then": [{"let": {"common": "=oa.Shape.common(ob.Shape)"}}, {"let": {"vol": "=common.Volume if common.Solids else 0.0"}}, {"when": "=vol > 1e-6", "then": [{"put": {"state": "interference", "interference": "=r(vol, 3)", "interferenceBox": "=box_of(common)"}}], "else": [{"put": {"state": "touching"}}]}], "else": [{"put": {"state": "clear"}}]},
+    {"put": {"meets": "=out['state'] == 'clear' and dist >= num(a.min, 'min')"}, "when": "=a.min is not None"}
+   ],
+   "answer": {"fields": {"...out": "=out"}}
+  },
+  "insp_run": {
+   "group": "inspection",
+   "description": "Inspect with FreeCAD's own Inspection feature (left in the document): actual — a mesh, points or a body — or file (a scan: stl, obj, ply, off, 3mf, amf, asc, pcd, xyz) against nominals [bodies, meshes, points]. Nothing is aligned: put the actual where the nominal is first (object_align). search_radius mm (1; FreeCAD's own default is 0.05): a point further than that from every nominal reads out of reach, so it must reach past the tolerance. tolerance ±t or [low, high] mm gives the verdict. Distances are signed: + outside a solid nominal (material added), − inside. A mesh or scan is measured at its vertices; a body is meshed first (deflection 0.1 mm, points every spacing mm, default 1% of its size, at most cap 60000) and that hidden mesh measured (how says so). thickness is stored but FreeCAD 1.1 does not use it. Cost grows with points × nominal faces: a free-form body against a big scan takes minutes — raise spacing first. Reply: points, measured, outOfReach, min, max, mean, rms, stdDev, inTolerancePercent, verdict (pass only when all are in tolerance and none out of reach), worst [{ at, distance }], health.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "actual": {
+      "type": "string"
+     },
+     "file": {
+      "type": "string"
+     },
+     "nominals": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "search_radius": {
+      "type": "number"
+     },
+     "thickness": {
+      "type": "number"
+     },
+     "tolerance": {
+      "type": [
+       "number",
+       "array"
+      ]
+     },
+     "deflection": {
+      "type": "number"
+     },
+     "spacing": {
+      "type": "number"
+     },
+     "cap": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     },
+     "worst": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "nominals"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/inspection.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"when": "=a.file", "then": [{"let": {"p": "=in_file(tool, a.file, 'file')"}}, {"refuse": {"fmt": "{p}: no such file."}, "code": "not_found", "when": "=not isfile(p)"}, {"let": {"ext": "=file_ext(p)"}}, {"when": "=ext in ('.stl', '.obj', '.ply', '.off', '.3mf', '.amf')", "then": [{"add": "Mesh::Feature", "name": "Actual", "as": "act"}, {"set": {"act.Mesh": "=read_mesh(p)"}}], "else": [{"refuse": {"fmt": "file: {ext or 'no extension'} is not read here — a mesh (stl, obj, ply, off, 3mf, amf) or points (asc, pcd, xyz, txt, e57). import_file brings other formats in; then actual names the object."}, "when": "=ext not in ('.asc', '.pcd', '.xyz', '.txt', '.e57')"}, {"let": {"reader": "=points_module()"}}, {"add": "Points::Feature", "name": "Actual", "as": "act"}, {"set": {"act.Points": "=read_points(reader, p)"}}]}, {"set": {"act.Label": "=unique(file_stem(p))"}}], "else": [{"refuse": "actual: the measured thing (a mesh, points or a body), or file: a scan to read.", "when": "=not a.actual"}, {"let": {"act": "=find(a.actual, 'actual')"}}]},
+    {"let": {"k": "=kind_of(act)"}},
+    {"refuse": {"fmt": "actual: {act.Label} is a {act.TypeId} — the actual is a mesh, a point cloud or an object with a shape (object_list names them)."}, "when": "=k is None"},
+    {"let": {"meshed": "=None", "used": "=act"}},
+    {"when": "=k == 'shape'", "then": [{"let": {"defl": "=float(a.get('deflection', 0.1))"}}, {"refuse": "deflection: how closely the body's mesh follows it, 0.001 … 5 mm.", "when": "=not 0.001 <= defl <= 5"}, {"let": {"diag": "=act.Shape.BoundBox.DiagonalLength"}}, {"let": {"spacing": "=float(a.spacing or max(diag / 100.0, 0.2))"}}, {"refuse": "spacing: mm between measured points on the body, over 0.", "when": "=spacing <= 0"}, {"let": {"cap": "=int(a.get('cap', 60000))"}}, {"let": {"meshed": "=mesh_of_body(act, defl, spacing, max(1000, min(cap, 400000)))"}}, {"let": {"used": "=meshed"}}]},
+    {"let": {"noms": "=[find(n, 'nominal') for n in (a.nominals or [])]"}},
+    {"refuse": "nominals: what it should be — bodies, meshes or points (a list of names).", "when": "=not noms"},
+    {"each": "n", "in": "=noms", "steps": [{"refuse": {"fmt": "nominals: {n.Label} is a {n.TypeId} — each is a body (an object with a shape), a mesh or a point cloud."}, "when": "=kind_of(n) is None"}, {"refuse": {"fmt": "nominals: {n.Label} is the actual itself — the nominal is what it should be (the design), the actual what was measured or made."}, "when": "=n is act"}]},
+    {"let": {"radius": "=num(a.get('search_radius', 1.0), 'search_radius')"}},
+    {"refuse": "search_radius: mm, over 0 — points further than this from every nominal are out of reach.", "when": "=radius <= 0"},
+    {"let": {"lo, hi": "=tol_of(a)"}},
+    {"refuse": {"fmt": "tolerance reaches past search_radius ({radius:g} mm): points out of tolerance would read as out of reach. Raise search_radius."}, "when": "=lo is not None and max(abs(lo), abs(hi)) > radius"},
+    {"add": "Inspection::Feature", "name": "Inspection", "as": "f"},
+    {"set": {"f.Label": "=unique(a.name or 'Inspection of ' + act.Label)", "f.Actual": "=used", "f.Nominals": "=noms", "f.SearchRadius": "=radius"}},
+    {"set": {"f.Thickness": "=num(a.thickness, 'thickness')"}, "when": "=a.thickness is not None"},
+    {"do": "=tol_props(f)"},
+    {"set": {"f.ToleranceLow": "=lo", "f.ToleranceHigh": "=hi"}, "when": "=lo is not None"},
+    {"do": "=doc().recompute()"},
+    {"refuse": {"fmt": "Inspection measured no points: {act.Label} holds none{why} — nothing was kept."}, "code": "failed", "first": [{"let": {"why": "=' (the file read as empty — is it a mesh FreeCAD reads?)' if a.file else ''"}}], "when": "=not len(f.Distances)"},
+    {"do": "=snapshot(tool)"},
+    {"let": {"out": "=reading(f, int(a.get('worst', 5)))"}},
+    {"when": "=meshed is not None", "then": [{"let": {"count": "=len(meshed.Mesh.Points)"}}, {"put": {"measuredOn": {"fmt": "{meshed.Label}: {count} points about {spacing:.3g} mm apart (spacing), hidden"}, "how": {"fmt": "{act.Label} was tessellated first (a mesh at deflection {defl:g} mm, split to spacing {spacing:.3g} mm, {count} points) and FreeCAD's Inspection read each point's distance to the nominals — the body's faces are not sampled directly. Timed against the body's B-spline poles: a large free-form body is given a longer deadline (and a coarser deflection or larger spacing is quicker)."}}}]},
+    {"put": {"thicknessNote": "Thickness is stored on the feature, but FreeCAD 1.1's Inspection does not use it when measuring: the distances are the same with or without it."}, "when": "=a.thickness is not None"},
+    {"put": {"next": "view_render { map: \"inspection\" } to see it; insp_faces says which faces are off; insp_export for a report.", "step": "=step()"}}
+   ],
+   "answer": {"fields": {"...out": "=out"}}
+  },
+  "insp_update": {
+   "group": "inspection",
+   "description": "Change an inspection and measure again: search_radius, thickness, tolerance (±t or [low, high]; null clears), nominals — at least one; inspection may be left out when there is one. Checked before anything is set (a tolerance past the search radius is refused). Reply: as insp_run.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "inspection": {
+      "type": "string"
+     },
+     "search_radius": {
+      "type": "number"
+     },
+     "thickness": {
+      "type": "number"
+     },
+     "tolerance": {
+      "type": [
+       "number",
+       "array",
+       "null"
+      ]
+     },
+     "nominals": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "worst": {
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/inspection.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=ins_of(a.inspection)"}},
+    {"refuse": "Nothing to change: search_radius, thickness, tolerance (±t, [low, high] or null to clear) or nominals — insp_read reads it as it is.", "when": "=not any([k in a for k in ('search_radius', 'thickness', 'tolerance', 'nominals')])"},
+    {"let": {"radius": "=float(o.SearchRadius)"}},
+    {"when": "=a.search_radius is not None", "then": [{"let": {"radius": "=num(a.search_radius, 'search_radius')"}}, {"refuse": "search_radius: mm, over 0 — points further than this from every nominal are out of reach.", "when": "=radius <= 0"}]},
+    {"let": {"lo, hi": "=band(o)"}},
+    {"when": "=a.tolerance is not None", "then": [{"let": {"lo, hi": "=tol_of(a)"}}], "else": [{"let": {"lo": "=None", "hi": "=None"}, "when": "='tolerance' in a"}]},
+    {"refuse": {"fmt": "tolerance reaches past search_radius ({radius:g} mm): points out of tolerance would read as out of reach. Raise search_radius in the same call."}, "when": "=lo is not None and max(abs(lo), abs(hi)) > radius"},
+    {"let": {"noms": "=None"}},
+    {"when": "=a.nominals", "then": [{"let": {"noms": "=[find(n, 'nominal') for n in a.nominals]"}}, {"each": "n", "in": "=noms", "steps": [{"refuse": {"fmt": "nominals: {n.Label} is a {n.TypeId} — each is a body (an object with a shape), a mesh or a point cloud."}, "when": "=kind_of(n) is None"}, {"refuse": {"fmt": "nominals: {n.Label} is this inspection's actual."}, "when": "=n is o.Actual"}]}]},
+    {"set": {"o.SearchRadius": "=radius"}, "when": "=a.search_radius is not None"},
+    {"set": {"o.Thickness": "=num(a.thickness, 'thickness')"}, "when": "=a.thickness is not None"},
+    {"when": "='tolerance' in a", "then": [{"do": "=tol_props(o)"}, {"set": {"o.ToleranceLow": "=0.0 if lo is None else lo", "o.ToleranceHigh": "=0.0 if lo is None else hi"}}]},
+    {"set": {"o.Nominals": "=noms"}, "when": "=noms is not None"},
+    {"do": "=o.touch()"}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"...reading": "=reading(o, int(a.get('worst', 5)))"}}
+  },
+  "insp_read": {
+   "group": "inspection",
+   "description": "One inspection's numbers (the one there is when inspection is left out): points, measured, outOfReach, min, max, mean, rms, stdDev, p95abs, histogram, tolerance, inTolerancePercent, over, under, verdict, worst spots (worst: how many, 10). Distances in mm, + outside the nominal. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "inspection": {
+      "type": "string"
+     },
+     "worst": {
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/inspection.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=ins_of(a.inspection)"}}
+   ],
+   "answer": {"fields": {"...reading": "=reading(o, int(a.get('worst', 10)))"}}
+  },
+  "insp_list": {
+   "group": "inspection",
+   "description": "The inspections in the document, a line each: inspection, actual, nominals, points, rms, inTolerancePercent, verdict, outOfReachPercent. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/inspection.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"read": "=[reading(o, 0) for o in inspections()]"}},
+    {"let": {"rows": "=[{k: row[k] for k in ('inspection', 'actual', 'nominals', 'points', 'rms', 'inTolerancePercent', 'verdict', 'outOfReachPercent') if k in row} for row in read]"}}
+   ],
+   "answer": {"fields": {"inspections": "=rows", "note": {"when": "=not rows", "value": "None yet: insp_run { actual, nominals }."}}}
+  },
+  "insp_faces": {
+   "group": "inspection",
+   "description": "An inspection split by the nominal body's faces: each face (\"Body.Face4\") with its points, mean offset (+ the actual sits outside there), min, max, rms and, with a tolerance, outOfTolerance and verdict — the faces that are off first; failing lists them. A face off evenly is displaced; one with min and max far apart is out of form. body: which body when the nominals hold several or none; reach mm (the search radius): how near a face a point must be to count for it; limit (30). Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "inspection": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "reach": {
+      "type": "number"
+     },
+     "deflection": {
+      "type": "number"
+     },
+     "limit": {
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/inspection.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=ins_of(a.inspection)"}},
+    {"refuse": {"fmt": "{o.Label}: its points and distances do not line up — insp_update to measure again."}, "code": "invalid_state", "when": "=not lined_up(o)"},
+    {"let": {"noms": "=[x for x in (o.Nominals or []) if has_faces(x)]"}},
+    {"when": "=a.body", "then": [{"let": {"nb": "=find(a.body, 'body')"}}, {"refuse": {"fmt": "body: {nb.Label} ({nb.TypeId}) has no faces to split the inspection by."}, "when": "=not has_faces(nb)"}, {"let": {"noms": "=[nb]"}}]},
+    {"refuse": "This inspection's nominals hold no body with faces (meshes and points have none): body names a body whose faces to split by.", "when": "=not noms"},
+    {"let": {"lo, hi": "=band(o)"}},
+    {"let": {"mesh": "=faces_mesh(noms, a.get('deflection', 0.05))"}},
+    {"let": {"reach": "=float(a.get('reach', max(1.0, float(get(o, 'SearchRadius', 1.0) or 1.0))))"}},
+    {"let": {"rows": "=by_face(o, mesh, reach, lo, hi)"}},
+    {"refuse": {"fmt": "{o.Label}: no measured point lies within {reach:g} mm of a face of {', '.join([x.Label for x in noms])} — a larger reach, or the body is not where the actual is."}, "code": "not_found", "when": "=not rows"}
+   ],
+   "answer": {"fields": {"inspection": "=o.Label", "faces": "=rows[:int(a.get('limit', 30))]", "facesMeasured": "=len(rows)", "failing": {"when": "=lo is not None", "value": "=[row['face'] for row in rows if row.get('verdict') == 'fail']"}, "note": "mean is how far the face sits off (+ outside the nominal, - inside); a spread between min and max is its form error."}}
+  },
+  "insp_export": {
+   "group": "inspection",
+   "description": "Write an inspection out to the session's folder: <name>.csv with a row a point (x, y, z, distance_mm, status ok | over | under | out_of_reach) and <name>.json with insp_read's numbers. name: the files' base name (the inspection's label by default). Reply: files { csv { path, rows }, json { path } }, summary. The document is not changed.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "inspection": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "worst": {
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/inspection.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=ins_of(a.inspection)"}},
+    {"let": {"base": "=(a.name or o.Label).replace(' ', '-')"}},
+    {"let": {"report": "=reading(o, int(a.get('worst', 10)))"}},
+    {"let": {"csv_path": "=made(base + '.csv')"}},
+    {"let": {"rows": "=write_csv(csv_path, ['x', 'y', 'z', 'distance_mm', 'status'], point_rows(o))"}},
+    {"let": {"json_path": "=made(base + '.json')"}},
+    {"do": "=write_json(json_path, report)"}
+   ],
+   "answer": {"fields": {"inspection": "=o.Label", "files": {"csv": {"path": "=csv_path", "rows": "=rows"}, "json": {"path": "=json_path"}}, "summary": "={k: report[k] for k in ('rms', 'min', 'max', 'inTolerancePercent', 'verdict') if k in report}"}}
+  },
+  "note_add": {
+   "group": "notes",
+   "description": "Pin a note to the part for the person — a question or a remark (text): at [x,y,z] mm, or on body + faces (\"Face6\", or shape_query's filters; pinned at the first face's centre and found again when faces renumber). It shows as a numbered pin in the window and in Agent Link's Notes tab; the person answers it there. Kept in the document (saved with doc_save). Reply: note { id, text, at, body, face, by: agent }, note_count.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string"
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "body": {
+      "type": "string"
+     },
+     "faces": {}
+    },
+    "required": [
+     "text"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/notes.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "text: what the note says (a question to the person, or a remark).", "when": "=not str(a.get('text', '')).strip()"},
+    {"let": {"on": "=None", "face": "=None"}},
+    {"when": "=a.faces is not None", "then": [{"let": {"o": "=body(a.body)"}}, {"let": {"picked": "=pick_faces(o.Shape, a.faces)"}}, {"let": {"c": "=picked[0][1].CenterOfMass"}}, {"let": {"at": "=[c.x, c.y, c.z]", "on": "=o.Label", "face": "=picked[0][0]"}}], "else": [{"refuse": "at [x, y, z] in mm, or body and faces (\"Face6\" or shape_query's filters: the note is pinned at the first face's centre and follows it).", "when": "=a.at is None"}, {"let": {"at": "=a['at']"}}, {"refuse": "at: [x, y, z] in mm, document coordinates (or body and faces to pin it on a face).", "when": "=not (is_list(at) and len(at) == 3 and all([is_num(c) for c in at]))"}, {"let": {"on": "=body(a.body).Label"}, "when": "=a.body"}]},
+    {"let": {"n": "=add_note(at, a.text, 'agent', on, face)"}}
+   ],
+   "answer": {"fields": {"note": "=note_view(n)", "note_count": "=len(notes()['notes'])"}}
+  },
+  "note_list": {
+   "group": "notes",
+   "description": "The notes pinned to the parts — the person's and the agent's — each with id, text, by, at, face, answer and done. waiting lists the ids of the person's notes with no answer yet (answer them: note_answer, then note_done); followed says which notes moved to a renumbered face. open: true leaves out the done ones. Read it at the start of a session and after the person has worked in the window.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "open": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/notes.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"followed": "=[]", "why": "=None"}},
+    {"try": [{"do": "=follow()"}], "on": "error", "except": [{"let": {"why": "=error_words(error)"}}]},
+    {"let": {"data": "=notes()"}},
+    {"each": "n", "in": "=data['notes']", "steps": [{"let": {"m": "=n.pop('movedFrom', None)"}}, {"when": "=m", "then": [{"let": {"row": "={'id': n['id'], 'from': m['face'], 'to': n.get('face'), 'at': n.get('at')}"}}, {"push": {"followed": "=dict(row, body=n['body']) if n.get('body') else row"}}]}]},
+    {"do": "=save_notes(data)", "when": "=followed"},
+    {"let": {"rows": "=[note_view(n) for n in data['notes'] if not (a.open and n.get('done'))]", "waiting": "=[n['id'] for n in data['notes'] if n['by'] == 'person' and not n.get('done') and not n.get('answer')]"}}
+   ],
+   "answer": {"fields": {"notes": "=rows", "followed": {"when": "=followed", "value": "=followed"}, "notFollowed": {"when": "=why", "value": {"fmt": "The notes' faces were not looked for again ({why}): faces may have moved."}}, "waiting": {"when": "=waiting", "value": "=waiting"}, "next": {"when": "=waiting", "value": "The person's notes waiting for an answer: note_answer { id, text }, and note_done when it is dealt with."}}}
+  },
+  "note_answer": {
+   "group": "notes",
+   "description": "Answer a note (the person's question or request): id (from note_list), text. The answer shows under the note in the window; a second answer replaces the first. note_done ticks it off once dealt with.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "text"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/notes.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"data": "=notes()"}},
+    {"let": {"n": "=find_note(data, a.id)"}},
+    {"put": {"answer": "=str(a.get('text', '')).strip()"}, "into": "n"},
+    {"refuse": "text: the answer.", "when": "=not n['answer']"},
+    {"do": "=save_notes(data)"}
+   ],
+   "answer": {"fields": {"note": "=note_view(n)"}}
+  },
+  "note_done": {
+   "group": "notes",
+   "description": "Tick a note off: id (done: false opens it again). It stays in the document; note_delete removes it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "done": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/notes.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"data": "=notes()"}},
+    {"let": {"n": "=find_note(data, a.id)"}},
+    {"put": {"done": "=bool(a.get('done', True))"}, "into": "n"},
+    {"do": "=save_notes(data)"}
+   ],
+   "answer": {"fields": {"note": "=note_view(n)"}}
+  },
+  "note_delete": {
+   "group": "notes",
+   "description": "Take a note out of the document for good: id — the person's or the agent's (note_done only ticks it off; delete the person's only when they ask). Reply: deleted, left.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/notes.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"data": "=notes()"}},
+    {"let": {"n": "=find_note(data, a.id)"}},
+    {"do": ["=data['notes'].remove(n)", "=save_notes(data)"]}
+   ],
+   "answer": {"fields": {"deleted": "=n['id']", "left": "=len(data['notes'])"}}
+  },
+  "steps_list": {
+   "group": "notes",
+   "description": "A PartDesign body's history in order (body may be left out when there is one): each feature's step number, name, label, type, its key value, the volume after it and what it added or took away (sketches: true lists the sketches too). The same list Agent Link's Steps tab plays. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "sketches": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/notes.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body_pd(a.body)"}},
+    {"let": {"rows": "=steps_of(b, bool(a.sketches))"}}
+   ],
+   "answer": {"fields": {"body": "=b.Label", "steps": "=rows", "count": "=len(rows)"}}
+  },
+  "steps_render": {
+   "group": "notes",
+   "description": "The build played back as pictures, drawn headless (not the window): a PNG a feature (step_01.png …), framed on the finished part so it grows in place, each captioned with its step, type and what it did, and a contact sheet steps.png of them all (sheet: false leaves it out; inline: false keeps it out of the reply). body; view (iso, or top, front, right …); width, height pixels a picture (480 × 360); path a folder (steps_<body> in the session's folder). Tessellates every step: seconds a step on a heavy body. Reply: folder, files, sheet, steps. The model is not changed.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "view": {
+      "type": "string"
+     },
+     "width": {
+      "type": "integer"
+     },
+     "height": {
+      "type": "integer"
+     },
+     "path": {
+      "type": "string"
+     },
+     "sheet": {
+      "type": "boolean"
+     },
+     "inline": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/notes.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body_pd(a.body)"}},
+    {"let": {"rows": "=steps_of(b, False)"}},
+    {"refuse": {"fmt": "{b.Label} has no features yet: pd_pad and the other pd_ tools add them."}, "code": "invalid_state", "when": "=not rows"},
+    {"let": {"view": "=str(a.get('view', 'iso')).lower()"}},
+    {"refuse": {"fmt": "view: {', '.join(VIEWS)}."}, "when": "=view not in VIEWS"},
+    {"let": {"w": "=a.get('width', 480)", "h": "=a.get('height', 360)"}},
+    {"refuse": "width, height: pixels a picture, 120 … 2000 (480 × 360 by default).", "when": "=not all([is_int(v) and 120 <= v <= 2000 for v in (w, h)])"},
+    {"let": {"folder": "=local(a.path or 'steps_' + ''.join([ch if ch.isalnum() else '_' for ch in b.Label]))"}},
+    {"do": "=make_folder(folder)"},
+    {"let": {"frame": "=framing(b)", "files": "=[]", "sheet": "=[]", "total": "=len(rows)"}},
+    {"each": "row", "in": "=rows", "steps": [{"let": {"o": "=doc().getObject(row['name'])"}}, {"when": "=not o.Shape.isNull()", "then": [{"let": {"img": "=step_picture(o, view, w, h, frame, caption(row['step'], total, row))"}}, {"let": {"p": "=join(folder, 'step_%02d.png' % row['step'])"}}, {"do": "=write_bytes(p, png(img))"}, {"push": {"files": "=p", "sheet": "=img"}}]}]},
+    {"let": {"out": "={'body': b.Label, 'folder': folder, 'files': files, 'steps': rows}"}},
+    {"when": "=a.get('sheet', True) and sheet", "then": [{"let": {"p": "=join(folder, 'steps.png')", "data": "=contact_sheet(sheet, w, h)"}}, {"do": "=write_bytes(p, data)"}, {"put": {"sheet": "=p"}}, {"put": {"_png": "=data"}, "when": "=a.get('inline', True)"}]}
+   ],
+   "answer": {"fields": {"...out": "=out"}}
+  },
+  "robot_trajectory": {
+   "group": "robot",
+   "description": "Combine or adjust trajectories as new objects that follow their sources (FreeCAD's compound and dress-up): op join (trajectories [names], in order) | dress (trajectory, with any of: speed mm/s and acceleration for every waypoint, cont true | false, move [x,y,z] added to every waypoint and/or ypr [yaw, pitch, roll] turned on top of each one's orientation — the same path at another place or angle; add: UseOrientation makes ypr replace the orientations instead). Reply: trajectory, waypoints, seconds, length_mm.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "op": {
+      "type": "string",
+      "enum": [
+       "join",
+       "dress"
+      ]
+     },
+     "trajectories": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "trajectory": {
+      "type": "string"
+     },
+     "speed": {
+      "type": "number"
+     },
+     "acceleration": {
+      "type": "number"
+     },
+     "cont": {
+      "type": "boolean"
+     },
+     "move": {
+      "type": "array",
+      "items": {}
+     },
+     "ypr": {
+      "type": "array",
+      "items": {}
+     },
+     "add": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "op"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/robot.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"choose": "=a.op", "of": {"join": [{"let": {"srcs": "=[trajectory(ref) for ref in (a.trajectories or [])]"}}, {"refuse": "trajectories: two or more trajectories by name, run one after another in that order.", "when": "=len(srcs) < 2"}, {"add": "Robot::TrajectoryCompound", "name": "Trajectory", "as": "o"}, {"set": {"o.Source": "=srcs"}}], "dress": [{"let": {"src": "=trajectory(a.trajectory)"}}, {"try": [{"add": "Robot::TrajectoryDressUpObject", "name": "Trajectory", "as": "o"}], "on": "error", "except": [{"add": "Robot::TrajectoryDressUp", "name": "Trajectory", "as": "o"}]}, {"set": {"o.Source": "=src"}}, {"set": {"o.UseSpeed": "=True", "o.Speed": "=float(a.speed)"}, "when": "=a.speed is not None"}, {"set": {"o.UseAcceleration": "=True", "o.Acceleration": "=float(a.acceleration)"}, "when": "=a.acceleration is not None"}, {"try": [{"set": {"o.ContType": "='Continues' if a.cont else 'Discontinues'"}}], "on": "error", "when": "=a.cont is not None"}, {"when": "=a.move is not None or a.ypr is not None", "then": [{"let": {"at": "=[float(c) for c in (a.move or [0, 0, 0])]"}}, {"set": {"o.PosAdd": "=posed(at, [float(c) for c in (a.ypr or [0, 0, 0])])"}}, {"let": {"add": "=a.add or ('AddPosition' if a.ypr is None else 'AddOrintation' if a.move is None else 'AddPositionAndOrientation')"}}, {"let": {"add": "={'AddOrientation': 'AddOrintation'}.get(add, add)"}}, {"refuse": "add: UseOrientation (ypr replaces each waypoint's orientation) | AddPosition (move added) | AddOrientation (ypr turned on top) | AddPositionAndOrientation (both) | DontChange.", "first": [{"do": "=doc().removeObject(o.Name)"}], "when": "=add not in ('DontChange', 'UseOrientation', 'AddPosition', 'AddOrintation', 'AddPositionAndOrientation')"}, {"set": {"o.AddType": "=add"}}]}]}, "else": [{"refuse": "op: join (trajectories, one after another) | dress (trajectory: a copy with speed mm/s, acceleration, cont, move [x,y,z] / ypr added to every point)."}]},
+    {"set": {"o.Label": "=unique(a.name or ('Joined trajectory' if a.op == 'join' else 'Dressed trajectory'), o)"}},
+    {"do": "=doc().recompute()"},
+    {"let": {"tr": "=o.Trajectory"}},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"trajectory": "=o.Label", "waypoints": "=int(tr.size()) if has(tr, 'size') else len(tr.Waypoints)", "seconds": "=round(tr.Duration, 3)", "length_mm": "=round(tr.Length, 1) if has(tr, 'Length') else None", "step": "=step()"}}
+  },
+  "robot_new": {
+   "group": "robot",
+   "description": "A six-axis robot (Robot::RobotObject): model kr16 | kr125 | kr210 | kr500 (KUKA kinematics and picture, where this FreeCAD ships the files) | puma (only a name for the built-in default below: no Puma's kinematics), or kinematics: a CSV of your own (a header line, then six lines of a, alpha, d, theta, rotDir, maxAngle, minAngle, velocity; mm and degrees). Without a file the robot is FreeCAD's built-in default, a KUKA IR 500 — the reply's model says which was used. tool { at, ypr }: the tool's point from the flange (a gripper's tip), which tcp in robot_move and robot_run then means. at, ypr are stored as its Base, but FreeCAD's kinematics do not use it: positions are always in the robot's own frame, origin at its foot. Reply: robot, axes [6 degrees], tcp { at, ypr }, model.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "model": {
+      "type": "string"
+     },
+     "kinematics": {
+      "type": "string"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "ypr": {
+      "type": "array",
+      "items": {}
+     },
+     "tool": {
+      "type": "object",
+      "description": "{ at [x,y,z], ypr [yaw, pitch, roll] | axis + angle }"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/robot.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"model": "=a.get('model', 'kr16')", "kin": "=a.kinematics"}},
+    {"refuse": {"fmt": "model: {', '.join(MODELS)} (KUKA files, where this FreeCAD ships them) or puma (FreeCAD's built-in default robot); or kinematics, a CSV of your own."}, "when": "=not kin and model not in MODELS and model != 'puma'"},
+    {"when": "=kin", "then": [{"let": {"kin": "=local(kin) if is_str(kin) else kin"}}, {"refuse": {"fmt": "kinematics: {kin} — no such file. A CSV: one header line, then six lines (axis 1 … 6) of a, alpha, d, theta, rotDir, maxAngle, minAngle, velocity (Denavit-Hartenberg, mm and degrees)."}, "code": "not_found", "when": "=not is_str(kin) or not isfile(kin)"}]},
+    {"add": "Robot::RobotObject", "name": "Robot", "as": "o"},
+    {"let": {"label": {"fmt": "Robot {model}"}}},
+    {"set": {"o.Label": "=unique(a.name or label, o)"}},
+    {"let": {"how": "=None"}},
+    {"when": "=kin", "then": [{"set": {"o.RobotKinematicFile": "=kin"}}, {"let": {"how": {"fmt": "kinematics from {basename(kin)}"}}}], "else": [{"when": "=model in MODELS", "then": [{"let": {"csv": "=lib_file(model, 'csv')"}}, {"when": "=csv", "then": [{"set": {"o.RobotKinematicFile": "=csv"}}, {"let": {"wrl": "=lib_file(model, 'wrl')"}}, {"set": {"o.RobotVrmlFile": "=wrl"}, "when": "=wrl"}, {"let": {"how": {"fmt": "KUKA {model.upper()} (FreeCAD's library)"}}}]}]}]},
+    {"when": "=how is None", "then": [{"set": {"o.Label": "=unique('Robot (FreeCAD default)', o)"}, "when": "=not a.name"}, {"let": {"lacks": "='' if model == 'puma' else ' — this FreeCAD ships no ' + model.upper() + ' file; give kinematics for the real one'"}}, {"let": {"how": {"fmt": "FreeCAD's built-in default robot (a KUKA IR 500: about 2.8 m reach){lacks}"}}}]},
+    {"set": {"o.Base": "=placement(a, 'robot')"}, "when": "=a.at is not None or a.ypr is not None"},
+    {"set": {"o.Tool": "=placement(a.tool, 'tool')"}, "when": "=a.tool is not None"},
+    {"do": "=settle(o)"}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"...state": "=state(o)", "model": "=how"}}
+  },
+  "robot_move": {
+   "group": "robot",
+   "description": "Move a robot (the one there is when robot is left out): axes [six degrees] (forward: tcp in the reply is where the tool point lands), tcp { at [x,y,z] mm, ypr [yaw, pitch, roll] degrees or axis + angle } (inverse kinematics from the pose it is in, within the axes' limits: reached false and off_mm when it could not get there, the axes then as they were), or home: true (the home pose set in FreeCAD, else all axes 0). An orientation left out means none (tool axes along the robot's) — usually unreachable: read tcp.ypr from the reply of an axes move and keep it. Reply: axes, tcp, reached.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "robot": {
+      "type": "string"
+     },
+     "axes": {
+      "type": "array",
+      "items": {}
+     },
+     "tcp": {
+      "type": "object",
+      "description": "{ at [x,y,z], ypr [yaw, pitch, roll] | axis + angle }"
+     },
+     "home": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/robot.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=robot(a.robot)"}},
+    {"refuse": "axes, tcp or home: one of them a call.", "when": "=len([k for k in ('axes', 'tcp') if a.get(k) is not None]) + (1 if a.home else 0) > 1"},
+    {"when": "=a.axes is not None", "then": [{"refuse": "axes: six angles in degrees, axis 1 … 6.", "when": "=not (is_list(a.axes) and len(a.axes) == 6 and all([is_num(v) for v in a.axes]))"}, {"each": "v", "in": "=a.axes", "index": "i", "steps": [{"do": {"set": ["=o", {"fmt": "Axis{i + 1}"}, "=float(v)"]}}]}], "else": [{"when": "=a.tcp is not None", "then": [{"set": {"o.Error": ""}}, {"let": {"want": "=placement(a.tcp, 'tcp')"}}, {"let": {"t": "=tool_of(o)"}}, {"set": {"o.Tcp": "=want.multiply(t.inverse()) if t else want"}}, {"each": "i", "in": "=range(1, 7)", "steps": [{"do": {"set": ["=o", {"fmt": "Axis{i}"}, "=((float(prop(o, 'Axis' + str(i))) + 180.0) % 360.0) - 180.0"]}}]}], "else": [{"when": "=a.home", "then": [{"let": {"home": "=[float(v) for v in (get(o, 'Home', None) or [])]"}}, {"each": "i", "in": "=range(1, 7)", "steps": [{"do": {"set": ["=o", {"fmt": "Axis{i}"}, "=home[i - 1] if len(home) == 6 else 0.0"]}}]}], "else": [{"refuse": "axes [six degrees], tcp { at, ypr | axis + angle }, or home: true."}]}]}]},
+    {"do": "=doc().recompute()"},
+    {"let": {"out": "=state(o)"}},
+    {"when": "=a.tcp is not None", "then": [{"let": {"got": "=o.Tcp.multiply(t) if t else o.Tcp"}}, {"let": {"miss": "=(got.Base - want.Base).Length"}}, {"put": {"reached": "=miss < 0.1 and not get(o, 'Error', '')"}}, {"put": {"off_mm": "=round(miss, 3)", "note": "Not reached: the axes are as they were. Out of the arm's reach or past an axis limit, or the solver did not get there from this pose (100 steps): move in smaller steps, or set axes near the pose first."}, "when": "=not out['reached']"}]}
+   ],
+   "answer": {"via": "settled", "with": ["=tool", "$fields"], "fields": {"...out": "=out"}}
+  },
+  "robot_path": {
+   "group": "robot",
+   "description": "A trajectory object: waypoints [{ at, ypr, type LIN | PTP | CIRC | WAIT (LIN by default), speed mm/s (1000), cont, name }], two or more, in the robot's frame — or edges [\"Body.Edge3\", …] (or an object for all its edges; one object only) to follow, deviation mm (0.5) from curved ones, useRotation for the edges' own orientation. Reply: trajectory, waypoints, length mm, seconds. robot_run checks a robot can follow it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "waypoints": {
+      "type": "array",
+      "items": {}
+     },
+     "edges": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "deviation": {
+      "type": "number"
+     },
+     "useRotation": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/robot.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"name": "=a.name or 'Trajectory'"}},
+    {"when": "=a.edges", "then": [{"let": {"refs": "={}"}}, {"each": "ref", "in": "=ref_list(a.edges)", "steps": [{"let": {"label, sub, el": "=resolve(ref)"}}, {"let": {"x": "=find(label)"}}, {"refuse": {"fmt": "edges: {label}.{sub} is not an edge — \"{label}.Edge3\", or \"{label}\" for all its edges (shape_query {{ kind: \"edge\" }} lists them)."}, "when": "=sub and not sub.startswith('Edge')"}, {"do": "=refs.setdefault(x, []).extend([sub] if sub else ['Edge' + str(i + 1) for i in range(len(x.Shape.Edges))])"}]}, {"refuse": "edges: of one object (FreeCAD's edge trajectory follows one shape): part_compound joins several first.", "when": "=len(refs) != 1"}, {"let": {"o": "=None"}}, {"each": "kind", "in": "=('Robot::Edge2TracObject', 'Robot::Edge2TrajectoryObject')", "steps": [{"try": [{"let": {"o": "=doc().addObject(kind, 'Edge2Trajectory')"}}], "on": "error", "when": "=o is None"}]}, {"refuse": "This FreeCAD's Robot module has no edge trajectory (Robot::Edge2TracObject): give waypoints instead.", "code": "unavailable", "when": "=o is None"}, {"set": {"o.Source": "=first(refs.items())", "o.SegValue": "=float(a.get('deviation', 0.5))", "o.UseRotation": "=bool(a.get('useRotation', False))"}}], "else": [{"let": {"wps": "=a.waypoints or []"}}, {"refuse": "waypoints: a list of { at: [x,y,z], ypr: [yaw, pitch, roll], type, speed, cont }.", "when": "=not is_list(wps) or not all([is_dict(w) for w in wps])"}, {"refuse": "waypoints: two or more { at, ypr, type LIN | PTP | CIRC, speed mm/s, cont } — or edges, a shape's edges to follow.", "when": "=len(wps) < 2"}, {"let": {"pts": "=[]"}}, {"each": "w", "in": "=wps", "index": "i", "steps": [{"let": {"kind": "=str(w.get('type', 'LIN')).upper()"}}, {"refuse": {"fmt": "waypoints.{i}.type: LIN, PTP, CIRC or WAIT."}, "when": "=kind not in ('LIN', 'PTP', 'CIRC', 'WAIT')"}, {"let": {"wp": "=waypoint(placement(w, 'waypoints.' + str(i)), kind, w.get('name') or 'Pt')"}}, {"let": {"speed": "=num(w.get('speed', 1000), 'speed')"}}, {"refuse": {"fmt": "waypoints.{i}.speed: mm/s, above 0 (1000 by default)."}, "when": "=speed <= 0"}, {"set": {"wp.Velocity": "=speed", "wp.Cont": "=bool(w.get('cont', False))"}}, {"push": {"pts": "=wp"}}]}, {"add": "Robot::TrajectoryObject", "name": "Trajectory", "as": "o"}, {"set": {"o.Trajectory": "=trajectory_of(pts)"}}]},
+    {"set": {"o.Label": "=unique(name, o)"}},
+    {"do": "=doc().recompute()"},
+    {"let": {"tr": "=o.Trajectory"}}
+   ],
+   "answer": {"via": "settled", "with": ["=tool", "$fields"], "late": true, "fields": {"trajectory": "=o.Label", "waypoints": "=len(tr.Waypoints)", "length": "=round(tr.Length, 2)", "seconds": "=round(tr.Duration, 3)"}}
+  },
+  "robot_run": {
+   "group": "robot",
+   "description": "Check a trajectory on a robot without moving it for good: samples (100; 2 … 5000) points along it by time, each solved by inverse kinematics from the one before, the tool point (robot_new tool) on the path. Reply: verdict (reaches all | misses n of N), misses [{ t, at, off_mm }] (the first 20), worst_mm, each axis's range of angles used, seconds. A miss is a point out of reach or past an axis limit, or one the solver could not follow to. The robot's axes are put back as they were.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "robot": {
+      "type": "string"
+     },
+     "trajectory": {
+      "type": "string"
+     },
+     "samples": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "trajectory"
+    ],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/robot.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=robot(a.robot)"}},
+    {"let": {"t": "=trajectory(a.trajectory)"}},
+    {"let": {"tr": "=t.Trajectory"}},
+    {"refuse": {"fmt": "{t.Label} has no duration (fewer than two waypoints, or all at one place): robot_path makes one with waypoints and speeds."}, "code": "invalid_state", "when": "=tr.Duration <= 0"},
+    {"let": {"n": "=int(a.get('samples', 100))"}},
+    {"refuse": "samples: 2 … 5000.", "when": "=not 2 <= n <= 5000"},
+    {"let": {"before": "=axes_of(o)"}},
+    {"let": {"lows, highs, misses, worst": "=sweep(o, t, n)"}},
+    {"each": "v", "in": "=before", "index": "i", "steps": [{"do": {"set": ["=o", {"fmt": "Axis{i + 1}"}, "=v"]}}]},
+    {"do": "=doc().recompute()"}
+   ],
+   "answer": {"fields": {"robot": "=o.Label", "trajectory": "=t.Label", "seconds": "=round(tr.Duration, 3)", "samples": "=n", "axes": "=[{'axis': i + 1, 'from': round(lows[i], 2), 'to': round(highs[i], 2)} for i in range(6)]", "verdict": "='reaches all' if not misses else 'misses ' + str(len(misses)) + ' of ' + str(n) + ' points'", "misses": {"when": "=misses", "value": "=misses[:20]"}, "worst_mm": {"when": "=misses", "value": "=round(worst, 3)"}, "note": {"when": "=misses", "value": "Out of reach or past an axis limit there (or the solver could not follow a jump between samples: more samples): move the path closer to the robot (robot_trajectory dress, move) or turn the tool. Positions are in the robot's own frame, its origin at its foot."}}}
+  },
+  "robot_export": {
+   "group": "robot",
+   "description": "Write a trajectory as KUKA KRL (.src) with FreeCAD's exporter: path (relative: the session's folder; .src added); every waypoint is written as a LIN move with its speed, whatever its type (FreeCAD's compact form; full: true is refused where FreeCAD's full form writes nothing, as in 1.1). Positions are the waypoints as they are (no tool or base applied). Reply: path, lines, moves. Simulate it on the controller before running; running it is the person's.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "robot": {
+      "type": "string"
+     },
+     "trajectory": {
+      "type": "string"
+     },
+     "path": {
+      "type": "string"
+     },
+     "full": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "trajectory"
+    ],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/robot.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=robot(a.robot)"}},
+    {"let": {"t": "=trajectory(a.trajectory)"}},
+    {"let": {"p": "=a.path or t.Label.replace(' ', '_') + '.src'"}},
+    {"let": {"p": "=p if isabs(p) else join(out_dir(), p)"}},
+    {"let": {"p": "=p + '.src'"}, "when": "=not p.lower().endswith('.src')"},
+    {"do": ["=made(p)", "=make_folder(dirname(p))"]},
+    {"try": [{"do": "=krl(o, t, p, a.full)"}], "on": "error", "except": [{"refuse": {"fmt": "KRL export failed: {error}"}, "code": "failed"}]},
+    {"refuse": "This FreeCAD's full KRL export writes no file (KukaExporter.ExportFullSub is empty in 1.1): leave full out for the compact form.", "code": "unavailable", "when": "=not isfile(p) and a.full"},
+    {"refuse": "FreeCAD's KRL exporter wrote no file.", "code": "unavailable", "when": "=not isfile(p)"},
+    {"let": {"text": "=read_text(p)"}}
+   ],
+   "answer": {"fields": {"path": "=p", "lines": "=text.count('\\n')", "moves": "=text.count('LIN ') + text.count('PTP ')", "note": "KUKA KRL. Check it in the controller's simulator before running; running it is the person's."}}
+  },
+  "ifc_open": {
+   "group": "bim",
+   "description": "Open an IFC file (path) to edit in place with IfcOpenShell: nothing is added to the FreeCAD document, and GlobalIds and all that is untouched stay as they are. One file at a time. Answers schema, storeys (elevation in the file's unit), classes (counts). The ifc_ tools exist only when FreeCAD has IfcOpenShell.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/ifc.py)",
+   "date": "2026-11-16",
+   "family": "ifc",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "path: an .ifc file.", "when": "=not a.path"},
+    {"let": {"path": "=where(a.path)"}},
+    {"refuse": {"fmt": "path {a.path!r}: no such file (a relative path is looked for in the session's output folder, where bim_export writes)."}, "code": "not_found", "when": "=not isfile(path)"},
+    {"try": [{"let": {"f": "=ifc_file(path)"}}], "on": "error", "except": [{"refuse": {"fmt": "{a.path}: not an IFC file IfcOpenShell can read ({error})."}}]},
+    {"do": "=opened(f, path)"},
+    {"let": {"counts": "=tally([el.is_a() for el in f.by_type('IfcProduct')])"}},
+    {"let": {"proj": "=first(f.by_type('IfcProject') or [None])"}}
+   ],
+   "answer": {"fields": {"path": "=path", "schema": "=f.schema", "project": "=proj.Name if proj else None", "storeys": "=[{'name': x.Name, 'elevation': get(x, 'Elevation', None), 'id': x.GlobalId} for x in f.by_type('IfcBuildingStorey')]", "classes": "=dict(sorted(counts.items(), key=lambda kv: -kv[1]))", "elements": "=sum(counts.values())", "next": "ifc_find to list elements; ifc_edit to change them; ifc_save writes the file (a copy unless overwrite)."}}
+  },
+  "ifc_find": {
+   "group": "bim",
+   "description": "Find elements in the open IFC, filters combined: class (IfcWall …; every product when left out), name (contains), storey (exact name), where { \"Pset_WallCommon.IsExternal\": true }, or ids (GlobalIds). limit (50); detail: true adds psets, quantities, material. Answers elements [{ id, class, name, storey }].",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "class": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "storey": {
+      "type": "string"
+     },
+     "where": {
+      "type": "object"
+     },
+     "detail": {
+      "type": "boolean"
+     },
+     "limit": {
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/ifc.py)",
+   "date": "2026-11-16",
+   "family": "ifc",
+   "runner": "steps",
+   "steps": [
+    {"let": {"m": "=model()"}},
+    {"let": {"els": "=select(m['file'], a)"}},
+    {"let": {"limit": "=int(a.get('limit', 50))"}}
+   ],
+   "answer": {"fields": {"count": "=len(els)", "elements": "=[row(e, a.detail) for e in els[:limit]]", "more": {"when": "=len(els) > limit", "value": "=len(els) - limit"}}}
+  },
+  "ifc_edit": {
+   "group": "bim",
+   "description": "Change elements of the open IFC, chosen by ifc_find's filters (one at least): attributes { Name, Description, ObjectType, Tag }, properties { \"Pset_WallCommon.FireRating\": \"REI60\" }, material (by name), storey_to (a storey's name), classification { system, code, title }. Over max (200) matches is refused. In memory until ifc_save.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "class": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "storey": {
+      "type": "string"
+     },
+     "where": {
+      "type": "object"
+     },
+     "attributes": {
+      "type": "object"
+     },
+     "properties": {
+      "type": "object"
+     },
+     "material": {
+      "type": "string"
+     },
+     "storey_to": {
+      "type": "string"
+     },
+     "classification": {
+      "type": "object"
+     },
+     "max": {
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/ifc.py)",
+   "date": "2026-11-16",
+   "family": "ifc",
+   "runner": "steps",
+   "steps": [
+    {"let": {"m": "=model()"}},
+    {"let": {"f": "=m['file']"}},
+    {"let": {"els": "=select(f, a)"}},
+    {"refuse": "No element matches: ifc_find with the same filters shows what is there.", "code": "not_found", "when": "=not els"},
+    {"refuse": "Nothing to change: give attributes, properties, material, storey_to or classification (ifc_find only looks).", "when": "=not any([a.get(k) for k in ('attributes', 'properties', 'material', 'storey_to', 'classification')])"},
+    {"refuse": "Say which elements: ids, class, name, storey or where (as ifc_find takes them); with none of them every product in the file would be changed.", "when": "=not (a.ids or a.get('class') or a.name or a.storey or a.where)"},
+    {"refuse": {"fmt": "{len(els)} elements match: narrow it, or max: {len(els)} to change them all."}, "when": "=len(els) > int(a.get('max', 200))"},
+    {"refuse": "classification: { system (e.g. \"Uniclass 2015\"), code (e.g. \"Ss_25_10\"), title }; code is needed.", "when": "=a.classification is not None and not (is_dict(a.classification) and a.classification.get('code'))"},
+    {"let": {"done": "={'attributes': 0, 'properties': 0, 'material': 0, 'storey': 0, 'classification': 0}", "attrs": "=a.attributes or {}", "props": "=a.properties or {}", "grouped": "={}"}},
+    {"each": "k, v", "in": "=props.items()", "steps": [{"refuse": {"fmt": "properties.{k}: \"Pset_WallCommon.FireRating\" — a set, a dot, a property."}, "when": "='.' not in k"}, {"do": "=grouped.setdefault(k.split('.', 1)[0], {}).update({k.split('.', 1)[1]: v})"}]},
+    {"let": {"mat": "=None"}},
+    {"let": {"mat": "=first([x for x in f.by_type('IfcMaterial') if x.Name == a.material]) or api(f, 'material.add_material', name=str(a.material))"}, "when": "=a.material"},
+    {"let": {"storey": "=None"}},
+    {"when": "=a.storey_to", "then": [{"let": {"storey": "=first([x for x in f.by_type('IfcBuildingStorey') if x.Name == a.storey_to])"}}, {"refuse": {"fmt": "storey_to {a.storey_to!r}: the file's storeys are {', '.join([str(x.Name) for x in f.by_type('IfcBuildingStorey')]) or 'none'} (by name, exactly)."}, "code": "not_found", "when": "=storey is None"}]},
+    {"each": "el", "in": "=els", "steps": [{"when": "=attrs", "then": [{"try": [{"do": "=api(f, 'attribute.edit_attributes', product=el, attributes=attrs)"}], "on": "error", "except": [{"refuse": {"fmt": "attributes on {el.is_a()}: {error}. Attribute names are IFC's own (Name, Description, ObjectType, Tag …); anything else is a property: properties {{ \"Pset.Name\": value }}."}}]}, {"put": {"attributes": "=done['attributes'] + 1"}, "into": "done"}]}, {"each": "ps, vals", "in": "=grouped.items()", "steps": [{"let": {"existing": "=get_pset(el, ps)"}}, {"let": {"pset": "=f.by_id(existing['id']) if existing else api(f, 'pset.add_pset', product=el, name=ps)"}}, {"do": "=api(f, 'pset.edit_pset', pset=pset, properties=vals)"}, {"put": {"properties": "=done['properties'] + 1"}, "into": "done"}]}, {"when": "=mat is not None", "then": [{"try": [{"do": "=api(f, 'material.unassign_material', products=[el])"}], "on": "error"}, {"try": [{"do": "=api(f, 'material.assign_material', products=[el], material=mat)"}], "on": ["TypeError"], "except": [{"do": "=api(f, 'material.assign_material', product=el, material=mat)"}]}, {"put": {"material": "=done['material'] + 1"}, "into": "done"}]}, {"when": "=storey is not None", "then": [{"try": [{"do": "=api(f, 'spatial.assign_container', products=[el], relating_structure=storey)"}], "on": ["TypeError"], "except": [{"do": "=api(f, 'spatial.assign_container', product=el, relating_structure=storey)"}]}, {"put": {"storey": "=done['storey'] + 1"}, "into": "done"}]}, {"when": "=a.classification", "then": [{"when": "=real_classification(f, el, a.classification)", "then": [{"put": {"classification": "=done['classification'] + 1"}, "into": "done"}], "else": [{"let": {"got": "=get_pset(el, 'AgentLink_Classification')", "c": "=a.classification"}}, {"let": {"pset": "=f.by_id(got['id']) if got else api(f, 'pset.add_pset', product=el, name='AgentLink_Classification')"}}, {"do": "=api(f, 'pset.edit_pset', pset=pset, properties={'System': str(c.get('system', '')), 'Code': str(c.get('code', '')), 'Title': str(c.get('title', ''))})"}, {"put": {"classification": "=done['classification'] + 1"}, "into": "done"}, {"put": {"classificationAs": "property set (this IfcOpenShell could not add a classification reference)"}, "into": "done"}]}]}]},
+    {"put": {"edits": "=m['edits'] + 1"}, "into": "m"}
+   ],
+   "answer": {"fields": {"changed": "=len(els)", "done": "={k: v for k, v in done.items() if v}", "elements": "=[row(e) for e in els[:20]]", "note": "In the open file only: ifc_save writes it."}}
+  },
+  "ifc_remove": {
+   "group": "bim",
+   "description": "Remove elements from the open IFC by GlobalId (ids, from ifc_find), with their openings and relationships. In memory until ifc_save; outside undo.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "ids"
+    ],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/ifc.py)",
+   "date": "2026-11-16",
+   "family": "ifc",
+   "runner": "steps",
+   "steps": [
+    {"let": {"m": "=model()"}},
+    {"let": {"f": "=m['file']"}},
+    {"refuse": "ids: the GlobalIds to remove (ifc_find lists them as id); removal goes by id only, never by class or name.", "when": "=not a.ids"},
+    {"let": {"els": "=select(f, {'ids': a.ids})"}},
+    {"let": {"names": "=[row(e) for e in els]"}},
+    {"each": "e", "in": "=els", "steps": [{"do": "=api(f, 'root.remove_product', product=e)"}]},
+    {"put": {"edits": "=m['edits'] + 1"}, "into": "m"}
+   ],
+   "answer": {"fields": {"removed": "=names", "note": "Its openings, relationships and representation went with it; ifc_save writes the file."}}
+  },
+  "ifc_save": {
+   "group": "bim",
+   "description": "Write the open IFC with its edits: path (default <name>_edited.ifc in the output folder), or overwrite: true to write over the file it came from.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string"
+     },
+     "overwrite": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/ifc.py)",
+   "date": "2026-11-16",
+   "family": "ifc",
+   "runner": "steps",
+   "steps": [
+    {"let": {"m": "=model()"}},
+    {"let": {"src": "=m['path']"}},
+    {"let": {"dst": "=src if a.overwrite else where(a.path or file_stem(src) + '_edited.ifc')"}},
+    {"do": ["=make_folder(dirname(dst))", "=m['file'].write(dst)"]}
+   ],
+   "answer": {"fields": {"path": "=dst", "bytes": "=file_size(dst)", "edits": "=m['edits']", "overwrote": "=dst == src"}}
+  },
+  "ifc_diff": {
+   "group": "bim",
+   "description": "Compare two IFC files (a old, b new) by GlobalId: elements added, removed and changed (attributes, property sets, material, storey; not geometry). limit (60). Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "a": {
+      "type": "string"
+     },
+     "b": {
+      "type": "string"
+     },
+     "limit": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "a",
+     "b"
+    ],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/ifc.py)",
+   "date": "2026-11-16",
+   "family": "ifc",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "a and b: two IFC files (paths), the old and the new.", "when": "=not (a.get('a') and a.b)"},
+    {"let": {"files": "=[]"}},
+    {"each": "key, p", "in": "=[('a', a.get('a')), ('b', a.b)]", "steps": [{"let": {"path": "=where(p)"}}, {"refuse": {"fmt": "{key} {p!r}: no such file (a relative path is looked for in the session's output folder)."}, "code": "not_found", "when": "=not isfile(path)"}, {"try": [{"push": {"files": "=ifc_file(path)"}}], "on": "error", "except": [{"refuse": {"fmt": "{key} {p!r}: not an IFC file IfcOpenShell can read ({error})."}}]}]},
+    {"let": {"ia": "={e.GlobalId: e for e in files[0].by_type('IfcProduct')}", "ib": "={e.GlobalId: e for e in files[1].by_type('IfcProduct')}"}},
+    {"let": {"added": "=[row(ib[g]) for g in ib.keys() - ia.keys()]", "gone": "=[row(ia[g]) for g in ia.keys() - ib.keys()]", "changed": "=[]"}},
+    {"each": "g", "in": "=both(ia, ib)", "steps": [{"let": {"d": "=differences(ia[g], ib[g])"}}, {"push": {"changed": "={'id': g, 'class': ib[g].is_a(), 'name': ib[g].Name, 'changes': d}"}, "when": "=d"}]},
+    {"let": {"limit": "=int(a.get('limit', 60))"}}
+   ],
+   "answer": {"fields": {"added": "=added[:limit]", "removed": "=gone[:limit]", "changed": "=changed[:limit]", "counts": {"added": "=len(added)", "removed": "=len(gone)", "changed": "=len(changed)", "same": "=len(both(ia, ib)) - len(changed)"}, "note": "Geometry changes are not compared, only data: bim_import both and view_render to see shapes."}}
   }
  }
 }

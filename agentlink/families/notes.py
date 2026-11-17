@@ -15,8 +15,8 @@ import os
 
 from .. import facepick, render, store
 from .. import paths
-from ..protocol import Tool, ToolError
-from ..tools import obj
+from .. import runners
+from ..protocol import ToolError
 
 GROUP = "notes"
 INFO = "Notes pinned to the parts between the person and the agent; the build played back step by step, a picture a step (inspired by Stefan Hermann's ScanRuler, CNC Kitchen)."
@@ -27,14 +27,17 @@ KEY_PARAMS = ("Length", "Depth", "Radius", "Size", "Occurrences", "Angle", "Offs
 # ---- notes -------------------------------------------------------------------------------
 
 def notes_of(doc):
+    """The document's notes: { next (the next id), notes [each a dict] }."""
     return store.read(doc, "notes", {"next": 1, "notes": []})
 
 
 def save_notes(doc, data):
+    """The notes written back into the document."""
     store.write(doc, "notes", data)
 
 
 def note_view(n):
+    """A note as the tools answer it: id, by, text, at, done, and body, face, answer, made, lost where it has them."""
     out = {"id": n["id"], "by": n["by"], "text": n["text"], "at": n["at"], "done": bool(n.get("done"))}
     for k in ("body", "face", "answer", "made", "lost"):
         if n.get(k):
@@ -314,6 +317,7 @@ def follow(doc, shape_of=_shape_of, geo=Geo, body_of=_body_of):
 
 
 def find_note(data, nid):
+    """The note of that id among the document's notes."""
     for n in data["notes"]:
         if n["id"] == int(nid):
             return n
@@ -370,14 +374,66 @@ def caption(step, total, row):
     return f"{step}/{total}  {row['type']}  {did}".strip()
 
 
+def framing(body):
+    """Where the camera looks for every step: the finished part's centre and
+    size, so it holds still and the part grows in it; None for an empty body."""
+    bb = body.Shape.BoundBox if not body.Shape.isNull() else None
+    return {"at": [bb.Center.x, bb.Center.y, bb.Center.z], "size": bb.DiagonalLength * 1.05} if bb and bb.isValid() else None
+
+
+def step_picture(o, view, w, h, frame, words):
+    """One step drawn headless: the feature's shape tessellated, rendered
+    from view in the frame, its caption written along the bottom. The image."""
+    pts, tris = o.Shape.tessellate(0.05)
+    import numpy as np
+
+    layer = {"name": o.Label, "V": np.array([[p.x, p.y, p.z] for p in pts], float),
+             "F": np.array(tris, np.int64).reshape(-1, 3), "color": render.PALETTE[0], "creases": True}
+    img, _, _ = render.draw([layer], view, w, h, frame=frame, bottom=26)
+    render.text(img, words, 10, h - 22, scale=2)
+    return img
+
+
+def contact_sheet(pictures, w, h):
+    """The steps' pictures laid out four to a row on one sheet, as PNG data."""
+    import math
+
+    import numpy as np
+
+    cols = min(4, len(pictures))
+    nrows = math.ceil(len(pictures) / cols)
+    big = np.tile(render.BG, (nrows * h, cols * w, 1))
+    for k, im in enumerate(pictures):
+        rr, cc = divmod(k, cols)
+        big[rr * h:(rr + 1) * h, cc * w:(cc + 1) * w] = im
+    return render.png(big)
+
+
+def write_bytes(path, data):
+    """data written as a file."""
+    with open(path, "wb") as f:
+        f.write(data)
+
+
+def error_words(e):
+    """An error as a note_list answer says it: its kind and its words."""
+    return f"{type(e).__name__}: {e}"
+
+
 def tools(session):
+    """The notes and steps tools are data (agentlink/data/tools.json, group
+    "notes"; run by agentlink/runners.py's steps runner): each entry has the
+    tool's words, its checks with their refusals, the order of its steps and
+    its answer. What is here is what those entries call by name
+    (docs/data-tools.md)."""
     s = session
     from .. import hooks
 
     # A note's face found again after every change (a hole renumbers faces).
     hooks.on("after_change", _follow_after)
 
-    def _body_pd(ref):
+    def body_pd(ref):
+        """The PartDesign body ref names, or the only one when ref is None."""
         if ref is None:
             pds = [o for o in s.doc.Objects if o.TypeId == "PartDesign::Body"]
             if len(pds) == 1:
@@ -388,152 +444,14 @@ def tools(session):
                 return o
         raise ToolError("not_found", f"body: no PartDesign body '{ref}' — " + (", ".join(o.Label for o in s.doc.Objects if o.TypeId == "PartDesign::Body") or "the document has none") + ".")
 
-    # -- notes --
-
-    def note_add(a):
-        if not str(a.get("text", "")).strip():
-            raise ToolError("invalid_input", "text: what the note says (a question to the person, or a remark).")
-        body, face = None, None
-        if a.get("faces") is not None:
-            o = s.body(a.get("body"))
-            picked = facepick.pick(o.Shape, a["faces"], "faces")
-            name, f = picked[0]
-            c = f.CenterOfMass
-            at, body, face = [c.x, c.y, c.z], o.Label, name
-        elif a.get("at") is not None:
-            at = a["at"]
-            if not (isinstance(at, list) and len(at) == 3 and all(isinstance(c, (int, float)) and not isinstance(c, bool) for c in at)):
-                raise ToolError("invalid_input", "at: [x, y, z] in mm, document coordinates (or body and faces to pin it on a face).")
-            if a.get("body"):
-                body = s.body(a["body"]).Label
-        else:
-            raise ToolError("invalid_input", "at [x, y, z] in mm, or body and faces (\"Face6\" or shape_query's filters: the note is pinned at the first face's centre and follows it).")
-        n = add_note(s.doc, at, a["text"], "agent", body, face)
-        return {"note": note_view(n), "note_count": len(notes_of(s.doc)["notes"])}
-
-    def note_list(a):
-        # Each note's face found again first (a step may have renumbered
-        # them); a failure here is said, the notes answered as they were.
-        followed, why = [], None
-        try:
-            follow(s.doc)
-        except Exception as e:  # noqa: BLE001
-            why = f"{type(e).__name__}: {e}"
-        data = notes_of(s.doc)
-        for n in data["notes"]:
-            m = n.pop("movedFrom", None)
-            if m:
-                followed.append({"id": n["id"], "from": m["face"], "to": n.get("face"), "at": n.get("at"), **({"body": n["body"]} if n.get("body") else {})})
-        if followed:
-            save_notes(s.doc, data)
-        rows = [note_view(n) for n in data["notes"] if not (a.get("open") and n.get("done"))]
-        waiting = [n["id"] for n in data["notes"] if n["by"] == "person" and not n.get("done") and not n.get("answer")]
-        out = {"notes": rows}
-        if followed:
-            out["followed"] = followed
-        if why:
-            out["notFollowed"] = f"The notes' faces were not looked for again ({why}): faces may have moved."
-        if waiting:
-            out["waiting"] = waiting
-            out["next"] = "The person's notes waiting for an answer: note_answer { id, text }, and note_done when it is dealt with."
-        return out
-
-    def note_answer(a):
-        data = notes_of(s.doc)
-        n = find_note(data, a.get("id"))
-        n["answer"] = str(a.get("text", "")).strip()
-        if not n["answer"]:
-            raise ToolError("invalid_input", "text: the answer.")
-        save_notes(s.doc, data)
-        return {"note": note_view(n)}
-
-    def note_done(a):
-        data = notes_of(s.doc)
-        n = find_note(data, a.get("id"))
-        n["done"] = bool(a.get("done", True))
-        save_notes(s.doc, data)
-        return {"note": note_view(n)}
-
-    def note_delete(a):
-        data = notes_of(s.doc)
-        n = find_note(data, a.get("id"))
-        data["notes"].remove(n)
-        save_notes(s.doc, data)
-        return {"deleted": n["id"], "left": len(data["notes"])}
-
-    # -- steps --
-
-    def steps_list(a):
-        b = _body_pd(a.get("body"))
-        rows = steps_of(b, bool(a.get("sketches")))
-        return {"body": b.Label, "steps": rows, "count": len(rows)}
-
-    def steps_render(a):
-        b = _body_pd(a.get("body"))
-        rows = steps_of(b, False)
-        if not rows:
-            raise ToolError("invalid_state", f"{b.Label} has no features yet: pd_pad and the other pd_ tools add them.")
-        view = str(a.get("view", "iso")).lower()
-        if view not in render.VIEWS:
-            raise ToolError("invalid_input", "view: " + ", ".join(render.VIEWS) + ".")
-        w, h = a.get("width", 480), a.get("height", 360)
-        if not all(isinstance(v, int) and not isinstance(v, bool) and 120 <= v <= 2000 for v in (w, h)):
-            raise ToolError("invalid_input", "width, height: pixels a picture, 120 … 2000 (480 × 360 by default).")
-        folder = paths.local(s, a.get("path") or f"steps_{''.join(ch if ch.isalnum() else '_' for ch in b.Label)}")
-        os.makedirs(folder, exist_ok=True)
-        # Framed on the finished part, so the camera holds still and the part grows in it.
-        bb = b.Shape.BoundBox if not b.Shape.isNull() else None
-        frame = {"at": [bb.Center.x, bb.Center.y, bb.Center.z], "size": bb.DiagonalLength * 1.05} if bb and bb.isValid() else None
-        files, sheet = [], []
-        total = len(rows)
-        for r in rows:
-            o = s.doc.getObject(r["name"])
-            sh = o.Shape
-            if sh.isNull():
-                continue
-            pts, tris = sh.tessellate(0.05)
-            import numpy as np
-
-            layer = {"name": o.Label, "V": np.array([[p.x, p.y, p.z] for p in pts], float),
-                     "F": np.array(tris, np.int64).reshape(-1, 3), "color": render.PALETTE[0], "creases": True}
-            img, _, _ = render.draw([layer], view, w, h, frame=frame, bottom=26)
-            render.text(img, caption(r["step"], total, r), 10, h - 22, scale=2)
-            p = os.path.join(folder, f"step_{r['step']:02d}.png")
-            with open(p, "wb") as f:
-                f.write(render.png(img))
-            files.append(p)
-            sheet.append(img)
-        out = {"body": b.Label, "folder": folder, "files": files, "steps": rows}
-        if a.get("sheet", True) and sheet:
-            import math
-
-            import numpy as np
-
-            cols = min(4, len(sheet))
-            nrows = math.ceil(len(sheet) / cols)
-            big = np.tile(render.BG, (nrows * h, cols * w, 1))
-            for k, im in enumerate(sheet):
-                rr, cc = divmod(k, cols)
-                big[rr * h:(rr + 1) * h, cc * w:(cc + 1) * w] = im
-            p = os.path.join(folder, "steps.png")
-            data = render.png(big)
-            with open(p, "wb") as f:
-                f.write(data)
-            out["sheet"] = p
-            if a.get("inline", True):
-                out["_png"] = data
-        return out
-
-    return [
-        Tool("note_add", "Pin a note to the part for the person — a question or a remark (text): at [x,y,z] mm, or on body + faces (\"Face6\", or shape_query's filters; pinned at the first face's centre and found again when faces renumber). It shows as a numbered pin in the window and in Agent Link's Notes tab; the person answers it there. Kept in the document (saved with doc_save). Reply: note { id, text, at, body, face, by: agent }, note_count.",
-             obj({"text": {"type": "string"}, "at": {"type": "array", "items": {"type": "number"}}, "body": {"type": "string"}, "faces": {}}, ["text"]), note_add, changes=True),
-        Tool("note_list", "The notes pinned to the parts — the person's and the agent's — each with id, text, by, at, face, answer and done. waiting lists the ids of the person's notes with no answer yet (answer them: note_answer, then note_done); followed says which notes moved to a renumbered face. open: true leaves out the done ones. Read it at the start of a session and after the person has worked in the window.",
-             obj({"open": {"type": "boolean"}}), note_list),
-        Tool("note_answer", "Answer a note (the person's question or request): id (from note_list), text. The answer shows under the note in the window; a second answer replaces the first. note_done ticks it off once dealt with.", obj({"id": {"type": "integer"}, "text": {"type": "string"}}, ["id", "text"]), note_answer, changes=True),
-        Tool("note_done", "Tick a note off: id (done: false opens it again). It stays in the document; note_delete removes it.", obj({"id": {"type": "integer"}, "done": {"type": "boolean"}}, ["id"]), note_done, changes=True),
-        Tool("note_delete", "Take a note out of the document for good: id — the person's or the agent's (note_done only ticks it off; delete the person's only when they ask). Reply: deleted, left.", obj({"id": {"type": "integer"}}, ["id"]), note_delete, changes=True),
-        Tool("steps_list", "A PartDesign body's history in order (body may be left out when there is one): each feature's step number, name, label, type, its key value, the volume after it and what it added or took away (sketches: true lists the sketches too). The same list Agent Link's Steps tab plays. Changes nothing.",
-             obj({"body": {"type": "string"}, "sketches": {"type": "boolean"}}), steps_list),
-        Tool("steps_render", "The build played back as pictures, drawn headless (not the window): a PNG a feature (step_01.png …), framed on the finished part so it grows in place, each captioned with its step, type and what it did, and a contact sheet steps.png of them all (sheet: false leaves it out; inline: false keeps it out of the reply). body; view (iso, or top, front, right …); width, height pixels a picture (480 × 360); path a folder (steps_<body> in the session's folder). Tessellates every step: seconds a step on a heavy body. Reply: folder, files, sheet, steps. The model is not changed.",
-             obj({"body": {"type": "string"}, "view": {"type": "string"}, "width": {"type": "integer"}, "height": {"type": "integer"}, "path": {"type": "string"}, "sheet": {"type": "boolean"}, "inline": {"type": "boolean"}}), steps_render),
-    ]
+    # What the tools' entries (agentlink/data/tools.json, group "notes") call by name.
+    helpers = {"doc": lambda: s.doc, "body": lambda ref: s.body(ref), "local": lambda p: paths.local(s, p), "join": lambda *parts: os.path.join(*parts),
+               "make_folder": lambda p: os.makedirs(p, exist_ok=True), "write_bytes": write_bytes,
+               # the notes
+               "notes": lambda: notes_of(s.doc), "save_notes": lambda data: save_notes(s.doc, data), "note_view": note_view, "find_note": find_note,
+               "add_note": lambda at, text, by, body=None, face=None: add_note(s.doc, at, text, by, body, face), "follow": lambda: follow(s.doc),
+               "pick_faces": lambda shape, q: facepick.pick(shape, q, "faces"), "error_words": error_words,
+               # the steps
+               "body_pd": body_pd, "steps_of": steps_of, "caption": caption, "framing": framing, "step_picture": step_picture, "contact_sheet": contact_sheet,
+               "png": lambda img: render.png(img), "VIEWS": render.VIEWS}
+    return runners.tools(GROUP, s, helpers)

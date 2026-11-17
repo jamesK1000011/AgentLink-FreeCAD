@@ -267,6 +267,9 @@ tests/_datafem_standin.py
 tests/_datamesh_before.py
 tests/_datamesh_cases.py
 tests/_datamesh_standin.py
+tests/_datamisc_before.py
+tests/_datamisc_cases.py
+tests/_datamisc_standin.py
 tests/_datapart2_before.py
 tests/_datapart2_cases.py
 tests/_datapart2_standin.py
@@ -313,6 +316,7 @@ tests/test_datadraft_data.py
 tests/test_datadraftmore_data.py
 tests/test_datafem_data.py
 tests/test_datamesh_data.py
+tests/test_datamisc_data.py
 tests/test_datapart2_data.py
 tests/test_datapart_data.py
 tests/test_datapd_data.py

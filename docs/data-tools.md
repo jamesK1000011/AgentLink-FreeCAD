@@ -48,6 +48,14 @@ reading (`joint_axis`, `joint_refs`, `joint_value`, `moving_group`, `pose_move`)
 shaft on an axis held to ISO 286; `carried`, `driven_parts`: what a joint carries and what its couplings drive; `stacked`,
 `spread`: an explosion's moves; `fill_native`: the BOM's columns) and the two loops that must put the parts back whatever
 happens (`sweep_run`, `play`). `tests/test_dataasm_data.py` is their proof, on a stand-in with no solver.
+The measuring tools (`families/measure.py`: shape_query, measure, measure_keep, measure_mass, section, clearance), the
+inspection tools (`families/inspection.py`, 6), the notes and steps tools (`families/notes.py`, 7) and the robot tools
+(`families/robot.py`, 6) are data too, and the six ifc_ tools (`families/ifc.py`, group `bim`, `"family": "ifc"`;
+`tests/test_datamisc_data.py` is the proof of all five files, on a stand-in). What is left in those
+files is the shared filter (`filter_shape`) and the readings (`describe`, `inertia`, `reading`, `by_face`), the notes'
+following of renumbered faces, the drawing of a step (`step_picture`, `contact_sheet`) and a robot's sweep along a
+trajectory (`sweep`) and IFC's selection and comparison (`select`, `differences`); the finders that several tools share (`ins_of`, `find_note`, `body_pd`, `robot`, `trajectory`) and
+the readers of an argument (`tol_of`, `placement`) still refuse in their own words.
 
 ## Two kinds of entry
 
