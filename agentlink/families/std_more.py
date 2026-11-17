@@ -735,7 +735,7 @@ def tools(s):
                "shaped": lambda ref, what: picks.shaped(d(), ref, what),
                "find": lambda ref, what="object": picks.find(d(), ref, what), "snapshot": lambda tool: s.snapshot(tool), "V": V,
                # PartDesign: bodies, their features and their tip
-               "pd_body": lambda ref: pdc.pd_body(d(), ref), "body_of": pdc.body_of, "in_body": pdc.in_body, "broken": lambda: pdc.broken(d()),
+               "pd_body": lambda ref: pdc.pd_body(d(), ref), "body_of": pdc.body_of, "in_body": pdc.in_body, "broken": lambda: pdc.newly_broken(d()),
                "solid_feature": solid_feature, "after_tip": after_tip, "profile_sketch": profile_sketch, "reattach": reattach, "shaft_solid": shaft_solid}
 
     st = {"type": "string"}

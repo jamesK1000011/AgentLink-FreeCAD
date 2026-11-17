@@ -136,6 +136,7 @@ All optional. Every hook catches and logs your exceptions.
 | `register_reviewer(fn)` | `fn(session, body)` gives the Review tab its verdict (`{"verdict": "pass"/"warn"/"fail", "findings": [...], "figures": {...}, "process": ...}`), or `None` to pass. Reviewers are asked in the order they registered; the first answer that is not `None` is shown. With none, the tab says so and offers the core `body_check`. |
 | `guard_setting(path, name)` | A setting `pref_set` must not change (`path` as `pref_set` takes it, e.g. `"Mod/MyAddon"`): one that widens what the agent may do or which code FreeCAD loads. |
 | `remember(session, kind, value)` / `analysis(session, kind)` | Last results by kind, for example the last FEA solve. |
+| `session.family_state` / `own_document_state(key)` | Your family's own state, under your group's name: `session.family_state.setdefault("mine", {})`. It is one dict per document; see [State per document](#state-per-document). |
 | `agentlink.tools.register_guides(folder)` | Markdown guides the agent can read with `guide_read`. A `guides/` folder beside your `agentlink_families.py` is registered for you; if there is also a `freecad_guides/`, only that one is (for add-ons whose `guides/` serve their own server). |
 | `agentlink.render.register_layer` / `register_map` | Layers and colour maps for `view_render`. |
 
@@ -206,11 +207,44 @@ An entry is `{ id, name, file, step, tx, session, … }`: `file` a saved copy
 Agent Link can open, `session` the `id()` of the session that took it and
 `step`/`tx` that session's step and undo count then.
 
+### State per document
+
+`session.family_state` is a dict of each family's own state under its
+group's name, and it belongs to the document the session is in. However the
+session comes to another document (`doc_new`, `doc_open`, `doc_close`,
+`doc_switch`, `doc_revert`, the person closing the agent's document), the
+dict of the document it leaves is set aside with that document for as long
+as it stays open, and the document it arrives in gets its own dict back, or
+an empty one. So a new document never sees another document's state, and
+going back to a document finds its state as it was left. A document is told
+by identity, not by name: one closed and opened again (or reverted) starts
+empty, and your family reads what it keeps in the document itself, as after
+a restart. Nothing is written into a document for you.
+
+Two events say when, on the thread that moved the session and before any
+state is handed out for the new document:
+
+| Event | When |
+|---|---|
+| `document_state_leaving(session, doc, state)` | The session has moved away from `doc`, which is still open; `state` is `doc`'s dict, about to be set aside. Write into `doc` now what must not be lost with the session (`session.doc` is already the new document: write to `doc`). Not told for an empty dict or a closed document. |
+| `document_state_entered(session, doc, state, restored)` | `state` is the session's dict for `doc` from now on; `restored` is True when it is the one set aside earlier, False when it starts empty. |
+
+An add-on that settles its own state per document (it keeps its own book of
+which document its state belongs to, and writes, sets aside and restores it
+itself) calls `own_document_state("mine")` once from its
+`agentlink_families` module. Its key is then carried along with the session
+untouched, so on arriving in another document it still finds the state of
+the document it left, to settle as it does. The same holds, with no call,
+for a key whose book is kept on the session under the attribute
+`_<key>_documents`. `session.family_state = d` puts `d` in place as the
+state of the document the session is in (an add-on that reopened a document
+from a copy puts back the state it kept).
+
 ### Events Agent Link emits
 
 | Event | When |
 |---|---|
-| `after_change(session, tool)` | After every changing call (one undo step). |
+| `after_change(session, tool)` | After every changing call. A call that changed nothing leaves no undo step (`session.last_step` is `{ tool, made, why }`; `session.tx` counts the steps made). |
 | `setting_changing(tool, path)` | Before `pref_set`, `pref_reset`, `pref_pack` or `pref_import` changes anything: a snapshot taken now is the state before. |
 | `setting_changed(path, name, old, new, tool=, restart=, applies=)` | After each value changed; `restart` when it shows only after FreeCAD restarts, `applies` `"at next launch"` headless. |
 | `reply_written(session)` | After each reply of the stdio server (the hidden FreeCAD): say what it holds for whoever restarts it after a crash. |

@@ -271,7 +271,7 @@ def tools(session):
 
     def check(what):
         doc().recompute()
-        b = pc.broken(doc())
+        b = pc.newly_broken(doc())  # not what was failing before the call
         if not b:
             return
         # A sheet says only that some cell failed: name the cells.

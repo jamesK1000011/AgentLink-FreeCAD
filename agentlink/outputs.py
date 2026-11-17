@@ -265,12 +265,21 @@ def track(session, tool, fn):
     finally:
         st["tools"].pop()
         if not st["tools"]:
+            import time as _time
+
+            t_out = _time.time()
             try:
                 flush(session)
             except Exception:
                 pass
             try:
                 maybe_auto(session)
+            except Exception:
+                pass
+            try:
+                from . import around
+
+                around.add("outputs", _time.time() - t_out)
             except Exception:
                 pass
 

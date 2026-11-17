@@ -99,7 +99,7 @@ def tools(session):
 
     def done(sk, tool, extra=None):
         def check():
-            b = pc.broken(doc())
+            b = pc.newly_broken(doc())  # not what was failing before the call
             if b:
                 raise ToolError("failed", f"That breaks {b[0]['object']}: {b[0]['error']} — nothing was kept. sketch_state reads the sketch as it is; a feature built on it needs its profile closed.")
         return picks.finish(s, tool, lambda: state(sk), check=check, extra=extra)

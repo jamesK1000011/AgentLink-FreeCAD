@@ -64,6 +64,12 @@ Panel                         register_tab(title, factory, order, workbench,
                               an add-on's own panel beside Agent Link's
 Protected settings            guard_setting(path, name)
 Last results                  remember(session, kind, value); analysis(session, kind)
+State per document            session.family_state is one dict per document
+                              (agentlink/docstates.py): set aside when the
+                              session leaves it, back when it returns; the
+                              events document_state_leaving and
+                              document_state_entered; own_document_state(key)
+                              for an add-on that settles its own
 Tools as data                 tools_from_data(folder, group, handlers):
                               the add-on's tools.json (agentlink/tooldata.py
                               is the format) bound to its handlers
@@ -531,7 +537,19 @@ def guard_setting(path, name):
     GUARDED.add((path, name))
 
 
-# ---- last results by kind ("fea": the last solve), read-only to others.
+# ---- family state per document (agentlink/docstates.py) ----
+def own_document_state(key):
+    """An add-on that settles its own state per document says so: its key
+    in session.family_state is then carried along with the session from
+    document to document untouched, for the add-on to write, set aside and
+    restore itself. Every other key is set aside with the document the
+    session leaves and comes back when the session returns to it (the
+    events document_state_leaving and document_state_entered say when)."""
+    from . import docstates
+
+    docstates.OWN.add(str(key))
+
+
 def remember(session, kind, value):
     d = getattr(session, "_agentlink_results", None)
     if d is None:
@@ -579,6 +597,12 @@ def reset():
     TAB_WORKBENCHES.clear()
     GUARDED.clear()
     del _RIDERS[:]
+    try:
+        from . import docstates
+
+        docstates.OWN.clear()
+    except Exception:
+        pass
 
 
 # ---- who a call is for ----------------------------------------------------------------------
