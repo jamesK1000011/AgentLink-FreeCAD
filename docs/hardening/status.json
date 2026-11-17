@@ -1524,6 +1524,13 @@
   "health": true,
   "model": "ScanRuler Mesh Tools model, run 3, answers read: applies the reduction on hand (2,142 triangles = the report, edited copy, open 0, bad 0, volume 16,769.173) and warns that it does not hold its tolerance (up to 10.4245 mm for 0.05 mm) with mesh_undo named. Only the case that does not hold was run: mesh_reduce is still wrong and unmarked"
  },
+ "mesh_apply_wrap": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler Mesh Tools model (repo, 70 calls), run 4: wrap applied at call 65; refused before a wrap (61) and after it was applied (67)"
+ },
  "mesh_boolean": {
   "description": true,
   "docs": true,
@@ -2581,6 +2588,13 @@
   "health": true,
   "model": "ScanRuler reverse model, run 2, answers read: five rows in order with keys 20, 22 and 3 mm and the expression, the fillet kept as four fingerprints, schema of extrude and the kinds listed for gear, parameter height = 2 * 10, gap 10 then overlap 480.69 mm3, clear refused without confirm and then empty"
  },
+ "reverse_parameter_remove": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler reverse model (repo, 69 calls), run 4: spare added (65), removed (66), list shows only height (67); refused when read by Block (14) and when gone (68)"
+ },
  "reverse_parameter_rename": {
   "description": true,
   "docs": true,
@@ -2725,6 +2739,13 @@
   "health": true,
   "model": "ScanRuler measure model, run 2, answers read: top face 23,465 vertices at z 20, nearest 5.024 mm, 155 regions with the six faces first (2234.9, 2135.8, 1156.8 x 2, 771.2 x 2 mm2, the pocket floor 98.3), flat patch rms 0, draft 0 on every patch, six bore rings r 5.999, outline 2400 mm2 and the bore r 5.998, cloud 109,800 points, no thread"
  },
+ "scan_noise": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model (repo, 144 calls), run 4: densified and smoothed scan reads sigma 0.0359 mm from 5859 samples (133); a CAD tessellation is refused (11)"
+ },
  "scan_open": {
   "description": true,
   "docs": true,
@@ -2773,6 +2794,13 @@
   "headless": true,
   "health": true,
   "model": "ScanRuler measure model, run 2, answers read: top face 23,465 vertices at z 20, nearest 5.024 mm, 155 regions with the six faces first (2234.9, 2135.8, 1156.8 x 2, 771.2 x 2 mm2, the pocket floor 98.3), flat patch rms 0, draft 0 on every patch, six bore rings r 5.999, outline 2400 mm2 and the bore r 5.998, cloud 109,800 points, no thread"
+ },
+ "scan_snapshot_latest": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "ScanRuler measure model (repo), run 4: the Snapshot command run through cmd_run took shot-1 (1712 x 2082, file saved); latest read at 141-142; refused with no shot (117) and for index 1 of 1 (143)"
  },
  "scan_snapshot_list": {
   "description": true,
