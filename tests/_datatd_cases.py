@@ -13,10 +13,8 @@ CONVERTED = {k: "techdraw" for k in (
     "td_dim", "td_dimset", "td_tolerance", "td_gdt", "td_datum", "td_note", "td_balloon", "td_table", "td_section_position", "td_leader", "td_finish",
     "td_area", "td_dim_format", "td_dim_special", "td_dim_align", "td_dim_repair")}
 
-# tool -> why it is still code
-NOT_YET = "not converted yet: the work stopped before it (docs/hardening: datacam-findings)"
-KEPT = {k: NOT_YET for k in (
-    "td_list", "td_cosmetic", "td_view_more", "td_lines", "td_export")}
+# tool -> why it is still code: none now (the five left here were converted after; tests/test_datatd2_data.py is their proof)
+KEPT = {}
 
 # Refusals written in an entry that no case reaches, each with its reason.
 UNREACHED = [

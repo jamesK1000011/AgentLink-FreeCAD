@@ -14432,6 +14432,1903 @@
     {"do": "=snapshot('asm_bom')"}
    ],
    "answer": {"fields": {"bom": "=bom.Label", "sheet": "=bom.Name", "native": "=native", "parts": "=rows", "step": "=step()", "next": "td_table { sheet } puts it on a drawing; sheet_read reads it.", "note": {"when": "=any(not r['material'] for r in rows)", "value": "Parts with no material recorded have no mass: material_set records one."}}}
+  },
+  "td_list": {
+   "group": "techdraw",
+   "description": "A page's views (label, scale, size, edge count; a group's items), dimensions (name, refs, measured, text, tolerance), GD&T, other objects and title block. A document just opened holds each view's settings but not its lines (FreeCAD works them out at the view's first recompute): views without lines are computed here first and waited for (up to 20 s; computed says how many and how long), and the dimensions on them after. A view still without lines is marked notReady with no edge count, and a dimension on it has notReady in place of measured and text — never 0 as if measured; notReady at the top says which and what to do (recompute, then td_list again). Changes nothing in the model.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "page": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"page": "=page_of(a.page)"}},
+    {"let": {"n_cold, waited, still": "=warm(page)"}},
+    {"let": {"out": "=page_reading(page, True)", "plural": "='s' if n_cold != 1 else ''"}},
+    {"put": {"computed": {"fmt": "{n_cold} view{plural} had no lines yet (a document just opened keeps a view's settings, not its lines): worked out here in {waited:g} s before reading."}}, "when": "=n_cold"},
+    {"when": "=still", "then": [{"do": "=mark_not_ready(out['views'], still)"}, {"put": {"notReady": {"fmt": "No lines yet for {', '.join(sorted([doc().getObject(n).Label for n in still]))}: their edge counts and the dimensions on them are left out, not zero. A view whose source has no shape or whose page has KeepUpdated off stays so; otherwise recompute, then td_list again."}}}]},
+    {"let": {"dims": [], "syms": [], "other": []}},
+    {"each": "o", "in": "=page.Views", "steps": [{"when": "=o.TypeId == 'TechDraw::DrawViewDimension'", "then": [{"let": {"row": "=dim_reading(o)"}}, {"try": [{"let": {"on": "=o.References2D[0][0].Name if o.References2D else None"}}], "except": [{"let": {"on": null}}]}, {"when": "=on in still", "then": [{"do": ["=row.pop('measured', None)", "=row.pop('text', None)"]}, {"put": {"notReady": true}, "into": "row"}]}, {"push": {"dims": "=row"}}], "else": [{"when": "=o.isDerivedFrom('TechDraw::DrawViewSymbol') and GDT_PROP in o.PropertiesList", "then": [{"let": {"data": "=loads(get(o, GDT_PROP))"}}, {"let": {"k": "=data.get('kind')"}}, {"choose": "=k", "of": {"frame": [{"let": {"reads": "=describe(data.get('rows') or [])"}}], "datum": [{"let": {"reads": {"fmt": "datum {data.get('letter', '?')}"}}}]}, "else": [{"let": {"reads": "=' '.join([key + ' ' + str(data[key]) for key in ('ra', 'removal', 'lay', 'text') if data.get(key) not in (None, '')]) or str(k)"}}]}, {"push": {"syms": {"symbol": "=o.Name", "kind": "=k", "reads": "=reads", "on": "=data.get('on')"}}}], "else": [{"push": {"other": {"object": "=o.Name", "type": "=o.TypeId.split('::')[-1]"}}, "when": "=not o.isDerivedFrom('TechDraw::DrawViewPart') and not o.isDerivedFrom('TechDraw::DrawProjGroup')"}]}]}]}
+   ],
+   "answer": {"fields": {"...out": "=out", "views": "=[x for x in out['views'] if x['type'] not in ('DrawViewDimension', 'DrawViewSymbol', 'DrawLeaderLine', 'DrawViewAnnotation', 'DrawViewBalloon', 'DrawViewSpreadsheet')]", "dimensions": "=dims", "gdt": {"when": "=syms", "value": "=syms"}, "other": {"when": "=other", "value": "=other"}}}
+  },
+  "td_export": {
+   "group": "techdraw",
+   "description": "Write a page out: formats [svg, pdf, dxf], name. DXF is TechDraw's own. SVG and PDF are drawn here from the page's objects (TechDraw's own PDF and SVG export needs the window): views, dimensions, symbols, notes, tables, centre marks, hatching and the title block's fields, without the template's artwork. Files go to the session's folder; notes says what was skipped.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "page": {
+      "type": "string"
+     },
+     "formats": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"page": "=page_of(a.page)", "kinds": "=a.formats or ['svg', 'pdf', 'dxf']"}},
+    {"refuse": "formats: any of svg, pdf, dxf.", "when": "=any([k not in ('svg', 'pdf', 'dxf') for k in kinds])"},
+    {"do": "=recompute(list(page.Views))"},
+    {"let": {"base": "=join(out_dir(), (a.name or page.Label).replace(' ', '-'))", "files": {}, "notes": []}},
+    {"let": {"sheet, skipped": "=page_sheet(page)"}},
+    {"do": "=notes.extend(skipped)", "when": "=skipped"},
+    {"each": "k", "in": "=kinds", "steps": [{"let": {"p": "=made(base + '.' + k)", "own": true}}, {"when": "=k == 'dxf'", "then": [{"try": [{"do": "=write_dxf_page(page, p)"}, {"when": "=isfile(p) and getsize(p) > 0", "then": [{"put": {"dxf": {"path": "=p", "bytes": "=getsize(p)", "by": "TechDraw"}}, "into": "files"}, {"let": {"own": false}}]}], "except": [{"push": {"notes": {"fmt": "TechDraw's DXF writer failed ({error}): written here instead"}}}]}]}, {"when": "=own", "then": [{"do": ["=write_out(p, drawn(sheet, k))", "=files.update({k: {'path': p, 'bytes': getsize(p)}})"]}]}]}
+   ],
+   "answer": {"fields": {"page": "=page.Label", "files": "=files", "notes": {"when": "=notes", "value": "=notes"}}}
+  },
+  "td_cosmetic": {
+   "group": "techdraw",
+   "description": "Cosmetic geometry on a view (FreeCAD's own cosmetic edges from 1.1, so in the window too; always in td_export): items [{ kind line (from, to: points on the part) | circle (center on the part, radius mm) | centerline (edges: a shaft's or hole's two side lines; extend mm) | thread (edges: the two outline lines of a side view, or circle: the end view's round edge; internal: true for a tapped hole; pitch, ISO coarse by default; length mm) , style thin | visible | hidden | center }]; clear: true drops the earlier ones. td_lines takes them by order, from 0.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "clear": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "view"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"v": "=view_of(a.view)"}},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"let": {"items": "=a.items or []", "prims": "=loads(get(v, COSMETIC_PROP)) if COSMETIC_PROP in v.PropertiesList and get(v, COSMETIC_PROP) else []"}},
+    {"when": "=a.clear", "then": [{"each": "p", "in": "=prims", "steps": [{"do": "=drop_native(v, p)"}]}, {"let": {"prims": []}}]},
+    {"let": {"first_new": "=len(prims)", "made": [], "k": "=view_scale(v) / gscale(v)"}},
+    {"each": "it", "in": "=items", "steps": [{"let": {"kind": "=it.get('kind')"}}, {"let": {"style": "=it.get('style', 'center' if kind == 'centerline' else 'thin')"}}, {"refuse": "style: thin | visible | hidden | center.", "when": "=style not in ('thin', 'visible', 'hidden', 'center')"}, {"choose": "=kind", "of": {"line": [{"let": {"p": "=paper_of3d(v, it.get('from'))"}}, {"let": {"q": "=paper_of3d(v, it.to)"}}, {"push": {"prims": {"pts": "=[p, q]", "style": "=style"}}}, {"push": {"made": {"kind": "line", "length_mm": "=num(hypot(q[0] - p[0], q[1] - p[1]) / view_scale(v), 3)"}}}], "circle": [{"let": {"c": "=paper_of3d(v, it.center)"}}, {"let": {"r": "=float(it.get('radius', 0)) * view_scale(v)"}}, {"refuse": "circle: radius mm on the part.", "when": "=r <= 0"}, {"push": {"prims": {"pts": "=circle_points(c, r)", "style": "=style", "closed": true, "circle": "=[c[0], c[1], r]"}}}, {"push": {"made": {"kind": "circle", "radius": "=float(it['radius'])"}}}], "centerline": [{"let": {"refs": "=it.edges or []"}}, {"refuse": "centerline: edges [two lines of the view] (a shaft's or hole's sides).", "when": "=len(refs) != 2"}, {"let": {"es": []}}, {"each": "r", "in": "=refs", "steps": [{"let": {"n": "=resolve_ref(v, r)"}}, {"refuse": {"fmt": "{r}: an edge of the view (td_geometry lists them)."}, "when": "=not n.startswith('Edge')"}, {"push": {"es": "=edges_of(v)[int(n[4:])]"}}]}, {"let": {"ext": "=float(it.get('extend', 3))"}}, {"let": {"pts, d": "=mid_line(es[0], es[1], k, ext)"}}, {"push": {"prims": {"pts": "=pts", "style": "center"}}}, {"push": {"made": {"kind": "centerline", "length_mm": "=num((d + 2 * ext) / view_scale(v), 2)"}}}], "thread": [{"let": {"internal": "=bool(it.get('internal', False))", "refs": "=it.edges or ([it['circle']] if it.circle else [])"}}, {"refuse": "thread: edges [two outline lines] (side view) or circle (end view).", "when": "=len(refs) not in (1, 2)"}, {"let": {"es": []}}, {"each": "r", "in": "=refs", "steps": [{"let": {"n": "=resolve_ref(v, r)"}}, {"refuse": {"fmt": "{r}: an edge of the view (td_geometry lists them)."}, "when": "=not n.startswith('Edge')"}, {"push": {"es": "=edges_of(v)[int(n[4:])]"}}]}, {"when": "=len(refs) == 1", "then": [{"let": {"cu": "=get(es[0], 'Curve')"}}, {"refuse": "thread: circle — a round edge seen end-on (a hole or shaft from its end).", "when": "=not has(cu, 'Radius')"}, {"let": {"D": "=2 * float(cu.Radius) * k / view_scale(v)"}}, {"let": {"P": "=float(it.pitch or coarse_pitch(D if not internal else D + 1.0825 * coarse_pitch(D)))"}}, {"let": {"h3": "=0.6134 * P"}}, {"push": {"prims": {"pts": "=thread_arc(cu, k, (D / 2 + (h3 if internal else -h3)) * view_scale(v))", "style": "thin"}}}, {"push": {"made": {"kind": "thread", "end": true, "diameter": "=num(D + (2 * h3 if internal else 0), 3)", "pitch": "=P"}}}], "else": [{"let": {"sides": "=side_outline(es[0], es[1], k)"}}, {"let": {"D": "=abs(sides.gap) / view_scale(v)"}}, {"let": {"P": "=float(it.pitch or coarse_pitch(D if not internal else D + 1.0825 * coarse_pitch(D)))"}}, {"let": {"h3": "=0.6134 * P * view_scale(v)", "length": "=float(it['length']) * view_scale(v) if it.length else sides.L"}}, {"each": "pts", "in": "=root_lines(sides, h3 if not internal else -h3, length)", "steps": [{"push": {"prims": {"pts": "=pts", "style": "thin"}}}]}, {"push": {"made": {"kind": "thread", "end": false, "nominal": "=num(D + (2 * 0.6134 * P if internal else 0), 3)", "pitch": "=P", "note": {"fmt": "M{num(D + (2 * 0.6134 * P if internal else 0), 1):g}x{P:g}"}}}}]}]}, "else": [{"refuse": "kind: line { from, to } | circle { center, radius } | centerline { edges } | thread { edges | circle, internal, pitch, length }."}]}]},
+    {"let": {"native": 0}},
+    {"each": "p", "in": "=prims[first_new:]", "steps": [{"do": "=p.update({'tags': native_cosmetic(v, p)})"}, {"let": {"native": "=native + len(p['tags'])"}}]},
+    {"do": ["=own_prop(v, COSMETIC_PROP, 'App::PropertyString', \"Cosmetic lines (JSON, paper mm), each with the tags of FreeCAD's own cosmetic edges that show it\")", "=setprop(v, COSMETIC_PROP, dumps(prims))", "=recompute()"]}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"view": "=v.Label", "made": "=made", "total": "=len(prims)", "native": "=native", "note": {"when": "=not native and made", "value": "This FreeCAD made no cosmetic edges of its own: the lines show in td_export only."}}}
+  },
+  "td_view_more": {
+   "group": "techdraw",
+   "description": "More views on a page: kind broken { view, breaks, gap } | draft { object (a Draft object) } | clip { width, height, frame } | clip_add / clip_remove { clip, view } | image { path, width, height } | symbol { path (an SVG), scale } | share { view } (the view also on this page, with its dimensions) | lock { view, locked } | stack { view, to top|bottom|up|down } | move { view, page } (to another page; a group's item takes its group), at [x, y].",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "broken",
+       "draft",
+       "clip",
+       "clip_add",
+       "clip_remove",
+       "image",
+       "symbol",
+       "share",
+       "lock",
+       "stack",
+       "move"
+      ]
+     },
+     "locked": {
+      "type": "boolean"
+     },
+     "to": {
+      "type": "string",
+      "enum": [
+       "top",
+       "bottom",
+       "up",
+       "down"
+      ]
+     },
+     "page": {
+      "type": "string"
+     },
+     "view": {
+      "type": "string"
+     },
+     "object": {
+      "type": "string"
+     },
+     "breaks": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "gap": {
+      "type": "number"
+     },
+     "clip": {
+      "type": "string"
+     },
+     "width": {
+      "type": "number"
+     },
+     "height": {
+      "type": "number"
+     },
+     "frame": {
+      "type": "boolean"
+     },
+     "path": {
+      "type": "string"
+     },
+     "scale": {
+      "type": "number"
+     },
+     "direction": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"kind": "=a.kind"}},
+    {"when": "=kind == 'broken'", "then": [{"let": {"v": "=view_of(a.view)"}}, {"let": {"page": "=page_holding(v)"}}, {"add": "TechDraw::DrawBrokenView", "name": "BrokenView", "as": "bv"}, {"set": {"bv.Source": "=v.Source", "bv.Direction": "=v.Direction", "bv.Scale": "=v.Scale"}}, {"let": {"brk": "=[find(b, 'breaks') for b in a.breaks or []]"}}, {"refuse": "breaks: objects that mark the break (two parallel sketch lines or a sketch with two lines across the part).", "first": [{"do": "=doc().removeObject(bv.Name)"}], "when": "=not brk"}, {"set": {"bv.Breaks": "=brk"}}, {"set": {"bv.Gap": "=float(a.gap)"}, "when": "=a.gap is not None"}, {"do": "=page.addView(bv)"}, {"let": {"x, y": "=pt2(a.at, 'at') if a.at else (float(v.X), float(v.Y) - 60)"}}, {"set": {"bv.X": "=x", "bv.Y": "=y"}}, {"do": "=recompute([bv])"}, {"answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"kind": "=kind", "...view": "=view_reading(bv)"}}}]},
+    {"when": "=kind in ('lock', 'stack', 'move')", "then": [{"let": {"v": "=obj_of(a.view, ['TechDraw::DrawView'], 'view')"}}, {"let": {"grp": "=first([p for p in v.InList if p.isDerivedFrom('TechDraw::DrawProjGroup')])", "here": "=page_holding(v)"}}, {"choose": "=kind", "of": {"lock": [{"refuse": "This FreeCAD's views have no lock.", "code": "unavailable", "when": "=not has(v, 'LockPosition')"}, {"set": {"v.LockPosition": "=bool(a.get('locked', True))"}}, {"answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"kind": "=kind", "view": "=v.Label", "locked": "=bool(v.LockPosition)"}}}], "stack": [{"let": {"mine": "=stack_of(v)"}}, {"refuse": "A view's stacking order is kept by the window (its view provider's StackOrder): there is none here — headless, or this FreeCAD has no stacking order. In the window: td_view_more { kind: \"stack\", view, to: top | bottom | up | down }.", "code": "unavailable", "when": "=mine is None"}, {"let": {"to": "=a.get('to', 'top')", "orders": "=[int(stack_of(x).StackOrder) for x in (here.Views if here else []) if x is not v and stack_of(x) is not None] or [0]"}}, {"choose": "=to", "of": {"top": [{"set": {"mine.StackOrder": "=max(orders) + 1"}}], "bottom": [{"set": {"mine.StackOrder": "=min(orders) - 1"}}], "up": [{"set": {"mine.StackOrder": "=int(mine.StackOrder) + 1"}}], "down": [{"set": {"mine.StackOrder": "=int(mine.StackOrder) - 1"}}]}, "else": [{"refuse": "to: top | bottom | up | down."}]}, {"answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"kind": "=kind", "view": "=v.Label", "stackOrder": "=int(mine.StackOrder)"}}}]}}, {"let": {"dest": "=page_of(a.page)", "mover": "=grp or v"}}, {"answer": {"fields": {"kind": "=kind", "view": "=mover.Label", "page": "=dest.Label", "note": "Already on that page."}}, "when": "=here is dest"}, {"do": "=here.removeView(mover)", "when": "=here is not None"}, {"do": ["=dest.addView(mover)", "=recompute([mover])"]}, {"answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"kind": "=kind", "view": "=mover.Label", "from": "=here.Label if here else None", "page": "=dest.Label", "note": {"when": "=grp", "value": "Moved with its projection group."}}}}]},
+    {"let": {"page": "=page_of(a.page)"}},
+    {"when": "=kind in ('clip_add', 'clip_remove')", "then": [{"let": {"c": "=obj_of(a.clip, ['TechDraw::DrawViewClip'], 'clip')"}}, {"let": {"v": "=obj_of(a.view, ['TechDraw::DrawView'], 'view')"}}, {"do": ["=c.addView(v) if kind == 'clip_add' else c.removeView(v)", "=recompute()"]}, {"answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"kind": "=kind", "clip": "=c.Label", "views": "=[x.Label for x in c.Views]"}}}]},
+    {"choose": "=kind", "of": {"draft": [{"let": {"src": "=find(a.object, 'object')"}}, {"add": "TechDraw::DrawViewDraft", "name": "DraftView"}, {"set": {"o.Source": "=src"}}, {"set": {"o.Direction": "=vector_of(a.direction)"}, "when": "=a.direction"}], "clip": [{"add": "TechDraw::DrawViewClip", "name": "Clip"}, {"let": {"w": "=float(a.get('width', 60))", "h": "=float(a.get('height', 40))"}}, {"set": {"o.Width": "=w", "o.Height": "=h", "o.ShowFrame": "=bool(a.get('frame', True))"}}], "image": [{"let": {"p": "=expanduser(a.path or '')"}}, {"refuse": {"fmt": "path {p!r}: no such image."}, "code": "not_found", "when": "=not isfile(p)"}, {"add": "TechDraw::DrawViewImage", "name": "Image"}, {"set": {"o.ImageFile": "=p"}}, {"let": {"w": "=float(a.get('width', 50))", "h": "=float(a.get('height', 50))"}}, {"set": {"o.Width": "=w", "o.Height": "=h"}}], "symbol": [{"let": {"p": "=expanduser(a.path or '')"}}, {"refuse": {"fmt": "path {p!r}: no such SVG."}, "code": "not_found", "when": "=not isfile(p)"}, {"add": "TechDraw::DrawViewSymbol", "name": "Symbol"}, {"set": {"o.Symbol": "=read_text(p)"}}, {"set": {"o.Scale": "=float(a.scale)"}, "when": "=a.scale"}], "share": [{"let": {"v": "=obj_of(a.view, ['TechDraw::DrawView'], 'view')"}}, {"do": "=page.addView(v)"}, {"let": {"deps": "=[x for x in v.InList if x.isDerivedFrom('TechDraw::DrawViewDimension') or x.isDerivedFrom('TechDraw::DrawViewBalloon')]"}}, {"each": "x", "in": "=deps", "steps": [{"do": "=page.addView(x)"}]}, {"do": "=recompute()"}, {"answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"kind": "=kind", "view": "=v.Label", "alsoOn": "=page.Label", "with": "=[x.Label for x in deps]"}}}]}, "else": [{"refuse": "kind: broken { view, breaks, gap } | draft { object } | clip { width, height } | clip_add / clip_remove { clip, view } | image { path, width, height } | symbol { path (SVG), scale } | share { view } — with page."}]},
+    {"do": "=page.addView(o)"},
+    {"set": {"o.Label": "=unique(a.name, o)"}, "when": "=a.name"},
+    {"let": {"x, y": "=place_xy(page, a.at, (100.0, 100.0))"}},
+    {"set": {"o.X": "=x", "o.Y": "=y"}},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"kind": "=kind", "...view": "=view_reading(o)"}}
+  },
+  "td_lines": {
+   "group": "techdraw",
+   "description": "A view's lines: action align_h / align_v { refs two points or an edge } (the view turned so they line up) | style { refs edges, style solid|dashed|dotted|dashdot|dashdotdot|none, weight mm, color } | extend / shorten { items (td_cosmetic's lines by order from 0; all when left out), by mm, centerlines } | erase { items, tags } (cosmetic lines gone; all td_cosmetic's when items is left out).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "action": {
+      "type": "string",
+      "enum": [
+       "align_h",
+       "align_v",
+       "style",
+       "extend",
+       "shorten",
+       "erase"
+      ]
+     },
+     "refs": {
+      "type": "array",
+      "items": {}
+     },
+     "style": {
+      "type": "string"
+     },
+     "weight": {
+      "type": "number"
+     },
+     "color": {},
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     },
+     "by": {
+      "type": "number"
+     },
+     "centerlines": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "view",
+     "action"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"v": "=view_of(a.view)", "act": "=a.action"}},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"when": "=act in ('align_h', 'align_v')", "then": [{"let": {"names": "=[resolve_ref(v, r) for r in (a.refs or [])]"}}, {"when": "=len(names) == 1 and names[0].startswith('Edge')", "then": [{"let": {"e": "=edges_of(v)[int(names[0][4:])]"}}, {"let": {"p": "=e.Vertexes[0].Point", "q": "=e.Vertexes[-1].Point"}}], "else": [{"refuse": "refs: two points, or one straight edge, to line up.", "when": "=len(names) != 2"}, {"let": {"vs": "=vertices_of(v)"}}, {"let": {"p, q": "=[vs[int(n[6:])] for n in names]"}}]}, {"let": {"turn": "=turn_to_align(p, q, act == 'align_v')"}}, {"set": {"v.Rotation": "=float(v.Rotation) + turn"}}, {"do": "=recompute([v])"}, {"answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"view": "=v.Label", "rotation": "=num(v.Rotation, 3)", "turned": "=num(turn, 3)"}}}]},
+    {"when": "=act == 'style'", "then": [{"let": {"st": "=a.get('style', 'solid')"}}, {"refuse": "style: solid | dashed | dotted | dashdot | dashdotdot | none.", "when": "=st not in LINE_STYLES"}, {"let": {"col": "=a.color"}}, {"let": {"c": "=colour(col) if col else (0.0, 0.0, 0.0, 1.0)"}}, {"let": {"w": "=float(a.get('weight', 0.35))", "styled": []}}, {"each": "r", "in": "=a.refs or []", "steps": [{"let": {"n": "=resolve_ref(v, r)"}}, {"refuse": {"fmt": "{r}: an edge."}, "when": "=not n.startswith('Edge')"}, {"do": "=v.formatGeometricEdge(int(n[4:]), LINE_STYLES[st], w, tuple(c[:3]) + (1.0 if native_ok() else 0.0,), st != 'none')", "when": "=has(v, 'formatGeometricEdge')"}, {"push": {"styled": "=n"}}]}, {"let": {"keep": "=loads(get(v, 'AgentLinkEdgeStyles', '{}') or '{}')"}}, {"do": ["=keep.update({n: {'style': st, 'weight': w, 'color': col or '#000000'} for n in styled})", "=own_prop(v, 'AgentLinkEdgeStyles', 'App::PropertyString', 'Edge line styles set by Agent Link (JSON)')"]}, {"set": {"v.AgentLinkEdgeStyles": "=dumps(keep)"}}, {"do": "=recompute([v])"}, {"answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"view": "=v.Label", "styled": "=styled", "style": "=st", "weight": "=w"}}}]},
+    {"let": {"prims": "=loads(get(v, COSMETIC_PROP, '[]') or '[]')"}},
+    {"when": "=act in ('extend', 'shorten')", "then": [{"let": {"by": "=float(a.get('by', 2.0)) * (1 if act == 'extend' else -1)", "changed": []}}, {"each": "i", "in": "=range(len(prims)) if a.items is None else [int(i) for i in a.items]", "steps": [{"refuse": {"fmt": "items: 0 to {len(prims) - 1} (td_cosmetic's lines, in the order made)."}, "when": "=not 0 <= i < len(prims)"}, {"when": "=len(prims[i]['pts']) == 2", "then": [{"let": {"L, pts": "=stretched(prims[i]['pts'], by)"}}, {"refuse": {"fmt": "item {i} is {L:.2f} mm long: it cannot shorten by {-by:g} at each end."}, "when": "=L + 2 * by <= 0"}, {"do": "=prims[i].update({'pts': pts})"}, {"do": ["=drop_native(v, prims[i])", "=prims[i].update({'tags': native_cosmetic(v, prims[i])})"], "when": "=prims[i].get('tags')"}, {"push": {"changed": "=i"}}]}]}, {"do": "=setprop(v, COSMETIC_PROP, dumps(prims))"}, {"each": "t", "in": "=a.centerlines or []", "steps": [{"try": [{"let": {"cl": "=v.getCenterLine(t)"}}, {"set": {"cl.Extension": "=float(cl.Extension) + by"}}, {"do": "=v.replaceCenterLine(cl)", "when": "=has(v, 'replaceCenterLine')"}], "except": [{"refuse": {"fmt": "centerlines: {t!r} is not a centerline tag of {v.Label} ({error}) — these are FreeCAD's own centerlines' tags; td_cosmetic's lines go by items (their order from 0)."}}]}]}, {"do": "=recompute()"}, {"answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"view": "=v.Label", "...changed": "={('extended' if act == 'extend' else 'shortened'): changed}", "by": "=abs(by)"}}}]},
+    {"when": "=act == 'erase'", "then": [{"let": {"gone": "=list(range(len(prims))) if a.items is None else sorted({int(i) for i in a.items})"}}, {"each": "i", "in": "=gone", "steps": [{"do": "=drop_native(v, prims[i])", "when": "=0 <= i < len(prims)"}]}, {"let": {"prims": "=[p for i, p in enumerate(prims) if i not in gone]"}}, {"do": "=setprop(v, COSMETIC_PROP, dumps(prims))"}, {"each": "t", "in": "=a.tags or []", "steps": [{"do": "=erase_tag(v, t)"}]}, {"do": "=recompute()"}, {"answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"view": "=v.Label", "erased": "=gone", "left": "=len(prims)"}}}]},
+    {"refuse": "action: align_h / align_v { refs } | style { refs edges, style, weight, color } | extend / shorten { items, by, centerlines } | erase { items, tags }."}
+   ]
+  },
+  "cam_path": {
+   "group": "cam_more",
+   "description": "Other CAM path objects (job puts one in a job). kind: area { sources, workplane \"Body.Face3\", props } | from_shape { sources } (a path along wires, no tool controller) | edges { sources, job } (with one: not on 1.1 without its window) | compound { ops } | array { ops, props: Type, Copies, Offset … } | stop { mandatory } (M0, else M1) | fixture { fixture: G54 … }. Answers object, commands, first (G-code lines).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "area",
+       "from_shape",
+       "edges",
+       "compound",
+       "array",
+       "stop",
+       "fixture"
+      ]
+     },
+     "job": {
+      "type": "string"
+     },
+     "sources": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "workplane": {
+      "type": "string"
+     },
+     "ops": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "props": {
+      "type": "object"
+     },
+     "mandatory": {
+      "type": "boolean"
+     },
+     "fixture": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "A CAM path needs FreeCAD's CAM workbench, not in this build.", "code": "unavailable", "when": "=not has_cam()"},
+    {"let": {"kind": "=a.kind", "job": "=job_of(a['job']) if a.job else None", "name": "=a.name"}},
+    {"choose": "=kind", "of": {"area": [{"let": {"srcs": "=[shaped(r, 'sources') for r in (a.sources or [])]"}}, {"refuse": "sources: the shapes to work from (labels), one or more.", "when": "=not srcs"}, {"add": "Path::FeatureArea", "name": "Area"}, {"set": {"o.Sources": "=srcs"}}, {"when": "=a.workplane", "then": [{"let": {"label, sub, face": "=resolve(a.workplane)"}}, {"refuse": "workplane: \"Body.Face3\", a flat face the sections are taken parallel to.", "when": "=sub is None or not sub.startswith('Face')"}, {"set": {"o.WorkPlane": "=face"}}]}, {"each": "pk, pv", "in": "=list((a.props or {}).items())", "steps": [{"refuse": {"fmt": "props.{pk}: {o.Label} has no such property (object_get lists them)."}, "when": "=pk not in o.PropertiesList"}, {"try": [{"do": "=setprop(o, pk, pv)"}], "except": [{"refuse": {"fmt": "props.{pk} = {pv!r}: {error}"}}]}]}], "from_shape": [{"let": {"srcs": "=[shaped(r, 'sources') for r in (a.sources or [])]"}}, {"refuse": "sources: wires or edges to turn into a path (labels), one or more.", "when": "=not srcs"}, {"add": "Path::FeatureShape", "name": "PathShape"}, {"set": {"o.Sources": "=srcs"}}, {"do": "=job.Operations.addObject(o)", "when": "=job is not None"}], "edges": [{"try": [{"let": {"cls": "=from_module('Path.Op.Gui.PathShape', 'ObjectPathShape')"}}], "on": ["ImportError"], "except": [{"refuse": {"fmt": "Path from Shape with a tool controller cannot be made here on FreeCAD {fc_version()} (there it is a command of the CAM workbench's window): kind from_shape makes the same path without a tool controller, and cam_op {{ kind: \"engrave\", base }} follows edges with the job's tool."}, "code": "unavailable"}]}, {"add": "Path::FeaturePython", "name": "PathShape"}, {"do": "=proxied(cls, o, job)"}, {"set": {"o.Base": "=[(shaped(r, 'sources'), []) for r in (a.sources or [])]"}}, {"do": "=job.Operations.addObject(o)", "when": "=job is not None"}], "compound": [{"let": {"members": "=[find(r, 'ops') for r in (a.ops or [])]"}}, {"refuse": "ops: the paths to run as one, in order.", "when": "=not members"}, {"let": {"nopath": "=[x.Label for x in members if get(x, 'Path') is None]"}}, {"refuse": {"fmt": "ops: {', '.join(nopath)} {'is' if len(nopath) == 1 else 'are'} not CAM paths (cam_list lists a job's operations)."}, "when": "=nopath"}, {"add": "Path::FeatureCompound", "name": "Compound"}, {"set": {"o.Group": "=members"}}, {"do": "=job.Operations.addObject(o)", "when": "=job is not None"}], "array": [{"let": {"cls": "=from_module('Path.Op.Gui.Array', 'ObjectArray')"}}, {"let": {"members": "=[find(r, 'ops') for r in (a.ops or [])]"}}, {"refuse": "ops: the operations to repeat.", "when": "=not members"}, {"let": {"nopath": "=[x.Label for x in members if get(x, 'Path') is None]"}}, {"refuse": {"fmt": "ops: {', '.join(nopath)} {'is' if len(nopath) == 1 else 'are'} not CAM paths (cam_list lists a job's operations)."}, "when": "=nopath"}, {"refuse": {"fmt": "ops: {members[0].Label} has no tool controller; give operations made by cam_op."}, "when": "=get(members[0], 'ToolController') is None"}, {"add": "Path::FeaturePython", "name": "Array"}, {"do": "=proxied(cls, o)"}, {"set": {"o.Base": "=members", "o.ToolController": "=members[0].ToolController"}}, {"each": "pk, pv", "in": "=list((a.props or {}).items())", "steps": [{"refuse": {"fmt": "props.{pk}: {o.Label} has no such property (object_get lists them)."}, "when": "=pk not in o.PropertiesList"}, {"try": [{"do": "=setprop(o, pk, pv)"}], "except": [{"refuse": {"fmt": "props.{pk} = {pv!r}: {error}"}}]}]}, {"do": "=job.Operations.addObject(o)", "when": "=job is not None"}], "stop": [{"let": {"cls": "=from_module('Path.Op.Gui.Stop', 'Stop')"}}, {"add": "Path::FeaturePython", "name": "Stop"}, {"do": "=proxied(cls, o)"}, {"set": {"o.Stop": "='Mandatory' if a.mandatory else 'Optional'"}}, {"do": "=job.Operations.addObject(o)", "when": "=job is not None"}], "fixture": [{"let": {"cls": "=from_module('Path.Main.Gui.Fixture', 'Fixture')"}}, {"add": "Path::FeaturePython", "name": "Fixture"}, {"do": "=proxied(cls, o)"}, {"let": {"allowed": "=list(o.getEnumerationsOfProperty('Fixture') or [])", "want": "=str(a.get('fixture', 'G54')).upper()"}}, {"refuse": {"fmt": "fixture {a.get('fixture')!r}: one of {', '.join(allowed)}."}, "first": [{"do": "=doc().removeObject(o.Name)"}], "when": "=want not in allowed"}, {"set": {"o.Fixture": "=want", "o.Active": true}}, {"do": "=job.Operations.addObject(o)", "when": "=job is not None"}]}, "else": [{"refuse": "kind: area { sources, workplane, props } | from_shape { sources } | edges { sources, job } | compound { ops } | array { ops, props: { Type, Copies, Offset … } } | stop { mandatory } | fixture { fixture: G54…G59.9 }."}]},
+    {"set": {"o.Label": "=unique(name, o)"}, "when": "=name"},
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]},
+    {"let": {"g": "=gcode(o)", "sh": "=get(o, 'Shape')"}},
+    {"let": {"sections": "=kind == 'area' and sh is not None and not sh.isNull()"}}
+   ],
+   "answer": {"fields": {"object": "=o.Label", "kind": "=kind", "job": {"when": "=job is not None", "value": "=job.Label"}, "commands": {"when": "=g", "value": "=len(g)"}, "first": {"when": "=g", "value": "=g[:6]"}, "wires": {"when": "=sections", "value": "=len(sh.Wires)"}, "area": {"when": "=sections", "value": "=round(sum([f.Area for f in sh.Faces]), 3) if sh.Faces else None"}}}
+  },
+  "cam_property_bag": {
+   "group": "cam_more",
+   "description": "A CAM property bag of named values for operations' expressions: properties [{ name (no spaces), type Float | Length | Angle | Integer | String | Bool, value, group }]. Answers bag, name (expressions call it <name>.<property>).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "properties": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "A property bag needs FreeCAD's CAM workbench, not in this build.", "code": "unavailable", "when": "=not has_cam()"},
+    {"let": {"bags": "=from_module('Path.Base', 'PropertyBag')", "props": "=a.properties or []"}},
+    {"each": "p", "in": "=props", "steps": [{"refuse": "properties: [{ name (letters and digits, no spaces), type (Float, Length, Angle, Integer, String, Bool), value, group }].", "when": "=not is_dict(p) or not p.get('name') or not str(p['name']).isidentifier()"}, {"refuse": {"fmt": "properties.{p['name']}.type {p.get('type')!r}: one of {', '.join(BAG_KINDS)}."}, "when": "=p.get('type', 'Float') not in BAG_KINDS"}]},
+    {"refuse": "properties: each name once.", "when": "=len({p['name'] for p in props}) < len(props)"},
+    {"let": {"bag": "=bags.Create(a.name or 'PropertyBag')"}},
+    {"set": {"bag.Label": "=unique(a.name, bag)"}, "when": "=a.name"},
+    {"each": "p", "in": "=props", "steps": [{"let": {"nm": "=p['name']", "kind": "=p.get('type', 'Float')"}}, {"do": "=bag.Proxy.addCustomProperty('App::Property' + kind, nm, p.get('group', 'Custom'), p.get('info', ''))"}, {"when": "='value' in p", "then": [{"try": [{"do": "=setprop(bag, nm, p['value'])"}], "except": [{"refuse": {"fmt": "properties.{nm}.value {p['value']!r} does not fit a {kind}: {error}"}}]}]}]},
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]}
+   ],
+   "answer": {"fields": {"bag": "=bag.Label", "name": "=bag.Name", "properties": "=[p['name'] for p in props]", "use": {"fmt": "In an operation's expression it is {bag.Name}.<property>."}}}
+  },
+  "cam_template_export": {
+   "group": "cam_more",
+   "description": "Write a CAM job as a template (job_<name>.json in the output folder unless path): tool controllers, stock, setup sheet, post settings; description. For FreeCAD's New Job dialog (cam_job does not read templates). Changes nothing in the document.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "type": "string"
+     },
+     "path": {
+      "type": "string"
+     },
+     "description": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/cam_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "A job template needs FreeCAD's CAM workbench, not in this build.", "code": "unavailable", "when": "=not has_cam()"},
+    {"let": {"jobs": "=from_module('Path.Main.Job')", "stocks": "=from_module('Path.Main.Stock')"}},
+    {"let": {"job": "=job_of(a.job)", "key": "=jobs.JobTemplate"}},
+    {"let": {"attrs": "=job.Proxy.templateAttrs(job)"}},
+    {"do": "=attrs.update({key.Description: a.description})", "when": "=a.description"},
+    {"do": ["=attrs.update({key.ToolController: [tc.Proxy.templateAttrs(tc) for tc in job.Tools.Group]})", "=attrs.update({key.Stock: stocks.TemplateAttributes(job.Stock)})", "=attrs.update({key.SetupSheet: job.Proxy.setupSheet.templateAttributes(True, True, True)})"]},
+    {"let": {"enc": "=job.Proxy.setupSheet.encodeTemplateAttributes(attrs)"}},
+    {"let": {"path": "=expanduser(a.path or join(out_dir(), 'job_' + str(job.Label) + '.json'))"}},
+    {"let": {"path": "=join(dirname(path), 'job_' + basename(path))"}, "when": "=not basename(path).startswith('job_')"},
+    {"let": {"path": "=path + '.json'"}, "when": "=not path.endswith('.json')"},
+    {"do": ["=made(path)", "=write_template(path, enc)"]}
+   ],
+   "answer": {"fields": {"template": "=path", "bytes": "=getsize(path)", "tools": "=len(job.Tools.Group)", "note": "FreeCAD's New Job dialog offers a job_*.json that lies in its CAM template folder (CAM preferences); cam_job does not read templates."}}
+  },
+  "draft_fix": {
+   "group": "cam_more",
+   "description": "Draft fixes: action flip_dimension { dimension } (text to the other side) | heal { objects } (old Draft objects rebuilt as new copies; left out: only those that need it, named ones regardless). Reply: normal; or healed, rebuilt, removed, now.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "flip_dimension",
+       "heal"
+      ]
+     },
+     "dimension": {
+      "type": "string"
+     },
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"act": "=a.action"}},
+    {"when": "=act == 'flip_dimension'", "then": [{"let": {"o": "=find(a.dimension, 'dimension')"}}, {"refuse": {"fmt": "dimension: {o.Label} is not a Draft dimension (draft_dimension makes them; a drawing's dimensions are td_dim's)."}, "when": "='Normal' not in o.PropertiesList or 'Dimline' not in o.PropertiesList"}, {"set": {"o.Normal": "=o.Normal.negative() if o.Normal.Length else V(0, 0, -1)"}}, {"do": ["=doc().recompute()", "=snapshot(tool)"]}, {"answer": {"fields": {"dimension": "=o.Label", "normal": "=[round(x, 6) for x in o.Normal]", "note": "Its text now reads from the other side; the measured value is the same."}}}]},
+    {"when": "=act == 'heal'", "then": [{"do": "=draft_ready()"}, {"let": {"targets": "=[find(r) for r in a['objects']] if a.objects else None"}}, {"let": {"asked": "=[o.Label for o in targets] if targets else None", "before": "={o.Name for o in doc().Objects}"}}, {"do": ["=heal(targets)", "=doc().recompute()", "=snapshot(tool)"]}, {"let": {"after": "={o.Name: o.Label for o in doc().Objects}"}}, {"let": {"made": "=[lab for n, lab in after.items() if n not in before]", "gone": "=len(before - set(after))"}}, {"answer": {"fields": {"healed": "=asked if asked else 'all Draft objects'", "rebuilt": "=len(made)", "removed": "=gone", "now": {"when": "=made", "value": "=made[:30]"}, "note": "='Each rebuilt object is a new copy with a new name; the old one was removed, and what pointed at it was moved over.' if made else 'Nothing needed healing.' if not asked else 'None of them is a kind Draft can rebuild (dimension, rectangle, wire, B-spline, circle, polygon).'"}}}]},
+    {"refuse": "action: flip_dimension { dimension } | heal { objects }."}
+   ]
+  },
+  "asm_rigid_group": {
+   "group": "cam_more",
+   "description": "Hold two or more parts of an assembly fixed to each other as one group (Assembly's rigid group joint, FreeCAD 1.2 and newer): parts by label, name. On FreeCAD 1.1 it answers unavailable — asm_joint kind fixed between each pair does the same there. Reply: joint, parts.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string"
+     },
+     "parts": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "parts"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)"}},
+    {"let": {"parts": "=[part_of(asm, r) for r in (a.parts or [])]"}},
+    {"refuse": {"fmt": "parts: two or more parts of {asm.Label}, held fixed to each other (asm_list lists them)."}, "when": "=len(parts) < 2"},
+    {"refuse": {"fmt": "Rigid groups came in FreeCAD 1.2; this is {fc_version()}. asm_joint kind fixed between each pair does the same."}, "code": "unavailable", "when": "=not has_rigid_groups()"},
+    {"let": {"rg": "=joints(asm).newObject('App::FeaturePython', 'RigidGroupJoint')"}},
+    {"do": "=rigid_group(rg, parts)"},
+    {"set": {"rg.Label": "=unique(a.name, rg)"}, "when": "=a.name"},
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]}
+   ],
+   "answer": {"fields": {"joint": "=rg.Label", "parts": "=[p.Label for p in parts]"}}
+  },
+  "asm_new_part": {
+   "group": "cam_more",
+   "description": "A new empty part to build in place (Assembly's New Part): an App::Part holding an empty PartDesign body, put in the assembly through an App::Link; name; at [x, y, z], axis and angle degrees place the link. Reply: part, body (sketch_new { body } and pd_pad build in it), inAssembly (the link's label). asm_check checks it where the link stands; asm_joint and asm_ground take bodies put in with asm_new or asm_add, not this link — to joint a part, build the body first and asm_add it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "assembly": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "axis": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "angle": {
+      "type": "number"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"asm": "=assembly(a.assembly)", "name": "=a.name or 'Part'"}},
+    {"add": "App::Part", "name": "Part", "as": "part"},
+    {"set": {"part.Label": "=unique(name, part)"}},
+    {"let": {"body": "=part.newObject('PartDesign::Body', 'Body')"}},
+    {"set": {"body.Label": "=unique(part.Label + ' body', body)"}},
+    {"let": {"lk": "=asm.newObject('App::Link', 'Link')"}},
+    {"set": {"lk.LinkedObject": "=part", "lk.Label": "=unique(part.Label, lk)"}},
+    {"set": {"lk.Placement": "=placement(a)"}, "when": "=placed(a)"},
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]}
+   ],
+   "answer": {"fields": {"part": "=part.Label", "body": "=body.Label", "inAssembly": "=lk.Label", "note": "An empty part in the assembly: sketch_new and pd_pad in its body build it in place. asm_joint and asm_ground do not take this link as a part; a body put in with asm_add they do."}}
+  },
+  "scad_status": {
+   "group": "openscad",
+   "description": "Whether the OpenSCAD program is on this computer (openscad: its path or null; version), and whether FreeCAD's CSG parser (ply) loads. Without OpenSCAD: .csg import (not a file's own hull, minkowski or text), CSG export and scad_op's hull work; .scad files, scad_code and minkowski do not. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/openscad.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"p": "=exe()", "version": null}},
+    {"when": "=p", "then": [{"let": {"how, words": "=version_of(p)"}}, {"let": {"version": "=words if how == 'ok' else 'unknown (it gave no answer to -v in 20 s)' if how == 'timeout' else 'unknown (' + words + ')'"}}]},
+    {"let": {"parser": "=has_ply()"}}
+   ],
+   "answer": {"fields": {"openscad": "=p", "version": {"when": "=p", "value": "=version"}, "note": {"when": "=not p", "value": "OpenSCAD is not installed: .csg import (not a file's hull, minkowski or text), CSG export and hull work; .scad files, scad_code and Minkowski need it."}, "csgParser": "=parser", "warning": {"when": "=not parser", "value": "The CSG parser (ply) is missing from FreeCAD's Python: CSG import will not run."}}}
+  },
+  "scad_import": {
+   "group": "openscad",
+   "description": "Read an OpenSCAD file into the document (path; relative: the session's folder): .csg needs only FreeCAD, unless it uses hull, minkowski or text (those, and any .scad, go through the OpenSCAD program: refused unavailable when it is not installed — scad_status). Primitives, booleans, transforms and extrusions come in as FreeCAD's own parametric objects (Part::Box, Cut, Fuse …; one object per CSG node, so a small file makes many), hull and minkowski as meshes turned to shapes. Reply: objects (how many), top (the results nothing else uses — the bodies to work with), made [{ object, type, solids, volume }], health.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/openscad.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "path: a file's path (a relative one is in the session's folder).", "when": "=not is_str(a.path) or not a.path.strip()"},
+    {"let": {"p": "=local(a.path)"}},
+    {"refuse": {"fmt": "{p}: no such file — a relative path is looked for in the session's folder."}, "code": "not_found", "when": "=not isfile(p)"},
+    {"let": {"ext": "=splitext(p)[1].lower()"}},
+    {"refuse": {"fmt": "path: {ext or 'no extension'} is not OpenSCAD's — a .csg or .scad file (import_file reads STL, STEP and the rest)."}, "when": "=ext not in ('.csg', '.scad')"},
+    {"when": "=ext == '.scad'", "then": [{"refuse": "A .scad file needs the OpenSCAD program, not found on this computer: the person installs it (openscad.org) or sets its path in FreeCAD's OpenSCAD preferences.", "code": "unavailable", "when": "=not exe()"}], "else": [{"when": "=not exe()", "then": [{"let": {"words": "=csg_needs(read_text(p))"}}, {"let": {"hull": "=' scad_op { op: \"hull\" } makes a hull of bodies without it.' if 'hull' in words else ''"}}, {"refuse": {"fmt": "{basename(p)} uses {', '.join(words)}, which FreeCAD works out through the OpenSCAD program, not found on this computer: the person installs it (openscad.org) or sets its path in FreeCAD's OpenSCAD preferences. Nothing was read.{hull}"}, "code": "unavailable", "when": "=words"}]}]},
+    {"let": {"before": "={o.Name for o in doc().Objects}", "no_reader": null}},
+    {"try": [{"try": [{"do": "=read_in(p)"}], "on": ["ImportError"], "except": [{"let": {"no_reader": "=error"}}]}], "except": [{"refuse": {"fmt": "{basename(p)} could not be read: {said(error)} — nothing was kept. scad_status says whether the CSG parser and OpenSCAD are here; a .scad that uses fonts or imports other files needs them beside it."}, "code": "failed"}]},
+    {"refuse": {"fmt": "FreeCAD's CSG importer is not loadable here ({no_reader}): scad_status says whether its parser (ply) is in FreeCAD's Python."}, "code": "unavailable", "when": "=no_reader is not None"},
+    {"do": "=doc().recompute()"},
+    {"let": {"objs, tops": "=made_since(before)"}},
+    {"refuse": {"fmt": "{basename(p)}: nothing came in — the file has no geometry at its top level (modules only defined, never called?)."}, "code": "failed", "when": "=not objs"},
+    {"do": "=tidy_view(before)"}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"path": "=p", "objects": "=len(objs)", "top": "=tops", "made": "=objs[:40]"}}
+  },
+  "scad_code": {
+   "group": "openscad",
+   "description": "Run OpenSCAD code into the document: code (e.g. \"difference() { cube(20, center=true); sphere(13); }\") goes through the OpenSCAD program to CSG and comes in as scad_import does. Needs OpenSCAD installed (scad_status); a syntax error is refused with OpenSCAD's message. name: the label of the result when there is one top object. Reply: top, objects, made.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "code": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "code"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/openscad.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"code": "=a.code"}},
+    {"refuse": "code: OpenSCAD source, e.g. \"difference() { cube(20, center=true); sphere(13); }\".", "when": "=not is_str(code) or not code.strip()"},
+    {"refuse": "OpenSCAD code needs the OpenSCAD program, not found on this computer: the person installs it (openscad.org) or sets its path in FreeCAD's OpenSCAD preferences.", "code": "unavailable", "when": "=not exe()"},
+    {"let": {"utils": "=scad_utils()"}},
+    {"try": [{"let": {"made": "=run_code(utils, code)"}}], "except": [{"refuse": {"fmt": "OpenSCAD refused the code: {error} — fix the line it names; nothing was made."}, "code": "failed"}]},
+    {"refuse": "OpenSCAD made nothing from the code (an error in it, or no geometry at the top level).", "code": "failed", "when": "=not made or not isfile(made)"},
+    {"let": {"before": "={o.Name for o in doc().Objects}"}},
+    {"try": [{"do": "=read_in(made)"}], "except": [{"refuse": {"fmt": "OpenSCAD ran the code, but FreeCAD's CSG importer could not read the result: {said(error)} — nothing was kept. Simpler code (no text(), surface() or import()) usually reads."}, "first": [{"do": "=drop_file(made)"}], "code": "failed"}]},
+    {"do": ["=drop_file(made)", "=doc().recompute()"]},
+    {"let": {"objs, tops": "=made_since(before)"}},
+    {"refuse": "The code made no geometry (modules only defined, or everything commented out).", "code": "failed", "when": "=not objs"},
+    {"do": "=tidy_view(before)"},
+    {"when": "=a.name and len(tops) == 1", "then": [{"let": {"top": "=first([o for o in doc().Objects if o.Label == tops[0]])"}}, {"set": {"top.Label": "=unique(a.name, top)"}}, {"let": {"tops": "=[top.Label]"}}]}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"top": "=tops", "objects": "=len(objs)", "made": "=objs[:40]"}}
+  },
+  "scad_export": {
+   "group": "openscad",
+   "description": "Write objects (the one body when left out) as OpenSCAD CSG (path: .csg or .scad, .csg added; relative: the session's folder): Part primitives, booleans, extrusions and placements as OpenSCAD's own, anything else (PartDesign bodies, fillets, imports) as polyhedra of triangles — the note counts them. Reply: path, bytes, lines. The document is not changed.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "path": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/openscad.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"names": "=a.objects or []"}},
+    {"let": {"objs": "=[find(n, 'objects') for n in ref_list(names)] if names else [body()]"}},
+    {"each": "o", "in": "=objs", "steps": [{"refuse": {"fmt": "objects: {o.Label} ({o.TypeId}) has no shape to write as CSG."}, "when": "=not has_shape(o)"}]},
+    {"let": {"given": "=a.path or (objs[0].Label.replace(' ', '_') + '.csg')"}},
+    {"refuse": "path: a file's path (a relative one is in the session's folder).", "when": "=not is_str(given) or not given.strip()"},
+    {"let": {"p": "=local(given)"}},
+    {"let": {"p": "=p + '.csg'"}, "when": "=not p.lower().endswith(('.csg', '.scad'))"},
+    {"do": "=make_folder(p)"},
+    {"try": [{"do": "=export_csg(objs, p)"}], "except": [{"refuse": {"fmt": "CSG export failed: {said(error)} — FreeCAD's exporter writes Part primitives, booleans, extrusions and placements itself and meshes the rest; export {{ format: \"stl\" }} gives OpenSCAD a mesh to import() instead."}, "code": "failed"}]},
+    {"let": {"text": "=read_text(p)"}},
+    {"let": {"poly": "=text.count('polyhedron(')"}}
+   ],
+   "answer": {"fields": {"objects": "=[o.Label for o in objs]", "path": "=p", "bytes": "=getsize(p)", "lines": "=text.count('\\n')", "note": {"when": "=poly", "value": {"fmt": "{poly} object(s) went out as polyhedra (triangles): OpenSCAD has no equivalent for those features."}}}}
+  },
+  "scad_op": {
+   "group": "openscad",
+   "description": "OpenSCAD's hull (the convex shape stretched round the objects, like shrink-wrap) or minkowski (the first shape swept round by the second: rounded edges all over; slow, minutes on curved shapes) of objects [names]. Hull works without OpenSCAD (computed here from the shapes' points, faceted on curves: made says which); minkowski needs OpenSCAD. The inputs are kept. name: the result's label. Reply: object, made, volume, faces, health.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "op": {
+      "type": "string",
+      "enum": [
+       "hull",
+       "minkowski"
+      ]
+     },
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "objects"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/openscad.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"op": "=a.get('op', 'hull')"}},
+    {"refuse": "op: hull | minkowski.", "when": "=op not in ('hull', 'minkowski')"},
+    {"let": {"objs": "=[shaped(n, 'objects') for n in (ref_list(a.objects) or [])]"}},
+    {"refuse": "objects: one or more bodies by name or label.", "when": "=op == 'hull' and len(objs) < 1"},
+    {"refuse": "objects: two bodies (the shape, then what sweeps round it) by name or label.", "when": "=op != 'hull' and len(objs) < 2"},
+    {"let": {"how": "OpenSCAD"}},
+    {"when": "=exe()", "then": [{"let": {"utils": "=scad_utils()"}}, {"try": [{"let": {"res": "=via_openscad(utils, objs, op)"}}], "except": [{"refuse": {"fmt": "OpenSCAD's {op} failed: {said(error)} — nothing was made."}, "code": "failed"}]}, {"refuse": {"fmt": "OpenSCAD's {op} made nothing: the objects must be all solids or all flat (2D and 3D do not mix), or OpenSCAD gave an error of its own (report_read shows it)."}, "code": "failed", "when": "=res is None"}], "else": [{"when": "=op == 'hull'", "then": [{"add": "Part::Feature", "name": "Hull", "as": "res"}, {"set": {"res.Shape": "=hull_here([o.Shape for o in objs])"}}, {"let": {"how": "here (OpenSCAD not installed): the hull of the bodies' points"}}], "else": [{"refuse": "A Minkowski sum needs the OpenSCAD program, not found on this computer: the person installs it (openscad.org) or sets its path in FreeCAD's OpenSCAD preferences.", "code": "unavailable", "when": "=not exe()"}]}]},
+    {"set": {"res.Label": "=unique(a.name or op.capitalize(), res)"}},
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]},
+    {"let": {"sh": "=res.Shape"}}
+   ],
+   "answer": {"fields": {"object": "=res.Label", "op": "=op", "of": "=[o.Label for o in objs]", "made": "=how", "volume": "=round(sh.Volume, 3) if sh.Solids else None", "faces": "=len(sh.Faces)", "step": "=step()"}}
+  },
+  "material_list": {
+   "group": "material",
+   "description": "Find materials: words (every word must be in the id, name, category, tags or description) and category (part of one: \"Printing filament\", \"Metal/Steel\", \"Thermoplast\" …; the reply's categories lists them). The printing filaments (pla, petg, abs, asa, pa6-cf, tpu-95a) come first, then FreeCAD's material library (its cards with a density or stiffness; appearance-only, fluid and pattern cards left out), then this document's custom ones. Reply: found, materials [{ id, name, category, density g/cm³, E and yield MPa where the card has them }] (limit 20), more. A library card's id is its UUID; its exact name works wherever an id is asked. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "words": {
+      "type": "string"
+     },
+     "category": {
+      "type": "string"
+     },
+     "limit": {
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/material.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"words": "=search_words(a.words)", "cat": "=(a.category or '').lower()"}},
+    {"let": {"cards": "=all_cards()"}},
+    {"let": {"hits": "=[c for c in cards if all(w in haystack(c) for w in words) and not (cat and cat not in c['category'].lower())]"}},
+    {"let": {"hits": "=sorted(hits, key=lambda c: not all(w in (c['id'] + ' ' + c['name']).lower() for w in words))"}},
+    {"let": {"limit": "=a.get('limit', 20)"}},
+    {"refuse": "limit: how many to list, 1 … 500 (20 by default).", "when": "=is_bool(limit) or not is_int(limit) or not 1 <= limit <= 500"},
+    {"let": {"no_library": "=not has_library()"}}
+   ],
+   "answer": {"fields": {"found": "=len(hits)", "materials": "=[brief(c) for c in hits[:limit]]", "categories": "=sorted({c['category'] for c in cards})", "more": {"when": "=len(hits) > limit", "value": "=len(hits) - limit"}, "note": {"when": "=no_library or not hits", "value": "=('Nothing matches: fewer words (every word must be found), or a category from categories.' + (\" FreeCAD's library is not in this build: the printing filaments only.\" if no_library else '')) if not hits else \"FreeCAD's material library is not in this build: the printing filaments only.\""}}}
+  },
+  "material_get": {
+   "group": "material",
+   "description": "One material's figures by id (a filament key, a library card's UUID or exact name, custom:<name>): density g/cm³, E (Young's modulus) MPa, nu (Poisson's ratio), yield and uts MPa, k W/(m·K) where the card has them, source, and missing (which of density, E, nu, yield the card lacks — fea needs E and yield, mass needs density). Library and filament figures are typical — a part that must not fail needs the supplier's. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/material.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"c": "=card(a.id)"}},
+    {"refuse": {"fmt": "material {a.id!r}: no such id or name — material_list {{ words }} finds one (a filament key such as pla, a library card's id or exact name, or custom:<name>)."}, "code": "not_found", "when": "=c is None"},
+    {"let": {"missing": "=[k for k in ('density', 'E', 'nu', 'yield') if c.get(k) is None]"}}
+   ],
+   "answer": {"fields": {"...card": "={k: (round(v, 4) if is_float(v) else v) for k, v in c.items() if v not in (None, '', [])}", "units": "density g/cm³; E, yield, uts MPa", "missing": {"when": "=missing", "value": "=missing"}, "note": "Library and filament figures are typical: for a part that must not fail, use the supplier's data sheet (material_set custom)."}}
+  },
+  "material_set": {
+   "group": "material",
+   "description": "Say what bodies are made of: id from material_list (or a library card's exact name), or custom { name, density g/cm³ (required), youngsMPa, yieldMPa, utsMPa, poisson, conductivity W/(m·K), softensC, source } for the supplier's figures (kept as custom:<name>). Kept with the document by the body's label (measure_mass, fea_* and drawings read it there); a library card also goes on the object's ShapeMaterial, which FreeCAD's own Material panel shows (shapeMaterial says per body). An installed add-on that owns materials keeps those it knows (printing filaments), marked from. bodies: the one body when left out. Reply: material, mass_g (volume × density, solid through), missing (E / yield the card lacks). Trap: object_rename does not carry it to the new label.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "bodies": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "id": {
+      "type": "string"
+     },
+     "custom": {
+      "type": "object"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/material.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "bodies: a list of body names or labels (the one body when left out).", "when": "=a.bodies is not None and not (is_list(a.bodies) and all(is_str(b) for b in a.bodies))"},
+    {"let": {"bodies": "=[body(b).Label for b in (a.bodies or [None])]", "custom": "=a.custom"}},
+    {"refuse": "custom: { name, density g/cm³, youngsMPa, yieldMPa, utsMPa, poisson, conductivity, softensC, source }.", "when": "=custom is not None and not is_dict(custom)"},
+    {"refuse": "id or custom, not both: id names a material there is, custom gives a new one's figures.", "when": "=custom and a.id"},
+    {"when": "=custom", "then": [{"let": {"name": "=str(custom.get('name') or '').strip()"}}, {"refuse": "custom.name: required — what the material is called.", "when": "=not name"}, {"let": {"rho": "=custom.get('density')"}}, {"refuse": "custom.density: g/cm³, 0.01 to 25.", "when": "=not is_number(rho) or not 0.01 < rho < 25"}, {"each": "k", "in": ["youngsMPa", "yieldMPa", "utsMPa", "poisson", "conductivity", "softensC"], "steps": [{"refuse": {"fmt": "custom.{k}: a number (youngsMPa, yieldMPa, utsMPa in MPa; conductivity W/(m·K); softensC °C)."}, "when": "=k in custom and (is_bool(custom[k]) or not is_number(custom[k]))"}]}, {"let": {"known": "={'name', 'density', 'youngsMPa', 'yieldMPa', 'utsMPa', 'poisson', 'conductivity', 'softensC', 'source'}"}}, {"let": {"odd": "=sorted([k for k in custom if k not in known])"}}, {"refuse": {"fmt": "custom.{odd[0]}: not a figure kept here — custom takes {', '.join(sorted(known))}."}, "when": "=odd"}, {"let": {"mid": "=custom_id(name)"}}, {"let": {"c": "={'id': mid, 'name': name, 'category': 'Custom', 'density': float(rho), 'E': custom.get('youngsMPa'), 'nu': custom.get('poisson', 0.35 if custom.get('youngsMPa') else None), 'yield': custom.get('yieldMPa'), 'uts': custom.get('utsMPa'), 'k': custom.get('conductivity'), 'softens': custom.get('softensC'), 'source': custom.get('source') or 'given by the person'}"}}, {"let": {"d": "=defs()"}}, {"do": ["=d.update({mid: c})", "=write('materialDefs', d)"]}], "else": [{"let": {"mid": "=a.id"}}, {"refuse": "id (from material_list: a filament key, a library card's id or name) or custom { name, density g/cm³, youngsMPa, yieldMPa }.", "when": "=not mid"}, {"let": {"mid": "=str(mid).lower() if str(mid).lower() in DENSITY else mid"}}, {"let": {"c": "=card(mid)"}}, {"refuse": {"fmt": "material {mid!r}: no such id or name — material_list {{ words }} finds one; custom {{ name, density }} gives one of your own."}, "code": "not_found", "when": "=c is None"}, {"let": {"got": "=owner(bodies, c['id'])"}}, {"when": "=got is not None", "then": [{"do": "=snapshot(tool)"}, {"answer": {"fields": {"bodies": "=bodies", "material": "=brief(c)", "...got": "=got"}}}]}]},
+    {"let": {"mats": "=read_materials()", "shape_mat": "={}", "lib_uuid": "=library_id(c['id'])"}},
+    {"each": "b", "in": "=bodies", "steps": [{"do": "=mats.update({b: c['id']})"}, {"do": "=shape_mat.update({b: shape_material(body(b), lib_uuid)})"}]},
+    {"do": "=write('materials', mats)"},
+    {"do": "=doc().recompute()", "when": "=any(shape_mat.values())"},
+    {"do": "=snapshot(tool)"},
+    {"let": {"mass": "=masses(bodies, c['density']) if c.get('density') else {}", "missing": "=[k for k in ('E', 'yield') if c.get(k) is None]"}}
+   ],
+   "answer": {"fields": {"bodies": "=bodies", "material": "=brief(c)", "shapeMaterial": "=shape_mat", "mass_g": {"when": "=mass", "value": "=mass"}, "shapeMaterialNote": {"when": "=not all(shape_mat.values())", "value": "Not every body's ShapeMaterial was set: only FreeCAD library cards go there; the material is kept with the document either way."}, "note": {"when": "=c['id'] not in DENSITY", "value": "Add-ons for printing read the filament keys only (pla, petg, abs, asa, pa6-cf, tpu-95a); measure_mass and fea_* read this material."}, "missing": {"when": "=missing", "value": "=missing"}}}
+  },
+  "material_clear": {
+   "group": "material",
+   "description": "Forget what bodies are made of (bodies; every body with a material when left out). measure_mass then asks for a material again (a printed part is taken as PLA and says so); strength studies assume PLA and say so. FreeCAD's own ShapeMaterial on the object is left as it was. Reply: cleared, materials (what is still recorded).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "bodies": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/material.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"mats": "=read_materials()"}},
+    {"refuse": "bodies: a list of body names or labels (every body with a material when left out).", "when": "=a.bodies is not None and not (is_list(a.bodies) and all(is_str(b) for b in a.bodies))"},
+    {"let": {"bodies": "=[body(b).Label for b in a.bodies] if a.bodies else list(mats)"}},
+    {"let": {"got": "=owner(bodies, None)"}},
+    {"when": "=got is not None", "then": [{"do": "=snapshot(tool)"}, {"answer": {"fields": {"cleared": "=bodies", "...got": "=got"}}}]},
+    {"let": {"cleared": "=[b for b in bodies if mats.pop(b, None) is not None]"}},
+    {"do": "=write('materials', mats)"},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"cleared": "=cleared", "materials": "=mats", "hadNone": {"when": "=len(cleared) != len(bodies)", "value": "=[b for b in bodies if b not in cleared]"}, "note": "The objects' ShapeMaterial (what FreeCAD's own Material panel shows) is left as it was; custom materials stay listed for material_set."}}
+  },
+  "fem_add": {
+   "group": "fem_more",
+   "description": "Add one of FEM's other objects to an analysis (fixed / force / pressure / self-weight, the material and Gmsh mesh: fea_native): kind (bearing, body_heat_source, current_density, electric_charge_density, electromagnetic, electrostatic_potential, flow_velocity, fluid_boundary, gear, initial_flow_velocity, initial_pressure, initial_temperature, magnetization, plane_rotation, pulley, rigid_body, section_print, spring, transform, centrifugal, contact, tie, displacement, heatflux, temperature, vacuum_permittivity, fluid_1d, rotation_1d, geometry_1d, geometry_2d, material_fluid, material_reinforced, material_nonlinear, solver_mystran, solver_z88, solver_elmer, solver_calculix, eq_magnetodynamic2d, eq_magnetodynamic, eq_electrostatic, eq_heat, eq_flow, eq_elasticity, mesh_region, mesh_boundary_layer, mesh_group, mesh_distance, mesh_manipulate, mesh_advanced, mesh_shape, mesh_transfinite_curve, mesh_transfinite_surface, mesh_transfinite_volume; refused where this FreeCAD lacks it); refs [\"Body.Face3\", …] or { body, faces: [queries] }; props { its FreeCAD properties: a quantity as text with its unit, \"2 MPa\", \"100 N\", \"1000 N/mm\" — a bare number is refused for a quantity, since FreeCAD keeps them in mN and kPa } — the answer lists them; mesh / solver / material where a refinement, equation or nonlinear material needs one; new: true makes a new analysis for a solver.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "bearing",
+       "body_heat_source",
+       "current_density",
+       "electric_charge_density",
+       "electromagnetic",
+       "electrostatic_potential",
+       "flow_velocity",
+       "fluid_boundary",
+       "gear",
+       "initial_flow_velocity",
+       "initial_pressure",
+       "initial_temperature",
+       "magnetization",
+       "plane_rotation",
+       "pulley",
+       "rigid_body",
+       "section_print",
+       "spring",
+       "transform",
+       "centrifugal",
+       "contact",
+       "tie",
+       "displacement",
+       "heatflux",
+       "temperature",
+       "vacuum_permittivity",
+       "fluid_1d",
+       "rotation_1d",
+       "geometry_1d",
+       "geometry_2d",
+       "material_fluid",
+       "material_reinforced",
+       "material_nonlinear",
+       "solver_mystran",
+       "solver_z88",
+       "solver_elmer",
+       "solver_calculix",
+       "eq_magnetodynamic2d",
+       "eq_magnetodynamic",
+       "eq_electrostatic",
+       "eq_heat",
+       "eq_flow",
+       "eq_elasticity",
+       "mesh_region",
+       "mesh_boundary_layer",
+       "mesh_group",
+       "mesh_distance",
+       "mesh_manipulate",
+       "mesh_advanced",
+       "mesh_shape",
+       "mesh_transfinite_curve",
+       "mesh_transfinite_surface",
+       "mesh_transfinite_volume"
+      ]
+     },
+     "analysis": {
+      "type": "string"
+     },
+     "refs": {},
+     "props": {
+      "type": "object"
+     },
+     "mesh": {
+      "type": "string"
+     },
+     "solver": {
+      "type": "string"
+     },
+     "material": {
+      "type": "string"
+     },
+     "new": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/fem_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"F": "=objects_fem()"}},
+    {"refuse": "FreeCAD's FEM workbench is not in this build.", "code": "unavailable", "when": "=F is None"},
+    {"let": {"kind": "=a.kind"}},
+    {"refuse": {"fmt": "kind: {', '.join(KINDS)}."}, "when": "=kind not in KINDS"},
+    {"let": {"fn, need": "=KINDS[kind]"}},
+    {"let": {"version": "='.'.join(freecad_version()[:3])"}},
+    {"refuse": {"fmt": "{kind} is not in FreeCAD {version}'s FEM."}, "code": "unavailable", "when": "=not has(F, fn)"},
+    {"when": "=a.new and kind.startswith('solver_')", "then": [{"make": "=F.makeAnalysis", "call": ["=doc()", "Analysis"], "as": "an"}, {"set": {"an.Label": "=unique(a.name or 'Analysis', an)"}}], "else": [{"let": {"which": "analysis: which — {labels}.", "unknown": "analysis {ref}: they are {labels}.", "nothing": "No FEM analysis: fea_native makes one (or kind solver_* with a new analysis: true)."}}, {"let": {"an": "=one_of(analyses(), a.analysis, which, unknown, none=nothing)"}}]},
+    {"choose": "=need", "of": {"mesh": [{"let": {"m": "=find(a.mesh, 'mesh') if a.mesh else first([x for x in an.Group if has(x, 'FemMesh') and 'Gmsh' in x.TypeId + get(get(x, 'Proxy'), 'Type', '')])"}}, {"let": {"m": "=first([x for x in an.Group if has(x, 'FemMesh')])"}, "when": "=m is None"}, {"refuse": {"fmt": "{an.Label} has no mesh to refine: fea_native makes the analysis a Gmsh mesh, or mesh: its label."}, "code": "not_found", "when": "=m is None"}, {"make": "=get(F, fn)", "call": ["=doc()", "=m"], "as": "o"}], "solver": [{"let": {"sv": "=find(a.solver, 'solver') if a.solver else first([x for x in an.Group if 'Elmer' in get(get(x, 'Proxy'), 'Type', '') or 'Elmer' in x.Label])"}}, {"refuse": {"fmt": "{an.Label} has no Elmer solver for equations: fem_add {{ kind: \"solver_elmer\" }} first, or solver: its label."}, "code": "not_found", "when": "=sv is None"}, {"make": "=get(F, fn)", "call": ["=doc()", "=sv"], "as": "o"}], "material": [{"let": {"mat": "=find(a.material, 'material') if a.material else first([x for x in an.Group if x.TypeId == 'App::MaterialObjectPython' and get(x, 'Category', 'Solid') == 'Solid'])"}}, {"refuse": {"fmt": "{an.Label} has no solid material for a nonlinear model to extend: fea_native gives the analysis one, or material: its label."}, "code": "not_found", "when": "=mat is None"}, {"make": "=get(F, fn)", "call": ["=doc()", "=mat"], "as": "o"}, {"do": "=an.addObject(o)"}]}, "else": [{"make": "=get(F, fn)", "call": ["=doc()"], "as": "o"}, {"do": "=an.addObject(o)"}]},
+    {"let": {"rf": "=[]", "r": "=a.refs"}},
+    {"when": "=r and is_dict(r)", "then": [{"let": {"ro": "=shaped(r.get('body'), 'refs.body')"}}, {"let": {"rf": "=[(ro, face_names(ro, r.get('faces')))]"}}], "else": [{"when": "=r", "then": [{"let": {"by": "={}"}}, {"each": "x", "in": "=r", "steps": [{"let": {"head, sub, solid": "=ref_parts(x)"}}, {"when": "=solid", "then": [{"let": {"ro": "=shaped(head)"}}, {"refuse": {"fmt": "{x}: {ro.Label} has {len(ro.Shape.Solids)} solids."}, "when": "=not 1 <= int(sub[5:]) <= len(ro.Shape.Solids)"}], "else": [{"refuse": {"fmt": "refs: \"Body.Face3\" (or .Edge, .Vertex, .Solid), not {x!r}."}, "when": "=head is None or sub is None"}, {"let": {"ro": "=shaped(head)"}}, {"do": "=element(ro.Shape, sub, ro.Label)"}]}, {"do": "=by.setdefault(ro.Name, (ro, []))[1].append(sub)"}]}, {"let": {"rf": "=[(ro, tuple(subs)) for ro, subs in by.values()]"}}]}]},
+    {"when": "=rf", "then": [{"refuse": {"fmt": "refs: {kind} takes no references (it applies to the whole analysis) — leave refs out."}, "when": "=not has(o, 'References')"}, {"set": {"o.References": "=rf"}}]},
+    {"do": "=set_props(o, a.props)"},
+    {"set": {"o.Label": "=unique(a.name, o)"}, "when": "=a.name"},
+    {"do": "=doc().recompute()"},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"added": "=o.Label", "kind": "=kind", "analysis": "=an.Label", "type": "=o.TypeId", "refs": {"when": "=rf", "value": "=[x.Label + '.' + n for x, ns in rf for n in ns]"}, "props": "={p: shown(get(o, p)) for p in settable(o)[:30]}"}}
+  },
+  "fem_mesh": {
+   "group": "fem_more",
+   "description": "FEM meshes: action netgen { body, props } (Netgen's mesh; refused where Netgen is not installed) | to_mesh { mesh, result, name } (the FEM mesh's outside as a plain mesh, deformed by a result) | clear_groups { mesh } (its groups removed).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "netgen",
+       "to_mesh",
+       "clear_groups"
+      ]
+     },
+     "body": {
+      "type": "string"
+     },
+     "mesh": {
+      "type": "string"
+     },
+     "result": {
+      "type": "string"
+     },
+     "analysis": {
+      "type": "string"
+     },
+     "props": {
+      "type": "object"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/fem_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"F": "=objects_fem()"}},
+    {"refuse": "FreeCAD's FEM workbench is not in this build.", "code": "unavailable", "when": "=F is None"},
+    {"let": {"act": "=a.action"}},
+    {"when": "=act == 'netgen'", "then": [{"let": {"b": "=shaped(a.body, 'body')", "an": null}}, {"when": "=a.analysis or any(x.TypeId == 'Fem::FemAnalysis' for x in doc().Objects)", "then": [{"let": {"which": "analysis: which — {labels}.", "unknown": "analysis {ref}: they are {labels}.", "nothing": "No FEM analysis: fea_native makes one (or kind solver_* with a new analysis: true)."}}, {"let": {"an": "=one_of(analyses(), a.analysis, which, unknown, none=nothing)"}}]}, {"make": "=F.makeMeshNetgen", "call": ["=doc()", "MeshNetgen"], "as": "m"}, {"set": {"m.Shape": "=b"}}, {"do": "=set_props(m, a.props)"}, {"do": "=an.addObject(m)", "when": "=an is not None"}, {"do": "=recompute_quietly()"}, {"let": {"nodes": "=m.FemMesh.NodeCount if m.FemMesh is not None else 0"}}, {"when": "=not nodes", "then": [{"try": [{"let": {"said": "=netgen_run(m)"}}, {"let": {"nodes": "=m.FemMesh.NodeCount", "why": "=' | '.join([ln.strip() for ln in said.splitlines() if ln.strip()][-2:])[:400] or 'no mesh came back'"}}], "on": "failure", "except": [{"let": {"nodes": 0, "why": "=error"}}]}, {"refuse": {"fmt": "Netgen did not mesh here ({why}): it needs Netgen installed with this FreeCAD's Python. fea_native makes a Gmsh mesh instead."}, "code": "unavailable", "first": [{"do": "=doc().removeObject(m.Name)"}], "when": "=not nodes"}]}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"mesh": "=m.Label", "nodes": "=nodes", "volumes": "=m.FemMesh.VolumeCount"}}}]},
+    {"let": {"m": "=find(a.mesh, 'mesh')"}},
+    {"refuse": {"fmt": "{m.Label} is not a FEM mesh."}, "when": "=not has(m, 'FemMesh')"},
+    {"choose": "=act", "of": {"to_mesh": [{"do": "=surface_maker()"}, {"let": {"res": "=find(a.result, 'result') if a.result else None"}}, {"let": {"facets": "=fem_surface(m.FemMesh, res) if res is not None else fem_surface(m.FemMesh)"}}, {"let": {"mesh_mod": "=mesh_module()"}}, {"add": "Mesh::Feature", "name": "Mesh", "as": "o"}, {"set": {"o.Mesh": "=mesh_mod.Mesh(facets)"}}, {"set": {"o.Label": "=unique(a.name or m.Label + ' surface', o)"}}, {"do": "=doc().recompute()"}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"mesh": "=o.Label", "facets": "=o.Mesh.CountFacets", "deformed": {"when": "=res is not None", "value": "=res.Label"}}}}], "clear_groups": [{"let": {"fm": "=m.FemMesh"}}, {"let": {"ids": "=list(fm.Groups)"}}, {"each": "g", "in": "=ids", "steps": [{"do": "=fm.removeGroup(g)"}]}, {"set": {"m.FemMesh": "=fm"}}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"mesh": "=m.Label", "cleared": "=len(ids)", "groups": "=fm.GroupCount"}}}]}, "else": [{"refuse": "action: netgen { body, props } | to_mesh { mesh, result } | clear_groups { mesh }."}]}
+   ],
+   "answer": {"fields": {}}
+  },
+  "fem_linearize": {
+   "group": "fem_more",
+   "description": "Stress linearization through a wall from a FEM result (a CalculiX result object, CCX_Results after fea_solve, or a post pipeline): from and to [x,y,z] mm on the wall's two faces, points (41), field (von Mises by default; NodeStressXX …) → membrane, bending, membrane + bending, peak (MPa). A line that leaves the part is refused.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "result": {
+      "type": "string"
+     },
+     "from": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "to": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "points": {
+      "type": "integer"
+     },
+     "field": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "result",
+     "from",
+     "to"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/fem_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"src": "=find(a.result, 'result')"}},
+    {"let": {"p0": "=point(a.get('from'), 'from')"}},
+    {"let": {"p1": "=point(a.to, 'to')"}},
+    {"let": {"n": "=int(a.get('points', 41))", "L": "=(p1 - p0).Length"}},
+    {"refuse": "from and to: the line through the wall, apart; points 5 or more.", "when": "=L <= 0 or n < 5"},
+    {"let": {"field": "=a.get('field', 'von Mises Stress')"}},
+    {"when": "=src.isDerivedFrom('Fem::FemPostPipeline')", "then": [{"add": "Fem::FemPostDataAlongLineFilter", "name": "Linearized", "as": "f"}, {"do": "=src.addObject(f)", "when": "=has(src, 'addObject')"}, {"set": {"f.Point1": "=p0", "f.Point2": "=p1", "f.Resolution": "=n - 1"}}, {"set": {"f.PlotData": "=field"}}, {"do": "=doc().recompute()"}, {"let": {"xs": "=list(f.XAxisData)"}}, {"let": {"ys": "=list(f.YAxisData)"}}, {"refuse": {"fmt": "No {field!r} along the line: inside the part, through the wall; field names are the pipeline's."}, "code": "failed", "when": "=not ys"}], "else": [{"refuse": {"fmt": "result {src.Label}: not a FEM result — a CalculiX result object (CCX_Results in the analysis fea_solve makes) or a post pipeline."}, "when": "=not (has(src, 'vonMises') and has(src, 'Mesh'))"}, {"let": {"fm": "=src.Mesh.FemMesh"}}, {"when": "=field.lower().startswith('von')", "then": [{"let": {"vals": "=list(src.vonMises)"}}], "else": [{"when": "=field in src.PropertiesList and is_seq(get(src, field))", "then": [{"let": {"vals": "=list(get(src, field))"}}], "else": [{"let": {"have": "=[p for p in src.PropertiesList if p.startswith(('NodeStress', 'Principal', 'MaxShear', 'vonMises', 'Temperature', 'Peeq'))]"}}, {"refuse": {"fmt": "field {field!r}: not a list of values on {src.Label} — one of {', '.join(have)}."}}]}]}, {"refuse": {"fmt": "{src.Label} holds no {field} values: the solve wrote none (fea_solve again)."}, "code": "invalid_state", "when": "=not vals"}, {"let": {"xs, ys, far": "=nearest_samples(src, fm, vals, p0, p1, n)"}}, {"refuse": {"fmt": "The line runs {far:.2f} mm from any node of the mesh: it leaves the part. from and to go across the wall, on its two faces."}, "when": "=far > max(0.5, 0.25 * L)"}]},
+    {"let": {"T, mem, bend, peak": "=membrane_bending(xs, ys, L)"}}
+   ],
+   "answer": {"fields": {"result": "=src.Label", "field": "=field", "thickness": "=round(T, 4)", "membrane": "=round(mem, 4)", "bending": "=round(abs(bend), 4)", "membranePlusBending": "=round(abs(mem) + abs(bend), 4)", "peak": "=round(peak, 4)", "points": "=len(ys)", "note": "Stress linearization along the line (membrane = mean, bending from the first moment) of the field as given — for von Mises a rough reading: ASME VIII-2 linearizes each component and takes the equivalent after (field: a component, then combine). Compare with the code's allowables; FEA is a feasibility check, not a sign-off."}}
+  },
+  "fea_shell": {
+   "group": "strength",
+   "description": "A thin plate or shell by shell elements (CalculiX on Gmsh's triangles): object (a face, shell or sheet: its faces are the mid-surface; faces narrows), thickness mm, material, holds [{ edges \"boundary\" (every free edge) | [{ near: [x,y,z] }], kind pinned (simply supported) | fixed (clamped) }], pressure MPa and/or gravity: true, mesh mm. Answers the largest deflection (mm) and stress (MPa). Panels, lids, sheet-metal, floors and walls as plates. Runs in the foreground (timeout s, 300); needs ccx and gmsh.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "object": {
+      "type": "string"
+     },
+     "faces": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "thickness": {
+      "type": "number"
+     },
+     "material": {
+      "type": "string"
+     },
+     "holds": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "pressure": {
+      "type": "number"
+     },
+     "gravity": {
+      "type": "boolean"
+     },
+     "mesh": {
+      "type": "number"
+     },
+     "timeout": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "object",
+     "thickness"
+    ],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"ccx, gmsh": "=binaries()"}},
+    {"refuse": "CalculiX (ccx) and Gmsh are needed: install them, or set their paths in FreeCAD's FEM preferences.", "code": "unavailable", "when": "=not (ccx and gmsh)"},
+    {"do": "=fem_module()"},
+    {"let": {"o": "=shaped(a.object, 'object')"}},
+    {"let": {"faces": "=list(o.Shape.Faces)"}},
+    {"let": {"faces": "=[element(o.Shape, f.split('.')[-1], o.Label) for f in a.faces]"}, "when": "=a.faces"},
+    {"refuse": "object: a face, shell or sheet (its faces are the shell's mid-surface); faces [\"Face1\"] narrows it.", "when": "=not faces"},
+    {"let": {"th": "=float(a.get('thickness', 0))"}},
+    {"refuse": "thickness: the shell's thickness, mm.", "when": "=th <= 0"},
+    {"let": {"c": "=card(a.material) if a.material else of_body(o.Label)[0]"}},
+    {"refuse": "material: an id with a Young's modulus (material_list).", "when": "=c is None or not c.get('E')"},
+    {"let": {"shell": "=shell_of(faces)"}},
+    {"let": {"mesh": "=float(a.mesh or round(max(1.0, shell.BoundBox.DiagonalLength / 25.0), 2))", "timeout": "=float(a.get('timeout', 300))"}},
+    {"let": {"m": "=shell_meshed(o, shell, mesh, gmsh, timeout)"}},
+    {"refuse": {"fmt": "Gmsh could not mesh the faces: {m.said}"}, "code": "failed", "when": "=not m.ok"},
+    {"do": "=shell_elements(m)"},
+    {"refuse": "No shell elements came out of the mesh.", "code": "failed", "when": "=m.etype is None"},
+    {"refuse": {"fmt": "The mesh gave {m.etype} elements, not shells."}, "code": "failed", "when": "=m.etype not in ('S6', 'S3', 'S8', 'S4')"},
+    {"let": {"holds": "=a.holds or []"}},
+    {"refuse": "holds [{ edges: \"boundary\" | [{ near: [x,y,z] }], kind pinned (simply supported) | fixed (clamped) }].", "when": "=not holds"},
+    {"let": {"outer": "=boundary_edges(shell)", "bl": "=[]", "held": 0}},
+    {"each": "h", "in": "=holds", "steps": [{"let": {"kind": "=h.get('kind', 'pinned')"}}, {"refuse": "holds.kind: pinned (simply supported: held, free to turn) | fixed (clamped).", "when": "=kind not in ('pinned', 'fixed')"}, {"let": {"ns": "=edge_nodes(m, outer if h.get('edges', 'boundary') == 'boundary' else nearest_edges(shell, h['edges']))"}}, {"let": {"held": "=held + len(ns)", "dof": "='1, 6' if kind == 'fixed' else '1, 3'"}}, {"do": "=bl.extend([str(n) + ', ' + dof for n in ns])"}]},
+    {"refuse": "The holds catch fewer than 3 mesh nodes: pick the edges again.", "when": "=held < 3"},
+    {"refuse": "pressure (MPa, on the faces' normal side) or gravity: true.", "when": "=not a.pressure and not a.gravity"},
+    {"do": "=shell_deck(m, c, th, bl, a.pressure, a.gravity)"},
+    {"let": {"res": "=shell_solve(m, ccx, timeout)"}},
+    {"refuse": "CalculiX wrote no displacements.", "code": "failed", "when": "=not res.disp"},
+    {"let": {"dmax, vm": "=shell_peaks(res)", "y": "=c.get('yield')"}}
+   ],
+   "answer": {"fields": {"object": "=o.Label", "faces": "=len(faces)", "thickness": "=th", "material": "=c['name']", "mesh": {"size": "=mesh", "elements": "=m.fm.FaceCount", "type": "=m.etype"}, "held": "=held", "deflectionMaxMm": "=round(dmax, 4)", "vonMisesMaxMPa": "=round(vm, 3)", "safety": {"when": "=y and vm", "value": "=round(y / vm, 2)"}, "files": "=m.wd", "note": "Shell elements carry bending through the thickness: the stress is the larger of the two faces'.", "warning": {"when": "=dmax > th / 2", "value": {"fmt": "The deflection ({dmax:.2f} mm) is over half the thickness: the plate is working as a membrane too, which a linear solve misses — real deflection is less."}}}}
+  },
+  "fea_parts": {
+   "group": "strength",
+   "description": "A strength study of several parts together (instead of fea_setup): bodies [labels, one solid each], materials { label: id } (else each body's own), join tie (bonded where they touch: glued, welded, press-fit) | contact (they push but do not pull; friction 0.2 lets them slide) | none, tolerance mm for touching (0.05), mesh mm. Makes a hidden compound, the study's body; answers touching (pairs and area) and warns of overlaps. Then fea_hold / fea_load on the parts' faces and fea_solve: each part's peak stress and safety.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "bodies": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "materials": {
+      "type": "object"
+     },
+     "join": {
+      "type": "string",
+      "enum": [
+       "tie",
+       "contact",
+       "none"
+      ]
+     },
+     "friction": {
+      "type": "number"
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "mesh": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "bodies"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"refs": "=a.bodies"}},
+    {"refuse": "bodies: two or more parts to study together.", "when": "=not is_list(refs) or len(refs) < 2"},
+    {"let": {"objs": "=[body(r) for r in refs]", "how": "=a.get('join', 'tie')"}},
+    {"refuse": "join: tie (bonded where they touch) | contact (pushing, not pulling; friction) | none.", "when": "=how not in ('tie', 'contact', 'none')"},
+    {"let": {"mats": "=a.materials or {}", "parts": "=[]"}},
+    {"each": "b", "in": "=objs", "steps": [{"when": "=mats.get(b.Label)", "then": [{"let": {"mid": "=mats[b.Label]"}}, {"let": {"c": "=card(mid) or card(str(mid).lower())"}}, {"refuse": {"fmt": "materials.{b.Label}: no material {mid!r} — material_list finds one."}, "code": "not_found", "when": "=c is None"}], "else": [{"let": {"c": "=of_body(b.Label)[0]"}}]}, {"refuse": {"fmt": "{b.Label}'s material {c['name']} has no Young's modulus."}, "code": "invalid_state", "when": "=not c.get('E')"}, {"refuse": {"fmt": "{b.Label} has {len(b.Shape.Solids)} solids: one solid a part (part_compound explode splits it)."}, "code": "invalid_state", "when": "=len(b.Shape.Solids) != 1"}, {"push": {"parts": "={'body': b.Label, 'material': c['id']}"}}]},
+    {"let": {"holder, comp": "=parts_holder(objs, a.name or 'FEA parts')"}},
+    {"let": {"tol": "=float(a.get('tolerance', 0.05))"}},
+    {"let": {"found": "=touching(comp, tol)"}},
+    {"let": {"least": "=min([min(x.BoundBox.XLength, x.BoundBox.YLength, x.BoundBox.ZLength) for x in comp.Solids])"}},
+    {"let": {"mesh": "=float(a.mesh or round(max(0.5, min(least / 3.0, comp.BoundBox.DiagonalLength / 15.0)), 2))"}},
+    {"let": {"st": "={'body': holder.Label, 'material': parts[0]['material'], 'mesh': mesh, 'holds': [], 'loads': [], 'parts': parts, 'join': how, 'friction': float(a.get('friction', 0)), 'tolerance': tol}"}},
+    {"do": "=save(st)"},
+    {"do": "=snapshot(tool)"},
+    {"let": {"overlap": "=[objs[i].Label + ' / ' + objs[j].Label for i, j in overlapping(comp)]", "warning": null}},
+    {"let": {"warning": {"fmt": "overlapping, not touching: {', '.join(overlap)} — a tie or contact needs faces that meet, not volumes that cross (asm_check, part_boolean)."}}, "when": "=overlap"},
+    {"let": {"warning": "nothing touches within tolerance: each part must be held on its own, or move them together."}, "when": "=how != 'none' and not found"}
+   ],
+   "answer": {"fields": {"study": "=holder.Label", "parts": "=parts", "join": "=how", "touching": "=[{'a': objs[x['a']].Label, 'b': objs[x['b']].Label, 'area': x['area']} for x in found]", "mesh": "=mesh", "next": "fea_hold and fea_load pick faces of the study's body (the parts together), then fea_solve: each part's peak and safety come back.", "warning": {"when": "=warning", "value": "=warning"}, "note": {"when": "=how == 'contact'", "value": "Contact is nonlinear: the solve runs in steps and takes longer. Each part still needs enough holds not to fly off before contact closes."}}}
+  },
+  "fea_setup": {
+   "group": "strength",
+   "description": "Start (or change) a strength study of one body: body; solid: n studies one solid of a multi-solid body alone (a hidden helper, read again from the body at each solve; its faces are numbered on their own); material (the body's by default; it needs a Young's modulus), mesh (largest element edge, mm; by default a third of the least size; one that makes over about 400,000 elements is refused). The same body's holds and loads are kept (said as kept; unmatched lists those that fit no face now); reset: true drops them (said as dropped). Answers study, material and next. A rigid hold makes stress no real mount does; a coarse mesh under-reads peaks; library figures are typical.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "solid": {
+      "type": "integer",
+      "description": "One solid of a multi-solid body (an AllowCompound Body), from 1, studied alone."
+     },
+     "material": {
+      "type": "string"
+     },
+     "mesh": {
+      "type": "number"
+     },
+     "reset": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=body(a.body)", "of": null}},
+    {"when": "=a.solid is not None", "then": [{"let": {"n": "=a.solid"}}, {"refuse": "solid: a solid's number in the body, from 1 (body_check lists them).", "when": "=not is_int(n)"}, {"let": {"src": "=o", "count": "=len(o.Shape.Solids)"}}, {"refuse": {"fmt": "solid: 1 to {count} — {src.Label} has {count} solids."}, "when": "=count > 1 and not 1 <= n <= count"}, {"let": {"plural": "='' if count == 1 else 's'"}}, {"refuse": {"fmt": "solid: 1 to {count} — {src.Label} has {count} solid{plural}: study the body itself (leave solid out)."}, "code": "invalid_state", "when": "=not 1 <= n <= count"}, {"let": {"o": "=solid_holder(src, n)"}}, {"let": {"of": "={'body': src.Label, 'solid': n}"}}]},
+    {"let": {"bb": "=o.Shape.BoundBox"}},
+    {"let": {"least": "=min(bb.XLength, bb.YLength, bb.ZLength)", "mesh": "=a.mesh"}},
+    {"let": {"mesh": "=round(max(0.5, min(least / 3.0, bb.DiagonalLength / 15.0)), 2)"}, "when": "=mesh is None"},
+    {"let": {"mesh": "=float(mesh)"}},
+    {"refuse": "mesh: the largest element edge, mm, over 0.", "when": "=mesh <= 0"},
+    {"let": {"est": "=o.Shape.Volume / (mesh ** 3 / 8.0)"}},
+    {"refuse": {"fmt": "mesh {mesh:g} mm makes some {int(est):,} elements: too many to solve here — {round(mesh * (est / 300000) ** (1 / 3), 1)} mm or more."}, "when": "=est > 400000"},
+    {"when": "=a.material", "then": [{"let": {"c": "=card(a.material) or card(str(a.material).lower())"}}, {"refuse": {"fmt": "material {a.material!r}: no such material by id or name — material_list {{ words }} finds one."}, "code": "not_found", "when": "=c is None"}, {"let": {"said": "given"}}], "else": [{"let": {"c, was_set": "=of_body(of['body'] if of else o.Label)"}}, {"let": {"said": "=\"the body's\" if was_set else 'assumed PLA: material_set records the real one'"}}]},
+    {"let": {"mid": "=c['id']"}},
+    {"refuse": {"fmt": "{c['name']} has no Young's modulus on its card: material_set custom {{ name, density, youngsMPa, yieldMPa }} gives one."}, "code": "invalid_state", "when": "=not c.get('E')"},
+    {"let": {"old": "=study() or {}"}},
+    {"let": {"keep": "=old.get('body') == o.Label and not a.reset"}},
+    {"let": {"st": "={'body': o.Label, 'material': mid, 'mesh': mesh, 'holds': old.get('holds', []) if keep else [], 'loads': old.get('loads', []) if keep else []}"}},
+    {"do": "=st.update({'of': of})", "when": "=of"},
+    {"do": "=save(st)"},
+    {"do": "=snapshot(tool)"},
+    {"let": {"lost": "=unmatched(st, o.Shape) if keep else []"}}
+   ],
+   "answer": {"fields": {"study": "=st", "material": {"id": "=mid", "name": "=c['name']", "E": "=c['E']", "nu": "=c.get('nu')", "yield": "=c.get('yield')", "from": "=said"}, "...said": "=setup_said(old, keep, bool(a.reset))", "unmatched": {"when": "=lost", "value": "=lost"}, "warning": {"when": "=mesh > least / 2", "value": {"fmt": "mesh {mesh:g} mm is over half the part's least size ({least:.1f} mm): too coarse to read stress — {round(least / 3, 2)} mm or less."}}, "solid": {"when": "=of", "value": {"fmt": "Solid {of['solid']} of {of['body']} alone, as {o.Label} (hidden, kept for the study and read again from {of['body']} at each solve): its faces are numbered on their own — pick holds and loads by where they are (near, normal) or shape_query it."}}, "solids": {"when": "=not of and len(o.Shape.Solids) > 1", "value": {"fmt": "{o.Label} is {len(o.Shape.Solids)} solids: every one needs a hold of its own (they are not joined), or solid: n studies one alone."}}, "next": "fea_hold the faces it is held by, fea_load what pushes on it, then fea_solve."}}
+  },
+  "fea_hold": {
+   "group": "strength",
+   "description": "Hold faces: faces by query — { near: [x,y,z] }, { normal: [0,0,-1], z: 0 }, { faces: [\"Face1\"] }, shape_query's references (\"Face8\", a list) or its filters ({ type: cylinder, radius: 3 }); kind fixed (no movement at all, the default) | slide (held only along the face's normal, x/y/z: a roller, a smooth floor, a symmetry plane) | pin (dofs [\"x\",\"y\",\"z\"] held, the rest free) | move (move [dx,dy,dz] mm, null for free: a set displacement, a press fit). Adds to the holds (replace: true starts again; clear: true drops them). The query is kept, not the face numbers (they change when the part is edited): fea_solve matches it again and refuses if it finds nothing. Answers held (the faces picked, with area and centre): check them.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "faces": {
+      "description": "Faces by query: { near: [x,y,z], radius }, { normal: [nx,ny,nz], x|y|z: plane, largest }, { faces: [\"Face3\"] }; or what shape_query answers — \"Face8\", \"Body.Face8\", a list of them, its items — or its filters ({ type: cylinder, radius: 3 }, { type: plane, normal, z }, …)"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "fixed",
+       "slide",
+       "pin",
+       "move"
+      ]
+     },
+     "dofs": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "move": {
+      "type": "array",
+      "items": {}
+     },
+     "replace": {
+      "type": "boolean"
+     },
+     "clear": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"st": "=study()"}},
+    {"refuse": "No strength study: fea_setup { body } first.", "code": "invalid_state", "when": "=not st"},
+    {"let": {"o": "=study_body(st)"}},
+    {"when": "=a.clear", "then": [{"do": ["=st.update({'holds': []})", "=save(st)"]}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"holds": "=[]"}}}]},
+    {"let": {"q": "=a.faces"}},
+    {"let": {"pk, picked": "=pick_both(o.Shape, q)"}},
+    {"let": {"kind": "=a.get('kind', 'fixed')", "AX": "={'x': 1, 'y': 2, 'z': 3}"}},
+    {"let": {"h": "={'faces': q, 'kind': kind}"}},
+    {"choose": "=kind", "of": {"fixed": [{"let": {"note": "Held rigidly: no movement at all on these faces. Real bolts and clamps give a little, so stress right at a hold reads high."}}], "slide": [{"let": {"n": "=faces_normal(pk)"}}, {"refuse": "slide: these faces have no one normal — slide holds a flat face (or faces facing one way).", "when": "=n.Length < 1e-9"}, {"do": "=n.normalize()"}, {"let": {"k": "=max(range(3), key=lambda i: abs(n[i]))", "facing": "=[round(c, 3) for c in n]"}}, {"refuse": {"fmt": "slide: the faces face {facing} — a slide holds along x, y or z; turn the part square or use pin with dofs."}, "when": "=abs(n[k]) < 0.999"}, {"do": "=h.update({'dofs': [k + 1], 'values': [0.0]})"}, {"let": {"axis": "='xyz'[k]"}}, {"let": {"note": {"fmt": "Held only along {axis} (a roller or a smooth floor): free to slide in the face. Add another hold or slide so the part cannot drift."}}}], "pin": [{"let": {"dofs": "=a.dofs"}}, {"refuse": "pin: dofs [\"x\", \"y\", \"z\"] — the directions held (the rest free).", "when": "=not dofs or not all(d in AX for d in dofs)"}, {"do": "=h.update({'dofs': sorted([AX[d] for d in set(dofs)]), 'values': [0.0] * len(set(dofs))})"}, {"let": {"note": {"fmt": "Held in {', '.join(sorted(set(dofs)))} only."}}}], "move": [{"let": {"m": "=a.move"}}, {"refuse": "move: [dx, dy, dz] mm the faces are pushed to (null leaves that direction free).", "when": "=not (is_list(m) and len(m) == 3)"}, {"do": "=h.update({'dofs': [i + 1 for i in range(3) if m[i] is not None]})"}, {"do": "=h.update({'values': [float(m[i]) for i in range(3) if m[i] is not None]})"}, {"refuse": "move: give at least one direction a value.", "when": "=not h['dofs']"}, {"let": {"note": "These faces are moved by that much (a set displacement): the answer reads the force it takes as stress."}}]}, "else": [{"refuse": "kind: fixed | slide (held along the face normal only) | pin (dofs held) | move (set displacement)."}]},
+    {"refuse": {"fmt": "That hold is already in the study (holds: {len(st['holds'])}): adding it again changes nothing real — replace: true to start the holds over, or clear: true."}, "code": "invalid_state", "when": "=not a.replace and same_in(h, st['holds'])"},
+    {"do": ["=st.update({'holds': ([] if a.replace else st['holds']) + [h]})", "=save(st)"]},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"held": "=picked", "kind": "=kind", "holds": "=len(st['holds'])", "note": "=note"}}
+  },
+  "fea_load": {
+   "group": "strength",
+   "description": "Load the part: force on faces (N; [fx, fy, fz] in total spread by area, or a number pushing into the faces), pressure on faces (MPa = N/mm², positive pushes in), gravity (true is 1 g down -z; a number of g; [gx, gy, gz] in g), or temperature (K the whole part warms by, against its holds; alpha 1/K, else the material's), or spin { rpm, axis [x,y,z], at [x,y,z] } (a rotor's own mass flung outward). One kind a call; faces as fea_hold takes them. Adds to the loads (replace: true starts again; clear: true drops them); an identical or zero load is refused. Answers on (the faces picked) and load.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "faces": {
+      "description": "Faces by query: { near: [x,y,z], radius }, { normal: [nx,ny,nz], x|y|z: plane, largest }, { faces: [\"Face3\"] }; or what shape_query answers — \"Face8\", \"Body.Face8\", a list of them, its items — or its filters ({ type: cylinder, radius: 3 }, { type: plane, normal, z }, …)"
+     },
+     "force": {},
+     "pressure": {
+      "type": "number"
+     },
+     "gravity": {},
+     "temperature": {
+      "type": "number"
+     },
+     "alpha": {
+      "type": "number"
+     },
+     "spin": {
+      "type": "object"
+     },
+     "replace": {
+      "type": "boolean"
+     },
+     "clear": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"st": "=study()"}},
+    {"refuse": "No strength study: fea_setup { body } first.", "code": "invalid_state", "when": "=not st"},
+    {"let": {"o": "=study_body(st)"}},
+    {"when": "=a.clear", "then": [{"do": ["=st.update({'loads': []})", "=save(st)"]}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"loads": "=[]"}}}]},
+    {"let": {"kinds": "=[k for k in ('force', 'pressure', 'gravity', 'temperature', 'spin') if k in a]"}},
+    {"refuse": "One of force (N: [fx, fy, fz] total, or a number pushing into the faces), pressure (MPa, pushing into the faces), gravity (true for 1 g down -z, a number of g, or [gx, gy, gz] in g), temperature (K the whole part warms by, negative cools; alpha 1/K) or spin { rpm, axis, at }.", "when": "=len(kinds) != 1"},
+    {"let": {"kind": "=kinds[0]", "out": "={}"}},
+    {"let": {"ld": "={'kind': kind}"}},
+    {"choose": "=kind", "of": {"spin": [{"let": {"sp": "=a['spin']"}}, {"refuse": "spin: { rpm, axis [x,y,z] (z), at [x,y,z] a point on the axis (origin) } — a rotor, a fan, a flywheel.", "when": "=not is_dict(sp) or not is_number(sp.get('rpm'))"}, {"let": {"ax": "=vector(sp.get('axis', [0, 0, 1]))"}}, {"refuse": "spin.axis: a direction.", "when": "=ax.Length < 1e-9"}, {"let": {"ax": "=ax.multiply(1.0 / ax.Length)"}}, {"do": "=ld.update({'spin': {'rpm': float(sp['rpm']), 'axis': [ax.x, ax.y, ax.z], 'at': [float(c) for c in sp.get('at', [0, 0, 0])]}})"}, {"put": {"note": "Spinning loads every bit of the part outward by its mass: hoop stress grows with rpm² — the material needs a density."}}], "temperature": [{"let": {"dT": "=a['temperature']"}}, {"refuse": "temperature: K (°C) the whole part changes by from as it was held — a number, negative to cool.", "when": "=not is_num(dT)"}, {"do": "=ld.update({'delta': float(dT)})"}, {"do": "=ld.update({'alpha': float(a.alpha)})", "when": "=a.alpha is not None"}, {"let": {"alpha": "=alpha_of(st, ld)"}}, {"refuse": {"fmt": "alpha: the material's expansion, 1/K (steel 12e-6, aluminium 23e-6, PLA 68e-6) — {st['material']} carries none."}, "when": "=alpha is None"}, {"put": {"alpha": "=alpha", "note": "Held faces stop it growing: stress builds where they do — a fully held part sees about E·alpha·dT."}}], "force": [{"let": {"q": "=a.faces"}}, {"let": {"picked, desc": "=pick_both(o.Shape, q)"}}, {"do": "=ld.update({'faces': q})"}, {"let": {"v": "=a['force']"}}, {"when": "=is_number(v)", "then": [{"let": {"n": "=faces_normal(picked)"}}, {"refuse": "force: these faces have no one direction to push along — give [fx, fy, fz].", "when": "=n.Length < 1e-9"}, {"do": "=n.normalize()"}, {"let": {"v": "=[-n.x * v, -n.y * v, -n.z * v]"}}], "else": [{"refuse": "force: [fx, fy, fz] N in total over the faces, or a number pushing into them.", "when": "=not (is_list(v) and len(v) == 3)"}]}, {"do": "=ld.update({'force': [float(x) for x in v]})"}, {"refuse": "force: [0, 0, 0] loads nothing — give its size and direction in N, [fx, fy, fz], or a number pushing into the faces.", "when": "=not any(abs(x) > 0 for x in ld['force'])"}, {"put": {"on": "=desc"}}], "pressure": [{"let": {"q": "=a.faces"}}, {"let": {"picked, desc": "=pick_both(o.Shape, q)"}}, {"do": "=ld.update({'faces': q})"}, {"let": {"v": "=a['pressure']"}}, {"refuse": "pressure: MPa (N/mm²), a number; positive pushes into the faces.", "when": "=not is_number(v)"}, {"do": "=ld.update({'pressure': float(v)})"}, {"put": {"on": "=desc"}}]}, "else": [{"let": {"v": "=a['gravity']"}}, {"let": {"g": "=[0.0, 0.0, -1.0] if v is True else [0.0, 0.0, -float(v)] if is_num(v) else [float(x) for x in v] if is_list(v) and len(v) == 3 else None"}}, {"refuse": "gravity: true (1 g down -z), a number of g down -z, or [gx, gy, gz] in g.", "when": "=g is None"}, {"refuse": "gravity: 0 g loads nothing — true (1 g down -z), a number of g, or [gx, gy, gz] in g.", "when": "=not any(abs(x) > 0 for x in g)"}, {"do": "=ld.update({'gravity': g})"}]},
+    {"refuse": {"fmt": "That load is already in the study (loads: {len(st['loads'])}): adding it again would apply it twice — replace: true to start the loads over, or clear: true."}, "code": "invalid_state", "when": "=not a.replace and same_in(ld, st['loads'])"},
+    {"do": ["=st.update({'loads': ([] if a.replace else st['loads']) + [ld]})", "=save(st)"]},
+    {"do": "=snapshot(tool)"},
+    {"do": "=out.update({'load': ld, 'loads': len(st['loads'])})"}
+   ],
+   "answer": {"fields": {"...out": "=out"}}
+  },
+  "fea_solve": {
+   "group": "strength",
+   "description": "Solve the study: as FreeCAD's own FEM analysis (CalculiX solver object, Gmsh mesh object, its constraints, results loaded into it; made anew each solve as \"<body> strength (fea_solve)\") where the study is one body, fixed holds, force/pressure/gravity, linear; else Agent Link's own CalculiX deck (solvedBy says which and why). Second-order tetrahedra, linear static; mm, N, MPa. Answers vonMisesMax { MPa, at, face } and displacementMax { mm, at, face }, safety (yield over the peak), mesh { nodes, elements }, warnings, files; health carries CalculiX's own warning lines. nonlinear: true follows large deflections and each material into yield (elasticOnly: true keeps it elastic) and answers the plastic strain. Runs in the foreground, FreeCAD waiting: seconds for a few thousand elements, minutes past 100,000 (timeout s, 300, bounds Gmsh and the own deck). A rigid hold makes stress no real mount does; a coarse mesh under-reads peaks; library figures are typical. Needs ccx and gmsh installed.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "timeout": {
+      "type": "number"
+     },
+     "nonlinear": {
+      "type": "boolean"
+     },
+     "elasticOnly": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=reset_tails()"},
+    {"let": {"st": "=study()"}},
+    {"refuse": "No strength study: fea_setup { body } first.", "code": "invalid_state", "when": "=not st"},
+    {"let": {"o": "=study_body(st)"}},
+    {"refuse": "Nothing holds the part: fea_hold the faces it is mounted by — a free body has no static answer.", "code": "invalid_state", "when": "=not st['holds']"},
+    {"refuse": "Nothing loads the part: fea_load a force, pressure or gravity.", "code": "invalid_state", "when": "=not st['loads']"},
+    {"let": {"lost": "=unmatched(st, o.Shape)"}},
+    {"refuse": {"fmt": "The study no longer fits the part, so it was not solved (it would run without them): {' '.join(lost)}"}, "code": "invalid_state", "when": "=lost"},
+    {"let": {"c": "=card(st['material'])"}},
+    {"refuse": {"fmt": "The study's material {st.material!r} is gone or has no Young's modulus: fea_setup {{ material }} again."}, "code": "invalid_state", "when": "=c is None or not c.get('E')"},
+    {"let": {"shape": "=o.Shape"}},
+    {"let": {"free": "=unheld_solids(st, shape)"}},
+    {"refuse": "=unheld_words(o.Label, len(shape.Solids), free)", "code": "invalid_state", "when": "=free"},
+    {"let": {"t0": "=now()", "timeout": "=float(a.get('timeout', 300))", "mesh": "=float(st['mesh'])", "nonlin": "=bool(a.nonlinear)"}},
+    {"let": {"run": "=solve_run(st, o, c, a, timeout)"}},
+    {"when": "=not run.disp or not run.stress", "then": [{"let": {"said": "=run.said", "t1": "", "t2": "", "t3": ""}}, {"let": {"t1": "=\". CalculiX's last lines: \" + str(said) + '.' + ccx_hint(said)"}, "when": "=said"}, {"let": {"t2": "=\". FreeCAD's FEM route first: \" + str(run.route_why)"}, "when": "=run.route_why and not run.fem"}, {"let": {"t3": ". A multi-solid body: fea_setup { solid: n } studies one solid alone"}, "when": "=len(shape.Solids) > 1"}, {"refuse": {"fmt": "CalculiX wrote no displacements or stresses — most often a part free to move (a solid or region no hold reaches, a hold on too few faces) or a mesh that failed{t1}{t2}{t3}; the files are in {run.wd}"}, "code": "failed"}]},
+    {"let": {"pk": "=peaks(run, shape)", "y": "=c.get('yield')", "warnings": "=[]"}},
+    {"let": {"smax": "=pk.smax", "dmax": "=pk.dmax"}},
+    {"let": {"by": {"fmt": "FreeCAD's FEM ({run.an_label}: CalculiX solver, Gmsh mesh, its constraints; results in the analysis)"}}, "when": "=run.fem"},
+    {"let": {"by": {"fmt": "Agent Link's own CalculiX deck — {run.route_why}"}}, "when": "=not run.fem"},
+    {"let": {"out": "={'body': o.Label, 'material': {'id': c['id'], 'name': c['name'], 'E': c['E'], 'yield': y}, 'mesh': {'size': mesh, 'nodes': len(run.nodes), 'elements': len(run.elems), 'type': 'C3D10'}, 'loads': run.applied, 'held': sorted(run.held_faces), 'vonMisesMax': merged({'MPa': round(smax, 3)}, pk.at_max), 'displacementMax': merged({'mm': round(dmax, 4)}, pk.at_dmax), 'solvedBy': by}"}},
+    {"when": "=nonlin", "then": [{"let": {"peeq": "=plastic_strain(run.frd)"}}, {"put": {"nonlinear": "=merged({'geometry': True, 'plastic': bool(y) and not a.elasticOnly}, {'plasticStrainMax': round(peeq, 5)} if peeq is not None else {})"}}, {"push": {"warnings": {"fmt": "It yields: plastic strain up to {peeq * 100:.2f} % — it takes a permanent set there."}}, "when": "=peeq"}]},
+    {"when": "=y", "then": [{"put": {"safety": "=round(y / smax, 2) if smax > 0 else None"}}, {"push": {"warnings": {"fmt": "Past yield ({smax:.1f} over {y:g} MPa): a linear solve is not right past yield — the part yields or breaks there (nonlinear: true follows it into yield)."}}, "when": "=smax > y and not nonlin"}], "else": [{"push": {"warnings": "The card has no yield strength: no safety factor — material_set custom with the supplier's yieldMPa."}}]},
+    {"push": {"warnings": "The peak is on a held face: a rigid hold makes stress no real mount does — read it as high, and look a little away from the hold."}, "when": "=pk.n_max in run.fixed"},
+    {"let": {"bb": "=shape.BoundBox"}},
+    {"let": {"least": "=min(bb.XLength, bb.YLength, bb.ZLength)"}},
+    {"push": {"warnings": {"fmt": "Coarse mesh ({mesh:g} mm against a least size of {least:.1f} mm): peaks are under-read — fea_setup {{ mesh: {round(mesh / 2, 2)} }} and solve again; if the peak rises by more than 10% keep refining."}}, "when": "=mesh > least / 4"},
+    {"push": {"warnings": "The displacement is large for the part: a linear solve is rough here."}, "when": "=not nonlin and dmax > 0.05 * max(bb.XLength, bb.YLength, bb.ZLength)"},
+    {"push": {"warnings": "Library and filament figures are typical: for a part that must not fail, use the supplier's data sheet (material_set custom)."}, "when": "=not str(c['id']).startswith('custom:')"},
+    {"when": "=run.groups is not None", "then": [{"let": {"rows": "=part_rows(run, st, shape)"}}, {"put": {"parts": "=rows", "joined": {"how": "=st.get('join')", "interfaces": "=len(run.pairs)"}}}, {"push": {"warnings": "No touching faces were found in the mesh: the parts were solved apart."}, "when": "=st.get('join') != 'none' and not run.pairs"}, {"do": "=out.pop('safety', None)", "when": "=y and len(rows) > 1"}]},
+    {"put": {"warnings": "=warnings", "files": "=run.wd", "seconds": "=round(now() - t0, 1)"}},
+    {"do": "=keep_solve(o, shape, st, out, run)"}
+   ],
+   "answer": {"fields": {"...out": "=out"}}
+  },
+  "fea_modes": {
+   "group": "strength",
+   "description": "Natural frequencies of the study's body: the lowest count (6, up to 30) modes, held by the study's holds (none: free, its rigid motions left out). Answers each mode's Hz and where it swings most and which way. Keep what shakes the part well away from the lowest. Runs in the foreground; needs ccx and gmsh (timeout s, 300).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "count": {
+      "type": "integer"
+     },
+     "timeout": {
+      "type": "number"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"st": "=study()"}},
+    {"refuse": "No strength study: fea_setup { body } first.", "code": "invalid_state", "when": "=not st"},
+    {"let": {"o": "=study_body(st)"}},
+    {"let": {"c": "=card(st['material'])"}},
+    {"refuse": {"fmt": "The study's material {st.material!r} needs a Young's modulus and a density: fea_setup {{ material }} again."}, "code": "invalid_state", "when": "=c is None or not c.get('E') or not c.get('density')"},
+    {"let": {"count": "=int(a.get('count', 6))"}},
+    {"refuse": "count: modes to find, 1 to 30.", "when": "=not 1 <= count <= 30"},
+    {"let": {"shape": "=o.Shape", "t0": "=now()", "timeout": "=float(a.get('timeout', 300))"}},
+    {"let": {"run": "=modes_run(o, st, c, count, timeout)"}},
+    {"refuse": {"fmt": "CalculiX wrote no frequencies: see job.dat in {run.wd}"}, "code": "failed", "when": "=not run.freqs"},
+    {"let": {"modes": "=mode_rows(run, shape, count)"}}
+   ],
+   "answer": {"fields": {"body": "=o.Label", "material": {"id": "=c['id']", "name": "=c['name']", "E": "=c['E']", "density": "=c['density']"}, "held": "='free (no holds: the six rigid motions left out)' if run.free else str(len(st['holds'])) + ' hold(s) from the study'", "mesh": {"size": "=st['mesh']", "nodes": "=len(run.nodes)", "elements": "=len(run.elems)"}, "modes": "=modes", "note": "Natural frequencies: keep what shakes the part (a motor, a fan, a vehicle) well away from the lowest, by a factor of two or more. moves is where each mode swings most, and which way.", "warnings": "=([] if run.free else ['Rigid holds make a part stiffer than a real mount: real frequencies read lower.']) + ([] if str(c['id']).startswith('custom:') else [\"Library and filament figures are typical: for a part that must not fail, use the supplier's data sheet (material_set custom).\"])", "files": "=run.wd", "seconds": "=round(now() - t0, 1)"}}
+  },
+  "fea_heat": {
+   "group": "strength",
+   "description": "Steady heat through the study's body: temperatures [{ faces, celsius }] held, heat [{ faces, watts }] going in (one of the two at least), air { h W/(m²·K) (10, still air), celsius (25), faces (the rest) } taking it away — air: false for none. Answers the hottest and coolest place and warns when the part passes where its material softens (k from the card, or conductivity W/(m·K) here). Conduction and convection only. view_render map heat shows it. Runs in the foreground (timeout s, 300); needs ccx and gmsh.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "temperatures": {
+      "type": "array",
+      "items": {}
+     },
+     "heat": {
+      "type": "array",
+      "items": {}
+     },
+     "air": {},
+     "conductivity": {
+      "type": "number"
+     },
+     "timeout": {
+      "type": "number"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"st": "=study()"}},
+    {"refuse": "No strength study: fea_setup { body } first.", "code": "invalid_state", "when": "=not st"},
+    {"let": {"o": "=study_body(st)"}},
+    {"let": {"c": "=card(st['material'])"}},
+    {"let": {"k": "=a.conductivity or (c or {}).get('k')", "named": "=(c or {}).get('name', st['material'])"}},
+    {"refuse": {"fmt": "{named} has no thermal conductivity on its card: conductivity W/(m·K) here, or material_set custom with one."}, "code": "invalid_state", "when": "=not k"},
+    {"let": {"k": "=float(k)", "temps_in": "=a.temperatures or []", "heat_in": "=a.heat or []"}},
+    {"refuse": "temperatures [{ faces, celsius }] held, and/or heat [{ faces, watts }] going in: something must drive the heat.", "when": "=not temps_in and not heat_in"},
+    {"let": {"air": "=a.get('air', {'h': 10, 'celsius': 25})"}},
+    {"let": {"air": "={'h': 10, 'celsius': 25}"}, "when": "=air is True"},
+    {"let": {"shape": "=o.Shape", "t0": "=now()", "timeout": "=float(a.get('timeout', 300))"}},
+    {"let": {"m": "=meshed(o, st, timeout, 'heat')"}},
+    {"let": {"used": "=set()", "temps": "={}", "fluxes": "=[]", "films": "=[]", "said": "=[]"}},
+    {"each": "t", "in": "=temps_in", "index": "i", "steps": [{"refuse": {"fmt": "temperatures.{i}: {{ faces, celsius }}."}, "when": "=not is_dict(t) or 'celsius' not in t"}, {"let": {"picked": "=pick(shape, t.get('faces'), 'temperatures.' + str(i) + '.faces')"}}, {"do": "=hold_temperature(m, picked, float(t['celsius']), used, temps)"}, {"push": {"said": "={'held': [n for n, f in picked], 'celsius': float(t['celsius'])}"}}]},
+    {"each": "h", "in": "=heat_in", "index": "i", "steps": [{"refuse": {"fmt": "heat.{i}: {{ faces, watts }} going in."}, "when": "=not is_dict(h) or 'watts' not in h"}, {"let": {"picked": "=pick(shape, h.get('faces'), 'heat.' + str(i) + '.faces')"}}, {"let": {"vf, area": "=heated(m, picked, used)", "names": "=[n for n, f in picked]"}}, {"refuse": {"fmt": "heat.{i}: no element faces on {names} — another mesh size."}, "code": "failed", "when": "=not vf or area <= 0"}, {"let": {"q": "=float(h['watts']) * 1000.0 / area"}}, {"do": "=fluxes.extend([(e, fn, q) for e, fn in vf])"}, {"push": {"said": "={'heated': names, 'watts': float(h['watts']), 'mWperMm2': round(q, 5)}"}}]},
+    {"when": "=air", "then": [{"let": {"hc": "=float(air.get('h', 10)) * 1e-3", "ta": "=float(air.get('celsius', 25))", "on": "=rest_faces(shape, used)"}}, {"let": {"on": "=pick(shape, air['faces'], 'air.faces')"}, "when": "=air.get('faces') is not None"}, {"do": "=films.extend(film_faces(m, on, hc, ta))"}, {"push": {"said": "={'air': {'h': float(air.get('h', 10)), 'celsius': ta, 'faces': len(on)}}"}}]},
+    {"refuse": "Heat goes in but nothing takes it away: hold a face at a temperature or leave air on.", "when": "=not temps and not films"},
+    {"let": {"T": "=heat_solve(m, k, temps, fluxes, films, float((air or {}).get('celsius', 20)) if air else 20.0, timeout)"}},
+    {"refuse": {"fmt": "CalculiX wrote no temperatures: see job.frd in {m.wd}"}, "code": "failed", "when": "=not T"},
+    {"let": {"hot": "=max(T, key=T.get)", "cold": "=min(T, key=T.get)", "soft": "=(c or {}).get('softens')", "warnings": "=[]"}},
+    {"let": {"peak": "=T[hot]", "seconds": "=round(now() - t0, 1)"}},
+    {"let": {"hottest": "=merged({'celsius': round(T[hot], 2)}, where(m.nodes, shape, hot))", "coolest": "=merged({'celsius': round(T[cold], 2)}, where(m.nodes, shape, cold))"}},
+    {"when": "=soft and peak >= soft", "then": [{"push": {"warnings": {"fmt": "Hotter than {c['name']} takes ({peak:.0f} °C against about {soft} °C where it softens under load): it will sag or creep there — a higher-temperature material, or more cooling."}}}], "else": [{"push": {"warnings": {"fmt": "Within 10 °C of where {c['name']} softens ({soft} °C): little margin."}}, "when": "=soft and peak >= soft - 10"}]},
+    {"push": {"warnings": "Steady state, conduction and still-air convection only (no radiation); film coefficients are rough — 5 to 25 W/(m²·K) for still air, more with a fan."}},
+    {"do": "=keep_heat(o, shape, T, m.nodes)"}
+   ],
+   "answer": {"fields": {"body": "=o.Label", "material": {"id": "=(c or {}).get('id')", "name": "=(c or {}).get('name')", "conductivity": "=k", "softensC": "=(c or {}).get('softens')"}, "boundary": "=said", "hottest": "=hottest", "coolest": "=coolest", "mesh": {"size": "=st['mesh']", "nodes": "=len(m.nodes)", "elements": "=len(m.elems)"}, "files": "=m.wd", "seconds": "=seconds", "warnings": "=warnings"}}
+  },
+  "fea_results": {
+   "group": "strength",
+   "description": "The last solve's answer again (kept with the session, not the file), with stale: true and staleWhy when the body or the study changed since. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"r": "=results()"}},
+    {"refuse": "No results in this session: fea_solve first.", "code": "not_found", "when": "=not r"},
+    {"let": {"stale": "=[]"}},
+    {"try": [{"let": {"b": "=body(r['body'])"}}, {"push": {"stale": "the body changed since the solve"}, "when": "=stats(b.Shape) != r['stats']"}], "on": "refusal", "except": [{"push": {"stale": "the body is gone"}}]},
+    {"push": {"stale": "the study (holds, loads, material, mesh) changed"}, "when": "=study() != r['study']"}
+   ],
+   "answer": {"fields": {"...result": "=dict(r['result'])", "stale": "=bool(stale)", "staleWhy": {"when": "=stale", "value": "=stale"}, "next": {"when": "=stale", "value": "fea_solve again."}}}
+  },
+  "fea_clear": {
+   "group": "strength",
+   "description": "Drop the strength study (body, material, holds, loads, refined regions) and its results. FEM analyses already made in the document stay.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"had": "=study() is not None"}},
+    {"do": "=forget()"},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"cleared": "=had"}}
+  },
+  "fea_buckle": {
+   "group": "strength",
+   "description": "Linear buckling of the study (its holds and loads): the lowest count (3) buckling factors — the loads times the factor is where each mode buckles; under 1 it buckles as loaded — and where each bulges. Thin walls, columns, ribs under compression. Runs in the foreground; needs ccx and gmsh (timeout s, 300).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "count": {
+      "type": "integer"
+     },
+     "timeout": {
+      "type": "number"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"st": "=study()"}},
+    {"refuse": "No strength study: fea_setup { body } first.", "code": "invalid_state", "when": "=not st"},
+    {"let": {"o": "=study_body(st)"}},
+    {"refuse": "Buckling needs the study's holds and loads (the load whose multiple buckles it): fea_hold and fea_load first.", "code": "invalid_state", "when": "=not st['holds'] or not st['loads']"},
+    {"let": {"c": "=card(st['material'])"}},
+    {"refuse": "The study's material has no Young's modulus: fea_setup { material }.", "code": "invalid_state", "when": "=c is None or not c.get('E')"},
+    {"let": {"count": "=int(a.get('count', 3))"}},
+    {"refuse": "count: modes, 1 … 10.", "when": "=not 1 <= count <= 10"},
+    {"let": {"timeout": "=float(a.get('timeout', 300))", "shape": "=o.Shape", "t0": "=now()"}},
+    {"let": {"run": "=buckle_run(o, st, c, count, timeout)"}},
+    {"refuse": {"fmt": "CalculiX wrote no buckling factors: see job.dat in {run.wd}"}, "code": "failed", "when": "=not run.factors"},
+    {"let": {"modes": "=bulge_rows(run, shape)"}},
+    {"let": {"low": "=modes[0]['factor']", "said": "", "verdict": null, "seconds": "=round(now() - t0, 1)"}},
+    {"when": "=low < 0", "then": [{"let": {"said": "A negative factor: the part buckles with the loads reversed — reverse them and read again."}}], "else": [{"when": "=low < 1", "then": [{"let": {"verdict": {"fmt": "Buckles under these loads: at {low:.2f}× them."}}}], "else": [{"let": {"tail": "=' — under 3×: little margin; thin walls and columns want more.' if low < 3 else '.'"}}, {"let": {"verdict": {"fmt": "Buckles at {low:.2f}× these loads{tail}"}}}]}]}
+   ],
+   "answer": {"fields": {"body": "=o.Label", "loads": "=run.applied", "modes": "=modes", "lowest": "=low", "seconds": "=seconds", "files": "=run.wd", "verdict": {"when": "=verdict is not None", "value": "=verdict"}, "note": "=(said + ' Linear (eigenvalue) buckling: an upper bound — real parts, imperfect and printed, go sooner; keep a margin of 3 or more.').strip()"}}
+  },
+  "fea_refine": {
+   "group": "strength",
+   "description": "A finer mesh near faces (a fillet, a hole's edge, where the peak sits): faces (a query as fea_hold takes), size mm (under the study's mesh); clear: true drops every region. Kept in the study; the next solve uses it (by Agent Link's own deck).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "faces": {},
+     "size": {
+      "type": "number"
+     },
+     "clear": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"st": "=study()"}},
+    {"refuse": "No strength study: fea_setup { body } first.", "code": "invalid_state", "when": "=not st"},
+    {"let": {"o": "=study_body(st)"}},
+    {"when": "=a.clear", "then": [{"do": "=st.update({'refine': []})"}], "else": [{"let": {"size": "=a.size"}}, {"refuse": "size: the element edge near the faces, mm, over 0 (smaller than the study's mesh).", "when": "=not is_number(size) or size <= 0"}, {"refuse": {"fmt": "size {size:g} is not finer than the study's mesh ({st['mesh']:g} mm)."}, "when": "=size >= float(st['mesh'])"}, {"let": {"pk, picked": "=pick_both(o.Shape, a.faces)"}}, {"do": "=st.update({'refine': list(st.get('refine') or []) + [{'faces': a['faces'], 'size': float(size)}]})"}]},
+    {"do": "=save(st)"},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"refine": "=st.get('refine', [])", "faces": {"when": "=not a.clear", "value": "=picked"}, "note": "Finer near those faces, growing back to the study's size over three elements: where a peak sits (a fillet, a hole's edge) — solve again and see the peak settle."}}
+  },
+  "fea_probe": {
+   "group": "strength",
+   "description": "Read the last solve where asked: points [[x,y,z] …] (von Mises MPa and displacement mm there, from the nearest nodes; nearestNodeMm says how near), line { from, to, samples } (a profile along it; warns where it leaves the part), faces (a query as fea_hold takes: max, mean and where on them). Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "points": {
+      "type": "array",
+      "items": {}
+     },
+     "line": {
+      "type": "object"
+     },
+     "faces": {}
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"r": "=results()"}},
+    {"refuse": "No solve to read: fea_solve first.", "code": "not_found", "when": "=not r or 'field' not in r"},
+    {"let": {"reader": "=probe(r)", "warning": null}},
+    {"let": {"out": "={'body': r['body']}"}},
+    {"put": {"points": "=[reader.at(q) for q in a.points]"}, "when": "=a.points"},
+    {"when": "=a.line", "then": [{"let": {"ln": "=a.line"}}, {"let": {"p0, p1": "=reader.ends(ln)"}}, {"let": {"n": "=int(ln.get('samples', 11))"}}, {"refuse": "line.samples: 2 … 500.", "when": "=not 2 <= n <= 500"}, {"let": {"rows": "=reader.along(p0, p1, n)"}}, {"let": {"far": "=max([x['nearestNodeMm'] for x in rows])"}}, {"let": {"warning": {"fmt": "Some samples lie {far:.1f} mm from any node: the line leaves the part there."}}, "when": "=far > reader.msize * 2 and far > 2"}, {"put": {"line": "=rows"}}, {"put": {"warning": "=warning"}, "when": "=warning"}]},
+    {"when": "=a.faces is not None", "then": [{"let": {"b": "=solved_body(r)"}}, {"refuse": {"fmt": "{r['body']}: the body solved is no longer here."}, "code": "not_found", "when": "=b is None"}, {"let": {"picked": "=pick(b.Shape, a['faces'], 'faces')"}}, {"let": {"on": "=reader.on_faces([f for n, f in picked])"}}, {"refuse": "No mesh nodes found on those faces.", "code": "failed", "when": "=on is None"}, {"put": {"faces": {"faces": "=[n for n, f in picked]", "nodes": "=on.nodes", "vonMisesMPa": {"max": "=round(on.vm_max, 3)", "mean": "=round(on.vm_mean, 3)", "maxAt": "=[round(c, 3) for c in on.max_at]"}, "displacementMm": {"max": "=round(on.u_max, 5)", "mean": "=round(on.u_mean, 5)"}}}}]},
+    {"refuse": "points [[x,y,z] …], line { from, to, samples }, and/or faces (a query as fea_hold takes).", "when": "=len(out) == 1"},
+    {"put": {"stale": true}, "when": "=r.get('stale')"}
+   ],
+   "answer": {"fields": {"...out": "=out"}}
+  },
+  "fea_chart": {
+   "group": "strength",
+   "description": "The last solve as FreeCAD's FEM post-processing charts, headless: kind histogram (field over every node, bins 20: an SVG bar chart, the CSV of the bins, min, median, p95, p99, max) | line (along line { from, to, samples } mm: an SVG line plot and CSV) | table (points [[x,y,z] …] or a line: a CSV, and the rows in the answer when 25 or fewer). field vonMises (MPa, default) or displacement (mm). name, title. Files go to the out folder. Changes nothing in the document.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "histogram",
+       "line",
+       "table"
+      ]
+     },
+     "field": {
+      "type": "string",
+      "enum": [
+       "vonMises",
+       "displacement"
+      ]
+     },
+     "bins": {
+      "type": "integer"
+     },
+     "line": {
+      "type": "object"
+     },
+     "points": {
+      "type": "array",
+      "items": {}
+     },
+     "name": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"r": "=results()"}},
+    {"refuse": "No solve to read: fea_solve first.", "code": "not_found", "when": "=not r or 'field' not in r"},
+    {"let": {"kind": "=a.get('kind', 'histogram')", "field": "=a.get('field', 'vonMises')"}},
+    {"refuse": "field: vonMises (MPa) or displacement (mm, its size).", "when": "=field not in ('vonMises', 'displacement')"},
+    {"let": {"unit": "='MPa' if field == 'vonMises' else 'mm'", "vals": "=field_values(r, field)"}},
+    {"let": {"base": "=safe_name(a.name or str(r['body']) + '-' + field + '-' + str(kind))"}},
+    {"do": "=ensure_out()"},
+    {"let": {"svg_path": "=made(out_path(base + '.svg'))"}},
+    {"let": {"csv_path": "=made(out_path(base + '.csv'))", "label": "='von Mises stress (MPa)' if field == 'vonMises' else 'displacement (mm)'", "text": null}},
+    {"let": {"out": "={'body': r['body'], 'kind': kind, 'field': field, 'unit': unit, 'nodes': int(len(vals))}"}},
+    {"choose": "=kind", "of": {"histogram": [{"let": {"bins": "=int(a.get('bins', 20))"}}, {"refuse": "bins: 2 … 200.", "when": "=not 2 <= bins <= 200"}, {"let": {"h": "=histogram(vals, bins)"}}, {"let": {"mids": "=[round((h.edges[i] + h.edges[i + 1]) / 2, 4) for i in range(bins)]"}}, {"let": {"text": "=chart_svg([{'name': 'nodes', 'values': h.counts}], x=mids, kind='bar', title=a.title or str(r['body']) + ': ' + label, xlabel=label, ylabel='nodes')"}}, {"let": {"rows": "=[['from', 'to', 'nodes']] + [[round(h.edges[i], 4), round(h.edges[i + 1], 4), h.counts[i]] for i in range(bins)]"}}, {"put": {"bins": "=bins", "min": "=round(h.min, 4)", "max": "=round(h.max, 4)", "median": "=round(h.median, 4)", "p95": "=round(h.p95, 4)", "p99": "=round(h.p99, 4)"}}], "line": [{"refuse": "line { from: [x,y,z], to: [x,y,z], samples }: the line to plot along, mm.", "when": "=kind == 'line' and not a.line"}, {"refuse": "points [[x,y,z] …] or line { from, to, samples }: where to read the table.", "when": "=kind == 'table' and not (a.line or a.points)"}, {"let": {"reader": "=probe(r)", "warning": null, "rows": null}}, {"let": {"at_points": "=[reader.at(q) for q in a.points] if a.points else None"}}, {"when": "=a.line", "then": [{"let": {"ln": "=a.line"}}, {"let": {"p0, p1": "=reader.ends(ln)"}}, {"let": {"n": "=int(ln.get('samples', 11))"}}, {"refuse": "line.samples: 2 … 500.", "when": "=not 2 <= n <= 500"}, {"let": {"rows": "=reader.along(p0, p1, n)"}}, {"let": {"far": "=max([x['nearestNodeMm'] for x in rows])"}}, {"let": {"warning": {"fmt": "Some samples lie {far:.1f} mm from any node: the line leaves the part there."}}, "when": "=far > reader.msize * 2 and far > 2"}]}, {"let": {"got": "=rows or at_points or []", "key": "='vonMisesMPa' if field == 'vonMises' else 'displacementMm'"}}, {"let": {"rows": "=[['x', 'y', 'z', 'vonMisesMPa', 'displacementMm', 'nearestNodeMm']] + [g['at'] + [g['vonMisesMPa'], g['displacementMm'], g['nearestNodeMm']] for g in got]"}}, {"when": "=kind == 'line' or a.line", "then": [{"let": {"dist": "=[round(distance(g['at'], a.line['from']), 3) for g in got]"}}, {"let": {"text": "=chart_svg([{'name': label, 'values': [g[key] for g in got]}], x=dist, kind='line', title=a.title or str(r['body']) + ': ' + label + ' along the line', xlabel='distance along the line (mm)', ylabel=label)"}}]}, {"put": {"samples": "=len(got)", "max": "=max([g[key] for g in got], default=None)"}}, {"put": {"warning": "=warning"}, "when": "=warning"}, {"put": {"table": "=rows"}, "when": "=kind == 'table' and len(got) <= 25"}], "table": [{"refuse": "line { from: [x,y,z], to: [x,y,z], samples }: the line to plot along, mm.", "when": "=kind == 'line' and not a.line"}, {"refuse": "points [[x,y,z] …] or line { from, to, samples }: where to read the table.", "when": "=kind == 'table' and not (a.line or a.points)"}, {"let": {"reader": "=probe(r)", "warning": null, "rows": null}}, {"let": {"at_points": "=[reader.at(q) for q in a.points] if a.points else None"}}, {"when": "=a.line", "then": [{"let": {"ln": "=a.line"}}, {"let": {"p0, p1": "=reader.ends(ln)"}}, {"let": {"n": "=int(ln.get('samples', 11))"}}, {"refuse": "line.samples: 2 … 500.", "when": "=not 2 <= n <= 500"}, {"let": {"rows": "=reader.along(p0, p1, n)"}}, {"let": {"far": "=max([x['nearestNodeMm'] for x in rows])"}}, {"let": {"warning": {"fmt": "Some samples lie {far:.1f} mm from any node: the line leaves the part there."}}, "when": "=far > reader.msize * 2 and far > 2"}]}, {"let": {"got": "=rows or at_points or []", "key": "='vonMisesMPa' if field == 'vonMises' else 'displacementMm'"}}, {"let": {"rows": "=[['x', 'y', 'z', 'vonMisesMPa', 'displacementMm', 'nearestNodeMm']] + [g['at'] + [g['vonMisesMPa'], g['displacementMm'], g['nearestNodeMm']] for g in got]"}}, {"when": "=kind == 'line' or a.line", "then": [{"let": {"dist": "=[round(distance(g['at'], a.line['from']), 3) for g in got]"}}, {"let": {"text": "=chart_svg([{'name': label, 'values': [g[key] for g in got]}], x=dist, kind='line', title=a.title or str(r['body']) + ': ' + label + ' along the line', xlabel='distance along the line (mm)', ylabel=label)"}}]}, {"put": {"samples": "=len(got)", "max": "=max([g[key] for g in got], default=None)"}}, {"put": {"warning": "=warning"}, "when": "=warning"}, {"put": {"table": "=rows"}, "when": "=kind == 'table' and len(got) <= 25"}]}, "else": [{"refuse": "kind: histogram (field over every node) | line (along line { from, to, samples }) | table (points or a line, as CSV)."}]},
+    {"do": "=write_text(csv_path, csv_text(rows))"},
+    {"put": {"csv": "=csv_path"}},
+    {"when": "=text", "then": [{"do": "=write_text(svg_path, text)"}, {"put": {"svg": "=svg_path"}}]}
+   ],
+   "answer": {"fields": {"...out": "=out"}}
+  },
+  "fea_export": {
+   "group": "strength",
+   "description": "Write the last solve to the out folder: formats [vtu (ParaView, FreeCAD FEM post-processing), csv (every node: position mm, von Mises MPa, displacement mm)] (both by default), name. Changes nothing in the document.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "formats": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"r": "=results()"}},
+    {"refuse": "No solve to write: fea_solve first.", "code": "not_found", "when": "=not r or 'field' not in r"},
+    {"let": {"f": "=r['field']"}},
+    {"let": {"base": "=out_path((a.name or str(r['body']) + '-stress').replace(' ', '-'))", "kinds": "=a.formats or ['vtu', 'csv']", "files": "={}"}},
+    {"each": "k", "in": "=kinds", "steps": [{"do": "=made(base + '.' + k)"}]},
+    {"when": "='vtu' in kinds", "then": [{"refuse": "This solve kept no elements: fea_solve again, then export.", "code": "invalid_state", "when": "=not f.get('elements')"}, {"do": "=write_vtu(base + '.vtu', f)"}, {"put": {"vtu": "=base + '.vtu'"}, "into": "files"}]},
+    {"when": "='csv' in kinds", "then": [{"do": "=write_csv(base + '.csv', f)"}, {"put": {"csv": "=base + '.csv'"}, "into": "files"}]}
+   ],
+   "answer": {"fields": {"body": "=r['body']", "files": "=files", "nodes": "=len(f['points'])", "elements": "=len(f.get('elements') or [])", "note": "The VTU opens in ParaView (and FreeCAD's FEM post-processing); the CSV has every node."}}
+  },
+  "fea_native": {
+   "group": "strength",
+   "description": "Build the study as FreeCAD's own FEM analysis (Analysis, solver, material, Gmsh mesh, fixed / force / pressure / self-weight constraints), to open and run in the FEM workbench; it is not solved here (fea_solve does that), and skipped lists what the FEM objects could not take. solver elmer (multiphysics) takes equations [elasticity, heat, flow, electrostatic, electricforce, flux, staticcurrent, magnetodynamic, deformation (nonlinear elasticity)] together, temperatures [{ faces, celsius }] and heat [{ faces, watts }] for heat, potentials [{ faces, volts }] for electrostatics; with flow the body is the fluid's space (fluid air | water; inlets and walls are set in the FEM workbench); write: true meshes it and writes Elmer's case (case.sif), run: true solves it where ElmerSolver is installed.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "solver": {
+      "type": "string",
+      "enum": [
+       "calculix",
+       "elmer"
+      ]
+     },
+     "equations": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "elasticity",
+        "deformation",
+        "heat",
+        "flow",
+        "electrostatic",
+        "electricforce",
+        "flux",
+        "staticcurrent",
+        "magnetodynamic",
+        "magnetodynamic2d"
+       ]
+      }
+     },
+     "temperatures": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "heat": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "potentials": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "fluid": {
+      "type": "string",
+      "enum": [
+       "air",
+       "water"
+      ]
+     },
+     "write": {
+      "type": "boolean"
+     },
+     "run": {
+      "type": "boolean"
+     },
+     "timeout": {
+      "type": "number"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/strength.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"st": "=study()"}},
+    {"refuse": "No strength study: fea_setup { body } first.", "code": "invalid_state", "when": "=not st"},
+    {"let": {"o": "=study_body(st)"}},
+    {"let": {"F": "=objects_fem()"}},
+    {"refuse": "FreeCAD's FEM module is not in this build.", "code": "unavailable", "when": "=F is None"},
+    {"let": {"c": "=card(st['material']) or {}", "made": "=[]", "skipped": "=[]", "kind": "=str(a.get('solver', 'calculix')).lower()"}},
+    {"refuse": "solver: calculix or elmer.", "when": "=kind not in ('calculix', 'elmer')"},
+    {"let": {"eqs": "=[str(e).lower() for e in (a.equations or ['elasticity'])]"}},
+    {"refuse": "equations, temperatures and potentials are Elmer's: solver elmer.", "when": "=kind == 'calculix' and (a.equations or a.temperatures or a.potentials)"},
+    {"when": "=kind == 'elmer'", "then": [{"let": {"unknown": "=[e for e in eqs if e not in ELMER_EQUATIONS]"}}, {"refuse": {"fmt": "equations: {', '.join(unknown)} unknown — {', '.join(ELMER_EQUATIONS)}."}, "when": "=unknown"}, {"refuse": {"fmt": "fluid: {' or '.join(FLUIDS)} (with flow, the body is the fluid's space)."}, "when": "=str(a.get('fluid', 'air')).lower() not in FLUIDS"}, {"each": "key, eq", "in": [["temperatures", "heat"], ["heat", "heat"], ["potentials", "electrostatic"]], "steps": [{"refuse": {"fmt": "{key} need the {eq} equation: equations [..., {eq}]."}, "when": "=a.get(key) and eq not in eqs"}]}, {"refuse": "This FreeCAD's FEM has no Elmer solver object.", "code": "unavailable", "when": "=not has(F, 'makeSolverElmer')"}, {"let": {"an": "=new_analysis(a, o)"}}, {"make": "=F.makeSolverElmer", "call": ["=doc()"], "as": "solver"}, {"do": "=an.addObject(solver)"}, {"push": {"made": "=solver.Label"}}, {"each": "e", "in": "=eqs", "steps": [{"let": {"mk": "=get(F, ELMER_EQUATIONS[e])"}}, {"refuse": {"fmt": "This FreeCAD's Elmer has no {e} equation."}, "code": "unavailable", "when": "=mk is None"}, {"make": "=mk", "call": ["=doc()", "=solver"], "as": "eq"}, {"push": {"made": "=eq.Label"}}]}], "else": [{"let": {"mk_solver": "=first([get(F, n) for n in ('makeSolverCalculiX', 'makeSolverCalculix', 'makeSolverCalculixCcxTools', 'makeSolverCcxTools') if has(F, n)])"}}, {"refuse": {"fmt": "This FreeCAD's FEM has no CalculiX solver object to add: {', '.join(solver_makers(F))}"}, "code": "unavailable", "when": "=mk_solver is None"}, {"let": {"an": "=new_analysis(a, o)"}}, {"make": "=mk_solver", "call": ["=doc()"], "as": "solver"}, {"do": "=an.addObject(solver)"}, {"push": {"made": "=solver.Label"}}]},
+    {"push": {"made": "=native_material(F, an, st, c, str(a.get('fluid', 'air')).lower() if kind == 'elmer' and 'flow' in eqs else None)"}},
+    {"let": {"mesh": "=native_mesh(F, an, o, st)"}},
+    {"push": {"made": "=mesh.Label"}},
+    {"let": {"structural": "=kind == 'calculix' or ('elasticity' in eqs or 'deformation' in eqs)"}},
+    {"each": "h", "in": "=st['holds'] if structural else []", "steps": [{"when": "=h.get('kind', 'fixed') != 'fixed'", "then": [{"push": {"skipped": {"fmt": "a {h['kind']} hold (add it as a displacement constraint in the FEM workbench)"}}}], "else": [{"push": {"made": "=fixed_on(F, an, o, h['faces'])"}}]}]},
+    {"each": "ld", "in": "=st['loads'] if structural else []", "steps": [{"choose": "=ld['kind']", "of": {"pressure": [{"push": {"made": "=pressure_on(F, an, o, ld)"}}], "temperature": [{"let": {"both": "=temperature_on(F, an, o, ld['delta'])"}}, {"when": "=both is not None", "then": [{"do": "=made.extend(both)"}, {"push": {"skipped": "the material's expansion coefficient and a thermomechanical solver setting (set them in the FEM workbench)"}}], "else": [{"push": {"skipped": "the temperature change (add it in the FEM workbench)"}}]}], "spin": [{"push": {"skipped": "the spin (FreeCAD 1.0's centrifugal constraint is Elmer's; CalculiX takes it as *DLOAD CENTRIF)"}}], "gravity": [{"push": {"made": "=gravity_on(F, an, ld['gravity'])"}}]}, "else": [{"let": {"label, directed": "=force_on(F, an, o, ld)"}}, {"push": {"skipped": "a force's direction (set it in the GUI)"}, "when": "=not directed"}, {"push": {"made": "=label"}}]}]},
+    {"do": "=made.extend(elmer_conditions(an, o, a, eqs))", "when": "=kind == 'elmer'"},
+    {"do": "=doc().recompute()"},
+    {"do": "=snapshot(tool)"},
+    {"let": {"written": "=elmer_write(o, mesh, solver, bool(a.run), float(a.get('timeout', 600))) if kind == 'elmer' and (a.write or a.run) else {}"}}
+   ],
+   "answer": {"fields": {"analysis": "=an.Label", "solver": "=kind", "objects": "=made", "next": "='write: true meshes it and writes Elmer\\'s case here; with ElmerSolver installed, run: true solves it. Or open it in the FEM workbench.' if kind == 'elmer' else 'In FreeCAD\\'s FEM workbench: mesh it (double-click the mesh), then run the solver — the same study fea_solve runs headless.'", "equations": {"when": "=kind == 'elmer'", "value": "=eqs"}, "...written": "=written", "skipped": {"when": "=skipped", "value": "=skipped"}}}
   }
  }
 }

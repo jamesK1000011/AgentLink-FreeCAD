@@ -22,8 +22,7 @@ import TechDraw  # noqa: F401 — the family stands on TechDraw; left out withou
 from .. import gdt, iso286, sheets
 from .. import paths
 from .. import runners
-from ..protocol import Tool, ToolError, bad
-from ..tools import obj
+from ..protocol import ToolError, bad
 from . import picks
 
 GROUP = "techdraw"
@@ -1408,6 +1407,134 @@ def axo_angles(e, x):
     return la, ea
 
 
+LINE_STYLES = {"solid": 1, "dashed": 2, "dotted": 3, "dashdot": 4, "dashdotdot": 5, "none": 0}  # TechDraw's line numbers, by td_lines' names
+
+
+def mark_not_ready(rows, still):
+    """td_list's rows of the views still without lines (and a group's items):
+    no edge or vertex count — never zeros as if counted — and notReady."""
+    for row in rows:
+        if row.get("name") in still:
+            row.pop("edges", None)
+            row.pop("vertices", None)
+            row["notReady"] = True
+        mark_not_ready(row.get("items") or [], still)
+
+
+def turn_to_align(p, q, upright):
+    """The turn in degrees, within a quarter either way, that lays the line
+    from p to q level (or upright) on the page."""
+    ang = math.degrees(math.atan2(q.y - p.y, q.x - p.x))
+    turn = 90 - ang if upright else -ang
+    while turn > 90:
+        turn -= 180
+    while turn < -90:
+        turn += 180
+    return turn
+
+
+def stretched(pts, by):
+    """A two-point line made longer by `by` mm at each end (shorter when
+    negative): its length as it was, and its two new points."""
+    (x0, y0), (x1, y1) = pts
+    L = math.hypot(x1 - x0, y1 - y0) or 1
+    ux, uy = (x1 - x0) / L, (y1 - y0) / L
+    return L, [[x0 - ux * by, y0 - uy * by], [x1 + ux * by, y1 + uy * by]]
+
+
+def erase_tag(v, tag):
+    """FreeCAD's own cosmetic edge, centerline or cosmetic vertex of that tag
+    removed from a view, whichever it is (one that is none of them is passed by)."""
+    for fn in ("removeCosmeticEdge", "removeCenterLine", "removeCosmeticVertex"):
+        try:
+            getattr(v, fn)(tag)
+            break
+        except Exception:
+            continue
+
+
+def circle_points(c, r):
+    """A circle on the paper as 48 points about c."""
+    return [(c[0] + r * math.cos(2 * math.pi * i / 48), c[1] + r * math.sin(2 * math.pi * i / 48)) for i in range(48)]
+
+
+def mid_line(e1, e2, k, ext):
+    """The line midway between two of a view's edges (a shaft's or a hole's
+    sides; k: the view's lines to paper mm), run on by ext mm past each end:
+    its two points, and its length before the run-on."""
+    a1, b1 = [(p.x * k, p.y * k) for p in (e1.Vertexes[0].Point, e1.Vertexes[-1].Point)]
+    a2, b2 = [(p.x * k, p.y * k) for p in (e2.Vertexes[0].Point, e2.Vertexes[-1].Point)]
+    if (a1[0] - b1[0]) * (a2[0] - b2[0]) + (a1[1] - b1[1]) * (a2[1] - b2[1]) < 0:
+        a2, b2 = b2, a2
+    m0 = ((a1[0] + a2[0]) / 2, (a1[1] + a2[1]) / 2)
+    m1 = ((b1[0] + b2[0]) / 2, (b1[1] + b2[1]) / 2)
+    d = math.hypot(m1[0] - m0[0], m1[1] - m0[1]) or 1
+    ux, uy = (m1[0] - m0[0]) / d, (m1[1] - m0[1]) / d
+    return [(m0[0] - ux * ext, m0[1] - uy * ext), (m1[0] + ux * ext, m1[1] + uy * ext)], d
+
+
+def thread_arc(cu, k, r):
+    """A thread seen end-on, as drawings show it: three quarters of a circle
+    of radius r (paper mm) about a round edge's centre, begun 10 degrees round."""
+    loc = getattr(cu, "Location", None) or cu.Center
+    c = (float(loc.x) * k, float(loc.y) * k)
+    a0 = math.radians(10)
+    return [(c[0] + r * math.cos(a0 + 1.5 * math.pi * i / 36), c[1] + r * math.sin(a0 + 1.5 * math.pi * i / 36)) for i in range(37)]
+
+
+def side_outline(e1, e2, k):
+    """A thread's two outline lines in a side view, on the paper: the
+    first's ends, the second's, the unit direction along the first, its
+    length, and the signed gap across to the second (paper mm)."""
+    A = [(p.x * k, p.y * k) for p in (e1.Vertexes[0].Point, e1.Vertexes[-1].Point)]
+    B = [(p.x * k, p.y * k) for p in (e2.Vertexes[0].Point, e2.Vertexes[-1].Point)]
+    ux, uy = A[1][0] - A[0][0], A[1][1] - A[0][1]
+    L = math.hypot(ux, uy) or 1
+    ux, uy = ux / L, uy / L
+    gap = (B[0][0] - A[0][0]) * (-uy) + (B[0][1] - A[0][1]) * ux
+    return {"A": A, "B": B, "u": (ux, uy), "L": L, "gap": gap}
+
+
+def root_lines(o, off, length):
+    """The two thin lines of a thread in a side view: each outline line of
+    side_outline's moved off mm toward the other (negative: away), both begun
+    at the end the first starts from and run for length."""
+    A, B, (ux, uy) = o["A"], o["B"], o["u"]
+    nx, ny = -uy, ux
+    sgn = 1 if o["gap"] > 0 else -1
+    b0 = min(B, key=lambda q: (q[0] - A[0][0]) * ux + (q[1] - A[0][1]) * uy)
+    out = []
+    for start, toward in ((A[0], sgn), (b0, -sgn)):
+        p0 = (start[0] + nx * off * toward, start[1] + ny * off * toward)
+        out.append([p0, (p0[0] + ux * length, p0[1] + uy * length)])
+    return out
+
+
+def stack_of(x):
+    """What keeps a view's stacking order: its view provider (TechDraw's
+    Gui side), not the view itself; None headless or where this FreeCAD has none."""
+    g = getattr(x, "ViewObject", None)
+    return g if g is not None and hasattr(g, "StackOrder") else None
+
+
+def read_text(p):
+    """A text file's content (an SVG for a symbol view), bytes that are not UTF-8 replaced."""
+    with open(p, encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
+def drawn(sheet, kind):
+    """The page drawn here (page_sheet's) in one format: its SVG or DXF text, or its PDF's bytes."""
+    return {"svg": sheet.svg, "pdf": sheet.pdf, "dxf": sheet.dxf}[kind]()
+
+
+def write_out(p, data):
+    """A drawn page written to its file: bytes (a PDF) as they are, text as UTF-8."""
+    with open(p, "wb" if isinstance(data, bytes) else "w", **({} if isinstance(data, bytes) else {"encoding": "utf-8"})) as f:
+        f.write(data)
+
+
+
 def tools(session):
     s = session
     doc = lambda: s.doc  # noqa: E731
@@ -1713,95 +1840,6 @@ def tools(session):
                 pass
         return len(cold), round(time.time() - t0, 2), still
 
-    def td_list(a):
-        page = page_of(doc(), a.get("page"))
-        n_cold, waited, still = warm(page)
-        out = page_reading(page, full=True)
-        if n_cold:
-            out["computed"] = (f"{n_cold} view{'s' if n_cold != 1 else ''} had no lines yet (a document just opened keeps a view's settings, not its lines): "
-                               f"worked out here in {waited:g} s before reading.")
-        if still:
-            # Never zeros as if measured: a view with no lines has no edge
-            # count, and a dimension on it no value.
-            def mark(row):
-                if row.get("name") in still:
-                    row.pop("edges", None)
-                    row.pop("vertices", None)
-                    row["notReady"] = True
-                for sub in row.get("items") or []:
-                    mark(sub)
-
-            for row in out["views"]:
-                mark(row)
-            out["notReady"] = ("No lines yet for " + ", ".join(sorted(doc().getObject(n).Label for n in still)) + ": their edge counts and the dimensions on them are left out, not zero. "
-                               "A view whose source has no shape or whose page has KeepUpdated off stays so; otherwise recompute, then td_list again.")
-        dims, syms, other = [], [], []
-        for o in page.Views:
-            if o.TypeId == "TechDraw::DrawViewDimension":
-                row = dim_reading(o)
-                try:
-                    on = o.References2D[0][0].Name if o.References2D else None
-                except Exception:
-                    on = None
-                if on in still:
-                    row.pop("measured", None)
-                    row.pop("text", None)
-                    row["notReady"] = True
-                dims.append(row)
-            elif o.isDerivedFrom("TechDraw::DrawViewSymbol") and GDT_PROP in o.PropertiesList:
-                data = json.loads(getattr(o, GDT_PROP))
-                # Frames, datums and what else is kept as a symbol (a surface
-                # finish): each read by its own kind — a finish has no letter,
-                # and listing a page that held one failed on it.
-                k = data.get("kind")
-                if k == "frame":
-                    reads = gdt.describe(data.get("rows") or [])
-                elif k == "datum":
-                    reads = f"datum {data.get('letter', '?')}"
-                else:
-                    reads = " ".join(f"{key} {data[key]}" for key in ("ra", "removal", "lay", "text") if data.get(key) not in (None, "")) or str(k)
-                syms.append({"symbol": o.Name, "kind": k, "reads": reads, "on": data.get("on")})
-            elif not o.isDerivedFrom("TechDraw::DrawViewPart") and not o.isDerivedFrom("TechDraw::DrawProjGroup"):
-                other.append({"object": o.Name, "type": o.TypeId.split("::")[-1]})
-        out["views"] = [x for x in out["views"] if x["type"] not in ("DrawViewDimension", "DrawViewSymbol", "DrawLeaderLine", "DrawViewAnnotation", "DrawViewBalloon", "DrawViewSpreadsheet")]
-        out["dimensions"] = dims
-        if syms:
-            out["gdt"] = syms
-        if other:
-            out["other"] = other
-        return out
-
-    def td_export(a):
-        page = page_of(doc(), a.get("page"))
-        kinds = a.get("formats") or ["svg", "pdf", "dxf"]
-        if any(k not in ("svg", "pdf", "dxf") for k in kinds):
-            raise bad("formats: any of svg, pdf, dxf.")
-        recompute([v for v in page.Views])
-        base = os.path.join(s.out_dir, (a.get("name") or page.Label).replace(" ", "-"))
-        files, notes = {}, []
-        sheet_, skipped = page_sheet(doc(), page)
-        if skipped:
-            notes += skipped
-        for k in kinds:
-            p = paths.made(s, f"{base}.{k}")
-            if k == "dxf":
-                try:
-                    TechDraw.writeDXFPage(page, p)
-                    if os.path.isfile(p) and os.path.getsize(p) > 0:
-                        files[k] = {"path": p, "bytes": os.path.getsize(p), "by": "TechDraw"}
-                        continue
-                except Exception as e:
-                    notes.append(f"TechDraw's DXF writer failed ({e}): written here instead")
-            data = {"svg": sheet_.svg, "pdf": sheet_.pdf, "dxf": sheet_.dxf}[k]()
-            with open(p, "wb" if isinstance(data, bytes) else "w", **({} if isinstance(data, bytes) else {"encoding": "utf-8"})) as f:
-                f.write(data)
-            files[k] = {"path": p, "bytes": os.path.getsize(p)}
-        out = {"page": page.Label, "files": files}
-        if notes:
-            out["notes"] = notes
-        return out
-
-    ref_schema = {"type": ["string", "object"]}
     # ---- cosmetic geometry, leaders, finishes, areas ----
 
     def paper_of3d(v, p3):
@@ -1810,117 +1848,6 @@ def tools(session):
             raise ToolError("invalid_state", f"{v.Label} has no geometry yet to place against.")
         return to_paper(v, frames, to_view(fr, v, vec(p3, "point")))
 
-    def edge_paper(v, r, want="any"):
-        n = resolve_ref(v, r, frames, want)
-        if not n.startswith("Edge"):
-            raise bad(f"{r}: an edge of the view (td_geometry lists them).")
-        e = edges_of(v)[int(n[4:])]
-        return n, e
-
-    def td_cosmetic(a):
-        v = view_of(doc(), a.get("view"))
-        if not edges_of(v):
-            recompute([v])
-        items = a.get("items") or []
-        prims = json.loads(getattr(v, COSMETIC_PROP)) if COSMETIC_PROP in v.PropertiesList and getattr(v, COSMETIC_PROP) else []
-        if a.get("clear"):
-            for p_ in prims:
-                drop_native(v, p_)
-            prims = []
-        first_new = len(prims)
-        made = []
-        k = view_scale(v) / gscale(v, frames)
-        for it in items:
-            kind = it.get("kind")
-            style = it.get("style", "center" if kind == "centerline" else "thin")
-            if style not in ("thin", "visible", "hidden", "center"):
-                raise bad("style: thin | visible | hidden | center.")
-            if kind == "line":
-                p, q = paper_of3d(v, it.get("from")), paper_of3d(v, it.get("to"))
-                prims.append({"pts": [p, q], "style": style})
-                made.append({"kind": "line", "length_mm": num(math.hypot(q[0] - p[0], q[1] - p[1]) / view_scale(v), 3)})
-            elif kind == "circle":
-                c = paper_of3d(v, it.get("center"))
-                r = float(it.get("radius", 0)) * view_scale(v)
-                if r <= 0:
-                    raise bad("circle: radius mm on the part.")
-                prims.append({"pts": [(c[0] + r * math.cos(2 * math.pi * i / 48), c[1] + r * math.sin(2 * math.pi * i / 48)) for i in range(48)], "style": style, "closed": True, "circle": [c[0], c[1], r]})
-                made.append({"kind": "circle", "radius": float(it["radius"])})
-            elif kind == "centerline":
-                refs = it.get("edges") or []
-                if len(refs) != 2:
-                    raise bad("centerline: edges [two lines of the view] (a shaft's or hole's sides).")
-                (_, e1), (_, e2) = edge_paper(v, refs[0]), edge_paper(v, refs[1])
-                a1, b1 = [(p.x * k, p.y * k) for p in (e1.Vertexes[0].Point, e1.Vertexes[-1].Point)]
-                a2, b2 = [(p.x * k, p.y * k) for p in (e2.Vertexes[0].Point, e2.Vertexes[-1].Point)]
-                if (a1[0] - b1[0]) * (a2[0] - b2[0]) + (a1[1] - b1[1]) * (a2[1] - b2[1]) < 0:
-                    a2, b2 = b2, a2
-                m0 = ((a1[0] + a2[0]) / 2, (a1[1] + a2[1]) / 2)
-                m1 = ((b1[0] + b2[0]) / 2, (b1[1] + b2[1]) / 2)
-                d = math.hypot(m1[0] - m0[0], m1[1] - m0[1]) or 1
-                ext = float(it.get("extend", 3))
-                ux, uy = (m1[0] - m0[0]) / d, (m1[1] - m0[1]) / d
-                prims.append({"pts": [(m0[0] - ux * ext, m0[1] - uy * ext), (m1[0] + ux * ext, m1[1] + uy * ext)], "style": "center"})
-                made.append({"kind": "centerline", "length_mm": num((d + 2 * ext) / view_scale(v), 2)})
-            elif kind == "thread":
-                internal = bool(it.get("internal", False))
-                refs = it.get("edges") or ([it["circle"]] if it.get("circle") else [])
-                if len(refs) == 1:
-                    n, e = edge_paper(v, refs[0])
-                    cu = getattr(e, "Curve", None)
-                    if not hasattr(cu, "Radius"):
-                        raise bad("thread: circle — a round edge seen end-on (a hole or shaft from its end).")
-                    D = 2 * float(cu.Radius) * k / view_scale(v)  # part mm
-                    P = float(it.get("pitch") or coarse_pitch(D if not internal else D + 1.0825 * coarse_pitch(D)))
-                    h3 = 0.6134 * P
-                    loc = getattr(cu, "Location", None) or cu.Center
-                    c = (float(loc.x) * k, float(loc.y) * k)
-                    r = (D / 2 + (h3 if internal else -h3)) * view_scale(v)
-                    a0 = math.radians(10)
-                    prims.append({"pts": [(c[0] + r * math.cos(a0 + 1.5 * math.pi * i / 36), c[1] + r * math.sin(a0 + 1.5 * math.pi * i / 36)) for i in range(37)], "style": "thin"})
-                    made.append({"kind": "thread", "end": True, "diameter": num(D + (2 * h3 if internal else 0), 3), "pitch": P})
-                elif len(refs) == 2:
-                    (_, e1), (_, e2) = edge_paper(v, refs[0]), edge_paper(v, refs[1])
-                    A = [(p.x * k, p.y * k) for p in (e1.Vertexes[0].Point, e1.Vertexes[-1].Point)]
-                    B = [(p.x * k, p.y * k) for p in (e2.Vertexes[0].Point, e2.Vertexes[-1].Point)]
-                    ux, uy = A[1][0] - A[0][0], A[1][1] - A[0][1]
-                    L = math.hypot(ux, uy) or 1
-                    ux, uy = ux / L, uy / L
-                    nx, ny = -uy, ux
-                    gap = (B[0][0] - A[0][0]) * nx + (B[0][1] - A[0][1]) * ny  # signed, paper mm
-                    D = abs(gap) / view_scale(v)
-                    P = float(it.get("pitch") or coarse_pitch(D if not internal else D + 1.0825 * coarse_pitch(D)))
-                    h3 = 0.6134 * P * view_scale(v)
-                    sgn = 1 if gap > 0 else -1
-                    # an external thread's root is inside its outline; an internal one's crest outside the drilled hole
-                    off = h3 if not internal else -h3
-                    length = float(it["length"]) * view_scale(v) if it.get("length") else L
-                    # start both at the end A starts from
-                    b0 = min(B, key=lambda q: (q[0] - A[0][0]) * ux + (q[1] - A[0][1]) * uy)
-                    for start, toward in ((A[0], sgn), (b0, -sgn)):
-                        p0 = (start[0] + nx * off * toward, start[1] + ny * off * toward)
-                        prims.append({"pts": [p0, (p0[0] + ux * length, p0[1] + uy * length)], "style": "thin"})
-                    made.append({"kind": "thread", "end": False, "nominal": num(D + (2 * 0.6134 * P if internal else 0), 3), "pitch": P,
-                                 "note": f"M{num(D + (2 * 0.6134 * P if internal else 0), 1):g}x{P:g}"})
-                else:
-                    raise bad("thread: edges [two outline lines] (side view) or circle (end view).")
-            else:
-                raise bad("kind: line { from, to } | circle { center, radius } | centerline { edges } | thread { edges | circle, internal, pitch, length }.")
-        native = 0
-        for p_ in prims[first_new:]:
-            p_["tags"] = native_cosmetic(v, p_)
-            native += len(p_["tags"])
-        if COSMETIC_PROP not in v.PropertiesList:
-            v.addProperty("App::PropertyString", COSMETIC_PROP, "AgentLink", "Cosmetic lines (JSON, paper mm), each with the tags of FreeCAD's own cosmetic edges that show it")
-            _own_data(v, COSMETIC_PROP)
-        setattr(v, COSMETIC_PROP, json.dumps(prims))
-        recompute()
-        out = {"view": v.Label, "made": made, "total": len(prims), "native": native}
-        if not native and made:
-            out["note"] = "This FreeCAD made no cosmetic edges of its own: the lines show in td_export only."
-        return done("td_cosmetic", out)
-
-
     # ---- the rest of TechDraw's commands, headless ----------------------------------------
 
     def dims_of(refs):
@@ -1928,240 +1855,11 @@ def tools(session):
         return [obj_of(doc(), r, ["TechDraw::DrawViewDimension"], "dimension") for r in refs]
 
 
-    def td_view_more(a):
-        kind = a.get("kind")
-        if kind == "broken":
-            v = view_of(doc(), a.get("view"))
-            page = page_holding(v)
-            bv = doc().addObject("TechDraw::DrawBrokenView", "BrokenView")
-            bv.Source = v.Source
-            bv.Direction = v.Direction
-            bv.Scale = v.Scale
-            brk = []
-            for b in a.get("breaks") or []:
-                o = picks.find(doc(), b, "breaks")
-                brk.append(o)
-            if not brk:
-                doc().removeObject(bv.Name)
-                raise bad("breaks: objects that mark the break (two parallel sketch lines or a sketch with two lines across the part).")
-            bv.Breaks = brk
-            if a.get("gap") is not None:
-                bv.Gap = float(a["gap"])
-            page.addView(bv)
-            bv.X, bv.Y = (pt2(a["at"], "at") if a.get("at") else (float(v.X), float(v.Y) - 60))
-            recompute([bv])
-            return done("td_view_more", {"kind": kind, **view_reading(bv)})
-        if kind in ("lock", "stack", "move"):
-            # From the window-only re-sort (unattended use, O): what the
-            # TechDraw buttons save into the drawing, done headless.
-            v = obj_of(doc(), a.get("view"), ["TechDraw::DrawView"], "view")
-            grp = next((p for p in v.InList if p.isDerivedFrom("TechDraw::DrawProjGroup")), None)
-            here = page_holding(v)
-            if kind == "lock":
-                if not hasattr(v, "LockPosition"):
-                    raise ToolError("unavailable", "This FreeCAD's views have no lock.")
-                v.LockPosition = bool(a.get("locked", True))
-                return done("td_view_more", {"kind": kind, "view": v.Label, "locked": bool(v.LockPosition)})
-            if kind == "stack":
-                # StackOrder is the view provider's (TechDraw's Gui side), not
-                # the view's own: looked for on the view, it was never found
-                # and every call answered "no stacking order" on 1.1.
-                def vp(x):
-                    g = getattr(x, "ViewObject", None)
-                    return g if g is not None and hasattr(g, "StackOrder") else None
+    def colour(c):
+        """A colour as the document family reads it ("#rrggbb" or [r, g, b]): (r, g, b, a) in 0…1."""
+        from .doc import colour as read
 
-                mine = vp(v)
-                if mine is None:
-                    raise ToolError("unavailable", "A view's stacking order is kept by the window (its view provider's StackOrder): there is none here — headless, or this FreeCAD has no stacking order. In the window: td_view_more { kind: \"stack\", view, to: top | bottom | up | down }.")
-                to = a.get("to", "top")
-                orders = [int(vp(x).StackOrder) for x in (here.Views if here else []) if x is not v and vp(x) is not None] or [0]
-                if to == "top":
-                    mine.StackOrder = max(orders) + 1
-                elif to == "bottom":
-                    mine.StackOrder = min(orders) - 1
-                elif to == "up":
-                    mine.StackOrder = int(mine.StackOrder) + 1
-                elif to == "down":
-                    mine.StackOrder = int(mine.StackOrder) - 1
-                else:
-                    raise bad("to: top | bottom | up | down.")
-                return done("td_view_more", {"kind": kind, "view": v.Label, "stackOrder": int(mine.StackOrder)})
-            dest = page_of(doc(), a.get("page"))
-            mover = grp or v
-            if here is dest:
-                return {"kind": kind, "view": mover.Label, "page": dest.Label, "note": "Already on that page."}
-            if here is not None:
-                here.removeView(mover)
-            dest.addView(mover)
-            recompute([mover])
-            return done("td_view_more", {"kind": kind, "view": mover.Label, "from": here.Label if here else None, "page": dest.Label,
-                                         **({"note": "Moved with its projection group."} if grp else {})})
-        page = page_of(doc(), a.get("page"))
-        if kind == "draft":
-            src = picks.find(doc(), a.get("object"), "object")
-            o = doc().addObject("TechDraw::DrawViewDraft", "DraftView")
-            o.Source = src
-            if a.get("direction"):
-                o.Direction = FreeCAD.Vector(*a["direction"])
-        elif kind == "clip":
-            o = doc().addObject("TechDraw::DrawViewClip", "Clip")
-            o.Width, o.Height = float(a.get("width", 60)), float(a.get("height", 40))
-            o.ShowFrame = bool(a.get("frame", True))
-        elif kind in ("clip_add", "clip_remove"):
-            c = obj_of(doc(), a.get("clip"), ["TechDraw::DrawViewClip"], "clip")
-            v = obj_of(doc(), a.get("view"), ["TechDraw::DrawView"], "view")
-            if kind == "clip_add":
-                c.addView(v)
-            else:
-                c.removeView(v)
-            recompute()
-            return done("td_view_more", {"kind": kind, "clip": c.Label, "views": [x.Label for x in c.Views]})
-        elif kind == "image":
-            p = os.path.expanduser(a.get("path") or "")
-            if not os.path.isfile(p):
-                raise ToolError("not_found", f"path {p!r}: no such image.")
-            o = doc().addObject("TechDraw::DrawViewImage", "Image")
-            o.ImageFile = p
-            o.Width, o.Height = float(a.get("width", 50)), float(a.get("height", 50))
-        elif kind == "symbol":
-            p = os.path.expanduser(a.get("path") or "")
-            if not os.path.isfile(p):
-                raise ToolError("not_found", f"path {p!r}: no such SVG.")
-            o = doc().addObject("TechDraw::DrawViewSymbol", "Symbol")
-            with open(p, encoding="utf-8", errors="replace") as f:
-                o.Symbol = f.read()
-            if a.get("scale"):
-                o.Scale = float(a["scale"])
-        elif kind == "share":
-            v = obj_of(doc(), a.get("view"), ["TechDraw::DrawView"], "view")
-            page.addView(v)
-            deps = [x for x in v.InList if x.isDerivedFrom("TechDraw::DrawViewDimension") or x.isDerivedFrom("TechDraw::DrawViewBalloon")]
-            for x in deps:
-                page.addView(x)
-            recompute()
-            return done("td_view_more", {"kind": kind, "view": v.Label, "alsoOn": page.Label, "with": [x.Label for x in deps]})
-        else:
-            raise bad("kind: broken { view, breaks, gap } | draft { object } | clip { width, height } | clip_add / clip_remove { clip, view } | image { path, width, height } | symbol { path (SVG), scale } | share { view } — with page.")
-        page.addView(o)
-        if a.get("name"):
-            o.Label = s.unique(a["name"], o)
-        o.X, o.Y = place_xy(page, a.get("at"), (100.0, 100.0))
-        recompute()
-        return done("td_view_more", {"kind": kind, **view_reading(o)})
-
-    def td_lines(a):
-        import math
-
-        v = view_of(doc(), a.get("view"))
-        act = a.get("action")
-        if not edges_of(v):
-            recompute([v])
-        if act in ("align_h", "align_v"):
-            names = [resolve_ref(v, r, frames) for r in (a.get("refs") or [])]
-            if len(names) == 1 and names[0].startswith("Edge"):
-                e = edges_of(v)[int(names[0][4:])]
-                p, q = e.Vertexes[0].Point, e.Vertexes[-1].Point
-            elif len(names) == 2:
-                vs = vertices_of(v)
-                p, q = (vs[int(n[6:])] for n in names)
-            else:
-                raise bad("refs: two points, or one straight edge, to line up.")
-            ang = math.degrees(math.atan2(q.y - p.y, q.x - p.x))
-            turn = -ang if act == "align_h" else 90 - ang
-            while turn > 90:
-                turn -= 180
-            while turn < -90:
-                turn += 180
-            v.Rotation = float(v.Rotation) + turn
-            recompute([v])
-            return done("td_lines", {"view": v.Label, "rotation": num(v.Rotation, 3), "turned": num(turn, 3)})
-        if act == "style":
-            STY = {"solid": 1, "dashed": 2, "dotted": 3, "dashdot": 4, "dashdotdot": 5, "none": 0}
-            st = picks.choice(a, "style", STY, f"style: {' | '.join(STY)}.", "solid")
-            col = a.get("color")
-            from .doc import colour as _colour
-
-            c = _colour(col) if col else (0.0, 0.0, 0.0, 1.0)
-            w = float(a.get("weight", 0.35))
-            out = []
-            for r in a.get("refs") or []:
-                n = resolve_ref(v, r, frames)
-                if not n.startswith("Edge"):
-                    raise bad(f"{r}: an edge.")
-                if hasattr(v, "formatGeometricEdge"):
-                    # TechDraw reads a colour of three as alpha 0, and from 1.1
-                    # alpha 0 is see-through (1 is solid): the edge styled
-                    # would vanish from the page. Before 1.1 alpha 0 was solid.
-                    v.formatGeometricEdge(int(n[4:]), STY[st], w, tuple(c[:3]) + ((1.0 if native_ok() else 0.0),), st != "none")
-                out.append(n)
-            keep = json.loads(getattr(v, "AgentLinkEdgeStyles", "{}") or "{}")
-            for n in out:
-                keep[n] = {"style": st, "weight": w, "color": col or "#000000"}
-            if "AgentLinkEdgeStyles" not in v.PropertiesList:
-                v.addProperty("App::PropertyString", "AgentLinkEdgeStyles", "AgentLink", "Edge line styles set by Agent Link (JSON)")
-                _own_data(v, "AgentLinkEdgeStyles")
-            v.AgentLinkEdgeStyles = json.dumps(keep)
-            recompute([v])
-            return done("td_lines", {"view": v.Label, "styled": out, "style": st, "weight": w})
-        prims = json.loads(getattr(v, COSMETIC_PROP, "[]") or "[]")
-        if act in ("extend", "shorten"):
-            by = float(a.get("by", 2.0)) * (1 if act == "extend" else -1)
-            idx = a.get("items")
-            idx = range(len(prims)) if idx is None else [int(i) for i in idx]
-            changed = []
-            for i in idx:
-                if not 0 <= i < len(prims):
-                    raise bad(f"items: 0 to {len(prims) - 1} (td_cosmetic's lines, in the order made).")
-                pts = prims[i]["pts"]
-                if len(pts) != 2:
-                    continue
-                (x0, y0), (x1, y1) = pts
-                L = math.hypot(x1 - x0, y1 - y0) or 1
-                ux, uy = (x1 - x0) / L, (y1 - y0) / L
-                if L + 2 * by <= 0:
-                    raise bad(f"item {i} is {L:.2f} mm long: it cannot shorten by {-by:g} at each end.")
-                prims[i]["pts"] = [[x0 - ux * by, y0 - uy * by], [x1 + ux * by, y1 + uy * by]]
-                if prims[i].get("tags"):
-                    drop_native(v, prims[i])
-                    prims[i]["tags"] = native_cosmetic(v, prims[i])
-                changed.append(i)
-            setattr(v, COSMETIC_PROP, json.dumps(prims))
-            # FreeCAD's own centerlines too, where the view has them.
-            for t in a.get("centerlines") or []:
-                try:
-                    # getCenterLine hands over the view's own centerline, so
-                    # the change is made on it; replaceCenterLine is not in
-                    # FreeCAD 1.1's Python (used where a release has it)
-                    cl = v.getCenterLine(t)
-                    cl.Extension = float(cl.Extension) + by
-                    if hasattr(v, "replaceCenterLine"):
-                        v.replaceCenterLine(cl)
-                except Exception as e:
-                    raise bad(f"centerlines: {t!r} is not a centerline tag of {v.Label} ({e}) — these are FreeCAD's own centerlines' tags; td_cosmetic's lines go by items (their order from 0).")
-            recompute()
-            return done("td_lines", {"view": v.Label, act + "ed" if act == "extend" else "shortened": changed, "by": abs(by)})
-        if act == "erase":
-            idx = a.get("items")
-            if idx is None:
-                gone = list(range(len(prims)))
-            else:
-                gone = sorted({int(i) for i in idx})
-            for i in gone:
-                if 0 <= i < len(prims):
-                    drop_native(v, prims[i])
-            prims = [p for i, p in enumerate(prims) if i not in gone]
-            setattr(v, COSMETIC_PROP, json.dumps(prims))
-            for t in a.get("tags") or []:
-                for fn in ("removeCosmeticEdge", "removeCenterLine", "removeCosmeticVertex"):
-                    try:
-                        getattr(v, fn)(t)
-                        break
-                    except Exception:
-                        continue
-            recompute()
-            return done("td_lines", {"view": v.Label, "erased": gone, "left": len(prims)})
-        raise bad("action: align_h / align_v { refs } | style { refs edges, style, weight, color } | extend / shorten { items, by, centerlines } | erase { items, tags }.")
-
+        return read(c)
 
     def own_prop(o, prop, kind, about):
         """One of Agent Link's own notes on a view (what td_export draws),
@@ -2275,17 +1973,15 @@ def tools(session):
                "clear_samples": clear_samples, "load_presets": load_presets, "save_presets": save_presets, "set_enum": set_enum,
                "paper_size": paper_size, "page_holding": page_holding, "edges_of": edges_of, "source_shapes": source_shapes, "abs_xy": abs_xy,
                "pt2": pt2, "circle_centres": circle_centres, "proxy_name": proxy_name, "try_set": try_set, "setprop": setprop, "own_prop": own_prop,
-               "edge_on": edge_on, "weld_wrong": weld_wrong, "face_front": face_front}
-    return runners.tools(GROUP, s, helpers) + [
-        Tool("td_list", "A page's views (label, scale, size, edge count; a group's items), dimensions (name, refs, measured, text, tolerance), GD&T, other objects and title block. A document just opened holds each view's settings but not its lines (FreeCAD works them out at the view's first recompute): views without lines are computed here first and waited for (up to 20 s; computed says how many and how long), and the dimensions on them after. A view still without lines is marked notReady with no edge count, and a dimension on it has notReady in place of measured and text — never 0 as if measured; notReady at the top says which and what to do (recompute, then td_list again). Changes nothing in the model.", obj({"page": {"type": "string"}}), td_list),
-        Tool("td_cosmetic", "Cosmetic geometry on a view (FreeCAD's own cosmetic edges from 1.1, so in the window too; always in td_export): items [{ kind line (from, to: points on the part) | circle (center on the part, radius mm) | centerline (edges: a shaft's or hole's two side lines; extend mm) | thread (edges: the two outline lines of a side view, or circle: the end view's round edge; internal: true for a tapped hole; pitch, ISO coarse by default; length mm) , style thin | visible | hidden | center }]; clear: true drops the earlier ones. td_lines takes them by order, from 0.",
-             obj({"view": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}, "clear": {"type": "boolean"}}, ["view"]), td_cosmetic, changes=True),
-        Tool("td_view_more", "More views on a page: kind broken { view, breaks, gap } | draft { object (a Draft object) } | clip { width, height, frame } | clip_add / clip_remove { clip, view } | image { path, width, height } | symbol { path (an SVG), scale } | share { view } (the view also on this page, with its dimensions) | lock { view, locked } | stack { view, to top|bottom|up|down } | move { view, page } (to another page; a group's item takes its group), at [x, y].",
-             obj({"kind": {"type": "string", "enum": ["broken", "draft", "clip", "clip_add", "clip_remove", "image", "symbol", "share", "lock", "stack", "move"]}, "locked": {"type": "boolean"}, "to": {"type": "string", "enum": ["top", "bottom", "up", "down"]}, "page": {"type": "string"}, "view": {"type": "string"}, "object": {"type": "string"}, "breaks": {"type": "array", "items": {"type": "string"}},
-                  "gap": {"type": "number"}, "clip": {"type": "string"}, "width": {"type": "number"}, "height": {"type": "number"}, "frame": {"type": "boolean"}, "path": {"type": "string"}, "scale": {"type": "number"}, "direction": {"type": "array", "items": {"type": "number"}}, "at": {"type": "array", "items": {}}, "name": {"type": "string"}}, ["kind"]), td_view_more, changes=True),
-        Tool("td_lines", "A view's lines: action align_h / align_v { refs two points or an edge } (the view turned so they line up) | style { refs edges, style solid|dashed|dotted|dashdot|dashdotdot|none, weight mm, color } | extend / shorten { items (td_cosmetic's lines by order from 0; all when left out), by mm, centerlines } | erase { items, tags } (cosmetic lines gone; all td_cosmetic's when items is left out).",
-             obj({"view": {"type": "string"}, "action": {"type": "string", "enum": ["align_h", "align_v", "style", "extend", "shorten", "erase"]}, "refs": {"type": "array", "items": {}}, "style": {"type": "string"}, "weight": {"type": "number"}, "color": {},
-                  "items": {"type": "array", "items": {"type": "integer"}}, "by": {"type": "number"}, "centerlines": {"type": "array", "items": {"type": "string"}}, "tags": {"type": "array", "items": {"type": "string"}}}, ["view", "action"]), td_lines, changes=True),
-        Tool("td_export", "Write a page out: formats [svg, pdf, dxf], name. DXF is TechDraw's own. SVG and PDF are drawn here from the page's objects (TechDraw's own PDF and SVG export needs the window): views, dimensions, symbols, notes, tables, centre marks, hatching and the title block's fields, without the template's artwork. Files go to the session's folder; notes says what was skipped.",
-             obj({"page": {"type": "string"}, "formats": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}}), td_export),
-    ]
+               "edge_on": edge_on, "weld_wrong": weld_wrong, "face_front": face_front,
+               # td_list, td_export, td_cosmetic, td_view_more, td_lines
+               "warm": warm, "mark_not_ready": mark_not_ready, "GDT_PROP": GDT_PROP, "COSMETIC_PROP": COSMETIC_PROP, "loads": json.loads,
+               "page_sheet": lambda page: page_sheet(doc(), page), "made": lambda p: paths.made(s, p), "out_dir": lambda: s.out_dir,
+               "join": os.path.join, "getsize": os.path.getsize, "expanduser": os.path.expanduser, "write_out": write_out, "drawn": drawn, "read_text": read_text,
+               "write_dxf_page": lambda page, p: TechDraw.writeDXFPage(page, p), "hypot": math.hypot, "vector_of": lambda xyz: V(*xyz),
+               "circle_points": circle_points, "mid_line": mid_line, "thread_arc": thread_arc, "side_outline": side_outline, "root_lines": root_lines,
+               "coarse_pitch": coarse_pitch, "native_ok": native_ok, "native_cosmetic": native_cosmetic, "drop_native": drop_native,
+               "find": lambda ref, what: picks.find(doc(), ref, what), "stack_of": stack_of, "LINE_STYLES": LINE_STYLES,
+               "colour": colour, "turn_to_align": turn_to_align,
+               "stretched": stretched, "erase_tag": erase_tag}
+    return runners.tools(GROUP, s, helpers)
