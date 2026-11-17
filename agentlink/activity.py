@@ -333,6 +333,21 @@ def _special(name, args, body):
         return f"Closed {what}" + (" (not saved)" if a.get("discard") else "")
     if name == "object_set":
         return _object_set(a, b)
+    if name == "feature_edit" and isinstance(a.get("set"), dict) and a["set"]:
+        # What was changed, not only which feature ("Set Pocket 2 Refine to on").
+        return _object_set({"object": a.get("feature") or b.get("feature") or "a feature", "values": a["set"]}, b)
+    if name == "sketch_edit" and a.get("set"):
+        # set: [{ constraint, value }] (or { name: value }): the dimension and
+        # its new value ("Set plate_width to 70 in PlateSketch").
+        sk = _word(a.get("sketch")) or _word(b.get("sketch")) or "the sketch"
+        s = a["set"]
+        rows = [(r.get("constraint"), r.get("value")) for r in (s if isinstance(s, list) else [s]) if isinstance(r, dict) and "constraint" in r]
+        if not rows and isinstance(s, dict):
+            rows = list(s.items())
+        if len(rows) > 2:
+            return f"Set {len(rows)} dimensions of {sk}"
+        if rows:
+            return "Set " + " and ".join(f"{_word(k) or 'a dimension'} to {_value_words('value', v)}" for k, v in rows) + f" in {sk}"
     if name == "cmd_run":
         return "Ran " + command_text(a.get("name"))
     if name == "menu_run":
