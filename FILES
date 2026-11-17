@@ -294,6 +294,11 @@ docs/hardening/window-r4-core-bim-mesh-findings.md
 docs/hardening/window-r4-pd-sk-asm-part-pts-sheet-findings.md
 docs/hardening/window-r4-td-cam-fem-draft-surf-findings.md
 docs/hardening/window-r4-ws-tex-tutor-findings.md
+docs/hardening/window-r6-asm-part-pts-core-findings.md
+docs/hardening/window-r6-cam-fem-td-mesh-findings.md
+docs/hardening/window-r6-scanruler-a-findings.md
+docs/hardening/window-r6-scanruler-b-findings.md
+docs/hardening/window-r6-ws-tex-tutor-findings.md
 docs/hardening/window-skasm-findings.md
 docs/hardening/window-td-cam-findings.md
 docs/hardening/workshop-rest-model.json
