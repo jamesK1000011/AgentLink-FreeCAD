@@ -305,6 +305,7 @@ tests/test_as_person.py
 tests/test_assembly.py
 tests/test_assembly_more.py
 tests/test_batch_chain_fc.py
+tests/test_batch_lines.py
 tests/test_batch_rollback.py
 tests/test_bim_data.py
 tests/test_bim_gaps.py

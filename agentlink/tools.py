@@ -1903,9 +1903,9 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             record.write(got, final=True)
             if record.ok and record.path:
                 got["record"] = record.path
-        return _batch_to(a.get("to"), got, first)
+        return _batch_to(a.get("to"), got, first, a.get("lines") or "all")
 
-    def _batch_to(to, got, first):
+    def _batch_to(to, got, first, lines="all"):
         """to: the whole answer goes to a .json file and a line per call
         comes back — a long run's answers (each with its reading, health
         and report) need not pass through the conversation to be kept."""
@@ -1930,7 +1930,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         # to go on) is kept, the file's beside it (batchrec.to_reply).
         from . import batchrec
 
-        return batchrec.to_reply(got, first, path, os.path.getsize(path), lines=a.get("lines") or "all")
+        return batchrec.to_reply(got, first, path, os.path.getsize(path), lines=lines)
 
     def _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine):
         import json as _json
