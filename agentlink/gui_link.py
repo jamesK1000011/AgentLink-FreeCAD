@@ -83,6 +83,10 @@ def _dialog_call(line):
 FRONT_CALLS = ("dialog_answer", "gui_input", "gui_unstick")
 
 
+# batch arguments the socket thread's light batch does not do.
+LIGHT_NOT = ("to", "lines", "file", "read", "at", "from", "build")
+
+
 def _thread_batch(line, tools):
     """The calls of a batch made only of socket-thread tools (a client lists
     tools only when it starts, so it reaches a new one through batch), or
@@ -93,6 +97,13 @@ def _thread_batch(line, tools):
     except (ValueError, AttributeError):
         return None
     if _tool_name(line) != "batch":
+        return None
+    # A batch that asks for its answer written (to), cut (lines), read from a
+    # file or a record (file, read, at) or started part way (from) goes the
+    # whole batch's way: the light answer here knows none of those, and a
+    # batch { calls: [job_status], to, lines: "counts" } came back as the
+    # job's whole answer (live, round 3).
+    if any(args.get(k) is not None for k in LIGHT_NOT):
         return None
     calls = args.get("calls")
     if isinstance(calls, str):

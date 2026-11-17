@@ -1836,9 +1836,14 @@ def tools(session):
 
     # ---- GD&T, notes, balloons, tables ----
 
-    def leader(view, p_from, to_page):
+    def leader(view, p_from, to_page, shoulder=5.0):
         """A leader from a point on the view (view mm, y as geometry) to a
-        page point: TechDraw's own leader line, owned by the view."""
+        page point: TechDraw's own leader line, owned by the view, ending in
+        a horizontal shoulder this long (mm). A weld symbol's reference line
+        is the leader's last segment (src/Mod/TechDraw/Gui/QGIWeldSymbol.cpp
+        getKinkPoint, getTailPoint): td_weld asks for 20 mm — on the 5 mm
+        shoulder no reference line could be seen and the tiles' size text sat
+        on the slanted run (td 048)."""
         page = page_holding(view)
         ln = doc().addObject("TechDraw::DrawLeaderLine", "Leader")
         page.addView(ln)
@@ -1851,8 +1856,8 @@ def tools(session):
         end = V(to_page[0] - (vx + p_from[0]), to_page[1] - (vy - p_from[1]), 0)
         # a slanted run, then a short horizontal shoulder into the frame, as
         # drawn by hand; TechDraw would flatten a two-point leader whole
-        shoulder = 5.0 if end.x >= 0 else -5.0
-        elbow = V(end.x - shoulder, end.y, 0) if abs(end.x) > 6 else V(end.x, end.y, 0)
+        shoulder = abs(float(shoulder)) if end.x >= 0 else -abs(float(shoulder))
+        elbow = V(end.x - shoulder, end.y, 0) if abs(end.x) > abs(shoulder) + 1 else V(end.x, end.y, 0)
         ln.WayPoints = [start, elbow, end] if elbow != end else [start, end]
         try:
             ln.AutoHorizontal = False

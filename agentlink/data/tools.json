@@ -9210,8 +9210,8 @@
     {"refuse": "=wrong", "when": "=wrong is not None"},
     {"let": {"ref, p": "=ref_point(v, a.on)"}},
     {"let": {"X, Y": "=abs_xy(v)"}},
-    {"let": {"to": "=pt2(a.at, 'at') if a.at is not None else (X + p[0] + 15, Y - p[1] + 15)"}},
-    {"let": {"ln": "=leader(v, p, to)"}},
+    {"let": {"to": "=pt2(a.at, 'at') if a.at is not None else (X + p[0] + 35, Y - p[1] + 15)"}},
+    {"let": {"ln": "=leader(v, p, to, 20)"}},
     {"set": {"ln.Label": "=unique(a.name or 'Weld ' + spec['kind'], ln)"}},
     {"do": ["=own_prop(ln, WELD_PROP, 'App::PropertyString', 'The weld symbol drawn at the leader\\'s end (JSON)')", "=setprop(ln, WELD_PROP, dumps(spec))"]},
     {"let": {"ws, has_svg": "=native_weld(page_holding(v), ln, spec)"}},
@@ -15786,7 +15786,7 @@
     {"do": ["=st.update({'holds': ([] if a.replace else st['holds']) + [h]})", "=save(st)"]},
     {"do": "=snapshot(tool)"}
    ],
-   "answer": {"fields": {"held": "=picked", "kind": "=kind", "holds": "=len(st['holds'])", "note": "=note"}}
+   "answer": {"fields": {"held": "=picked", "kind": "=kind", "holds": "=len(st['holds'])", "note": "=note", "window": "Kept with the study as Agent Link's data: FreeCAD has no constraint object for it, so the window draws no symbol on the faces; fea_native builds FreeCAD's own analysis, whose holds and loads are drawn."}}
   },
   "fea_load": {
    "group": "strength",
@@ -15840,7 +15840,7 @@
     {"do": "=snapshot(tool)"},
     {"do": "=out.update({'load': ld, 'loads': len(st['loads'])})"}
    ],
-   "answer": {"fields": {"...out": "=out"}}
+   "answer": {"fields": {"...out": "=out", "window": "Kept with the study as Agent Link's data: FreeCAD has no constraint object for it, so the window draws no symbol on the faces; fea_native builds FreeCAD's own analysis, whose holds and loads are drawn."}}
   },
   "fea_solve": {
    "group": "strength",

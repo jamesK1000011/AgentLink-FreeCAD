@@ -429,6 +429,59 @@ def _volume(v):
     return (f"{v:.0f}" if abs(v) >= 100 else f"{v:.3g}") + " mm³"
 
 
+# An answer's key value, the first found, for the words of a call ("Made a
+# mesh: 152 facets", "Weighed Block: 24 g"): (key, how it reads). Numbers
+# only where the key says the unit; lists by their count.
+KEY_NUMBERS = (("volume", "{} mm³"), ("volume_m3", "{} m³"), ("area", "{} mm²"), ("area_m2", "{} m²"),
+               ("length", "{} mm"), ("length_mm", "{} mm"), ("length_m", "{} m"), ("span_mm", "{} mm"),
+               ("totalLength_m", "{} m of bars"), ("distance", "{} mm"), ("gap", "{} mm"), ("value", None),
+               ("mass_kg", "{} kg"), ("mass", "{} g"), ("vonMisesMaxMPa", "{} MPa at most"),
+               ("deflectionMaxMm", "{} mm deflection"), ("worst_mm", "{} mm off"), ("bars", "{} bars"),
+               ("facets", "{} facets"), ("triangles", "{} triangles"), ("found", "{} found"), ("count", "{} found"),
+               ("points", "{} points"), ("chars", "{} characters"), ("waypoints", "{} waypoints"), ("lines", "{} lines"))
+KEY_TEXTS = ("refined", "verdict", "state", "solve")
+KEY_LISTS = ("materials", "inspections", "fonts", "views", "axes", "pieces", "cleared", "merged", "inserted", "removed",
+             "modes", "rows", "parts", "ops", "added", "changed")
+KEY_FILES = ("file", "path", "template", "files")
+
+
+def _short_num(v):
+    if isinstance(v, float):
+        return f"{v:.0f}" if abs(v) >= 100 else f"{v:.4g}"
+    return str(v)
+
+
+def key_value(body):
+    """The answer's key value in a few words ("24 g", "152 facets", "3
+    found", "wrote house.ifc"), or None. A file shows as its name, never its
+    folder. Plain Python."""
+    b = body if isinstance(body, dict) else {}
+    if isinstance(b.get("result"), (int, float)) and not isinstance(b.get("result"), bool) and isinstance(b.get("to"), str):
+        return plain(f"{_short_num(b['result'])} {b['to']}")
+    for k, fmt in KEY_NUMBERS:
+        v = b.get(k)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            if fmt is None:
+                unit = b.get("unit") if isinstance(b.get("unit"), str) else ""
+                return plain(f"{_short_num(v)} {unit}".strip())
+            return fmt.format(_short_num(v))
+    for k in KEY_TEXTS:
+        v = b.get(k)
+        if isinstance(v, str) and v.strip() and len(v) <= 40:
+            return plain(_amp(v))
+    for k in KEY_LISTS:
+        v = b.get(k)
+        if isinstance(v, list) and v:
+            return f"{len(v)} {k}"
+    for k in KEY_FILES:
+        v = b.get(k)
+        if isinstance(v, list):
+            v = next((x for x in v if isinstance(x, str)), None)
+        if isinstance(v, str) and ("/" in v or "\\" in v or "." in v[-6:]):
+            return "wrote " + plain(v)
+    return None
+
+
 def outcome(name, ok, body=None, args=None):
     """What came of a call, short: "Pad made, 24000 mm³", "Saved as
     WindowTest.FCStd", "Refused: …". Never a folder."""
@@ -458,6 +511,11 @@ def outcome(name, ok, body=None, args=None):
         return f"Deleted {len(b['deleted'])}"
     if isinstance(b.get("count"), int) and not isinstance(b.get("count"), bool):
         return f"{b['count']} found"
+    # The answer's key value before a name or a note: a note is a warning
+    # or an explanation, cut off on the window (core 0054, 0070, 0088).
+    kv = key_value(b)
+    if kv:
+        return _cap(kv[:1].upper() + kv[1:])
     for k in ("created", "object", "sketch", "page", "body", "note"):
         if isinstance(b.get(k), str) and b[k].strip():
             return _cap(_sentence(b[k]) if k == "note" else plain(_amp(b[k])))

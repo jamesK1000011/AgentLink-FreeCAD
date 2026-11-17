@@ -98,6 +98,170 @@ COMMAND.update({
     "cam_tool": "CAM_ToolController", "cam_tool_add": "CAM_ToolBitDock", "cam_setup": "CAM_Job",
 })
 
+# Round 4: the rest of the families, each tool to the button on its
+# workbench's toolbar (FreeCAD 1.1.3: src/Mod/*/Gui/Workbench.cpp
+# setupToolBars, the InitGui.py appendToolbar lists, src/Gui/Workbench.cpp's
+# Std toolbars), or to a command inside a toolbar dropdown (Part's compound,
+# split, join and offset groups, Std_LinkActions, TechDraw's groups: the
+# dropdown's button lights). Only names in
+# docs/hardening/freecad-1.1.0-commands.txt (tests/test_echo_rings.py). A
+# tool with no button on any toolbar is left out: its call lights nothing and
+# its trace says "no button".
+COMMAND.update({
+    # Mesh: Mesh Tools / Modify / Boolean / Cutting / Segmentation / Analyze
+    # (src/Mod/Mesh/Gui/Workbench.cpp 239-293); MeshPart's unwrap is in the
+    # menu only.
+    "meshobj_smooth": "Mesh_Smoothing", "meshobj_decimate": "Mesh_Decimating", "meshobj_transform": "Mesh_Scale",
+    "meshobj_offset": "Mesh_Scale", "meshobj_boolean": "Mesh_Union", "meshobj_sections": "Mesh_CrossSections",
+    "meshobj_trim": "Mesh_TrimByPlane", "meshobj_merge": "Mesh_Merge", "meshobj_split": "Mesh_SplitComponents",
+    "meshobj_segments": "Mesh_Segmentation", "meshobj_curvature": "Mesh_VertexCurvature", "meshobj_info": "Mesh_Evaluation",
+    "meshobj_repair": "Mesh_HarmonizeNormals", "meshobj_primitive": "Mesh_BuildRegularSolid", "meshobj_from_shape": "Mesh_FromPartShape",
+    "meshobj_export": "Mesh_Export", "meshobj_boundary": "Mesh_Evaluation", "meshobj_refine": "Mesh_RemeshGmsh",
+    "meshobj_unwrap": "MeshPart_CreateFlatMesh", "meshobj_project": "MeshPart_CurveOnMesh", "meshobj_edit": "Mesh_AddFacet",
+    # Surface toolbar (src/Mod/Surface/Gui/Workbench.cpp 63-77); sew, thicken,
+    # loft and the fits light the Part button that does that job.
+    "surface_boundary": "Surface_GeomFillSurface", "surface_fill": "Surface_Filling", "surface_sections": "Surface_Sections",
+    "surface_extend": "Surface_ExtendFace", "surface_blend": "Surface_BlendCurve", "surface_cut": "Surface_Cut",
+    "surface_loft": "Part_Loft", "surface_thicken": "Part_Thickness", "surface_sew": "Part_Builder",
+    # The fits are Reverse Engineering's (its toolbar holds the surface fit;
+    # the polynomial fit is in its menu only).
+    "surface_points": "Reen_ApproxSurface", "surface_polynomial": "Reen_ApproxPolynomial",
+    # Points Tools (src/Mod/Points/Gui/Workbench.cpp 46-58); the fits and the
+    # mesh are Reverse Engineering's (its own toolbar, when loaded).
+    "points_sample": "Points_Convert", "points_import": "Points_Import", "points_export": "Points_Export",
+    "points_structure": "Points_Structure", "points_merge": "Points_Merge", "points_crop": "Points_PolyCut",
+    "points_fit": "Reen_ApproxPlane", "points_mesh": "Reen_PoissonReconstruction", "points_info": "Points_Convert",
+    # Spreadsheet toolbar (src/Mod/Spreadsheet/Gui/Workbench.cpp 238-264).
+    "sheet_new": "Spreadsheet_CreateSheet", "sheet_import": "Spreadsheet_Import", "sheet_export": "Spreadsheet_Export",
+    "sheet_cells": "Spreadsheet_MergeCells", "sheet_format": "Spreadsheet_StyleBold", "sheet_set": "Spreadsheet_SetAlias",
+    "sheet_table": "Spreadsheet_CreateSheet", "sheet_rows": "Spreadsheet_SetAlias", "sheet_clear": "Spreadsheet_SetAlias",
+    "param_set": "Spreadsheet_SetAlias", "param_remove": "Spreadsheet_SetAlias", "param_bind": "Std_Expressions",
+    "varset_new": "Std_VarSet", "varset_set": "Std_VarSet",
+    # Part: Solids, Part Tools, Boolean Tools (src/Mod/Part/Gui/Workbench.cpp
+    # 170-220) and their dropdowns (Part_CompCompoundTools,
+    # Part_CompJoinFeatures, Part_CompSplitFeatures, Part_CompOffset).
+    "part_face": "Part_MakeFace", "part_ruled": "Part_RuledSurface", "part_project": "Part_ProjectionOnSurface",
+    "part_slices": "Part_CrossSections", "part_offset2d": "Part_Offset2D", "part_split": "Part_Slice",
+    "part_refine": "Part_RefineShape", "part_defeature": "Part_Defeaturing", "part_container": "Std_Part",
+    "part_join": "Part_JoinConnect", "part_extract": "Part_Builder", "part_fix": "Part_Builder",
+    "part_from_mesh": "Part_ShapeFromMesh", "part_wire": "Part_Primitives", "part_transform": "Std_Placement",
+    "part_attach": "Part_EditAttachment", "part_datum": "Part_DatumPlane", "part_import_curves": "Std_Import",
+    "compound_filter": "Part_CompoundFilter", "compound_explode": "Part_ExplodeCompound",
+    # BIM's toolbars (src/Mod/BIM/InitGui.py 74-256, 405-421): the 3D/BIM,
+    # Annotation, Object, Manage and Utils lists.
+    "bim_structure": "BIM_Slab", "bim_profiles": "Arch_Profile", "bim_component": "Arch_Component",
+    "bim_edit": "Arch_Add", "bim_pipe_connector": "Arch_PipeConnector", "bim_structural_system": "Arch_StructuralSystem",
+    "bim_quantities": "BIM_IfcQuantities", "bim_preflight": "BIM_Preflight", "bim_ifc": "BIM_IfcProperties",
+    "bim_ifc_brep": "Arch_ToggleIfcBrepFlag", "bim_trash": "BIM_Trash", "bim_views": "BIM_Shape2DView",
+    "bim_panel_out": "Arch_Panel_Cut", "bim_layers": "Arch_MultiMaterial", "bim_reorder": "BIM_Reorder",
+    "bim_rewire": "BIM_Rewire", "bim_glue": "BIM_Glue", "bim_reextrude": "BIM_Reextrude", "bim_image_plane": "BIM_ImagePlane",
+    "bim_remove_shape": "Arch_RemoveShape", "bim_library": "BIM_Library", "bim_reference": "Arch_Reference",
+    "bim_nest": "Arch_Nest", "bim_list": "BIM_Views", "bim_export": "Std_Export", "bim_import": "Std_Import",
+    "ifc_diff": "BIM_Diff", "ifc_save": "Std_Save", "ifc_open": "Std_Open", "ifc_edit": "BIM_IfcProperties",
+    "ifc_find": "BIM_IfcExplorer", "ifc_remove": "Std_Delete",
+    # Draft (src/Mod/Draft/draftutils/init_tools.py): creation, annotation,
+    # modification and utility toolbars.
+    "draft_shape": "Draft_Wire", "draft_modify": "Draft_Move", "draft_link_array": "Draft_OrthoArray",
+    "draft_facebinder": "Draft_Facebinder", "draft_hatch": "Draft_Hatch", "draft_layer": "Draft_Layer",
+    "draft_style": "Draft_AnnotationStyleEditor", "draft_to_sketch": "Draft_Draft2Sketch", "draft_from_sketch": "Draft_Draft2Sketch",
+    "draft_fix": "Draft_FlipDimension", "draft_plane": "Draft_SelectPlane", "draft_2d_view": "Draft_Shape2DView",
+    "draft_outline": "Draft_ShapeString",
+    # TechDraw (src/Mod/TechDraw/Gui/Workbench.cpp setupToolBars).
+    "td_note": "TechDraw_Annotation", "td_leader": "TechDraw_LeaderLine", "td_balloon": "TechDraw_Balloon",
+    "td_weld": "TechDraw_WeldSymbol", "td_finish": "TechDraw_SurfaceFinishSymbols", "td_tolerance": "TechDraw_HoleShaftFit",
+    "td_hatch": "TechDraw_Hatch", "td_title": "TechDraw_FillTemplateFields", "td_export": "TechDraw_ExportPageSVG",
+    "td_centermarks": "TechDraw_ExtensionCircleCenterLines", "td_cosmetic": "TechDraw_2PointCosmeticLine",
+    "td_dimset": "TechDraw_ExtensionCreateHorizChainDimension", "td_dim_special": "TechDraw_HorizontalExtentDimension",
+    "td_dim_repair": "TechDraw_DimensionRepair", "td_dim_format": "TechDraw_ExtensionCustomizeFormat",
+    "td_dim_align": "TechDraw_ExtensionPosHorizChainDimension", "td_lines": "TechDraw_ExtensionChangeLineAttributes",
+    "td_section_position": "TechDraw_ExtensionPositionSectionView", "td_view_more": "TechDraw_ExtensionLockUnlockView",
+    "td_area": "TechDraw_AreaDimension", "td_datum": "TechDraw_LeaderLine", "td_gdt": "TechDraw_RichTextAnnotation",
+    "td_table": "TechDraw_SpreadsheetView", "td_bim": "TechDraw_ArchView",
+    # CAM (src/Mod/CAM/InitGui.py 127-269).
+    "cam_edit": "CAM_OpActiveToggle", "cam_path": "CAM_Area", "cam_property_bag": "CAM_PropertyBag",
+    "cam_template_export": "CAM_ExportTemplate", "cam_remove": "Std_Delete", "cam_library": "CAM_ToolBitDock",
+    # FEM (src/Mod/Fem/Gui/Workbench.cpp setupToolBars).
+    "fea_refine": "FEM_MeshRegion", "fea_shell": "FEM_ElementGeometry2D", "fea_heat": "FEM_ConstraintTemperature",
+    "fea_modes": "FEM_SolverRun", "fea_buckle": "FEM_SolverRun", "fea_parts": "FEM_ConstraintTie",
+    "fea_clear": "FEM_ResultsPurge", "fem_mesh": "FEM_MeshNetgenFromShape", "fem_add": "FEM_ConstraintDisplacement",
+    "fem_linearize": "FEM_PostFilterLinearizedStresses",
+    # Inspection, OpenSCAD, Robot, Material.
+    "insp_run": "Inspection_VisualInspection", "insp_update": "Inspection_VisualInspection",
+    "scad_op": "OpenSCAD_Hull", "scad_code": "OpenSCAD_AddOpenSCADElement", "scad_tidy": "OpenSCAD_RefineShapeFeature",
+    "scad_import": "Std_Import", "scad_export": "Std_Export",
+    "robot_new": "Robot_Create", "robot_path": "Robot_CreateTrajectory", "robot_trajectory": "Robot_TrajectoryCompound",
+    "robot_move": "Robot_RestoreHomePos", "robot_tool": "Robot_AddToolShape", "robot_export": "Robot_ExportKukaFull",
+    "material_set": "Material_Edit", "material_clear": "Material_Edit",
+    # The Std toolbars every bench has (src/Gui/Workbench.cpp 830-885):
+    # File, Edit, View and Structure (Std_LinkActions holds the link
+    # commands).
+    "doc_new": "Std_New", "doc_open": "Std_Open", "doc_save_all": "Std_Save", "doc_revert": "Std_Open",
+    "doc_close": "Std_CloseActiveWindow", "doc_info": "Std_ProjectInfo", "doc_graph": "Std_DependencyGraph",
+    "text_document": "Std_TextDocument",
+    "doc_merge": "Std_Open", "object_group": "Std_Group", "link_make": "Std_LinkMake", "link_edit": "Std_LinkReplace",
+    "object_set": "Std_Placement", "object_align": "Std_Placement", "object_duplicate": "Std_DuplicateSelection",
+    "object_delete": "Std_Delete", "object_appearance": "Std_SetAppearance", "object_freeze": "Std_ToggleFreeze",
+    "measure_keep": "Std_Measure", "measure_mass": "Std_Measure", "clearance": "Std_Measure", "import_file": "Std_Import",
+    "asm_check": "Assembly_SolveAssembly", "asm_export": "Assembly_ExportASMT", "asm_motion": "Assembly_CreateSimulation",
+})
+
+# Tools whose button follows one argument: {tool: (argument, {its value,
+# flattened (_flat): command})}. A value not listed takes COMMAND's.
+BY_ARG = {
+    "part_primitive": ("kind", {"box": "Part_Box", "cylinder": "Part_Cylinder", "sphere": "Part_Sphere", "cone": "Part_Cone",
+                                "torus": "Part_Torus", "tube": "Part_Tube"}),
+    "part_boolean": ("op", {"fuse": "Part_Fuse", "cut": "Part_Cut", "common": "Part_Common"}),
+    "meshobj_boolean": ("op", {"union": "Mesh_Union", "fuse": "Mesh_Union", "intersection": "Mesh_Intersection",
+                               "common": "Mesh_Intersection", "difference": "Mesh_Difference", "cut": "Mesh_Difference"}),
+    "part_split": ("mode", {"slice": "Part_Slice", "fragments": "Part_BooleanFragments", "xor": "Part_XOR"}),
+    "part_join": ("kind", {"connect": "Part_JoinConnect", "embed": "Part_JoinEmbed", "cutout": "Part_JoinCutout"}),
+    "part_datum": ("kind", {"point": "Part_DatumPoint", "line": "Part_DatumLine", "plane": "Part_DatumPlane",
+                            "csys": "Part_CoordinateSystem"}),
+    "part_fix": ("op", {"reverse": "Part_ReverseShape", "solid": "Part_MakeSolid"}),
+    "points_fit": ("shape", {"plane": "Reen_ApproxPlane", "cylinder": "Reen_ApproxCylinder", "sphere": "Reen_ApproxSphere",
+                             "surface": "Reen_ApproxSurface", "curve": "Reen_ApproxCurve"}),
+    "draft_shape": ("kind", {"line": "Draft_Line", "wire": "Draft_Wire", "polyline": "Draft_Wire", "circle": "Draft_Circle",
+                             "arc": "Draft_Arc", "ellipse": "Draft_Ellipse", "rectangle": "Draft_Rectangle",
+                             "polygon": "Draft_Polygon", "bspline": "Draft_BSpline", "bezier": "Draft_BezCurve",
+                             "point": "Draft_Point"}),
+    "draft_modify": ("op", {"move": "Draft_Move", "rotate": "Draft_Rotate", "scale": "Draft_Scale", "mirror": "Draft_Mirror",
+                            "offset": "Draft_Offset", "upgrade": "Draft_Upgrade", "downgrade": "Draft_Downgrade",
+                            "join": "Draft_Join", "fillet": "Draft_Fillet", "split": "Draft_Split",
+                            "stretch": "Draft_Stretch", "trim": "Draft_Trimex", "extend": "Draft_Trimex"}),
+    "draft_link_array": ("kind", {"ortho": "Draft_OrthoArray", "polar": "Draft_PolarArray", "circular": "Draft_CircularArray",
+                                  "path": "Draft_PathLinkArray", "point": "Draft_PointLinkArray"}),
+    "td_dimset": ("type", {"horizontal": "TechDraw_ExtensionCreateHorizChainDimension",
+                           "vertical": "TechDraw_ExtensionCreateVertChainDimension"}),
+    "td_dim_special": ("kind", {"extenth": "TechDraw_HorizontalExtentDimension", "extentv": "TechDraw_VerticalExtentDimension",
+                                "chamferh": "TechDraw_ExtensionCreateHorizChamferDimension",
+                                "chamferv": "TechDraw_ExtensionCreateVertChamferDimension",
+                                "arclength": "TechDraw_ExtensionCreateLengthArc", "axolength": "TechDraw_AxoLengthDimension"}),
+    "fea_hold": ("kind", {"fixed": "FEM_ConstraintFixed", "pin": "FEM_ConstraintFixed", "slide": "FEM_ConstraintDisplacement",
+                          "move": "FEM_ConstraintDisplacement"}),
+    "scad_op": ("op", {"hull": "OpenSCAD_Hull", "minkowski": "OpenSCAD_Minkowski"}),
+}
+
+
+def _by_arg(name, a):
+    """The button BY_ARG gives for this call's argument, or None."""
+    row = BY_ARG.get(name)
+    if not row:
+        return None
+    key, table = row
+    return table.get(_flat(a.get(key)))
+
+
+def _fea_load_command(a):
+    """fea_load: gravity on the self-weight button, pressure on Pressure,
+    else Force (the old ring lit Force for gravity, fem 033)."""
+    if a.get("gravity") not in (None, False):
+        return "FEM_ConstraintSelfWeight"
+    if a.get("pressure") is not None:
+        return "FEM_ConstraintPressure"
+    if a.get("temperature") is not None:
+        return "FEM_ConstraintTemperature"
+    return "FEM_ConstraintForce"
+
 # Tools whose button depends on what kind was asked for.
 CAM_OP = {"profile": "CAM_Profile", "pocket": "CAM_Pocket_Shape", "adaptive": "CAM_Adaptive", "face": "CAM_MillFace",
           "drill": "CAM_Drilling", "engrave": "CAM_Engrave", "helix": "CAM_Helix", "slot": "CAM_Slot", "deburr": "CAM_Deburr",
@@ -187,6 +351,11 @@ def command_for(name, args):
         return None  # it only reads the tip
     if name in PD_SUBTRACTIVE and (args or {}).get("subtractive") is True:
         return PD_SUBTRACTIVE[name]
+    if name == "fea_load":
+        return _fea_load_command(args or {})
+    got = _by_arg(name, args or {})
+    if got:
+        return got
     if name in COMMAND:
         return COMMAND[name]
     # What add-ons declared (declare()): their own callables first, then
@@ -234,7 +403,10 @@ NO_ECHO = set()
 # start of every call, the snapshot's own too: no picture had a ring).
 # Add-ons declare theirs as WATCH (names or prefixes).
 WATCH = {"window_snapshot", "view_snapshot", "view_render", "view_maps", "snapshot_latest", "snapshot_list",
-         "report_read", "usage_report", "job_status", "crash_collect", "doc_graph", "steps_list", "note_list"}
+         "report_read", "usage_report", "job_status", "crash_collect", "steps_list", "note_list"}
+# (doc_graph left the list in round 4: as a look it kept the last call's
+# words, so its picture read "Read the document's details", core 0031; it is
+# a read and says its own.)
 
 # How long what the echo shows for a changing call stays: the lit button,
 # the words over the 3D view and in the status bar. Until the next changing
@@ -277,7 +449,9 @@ OUT_KEYS = ("feature", "sketch", "object", "body", "created", "page", "view", "j
             # Mesh, Surface, Draft, BIM and Spreadsheet answers name what
             # they made under these (meshobj keep/finish: "mesh"; the Mesh
             # Info panel stayed empty because no mesh was ever selected).
-            "mesh", "surface", "layer", "projection", "sections", "pieces", "views", "made")
+            "mesh", "surface", "layer", "projection", "sections", "pieces", "views", "made",
+            # Round 4: links, text documents, trajectories, groups.
+            "link", "text", "trajectory", "group")
 # More of the same for single tools, where the answer (or, for a call that
 # moves a thing, its arguments) names what was made or changed under a key
 # of its own. A value is a name or a list of names.
@@ -285,22 +459,38 @@ OUT_MORE = {"pd_datum": ("datum",), "pd_datum_plane": ("plane",), "pd_binder": (
             "pd_move_feature": ("moved",), "pd_tip": ("tip",), "pd_reorder": ("feature",),
             "asm_add": ("added",), "asm_sub": ("as",), "asm_new_part": ("inAssembly", "part"), "asm_bom": ("sheet",),
             "asm_explode": ("view",), "asm_new": ("assembly",), "bim_material": ("on",), "draft_fix": ("object", "dimension"),
-            "fea_parts": ("parts",), "meshobj_split": ("pieces",)}
+            "fea_parts": ("parts",), "meshobj_split": ("pieces",), "cam_dressup": ("dressup",),
+            # bim_views: views [{ level, section, view }]; bim_panel_out:
+            # cuts [{ panel, cut }] (bim 042, 048 showed the model from the
+            # top, not the plan or the cut sheet).
+            "bim_views": ("views",), "bim_panel_out": ("cuts", "sheet")}
+# Tools whose own keys name the result alone when given (the answer's
+# "object" is what they read, not what they made): a fit's new body, not the
+# cloud (points 0011); a duplicate's copy (core 0025); the part grounded,
+# not the joint that holds it (asm 032).
+OUT_ONLY = {"points_fit": ("body",), "object_duplicate": ("duplicated",), "asm_ground": ("part",),
+            "points_mesh": ("mesh",), "points_structure": ("points",), "points_merge": ("points",)}
+# In an answer's list of rows ({ from, copy }), the keys that name what was
+# made.
+ROW_KEYS = ("copy", "made", "view", "cut", "object", "name")
 # What a changing call made when its answer names nothing: the objects new
 # in the document since before it, at most NEW_MOST of those shown, in a
 # document of at most NEW_LOOK_MOST objects.
 NEW_MOST, NEW_LOOK_MOST = 20, 5000
 # Tools whose answer names a spreadsheet: its view comes to the front.
-SHEET_TOOLS = ("sheet_", "asm_bom", "bim_schedule")
+SHEET_TOOLS = ("sheet_", "asm_bom", "bim_schedule", "param_")
 # Tools that make a flat plan of a model (a 2D view at Z = 0, a cut sheet):
 # looked at from the top.
 PLAN_TOOLS = ("draft_2d_view", "bim_views", "bim_panel_out")
 # Families whose results are looked for under other things (a room under
-# the roof, a surface inside a solid, a mesh copy on its source). Not Part
-# Design (a feature is inside its body by nature), sketches (edited face
-# on), drawing pages, assemblies (their parts touch) or CAM (the stock is
-# made see-through by the CAM step itself).
-UNCOVERED = ("bim_", "surface_", "meshobj_", "draft_", "part_", "fea_", "import_", "points_", "insp_", "material_")
+# the roof, a surface inside a solid, a mesh copy on its source, another
+# body in front of a Part Design feature). Not drawing pages, assemblies
+# (their parts touch; a part in front is uncovered only by a part_ call) or
+# CAM (the stock is made see-through by the CAM step itself). A sketch in
+# edit is uncovered for every sketch_ call (_after). What holds the result
+# (its body, level, assembly) is never made see-through (is_container).
+UNCOVERED = ("bim_", "surface_", "meshobj_", "draft_", "part_", "fea_", "import_", "points_", "insp_", "material_",
+             "pd_", "feature_", "object_", "link_", "compound_", "scad_")
 # The keys that name the bodies a Part Design call worked in.
 BODY_KEYS = ("body", "to", "from")
 
@@ -315,9 +505,15 @@ def out_names(name, args, body):
 
     def take(v):
         for x in v if isinstance(v, (list, tuple)) else [v]:
+            if isinstance(x, dict):
+                x = next((x[k] for k in ROW_KEYS if isinstance(x.get(k), str) and x[k]), None)
             if isinstance(x, str) and x and x not in out:
                 out.append(x)
 
+    for k in OUT_ONLY.get(name, ()):
+        take(b.get(k) if b.get(k) else a.get(k))
+    if out:
+        return out
     for k in OUT_MORE.get(name, ()):
         take(b.get(k) if b.get(k) else a.get(k))
     for k in OUT_KEYS:
@@ -774,11 +970,15 @@ def flash_command(cmd, ms=HOLD_MS, settle=False, menu_ms=1300):
             for b, _m, _a in targets.group_buttons(cmd):
                 if painter.flash(b, ms):
                     how = "group"
+                else:
+                    unseen.append(b)  # the dropdown's button, in the "»" list or on a hidden toolbar
         except Exception:  # noqa: BLE001  (a nicety; the call has run)
             pass
     if how == "none" and unseen and overflow_flash(unseen, painter, ms, QtW):
         # The button is in its toolbar's "»" list (a narrow window): the
-        # "»" lights, never another command's button.
+        # "»" lights, never another command's button — and only when the
+        # button truly is in that list (in_overflow), not on a toolbar the
+        # person hid, nor a button its toolbar hides for its own reasons.
         how = "behind »"
     if how == "none":
         # Said as it is (Echo.after's trace): a button that exists and is
@@ -814,19 +1014,51 @@ def _actions(cmd, QtW):
     return targets.actions(cmd)
 
 
+def in_overflow(rows, i):
+    """Whether item i of a toolbar is in its "»" list: rows, the toolbar's
+    items in order as (action shown, widget shown). Qt's toolbar layout
+    hides the widgets that do not fit from the end; an item whose action is
+    hidden, or a hidden widget with a shown one after it, is hidden for
+    another reason (a command not available here, a widget the bench hides).
+    Plain Python."""
+    if not 0 <= i < len(rows):
+        return False
+    act, wid = rows[i]
+    if not act or wid:
+        return False
+    return not any(w for a, w in rows[i + 1:] if a)
+
+
+def _toolbar_of(w, QtW):
+    bar = w.parentWidget()
+    while bar is not None and not isinstance(bar, QtW.QToolBar):
+        bar = bar.parentWidget()
+    return bar
+
+
 def overflow_flash(buttons, painter, ms, QtW):
     """The "»" button of the toolbar that holds one of buttons lit (Qt's
-    qt_toolbar_ext_button: the list of what does not fit). True when one
-    was lit. Never raises."""
+    qt_toolbar_ext_button: the list of what does not fit), only when that
+    toolbar is shown, its "»" is shown, and the button is one Qt moved into
+    the list (in_overflow). True when one was lit. Never raises."""
     for w in buttons:
         try:
-            bar = w.parentWidget()
-            while bar is not None and not isinstance(bar, QtW.QToolBar):
-                bar = bar.parentWidget()
-            if bar is None:
-                continue
+            bar = _toolbar_of(w, QtW)
+            if bar is None or not bar.isVisible():
+                continue  # a toolbar the person hid: no "»" stands for it
             ext = bar.findChild(QtW.QToolButton, "qt_toolbar_ext_button")
-            if ext is not None and painter.flash(ext, ms):
+            if ext is None or not ext.isVisible():
+                continue
+            acts = [a for a in bar.actions() if not a.isSeparator()]
+            rows, at = [], None
+            for k, a in enumerate(acts):
+                wid = bar.widgetForAction(a)
+                rows.append((bool(a.isVisible()), bool(wid is not None and wid.isVisible())))
+                if wid is w:
+                    at = k
+            if at is None or not in_overflow(rows, at):
+                continue
+            if painter.flash(ext, ms):
                 return True
         except Exception:  # noqa: BLE001  (a deleted toolbar)
             continue
@@ -982,6 +1214,7 @@ def _camera(v):
 # ---- a sketch framed whole (round 3, item 3) ------------------------------------------------
 
 SKETCH_EMPTY_MM = 100.0  # a new, empty sketch: this much of its plane around its origin
+ROBOT_MM = 1500.0        # a robot framed: at least this much around its base and tool point
 
 
 def box_of(points):
@@ -1088,10 +1321,10 @@ COVER_LOOK_MOST = 400  # documents with more shown objects than this are not sea
 
 
 def _box(o):
-    """An object's box (Shape, else Mesh, else Part's reading of a link), or
+    """An object's box (Shape, else Mesh, else a point cloud's Points), or
     None."""
     try:
-        for attr in ("Shape", "Mesh"):
+        for attr in ("Shape", "Mesh", "Points"):
             sh = getattr(o, attr, None)
             if sh is None:
                 continue
@@ -1126,6 +1359,65 @@ def _tuple(bb):
     return (bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax)
 
 
+def sight_hits(box, point, direction, eps=1e-6):
+    """Whether the line of sight from point back to the camera (the camera
+    looks along direction; orthographic, as FreeCAD's default view) passes
+    through box (xmin, ymin, zmin, xmax, ymax, zmax) in front of the point.
+    A box that holds the point does not count here (covers() judges those,
+    by size). Plain Python."""
+    ln = sum(c * c for c in direction) ** 0.5
+    if ln <= 0:
+        return False
+    r = [-c / ln for c in direction]
+    t0, t1 = -float("inf"), float("inf")
+    for i in range(3):
+        lo, hi, o = box[i], box[i + 3], point[i]
+        if abs(r[i]) < 1e-12:
+            if o < lo - eps or o > hi + eps:
+                return False
+            continue
+        a, b = (lo - o) / r[i], (hi - o) / r[i]
+        t0, t1 = max(t0, min(a, b)), min(t1, max(a, b))
+    return t1 >= t0 and t0 > eps
+
+
+def covers_in_view(made_boxes, others, direction):
+    """Of others ([(key, box)]), the keys of those between a result and the
+    camera, seen along direction: the line of sight from the middle of a
+    result's box passes through them (the roof over a room seen from above,
+    the house in front of a truss behind it, the plate in front of a sketch
+    face on). Plain Python."""
+    if not direction:
+        return []
+    out = []
+    for key, b in others:
+        for m in made_boxes:
+            mid = [(m[i] + m[i + 3]) / 2.0 for i in range(3)]
+            if sight_hits(b, mid, direction):
+                out.append(key)
+                break
+    return out
+
+
+# Objects that hold others (a body, a part, a folder, a BIM level or building,
+# an assembly): never made see-through for what is inside them (their box
+# holds it by nature, and the whole assembly went see-through: asm 049).
+CONTAINER_TYPES = ("PartDesign::Body", "App::Part", "App::DocumentObjectGroup", "Assembly::AssemblyObject",
+                   "App::DocumentObjectGroupPython", "App::LinkGroup")
+
+
+def is_container(o):
+    try:
+        if getattr(o, "TypeId", "") in CONTAINER_TYPES:
+            return True
+        if "Group" in (getattr(o, "PropertiesList", None) or ()) and getattr(o, "Shape", None) is None:
+            return True
+        proxy = getattr(o, "Proxy", None)
+        return type(proxy).__name__ in ("BuildingPart", "Floor", "Building", "Site", "Project")
+    except Exception:  # noqa: BLE001
+        return False
+
+
 # Boxes of the objects looked at by uncover(), by (document, name): kept
 # while the object's shape is the same one (its hash; a mesh's counts), so a
 # BIM model's hundred walls are not measured again on every call.
@@ -1141,6 +1433,9 @@ def _stamp(o):
         m = getattr(o, "Mesh", None)
         if m is not None:
             return ("m", m.CountPoints, m.CountFacets)
+        p = getattr(o, "Points", None)
+        if p is not None:
+            return ("p", p.CountPoints)
     except Exception:  # noqa: BLE001
         pass
     return None
@@ -1164,26 +1459,43 @@ def _box_of(o):
     return t
 
 
-def uncover(doc, made):
+def view_direction():
+    """The active 3D view's direction (x, y, z), or None."""
+    try:
+        import FreeCADGui
+
+        d = FreeCADGui.ActiveDocument.ActiveView.getViewDirection()
+        return (d.x, d.y, d.z)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def uncover(doc, made, boxes=None, direction=None):
     """What hides a result made see-through, as view state only (each cover's
     ViewObject.Transparency; FreeCAD does not mark a document modified for
-    it), put back at the next changing call. The result itself, what it is
-    built from and what it is part of are never touched. Returns the labels
-    made see-through. Never raises."""
+    it), put back at the next changing call: a shown object whose box holds
+    the result (covers()) or that stands between it and the camera
+    (covers_in_view(), along direction, else the active view's). The result
+    itself and what holds it (its body, part, folder, level, assembly:
+    is_container) are never touched; what it is built from may be (a host
+    slab round its bars, the plate over a sketch). boxes: the result's boxes
+    when its shape does not tell (a sketch in edit: sketch_box). Returns the
+    labels made see-through. Never raises."""
     done = []
     try:
-        boxes = [(o, _box(o)) for o in made or ()]
-        mine = [_tuple(b) for _o, b in boxes if b is not None]
+        mine = [b for b in boxes or () if b is not None]
+        if not mine:
+            got = [(o, _box(o)) for o in made or ()]
+            mine = [_tuple(b) for _o, b in got if b is not None]
         if not mine:
             return done
         near = set()
         for o in made:
-            for attr in ("InListRecursive", "OutListRecursive"):
-                try:
-                    near.update(id(x) for x in getattr(o, attr, None) or ())
-                except Exception:  # noqa: BLE001
-                    continue
             near.add(id(o))
+            try:
+                near.update(id(x) for x in getattr(o, "InListRecursive", None) or () if is_container(x))
+            except Exception:  # noqa: BLE001
+                continue
         shown = []
         for o in list(getattr(doc, "Objects", ()) or ()):
             if id(o) in near or not _seen(o):
@@ -1199,10 +1511,17 @@ def uncover(doc, made):
                     continue
             except Exception:  # noqa: BLE001
                 continue
+            if is_container(o):
+                continue
             b = _box_of(o)
             if b is not None:
                 others.append((o, b))
-        for o in covers(mine, others)[:COVERS_MOST]:
+        if direction is None:
+            direction = view_direction()
+        hit = covers(mine, others)
+        seen = {id(o) for o in hit}
+        hit += [o for o in covers_in_view(mine, [(o, b) for o, b in others if id(o) not in seen], direction)]
+        for o in hit[:COVERS_MOST]:
             vo = o.ViewObject
             _covers.append((o.Document.Name, o.Name, int(vo.Transparency or 0)))
             vo.Transparency = COVER_ALPHA
@@ -1486,6 +1805,48 @@ def _add_sel(o, sub=""):
     return False
 
 
+# A read's own selection: whether one is standing (the next read that names
+# nothing puts back _last_change_sel, the names of what the last change
+# selected).
+_read_sel = [False]
+_last_change_sel = []
+# What a read names to select: ARG_KEYS and the other keys reads take.
+READ_KEYS = ARG_KEYS + ("assembly", "mesh", "points", "inspection", "robot", "job", "link")
+# Arguments that name a face, an edge or a vertex as "Object.Face6".
+REF_KEYS = ("a", "b", "of", "refs", "ref")
+SUB_HEADS = ("Face", "Edge", "Vertex")
+
+
+def _ref(v):
+    """(object, sub) of "Block.Face6", or None. Plain Python."""
+    if not isinstance(v, str) or "." not in v:
+        return None
+    obj, sub = v.rsplit(".", 1)
+    return (obj, sub) if obj and sub.startswith(SUB_HEADS) and sub[len(sub.rstrip("0123456789")):].isdigit() else None
+
+
+def read_refs(name, args, body):
+    """[(object, sub)] a read names: its arguments' "Object.Face6" refs, and
+    for shape_query the found faces or edges on its body (its answer's
+    items' ref). Plain Python."""
+    a = args if isinstance(args, dict) else {}
+    b = body if isinstance(body, dict) else {}
+    out = []
+    for k in REF_KEYS:
+        v = a.get(k)
+        for x in v if isinstance(v, list) else [v]:
+            r = _ref(x)
+            if r and r not in out:
+                out.append(r)
+    if name == "shape_query":
+        on = b.get("body") or a.get("body")
+        for it in b.get("items") if isinstance(b.get("items"), list) else []:
+            ref = it.get("ref") if isinstance(it, dict) else it
+            if isinstance(on, str) and isinstance(ref, str) and ref.startswith(SUB_HEADS):
+                out.append((on, ref))
+    return out[:SUBS_MOST]
+
+
 def _select(objs):
     import FreeCADGui
 
@@ -1495,6 +1856,100 @@ def _select(objs):
     FreeCADGui.Selection.clearSelection()
     for o in objs:
         _add_sel(o)
+    isolation_off(objs)
+
+
+def is_joint(o):
+    """An Assembly joint (FreeCAD's own test: a JointType property,
+    src/Mod/Assembly/Gui/ViewProviderAssembly.cpp onSelectionChanged)."""
+    try:
+        return "JointType" in (getattr(o, "PropertiesList", None) or ())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def isolation_off(objs):
+    """A joint selected alone makes FreeCAD's Assembly draw every part but
+    the joint's two see-through (ViewProviderAssembly::isolateJointReferences
+    on the selection's AddSelection, with one assembly in the document); when
+    its references do not resolve to the assembly's own parts, the whole
+    assembly went see-through (asm 049). The echo selects a joint to show it
+    in the tree, not to isolate it: the isolation is cleared again
+    (clearIsolate, as FreeCAD's own joint dialog does when it closes). The
+    labels of the assemblies cleared. Never raises."""
+    done = []
+    try:
+        joints = [o for o in objs or () if is_joint(o)]
+        if not joints:
+            return done
+        doc = joints[0].Document
+        for a in doc.findObjects("Assembly::AssemblyObject"):
+            fn = getattr(getattr(a, "ViewObject", None), "clearIsolate", None)
+            if callable(fn):
+                fn()
+                done.append(a.Label)
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (isolation off): {e}\n")
+    return done
+
+
+# ---- the tree and the property view brought up to the selection (round 4) -----------------
+
+# The panels that follow the selection on a timer of their own: FreeCAD's
+# property view (src/Gui/PropertyView.cpp onSelectionChanged: a single-shot
+# timer, ViewParams PropertyViewTimer, 100 ms) and the tree (src/Gui/Tree.cpp
+# onSelectionChanged: selectTimer, which also opens and scrolls to the row).
+# Those timers fire only when the window's event loop runs that long after
+# the selection; the echo selects, paints once and the next call (or the
+# picture) comes first, so the property view showed an earlier call's object
+# (pd 034-111, BIM 018-051) and the tree an earlier row (asm 031, points 0008).
+FOLLOWERS = ("Gui::PropertyView", "Gui::TreeWidget")
+_follow = []
+
+
+def to_fire(rows):
+    """Of rows [(owner class name, active, single shot)] for the window's
+    timers, the indexes to run now: the followers' pending single-shot ones.
+    Plain Python."""
+    return [i for i, (cls, active, single) in enumerate(rows) if cls in FOLLOWERS and active and single]
+
+
+def views_follow():
+    """The tree and the property view brought up to the selection now (their
+    own pending single-shot timers started again at 0 ms and run once), as
+    they would be 100 ms later. How many ran. Never raises."""
+    from .overlay import alive
+
+    try:
+        import FreeCADGui
+
+        QtCore, _QtGui, _QtW = _qt()
+        if not _follow or not all(alive(t) for t in _follow):
+            del _follow[:]
+            for t in FreeCADGui.getMainWindow().findChildren(QtCore.QTimer):
+                try:
+                    par = t.parent()
+                    if par is not None and par.metaObject().className() in FOLLOWERS:
+                        _follow.append(t)
+                except RuntimeError:
+                    continue
+        rows = []
+        for t in _follow:
+            try:
+                rows.append((t.parent().metaObject().className(), t.isActive(), t.isSingleShot()))
+            except RuntimeError:
+                rows.append(("", False, False))
+        fire = to_fire(rows)
+        for i in fire:
+            _follow[i].start(0)
+        if fire:
+            flags = _paint_flags(QtCore)
+            for _ in range(2):
+                QtCore.QCoreApplication.processEvents(flags)
+        return len(fire)
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (views follow): {e}\n")
+        return 0
 
 
 def _select_subs(obj, subs):
@@ -1762,6 +2217,37 @@ def front_3d(doc):
         return None
 
 
+def is_sheet(o):
+    """A spreadsheet, FreeCAD's own or one derived from it (Assembly's
+    Bills_of_Materials is an Assembly::BomObject, a Spreadsheet::Sheet: the
+    old test by TypeId never opened it, asm 055)."""
+    try:
+        if getattr(o, "TypeId", "") == "Spreadsheet::Sheet":
+            return True
+        return bool(o.isDerivedFrom("Spreadsheet::Sheet"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def sheet_refs(name, args, body):
+    """The names of the spreadsheet a call worked in: its answer's or its
+    arguments' sheet (or bom), the sheet part of a parameter's ref
+    ("Params.width"), and for the param_ tools the Params sheet. Plain
+    Python."""
+    a = args if isinstance(args, dict) else {}
+    b = body if isinstance(body, dict) else {}
+    out = []
+    for v in (b.get("sheet"), a.get("sheet"), b.get("bom")):
+        if isinstance(v, str) and v:
+            out.append(v)
+    ref = b.get("ref")
+    if isinstance(ref, str) and "." in ref:
+        out.append(ref.split(".", 1)[0])
+    if str(name).startswith("param_"):
+        out.append("Params")
+    return list(dict.fromkeys(out))
+
+
 def show_view_of(o):
     """o's own view brought to the front (a page, a spreadsheet: what a
     double-click on its tree row opens). Its label, or None."""
@@ -1895,6 +2381,183 @@ def refused_words(what, result):
     r = str(result or "").strip()
     why = r[len("Refused:"):].strip() if r.startswith("Refused:") else ""
     return f"{what}: refused" + (f" ({why})" if why else "")
+
+
+# ---- a CAM operation's path shown, as CAM's own GUI shows it (round 4) ----------------------
+
+def is_path_op(o):
+    """A CAM operation or dressup (it has a Path; a Job has Operations)."""
+    try:
+        props = getattr(o, "PropertiesList", None) or ()
+        return "Path" in props and "Operations" not in props and "Stock" not in props
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _jobs(doc):
+    try:
+        return [o for o in doc.Objects if "Operations" in (getattr(o, "PropertiesList", None) or ()) and "Stock" in o.PropertiesList]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def cam_shown(doc, objs, job_ref=None):
+    """What CAM's own GUI does when it makes an operation and edits a job
+    (src/Mod/CAM/Path/Op/Gui/Base.py Create: the operation's
+    ViewObject.Visibility = True — CAM's App-side Create, which the tools
+    use, leaves it hidden, so no toolpath was ever drawn: cam 008-032;
+    Path/Main/Gui/Job.py rememberBaseVisibility: the job's model clone
+    shown, the original body hidden, the stock shown), done here as view
+    state: the operations named shown, the stock see-through. The labels
+    shown. Never raises."""
+    done = []
+    try:
+        ops = [o for o in objs or () if is_path_op(o)]
+        jobs = [o for o in _objects(doc, [job_ref]) if o in _jobs(doc)] if isinstance(job_ref, str) else []
+        if not jobs:
+            alls = _jobs(doc)
+            jobs = [j for j in alls if any(op in (getattr(j.Operations, "Group", None) or ()) or j in
+                                           (getattr(op, "InListRecursive", None) or ()) for op in ops)] or (alls if len(alls) == 1 else [])
+        for j in jobs:
+            for base in list(getattr(getattr(j, "Model", None), "Group", None) or ()):
+                try:
+                    orig = j.Proxy.baseObject(j, base)
+                    if orig is not None and orig is not base and _seen(orig):
+                        orig.ViewObject.Visibility = False
+                        done.append(f"{orig.Label} hidden")
+                    if not _seen(base):
+                        base.ViewObject.Visibility = True
+                except Exception:  # noqa: BLE001
+                    continue
+            stock = getattr(j, "Stock", None)
+            vo = getattr(stock, "ViewObject", None) if stock is not None else None
+            if vo is not None:
+                vo.Visibility = True
+                if int(vo.Transparency or 0) < 70:
+                    vo.Transparency = 70
+        for op in ops:
+            if not _seen(op):
+                op.ViewObject.Visibility = True
+                done.append(op.Label)
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (CAM path shown): {e}\n")
+    return done
+
+
+# ---- a FEM result coloured, as FreeCAD's own result panel colours it (round 4) -------------
+
+def fem_result_shown(doc, body):
+    """The newest mechanical result of the analysis a call names (else of
+    any analysis in doc) shown on its mesh in von Mises colours, with
+    FreeCAD's own femresult.resulttools.show_result (what the Results task
+    panel's von Mises choice does: setNodeColorByScalars on the result mesh,
+    which is shown) — fea_solve's and fea_native's results were never seen
+    (fem 030, 034). Scene colours only, no property. The result's label, or
+    None. Never raises."""
+    try:
+        b = body if isinstance(body, dict) else {}
+        named = [o for o in _objects(doc, [b.get("analysis")]) if getattr(o, "TypeId", "") == "Fem::FemAnalysis"]
+        analyses = named or [o for o in doc.Objects if getattr(o, "TypeId", "") == "Fem::FemAnalysis"]
+        results = [o for an in analyses for o in (getattr(an, "Group", None) or ())
+                   if str(getattr(o, "TypeId", "")).startswith("Fem::FemResultObject") and getattr(o, "Mesh", None) is not None
+                   and len(getattr(o, "vonMises", None) or ()) > 0]
+        if not results:
+            return None
+        res = results[-1]
+        from femresult import resulttools
+
+        resulttools.show_result(res, "Sabs")
+        return res.Label
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (FEM result): {e}\n")
+        return None
+
+
+# ---- a later change puts away the inspection colours (round 4) -----------------------------
+
+# Inspection results the agent made, by document: hidden (view state) at the
+# next changing call that is not an inspection call — their colour map and
+# legend covered later results (core 0071-0097).
+_inspections = {}
+
+
+def inspections_after(doc, name, made):
+    """Note the inspection results this call made; for a changing call of
+    another family, hide those noted (the legend goes with them:
+    ViewProviderInspection::hide). The names hidden. Never raises."""
+    hidden = []
+    try:
+        key = doc.Name
+        if str(name).startswith("insp_"):
+            new = [o.Name for o in made or () if getattr(o, "TypeId", "") == "Inspection::Feature"]
+            if new:
+                _inspections.setdefault(key, [])
+                _inspections[key] += [n for n in new if n not in _inspections[key]]
+            return hidden
+        for n in _inspections.pop(key, []):
+            o = doc.getObject(n)
+            vo = getattr(o, "ViewObject", None) if o is not None else None
+            try:
+                if vo is not None and vo.Visibility:
+                    vo.Visibility = False
+                    hidden.append(n)
+            except Exception:  # noqa: BLE001
+                continue
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (inspections): {e}\n")
+    return hidden
+
+
+# ---- a feature's sketch put away, as FreeCAD's own commands do (round 4) --------------------
+
+def _linked(v):
+    """The object of a link property's value (obj, (obj, subs), [(obj,
+    subs)]), or None."""
+    if isinstance(v, (list, tuple)):
+        v = v[0] if v else None
+    if isinstance(v, (list, tuple)):
+        v = v[0] if v else None
+    return v
+
+
+def profiles_hidden(made):
+    """The sketch a Part Design feature was made from hidden once the
+    feature is made, as FreeCAD's own Pad, Pocket, Revolution … do
+    (src/Mod/PartDesign/Gui/Command.cpp finishProfileBased: FCMD_OBJ_HIDE
+    on the profile): the Master outline stayed drawn over Tut from pd 007
+    on. View state only. The names hidden. Never raises."""
+    hidden = []
+    for o in made or ():
+        try:
+            if "Profile" not in (getattr(o, "PropertiesList", None) or ()) or not _has_solid(o):
+                continue
+            prof = _linked(o.Profile)
+            if getattr(prof, "TypeId", "") != "Sketcher::SketchObject" or not _seen(prof):
+                continue
+            prof.ViewObject.Visibility = False
+            hidden.append(prof.Name)
+        except Exception:  # noqa: BLE001
+            continue
+    return hidden
+
+
+# ---- the words of a change: what it made and its key value (round 4) ------------------------
+
+def change_words(what, body):
+    """A change's words with the answer's key value (a volume, a length, a
+    count, a file) when the words do not give it yet ("Padded Profile by 53
+    mm" stays; "Made a mesh" becomes "Made a mesh: 152 facets"). Plain
+    Python."""
+    from . import activity
+
+    what = str(what or "")
+    try:
+        v = activity.key_value(body)
+    except Exception:  # noqa: BLE001
+        v = None
+    if not v or v.lower() in what.lower():
+        return what
+    return f"{what}: {v}"
 
 
 class Echo:
@@ -2054,12 +2717,14 @@ class Echo:
             page = _objects(doc, [page_ref]) if isinstance(page_ref, str) else []
             page = page or [o for o in made if getattr(o, "TypeId", "") == "TechDraw::DrawPage"]
             return show_view_of(page[0]) if page else None
-        sheet = [o for o in made if getattr(o, "TypeId", "") == "Spreadsheet::Sheet"]
+        sheet = [o for o in made if is_sheet(o)]
         if not sheet and name.startswith(SHEET_TOOLS):
-            ref = (body or {}).get("sheet") or (args or {}).get("sheet")
-            sheet = [o for o in _objects(doc, [ref]) if getattr(o, "TypeId", "") == "Spreadsheet::Sheet"]
+            sheet = [o for o in _objects(doc, sheet_refs(name, args, body)) if is_sheet(o)]
         if sheet and name.startswith(SHEET_TOOLS):
             return show_view_of(sheet[0])
+        text = [o for o in made if getattr(o, "TypeId", "") == "App::TextDocument"]
+        if text:
+            return show_view_of(text[0])  # the text in its own tab, as a double-click opens it (core 0028)
         page = [o for o in made if getattr(o, "TypeId", "") == "TechDraw::DrawPage"]
         if page:
             return show_view_of(page[0])
@@ -2074,10 +2739,10 @@ class Echo:
                 except Exception:
                     pass
         got = front_3d(doc)
-        self._container(name, args or {}, body or {})
+        self._container(name, args or {}, body or {}, made)
         return got
 
-    def _container(self, name, args, body):
+    def _container(self, name, args, body, made=()):
         """What a person would have made active for the work: an assembly
         (as Assembly's "Activate assembly" does, its joints then going into
         it), a BIM level or building (the active container new BIM objects
@@ -2120,38 +2785,16 @@ class Echo:
                     # shows them.
                     if self.mode != "short":
                         self._pause()
-        elif name.startswith("bim_") and name in ("bim_level", "bim_building"):
-            made = _objects(doc, [body.get("object")])
-            if made:
-                try:
-                    view.setActiveObject("Arch", made[0])
-                except Exception:
-                    pass
-        elif name.startswith("bim_") and isinstance(args.get("level"), str):
-            lv = _objects(doc, [args["level"]])
-            if lv:
-                try:
-                    view.setActiveObject("Arch", lv[0])
-                except Exception:
-                    pass
         elif name.startswith("cam_"):
-            job = _objects(doc, [body.get("job") or args.get("job")])
-            op = _objects(doc, [body.get("op")])
-            if job:
-                j = job[0]
-                stock = getattr(j, "Stock", None)
-                for o in [stock] + op:
-                    vo = getattr(o, "ViewObject", None) if o is not None else None
-                    if vo is not None:
-                        try:
-                            vo.Visibility = True
-                        except Exception:
-                            pass
-                if stock is not None and getattr(stock, "ViewObject", None) is not None:
-                    try:
-                        stock.ViewObject.Transparency = max(int(stock.ViewObject.Transparency or 0), 70)
-                    except Exception:
-                        pass
+            refs = [body.get(k) for k in ("op", "dressup", "object") if isinstance(body.get(k), str)]
+            refs += [args.get(k) for k in ("op",) if isinstance(args.get(k), str)]
+            shown = cam_shown(doc, list(made) + _objects(doc, refs), body.get("job") or args.get("job"))
+            if shown and isinstance(getattr(self, "tr", None), dict):
+                self.tr["camShown"] = shown
+        # BIM: no level or building is made active here any more. BIM's own
+        # tools never activate one (only a double-click or the Active entry
+        # does: src/Mod/BIM/ArchBuildingPart.py activate), and the active
+        # one stays highlighted for good ("House" green from bim 024 to 068).
 
     def _mode(self, name, args):
         """The mode a person would be in: a sketch's tools work with the
@@ -2317,15 +2960,35 @@ class Echo:
             self._step(tr, "active", self._active_body, made)
         if name.startswith(PLAN_TOOLS):
             self._step(tr, "plan", self._plan, made)
-        self._step(tr, "fit", self._frame, tr, name, made, sketch, subs)
-        if made and how != "worked on" and name.startswith(UNCOVERED):
+        if name.startswith("robot_"):
+            self._step(tr, "robotFramed", self._robot_frame, doc, args, body, made)
+        else:
+            self._step(tr, "fit", self._frame, tr, name, made, sketch, subs)
+        _last_change_sel[:] = [getattr(o, "Name", "?") for o in made] if sketch is None else []
+        _read_sel[0] = False
+        if sketch is not None:
+            # A sketch in edit with other bodies between it and the camera
+            # (sk 029, 037, 053, 060): those made see-through until the next
+            # change, as view state; its own body is never touched.
+            self._step(tr, "uncovered", uncover, doc, [sketch], [sketch_box(sketch)])
+        elif made and how != "worked on" and name.startswith(UNCOVERED):
             self._step(tr, "uncovered", uncover, doc, made)
-        if name == "meshobj_segments":
-            self._step(tr, "segments", segments_shown, made)
+        self._step(tr, "inspectionsHidden", inspections_after, doc, name, made)
+        if name.startswith(("fea_", "fem_")):
+            self._step(tr, "femResult", fem_result_shown, doc, body)
+        if name.startswith(("pd_", "feature_")):
+            self._step(tr, "profilesHidden", profiles_hidden, named)
+        if name == "meshobj_segments" and self._step(tr, "segments", segments_shown, made):
+            # The segments' colours show only with the mesh not selected
+            # (the selection's green covered them: mesh 009).
+            _selected[0] += 1
+            FreeCADGui.Selection.clearSelection()
         self._step(tr, "modelTab", _model_tab_back)
+        self._step(tr, "viewsFollow", views_follow)
         # What was done, said again now that it is done (and naming what it
-        # made): held until the next changing call (HOLD_MS).
-        self._step(tr, "words", say, what, HOLD_MS, where)
+        # made, with the answer's key value): held until the next changing
+        # call (HOLD_MS).
+        self._step(tr, "words", say, change_words(what, body), HOLD_MS, where)
         if self.mode != "short":
             # At a batch's short pace the next call's pause paints it (and a
             # picture of the window paints before it grabs): no paint here.
@@ -2346,8 +3009,14 @@ class Echo:
 
     def _read_shown(self, name, args, body):
         """What a read worked on, selected (its page in front for a TechDraw
-        read): the object it names, not a whole Part Design body, and only
-        in the agent's document when it is the one in front. The labels."""
+        read, its sheet for a spreadsheet read, else the 3D view brought back
+        in front of a page: td 049): the object it names (READ_KEYS), the
+        faces and edges it names ("Block.Face6": a measure's a and b; a
+        shape_query's found faces on its body), not a whole Part Design body,
+        and only in the agent's document when it is the one in front. A read
+        that names nothing puts back the last change's selection when an
+        earlier read had replaced it (asm 050-055: shape_query's
+        ConnectingRod stayed for asm_check, asm_fits, asm_bom). The labels."""
         doc = self.s.doc
         if doc is None or FreeCAD.ActiveDocument is None or FreeCAD.ActiveDocument.Name != doc.Name:
             return None
@@ -2355,19 +3024,44 @@ class Echo:
             ref = (body or {}).get("page") or (args or {}).get("page")
             page = _objects(doc, [ref]) if isinstance(ref, str) else []
             return show_view_of(page[0]) if page else None
-        objs = [o for o in _objects(doc, [args.get(k) for k in ARG_KEYS if args.get(k)])
-                if getattr(o, "TypeId", "") not in ("PartDesign::Body", "Sketcher::SketchObject")]
-        if not objs:
-            return None
+        if name.startswith(SHEET_TOOLS):
+            sheet = [o for o in _objects(doc, sheet_refs(name, args, body)) if is_sheet(o)]
+            if sheet:
+                return show_view_of(sheet[0])
+        subs = read_refs(name, args, body)
+        objs = [o for o in _objects(doc, [args.get(k) for k in READ_KEYS if args.get(k)])
+                if getattr(o, "TypeId", "") not in ("PartDesign::Body", "Sketcher::SketchObject") or subs]
+        picked = [(o, sub) for o in _objects(doc, [r for r, _s in subs]) for r, sub in subs if r in (o.Name, o.Label)]
         import FreeCADGui
 
+        if not objs and not picked:
+            back = _last_change_sel if _read_sel[0] else None
+            if back:
+                _read_sel[0] = False
+                keep = [o for o in _objects(doc, back)]
+                if keep:
+                    _select(keep)
+                    views_follow()
+                    return [o.Label for o in keep]
+            return None
+        front_3d(doc)
         try:
             now = [x.Name for x in FreeCADGui.Selection.getSelection()]
         except Exception:  # noqa: BLE001
             now = None
+        if picked:
+            _selected[0] += 1
+            FreeCADGui.Selection.clearSelection()
+            for o, sub in picked:
+                _add_sel(o, sub)
+            _read_sel[0] = True
+            views_follow()
+            return [f"{o.Label}.{sub}" for o, sub in picked]
         if now == [o.Name for o in objs]:
             return None
         _select(objs)
+        _read_sel[0] = True
+        views_follow()
         return [o.Label for o in objs]
 
     def _reopen_sketch(self, gd, args):
@@ -2473,6 +3167,40 @@ class Echo:
             if gv.getActiveObject("pdbody") is not body_obj:
                 gv.setActiveObject("pdbody", body_obj)
             return body_obj.Name
+        return None
+
+    def _robot_frame(self, doc, args, body, made):
+        """A robot framed on itself: the box from its base to its tool point
+        (and its tool shape), at least ROBOT_MM across — a robot with no
+        drawing of its own (FreeCAD's built-in default has no VRML model)
+        gave the whole-document fit a 10 m view of nothing (core 0081-0092).
+        The robot selected. "robot" when framed. Never raises."""
+        import FreeCADGui
+
+        robots = [o for o in made if getattr(o, "TypeId", "") == "Robot::RobotObject"]
+        if not robots:
+            robots = [o for o in _objects(doc, [(body or {}).get("robot"), (args or {}).get("robot")])
+                      if getattr(o, "TypeId", "") == "Robot::RobotObject"]
+        if not robots:
+            return self._frame(self.tr, "robot_", made, None, [])
+        r = robots[0]
+        pts = []
+        for attr in ("Base", "Tcp"):
+            try:
+                p = getattr(r, attr).Base
+                pts.append((p.x, p.y, p.z))
+            except Exception:  # noqa: BLE001
+                continue
+        tool = getattr(r, "ToolShape", None)
+        b = _box(tool) if tool is not None else None
+        if b is not None:
+            pts += [(b.XMin, b.YMin, b.ZMin), (b.XMax, b.YMax, b.ZMax)]
+        _select([r])
+        box = grown(box_of(pts), least=ROBOT_MM)
+        gd = FreeCADGui.ActiveDocument
+        v = getattr(gd, "ActiveView", None) if gd is not None else None
+        if box is not None and FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and frame_box(v, box):
+            return "robot"
         return None
 
     def _turn(self, made):
