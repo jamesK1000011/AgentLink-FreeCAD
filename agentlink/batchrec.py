@@ -158,9 +158,10 @@ def to_reply(got, first, path, size, lines="all"):
         if v is not None:
             row["health"] = v
     counts = None
-    if only == "refused":
+    if only in ("refused", "counts"):
         counts = {"ok": sum(1 for r in lines if r["ok"]), "refused": sum(1 for r in lines if not r["ok"])}
-        lines = [r for r in lines if not r["ok"] or not clean_verdict(r.get("health"))]
+        # counts: no line at all (a run made for its files or pictures, read from the file afterwards)
+        lines = [] if only == "counts" else [r for r in lines if not r["ok"] or not clean_verdict(r.get("health"))]
     short = {k: v for k, v in got.items() if k != "results"}
     short.update({"results": lines, "written": {"path": path, "bytes": size}})
     if counts is not None:

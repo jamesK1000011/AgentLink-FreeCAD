@@ -621,7 +621,7 @@ def _walk(x):
 # Measured (tokens): the 383 data tools' definitions; the 21 Tool(…) written in code; the lean listing (core and
 # view: what a session loads at its start); one data tool's card; tool_groups' and usage_report's own cards (586 and
 # 150 before needs, arguments and the meter's clause were added: the lean listing grew by 154).
-COSTS = {"dataTools": 383, "dataToolsTokens": 78323, "codedTools": 21, "codedToolsTokens": 8457, "leanTools": 20, "leanListingTokens": 7139,
+COSTS = {"dataTools": 383, "dataToolsTokens": 78323, "codedTools": 21, "codedToolsTokens": 8467, "leanTools": 20, "leanListingTokens": 7150,
          "oneCardMedian": 177, "oneCardLargest": 824, "toolGroupsCard": 712, "usageReportCard": 178}
 
 

@@ -23,6 +23,11 @@ class Lines(unittest.TestCase):
         self.assertEqual([r["i"] for r in out["results"]], [11, 12])
         self.assertEqual(out["counts"], {"ok": 3, "refused": 1})
 
+    def test_counts_gives_no_line(self):
+        out = batchrec.to_reply(self.GOT, 10, "p", 1, lines="counts")
+        self.assertEqual(out["results"], [])
+        self.assertEqual(out["counts"], {"ok": 3, "refused": 1})
+
     def test_clean_verdicts(self):
         for v in ("nothing red", "as before", "Hist: valid, closed, 2 solids (AllowCompound)", "3 parts valid, closed, 1 solid", "Master: empty", None):
             self.assertTrue(batchrec.clean_verdict(v), v)
