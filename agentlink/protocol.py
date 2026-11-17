@@ -9,6 +9,7 @@ import json
 import math
 import os
 import sys
+import threading
 import time
 import traceback
 
@@ -573,7 +574,7 @@ class Server:
                 # plain read (meshobj_info) were not one — and by what the
                 # call is (jobs.background_refusal): a read that writes a
                 # file belongs in the batch's order, a change is never a job.
-                raise ToolError("invalid_input", jobs.background_refusal(tool, args, getattr(s, "batch_now", None) is not None))
+                raise ToolError("invalid_input", jobs.background_refusal(tool, args, getattr(s, "batch_now", None) is not None, s))
             gate = self.gate
             if gate is not None:
                 gate.as_job = as_job
@@ -697,51 +698,140 @@ class _Nothing:
 
 
 class _hang_trace:
-    """While a call runs: should it still be running after 60 s, Python's
-    own stack of every thread is written to <outDir>/crash/hang-<tool>.txt
-    (faulthandler: it writes from a watchdog thread, so a call stuck inside
-    FreeCAD on the GUI thread still leaves where it was). A call that ends
-    in time leaves nothing. Nested calls (a batch's) each re-arm it; the
-    outer one is armed again as an inner one ends."""
+    """While something runs that may hold FreeCAD — a call, a job's worker
+    thread, a batch's wait for a heavy read: should it still be running
+    after AFTER seconds, Python's own stack of every thread is written to
+    <outDir>/crash/hang-<tool>.txt (a job's: hang-job-<tool>.txt, a batch's
+    wait: hang-batch-wait-<tool>.txt), under a first line that says what
+    was running. faulthandler writes it from a watchdog thread of its own,
+    without Python's lock, so a call stuck inside FreeCAD on the GUI thread
+    — or a job's thread stuck there with the GUI thread waiting for it —
+    still leaves where each thread was. One that ends in time leaves
+    nothing; one that ends late adds a last line saying it did end (long,
+    not hung).
 
-    _stack = []
+    faulthandler has one timer for the whole process, and several of these
+    are open at once (a batch's wait round a job's thread, a call inside a
+    batch): the timer is always set for the open one that is due first, and
+    set again for the next as each ends. A batch's own call is not watched
+    (it runs many calls, each watched, and may rightly take 100 s). The one
+    file open is the one the timer writes to; it is closed whenever the
+    timer moves on, and when the last watch ends none is left open."""
 
-    def __init__(self, session, name):
-        self.session, self.name, self.f = session, str(name or "call"), None
+    AFTER = 60.0
+    _lock = threading.Lock()
+    _live = []  # the watches open now
+    _armed = None  # [watch, file, the size of its first line]: what the timer holds
+
+    def __init__(self, session, name, kind="call", after=None):
+        self.name, self.kind = str(name or "call"), kind
+        self.out = session if isinstance(session, str) else getattr(session, "out_dir", None)
+        self.after = float(self.AFTER if after is None else after)
+        self.path, self.on, self.fired, self.off, self.t0 = None, False, False, False, 0.0
 
     def __enter__(self):
         try:
-            import faulthandler
-            import os
+            if not self.out or (self.kind == "call" and self.name == "batch"):
+                return self
             import re
 
-            out = getattr(self.session, "out_dir", None)
-            if not out or self.name == "batch":
-                return self
-            d = os.path.join(out, "crash")
+            d = os.path.join(self.out, "crash")
             os.makedirs(d, exist_ok=True)
-            self.path = os.path.join(d, "hang-" + re.sub(r"[^A-Za-z0-9_]", "_", self.name) + ".txt")
-            self.f = open(self.path, "w")
-            faulthandler.dump_traceback_later(60, repeat=False, file=self.f)
+            stem = ("" if self.kind == "call" else re.sub(r"[^A-Za-z0-9]+", "-", self.kind).strip("-") + "-") + re.sub(r"[^A-Za-z0-9_]", "_", self.name)
+            self.path = os.path.join(d, "hang-" + stem + ".txt")
+            self.t0 = time.time()
+            self.due = time.monotonic() + self.after
+            self.thread = threading.current_thread().name
+            with self._lock:
+                self._live.append(self)
+                self.on = True
+                self._set()
         except Exception:
-            self.f = None
+            pass
         return self
 
     def __exit__(self, *exc):
-        if self.f is None:
+        if not self.on:
             return False
         try:
-            import faulthandler
-            import os
-
-            faulthandler.cancel_dump_traceback_later()
-            empty = self.f.tell() == 0
-            self.f.close()
-            if empty:
-                os.remove(self.path)
+            with self._lock:
+                self.on = False
+                if self in self._live:
+                    self._live.remove(self)
+                self._set()
+                if self.fired:
+                    # It ran long and ended: said under the stacks, so the
+                    # file is not read as a hang.
+                    with open(self.path, "a", encoding="utf-8") as f:
+                        f.write(f"\n{self.kind} {self.name} ended after {time.time() - self.t0:.0f} s: long, not hung.\n")
         except Exception:
             pass
         return False
+
+    @classmethod
+    def _set(cls):
+        """The timer set for the open watch due first (the lock held)."""
+        import faulthandler
+
+        held = cls._armed
+        cls._armed = None
+        if held is not None:
+            w, f, head = held
+            try:
+                faulthandler.cancel_dump_traceback_later()
+            except Exception:
+                pass
+            try:
+                wrote = os.fstat(f.fileno()).st_size > head
+            except Exception:
+                wrote = True
+            try:
+                f.close()
+            except Exception:
+                pass
+            if wrote:
+                w.fired = True
+            else:
+                try:
+                    os.remove(w.path)
+                except OSError:
+                    pass
+        while True:
+            waiting = [w for w in cls._live if not w.fired and not w.off]
+            if not waiting:
+                return
+            w = min(waiting, key=lambda x: x.due)
+            f = None
+            try:
+                f = open(w.path, "w", encoding="utf-8")
+                f.write(f"Agent Link: {w.kind} {w.name} (thread {w.thread}, started {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(w.t0))}) "
+                        f"was still running after {w.after:g} s. Python's stack of every thread then:\n\n")
+                f.flush()
+                head = os.fstat(f.fileno()).st_size
+                # One overdue already (the timer was another's when its time
+                # came) is written at once.
+                faulthandler.dump_traceback_later(max(w.due - time.monotonic(), 0.05), repeat=False, file=f)
+                cls._armed = [w, f, head]
+                return
+            except Exception:
+                # This one cannot be watched (its file, the timer): the
+                # others still get theirs.
+                w.off = True
+                try:
+                    faulthandler.cancel_dump_traceback_later()
+                except Exception:
+                    pass
+                if f is not None:
+                    try:
+                        f.close()
+                        os.remove(w.path)
+                    except Exception:
+                        pass
+
+
+def hang_trace(session, name, kind="call", after=None):
+    """`with hang_trace(session or its folder, tool, kind):` — see _hang_trace."""
+    return _hang_trace(session, name, kind, after)
 
 
 def _acting(session):

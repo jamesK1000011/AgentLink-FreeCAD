@@ -130,6 +130,8 @@ class Session:
         # Each family's own state, under its group's name: one dict per
         # document (the family_state property below; agentlink/docstates.py).
         self.out_dir = out_dir or os.getcwd()
+        # The five below are this document's (properties over the session's
+        # record of the document it is in: agentlink/docstates.py own()).
         self.steps = []  # [{step, tool, bodies: {name: stats}}]
         self.meta = {}  # body name -> {encased: …, generator: …}
         # Undo steps made in this document so far (undo takes one back,
@@ -172,6 +174,33 @@ class Session:
     @family_state.setter
     def family_state(self, state):
         docstates.put(self, self.__dict__.get("_doc"), state)
+
+    # The session's own record of the document — steps, meta, tx, calls and
+    # checks — is that document's too, kept by the same book: a new, opened
+    # or switched-to document has its own steps (history_diff compares one
+    # document's), its own undo count (tx is "steps made in this document")
+    # and its own calls (a macro saved there replays what made it, starting
+    # with its doc_new or doc_open), and the one left finds its own again
+    # for as long as it stays open.
+
+    def _own(self):
+        return docstates.own(self, self.__dict__.get("_doc"))
+
+    def _own_property(key):  # noqa: N805 - builds the five properties below
+        def get(self):
+            return self._own()[key]
+
+        def put(self, value):
+            self._own()[key] = value
+
+        return property(get, put)
+
+    steps = _own_property("steps")
+    meta = _own_property("meta")
+    tx = _own_property("tx")
+    calls = _own_property("calls")
+    checks = _own_property("checks")
+    del _own_property
 
     # ---- every change one undo step ----
 
@@ -394,15 +423,12 @@ class Session:
             return True
 
     def switch(self, doc):
-        """Work in another document from now on: its own undo, steps and
-        families' state."""
-        self.doc = doc  # the families' state follows (the doc property)
+        """Work in another document from now on: its own undo, steps, calls
+        and families' state — fresh for one this session has not worked in
+        (or one reopened: a reverted document is another document), its own
+        again for one it left open (the doc property; agentlink/docstates.py)."""
+        self.doc = doc
         undo_on(self.doc)
-        self.steps = []
-        self.meta = {}
-        self.tx = 0
-        self.calls = []
-        self.checks = {}
         self.__dict__.pop("_stats_cache", None)
 
     def body(self, ref):
@@ -1675,7 +1701,10 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         t = t.for_call(args)
         check_input(t.schema, args)
         if not jobs.wanted(t, args, s, asked=True):
-            raise ToolError("invalid_input", f"{name} cannot run as a job: only a read that leaves the window and the 3D view alone can (not a change, a picture, a window tool or a batch).")
+            why = jobs.why_in_place(name, s)
+            if why:
+                raise ToolError("invalid_input", f"{name} cannot run as a job: it changes nothing, but it {why}, which only the window's own thread may do — call {name} itself; it runs as a plain call.")
+            raise ToolError("invalid_input", f"{name} cannot run as a job: only a read that leaves the window and the 3D view alone can (not a change, a picture, a window tool or a batch) — call {name} itself.")
         return server._as_job(t, args, wait=0 if a.get("wait") is False else None)
 
     def _batch_path(p):
@@ -1985,9 +2014,13 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 left = take_back(start, None, mine.get("names0"))
                 if left:
                     out["removed"] = left
-                if s.doc is start:
-                    s.tx = max(0, s.tx - undone)
-                    s.calls = [x for x in s.calls if x["tx"] <= s.tx]
+                # The steps taken back come off the count of the document
+                # they were made in, the batch's first — also when a call
+                # moved the session to another (its record is set aside).
+                rec = docstates.own_of(s, start)
+                if rec is not None:
+                    rec["tx"] = max(0, rec["tx"] - undone)
+                    rec["calls"] = [x for x in rec["calls"] if x["tx"] <= rec["tx"]]
                 start.recompute()
                 if s.doc is start:
                     s.snapshot("batch rolled back")
@@ -2030,7 +2063,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 from . import jobs as _jobs, keep as _keep
 
                 _t = server.tools.get(c["tool"])
-                heavy_read = bool(_t is not None and _keep.is_heavy(c["tool"]) and _jobs.eligible(_t, c.get("arguments") or {}))
+                heavy_read = bool(_t is not None and _keep.is_heavy(c["tool"]) and _jobs.eligible(_t, c.get("arguments") or {}, s))
             except Exception:
                 heavy_read = False
             if heavy_read:
@@ -2063,7 +2096,15 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                     return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": first + i,
                                   "note": f"Stopped before calls.{first + i} ({c['tool']}), a heavy read, with {max(left, 0):.0f} s of the budget left: "
                                           + (f"batch {{ file: \"{mine['file']}\", from: {first + i} }}" if mine.get("file") else f"batch again with the calls from index {first + i} on") + " runs it first."})
-                if hmiss is None and not _jobs.wait_for(job, max(left, 1)):
+                if hmiss is None:
+                    # The GUI thread stands still here while the job's thread
+                    # works: where both are, should the wait reach a minute
+                    # (the job's own watch says the same from its side).
+                    from .protocol import hang_trace as _hang
+
+                    with _hang(s, c["tool"], "batch wait"):
+                        hdone = _jobs.wait_for(job, max(left, 1))
+                if hmiss is None and not hdone:
                     return ended({"results": results, "ran": len(results), "notRun": len(calls) - i - 1, "next": nxt,
                                   "heavy": {"index": first + i, "tool": c["tool"], "job": job["job"]},
                                   "note": f"calls.{first + i} ({c['tool']}) is a heavy read still running as job {job['job']} when the budget ran out: "

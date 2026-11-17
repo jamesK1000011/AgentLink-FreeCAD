@@ -12,6 +12,19 @@ from agentlink import expr, runners, tooldata  # noqa: E402
 from agentlink.protocol import ToolError  # noqa: E402
 
 
+def _enums(x, key):
+    """Every value a JSON schema lists for a property of that name."""
+    if isinstance(x, dict):
+        for k, v in x.items():
+            if k == key and isinstance(v, dict) and "enum" in v:
+                yield from v["enum"]
+            else:
+                yield from _enums(v, key)
+    elif isinstance(x, list):
+        for v in x:
+            yield from _enums(v, key)
+
+
 class Thing:
     def __init__(self, label, **kw):
         self.Label = label
@@ -232,6 +245,37 @@ class Runners(unittest.TestCase):
         with self.assertRaises(ToolError) as c:
             self.steps(e, {"n": 9}, {"fields": {}})
         self.assertEqual((c.exception.code, c.exception.message, undone), ("invalid_state", "9 is too many ({ n } up to 3).", ["Made"]))
+
+    def test_a_refusal_says_whose_call_it_is(self):
+        """The hub's two other refusal codes: not_allowed (the person's own to
+        say: a confirm they must type, a setting they guard) and refused (what
+        the tool never does from here), each raised as written; a code the
+        runners do not know is found when the entry is checked."""
+        steps = [
+            {"refuse": {"fmt": "confirm: \"{want}\", typed by the person. Nothing was changed."}, "code": "not_allowed", "when": "=a.confirm != want"},
+            {"refuse": {"fmt": "{a.name} is not run from here: the person closes it."}, "code": "refused", "when": "=a.name == 'quit'"},
+        ]
+        e = [{"let": {"want": "install Gears"}}] + steps
+        self.assertEqual(self.steps(e, {"confirm": "install Gears", "name": "fit"}, {"fields": {"ran": "=a.name"}}), {"ran": "fit"})
+        with self.assertRaises(ToolError) as c:
+            self.steps(e, {"name": "fit"}, {"fields": {}})
+        self.assertEqual((c.exception.code, c.exception.message), ("not_allowed", "confirm: \"install Gears\", typed by the person. Nothing was changed."))
+        with self.assertRaises(ToolError) as c:
+            self.steps(e, {"confirm": "install Gears", "name": "quit"}, {"fields": {}})
+        self.assertEqual((c.exception.code, c.exception.message), ("refused", "quit is not run from here: the person closes it."))
+        self.assertLessEqual({"not_allowed", "refused"}, runners.CODES)
+        for code in ("unsupported", "busy", "Not_allowed"):
+            bad = {"dataVersion": "1.0.0", "entries": {"t": {**ENTRY, "runner": "steps", "steps": [{"refuse": "no", "code": code}]}}}
+            self.assertTrue(tooldata.check(bad), code)
+        # The schema lists the same codes for a refuse step.
+        with open(os.path.join(runners.DATA, "tools.schema.json"), encoding="utf-8") as f:
+            self.assertIn(json.dumps(sorted(runners.CODES)), json.dumps(sorted(set(_enums(json.load(f), "code")))))
+        # A wrapper's rule takes them too.
+        rule = {"runner": "make", "target": {"type": "X::Thing"}, "rules": [{"check": "truthy", "of": "$a.ok", "message": "the person's to set.", "code": "not_allowed"}]}
+        self.assertEqual(tooldata.check({"dataVersion": "1.0.0", "entries": {"t": {**ENTRY, **rule}}}), [])
+        with self.assertRaises(ToolError) as c:
+            self.run_entry(rule, {})
+        self.assertEqual(c.exception.code, "not_allowed")
 
     def test_steps_branch_loop_and_try(self):
         steps = [

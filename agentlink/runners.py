@@ -52,7 +52,11 @@ it only when e is truthy):
   {"let": {"name": e, …}}        values, in order ("p, q": e unpacks)
   {"refuse": message, "when": e, "code": "invalid_input", "first": [steps]}
                                  the refusal, in its place in the order;
-                                 first: what to undo before it
+                                 first: what to undo before it; code: one
+                                 of CODES below (not_allowed: the person's
+                                 own to say or set, e.g. a typed confirm
+                                 left out; refused: a thing this tool
+                                 never does, with the tool that does)
   {"make": "Arch.makeStairs", "call": [e, …], "kw": {…}, "as": "o",
    "headless": true}             a maker called (through the family's
                                  headless_call when headless)
@@ -86,7 +90,9 @@ from .protocol import Tool, ToolError
 
 RUNNERS = ("make", "apply", "command", "read", "steps")
 DATA = os.path.join(os.path.dirname(__file__), "data")
-CODES = {"invalid_input", "not_found", "invalid_state", "unavailable", "failed"}
+# The codes a rule or a refuse step may carry: the hub's own refusals. not_allowed is the person's to say or set (a guarded setting, a
+# confirm they must type); refused is what a tool never does from here (a command that would hold the window), said with the tool that does.
+CODES = {"invalid_input", "not_found", "invalid_state", "unavailable", "failed", "not_allowed", "refused"}
 
 _entries = None
 

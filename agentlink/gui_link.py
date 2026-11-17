@@ -702,7 +702,8 @@ class Link:
                 from .store import undo_on
 
                 undo_on(s.doc)
-                s.steps, s.meta = [], {}
+                # Its steps, calls and undo count are the new document's own
+                # (the session's doc property: agentlink/docstates.py).
         try:
             self.session.pinned_label = self.session.doc.Label
         except Exception:

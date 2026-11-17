@@ -20,8 +20,6 @@ KEPT = {
     "gui_input": "one algorithm over Qt widgets (gui_input.Run): events sent step by step inside the window's event loop, the link's deadline set and "
                  "lifted around it, the person's input stood in for inside a context manager with a finally",
     "live_run": "a replay that calls the server's own tools from closures, with a guard ticking inside nested Qt event loops and state put back in a finally",
-    "addon": "installs code: the Addon Manager's installer run with the add-on moved aside and put back when the install or the smoke test fails, and its "
-             "refusal for a missing confirm has the code not_allowed, which a refuse step does not take",
 }
 # What some cases must have answered (not two empty runs alike): fields of an answer, or the whole refusal.
 EXPECT = {
