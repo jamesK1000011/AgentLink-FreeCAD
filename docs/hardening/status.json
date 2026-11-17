@@ -6,6 +6,10 @@
   "health": true,
   "model": "unproven-hub model, run 5, answers read: doc_switch lists the 21 open documents with file and changed, answers Already on it with front true, and refuses a wrong name listing them as label (name); addon list (the Mod folder: 9 add-ons with versions, Agent Link and five more managedBy agentlink_update) and search sheetmetal (found 1, from the catalog, 4 s). Not run: a switch to another document; addon install, update, remove"
  },
+ "addon_test": {
+  "headless": true,
+  "note": "17 Nov: marks model and hubrest model on the Mac, answers read"
+ },
  "align_auto": {
   "description": true,
   "docs": true,
@@ -43,15 +47,18 @@
  },
  "app_recover": {
   "headless": true,
+  "live": true,
   "model": "WorkshopRest",
-  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_add": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_bom": {
   "description": true,
@@ -65,91 +72,117 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_explode": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_export": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_fits": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_ground": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_joint": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_joint_remove": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_limits": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_motion": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_new": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_new_part": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_pose": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_rigid_group": {
   "description": true,
@@ -161,77 +194,99 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "asm_sweep": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)"
+  "live": true,
+  "model": "AssemblyExample: Assembly workbench crank and slider (73 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_building": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_component": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_covering": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_curtain_wall": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_edit": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_equipment": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_export": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_fence": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_frame": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_glue": {
   "description": true,
@@ -250,14 +305,17 @@
   "description": true,
   "docs": true,
   "headless": true,
+  "live": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
-  "note": "type, properties; the classification form was fixed in 527316d and shows right in the exported file"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_ifc_brep": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_image_plane": {
   "description": true,
@@ -271,23 +329,27 @@
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
-  "note": "read product by product with IfcOpenShell (FreeCAD's importer failed: USE_BREP_DATA)"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_layers": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
-  "note": "its note about IFC was corrected after the run (text only)"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_level": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_library": {
   "headless": true,
@@ -298,20 +360,26 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_material": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_member": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_nest": {
   "headless": true,
@@ -322,15 +390,18 @@
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
-  "note": "doors and windows; wallCut_m3 is in every reply"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_panel": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_panel_out": {
   "description": true,
@@ -343,42 +414,54 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_pipe_connector": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_preflight": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_profiles": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_quantities": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse re-run 16:25 after the fixes (hip ridge 1154.7)"
+  "live": true,
+  "model": "ArchHouse re-run 16:25 after the fixes (hip ridge 1154.7)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_rebar": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_reextrude": {
   "description": true,
@@ -420,76 +503,95 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse re-run 16:25 after the fixes (hip ridge 1154.7)"
+  "live": true,
+  "model": "ArchHouse re-run 16:25 after the fixes (hip ridge 1154.7)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_schedule": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_section": {
   "description": true,
   "docs": true,
   "headless": true,
+  "live": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
-  "note": "as data since 7dc955a: BIM model re-run 18:23, answers identical to the code run"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_space": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_stairs": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
-  "note": "the flight tops out one riser below the height (FreeCAD counts risers)"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_structural_system": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_structure": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_trash": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_truss": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_views": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "bim_wall": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
-  "note": "as data since 7dc955a: BIM model re-run 18:23, answers identical to the code run"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "board_enclosure": {
   "description": true,
@@ -503,7 +605,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: body_check Bracket ok, valid, closed, 1 solid, 11214.6, 7 faces, checkGeometry ok, and not_found naming Bracket; report_read last 5 and problems only (count 2, problems 1: a Qt font line); crash_collect copied 15 recovery folders into crash/<time>/recovery, reports []; outputs_clean dry run: wouldGo {}, kept 210, 61 exports listed, nothing removed, and kinds refused. Not run: outputs_clean with dry_run false"
+  "live": true,
+  "model": "unproven-hub model, run 5, answers read: body_check Bracket ok, valid, closed, 1 solid, 11214.6, 7 faces, checkGeometry ok, and not_found naming Bracket; report_read last 5 and problems only (count 2, problems 1: a Qt font line); crash_collect copied 15 recovery folders into crash/<time>/recovery, reports []; outputs_clean dry run: wouldGo {}, kept 210, 61 exports listed, nothing removed, and kinds refused. Not run: outputs_clean with dry_run false",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "cam_dressup": {
   "description": true,
@@ -515,20 +619,26 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CamWalkthrough re-run 16:24 after the fixes"
+  "live": true,
+  "model": "CamWalkthrough re-run 16:24 after the fixes",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "cam_job": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+  "live": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "cam_library": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+  "live": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "cam_list": {
   "description": true,
@@ -549,7 +659,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+  "live": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "cam_post": {
   "description": true,
@@ -563,7 +675,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+  "live": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "cam_remove": {
   "description": true,
@@ -575,7 +689,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CamWalkthrough re-run 16:24 after the fixes"
+  "live": true,
+  "model": "CamWalkthrough re-run 16:24 after the fixes",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "cam_sim": {
   "description": true,
@@ -589,20 +705,26 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+  "live": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "cam_tool": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+  "live": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "cam_tool_add": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)"
+  "live": true,
+  "model": "CamWalkthrough: CAM Walkthrough for the Impatient + tour (34 calls, the re-run after the cam fixes)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "catalog_links": {
   "description": true,
@@ -630,7 +752,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "cmd_list": {
   "headless": true,
@@ -655,7 +779,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "crash_collect": {
   "description": true,
@@ -669,14 +795,18 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model: 100 x 60 x 3 acrylic plate with one hole: pass, least web 16, kerf 0.2 assumed; refused for a body in no cut setup; 4 copies nested by BIM Nest on 300 x 200: DXF 16 lines and 4 circles on OUTER and HOLES, read back and matching, SVG the same"
+  "live": true,
+  "model": "Workshop Make model: 100 x 60 x 3 acrylic plate with one hole: pass, least web 16, kerf 0.2 assumed; refused for a body in no cut setup; 4 copies nested by BIM Nest on 300 x 200: DXF 16 lines and 4 circles on OUTER and HOLES, read back and matching, SVG the same",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "cut_export": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model: 100 x 60 x 3 acrylic plate with one hole: pass, least web 16, kerf 0.2 assumed; refused for a body in no cut setup; 4 copies nested by BIM Nest on 300 x 200: DXF 16 lines and 4 circles on OUTER and HOLES, read back and matching, SVG the same"
+  "live": true,
+  "model": "Workshop Make model: 100 x 60 x 3 acrylic plate with one hole: pass, least web 16, kerf 0.2 assumed; refused for a body in no cut setup; 4 copies nested by BIM Nest on 300 x 200: DXF 16 lines and 4 circles on OUTER and HOLES, read back and matching, SVG the same",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "deviation_align": {
   "description": true,
@@ -795,7 +925,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc re-run 16:36 after the fixes"
+  "live": true,
+  "model": "CoreDoc re-run 16:36 after the fixes",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "doc_new": {
   "description": true,
@@ -809,8 +941,9 @@
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
-  "note": "open and recent"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "doc_revert": {
   "description": true,
@@ -831,7 +964,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc re-run 16:36 after the fixes"
+  "live": true,
+  "model": "CoreDoc re-run 16:36 after the fixes",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "doc_switch": {
   "description": true,
@@ -851,78 +986,99 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_clone": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_dimension": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_facebinder": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_fix": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_fonts": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_from_sketch": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_hatch": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_label": {
   "description": true,
   "docs": true,
   "headless": true,
+  "live": true,
   "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
-  "note": "area shown as FreeCAD formats it (64.95 cm\u00b2)"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_layer": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_link_array": {
   "description": true,
   "docs": true,
   "headless": true,
+  "live": true,
   "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
-  "note": "polar, ortho, circular, path, points"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_modify": {
   "description": true,
   "docs": true,
   "headless": true,
+  "live": true,
   "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
-  "note": "14 ops ran; upgrade left two wires where ends were 1.1e-7 mm apart (FreeCAD's tolerance; the note for it was added after and not run)"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_outline": {
   "headless": true,
@@ -932,33 +1088,43 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_shape": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_style": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_text": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Probe 17:37 after the fixes (cold views computed; tool point read; lettering box)"
+  "live": true,
+  "model": "Probe 17:37 after the fixes (cold views computed; tool point read; lettering box)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "draft_to_sketch": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)"
+  "live": true,
+  "model": "DraftTutorial: Draft tutorial steps 3-13, ShapeString tutorial + tour (81 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "drawing_exploded": {
   "description": true,
@@ -1040,7 +1206,9 @@
  "export": {
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "export_csv": {
   "description": true,
@@ -1054,21 +1222,27 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Fasteners model 16:58 (24 calls; as expected on every call)"
+  "live": true,
+  "model": "Workshop Fasteners model 16:58 (24 calls; as expected on every call)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "fastener_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Fasteners model: three screws listed with their holes kept after the Body edges renumbered (Edge14 to Edge16, Edge19 to Edge21), BOM by item, sheet Fasteners_BOM by Fasteners own Generate BOM"
+  "live": true,
+  "model": "Workshop Fasteners model: three screws listed with their holes kept after the Body edges renumbered (Edge14 to Edge16, Edge19 to Edge21), BOM by item, sheet Fasteners_BOM by Fasteners own Generate BOM",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "fastener_print": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Fasteners model: read only: mode standard, nut [1.03, 0.1], screw [0.99, -0.05]; a wrong mode refused; set not run (it changes the person preference)"
+  "live": true,
+  "model": "Workshop Fasteners model: read only: mode standard, nut [1.03, 0.1], screw [0.99, -0.05]; a wrong mode refused; set not run (it changes the person preference)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "fastener_set": {
   "description": true,
@@ -1082,7 +1256,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Fasteners model 16:58 (24 calls; as expected on every call)"
+  "live": true,
+  "model": "Workshop Fasteners model 16:58 (24 calls; as expected on every call)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "fea_buckle": {
   "description": true,
@@ -1102,7 +1278,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+  "live": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "fea_export": {
   "description": true,
@@ -1135,7 +1313,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+  "live": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "fea_modes": {
   "description": true,
@@ -1153,8 +1333,9 @@
  "fea_parts": {
   "description": true,
   "headless": true,
+  "live": true,
   "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
-  "note": "docs: body not read line by line in the FEM pass"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "fea_probe": {
   "description": true,
@@ -1168,7 +1349,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+  "live": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "fea_results": {
   "description": true,
@@ -1181,7 +1364,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+  "live": true,
+  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "fea_shell": {
   "description": true,
@@ -1199,14 +1384,18 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "feature_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "feature_remove": {
   "description": true,
@@ -1221,7 +1410,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "fem_add": {
   "description": true,
@@ -1247,7 +1438,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model: calibrate kept (0 and 0.2); slide hole 8.2, shaft 8 on every fit; stack 0.6, worst case [0.25, 0.95], rss [0.371, 0.829]"
+  "live": true,
+  "model": "Workshop Make model: calibrate kept (0 and 0.2); slide hole 8.2, shaft 8 on every fit; stack 0.6, worst case [0.25, 0.95], rss [0.371, 0.829]",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "fit_scan_export": {
   "description": true,
@@ -1409,6 +1602,10 @@
   "health": true,
   "model": "Workshop Parts model: baseplate 2x2 [84, 84, 4.65], magnet baseplate 7.65 high with 8 holes of 6.2, project box inside [76, 56, 28] with pilot 2.8 and lid hole 3.7 at calibration 0.3, board box with standoffs and one opening; each put clear beside the last, all sound; floor range refused"
  },
+ "gui_unstick": {
+  "headless": true,
+  "note": "17 Nov: marks model and hubrest model on the Mac, answers read"
+ },
  "guide_read": {
   "description": true,
   "docs": true,
@@ -1421,7 +1618,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: checkpoint cp1 named padded (step 5, 13592 bytes) and listed; diff of the last step (pd_pocket: 12000 to 11214.6, faces 6 to 7, Pocket added) and since the checkpoint by reference (since 5, Hole and Pocket added, three steps), since 99999 refused with the range 0 to 7; undo of pd_pocket (redoCount 1, steps_list counts 1) and redo (counts 2, 11214.6 again); restore to padded by undo (8 steps named, steps_list back to Base and Pad) and not_found listing cp1 (padded). Not run: a restore by file, a checkpoint across a restart"
+  "live": true,
+  "model": "unproven-hub model, run 5, answers read: checkpoint cp1 named padded (step 5, 13592 bytes) and listed; diff of the last step (pd_pocket: 12000 to 11214.6, faces 6 to 7, Pocket added) and since the checkpoint by reference (since 5, Hole and Pocket added, three steps), since 99999 refused with the range 0 to 7; undo of pd_pocket (redoCount 1, steps_list counts 1) and redo (counts 2, 11214.6 again); restore to padded by undo (8 steps named, steps_list back to Base and Pad) and not_found listing cp1 (padded). Not run: a restore by file, a checkpoint across a restart",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "history_diff": {
   "description": true,
@@ -1463,21 +1662,27 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model: 6x2 magnet in a plain solid: pocket 6.4 x 2.2, floor 3, top 5.2, pause after layer 26, roof 4.8; listed, paused, removed (pocket filled, one solid); refused on a PartDesign Body, out of the part, unknown id; Parts model: the bin magnets pause after layer 12 at z 2.4"
+  "live": true,
+  "model": "Workshop Make model: 6x2 magnet in a plain solid: pocket 6.4 x 2.2, floor 3, top 5.2, pause after layer 26, roof 4.8; listed, paused, removed (pocket filled, one solid); refused on a PartDesign Body, out of the part, unknown id; Parts model: the bin magnets pause after layer 12 at z 2.4",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "hw_hole": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "live": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "hw_pauses": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model: 6x2 magnet in a plain solid: pocket 6.4 x 2.2, floor 3, top 5.2, pause after layer 26, roof 4.8; listed, paused, removed (pocket filled, one solid); refused on a PartDesign Body, out of the part, unknown id; Parts model: the bin magnets pause after layer 12 at z 2.4"
+  "live": true,
+  "model": "Workshop Make model: 6x2 magnet in a plain solid: pocket 6.4 x 2.2, floor 3, top 5.2, pause after layer 26, roof 4.8; listed, paused, removed (pocket filled, one solid); refused on a PartDesign Body, out of the part, unknown id; Parts model: the bin magnets pause after layer 12 at z 2.4",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "hw_unembed": {
   "description": true,
@@ -1491,22 +1696,27 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "ifc_edit": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "ifc_find": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
-  "note": "a layered wall has no material in the file: FreeCAD 1.1 exports single materials only"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "ifc_open": {
   "description": true,
@@ -1529,21 +1739,26 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "import_file": {
   "description": true,
   "docs": true,
   "headless": true,
+  "live": true,
   "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
-  "note": "stl as a mesh, step as a body"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "insp_export": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "insp_faces": {
   "description": true,
@@ -1557,26 +1772,34 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "insp_read": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "insp_run": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "insp_update": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "job_start": {
   "headless": true,
@@ -1594,14 +1817,18 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "link_make": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "macro_approve": {
   "headless": true,
@@ -1610,8 +1837,9 @@
  },
  "macro_list": {
   "headless": true,
+  "live": true,
   "model": "WorkshopRest",
-  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "macro_run": {
   "headless": true,
@@ -1620,18 +1848,21 @@
  },
  "macro_save": {
   "headless": true,
+  "live": true,
   "model": "WorkshopRest",
-  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "macro_show": {
   "headless": true,
+  "live": true,
   "model": "WorkshopRest",
-  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "macro_unapprove": {
   "headless": true,
+  "live": true,
   "model": "WorkshopRest",
-  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "manual_check": {
   "description": true,
@@ -1685,8 +1916,9 @@
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
-  "note": "answered by the installed add-on's service"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "material_get": {
   "description": true,
@@ -1700,27 +1932,35 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "material_set": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc re-run 16:36 after the fixes"
+  "live": true,
+  "model": "CoreDoc re-run 16:36 after the fixes",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "measure": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "measure_keep": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "measure_mass": {
   "description": true,
@@ -1916,7 +2156,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+  "live": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "meshobj_boundary": {
   "description": true,
@@ -1941,15 +2183,18 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+  "live": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "meshobj_export": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
-  "note": "background: true was refused in the batch (known)"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "meshobj_from_shape": {
   "description": true,
@@ -1962,39 +2207,50 @@
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
-  "note": "background: true was refused in the batch (known)"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "meshobj_merge": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+  "live": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "meshobj_offset": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+  "live": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "meshobj_primitive": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+  "live": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "meshobj_project": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "MeshHardening re-run 16:25 after the fixes"
+  "live": true,
+  "model": "MeshHardening re-run 16:25 after the fixes",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "meshobj_refine": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+  "live": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "meshobj_repair": {
   "description": true,
@@ -2006,7 +2262,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "MeshHardening re-run 16:25 after the fixes"
+  "live": true,
+  "model": "MeshHardening re-run 16:25 after the fixes",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "meshobj_segments": {
   "description": true,
@@ -2018,7 +2276,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "MeshHardening re-run 16:25 after the fixes"
+  "live": true,
+  "model": "MeshHardening re-run 16:25 after the fixes",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "meshobj_split": {
   "description": true,
@@ -2030,27 +2290,35 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+  "live": true,
+  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "meshobj_trim": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "MeshHardening re-run 16:25 after the fixes"
+  "live": true,
+  "model": "MeshHardening re-run 16:25 after the fixes",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "mill_check": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model: 60 x 40 x 20 block with a 30 x 20 x 8 pocket, 3 mm tool from +z: four sharp inside corners warned at the right places, least wall 10, stock 64 x 44 x 22 and reach 20 assumed and said"
+  "live": true,
+  "model": "Workshop Make model: 60 x 40 x 20 block with a 30 x 20 x 8 pocket, 3 mm tool from +z: four sharp inside corners warned at the right places, least wall 10, stock 64 x 44 x 22 and reach 20 assumed and said",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "mill_export": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
+  "live": true,
+  "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "note_add": {
   "description": true,
@@ -2092,7 +2360,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "object_appearance": {
   "description": true,
@@ -2104,15 +2374,18 @@
   "description": true,
   "docs": true,
   "headless": true,
+  "live": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
-  "note": "the delete ran; the in-use refusal was not reached (wrong document after doc_close)"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "object_duplicate": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "object_freeze": {
   "description": true,
@@ -2125,34 +2398,44 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "object_group": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "object_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "object_rename": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "object_set": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "orca_calibrate": {
   "headless": true,
@@ -2211,33 +2494,43 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "param_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "param_remove": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "param_set": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_attach": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_boolean": {
   "description": true,
@@ -2251,28 +2544,36 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_compound": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_container": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_datum": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_defeature": {
   "description": true,
@@ -2286,63 +2587,81 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_extrude": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_face": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_fillet": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_fix": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_from_mesh": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_import_curves": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_join": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_loft": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_offset": {
   "description": true,
@@ -2356,7 +2675,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_primitive": {
   "description": true,
@@ -2370,14 +2691,18 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_refine": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_review": {
   "description": true,
@@ -2391,28 +2716,36 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_ruled": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_section": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_slices": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_spec": {
   "description": true,
@@ -2433,29 +2766,36 @@
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "SweepProbe 15:52 (bent rod 965.35 mm3)",
-  "note": "failed in the Part model, fixed after, not re-run: not proven"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_thickness": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_transform": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "part_wire": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "patent_draft": {
   "description": true,
@@ -2483,251 +2823,319 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_body_new": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_boolean": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_chamfer": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_clone": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_datum": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_datum_plane": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_draft": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_fillet": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_gear": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_groove": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_helix": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_hole": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_linear_pattern": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_loft": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_mirrored": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_move_feature": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_multitransform": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_pad": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "SketcherTutorial (star 24247.47 mm3; plate 9442.92 mm3 = example 1's own)",
-  "note": "docs and description from the Part Design pass"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_pipe": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_pocket": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_polar_pattern": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_primitive": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_reorder": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_revolution": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_shaft": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_thickness": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pd_tip": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)"
+  "live": true,
+  "model": "PartDesignTutorial: Basic Part Design Tutorial 019 (18507.86 mm3, 20 faces = the wiki file) + tour (113 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "points_crop": {
   "description": true,
   "docs": true,
   "headless": true,
+  "live": true,
   "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)",
-  "note": "box and plane; specks and thin not run (no bunny file)"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "points_export": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
+  "live": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "points_fit": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
+  "live": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "points_import": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
+  "live": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "points_info": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)",
-  "note": "spacing is the median gap to the nearest neighbour (0.34 here; the model expected the grid pitch)"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "points_merge": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
+  "live": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "points_mesh": {
   "description": true,
   "docs": true,
   "headless": true,
+  "live": true,
   "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)",
-  "note": "height and hull; poisson ran (PCL present) but came back open"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "points_sample": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
+  "live": true,
+  "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "points_structure": {
   "description": true,
@@ -2744,8 +3152,9 @@
  },
  "pref_history": {
   "headless": true,
+  "live": true,
   "model": "WorkshopRest",
-  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pref_pack": {
   "description": true,
@@ -2759,7 +3168,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read on Mod/AgentLink/LiveTest: pref_set Probe null to 3 (int) and 3 to 4 with the stored type, pref_get reads Integer 3 and a whole group with its subgroups, a guarded name (ProbeExecutable) and a call with no name refused; pref_reset reset [Probe], notSet [NeverSet], the guarded name refused, and pref_get then refuses Probe (the group is as before the run); pref_pack lists six packs and refuses a wrong name. Not run: pref_pack apply"
+  "live": true,
+  "model": "unproven-hub model, run 5, answers read on Mod/AgentLink/LiveTest: pref_set Probe null to 3 (int) and 3 to 4 with the stored type, pref_get reads Integer 3 and a whole group with its subgroups, a guarded name (ProbeExecutable) and a call with no name refused; pref_reset reset [Probe], notSet [NeverSet], the guarded name refused, and pref_get then refuses Probe (the group is as before the run); pref_pack lists six packs and refuses a wrong name. Not run: pref_pack apply",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "pref_rollback": {
   "headless": true,
@@ -2771,7 +3182,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read on Mod/AgentLink/LiveTest: pref_set Probe null to 3 (int) and 3 to 4 with the stored type, pref_get reads Integer 3 and a whole group with its subgroups, a guarded name (ProbeExecutable) and a call with no name refused; pref_reset reset [Probe], notSet [NeverSet], the guarded name refused, and pref_get then refuses Probe (the group is as before the run); pref_pack lists six packs and refuses a wrong name. Not run: pref_pack apply"
+  "live": true,
+  "model": "unproven-hub model, run 5, answers read on Mod/AgentLink/LiveTest: pref_set Probe null to 3 (int) and 3 to 4 with the stored type, pref_get reads Integer 3 and a whole group with its subgroups, a guarded name (ProbeExecutable) and a call with no name refused; pref_reset reset [Probe], notSet [NeverSet], the guarded name refused, and pref_get then refuses Probe (the group is as before the run); pref_pack lists six packs and refuses a wrong name. Not run: pref_pack apply",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "printed_channel": {
   "description": true,
@@ -2782,16 +3195,18 @@
  },
  "printer_add": {
   "headless": true,
+  "live": true,
   "model": "WorkshopRest",
-  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "printer_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "WorkshopRest",
-  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "printer_pause": {
   "headless": true,
@@ -2817,7 +3232,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "report_get": {
   "description": true,
@@ -3005,16 +3422,18 @@
   "description": true,
   "docs": true,
   "headless": true,
+  "live": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
-  "note": "seconds follow FreeCAD's acceleration (3.0 s for 200 mm at 100 mm/s)"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "robot_run": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
-  "note": "out-of-reach trajectory reported right; the 200 mm stroke from the singular pose missed 13 of 20"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "robot_tool": {
   "description": true,
@@ -3038,35 +3457,45 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "scad_import": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScadProbe 16:21 (no OpenSCAD installed; the window no longer hangs)"
+  "live": true,
+  "model": "ScadProbe 16:21 (no OpenSCAD installed; the window no longer hangs)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "scad_op": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScadProbe 16:21 (no OpenSCAD installed; the window no longer hangs)"
+  "live": true,
+  "model": "ScadProbe 16:21 (no OpenSCAD installed; the window no longer hangs)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "scad_status": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "scad_tidy": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScadProbe 16:21 (no OpenSCAD installed; the window no longer hangs)"
+  "live": true,
+  "model": "ScadProbe 16:21 (no OpenSCAD installed; the window no longer hangs)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "scan_cloud": {
   "description": true,
@@ -3207,7 +3636,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "section_cut": {
   "description": true,
@@ -3297,67 +3728,87 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sheet_export": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sheet_format": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sheet_import": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sheet_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sheet_new": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sheet_read": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sheet_rows": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sheet_set": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sheet_table": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "show": {
   "description": true,
@@ -3371,136 +3822,171 @@
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
-  "note": "tutorial used line, arc, circle, rectangle; other kinds only in the test suite"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_array": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_attach": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_bspline": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_carbon": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_constrain": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_copy": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_edit": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_extend": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_external": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_join": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_merge": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_mirror": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
-  "note": "circle arcs proven; elliptical, parabolic, hyperbolic arcs not"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_new": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_offset": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_project": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_state": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
-  "note": "a read: carries no health"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_to_bspline": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "sketch_validate": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)"
+  "live": true,
+  "model": "SketcherTutorial: Basic Sketcher Tutorial star, example 1 plate, tour (62 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "slice": {
   "description": true,
@@ -3519,7 +4005,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model: bracket sliced by OrcaSlicer 2.5.0 with profiles written from the setup: 50 layers, 17.82 g (Make estimate 17.1), 2 h 7 min; project 3mf written and read back with its presets and statistics"
+  "live": true,
+  "model": "Workshop Make model: bracket sliced by OrcaSlicer 2.5.0 with profiles written from the setup: 50 layers, 17.82 g (Make estimate 17.1), 2 h 7 min; project 3mf written and read back with its presets and statistics",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "slice_with": {
   "description": true,
@@ -3533,7 +4021,13 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model: action list only (56 OrcaSlicer machine presets, no saved bundles); use, export, import and fetch not run"
+  "live": true,
+  "model": "Workshop Make model: action list only (56 OrcaSlicer machine presets, no saved bundles); use, export, import and fetch not run",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
+ },
+ "snapshot_list": {
+  "headless": true,
+  "note": "17 Nov: marks model and hubrest model on the Mac, answers read"
  },
  "steps_render": {
   "description": true,
@@ -3546,72 +4040,93 @@
   "description": true,
   "docs": true,
   "headless": true,
+  "live": true,
   "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)",
-  "note": "size 5 swings wide (242.7 mm for a 53 mm chord): FreeCAD's own"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "surface_boundary": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+  "live": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "surface_cut": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+  "live": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "surface_extend": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+  "live": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "surface_fill": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+  "live": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "surface_loft": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+  "live": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "surface_points": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+  "live": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "surface_polynomial": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+  "live": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "surface_sections": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+  "live": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "surface_sew": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+  "live": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "surface_thicken": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)"
+  "live": true,
+  "model": "SurfaceHardening: Surface GeomFillSurface / Sections / BlendCurve examples + tour (52 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_area": {
   "description": true,
@@ -3625,7 +4140,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_bim": {
   "description": true,
@@ -3640,7 +4157,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_cosmetic": {
   "description": true,
@@ -3653,22 +4172,27 @@
   "description": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
-  "note": "docs: inputs only"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_detail": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_dim": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_dim_align": {
   "description": true,
@@ -3696,14 +4220,18 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_dimset": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_export": {
   "description": true,
@@ -3716,22 +4244,26 @@
   "description": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
-  "note": "docs: inputs only"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_gdt": {
   "description": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
-  "note": "docs: inputs only"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_geometry": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_hatch": {
   "description": true,
@@ -3745,7 +4277,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_lines": {
   "description": true,
@@ -3759,22 +4293,27 @@
   "docs": true,
   "headless": true,
   "health": true,
+  "live": true,
   "model": "Probe 17:37 after the fixes (cold views computed; tool point read; lettering box)",
-  "note": "fixed after the TechDraw run, not re-run: not proven"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_note": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_page": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_projection": {
   "description": true,
@@ -3788,7 +4327,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_section_position": {
   "description": true,
@@ -3823,25 +4364,31 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_view_more": {
   "description": true,
   "docs": true,
   "headless": true,
-  "note": "17 Nov: re-run after the hub fixes"
+  "live": true,
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "td_weld": {
   "headless": true,
   "health": true,
+  "live": true,
   "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
-  "note": "docs: inputs only; description: one clause only"
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "text_document": {
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "texture_apply": {
   "description": true,
@@ -3855,35 +4402,45 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+  "live": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "texture_draft": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model: draft on the box (12 triangles, 6 faces), texture and settings set per layer, layer add / blend / name / solo / remove, a .bumpmesh project loaded back with its two layers; layer 0 blend and removing the last layer refused"
+  "live": true,
+  "model": "Texturizer model: draft on the box (12 triangles, 6 faces), texture and settings set per layer, layer add / blend / name / solo / remove, a .bumpmesh project loaded back with its two layers; layer 0 blend and removing the last layer refused",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "texture_export": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model: STL of a Textured object (25506 triangles) found again by texture_check, 3MF of the draft, .bumpmesh project with its four files, a body refused as not a mesh; prepare wrote the STL (12 triangles) and mask (2) to the output folder"
+  "live": true,
+  "model": "Texturizer model: STL of a Textured object (25506 triangles) found again by texture_check, 3MF of the draft, .bumpmesh project with its four files, a body refused as not a mesh; prepare wrote the STL (12 triangles) and mask (2) to the output folder",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "texture_layer": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model: draft on the box (12 triangles, 6 faces), texture and settings set per layer, layer add / blend / name / solo / remove, a .bumpmesh project loaded back with its two layers; layer 0 blend and removing the last layer refused"
+  "live": true,
+  "model": "Texturizer model: draft on the box (12 triangles, 6 faces), texture and settings set per layer, layer add / blend / name / solo / remove, a .bumpmesh project loaded back with its two layers; layer 0 blend and removing the last layer refused",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "texture_list": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model: 25 geometric textures with credits, 3 hexagon ids, a wrong category refused; estimate on the 40 x 30 x 10 box exactly as worked out: 24576 triangles and 10321920 bytes at 1.0 mm, 69206016 capped to 750000 at 0.02 mm"
+  "live": true,
+  "model": "Texturizer model: 25 geometric textures with credits, 3 hexagon ids, a wrong category refused; estimate on the 40 x 30 x 10 box exactly as worked out: 24576 triangles and 10321920 bytes at 1.0 mm, 69206016 capped to 750000 at 0.02 mm",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "texture_mask": {
   "description": true,
@@ -3904,7 +4461,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)"
+  "live": true,
+  "model": "Texturizer model 17:01 (52 calls; as expected on every call; 29666 triangles for the engine-computed 29442)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "texture_set": {
   "description": true,
@@ -3946,14 +4505,18 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model: M6 row (pitch 1, pitchDia 5.35, minors 4.917 / 4.773, tap drill 5), six sizes nearest 4.5 mm, M7.3 refused; a 4.5 mm hole read as M5x0.5 and #12-24 tap drills, #12-28 minor, needs pitch"
+  "live": true,
+  "model": "Workshop Make model: M6 row (pitch 1, pitchDia 5.35, minors 4.917 / 4.773, tap drill 5), six sizes nearest 4.5 mm, M7.3 refused; a 4.5 mm hole read as M5x0.5 and #12-24 tap drills, #12-28 minor, needs pitch",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "thread_lookup": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model: M6 row (pitch 1, pitchDia 5.35, minors 4.917 / 4.773, tap drill 5), six sizes nearest 4.5 mm, M7.3 refused; a 4.5 mm hole read as M5x0.5 and #12-24 tap drills, #12-28 minor, needs pitch"
+  "live": true,
+  "model": "Workshop Make model: M6 row (pitch 1, pitchDia 5.35, minors 4.917 / 4.773, tap drill 5), six sizes nearest 4.5 mm, M7.3 refused; a 4.5 mm hole read as M5x0.5 and #12-24 tap drills, #12-28 minor, needs pitch",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "tool_groups": {
   "description": true,
@@ -3979,7 +4542,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "usage_report": {
   "headless": true,
@@ -3989,14 +4554,18 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "varset_set": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+  "live": true,
+  "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)",
+  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "view_maps": {
   "description": true,
