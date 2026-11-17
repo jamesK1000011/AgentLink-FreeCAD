@@ -480,7 +480,12 @@ OUT_MORE = {"pd_datum": ("datum",), "pd_datum_plane": ("plane",), "pd_binder": (
             # 0032 selected nothing, so the copy lying on Block stayed opaque).
             "object_appearance": ("set",),
             # Round 6: the axes a grid made (bim 037).
-            "bim_grid": ("axes",)}
+            "bim_grid": ("axes",),
+            # Round 7: the dimensions lined up, formatted or moved (td 066,
+            # 068, 070: nothing was selected), a hatch (td 059), the nested
+            # pieces and their sheet (bim 046: nothing framed or selected).
+            "td_dim_align": ("dims",), "td_dim_format": ("dims",), "td_dim_repair": ("dimension",),
+            "td_hatch": ("hatch",), "bim_nest": ("pieces", "container")}
 # Tools whose own keys name the result alone when given (the answer's
 # "object" is what they read, not what they made): a fit's new body, not the
 # cloud (points 0011); a duplicate's copy (core 0025); the part grounded,
@@ -498,7 +503,7 @@ PIECE_COLOURS = ((0.84, 0.37, 0.0), (0.0, 0.45, 0.70), (0.0, 0.62, 0.45), (0.80,
                  (0.94, 0.89, 0.26), (0.34, 0.71, 0.91))
 # In an answer's list of rows ({ from, copy }), the keys that name what was
 # made.
-ROW_KEYS = ("copy", "made", "view", "cut", "object", "name")
+ROW_KEYS = ("copy", "made", "view", "cut", "object", "name", "dimension")
 # What a changing call made when its answer names nothing: the objects new
 # in the document since before it, at most NEW_MOST of those shown, in a
 # document of at most NEW_LOOK_MOST objects.
@@ -1466,6 +1471,124 @@ def scene_marks(points, lines=(), colour="#e8a33d", labels=()):
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (scene marks): {e}\n")
         return 0
+
+
+# BIM results that lie flat and thin (grid lines, a panel's cut outline, the
+# nested pieces on their sheet): under the slab or too thin to tell from the
+# top (bim 037: the Y lines hidden; 046: no sheet, pieces not framed; 049:
+# the cut half off the view). Their edges drawn over the model in the scene
+# only, with words, and the view framed on them. tool: (the answer's or the
+# arguments' keys naming them).
+OUTLINE_TOOLS = {"bim_grid": ("axes",), "bim_panel_out": ("cuts", "sheet"), "bim_nest": ("container", "pieces")}
+OUTLINE_MOST = 400   # edges drawn at most
+
+
+def outline_names(name, args, body):
+    """The names of what OUTLINE_TOOLS draws for this call, each with its
+    role: [(name, key)]. Rows ({ panel, cut }) give their ROW_KEYS name.
+    Plain Python."""
+    a = args if isinstance(args, dict) else {}
+    b = body if isinstance(body, dict) else {}
+    out = []
+    for k in OUTLINE_TOOLS.get(name, ()):
+        v = b.get(k) if b.get(k) not in (None, "", []) else a.get(k)
+        for x in v if isinstance(v, (list, tuple)) else [v]:
+            if isinstance(x, dict):
+                x = next((x[r] for r in ROW_KEYS if isinstance(x.get(r), str) and x[r]), None)
+            if isinstance(x, str) and x and (x, k) not in out:
+                out.append((x, k))
+    return out
+
+
+def outline_words(name, key, label, i, n_edges):
+    """The word beside an outline: a grid line's number, the sheet, a
+    piece's or a cut's label with its edge count. Plain Python."""
+    if name == "bim_grid":
+        return f"{label} {i + 1}"
+    if key == "container":
+        return f"sheet {label}"
+    if key == "cuts":
+        return f"{label}: {n_edges} edges"
+    return label
+
+
+def outlines_shown(doc, name, args, body):
+    """OUTLINE_TOOLS' result drawn over the model and framed (see there):
+    {lines, labels, framed}, or None when there was nothing to draw. Never
+    raises into the call (the _step around it)."""
+    import FreeCADGui
+
+    lines, labels, box = [], [], None
+    for n, key in outline_names(name, args, body):
+        obj = _objects(doc, [n])
+        sh = getattr(obj[0], "Shape", None) if obj else None
+        if sh is None or sh.isNull():
+            continue
+        edges = list(sh.Edges)[:OUTLINE_MOST - len(lines)]
+        for i, e in enumerate(edges):
+            try:
+                pts = e.discretize(Number=2 if type(getattr(e, "Curve", None)).__name__ in ("Line", "LineSegment") else 24)
+            except Exception:  # noqa: BLE001
+                continue
+            lines.append([(p.x, p.y, p.z) for p in pts])
+            if name == "bim_grid":
+                labels.append(((pts[-1].x, pts[-1].y, pts[-1].z), outline_words(name, key, obj[0].Label, i, len(edges))))
+        bb = sh.BoundBox
+        if name != "bim_grid":
+            c = bb.Center
+            labels.append(((c.x, c.y, bb.ZMax), outline_words(name, key, obj[0].Label, 0, len(sh.Edges))))
+        b = (bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax)
+        box = b if box is None else tuple(min(box[k], b[k]) for k in range(3)) + tuple(max(box[k], b[k]) for k in range(3, 6))
+        if len(lines) >= OUTLINE_MOST:
+            break
+    if not lines:
+        return None
+    n = scene_marks([], lines, "#e8a33d", labels)
+    gd = FreeCADGui.ActiveDocument
+    v = getattr(gd, "ActiveView", None) if gd is not None else None
+    framed = bool(FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and frame_box(v, box))
+    return {"lines": n, "labels": len(labels), "framed": framed}
+
+
+# Calls whose result is the order of a group's children, seen only in the
+# Model tree (bim 060: the tree was behind the Agent Link tab).
+TREE_TOOLS = ("bim_reorder",)
+
+
+def tree_shown(doc, args, body):
+    """The Model tree in front, the group's children selected (the tree
+    opens the group to show them): {tab, selected}. Left alone while a task
+    dialog is open. Never raises into the call (the _step around it)."""
+    import FreeCADGui
+
+    if FreeCADGui.Control.activeDialog():
+        return None
+    out = {"tab": False}
+    _QtCore, _QtGui, QtW = _qt()
+    mw = FreeCADGui.getMainWindow()
+    for bar in mw.findChildren(QtW.QTabBar):
+        try:
+            clean = [str(bar.tabText(k) or "").replace("&", "").strip() for k in range(bar.count())]
+        except RuntimeError:
+            continue
+        if "Model" not in clean:
+            continue
+        try:
+            FreeCADGui.Control.showModelView()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            bar.setCurrentIndex(clean.index("Model"))
+            out["tab"] = True
+        except RuntimeError:
+            pass
+        break
+    g = _objects(doc, [(body or {}).get("group"), (args or {}).get("group")])
+    kids = [o for o in (getattr(g[0], "Group", None) or []) if not _hidden(o)] if g else []
+    if kids:
+        _select(kids)
+        out["selected"] = len(kids)
+    return out
 
 
 def scene_field(V, F, colours, per_face=False):
@@ -4567,6 +4690,10 @@ class Echo:
             self._step(tr, "robotFramed", self._robot_frame, doc, args, body, made)
         else:
             self._step(tr, "fit", self._frame, tr, name, made, sketch, subs)
+        if name in OUTLINE_TOOLS:
+            self._step(tr, "outlines", outlines_shown, doc, name, args, body)
+        if name in TREE_TOOLS:
+            self._step(tr, "tree", tree_shown, doc, args, body)
         _last_change_sel[:] = [getattr(o, "Name", "?") for o in made] if sketch is None else []
         _read_sel[0] = False
         if sketch is not None:

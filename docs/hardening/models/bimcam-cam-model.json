@@ -183,7 +183,7 @@
     ],
     "name": "Nothing"
    },
-   "expect": "refused: no cutting moves (an outside face is no pocket); nothing kept"
+   "expect": "refused before FreeCAD computes it: faces Face1 stands upright and closes round no pocket (an outside face is no pocket); nothing kept; no \"EdgeWalker has no edges to load\" traceback in the Report view (window round 7, 09-014)"
   },
   {
    "tool": "cam_op",

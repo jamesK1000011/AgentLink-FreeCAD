@@ -1295,13 +1295,37 @@ def leader_points(dx, dy, shoulder=5.0):
     return [(0.0, 0.0), (ex, ey)]
 
 
-def free_spot(busy, paper, want, w, h, dx=0.0, dy=0.0, side_of=None, away=None):
+def _cross(p, q, r, t):
+    """Whether segment p-q crosses segment r-t (touching at an end does not
+    count: a leader starts on the part, where other lines end too)."""
+    def side(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    d1, d2, d3, d4 = side(r, t, p), side(r, t, q), side(p, q, r), side(p, q, t)
+    return ((d1 > 1e-9 and d2 < -1e-9) or (d1 < -1e-9 and d2 > 1e-9)) and ((d3 > 1e-9 and d4 < -1e-9) or (d3 < -1e-9 and d4 > 1e-9))
+
+
+def seg_in_box(p, q, box, pad=0.0):
+    """Whether segment p-q runs through box (cx, cy, w, h), grown by pad."""
+    cx, cy, w, h = box
+    x0, x1, y0, y1 = cx - w / 2 - pad, cx + w / 2 + pad, cy - h / 2 - pad, cy + h / 2 + pad
+    if any(x0 < x < x1 and y0 < y < y1 for x, y in (p, q)):
+        return True
+    corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    return any(_cross(p, q, a, b) for a, b in zip(corners, corners[1:] + corners[:1]))
+
+
+def free_spot(busy, paper, want, w, h, dx=0.0, dy=0.0, side_of=None, away=None, lines=(), src=None):
     """A page point near want (page mm, y up) where a box w x h — its centre
     dx, dy from the point, dx turned to the point's side of side_of when
     given (a note right of its leader's end when the end is right of the
     feature) — lies on the paper (5 mm in) and clear of every busy box
-    (cx, cy, w, h) by 1 mm. Rings of 4 mm out to 60 mm, 16 ways each, first
-    the way from away to want. want itself when nothing is free."""
+    (cx, cy, w, h) by 1 mm, and of every busy line [(p, q)] (dimension
+    lines and leaders: the "4.71" text sat on the 30/30 chain's line, the
+    area's leader crossed the frame's, td 048, 061). src: where the new
+    leader starts; its run from there to the point may cross no busy line
+    either. Rings of 4 mm out to 60 mm, 16 ways each, first the way from
+    away to want. want itself when nothing is free."""
     W, H = paper
 
     def free(x, y):
@@ -1309,7 +1333,14 @@ def free_spot(busy, paper, want, w, h, dx=0.0, dy=0.0, side_of=None, away=None):
         cy = y + dy
         if cx - w / 2 < 5 or cx + w / 2 > W - 5 or cy - h / 2 < 5 or cy + h / 2 > H - 5:
             return False
-        return all(not (abs(cx - bx) < (w + bw) / 2 + 1 and abs(cy - by) < (h + bh) / 2 + 1) for bx, by, bw, bh in busy)
+        if not all(not (abs(cx - bx) < (w + bw) / 2 + 1 and abs(cy - by) < (h + bh) / 2 + 1) for bx, by, bw, bh in busy):
+            return False
+        me = (cx, cy, w, h)
+        if any(seg_in_box(p, q, me, 0.5) for p, q in lines):
+            return False
+        if src is not None and any(_cross(tuple(src), (x, y), p, q) for p, q in lines):
+            return False
+        return True
 
     x0, y0 = float(want[0]), float(want[1])
     if free(x0, y0):
@@ -1322,6 +1353,56 @@ def free_spot(busy, paper, want, w, h, dx=0.0, dy=0.0, side_of=None, away=None):
             if free(x, y):
                 return round(x, 2), round(y, 2)
     return x0, y0
+
+
+def moved_text(old_anchor, new_anchor, text):
+    """Where a dimension's text goes when its reference moves (td_dim_repair:
+    the R3 text stayed at the slot's right end while its leader came from
+    the left end, across the slot, td 070): the same offset from the new
+    anchor, turned to the outside along each axis the anchor moved across
+    (an offset pointing back toward where the anchor came from). Page mm
+    or paper mm alike, y up."""
+    ox, oy = text[0] - old_anchor[0], text[1] - old_anchor[1]
+    mx, my = new_anchor[0] - old_anchor[0], new_anchor[1] - old_anchor[1]
+    if mx * ox < 0:
+        ox = -ox
+    if my * oy < 0:
+        oy = -oy
+    return new_anchor[0] + ox, new_anchor[1] + oy
+
+
+def poly_area_centre(pts):
+    """(area, (cx, cy)) of a closed polygon [(x, y)] (shoelace; the area
+    is positive whichever way it runs)."""
+    pts = [tuple(p[:2]) for p in pts]
+    if len(pts) > 1 and pts[0] == pts[-1]:
+        pts = pts[:-1]
+    a = cx = cy = 0.0
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:] + pts[:1]):
+        c = x0 * y1 - x1 * y0
+        a += c
+        cx += (x0 + x1) * c
+        cy += (y0 + y1) * c
+    if abs(a) < 1e-12:
+        n = max(len(pts), 1)
+        return 0.0, (sum(p[0] for p in pts) / n, sum(p[1] for p in pts) / n)
+    return abs(a) / 2, (cx / (3 * a), cy / (3 * a))
+
+
+def pick_view_face(faces, area, centre, tol=0.05):
+    """The index of the view face [(area, (cx, cy))] that shows a part's
+    face of this area and centre (the same paper frame; the centre's y
+    taken either way up, as releases keep it), or None when none is within
+    tol of the area."""
+    best, k = None, None
+    for i, (a, c) in enumerate(faces):
+        if area <= 0 or abs(a - area) / area > tol:
+            continue
+        d = min(math.hypot(c[0] - centre[0], c[1] - centre[1]), math.hypot(c[0] - centre[0], c[1] + centre[1]))
+        score = abs(a - area) / area + d / max(math.sqrt(area), 1e-6)
+        if best is None or score < best:
+            best, k = score, i
+    return k
 
 
 def flip_y(v, cache, pts):
@@ -1355,6 +1436,104 @@ def native_marks(v, on):
         except Exception:
             pass
     return True
+
+
+HATCH_OWN = "AgentLinkHatchOf"
+
+
+def view_faces(v):
+    """The view's faces as FreeCAD numbers them (FaceN of a hatch's Source:
+    DrawViewPart::findFacesNew walks the visible edges with TechDraw's
+    EdgeWalker, keeps the closed wires with an area, biggest first):
+    [(area, (cx, cy))] in the visible edges' frame (paper mm). Worked out
+    again here with TechDraw.edgeWalker on the same edges: FreeCAD has no
+    Python call that hands a view's faces over."""
+    out = []
+    es = list(v.getVisibleEdges() or [])
+    if not es:
+        return out
+    wires = TechDraw.edgeWalker(es, True) or []
+    for w in wires:
+        try:
+            if not w.isClosed():
+                continue
+            a, c = poly_area_centre([(p.x, p.y) for p in w.discretize(Deflection=0.02)])
+        except Exception:
+            continue
+        if a > 1e-6:
+            out.append((a, c))
+    return out
+
+
+def native_hatch(doc, v, src, faces):
+    """FreeCAD's own hatch (TechDraw::DrawHatch, as TechDraw_Hatch makes it:
+    Source the view and its FaceN, the default SVG pattern) on the view
+    faces that show the part's faces, so the hatch shows in the window
+    (td 059: td_hatch only noted the faces for td_export, and the picture
+    showed no hatch). Earlier hatches of Agent Link's on the view are
+    replaced; none given takes them off. What was done, for the answer: a
+    headless fact for a picture with no hatch (viewFaces 0: FreeCAD found
+    no faces in the view, its HandleFaces preference off or the edges not
+    closed; missing: a part face no view face matched)."""
+    out = {}
+    for o in list(getattr(v, "InList", []) or []):
+        try:
+            if o.TypeId == "TechDraw::DrawHatch" and HATCH_OWN in o.PropertiesList:
+                doc.removeObject(o.Name)
+        except Exception:
+            continue
+    if not faces:
+        return out
+    cache = {}
+    fr = frame_of(v, cache)
+    if fr is None:
+        out["why"] = "the view's projection could not be read"
+        return out
+    try:
+        vf = view_faces(v)
+    except Exception as e:
+        out["why"] = f"the view's faces could not be read ({e})"
+        return out
+    out["viewFaces"] = len(vf)
+    subs, missing = [], []
+    for f in faces:
+        try:
+            wire = src.getElement(f).OuterWire
+            a, c = poly_area_centre([to_paper(v, cache, to_view(fr, v, p)) for p in wire.discretize(Deflection=0.02)])
+        except Exception:
+            missing.append(f)
+            continue
+        k = pick_view_face(vf, a, c)
+        if k is None:
+            missing.append(f)
+        elif f"Face{k}" not in subs:
+            subs.append(f"Face{k}")
+    if missing:
+        out["missing"] = missing
+    if not subs:
+        return out
+    try:
+        h = doc.addObject("TechDraw::DrawHatch", "Hatch")
+        h.addProperty("App::PropertyString", HATCH_OWN, "AgentLink", "The part's faces this hatch shows (JSON)")
+        setattr(h, HATCH_OWN, json.dumps(list(faces)))
+        h.Source = (v, subs)
+    except Exception as e:
+        out["why"] = f"FreeCAD made no hatch ({e})"
+        return out
+    try:
+        v.touch()  # as TechDraw_Hatch does: the view draws its hatches again
+        doc.recompute()
+        v.requestPaint()
+    except Exception:
+        pass
+    out["object"] = h.Name
+    out["viewFace"] = subs
+    try:
+        out["pattern"] = os.path.basename(str(h.HatchPattern))
+        out["state"] = list(h.State)
+    except Exception:
+        pass
+    return out
 
 
 def mark_facts(v):
@@ -1641,10 +1820,14 @@ def more_decimals(f, k):
 
 def prefixed(f, pre, count):
     """A dimension's format with a prefix before its number: "diameter" ⌀,
-    "square" □, "count" (count×), or the text itself."""
-    tok = {"diameter": "⌀", "square": "□"}.get(pre)
+    "square" □, the text itself, or "count" (count×, before any symbol)."""
+    import re
+
     if pre == "count":
-        tok = f"{int(count)}× "
+        # Before everything, the ⌀ FreeCAD's diameter format starts with
+        # too: "2× ⌀6", not "⌀2× 6" (td 066 read "⌀1× 6").
+        return f"{int(count)}× " + re.sub(r"^\d+× ", "", f)
+    tok = {"diameter": "⌀", "square": "□"}.get(pre)
     if tok is None:
         tok = str(pre)
     i = f.find("%")
@@ -2118,12 +2301,147 @@ def tools(session):
                 continue
         return out
 
-    def clear_xy(page, want, w, h, dx=0.0, dy=0.0, side_of=None, skip=(), away=None):
+    def clear_xy(page, want, w, h, dx=0.0, dy=0.0, side_of=None, skip=(), away=None, src=None):
         """A page point near want where a box w x h lies on nothing the page
-        holds (busy_boxes; free_spot says how). Labels placed by fixed
-        offsets lay on each other and on the part (td 036, 037, 043, 046,
-        047)."""
-        return free_spot(busy_boxes(page, skip), paper_size(page), want, w, h, dx, dy, side_of, away)
+        holds (busy_boxes, busy_lines; free_spot says how), and the leader
+        from src (page mm) to it crosses no line already there. Labels
+        placed by fixed offsets lay on each other and on the part (td 036,
+        037, 043, 046, 047); boxes alone let a label sit on a dimension's
+        line and a leader cross another (td 048, 061)."""
+        return free_spot(busy_boxes(page, skip), paper_size(page), want, w, h, dx, dy, side_of, away,
+                         busy_lines(page, skip), src)
+
+    def ref_xy(v, n):
+        """A view reference's points on the paper from the view's centre, y
+        up: a vertex's point, a round edge's centre, a straight edge's two
+        ends. [] where it cannot be read."""
+        try:
+            if n.startswith("Vertex"):
+                p = vertices_of(v)[int(n[6:])]
+                x, y = to_paper(v, frames, (p.x, p.y))
+                return [(x, -y)]
+            e = edges_of(v)[int(n[4:])]
+            c = getattr(e, "Curve", None)
+            if hasattr(c, "Radius") and hasattr(c, "Center"):
+                x, y = to_paper(v, frames, (c.Center.x, c.Center.y))
+                return [(x, -y)]
+            out = []
+            for q in (e.Vertexes[0].Point, e.Vertexes[-1].Point):
+                x, y = to_paper(v, frames, (q.x, q.y))
+                out.append((x, -y))
+            return out
+        except Exception:
+            return []
+
+    def dim_refs(d):
+        """(the view, its sub-element names) a dimension measures."""
+        out, v = [], None
+        for item in list(getattr(d, "References2D", []) or []):
+            try:
+                o, subs = item
+            except Exception:
+                continue
+            v = v or o
+            out += [subs] if isinstance(subs, str) else list(subs)
+        return v, [x for x in out if x]
+
+    def dim_anchor(d):
+        """Where a dimension's references are, on the paper from its view's
+        centre, y up: their points' middle (a radius' or diameter's centre).
+        None where any of them cannot be read."""
+        v, names = dim_refs(d)
+        got = [ref_xy(v, n) for n in names] if v is not None else []
+        if not got or not all(got):
+            return None  # one not read: no middle rather than a wrong one
+        pts = [p for g in got for p in g]
+        return sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
+
+    def busy_lines(page, skip=()):
+        """The lines already on a page that a new label may not sit on and a
+        new leader may not cross, [(p, q)] page mm y up: Agent Link's
+        leaders (their start on the view and their way points), a
+        horizontal or vertical dimension's line and extension lines, a
+        radius' or diameter's line from its text to the centre."""
+        skip = {getattr(o, "Name", o) for o in skip}
+        out = []
+        for o in list(getattr(page, "Views", []) or []):
+            if getattr(o, "Name", None) in skip:
+                continue
+            try:
+                if o.isDerivedFrom("TechDraw::DrawLeaderLine"):
+                    par = getattr(o, "LeaderParent", None)
+                    if par is None:
+                        continue
+                    sc = view_scale(par)
+                    X, Y = abs_xy(par)
+                    sx, sy = X + float(o.X) * sc, Y + float(o.Y) * sc
+                    pts = [(sx + float(p.x), sy - float(p.y)) for p in o.WayPoints]
+                    out += list(zip(pts, pts[1:]))
+                elif o.TypeId == "TechDraw::DrawViewDimension":
+                    v, names = dim_refs(o)
+                    if v is None:
+                        continue
+                    X, Y = abs_xy(v)
+                    tx, ty = X + float(o.X), Y + float(o.Y)
+                    pts = [(X + x, Y + y) for n in names for x, y in ref_xy(v, n)]
+                    if o.Type == "DistanceX" and len(pts) >= 2:
+                        out.append(((min(p[0] for p in pts), ty), (max(p[0] for p in pts), ty)))
+                        out += [((p[0], p[1]), (p[0], ty)) for p in pts]
+                    elif o.Type == "DistanceY" and len(pts) >= 2:
+                        out.append(((tx, min(p[1] for p in pts)), (tx, max(p[1] for p in pts))))
+                        out += [((p[0], p[1]), (tx, p[1])) for p in pts]
+                    elif o.Type in ("Radius", "Diameter") and pts:
+                        out.append(((tx, ty), pts[0]))
+            except Exception:
+                continue
+        return [(p, q) for p, q in out if math.hypot(q[0] - p[0], q[1] - p[1]) > 0.05]
+
+    def text_box(d):
+        """A dimension's text as a box on the page (cx, cy, w, h), its text's
+        length guessed at 0.6 of 3.5 mm a character."""
+        v, _ = dim_refs(d)
+        X, Y = abs_xy(v) if v is not None else (0.0, 0.0)
+        try:
+            t = str(d.getText() or "")
+        except Exception:
+            t = "00.00"
+        return X + float(d.X), Y + float(d.Y), len(t) * 3.5 * 0.6 + 2, 5.5
+
+    def nudge_out(d, most=30.0):
+        """A radius' or diameter's text that now lies on something (its text
+        grew: "1× ⌀6.0" ran into the detail circle's B, td 066) moved out
+        along its own line from the centre, 2 mm at a time, until it lies
+        clear; its line keeps its direction. The new [X, Y], or None when it
+        lay clear already, is no radius or diameter, or nothing is clear."""
+        if d.Type not in ("Radius", "Diameter"):
+            return None
+        page = page_holding(dim_refs(d)[0]) if dim_refs(d)[0] is not None else None
+        c = dim_anchor(d)
+        if page is None or c is None:
+            return None
+        busy = busy_boxes(page, [d])
+        lines = busy_lines(page, [d])
+        cx, cy, w, h = text_box(d)
+
+        def clear(x, y):
+            if any(abs(x - bx) < (w + bw) / 2 + 1 and abs(y - by) < (h + bh) / 2 + 1 for bx, by, bw, bh in busy):
+                return False
+            return not any(seg_in_box(p, q, (x, y, w, h), 0.5) for p, q in lines)
+
+        if clear(cx, cy):
+            return None
+        ox, oy = float(d.X) - c[0], float(d.Y) - c[1]
+        L = math.hypot(ox, oy)
+        if L < 1e-6:
+            return None
+        ux, uy = ox / L, oy / L
+        k = 2.0
+        while k <= most:
+            if clear(cx + ux * k, cy + uy * k):
+                d.X, d.Y = float(d.X) + ux * k, float(d.Y) + uy * k
+                return [num(d.X, 2), num(d.Y, 2)]
+            k += 2.0
+        return None
 
     def ref_point(v, r):
         """A view-geometry point for a reference: a vertex, an edge's middle,
@@ -2326,7 +2644,8 @@ def tools(session):
                "next_balloon": next_balloon, "make_compound": lambda shapes: __import__("Part").makeCompound(shapes),
                "doc": doc, "recompute": recompute, "done": done, "place_xy": place_xy, "view_reading": view_reading, "page_reading": page_reading,
                "bodies_for": bodies_for, "direction": direction, "leader": leader, "ref_point": ref_point,
-               "clear_xy": clear_xy, "paper_half": paper_half,
+               "clear_xy": clear_xy, "paper_half": paper_half, "dim_anchor": dim_anchor, "moved_text": moved_text,
+               "nudge_out": nudge_out, "native_hatch": lambda v, src, faces: native_hatch(doc(), v, src, faces),
                "unique": lambda label, *own: s.unique(label, *own), "local": lambda p: paths.local(s, p),
                "pages": lambda: pages(doc()), "page_of": lambda ref: page_of(doc(), ref), "view_of": lambda ref: view_of(doc(), ref),
                "obj_of": lambda ref, types=None, what="object": obj_of(doc(), ref, types, what), "ref_list": picks.ref_list,
