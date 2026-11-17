@@ -79,18 +79,46 @@ def fit_png(path, w, h):
         return False
 
 
-def snap_fit(view, w, h):
+def snap_fit(view, w, h, box=None):
     """Fit the parts to a picture w x h, not to the window: fitAll fits the
     window's shape, so a picture of another shape (a grid's cell, a tall
     one from a wide window) came out with the part a third of the frame.
     Coin's viewAll on the camera for that viewport, the window's fitAll
-    when Coin cannot be reached."""
+    when Coin cannot be reached.
+
+    box: the shown parts' own box (shown_box). The camera is framed on a
+    cube of that size in its place, as FreeCAD's own viewAll(factor) does
+    (View3DInventorViewer.cpp), not on the whole scene graph: FreeCAD's fit
+    leaves out what is marked to be skipped (a sketch's grid, a sketch's
+    edit layer: SoSkipBoundingGroup), which a plain viewAll of the scene
+    graph takes in, with anything else an add-on hangs in the scene. A fit
+    of the scene then left the parts a speck (seen live: view_snapshot
+    { view: iso, fit: true } answered "a speck" on a 40 mm bracket), and
+    the check that follows reads this same box. No box: the scene graph."""
     view.fitAll()
     try:
         from pivy import coin
 
         cam = view.getCameraNode()
-        cam.viewAll(view.getSceneGraph(), coin.SbViewportRegion(int(w), int(h)))
+        region = coin.SbViewportRegion(int(w), int(h))
+        size = None
+        if box is not None:
+            size = [max(float(v), 1e-6) for v in (box.XLength, box.YLength, box.ZLength)]
+        if size is not None and max(size) > 1e-6:
+            graph = coin.SoSeparator()
+            graph.ref()
+            try:
+                at, cube = coin.SoTranslation(), coin.SoCube()
+                c = box.Center
+                at.translation.setValue(float(c.x), float(c.y), float(c.z))
+                cube.width, cube.height, cube.depth = size
+                graph.addChild(at)
+                graph.addChild(cube)
+                cam.viewAll(graph, region)
+            finally:
+                graph.unref()
+        else:
+            cam.viewAll(view.getSceneGraph(), region)
         return True
     except Exception:  # noqa: BLE001 - the window's own fit stands
         return False
@@ -280,6 +308,45 @@ def _snap_shown(s):
         return True
 
 
+def shown_box(s):
+    """(how many objects with a shape, a mesh or points are shown in the
+    window, their box together or None). Reads only."""
+    import FreeCAD
+
+    shown, box = 0, None
+    for o in s.doc.Objects:
+        try:
+            vo = o.ViewObject
+            if vo is None or not vo.Visibility:
+                continue
+            bb = None
+            sh = getattr(o, "Shape", None)
+            if sh is not None and not sh.isNull():
+                bb = sh.BoundBox
+            elif getattr(o, "Mesh", None) is not None and o.Mesh.CountFacets:
+                bb = o.Mesh.BoundBox
+            elif getattr(o, "Points", None) is not None and o.Points.CountPoints:
+                bb = o.Points.BoundBox
+            if bb is None or not bb.isValid():
+                continue
+            shown += 1
+            if box is None:
+                box = FreeCAD.BoundBox(bb)
+            else:
+                box.add(bb)
+        except Exception:
+            continue
+    return shown, box
+
+
+def _fit_box(s):
+    """The box a fit frames (shown_box's), or None when it cannot be read."""
+    try:
+        return shown_box(s)[1]
+    except Exception:  # noqa: BLE001 - the scene graph is fitted instead
+        return None
+
+
 def _snap_empty(s, view):
     """Why the window's view shows nothing or almost nothing of the model
     (emptywhy.off_screen), or None: what is shown, and where the shown
@@ -289,29 +356,7 @@ def _snap_empty(s, view):
     try:
         import FreeCAD
 
-        shown, box = 0, None
-        for o in s.doc.Objects:
-            try:
-                vo = o.ViewObject
-                if vo is None or not vo.Visibility:
-                    continue
-                bb = None
-                sh = getattr(o, "Shape", None)
-                if sh is not None and not sh.isNull():
-                    bb = sh.BoundBox
-                elif getattr(o, "Mesh", None) is not None and o.Mesh.CountFacets:
-                    bb = o.Mesh.BoundBox
-                elif getattr(o, "Points", None) is not None and o.Points.CountPoints:
-                    bb = o.Points.BoundBox
-                if bb is None or not bb.isValid():
-                    continue
-                shown += 1
-                if box is None:
-                    box = FreeCAD.BoundBox(bb)
-                else:
-                    box.add(bb)
-            except Exception:
-                continue
+        shown, box = shown_box(s)
         hidden = []
         try:
             hidden = [o.Label for o in s.hidden_in(s.doc)]
@@ -652,7 +697,7 @@ def tools(session):
             for n in views:
                 turn(view, n)
                 if fit:
-                    snap_fit(view, cw, ch)
+                    snap_fit(view, cw, ch, _fit_box(s))
                 q = paths.out_file(s, "view_snapshot", f"snapshot_{n}.png", ".png")
                 view.saveImage(q, cw, ch, bg)
                 fit_png(q, cw, ch)
@@ -674,7 +719,7 @@ def tools(session):
         "maps": lambda: render.MAPS, "layers": lambda: render.LAYERS, "views": lambda: list(render.VIEWS),
         "SNAP_TURN": SNAP_TURN, "GRID": GRID, "alias": lambda n: ALIASES.get(str(n).lower(), str(n).lower()),
         "gui_up": gui_up, "active_view": active_view, "turn": turn,
-        "snap_fit": snap_fit, "snap_empty": lambda view: _snap_empty(s, view), "nothing_shown": nothing_shown,
+        "snap_fit": lambda view, w, h: snap_fit(view, w, h, _fit_box(s)), "snap_empty": lambda view: _snap_empty(s, view), "nothing_shown": nothing_shown,
         "snap_size": snap_size, "shots": shots, "snap_combine": snap_combine, "fit_png": fit_png, "png_size": png_size,
         "out_file": lambda name: paths.out_file(s, "view_snapshot", name, ".png"),
         "filesize": os.path.getsize, "read_bytes": read_bytes,

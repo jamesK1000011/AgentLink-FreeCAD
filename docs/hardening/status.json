@@ -1,4 +1,11 @@
 {
+ "addon": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: doc_switch lists the 21 open documents with file and changed, answers Already on it with front true, and refuses a wrong name listing them as label (name); addon list (the Mod folder: 9 add-ons with versions, Agent Link and five more managedBy agentlink_update) and search sheetmetal (found 1, from the catalog, 4 s). Not run: a switch to another document; addon install, update, remove"
+ },
  "align_auto": {
   "description": true,
   "docs": true,
@@ -26,6 +33,13 @@
   "headless": true,
   "health": true,
   "model": "ScanRuler measure model, run 3, answers read: Worn overlapsInPlace true, the way in not swept, blocked 1 (run 2: blocked 19.25 mm short); symmetry rms 0, matchedShare 0.992 from Mirror with the note that 0.8 % of the samples have no mirror image; pre-warp rms 0 at the target vertices, seenFromPrint largest 1.0, warning, stop false (run 2: stop true)"
+ },
+ "app_extensions": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: list (one repository, loaded agentlink_collab 0.1.0) and add with no repo refused before anything is written. Not run: add, remove, sync"
  },
  "asm_add": {
   "description": true,
@@ -214,6 +228,13 @@
   "health": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
  },
+ "bim_glue": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "bim-rest model, run 5, answers read: bim_reference of a saved 1000 x 500 x 300 box (file shelf-block.FCStd, part null, volume 150000000, box as built) and a missing file refused; bim_image_plane 8000 x 6000 as asked and 4000 x 3000 from the picture (Pillow is there), a missing picture refused; bim_reextrude of Stub wall.Face6: the same 3000 x 200 x 2600 block again (1560000000 mm3, wire true), no face refused; bim_glue of two 500 mm blocks (of 2, health: 2 solids), one object refused; bim_rewire of three lines into two wires (from 3), a wrong name refused. Not read: the two wires lengths (the answer has none), the reference kept up to date after the file changes"
+ },
  "bim_grid": {
   "description": true,
   "docs": true,
@@ -232,6 +253,13 @@
   "docs": true,
   "headless": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_image_plane": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "bim-rest model, run 5, answers read: bim_reference of a saved 1000 x 500 x 300 box (file shelf-block.FCStd, part null, volume 150000000, box as built) and a missing file refused; bim_image_plane 8000 x 6000 as asked and 4000 x 3000 from the picture (Pillow is there), a missing picture refused; bim_reextrude of Stub wall.Face6: the same 3000 x 200 x 2600 block again (1560000000 mm3, wire true), no face refused; bim_glue of two 500 mm blocks (of 2, health: 2 solids), one object refused; bim_rewire of three lines into two wires (from 3), a wrong name refused. Not read: the two wires lengths (the answer has none), the reference kept up to date after the file changes"
  },
  "bim_import": {
   "description": true,
@@ -339,12 +367,40 @@
   "health": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
  },
+ "bim_reextrude": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "bim-rest model, run 5, answers read: bim_reference of a saved 1000 x 500 x 300 box (file shelf-block.FCStd, part null, volume 150000000, box as built) and a missing file refused; bim_image_plane 8000 x 6000 as asked and 4000 x 3000 from the picture (Pillow is there), a missing picture refused; bim_reextrude of Stub wall.Face6: the same 3000 x 200 x 2600 block again (1560000000 mm3, wire true), no face refused; bim_glue of two 500 mm blocks (of 2, health: 2 solids), one object refused; bim_rewire of three lines into two wires (from 3), a wrong name refused. Not read: the two wires lengths (the answer has none), the reference kept up to date after the file changes"
+ },
+ "bim_reference": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "bim-rest model, run 5, answers read: bim_reference of a saved 1000 x 500 x 300 box (file shelf-block.FCStd, part null, volume 150000000, box as built) and a missing file refused; bim_image_plane 8000 x 6000 as asked and 4000 x 3000 from the picture (Pillow is there), a missing picture refused; bim_reextrude of Stub wall.Face6: the same 3000 x 200 x 2600 block again (1560000000 mm3, wire true), no face refused; bim_glue of two 500 mm blocks (of 2, health: 2 solids), one object refused; bim_rewire of three lines into two wires (from 3), a wrong name refused. Not read: the two wires lengths (the answer has none), the reference kept up to date after the file changes"
+ },
+ "bim_remove_shape": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "bim-rest model, run 5, answers read: a 250 x 250 x 2000 column turned [Post]; object_list after it has no Post and one structure of 125000000 mm3, 250 x 250 x 2000 (name Structure001, label Structure002), no error; a wrong name refused listing the objects. Not read: that Structure002 was the column own internal name (no answer gives it); a wall, and a shape that is not a box"
+ },
  "bim_reorder": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
   "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+ },
+ "bim_rewire": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "bim-rest model, run 5, answers read: bim_reference of a saved 1000 x 500 x 300 box (file shelf-block.FCStd, part null, volume 150000000, box as built) and a missing file refused; bim_image_plane 8000 x 6000 as asked and 4000 x 3000 from the picture (Pillow is there), a missing picture refused; bim_reextrude of Stub wall.Face6: the same 3000 x 200 x 2600 block again (1560000000 mm3, wire true), no face refused; bim_glue of two 500 mm blocks (of 2, health: 2 solids), one object refused; bim_rewire of three lines into two wires (from 3), a wrong name refused. Not read: the two wires lengths (the answer has none), the reference kept up to date after the file changes"
  },
  "bim_roof": {
   "description": true,
@@ -428,6 +484,13 @@
   "headless": true,
   "health": true,
   "model": "Workshop Electronics model, run 2, answers read: board 50 x 30 x 1.6, 2 copper layers, holes 3.2, 3.2 and 2.2, J1 and C1 tall, R1 and U1 with no height, moved [-125,115]; enclosure 56 x 36 x 21.6 with M3 standoffs and the J1 opening; a Part::Box refused with the plain-copy call, the channel 46.14 mm open both ends, 138.67 mm3 out, 4,406 ohm of filament, awg 22 fits, awg 99 refused before any cut, a path outside refused; order zips with 3 gerbers, drill, BOM, CPL, DRC not run (no kicad-cli)"
+ },
+ "body_check": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: body_check Bracket ok, valid, closed, 1 solid, 11214.6, 7 faces, checkGeometry ok, and not_found naming Bracket; report_read last 5 and problems only (count 2, problems 1: a Qt font line); crash_collect copied 15 recovery folders into crash/<time>/recovery, reports []; outputs_clean dry run: wouldGo {}, kept 210, 61 exports listed, nothing removed, and kinds refused. Not run: outputs_clean with dry_run false"
  },
  "cam_dressup": {
   "description": true,
@@ -556,6 +619,13 @@
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
  },
+ "cmd_run": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: cmd_run Sketcher_LeaveSketch with the sketch open (ran, wasActive true) and with none (ran null, already \u2026), Std_ViewIsometric (ran, objectsAdded 0), an unknown command refused, Std_Delete refused as greyed with nothing selected (Bracket still there after); menu_list View: 111 items with paths, commands, enabled and checked, an unknown menu refused listing the nine menus; menu_run View > Standard views > Fit all pressed Std_ViewFitAll (the titles matched without regard to case; 2 s), a submenu and an unknown item refused. Not run: the refusal of Std_Quit and the like"
+ },
  "compound_explode": {
   "description": true,
   "docs": true,
@@ -569,6 +639,13 @@
   "headless": true,
   "health": true,
   "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+ },
+ "crash_collect": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: body_check Bracket ok, valid, closed, 1 solid, 11214.6, 7 faces, checkGeometry ok, and not_found naming Bracket; report_read last 5 and problems only (count 2, problems 1: a Qt font line); crash_collect copied 15 recovery folders into crash/<time>/recovery, reports []; outputs_clean dry run: wouldGo {}, kept 210, 61 exports listed, nothing removed, and kinds refused. Not run: outputs_clean with dry_run false"
  },
  "cut_check": {
   "description": true,
@@ -738,6 +815,13 @@
   "headless": true,
   "health": true,
   "model": "CoreDoc re-run 16:36 after the fixes"
+ },
+ "doc_switch": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: doc_switch lists the 21 open documents with file and changed, answers Already on it with front true, and refuses a wrong name listing them as label (name); addon list (the Mod folder: 9 add-ons with versions, Agent Link and five more managedBy agentlink_update) and search sheetmetal (found 1, from the catalog, 4 s). Not run: a switch to another document; addon install, update, remove"
  },
  "draft_2d_view": {
   "description": true,
@@ -999,6 +1083,13 @@
   "headless": true,
   "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
  },
+ "fea_export": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read (a 100 x 10 x 10 steel cantilever, 100 N at the tip, solved by the own deck): fea_results refused before any solve, then the solve again unchanged (59.906 MPa at the root, 0.1908 mm at the tip against 0.1905 by beam theory, safety 4.17, 2312 nodes, 1093 elements), stale false, and after the load was doubled the kept answer with stale true and staleWhy; fea_export refused before any solve, then vtu and csv named unproven-cantilever with 2312 nodes and 1093 elements, and csv alone as Beam-stress.csv. Not read: the files themselves"
+ },
  "fea_frame": {
   "description": true,
   "docs": true,
@@ -1058,6 +1149,13 @@
   "headless": true,
   "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
  },
+ "fea_results": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read (a 100 x 10 x 10 steel cantilever, 100 N at the tip, solved by the own deck): fea_results refused before any solve, then the solve again unchanged (59.906 MPa at the root, 0.1908 mm at the tip against 0.1905 by beam theory, safety 4.17, 2312 nodes, 1093 elements), stale false, and after the load was doubled the kept answer with stale true and staleWhy; fea_export refused before any solve, then vtu and csv named unproven-cantilever with 2312 nodes and 1093 elements, and csv alone as Beam-stress.csv. Not read: the files themselves"
+ },
  "fea_setup": {
   "description": true,
   "docs": true,
@@ -1088,6 +1186,9 @@
  "feature_remove": {
   "description": true,
   "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: Pad refused as used by Hole (Pocket not named), a wrong name refused listing Base, Pad, Hole, Pocket; Pocket removed with its sketch (removed [Pocket, Hole], tip Pad, volume 12000, volumeChange 785.4, steps_list back to Base and Pad); keepSketch removed [Pocket] only and steps_list still lists Slot. Not run: force",
   "note": "only its refusal path ran in the Part Design model: not proven"
  },
  "feature_suppress": {
@@ -1276,6 +1377,48 @@
   "headless": true,
   "health": true,
   "model": "Workshop Parts model: baseplate 2x2 [84, 84, 4.65], magnet baseplate 7.65 high with 8 holes of 6.2, project box inside [76, 56, 28] with pilot 2.8 and lid hole 3.7 at calibration 0.3, board box with standoffs and one opening; each put clear beside the last, all sound; floor range refused"
+ },
+ "guide_read": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: session_state on the empty document (freecad 1.1.3, where window, outDir), with Bracket hidden (hidden and hiddenNote, bodies []), shown again (12000, 6 faces) and at the end (8 bodies, assembly Stand of Foot and Post, step 49); tool_groups: 68 groups with core on and no tool names, find (feature_remove first of 5), one tool card (required [feature]), group core (21 tools), now with fits and next, and both refusals (did you mean feature_remove; the groups listed); guide_read: the index of 40 guides with tokens, one section of feature, and the refusals naming its ten sections and the guides"
+ },
+ "history_checkpoint": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: checkpoint cp1 named padded (step 5, 13592 bytes) and listed; diff of the last step (pd_pocket: 12000 to 11214.6, faces 6 to 7, Pocket added) and since the checkpoint by reference (since 5, Hole and Pocket added, three steps), since 99999 refused with the range 0 to 7; undo of pd_pocket (redoCount 1, steps_list counts 1) and redo (counts 2, 11214.6 again); restore to padded by undo (8 steps named, steps_list back to Base and Pad) and not_found listing cp1 (padded). Not run: a restore by file, a checkpoint across a restart"
+ },
+ "history_diff": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: checkpoint cp1 named padded (step 5, 13592 bytes) and listed; diff of the last step (pd_pocket: 12000 to 11214.6, faces 6 to 7, Pocket added) and since the checkpoint by reference (since 5, Hole and Pocket added, three steps), since 99999 refused with the range 0 to 7; undo of pd_pocket (redoCount 1, steps_list counts 1) and redo (counts 2, 11214.6 again); restore to padded by undo (8 steps named, steps_list back to Base and Pad) and not_found listing cp1 (padded). Not run: a restore by file, a checkpoint across a restart"
+ },
+ "history_redo": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: checkpoint cp1 named padded (step 5, 13592 bytes) and listed; diff of the last step (pd_pocket: 12000 to 11214.6, faces 6 to 7, Pocket added) and since the checkpoint by reference (since 5, Hole and Pocket added, three steps), since 99999 refused with the range 0 to 7; undo of pd_pocket (redoCount 1, steps_list counts 1) and redo (counts 2, 11214.6 again); restore to padded by undo (8 steps named, steps_list back to Base and Pad) and not_found listing cp1 (padded). Not run: a restore by file, a checkpoint across a restart"
+ },
+ "history_restore": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: checkpoint cp1 named padded (step 5, 13592 bytes) and listed; diff of the last step (pd_pocket: 12000 to 11214.6, faces 6 to 7, Pocket added) and since the checkpoint by reference (since 5, Hole and Pocket added, three steps), since 99999 refused with the range 0 to 7; undo of pd_pocket (redoCount 1, steps_list counts 1) and redo (counts 2, 11214.6 again); restore to padded by undo (8 steps named, steps_list back to Base and Pad) and not_found listing cp1 (padded). Not run: a restore by file, a checkpoint across a restart"
+ },
+ "history_undo": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: checkpoint cp1 named padded (step 5, 13592 bytes) and listed; diff of the last step (pd_pocket: 12000 to 11214.6, faces 6 to 7, Pocket added) and since the checkpoint by reference (since 5, Hole and Pocket added, three steps), since 99999 refused with the range 0 to 7; undo of pd_pocket (redoCount 1, steps_list counts 1) and redo (counts 2, 11214.6 again); restore to padded by undo (8 steps named, steps_list back to Base and Pad) and not_found listing cp1 (padded). Not run: a restore by file, a checkpoint across a restart"
  },
  "hw_embed": {
   "description": true,
@@ -1517,6 +1660,20 @@
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
   "note": "with density or material given; with neither the installed add-on answers in its own form"
  },
+ "menu_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: cmd_run Sketcher_LeaveSketch with the sketch open (ran, wasActive true) and with none (ran null, already \u2026), Std_ViewIsometric (ran, objectsAdded 0), an unknown command refused, Std_Delete refused as greyed with nothing selected (Bracket still there after); menu_list View: 111 items with paths, commands, enabled and checked, an unknown menu refused listing the nine menus; menu_run View > Standard views > Fit all pressed Std_ViewFitAll (the titles matched without regard to case; 2 s), a submenu and an unknown item refused. Not run: the refusal of Std_Quit and the like"
+ },
+ "menu_run": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: cmd_run Sketcher_LeaveSketch with the sketch open (ran, wasActive true) and with none (ran null, already \u2026), Std_ViewIsometric (ran, objectsAdded 0), an unknown command refused, Std_Delete refused as greyed with nothing selected (Bracket still there after); menu_list View: 111 items with paths, commands, enabled and checked, an unknown menu refused listing the nine menus; menu_run View > Standard views > Fit all pressed Std_ViewFitAll (the titles matched without regard to case; 2 s), a submenu and an unknown item refused. Not run: the refusal of Std_Quit and the like"
+ },
  "mesh_apply_reduced": {
   "description": true,
   "docs": true,
@@ -1697,6 +1854,13 @@
   "headless": true,
   "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
  },
+ "meshobj_curvature": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: a ball of radius 10 (2514 points): medianRadius 9.987, flatPercent 0, tightestRadius 2.2546 at the poles; flat 0.5 counts all of it flat (100); a 20 x 20 x 2 plate in 1 mm triangles: flatPercent 72.98; a wrong name refused naming Ball mesh and Plate mesh"
+ },
  "meshobj_decimate": {
   "description": true,
   "docs": true,
@@ -1818,6 +1982,41 @@
   "health": true,
   "model": "Workshop Make model 16:39-16:57 (74 calls; accepted/refused as expected on every call, values not read one by one)"
  },
+ "note_add": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: a note on the top face of Bracket (id 1, at [20, 15, 10], Face6), empty text refused; listed; answered (id by reference); done true, left out of the open list, done false again; deleted (left 0), a wrong id refused; steps_render: two step pictures and the sheet in unproven_steps with the two rows, width 50 refused (that refusal is kept in the job list as a failed job). Not read: the pictures"
+ },
+ "note_answer": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: a note on the top face of Bracket (id 1, at [20, 15, 10], Face6), empty text refused; listed; answered (id by reference); done true, left out of the open list, done false again; deleted (left 0), a wrong id refused; steps_render: two step pictures and the sheet in unproven_steps with the two rows, width 50 refused (that refusal is kept in the job list as a failed job). Not read: the pictures"
+ },
+ "note_delete": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: a note on the top face of Bracket (id 1, at [20, 15, 10], Face6), empty text refused; listed; answered (id by reference); done true, left out of the open list, done false again; deleted (left 0), a wrong id refused; steps_render: two step pictures and the sheet in unproven_steps with the two rows, width 50 refused (that refusal is kept in the job list as a failed job). Not read: the pictures"
+ },
+ "note_done": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: a note on the top face of Bracket (id 1, at [20, 15, 10], Face6), empty text refused; listed; answered (id by reference); done true, left out of the open list, done false again; deleted (left 0), a wrong id refused; steps_render: two step pictures and the sheet in unproven_steps with the two rows, width 50 refused (that refusal is kept in the job list as a failed job). Not read: the pictures"
+ },
+ "note_list": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: a note on the top face of Bracket (id 1, at [20, 15, 10], Face6), empty text refused; listed; answered (id by reference); done true, left out of the open list, done false again; deleted (left 0), a wrong id refused; steps_render: two step pictures and the sheet in unproven_steps with the two rows, width 50 refused (that refusal is kept in the job list as a failed job). Not read: the pictures"
+ },
  "object_align": {
   "description": true,
   "docs": true,
@@ -1884,6 +2083,13 @@
   "headless": true,
   "health": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+ },
+ "outputs_clean": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: body_check Bracket ok, valid, closed, 1 solid, 11214.6, 7 faces, checkGeometry ok, and not_found naming Bracket; report_read last 5 and problems only (count 2, problems 1: a Qt font line); crash_collect copied 15 recovery folders into crash/<time>/recovery, reports []; outputs_clean dry run: wouldGo {}, kept 210, 61 exports listed, nothing removed, and kinds refused. Not run: outputs_clean with dry_run false"
  },
  "pack_plan": {
   "description": true,
@@ -2435,6 +2641,34 @@
   "headless": true,
   "model": "PointsModel: Points workbench pages on sampled shapes (35 calls; the 5 Stanford-bunny calls had no file)"
  },
+ "pref_get": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read on Mod/AgentLink/LiveTest: pref_set Probe null to 3 (int) and 3 to 4 with the stored type, pref_get reads Integer 3 and a whole group with its subgroups, a guarded name (ProbeExecutable) and a call with no name refused; pref_reset reset [Probe], notSet [NeverSet], the guarded name refused, and pref_get then refuses Probe (the group is as before the run); pref_pack lists six packs and refuses a wrong name. Not run: pref_pack apply"
+ },
+ "pref_pack": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read on Mod/AgentLink/LiveTest: pref_set Probe null to 3 (int) and 3 to 4 with the stored type, pref_get reads Integer 3 and a whole group with its subgroups, a guarded name (ProbeExecutable) and a call with no name refused; pref_reset reset [Probe], notSet [NeverSet], the guarded name refused, and pref_get then refuses Probe (the group is as before the run); pref_pack lists six packs and refuses a wrong name. Not run: pref_pack apply"
+ },
+ "pref_reset": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read on Mod/AgentLink/LiveTest: pref_set Probe null to 3 (int) and 3 to 4 with the stored type, pref_get reads Integer 3 and a whole group with its subgroups, a guarded name (ProbeExecutable) and a call with no name refused; pref_reset reset [Probe], notSet [NeverSet], the guarded name refused, and pref_get then refuses Probe (the group is as before the run); pref_pack lists six packs and refuses a wrong name. Not run: pref_pack apply"
+ },
+ "pref_set": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read on Mod/AgentLink/LiveTest: pref_set Probe null to 3 (int) and 3 to 4 with the stored type, pref_get reads Integer 3 and a whole group with its subgroups, a guarded name (ProbeExecutable) and a call with no name refused; pref_reset reset [Probe], notSet [NeverSet], the guarded name refused, and pref_get then refuses Probe (the group is as before the run); pref_pack lists six packs and refuses a wrong name. Not run: pref_pack apply"
+ },
  "printed_channel": {
   "description": true,
   "docs": true,
@@ -2461,6 +2695,13 @@
   "headless": true,
   "health": true,
   "model": "ScanRuler measure model, run 2, answers read: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 deg, angularity 1.047 mm at basic 89, limit over by 0.099 then cleared, not_found lists the six, report 1 checked 1 pass, CSV 15 rows"
+ },
+ "report_read": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: body_check Bracket ok, valid, closed, 1 solid, 11214.6, 7 faces, checkGeometry ok, and not_found naming Bracket; report_read last 5 and problems only (count 2, problems 1: a Qt font line); crash_collect copied 15 recovery folders into crash/<time>/recovery, reports []; outputs_clean dry run: wouldGo {}, kept 210, 61 exports listed, nothing removed, and kinds refused. Not run: outputs_clean with dry_run false"
  },
  "reverse_body_check": {
   "description": true,
@@ -2879,6 +3120,20 @@
   "health": true,
   "model": "ScanRuler measure and 2D models, run 2, answers read: chains 200.0 and 37.696 mm, four lines at the corners and one arc r 5.9993 at [20,20,10], the half section 4 + 8 lines, shadow area 2531.69, sketch with 2 closed wires padded to 11,434.65 mm3"
  },
+ "selection": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: selection set to Bracket, read back with detail, a wrong name refused with the selection kept (read again), cleared; show hides Bracket (session_state: hidden, bodies []), shows it with Ghost answered as unknown, and refuses when nothing named exists; window_snapshot: the whole window (1712 x 2082) twice, the Report view panel alone (1712 x 420), a wrong panel refused listing the six panels. Not read: the pictures themselves"
+ },
+ "session_state": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: session_state on the empty document (freecad 1.1.3, where window, outDir), with Bracket hidden (hidden and hiddenNote, bodies []), shown again (12000, 6 faces) and at the end (8 bodies, assembly Stand of Foot and Post, step 49); tool_groups: 68 groups with core on and no tool names, find (feature_remove first of 5), one tool card (required [feature]), group core (21 tools), now with fits and next, and both refusals (did you mean feature_remove; the groups listed); guide_read: the index of 40 guides with tokens, one section of feature, and the refusals naming its ten sections and the guides"
+ },
  "setup": {
   "description": true,
   "docs": true,
@@ -2972,6 +3227,13 @@
   "headless": true,
   "health": true,
   "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "show": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: selection set to Bracket, read back with detail, a wrong name refused with the selection kept (read again), cleared; show hides Bracket (session_state: hidden, bodies []), shows it with Ghost answered as unknown, and refuses when nothing named exists; window_snapshot: the whole window (1712 x 2082) twice, the Report view panel alone (1712 x 420), a wrong panel refused listing the six panels. Not read: the pictures themselves"
  },
  "sketch_add": {
   "description": true,
@@ -3137,6 +3399,13 @@
   "health": true,
   "model": "Workshop Make model: action list only (56 OrcaSlicer machine presets, no saved bundles); use, export, import and fetch not run"
  },
+ "steps_render": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: a note on the top face of Bracket (id 1, at [20, 15, 10], Face6), empty text refused; listed; answered (id by reference); done true, left out of the open list, done false again; deleted (left 0), a wrong id refused; steps_render: two step pictures and the sheet in unproven_steps with the two rows, width 50 refused (that refusal is kept in the job list as a failed job). Not read: the pictures"
+ },
  "surface_blend": {
   "description": true,
   "docs": true,
@@ -3225,6 +3494,9 @@
  "td_bim": {
   "description": true,
   "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: the plan cut of a 4000 x 200 x 2500 wall at z 1200 on an A3 page at 1:50: view Plan view, section Plan cut, scale 0.02, svgBytes 1136, no warning, listed by td_page as DrawViewArch at [250, 120]; a body given as the section refused (not a BIM section plane). Not read: the drawing itself (no picture of the page was looked at)",
   "note": "not run (needs a BIM section plane): not proven"
  },
  "td_centermarks": {
@@ -3546,6 +3818,13 @@
   "health": true,
   "model": "Workshop Make model: M6 row (pitch 1, pitchDia 5.35, minors 4.917 / 4.773, tap drill 5), six sizes nearest 4.5 mm, M7.3 refused; a 4.5 mm hole read as M5x0.5 and #12-24 tap drills, #12-28 minor, needs pitch"
  },
+ "tool_groups": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: session_state on the empty document (freecad 1.1.3, where window, outDir), with Bracket hidden (hidden and hiddenNote, bodies []), shown again (12000, 6 faces) and at the end (8 bodies, assembly Stand of Foot and Post, step 49); tool_groups: 68 groups with core on and no tool names, find (feature_remove first of 5), one tool card (required [feature]), group core (21 tools), now with fits and next, and both refusals (did you mean feature_remove; the groups listed); guide_read: the index of 40 guides with tokens, one section of feature, and the refusals naming its ten sections and the guides"
+ },
  "tutor": {
   "description": true,
   "docs": true,
@@ -3572,6 +3851,20 @@
   "headless": true,
   "health": true,
   "model": "SheetTutorial: Configuration Tables hex nut, spreadsheet, VarSet, parameters (55 calls)"
+ },
+ "view_maps": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: view_maps lists 8 maps (wall, stress, heat, curvature and the add-ons), 2 layers, 10 views; view_render four views of Bracket at 900 x 700 (7822 bytes, mmAcross each, 12 triangles), map stress before any solve answered empty in words, after the solve drawn with a legend (min 0.9497, max 59.9059 MPa = the solve, worst at [3.12, 127.19, 10]; 6.4 s), width 10 refused. bim-rest model: a top view written (800 x 600), and four flat faces answered empty (no solid shape): the tool is right there, the model expected a picture"
+ },
+ "view_render": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: view_maps lists 8 maps (wall, stress, heat, curvature and the add-ons), 2 layers, 10 views; view_render four views of Bracket at 900 x 700 (7822 bytes, mmAcross each, 12 triangles), map stress before any solve answered empty in words, after the solve drawn with a legend (min 0.9497, max 59.9059 MPa = the solve, worst at [3.12, 127.19, 10]; 6.4 s), width 10 refused. bim-rest model: a top view written (800 x 600), and four flat faces answered empty (no solid shape): the tool is right there, the model expected a picture"
  },
  "wear_diff": {
   "description": true,
@@ -3600,5 +3893,12 @@
   "headless": true,
   "health": true,
   "model": "ScanRuler measure model, run 2, answers read: limit 12 gives 21 measured points under it and two thin patches at 10.0 (the pocket wall and the x 60 face); pocket lost -1.0 on 549 points, rebuilt to 0 lost, largest move 1.0"
+ },
+ "window_snapshot": {
+  "description": true,
+  "docs": true,
+  "headless": true,
+  "health": true,
+  "model": "unproven-hub model, run 5, answers read: selection set to Bracket, read back with detail, a wrong name refused with the selection kept (read again), cleared; show hides Bracket (session_state: hidden, bodies []), shows it with Ghost answered as unknown, and refuses when nothing named exists; window_snapshot: the whole window (1712 x 2082) twice, the Report view panel alone (1712 x 420), a wrong panel refused listing the six panels. Not read: the pictures themselves"
  }
 }

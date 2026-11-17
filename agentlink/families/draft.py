@@ -11,7 +11,7 @@ import os
 import FreeCAD
 import Part
 
-from .. import runners
+from .. import paths, runners
 from ..protocol import ToolError
 from . import measure as M
 from . import picks
@@ -312,7 +312,9 @@ def tools(session):
                "is_edge": lambda x: isinstance(x, Part.Edge), "is_face": lambda x: isinstance(x, Part.Face),
                "is_surface": lambda x: isinstance(x, (Part.Face, Part.Shell)),
                # the family's
-               "fonts": fonts, "font_file": font_file, "text_faces": text_faces, "face_frame": face_frame, "outline_faces": outline_faces, "place_on": place_on,
+               "fonts": fonts, "font_file": font_file, "text_faces": text_faces, "face_frame": face_frame, "place_on": place_on,
+               # draft_outline's file: a relative path is looked for in the session's folder, as the other tools' files are
+               "outline_faces": lambda path: outline_faces(paths.local(s, path)),
                "pick_face": pick_face, "curve": _curve, "point": lambda p, what: FreeCAD.Vector(*picks.vec3(p, what)), "along_path": along_path,
                "refined": refined}
     return runners.tools(GROUP, s, helpers, family="draft")

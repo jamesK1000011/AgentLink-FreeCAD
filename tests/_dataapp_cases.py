@@ -226,7 +226,9 @@ def cases(fc, tmp, old, new):
     add(K, "the repository's own applied", prep(gui=False), {"apply": "Studio Dark"})
 
     # ---- commands ----------------------------------------------------------------------------------
-    INFO = {"Std_ViewFitAll": {"menuText": "Fit &all", "toolTip": "<b>Fits</b> the whole content on the screen ", "shortcutText": "V, F"},
+    # "shortcut": the key FreeCAD 1.1's Command.getInfo() has (src/Gui/CommandPyImp.cpp). The handler read
+    # "shortcutText", which FreeCAD never gives (tests/test_dataapp_data.py: a meant difference).
+    INFO = {"Std_ViewFitAll": {"menuText": "Fit &all", "toolTip": "<b>Fits</b> the whole content on the screen ", "shortcut": "V, F"},
             "PartDesign_Pad": {"menuText": "Pad", "toolTip": "", "shortcutText": ""}, "Std_Quit": {"menuText": "E&xit", "toolTip": "Quits the application"},
             "Sketcher_LeaveSketch": {}}
     L = "cmd_list"

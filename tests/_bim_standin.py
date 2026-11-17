@@ -396,6 +396,10 @@ def install():
         def mergeProject(self, p):
             log("mergeProject", p)
             self.new("Part::Feature", "Merged")
+            # A file Agent Link worked on carries its hidden records object (agentlink/store.py);
+            # FreeCAD merges it in under the next free name.
+            if flag("merge_records"):
+                self.new("App::FeaturePython", "AgentLinkRecords001").__dict__["Label"] = "Agent Link records001"
 
     class Session:
         def __init__(self, out_dir="/tmp"):
@@ -686,6 +690,14 @@ def install():
         def run(self):
             log("Nester.run", rotations=list(nesting.ROTATIONS))
             if flag("no_nest"):
+                return None
+            # FreeCAD's nester gives up on the whole run, with a printed reason, when one of the
+            # rotations it tries leaves a piece no place (ArchNesting.py run(): "Could not determine
+            # location on sheet. Aborting."): here it lays the pieces out only at the rotation
+            # nest_only, tried alone.
+            if flag("nest_only") is not None and list(nesting.ROTATIONS) != [flag("nest_only")]:
+                print("Placing piece 2 / 2 Area: 18.00 dm^2 : ", ", ".join(str(r) for r in nesting.ROTATIONS), ", ", end="")
+                print("Could not determine location on sheet. Aborting.")
                 return None
             sheets = [[o] for o in self.objects] if flag("many_sheets") else [list(self.objects)]
             self.results = [sheets]

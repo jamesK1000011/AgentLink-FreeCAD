@@ -117,9 +117,22 @@ class DraftData(unittest.TestCase):
     def test_same_steps_and_words_as_the_handlers(self):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
+        looked_in_folder = 0
         for c in got:
+            # Meant difference from the handler: draft_outline looks for a relative
+            # path in the session's folder, as the other tools' files are (the handler
+            # took it as it was, so a bare file name was "no file at logo.svg" from
+            # wherever FreeCAD was started). Every case here names "logo.svg" or
+            # "logo.dxf": the entry hands the file reader <out>/logo.…, and nothing
+            # else differs — the same steps in the same order, the same words.
+            if c["tool"] == "draft_outline" and "<out>/logo." in json.dumps(c["new"]):
+                self.assertNotIn("<out>/logo.", json.dumps(c["old"]), c["case"])
+                c = {**c, "new": json.loads(json.dumps(c["new"]).replace("<out>/logo.", "logo."))}
+                looked_in_folder += 1
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
+        self.assertGreaterEqual(looked_in_folder, 10)  # each draft_outline case that reaches its file
+        for c in got:
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
         # Each tool: a case that answers.
         for name in CONVERTED:

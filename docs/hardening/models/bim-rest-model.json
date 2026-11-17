@@ -531,7 +531,7 @@
     ],
     "margin": 5
    },
-   "expect": "sheets 1, placed 3, of 3, rotations [0, 90], margin 'not applied: FreeCAD 1.1's nester has no margin. …'; no note (all on one sheet: 330000 mm² of pieces on 720000). The three pieces are moved onto the sheet (x 0 to 1200, y -8000 to -7400). A 'failed' here ('The pieces would not nest') is FreeCAD's nester stopping: report_read { problems: true } gives its reason"
+   "expect": "sheets 1, placed 3, of 3, rotations [0, 90], margin 'not applied: FreeCAD 1.1's nester has no margin. …'; no note (all on one sheet: 330000 mm² of pieces on 720000). The three pieces are moved onto the sheet (x 0 to 1200, y -8000 to -7400). Run 5 answered failed (\"FreeCAD's nester stopped\"): with [0, 90] together FreeCAD's nester gives up on the whole run when one rotation leaves a piece room only where it would touch another. Since hubfix4 the tool then tries each rotation alone: the answer carries rotationsUsed ([0] or [90]) and rotationsNote beside rotations [0, 90], and the rest as above. A 'failed' still ('The pieces would not nest: FreeCAD's nester stopped — it said: …') now quotes the nester's own reason"
   },
   {
    "tool": "view_render",
@@ -548,7 +548,7 @@
     "inline": false,
     "path": "bim-rest-nest.png"
    },
-   "expect": "path ends bim-rest-nest.png; mmAcross about 1200 to 1500 (the frame is the sheet, so the pieces lie on it: before the nest they spread over 4300 mm); notDrawn absent or naming these flat faces (view_render draws solids: then read the pieces' places with object_list instead)"
+   "expect": "empty: \"Nothing to draw: Sheet, Piece a, Piece b, Piece c have no solid shape …\" and no picture (run 5: view_render draws solids, and these are flat faces — the expectation of a picture was wrong). Where the pieces lie after the nest is not read by any call of this list: object_get { object: \"Piece a\" } (its Placement, inside x 0 to 1200, y -8000 to -7400) would say, and is the call to add"
   }
  ],
  "notCovered": [

@@ -111,10 +111,51 @@ class BimData(unittest.TestCase):
     def test_same_steps_and_words_as_the_handlers(self):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
+        # Meant differences from the handler, bim_nest: FreeCAD's nester gives up on the whole
+        # run when one of the rotations leaves a piece no place (three rectangles on a sheet with
+        # room to spare stopped so live, with [0, 90]). The handler then refused, pointing at the
+        # report view. The entry tries each rotation alone, in the order given, takes the first
+        # that lays the pieces out and says so (rotationsUsed, rotationsNote); when none does, the
+        # refusal carries the nester's own printed reason.
+        old_words = ("The pieces would not nest: FreeCAD's nester stopped (its reason is in the report view; report_read shows it). "
+                     "Check each piece is a flat face lying the same way up as the sheet, and that the largest fits the sheet.")
+        runs = "Nester.run(rotations="
+        seen = 0
         for c in got:
+            if c["tool"] == "bim_nest" and c["case"].startswith("stops "):
+                seen += 1
+                self.assertEqual(c["old"]["result"], ["refused", "failed", old_words], c["case"])
+                self.assertEqual(sum(runs in t for t in c["old"]["trace"]), 1, c["case"])
+                tried = [t for t in c["new"]["trace"] if runs in t]
+                if "one alone" in c["case"]:
+                    self.assertEqual(c["new"]["result"][0], "ok", c["new"]["result"])
+                    out = c["new"]["result"][1]
+                    self.assertEqual((out["sheets"], out["placed"], out["of"], out["rotations"], out["rotationsUsed"]), (1, 2, 2, [0, 90], [90.0]))
+                    self.assertIn("each was tried alone", out["rotationsNote"])
+                    self.assertEqual([t[len(runs):] for t in tried], ["[0, 90])", "[0])", "[90])"])
+                    self.assertTrue(any("Nester.apply" in t for t in c["new"]["trace"]))
+                else:
+                    self.assertEqual(c["new"]["result"], ["refused", "failed", "The pieces would not nest: FreeCAD's nester stopped — it said: Could not determine location on sheet. "
+                                                          "(rotations: together, then each alone). Check each piece is a flat face lying the same way up as the sheet, "
+                                                          "and that the largest fits the sheet."])
+                    self.assertEqual(len(tried), 3, tried)
+                    self.assertFalse(any("Nester.apply" in t for t in c["new"]["trace"]))
+                continue
+            # Meant difference, bim_library { insert } of an .FCStd Agent Link worked on: the file's
+            # hidden records object came in with the model ("Agent Link records001", seen live) and
+            # was answered as one of the objects. The entry leaves it out, as doc_merge does.
+            if (c["tool"], c["case"]) == ("bim_library", "insert a document that carries Agent Link's records"):
+                seen += 1
+                self.assertEqual(c["old"]["result"][1]["objects"], ["Merged", "Agent Link records001"])
+                self.assertIn("Agent Link records001", c["old"]["objects"])
+                self.assertEqual(c["new"]["result"], ["ok", {"inserted": "Table.FCStd", "objects": ["Merged"]}])
+                self.assertNotIn("Agent Link records001", c["new"]["objects"])
+                self.assertIn("Merged", c["new"]["objects"])
+                continue
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
+        self.assertEqual(seen, 3)
         # Each tool: a case that answers, and (where it can refuse) one that is refused.
         for name in CONVERTED:
             kinds = {c["new"]["result"][0] for c in got if c["tool"] == name}
@@ -275,6 +316,8 @@ def _main(mode):
     from _bim_cases import cases
 
     rows = []
+    # What a stand-in prints as FreeCAD would (the nester's "… Aborting.") goes to stderr: stdout carries the rows.
+    out, sys.stdout = sys.stdout, sys.stderr
     for tool, case, prepare, args in cases(fc, tempfile.mkdtemp()):
         row = {"tool": tool, "case": case, "crash": case.startswith("crash:")}
         for which, mods in (("old", old), ("new", new)):
@@ -293,6 +336,7 @@ def _main(mode):
             text = json.dumps({"result": res, "trace": list(fc.trace), "objects": [o.Label for o in s.doc.Objects]}, ensure_ascii=False, default=repr)
             row[which] = json.loads(text.replace(s.out_dir, "<out>"))
         rows.append(row)
+    sys.stdout = out
     print(json.dumps(rows, ensure_ascii=False))
 
 

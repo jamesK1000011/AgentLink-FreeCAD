@@ -117,10 +117,27 @@ class MeshData(unittest.TestCase):
     def test_same_steps_and_words_as_the_handlers(self):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
+        died = 0
         for c in got:
+            # Meant difference, meshobj_unwrap: the unwrapping's own Python ended with a crash
+            # code and no word (seen live: "it stopped (code -11)" on a sphere's cap), and the
+            # handler blamed the surface whatever brought it down. The entry's helper has that
+            # Python mark where it is; one that ends while FreeCAD's modules load is refused
+            # as unavailable, in words that do not send the agent to split the surface.
+            if (c["tool"], c["case"]) == ("meshobj_unwrap", "its Python dies loading FreeCAD's modules"):
+                died += 1
+                self.assertEqual(c["old"]["result"], ["refused", "failed", "FreeCAD's unwrapping could not lay this surface flat: it stopped (code -11) — split it into simpler faces "
+                                                      "(a cone or cylinder side unwraps; a whole sphere does not)."])
+                self.assertEqual(c["new"]["result"], ["refused", "unavailable", "The unwrapping runs in a Python apart from FreeCAD, and FreeCAD's own modules would not load there "
+                                                      "(it stopped (code -11)): nothing was unwrapped, and this surface is not the cause — unwrap a cylinder, cone or flat face "
+                                                      "(\"Body.Face3\") instead: those are laid flat exactly, without it."])
+                self.assertEqual(c["new"]["trace"], c["old"]["trace"])
+                self.assertEqual(c["new"]["objects"], c["old"]["objects"])
+                continue
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
+        self.assertEqual(died, 1)
         # Each tool: a case that answers, and (where it can refuse) one that is refused.
         for name in CONVERTED:
             kinds = {c["new"]["result"][0] for c in got if c["tool"] == name}

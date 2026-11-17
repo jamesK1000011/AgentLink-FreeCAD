@@ -576,7 +576,7 @@
    "arguments": {
     "activate": "Part Design"
    },
-   "expect": "active \"PartDesignWorkbench\"; was: the one before; workbenches"
+   "expect": "active \"PartDesignWorkbench\"; was: the one before; workbenches. When Part Design is the active workbench already (the call before says: run 5 had it so): active and was both \"PartDesignWorkbench\" with note \"Already active.\" — an answer, not the refusal run 5 got (\"FreeCAD did not switch to PartDesignWorkbench (still PartDesignWorkbench) …\", fixed in hubfix4)"
   },
   {
    "tool": "workbench",
@@ -1125,7 +1125,7 @@
      "body": "Bracket"
     }
    },
-   "expect": "INSIDE A BATCH: REFUSED invalid_input \"body_check cannot run as a job: only a read that leaves the window and the 3D view alone can (not a change, a picture, a window tool or a batch) — call body_check itself.\" A batch is one answer and starts no job (jobs.wanted). The words blame the tool, not the batch: a finding. job_start's success is in runAlone below"
+   "expect": "INSIDE A BATCH: REFUSED invalid_input \"job_start: not inside a batch, which is one answer and starts no job — call job_start { tool: \\\"body_check\\\", arguments } on its own, or call body_check itself here: a heavy read inside a batch runs in its place and the batch waits for it.\" A batch is one answer and starts no job (jobs.wanted). (Run 5, before hubfix4, read \"body_check cannot run as a job: only a read … — call body_check itself.\": the words blamed the tool.) job_start's success is in runAlone below"
   },
   {
    "tool": "job_start",
@@ -1363,7 +1363,7 @@
     ],
     "name": "Top outline"
    },
-   "expect": "path: the unwrap's SVG, by reference (symbol and image take a full path: a bare file name is not looked for in the session's folder). kind symbol; view \"Top outline\"; type DrawViewSymbol; at [60, 60]"
+   "expect": "path: the unwrap's SVG, by reference (a full path; since hubfix4 a bare file name is looked for in the session's folder too, so \"unproven_foot_top.svg\" would do as well — not run that way yet). kind symbol; view \"Top outline\"; type DrawViewSymbol; at [60, 60]"
   },
   {
    "tool": "draft_outline",
