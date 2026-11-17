@@ -247,6 +247,8 @@ server.json
 tests/_bim_before.py
 tests/_bim_cases.py
 tests/_bim_standin.py
+tests/_datadraft_before.py
+tests/_datadraft_cases.py
 tests/_datamesh_before.py
 tests/_datamesh_cases.py
 tests/_datamesh_standin.py
@@ -256,6 +258,9 @@ tests/_datapart_standin.py
 tests/_datapd_before.py
 tests/_datapd_cases.py
 tests/_datapd_standin.py
+tests/_datatd_before.py
+tests/_datatd_cases.py
+tests/_datatd_standin.py
 tests/_fc.py
 tests/_pd_base.py
 tests/test_activity_words.py
@@ -279,9 +284,11 @@ tests/test_core_guards.py
 tests/test_core_guards_fc.py
 tests/test_core_readers.py
 tests/test_crash_logs.py
+tests/test_datadraft_data.py
 tests/test_datamesh_data.py
 tests/test_datapart_data.py
 tests/test_datapd_data.py
+tests/test_datatd_data.py
 tests/test_declared.py
 tests/test_doc.py
 tests/test_draft.py

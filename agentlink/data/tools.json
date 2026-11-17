@@ -8876,6 +8876,1969 @@
     {"do": "=snapshot('sketch_edit')"}
    ],
    "answer": {"fields": {"sketch": "=sk.Label", "done": "=done", "state": "=st", "geometryCount": "=len(sk.Geometry)", "step": "=steps()", "bodyAfter": {"when": "=b is not None and ng and not b.Shape.isNull()", "value": "=body_reading(b)"}}}
+  },
+  "td_page": {
+   "group": "techdraw",
+   "description": "TechDraw pages: action new { paper A4|A3|A2|A1|A0|Letter|ANSIB…, orientation landscape|portrait, standard iso|asme, blank, template (an SVG path, or a name from templates), projection first|third, scale (the page's: views take it unless given their own), name } on the build's own templates, sample title-block texts cleared; list; read { page } (views and title-block fields); templates. Page positions are mm from the paper's bottom-left corner, y up.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "new",
+       "list",
+       "read",
+       "templates"
+      ]
+     },
+     "page": {
+      "type": "string"
+     },
+     "paper": {
+      "type": "string"
+     },
+     "orientation": {
+      "type": "string"
+     },
+     "standard": {
+      "type": "string"
+     },
+     "blank": {
+      "type": "boolean"
+     },
+     "template": {
+      "type": "string"
+     },
+     "projection": {
+      "type": "string"
+     },
+     "scale": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"act": "=a.get('action', 'list')"}},
+    {"choose": "=act", "of": {"templates": [{"let": {"root": "=template_root()"}}, {"answer": {"fields": {"root": "=root", "templates": "=[relpath(p, root) for p in templates()]"}}}], "list": [{"when": "=pages()", "then": [{"answer": {"fields": {"pages": "=[page_reading(p) for p in pages()]"}}}]}, {"answer": {"fields": {"pages": [], "note": "None yet: td_page { action: \"new\", paper: \"A4\" }."}}}], "read": [{"answer": {"fields": {"...": "=page_reading(page_of(a.page), True)"}}}]}},
+    {"refuse": "action: new, list, read or templates.", "when": "=act != 'new'"},
+    {"let": {"paper": "=a.get('paper', 'A4')", "tpl": "=a.template", "std_note": null}},
+    {"when": "=tpl", "then": [{"let": {"p": "=template_path(tpl)"}}, {"refuse": {"fmt": "template {tpl!r}: no such file — td_page {{ action: \"templates\" }} lists the build's own."}, "when": "=not isfile(p)", "code": "not_found"}], "else": [{"refuse": {"fmt": "paper: one of {', '.join(PAPERS)}."}, "when": "=paper not in PAPERS"}, {"let": {"p": "=find_template(paper, a.orientation == 'portrait', bool(a.blank), a.standard)"}}, {"let": {"std_note": {"fmt": "No {a.standard.upper()} template for {paper}: {basename(p)} is used (ASME sizes: Letter, ANSIB … ANSIE)."}}, "when": "=p and a.standard and (sep + a.standard.upper() + sep) not in p"}, {"refuse": {"fmt": "No {paper} {a.get('orientation', 'landscape')} template in this build — td_page {{ action: \"templates\" }} lists them; pass template."}, "when": "=p is None", "code": "not_found"}]},
+    {"add": "TechDraw::DrawPage", "name": "Page", "as": "page"},
+    {"set": {"page.Label": "=unique(a.name or 'Drawing')"}},
+    {"add": "TechDraw::DrawSVGTemplate", "name": "Template", "as": "t"},
+    {"set": {"t.Template": "=p", "page.Template": "=t"}},
+    {"do": "=set_enum(page, 'ProjectionType', 'First angle' if a.projection == 'first' else 'Third angle')", "when": "=a.projection in ('first', 'third')"},
+    {"set": {"page.Scale": "=float(a.scale)"}, "when": "=a.scale"},
+    {"do": "=recompute()"},
+    {"let": {"cleared": "=clear_samples(t, p)"}},
+    {"let": {"out": "=page_reading(page, True)"}},
+    {"put": {"cleared": "=cleared"}, "when": "=cleared"},
+    {"put": {"note": "=std_note"}, "when": "=not tpl and std_note"},
+    {"put": {"next": "td_title { fields } fills the title block (ask the person for names and numbers); td_view or td_projection puts the part on."}}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "=out"]}
+  },
+  "td_title": {
+   "group": "techdraw",
+   "description": "The title block: fields { name: value } by the template's own field names, which differ by template (no fields: lists them; an unknown name is refused with the list); preset \"mine\" fills from a saved one, with save: true saves the page's as it (not its title, sheet number, scale or date, unless given in fields), delete: true removes it; import / export a presets file (JSON). Ask the person for names and numbers.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "page": {
+      "type": "string"
+     },
+     "fields": {
+      "type": "object"
+     },
+     "preset": {
+      "type": "string"
+     },
+     "save": {
+      "type": "boolean"
+     },
+     "delete": {
+      "type": "boolean"
+     },
+     "import": {
+      "type": "string"
+     },
+     "export": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"page": "=page_of(a.page)"}},
+    {"let": {"t": "=page.Template"}},
+    {"try": [{"let": {"texts": "=dict(t.EditableTexts)"}}], "except": [{"refuse": {"fmt": "{page.Label}'s template has no editable fields (a blank one): td_note writes text on the page instead, or make the page on a template with a title block (td_page {{ action: \"templates\" }})."}, "code": "invalid_state"}]},
+    {"let": {"pre": "=a.preset"}},
+    {"when": "=a.export", "then": [{"let": {"data": "=load_presets()", "path": "=local(a.export)"}}, {"do": "=save_presets(data, path)"}, {"answer": {"fields": {"exported": "=path", "presets": "=sorted(data)"}}}]},
+    {"when": "=a.get('import')", "then": [{"let": {"path": "=local(a.get('import'))"}}, {"let": {"got": "=load_presets(path)"}}, {"refuse": {"fmt": "{path}: no presets in it."}, "when": "=not got", "code": "not_found"}, {"let": {"data": "=load_presets()"}}, {"do": ["=data.update(got)", "=save_presets(data)"]}, {"answer": {"fields": {"imported": "=sorted(got)", "presets": "=sorted(data)"}}}]},
+    {"let": {"fields": "=dict(a.fields or {})"}},
+    {"when": "=pre and a.delete", "then": [{"let": {"data": "=load_presets()"}}, {"refuse": {"fmt": "preset {pre!r}: there are {', '.join(sorted(data)) or 'none'}."}, "when": "=pre not in data", "code": "not_found"}, {"do": ["=data.pop(pre)", "=save_presets(data)"]}, {"answer": {"fields": {"deleted": "=pre", "presets": "=sorted(data)"}}}]},
+    {"when": "=pre and a.save", "then": [{"let": {"data": "=load_presets()"}}, {"do": ["=data.update({pre: dict([(k, v) for k, v in texts.items() if str(v).strip() and not any(w in k.lower() for w in ('sheet', 'scale', 'date', 'title'))] + [(k, str(v)) for k, v in fields.items()])})", "=save_presets(data)"]}], "else": [{"when": "=pre", "then": [{"let": {"data": "=load_presets()"}}, {"refuse": {"fmt": "preset {pre!r}: there are {', '.join(sorted(data)) or 'none'} (save one with preset and save: true)."}, "when": "=pre not in data", "code": "not_found"}, {"let": {"fields": "=dict(list(data[pre].items()) + list(fields.items()))"}}]}]},
+    {"when": "=not fields", "then": [{"answer": {"fields": {"page": "=page.Label", "fields": "=texts", "presets": "=sorted(load_presets())", "note": "Set with fields { name: value } — the names are the template's own."}}}]},
+    {"let": {"low": "={k.lower(): k for k in texts}", "unknown": []}},
+    {"each": "k, v", "in": "=fields.items()", "steps": [{"let": {"key": "=k if k in texts else low.get(k.lower())"}}, {"when": "=key is None", "then": [{"push": {"unknown": "=k"}}], "else": [{"do": "=texts.update({key: str(v)})"}]}]},
+    {"refuse": {"fmt": "No field {', '.join(unknown)} in this template — it has: {', '.join(sorted(texts))}."}, "when": "=unknown and not a.preset"},
+    {"set": {"t.EditableTexts": "=texts"}},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"page": "=page.Label", "fields": "=dict(t.EditableTexts)", "notInThisTemplate": {"when": "=unknown", "value": "=unknown"}, "saved": {"when": "=pre and a.save", "value": "=pre"}}}
+  },
+  "td_view": {
+   "group": "techdraw",
+   "description": "Put a view of bodies on a page: bodies (all when left out), direction front|top|right|left|rear|bottom|iso or [x, y, z] (part toward viewer), scale (left out: the page's), at [x, y] page mm (its centre, bottom-left origin), hidden (dashed hidden lines), name. Answers its label (what other td_ tools take), size on the paper and edges — 0 edges: the bodies are empty or hidden. Its lines are waited for (up to 30 s in the window).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "page": {
+      "type": "string"
+     },
+     "bodies": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "direction": {
+      "type": [
+       "string",
+       "array"
+      ]
+     },
+     "scale": {
+      "type": "number"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "hidden": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"page": "=page_of(a.page)"}},
+    {"let": {"objs": "=bodies_for(a.bodies)"}},
+    {"let": {"z, x": "=direction(a.get('direction', 'front'))"}},
+    {"add": "TechDraw::DrawViewPart", "name": "View", "as": "v"},
+    {"do": "=page.addView(v)"},
+    {"set": {"v.Label": "=unique(a.name or (a.direction if is_str(a.direction) else 'View').capitalize())", "v.Source": "=objs", "v.Direction": "=z", "v.XDirection": "=x"}},
+    {"set": {"v.ScaleType": "Custom", "v.Scale": "=float(a.scale)"}, "when": "=a.scale"},
+    {"let": {"W, H": "=paper_size(page)"}},
+    {"let": {"px, py": "=place_xy(page, a.at, (W * 0.35, H * 0.55))"}},
+    {"set": {"v.X": "=px", "v.Y": "=py"}},
+    {"set": {"v.HardHidden": true}, "when": "=a.hidden"},
+    {"do": "=recompute([v])"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "=view_reading(v)"]}
+  },
+  "td_centermarks": {
+   "group": "techdraw",
+   "description": "Centre marks (thin chain crosses) on the holes and round edges of views (all part views when left out): extend mm past each circle (2); on: false takes them off. Whole circles and arcs past a half turn only. Drawn by td_export, not in the window.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "views": {},
+     "extend": {
+      "type": "number"
+     },
+     "on": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"names": "=a.views"}},
+    {"let": {"views": "=[view_of(n) for n in (names if is_list(names) else [names])] if names else [o for o in doc().Objects if o.isDerivedFrom('TechDraw::DrawViewPart')]"}},
+    {"let": {"ext": "=float(a.get('extend', 2.0)) if a.get('on', True) else 0.0", "rows": []}},
+    {"let": {"late": "=[v for v in views if not edges_of(v)]"}},
+    {"do": "=recompute(late)", "when": "=late"},
+    {"each": "v", "in": "=views", "steps": [{"do": ["=own_prop(v, MARKS_PROP, 'App::PropertyFloat', 'Centre marks on its circles: how far past each, mm (0: none)')", "=setprop(v, MARKS_PROP, ext)"]}, {"push": {"rows": {"view": "=v.Label", "circles": "=len(circle_centres(v))"}}}]}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"views": "=rows", "extend": "=ext", "note": "Drawn as thin chain lines by td_export."}}
+  },
+  "td_hatch": {
+   "group": "techdraw",
+   "description": "Hatch faces of the part in a view (thin lines spacing mm apart at angle degrees; a section's cut is hatched by itself): view, faces [\"Face6\" …] (the part's own, from shape_query) — none takes it off. Drawn by td_export, not in the window; a face seen edge-on is warned of.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "faces": {},
+     "spacing": {
+      "type": "number"
+     },
+     "angle": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "view"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"v": "=view_of(a.view)"}},
+    {"let": {"faces": "=ref_list(a.faces or [])", "src": "=source_shapes(v)"}},
+    {"refuse": {"fmt": "{v.Label} shows no shape: its Source is empty — td_view puts bodies on a page."}, "when": "=src is None"},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"each": "f", "in": "=faces", "steps": [{"refuse": "faces: the part's own faces, \"Face6\" (shape_query finds them).", "when": "=not str(f).startswith('Face')"}, {"try": [{"do": "=src.getElement(f)"}], "except": [{"refuse": {"fmt": "faces: {f} is not a face of {v.Label}'s part."}}]}]},
+    {"do": "=own_prop(v, HATCH_PROP, 'App::PropertyString', 'Faces hatched in the exported page (JSON)')"},
+    {"let": {"spec": {"faces": "=faces", "spacing": "=float(a.get('spacing', 2.5))", "angle": "=float(a.get('angle', 45))"}}},
+    {"do": "=setprop(v, HATCH_PROP, dumps(spec) if faces else '')"},
+    {"let": {"flat": "=edge_on(v, src, faces)"}}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"view": "=v.Label", "faces": "=faces", "spacing": "=spec['spacing']", "angle": "=spec['angle']", "note": "='Drawn by td_export.' if faces else 'Hatching taken off.'", "warning": {"when": "=flat", "value": {"fmt": "{', '.join(flat)} {'is' if len(flat) == 1 else 'are'} seen edge-on in {v.Label}: nothing to hatch there — shape_query {{ normal }} finds the faces facing this view."}}}}
+  },
+  "td_weld": {
+   "group": "techdraw",
+   "description": "A weld symbol on a leader from a feature of a view (on, as td_dim takes it; at the leader's end on the page), drawn by td_export (the window shows the leader only): kind fillet, square, v, bevel, u, j, plug, spot, seam, flare-v, flare-bevel, backing, surfacing, size (left of it), length (right: \"50\" or \"50-100\" for pitch), side arrow | other | both, allAround, field (a site weld), tail (process, \"GMAW\").",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "on": {},
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "fillet",
+       "square",
+       "v",
+       "bevel",
+       "u",
+       "j",
+       "plug",
+       "spot",
+       "seam",
+       "flare-v",
+       "flare-bevel",
+       "backing",
+       "surfacing"
+      ]
+     },
+     "size": {},
+     "length": {},
+     "side": {
+      "type": "string",
+      "enum": [
+       "arrow",
+       "other",
+       "both"
+      ]
+     },
+     "allAround": {
+      "type": "boolean"
+     },
+     "field": {
+      "type": "boolean"
+     },
+     "tail": {
+      "type": "string"
+     },
+     "textSize": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "view",
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"v": "=view_of(a.view)"}},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"let": {"spec": {"kind": "=a.get('kind', 'fillet')", "size": "=str(a.get('size', ''))", "length": "=str(a.get('length', ''))", "side": "=a.get('side', 'arrow')", "allAround": "=bool(a.allAround)", "field": "=bool(a.field)", "tail": "=str(a.get('tail', ''))", "h": "=float(a.get('textSize', 3.5))"}}},
+    {"let": {"wrong": "=weld_wrong(spec)"}},
+    {"refuse": "=wrong", "when": "=wrong is not None"},
+    {"let": {"ref, p": "=ref_point(v, a.on)"}},
+    {"let": {"X, Y": "=abs_xy(v)"}},
+    {"let": {"to": "=pt2(a.at, 'at') if a.at is not None else (X + p[0] + 15, Y - p[1] + 15)"}},
+    {"let": {"ln": "=leader(v, p, to)"}},
+    {"set": {"ln.Label": "=unique(a.name or 'Weld ' + spec['kind'], ln)"}},
+    {"do": ["=own_prop(ln, WELD_PROP, 'App::PropertyString', 'The weld symbol drawn at the leader\\'s end (JSON)')", "=setprop(ln, WELD_PROP, dumps(spec))", "=recompute()"]}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"weld": "=ln.Label", "on": "=ref", "...": "={k: spec[k] for k in ('kind', 'size', 'length', 'side', 'allAround', 'field', 'tail')}", "note": "Drawn by td_export: the symbol below the reference line is the arrow side, above it the other side."}}
+  },
+  "td_bim": {
+   "group": "techdraw",
+   "description": "A BIM section plane drawn on a page (a building plan or section): section (from bim_section), scale (0.02 = 1:50), at, render Wireframe | Solid, fill (cut faces hatched), spaces, hidden. Warns when it drew nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "page": {
+      "type": "string"
+     },
+     "section": {
+      "type": "string"
+     },
+     "scale": {
+      "type": "number"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "render": {
+      "type": "string"
+     },
+     "fill": {
+      "type": "boolean"
+     },
+     "spaces": {
+      "type": "boolean"
+     },
+     "hidden": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "section"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"page": "=page_of(a.page)"}},
+    {"let": {"sec": "=obj_of(a.section, None, 'section plane')"}},
+    {"refuse": {"fmt": "section: {sec.Label} is not a BIM section plane (bim_section makes one)."}, "when": "=proxy_name(sec) != '_SectionPlane'"},
+    {"add": "TechDraw::DrawViewArch", "name": "ArchView", "as": "v"},
+    {"do": "=page.addView(v)"},
+    {"set": {"v.Label": "=unique(a.name or sec.Label + ' view', v)", "v.Source": "=sec"}},
+    {"each": "k, val", "in": "=[('AllOn', True), ('RenderMode', a.get('render', 'Wireframe')), ('ShowFill', bool(a.get('fill', True))), ('FillSpaces', bool(a.get('spaces', False))), ('ShowHidden', bool(a.get('hidden', False)))]", "steps": [{"do": "=try_set(v, k, val)"}]},
+    {"set": {"v.Scale": "=float(a.get('scale', 0.02))"}},
+    {"let": {"W, H": "=paper_size(page)"}},
+    {"let": {"px, py": "=place_xy(page, a.at, (W * 0.5, H * 0.55))"}},
+    {"set": {"v.X": "=px", "v.Y": "=py"}},
+    {"do": "=recompute([v])"},
+    {"let": {"sym": "=str(get(v, 'Symbol', '') or '')"}}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"view": "=v.Label", "section": "=sec.Label", "scale": "=v.Scale", "svgBytes": "=len(sym)", "warning": {"when": "=not sym", "value": "The view drew nothing here — the section cuts no BIM objects, or this FreeCAD draws Arch views only in its window."}}}
+  },
+  "td_projection": {
+   "group": "techdraw",
+   "description": "A projection group (views kept aligned): views [front, top, right, left, rear, bottom, iso, isoLeft …] (front always; default front, top, right), projection first|third (default the page's), front (which way is front: a direction), bodies, scale, at. Answers items: each one's label (Front, Top, FrontTopRight …) is the view td_dim and td_section take.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "page": {
+      "type": "string"
+     },
+     "bodies": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "views": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "projection": {
+      "type": "string"
+     },
+     "front": {
+      "type": [
+       "string",
+       "array"
+      ]
+     },
+     "scale": {
+      "type": "number"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"page": "=page_of(a.page)"}},
+    {"let": {"objs": "=bodies_for(a.bodies)", "want": "=a.views or ['front', 'top', 'right']"}},
+    {"let": {"wrong": "=[w for w in want if w not in PROJ_ITEMS]"}},
+    {"refuse": {"fmt": "views: any of {', '.join(PROJ_ITEMS)} — not {', '.join([str(w) for w in wrong])}."}, "when": "=wrong"},
+    {"let": {"want": "=list({w: 1 for w in want})"}},
+    {"let": {"front_z, front_x": "=direction(a.get('front', 'front'), 'front')"}},
+    {"add": "TechDraw::DrawProjGroup", "name": "ProjGroup", "as": "g"},
+    {"do": "=page.addView(g)"},
+    {"set": {"g.Source": "=objs"}},
+    {"when": "=a.projection in ('first', 'third')", "then": [{"do": "=set_enum(g, 'ProjectionType', 'First angle' if a.projection == 'first' else 'Third angle')"}], "else": [{"try": [{"do": "=set_enum(g, 'ProjectionType', page.ProjectionType)"}], "on": "refusal", "except": [], "when": "=get(page, 'ProjectionType', '')"}]},
+    {"do": "=g.addProjection('Front')"},
+    {"set": {"g.ScaleType": "Custom", "g.Scale": "=float(a.scale)"}, "when": "=a.scale"},
+    {"do": "=face_front(g, front_z, front_x)"},
+    {"each": "w", "in": "=want", "steps": [{"do": "=g.addProjection(PROJ_ITEMS[w])", "when": "=PROJ_ITEMS[w] != 'Front'"}]},
+    {"let": {"W, H": "=paper_size(page)"}},
+    {"let": {"px, py": "=place_xy(page, a.at, (W * 0.4, H * 0.55))"}},
+    {"set": {"g.X": "=px", "g.Y": "=py"}},
+    {"set": {"g.AutoDistribute": true}},
+    {"do": "=recompute(list(g.Views))"},
+    {"let": {"out": "=view_reading(g)"}},
+    {"put": {"projection": "=g.ProjectionType", "items": "=[view_reading(x) for x in g.Views]"}}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "=out"]}
+  },
+  "td_section": {
+   "group": "techdraw",
+   "description": "A section view cut from a view: normal of the cut plane, toward who looks at the section (\"x\" | \"-y\" | [x,y,z]; it lies across the base view, not along its direction), through [x, y, z] a point of the plane (default the part's middle), symbol (A …), at, hatch false. Answers its label (Section A) and edges; 0 edges: the plane misses the part.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "normal": {
+      "type": [
+       "string",
+       "array"
+      ]
+     },
+     "through": {
+      "type": "array",
+      "items": {}
+     },
+     "symbol": {
+      "type": "string"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "hatch": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "view",
+     "normal"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"base": "=view_of(a.view)"}},
+    {"let": {"page": "=page_holding(base)"}},
+    {"when": "=is_list(a.normal)", "then": [{"let": {"normal": "=vec(a.normal, 'normal')"}}], "else": [{"refuse": "normal: the cut plane's normal, pointing toward the viewer of the section — \"x\" | \"-y\" | … or [x, y, z].", "when": "=a.normal not in ('x', 'y', 'z', '-x', '-y', '-z')"}, {"let": {"normal": "=axis_vector(a.normal)"}}]},
+    {"do": "=normal.normalize()"},
+    {"refuse": "normal: the plane must cut across the base view, not lie in its paper — choose a normal along the base view's paper.", "when": "=abs(normal.dot(V(base.Direction))) > 0.99"},
+    {"let": {"sh": "=source_shapes(base)"}},
+    {"let": {"origin": "=vec(a.through, 'through') if a.through is not None else sh.BoundBox.Center"}},
+    {"let": {"sym": "=str(a.symbol or next_letter('section'))"}},
+    {"add": "TechDraw::DrawViewSection", "name": "Section", "as": "sv"},
+    {"do": "=page.addView(sv)"},
+    {"set": {"sv.Label": "=unique('Section ' + sym)", "sv.BaseView": "=base", "sv.Source": "=list(base.Source)", "sv.ScaleType": "Custom", "sv.Scale": "=view_scale(base)", "sv.SectionNormal": "=normal", "sv.SectionOrigin": "=origin", "sv.SectionSymbol": "=sym", "sv.Direction": "=normal"}},
+    {"let": {"x, side": "=section_frame(base, normal)"}},
+    {"set": {"sv.XDirection": "=x"}},
+    {"try": [{"do": "=set_enum(sv, 'SectionDirection', side)"}], "except": [], "when": "=side"},
+    {"let": {"W, H": "=paper_size(page)"}},
+    {"let": {"bxp, byp": "=abs_xy(base)"}},
+    {"let": {"off": "={'Right': (W * 0.25, 0), 'Left': (-W * 0.25, 0), 'Up': (0, H * 0.3), 'Down': (0, -H * 0.3)}.get(side or 'Right', (W * 0.25, 0))"}},
+    {"let": {"px, py": "=place_xy(page, a.at, (min(W - 20, max(20, bxp + off[0])), min(H - 20, max(20, byp + off[1]))))"}},
+    {"set": {"sv.X": "=px", "sv.Y": "=py"}},
+    {"do": "=hide_cut(sv)", "when": "=a.hatch is False"},
+    {"do": "=recompute([base, sv])"},
+    {"let": {"out": "=view_reading(sv)"}},
+    {"put": {"symbol": "=sym", "base": "=base.Label", "through": ["=num(origin.x, 3)", "=num(origin.y, 3)", "=num(origin.z, 3)"], "normal": ["=num(normal.x)", "=num(normal.y)", "=num(normal.z)"]}},
+    {"put": {"warning": "The section has no geometry: the plane may miss the part (through)."}, "when": "=not out.get('edges')"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "=out"]}
+  },
+  "td_detail": {
+   "group": "techdraw",
+   "description": "A detail view: a circle of radius (mm on the part) around center [x, y, z] (a point on the part) or anchor [x, y] (td_geometry's view mm), drawn larger (scale, default twice the base), symbol (B …), at. 0 edges in the answer: the circle misses the part.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "center": {
+      "type": "array",
+      "items": {}
+     },
+     "anchor": {
+      "type": "array",
+      "items": {}
+     },
+     "radius": {
+      "type": "number"
+     },
+     "scale": {
+      "type": "number"
+     },
+     "symbol": {
+      "type": "string"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     }
+    },
+    "required": [
+     "view",
+     "radius"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"base": "=view_of(a.view)"}},
+    {"let": {"page": "=page_holding(base)", "r": "=float(a.get('radius', 0) or 0)"}},
+    {"refuse": "radius: the circle drawn around the detail, mm on the part, over 0 — e.g. td_detail { view, center: [x, y, z], radius: 8 }.", "when": "=r <= 0"},
+    {"let": {"sym": "=str(a.symbol or next_letter('detail'))"}},
+    {"add": "TechDraw::DrawViewDetail", "name": "Detail", "as": "dv"},
+    {"do": "=page.addView(dv)"},
+    {"set": {"dv.Label": "=unique('Detail ' + sym)", "dv.BaseView": "=base", "dv.Source": "=list(base.Source)", "dv.Direction": "=V(base.Direction)", "dv.XDirection": "=V(base.XDirection)"}},
+    {"when": "=a.at3d is not None or a.center is not None", "then": [{"let": {"anchor": "=anchor_at(base, vec(a.get('center', a.at3d), 'center'))"}}], "else": [{"let": {"ax, ay": "=pt2(a.get('anchor', [0, 0]), 'anchor')"}}, {"let": {"anchor": "=V(ax, ay, 0)"}}]},
+    {"set": {"dv.AnchorPoint": "=anchor", "dv.Radius": "=r", "dv.Reference": "=sym", "dv.ScaleType": "Custom", "dv.Scale": "=float(a.scale or view_scale(base) * 2)"}},
+    {"let": {"W, H": "=paper_size(page)"}},
+    {"let": {"bxp, byp": "=abs_xy(base)"}},
+    {"let": {"px, py": "=place_xy(page, a.at, (min(W - 30, bxp + W * 0.3), max(30, byp - H * 0.25)))"}},
+    {"set": {"dv.X": "=px", "dv.Y": "=py"}},
+    {"do": "=recompute([base, dv])"},
+    {"let": {"out": "=view_reading(dv)"}},
+    {"put": {"symbol": "=sym", "base": "=base.Label", "anchor": ["=num(anchor.x, 3)", "=num(anchor.y, 3)"], "radius": "=r"}},
+    {"put": {"warning": "The detail is empty: its circle misses the part. Give center as a point on the part [x, y, z], or anchor [x, y] from td_geometry."}, "when": "=not out.get('edges')"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "=out"]}
+  },
+  "td_geometry": {
+   "group": "techdraw",
+   "description": "A view's geometry, to dimension against: kind edges | circles (each marked circle or arc) | lines | vertices, each with its ref (Edge3, Vertex5: zero-based), kind, ends or centre and diameter (mm on the part); limit (120). The numbers move when the part changes: read them just before use, or name geometry by the part (byPoint). Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "limit": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "view"
+    ],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"v": "=view_of(a.view)"}},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"let": {"kind": "=a.get('kind', 'edges')", "sc": "=gscale(v)", "cap": "=int(a.get('limit', 120))"}},
+    {"when": "=kind == 'vertices'", "then": [{"let": {"items": "=[{'ref': 'Vertex' + str(i), 'at': [num(p.x / sc, 3), num(p.y / sc, 3)]} for i, p in enumerate(vertices_of(v))]"}}], "else": [{"refuse": "kind: edges, circles, lines or vertices.", "when": "=kind not in ('edges', 'circles', 'lines')"}, {"let": {"items": "=[dict([('ref', 'Edge' + str(i))] + list(info.items())) for i, info in enumerate([edge_info(e, sc) for e in edges_of(v)]) if not (kind == 'circles' and info['kind'] not in ('circle', 'arc')) and not (kind == 'lines' and info['kind'] != 'line')]"}}]}
+   ],
+   "answer": {"fields": {"view": "=v.Label", "scale": "=num(view_scale(v))", "units": "mm on the part, in the view's plane (x right, y as TechDraw keeps it)", "items": "=items[:cap]", "more": {"when": "=len(items) > cap", "value": {"fmt": "{len(items) - cap} more: kind narrows, or limit."}}, "byPoint": "Or name geometry by the part instead: { point: [x,y,z] }, { circle: { diameter, near } }, { edge: { through: [p, q] } }."}}
+  },
+  "td_dim": {
+   "group": "techdraw",
+   "description": "A dimension on a view, measured by TechDraw so it follows the part: type distance | horizontal | vertical (two points or one straight edge) | radius | diameter (one round edge) | angle (two straight edges); refs [\"Vertex1\", \"Vertex4\"] or by the part, which holds when numbers move: { point: [x,y,z] }, { circle: { diameter, near } }, { center: { diameter, near } }, { edge: { through: [p, q] } }. A diameter by { circle } takes whole circles only: an arc of that size (a slot's end) is refused — use radius. at [dx, dy] (its text from the view's centre, page mm); tolerance at once: plus/minus, fit \"H7\", basic, label, format \"%.1f\". Lengths in an iso view read foreshortened (td_dim_special axo_length). Answers dimension (its name), measured, text; unmeasurable is refused, nothing kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string"
+     },
+     "refs": {
+      "type": "array",
+      "items": {
+       "type": [
+        "string",
+        "object"
+       ]
+      }
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "plus": {
+      "type": "number"
+     },
+     "minus": {
+      "type": "number"
+     },
+     "fit": {
+      "type": "string"
+     },
+     "basic": {
+      "type": "boolean"
+     },
+     "label": {
+      "type": "string"
+     },
+     "format": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "view",
+     "refs"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"v": "=view_of(a.view)"}},
+    {"let": {"page": "=page_holding(v)"}},
+    {"let": {"typ": "=a.get('type', 'Distance')"}},
+    {"let": {"typ": "={'distance': 'Distance', 'horizontal': 'DistanceX', 'vertical': 'DistanceY', 'radius': 'Radius', 'diameter': 'Diameter', 'angle': 'Angle'}.get(typ, typ)"}},
+    {"refuse": "type: distance | horizontal | vertical | radius | diameter | angle.", "when": "=typ not in DIM_TYPES"},
+    {"let": {"refs": "=a.refs or []"}},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"let": {"names": "=[resolve_ref(v, r, 'circle' if typ == 'Diameter' else 'any') for r in refs]", "arc_note": null, "span": ""}},
+    {"let": {"plural": "='s' if len(names) != 1 else ''"}},
+    {"refuse": {"fmt": "{typ.lower()}: one circle or arc — refs [{{ circle: {{ diameter, near }} }}] or [\"Edge7\"] (td_geometry {{ kind: \"circles\" }} lists them); got {len(names)} reference{plural}."}, "when": "=typ in ('Radius', 'Diameter') and not (len(names) == 1 and names[0].startswith('Edge'))"},
+    {"when": "=typ in ('Radius', 'Diameter')", "then": [{"let": {"es": "=edges_of(v)", "k": "=int(names[0][4:])"}}, {"let": {"turn": "=arc_turn(es[k]) if k < len(es) else None"}}, {"refuse": {"fmt": "{typ.lower()}: {names[0]} of {v.Label} is a straight edge — td_geometry {{ kind: \"circles\" }} lists the circles and arcs."}, "when": "=turn is None and curve_name(es[k]) in ('Line', 'LineSegment')"}, {"when": "=typ == 'Diameter' and k not in whole_circles(es)", "then": [{"let": {"span": {"fmt": " of {turn * 360:.0f}°"}}, "when": "=turn"}, {"let": {"arc_note": {"fmt": "{names[0]} is an arc{span}, not a whole circle: a diameter on it reads as a hole's size — type: \"radius\" is the usual callout for an arc."}}}]}]},
+    {"refuse": "angle: refs two straight edges of the view ([\"Edge2\", \"Edge5\"] or { edge: { through: [p, q] } } each); td_geometry { kind: \"lines\" } lists them.", "when": "=typ == 'Angle' and not (len(names) == 2 and all(n.startswith('Edge') for n in names))"},
+    {"refuse": {"fmt": "{typ}: refs two vertices (or an edge and a vertex), or one straight edge — got {len(names)}; td_geometry {{ kind: \"vertices\" }} lists the points, or name them by the part: {{ point: [x, y, z] }}."}, "when": "=typ.startswith('Distance') and not (len(names) == 2 or (len(names) == 1 and names[0].startswith('Edge')))"},
+    {"add": "TechDraw::DrawViewDimension", "name": "Dimension", "as": "d"},
+    {"set": {"d.Type": "=typ", "d.MeasureType": "Projected", "d.References2D": "=[(v, n) for n in names]"}},
+    {"do": "=page.addView(d)"},
+    {"when": "=a.at is not None", "then": [{"let": {"ox, oy": "=pt2(a.at, 'at')"}}, {"set": {"d.X": "=ox", "d.Y": "=oy"}}]},
+    {"do": "=recompute()"},
+    {"try": [{"let": {"raw": "=float(d.getRawValue())"}}], "except": [{"refuse": {"fmt": "TechDraw cannot measure {', '.join(names)} of {v.Label} as {typ}: {error} — nothing was kept. td_geometry shows what each reference is (a radius or diameter wants a round edge, an angle two lines)."}, "first": [{"do": "=doc().removeObject(d.Name)"}], "code": "failed"}]},
+    {"let": {"src": "=apply_tol(d, a, raw)"}},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"...": "=dim_reading(d)", "fitFrom": {"when": "=src", "value": "=src"}, "note": {"when": "=arc_note", "value": "=arc_note"}}}
+  },
+  "td_dimset": {
+   "group": "techdraw",
+   "description": "Several dimensions along one direction at once: style chain (each point to the next) or baseline (each from the first, stacked lanes); type horizontal | vertical; refs three or more points in order (as td_dim takes them); offset mm off the view (10), spacing between lanes (7), format. Answers each dimension and overall.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "refs": {
+      "type": "array",
+      "items": {}
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "horizontal",
+       "vertical"
+      ]
+     },
+     "style": {
+      "type": "string",
+      "enum": [
+       "chain",
+       "baseline"
+      ]
+     },
+     "offset": {
+      "type": "number"
+     },
+     "spacing": {
+      "type": "number"
+     },
+     "format": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "view",
+     "refs"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"refs": "=a.refs or []"}},
+    {"refuse": {"fmt": "refs: three or more points along the part, in order — got {len(refs)} (td_dim takes two)."}, "when": "=len(refs) < 3"},
+    {"let": {"typ": "=a.get('type', 'horizontal')"}},
+    {"refuse": "type: horizontal | vertical.", "when": "=typ not in ('horizontal', 'vertical')"},
+    {"let": {"style": "=a.get('style', 'chain')"}},
+    {"refuse": "style: chain (each to the next) | baseline (each from the first).", "when": "=style not in ('chain', 'baseline')"},
+    {"let": {"v": "=view_of(a.view)"}},
+    {"let": {"X, Y": "=abs_xy(v)", "off": "=float(a.get('offset', 10.0))"}},
+    {"let": {"gap": "=float(a.get('spacing', 7.0))"}},
+    {"let": {"pairs": "=[(refs[i], refs[i + 1]) for i in range(len(refs) - 1)] if style == 'chain' else [(refs[0], r) for r in refs[1:]]"}},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"let": {"es": "=edges_of(v)", "made": []}},
+    {"let": {"bb": "=make_compound(es).BoundBox if es else None"}},
+    {"each": "r1, r2", "in": "=pairs", "index": "k", "steps": [{"let": {"lane": "=off + (k * gap if style == 'baseline' else 0)", "half_h": "=bb.YLength / 2 if bb is not None else 20", "half_w": "=bb.XLength / 2 if bb is not None else 20"}}, {"let": {"got": "=one_dim(dict([('view', v.Label), ('type', typ), ('refs', [r1, r2])] + ([('format', a.format)] if a.format else [])))"}}, {"let": {"d": "=obj_of(got['dimension'], ['TechDraw::DrawViewDimension'], 'dimension')"}}, {"let": {"nx": "=half_w + lane if typ == 'vertical' else d.X", "ny": "=-(half_h + lane) if typ == 'horizontal' else d.Y"}}, {"set": {"d.X": "=nx", "d.Y": "=ny"}}, {"push": {"made": "=dict(list(got.items()) + [('lane', round(lane, 1))])"}}]},
+    {"do": "=recompute()"},
+    {"let": {"total": "=sum(m.get('measured', 0) for m in made) if style == 'chain' else (made[-1].get('measured') if made else None)"}}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"view": "=v.Label", "style": "=style", "type": "=typ", "dimensions": "=made", "overall": {"when": "=is_number(total)", "value": "=round(total, 3)"}}}
+  },
+  "td_tolerance": {
+   "group": "techdraw",
+   "description": "Tolerance a dimension (by its name or label): plus/minus (mm; equal = ±), fit \"H7\" | \"g6\" (ISO 286 deviations for its measured size), basic: true (a boxed theoretically exact size, for GD&T), label (text instead of the value), format \"%.2f\"; clear: true first resets it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "dimension": {
+      "type": "string"
+     },
+     "plus": {
+      "type": "number"
+     },
+     "minus": {
+      "type": "number"
+     },
+     "fit": {
+      "type": "string"
+     },
+     "basic": {
+      "type": "boolean"
+     },
+     "label": {
+      "type": "string"
+     },
+     "format": {
+      "type": "string"
+     },
+     "clear": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "dimension"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"d": "=obj_of(a.dimension, ['TechDraw::DrawViewDimension'], 'dimension')"}},
+    {"let": {"raw": "=float(d.getRawValue())"}},
+    {"set": {"d.EqualTolerance": true, "d.OverTolerance": 0, "d.UnderTolerance": 0, "d.TheoreticalExact": false, "d.Arbitrary": false, "d.FormatSpec": "='%.2f' if d.Type in ('Distance', 'DistanceX', 'DistanceY', 'Radius', 'Diameter') else d.FormatSpec"}, "when": "=a.clear"},
+    {"let": {"src": "=apply_tol(d, a, raw)"}},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"...": "=dim_reading(d)", "fitFrom": {"when": "=src", "value": "=src"}}}
+  },
+  "td_gdt": {
+   "group": "techdraw",
+   "description": "A feature control frame (ISO 1101 / ASME Y14.5): frame [{ characteristic (flatness, straightness, circularity, cylindricity, profile_line, profile_surface, parallelism, perpendicularity, angularity, position, concentricity, symmetry, circular_runout, total_runout), tolerance mm, diameter (⌀ zone), modifier M|L|…, datums [\"A\", \"B|M\"] }] (rows stack: composite); with a leader to on (a view ref) or under dimension; at. Form tolerances take no datum, orientation and runout need one (refused, saying which). Answers reads: the frame in words.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "on": {
+      "type": [
+       "string",
+       "object"
+      ]
+     },
+     "dimension": {
+      "type": "string"
+     },
+     "frame": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "characteristic": {
+      "type": "string"
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "diameter": {
+      "type": "boolean"
+     },
+     "modifier": {
+      "type": "string"
+     },
+     "datums": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "height": {
+      "type": "number"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"rows": "=a.frame or ([a] if a.characteristic else [])"}},
+    {"let": {"rows": "=[{k: r.get(k) for k in ('characteristic', 'tolerance', 'diameter', 'modifier', 'datums') if r.get(k) is not None} for r in rows]"}},
+    {"let": {"fig, wrong": "=figure('frame', rows, float(a.get('height', 3.5)))"}},
+    {"refuse": "=wrong", "when": "=wrong is not None"},
+    {"when": "=a.dimension", "then": [{"let": {"d": "=obj_of(a.dimension, ['TechDraw::DrawViewDimension'], 'dimension')"}}, {"let": {"v": "=d.References2D[0][0]"}}, {"let": {"page": "=page_holding(v)", "vx, vy": "=abs_xy(v)"}}, {"let": {"at": "=place_xy(page, a.at, (vx + float(d.X), vy + float(d.Y) - fig.h - 2))"}}, {"let": {"sym": "=symbol(page, fig, {'kind': 'frame', 'rows': rows, 'h': float(a.get('height', 3.5))}, at, 'Frame')", "ln": null}}], "else": [{"let": {"v": "=view_of(a.view)"}}, {"let": {"page": "=page_holding(v)"}}, {"refuse": "on: the feature the frame points to (\"Edge3\", { point }, { circle }…), or dimension: a dimension to sit under.", "when": "=a.on is None"}, {"do": "=recompute([v])", "when": "=not edges_of(v)"}, {"let": {"ref, p": "=ref_point(v, a.on)"}}, {"let": {"vx, vy": "=abs_xy(v)"}}, {"let": {"at": "=place_xy(page, a.at, (vx + p[0] + 25, vy - p[1] + 15))"}}, {"let": {"sym": "=symbol(page, fig, {'kind': 'frame', 'rows': rows, 'h': float(a.get('height', 3.5)), 'on': ref}, at, 'Frame')"}}, {"let": {"ln": "=leader(v, p, (at[0] - fig.w / 2, at[1]))"}}]},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"symbol": "=sym.Name", "reads": "=describe(rows)", "at": ["=num(sym.X, 2)", "=num(sym.Y, 2)"], "size": ["=num(fig.w, 2)", "=num(fig.h, 2)"], "leader": {"when": "=ln", "value": "=ln.Name"}}}
+  },
+  "td_datum": {
+   "group": "techdraw",
+   "description": "A datum feature symbol: view, letter, on the feature (\"Edge3\" or { edge: { through } }, { point }), at. The triangle stands on the feature, the letter outward.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "letter": {
+      "type": "string"
+     },
+     "on": {
+      "type": [
+       "string",
+       "object"
+      ]
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "height": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "view",
+     "letter",
+     "on"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"v": "=view_of(a.view)"}},
+    {"let": {"page": "=page_holding(v)"}},
+    {"let": {"fig, wrong": "=figure('datum', a.letter, float(a.get('height', 3.5)))"}},
+    {"refuse": "=wrong", "when": "=wrong is not None"},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"let": {"ref, p": "=ref_point(v, a.on)"}},
+    {"let": {"vx, vy": "=abs_xy(v)"}},
+    {"let": {"ox": "=p[0]", "oy": "=-p[1]"}},
+    {"let": {"side": "=('right' if ox > 0 else 'left') if abs(ox) > abs(oy) else ('up' if oy > 0 else 'down')"}},
+    {"let": {"fig, wrong": "=figure('datum', a.letter, float(a.get('height', 3.5)), side)"}},
+    {"refuse": "=wrong", "when": "=wrong is not None"},
+    {"let": {"cx": "=vx + ox + {'right': fig.w / 2, 'left': -fig.w / 2}.get(side, 0.0)", "cy": "=vy + oy + {'up': fig.h / 2, 'down': -fig.h / 2}.get(side, 0.0)"}},
+    {"let": {"at": "=place_xy(page, a.at, (cx, cy))", "label": {"fmt": "Datum {a.letter}"}}},
+    {"let": {"sym": "=symbol(page, fig, {'kind': 'datum', 'letter': a.letter, 'h': float(a.get('height', 3.5)), 'side': side, 'on': ref}, at, label)"}},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"symbol": "=sym.Name", "datum": "=a.letter", "on": "=ref", "side": "=side", "at": ["=num(sym.X, 2)", "=num(sym.Y, 2)"]}}
+  },
+  "td_note": {
+   "group": "techdraw",
+   "description": "A note on the page: text (\\n splits lines), size (mm, 5), at [x, y] page mm. td_leader points one at a feature.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "page": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     },
+     "size": {
+      "type": "number"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"page": "=page_of(a.page)"}},
+    {"let": {"text": "=a.text"}},
+    {"refuse": "text: the note, lines split by \\n.", "when": "=not text"},
+    {"add": "TechDraw::DrawViewAnnotation", "name": "Note", "as": "n"},
+    {"do": "=page.addView(n)"},
+    {"set": {"n.Text": "=str(text).split('\\n')", "n.TextSize": "=float(a.get('size', 5.0))"}},
+    {"let": {"px, py": "=place_xy(page, a.at, (40, 40))"}},
+    {"set": {"n.X": "=px", "n.Y": "=py"}},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"note": "=n.Name", "lines": "=len(n.Text)", "at": ["=num(n.X, 2)", "=num(n.Y, 2)"]}}
+  },
+  "td_balloon": {
+   "group": "techdraw",
+   "description": "A balloon pointing at a feature of a view: view, on (a ref as td_dim takes), text (default the page's next number), at [dx, dy] from the view's centre.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "on": {
+      "type": [
+       "string",
+       "object"
+      ]
+     },
+     "text": {
+      "type": "string"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     }
+    },
+    "required": [
+     "view",
+     "on"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"v": "=view_of(a.view)"}},
+    {"let": {"page": "=page_holding(v)"}},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"let": {"ref, p": "=ref_point(v, a.on)"}},
+    {"add": "TechDraw::DrawViewBalloon", "name": "Balloon", "as": "b"},
+    {"set": {"b.SourceView": "=v"}},
+    {"do": "=page.addView(b)"},
+    {"set": {"b.OriginX": "=p[0]", "b.OriginY": "=-p[1]"}},
+    {"let": {"text": "=a.text"}},
+    {"let": {"text": "=next_balloon(page)"}, "when": "=text is None"},
+    {"set": {"b.Text": "=str(text)"}},
+    {"when": "=a.at is not None", "then": [{"let": {"ox, oy": "=pt2(a.at, 'at')"}}, {"set": {"b.X": "=ox", "b.Y": "=oy"}}], "else": [{"set": {"b.X": "=p[0] + 15", "b.Y": "=-p[1] + 15"}}]},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"balloon": "=b.Name", "text": "=b.Text", "on": "=ref"}}
+  },
+  "td_table": {
+   "group": "techdraw",
+   "description": "A spreadsheet's cells as a table on the page (a parts list from asm_bom, a revision table): sheet, range (default its used cells), size, at. It follows the sheet; an empty sheet is refused.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "page": {
+      "type": "string"
+     },
+     "sheet": {
+      "type": "string"
+     },
+     "range": {
+      "type": "string"
+     },
+     "size": {
+      "type": "number"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"page": "=page_of(a.page)"}},
+    {"let": {"ss": "=sheet_find(a.sheet)"}},
+    {"let": {"rng": "=a.range or filled_bounds(ss)"}},
+    {"refuse": {"fmt": "{ss.Label} is empty: sheet_set fills its cells (asm_bom makes a parts list), then td_table again."}, "when": "=not rng", "code": "invalid_state"},
+    {"let": {"corners, wrong": "=range_corners(rng)"}},
+    {"refuse": {"fmt": "range: {wrong}."}, "when": "=wrong is not None"},
+    {"add": "TechDraw::DrawViewSpreadsheet", "name": "Table", "as": "t"},
+    {"do": "=page.addView(t)"},
+    {"set": {"t.Source": "=ss", "t.CellStart": "=cell_name(corners[0])", "t.CellEnd": "=cell_name(corners[1])", "t.TextSize": "=float(a.size or 3.5)"}},
+    {"let": {"W, H": "=paper_size(page)"}},
+    {"let": {"px, py": "=place_xy(page, a.at, (W * 0.75, H * 0.75))"}},
+    {"set": {"t.X": "=px", "t.Y": "=py"}},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"table": "=t.Name", "sheet": "=ss.Label", "range": "=range_text(corners[0], corners[1])", "at": ["=num(t.X, 2)", "=num(t.Y, 2)"], "note": "It follows the sheet: change cells with sheet_set."}}
+  },
+  "td_section_position": {
+   "group": "techdraw",
+   "description": "Line a section view up with its base view: straight across when it sits beside it, straight above or below when over it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "section": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "section"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"sv": "=obj_of(a.section, ['TechDraw::DrawViewSection'], 'section')"}},
+    {"let": {"base": "=sv.BaseView"}},
+    {"let": {"base": "=base.InList[0]"}, "when": "=base.TypeId == 'TechDraw::DrawProjGroupItem'"},
+    {"let": {"bx": "=float(base.X)", "by": "=float(base.Y)"}},
+    {"when": "=abs(float(sv.X) - bx) > abs(float(sv.Y) - by)", "then": [{"set": {"sv.Y": "=by"}}], "else": [{"set": {"sv.X": "=bx"}}]},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"section": "=sv.Label", "at": ["=num(sv.X, 2)", "=num(sv.Y, 2)"], "base": "=base.Label"}}
+  },
+  "td_leader": {
+   "group": "techdraw",
+   "description": "A leader line from a feature of a view (on: a ref as td_dim takes) to at [x, y] page mm, with text (\\n splits lines) at its end — a note pointing at something.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "on": {},
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "text": {
+      "type": "string"
+     },
+     "size": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "view",
+     "on"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"v": "=view_of(a.view)"}},
+    {"let": {"page": "=page_holding(v)"}},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"let": {"ref, p": "=ref_point(v, a.on)"}},
+    {"let": {"vx, vy": "=abs_xy(v)"}},
+    {"let": {"at": "=place_xy(page, a.at, (vx + p[0] + 20, vy - p[1] + 15))"}},
+    {"let": {"ln": "=leader(v, p, at)"}},
+    {"let": {"out": {"leader": "=ln.Name", "on": "=ref"}}},
+    {"when": "=a.text", "then": [{"add": "TechDraw::DrawViewAnnotation", "name": "Note", "as": "n"}, {"do": "=page.addView(n)"}, {"set": {"n.Text": "=str(a.text).split('\\n')"}}, {"let": {"size": "=float(a.get('size', 3.5))"}}, {"set": {"n.TextSize": "=size"}}, {"let": {"w": "=max(len(x) for x in n.Text) * size * 0.55"}}, {"set": {"n.X": "=at[0] + (w / 2 + 1.5 if at[0] >= vx + p[0] else -w / 2 - 1.5)", "n.Y": "=at[1] + size * 0.35"}}, {"put": {"note": "=n.Name"}}]},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "=out"]}
+  },
+  "td_finish": {
+   "group": "techdraw",
+   "description": "A surface texture symbol (ISO 1302) on a surface's edge in a view (on): ra (\"1.6\" or \"Rz 6.3\"), removal required (machined) | prohibited | any, process (\"ground\"), lay = | perpendicular | crossed | multi | circular | radial | particulate, allowance mm; placed off the part on a leader (at [x, y] page mm to choose where; onSurface: true stands it on the edge itself).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "on": {},
+     "ra": {
+      "type": "string"
+     },
+     "removal": {
+      "type": "string",
+      "enum": [
+       "required",
+       "prohibited",
+       "any"
+      ]
+     },
+     "process": {
+      "type": "string"
+     },
+     "lay": {
+      "type": "string"
+     },
+     "allowance": {
+      "type": "string"
+     },
+     "height": {
+      "type": "number"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "onSurface": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "view",
+     "on"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"v": "=view_of(a.view)"}},
+    {"let": {"page": "=page_holding(v)"}},
+    {"let": {"data": {"kind": "finish", "ra": "=str(a.get('ra', ''))", "removal": "=a.get('removal', 'required')", "process": "=str(a.get('process', ''))", "lay": "=str(a.get('lay', ''))", "allowance": "=str(a.get('allowance', ''))", "h": "=float(a.get('height', 3.5))"}}},
+    {"let": {"fig, wrong": "=figure('finish', data['ra'], data['removal'], data['process'], data['lay'], data['allowance'], data['h'])"}},
+    {"refuse": "=wrong", "when": "=wrong is not None"},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"refuse": "on: the surface's edge in the view (\"Edge4\") — the symbol's point sits on it.", "when": "=a.on is None"},
+    {"let": {"ref, p": "=ref_point(v, a.on)"}},
+    {"let": {"vx, vy": "=abs_xy(v)"}},
+    {"let": {"base": "=(vx + p[0], vy - p[1])", "want": "=a.at"}},
+    {"let": {"want": "=[base[0] + 12, base[1] + (-14 if p[1] > 0 else 14)]"}, "when": "=a.at is None and not a.onSurface"},
+    {"when": "=want is not None", "then": [{"let": {"at": "=place_xy(page, want, base)"}}, {"let": {"ln": "=leader(v, p, at)"}}, {"do": "=data.update({'leader': ln.Name})"}], "else": [{"let": {"at": "=base"}}]},
+    {"let": {"cx": "=at[0] + fig.origin[0] + fig.w / 2", "cy": "=at[1] - (fig.origin[1] + fig.h / 2)"}},
+    {"do": "=data.update({'on': ref})"},
+    {"let": {"sym": "=symbol(page, fig, data, (cx, cy), 'Surface finish')"}},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"symbol": "=sym.Name", "on": "=ref", "ra": "=data['ra']", "removal": "=data['removal']", "at": ["=num(at[0], 2)", "=num(at[1], 2)"]}}
+  },
+  "td_area": {
+   "group": "techdraw",
+   "description": "Write a face's area on the drawing with a leader to it: face (\"Body.Face3\" on the part), view, unit mm2 | cm2 | m2, decimals, format (\"A = {value} {unit}\"), at. Written as text: it does not follow the part afterwards.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "face": {
+      "type": "string"
+     },
+     "unit": {
+      "type": "string",
+      "enum": [
+       "mm2",
+       "cm2",
+       "m2"
+      ]
+     },
+     "decimals": {
+      "type": "integer"
+     },
+     "format": {
+      "type": "string"
+     },
+     "size": {
+      "type": "number"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     }
+    },
+    "required": [
+     "view",
+     "face"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"v": "=view_of(a.view)"}},
+    {"let": {"page": "=page_holding(v)"}},
+    {"let": {"label, sub, face": "=resolve(a.face)"}},
+    {"refuse": "face: a face of the part (\"Body.Face3\") — its area is written.", "when": "=not sub or not sub.startswith('Face')"},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"let": {"p": "=paper_of3d(v, list(face.CenterOfMass))"}},
+    {"let": {"vx, vy": "=abs_xy(v)", "unit": "=a.get('unit', 'mm2')"}},
+    {"let": {"val": "=face.Area / {'mm2': 1, 'cm2': 100, 'm2': 1e6}.get(unit, 1)"}},
+    {"let": {"text": "=area_text(a.get('format', 'A = {value} {unit}'), val, a.get('decimals', 1), unit)"}},
+    {"let": {"at": "=place_xy(page, a.at, (vx + p[0] + 20, vy - p[1] + 15))"}},
+    {"let": {"ln": "=leader(v, p, at)"}},
+    {"add": "TechDraw::DrawViewAnnotation", "name": "Note", "as": "n"},
+    {"do": "=page.addView(n)"},
+    {"set": {"n.Text": ["=text"]}},
+    {"let": {"size": "=float(a.get('size', 3.5))"}},
+    {"set": {"n.TextSize": "=size"}},
+    {"set": {"n.X": "=at[0] + len(text) * size * 0.55 / 2 + 1.5", "n.Y": "=at[1] + size * 0.35"}},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"face": "=label + '.' + sub", "area": "=num(val, 4)", "unit": "=unit", "text": "=text", "leader": "=ln.Name", "note": "=n.Name"}}
+  },
+  "td_dim_format": {
+   "group": "techdraw",
+   "description": "Dimension text: dims, then decimals n (0 to 9), more +1/−1, prefix diameter (⌀) | square (□) | count (n×, with count) | any text, removePrefix, format (a whole format, \"%.2f mm\"). A prefix is text only: it does not check what the dimension is on.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "dims": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "decimals": {
+      "type": "integer"
+     },
+     "more": {
+      "type": "integer"
+     },
+     "prefix": {
+      "type": "string"
+     },
+     "count": {
+      "type": "integer"
+     },
+     "removePrefix": {
+      "type": "boolean"
+     },
+     "format": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "dims"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"rows": []}},
+    {"each": "d", "in": "=dims_of(a.dims)", "steps": [{"let": {"f": "=str(d.FormatSpec)"}}, {"let": {"f": "=str(a.format)"}, "when": "=a.format"}, {"let": {"f": "=without_prefix(f)"}, "when": "=a.removePrefix"}, {"when": "=a.decimals is not None", "then": [{"let": {"n": "=int(a.decimals)"}}, {"refuse": "decimals: 0 to 9.", "when": "=not 0 <= n <= 9"}, {"let": {"f": "=with_decimals(f, n)"}}]}, {"let": {"f": "=more_decimals(f, int(a.more))"}, "when": "=a.more is not None"}, {"let": {"f": "=prefixed(f, a.prefix, a.get('count', 2))"}, "when": "=a.prefix"}, {"set": {"d.FormatSpec": "=f"}}, {"push": {"rows": {"dimension": "=d.Label", "format": "=f"}}}]},
+    {"do": "=recompute()"},
+    {"each": "e, d", "in": "=zip(rows, dims_of(a.dims))", "steps": [{"try": [{"do": "=e.update({'reads': d.getText() if has(d, 'getText') else None})"}], "except": []}]}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"dims": "=rows"}}
+  },
+  "td_dim_special": {
+   "group": "techdraw",
+   "description": "Special dimensions: kind extent_h / extent_v (the view's whole width or height, or refs edges'), chamfer_h / chamfer_v (refs a chamfer's two points: \"2 x45°\"), arc_length (refs one arc: ◠ its length), axo_length (refs [edge, extension-line edge] in an iso view: the true length, not the foreshortened one). at [dx, dy]. Arc and axo lengths are text, re-read from the part when a td_ tool changes the drawing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "view": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "extent_h",
+       "extent_v",
+       "chamfer_h",
+       "chamfer_v",
+       "arc_length",
+       "axo_length"
+      ]
+     },
+     "refs": {
+      "type": "array",
+      "items": {}
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "decimals": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "view",
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"v": "=view_of(a.view)"}},
+    {"let": {"page": "=page_holding(v)"}},
+    {"let": {"kind": "=a.kind"}},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"when": "=kind in ('extent_h', 'extent_v')", "then": [{"let": {"edges": "=[resolve_ref(v, r) for r in (a.refs or [])]"}}, {"let": {"d": "=extent_dim(v, edges, 0 if kind == 'extent_h' else 1)"}}, {"refuse": {"fmt": "TechDraw made no extent dimension on {v.Label}: refs edges of the view (td_geometry lists them), or none for the whole view; a view with no edges has no extent."}, "when": "=d is None", "code": "failed"}, {"answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"kind": "=kind", "...": "=dim_reading(d)"}}}]},
+    {"let": {"names": "=[resolve_ref(v, r) for r in (a.refs or [])]"}},
+    {"add": "TechDraw::DrawViewDimension", "name": "Dimension", "as": "d"},
+    {"set": {"d.MeasureType": "Projected"}},
+    {"choose": "='chamfer' if kind in ('chamfer_h', 'chamfer_v') else 'length' if kind in ('arc_length', 'axo_length') else 'other'", "of": {"chamfer": [{"refuse": "refs: the chamfer's two end points.", "first": [{"do": "=doc().removeObject(d.Name)"}], "when": "=len(names) != 2"}, {"set": {"d.Type": "='DistanceX' if kind == 'chamfer_h' else 'DistanceY'", "d.References2D": "=[(v, n) for n in names]"}}, {"do": ["=page.addView(d)", "=recompute()"]}, {"let": {"ang": "=chamfer_angle(v, names, kind)"}}, {"set": {"d.FormatSpec": {"fmt": "{d.FormatSpec} x{ang}°"}}}], "length": [{"let": {"misfit": "=len(names) != (1 if kind == 'arc_length' else 2) or not all(n.startswith('Edge') for n in names)"}}, {"refuse": "refs: one curved edge.", "first": [{"do": "=doc().removeObject(d.Name)"}], "when": "=misfit and kind == 'arc_length'"}, {"refuse": "refs: [the edge to measure, an edge the extension lines run along].", "first": [{"do": "=doc().removeObject(d.Name)"}], "when": "=misfit"}, {"let": {"es": "=edges_of(v)"}}, {"let": {"e": "=es[int(names[0][4:])]"}}, {"let": {"spec": {"kind": "=kind", "view": "=v.Name", "edge": "=names[0]", "decimals": "=int(a.get('decimals', 2))"}}}, {"when": "=kind == 'arc_length'", "then": [{"refuse": {"fmt": "{names[0]} is not an arc: refs one curved edge."}, "first": [{"do": "=doc().removeObject(d.Name)"}], "when": "=not has(get(e, 'Curve'), 'Radius')"}, {"let": {"anchor": "=model_arc_anchor(v, e)"}}, {"do": "=spec.update({'src': anchor})", "when": "=anchor"}, {"let": {"ends": "=nearest_vertices(v, e)"}}, {"set": {"d.Type": "Distance", "d.References2D": "=[(v, n) for n in ends]"}}, {"do": "=page.addView(d)"}], "else": [{"let": {"la, ea": "=axo_angles(e, es[int(names[1][4:])])"}}, {"set": {"d.Type": "Distance", "d.References2D": "=[(v, names[0])]"}}, {"do": "=page.addView(d)"}, {"set": {"d.AngleOverride": true, "d.LineAngle": "=la", "d.ExtensionAngle": "=ea"}}]}, {"do": ["=own_prop(d, SPECIAL_PROP, 'App::PropertyString', 'What this special dimension measures (JSON), re-read when the drawing changes')", "=setprop(d, SPECIAL_PROP, dumps(spec))"]}, {"let": {"L": "=special_length(v, spec)"}}, {"refuse": {"fmt": "{names[0]}: no model edge lands on it in this view (an axonometric length needs a straight edge of the part along one of its axes)."}, "first": [{"do": "=doc().removeObject(d.Name)"}], "when": "=L is None and kind == 'axo_length'", "code": "invalid_state"}, {"refuse": {"fmt": "{names[0]} could not be read."}, "first": [{"do": "=doc().removeObject(d.Name)"}], "when": "=L is None", "code": "invalid_state"}, {"do": "=refresh_special()"}]}, "else": [{"refuse": "kind: extent_h | extent_v { refs edges, none for the whole view } | chamfer_h | chamfer_v { refs two points } | arc_length { refs [an arc] } | axo_length { refs [edge, extension edge] }.", "first": [{"do": "=doc().removeObject(d.Name)"}]}]},
+    {"when": "=a.at is not None", "then": [{"let": {"ox, oy": "=pt2(a.at, 'at')"}}, {"set": {"d.X": "=ox", "d.Y": "=oy"}}]},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"kind": "=kind", "...": "=dim_reading(d)"}}
+  },
+  "td_dim_align": {
+   "group": "techdraw",
+   "description": "Line dimensions' texts up: dims (the first sets the line), direction horizontal (all at the first's height) | vertical | oblique (three or more, on the line through the first two).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "dims": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "direction": {
+      "type": "string",
+      "enum": [
+       "horizontal",
+       "vertical",
+       "oblique"
+      ]
+     }
+    },
+    "required": [
+     "dims"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"ds": "=dims_of(a.dims)", "how": "=a.get('direction', 'horizontal')"}},
+    {"choose": "=how", "of": {"horizontal": [{"let": {"y": "=float(ds[0].Y)"}}, {"each": "d", "in": "=ds", "steps": [{"set": {"d.Y": "=y"}}]}], "vertical": [{"let": {"x": "=float(ds[0].X)"}}, {"each": "d", "in": "=ds", "steps": [{"set": {"d.X": "=x"}}]}], "oblique": [{"refuse": "oblique: three or more dimensions, lined up on the first two.", "when": "=len(ds) < 3"}, {"let": {"x0": "=float(ds[0].X)", "y0": "=float(ds[0].Y)"}}, {"let": {"dx": "=float(ds[1].X) - x0", "dy": "=float(ds[1].Y) - y0"}}, {"let": {"L2": "=dx * dx + dy * dy or 1"}}, {"each": "d", "in": "=ds[2:]", "steps": [{"let": {"t": "=((float(d.X) - x0) * dx + (float(d.Y) - y0) * dy) / L2"}}, {"set": {"d.X": "=x0 + t * dx", "d.Y": "=y0 + t * dy"}}]}]}, "else": [{"refuse": "direction: horizontal | vertical | oblique."}]},
+    {"do": "=recompute()"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"dims": "=[{'dimension': d.Label, 'at': [num(d.X, 2), num(d.Y, 2)]} for d in ds]"}}
+  },
+  "td_dim_repair": {
+   "group": "techdraw",
+   "description": "Point a dimension at new references (after the model changed and its numbers moved): refs as td_dim takes them, view to move it to another; the old ones are put back if TechDraw cannot measure the new.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "dimension": {
+      "type": "string"
+     },
+     "view": {
+      "type": "string"
+     },
+     "refs": {
+      "type": "array",
+      "items": {}
+     }
+    },
+    "required": [
+     "dimension",
+     "refs"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/techdraw.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"d": "=dims_of(a.dimension)[0]"}},
+    {"let": {"v": "=view_of(a.view) if a.view else d.References2D[0][0]"}},
+    {"do": "=recompute([v])", "when": "=not edges_of(v)"},
+    {"let": {"names": "=[resolve_ref(v, r) for r in (a.refs or [])]"}},
+    {"refuse": "refs: the view's points or edges it should measure now (as td_dim takes them).", "when": "=not names"},
+    {"let": {"before": "=d.References2D"}},
+    {"set": {"d.References2D": "=[(v, n) for n in names]"}},
+    {"do": "=recompute()"},
+    {"try": [{"do": "=float(d.getRawValue())"}], "except": [{"refuse": {"fmt": "TechDraw cannot measure those: {error} — the old references were put back."}, "first": [{"set": {"d.References2D": "=before"}}, {"do": "=recompute()"}], "code": "failed"}]}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "=dim_reading(d)"]}
+  },
+  "surface_fill": {
+   "group": "draft",
+   "description": "A plain surface filled across one closed boundary (Part's filled face; not parametric): edges (\"Body.Edge3\" …) or a sketch or wire whose outline bounds it, bent as smoothly as the edges allow; thickness mm makes it a solid (negative: the other side). Edges that leave a gap or form more than one loop are refused. Reply: object, area, solid, volume.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "edges": {
+      "type": "array",
+      "items": {}
+     },
+     "body": {
+      "type": "string"
+     },
+     "thickness": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "edges"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft.py)",
+   "date": "2026-11-16",
+   "family": "draft",
+   "runner": "steps",
+   "steps": [
+    {"let": {"edges": "=[]"}},
+    {"each": "r", "in": "=a.edges or []", "index": "i", "steps": [{"let": {"label, sub, el": "=resolve(r, a.body)"}}, {"refuse": {"fmt": "edges.{i}: an edge (\"Box.Edge3\") or an object whose edges bound it (a sketch, a wire)."}, "when": "=not is_edge(el) and not (has(el, 'Edges') and el.Edges and sub is None)"}, {"do": "=edges.extend([el] if is_edge(el) else list(el.Edges))"}]},
+    {"refuse": "edges: the boundary — edges (\"Body.Edge3\") or a sketch whose closed outline bounds the surface.", "when": "=len(edges) < 1"},
+    {"let": {"runs": "=sort_edges(edges)"}},
+    {"refuse": {"fmt": "edges: they form {len(runs)} separate runs, not one closed boundary — give the edges of one loop (an inner loop cannot be a hole here; part_face makes a flat face with holes)."}, "when": "=len(runs) != 1"},
+    {"try": [{"let": {"w": "=as_wire(runs[0])"}}], "on": "error", "except": [{"let": {"w": null}}]},
+    {"when": "=w is None or not w.isClosed()", "then": [{"let": {"gap": ""}}, {"when": "=w is not None and len(w.Vertexes) >= 2", "then": [{"let": {"vs": "=w.OrderedVertexes"}}, {"let": {"gap": {"fmt": " (its ends are {vs[0].Point.distanceToPoint(vs[-1].Point):.4g} mm apart)"}}}]}, {"refuse": {"fmt": "edges: they do not close into one boundary{gap}: add the missing edge, or snap the ends together."}}]},
+    {"try": [{"let": {"face": "=filled_face(w.Edges)"}}], "on": "error", "except": [{"refuse": {"fmt": "No surface fills that boundary: {error} — fewer, smoother edges; surface_boundary takes 2 to 4 curves, surface_sections a row of them."}, "code": "failed"}]},
+    {"refuse": "The filled surface came out empty: the boundary may fold over itself.", "code": "failed", "when": "=face.isNull() or face.Area < 1e-9"},
+    {"let": {"t": "=a.thickness"}},
+    {"when": "=t is not None", "then": [{"let": {"t": "=num(t, 'thickness')"}}, {"refuse": "thickness: mm, not 0 (negative: the other side); leave it out for the surface alone.", "when": "=t == 0"}, {"try": [{"let": {"shape": "=face.makeOffsetShape(t, 1e-3, fill=True)"}}], "on": "error", "except": [{"refuse": {"fmt": "The surface could not be thickened by {t:g} mm: {error} — a thinner one, or the other side (negative)."}, "code": "failed"}]}], "else": [{"let": {"shape": "=face"}}]},
+    {"let": {"o": "=doc().addObject('Part::Feature', (a.name or 'Surface').replace(' ', '_'))"}},
+    {"set": {"o.Label": "=a.name or 'Surface'", "o.Shape": "=shape"}},
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]}
+   ],
+   "answer": {"fields": {"object": "=o.Label", "area": "=round(face.Area, 2)", "solid": "=bool(shape.Solids)", "step": "=step()", "volume": {"when": "=shape.Solids", "value": "=round(shape.Volume, 2)"}}}
+  },
+  "surface_loft": {
+   "group": "draft",
+   "description": "A plain surface through curves in order (Part's loft; not parametric): curves, each an edge (\"Body.Edge3\"), a sketch, or { points: [[x,y,z] …], closed } for a smooth curve through them; all open (a sheet) or all closed (a tube), running the same way. ruled: straight between; closed: true joins the last back to the first (3 or more); thickness mm makes it a solid (side out, in or both). Reply: object, area, solid, volume, size, through; warnings under 0.8 mm or when the solid is not valid.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "curves": {
+      "type": "array",
+      "items": {}
+     },
+     "body": {
+      "type": "string"
+     },
+     "ruled": {
+      "type": "boolean"
+     },
+     "closed": {
+      "type": "boolean"
+     },
+     "thickness": {
+      "type": "number"
+     },
+     "side": {
+      "type": "string",
+      "enum": [
+       "out",
+       "in",
+       "both"
+      ]
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "curves"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft.py)",
+   "date": "2026-11-16",
+   "family": "draft",
+   "runner": "steps",
+   "steps": [
+    {"let": {"curves": "=a.curves or []"}},
+    {"refuse": "curves: two or more, in order — edges (\"Body.Edge3\"), sketches, or { points: [[x,y,z] …], closed }.", "when": "=not is_list(curves) or len(curves) < 2"},
+    {"refuse": "closed: true runs the surface from the last curve back to the first, which needs three or more curves.", "when": "=a.closed and len(curves) < 3"},
+    {"let": {"wires": "=[curve(r, 'curves.' + str(i), a.body) for i, r in enumerate(curves)]"}},
+    {"let": {"closed": "=[w.isClosed() for w in wires]"}},
+    {"refuse": {"fmt": "curves: all open or all closed — curves {[i for i, c in enumerate(closed) if c]} are closed, the rest open."}, "when": "=len(set(closed)) > 1"},
+    {"try": [{"let": {"shape": "=make_loft(wires, False, bool(a.ruled), bool(a.closed))"}}], "on": "error", "except": [{"refuse": {"fmt": "No surface goes through those curves: {error} — curves that run the same way, in order, with the same number of pieces each, loft best."}, "code": "failed"}]}
+   ],
+   "answer": {"via": "finish", "with": ["=shape", "=a", "=tool", "$fields"], "fields": {"curves": "=len(wires)", "through": "='closed curves (a tube)' if closed[0] else 'open curves (a sheet)'"}}
+  },
+  "surface_points": {
+   "group": "draft",
+   "description": "A plain smooth surface through a grid of points, row by row (rows: [[[x,y,z] …] …], two or more rows of one length): through every point, or with tolerance mm within that of them for a smoother one. thickness and side make it a solid. Reply: grid, fitted, farthestPoint mm (how far the worst point is off it), area.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "rows": {
+      "type": "array",
+      "items": {}
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "thickness": {
+      "type": "number"
+     },
+     "side": {
+      "type": "string",
+      "enum": [
+       "out",
+       "in",
+       "both"
+      ]
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "rows"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft.py)",
+   "date": "2026-11-16",
+   "family": "draft",
+   "runner": "steps",
+   "steps": [
+    {"let": {"rows": "=a.rows"}},
+    {"refuse": "rows: a grid of points, row by row — [[[x,y,z] …], [[x,y,z] …] …], two or more rows of the same length.", "when": "=not is_list(rows) or len(rows) < 2 or not all(is_list(r) for r in rows)"},
+    {"let": {"n": "=len(rows[0])"}},
+    {"refuse": {"fmt": "rows: each row the same length ({n}), two or more points each."}, "when": "=n < 2 or any(len(r) != n for r in rows)"},
+    {"let": {"pts": "=[[point(p, 'rows.' + str(i) + '.' + str(j)) for j, p in enumerate(r)] for i, r in enumerate(rows)]"}},
+    {"let": {"tol": "=float(a.get('tolerance', 0.0))", "bs": "=bspline_surface()", "deg": "=min(3, len(rows) - 1, n - 1)"}},
+    {"try": [{"when": "=tol > 0", "then": [{"do": "=bs.approximate(Points=pts, DegMin=deg, DegMax=deg, Tolerance=tol)"}], "else": [{"do": "=bs.interpolate(pts)"}]}], "on": "error", "except": [{"refuse": {"fmt": "No surface fits those points: {error} — rows that run the same way, without points on top of each other."}, "code": "failed"}]},
+    {"let": {"face": "=bs.toShape()"}},
+    {"let": {"worst": "=max(face.distToShape(vertex(p))[0] for r in pts for p in r)", "fitted": "through every point"}},
+    {"let": {"fitted": {"fmt": "within {tol:g} mm"}}, "when": "=tol > 0"}
+   ],
+   "answer": {"via": "finish", "with": ["=face", "=a", "=tool", "$fields"], "fields": {"grid": "=[len(rows), n]", "fitted": "=fitted", "farthestPoint": "=round(worst, 4)"}}
+  },
+  "surface_thicken": {
+   "group": "draft",
+   "description": "Make a surface a solid: surface an object (\"Surface\") or one face (\"Body.Face3\"), thickness mm over 0, side out (along its normal), in, or both (half each way). A new plain object; it cannot be thicker inward than its tightest bend. Reply: object, solid, volume, area, size; warnings under two printed lines (0.8 mm) or when the solid is not valid.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "surface": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "thickness": {
+      "type": "number"
+     },
+     "side": {
+      "type": "string",
+      "enum": [
+       "out",
+       "in",
+       "both"
+      ]
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "surface",
+     "thickness"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft.py)",
+   "date": "2026-11-16",
+   "family": "draft",
+   "runner": "steps",
+   "steps": [
+    {"let": {"ref": "=a.surface"}},
+    {"refuse": "surface: an object (\"Surface\") or a body's face (\"Body.Face3\").", "when": "=not ref"},
+    {"let": {"label, sub, el": "=resolve(ref, a.body)"}},
+    {"let": {"shape": "=el if is_surface(el) else get(el, 'Shape', el)"}},
+    {"refuse": {"fmt": "surface: {ref} has no faces to thicken."}, "when": "=not get(shape, 'Faces', None)"},
+    {"refuse": "thickness: mm.", "when": "=a.thickness is None"}
+   ],
+   "answer": {"via": "finish", "with": ["=shape if is_face(shape) or len(shape.Faces) == 1 else as_shell(shape.Faces)", "=a", "=tool", "$fields"], "fields": {"from": "=ref"}}
+  },
+  "draft_fonts": {
+   "group": "draft",
+   "description": "The TrueType fonts on this computer by file name (name filters; limit, 25; paths: true adds their paths), and the one draft_text takes by default. Reply: fonts, found, default.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "limit": {
+      "type": "integer"
+     },
+     "paths": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/draft.py)",
+   "date": "2026-11-16",
+   "family": "draft",
+   "runner": "steps",
+   "steps": [
+    {"let": {"have": "=fonts()", "q": "=(a.name or '').lower()"}},
+    {"let": {"hit": "=[f for f in have if q in basename(f).lower()] if q else have", "lim": "=int(a.get('limit', 25))"}}
+   ],
+   "answer": {"fields": {"fonts": "=[basename(f) for f in hit[:lim]]", "found": "=len(hit)", "default": "=basename(font_file(None)) if have else None", "paths": {"when": "=a.paths", "value": "=hit[:lim]"}, "more": {"when": "=len(hit) > lim", "value": {"fmt": "{len(hit) - lim} more: name filters (\"Sans\"), limit raises it."}}}}
+  },
+  "draft_text": {
+   "group": "draft",
+   "description": "Letter a flat face of a body: text from a TrueType font (font: a name or .ttf path; draft_fonts lists them), size mm (the font's size: capitals come out near 0.7 of it), depth mm, mode emboss (raised, default) or engrave (cut in), face (default the largest facing up), centred on it or at [x,y,z], rotate degrees, tracking. The body becomes the lettered solid (one boolean, not parametric; slow for long text on a detailed body). Reply: volumeChange, box (the real extent), font; warning when letters run off the face, printNote when strokes are under a printed line.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     },
+     "face": {
+      "description": "The face: \"Face6\", or a query { normal, near, area … } as shape_query takes (the largest match, or the nearest with near). Default: the largest face facing up."
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "size": {
+      "type": "number"
+     },
+     "depth": {
+      "type": "number"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "emboss",
+       "engrave"
+      ]
+     },
+     "font": {
+      "type": "string"
+     },
+     "rotate": {
+      "type": "number"
+     },
+     "tracking": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft.py)",
+   "date": "2026-11-16",
+   "family": "draft",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=body(a.body)", "text": "=a.text"}},
+    {"refuse": "text: the lettering.", "when": "=not is_str(text) or not text.strip()"},
+    {"let": {"size": "=num(a.get('size', 6), 'size')", "depth": "=num(a.get('depth', 0.6), 'depth')"}},
+    {"refuse": "size (letter height) and depth: mm, over 0.", "when": "=size <= 0 or depth <= 0"},
+    {"let": {"mode": "=a.get('mode', 'emboss')"}},
+    {"refuse": "mode: emboss (raised) or engrave (cut in).", "when": "=mode not in ('emboss', 'engrave')"},
+    {"let": {"face": "=pick_face(o, a.face or {'normal': [0, 0, 1]})", "at": "=vec3(a.at, 'at') if a.at is not None else None"}},
+    {"let": {"pl, n": "=face_frame(face, at)", "font": "=font_file(a.font)"}},
+    {"let": {"letters": "=text_faces(text, font, size, float(a.get('tracking', 0)))"}},
+    {"let": {"bb": "=letters.BoundBox"}},
+    {"do": "=letters.translate(V(-(bb.XMin + bb.XMax) / 2, -(bb.YMin + bb.YMax) / 2, 0))"},
+    {"do": "=letters.rotate(V(0, 0, 0), V(0, 0, 1), float(a.rotate))", "when": "=a.rotate"},
+    {"let": {"letters": "=letters.copy()"}},
+    {"do": "=letters.transformShape(pl.toMatrix())"},
+    {"let": {"lb": "=letters.BoundBox", "solid": "=letters.extrude(n * (depth if mode == 'emboss' else -depth))"}},
+    {"let": {"eb": "=solid.BoundBox"}},
+    {"let": {"eb": "=([eb.XMin, eb.YMin, eb.ZMin], [eb.XMax, eb.YMax, eb.ZMax])"}},
+    {"do": "=solid.translate(n * 0.01)", "when": "=mode == 'engrave'"},
+    {"let": {"before": "=o.Shape.Volume", "out_of_face": "=[p for p in (V(lb.XMin, lb.YMin, lb.ZMin), V(lb.XMax, lb.YMax, lb.ZMax)) if face.distToShape(vertex(p))[0] > 0.05]"}},
+    {"try": [{"let": {"res": "=o.Shape.fuse(solid) if mode == 'emboss' else o.Shape.cut(solid)"}}, {"let": {"res": "=res.removeSplitter()"}}], "on": "error", "except": [{"refuse": {"fmt": "The lettering could not be {'joined to' if mode == 'emboss' else 'cut into'} {o.Label}: {error}"}, "code": "failed"}]},
+    {"refuse": "The result is not a valid solid: smaller letters, a shallower depth, or another font.", "code": "failed", "when": "=not res.isValid() or not res.Solids"},
+    {"let": {"made": "=bake(o, res, a.name)"}},
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]},
+    {"let": {"stroke": "=size * 0.12"}}
+   ],
+   "answer": {"fields": {"body": "=made.Label", "text": "=text", "mode": "=mode", "font": "=basename(font)", "size": "=size", "depth": "=depth", "volumeChange": "=round(made.Shape.Volume - before, 2)", "box": "={'min': [round(v, 2) for v in eb[0]], 'max': [round(v, 2) for v in eb[1]]}", "step": "=step()", "warning": {"when": "=out_of_face", "value": "The lettering runs past the face's edge: smaller size, or shorter text."}, "printNote": {"when": "=stroke < 0.4", "value": {"fmt": "Strokes about {stroke:.2f} mm wide: under a 0.4 mm nozzle's line — print letters at least {ceil(0.4 / 0.12)} mm tall, or expect them to blur."}}, "view": "view_render { zoom: { at: the box's middle, size } } to look at it."}}
+  },
+  "draft_outline": {
+   "group": "draft",
+   "description": "Bring a logo or shape from an SVG or DXF file (closed outlines; holes kept; text must be paths): scaled to width or height mm (neither: the file's own size), then mode emboss (raised on a body's face, the largest facing up by default), engrave (cut in), or extrude (a part of its own, depth mm thick; the default without body). face, at, rotate as draft_text; mirror flips it. Reply: outlines, size, scale, openCurvesLeftOut, volume or volumeChange, printNote when strokes are under a printed line.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "face": {
+      "description": "The face: \"Face6\", or a query { normal, near, area … } as shape_query takes (the largest match, or the nearest with near). Default: the largest face facing up."
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "width": {
+      "type": "number"
+     },
+     "height": {
+      "type": "number"
+     },
+     "depth": {
+      "type": "number"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "emboss",
+       "engrave",
+       "extrude"
+      ]
+     },
+     "rotate": {
+      "type": "number"
+     },
+     "mirror": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft.py)",
+   "date": "2026-11-16",
+   "family": "draft",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "path: an .svg or .dxf with closed outlines (a logo, a shape).", "when": "=not a.path"},
+    {"let": {"flat, open_": "=outline_faces(a.path)"}},
+    {"let": {"bb": "=flat.BoundBox", "w": "=num(a.width, 'width') if a.width is not None else None"}},
+    {"let": {"h": "=num(a.height, 'height') if a.height is not None else None", "k": 1.0}},
+    {"when": "=w", "then": [{"let": {"k": "=w / bb.XLength"}}], "else": [{"let": {"k": "=h / bb.YLength"}, "when": "=h"}]},
+    {"when": "=k != 1.0", "then": [{"let": {"flat": "=flat.copy()"}}, {"do": "=flat.scale(k)"}]},
+    {"let": {"flat": "=flat.mirror(V(0, 0, 0), V(1, 0, 0))"}, "when": "=a.mirror"},
+    {"let": {"bb": "=flat.BoundBox", "depth": "=num(a.get('depth', 0.6), 'depth')"}},
+    {"refuse": "depth: mm, over 0.", "when": "=depth <= 0"},
+    {"let": {"mode": "=a.get('mode', 'emboss' if a.body else 'extrude')"}},
+    {"refuse": "mode: emboss (raised on a face), engrave (cut in), or extrude (a part of its own).", "when": "=mode not in ('emboss', 'engrave', 'extrude')"},
+    {"let": {"out": "={'outlines': len(flat.Faces), 'size': [round(bb.XLength, 2), round(bb.YLength, 2)], 'scale': round(k, 5), 'mode': mode, 'depth': depth}"}},
+    {"put": {"openCurvesLeftOut": "=open_"}, "when": "=open_"},
+    {"try": [{"let": {"thin": "=flat.makeOffset2D(-0.2, 0, False, False, False)"}}, {"let": {"lost": "=1 - (thin.Area / flat.Area) if flat.Area else 0"}}, {"put": {"printNote": "Much of the artwork is under 0.4 mm across: thin strokes will blur or vanish — scale it up (width), or thicken the artwork."}, "when": "=lost > 0.5"}], "on": "error", "except": [{"put": {"printNote": "Parts of the artwork are under 0.4 mm across (thinner than a printed line): scale it up, or expect them to blur."}}]},
+    {"when": "=mode == 'extrude'", "then": [{"let": {"solid": "=flat.extrude(V(0, 0, depth))"}}, {"let": {"o": "=doc().addObject('Part::Feature', (a.name or 'Outline').replace(' ', '_'))"}}, {"set": {"o.Label": "=a.name or 'Outline'", "o.Shape": "=solid"}}, {"do": ["=doc().recompute()", "=snapshot(tool)"]}, {"answer": {"fields": {"...": "=out", "body": "=o.Label", "volume": "=round(solid.Volume, 2)", "step": "=step()"}}}]},
+    {"let": {"o": "=body(a.body)"}},
+    {"let": {"face": "=pick_face(o, a.face or {'normal': [0, 0, 1]})", "at": "=vec3(a.at, 'at') if a.at is not None else None"}},
+    {"let": {"solid, lb": "=place_on(o, face, flat, at, a.rotate, depth, mode)"}},
+    {"let": {"before": "=o.Shape.Volume", "off": "=[p for p in (V(lb.XMin, lb.YMin, lb.ZMin), V(lb.XMax, lb.YMax, lb.ZMax)) if face.distToShape(vertex(p))[0] > 0.05]"}},
+    {"try": [{"let": {"res": "=(o.Shape.fuse(solid) if mode == 'emboss' else o.Shape.cut(solid)).removeSplitter()"}}], "on": "error", "except": [{"refuse": {"fmt": "The outline could not be {'joined to' if mode == 'emboss' else 'cut into'} {o.Label}: {error}"}, "code": "failed"}]},
+    {"refuse": "The result is not a valid solid: a smaller size or a shallower depth.", "code": "failed", "when": "=not res.isValid() or not res.Solids"},
+    {"let": {"made": "=bake(o, res, a.name)"}},
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]}
+   ],
+   "answer": {"fields": {"...": "=out", "body": "=made.Label", "volumeChange": "=round(made.Shape.Volume - before, 2)", "box": "={'min': [round(v, 2) for v in (lb.XMin, lb.YMin, lb.ZMin)], 'max': [round(v, 2) for v in (lb.XMax, lb.YMax, lb.ZMax)]}", "step": "=step()", "view": "view_render { zoom: { at: the box's middle, size } } to look at it.", "warning": {"when": "=off", "value": "The outline runs past the face's edge: a smaller width."}}}
+  },
+  "draft_array": {
+   "group": "draft",
+   "description": "Copies of a whole body as plain solids: kind grid (count [nx, ny, nz]; gap mm between them, 2, or spacing [dx, dy, dz] from one to the next), polar (count round center about axis; angle degrees, 360, a smaller one spans first to last), or path (count along a curve: an edge, a sketch or { points }; align turns each with it). Joined into the body by default (one boolean: slow past a few dozen detailed copies); separate: true makes each its own body. Reply: copies, solids, volume, size. Copies that follow the original: draft_link_array; inside one part: pd_linear_pattern, pd_polar_pattern.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "grid",
+       "polar",
+       "path"
+      ]
+     },
+     "count": {},
+     "gap": {
+      "type": "number"
+     },
+     "spacing": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "angle": {
+      "type": "number"
+     },
+     "center": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "axis": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "path": {},
+     "bodyOfPath": {
+      "type": "string"
+     },
+     "align": {
+      "type": "boolean"
+     },
+     "separate": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft.py)",
+   "date": "2026-11-16",
+   "family": "draft",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=body(a.body)"}},
+    {"let": {"base": "=o.Shape", "kind": "=a.get('kind', 'grid')", "places": "=[]"}},
+    {"choose": "=kind", "of": {"grid": [{"let": {"n": "=([int(x) for x in (a.count or [2, 1, 1])] + [1, 1])[:3]"}}, {"refuse": "count: [nx, ny, nz], each 1 or more, two copies or more in all.", "when": "=any(k < 1 for k in n) or n[0] * n[1] * n[2] < 2"}, {"let": {"bb": "=base.BoundBox", "gap": "=num(a.get('gap', 2), 'gap')"}}, {"let": {"step": "=vec3(a.spacing, 'spacing') if a.spacing is not None else V(bb.XLength + gap, bb.YLength + gap, bb.ZLength + gap)"}}, {"let": {"places": "=[placement(V(i * step.x, j * step.y, k * step.z), rotation()) for i in range(n[0]) for j in range(n[1]) for k in range(n[2])]"}}], "polar": [{"let": {"count": "=int(a.get('count', 6))"}}, {"refuse": "count: 2 or more copies round the circle.", "when": "=count < 2"}, {"let": {"angle": "=float(a.get('angle', 360))", "centre": "=vec3(a.center, 'center') if a.center is not None else V(0, 0, 0)"}}, {"let": {"axis": "=vec3(a.axis, 'axis') if a.axis is not None else V(0, 0, 1)", "turn": "=angle / count if abs(angle) >= 360 - 1e-9 else angle / (count - 1)"}}, {"each": "i", "in": "=range(count)", "steps": [{"let": {"r": "=rotation(axis, turn * i)"}}, {"push": {"places": "=placement(centre - r.multVec(centre), r)"}}]}], "path": [{"let": {"ref": "=a.path"}}, {"refuse": "path: an edge (\"Body.Edge3\"), a sketch or wire, or { points: [[x,y,z] …] }.", "when": "=not ref"}, {"let": {"w": "=curve(ref, 'path', a.bodyOfPath)", "count": "=int(a.get('count', 5))"}}, {"refuse": "count: 2 or more copies along the path.", "when": "=count < 2"}, {"let": {"places": "=along_path(w, count, bool(a.align))"}}]}, "else": [{"refuse": "kind: grid (count [nx, ny, nz], gap or spacing), polar (count, angle, center, axis) or path (path, count, align)."}]},
+    {"let": {"copies": "=[]"}},
+    {"each": "pl", "in": "=places", "steps": [{"let": {"c": "=base.copy()"}}, {"do": "=c.transformShape(pl.toMatrix())"}, {"push": {"copies": "=c"}}]},
+    {"when": "=a.separate", "then": [{"let": {"made": "=[]"}}, {"each": "i, c", "in": "=enumerate(copies[1:], 2)", "steps": [{"let": {"n": "=doc().addObject('Part::Feature', o.Name + '_' + str(i))"}}, {"set": {"n.Label": "=o.Label + ' ' + str(i)", "n.Shape": "=c"}}, {"push": {"made": "=n.Label"}}]}, {"do": ["=doc().recompute()", "=snapshot(tool)"]}, {"answer": {"fields": {"kind": "=kind", "copies": "=len(copies)", "bodies": "=[o.Label] + made", "step": "=step()"}}}]},
+    {"try": [{"let": {"res": "=copies[0].fuse(copies[1:]) if len(copies) > 1 else copies[0]"}}, {"let": {"res": "=refined(res, len(copies) > 1)"}}], "on": "error", "except": [{"refuse": {"fmt": "The copies could not be joined: {error} — separate: true keeps them apart."}, "code": "failed"}]},
+    {"let": {"apart": "=len(res.Solids) > 1"}},
+    {"let": {"said": {"fmt": "The copies do not touch: one body of {len(res.Solids)} separate solids. separate: true makes each its own body (to print or move apart)."}}, "when": "=apart and not a.allowApart"},
+    {"let": {"made": "=bake(o, res, a.name)"}},
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]},
+    {"let": {"bb": "=made.Shape.BoundBox"}}
+   ],
+   "answer": {"fields": {"kind": "=kind", "copies": "=len(copies)", "note": {"when": "=apart and not a.allowApart", "value": "=said"}, "body": "=made.Label", "solids": "=len(res.Solids)", "volume": "=round(made.Shape.Volume, 2)", "size": "=[round(bb.XLength, 2), round(bb.YLength, 2), round(bb.ZLength, 2)]", "step": "=step()"}}
   }
  }
 }

@@ -21,6 +21,7 @@ import TechDraw  # noqa: F401 — the family stands on TechDraw; left out withou
 
 from .. import gdt, iso286, sheets
 from .. import paths
+from .. import runners
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from . import picks
@@ -1224,6 +1225,189 @@ def draw_table(doc, sh, v, H):
             x += cols[j]
 
 
+# ---- what the tools kept as data call by name (agentlink/data/tools.json; docs/data-tools.md) ----
+
+
+def proxy_name(o):
+    """The class name of an object's Python proxy ("_SectionPlane"), "NoneType" for none."""
+    return type(getattr(o, "Proxy", None)).__name__
+
+
+def try_set(o, prop, value):
+    """A property set where this release's object has it; a value it will not take is passed by."""
+    if hasattr(o, prop):
+        try:
+            setattr(o, prop, value)
+        except Exception:
+            pass
+
+
+def setprop(o, prop, value):
+    """A property set by its name (Agent Link's own notes on a view are named by constants)."""
+    setattr(o, prop, value)
+
+
+def edge_on(v, src, faces):
+    """Those of the part's faces a view sees edge-on: their outline on the paper has no area (under 0.01 mm²)."""
+    X, Y = abs_xy(v)
+    H = paper_size(page_holding(v))[1] if page_holding(v) is not None else 210.0
+    flat = []
+    for f in faces:
+        ps = paper_polys(v, [src.getElement(f)], X, Y, H)
+        area = sum(abs(sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in zip(p, p[1:] + p[:1]))) / 2 for p in ps)
+        if area < 0.01:
+            flat.append(f)
+    return flat
+
+
+def weld_wrong(spec):
+    """What is wrong with a weld symbol's words (gdt.weld draws it for td_export), or None."""
+    try:
+        gdt.weld(spec["kind"], spec["size"], spec["length"], spec["side"], spec["allAround"], spec["field"], spec["tail"], spec["h"])
+    except gdt.GdtError as e:
+        return str(e)
+    return None
+
+
+def face_front(g, z, x):
+    """A projection group's front turned to face z with x to the right,
+    before the others are added: TechDraw works each secondary view's
+    direction out from the front's as it is when the view is added
+    (DrawProjGroup::addProjection), not afterwards."""
+    try:
+        anchor = g.Anchor
+        anchor.Direction = z
+        anchor.XDirection = x
+    except Exception:
+        pass
+
+
+def axis_vector(name):
+    """ "x", "-y" … as a vector along that axis."""
+    sgn = -1.0 if name.startswith("-") else 1.0
+    return V(*[sgn if c == name[-1] else 0.0 for c in "xyz"])
+
+
+def section_frame(base, normal):
+    """(x, side) for a section cut with normal from a base view: the
+    section's x direction (the base's, laid into the cut plane), and the
+    side of the base it is seen from — Right, Left, Up, Down, or None when
+    the cut runs askew to the base's paper."""
+    bx = V(base.XDirection)
+    x = bx - normal * bx.dot(normal)
+    if x.Length < 1e-6:
+        x = V(base.Direction).cross(normal)
+    x.normalize()
+    by = V(base.Direction).cross(bx)
+    side = "Right" if normal.dot(bx) > 0.7 else "Left" if normal.dot(bx) < -0.7 else "Up" if normal.dot(by) > 0.7 else "Down" if normal.dot(by) < -0.7 else None
+    return x, side
+
+
+def hide_cut(sv):
+    """A section's cut face left unhatched: TechDraw's own word is Hide (Hide | Color | SvgHatch | PatHatch), None on older releases."""
+    for word in ("Hide", "None"):
+        try:
+            sv.CutSurfaceDisplay = word
+            break
+        except Exception:
+            continue
+
+
+def curve_name(e):
+    """The class name of an edge's curve ("LineSegment", "Circle"); "NoneType" for none."""
+    return type(getattr(e, "Curve", None)).__name__
+
+
+def figure(kind, *args):
+    """A GD&T figure drawn by agentlink/gdt.py (kind: frame, datum …):
+    (figure, None), or (None, what is wrong with its words)."""
+    try:
+        return getattr(gdt, kind)(*args), None
+    except gdt.GdtError as e:
+        return None, str(e)
+
+
+def next_balloon(page):
+    """The page's next balloon number, taken ("1" where the page keeps none)."""
+    try:
+        text = str(page.NextBalloonIndex)
+        page.NextBalloonIndex = page.NextBalloonIndex + 1
+    except Exception:
+        text = "1"
+    return text
+
+
+def area_text(form, val, decimals, unit):
+    """An area as the caller's text: form with {value} (to decimals places) and {unit} (mm², cm², m²) filled."""
+    return form.format(value=f"{val:.{int(decimals)}f}", unit={"mm2": "mm²", "cm2": "cm²", "m2": "m²"}.get(unit, unit))
+
+
+def without_prefix(f):
+    """A dimension's format without what stands before its number."""
+    i = f.find("%")
+    return f[i:] if i > 0 else f
+
+
+def with_decimals(f, n):
+    """A dimension's format showing n decimals (its first number's; one is put in where it names none)."""
+    import re
+
+    return re.sub(r"%\.(\d)([fwgG])", lambda m: f"%.{n}{m.group(2)}", f, count=1) if re.search(r"%\.\d", f) else f.replace("%", f"%.{n}", 1)
+
+
+def more_decimals(f, k):
+    """A dimension's format with k more decimals (fewer for a negative k), kept within 0 to 9."""
+    import re
+
+    return re.sub(r"%\.(\d)", lambda m: f"%.{max(0, min(9, int(m.group(1)) + k))}", f, count=1)
+
+
+def prefixed(f, pre, count):
+    """A dimension's format with a prefix before its number: "diameter" ⌀,
+    "square" □, "count" (count×), or the text itself."""
+    tok = {"diameter": "⌀", "square": "□"}.get(pre)
+    if pre == "count":
+        tok = f"{int(count)}× "
+    if tok is None:
+        tok = str(pre)
+    i = f.find("%")
+    return f[:i] + tok + f[i:] if i >= 0 else tok + f
+
+
+def chamfer_angle(v, names, kind):
+    """A chamfer's angle in whole degrees (90 at most) between two of the
+    view's vertices, from the horizontal for chamfer_h, the vertical for chamfer_v."""
+    vs = vertices_of(v)
+    p, q = (vs[int(n[6:])] for n in names)
+    ang = round(math.degrees(abs(math.atan2(q.y - p.y, q.x - p.x))) if kind == "chamfer_h" else math.degrees(abs(math.atan2(q.x - p.x, q.y - p.y))))
+    return ang if ang <= 90 else 180 - ang
+
+
+def nearest_vertices(v, e):
+    """The view's vertices nearest an edge's two ends, by name ("Vertex3"): what a dimension along the edge stands on."""
+    vs = vertices_of(v)
+    ends = []
+    for pt in (e.Vertexes[0].Point, e.Vertexes[-1].Point):
+        k = min(range(len(vs)), key=lambda i: (vs[i] - pt).Length)
+        ends.append(f"Vertex{k}")
+    return ends
+
+
+def axo_angles(e, x):
+    """(line angle, extension angle) in degrees for a length along one of
+    the part's axes in an axonometric view, read true (not foreshortened):
+    e the measured edge, x the one the extension lines run along."""
+    dl = e.Vertexes[-1].Point - e.Vertexes[0].Point
+    el = x.Vertexes[-1].Point - x.Vertexes[0].Point
+    X = FreeCAD.Vector(1, 0, 0)
+    la, ea = math.degrees(dl.getAngle(X)), math.degrees(el.getAngle(X))
+    if dl.y < 0:
+        la = 180 - la
+    if el.y < 0:
+        ea = 180 - ea
+    return la, ea
+
+
 def tools(session):
     s = session
     doc = lambda: s.doc  # noqa: E731
@@ -1325,63 +1509,6 @@ def tools(session):
 
     # ---- pages and title blocks ----
 
-    def td_page(a):
-        act = a.get("action", "list")
-        if act == "templates":
-            root = template_root()
-            return {"root": root, "templates": [os.path.relpath(p, root) for p in templates()]}
-        if act == "list":
-            return {"pages": [page_reading(p) for p in pages(doc())]} if pages(doc()) else {"pages": [], "note": "None yet: td_page { action: \"new\", paper: \"A4\" }."}
-        if act == "read":
-            return page_reading(page_of(doc(), a.get("page")), full=True)
-        if act != "new":
-            raise bad("action: new, list, read or templates.")
-        paper = a.get("paper", "A4")
-        tpl = a.get("template")
-        if tpl:
-            p = os.path.expanduser(tpl)
-            if not os.path.isabs(p):
-                p = os.path.join(template_root(), p) if os.path.isfile(os.path.join(template_root(), p)) else os.path.join(s.out_dir, p)
-            if not os.path.isfile(p):
-                raise ToolError("not_found", f"template {tpl!r}: no such file — td_page {{ action: \"templates\" }} lists the build's own.")
-        else:
-            if paper not in PAPERS:
-                raise bad(f"paper: one of {', '.join(PAPERS)}.")
-            p = find_template(paper, a.get("orientation") == "portrait", bool(a.get("blank")), a.get("standard"))
-            std_note = None
-            if p and a.get("standard") and f"{os.sep}{a['standard'].upper()}{os.sep}" not in p:
-                std_note = f"No {a['standard'].upper()} template for {paper}: {os.path.basename(p)} is used (ASME sizes: Letter, ANSIB … ANSIE)."
-            if p is None:
-                raise ToolError("not_found", f"No {paper} {a.get('orientation', 'landscape')} template in this build — td_page {{ action: \"templates\" }} lists them; pass template.")
-        page = doc().addObject("TechDraw::DrawPage", "Page")
-        page.Label = s.unique(a.get("name") or "Drawing")
-        t = doc().addObject("TechDraw::DrawSVGTemplate", "Template")
-        t.Template = p
-        page.Template = t
-        if a.get("projection") in ("first", "third"):
-            set_enum(page, "ProjectionType", "First angle" if a["projection"] == "first" else "Third angle")
-        if a.get("scale"):
-            page.Scale = float(a["scale"])
-        recompute()
-        # The template's own example values (names, numbers) are not this
-        # drawing's: cleared. What FreeCAD fills in itself (today's date,
-        # the scale) differs from them and stays.
-        try:
-            texts = dict(t.EditableTexts)
-            samples = template_defaults(p)
-            cleared = [k for k, v in texts.items() if v and samples.get(k) == v and "scale" not in k.lower()]
-            if cleared:
-                t.EditableTexts = {k: ("" if k in cleared else v) for k, v in texts.items()}
-                recompute()
-        except Exception:
-            cleared = []
-        out = page_reading(page, full=True)
-        if cleared:
-            out["cleared"] = cleared
-        if not tpl and std_note:
-            out["note"] = std_note
-        out["next"] = "td_title { fields } fills the title block (ask the person for names and numbers); td_view or td_projection puts the part on."
-        return done("td_page", out)
 
     def page_reading(p, full=False):
         W, H = paper_size(p)
@@ -1398,297 +1525,9 @@ def tools(session):
                 out["titleBlock"] = {}
         return out
 
-    def td_title(a):
-        page = page_of(doc(), a.get("page"))
-        t = page.Template
-        try:
-            texts = dict(t.EditableTexts)
-        except Exception:
-            raise ToolError("invalid_state", f"{page.Label}'s template has no editable fields (a blank one): td_note writes text on the page instead, or make the page on a template with a title block (td_page {{ action: \"templates\" }}).")
-        pre = a.get("preset")
-        if a.get("export"):
-            data = load_presets()
-            path = paths.local(s, a["export"])
-            save_presets(data, path)
-            return {"exported": path, "presets": sorted(data)}
-        if a.get("import"):
-            path = paths.local(s, a["import"])
-            got = load_presets(path)
-            if not got:
-                raise ToolError("not_found", f"{path}: no presets in it.")
-            data = load_presets()
-            data.update(got)
-            save_presets(data)
-            return {"imported": sorted(got), "presets": sorted(data)}
-        fields = dict(a.get("fields") or {})
-        if pre and a.get("delete"):
-            data = load_presets()
-            if pre not in data:
-                raise ToolError("not_found", f"preset {pre!r}: there are {', '.join(sorted(data)) or 'none'}.")
-            del data[pre]
-            save_presets(data)
-            return {"deleted": pre, "presets": sorted(data)}
-        if pre and a.get("save"):
-            # who and what, not this sheet's own title, number, scale or date
-            per_sheet = ("sheet", "scale", "date", "title")
-            data = load_presets()
-            data[pre] = {k: v for k, v in texts.items() if str(v).strip() and not any(w in k.lower() for w in per_sheet)} | {k: str(v) for k, v in fields.items()}
-            save_presets(data)
-        elif pre:
-            data = load_presets()
-            if pre not in data:
-                raise ToolError("not_found", f"preset {pre!r}: there are {', '.join(sorted(data)) or 'none'} (save one with preset and save: true).")
-            fields = {**data[pre], **fields}
-        if not fields:
-            return {"page": page.Label, "fields": texts, "presets": sorted(load_presets()), "note": "Set with fields { name: value } — the names are the template's own."}
-        low = {k.lower(): k for k in texts}
-        unknown = []
-        for k, v in fields.items():
-            key = k if k in texts else low.get(k.lower())
-            if key is None:
-                unknown.append(k)
-                continue
-            texts[key] = str(v)
-        if unknown and not a.get("preset"):
-            raise bad(f"No field {', '.join(unknown)} in this template — it has: {', '.join(sorted(texts))}.")
-        t.EditableTexts = texts
-        recompute()
-        out = {"page": page.Label, "fields": dict(t.EditableTexts)}
-        if unknown:
-            out["notInThisTemplate"] = unknown
-        if pre and a.get("save"):
-            out["saved"] = pre
-        return done("td_title", out)
 
     # ---- views ----
 
-    def td_view(a):
-        page = page_of(doc(), a.get("page"))
-        objs = bodies_for(a.get("bodies"))
-        z, x = direction(a.get("direction", "front"))
-        v = doc().addObject("TechDraw::DrawViewPart", "View")
-        page.addView(v)
-        v.Label = s.unique(a.get("name") or (a.get("direction") if isinstance(a.get("direction"), str) else "View").capitalize())
-        v.Source = objs
-        v.Direction = z
-        v.XDirection = x
-        if a.get("scale"):
-            v.ScaleType = "Custom"
-            v.Scale = float(a["scale"])
-        W, H = paper_size(page)
-        v.X, v.Y = place_xy(page, a.get("at"), (W * 0.35, H * 0.55))
-        if a.get("hidden"):
-            v.HardHidden = True
-        recompute([v])
-        return done("td_view", view_reading(v))
-
-    def td_bim(a):
-        """A BIM section plane drawn on a page (TechDraw's Arch view): a plan or section of the building."""
-        page = page_of(doc(), a.get("page"))
-        sec = obj_of(doc(), a.get("section"), what="section plane")
-        if type(getattr(sec, "Proxy", None)).__name__ != "_SectionPlane":
-            raise bad(f"section: {sec.Label} is not a BIM section plane (bim_section makes one).")
-        v = doc().addObject("TechDraw::DrawViewArch", "ArchView")
-        page.addView(v)
-        v.Label = s.unique(a.get("name") or f"{sec.Label} view", v)
-        v.Source = sec
-        for k, val in (("AllOn", True), ("RenderMode", a.get("render", "Wireframe")), ("ShowFill", bool(a.get("fill", True))),
-                       ("FillSpaces", bool(a.get("spaces", False))), ("ShowHidden", bool(a.get("hidden", False)))):
-            if hasattr(v, k):
-                try:
-                    setattr(v, k, val)
-                except Exception:
-                    pass
-        v.Scale = float(a.get("scale", 0.02))
-        W, H = paper_size(page)
-        v.X, v.Y = place_xy(page, a.get("at"), (W * 0.5, H * 0.55))
-        recompute([v])
-        sym = str(getattr(v, "Symbol", "") or "")
-        out = {"view": v.Label, "section": sec.Label, "scale": v.Scale, "svgBytes": len(sym)}
-        if not sym:
-            out["warning"] = "The view drew nothing here — the section cuts no BIM objects, or this FreeCAD draws Arch views only in its window."
-        return done("td_bim", out)
-
-    def td_centermarks(a):
-        """Centre marks on a view's holes and round edges, drawn into the exported page."""
-        names = a.get("views")
-        views = [view_of(doc(), n) for n in (names if isinstance(names, list) else [names])] if names else \
-            [o for o in doc().Objects if o.isDerivedFrom("TechDraw::DrawViewPart")]
-        ext = float(a.get("extend", 2.0)) if a.get("on", True) else 0.0
-        out = []
-        late = [v for v in views if not edges_of(v)]
-        if late:
-            recompute(late)  # their lines, before the circles are counted
-        for v in views:
-            if MARKS_PROP not in v.PropertiesList:
-                v.addProperty("App::PropertyFloat", MARKS_PROP, "AgentLink", "Centre marks on its circles: how far past each, mm (0: none)")
-                _own_data(v, MARKS_PROP)
-            setattr(v, MARKS_PROP, ext)
-            out.append({"view": v.Label, "circles": len(circle_centres(v))})
-        return done("td_centermarks", {"views": out, "extend": ext, "note": "Drawn as thin chain lines by td_export."})
-
-    def td_hatch(a):
-        """Hatching on faces of the part, seen in a view (a section's cut is hatched by itself)."""
-        v = view_of(doc(), a.get("view"))
-        faces = a.get("faces") or []
-        faces = picks.ref_list(faces)
-        src = source_shapes(v)
-        if src is None:
-            raise bad(f"{v.Label} shows no shape: its Source is empty — td_view puts bodies on a page.")
-        if not edges_of(v):
-            recompute([v])  # the view's own lines place the faces on the paper
-        for f in faces:
-            if not str(f).startswith("Face"):
-                raise bad("faces: the part's own faces, \"Face6\" (shape_query finds them).")
-            try:
-                src.getElement(f)
-            except Exception:
-                raise bad(f"faces: {f} is not a face of {v.Label}'s part.") from None
-        if HATCH_PROP not in v.PropertiesList:
-            v.addProperty("App::PropertyString", HATCH_PROP, "AgentLink", "Faces hatched in the exported page (JSON)")
-            _own_data(v, HATCH_PROP)
-        spec = {"faces": faces, "spacing": float(a.get("spacing", 2.5)), "angle": float(a.get("angle", 45))}
-        setattr(v, HATCH_PROP, json.dumps(spec) if faces else "")
-        X, Y = abs_xy(v)
-        H = paper_size(page_holding(v))[1] if page_holding(v) is not None else 210.0
-        flat = []
-        for f in faces:
-            ps = paper_polys(v, [src.getElement(f)], X, Y, H)
-            area = sum(abs(sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in zip(p, p[1:] + p[:1]))) / 2 for p in ps)
-            if area < 0.01:
-                flat.append(f)
-        out = {"view": v.Label, "faces": faces, **{k: spec[k] for k in ("spacing", "angle")},
-               "note": "Drawn by td_export." if faces else "Hatching taken off."}
-        if flat:
-            out["warning"] = f"{', '.join(flat)} {'is' if len(flat) == 1 else 'are'} seen edge-on in {v.Label}: nothing to hatch there — shape_query {{ normal }} finds the faces facing this view."
-        return done("td_hatch", out)
-
-    def td_weld(a):
-        """A weld symbol on a leader from a feature of a view (ISO 2553 / AWS A2.4 forms)."""
-        v = view_of(doc(), a.get("view"))
-        if not edges_of(v):
-            recompute([v])
-        spec = {"kind": a.get("kind", "fillet"), "size": str(a.get("size", "")), "length": str(a.get("length", "")),
-                "side": a.get("side", "arrow"), "allAround": bool(a.get("allAround")), "field": bool(a.get("field")),
-                "tail": str(a.get("tail", "")), "h": float(a.get("textSize", 3.5))}
-        try:
-            gdt.weld(spec["kind"], spec["size"], spec["length"], spec["side"], spec["allAround"], spec["field"], spec["tail"], spec["h"])
-        except gdt.GdtError as e:
-            raise bad(str(e)) from None
-        ref, p = ref_point(v, a.get("on"))
-        X, Y = abs_xy(v)
-        to = pt2(a["at"], "at") if a.get("at") is not None else (X + p[0] + 15, Y - p[1] + 15)
-        ln = leader(v, p, to)
-        ln.Label = s.unique(a.get("name") or f"Weld {spec['kind']}", ln)
-        ln.addProperty("App::PropertyString", WELD_PROP, "AgentLink", "The weld symbol drawn at the leader's end (JSON)")
-        _own_data(ln, WELD_PROP)
-        setattr(ln, WELD_PROP, json.dumps(spec))
-        recompute()
-        return done("td_weld", {"weld": ln.Label, "on": ref, **{k: spec[k] for k in ("kind", "size", "length", "side", "allAround", "field", "tail")},
-                                "note": "Drawn by td_export: the symbol below the reference line is the arrow side, above it the other side."})
-
-    def td_projection(a):
-        page = page_of(doc(), a.get("page"))
-        objs = bodies_for(a.get("bodies"))
-        want = a.get("views") or ["front", "top", "right"]
-        bad_ = [w for w in want if w not in PROJ_ITEMS]
-        if bad_:
-            raise bad(f"views: any of {', '.join(PROJ_ITEMS)} — not {', '.join(str(w) for w in bad_)}.")
-        want = list(dict.fromkeys(want))  # one of each: TechDraw makes a projection once
-        # which way is front, read before anything is made
-        front_z, front_x = direction(a.get("front", "front"), "front")
-        g = doc().addObject("TechDraw::DrawProjGroup", "ProjGroup")
-        page.addView(g)
-        g.Source = objs
-        if a.get("projection") in ("first", "third"):
-            set_enum(g, "ProjectionType", "First angle" if a["projection"] == "first" else "Third angle")
-        elif getattr(page, "ProjectionType", ""):
-            try:
-                set_enum(g, "ProjectionType", page.ProjectionType)
-            except ToolError:
-                pass
-        g.addProjection("Front")
-        if a.get("scale"):
-            g.ScaleType = "Custom"
-            g.Scale = float(a["scale"])
-        # The front's direction before the others are added: TechDraw works
-        # each secondary view's direction out from the front's as it is when
-        # the view is added (DrawProjGroup::addProjection), not afterwards.
-        try:
-            anchor = g.Anchor
-            anchor.Direction = front_z
-            anchor.XDirection = front_x
-        except Exception:
-            pass
-        for w in want:
-            if PROJ_ITEMS[w] != "Front":
-                g.addProjection(PROJ_ITEMS[w])
-        W, H = paper_size(page)
-        g.X, g.Y = place_xy(page, a.get("at"), (W * 0.4, H * 0.55))
-        g.AutoDistribute = True
-        recompute(list(g.Views))
-        out = view_reading(g)
-        out["projection"] = g.ProjectionType
-        out["items"] = [view_reading(x) for x in g.Views]
-        return done("td_projection", out)
-
-    def td_section(a):
-        base = view_of(doc(), a.get("view"))
-        page = page_holding(base)
-        normal = vec(a.get("normal"), "normal") if isinstance(a.get("normal"), list) else None
-        if normal is None:
-            if a.get("normal") not in ("x", "y", "z", "-x", "-y", "-z"):
-                raise bad("normal: the cut plane's normal, pointing toward the viewer of the section — \"x\" | \"-y\" | … or [x, y, z].")
-            sgn = -1.0 if a["normal"].startswith("-") else 1.0
-            normal = V(*[sgn if c == a["normal"][-1] else 0.0 for c in "xyz"])
-        normal.normalize()
-        if abs(normal.dot(V(base.Direction))) > 0.99:
-            raise bad("normal: the plane must cut across the base view, not lie in its paper — choose a normal along the base view's paper.")
-        sh = source_shapes(base)
-        origin = vec(a["through"], "through") if a.get("through") is not None else sh.BoundBox.Center
-        sym = str(a.get("symbol") or next_letter(doc(), "section"))
-        sv = doc().addObject("TechDraw::DrawViewSection", "Section")
-        page.addView(sv)
-        sv.Label = s.unique(f"Section {sym}")
-        sv.BaseView = base
-        sv.Source = list(base.Source)
-        sv.ScaleType = "Custom"
-        sv.Scale = view_scale(base)
-        sv.SectionNormal = normal
-        sv.SectionOrigin = origin
-        sv.SectionSymbol = sym
-        sv.Direction = normal
-        bx = V(base.XDirection)
-        x = bx - normal * bx.dot(normal)
-        if x.Length < 1e-6:
-            x = V(base.Direction).cross(normal)
-        x.normalize()
-        sv.XDirection = x
-        by = V(base.Direction).cross(bx)
-        side = "Right" if normal.dot(bx) > 0.7 else "Left" if normal.dot(bx) < -0.7 else "Up" if normal.dot(by) > 0.7 else "Down" if normal.dot(by) < -0.7 else None
-        if side:
-            try:
-                set_enum(sv, "SectionDirection", side)
-            except Exception:
-                pass
-        W, H = paper_size(page)
-        bxp, byp = abs_xy(base)
-        off = {"Right": (W * 0.25, 0), "Left": (-W * 0.25, 0), "Up": (0, H * 0.3), "Down": (0, -H * 0.3)}.get(side or "Right", (W * 0.25, 0))
-        sv.X, sv.Y = place_xy(page, a.get("at"), (min(W - 20, max(20, bxp + off[0])), min(H - 20, max(20, byp + off[1]))))
-        if a.get("hatch") is False:
-            # TechDraw's own word is Hide (Hide | Color | SvgHatch | PatHatch)
-            for word in ("Hide", "None"):
-                try:
-                    sv.CutSurfaceDisplay = word
-                    break
-                except Exception:
-                    continue
-        recompute([base, sv])
-        out = view_reading(sv)
-        out.update({"symbol": sym, "base": base.Label, "through": [num(origin.x, 3), num(origin.y, 3), num(origin.z, 3)], "normal": [num(normal.x), num(normal.y), num(normal.z)]})
-        if not out.get("edges"):
-            out["warning"] = "The section has no geometry: the plane may miss the part (through)."
-        return done("td_section", out)
 
     def next_letter(d, kind):
         used = set()
@@ -1702,156 +1541,9 @@ def tools(session):
                 return ch
         return "Z"
 
-    def td_detail(a):
-        base = view_of(doc(), a.get("view"))
-        page = page_holding(base)
-        r = float(a.get("radius", 0) or 0)
-        if r <= 0:
-            raise bad("radius: the circle drawn around the detail, mm on the part, over 0 — e.g. td_detail { view, center: [x, y, z], radius: 8 }.")
-        sym = str(a.get("symbol") or next_letter(doc(), "detail"))
-        dv = doc().addObject("TechDraw::DrawViewDetail", "Detail")
-        page.addView(dv)
-        dv.Label = s.unique(f"Detail {sym}")
-        dv.BaseView = base
-        dv.Source = list(base.Source)
-        dv.Direction = V(base.Direction)
-        dv.XDirection = V(base.XDirection)
-        if a.get("at3d") is not None or a.get("center") is not None:
-            p3 = vec(a.get("center", a.get("at3d")), "center")
-            fr = frame_of(base, frames)
-            if fr is None:
-                recompute([base])
-                fr = frame_of(base, frames)
-            q = to_view(fr, base, p3)
-            sc = fr[0]
-            # AnchorPoint: the base view's own, unscaled, y up
-            anchor = V(q[0] / sc, -q[1] / sc if fr[1] < 0 else q[1] / sc, 0)
-        else:
-            anchor = V(*pt2(a.get("anchor", [0, 0]), "anchor"), 0)
-        dv.AnchorPoint = anchor
-        dv.Radius = r
-        dv.Reference = sym
-        dv.ScaleType = "Custom"
-        dv.Scale = float(a.get("scale") or view_scale(base) * 2)
-        W, H = paper_size(page)
-        bxp, byp = abs_xy(base)
-        dv.X, dv.Y = place_xy(page, a.get("at"), (min(W - 30, bxp + W * 0.3), max(30, byp - H * 0.25)))
-        recompute([base, dv])
-        out = view_reading(dv)
-        out.update({"symbol": sym, "base": base.Label, "anchor": [num(anchor.x, 3), num(anchor.y, 3)], "radius": r})
-        if not out.get("edges"):
-            out["warning"] = "The detail is empty: its circle misses the part. Give center as a point on the part [x, y, z], or anchor [x, y] from td_geometry."
-        return done("td_detail", out)
-
-    def td_geometry(a):
-        v = view_of(doc(), a.get("view"))
-        if not edges_of(v):
-            recompute([v])
-        kind = a.get("kind", "edges")
-        sc = gscale(v, frames)
-        cap = int(a.get("limit", 120))
-        if kind == "vertices":
-            vs = vertices_of(v)
-            items = [{"ref": f"Vertex{i}", "at": [num(p.x / sc, 3), num(p.y / sc, 3)]} for i, p in enumerate(vs)]
-        elif kind in ("edges", "circles", "lines"):
-            items = []
-            for i, e in enumerate(edges_of(v)):
-                info = edge_info(e, sc)
-                if kind == "circles" and info["kind"] not in ("circle", "arc"):
-                    continue
-                if kind == "lines" and info["kind"] != "line":
-                    continue
-                items.append({"ref": f"Edge{i}", **info})
-        else:
-            raise bad("kind: edges, circles, lines or vertices.")
-        out = {"view": v.Label, "scale": num(view_scale(v)), "units": "mm on the part, in the view's plane (x right, y as TechDraw keeps it)", "items": items[:cap]}
-        if len(items) > cap:
-            out["more"] = f"{len(items) - cap} more: kind narrows, or limit."
-        out["byPoint"] = "Or name geometry by the part instead: { point: [x,y,z] }, { circle: { diameter, near } }, { edge: { through: [p, q] } }."
-        return out
 
     # ---- dimensions and tolerances ----
 
-    def td_dim(a):
-        v = view_of(doc(), a.get("view"))
-        page = page_holding(v)
-        typ = a.get("type", "Distance")
-        typ = {"distance": "Distance", "horizontal": "DistanceX", "vertical": "DistanceY", "radius": "Radius", "diameter": "Diameter", "angle": "Angle"}.get(typ, typ)
-        if typ not in DIM_TYPES:
-            raise bad("type: distance | horizontal | vertical | radius | diameter | angle.")
-        refs = a.get("refs") or []
-        if not edges_of(v):
-            recompute([v])
-        names = [resolve_ref(v, r, frames, "circle" if typ == "Diameter" else "any") for r in refs]
-        if typ in ("Radius", "Diameter") and not (len(names) == 1 and names[0].startswith("Edge")):
-            raise bad(f"{typ.lower()}: one circle or arc — refs [{{ circle: {{ diameter, near }} }}] or [\"Edge7\"] (td_geometry {{ kind: \"circles\" }} lists them); got {len(names)} reference{'s' if len(names) != 1 else ''}.")
-        arc_note = None
-        if typ in ("Radius", "Diameter"):
-            es_ = edges_of(v)
-            k_ = int(names[0][4:])
-            turn = arc_turn(es_[k_]) if k_ < len(es_) else None
-            if turn is None and type(getattr(es_[k_], "Curve", None)).__name__ in ("Line", "LineSegment"):
-                raise bad(f"{typ.lower()}: {names[0]} of {v.Label} is a straight edge — td_geometry {{ kind: \"circles\" }} lists the circles and arcs.")
-            if typ == "Diameter" and k_ not in whole_circles(es_):
-                # named outright, so it is made as asked (TechDraw allows it) and said
-                arc_note = f"{names[0]} is an arc{f' of {turn * 360:.0f}°' if turn else ''}, not a whole circle: a diameter on it reads as a hole's size — type: \"radius\" is the usual callout for an arc."
-        if typ == "Angle" and not (len(names) == 2 and all(n.startswith("Edge") for n in names)):
-            raise bad("angle: refs two straight edges of the view ([\"Edge2\", \"Edge5\"] or { edge: { through: [p, q] } } each); td_geometry { kind: \"lines\" } lists them.")
-        if typ.startswith("Distance") and not (len(names) == 2 or (len(names) == 1 and names[0].startswith("Edge"))):
-            raise bad(f"{typ}: refs two vertices (or an edge and a vertex), or one straight edge — got {len(names)}; td_geometry {{ kind: \"vertices\" }} lists the points, or name them by the part: {{ point: [x, y, z] }}.")
-        d = doc().addObject("TechDraw::DrawViewDimension", "Dimension")
-        d.Type = typ
-        d.MeasureType = "Projected"
-        d.References2D = [(v, n) for n in names]
-        page.addView(d)
-        if a.get("at") is not None:
-            ox, oy = pt2(a["at"], "at")
-            d.X, d.Y = ox, oy
-        recompute()
-        try:
-            raw = float(d.getRawValue())
-        except Exception as e:
-            doc().removeObject(d.Name)
-            raise ToolError("failed", f"TechDraw cannot measure {', '.join(names)} of {v.Label} as {typ}: {e} — nothing was kept. td_geometry shows what each reference is (a radius or diameter wants a round edge, an angle two lines).")
-        src = apply_tol(d, a, raw)
-        recompute()
-        return done("td_dim", {**dim_reading(d), **({"fitFrom": src} if src else {}), **({"note": arc_note} if arc_note else {})})
-
-    def td_dimset(a):
-        """Several dimensions at once along one direction: a chain (each to the
-        next) or a baseline (each from the first), stacked so they do not cross."""
-        refs = a.get("refs") or []
-        if len(refs) < 3:
-            raise bad(f"refs: three or more points along the part, in order — got {len(refs)} (td_dim takes two).")
-        typ = picks.choice(a, "type", ("horizontal", "vertical"), "type: horizontal | vertical.", "horizontal")
-        style = picks.choice(a, "style", ("chain", "baseline"), "style: chain (each to the next) | baseline (each from the first).", "chain")
-        v = view_of(doc(), a.get("view"))
-        X, Y = abs_xy(v)
-        off = float(a.get("offset", 10.0))  # page mm from the view's edge to the first line
-        gap = float(a.get("spacing", 7.0))
-        pairs = [(refs[i], refs[i + 1]) for i in range(len(refs) - 1)] if style == "chain" else [(refs[0], r) for r in refs[1:]]
-        if not edges_of(v):
-            recompute([v])
-        es = edges_of(v)
-        import Part as _P
-
-        bb = _P.makeCompound(es).BoundBox if es else None
-        made = []
-        for k, (r1, r2) in enumerate(pairs):
-            lane = off + (k * gap if style == "baseline" else 0)
-            # the view's half size on the paper, then the lane past it (below for horizontal, right for vertical)
-            half_h = bb.YLength / 2 if bb is not None else 20
-            half_w = bb.XLength / 2 if bb is not None else 20
-            at = [0, -(half_h + lane)] if typ == "horizontal" else [half_w + lane, 0]
-            out = td_dim({"view": v.Label, "type": typ, "refs": [r1, r2], **{kk: a[kk] for kk in ("format",) if a.get(kk)}})
-            d = obj_of(doc(), out["dimension"], ["TechDraw::DrawViewDimension"], "dimension")
-            # text placed beside the view, each lane further out; along the line, between its ends
-            d.X, d.Y = at[0] if typ == "vertical" else d.X, at[1] if typ == "horizontal" else d.Y
-            made.append({**out, "lane": round(lane, 1)})
-        recompute()
-        total = sum(m.get("measured", 0) for m in made) if style == "chain" else (made[-1].get("measured") if made else None)
-        return done("td_dimset", {"view": v.Label, "style": style, "type": typ, "dimensions": made,
-                                  **({"overall": round(total, 3)} if isinstance(total, (int, float)) else {})})
 
     def apply_tol(d, a, raw):
         if a.get("format"):
@@ -1909,19 +1601,6 @@ def tools(session):
             pass
         return out
 
-    def td_tolerance(a):
-        d = obj_of(doc(), a.get("dimension"), ["TechDraw::DrawViewDimension"], "dimension")
-        raw = float(d.getRawValue())
-        if a.get("clear"):
-            d.EqualTolerance = True
-            d.OverTolerance = 0
-            d.UnderTolerance = 0
-            d.TheoreticalExact = False
-            d.Arbitrary = False
-            d.FormatSpec = "%.2f" if d.Type in ("Distance", "DistanceX", "DistanceY", "Radius", "Diameter") else d.FormatSpec
-        src = apply_tol(d, a, raw)
-        recompute()
-        return done("td_tolerance", {**dim_reading(d), **({"fitFrom": src} if src else {})})
 
     # ---- GD&T, notes, balloons, tables ----
 
@@ -1983,125 +1662,6 @@ def tools(session):
             pass
         return sym
 
-    def td_gdt(a):
-        rows = a.get("frame") or ([a] if a.get("characteristic") else [])
-        rows = [{k: r.get(k) for k in ("characteristic", "tolerance", "diameter", "modifier", "datums") if r.get(k) is not None} for r in rows]
-        try:
-            fig = gdt.frame(rows, float(a.get("height", 3.5)))
-        except gdt.GdtError as e:
-            raise bad(str(e))
-        if a.get("dimension"):
-            d = obj_of(doc(), a["dimension"], ["TechDraw::DrawViewDimension"], "dimension")
-            v = d.References2D[0][0]
-            page = page_holding(v)
-            vx, vy = abs_xy(v)
-            at = place_xy(page, a.get("at"), (vx + float(d.X), vy + float(d.Y) - fig.h - 2))
-            sym = symbol(page, fig, {"kind": "frame", "rows": rows, "h": float(a.get("height", 3.5))}, at, "Frame")
-            ln = None
-        else:
-            v = view_of(doc(), a.get("view"))
-            page = page_holding(v)
-            if a.get("on") is None:
-                raise bad("on: the feature the frame points to (\"Edge3\", { point }, { circle }…), or dimension: a dimension to sit under.")
-            if not edges_of(v):
-                recompute([v])
-            ref, p = ref_point(v, a["on"])
-            vx, vy = abs_xy(v)
-            at = place_xy(page, a.get("at"), (vx + p[0] + 25, vy - p[1] + 15))
-            sym = symbol(page, fig, {"kind": "frame", "rows": rows, "h": float(a.get("height", 3.5)), "on": ref}, at, "Frame")
-            ln = leader(v, p, (at[0] - fig.w / 2, at[1]))
-        recompute()
-        return done("td_gdt", {"symbol": sym.Name, "reads": gdt.describe(rows), "at": [num(sym.X, 2), num(sym.Y, 2)], "size": [num(fig.w, 2), num(fig.h, 2)], **({"leader": ln.Name} if ln else {})})
-
-    def td_datum(a):
-        v = view_of(doc(), a.get("view"))
-        page = page_holding(v)
-        try:
-            fig = gdt.datum(a.get("letter"), float(a.get("height", 3.5)))
-        except gdt.GdtError as e:
-            raise bad(str(e))
-        if not edges_of(v):
-            recompute([v])
-        ref, p = ref_point(v, a.get("on"))
-        vx, vy = abs_xy(v)
-        # The triangle stands on the feature, the letter outward from the
-        # view's middle (page y up; the geometry's y is inverted).
-        ox, oy = p[0], -p[1]
-        side = ("right" if ox > 0 else "left") if abs(ox) > abs(oy) else ("up" if oy > 0 else "down")
-        try:
-            fig = gdt.datum(a.get("letter"), float(a.get("height", 3.5)), side)
-        except gdt.GdtError as e:
-            raise bad(str(e))
-        fx, fy = vx + ox, vy + oy  # the triangle's base, on the page
-        cx = fx + {"right": fig.w / 2, "left": -fig.w / 2}.get(side, 0.0)
-        cy = fy + {"up": fig.h / 2, "down": -fig.h / 2}.get(side, 0.0)
-        at = place_xy(page, a.get("at"), (cx, cy))
-        sym = symbol(page, fig, {"kind": "datum", "letter": a["letter"], "h": float(a.get("height", 3.5)), "side": side, "on": ref}, at, f"Datum {a['letter']}")
-        recompute()
-        return done("td_datum", {"symbol": sym.Name, "datum": a["letter"], "on": ref, "side": side, "at": [num(sym.X, 2), num(sym.Y, 2)]})
-
-    def td_note(a):
-        page = page_of(doc(), a.get("page"))
-        text = a.get("text")
-        if not text:
-            raise bad("text: the note, lines split by \\n.")
-        n = doc().addObject("TechDraw::DrawViewAnnotation", "Note")
-        page.addView(n)
-        n.Text = str(text).split("\n")
-        n.TextSize = float(a.get("size", 5.0))
-        W, H = paper_size(page)
-        n.X, n.Y = place_xy(page, a.get("at"), (40, 40))
-        recompute()
-        return done("td_note", {"note": n.Name, "lines": len(n.Text), "at": [num(n.X, 2), num(n.Y, 2)]})
-
-    def td_balloon(a):
-        v = view_of(doc(), a.get("view"))
-        page = page_holding(v)
-        if not edges_of(v):
-            recompute([v])
-        ref, p = ref_point(v, a.get("on"))
-        b = doc().addObject("TechDraw::DrawViewBalloon", "Balloon")
-        b.SourceView = v
-        page.addView(b)
-        b.OriginX, b.OriginY = p[0], -p[1]
-        text = a.get("text")
-        if text is None:
-            try:
-                text = str(page.NextBalloonIndex)
-                page.NextBalloonIndex = page.NextBalloonIndex + 1
-            except Exception:
-                text = "1"
-        b.Text = str(text)
-        if a.get("at") is not None:
-            ox, oy = pt2(a["at"], "at")
-            b.X, b.Y = ox, oy
-        else:
-            b.X, b.Y = p[0] + 15, -p[1] + 15
-        recompute()
-        return done("td_balloon", {"balloon": b.Name, "text": b.Text, "on": ref})
-
-    def td_table(a):
-        from . import sheet as SH
-        from .. import cells as C
-
-        page = page_of(doc(), a.get("page"))
-        ss = SH.find(doc(), a.get("sheet"))
-        rng = a.get("range") or C.bounds(SH.filled(ss))
-        if not rng:
-            raise ToolError("invalid_state", f"{ss.Label} is empty: sheet_set fills its cells (asm_bom makes a parts list), then td_table again.")
-        try:
-            (r0, c0), (r1, c1) = C.parse_range(rng)
-        except C.AddressError as e:
-            raise bad(f"range: {e}.")
-        t = doc().addObject("TechDraw::DrawViewSpreadsheet", "Table")
-        page.addView(t)
-        t.Source = ss
-        t.CellStart, t.CellEnd = C.name(r0, c0), C.name(r1, c1)
-        t.TextSize = float(a.get("size") or 3.5)
-        W, H = paper_size(page)
-        t.X, t.Y = place_xy(page, a.get("at"), (W * 0.75, H * 0.75))
-        recompute()
-        return done("td_table", {"table": t.Name, "sheet": ss.Label, "range": C.range_text((r0, c0), (r1, c1)), "at": [num(t.X, 2), num(t.Y, 2)], "note": "It follows the sheet: change cells with sheet_set."})
 
     # ---- reading and writing out ----
 
@@ -2360,86 +1920,6 @@ def tools(session):
             out["note"] = "This FreeCAD made no cosmetic edges of its own: the lines show in td_export only."
         return done("td_cosmetic", out)
 
-    def td_leader(a):
-        v = view_of(doc(), a.get("view"))
-        page = page_holding(v)
-        if not edges_of(v):
-            recompute([v])
-        ref, p = ref_point(v, a.get("on"))
-        vx, vy = abs_xy(v)
-        at = place_xy(page, a.get("at"), (vx + p[0] + 20, vy - p[1] + 15))
-        ln = leader(v, p, at)
-        out = {"leader": ln.Name, "on": ref}
-        if a.get("text"):
-            n = doc().addObject("TechDraw::DrawViewAnnotation", "Note")
-            page.addView(n)
-            n.Text = str(a["text"]).split("\n")
-            size = float(a.get("size", 3.5))
-            n.TextSize = size
-            right = at[0] >= vx + p[0]
-            w = max(len(x) for x in n.Text) * size * 0.55
-            n.X, n.Y = at[0] + (w / 2 + 1.5 if right else -w / 2 - 1.5), at[1] + size * 0.35
-            out["note"] = n.Name
-        recompute()
-        return done("td_leader", out)
-
-    def td_finish(a):
-        v = view_of(doc(), a.get("view"))
-        page = page_holding(v)
-        data = {"kind": "finish", "ra": str(a.get("ra", "")), "removal": a.get("removal", "required"), "process": str(a.get("process", "")),
-                "lay": str(a.get("lay", "")), "allowance": str(a.get("allowance", "")), "h": float(a.get("height", 3.5))}
-        try:
-            fig = gdt.finish(data["ra"], data["removal"], data["process"], data["lay"], data["allowance"], data["h"])
-        except gdt.GdtError as e:
-            raise bad(str(e))
-        if not edges_of(v):
-            recompute([v])
-        if a.get("on") is None:
-            raise bad("on: the surface's edge in the view (\"Edge4\") — the symbol's point sits on it.")
-        ref, p = ref_point(v, a["on"])
-        vx, vy = abs_xy(v)
-        base = (vx + p[0], vy - p[1])
-        if a.get("at") is None and not a.get("onSurface"):
-            # off the material, on a leader: below a lower edge, above an upper one
-            a = dict(a, at=[base[0] + 12, base[1] + (-14 if p[1] > 0 else 14)])
-        if a.get("at") is not None:
-            at = place_xy(page, a["at"], base)
-            ln = leader(v, p, at)
-            data["leader"] = ln.Name
-        else:
-            at = base
-        # the symbol's centre from its base point
-        cx = at[0] + fig.origin[0] + fig.w / 2
-        cy = at[1] - (fig.origin[1] + fig.h / 2)
-        data["on"] = ref
-        sym = symbol(page, fig, data, (cx, cy), "Surface finish")
-        recompute()
-        return done("td_finish", {"symbol": sym.Name, "on": ref, "ra": data["ra"], "removal": data["removal"], "at": [num(at[0], 2), num(at[1], 2)]})
-
-    def td_area(a):
-        v = view_of(doc(), a.get("view"))
-        page = page_holding(v)
-        label, sub, face = picks.resolve(s, a.get("face"))
-        if not sub or not sub.startswith("Face"):
-            raise bad("face: a face of the part (\"Body.Face3\") — its area is written.")
-        if not edges_of(v):
-            recompute([v])
-        p = paper_of3d(v, list(face.CenterOfMass))
-        vx, vy = abs_xy(v)
-        unit = a.get("unit", "mm2")
-        val = face.Area / {"mm2": 1, "cm2": 100, "m2": 1e6}.get(unit, 1)
-        text = a.get("format", "A = {value} {unit}").format(value=f"{val:.{int(a.get('decimals', 1))}f}", unit={"mm2": "mm²", "cm2": "cm²", "m2": "m²"}.get(unit, unit))
-        at = place_xy(page, a.get("at"), (vx + p[0] + 20, vy - p[1] + 15))
-        ln = leader(v, p, at)
-        n = doc().addObject("TechDraw::DrawViewAnnotation", "Note")
-        page.addView(n)
-        n.Text = [text]
-        size = float(a.get("size", 3.5))
-        n.TextSize = size
-        w = len(text) * size * 0.55
-        n.X, n.Y = at[0] + w / 2 + 1.5, at[1] + size * 0.35
-        recompute()
-        return done("td_area", {"face": f"{label}.{sub}", "area": num(val, 4), "unit": unit, "text": text, "leader": ln.Name, "note": n.Name})
 
     # ---- the rest of TechDraw's commands, headless ----------------------------------------
 
@@ -2447,185 +1927,6 @@ def tools(session):
         refs = picks.ref_list(refs, "dims: one or more dimensions by label.")
         return [obj_of(doc(), r, ["TechDraw::DrawViewDimension"], "dimension") for r in refs]
 
-    def td_dim_format(a):
-        import re
-
-        out = []
-        for d in dims_of(a.get("dims")):
-            f = str(d.FormatSpec)
-            if a.get("format"):
-                f = str(a["format"])
-            if a.get("removePrefix"):
-                i = f.find("%")
-                f = f[i:] if i > 0 else f
-            if a.get("decimals") is not None:
-                n = int(a["decimals"])
-                if not 0 <= n <= 9:
-                    raise bad("decimals: 0 to 9.")
-                f = re.sub(r"%\.(\d)([fwgG])", lambda m: f"%.{n}{m.group(2)}", f, count=1) if re.search(r"%\.\d", f) else f.replace("%", f"%.{n}", 1)
-            if a.get("more") is not None:
-                k = int(a["more"])
-                f = re.sub(r"%\.(\d)", lambda m: f"%.{max(0, min(9, int(m.group(1)) + k))}", f, count=1)
-            pre = a.get("prefix")
-            if pre:
-                tok = {"diameter": "⌀", "square": "□"}.get(pre)
-                if pre == "count":
-                    tok = f"{int(a.get('count', 2))}× "
-                if tok is None:
-                    tok = str(pre)
-                i = f.find("%")
-                f = f[:i] + tok + f[i:] if i >= 0 else tok + f
-            d.FormatSpec = f
-            out.append({"dimension": d.Label, "format": f})
-        recompute()
-        for e, d in zip(out, dims_of(a.get("dims"))):
-            try:
-                e["reads"] = d.getText() if hasattr(d, "getText") else None
-            except Exception:
-                pass
-        return done("td_dim_format", {"dims": out})
-
-    def td_dim_special(a):
-        v = view_of(doc(), a.get("view"))
-        page = page_holding(v)
-        kind = a.get("kind")
-        if not edges_of(v):
-            recompute([v])
-        if kind in ("extent_h", "extent_v"):
-            import TechDraw
-
-            edges = [resolve_ref(v, r, frames) for r in (a.get("refs") or [])]
-            before = {o.Name for o in doc().Objects}
-            TechDraw.makeExtentDim(v, edges, 0 if kind == "extent_h" else 1)
-            recompute()
-            d = next((o for o in doc().Objects if o.Name not in before and o.isDerivedFrom("TechDraw::DrawViewDimension")), None)
-            if d is None:
-                raise ToolError("failed", f"TechDraw made no extent dimension on {v.Label}: refs edges of the view (td_geometry lists them), or none for the whole view; a view with no edges has no extent.")
-            return done("td_dim_special", {"kind": kind, **dim_reading(d)})
-        names = [resolve_ref(v, r, frames) for r in (a.get("refs") or [])]
-        d = doc().addObject("TechDraw::DrawViewDimension", "Dimension")
-        d.MeasureType = "Projected"
-        if kind in ("chamfer_h", "chamfer_v"):
-            if len(names) != 2:
-                doc().removeObject(d.Name)
-                raise bad("refs: the chamfer's two end points.")
-            d.Type = "DistanceX" if kind == "chamfer_h" else "DistanceY"
-            d.References2D = [(v, n) for n in names]
-            page.addView(d)
-            recompute()
-            vs = vertices_of(v)
-            p, q = (vs[int(n[6:])] for n in names)
-            import math
-
-            ang = round(math.degrees(abs(math.atan2(q.y - p.y, q.x - p.x))) if kind == "chamfer_h" else math.degrees(abs(math.atan2(q.x - p.x, q.y - p.y))))
-            ang = ang if ang <= 90 else 180 - ang
-            d.FormatSpec = f"{d.FormatSpec} x{ang}°"
-        elif kind in ("arc_length", "axo_length"):
-            want_n = 1 if kind == "arc_length" else 2
-            if len(names) != want_n or not all(n.startswith("Edge") for n in names):
-                doc().removeObject(d.Name)
-                raise bad("refs: one curved edge." if kind == "arc_length" else "refs: [the edge to measure, an edge the extension lines run along].")
-            es = edges_of(v)
-            e = es[int(names[0][4:])]
-            spec = {"kind": kind, "view": v.Name, "edge": names[0], "decimals": int(a.get("decimals", 2))}
-            if kind == "arc_length":
-                if not hasattr(getattr(e, "Curve", None), "Radius"):
-                    doc().removeObject(d.Name)
-                    raise bad(f"{names[0]} is not an arc: refs one curved edge.")
-                anchor = model_arc_anchor(v, e, frames)
-                if anchor:
-                    spec["src"] = anchor
-                vs = vertices_of(v)
-                ends = []
-                for pt in (e.Vertexes[0].Point, e.Vertexes[-1].Point):
-                    k = min(range(len(vs)), key=lambda i: (vs[i] - pt).Length)
-                    ends.append(f"Vertex{k}")
-                d.Type = "Distance"
-                d.References2D = [(v, n) for n in ends]
-                page.addView(d)
-            else:
-                # A length along one of the part's axes in an axonometric
-                # view, read true (not foreshortened): the measured edge
-                # first, the one the extension lines run along second.
-                import math
-
-                x = es[int(names[1][4:])]
-                dl = e.Vertexes[-1].Point - e.Vertexes[0].Point
-                el = x.Vertexes[-1].Point - x.Vertexes[0].Point
-                X = FreeCAD.Vector(1, 0, 0)
-                la, ea = math.degrees(dl.getAngle(X)), math.degrees(el.getAngle(X))
-                if dl.y < 0:
-                    la = 180 - la
-                if el.y < 0:
-                    ea = 180 - ea
-                d.Type = "Distance"
-                d.References2D = [(v, names[0])]
-                page.addView(d)
-                d.AngleOverride = True
-                d.LineAngle = la
-                d.ExtensionAngle = ea
-            # kept on the dimension and re-read on every TechDraw change, so
-            # the text follows the part and the view's scale
-            d.addProperty("App::PropertyString", SPECIAL_PROP, "AgentLink", "What this special dimension measures (JSON), re-read when the drawing changes")
-            _own_data(d, SPECIAL_PROP)
-            setattr(d, SPECIAL_PROP, json.dumps(spec))
-            L = special_length(v, spec, frames)
-            if L is None:
-                doc().removeObject(d.Name)
-                raise ToolError("invalid_state", f"{names[0]}: no model edge lands on it in this view (an axonometric length needs a straight edge of the part along one of its axes)." if kind == "axo_length" else f"{names[0]} could not be read.")
-            refresh_special(doc(), frames)
-        else:
-            doc().removeObject(d.Name)
-            raise bad("kind: extent_h | extent_v { refs edges, none for the whole view } | chamfer_h | chamfer_v { refs two points } | arc_length { refs [an arc] } | axo_length { refs [edge, extension edge] }.")
-        if a.get("at") is not None:
-            d.X, d.Y = pt2(a["at"], "at")
-        recompute()
-        return done("td_dim_special", {"kind": kind, **dim_reading(d)})
-
-    def td_dim_align(a):
-        ds = dims_of(a.get("dims"))
-        how = a.get("direction", "horizontal")
-        if how == "horizontal":
-            y = float(ds[0].Y)
-            for d in ds:
-                d.Y = y
-        elif how == "vertical":
-            x = float(ds[0].X)
-            for d in ds:
-                d.X = x
-        elif how == "oblique":
-            # On the line through the first two dimension texts.
-            if len(ds) < 3:
-                raise bad("oblique: three or more dimensions, lined up on the first two.")
-            x0, y0 = float(ds[0].X), float(ds[0].Y)
-            dx, dy = float(ds[1].X) - x0, float(ds[1].Y) - y0
-            L2 = dx * dx + dy * dy or 1
-            for d in ds[2:]:
-                t = ((float(d.X) - x0) * dx + (float(d.Y) - y0) * dy) / L2
-                d.X, d.Y = x0 + t * dx, y0 + t * dy
-        else:
-            raise bad("direction: horizontal | vertical | oblique.")
-        recompute()
-        return done("td_dim_align", {"dims": [{"dimension": d.Label, "at": [num(d.X, 2), num(d.Y, 2)]} for d in ds]})
-
-    def td_dim_repair(a):
-        d = dims_of(a.get("dimension"))[0]
-        v = view_of(doc(), a["view"]) if a.get("view") else d.References2D[0][0]
-        if not edges_of(v):
-            recompute([v])
-        names = [resolve_ref(v, r, frames) for r in (a.get("refs") or [])]
-        if not names:
-            raise bad("refs: the view's points or edges it should measure now (as td_dim takes them).")
-        before = d.References2D
-        d.References2D = [(v, n) for n in names]
-        recompute()
-        try:
-            float(d.getRawValue())
-        except Exception as e:
-            d.References2D = before
-            recompute()
-            raise ToolError("failed", f"TechDraw cannot measure those: {e} — the old references were put back.")
-        return done("td_dim_repair", dim_reading(d))
 
     def td_view_more(a):
         kind = a.get("kind")
@@ -2861,92 +2162,130 @@ def tools(session):
             return done("td_lines", {"view": v.Label, "erased": gone, "left": len(prims)})
         raise bad("action: align_h / align_v { refs } | style { refs edges, style, weight, color } | extend / shorten { items, by, centerlines } | erase { items, tags }.")
 
-    def td_section_position(a):
-        sv = obj_of(doc(), a.get("section"), ["TechDraw::DrawViewSection"], "section")
-        base = sv.BaseView
-        if base.TypeId == "TechDraw::DrawProjGroupItem":
-            base = base.InList[0]
-        bx, by = float(base.X), float(base.Y)
-        sx, sy = float(sv.X), float(sv.Y)
-        if abs(sx - bx) > abs(sy - by):
-            sv.Y = by
-        else:
-            sv.X = bx
+
+    def own_prop(o, prop, kind, about):
+        """One of Agent Link's own notes on a view (what td_export draws),
+        added where the object has none yet; no change FreeCAD has to recompute."""
+        if prop not in o.PropertiesList:
+            o.addProperty(kind, prop, "AgentLink", about)
+            _own_data(o, prop)
+
+    def template_path(tpl):
+        """Where a template the caller names is: as given when absolute, in
+        the build's template folder when it is there, else in the session's folder."""
+        p = os.path.expanduser(tpl)
+        if not os.path.isabs(p):
+            p = os.path.join(template_root(), p) if os.path.isfile(os.path.join(template_root(), p)) else os.path.join(s.out_dir, p)
+        return p
+
+    def clear_samples(t, path):
+        """The template's own example values (names, numbers) cleared: they
+        are not this drawing's. What FreeCAD fills in itself (today's date,
+        the scale) differs from them and stays. Answers the fields cleared."""
+        try:
+            texts = dict(t.EditableTexts)
+            samples = template_defaults(path)
+            cleared = [k for k, v in texts.items() if v and samples.get(k) == v and "scale" not in k.lower()]
+            if cleared:
+                t.EditableTexts = {k: ("" if k in cleared else v) for k, v in texts.items()}
+                recompute()
+        except Exception:
+            cleared = []
+        return cleared
+
+    def anchor_at(base, p3):
+        """A detail's AnchorPoint for a point on the part: in the base
+        view's own frame, unscaled, y up (the view's lines are waited for
+        when they are not there yet)."""
+        fr = frame_of(base, frames)
+        if fr is None:
+            recompute([base])
+            fr = frame_of(base, frames)
+        q = to_view(fr, base, p3)
+        sc = fr[0]
+        return V(q[0] / sc, -q[1] / sc if fr[1] < 0 else q[1] / sc, 0)
+
+    def extent_dim(v, edges, way):
+        """TechDraw's extent dimension over edges of a view (none: the whole
+        view), way 0 across, 1 up: the dimension it made, or None."""
+        import TechDraw
+
+        before = {o.Name for o in doc().Objects}
+        TechDraw.makeExtentDim(v, edges, way)
         recompute()
-        return done("td_section_position", {"section": sv.Label, "at": [num(sv.X, 2), num(sv.Y, 2)], "base": base.Label})
+        return next((o for o in doc().Objects if o.Name not in before and o.isDerivedFrom("TechDraw::DrawViewDimension")), None)
 
+    def one_dim(args):
+        """td_dim itself (its entry, run with these arguments): td_dimset makes each of its dimensions with it."""
+        return runners.run_steps("td_dim", runners.entries()["td_dim"], args, helpers)
 
-    return [
-        Tool("td_page", "TechDraw pages: action new { paper A4|A3|A2|A1|A0|Letter|ANSIB…, orientation landscape|portrait, standard iso|asme, blank, template (an SVG path, or a name from templates), projection first|third, scale (the page's: views take it unless given their own), name } on the build's own templates, sample title-block texts cleared; list; read { page } (views and title-block fields); templates. Page positions are mm from the paper's bottom-left corner, y up.",
-             obj({"action": {"type": "string", "enum": ["new", "list", "read", "templates"]}, "page": {"type": "string"}, "paper": {"type": "string"}, "orientation": {"type": "string"}, "standard": {"type": "string"}, "blank": {"type": "boolean"},
-                  "template": {"type": "string"}, "projection": {"type": "string"}, "scale": {"type": "number"}, "name": {"type": "string"}}), td_page, changes=True),
-        Tool("td_title", "The title block: fields { name: value } by the template's own field names, which differ by template (no fields: lists them; an unknown name is refused with the list); preset \"mine\" fills from a saved one, with save: true saves the page's as it (not its title, sheet number, scale or date, unless given in fields), delete: true removes it; import / export a presets file (JSON). Ask the person for names and numbers.",
-             obj({"page": {"type": "string"}, "fields": {"type": "object"}, "preset": {"type": "string"}, "save": {"type": "boolean"}, "delete": {"type": "boolean"}, "import": {"type": "string"}, "export": {"type": "string"}}), td_title, changes=True),
-        Tool("td_view", "Put a view of bodies on a page: bodies (all when left out), direction front|top|right|left|rear|bottom|iso or [x, y, z] (part toward viewer), scale (left out: the page's), at [x, y] page mm (its centre, bottom-left origin), hidden (dashed hidden lines), name. Answers its label (what other td_ tools take), size on the paper and edges — 0 edges: the bodies are empty or hidden. Its lines are waited for (up to 30 s in the window).",
-             obj({"page": {"type": "string"}, "bodies": {"type": "array", "items": {"type": "string"}}, "direction": {"type": ["string", "array"]}, "scale": {"type": "number"}, "at": {"type": "array", "items": {}}, "hidden": {"type": "boolean"}, "name": {"type": "string"}}), td_view, changes=True),
-        Tool("td_centermarks", "Centre marks (thin chain crosses) on the holes and round edges of views (all part views when left out): extend mm past each circle (2); on: false takes them off. Whole circles and arcs past a half turn only. Drawn by td_export, not in the window.",
-             obj({"views": {}, "extend": {"type": "number"}, "on": {"type": "boolean"}}), td_centermarks, changes=True),
-        Tool("td_hatch", "Hatch faces of the part in a view (thin lines spacing mm apart at angle degrees; a section's cut is hatched by itself): view, faces [\"Face6\" …] (the part's own, from shape_query) — none takes it off. Drawn by td_export, not in the window; a face seen edge-on is warned of.",
-             obj({"view": {"type": "string"}, "faces": {}, "spacing": {"type": "number"}, "angle": {"type": "number"}}, ["view"]), td_hatch, changes=True),
-        Tool("td_weld", f"A weld symbol on a leader from a feature of a view (on, as td_dim takes it; at the leader's end on the page), drawn by td_export (the window shows the leader only): kind {', '.join(gdt.WELDS)}, size (left of it), length (right: \"50\" or \"50-100\" for pitch), side arrow | other | both, allAround, field (a site weld), tail (process, \"GMAW\").",
-             obj({"view": {"type": "string"}, "on": {}, "at": {"type": "array", "items": {}}, "kind": {"type": "string", "enum": list(gdt.WELDS)}, "size": {}, "length": {},
-                  "side": {"type": "string", "enum": ["arrow", "other", "both"]}, "allAround": {"type": "boolean"}, "field": {"type": "boolean"}, "tail": {"type": "string"},
-                  "textSize": {"type": "number"}, "name": {"type": "string"}}, ["view", "kind"]), td_weld, changes=True),
-        Tool("td_bim", "A BIM section plane drawn on a page (a building plan or section): section (from bim_section), scale (0.02 = 1:50), at, render Wireframe | Solid, fill (cut faces hatched), spaces, hidden. Warns when it drew nothing.",
-             obj({"page": {"type": "string"}, "section": {"type": "string"}, "scale": {"type": "number"}, "at": {"type": "array", "items": {}}, "render": {"type": "string"},
-                  "fill": {"type": "boolean"}, "spaces": {"type": "boolean"}, "hidden": {"type": "boolean"}, "name": {"type": "string"}}, ["section"]), td_bim, changes=True),
-        Tool("td_projection", "A projection group (views kept aligned): views [front, top, right, left, rear, bottom, iso, isoLeft …] (front always; default front, top, right), projection first|third (default the page's), front (which way is front: a direction), bodies, scale, at. Answers items: each one's label (Front, Top, FrontTopRight …) is the view td_dim and td_section take.",
-             obj({"page": {"type": "string"}, "bodies": {"type": "array", "items": {"type": "string"}}, "views": {"type": "array", "items": {"type": "string"}}, "projection": {"type": "string"}, "front": {"type": ["string", "array"]}, "scale": {"type": "number"}, "at": {"type": "array", "items": {}}}), td_projection, changes=True),
-        Tool("td_section", "A section view cut from a view: normal of the cut plane, toward who looks at the section (\"x\" | \"-y\" | [x,y,z]; it lies across the base view, not along its direction), through [x, y, z] a point of the plane (default the part's middle), symbol (A …), at, hatch false. Answers its label (Section A) and edges; 0 edges: the plane misses the part.",
-             obj({"view": {"type": "string"}, "normal": {"type": ["string", "array"]}, "through": {"type": "array", "items": {}}, "symbol": {"type": "string"}, "at": {"type": "array", "items": {}}, "hatch": {"type": "boolean"}}, ["view", "normal"]), td_section, changes=True),
-        Tool("td_detail", "A detail view: a circle of radius (mm on the part) around center [x, y, z] (a point on the part) or anchor [x, y] (td_geometry's view mm), drawn larger (scale, default twice the base), symbol (B …), at. 0 edges in the answer: the circle misses the part.",
-             obj({"view": {"type": "string"}, "center": {"type": "array", "items": {}}, "anchor": {"type": "array", "items": {}}, "radius": {"type": "number"}, "scale": {"type": "number"}, "symbol": {"type": "string"}, "at": {"type": "array", "items": {}}}, ["view", "radius"]), td_detail, changes=True),
-        Tool("td_geometry", "A view's geometry, to dimension against: kind edges | circles (each marked circle or arc) | lines | vertices, each with its ref (Edge3, Vertex5: zero-based), kind, ends or centre and diameter (mm on the part); limit (120). The numbers move when the part changes: read them just before use, or name geometry by the part (byPoint). Changes nothing.",
-             obj({"view": {"type": "string"}, "kind": {"type": "string"}, "limit": {"type": "integer"}}, ["view"]), td_geometry),
-        Tool("td_dim", "A dimension on a view, measured by TechDraw so it follows the part: type distance | horizontal | vertical (two points or one straight edge) | radius | diameter (one round edge) | angle (two straight edges); refs [\"Vertex1\", \"Vertex4\"] or by the part, which holds when numbers move: { point: [x,y,z] }, { circle: { diameter, near } }, { center: { diameter, near } }, { edge: { through: [p, q] } }. A diameter by { circle } takes whole circles only: an arc of that size (a slot's end) is refused — use radius. at [dx, dy] (its text from the view's centre, page mm); tolerance at once: plus/minus, fit \"H7\", basic, label, format \"%.1f\". Lengths in an iso view read foreshortened (td_dim_special axo_length). Answers dimension (its name), measured, text; unmeasurable is refused, nothing kept.",
-             obj({"view": {"type": "string"}, "type": {"type": "string"}, "refs": {"type": "array", "items": ref_schema}, "at": {"type": "array", "items": {}}, "plus": {"type": "number"}, "minus": {"type": "number"}, "fit": {"type": "string"},
-                  "basic": {"type": "boolean"}, "label": {"type": "string"}, "format": {"type": "string"}}, ["view", "refs"]), td_dim, changes=True),
-        Tool("td_dimset", "Several dimensions along one direction at once: style chain (each point to the next) or baseline (each from the first, stacked lanes); type horizontal | vertical; refs three or more points in order (as td_dim takes them); offset mm off the view (10), spacing between lanes (7), format. Answers each dimension and overall.",
-             obj({"view": {"type": "string"}, "refs": {"type": "array", "items": {}}, "type": {"type": "string", "enum": ["horizontal", "vertical"]}, "style": {"type": "string", "enum": ["chain", "baseline"]},
-                  "offset": {"type": "number"}, "spacing": {"type": "number"}, "format": {"type": "string"}}, ["view", "refs"]), td_dimset, changes=True),
-        Tool("td_tolerance", "Tolerance a dimension (by its name or label): plus/minus (mm; equal = ±), fit \"H7\" | \"g6\" (ISO 286 deviations for its measured size), basic: true (a boxed theoretically exact size, for GD&T), label (text instead of the value), format \"%.2f\"; clear: true first resets it.",
-             obj({"dimension": {"type": "string"}, "plus": {"type": "number"}, "minus": {"type": "number"}, "fit": {"type": "string"}, "basic": {"type": "boolean"}, "label": {"type": "string"}, "format": {"type": "string"}, "clear": {"type": "boolean"}}, ["dimension"]), td_tolerance, changes=True),
-        Tool("td_gdt", "A feature control frame (ISO 1101 / ASME Y14.5): frame [{ characteristic (flatness, straightness, circularity, cylindricity, profile_line, profile_surface, parallelism, perpendicularity, angularity, position, concentricity, symmetry, circular_runout, total_runout), tolerance mm, diameter (⌀ zone), modifier M|L|…, datums [\"A\", \"B|M\"] }] (rows stack: composite); with a leader to on (a view ref) or under dimension; at. Form tolerances take no datum, orientation and runout need one (refused, saying which). Answers reads: the frame in words.",
-             obj({"view": {"type": "string"}, "on": ref_schema, "dimension": {"type": "string"}, "frame": {"type": "array", "items": {"type": "object"}}, "characteristic": {"type": "string"}, "tolerance": {"type": "number"}, "diameter": {"type": "boolean"},
-                  "modifier": {"type": "string"}, "datums": {"type": "array", "items": {"type": "string"}}, "at": {"type": "array", "items": {}}, "height": {"type": "number"}}), td_gdt, changes=True),
-        Tool("td_datum", "A datum feature symbol: view, letter, on the feature (\"Edge3\" or { edge: { through } }, { point }), at. The triangle stands on the feature, the letter outward.",
-             obj({"view": {"type": "string"}, "letter": {"type": "string"}, "on": ref_schema, "at": {"type": "array", "items": {}}, "height": {"type": "number"}}, ["view", "letter", "on"]), td_datum, changes=True),
-        Tool("td_note", "A note on the page: text (\\n splits lines), size (mm, 5), at [x, y] page mm. td_leader points one at a feature.", obj({"page": {"type": "string"}, "text": {"type": "string"}, "size": {"type": "number"}, "at": {"type": "array", "items": {}}}, ["text"]), td_note, changes=True),
-        Tool("td_balloon", "A balloon pointing at a feature of a view: view, on (a ref as td_dim takes), text (default the page's next number), at [dx, dy] from the view's centre.",
-             obj({"view": {"type": "string"}, "on": ref_schema, "text": {"type": "string"}, "at": {"type": "array", "items": {}}}, ["view", "on"]), td_balloon, changes=True),
-        Tool("td_table", "A spreadsheet's cells as a table on the page (a parts list from asm_bom, a revision table): sheet, range (default its used cells), size, at. It follows the sheet; an empty sheet is refused.",
-             obj({"page": {"type": "string"}, "sheet": {"type": "string"}, "range": {"type": "string"}, "size": {"type": "number"}, "at": {"type": "array", "items": {}}}), td_table, changes=True),
+    def sheet_find(ref):
+        from . import sheet as SH
+
+        return SH.find(doc(), ref)
+
+    def filled_bounds(ss):
+        """The range that holds every filled cell of a sheet ("A1:C4"), or nothing for an empty one."""
+        from . import sheet as SH
+        from .. import cells as C
+
+        return C.bounds(SH.filled(ss))
+
+    def range_corners(rng):
+        """A range's two corners ((row, column), (row, column)) and None; or None and what is wrong with it."""
+        from .. import cells as C
+
+        try:
+            return C.parse_range(rng), None
+        except C.AddressError as e:
+            return None, str(e)
+
+    def cell_name(rc):
+        from .. import cells as C
+
+        return C.name(*rc)
+
+    def range_text(a_, b_):
+        from .. import cells as C
+
+        return C.range_text(a_, b_)
+
+    # What the tools' entries (agentlink/data/tools.json) call by name.
+    helpers = {"extent_dim": extent_dim, "chamfer_angle": chamfer_angle, "nearest_vertices": nearest_vertices, "axo_angles": axo_angles,
+               "model_arc_anchor": lambda v, e: model_arc_anchor(v, e, frames), "special_length": lambda v, spec: special_length(v, spec, frames),
+               "refresh_special": lambda: refresh_special(doc(), frames), "SPECIAL_PROP": SPECIAL_PROP,
+               "paper_of3d": paper_of3d, "dims_of": dims_of, "resolve": lambda ref: picks.resolve(s, ref), "area_text": area_text,
+               "without_prefix": without_prefix, "with_decimals": with_decimals, "more_decimals": more_decimals, "prefixed": prefixed,
+               "anchor_at": anchor_at, "one_dim": one_dim, "sheet_find": sheet_find, "filled_bounds": filled_bounds, "range_corners": range_corners,
+               "cell_name": cell_name, "range_text": range_text, "apply_tol": apply_tol, "dim_reading": dim_reading, "symbol": symbol,
+               "next_letter": lambda kind: next_letter(doc(), kind), "resolve_ref": lambda v, r, kind="any": resolve_ref(v, r, frames, kind),
+               "gscale": lambda v: gscale(v, frames), "V": V, "vec": vec, "num": num, "view_scale": view_scale, "vertices_of": vertices_of,
+               "edge_info": edge_info, "arc_turn": arc_turn, "whole_circles": whole_circles, "describe": gdt.describe, "DIM_TYPES": DIM_TYPES,
+               "axis_vector": axis_vector, "section_frame": section_frame, "hide_cut": hide_cut, "curve_name": curve_name, "figure": figure,
+               "next_balloon": next_balloon, "make_compound": lambda shapes: __import__("Part").makeCompound(shapes),
+               "doc": doc, "recompute": recompute, "done": done, "place_xy": place_xy, "view_reading": view_reading, "page_reading": page_reading,
+               "bodies_for": bodies_for, "direction": direction, "leader": leader, "ref_point": ref_point,
+               "unique": lambda label, *own: s.unique(label, *own), "local": lambda p: paths.local(s, p),
+               "pages": lambda: pages(doc()), "page_of": lambda ref: page_of(doc(), ref), "view_of": lambda ref: view_of(doc(), ref),
+               "obj_of": lambda ref, types=None, what="object": obj_of(doc(), ref, types, what), "ref_list": picks.ref_list,
+               "isfile": os.path.isfile, "relpath": os.path.relpath, "basename": os.path.basename, "sep": os.sep, "dumps": json.dumps,
+               # the family's
+               "PAPERS": PAPERS, "PROJ_ITEMS": PROJ_ITEMS, "MARKS_PROP": MARKS_PROP, "HATCH_PROP": HATCH_PROP, "WELD_PROP": WELD_PROP,
+               "template_root": template_root, "templates": templates, "find_template": find_template, "template_path": template_path,
+               "clear_samples": clear_samples, "load_presets": load_presets, "save_presets": save_presets, "set_enum": set_enum,
+               "paper_size": paper_size, "page_holding": page_holding, "edges_of": edges_of, "source_shapes": source_shapes, "abs_xy": abs_xy,
+               "pt2": pt2, "circle_centres": circle_centres, "proxy_name": proxy_name, "try_set": try_set, "setprop": setprop, "own_prop": own_prop,
+               "edge_on": edge_on, "weld_wrong": weld_wrong, "face_front": face_front}
+    return runners.tools(GROUP, s, helpers) + [
         Tool("td_list", "A page's views (label, scale, size, edge count; a group's items), dimensions (name, refs, measured, text, tolerance), GD&T, other objects and title block. A document just opened holds each view's settings but not its lines (FreeCAD works them out at the view's first recompute): views without lines are computed here first and waited for (up to 20 s; computed says how many and how long), and the dimensions on them after. A view still without lines is marked notReady with no edge count, and a dimension on it has notReady in place of measured and text — never 0 as if measured; notReady at the top says which and what to do (recompute, then td_list again). Changes nothing in the model.", obj({"page": {"type": "string"}}), td_list),
         Tool("td_cosmetic", "Cosmetic geometry on a view (FreeCAD's own cosmetic edges from 1.1, so in the window too; always in td_export): items [{ kind line (from, to: points on the part) | circle (center on the part, radius mm) | centerline (edges: a shaft's or hole's two side lines; extend mm) | thread (edges: the two outline lines of a side view, or circle: the end view's round edge; internal: true for a tapped hole; pitch, ISO coarse by default; length mm) , style thin | visible | hidden | center }]; clear: true drops the earlier ones. td_lines takes them by order, from 0.",
              obj({"view": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}, "clear": {"type": "boolean"}}, ["view"]), td_cosmetic, changes=True),
-        Tool("td_leader", "A leader line from a feature of a view (on: a ref as td_dim takes) to at [x, y] page mm, with text (\\n splits lines) at its end — a note pointing at something.",
-             obj({"view": {"type": "string"}, "on": {}, "at": {"type": "array", "items": {}}, "text": {"type": "string"}, "size": {"type": "number"}}, ["view", "on"]), td_leader, changes=True),
-        Tool("td_finish", "A surface texture symbol (ISO 1302) on a surface's edge in a view (on): ra (\"1.6\" or \"Rz 6.3\"), removal required (machined) | prohibited | any, process (\"ground\"), lay = | perpendicular | crossed | multi | circular | radial | particulate, allowance mm; placed off the part on a leader (at [x, y] page mm to choose where; onSurface: true stands it on the edge itself).",
-             obj({"view": {"type": "string"}, "on": {}, "ra": {"type": "string"}, "removal": {"type": "string", "enum": ["required", "prohibited", "any"]}, "process": {"type": "string"},
-                  "lay": {"type": "string"}, "allowance": {"type": "string"}, "height": {"type": "number"}, "at": {"type": "array", "items": {}}, "onSurface": {"type": "boolean"}}, ["view", "on"]), td_finish, changes=True),
-        Tool("td_area", "Write a face's area on the drawing with a leader to it: face (\"Body.Face3\" on the part), view, unit mm2 | cm2 | m2, decimals, format (\"A = {value} {unit}\"), at. Written as text: it does not follow the part afterwards.",
-             obj({"view": {"type": "string"}, "face": {"type": "string"}, "unit": {"type": "string", "enum": ["mm2", "cm2", "m2"]}, "decimals": {"type": "integer"}, "format": {"type": "string"},
-                  "size": {"type": "number"}, "at": {"type": "array", "items": {}}}, ["view", "face"]), td_area, changes=True),
-        Tool("td_dim_format", "Dimension text: dims, then decimals n (0 to 9), more +1/−1, prefix diameter (⌀) | square (□) | count (n×, with count) | any text, removePrefix, format (a whole format, \"%.2f mm\"). A prefix is text only: it does not check what the dimension is on.",
-             obj({"dims": {"type": "array", "items": {"type": "string"}}, "decimals": {"type": "integer"}, "more": {"type": "integer"}, "prefix": {"type": "string"}, "count": {"type": "integer"}, "removePrefix": {"type": "boolean"}, "format": {"type": "string"}}, ["dims"]), td_dim_format, changes=True),
-        Tool("td_dim_special", "Special dimensions: kind extent_h / extent_v (the view's whole width or height, or refs edges'), chamfer_h / chamfer_v (refs a chamfer's two points: \"2 x45°\"), arc_length (refs one arc: ◠ its length), axo_length (refs [edge, extension-line edge] in an iso view: the true length, not the foreshortened one). at [dx, dy]. Arc and axo lengths are text, re-read from the part when a td_ tool changes the drawing.",
-             obj({"view": {"type": "string"}, "kind": {"type": "string", "enum": ["extent_h", "extent_v", "chamfer_h", "chamfer_v", "arc_length", "axo_length"]}, "refs": {"type": "array", "items": {}}, "at": {"type": "array", "items": {}}, "decimals": {"type": "integer"}}, ["view", "kind"]), td_dim_special, changes=True),
-        Tool("td_dim_align", "Line dimensions' texts up: dims (the first sets the line), direction horizontal (all at the first's height) | vertical | oblique (three or more, on the line through the first two).",
-             obj({"dims": {"type": "array", "items": {"type": "string"}}, "direction": {"type": "string", "enum": ["horizontal", "vertical", "oblique"]}}, ["dims"]), td_dim_align, changes=True),
-        Tool("td_dim_repair", "Point a dimension at new references (after the model changed and its numbers moved): refs as td_dim takes them, view to move it to another; the old ones are put back if TechDraw cannot measure the new.",
-             obj({"dimension": {"type": "string"}, "view": {"type": "string"}, "refs": {"type": "array", "items": {}}}, ["dimension", "refs"]), td_dim_repair, changes=True),
         Tool("td_view_more", "More views on a page: kind broken { view, breaks, gap } | draft { object (a Draft object) } | clip { width, height, frame } | clip_add / clip_remove { clip, view } | image { path, width, height } | symbol { path (an SVG), scale } | share { view } (the view also on this page, with its dimensions) | lock { view, locked } | stack { view, to top|bottom|up|down } | move { view, page } (to another page; a group's item takes its group), at [x, y].",
              obj({"kind": {"type": "string", "enum": ["broken", "draft", "clip", "clip_add", "clip_remove", "image", "symbol", "share", "lock", "stack", "move"]}, "locked": {"type": "boolean"}, "to": {"type": "string", "enum": ["top", "bottom", "up", "down"]}, "page": {"type": "string"}, "view": {"type": "string"}, "object": {"type": "string"}, "breaks": {"type": "array", "items": {"type": "string"}},
                   "gap": {"type": "number"}, "clip": {"type": "string"}, "width": {"type": "number"}, "height": {"type": "number"}, "frame": {"type": "boolean"}, "path": {"type": "string"}, "scale": {"type": "number"}, "direction": {"type": "array", "items": {"type": "number"}}, "at": {"type": "array", "items": {}}, "name": {"type": "string"}}, ["kind"]), td_view_more, changes=True),
         Tool("td_lines", "A view's lines: action align_h / align_v { refs two points or an edge } (the view turned so they line up) | style { refs edges, style solid|dashed|dotted|dashdot|dashdotdot|none, weight mm, color } | extend / shorten { items (td_cosmetic's lines by order from 0; all when left out), by mm, centerlines } | erase { items, tags } (cosmetic lines gone; all td_cosmetic's when items is left out).",
              obj({"view": {"type": "string"}, "action": {"type": "string", "enum": ["align_h", "align_v", "style", "extend", "shorten", "erase"]}, "refs": {"type": "array", "items": {}}, "style": {"type": "string"}, "weight": {"type": "number"}, "color": {},
                   "items": {"type": "array", "items": {"type": "integer"}}, "by": {"type": "number"}, "centerlines": {"type": "array", "items": {"type": "string"}}, "tags": {"type": "array", "items": {"type": "string"}}}, ["view", "action"]), td_lines, changes=True),
-        Tool("td_section_position", "Line a section view up with its base view: straight across when it sits beside it, straight above or below when over it.", obj({"section": {"type": "string"}}, ["section"]), td_section_position, changes=True),
         Tool("td_export", "Write a page out: formats [svg, pdf, dxf], name. DXF is TechDraw's own. SVG and PDF are drawn here from the page's objects (TechDraw's own PDF and SVG export needs the window): views, dimensions, symbols, notes, tables, centre marks, hatching and the title block's fields, without the template's artwork. Files go to the session's folder; notes says what was skipped.",
              obj({"page": {"type": "string"}, "formats": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}}), td_export),
     ]

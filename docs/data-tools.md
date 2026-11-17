@@ -12,6 +12,8 @@ three files now hold only what the entries call by name. So are the Mesh family 
 21 tools) and the Points family (`families/points.py`, 8 tools): the numpy over points and triangles and
 the FreeCAD Mesh calls are named helpers (`plane_sides`, `own_boolean`, `edge_loops`, `flatten_apart`;
 `in_box`, `fitted`, `curve_through`, `grid_mesh`), the checks, the order and the answer are the entries.
+TechDraw (`families/techdraw.py`) is data for 27 of its 32 tools; `td_list`, `td_export`, `td_cosmetic`,
+`td_view_more` and `td_lines` are still handlers there, beside the entries (`tests/test_datatd_data.py` is its proof).
 
 So are Part Design and Sketcher: the 19 feature tools (`families/feature.py`), the 8 sketch tools
 (`families/sketch.py`) and `std_more.py`'s pd_move_feature, pd_reorder, pd_tip and pd_shaft. What is left in
