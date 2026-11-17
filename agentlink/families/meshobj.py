@@ -496,7 +496,10 @@ def flatten_apart(P, F, iters, weight):
     loaded there, before any unwrapping: the surface is not at fault) or
     "stopped" (why: its last word). It marks where it is on its error
     stream (UNWRAP_MARK), so that a crash with no word of its own (seen
-    live: code -11 on a sphere's cap of 1,651 triangles) says which."""
+    live: code -11 on a sphere's cap of 1,651 triangles) says which:
+    "loading" … "loaded" for FreeCAD's modules, "unwrapping" … "unwrapped"
+    for flatmesh's own work. The outlines are found here (flat_loops), not
+    by flatmesh."""
     import subprocess
     import sys
     import tempfile
@@ -512,10 +515,11 @@ def flatten_apart(P, F, iters, weight):
         "import flatmesh\n"
         "at('loaded')\n"
         "z = np.load(sys.argv[1])\n"
+        "at('unwrapping')\n"
         "fl = flatmesh.FaceUnwrapper(np.ascontiguousarray(z['P'], dtype=np.float64), np.ascontiguousarray(z['F'], dtype=np.int64))\n"
         f"fl.findFlatNodes({iters}, {weight})\n"
-        "b = fl.getFlatBoundaryNodes()\n"
-        "np.savez(sys.argv[2], Q=np.asarray(fl.ze_nodes, float), n=np.array([len(x) for x in b]), B=np.concatenate([np.asarray(x, float) for x in b]) if b else np.zeros((0, 3)))\n"
+        "at('unwrapped')\n"
+        "np.savez(sys.argv[2], Q=np.asarray(fl.ze_nodes, float))\n"
     )
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join([x for x in sys.path if x])
@@ -538,12 +542,25 @@ def flatten_apart(P, F, iters, weight):
         return None, None, stop, why
     z = np.load(dst)
     Q = np.asarray(z["Q"], float)[:, :2]
-    n, B = list(z["n"]), np.asarray(z["B"], float)
-    bounds, k = [], 0
-    for c in n:
-        bounds.append(B[k:k + int(c), :2])
-        k += int(c)
-    return Q, bounds, None, None
+    return Q, flat_loops(Q, F), None, None
+
+
+def flat_loops(Q, F):
+    """The flat pattern's outlines: the surface's open edges (one triangle
+    each) chained into loops, as arrays of flat points. Worked out here,
+    not by flatmesh's getFlatBoundaryNodes: that walk reads past the end of
+    its own table where two outlines meet at one point (a point on four
+    open edges) and brings its Python down (FreeCAD's MeshFlattening.cpp,
+    getBoundaries)."""
+    F = np.asarray(F, dtype=np.int64).reshape(-1, 3)
+    if len(F) == 0:
+        return []
+    e0, e1 = F.reshape(-1), F[:, [1, 2, 0]].reshape(-1)
+    lo_, hi_ = np.minimum(e0, e1), np.maximum(e0, e1)
+    nn = int(F.max()) + 1
+    keys, cnt = np.unique(lo_ * nn + hi_, return_counts=True)
+    edges = [(int(k // nn), int(k % nn)) for k in keys[cnt == 1]]
+    return [np.asarray(Q, float)[chain, :2] for chain in edge_loops(edges) if len(chain) >= 3]
 
 
 def stretch(P, Q, F):

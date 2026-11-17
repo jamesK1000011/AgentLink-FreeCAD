@@ -53,7 +53,18 @@ def holder(doc, make=False):
         for k, v in (doc.Meta or {}).items():
             if k.startswith(KEY):
                 _set(o, k[len(KEY):], v)
+        _untouch(o)
     return o
+
+
+def _untouch(o):
+    """The records object left as not needing a recompute: it has nothing
+    to compute, and a touched one showed in the tree (and in the health
+    check) as an object to recompute after material_set or material_clear."""
+    try:
+        o.purgeTouched()
+    except Exception:
+        pass
 
 
 def _set(o, name, raw):
@@ -64,6 +75,13 @@ def _set(o, name, raw):
             o.setEditorMode(p, 2)
         except Exception:
             pass
+    try:
+        # A record is an output: writing it does not touch the object
+        # (FreeCAD's Property::Output; set on records of older files too).
+        if "Output" not in (o.getPropertyStatus(p) or ()):
+            o.setPropertyStatus(p, "Output")
+    except Exception:
+        pass
     if getattr(o, p, None) != raw:
         setattr(o, p, raw)
 

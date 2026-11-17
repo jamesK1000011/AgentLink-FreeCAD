@@ -82,10 +82,47 @@ class Meter:
             del self.calls[:-5000]
         self._append(row)
 
+    def refused(self, tool, args_text, reply_text, code=None):
+        """A call the window answered with a refusal of its own, before the
+        call ran (a dialog holding the window, the agent's document closed
+        or not in front): counted as a call that erred, as the agent saw it."""
+        self.call(tool, args_text, reply_text, None, code or "error", 0)
+
+    def amend(self, tool, code="busy"):
+        """The last call of tool, counted as answered, was answered to the
+        agent with an error after all (the window wrote "busy" while the
+        call was still running): counted as erred. Kept on disk as a line
+        of its own (kind "amend"). False when there was none to amend."""
+        with self.lock:
+            row = next((r for r in reversed(self.calls) if r.get("tool") == tool), None)
+            if row is None or row.get("err"):
+                return False
+            row["err"] = code
+        self._append({"t": round(time.time(), 1), "s": self.session_id, "kind": "amend", "tool": tool, "err": code})
+        return True
+
     def session_totals(self):
         with self.lock:
             rows = list(self.calls)
         return totals(rows, self.listed)
+
+
+def err_code(result):
+    """The error code of a tools/call result ({"content": […], "isError"}),
+    or None when it is not an error. An error whose text cannot be read
+    still counts (code "error"): the meter once read the whole answer's
+    texts joined as one JSON, so an error answer with a second text part
+    was not counted at all."""
+    if not isinstance(result, dict) or not result.get("isError"):
+        return None
+    try:
+        content = result.get("content") or []
+        first = next((c.get("text", "") for c in content if c.get("type") == "text"), "")
+        err = json.loads(first).get("error")
+        code = err.get("code") if isinstance(err, dict) else None
+        return str(code) if code else "error"
+    except Exception:  # noqa: BLE001 - an error all the same
+        return "error"
 
 
 def tokens_of(row):
@@ -151,6 +188,7 @@ def report(days=7, where=None, top=12):
     rows = read_days(days, where)
     calls = [r for r in rows if r.get("kind") == "call"]
     lists = [r for r in rows if r.get("kind") == "list"]
+    amended = len([r for r in rows if r.get("kind") == "amend"])
     sessions = {}
     for r in lists:
         sessions.setdefault(r["s"], {"session": r["s"], "listed": r["tools"], "listTokens": r["tokens"], "calls": 0, "tokens": 0})
@@ -167,7 +205,7 @@ def report(days=7, where=None, top=12):
     t = totals(calls)
     list_tok = sum(s["listTokens"] for s in sessions.values())
     out = {"days": days, "calls": t["calls"], "tokens": t["tokens"] + list_tok, "callTokens": t["tokens"], "toolListTokens": list_tok,
-           "imageTokens": t["imageTokens"], "errors": t["errors"], "perDay": sorted(per_day.values(), key=lambda x: x["day"]),
+           "imageTokens": t["imageTokens"], "errors": t["errors"] + amended, "perDay": sorted(per_day.values(), key=lambda x: x["day"]),
            "sessions": len(sessions), "topTools": t["byTool"][:top],
            "note": "Estimates from what passed through Agent Link (text at ~3.5 characters a token, pictures at width × height / 750): where the cost goes, not Claude's own count. The tool list is paid at each session's start; your plan's usage page has the real totals."}
     tips = []

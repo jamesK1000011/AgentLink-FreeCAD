@@ -462,9 +462,9 @@ class Server:
                 import base64
 
                 data = base64.b64decode(img["data"][:64]) if img else None
-                err = None
-                if result.get("isError"):
-                    err = (json.loads(text).get("error") or {}).get("code", "error")
+                from .usage import err_code
+
+                err = err_code(result)
                 self.meter.call(str(params.get("name")), compact(params.get("arguments") or {}), text, data, err, (time.time() - t0) * 1000)
             except Exception:
                 pass

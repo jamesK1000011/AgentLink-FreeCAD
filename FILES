@@ -226,6 +226,7 @@ docs/hardening/freecad-1.1.0-commands.txt
 docs/hardening/hubfix-findings.md
 docs/hardening/hubfix2-findings.md
 docs/hardening/hubfix3-findings.md
+docs/hardening/hubfix5-findings.md
 docs/hardening/hubrest-findings.md
 docs/hardening/inventory.json
 docs/hardening/map-findings.md
@@ -261,9 +262,12 @@ docs/hardening/status.json
 docs/hardening/tutor-rest-model.json
 docs/hardening/unproven-findings.md
 docs/hardening/unproven-run-findings.md
+docs/hardening/window-bim-findings.md
+docs/hardening/window-draft-surf-fem-mesh-findings.md
 docs/hardening/window-pd-findings.md
 docs/hardening/window-pd2-findings.md
 docs/hardening/window-skasm-findings.md
+docs/hardening/window-td-cam-findings.md
 docs/hardening/workshop-rest-model.json
 docs/hooks.md
 docs/packaging.md
@@ -422,6 +426,7 @@ tests/test_hubfix2.py
 tests/test_hubfix2_fc.py
 tests/test_hubfix3.py
 tests/test_hubfix4.py
+tests/test_hubfix5.py
 tests/test_hubfix_small.py
 tests/test_hull3d.py
 tests/test_inspection.py
