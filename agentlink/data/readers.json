@@ -448,7 +448,6 @@
     "num",
     "op_type",
     "path_module",
-    "path_seen",
     "path_stats",
     "post_factory",
     "postables",
