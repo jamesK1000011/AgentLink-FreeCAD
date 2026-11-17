@@ -1527,10 +1527,43 @@ def selection_cleared():
         n = len(FreeCADGui.Selection.getSelectionEx() or ())
         _selected[0] += 1
         FreeCADGui.Selection.clearSelection()
+        # The tree's own row follows the selection on a timer: run it now
+        # (the globe's row stayed lit in the picture, mesh 012 round 8).
+        views_follow()
         return n
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (selection cleared): {e}\n")
         return None
+
+
+def selected_now():
+    """How many are selected now (a FACT after selection_cleared). Never
+    raises."""
+    try:
+        import FreeCADGui
+
+        return len(FreeCADGui.Selection.getSelectionEx() or ())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def scene_facts(hidden=()):
+    """Where the scene's map sits and how it is drawn (annotate.field_facts):
+    its parent chain to the view's top, the switches on it, whether a hidden
+    object's node (hidden: objects) is on it, the binding, the colour count,
+    the polygon offset. Never raises."""
+    try:
+        from . import annotate
+
+        roots = []
+        for o in hidden or ():
+            try:
+                roots.append((o.Label, o.ViewObject.RootNode))
+            except Exception:  # noqa: BLE001
+                continue
+        return annotate.service().field_facts(SCENE_OWNER, roots)
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"{type(e).__name__}: {e}"}
 
 
 def framed_on_points(points):
@@ -2023,6 +2056,8 @@ def map_shown(session, name, args):
         out["framed"] = bool(framed_on_points(np.concatenate([np.asarray(L["V"], dtype=float).reshape(-1, 3)
                                                                for L in m.get("layers") or ()])))
         out["selectionCleared"] = selection_cleared()
+        out["selectedAfter"] = selected_now()
+        out["scene"] = scene_facts()
         return out
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (map {name}): {e}\n")
@@ -3549,6 +3584,16 @@ def hold_marked(doc, body):
         return None
 
 
+def solve_peak(r):
+    """The largest von Mises of the last solve (the node values its answer's
+    peak is read from), or None. Never raises."""
+    try:
+        vm = [float(x) for x in ((r or {}).get("field") or {}).get("vonMises") or ()]
+        return max(vm) if vm else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def fem_result_shown(doc, body, session=None):
     """A strength result shown in colour in the window (round 6, item 2;
     fem 030, 034: none was ever seen).
@@ -3616,8 +3661,13 @@ def fem_result_shown(doc, body, session=None):
         fin = vals[np.isfinite(vals)]
         if not len(fin):
             return None
-        lo, hi = float(np.percentile(fin, 1)), float(np.percentile(fin, 99))
-        lo = min(0.0, float(fin.min())) if lo >= 0 else lo
+        # The scale from 0 to the solve's own largest von Mises, the number
+        # its words give (fem 034 round 8: the scale said 406, the caption
+        # 432: the 99th percentile of the surface's values, not the peak).
+        lo = min(0.0, float(fin.min()))
+        hi = solve_peak(r)
+        if hi is None:
+            hi = float(fin.max())
         if hi <= lo:
             hi = lo + 1e-6
         cols = render.colours_for(vals, lo, hi, m.get("cmap", "jet"))
@@ -3627,14 +3677,18 @@ def fem_result_shown(doc, body, session=None):
         # The body under the map hidden while it stands (its faces and the
         # selection's green fought the map in stripes: fem 034), the scale
         # beside it, nothing selected (round 7).
-        hid = []
+        hid, under = [], []
         try:
-            hid = hide_for_scene([session.body(r["body"])])
+            under = [session.body(r["body"])]
+            hid = hide_for_scene(under)
         except Exception:  # noqa: BLE001
             pass
         leg = scene_legend(str(m.get("label") or "VON MISES"), str(m.get("unit") or "MPa"), lo, hi, map_stops(m.get("cmap", "jet")))
-        return {"map": "stress (Agent Link's own solve)", "range": [round(lo, 3), round(hi, 3)], "triangles": drawn,
-                "hidden": hid, "legend": bool(leg), "selectionCleared": selection_cleared()}
+        out = {"map": "stress (Agent Link's own solve)", "range": [round(lo, 3), round(hi, 3)], "triangles": drawn,
+               "hidden": hid, "legend": bool(leg), "selectionCleared": selection_cleared()}
+        out["selectedAfter"] = selected_now()
+        out["scene"] = scene_facts(under)
+        return out
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (FEM result): {e}\n")
         return None
