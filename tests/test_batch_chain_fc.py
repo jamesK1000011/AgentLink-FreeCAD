@@ -200,9 +200,9 @@ class GuideRead(unittest.TestCase):
         err, idx = self.call("guide_read")
         self.assertFalse(err, idx)
         by = {g["topic"]: g for g in idx["guides"]}
-        self.assertEqual(by["model"]["sections"][0], "Start here")
+        self.assertEqual(list(by["model"]["sectionTokens"])[0], "Start here")
         self.assertTrue(by["model"]["later"])
-        self.assertEqual(set(by["sketch"]["sectionTokens"]), set(by["sketch"]["sections"]))
+        self.assertNotIn("sections", by["sketch"])  # the names once: sectionTokens' keys
         err, one = self.call("guide_read", {"topic": "model", "section": "traps"})
         self.assertTrue(one["text"].startswith("## traps"))
         err, two = self.call("guide_read", {"topic": "model", "section": ["Start here", "workflow"]})

@@ -58,14 +58,17 @@ def entry(topic, text):
     title, _head, sections = parse(text)
     first = [s for s in sections if s["name"].lower() == START]
     order = first + [s for s in sections if s not in first]
-    out = {"topic": topic, "title": title or topic, "sections": [s["name"] for s in order], "chars": len(text), "tokens": tokens(text),
+    # The sections' names once: sectionTokens' keys, in order (a list of
+    # them beside it, and each later section's cost again, were a third of
+    # the index's ~15 000 characters, live).
+    out = {"topic": topic, "title": title or topic, "chars": len(text), "tokens": tokens(text),
            "sectionTokens": {s["name"]: tokens(s["text"]) for s in order}}
     if first:
         out["start"] = first[0]["name"]
-    later = [{"section": s["name"], "when": s["when"], "tokens": tokens(s["text"])} for s in sections if s["when"]]
+    later = [{"section": s["name"], "when": s["when"]} for s in sections if s["when"]]
     if later:
         out["later"] = later
-        out["firstReadTokens"] = tokens(text) - sum(x["tokens"] for x in later)
+        out["firstReadTokens"] = tokens(text) - sum(tokens(s["text"]) for s in sections if s["when"])
     return out
 
 

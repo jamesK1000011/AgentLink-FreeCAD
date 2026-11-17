@@ -15,6 +15,7 @@ import Sketcher
 
 from .. import geometry as geo
 from .. import runners
+from ..once import DOF_NOTE
 from ..protocol import ToolError
 from . import pd_common as pc
 from . import picks
@@ -216,7 +217,8 @@ def state_of(sk):
             why.append("no profile yet: sketch_add")
         out["todo"] = "; ".join(why) or "the sketch has no closed wire"
     elif dof:
-        out["note"] = f"{dof} degrees of freedom: it pads as drawn, but edits may move it — dimension and fix it for a parametric part."
+        # Its words after the count are said once a conversation (agentlink/once.py).
+        out["note"] = f"{dof} degrees of freedom: {DOF_NOTE}"
     return out
 
 
