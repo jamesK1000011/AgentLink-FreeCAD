@@ -191,6 +191,7 @@ docs/clients/vscode.md
 docs/data-tools.md
 docs/hardening/STATUS.md
 docs/hardening/addons-findings.md
+docs/hardening/addons-unproven-findings.md
 docs/hardening/addons4-findings.md
 docs/hardening/asmtd-findings.md
 docs/hardening/bimcam-findings.md
@@ -224,6 +225,7 @@ docs/hardening/inventory.json
 docs/hardening/map-findings.md
 docs/hardening/models/asmtd-assembly-model.json
 docs/hardening/models/asmtd-techdraw-model.json
+docs/hardening/models/bim-rest-model.json
 docs/hardening/models/bimcam-bim-model.json
 docs/hardening/models/bimcam-cam-model.json
 docs/hardening/models/bimcam-points-model.json
@@ -238,6 +240,7 @@ docs/hardening/models/partdesign-model.json
 docs/hardening/models/sheetfem-fem-model.json
 docs/hardening/models/sheetfem-sheet-model.json
 docs/hardening/models/sketcher-model.json
+docs/hardening/models/unproven-hub-model.json
 docs/hardening/part-findings.md
 docs/hardening/partdesign-findings.md
 docs/hardening/run2-findings.md
@@ -247,6 +250,7 @@ docs/hardening/sheetfem-findings.md
 docs/hardening/sketcher-findings.md
 docs/hardening/status-findings.md
 docs/hardening/status.json
+docs/hardening/unproven-findings.md
 docs/hooks.md
 docs/packaging.md
 docs/records.md
@@ -262,6 +266,7 @@ scripts/live/texturizer.json
 scripts/live/tutor-watch.json
 scripts/live/workshop.json
 scripts/merge_chunks.py
+scripts/model_calls.py
 scripts/release.py
 scripts/sync_shared.py
 scripts/tool_index.py
