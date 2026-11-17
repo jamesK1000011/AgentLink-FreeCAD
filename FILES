@@ -224,6 +224,7 @@ docs/hardening/datatd2-findings.md
 docs/hardening/diff-findings.md
 docs/hardening/draftmesh-findings.md
 docs/hardening/echo2-findings.md
+docs/hardening/echo3-findings.md
 docs/hardening/freecad-1.1.0-commands.txt
 docs/hardening/hubfix-findings.md
 docs/hardening/hubfix2-findings.md
@@ -404,6 +405,7 @@ tests/test_declared.py
 tests/test_doc.py
 tests/test_draft.py
 tests/test_echo_declare.py
+tests/test_echo_hold.py
 tests/test_echo_later.py
 tests/test_echo_map.py
 tests/test_echo_pace.py
