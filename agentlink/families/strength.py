@@ -936,7 +936,18 @@ def tools(session):
         if msg:
             raise RuntimeError(f"its prerequisites: {msg.strip()}")
         fea.write_inp_file()
-        rc = fea.ccx_run()
+        try:
+            rc = fea.ccx_run()
+        except AttributeError as e:
+            # Live, 17 Nov: FreeCAD 1.1.3's ccx_run (femtools/ccxtools.py 571)
+            # clears the mesh view's HighlightedNodes after CalculiX finished
+            # without error; a mesh whose view is a plain geometry view has no
+            # such property, so the FreeCAD route failed and Agent Link's own
+            # deck was used (no CCX_Results). CalculiX has run: go on to its
+            # .frd as the route does.
+            if "HighlightedNodes" not in str(e):
+                raise
+            rc = 0
         # CalculiX's own lines for the shared health check, as the own deck keeps them.
         said = [getattr(fea, k, "") or "" for k in ("ccx_stdout", "ccx_stderr")]
         s._ccx_tail = last_lines("\n".join(v.decode("utf-8", "replace") if isinstance(v, bytes) else str(v) for v in said)) or None
