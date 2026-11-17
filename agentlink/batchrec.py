@@ -119,7 +119,7 @@ def brief_verdicts(verdicts):
 
 # A health verdict with nothing to act on: such a line is left out of a
 # lines: "refused" reply.
-CLEAN = re.compile(r"^(nothing red|as before|([^;]*: )?(\d+ parts? )?valid, closed, \d+ solids?( \(AllowCompound\))?|[^;]*: assembly solved|[^;]*: empty)$")
+CLEAN = re.compile(r"^(nothing red|as before|([^;]*: )?(\d+ parts? )?valid, closed, \d+ solids?( \(AllowCompound\))?|[^;]*: assembly solved|[^;]*: empty|[^;]*: fully constrained|CalculiX ran clean)$")
 
 
 def clean_verdict(v):
