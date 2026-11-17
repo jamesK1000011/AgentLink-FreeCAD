@@ -88,6 +88,9 @@ TRUSTED = {
     # empty for a document met for the first time. Neither the document nor the window is touched.
     ("docstates.py", "own"): "the session's own record of a document, made empty when first asked",
     ("docstates.py", "settle"): "the session's own record of a document, made empty when first asked",
+    # part_attach's check before anything is set: the references and mode are set on a copy of the object's
+    # attacher (o.Attacher is a copy, copied once more), and only its calculateAttachedPlacement is asked.
+    ("model_more.py", "attach_check"): "sets a copy of the attacher only, to ask it whether the attachment fits",
 }
 
 

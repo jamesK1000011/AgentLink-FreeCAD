@@ -729,23 +729,35 @@ def install():
     real_run = subprocess.run
 
     def run(cmd, *a, **kw):
-        if not (isinstance(cmd, list) and len(cmd) == 5 and cmd[1] == "-c" and "flatmesh" in cmd[2]):
+        # The helper as a script file, its paths by the environment (FreeCAD's console program
+        # takes the arguments after a script for files).
+        # The older handler's form (tests/test_datamesh_data.py runs it too): [python, "-c", code, in, out].
+        older = isinstance(cmd, list) and len(cmd) == 5 and cmd[1] == "-c" and "flatmesh" in cmd[2]
+        if not (older or (isinstance(cmd, list) and len(cmd) == 2 and str(cmd[1]).endswith("agentlink_unwrap.py"))):
             return real_run(cmd, *a, **kw)
         import numpy as np
 
-        z = np.load(cmd[3])
-        log("flatmesh", z["P"], z["F"], cmd[2].split("findFlatNodes")[1].split("\n")[0])
+        env = kw.get("env") or {}
+        if older:
+            code, src, dst = cmd[2], cmd[3], cmd[4]
+            how = code.split("findFlatNodes")[1].split("\n")[0]
+        else:
+            with open(cmd[1], encoding="utf-8") as f:
+                code = f.read()
+            src, dst = env["AGENTLINK_UNWRAP_IN"], env["AGENTLINK_UNWRAP_OUT"]
+            how = f"({env['AGENTLINK_UNWRAP_ITERS']}, {float(env['AGENTLINK_UNWRAP_WEIGHT'])})"
+        z = np.load(src)
+        log("flatmesh", z["P"], z["F"], how)
         if flag("unwrap") == "stops":
             return types.SimpleNamespace(returncode=1, stderr="Traceback\nRuntimeError: singular matrix\n", stdout="")
         # The Python beside FreeCAD brought down while it loads FreeCAD's modules: no word of its
         # own, only the code it ended with and (from the entry's helper) the mark it had reached.
         if flag("unwrap") == "dies loading":
-            return types.SimpleNamespace(returncode=-11, stderr="agentlink-unwrap: loading\n" if "agentlink-unwrap" in cmd[2] else "", stdout="")
+            return types.SimpleNamespace(returncode=-11, stderr="agentlink-unwrap: loading\n" if "agentlink-unwrap" in code else "", stdout="")
         Q = np.array(z["P"], float)
         if flag("unwrap") == "stretched":
             Q[:, 0] *= 1.5
-        loop = Q[[0, 1, 2, 3]] if len(Q) >= 4 else Q
-        np.savez(cmd[4], Q=Q, n=np.array([len(loop), 2]), B=np.concatenate([loop, Q[:2]]))
+        np.savez(dst, Q=Q)
         return types.SimpleNamespace(returncode=0, stderr="", stdout="")
 
     subprocess.run = run

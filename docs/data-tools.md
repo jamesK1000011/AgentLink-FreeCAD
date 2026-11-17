@@ -280,7 +280,7 @@ wrappers, not checked):
 | need arguments | 194 | read to the end of their leading part once the arguments are given |
 | blocked | 116 | a leading step calls a helper that is neither a reader nor a changer; read as far as that step |
 
-Of the 775 leading refusals written in the entries, 36 read no argument: a strength study that is not set up (11 tools),
+Of the 777 leading refusals written in the entries, 36 read no argument: a strength study that is not set up (11 tools),
 a workbench or a maker this FreeCAD does not have, results not solved yet, no variable set. Per family:
 
 | Family | Tools | Readers | Changers | Leading refusals | of them without arguments | Whole without arguments | Need arguments | Blocked |
@@ -305,7 +305,7 @@ a workbench or a maker this FreeCAD does not have, results not solved yet, no va
 | measure | 6 | 19 | 0 | 10 | 0 | 0 | 3 | 3 |
 | mesh | 21 | 37 | 5 | 70 | 1 | 1 | 11 | 8 |
 | model | 11 | 30 | 2 | 47 | 1 | 0 | 2 | 9 |
-| model_more | 10 | 34 | 3 | 50 | 0 | 1 | 7 | 2 |
+| model_more | 10 | 35 | 3 | 51 | 0 | 1 | 7 | 2 |
 | notes | 7 | 10 | 1 | 7 | 0 | 1 | 3 | 3 |
 | openscad | 5 | 17 | 5 | 10 | 0 | 1 | 2 | 2 |
 | param | 6 | 17 | 3 | 17 | 2 | 1 | 4 | 1 |
@@ -315,13 +315,13 @@ a workbench or a maker this FreeCAD does not have, results not solved yet, no va
 | sheet | 11 | 31 | 3 | 23 | 0 | 0 | 3 | 8 |
 | sketch | 8 | 32 | 4 | 15 | 0 | 0 | 8 | 0 |
 | sketch_more | 12 | 16 | 4 | 34 | 3 | 0 | 10 | 2 |
-| std_more | 28 | 45 | 4 | 55 | 2 | 5 | 19 | 3 |
+| std_more | 28 | 47 | 4 | 56 | 2 | 5 | 19 | 3 |
 | strength | 16 | 31 | 11 | 25 | 11 | 9 | 3 | 4 |
 | surface | 6 | 11 | 1 | 15 | 0 | 0 | 6 | 0 |
 | techdraw | 32 | 69 | 10 | 23 | 1 | 2 | 24 | 6 |
 | unattended | 5 | 11 | 1 | 1 | 0 | 0 | 1 | 4 |
 | view | 2 | 8 | 0 | 6 | 1 | 1 | 0 | 1 |
-| **all** | **383** | **881** | **136** | **775** | **36** | **60** | **194** | **116** |
+| **all** | **383** | **884** | **136** | **777** | **36** | **60** | **194** | **116** |
 
 **The live filter** (`agentlink/appliesnow.py`). After each changing call the reading is taken for a small set of tools,
 within a time budget, and one short line goes into the answer's health beside `next` — group names and counts, never a

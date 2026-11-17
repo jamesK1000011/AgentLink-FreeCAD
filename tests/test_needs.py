@@ -36,8 +36,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # The readers' pin: sha256 of readers.json's entries (each family's readers and changers, and the methods), as
 # scripts/tool_needs.py writes them. A helper or a method that joins or leaves a list changes it: read why
 # (`python3 scripts/tool_needs.py --why name`), then put the new value here.
-PIN = "c411e7267839bb41b3e4890e566439b161b02fe4cd2e66f649a37b49ab518c23"
-COUNTS = {"readers": 881, "changers": 140, "families": 36}
+PIN = "1da23c60524952f7c331544d2d6b8c54c8251857097580533115cdabd4bb499a"
+COUNTS = {"readers": 884, "changers": 140, "families": 36}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -366,7 +366,7 @@ class Census(unittest.TestCase):
             self.assertGreaterEqual(needs.later_refusals(e), 0, name)
 
 
-TOTAL = {"tools": 383, "steps": 370, "leadingRefusals": 775, "noArgument": 36, "blocked": 116, "needsArguments": 194, "complete": 60, "noCheck": 51}
+TOTAL = {"tools": 383, "steps": 370, "leadingRefusals": 777, "noArgument": 36, "blocked": 116, "needsArguments": 194, "complete": 60, "noCheck": 51}
 
 
 class Agreement(unittest.TestCase):
