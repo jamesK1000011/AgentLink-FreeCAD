@@ -250,30 +250,43 @@ def tools(s):
     st = {"type": "string"}
     return [
         Tool("gui_input",
-             "Mouse and keyboard input to the FreeCAD window's own widgets as Qt events inside FreeCAD, never the system cursor or keyboard. "
-             "Window only. steps, in order, each: {click: T, button?: left|right|middle, double?, modifiers?: [shift, ctrl, alt, meta]}; "
-             "{press: T} {move: T} {release: T} (after a press they go to the pressed widget); "
-             f"{{drag: {{from: T, to: T, steps?: {gi_steps}, button?, modifiers?}}}}; {{scroll: T, dy: notches (over 0 rolls away)}}; "
-             "{key: \"Return\"|\"Escape\"|\"F2\"|\"a\"…, modifiers?, target?: T} and {type: \"text\", target?: T} to the focused widget or T; "
-             f"{{wait: ms (≤{gi_wait})}}; {{shot: name}} (a window PNG in ~/AgentLink/gui_input; the last shown unless inline: false). "
-             "Targets T: {view: [x, y]} logical pixels from the active 3D view's top-left; {view_world: [x, y, z]} a model point projected there; "
-             "{widget: {objectName?, text?, toolTip?, class?, under?: dock or dialog title}, at?: [dx, dy] from its top-left (centre by default)} "
-             "the first visible match; {tab: {text, under?}}; {item: {text, under?, column?}, check?: true} a list, tree or table row "
-             "(check: its box); {menu_item: \"text\"} an item of the open menu; {window: [x, y]} main-window pixels. While a dialog or menu is in front only targets inside it are taken. "
-             "Answers per step what it hit (class, name, text, where), a dialog or menu it opened (later steps run inside it), "
-             "open: what still holds the window at the end (close it: Escape, dialog_answer or gui_unstick), new Report problems. Shortcuts are not triggered (cmd_run). Proof that a step worked is what the tools read back afterwards (session_state, selection { clear: false }, object_get), not the shot. Face and edge names change with the model: aim view_world at a point on the face, after cmd_run Std_ViewIsometric and Std_ViewFitAll.",
+             "Send mouse and keyboard input to the widgets of the FreeCAD window, as Qt events inside FreeCAD. It never uses the system cursor or keyboard. Window "
+             "only. steps: in order, each one of these. {click: T, button?: left|right|middle, double?, modifiers?: [shift, ctrl, alt, meta]}. {press: T} {move: T} "
+             f"{{release: T}}: after a press, they go to the pressed widget. {{drag: {{from: T, to: T, steps?: {gi_steps}, button?, modifiers?}}}}. {{scroll: T, dy: "
+             "notches}: more than 0 rolls away. {key: \"Return\"|\"Escape\"|\"F2\"|\"a\"…, modifiers?, target?: T} and {type: \"text\", target?: T}: to the focused widget or "
+             f"T. {{wait: ms (≤{gi_wait})}}. {{shot: name}}: a window PNG in ~/AgentLink/gui_input; the last shows unless inline: false. Targets T follow. {{view: [x, "
+             "y]}: logical pixels from the top-left of the active 3D view. {view_world: [x, y, z]}: a model point projected there. {widget: {objectName?, text?, "
+             "toolTip?, class?, under?: dock or dialog title}, at?: [dx, dy]}: the first visible match. at is from its top-left (centre by default). {tab: {text, "
+             "under?}}. {item: {text, under?, column?}, check?: true}: a row of a list, tree or table (check: its box). {menu_item: \"text\"}: an item of the open "
+             "menu. {window: [x, y]}: main-window pixels. While a dialog or menu is in front, the tool takes only targets inside it. For each step, the answer gives "
+             "what it hit (class, name, text, where). It also gives a dialog or menu that it opened. Later steps run inside that dialog or menu. open: what still "
+             "holds the window at the end. Close it with Escape, dialog_answer or gui_unstick. Also new Report problems. The tool does not trigger shortcuts "
+             "(cmd_run). The proof that a step worked is what the tools read back after it, not the shot. Use session_state, selection { clear: false }, object_get. "
+             "Face and edge names change with the model. Aim view_world at a point on the face, after cmd_run Std_ViewIsometric and Std_ViewFitAll.",
              obj({"steps": {"type": "array", "items": {"type": "object"}}, "inline": {"type": "boolean"},
                   "as": {"type": "string", "enum": ["person"],
                          "description": "Dev, testing an add-on that follows the person: this call's input counts as the person's, not the agent's."}},
                  ["steps"]), gui_input),
         Tool("live_run",
-             "Replay a live window script (scripts/live, its README's format) and check every step's answers. Reset the test document first, every time: live_run { script: \"reset\" } closes what earlier runs left, rebuilds the WindowTest document and brings it to the front, and every other script is written to start from exactly that; run without it, a script acts on whatever document is in front and its checks fail for reasons that are not the tools'. "
-             "script: a name (reset, agentlink, or another found in the installed add-ons' scripts/live folders; a wrong name is refused with the names there are) or a .json file's path. "
-             "steps: only these (names or numbers from 0; all by default) — a later step run alone acts on whatever document is in front, with what the steps before it would have made missing. Each step's calls go to batch (rollback: false, stopOnError: false), or one by one when the step is direct; "
-             "$names are filled in from vars { name: value } and from earlier answers (a $name the script declares, kept from the latest answer that has that key: $next); a step that needs one not known yet is skipped and says which. "
-             "Two-role steps (role: student, parallel) are skipped: they need two agents (ROLES.md). Every expect is checked (equals, contains, atLeast, atMost, exists, noneContain with ignoreLinesWith; paths with dots, [*] any item, [-1] the last). "
-             "A call with allow: [codes] may be refused with one of them without failing its step (allowedRefusals; reset closes documents that may not be open). A gui_input that opens a dialog does not end the replay: inside the dialog's loop, the step's calls after it and the next steps' calls run one at a time only while the dialog is still open (so the step that answers it runs); once it closes the replay returns, the dialog's loop ends, and the rest runs after it; a step answered busy is run again once after a short wait; anything left open at the end is closed (gui_unstick) and said in leftOpen. "
-             f"budget: seconds the replay may hold the window ({ls.BUDGET:g} by default, at most {ls.BUDGET_MAX:g}): no call starts past it, and the answer names the steps not run (notRun) — live_run {{ steps: [...] }} runs them, so a long script is split across calls. A nested event loop still holding the window past the budget is closed, then the call is answered with what ran so far and FreeCAD is started again by the watchdog. The answer is always live_run's own summary. "
-             "Reply: total { passed, failed, skipped, run } and steps, each with result pass, fail or skipped, a failing check's call, path, wanted and got, refused calls, the step's shot (a window picture, in the window) and look (what it should show), and the totals. stopOnFail: true stops at the first failing step. It changes the document as the script does.",
+             "Replay a live window script (scripts/live, the format of its README) and check the answers of every step. First reset the test document, every time. "
+             "live_run { script: \"reset\" } closes what earlier runs left, builds the WindowTest document again and brings it to the front. Every other script must "
+             "start from exactly that. Without it, a script acts on the document in front. Then its checks fail for reasons that are not the tools'. script: a name "
+             "(reset, agentlink, or another found in the scripts/live folders of the installed add-ons). The tool refuses a wrong name, and gives the names there "
+             "are. Or the path of a .json file. steps: only these (names or numbers from 0; all by default). A later step run alone acts on the document in front. "
+             "What the steps before it would make is then missing. The calls of each step go to batch (rollback: false, stopOnError: false). When the step is "
+             "direct, they go one by one. vars { name: value } and earlier answers fill in $names. A $name that the script declares is kept from the latest answer "
+             "that has that key: $next. The tool skips a step that needs a $name not known yet, and tells which. The tool skips two-role steps (role: student, "
+             "parallel): they need two agents (ROLES.md). The tool checks every expect: equals, contains, atLeast, atMost, exists, noneContain with ignoreLinesWith. "
+             "Paths have dots; [*] is any item, [-1] the last. A call with allow: [codes] can be refused with one of them, and its step does not fail "
+             "(allowedRefusals). reset closes documents that are possibly not open. A gui_input that opens a dialog does not end the replay. Inside the dialog's "
+             "loop, the step's calls after it and the next steps' calls run one at a time. They run only while the dialog is still open, so the step that answers it "
+             "runs. When the dialog closes, the replay returns, the dialog's loop ends, and the rest runs after it. The tool runs a step answered busy once again "
+             "after a short wait. At the end, the tool closes anything left open (gui_unstick) and tells it in leftOpen. budget: seconds that the replay can hold "
+             f"the window ({ls.BUDGET:g} by default, at most {ls.BUDGET_MAX:g}). No call starts after it, and the answer names the steps not run (notRun). live_run {{ "
+             "steps: [...] } runs them, so you can split a long script across calls. A nested event loop that still holds the window after the budget gets closed. "
+             "Then the call answers with what ran so far, and the watchdog starts FreeCAD again. The answer is always the summary of live_run itself. Answer: total "
+             "{ passed, failed, skipped, run } and steps. Each step has result pass, fail or skipped. It also has a failing check's call, path, wanted and got, and "
+             "refused calls. It also has the step's shot (a window picture, in the window) and look (what it must show). Also the totals. stopOnFail: true stops at "
+             "the first failing step. It changes the document as the script does.",
              obj({"script": st, "steps": {"type": "array", "items": {}}, "vars": {"type": "object"}, "stopOnFail": {"type": "boolean"}, "budget": {"type": "number"}}, ["script"]), live_run),
     ] + runners.tools(GROUP, s, helpers)

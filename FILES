@@ -323,6 +323,8 @@ scripts/merge_chunks.py
 scripts/model_calls.py
 scripts/model_check.py
 scripts/release.py
+scripts/ste_check.py
+scripts/ste_originals.json
 scripts/sync_shared.py
 scripts/tool_index.py
 scripts/tool_index_more.py
@@ -533,6 +535,7 @@ tests/test_sketch_gaps.py
 tests/test_smart_calls.py
 tests/test_staticbase.py
 tests/test_std_more.py
+tests/test_ste_lint.py
 tests/test_stem_findings.py
 tests/test_stem_findings_more.py
 tests/test_strength.py

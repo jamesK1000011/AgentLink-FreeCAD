@@ -42,10 +42,40 @@ DESCRIPTIONS = {
 }
 
 
-def description(name, old):
-    """The snapshot's description of a tool with its meant change made."""
+
+# Branch explore/full-ste: every hub tool's description is rewritten in ASD-STE100, in place. A snapshot's
+# words (with the meant changes above) must still be main's original word for word (scripts/ste_originals.json);
+# the tool's words are then the STE text, which tests/test_ste_lint.py checks against that original: every
+# number, unit, input name, other tool's name and guard word kept, every sentence 20 words at most.
+_STE = {}
+
+
+def _ste():
+    if not _STE:
+        import json
+        import os
+
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "scripts", "ste_originals.json"), encoding="utf-8") as f:
+            _STE["orig"] = json.load(f)["tools"]
+        with open(os.path.join(root, "agentlink", "data", "tools.json"), encoding="utf-8") as f:
+            _STE["now"] = {n: e["description"] for n, e in json.load(f)["entries"].items()}
+    return _STE
+
+
+def _meant_only(name, old):
     if name not in DESCRIPTIONS:
         return old
     was, now = DESCRIPTIONS[name]
     assert old.count(was) == 1, (name, was)
     return old.replace(was, now)
+
+
+def description(name, old):
+    """The snapshot's description of a tool with its meant change made, and
+    then the STE rewrite when the result is main's original word for word."""
+    text = _meant_only(name, old)
+    s = _ste()
+    if name in s["now"] and s["orig"].get(name, {}).get("description") == text:
+        return s["now"][name]
+    return text

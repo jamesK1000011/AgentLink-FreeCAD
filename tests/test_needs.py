@@ -523,7 +523,9 @@ class Filter(unittest.TestCase):
 
 
 # Upper bounds, in tokens at 3.5 characters each: a later change cannot bloat these without saying so here.
-BOUNDS = {"line": 45, "full": 800, "report": 260, "needsReply": 260, "nowReply": 1500, "oneCard": 900, "leanListing": 7450, "everything": 90000, "toolGroupsCard": 740}
+# explore/full-ste: every description in ASD-STE100 measures 92 801 for everything (data and coded tools),
+# over main's 90 000; the bound is raised to 93 000 on this branch only. The others still hold unchanged.
+BOUNDS = {"line": 45, "full": 800, "report": 260, "needsReply": 260, "nowReply": 1500, "oneCard": 900, "leanListing": 7450, "everything": 93000, "toolGroupsCard": 740}
 # The three states, without arguments: every Part Design and Sketcher tool begins by finding the body or the sketch its
 # arguments name, so none of the 32 can be told before a call (they are told with arguments: Agreement). The filter
 # has something to say where a tool's first check is of the document alone: test_a_state_the_filter_tells.
@@ -623,8 +625,10 @@ def _walk(x):
 # 150 before needs, arguments and the meter's clause were added: the lean listing grew by 154; report_read's clause on known faults added 16).
 # The token pass (docs/hardening/tokens-findings.md) added 216 to the lean listing: batch's read/at, lines "full" and the
 # file batch's record reply (+168), tool_groups' said (+22), guide_read's index wording (+26).
-COSTS = {"dataTools": 383, "dataToolsTokens": 79057, "codedTools": 22, "codedToolsTokens": 9037, "leanTools": 20, "leanListingTokens": 7406,
-         "oneCardMedian": 179, "oneCardLargest": 824, "toolGroupsCard": 734, "usageReportCard": 178}
+# explore/full-ste (every description in ASD-STE100): data 79008 -> 83635, coded 9037 -> 9166, lean listing 7406 -> 7409,
+# one card's median 178 -> 190 and largest 824 -> 878, tool_groups' card 734 -> 729, usage_report's 178 -> 194.
+COSTS = {"dataTools": 383, "dataToolsTokens": 83685, "codedTools": 22, "codedToolsTokens": 9166, "leanTools": 20, "leanListingTokens": 7409,
+         "oneCardMedian": 190, "oneCardLargest": 878, "toolGroupsCard": 729, "usageReportCard": 194}
 
 
 try:
