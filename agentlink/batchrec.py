@@ -79,7 +79,8 @@ class BatchRecord:
 
 # The file's own note in a batch { to } reply.
 TO_NOTE = ("Each call's whole answer is in the file (results[i].result; a call with a to of its own: in that file, written here); "
-           "here: ok, a refusal's words and the health verdict.")
+           "here: ok, a refusal's words and the health verdict. batch { read: the file, at: \"results.0.result\" } gives any part of it "
+           "back (results count from this part's first call, i minus from).")
 
 
 # The part of a health verdict that stands from call to call: the objects
@@ -88,6 +89,14 @@ STANDING = re.compile(r"^\d+ objects? still failing from before this call: ")
 STANDING_NOTE = ("A line's health leaves out the part \"… still failing from before this call: …\" when it is the same as in the "
                  "last line that gave it: it is said at the first call it shows in and again only when it changes "
                  "(\"as before\": nothing else was said). The file has every verdict whole.")
+
+
+# Said once a conversation, not on every reply (agentlink/once.py).
+from . import once as _once  # noqa: E402
+
+_once.register("batch", "toNote", TO_NOTE)
+_once.register("batch", "note", TO_NOTE)
+_once.register("batch", "healthNote", STANDING_NOTE)
 
 
 def brief_verdicts(verdicts):
@@ -173,3 +182,31 @@ def to_reply(got, first, path, size, lines="all"):
     else:
         short["note"] = TO_NOTE
     return short
+
+
+def record_reply(got, first, record_path, from_file, lines):
+    """What a batch without to answers once its record (record_path, None
+    when it could not be written) holds the whole answer: a batch from a
+    file, or one given lines, answers as batch { to } does from the record
+    (a plain file batch's reply repeated every call's answer, 10-35 k
+    characters, live); any other batch answers whole. The record's path is
+    the reply's written, so record is not given twice."""
+    if not isinstance(got, dict) or not (from_file or lines) or lines == "full" or not record_path or not os.path.isfile(record_path):
+        return got
+    short = to_reply(got, first, record_path, os.path.getsize(record_path), lines=lines or "all")
+    short.pop("record", None)
+    return short
+
+
+def read_part(path, name, at=None):
+    """batch { read, at }: the part at the dotted path at of the JSON file at
+    path (name: as the agent gave it) — a batch's record or a to file, so an
+    answer a reply left out can be read back. Raises chain.Miss in a
+    refusal's words."""
+    from . import chain
+
+    try:
+        value = chain.at(chain.read_json(path, name), at, name)
+    except chain.Miss as e:
+        raise chain.Miss(e.code, e.message.replace(chain.FILE + ": ", "read: ", 1).replace(chain.AT + " ", "at ", 1)) from None
+    return {"read": path, "at": at or "", "value": value}

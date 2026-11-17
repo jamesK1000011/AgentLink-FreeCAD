@@ -914,6 +914,16 @@ class Session:
 
 
 
+# tool_groups' standing notes: said once a conversation (agentlink/once.py).
+TG_CARDS_NOTE = "Callable by name as they are, listed or not: directly, or batch { calls: [{ tool, arguments }] } where the client only sends listed tools."
+TG_CARD_NOTE = "tool_groups { tool: name } gives a tool's whole description and inputs; each is callable by name without enabling its group."
+TG_ALL_NOTE = "Every tool is callable by name, listed or not. find: \"words\" searches them all; group: g gives one group's whole about and its tools, a line each; detail: true every group's whole about."
+
+from . import once as _once  # noqa: E402
+
+_once.register("tool_groups", "note", TG_CARDS_NOTE, TG_CARD_NOTE, TG_ALL_NOTE)
+
+
 # What the server says it is, at initialize: how a session goes, in the
 # order an agent needs it. Built per server: headless or the FreeCAD window,
 # lean or every tool listed.
@@ -937,6 +947,8 @@ WORKING = (
     "where an add-on offers them); history_diff says what changed. batch runs calls in order and rolls back whole when one is "
     "refused; in it a call's answer can go to a file (to) and feed a later call ($file, $from) without passing through the conversation, and build: \"end\" recomputes once for a run of sketch edits. A refusal is { error: { code, message } }: the code (invalid_input, invalid_state, not_found, "
     "unavailable, failed) and a message saying what to change — correct the call and go on. "
+    "Words that stand the same from call to call (a tool's own note, the health's advice on an overlap) are given the first time "
+    "in a conversation; after that the answer names their key in saidBefore, and tool_groups { tool: name } gives them again (said). "
     "Look at the work after each change that matters: view_render draws the parts from any view, cut open, zoomed "
     "to a spot, or with a map (wall, stress, and those add-ons add), and gives the worst place; body_check says "
     "whether a body is sound. Ask the person what only they know — how a part is made, what it is made of, "
@@ -1523,8 +1535,16 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         first_sentence = toolindex.first_sentence
 
         def card(t):
-            return {"tool": t.name, "group": t.group, "listed": server.groups is None or t.group in server.groups, "changes": bool(t.changes),
-                    "description": t.description, "inputSchema": t.schema}
+            out = {"tool": t.name, "group": t.group, "listed": server.groups is None or t.group in server.groups, "changes": bool(t.changes),
+                   "description": t.description, "inputSchema": t.schema}
+            # The standing words its answers gave once in this conversation
+            # and leave out since (saidBefore names the keys): agentlink/once.py.
+            said = _once.said(s, t.name)
+            if _once.health_said(s):
+                said["health"] = _once.health_said(s)  # the health's advice and a sketch reading's DoF note
+            if said:
+                out["said"] = said
+            return out
 
         names = a.get("tool")
         if names:
@@ -1540,7 +1560,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                     near = difflib.get_close_matches(n, list(server.tools), 4)
                     raise ToolError("not_found", f"tool {n!r}: not here{' — did you mean ' + ', '.join(near) if near else ''}. tool_groups {{ find: \"words\" }} searches every tool by what it does.")
                 cards.append(card(t))
-            return {"tools": cards, "note": "Callable by name as they are, listed or not: directly, or batch { calls: [{ tool, arguments }] } where the client only sends listed tools."}
+            return {"tools": cards, "note": TG_CARDS_NOTE}
         asked = a.get("needs")
         if asked is not None or a.get("arguments") is not None:
             # One tool's own leading checks, read against the document as it is and never run
@@ -1608,7 +1628,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 told.update(known)
                 return shown
 
-            card_note = "tool_groups { tool: name } gives a tool's whole description and inputs; each is callable by name without enabling its group."
+            card_note = TG_CARD_NOTE
             if not now:
                 hits = toolindex.rank(rows, find)
                 if not hits:
@@ -1698,7 +1718,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         except Exception:  # noqa: BLE001
             pass
         return {"groups": rows, "listed": sum(1 for t in server.tools.values() if server.groups is None or t.group in server.groups), **addons,
-                "note": "Every tool is callable by name, listed or not. find: \"words\" searches them all; group: g gives one group's whole about and its tools, a line each; detail: true every group's whole about."}
+                "note": TG_ALL_NOTE}
 
     def outputs_clean(a):
         kinds = a.get("kinds")
@@ -1822,6 +1842,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         from . import hold as _hold
         from . import paths as _paths_mod
 
+        if a.get("read") is not None or a.get("at") is not None:
+            return _batch_read(a)
         calls = a.get("calls") or []
         if a.get("calls") is None and a.get("file") is None:
             raise ToolError("invalid_input", "calls: [{ tool, arguments } …], or file: a .json file holding them. Nothing was run.")
@@ -1999,12 +2021,44 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             record.write(got, final=True)
             if record.ok and record.path:
                 got["record"] = record.path
-        return _batch_to(a.get("to"), got, first, a.get("lines") or "all")
+        lines = a.get("lines")
+        if lines == "full" or a.get("to"):
+            return _batch_to(a.get("to"), got, first, "all" if lines in (None, "full") else lines, full=lines == "full")
+        # A batch from a file (a long run, kept out of the conversation by
+        # design) or one that asks for lines answers like batch { to } from
+        # its record, which holds every call's whole answer: a plain file
+        # batch's reply repeated every answer (10-35 k characters, live).
+        # lines: "full" gives the whole answer here instead.
+        from . import batchrec
 
-    def _batch_to(to, got, first, lines="all"):
+        return batchrec.record_reply(got, first, record.path if record.ok else None, a.get("file") is not None, lines)
+
+    def _batch_read(a):
+        """batch { read, at }: a part of a batch's record or of a to file,
+        so an answer kept out of the reply can be read back here."""
+        from . import chain as _chain
+        from . import paths as _paths_mod
+
+        extra = sorted(k for k in a if k not in ("read", "at"))
+        if extra:
+            raise ToolError("invalid_input", f"read takes only at beside it, not {', '.join(extra)}: batch {{ read: \"batches/….json\", at: \"results.0.result\" }}. Nothing was run.")
+        name = a.get("read")
+        if not isinstance(name, str) or not name.strip() or not name.lower().endswith(".json"):
+            raise ToolError("invalid_input", "read: a .json file's path — a batch's record (its reply's written or record) or a to file; relative: in the session's folder. at: a dotted path in it (\"results.0.result\").")
+        p = _batch_path(name)
+        _paths_mod.check("batch", "read", p, s.out_dir, False)
+        from . import batchrec
+
+        try:
+            return batchrec.read_part(p, name, a.get("at"))
+        except _chain.Miss as e:
+            raise ToolError(e.code, e.message) from None
+
+    def _batch_to(to, got, first, lines="all", full=False):
         """to: the whole answer goes to a .json file and a line per call
         comes back — a long run's answers (each with its reading, health
-        and report) need not pass through the conversation to be kept."""
+        and report) need not pass through the conversation to be kept.
+        full (lines: "full"): written, and the whole answer comes back too."""
         if not to or not isinstance(got, dict):
             return got
         if not isinstance(to, str) or not to.lower().endswith(".json"):
@@ -2024,6 +2078,9 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             return got
         # A line per call; the batch's own note (where it stopped and how
         # to go on) is kept, the file's beside it (batchrec.to_reply).
+        if full:
+            got["written"] = {"path": path, "bytes": os.path.getsize(path)}
+            return got
         from . import batchrec
 
         return batchrec.to_reply(got, first, path, os.path.getsize(path), lines=lines)
@@ -2332,8 +2389,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
     core = [
         Tool("usage_report", "What working through Agent Link has cost the agent, estimated on this side: calls, tokens (text at ~3.5 characters a token, pictures by size) and the tool list each session loads up front — per day over days (7), per session, the costliest tools, and tips to cut it. session: true gives this session alone. Not Claude's own count: the plan's usage page has that. Changes nothing. appliesNow: this session's meter of the applies-now filter (notThenAnswered must stay near zero).",
              obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}}), usage_report),
-        Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools, each with one line of what it does); detail: true gives every group's whole about. The cheap way to a tool that is not listed is find, card, call: find: \"words\" searches every tool (best first; group narrows it, limit 1-40, 10 by default) by its name, FreeCAD's own names for its commands and workbench (\"PartDesign_Fillet\", \"techdraw\", \"drawing\"), search words and description — tools matching every word come before those matching some — and answers name, group and what it does; tool: name (or up to 20 names) answers that tool's whole description and inputSchema; then call it by name. now: true (alone or with find) answers the tools that fit the present state, best first, each with fits (why): first the likely next step by the document's own state, the same ranking as session_state's next (next [{ tool, why }], at most three; fits then starts \"likely next: …\"), then the active workbench, a sketch open in edit, the selection, and whether the tool's FreeCAD command reports itself active — without a window it goes by the document's objects only and says so. With no arguments the answer also names installed add-ons that brought no tools (addonsWithoutTools [{ extension, error }] and warning), when there are any. None of these lists anything, so a group's other descriptions are not loaded: enable a group only when a task uses most of it. Every tool is callable by name either way. Changes nothing but which tools are listed. needs: tool reads that tool's own leading checks against the document now, never run — { applies: true | false | null (not checked), wouldRefuse [{ code, words }], notChecked }; arguments: {…} reads that call's checks too; advice only. find's hits that would refuse now come last, with applies: false; now: true carries appliesNow, the full form of the health's appliesNow line.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}, "needs": {"type": "string"}, "arguments": {"type": "object"}}), tool_groups),
-        Tool("guide_read", "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry. No topic: the index — per guide its sections, what the guide and each section cost to read (tokens and sectionTokens: approximate, characters / 4), start (its \"Start here\" section, where it has one: a short map of what to read first; named first in sections) and later (sections meant for one moment of a task, each with when; firstReadTokens is the guide without them). "
+        Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools, each with one line of what it does); detail: true gives every group's whole about. The cheap way to a tool that is not listed is find, card, call: find: \"words\" searches every tool (best first; group narrows it, limit 1-40, 10 by default) by its name, FreeCAD's own names for its commands and workbench (\"PartDesign_Fillet\", \"techdraw\", \"drawing\"), search words and description — tools matching every word come before those matching some — and answers name, group and what it does; tool: name (or up to 20 names) answers that tool's whole description and inputSchema (and said: words its answers gave once and now leave out, named in saidBefore); then call it by name. now: true (alone or with find) answers the tools that fit the present state, best first, each with fits (why): first the likely next step by the document's own state, the same ranking as session_state's next (next [{ tool, why }], at most three; fits then starts \"likely next: …\"), then the active workbench, a sketch open in edit, the selection, and whether the tool's FreeCAD command reports itself active — without a window it goes by the document's objects only and says so. With no arguments the answer also names installed add-ons that brought no tools (addonsWithoutTools [{ extension, error }] and warning), when there are any. None of these lists anything, so a group's other descriptions are not loaded: enable a group only when a task uses most of it. Every tool is callable by name either way. Changes nothing but which tools are listed. needs: tool reads that tool's own leading checks against the document now, never run — { applies: true | false | null (not checked), wouldRefuse [{ code, words }], notChecked }; arguments: {…} reads that call's checks too; advice only. find's hits that would refuse now come last, with applies: false; now: true carries appliesNow, the full form of the health's appliesNow line.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}, "needs": {"type": "string"}, "arguments": {"type": "object"}}), tool_groups),
+        Tool("guide_read", "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry. No topic: the index — per guide its sections and what the guide and each section cost to read (tokens; sectionTokens: each section's name, in the guide's order, with its cost — approximate, characters / 4), start (its \"Start here\" section, where it has one: a short map of what to read first; named first in sectionTokens) and later (sections meant for one moment of a task, each with when, its cost in sectionTokens; firstReadTokens is the guide without them). "
              "topic: a guide whole; section: one of its ## sections by the start of its name, or a list of them in one answer (section: [\"Start here\", \"traps\"]). The cheap way through a long guide: its Start here section, then the sections it names, the later ones when their moment comes. "
              "topic as a list reads several guides in order in one call (with section: that section of each guide that has it; missing names the rest), up to about 55 000 characters — the answer is read [{ topic, text }], with next: the topics not reached; guide_read { topic: next } reads on. Changes nothing.",
              obj({"topic": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "section": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}}), guide_read),
@@ -2348,8 +2405,11 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
              "(3) { \"$from\": 2, \"$at\": \"bodies.0.name\" } takes the same from the answer of call 2 of this batch (calls are numbered from 0 through the whole list, as from and next count; only an earlier call, and only one run in this part of the batch — across parts use to and $file). A reference stands alone as the value ($file or $from, with $at); one that cannot be followed — no file, no key, no index, a refused call — refuses that call, saying what is there (the keys or the length at the deepest level reached), and counts as a refusal for stopOnError and rollback; a file or answer over 20 MB is refused. The arguments are checked after the references are filled in. "
              "build: \"end\" recomputes once for a run of changes instead of after each: while consecutive calls are sketch_add, sketch_constrain, sketch_edit, sketch_offset or object_set on one document (and any tools an add-on declares safe), FreeCAD's recompute is held (its own Skip recomputes switch), and the document is built once — at the end, before the first call that is none of these (a read that needs geometry, a pad: they build first and run as always), or when a call moves to another document. A held call's answer carries build: \"held\" and a health that says the reading is held; the parts of its answer read from the rebuilt shape (a sketch's wires, closedWires, openVertices and readyForFeature, sketch_edit's bodyAfter) are left out and named in health.leftOut — a sketch's solver, dof, conflicting and redundant are still fresh. "
              "builds [{ when, held, calls: [first, last], recomputed, ms, health }] in the batch's answer carries the one health reading for everything the held calls made or changed. A held call cannot refuse for what only a rebuild shows (an edit that breaks a later feature): when a build leaves an object failing that was not before, the batch stops there as at a refusal (buildFailed: true) and, with rollback, is taken back whole. guide_read, tool_groups, usage_report and job_status run inside a held run without a build. If the person has Skip recomputes on already, nothing is held or built and buildNote says so. Use it for a sketch drawn and constrained in many calls or many properties set; leave it out when each call's own reading matters. "
-             "lines: \"refused\" (with to): the reply lists only the calls that were refused or whose health is not clean, with counts { ok, refused } for the rest — for a long run whose answers are read from the file; \"all\" (the default) keeps a line per call; \"counts\": the counts alone.",
-             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}, "lines": {"type": "string", "enum": ["all", "refused", "counts"]}, "build": {"type": "string", "enum": ["end", "each"]}}), batch),
+             "lines: \"refused\" (with to): the reply lists only the calls that were refused or whose health is not clean, with counts { ok, refused } for the rest — for a long run whose answers are read from the file; \"all\" (the default) keeps a line per call; \"counts\": the counts alone. "
+             "A batch from a file answers that way without to too, from its record (written names it; a line per call unless lines says otherwise), and so does a batch of calls given lines; "
+             "lines: \"full\" gives every call's whole answer in the reply instead (with to, written there as well). "
+             "read: a .json file (a batch's record or a to file) with at: a dotted path in it (\"results.3.result\"; results count from that part's first call) answers that part ({ read, at, value }) and runs nothing — the way back to any answer a reply left out.",
+             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}, "lines": {"type": "string", "enum": ["all", "refused", "counts", "full"]}, "build": {"type": "string", "enum": ["end", "each"]}, "read": {"type": "string"}, "at": {"type": "string"}}), batch),
         Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded making): shots past the last 50 and 3 days, solver and job runs past 14 days, FreeCAD backups past 7; exports only listed. To the Trash. Dry run unless dry_run: false; kinds, older_than_days narrow it. Runs on its own daily.",
              obj({"dry_run": {"type": "boolean"}, "kinds": {"type": "array", "items": {"type": "string", "enum": list(outputs.KINDS)}}, "older_than_days": {"type": "number"}}), outputs_clean),
         Tool("history_undo", "Undo the last change (steps: how many), as FreeCAD's Edit › Undo does.", obj({"steps": {"type": "integer"}}), history("undo")),

@@ -34,6 +34,8 @@ import os
 import re
 import time
 
+from .once import HEALTH_TODOS  # the advice said once a conversation (agentlink/once.py)
+
 BUDGET_S = 1.5        # the whole check, after which the rest is named as unchecked
 MAX_OBJECTS = 4000    # State flags are read on at most this many objects
 MAX_LIST = 6          # entries per list in the answer
@@ -984,7 +986,7 @@ def check(session, tool, m):
             todos.append("fix the input of the first failed object (those after it fail because of it), or history_undo")
         else:
             lines.append(f"{old} object{'s' if old != 1 else ''} still failing from before this call: " + ", ".join(e["object"] for e in show[:3]) + (" …" if old > 3 else ""))
-            todos.append("recompute lists them with FreeCAD's reasons")
+            todos.append(HEALTH_TODOS["failing"])
     if pending:
         h["needRecompute"] = pending[:MAX_LIST] + ([f"… {len(pending) - MAX_LIST} more"] if len(pending) > MAX_LIST else [])
         lines.append(f"{len(pending)} object{'s' if len(pending) != 1 else ''} not recomputed yet")
@@ -1102,7 +1104,7 @@ def check(session, tool, m):
             lines += [x["line"] for x in hits[:2]]
             if len(hits) > 2:
                 lines.append(f"{len(hits) - 2} more overlaps")
-            todos.append("an overlap is right for a boolean's tool or a press fit; if it is not meant, part_transform moves the part and clearance reads the gap")
+            todos.append(HEALTH_TODOS["overlap"])
         if skipped:
             unchecked.append("interference of " + "; ".join(skipped[:3]) + (" …" if len(skipped) > 3 else "") + ": clearance")
 

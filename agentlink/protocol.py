@@ -405,6 +405,11 @@ class Server:
             return None
         try:
             if method == "initialize":
+                if self.session is not None:
+                    # A new conversation: every standing word is said again (agentlink/once.py).
+                    from . import once
+
+                    once.reset(self.session)
                 result = {
                     "protocolVersion": PROTOCOL,
                     "capabilities": {"tools": {"listChanged": True}, **({"resources": {}} if self.resources else {})},
@@ -647,6 +652,15 @@ class Server:
             traceback.print_exc(file=sys.stderr)
             return self.refusal("failed", failed_words(name, e), _test_trace())
         image = None
+        s = self.session
+        if isinstance(out, dict) and s is not None and getattr(s, "batch_now", None) is None:
+            # Standing words a tool has already said in this conversation
+            # left out and named in saidBefore (agentlink/once.py); a
+            # batch's calls are thinned in its reply, in order, never inside
+            # it (its record and to files keep every answer whole).
+            from . import once
+
+            once.thin_reply(s, self.tools.get(name, tool), out, self.tools)
         if isinstance(out, dict):
             # A picture for the agent to look at: image content beside the
             # text (the file is written as well; inline false leaves it out).

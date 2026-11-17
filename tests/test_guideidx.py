@@ -44,19 +44,21 @@ class Index(unittest.TestCase):
     def test_entry(self):
         e = G.entry("g", TEXT)
         self.assertEqual(e["title"], "A guide")
-        self.assertEqual(e["sections"], ["Start here", "workflow", "Heavy steps", "traps"])
+        # The names once, as sectionTokens' keys in order (no sections list beside them).
+        self.assertEqual(list(e["sectionTokens"]), ["Start here", "workflow", "Heavy steps", "traps"])
+        self.assertNotIn("sections", e)
         self.assertEqual(e["start"], "Start here")
         self.assertEqual(e["chars"], len(TEXT))
         self.assertEqual(e["tokens"], G.tokens(TEXT))
-        self.assertEqual(list(e["sectionTokens"]), e["sections"])
         self.assertEqual(e["sectionTokens"]["workflow"], G.tokens("## workflow\n1. First.\n\n"))
-        self.assertEqual(e["later"], [{"section": "Heavy steps", "when": "before a big boolean", "tokens": e["sectionTokens"]["Heavy steps"]}])
-        self.assertEqual(e["firstReadTokens"], e["tokens"] - e["later"][0]["tokens"])
+        # A later section's cost is read from sectionTokens, not given twice.
+        self.assertEqual(e["later"], [{"section": "Heavy steps", "when": "before a big boolean"}])
+        self.assertEqual(e["firstReadTokens"], e["tokens"] - e["sectionTokens"]["Heavy steps"])
 
     def test_a_guide_without_the_conventions_reads_as_before(self):
         text = "# T\n\n## a\nx\n\n## b\ny\n"
         e = G.entry("t", text)
-        self.assertEqual(e["sections"], ["a", "b"])
+        self.assertEqual(list(e["sectionTokens"]), ["a", "b"])
         self.assertNotIn("start", e)
         self.assertNotIn("later", e)
         self.assertEqual(G.clean(text), text)
@@ -109,7 +111,7 @@ class TheGuidesHere(unittest.TestCase):
         for t in longest:
             e = G.entry(t, gs[t])
             self.assertEqual(e.get("start"), "Start here", t)
-            self.assertEqual(e["sections"][0], "Start here", t)
+            self.assertEqual(list(e["sectionTokens"])[0], "Start here", t)
             self.assertTrue(e.get("later"), t)
             # The map names sections that are there, and every later one.
             text, _, names = G.pick(gs[t], "Start here")

@@ -152,6 +152,7 @@ agentlink/meshformats.py
 agentlink/millsim.py
 agentlink/needs.py
 agentlink/nexthint.py
+agentlink/once.py
 agentlink/outputs.py
 agentlink/overlay.py
 agentlink/panel.py
@@ -260,6 +261,7 @@ docs/hardening/sheetfem-findings.md
 docs/hardening/sketcher-findings.md
 docs/hardening/status-findings.md
 docs/hardening/status.json
+docs/hardening/tokens-findings.md
 docs/hardening/tutor-rest-model.json
 docs/hardening/unproven-findings.md
 docs/hardening/unproven-run-findings.md
@@ -267,6 +269,7 @@ docs/hardening/window-bim-findings.md
 docs/hardening/window-draft-surf-fem-mesh-findings.md
 docs/hardening/window-pd-findings.md
 docs/hardening/window-pd2-findings.md
+docs/hardening/window-pd3-skasm2-findings.md
 docs/hardening/window-skasm-findings.md
 docs/hardening/window-td-cam-findings.md
 docs/hardening/workshop-rest-model.json
@@ -459,6 +462,7 @@ tests/test_nexthint.py
 tests/test_no_addon_names.py
 tests/test_note_faces.py
 tests/test_notice.py
+tests/test_once.py
 tests/test_outputs.py
 tests/test_overlay.py
 tests/test_owner_services.py
