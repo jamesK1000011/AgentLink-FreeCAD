@@ -33,11 +33,14 @@ def quiet(line):
 #    a wall, which only a Part view provider has; on a wall whose view
 #    object answers as Gui.ViewProviderGeometryObject it raises each time.
 #    bim_wall makes walls with Arch.makeWall, as FreeCAD's own BIM_Wall
-#    command does (docs/hardening/hubfix5-findings.md).
+#    command does (docs/hardening/hubfix5-findings.md). ArchCurtainWall.py's
+#    ViewProviderCurtainWall.updateData (line 738) -> colorize (line 794)
+#    reads it the same way on every change of a curtain wall (window round
+#    7, bim 049): the same line, the same fault, said with the wall's.
 KNOWN = [
     (re.compile(r"'Gui\.ViewProviderGeometryObject' object has no attribute 'DiffuseColor'"),
-     "FreeCAD's own, known: BIM's ArchWall.py (updateData) asks a wall's view for DiffuseColor, which it lacks — "
-     "FreeCAD 1.1 says it on every change of a wall; harmless here, not from this call"),
+     "FreeCAD's own, known: BIM's ArchWall.py (updateData) and ArchCurtainWall.py (colorize) ask a wall's view "
+     "for DiffuseColor, which it lacks — FreeCAD 1.1 says it on every change of a wall; harmless here, not from this call"),
 ]
 _TIME = re.compile(r"^\d{1,2}:\d{2}:\d{2}(?:\.\d+)?\s+")
 _TB_START = re.compile(r"Traceback \(most recent call last\)")

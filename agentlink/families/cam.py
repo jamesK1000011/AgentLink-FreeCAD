@@ -68,6 +68,77 @@ def _q(v, unit):
             return None
 
 
+def _upright(face):
+    """Whether a face is a wall FreeCAD's pocket takes as one (PocketShape
+    clasifySub, src/Mod/CAM/Path/Op/PocketShape.py 201-258): a flat face
+    standing upright, a part of an upright cylinder (not a whole one: that
+    is a hole's floor to it), an upright extrusion's side."""
+    import Part
+
+    srf = getattr(face, "Surface", None)
+    if isinstance(srf, Part.Plane):
+        return abs(srf.Axis.z) < 1e-3
+    if isinstance(srf, Part.Cylinder):
+        return abs(abs(srf.Axis.z) - 1) < 1e-3 and not any(e.isClosed() for e in face.Edges)
+    if isinstance(srf, Part.SurfaceOfExtrusion):
+        try:
+            return abs(srf.Direction.z) > 1 - 1e-3
+        except Exception:  # noqa: BLE001
+            return False
+    return False
+
+
+def _touching(shapes):
+    """The shapes put together where they touch (Path.Geom.combineConnectedShapes)."""
+    import Part
+
+    groups = []
+    for sh in shapes:
+        near = [g for g in groups if any(sh.distToShape(x)[0] < 1e-6 for x in g)]
+        merged = [sh]
+        for g in near:
+            merged += g
+            groups.remove(g)
+        groups.append(merged)
+    return [Part.makeCompound(g) for g in groups]
+
+
+def open_walls(shape, names):
+    """The faces among names that FreeCAD's pocket would take as walls
+    (_upright) but that close round no pocket floor: PocketShape.areaOpShapes
+    (lines 116-127) hands each touching set of walls to
+    TechDraw.findShapeOutline, which raises "EdgeWalker has no edges to load"
+    when the set encloses nothing seen from above (window 09-014: a pocket on
+    the block's outside wall, Face1; the traceback stayed in the Report
+    view though the call was refused). [] when all close a loop, or none is
+    a wall."""
+    import TechDraw
+
+    walls = []
+    for n in names:
+        sub = str(n).split(".")[-1]
+        try:
+            f = shape.getElement(sub)
+        except Exception:  # noqa: BLE001
+            continue
+        if _upright(f):
+            walls.append((sub, f))
+    if not walls:
+        return []
+    out = []
+    for g in _touching([f for _, f in walls]):
+        try:
+            w = TechDraw.findShapeOutline(g, 1, FreeCAD.Vector(0, 0, 1))
+            import Part
+
+            ok = w is not None and Part.Face(w).Area > 1e-6
+        except Exception:  # noqa: BLE001
+            ok = False
+        if not ok:
+            out += [n for n, f in walls if any(f.isSame(x) for x in g.Faces)]
+    return out
+
+
 CYCLES = ("G73", "G81", "G82", "G83", "G85", "G86", "G89")
 
 
@@ -900,7 +971,7 @@ def tools(session):
                # the family's
                "OPS": OPS, "POSTS": POSTS, "SHAPES": SHAPES, "BIT_PROPS": BIT_PROPS, "DRESSUPS": DRESSUPS, "HINTS": HINTS, "CUTS": ("G1", "G2", "G3", "G01", "G02", "G03") + CYCLES,
                "path_stats": path_stats, "path_seen": path_seen, "tc_of": tc_of, "tc_for": tc_for, "base_op": base_op, "set_tool": set_tool, "tool_out": tool_out, "stock_out": stock_out,
-               "commands": commands, "op_type": op_type, "with_tool": with_tool, "face_names": face_names, "where": where, "make_op": make_op, "enum_of": enum_of, "stack_of": stack_of,
+               "commands": commands, "op_type": op_type, "with_tool": with_tool, "face_names": face_names, "open_walls": open_walls, "where": where, "make_op": make_op, "enum_of": enum_of, "stack_of": stack_of,
                "sim_tool": sim_tool, "sim_run": sim_run, "sim_picture": sim_picture, "post_factory": post_factory, "by_job": by_job, "post_script": post_script,
                "postables": postables, "shape_file": shape_file, "bit_factory": bit_factory, "toolbit": toolbit, "bit_of": bit_of, "write_tools": write_tools,
                "read_tools": read_tools, "one_tool": one_tool, "dress": dress, "undress": undress, "place": place, "custom_module": custom_module,

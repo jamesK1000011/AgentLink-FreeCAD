@@ -159,7 +159,7 @@
   "td_section": {"did": ["Drew a section view", "Drew a section view"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "td_detail": {"did": ["Drew a detail view"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "td_dim": {"did": ["Dimensioned the drawing"], "source": "Agent Link's own wording", "date": "2026-11-15"},
-  "td_export": {"did": ["Exported {page} as {format}", "Exported {page}", "Exported the drawing"], "source": "Agent Link's own wording", "date": "2026-11-15"},
+  "td_export": {"did": ["Exported {page}: {wrote}", "Exported {page} as {format}", "Exported {page}", "Exported the drawing"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "td_list": {"did": ["Read the drawing"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "td_title": {"did": ["Filled in the title block"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "td_balloon": {"did": ["Added a balloon to {page}", "Added a balloon"], "source": "Agent Link's own wording", "date": "2026-11-15"},
@@ -275,6 +275,15 @@
   "part_extract": {"did": ["Took out {refs}", "Took out part of a shape"], "source": "Agent Link's own wording", "date": "2026-11-17"},
   "part_defeature": {"did": ["Took {faces} off {body}", "Took faces off {body}", "Took faces off a shape"], "source": "Agent Link's own wording", "date": "2026-11-17"},
   "part_datum": {"did": ["Made a datum {kind} {name}", "Made a datum {kind}", "Made a datum"], "source": "Agent Link's own wording", "date": "2026-11-17"},
+  "td_hatch": {"did": ["Hatched {faces} of {view}", "Took the hatching off {view}", "Hatched a view"], "source": "Agent Link's own wording", "date": "2026-11-17"},
+  "td_dim_align": {"did": ["Lined up {count} dimensions ({moved} moved)", "Lined up dimensions"], "source": "Agent Link's own wording", "date": "2026-11-17"},
+  "td_dim_format": {"did": ["Set the dimension to read {texts}", "Changed a dimension's format"], "source": "Agent Link's own wording", "date": "2026-11-17"},
+  "td_dim_repair": {"did": ["Moved {label} onto new edges: it reads {text}", "Moved a dimension onto new edges"], "source": "Agent Link's own wording", "date": "2026-11-17"},
+  "bim_grid": {"did": ["Made grid lines, {xCount} along X and {yCount} along Y, {length} mm long", "Made grid lines {length} mm long", "Made grid lines"], "source": "Agent Link's own wording", "date": "2026-11-17"},
+  "bim_nest": {"did": ["Nested {placed} of {of} pieces on {container}", "Nested the pieces"], "source": "Agent Link's own wording", "date": "2026-11-17"},
+  "bim_panel_out": {"did": ["Made the cut outline of {panels}: {edges} edges", "Made the cut outlines of {panels}", "Made panel cut outlines"], "source": "Agent Link's own wording", "date": "2026-11-17"},
+  "bim_library": {"did": ["Inserted {inserted} from the library", "Searched the library for {search}: {names}", "Searched the library for {search}: none found", "Listed the library: {names}", "Searched the objects library"], "source": "Agent Link's own wording", "date": "2026-11-17"},
+  "ifc_open": {"did": ["Opened {path}", "Opened an IFC file"], "result": ["IFC {schema}, storeys {storeyNames}, {elements} elements", "IFC {schema}, {elements} elements", "IFC {schema}"], "source": "Agent Link's own wording", "date": "2026-11-17"},
   "selection": {"result": ["Done"], "source": "Agent Link's own wording", "date": "2026-11-15"}
  }
 }

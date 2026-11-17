@@ -2523,7 +2523,7 @@
     },
     {"refuse": "spacing (or xSpacing / ySpacing): mm between grid lines, one number (with count) or a list of gaps.", "when": "=not made"}
    ],
-   "answer": {"via": "done", "with": ["=tool", "$fields"], "late": true, "fields": {"axes": "=made", "lines": "=lines", "length": "=pos(a, 'length', 10000)"}}
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "late": true, "fields": {"axes": "=made", "lines": "=lines", "xCount": "=len(lines.get('x', []))", "yCount": "=len(lines.get('y', []))", "length": "=pos(a, 'length', 10000)"}}
   },
   "bim_material": {
    "group": "bim",
@@ -3553,6 +3553,7 @@
         "answer": {
          "fields": {
           "cuts": "=[{'panel': p.Label, 'cut': c.Label, 'edges': len(c.Shape.Edges) if not c.Shape.isNull() else 0} for p, c in zip(panels, cuts)]",
+          "edges": "=sum([len(c.Shape.Edges) if not c.Shape.isNull() else 0 for c in cuts])",
           "note": "Flat outlines to cut, with the panel's tag; export to DXF or SVG for the cutter."
          }
         }
@@ -3865,7 +3866,7 @@
      ]
     }
    ],
-   "answer": {"fields": {"found": "=[{'name': basename(h), 'path': h} for h in hits[:50]]", "more": "=max(0, len(hits) - 50)", "roots": "=roots"}}
+   "answer": {"fields": {"found": "=[{'name': basename(h), 'path': h} for h in hits[:50]]", "count": "=len(hits)", "names": "=[basename(h) for h in hits[:50]]", "more": "=max(0, len(hits) - 50)", "roots": "=roots"}}
   },
   "bim_reextrude": {
    "group": "bim_gaps",
@@ -9097,7 +9098,7 @@
   },
   "td_hatch": {
    "group": "techdraw",
-   "description": "Hatch faces of the part in a view (thin lines spacing mm apart at angle degrees; a section's cut is hatched by itself): view, faces [\"Face6\" …] (the part's own, from shape_query) — none takes it off. Drawn by td_export, not in the window; a face seen edge-on is warned of.",
+   "description": "Hatch faces of the part in a view (thin lines spacing mm apart at angle degrees; a section's cut is hatched by itself): view, faces [\"Face6\" …] (the part's own, from shape_query) — none takes it off. Drawn by td_export, and in the window as FreeCAD's own hatch (TechDraw::DrawHatch, its default pattern) on the view's face that shows each (window says which, or why none); a face seen edge-on is warned of.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -9130,9 +9131,10 @@
     {"do": "=own_prop(v, HATCH_PROP, 'App::PropertyString', 'Faces hatched in the exported page (JSON)')"},
     {"let": {"spec": {"faces": "=faces", "spacing": "=float(a.get('spacing', 2.5))", "angle": "=float(a.get('angle', 45))"}}},
     {"do": "=setprop(v, HATCH_PROP, dumps(spec) if faces else '')"},
-    {"let": {"flat": "=edge_on(v, src, faces)"}}
+    {"let": {"flat": "=edge_on(v, src, faces)"}},
+    {"let": {"native": "=native_hatch(v, src, [f for f in faces if f not in flat])"}}
    ],
-   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"view": "=v.Label", "faces": "=faces", "spacing": "=spec['spacing']", "angle": "=spec['angle']", "note": "='Drawn by td_export.' if faces else 'Hatching taken off.'", "warning": {"when": "=flat", "value": {"fmt": "{', '.join(flat)} {'is' if len(flat) == 1 else 'are'} seen edge-on in {v.Label}: nothing to hatch there — shape_query {{ normal }} finds the faces facing this view."}}}}
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"view": "=v.Label", "faces": "=faces", "spacing": "=spec['spacing']", "angle": "=spec['angle']", "hatch": {"when": "=native.get('object')", "value": "=native.get('object')"}, "window": {"when": "=faces", "value": "=native"}, "note": "=(\"Drawn by td_export, and in the window as FreeCAD's own hatch on \" + ', '.join(native['viewFace']) + ' of the view.' if native.get('object') else 'Drawn by td_export; not in the window: ' + (native.get('why') or 'no face of the view matched (window.missing).')) if faces else 'Hatching taken off.'", "warning": {"when": "=flat", "value": {"fmt": "{', '.join(flat)} {'is' if len(flat) == 1 else 'are'} seen edge-on in {v.Label}: nothing to hatch there — shape_query {{ normal }} finds the faces facing this view."}}}}
   },
   "td_weld": {
    "group": "techdraw",
@@ -9210,7 +9212,7 @@
     {"refuse": "=wrong", "when": "=wrong is not None"},
     {"let": {"ref, p": "=ref_point(v, a.on)"}},
     {"let": {"X, Y": "=abs_xy(v)"}},
-    {"let": {"to": "=pt2(a.at, 'at') if a.at is not None else clear_xy(page_holding(v), (X + p[0] + 35, Y - p[1] + 15), 28, 16, dx=-10, side_of=X + p[0], away=(X, Y))"}},
+    {"let": {"to": "=pt2(a.at, 'at') if a.at is not None else clear_xy(page_holding(v), (X + p[0] + 35, Y - p[1] + 15), 28, 16, dx=-10, side_of=X + p[0], away=(X, Y), src=(X + p[0], Y - p[1]))"}},
     {"let": {"ln": "=leader(v, p, to, 20)"}},
     {"set": {"ln.Label": "=unique(a.name or 'Weld ' + spec['kind'], ln)"}},
     {"do": ["=own_prop(ln, WELD_PROP, 'App::PropertyString', 'The weld symbol drawn at the leader\\'s end (JSON)')", "=setprop(ln, WELD_PROP, dumps(spec))"]},
@@ -9653,7 +9655,7 @@
     {"do": "=recompute([v])", "when": "=not edges_of(v)"},
     {"let": {"es": "=edges_of(v)", "made": []}},
     {"let": {"bb": "=make_compound(es).BoundBox if es else None", "half": "=paper_half(v)"}},
-    {"each": "r1, r2", "in": "=pairs", "index": "k", "steps": [{"let": {"lane": "=off + (k * gap if style == 'baseline' else 0)", "half_h": "=half[1] if half else 20", "half_w": "=half[0] if half else 20"}}, {"let": {"got": "=one_dim(dict([('view', v.Label), ('type', typ), ('refs', [r1, r2])] + ([('format', a.format)] if a.format else [])))"}}, {"let": {"d": "=obj_of(got['dimension'], ['TechDraw::DrawViewDimension'], 'dimension')"}}, {"let": {"nx": "=half_w + lane if typ == 'vertical' else d.X", "ny": "=-(half_h + lane) if typ == 'horizontal' else d.Y"}}, {"set": {"d.X": "=nx", "d.Y": "=ny"}}, {"push": {"made": "=dict(list(got.items()) + [('lane', round(lane, 1))])"}}]},
+    {"each": "r1, r2", "in": "=pairs", "index": "k", "steps": [{"let": {"lane": "=off + (k * gap if style == 'baseline' else 0)", "half_h": "=half[1] if half else 20", "half_w": "=half[0] if half else 20"}}, {"let": {"got": "=one_dim(dict([('view', v.Label), ('type', typ), ('refs', [r1, r2])] + ([('format', a.format)] if a.format else [])))"}}, {"let": {"d": "=obj_of(got['dimension'], ['TechDraw::DrawViewDimension'], 'dimension')"}}, {"let": {"mid": "=dim_anchor(d) or (float(d.X), float(d.Y))"}}, {"let": {"nx": "=half_w + lane if typ == 'vertical' else mid[0]", "ny": "=-(half_h + lane) if typ == 'horizontal' else mid[1]"}}, {"set": {"d.X": "=nx", "d.Y": "=ny"}}, {"push": {"made": "=dict(list(got.items()) + [('lane', round(lane, 1)), ('textAt', [num(nx, 2), num(ny, 2)])])"}}]},
     {"do": "=recompute()"},
     {"let": {"total": "=sum(m.get('measured', 0) for m in made) if style == 'chain' else (made[-1].get('measured') if made else None)"}}
    ],
@@ -9770,7 +9772,7 @@
     {"let": {"rows": "=[{k: r.get(k) for k in ('characteristic', 'tolerance', 'diameter', 'modifier', 'datums') if r.get(k) is not None} for r in rows]"}},
     {"let": {"fig, wrong": "=figure('frame', rows, float(a.get('height', 3.5)))"}},
     {"refuse": "=wrong", "when": "=wrong is not None"},
-    {"when": "=a.dimension", "then": [{"let": {"d": "=obj_of(a.dimension, ['TechDraw::DrawViewDimension'], 'dimension')"}}, {"let": {"v": "=d.References2D[0][0]"}}, {"let": {"page": "=page_holding(v)", "vx, vy": "=abs_xy(v)"}}, {"let": {"at": "=place_xy(page, a.at, (vx + float(d.X), vy + float(d.Y) - fig.h - 2))"}}, {"let": {"sym": "=symbol(page, fig, {'kind': 'frame', 'rows': rows, 'h': float(a.get('height', 3.5))}, at, 'Frame')", "ln": null}}], "else": [{"let": {"v": "=view_of(a.view)"}}, {"let": {"page": "=page_holding(v)"}}, {"refuse": "on: the feature the frame points to (\"Edge3\", { point }, { circle }…), or dimension: a dimension to sit under.", "when": "=a.on is None"}, {"do": "=recompute([v])", "when": "=not edges_of(v)"}, {"let": {"ref, p": "=ref_point(v, a.on)"}}, {"let": {"vx, vy": "=abs_xy(v)"}}, {"let": {"at": "=place_xy(page, a.at, (vx + p[0] + 25, vy - p[1] + 15))"}}, {"let": {"at": "=clear_xy(page, at, fig.w, fig.h, away=(vx, vy))"}, "when": "=a.at is None"}, {"let": {"sym": "=symbol(page, fig, {'kind': 'frame', 'rows': rows, 'h': float(a.get('height', 3.5)), 'on': ref}, at, 'Frame')"}}, {"let": {"ln": "=leader(v, p, (at[0] - fig.w / 2, at[1]))"}}]},
+    {"when": "=a.dimension", "then": [{"let": {"d": "=obj_of(a.dimension, ['TechDraw::DrawViewDimension'], 'dimension')"}}, {"let": {"v": "=d.References2D[0][0]"}}, {"let": {"page": "=page_holding(v)", "vx, vy": "=abs_xy(v)"}}, {"let": {"at": "=place_xy(page, a.at, (vx + float(d.X), vy + float(d.Y) - fig.h - 2))"}}, {"let": {"sym": "=symbol(page, fig, {'kind': 'frame', 'rows': rows, 'h': float(a.get('height', 3.5))}, at, 'Frame')", "ln": null}}], "else": [{"let": {"v": "=view_of(a.view)"}}, {"let": {"page": "=page_holding(v)"}}, {"refuse": "on: the feature the frame points to (\"Edge3\", { point }, { circle }…), or dimension: a dimension to sit under.", "when": "=a.on is None"}, {"do": "=recompute([v])", "when": "=not edges_of(v)"}, {"let": {"ref, p": "=ref_point(v, a.on)"}}, {"let": {"vx, vy": "=abs_xy(v)"}}, {"let": {"at": "=place_xy(page, a.at, (vx + p[0] + 25, vy - p[1] + 15))"}}, {"let": {"at": "=clear_xy(page, at, fig.w, fig.h, away=(vx, vy), src=(vx + p[0], vy - p[1]))"}, "when": "=a.at is None"}, {"let": {"sym": "=symbol(page, fig, {'kind': 'frame', 'rows': rows, 'h': float(a.get('height', 3.5)), 'on': ref}, at, 'Frame')"}}, {"let": {"ln": "=leader(v, p, (at[0] - fig.w / 2, at[1]))"}}]},
     {"do": "=recompute()"}
    ],
    "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"symbol": "=sym.Name", "reads": "=describe(rows)", "at": ["=num(sym.X, 2)", "=num(sym.Y, 2)"], "size": ["=num(fig.w, 2)", "=num(fig.h, 2)"], "leader": {"when": "=ln", "value": "=ln.Name"}}}
@@ -10038,7 +10040,7 @@
     {"let": {"ref, p": "=ref_point(v, a.on)"}},
     {"let": {"vx, vy": "=abs_xy(v)"}},
     {"let": {"at": "=place_xy(page, a.at, (vx + p[0] + 20, vy - p[1] + 15))"}},
-    {"let": {"at": "=clear_xy(page, at, max([len(x) for x in str(a.text).split('\\n')]) * float(a.get('size', 3.5)) * 0.6 + 3 if a.text else 4, (len(str(a.text).split('\\n')) * 1.3 + 0.4) * float(a.get('size', 3.5)) if a.text else 4, dx=max([len(x) for x in str(a.text).split('\\n')]) * float(a.get('size', 3.5)) * 0.275 + 1.5 if a.text else 0, side_of=vx + p[0], away=(vx, vy))"}, "when": "=a.at is None"},
+    {"let": {"at": "=clear_xy(page, at, max([len(x) for x in str(a.text).split('\\n')]) * float(a.get('size', 3.5)) * 0.6 + 3 if a.text else 4, (len(str(a.text).split('\\n')) * 1.3 + 0.4) * float(a.get('size', 3.5)) if a.text else 4, dx=max([len(x) for x in str(a.text).split('\\n')]) * float(a.get('size', 3.5)) * 0.275 + 1.5 if a.text else 0, side_of=vx + p[0], away=(vx, vy), src=(vx + p[0], vy - p[1]))"}, "when": "=a.at is None"},
     {"let": {"ln": "=leader(v, p, at)"}},
     {"let": {"out": {"leader": "=ln.Name", "on": "=ref"}}},
     {"when": "=a.text", "then": [{"add": "TechDraw::DrawViewAnnotation", "name": "Note", "as": "n"}, {"do": "=page.addView(n)"}, {"set": {"n.Text": "=str(a.text).split('\\n')"}}, {"let": {"size": "=float(a.get('size', 3.5))"}}, {"set": {"n.TextSize": "=size"}}, {"let": {"w": "=max(len(x) for x in n.Text) * size * 0.55"}}, {"set": {"n.X": "=at[0] + (w / 2 + 1.5 if at[0] >= vx + p[0] else -w / 2 - 1.5)", "n.Y": "=at[1] + size * 0.35"}}, {"put": {"note": "=n.Name"}}]},
@@ -10109,7 +10111,7 @@
     {"let": {"vx, vy": "=abs_xy(v)"}},
     {"let": {"base": "=(vx + p[0], vy - p[1])", "want": "=a.at"}},
     {"let": {"want": "=[base[0] + 12, base[1] + (-14 if p[1] > 0 else 14)]"}, "when": "=a.at is None and not a.onSurface"},
-    {"let": {"want": "=clear_xy(page, want, fig.w, fig.h, dx=fig.origin[0] + fig.w / 2, dy=-(fig.origin[1] + fig.h / 2), away=(vx, vy))"}, "when": "=a.at is None and not a.onSurface"},
+    {"let": {"want": "=clear_xy(page, want, fig.w, fig.h, dx=fig.origin[0] + fig.w / 2, dy=-(fig.origin[1] + fig.h / 2), away=(vx, vy), src=base)"}, "when": "=a.at is None and not a.onSurface"},
     {"when": "=want is not None", "then": [{"let": {"at": "=place_xy(page, want, base)"}}, {"let": {"ln": "=leader(v, p, at)"}}, {"do": "=data.update({'leader': ln.Name})"}], "else": [{"let": {"at": "=base"}}]},
     {"let": {"cx": "=at[0] + fig.origin[0] + fig.w / 2", "cy": "=at[1] - (fig.origin[1] + fig.h / 2)"}},
     {"do": "=data.update({'on': ref})"},
@@ -10173,7 +10175,7 @@
     {"let": {"val": "=face.Area / {'mm2': 1, 'cm2': 100, 'm2': 1e6}.get(unit, 1)"}},
     {"let": {"text": "=area_text(a.get('format', 'A = {value} {unit}'), val, a.get('decimals', 1), unit)"}},
     {"let": {"at": "=place_xy(page, a.at, (vx + p[0] + 20, vy - p[1] + 15))"}},
-    {"let": {"at": "=clear_xy(page, at, len(text) * float(a.get('size', 3.5)) * 0.6 + 3, float(a.get('size', 3.5)) * 1.7, dx=len(text) * float(a.get('size', 3.5)) * 0.275 + 1.5, away=(vx, vy))"}, "when": "=a.at is None"},
+    {"let": {"at": "=clear_xy(page, at, len(text) * float(a.get('size', 3.5)) * 0.6 + 3, float(a.get('size', 3.5)) * 1.7, dx=len(text) * float(a.get('size', 3.5)) * 0.275 + 1.5, away=(vx, vy), src=(vx + p[0], vy - p[1]))"}, "when": "=a.at is None"},
     {"let": {"ln": "=leader(v, p, at)"}},
     {"add": "TechDraw::DrawViewAnnotation", "name": "Note", "as": "n"},
     {"do": "=page.addView(n)"},
@@ -10229,9 +10231,12 @@
     {"let": {"rows": []}},
     {"each": "d", "in": "=dims_of(a.dims)", "steps": [{"let": {"f": "=str(d.FormatSpec)"}}, {"let": {"f": "=str(a.format)"}, "when": "=a.format"}, {"let": {"f": "=without_prefix(f)"}, "when": "=a.removePrefix"}, {"when": "=a.decimals is not None", "then": [{"let": {"n": "=int(a.decimals)"}}, {"refuse": "decimals: 0 to 9.", "when": "=not 0 <= n <= 9"}, {"let": {"f": "=with_decimals(f, n)"}}]}, {"let": {"f": "=more_decimals(f, int(a.more))"}, "when": "=a.more is not None"}, {"let": {"f": "=prefixed(f, a.prefix, a.get('count', 2))"}, "when": "=a.prefix"}, {"set": {"d.FormatSpec": "=f"}}, {"push": {"rows": {"dimension": "=d.Label", "format": "=f"}}}]},
     {"do": "=recompute()"},
-    {"each": "e, d", "in": "=zip(rows, dims_of(a.dims))", "steps": [{"try": [{"do": "=e.update({'reads': d.getText() if has(d, 'getText') else None})"}], "except": []}]}
+    {"each": "e, d", "in": "=zip(rows, dims_of(a.dims))", "steps": [{"try": [{"do": "=e.update({'reads': d.getText() if has(d, 'getText') else None})"}], "except": []}]},
+    {"let": {"nudged": 0}},
+    {"each": "e, d", "in": "=zip(rows, dims_of(a.dims))", "steps": [{"let": {"to": "=nudge_out(d)"}}, {"when": "=to", "then": [{"do": "=e.update({'movedTo': to})"}, {"let": {"nudged": "=nudged + 1"}}]}]},
+    {"do": "=recompute()", "when": "=nudged"}
    ],
-   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"dims": "=rows"}}
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"dims": "=rows", "texts": "=[e['reads'] for e in rows if e.get('reads')]"}}
   },
   "td_dim_special": {
    "group": "techdraw",
@@ -10286,7 +10291,7 @@
     {"set": {"d.MeasureType": "Projected"}},
     {"let": {"mid": null}},
     {"choose": "='chamfer' if kind in ('chamfer_h', 'chamfer_v') else 'length' if kind in ('arc_length', 'axo_length') else 'other'", "of": {"chamfer": [{"refuse": "refs: the chamfer's two end points.", "first": [{"do": "=doc().removeObject(d.Name)"}], "when": "=len(names) != 2"}, {"set": {"d.Type": "='DistanceX' if kind == 'chamfer_h' else 'DistanceY'", "d.References2D": "=[(v, n) for n in names]"}}, {"do": ["=page.addView(d)", "=recompute()"]}, {"let": {"ang": "=chamfer_angle(v, names, kind)"}}, {"set": {"d.FormatSpec": {"fmt": "{d.FormatSpec} x{ang}°"}}}], "length": [{"let": {"misfit": "=len(names) != (1 if kind == 'arc_length' else 2) or not all(n.startswith('Edge') for n in names)"}}, {"refuse": "refs: one curved edge.", "first": [{"do": "=doc().removeObject(d.Name)"}], "when": "=misfit and kind == 'arc_length'"}, {"refuse": "refs: [the edge to measure, an edge the extension lines run along].", "first": [{"do": "=doc().removeObject(d.Name)"}], "when": "=misfit"}, {"let": {"es": "=edges_of(v)"}}, {"let": {"e": "=es[int(names[0][4:])]"}}, {"let": {"spec": {"kind": "=kind", "view": "=v.Name", "edge": "=names[0]", "decimals": "=int(a.get('decimals', 2))"}}}, {"when": "=kind == 'arc_length'", "then": [{"refuse": {"fmt": "{names[0]} is not an arc: refs one curved edge."}, "first": [{"do": "=doc().removeObject(d.Name)"}], "when": "=not has(get(e, 'Curve'), 'Radius')"}, {"let": {"anchor": "=model_arc_anchor(v, e)"}}, {"do": "=spec.update({'src': anchor})", "when": "=anchor"}, {"let": {"ends": "=nearest_vertices(v, e)", "mid": "=ref_point(v, names[0])[1]"}}, {"set": {"d.Type": "Distance", "d.References2D": "=[(v, n) for n in ends]"}}, {"do": "=page.addView(d)"}], "else": [{"let": {"la, ea": "=axo_angles(e, es[int(names[1][4:])])"}}, {"set": {"d.Type": "Distance", "d.References2D": "=[(v, names[0])]"}}, {"do": "=page.addView(d)"}, {"set": {"d.AngleOverride": true, "d.LineAngle": "=la", "d.ExtensionAngle": "=ea"}}]}, {"do": ["=own_prop(d, SPECIAL_PROP, 'App::PropertyString', 'What this special dimension measures (JSON), re-read when the drawing changes')", "=setprop(d, SPECIAL_PROP, dumps(spec))"]}, {"let": {"L": "=special_length(v, spec)"}}, {"refuse": {"fmt": "{names[0]}: no model edge lands on it in this view (an axonometric length needs a straight edge of the part along one of its axes)."}, "first": [{"do": "=doc().removeObject(d.Name)"}], "when": "=L is None and kind == 'axo_length'", "code": "invalid_state"}, {"refuse": {"fmt": "{names[0]} could not be read."}, "first": [{"do": "=doc().removeObject(d.Name)"}], "when": "=L is None", "code": "invalid_state"}, {"do": "=refresh_special()"}]}, "else": [{"refuse": "kind: extent_h | extent_v { refs edges, none for the whole view } | chamfer_h | chamfer_v { refs two points } | arc_length { refs [an arc] } | axo_length { refs [edge, extension edge] }.", "first": [{"do": "=doc().removeObject(d.Name)"}]}]},
-    {"when": "=a.at is not None", "then": [{"let": {"ox, oy": "=pt2(a.at, 'at')"}}, {"set": {"d.X": "=ox", "d.Y": "=oy"}}], "else": [{"when": "=mid is not None", "then": [{"let": {"vx, vy": "=abs_xy(v)"}}, {"let": {"ox, oy": "=clear_xy(page, (vx + mid[0], vy - mid[1]), 14, 5.5, skip=[d], away=(vx, vy))"}}, {"set": {"d.X": "=ox - vx", "d.Y": "=oy - vy"}}]}]},
+    {"when": "=a.at is not None", "then": [{"let": {"ox, oy": "=pt2(a.at, 'at')"}}, {"set": {"d.X": "=ox", "d.Y": "=oy"}}], "else": [{"when": "=mid is not None", "then": [{"let": {"vx, vy": "=abs_xy(v)"}}, {"let": {"ox, oy": "=clear_xy(page, (vx + mid[0], vy - mid[1]), 14, 5.5, skip=[d], away=(vx, vy), src=(vx + mid[0], vy - mid[1]))"}}, {"set": {"d.X": "=ox - vx", "d.Y": "=oy - vy"}}]}]},
     {"do": "=recompute()"}
    ],
    "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"kind": "=kind", "...": "=dim_reading(d)"}}
@@ -10323,10 +10328,11 @@
    "runner": "steps",
    "steps": [
     {"let": {"ds": "=dims_of(a.dims)", "how": "=a.get('direction', 'horizontal')"}},
+    {"let": {"was": "=[(float(d.X), float(d.Y)) for d in ds]"}},
     {"choose": "=how", "of": {"horizontal": [{"let": {"y": "=float(ds[0].Y)"}}, {"each": "d", "in": "=ds", "steps": [{"set": {"d.Y": "=y"}}]}], "vertical": [{"let": {"x": "=float(ds[0].X)"}}, {"each": "d", "in": "=ds", "steps": [{"set": {"d.X": "=x"}}]}], "oblique": [{"refuse": "oblique: three or more dimensions, lined up on the first two.", "when": "=len(ds) < 3"}, {"let": {"x0": "=float(ds[0].X)", "y0": "=float(ds[0].Y)"}}, {"let": {"dx": "=float(ds[1].X) - x0", "dy": "=float(ds[1].Y) - y0"}}, {"let": {"L2": "=dx * dx + dy * dy or 1"}}, {"each": "d", "in": "=ds[2:]", "steps": [{"let": {"t": "=((float(d.X) - x0) * dx + (float(d.Y) - y0) * dy) / L2"}}, {"set": {"d.X": "=x0 + t * dx", "d.Y": "=y0 + t * dy"}}]}]}, "else": [{"refuse": "direction: horizontal | vertical | oblique."}]},
     {"do": "=recompute()"}
    ],
-   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"dims": "=[{'dimension': d.Label, 'at': [num(d.X, 2), num(d.Y, 2)]} for d in ds]"}}
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"dims": "=[{'dimension': d.Label, 'at': [num(d.X, 2), num(d.Y, 2)]} for d in ds]", "count": "=len(ds)", "moved": "=sum([1 for d, w in zip(ds, was) if abs(float(d.X) - w[0]) > 0.01 or abs(float(d.Y) - w[1]) > 0.01])", "note": {"when": "=all([abs(float(d.X) - w[0]) <= 0.01 and abs(float(d.Y) - w[1]) <= 0.01 for d, w in zip(ds, was)])", "value": "They were lined up already: nothing moved."}}}
   },
   "td_dim_repair": {
    "group": "techdraw",
@@ -10361,12 +10367,14 @@
     {"do": "=recompute([v])", "when": "=not edges_of(v)"},
     {"let": {"names": "=[resolve_ref(v, r) for r in (a.refs or [])]"}},
     {"refuse": "refs: the view's points or edges it should measure now (as td_dim takes them).", "when": "=not names"},
-    {"let": {"before": "=d.References2D"}},
+    {"let": {"before": "=d.References2D", "a0": "=dim_anchor(d)"}},
     {"set": {"d.References2D": "=[(v, n) for n in names]"}},
     {"do": "=recompute()"},
-    {"try": [{"do": "=float(d.getRawValue())"}], "except": [{"refuse": {"fmt": "TechDraw cannot measure those: {error} — the old references were put back."}, "first": [{"set": {"d.References2D": "=before"}}, {"do": "=recompute()"}], "code": "failed"}]}
+    {"try": [{"do": "=float(d.getRawValue())"}], "except": [{"refuse": {"fmt": "TechDraw cannot measure those: {error} — the old references were put back."}, "first": [{"set": {"d.References2D": "=before"}}, {"do": "=recompute()"}], "code": "failed"}]},
+    {"let": {"a1": "=dim_anchor(d)", "moved": null}},
+    {"when": "=a0 is not None and a1 is not None and (abs(a1[0] - a0[0]) > 0.01 or abs(a1[1] - a0[1]) > 0.01)", "then": [{"let": {"t": "=moved_text(a0, a1, (float(d.X), float(d.Y)))", "vx, vy": "=abs_xy(v)"}}, {"let": {"t": "=clear_xy(page_holding(v), (vx + t[0], vy + t[1]), 14, 5.5, skip=[d], away=(vx + a1[0], vy + a1[1]), src=(vx + a1[0], vy + a1[1]))"}}, {"let": {"moved": "=[[num(d.X, 2), num(d.Y, 2)], [num(t[0] - vx, 2), num(t[1] - vy, 2)]]"}}, {"set": {"d.X": "=t[0] - vx", "d.Y": "=t[1] - vy"}}, {"do": "=recompute()"}]}
    ],
-   "answer": {"via": "done", "with": ["=tool", "=dim_reading(d)"]}
+   "answer": {"via": "done", "with": ["=tool", "=dict(list(dim_reading(d).items()) + ([('textMoved', moved)] if moved else []))"]}
   },
   "surface_fill": {
    "group": "draft",
@@ -12619,6 +12627,8 @@
           {"let": {"names": "=names + hits"}}
          ]
         },
+        {"let": {"walls": "=open_walls(src.Shape, names) if kind == 'pocket' else []"}},
+        {"refuse": {"fmt": "faces: {', '.join(walls)} {'stands' if len(walls) == 1 else 'stand'} upright and {'closes' if len(walls) == 1 else 'close'} round no pocket: a pocket takes its floor (a face facing up, shape_query {{ normal: [0, 0, 1] }}) or walls that close round it. Nothing was kept."}, "when": "=walls"},
         {"set": {"op.Base": "=[(model, names)]"}}
        ]
       },
@@ -14512,7 +14522,7 @@
     {"do": "=notes.extend(skipped)", "when": "=skipped"},
     {"each": "k", "in": "=kinds", "steps": [{"let": {"p": "=made(base + '.' + k)", "own": true}}, {"when": "=k == 'dxf'", "then": [{"try": [{"do": "=write_dxf_page(page, p)"}, {"when": "=isfile(p) and getsize(p) > 0", "then": [{"put": {"dxf": {"path": "=p", "bytes": "=getsize(p)", "by": "TechDraw"}}, "into": "files"}, {"let": {"own": false}}]}], "except": [{"push": {"notes": {"fmt": "TechDraw's DXF writer failed ({error}): written here instead"}}}]}]}, {"when": "=own", "then": [{"do": ["=write_out(p, drawn(sheet, k))", "=files.update({k: {'path': p, 'bytes': getsize(p)}})"]}]}]}
    ],
-   "answer": {"fields": {"page": "=page.Label", "files": "=files", "notes": {"when": "=notes", "value": "=notes"}}}
+   "answer": {"fields": {"page": "=page.Label", "files": "=files", "wrote": "=basename(base) + ' ' + ', '.join([('.' + k) + ' ' + (str(round(f['bytes'] / 1024)) + ' kB' if f['bytes'] >= 1024 else str(f['bytes']) + ' B') for k, f in files.items()])", "notes": {"when": "=notes", "value": "=notes"}}}
   },
   "td_cosmetic": {
    "group": "techdraw",
@@ -17434,7 +17444,7 @@
     {"let": {"counts": "=tally([el.is_a() for el in f.by_type('IfcProduct')])"}},
     {"let": {"proj": "=first(f.by_type('IfcProject') or [None])"}}
    ],
-   "answer": {"fields": {"path": "=path", "schema": "=f.schema", "project": "=proj.Name if proj else None", "storeys": "=[{'name': x.Name, 'elevation': get(x, 'Elevation', None), 'id': x.GlobalId} for x in f.by_type('IfcBuildingStorey')]", "classes": "=dict(sorted(counts.items(), key=lambda kv: -kv[1]))", "elements": "=sum(counts.values())", "next": "ifc_find to list elements; ifc_edit to change them; ifc_save writes the file (a copy unless overwrite)."}}
+   "answer": {"fields": {"path": "=path", "schema": "=f.schema", "project": "=proj.Name if proj else None", "storeys": "=[{'name': x.Name, 'elevation': get(x, 'Elevation', None), 'id': x.GlobalId} for x in f.by_type('IfcBuildingStorey')]", "storeyNames": "=[str(x.Name) for x in f.by_type('IfcBuildingStorey') if x.Name]", "classes": "=dict(sorted(counts.items(), key=lambda kv: -kv[1]))", "elements": "=sum(counts.values())", "next": "ifc_find to list elements; ifc_edit to change them; ifc_save writes the file (a copy unless overwrite)."}}
   },
   "ifc_find": {
    "group": "bim",

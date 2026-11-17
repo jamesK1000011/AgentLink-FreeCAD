@@ -33,6 +33,8 @@ DESCRIPTIONS = {
         "ext number), at [dx, dy] paper mm from the view's centre. Its tip and bubble are kept as FreeCAD keeps them, in the view's own unscaled frame (OriginX/Y, X/Y over the view's scale)"),
     'td_centermarks': (' only. Drawn by td_export, not in the window',
         " only. Drawn by td_export; in the window FreeCAD's own centre marks of the view are switched on (or off) instead — a small cross at each centre (its ArcCenterMarks), not the chain lines"),
+    'td_hatch': ('Drawn by td_export, not in the window;',
+        "Drawn by td_export, and in the window as FreeCAD's own hatch (TechDraw::DrawHatch, its default pattern) on the view's face that shows each (window says which, or why none);"),
     'td_weld': ('page), drawn by td_export (the window shows the leader only',
         "page), drawn by td_export, and in the window as FreeCAD's own weld symbol on the leader (TechDraw::DrawWeldSymbol, with FreeCAD's own symbol for fillet, square, v, plug and surfacing; the other kinds show their words only, and window says which"),
 }
