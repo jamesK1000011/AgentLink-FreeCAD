@@ -203,7 +203,7 @@
  "asm_rigid_group": {
   "description": true,
   "docs": true,
-  "note": "unavailable on FreeCAD 1.1.3 (the refusal is what ran): not proven"
+  "note": "Class b (rule, 17 Nov): a tool that can only refuse on this Mac because a program, a FreeCAD version or an add-on is missing is not counted as proven. Its refusal is checked headless (the words name what is missing) and it is listed by name in the final report. Here: asm_rigid_group needs FreeCAD 1.2; scad_code needs OpenSCAD."
  },
  "asm_sub": {
   "description": true,
@@ -820,6 +820,38 @@
   "model": "window pass 3 (17 Nov), win3 models",
   "note": "17 Nov: window pass 3, the picture after the tool's first accepted call reviewed GOOD or MINOR (live/w3/review0-3)"
  },
+ "code_answer": {
+  "note": "Class b (rule, 17 Nov): these come with Home-FreeCAD (private, code compliance), which is not installed on the Mac. Not counted as proven; listed by name."
+ },
+ "code_check": {
+  "note": "Class b (rule, 17 Nov): these come with Home-FreeCAD (private, code compliance), which is not installed on the Mac. Not counted as proven; listed by name."
+ },
+ "code_facts": {
+  "note": "Class b (rule, 17 Nov): these come with Home-FreeCAD (private, code compliance), which is not installed on the Mac. Not counted as proven; listed by name."
+ },
+ "code_fem": {
+  "note": "Class b (rule, 17 Nov): these come with Home-FreeCAD (private, code compliance), which is not installed on the Mac. Not counted as proven; listed by name."
+ },
+ "code_missing": {
+  "note": "Class b (rule, 17 Nov): these come with Home-FreeCAD (private, code compliance), which is not installed on the Mac. Not counted as proven; listed by name."
+ },
+ "code_packet": {
+  "note": "Class b (rule, 17 Nov): these come with Home-FreeCAD (private, code compliance), which is not installed on the Mac. Not counted as proven; listed by name."
+ },
+ "code_packs": {
+  "note": "Class b (rule, 17 Nov): these come with Home-FreeCAD (private, code compliance), which is not installed on the Mac. Not counted as proven; listed by name."
+ },
+ "code_project": {
+  "note": "Class b (rule, 17 Nov): these come with Home-FreeCAD (private, code compliance), which is not installed on the Mac. Not counted as proven; listed by name."
+ },
+ "code_span": {
+  "note": "Class b (rule, 17 Nov): these come with Home-FreeCAD (private, code compliance), which is not installed on the Mac. Not counted as proven; listed by name."
+ },
+ "collab": {
+  "headless": true,
+  "model": "collab state (17 Nov)",
+  "note": "17 Nov: collab state answered mode live, allowed live, levels, proposalCalls 0; refused inside a batch with why"
+ },
  "compound_explode": {
   "description": true,
   "docs": true,
@@ -943,6 +975,11 @@
   "live": true,
   "model": "Workshop Make model: bracket with six holes and a nut trap in a print setup: no findings, rules from the setup (nozzle 0.4, minWall 0.8, bridge 10), least wall 3.09 mm beside the nut trap (consistent by hand, not recomputed exactly); Parts model: the bin lip thin wall found",
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
+ },
+ "dialog_answer": {
+  "headless": true,
+  "model": "unproven-hub model, window pass 3 (17 Nov)",
+  "note": "17 Nov: answers read: steps_list Bracket Pad 12000 then Pocket; view_snapshot iso 800x600 png; snapshot_latest the newest shot; dialog_answer with none open says so (the dialog case is run-alone 8)"
  },
  "dimension_add": {
   "description": true,
@@ -2551,6 +2588,11 @@
   "model": "MeshHardening re-run 16:25 after the fixes",
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
+ "meshobj_unwrap": {
+  "headless": true,
+  "model": "probe-b (17 Nov)",
+  "note": "17 Nov: unwrap of a trimmed sphere-cap mesh answered area3d 313.6, areaFlat 314.7, stretch mean 1.0 % max 3.8 %, 1 outline; helper: ran in freecadcmd (the bundle python stops, code -11, at import flatmesh)"
+ },
  "mill_check": {
   "description": true,
   "docs": true,
@@ -3446,6 +3488,11 @@
   "model": "WorkshopRest",
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
+ "pref_import": {
+  "headless": true,
+  "model": "probe-b (17 Nov)",
+  "note": "17 Nov: merged this morning's own settings snapshot back: groups listed, backup written, a guarded setting kept"
+ },
  "pref_pack": {
   "description": true,
   "docs": true,
@@ -3791,7 +3838,7 @@
  "scad_code": {
   "description": true,
   "docs": true,
-  "note": "needs OpenSCAD, not installed on the Mac: only its refusal ran"
+  "note": "Class b (rule, 17 Nov): a tool that can only refuse on this Mac because a program, a FreeCAD version or an add-on is missing is not counted as proven. Its refusal is checked headless (the words name what is missing) and it is listed by name in the final report. Here: asm_rigid_group needs FreeCAD 1.2; scad_code needs OpenSCAD."
  },
  "scad_export": {
   "description": true,
@@ -4427,9 +4474,19 @@
   "model": "Workshop Make model: action list only (56 OrcaSlicer machine presets, no saved bundles); use, export, import and fetch not run",
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
+ "snapshot_latest": {
+  "headless": true,
+  "model": "unproven-hub model, window pass 3 (17 Nov)",
+  "note": "17 Nov: answers read: steps_list Bracket Pad 12000 then Pocket; view_snapshot iso 800x600 png; snapshot_latest the newest shot; dialog_answer with none open says so (the dialog case is run-alone 8)"
+ },
  "snapshot_list": {
   "headless": true,
   "note": "17 Nov: marks model and hubrest model on the Mac, answers read"
+ },
+ "steps_list": {
+  "headless": true,
+  "model": "unproven-hub model, window pass 3 (17 Nov)",
+  "note": "17 Nov: answers read: steps_list Bracket Pad 12000 then Pocket; view_snapshot iso 800x600 png; snapshot_latest the newest shot; dialog_answer with none open says so (the dialog case is run-alone 8)"
  },
  "steps_render": {
   "description": true,
@@ -5022,6 +5079,11 @@
   "headless": true,
   "health": true,
   "model": "unproven-hub model, run 5, answers read: view_maps lists 8 maps (wall, stress, heat, curvature and the add-ons), 2 layers, 10 views; view_render four views of Bracket at 900 x 700 (7822 bytes, mmAcross each, 12 triangles), map stress before any solve answered empty in words, after the solve drawn with a legend (min 0.9497, max 59.9059 MPa = the solve, worst at [3.12, 127.19, 10]; 6.4 s), width 10 refused. bim-rest model: a top view written (800 x 600), and four flat faces answered empty (no solid shape): the tool is right there, the model expected a picture"
+ },
+ "view_snapshot": {
+  "headless": true,
+  "model": "unproven-hub model, window pass 3 (17 Nov)",
+  "note": "17 Nov: answers read: steps_list Bracket Pad 12000 then Pocket; view_snapshot iso 800x600 png; snapshot_latest the newest shot; dialog_answer with none open says so (the dialog case is run-alone 8)"
  },
  "wear_diff": {
   "description": true,
