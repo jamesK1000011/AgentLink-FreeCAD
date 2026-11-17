@@ -256,6 +256,9 @@ tests/_dataasm_standin.py
 tests/_datacam_before.py
 tests/_datacam_cases.py
 tests/_datacam_standin.py
+tests/_datacore_before.py
+tests/_datacore_cases.py
+tests/_datacore_standin.py
 tests/_datadraft_before.py
 tests/_datadraft_cases.py
 tests/_datadraftmore_before.py
@@ -279,6 +282,12 @@ tests/_datapart_standin.py
 tests/_datapd_before.py
 tests/_datapd_cases.py
 tests/_datapd_standin.py
+tests/_datasheet_before.py
+tests/_datasheet_cases.py
+tests/_datasheet_standin.py
+tests/_datask2_before.py
+tests/_datask2_cases.py
+tests/_datask2_standin.py
 tests/_datatd2_before.py
 tests/_datatd2_cam_standin.py
 tests/_datatd2_cases.py
@@ -312,6 +321,7 @@ tests/test_core_readers.py
 tests/test_crash_logs.py
 tests/test_dataasm_data.py
 tests/test_datacam_data.py
+tests/test_datacore_data.py
 tests/test_datadraft_data.py
 tests/test_datadraftmore_data.py
 tests/test_datafem_data.py
@@ -320,6 +330,8 @@ tests/test_datamisc_data.py
 tests/test_datapart2_data.py
 tests/test_datapart_data.py
 tests/test_datapd_data.py
+tests/test_datasheet_data.py
+tests/test_datask2_data.py
 tests/test_datatd2_data.py
 tests/test_datatd_data.py
 tests/test_declared.py

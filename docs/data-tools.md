@@ -42,6 +42,14 @@ So are Part Design and Sketcher: the 19 feature tools (`families/feature.py`), t
 those files is the solver's reading, the geometry builders (one shape each), the constraints by name and
 the small FreeCAD-API functions the entries call.
 
+So are the parameter tools and the rest of Part Design and Sketcher: the 6 of `families/param.py` (the Params sheet and the variable sets),
+the 7 of `families/feature_more.py` (`"family": "feature_more"`, group `feature`) and the 12 of `families/sketch_more.py` (`"family":
+"sketch_more"`, group `sketch`). The guard that refuses a change for what it breaks is written in each entry with `broken` (pd_common's
+`newly_broken`: not what was failing before the call). What is left as helpers: the sheet's and the sets' reading (`rows`, `value_of`, `users`,
+`var_type`, `why`), the gear's and the sprocket's profile with the window's makers held off (`gear_profile`), a sketch kept and put back
+(`kept`, `restore`), the matrices and the mirrored arc (`turn`, `scaling`, `mirrored`), the Sketcher's detectors (`detect`) and one sketch
+brought into another (`bring_in`). `tests/test_datask2_data.py` is their proof, on a stand-in.
+
 The Assembly family is data too: the 8 tools of `families/assembly.py` and the 8 of `families/assembly_more.py`
 (`"family": "assembly_more"`; both files are the group `assembly`). What is left there is the Assembly workbench's own
 reading (`joint_axis`, `joint_refs`, `joint_value`, `moving_group`, `pose_move`), the algorithms (`pair_fit`: the hole and
@@ -56,6 +64,23 @@ files is the shared filter (`filter_shape`) and the readings (`describe`, `inert
 following of renumbered faces, the drawing of a step (`step_picture`, `contact_sheet`) and a robot's sweep along a
 trajectory (`sweep`) and IFC's selection and comparison (`select`, `differences`); the finders that several tools share (`ins_of`, `find_note`, `body_pd`, `robot`, `trajectory`) and
 the readers of an argument (`tol_of`, `placement`) still refuse in their own words.
+
+Spreadsheets and the document-level tools are data as well (`tests/test_datasheet_data.py`): the 11 of `families/sheet.py` and the 16 that were
+still code in `families/std_more.py` (links, duplicates, merge, document information, revert, save all, text documents, appearance, the OpenSCAD
+tree tools, freeze, units, point-pair alignment, a robot's tool shape, merged cells), so that file holds no handler any more. What is left in
+`sheet.py` is the reading of a sheet (`filled`, `cell_reading`, `value_of`, `tables`, `table_reading`, `users_of`), the guard every changing
+sheet tool ends with (`check`: recompute, and when the change broke something that was sound, undo and refuse naming the failing cells), a
+formula's Params names (`qualified`) and a design table's binding as FreeCAD's own dialog writes it (`bind_row`); in `std_more.py` the rigid
+fit (`rigid_fit`), GraphViz's text and run (`dot_text`, `dot_draw`), the window's freeze command (`toggle_freeze`) and a colour kept on the
+object (`keep_colour`, `keep_untouched`). A `cells` function that says what is wrong with a value answers `(value, None)` or `(None, why)`
+(`content`, `grid`, `hex_rgba`, `tidy_range`), and the entry has the refusal.
+
+The hub's own core tools are data where the steps say them cleanly (`tests/test_datacore_data.py`): the 13 of `families/doc.py` (documents, objects,
+`import_file`, `export`), `view_maps` and `view_snapshot`, `addon_test` and `gui_unstick`, and `dialog_answer`, `crash_collect`, `doc_switch` and
+`queue_go`. Named helpers there are the readers and writers of files (`mesh_read`, `mesh_solid`, `solid_written`, `scene_written`, `merged_meshes`,
+`flat_write`), what goes with a deleted object (`along`, `shown_again`), which open document a name means (`doc_hits`, `doc_by`, `back_to`), and
+the window's own calls (`active_view`, `shots`: each view saved and the person's camera put back). Kept as code, in the same files: `view_render`
+(the picture itself), `gui_input` and `live_run` (one algorithm each over Qt's event loop) and `addon` (an installer that puts back what it moved).
 
 ## Two kinds of entry
 
