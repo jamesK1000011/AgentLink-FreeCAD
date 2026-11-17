@@ -26,6 +26,7 @@ agentlink/chain.py
 agentlink/changes.py
 agentlink/charts.py
 agentlink/commands.py
+agentlink/contextlist.py
 agentlink/crash_logs.py
 agentlink/data/activity.json
 agentlink/data/activity.schema.json
@@ -399,6 +400,7 @@ tests/test_ccx.py
 tests/test_cells.py
 tests/test_chain.py
 tests/test_charts.py
+tests/test_contextlist.py
 tests/test_core_check.py
 tests/test_core_guards.py
 tests/test_core_guards_fc.py
