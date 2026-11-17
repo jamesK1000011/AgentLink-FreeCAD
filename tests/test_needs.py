@@ -623,7 +623,7 @@ def _walk(x):
 # 150 before needs, arguments and the meter's clause were added: the lean listing grew by 154; report_read's clause on known faults added 16).
 # The token pass (docs/hardening/tokens-findings.md) added 216 to the lean listing: batch's read/at, lines "full" and the
 # file batch's record reply (+168), tool_groups' said (+22), guide_read's index wording (+26).
-COSTS = {"dataTools": 383, "dataToolsTokens": 78901, "codedTools": 21, "codedToolsTokens": 8699, "leanTools": 20, "leanListingTokens": 7382,
+COSTS = {"dataTools": 383, "dataToolsTokens": 78901, "codedTools": 22, "codedToolsTokens": 8935, "leanTools": 20, "leanListingTokens": 7382,
          "oneCardMedian": 177, "oneCardLargest": 824, "toolGroupsCard": 734, "usageReportCard": 178}
 
 

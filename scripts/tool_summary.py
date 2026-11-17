@@ -53,7 +53,12 @@ def groups():
     info = _consts(core_tree, {"GROUP_INFO"}).get("GROUP_INFO", {})
     group_of = _consts(core_tree, {"GROUP_OF"}).get("GROUP_OF", {})
     aliases = set(_consts(core_tree, {"ALIASES"}).get("ALIASES", {}))
-    out = {"core": {"info": info.get("core", ""), "tools": _tool_names(core_tree)}}
+    # A tool of tools.py that GROUP_OF puts in its own group (tool_find: "find") is not core's.
+    core_names = _tool_names(core_tree)
+    out = {"core": {"info": info.get("core", ""), "tools": [n for n in core_names if group_of.get(n, "core") == "core"]}}
+    for n in core_names:
+        if group_of.get(n, "core") != "core" and group_of[n] not in ("core",):
+            out.setdefault(group_of[n], {"info": info.get(group_of[n], ""), "tools": []})["tools"].append(n)
     moved = []
     fam_tree = _parse(os.path.join(PKG, "families", "__init__.py"))
     for name in _consts(fam_tree, {"NAMES"})["NAMES"]:

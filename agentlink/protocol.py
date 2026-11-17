@@ -347,7 +347,30 @@ class Server:
 
     def listed(self):
         # An alias (an old name kept callable) is never listed beside its tool.
+        shown = getattr(self, "shown", None)
+        if shown is not None:
+            # The context-controlled list (agentlink/contextlist.py): its base,
+            # what fits now, and any group turned on beyond the lean default.
+            from .contextlist import BASE
+
+            extra = set(self.groups or ()) - set(getattr(self, "lean_groups", None) or ())
+            order = {n: i for i, n in enumerate(list(BASE) + list(getattr(self, "shown_order", None) or ()))}
+            out = [t for t in self.tools.values() if (t.name in BASE or t.name in shown or t.group in extra) and not getattr(t, "alias_of", None)]
+            return sorted(out, key=lambda t: order.get(t.name, len(order)))
         return [t for t in self.tools.values() if (self.groups is None or t.group in self.groups) and not getattr(t, "alias_of", None)]
+
+    def is_listed(self, name):
+        """Whether the client was shown this tool in the list as it is now."""
+        t = self.tools.get(name)
+        if t is None:
+            return False
+        shown = getattr(self, "shown", None)
+        if shown is not None:
+            from .contextlist import BASE
+
+            extra = set(self.groups or ()) - set(getattr(self, "lean_groups", None) or ())
+            return name in BASE or name in shown or t.group in extra
+        return self.groups is None or t.group in self.groups
 
     def _list_sig(self):
         out = {}
@@ -419,8 +442,19 @@ class Server:
             elif method == "ping":
                 result = {}
             elif method == "tools/list":
+                if self.session is not None:
+                    try:
+                        from . import contextlist
+
+                        contextlist.apply(self, self.session, notify=False)
+                    except Exception:
+                        pass
                 result = {"tools": [t.listing() for t in self.listed()]}
                 self.note_listed()
+                if self.session is not None and getattr(self, "shown", None) is not None:
+                    from . import contextlist
+
+                    contextlist.note_listed(self, self.session, result["tools"])
                 if self.meter is not None:
                     self.meter.list(result["tools"], self.instructions)
             elif method == "resources/list" and self.resources:
@@ -567,6 +601,10 @@ class Server:
                 hint = f"near: {', '.join(near)}" if near else (f"its family: {', '.join(same)}" if same else "tool_groups lists them all")
             return self.refusal("not_found", f"{name}: no such tool — {hint}.")
         t0 = time.time()
+        if self.session is not None and getattr(self, "shown", None) is not None:
+            from . import contextlist
+
+            contextlist.note_call(self, self.session, name)
         tool = tool.for_call(args)
         try:
             # background: true on any read the tool does not take itself:
@@ -636,6 +674,13 @@ class Server:
 
                     with _ar.part("appliesNow"):
                         appliesnow.push(s, tool, out, count=tool.name != "batch")
+                except Exception:
+                    pass
+                try:
+                    from . import contextlist
+
+                    with _ar.part("contextList"):
+                        contextlist.after_call(s, tool.name)
                 except Exception:
                     pass
             if self.on_call is not None:
