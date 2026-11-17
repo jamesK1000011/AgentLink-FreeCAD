@@ -96,6 +96,10 @@ IN_PLACE = {
     "td_list": "recomputes views that have no lines yet",
     "td_geometry": "recomputes the page's views",
     "td_export": "recomputes the page's views",
+    # the IFC file linked from the document's Meta, so a reopened document
+    # finds it (families/ifc.py keep_link).
+    "ifc_open": "links the IFC file it opens from the document (its Meta)",
+    "ifc_save": "links the copy it writes from the document (its Meta)",
     # FreeCAD.setActiveDocument signals the window (src/App/Application.cpp;
     # src/Gui/Application.cpp slotActiveDocument activates an MDI window);
     # cam_post also sets the job's PostProcessorArgs and puts them back.

@@ -14481,11 +14481,12 @@
     {"let": {"n_cold, waited, still": "=warm(page)"}},
     {"let": {"out": "=page_reading(page, True)", "plural": "='s' if n_cold != 1 else ''"}},
     {"put": {"computed": {"fmt": "{n_cold} view{plural} had no lines yet (a document just opened keeps a view's settings, not its lines): worked out here in {waited:g} s before reading."}}, "when": "=n_cold"},
-    {"when": "=still", "then": [{"do": "=mark_not_ready(out['views'], still)"}, {"put": {"notReady": {"fmt": "No lines yet for {', '.join(sorted([doc().getObject(n).Label for n in still]))}: their edge counts and the dimensions on them are left out, not zero. A view whose source has no shape or whose page has KeepUpdated off stays so; otherwise recompute, then td_list again."}}}]},
+    {"when": "=still", "then": [{"do": "=mark_not_ready(out['views'], still)"}, {"put": {"notReady": {"fmt": "No lines yet for {', '.join(sorted([doc().getObject(n).Label for n in still]))}: their edge counts are left out, not zero, and so are the drawn values of the dimensions on them (listed, each with notReady; model3d is the part's own value through its 3D references). A view whose source has no shape or whose page has KeepUpdated off stays so; otherwise recompute, then td_list again."}}}]},
     {"let": {"dims": [], "syms": [], "other": []}},
-    {"each": "o", "in": "=page.Views", "steps": [{"when": "=o.TypeId == 'TechDraw::DrawViewDimension'", "then": [{"let": {"row": "=dim_reading(o)"}}, {"try": [{"let": {"on": "=o.References2D[0][0].Name if o.References2D else None"}}], "except": [{"let": {"on": null}}]}, {"when": "=on in still", "then": [{"do": ["=row.pop('measured', None)", "=row.pop('text', None)"]}, {"put": {"notReady": true}, "into": "row"}]}, {"push": {"dims": "=row"}}], "else": [{"when": "=o.isDerivedFrom('TechDraw::DrawViewSymbol') and GDT_PROP in o.PropertiesList", "then": [{"let": {"data": "=loads(get(o, GDT_PROP))"}}, {"let": {"k": "=data.get('kind')"}}, {"choose": "=k", "of": {"frame": [{"let": {"reads": "=describe(data.get('rows') or [])"}}], "datum": [{"let": {"reads": {"fmt": "datum {data.get('letter', '?')}"}}}]}, "else": [{"let": {"reads": "=' '.join([key + ' ' + str(data[key]) for key in ('ra', 'removal', 'lay', 'text') if data.get(key) not in (None, '')]) or str(k)"}}]}, {"push": {"syms": {"symbol": "=o.Name", "kind": "=k", "reads": "=reads", "on": "=data.get('on')"}}}], "else": [{"push": {"other": {"object": "=o.Name", "type": "=o.TypeId.split('::')[-1]"}}, "when": "=not o.isDerivedFrom('TechDraw::DrawViewPart') and not o.isDerivedFrom('TechDraw::DrawProjGroup')"}]}]}]}
+    {"each": "o", "in": "=page.Views", "steps": [{"when": "=o.isDerivedFrom('TechDraw::DrawViewDimension')", "then": [{"try": [{"let": {"on": "=o.References2D[0][0].Name if o.References2D else None"}}], "except": [{"let": {"on": null}}]}, {"let": {"row": "=dim_reading(o, bool(still) and on in still)"}}, {"push": {"dims": "=row"}}], "else": [{"when": "=o.isDerivedFrom('TechDraw::DrawViewSymbol') and GDT_PROP in o.PropertiesList", "then": [{"let": {"data": "=loads(get(o, GDT_PROP))"}}, {"let": {"k": "=data.get('kind')"}}, {"choose": "=k", "of": {"frame": [{"let": {"reads": "=describe(data.get('rows') or [])"}}], "datum": [{"let": {"reads": {"fmt": "datum {data.get('letter', '?')}"}}}]}, "else": [{"let": {"reads": "=' '.join([key + ' ' + str(data[key]) for key in ('ra', 'removal', 'lay', 'text') if data.get(key) not in (None, '')]) or str(k)"}}]}, {"push": {"syms": {"symbol": "=o.Name", "kind": "=k", "reads": "=reads", "on": "=data.get('on')"}}}], "else": [{"push": {"other": {"object": "=o.Name", "type": "=o.TypeId.split('::')[-1]"}}, "when": "=not o.isDerivedFrom('TechDraw::DrawViewPart') and not o.isDerivedFrom('TechDraw::DrawProjGroup')"}]}]}]},
+    {"let": {"tail": "={k: out.pop(k) for k in ('computed', 'notReady', 'titleBlock') if k in out}"}}
    ],
-   "answer": {"fields": {"...out": "=out", "views": "=[x for x in out['views'] if x['type'] not in ('DrawViewDimension', 'DrawViewSymbol', 'DrawLeaderLine', 'DrawViewAnnotation', 'DrawViewBalloon', 'DrawViewSpreadsheet')]", "dimensions": "=dims", "gdt": {"when": "=syms", "value": "=syms"}, "other": {"when": "=other", "value": "=other"}}}
+   "answer": {"fields": {"...out": "=out", "views": "=[x for x in out['views'] if x['type'] not in ('DrawViewDimension', 'DrawViewDimExtent', 'LandmarkDimension', 'DrawViewSymbol', 'DrawLeaderLine', 'DrawViewAnnotation', 'DrawViewBalloon', 'DrawViewSpreadsheet')]", "dimensions": "=dims", "gdt": {"when": "=syms", "value": "=syms"}, "other": {"when": "=other", "value": "=other"}, "...tail": "=tail"}}
   },
   "td_export": {
    "group": "techdraw",
@@ -17486,6 +17487,7 @@
    "family": "ifc",
    "runner": "steps",
    "steps": [
+    {"do": "=resume()", "when": "=resumable()"},
     {"let": {"m": "=model()"}},
     {"let": {"els": "=select(m['file'], a)"}},
     {"let": {"limit": "=int(a.get('limit', 50))"}}
@@ -17544,6 +17546,7 @@
    "family": "ifc",
    "runner": "steps",
    "steps": [
+    {"do": "=resume()", "when": "=resumable()"},
     {"let": {"m": "=model()"}},
     {"let": {"f": "=m['file']"}},
     {"let": {"els": "=select(f, a)"}},
@@ -17587,6 +17590,7 @@
    "family": "ifc",
    "runner": "steps",
    "steps": [
+    {"do": "=resume()", "when": "=resumable()"},
     {"let": {"m": "=model()"}},
     {"let": {"f": "=m['file']"}},
     {"refuse": "ids: the GlobalIds to remove (ifc_find lists them as id); removal goes by id only, never by class or name.", "when": "=not a.ids"},
@@ -17619,10 +17623,11 @@
    "family": "ifc",
    "runner": "steps",
    "steps": [
+    {"do": "=resume()", "when": "=resumable()"},
     {"let": {"m": "=model()"}},
     {"let": {"src": "=m['path']"}},
     {"let": {"dst": "=src if a.overwrite else where(a.path or file_stem(src) + '_edited.ifc')"}},
-    {"do": ["=make_folder(dirname(dst))", "=m['file'].write(dst)"]}
+    {"do": ["=make_folder(dirname(dst))", "=m['file'].write(dst)", "=saved_to(dst)"]}
    ],
    "answer": {"fields": {"path": "=dst", "bytes": "=file_size(dst)", "edits": "=m['edits']", "overwrote": "=dst == src"}}
   },
