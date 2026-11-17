@@ -358,8 +358,26 @@ def _special(name, args, body):
     if name == "workbench":
         return f"Switched to {bench_text(a['activate'])}" if a.get("activate") else "Read the workbenches"
     if name == "selection":
+        # Only a call that asks to clear (clear: true) clears; one that names
+        # nothing reads (round 7, 00-096: "Cleared the selection" on a read).
         objs = _word(a.get("objects"))
-        return f"Selected {objs}" if objs and not a.get("clear") else "Cleared the selection"
+        if a.get("clear") is True:
+            return "Cleared the selection"
+        if objs:
+            return f"Selected {objs}"
+        got = b.get("selected")
+        if isinstance(got, list):
+            return f"Read the selection: {_and([_word(x) or '?' for x in got])}" if got else "Read the selection: nothing selected"
+        return "Read the selection"
+    if name == "show" and b:
+        # What the answer says was done, not what was asked (round 7, 00-106:
+        # "Showed Bracket and Ghost" though Ghost is not in the document).
+        hid = a.get("visible") is False
+        done = [x for x in (b.get("hidden") if hid else b.get("visible")) or [] if isinstance(x, str)]
+        missing = [x for x in b.get("unknown") or [] if isinstance(x, str)]
+        if done or missing:
+            text = (("Hid " if hid else "Showed ") + (_word(done) or "")) if done else ("Hid nothing" if hid else "Showed nothing")
+            return text + (f"; {_word(missing)} not found" if missing else "")
     return None
 
 
@@ -572,6 +590,265 @@ def key_value(body):
     return None
 
 
+# ---- a read's own value (round 7) ---------------------------------------------------------
+# Reads and looks whose answer has no key value of its own, so their words
+# said only what was done ("Read the session"): each with a count from its
+# answer ("Read the session: 2 bodies, step 14"). fn(body) -> words or None.
+# Plain Python.
+
+def _n(v):
+    return len(v) if isinstance(v, (list, tuple, dict)) else v if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+def _count(n, one, many=None):
+    return f"{n} {one if n == 1 else (many or one + 's')}"
+
+
+def _file_name(v):
+    return plain(v) if isinstance(v, str) and v else None
+
+
+def _session_value(b):
+    n = _n(b.get("bodies"))
+    if n is None:
+        return None
+    out = _count(n, "body", "bodies")
+    if _n(b.get("hidden")):
+        out += f", {_n(b['hidden'])} hidden"
+    if isinstance(b.get("step"), int):
+        out += f", step {b['step']}"
+    return out
+
+
+def _guide_value(b):
+    if isinstance(b.get("guides"), list):
+        return _count(len(b["guides"]), "guide")
+    if isinstance(b.get("read"), list):
+        return _count(len(b["read"]), "guide")
+    text = b.get("text")
+    if isinstance(text, str):
+        heads = sum(1 for line in text.splitlines() if line.startswith("## "))
+        return _count(heads, "section") if heads else f"{len(text)} characters"
+    return None
+
+
+def _groups_value(b):
+    if isinstance(b.get("groups"), list):
+        on = sum(1 for g in b["groups"] if isinstance(g, dict) and g.get("on"))
+        out = _count(len(b["groups"]), "group") + (f", {on} on" if on else "")
+        return out + (f", {b['listed']} tools listed" if isinstance(b.get("listed"), int) else "")
+    if isinstance(b.get("tools"), list):
+        return _count(len(b["tools"]), "tool") + " found"
+    if isinstance(b.get("added"), list) or isinstance(b.get("removed"), list):
+        return f"{len(b.get('added') or [])} tools added, {len(b.get('removed') or [])} groups off"
+    return None
+
+
+def _usage_value(b):
+    if not isinstance(b.get("calls"), int):
+        return None
+    out = _count(b["calls"], "call")
+    if isinstance(b.get("tokens"), (int, float)):
+        out += f", {_short_num(b['tokens'])} tokens"
+    if b.get("errors"):
+        out += f", {_count(b['errors'], 'refusal')}"
+    return out
+
+
+def _report_value(b):
+    if b.get("found") is False:
+        return "no Report view"
+    p = b.get("problems")
+    n = b.get("count")
+    if not isinstance(p, int) and not isinstance(n, int):
+        return None
+    bits = []
+    if isinstance(p, int):
+        bits.append(_count(p, "problem"))
+    if isinstance(n, int):
+        bits.append(_count(n, "line"))
+    return ", ".join(bits)
+
+
+def _picture_value(b):
+    if b.get("empty"):
+        return "nothing drawn: " + _sentence(str(b["empty"]), 70)[:1].lower() + _sentence(str(b["empty"]), 70)[1:]
+    w, h = b.get("width"), b.get("height")
+    f = _file_name(b.get("path"))
+    if not (isinstance(w, int) and isinstance(h, int)):
+        return None  # the file alone: key_value's "wrote a.png"
+    return ", ".join(x for x in (f"{w} x {h} px", f) if x)
+
+
+def _maps_value(b):
+    if not isinstance(b.get("maps"), list):
+        return None
+    out = _count(len(b["maps"]), "map")
+    if isinstance(b.get("layers"), list):
+        out += f", {_count(len(b['layers']), 'layer')}"
+    return out
+
+
+def _shots_value(b):
+    if not isinstance(b.get("shots"), list):
+        return None
+    return _count(len(b["shots"]), "screenshot") if b["shots"] else "no screenshots"
+
+
+def _notes_value(b):
+    if not isinstance(b.get("notes"), list):
+        return None
+    out = _count(len(b["notes"]), "note") if b["notes"] else "no notes"
+    if isinstance(b.get("waiting"), list) and b["waiting"]:
+        out += f", {len(b['waiting'])} waiting"
+    return out
+
+
+def _steps_value(b):
+    return _count(len(b["steps"]), "step") if isinstance(b.get("steps"), list) else None
+
+
+def _job_value(b):
+    if isinstance(b.get("jobs"), list):
+        return _count(len(b["jobs"]), "job") if b["jobs"] else "no jobs"
+    st = b.get("status")
+    if not isinstance(st, str):
+        return None
+    out = (f"{b['tool']} " if isinstance(b.get("tool"), str) else "") + st
+    if isinstance(b.get("running"), (int, float)):
+        out += f", {_short_num(b['running'])} s so far"
+    elif isinstance(b.get("took"), (int, float)):
+        out += f" in {_short_num(b['took'])} s"
+    return out
+
+
+def _crash_value(b):
+    if "folder" in b:
+        return f"copied {len(b.get('recovery') or [])} recovery folders, {len(b.get('reports') or [])} reports"
+    return "nothing new" if b.get("note") else None
+
+
+def _pref_value(b):
+    if "value" in b and isinstance(b.get("name"), str):
+        return f"{_word(b['name'])} = {_word(b['value']) if _word(b['value']) is not None else b['value']}"
+    if isinstance(b.get("values"), dict):
+        out = _count(len(b["values"]), "value")
+        if isinstance(b.get("groups"), list):
+            out += f", {_count(len(b['groups']), 'group')}"
+        return out
+    return None
+
+
+def _ifc_value(b):
+    if not isinstance(b.get("schema"), str):
+        return None
+    out = b["schema"]
+    if isinstance(b.get("storeys"), list):
+        out += f", {_count(len(b['storeys']), 'storey')}"
+    if isinstance(b.get("elements"), int):
+        out += f", {_count(b['elements'], 'element')}"
+    return out
+
+
+def _extensions_value(b):
+    if not isinstance(b.get("loaded"), (dict, list)):
+        return None
+    return f"{len(b['loaded'])} loaded" + (f", {_count(len(b['repos']), 'listed repo')}" if isinstance(b.get("repos"), list) else "")
+
+
+READ_VALUES = {"session_state": _session_value, "guide_read": _guide_value, "tool_groups": _groups_value, "usage_report": _usage_value,
+               "report_read": _report_value, "view_render": _picture_value, "view_snapshot": _picture_value, "window_snapshot": _picture_value,
+               "view_maps": _maps_value, "snapshot_list": _shots_value, "note_list": _notes_value, "steps_list": _steps_value,
+               "job_start": _job_value, "job_status": _job_value, "crash_collect": _crash_value, "pref_get": _pref_value,
+               "ifc_open": _ifc_value, "app_extensions": _extensions_value}
+
+# Tools whose last word reads: their answer's file is what they read, not
+# what they wrote (round 7: "Read a setting: wrote BaseApp/Preferences/View",
+# "Opened IFC on house.ifc: wrote house.ifc").
+READ_WORDS = ("get", "read", "open", "import", "list", "info", "state", "status", "find", "check", "maps", "latest")
+
+
+def writes(name):
+    """Whether a tool's answer's file is one it wrote (an export, a save, a
+    picture), by its name's last word. Plain Python."""
+    last = str(name or "").rsplit("_", 1)[-1]
+    return last not in READ_WORDS
+
+
+def read_value(name, body):
+    """A read's own value (READ_VALUES), or None. Never raises."""
+    fn = READ_VALUES.get(str(name or ""))
+    if fn is None or not isinstance(body, dict):
+        return None
+    try:
+        got = fn(body)
+    except Exception:  # noqa: BLE001
+        return None
+    return _cap(plain(got), 90) if isinstance(got, str) and got.strip() else None
+
+
+def _vols(rows):
+    vols = [r.get("volume") for r in rows if isinstance(r, dict)]
+    vols = [v for v in vols if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    if not vols or len(vols) != len([r for r in rows if isinstance(r, dict)]):
+        return None
+    if max(vols) - min(vols) <= 1e-3 * max(1.0, abs(max(vols))):
+        return f"{_short_num(vols[0])} mm³ each" if len(vols) > 1 else f"{_short_num(vols[0])} mm³"
+    return ", ".join(_short_num(v) for v in vols[:4]) + (" …" if len(vols) > 4 else "") + " mm³"
+
+
+def shape_value(b):
+    """A shape or mesh change's figures that key_value does not read (round
+    7, review3: "Split Halves", "Took Face7 off Plate", "Simplified a mesh:
+    4181 mm³" gave none or the wrong one): pieces and their volumes, faces
+    and volume before and after, a mesh's "n → m triangles", "unchanged".
+    None for any other answer. Plain Python."""
+    b = b if isinstance(b, dict) else {}
+
+    def num(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+    if num(b.get("waypoints")) and isinstance(b.get("trajectory"), str):
+        out = _count(int(b["waypoints"]), "waypoint")
+        return out + (f", {_short_num(b['length_mm'])} mm" if num(b.get("length_mm")) else "")
+    if num(b.get("moves")) and num(b.get("lines")):
+        return f"{_count(int(b['moves']), 'move')}, {_count(int(b['lines']), 'line')}"
+    if isinstance(b.get("reduced"), str) and "→" in b["reduced"]:
+        return plain(b["reduced"])
+    if b.get("changed") is False and isinstance(b.get("mesh"), str):
+        return "unchanged"
+    fb, fa = b.get("facesBefore"), b.get("facesAfter")
+    if num(fb) and num(fa):
+        out = f"{_short_num(fb)} → {_short_num(fa)} faces"
+        vb, v = b.get("volumeBefore_mm3"), b.get("volume_mm3")
+        if num(vb) and num(v):
+            out += f", {_short_num(vb)} → {_short_num(v)} mm³"
+        return out
+    p = b.get("pieces")
+    rows = b.get("solids") if isinstance(b.get("solids"), list) else p if isinstance(p, list) else []
+    n = len(p) if isinstance(p, list) else int(p) if num(p) else None
+    if n is not None:
+        out = _count(n, "piece")
+        if isinstance(b.get("group"), str):
+            out += f" in {plain(_amp(b['group']))}"
+        vols = _vols(rows)
+        return out + (f", {vols}" if vols else "")
+    return None
+
+
+def call_value(name, body):
+    """The value said with a call's words: its read value, else a shape's
+    figures (shape_value), else the answer's key value — a file a reading
+    tool names shown without "wrote". Plain Python."""
+    got = read_value(name, body) or shape_value(body)
+    if got:
+        return got
+    kv = key_value(body)
+    if kv and kv.startswith("wrote ") and not writes(name):
+        kv = kv[len("wrote "):]
+    return kv
+
+
 def outcome(name, ok, body=None, args=None):
     """What came of a call, short: "Pad made, 24000 mm³", "Saved as
     WindowTest.FCStd", "Refused: …". Never a folder."""
@@ -580,6 +857,9 @@ def outcome(name, ok, body=None, args=None):
         return _cap(refusal(b))
     if name == "workbench" and b.get("active") and (args or {}).get("activate"):
         return _cap(plain(f"{bench_text(b['active'])} in front"))
+    rv = read_value(name, b)
+    if rv:
+        return _cap(rv[:1].upper() + rv[1:])
     got = _first(RESULTS.get(name), b, args or {})
     if got:
         return _cap(plain(got))
@@ -603,7 +883,7 @@ def outcome(name, ok, body=None, args=None):
         return f"{b['count']} found"
     # The answer's key value before a name or a note: a note is a warning
     # or an explanation, cut off on the window (core 0054, 0070, 0088).
-    kv = key_value(b)
+    kv = call_value(name, b)
     if kv:
         return _cap(kv[:1].upper() + kv[1:])
     for k in ("created", "object", "sketch", "page", "body", "note"):

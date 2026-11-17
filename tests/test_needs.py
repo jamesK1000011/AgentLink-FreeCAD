@@ -36,8 +36,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # The readers' pin: sha256 of readers.json's entries (each family's readers and changers, and the methods), as
 # scripts/tool_needs.py writes them. A helper or a method that joins or leaves a list changes it: read why
 # (`python3 scripts/tool_needs.py --why name`), then put the new value here.
-PIN = "29a6ee6cbcac196c09fa6ca1eb0056934c8889ee887ed220eaaaf303e486ef71"
-COUNTS = {"readers": 887, "changers": 140, "families": 36}
+PIN = "565faea3db92cb91b3aa359008087bc2f618c8b0baf53562300fda6f18016b34"
+COUNTS = {"readers": 888, "changers": 140, "families": 36}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -366,7 +366,7 @@ class Census(unittest.TestCase):
             self.assertGreaterEqual(needs.later_refusals(e), 0, name)
 
 
-TOTAL = {"tools": 383, "steps": 370, "leadingRefusals": 777, "noArgument": 36, "blocked": 116, "needsArguments": 194, "complete": 60, "noCheck": 51}
+TOTAL = {"tools": 383, "steps": 370, "leadingRefusals": 779, "noArgument": 38, "blocked": 116, "needsArguments": 194, "complete": 60, "noCheck": 51}
 
 
 class Agreement(unittest.TestCase):
@@ -623,7 +623,7 @@ def _walk(x):
 # 150 before needs, arguments and the meter's clause were added: the lean listing grew by 154; report_read's clause on known faults added 16).
 # The token pass (docs/hardening/tokens-findings.md) added 216 to the lean listing: batch's read/at, lines "full" and the
 # file batch's record reply (+168), tool_groups' said (+22), guide_read's index wording (+26).
-COSTS = {"dataTools": 383, "dataToolsTokens": 78901, "codedTools": 21, "codedToolsTokens": 8699, "leanTools": 20, "leanListingTokens": 7382,
+COSTS = {"dataTools": 383, "dataToolsTokens": 78970, "codedTools": 21, "codedToolsTokens": 8699, "leanTools": 20, "leanListingTokens": 7382,
          "oneCardMedian": 177, "oneCardLargest": 824, "toolGroupsCard": 734, "usageReportCard": 178}
 
 

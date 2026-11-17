@@ -76,6 +76,7 @@ def queue_done(tool):
         return
     q = keep.queue_state()
     q["running"] = [r for r in q.get("running") or [] if r.get("tool") != tool]
+    keep.settled_notice(q)
     keep.save_queue(q)
 # A call stuck behind a dialog this long is answered "blocked".
 DIALOG_WAIT = 4.0

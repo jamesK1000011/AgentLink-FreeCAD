@@ -806,13 +806,17 @@ class Link:
                 self._popup = (pkey, time.time())
             if pop:
                 pop["since"] = self._popup[1]
-            # A heavy job held for the person's go (N): said in the status bar.
+            # A heavy job held for the person's go (N): said in the status bar
+            # while a heavy job runs (keep.status_line); with none running the
+            # line is not said again and goes after its 3 s (round 7: it
+            # stayed for the rest of the run).
             q = keep._load(keep.path("queue.json"), {}) or {}
-            if q.get("held") and q.get("notice"):
+            line = keep.status_line(q)
+            if line:
                 try:
                     import FreeCADGui
 
-                    FreeCADGui.getMainWindow().statusBar().showMessage("Agent Link: " + q["notice"] + " (say go in chat).", 3000)
+                    FreeCADGui.getMainWindow().statusBar().showMessage(line, 3000)
                 except Exception:
                     pass
             docs = [{"name": x.Name, "label": x.Label, "file": x.FileName or "", **({"modified": True} if _modified(x) else {})} for x in FreeCAD.listDocuments().values()]

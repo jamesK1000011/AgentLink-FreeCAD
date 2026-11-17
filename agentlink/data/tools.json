@@ -16005,7 +16005,7 @@
   },
   "fea_results": {
    "group": "strength",
-   "description": "The last solve's answer again (kept with the session, not the file), with stale: true and staleWhy when the body or the study changed since. Changes nothing.",
+   "description": "The last solve's answer again (kept with the session, not the file), with solvedFor { document, body } and stale: true and staleWhy when the body or the study changed since. Only the solve of this document's study: one kept from another study or document is refused, named (fea_solve first). Changes nothing.",
    "inputSchema": {
     "type": "object",
     "properties": {},
@@ -16017,13 +16017,14 @@
    "date": "2026-11-16",
    "runner": "steps",
    "steps": [
-    {"let": {"r": "=results()"}},
+    {"let": {"r": "=results()", "other": "=results_elsewhere()"}},
+    {"refuse": {"fmt": "No results for this study: the solve kept is of {other} (an older study, not this one) — fea_solve first."}, "code": "not_found", "when": "=not r and other"},
     {"refuse": "No results in this session: fea_solve first.", "code": "not_found", "when": "=not r"},
     {"let": {"stale": "=[]"}},
     {"try": [{"let": {"b": "=body(r['body'])"}}, {"push": {"stale": "the body changed since the solve"}, "when": "=stats(b.Shape) != r['stats']"}], "on": "refusal", "except": [{"push": {"stale": "the body is gone"}}]},
     {"push": {"stale": "the study (holds, loads, material, mesh) changed"}, "when": "=study() != r['study']"}
    ],
-   "answer": {"fields": {"...result": "=dict(r['result'])", "stale": "=bool(stale)", "staleWhy": {"when": "=stale", "value": "=stale"}, "next": {"when": "=stale", "value": "fea_solve again."}}}
+   "answer": {"fields": {"...result": "=dict(r['result'])", "solvedFor": "={'document': r.get('doc'), 'body': r['body']}", "stale": "=bool(stale)", "staleWhy": {"when": "=stale", "value": "=stale"}, "next": {"when": "=stale", "value": "fea_solve again."}}}
   },
   "fea_clear": {
    "group": "strength",
@@ -16214,7 +16215,7 @@
   },
   "fea_export": {
    "group": "strength",
-   "description": "Write the last solve to the out folder: formats [vtu (ParaView, FreeCAD FEM post-processing), csv (every node: position mm, von Mises MPa, displacement mm)] (both by default), name. Changes nothing in the document.",
+   "description": "Write the last solve to the out folder: formats [vtu (ParaView, FreeCAD FEM post-processing), csv (every node: position mm, von Mises MPa, displacement mm)] (both by default), name. Only the solve of this document's study (solvedFor names it; another study's is refused). Changes nothing in the document.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -16236,7 +16237,8 @@
    "date": "2026-11-16",
    "runner": "steps",
    "steps": [
-    {"let": {"r": "=results()"}},
+    {"let": {"r": "=results()", "other": "=results_elsewhere()"}},
+    {"refuse": {"fmt": "No solve to write for this study: the solve kept is of {other} (an older study, not this one) — fea_solve first."}, "code": "not_found", "when": "=not r and other"},
     {"refuse": "No solve to write: fea_solve first.", "code": "not_found", "when": "=not r or 'field' not in r"},
     {"let": {"f": "=r['field']"}},
     {"let": {"base": "=out_path((a.name or str(r['body']) + '-stress').replace(' ', '-'))", "kinds": "=a.formats or ['vtu', 'csv']", "files": "={}"}},
@@ -16244,7 +16246,7 @@
     {"when": "='vtu' in kinds", "then": [{"refuse": "This solve kept no elements: fea_solve again, then export.", "code": "invalid_state", "when": "=not f.get('elements')"}, {"do": "=write_vtu(base + '.vtu', f)"}, {"put": {"vtu": "=base + '.vtu'"}, "into": "files"}]},
     {"when": "='csv' in kinds", "then": [{"do": "=write_csv(base + '.csv', f)"}, {"put": {"csv": "=base + '.csv'"}, "into": "files"}]}
    ],
-   "answer": {"fields": {"body": "=r['body']", "files": "=files", "nodes": "=len(f['points'])", "elements": "=len(f.get('elements') or [])", "note": "The VTU opens in ParaView (and FreeCAD's FEM post-processing); the CSV has every node."}}
+   "answer": {"fields": {"body": "=r['body']", "solvedFor": "={'document': r.get('doc'), 'body': r['body']}", "files": "=files", "nodes": "=len(f['points'])", "elements": "=len(f.get('elements') or [])", "note": "The VTU opens in ParaView (and FreeCAD's FEM post-processing); the CSV has every node."}}
   },
   "fea_native": {
    "group": "strength",

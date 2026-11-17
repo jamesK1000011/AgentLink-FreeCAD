@@ -467,7 +467,9 @@ def _snap_empty(s, view, w=None, h=None, fitted=False):
 # ---- the maps Agent Link has ---------------------------------------------------------
 
 def _stress(s, a):
-    r = getattr(s, "_agentlink_fea", None)
+    from . import strength
+
+    r = strength._results(s)  # this study's solve only (round 7: an older study's was drawn)
     if not r or "field" not in r:
         raise ToolError("not_found", "No stress to show: fea_solve first (a solve in this session).")
     o = s.body(r["body"])

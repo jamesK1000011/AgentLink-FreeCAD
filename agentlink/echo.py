@@ -11,6 +11,7 @@
 
 import datetime
 import math
+import re
 import time
 
 try:
@@ -398,6 +399,9 @@ def _longest(name, pairs):
 # themselves.
 SKIP = {"batch", "session_state", "tool_groups", "guide_read"}
 NO_ECHO = set()
+# Of the looks, those that say their own words all the same (round 7): the
+# hub's SKIP reads (batch says none: its calls say theirs) and every WATCH.
+LOOK_WORDS = SKIP - {"batch"}
 
 # Tools that look at the window or the session and leave it as it is: a
 # picture of the window, the Report view, the session's state. They show
@@ -482,7 +486,16 @@ OUT_MORE = {"pd_datum": ("datum",), "pd_datum_plane": ("plane",), "pd_binder": (
 # cloud (points 0011); a duplicate's copy (core 0025); the part grounded,
 # not the joint that holds it (asm 032).
 OUT_ONLY = {"points_fit": ("body",), "object_duplicate": ("duplicated",), "asm_ground": ("part",),
-            "points_mesh": ("mesh",), "points_structure": ("points",), "points_merge": ("points",)}
+            "points_mesh": ("mesh",), "points_structure": ("points",), "points_merge": ("points",),
+            # Round 7 (16-025): explode: true makes each piece a body and hides
+            # the split; selecting and framing the hidden split showed no piece.
+            "part_split": ("bodies",), "part_compound": ("bodies",)}
+# Calls that leave a part in pieces (round 7, 16-025: two halves read as
+# one grey part): each piece in a colour of its own (view state, put back at
+# the next change) and nothing selected, as COLOUR_TOOLS.
+PIECE_TOOLS = ("part_split", "part_compound", "compound_explode", "meshobj_split")
+PIECE_COLOURS = ((0.84, 0.37, 0.0), (0.0, 0.45, 0.70), (0.0, 0.62, 0.45), (0.80, 0.47, 0.65),
+                 (0.94, 0.89, 0.26), (0.34, 0.71, 0.91))
 # In an answer's list of rows ({ from, copy }), the keys that name what was
 # made.
 ROW_KEYS = ("copy", "made", "view", "cut", "object", "name")
@@ -814,9 +827,21 @@ def declared_words(name, args, body):
             w = fn(name, args if isinstance(args, dict) else {}, body if isinstance(body, dict) else {})
         except Exception:  # noqa: BLE001
             continue
-        if isinstance(w, str) and w.strip():
+        if isinstance(w, str) and w.strip() and not raw_words(w):
             return w.strip()
     return None
+
+
+# A dict's or a list of dicts' Python text in words ("Material set: Bracket
+# {'note': …}", round 7, 04-012): never shown; the echo's own words go in
+# their place.
+_RAW = re.compile(r"[{\[]\s*['\"][^'\"]{1,40}['\"]\s*:")
+
+
+def raw_words(w):
+    """Whether words carry a raw dict (Python's or JSON's text). Plain
+    Python."""
+    return bool(_RAW.search(str(w or "")))
 
 
 def declared_selection(name, args, body, doc):
@@ -1321,6 +1346,15 @@ def _camera(v):
 
 SKETCH_EMPTY_MM = 100.0  # a new, empty sketch: this much of its plane around its origin
 ROBOT_MM = 1500.0        # a robot framed: at least this much around its base and tool point
+TRACK_MM = 400.0         # a trajectory framed on its own: at least this much around its waypoints
+
+
+def _box_size(box):
+    """The largest side of a (x0, y0, z0, x1, y1, z1) box, 0 for none.
+    Plain Python."""
+    if not box:
+        return 0.0
+    return max(box[3] - box[0], box[4] - box[1], box[5] - box[2])
 
 
 def box_of(points):
@@ -1601,19 +1635,56 @@ def hide_for_scene(objs):
     return done
 
 
-def robot_words(r, doc, ends):
+# Robot objects that hold waypoints (a trajectory, a compound of them, a
+# dress-up, one from edges): framed and marked by their waypoints.
+TRAJECTORY_TYPES = ("Robot::TrajectoryObject", "Robot::TrajectoryCompositionObject", "Robot::TrajectoryDressUpObject",
+                    "Robot::Edge2TracObject")
+ROBOT_LABEL_NEAR = 0.07  # labels closer than this share of the framed box's size are said as one
+
+
+def merged_labels(labels, near):
+    """labels [(point, text)] that would overlap on screen said as one
+    (round 7, 08-096: "Too far start" and "Too far end" over each other): a
+    label within near (mm) of an earlier one joins it ("a · b"), and a
+    trajectory's "X start" and "X end" together read "X". Plain Python."""
+    groups = []  # [point, [texts]]
+    for p, text in labels or ():
+        try:
+            pt = tuple(float(c) for c in p)
+        except Exception:  # noqa: BLE001
+            continue
+        for g in groups:
+            if math.dist(g[0], pt) <= near:
+                g[1].append(str(text))
+                break
+        else:
+            groups.append([pt, [str(text)]])
+    out = []
+    for pt, texts in groups:
+        for t in [t[: -len(" start")] for t in texts if t.endswith(" start")]:
+            if t + " end" in texts:
+                texts = [x for x in texts if x not in (t + " start", t + " end")] + [t]
+        out.append((pt, " · ".join(dict.fromkeys(texts))))
+    return out
+
+
+def robot_words(r, doc, ends, only=None):
     """The words beside a robot's scene marks: "base", "tool point" (with
     the tool shape's name when one is set) at ends [base, tcp], and each
     trajectory's name at its first waypoint and "end" at its last
-    [(point, word)]. Never raises."""
+    [(point, word)]; only: the trajectories (labels) to name, else all.
+    r None: the trajectories alone. Never raises."""
     out = []
     try:
-        tool = getattr(r, "ToolShape", None)
-        names = ["base " + str(getattr(r, "Label", "robot")),
-                 "tool point" + (" (" + str(tool.Label) + ")" if tool is not None and hasattr(tool, "Label") else "")]
-        out += [(p, w) for p, w in zip(ends, names)]
+        if r is not None:
+            tool = getattr(r, "ToolShape", None)
+            names = ["base " + str(getattr(r, "Label", "robot")),
+                     "tool point" + (" (" + str(tool.Label) + ")" if tool is not None and hasattr(tool, "Label") else "")]
+            out += [(p, w) for p, w in zip(ends, names)]
         for t in getattr(doc, "Objects", ()) or ():
-            if getattr(t, "TypeId", "") != "Robot::TrajectoryObject":
+            if getattr(t, "TypeId", "") not in TRAJECTORY_TYPES:
+                continue
+            if only is not None and getattr(t, "Label", None) not in only:
                 continue
             line = robot_paths_of(t)
             if line:
@@ -1638,13 +1709,15 @@ def robot_paths_of(t):
         return []
 
 
-def robot_paths(doc):
-    """Each robot trajectory's waypoints [(x, y, z)], placed by its Base.
-    Never raises."""
+def robot_paths(doc, only=None):
+    """Each robot trajectory's waypoints [(x, y, z)], placed by its Base;
+    only: the trajectories (labels) to take, else all. Never raises."""
     out = []
     try:
         for t in getattr(doc, "Objects", ()) or ():
-            if getattr(t, "TypeId", "") != "Robot::TrajectoryObject":
+            if getattr(t, "TypeId", "") not in TRAJECTORY_TYPES:
+                continue
+            if only is not None and getattr(t, "Label", None) not in only:
                 continue
             try:
                 base = getattr(t, "Base", None)
@@ -2493,6 +2566,43 @@ NO_SELECT = ("Robot::RobotObject", "Robot::TrajectoryObject", "Robot::Trajectory
              "Robot::TrajectoryDressUpObject", "Robot::Edge2TracObject")
 
 
+def pieces_coloured(made):
+    """Each of two or more pieces a call left (PIECE_TOOLS) in its own
+    colour, as view state put back at the next change (set_view_prop). The
+    pieces' labels and colours, or None. Never raises."""
+    try:
+        pieces = [o for o in made or () if _seen(o) and _box(o) is not None]
+        if len(pieces) < 2:
+            return None
+        out = {}
+        for i, o in enumerate(pieces):
+            c = PIECE_COLOURS[i % len(PIECE_COLOURS)]
+            if set_view_prop(o, "ShapeColor", c):
+                out[o.Label] = "#%02x%02x%02x" % tuple(int(round(x * 255)) for x in c)
+        return out or None
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (pieces coloured): {e}\n")
+        return None
+
+
+def sub_exists(o, sub):
+    """Whether o has the element or sub-object sub ("Face6", "Pad.Edge3"):
+    a selection of one that is gone is never sent (round 7: an
+    "Unhandled unknown exception caught in selection observer" in the
+    Report view). True when it cannot be told. Never raises."""
+    if not sub or not str(sub).rsplit(".", 1)[-1].startswith(SUB_HEADS):
+        return True  # a constraint, a sub-object path: Sketcher and the tree check those
+    if "Sketcher" in str(getattr(o, "TypeId", "")):
+        return True  # a sketch's new lines are in its shape only after a recompute
+    try:
+        fn = getattr(o, "getSubObject", None)
+        if not callable(fn):
+            return True
+        return fn(sub) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _watcher_type(o):
     try:
         return str(getattr(o, "TypeId", "")) in NO_SELECT
@@ -2507,6 +2617,10 @@ def _add_sel(o, sub=""):
     import FreeCADGui
 
     if _watcher_type(o):
+        return False
+    if sub and not sub_exists(o, sub):
+        _missing_subs.append(f"{getattr(o, 'Label', '?')}.{sub}")
+        del _missing_subs[:-8]
         return False
 
     path = sel_path(o)
@@ -2531,6 +2645,11 @@ def _add_sel(o, sub=""):
         except Exception:  # noqa: BLE001
             pass
     return False
+
+
+# Sub-elements the echo was asked to select that were not there (a FACT:
+# the trace's "subsMissing").
+_missing_subs = []
 
 
 # A read's own selection: whether one is standing (the next read that names
@@ -3689,6 +3808,94 @@ def hold_marked(doc, body):
         return None
 
 
+def facing_direction(normal, current, tilt=0.6):
+    """A view direction that shows a face whose outward normal is normal:
+    current when the face already faces the camera (the camera looks along
+    the direction, so a seen face's normal points back against it), else
+    the direction straight onto the face, tilted by tilt toward the current
+    one so the part around it still reads. Unit (x, y, z). Plain Python."""
+    def unit(v):
+        L = math.sqrt(sum(c * c for c in v))
+        return tuple(c / L for c in v) if L > 1e-9 else None
+
+    n = unit(normal)
+    c = unit(current) or (-0.577, 0.577, -0.577)
+    if n is None:
+        return c
+    if sum(a * b for a, b in zip(n, c)) < -0.3:
+        return c
+    side = tuple(ci - sum(a * b for a, b in zip(c, n)) * ni for ci, ni in zip(c, n))
+    if unit(side) is None:
+        side = (0.0, 0.0, -1.0) if abs(n[2]) < 0.9 else (1.0, 0.0, 0.0)
+        side = tuple(ci - sum(a * b for a, b in zip(side, n)) * ni for ci, ni in zip(side, n))
+    side = unit(side)
+    return unit(tuple(-ni + tilt * si for ni, si in zip(n, side)))
+
+
+HOLD_FRAME_LEAST = 20.0   # mm around a held face at the least
+HOLD_FRAME_TIMES = 3.0    # the held faces' size, this many times, framed
+
+
+def hold_framed(doc, body):
+    """The view framed on fea_hold's faces, turned to face them when they
+    look away (round 7, 00-234: the whole document was framed, 7.5 m across,
+    and the held end of a 100 mm beam was not seen): their box, at least
+    HOLD_FRAME_TIMES their size; only with Follow on. {faces, box,
+    direction, turned} or None. Never raises."""
+    try:
+        import FreeCADGui
+
+        b = body if isinstance(body, dict) else {}
+        held = [h for h in b.get("held") or () if isinstance(h, dict) and h.get("face")]
+        if not held or not FreeCAD.ParamGet(PREFS).GetBool("Follow", True):
+            return None
+        from . import annotate, store
+
+        st = store.read(doc, "fea", None) or {}
+        o = None if st.get("of") else next(iter(_objects(doc, [st.get("body")])), None)
+        boxes, normals = [], []
+        if o is not None:
+            shape = annotate.global_shape(o)
+            for h in held:
+                try:
+                    face = shape.getElement(h["face"])
+                    bb = face.BoundBox
+                    boxes.append((bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax))
+                    u0, u1, v0, v1 = face.ParameterRange
+                    nv = face.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+                    normals.append((nv.x, nv.y, nv.z))
+                except Exception:  # noqa: BLE001
+                    continue
+        if not boxes:
+            pts = [tuple(float(c) for c in h["centre"]) for h in held if isinstance(h.get("centre"), (list, tuple)) and len(h["centre"]) == 3]
+            if not pts:
+                return None
+            boxes = [box_of(pts)]
+        box = _union(boxes)
+        size = max(_box_size(box), 1.0)
+        box = grown(box, margin=0.0, least=max(HOLD_FRAME_LEAST, HOLD_FRAME_TIMES * size))
+        gd = FreeCADGui.ActiveDocument
+        v = getattr(gd, "ActiveView", None) if gd is not None else None
+        if v is None:
+            return None
+        turned = False
+        d = None
+        if normals:
+            n = tuple(sum(c) / len(normals) for c in zip(*normals))
+            cur = v.getViewDirection()
+            d = facing_direction(n, (cur.x, cur.y, cur.z))
+            if d is not None and max(abs(a - b2) for a, b2 in zip(d, (cur.x, cur.y, cur.z))) > 1e-6:
+                with _Still(v):
+                    v.setViewDirection(d)
+                turned = True
+        framed_ = frame_box(v, box)
+        return {"faces": [h["face"] for h in held], "box": [round(x, 2) for x in box], "framed": bool(framed_),
+                "direction": [round(c, 3) for c in d] if d else None, "turned": turned}
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (hold framed): {e}\n")
+        return None
+
+
 def solve_peak(r):
     """The largest von Mises of the last solve (the node values its answer's
     peak is read from), or None. Never raises."""
@@ -3869,16 +4076,17 @@ def profiles_hidden(made):
 
 # ---- the words of a change: what it made and its key value (round 4) ------------------------
 
-def change_words(what, body):
+def change_words(what, body, name=None):
     """A change's words with the answer's key value (a volume, a length, a
     count, a file) when the words do not give it yet ("Padded Profile by 53
-    mm" stays; "Made a mesh" becomes "Made a mesh: 152 facets"). Plain
-    Python."""
+    mm" stays; "Made a mesh" becomes "Made a mesh: 152 facets"); name: the
+    tool, for its own value (activity.call_value: a part_ or mesh answer's
+    pieces or facets, never "wrote" for a file a tool read). Plain Python."""
     from . import activity
 
     what = str(what or "")
     try:
-        v = activity.key_value(body)
+        v = activity.call_value(name, body) if name else activity.key_value(body)
     except Exception:  # noqa: BLE001
         v = None
     if not v or v.lower() in what.lower():
@@ -4211,7 +4419,17 @@ class Echo:
                 what, result = own, ""
             _note({"time": datetime.datetime.now().strftime("%H:%M:%S"), "tool": name, "ok": ok, "what": _tag(self.s) + what,
                    "result": result, "call": call, "ms": int((time.time() - (self.t0 or time.time())) * 1000)})
-        if name == "batch" or tool is None or skipped(name) or watching(name):
+        if name == "batch" or tool is None:
+            return
+        if skipped(name) or watching(name):
+            # A look (a picture, the session, a guide): its own words with a
+            # value from its answer (round 7: the frame kept the last call's
+            # caption, so a read could not be told from the call before it).
+            # Words only — the ring, the selection, the view and the last
+            # change's trace stay as they are — for the hub's SKIP reads and
+            # every WATCH (an add-on's NO_ECHO draws in the window itself).
+            if (name in LOOK_WORDS or watching(name)) and _on() and self.live():
+                self._look_words(name, ok, what or did_name(name), result)
             return
         if not _on() or not self.live():
             return
@@ -4223,6 +4441,18 @@ class Echo:
         except Exception as e:  # noqa: BLE001  (never into the call)
             tr["afterError"] = f"{type(e).__name__}: {e}"
             _plog(f"Agent Link echo (after {name}): {e}\n")
+
+    def _look_words(self, name, ok, what, result):
+        """A look's words in the caption and the status bar (say()), noted as
+        session.echo_look {tool, words} — never in the trace, which keeps the
+        last change's for session_state and a batch's profile. Cheap: one
+        label's text. Never raises."""
+        try:
+            words = read_words(what, result) if ok else refused_words(what, result)
+            say(words, HOLD_MS, self._where())
+            self.s.echo_look = {"tool": name, "words": words}
+        except Exception as e:  # noqa: BLE001
+            _plog(f"Agent Link echo (look words, {name}): {e}\n")
 
     def _step(self, tr, key, fn, *a):
         """One part of the echo after a call, on its own: a failure in it is
@@ -4353,6 +4583,7 @@ class Echo:
             self._step(tr, "femResult", fem_result_shown, doc, body, self.s)
         if name == "fea_hold":
             self._step(tr, "holdMarked", hold_marked, doc, body)
+            self._step(tr, "holdFramed", hold_framed, doc, body)
         if name.startswith(("pd_", "feature_")):
             self._step(tr, "profilesHidden", profiles_hidden, named)
         if name == "meshobj_boundary":
@@ -4362,6 +4593,9 @@ class Echo:
                                            or body.get("kept")):
             # The segments' colours show only with the mesh not selected
             # (the selection's green covered them: mesh 009).
+            _selected[0] += 1
+            FreeCADGui.Selection.clearSelection()
+        if name in PIECE_TOOLS and self._step(tr, "piecesColoured", pieces_coloured, made):
             _selected[0] += 1
             FreeCADGui.Selection.clearSelection()
         if name in COLOUR_TOOLS:
@@ -4375,7 +4609,7 @@ class Echo:
         # What was done, said again now that it is done (and naming what it
         # made, with the answer's key value): held until the next changing
         # call (HOLD_MS).
-        self._step(tr, "words", say, what if getattr(self, "_own_words", False) else change_words(what, body), HOLD_MS, where)
+        self._step(tr, "words", say, what if getattr(self, "_own_words", False) else change_words(what, body, name), HOLD_MS, where)
         if self.mode != "short":
             # At a batch's short pace the next call's pause paints it (and a
             # picture of the window paints before it grabs): no paint here.
@@ -4624,6 +4858,11 @@ class Echo:
             robots = [o for o in _objects(doc, [(body or {}).get("robot"), (args or {}).get("robot")])
                       if getattr(o, "TypeId", "") == "Robot::RobotObject"]
         if not robots:
+            tracks = [o for o in list(made) + _objects(doc, [(body or {}).get("trajectory")])
+                      if getattr(o, "TypeId", "") in TRAJECTORY_TYPES]
+            tracks = list({id(o): o for o in tracks}.values())
+            if tracks:
+                return self._track_frame(doc, tracks)
             return self._frame(self.tr, "robot_", made, None, [])
         r = robots[0]
         pts = []
@@ -4647,9 +4886,10 @@ class Echo:
             # said nothing, window round 6).
             marks = [q for q in pts[:2]]
             lines = ([pts[:2]] if len(pts) >= 2 else []) + paths
-            words = robot_words(r, doc, pts[:2])
+            near = ROBOT_LABEL_NEAR * _box_size(grown(box_of(pts), least=ROBOT_MM))
+            words = merged_labels(robot_words(r, doc, pts[:2]), near)
             self.tr["robotModel"] = "none: no RobotVrmlFile, base and tool point marked"
-            self.tr["robotMarks"] = scene_marks(marks + [w[0] for w in words[2:]], lines, labels=words)
+            self.tr["robotMarks"] = scene_marks(list(dict.fromkeys(marks + [w[0] for w in words])), lines, labels=words)
             self.tr["robotLabels"] = [w[1] for w in words]
         _select([r])  # not selected: NO_SELECT (its task watcher widened the Tasks panel)
         box = grown(box_of(pts), least=ROBOT_MM)
@@ -4657,6 +4897,34 @@ class Echo:
         v = getattr(gd, "ActiveView", None) if gd is not None else None
         if box is not None and FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and frame_box(v, box):
             return "robot"
+        return None
+
+    def _track_frame(self, doc, tracks):
+        """A trajectory made with no robot named (robot_trajectory: round 7,
+        08-091, 08-093 framed a 9 km view with two dots and no words): the
+        view framed on its waypoints (at least TRACK_MM across), each
+        waypoint marked, the path drawn, its name at its start and end (one
+        label when they would overlap). Not selected (NO_SELECT). "track"
+        when framed; the FACTs in the trace (trackBox: the box framed,
+        trackPoints, trackLabels). Never raises."""
+        import FreeCADGui
+
+        names = [getattr(t, "Label", None) for t in tracks]
+        paths = robot_paths(doc, only=names)
+        pts = [p for line in paths for p in line]
+        if not pts:
+            self.tr["trackPoints"] = 0
+            return None
+        box = grown(box_of(pts), least=TRACK_MM)
+        words = merged_labels(robot_words(None, doc, (), only=names), ROBOT_LABEL_NEAR * _box_size(box))
+        self.tr["trackPoints"] = len(pts)
+        self.tr["trackMarks"] = scene_marks(pts, paths, labels=words)
+        self.tr["trackLabels"] = [w[1] for w in words]
+        self.tr["trackBox"] = [round(x, 1) for x in box]
+        gd = FreeCADGui.ActiveDocument
+        v = getattr(gd, "ActiveView", None) if gd is not None else None
+        if FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and frame_box(v, box):
+            return "track"
         return None
 
     def _turn(self, made):
@@ -4759,17 +5027,22 @@ def wrap(server, session):
             tool = tool.for_call(args)  # a changing tool's read shows as a read
         from . import around
 
+        del _missing_subs[:]
+        r0 = report_count()
         try:
             with around.part("echoBefore"):
                 echo.before(tool, args)
         except Exception as e:  # noqa: BLE001  (the echo never stops a call)
             _plog(f"Agent Link echo (before): {e}\n")
+        r1 = report_count()
         reply = plain(params)
+        r2 = report_count()
         try:
             with around.part("echoAfter"):  # its view fit is in "fit" as well
                 echo.after(tool, args, reply)
         except Exception as e:  # noqa: BLE001
             _plog(f"Agent Link echo (after): {e}\n")
+        report_facts(getattr(echo, "tr", None), name, (r0, r1), (r2, report_count()))
         return reply
 
     server.call = call
@@ -4783,6 +5056,72 @@ def wrap(server, session):
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (jobs): {e}\n")
     return echo
+
+
+# ---- what the echo itself wrote to the Report view (round 7, item 4) ------------------------
+
+_report_w = [None]
+
+
+def _report_doc():
+    """The Report view's text document (cached while its widget lives), or
+    None. Never raises."""
+    try:
+        from .overlay import alive
+
+        w = _report_w[0]
+        if w is None or not alive(w):
+            from . import report_watch
+
+            w = _report_w[0] = report_watch._report_widget()
+        return w.document() if w is not None else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def report_count():
+    """The Report view's line count (cheap: Qt keeps it), or None."""
+    try:
+        d = _report_doc()
+        return d.blockCount() if d is not None else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def report_lines(start, end, most=3):
+    """The Report view's lines from start to end (at most most, the last
+    ones). Never raises."""
+    try:
+        d = _report_doc()
+        out = []
+        for i in range(max(start, end - most), end):
+            b = d.findBlockByNumber(i)
+            if b.isValid() and b.text().strip():
+                out.append(b.text().strip()[:200])
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def report_facts(tr, name, before, after):
+    """Into the call's trace: Report view lines written while the echo ran
+    before or after the call (reportDuringEcho: a selection observer's
+    error is written at once, so a line here is the echo's own doing), and
+    sub-elements it was asked to select that were gone (subsMissing). Never
+    raises."""
+    try:
+        if not isinstance(tr, dict) or tr.get("tool") != name:
+            return
+        got = {}
+        for key, (a, b) in (("before", before), ("after", after)):
+            if isinstance(a, int) and isinstance(b, int) and b > a:
+                got[key] = report_lines(a, b)
+        if got:
+            tr["reportDuringEcho"] = got
+        if _missing_subs:
+            tr["subsMissing"] = list(_missing_subs)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # The window's echo a job's end is shown through (wrap()).

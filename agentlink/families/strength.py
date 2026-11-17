@@ -49,8 +49,41 @@ def _save(doc, st):
 
 
 def _results(session):
-    """The last solve kept with the session, or None."""
-    return getattr(session, "_agentlink_fea", None)
+    """The last solve kept with the session, when it is the solve of the
+    study in hand (results_of), or None."""
+    doc = getattr(session, "doc", None)
+    return results_of(getattr(session, "_agentlink_fea", None), _study(doc) if doc is not None else None, getattr(doc, "Name", None))
+
+
+def _same_study(a, b):
+    """Whether two studies are of the same body (and the same solid of it):
+    their holds, loads, material or mesh may differ (that is stale, said)."""
+    a, b = a or {}, b or {}
+    return a.get("body") == b.get("body") and (a.get("of") or None) == (b.get("of") or None)
+
+
+def results_of(kept, study, doc_name):
+    """kept (the session's last solve) when it is a solve of study in the
+    document doc_name, else None (round 7, 00-228: fea_results answered an
+    older study's "max 460 MPa" in a new document before any solve there).
+    Plain Python."""
+    if not isinstance(kept, dict) or not study:
+        return None
+    if kept.get("doc") != doc_name:
+        return None
+    return kept if _same_study(kept.get("study"), study) else None
+
+
+def results_elsewhere(session):
+    """Words for a solve kept with the session that is not this study's
+    ("Beam in UnprovenHub"), or None. Never raises."""
+    try:
+        r = getattr(session, "_agentlink_fea", None)
+        if not isinstance(r, dict) or _results(session):
+            return None
+        return f"{r.get('body')}" + (f" in {r['doc']}" if r.get("doc") else "")
+    except Exception:  # noqa: BLE001
+        return None
 
 
 ELMER_EQUATIONS = {"elasticity": "makeEquationElasticity", "deformation": "makeEquationDeformation", "heat": "makeEquationHeat",
@@ -1640,7 +1673,7 @@ def tools(session):
                  "stress": [list(stress.get(n, (0.0,) * 6)) for n in ids]}
         at = {n: i for i, n in enumerate(ids)}
         field["elements"] = [[at[n] for n in e] for e in elems.values() if all(n in at for n in e)]
-        s._agentlink_fea = {"body": o.Label, "stats": geo.stats(shape), "study": st, "result": out, "field": field}
+        s._agentlink_fea = {"body": o.Label, "doc": s.doc.Name, "stats": geo.stats(shape), "study": st, "result": out, "field": field}
         from .. import hooks
 
         hooks.remember(s, "fea", s._agentlink_fea)
@@ -1663,7 +1696,7 @@ def tools(session):
                "probe": Probe, "solved_body": solved_body, "field_values": field_values, "histogram": histogram, "distance": distance, "chart_svg": chart_svg,
                "safe_name": lambda text: "".join(ch if ch.isalnum() else "_" for ch in text), "ensure_out": lambda: os.makedirs(s.out_dir, exist_ok=True),
                "csv_text": lambda rows: "\n".join(",".join(str(c) for c in row) for row in rows) + "\n", "write_text": write_text,
-               "study": lambda: _study(s.doc), "save": lambda st: _save(s.doc, st), "study_body": study_body, "results": lambda: _results(s), "forget": forget,
+               "study": lambda: _study(s.doc), "save": lambda st: _save(s.doc, st), "study_body": study_body, "results": lambda: _results(s), "results_elsewhere": lambda: results_elsewhere(s), "forget": forget,
                "snapshot": lambda tool: s.snapshot(tool), "body": lambda ref: s.body(ref), "stats": lambda shape: geo.stats(shape),
                "solid_holder": lambda src, n: solid_holder(s, src, n), "card": lambda mid: matfam.card(s.doc, mid), "of_body": lambda label: matfam.of_body(s.doc, label),
                "setup_said": _setup_said, "unmatched": lambda st, shape: unmatched(st, shape, facepick.pick),
