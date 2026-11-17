@@ -379,7 +379,8 @@ def tools(s):
             keep.record_versions({"addon": name}, {"addon": name}, "smoke failed: rolled back")
             raise ToolError("failed", f"{name} broke the smoke test after its {action}: " + "; ".join(res.get("failures") or [])[:500] + (". The version before is back." if kept else ". It was removed again."))
         keep.record_versions({"addon": name}, {"addon": name, "url": getattr(ad, "url", url)}, f"{action}: smoke passed")
-        if action == "install":
+        if action == "install" or (url and not (sources.get(name) or {}).get("url")):
+            # (an update that named the source of one put in by hand: kept too)
             sources[name] = {"url": url or None, "branch": branch or None}
             keep._save(sources_file, sources)
         return {action + "ed" if action == "install" else "updated": name, "folder": where, "smoke": "passed", **({"previous": kept} if kept else {}),
