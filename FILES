@@ -193,6 +193,7 @@ docs/hardening/STATUS.md
 docs/hardening/addons-findings.md
 docs/hardening/addons-unproven-findings.md
 docs/hardening/addons4-findings.md
+docs/hardening/addons5-findings.md
 docs/hardening/asmtd-findings.md
 docs/hardening/bimcam-findings.md
 docs/hardening/chain-findings.md
@@ -251,6 +252,7 @@ docs/hardening/sketcher-findings.md
 docs/hardening/status-findings.md
 docs/hardening/status.json
 docs/hardening/unproven-findings.md
+docs/hardening/window-pd-findings.md
 docs/hooks.md
 docs/packaging.md
 docs/records.md
