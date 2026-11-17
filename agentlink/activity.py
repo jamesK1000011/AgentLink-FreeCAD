@@ -742,8 +742,11 @@ def _pref_value(b):
 def _ifc_value(b):
     if not isinstance(b.get("schema"), str):
         return None
-    out = b["schema"]
-    if isinstance(b.get("storeys"), list):
+    out = "IFC " + b["schema"]
+    names = [n for n in b.get("storeyNames") or [] if isinstance(n, str)]
+    if names:
+        out += ", storeys " + (" and ".join(names) if len(names) <= 2 else ", ".join(names[:-1]) + " and " + names[-1])
+    elif isinstance(b.get("storeys"), list):
         out += f", {_count(len(b['storeys']), 'storey')}"
     if isinstance(b.get("elements"), int):
         out += f", {_count(b['elements'], 'element')}"
