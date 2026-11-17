@@ -459,6 +459,10 @@ OUT_KEYS = ("feature", "sketch", "object", "body", "created", "page", "view", "j
 # More of the same for single tools, where the answer (or, for a call that
 # moves a thing, its arguments) names what was made or changed under a key
 # of its own. A value is a name or a list of names.
+# Calls that change how objects look (colour, see-through): the selection is
+# cleared after them, its highlight drew over the colours (core 0032).
+COLOUR_TOOLS = ("object_appearance",)
+
 OUT_MORE = {"pd_datum": ("datum",), "pd_datum_plane": ("plane",), "pd_binder": ("binder",), "pd_shaft": ("shaft",),
             "pd_move_feature": ("moved",), "pd_tip": ("tip",), "pd_reorder": ("feature",),
             "asm_add": ("added",), "asm_sub": ("as",), "asm_new_part": ("inAssembly", "part"), "asm_bom": ("sheet",),
@@ -1415,12 +1419,15 @@ def frame_box(v, box):
 SCENE_OWNER = "echo-scene"
 
 
-def scene_marks(points, lines=(), colour="#e8a33d"):
-    """Marks drawn in the 3D view's scene only (agentlink/annotate.py), put
-    away at the next changing call (scene_clear). The count. Never raises."""
+def scene_marks(points, lines=(), colour="#e8a33d", labels=()):
+    """Marks drawn in the 3D view's scene only (agentlink/annotate.py), with
+    a word beside each point of labels [(point, text)], put away at the
+    next changing call (scene_clear). The count. Never raises."""
     try:
         from . import annotate
 
+        if labels:
+            return annotate.service().marks(SCENE_OWNER, points, lines, colour, labels=labels)
         return annotate.service().marks(SCENE_OWNER, points, lines, colour)
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (scene marks): {e}\n")
@@ -1559,6 +1566,43 @@ def hide_for_scene(objs):
         except Exception:  # noqa: BLE001
             continue
     return done
+
+
+def robot_words(r, doc, ends):
+    """The words beside a robot's scene marks: "base", "tool point" (with
+    the tool shape's name when one is set) at ends [base, tcp], and each
+    trajectory's name at its first waypoint and "end" at its last
+    [(point, word)]. Never raises."""
+    out = []
+    try:
+        tool = getattr(r, "ToolShape", None)
+        names = ["base " + str(getattr(r, "Label", "robot")),
+                 "tool point" + (" (" + str(tool.Label) + ")" if tool is not None and hasattr(tool, "Label") else "")]
+        out += [(p, w) for p, w in zip(ends, names)]
+        for t in getattr(doc, "Objects", ()) or ():
+            if getattr(t, "TypeId", "") != "Robot::TrajectoryObject":
+                continue
+            line = robot_paths_of(t)
+            if line:
+                out.append((line[0], str(t.Label) + " start"))
+                if len(line) > 1:
+                    out.append((line[-1], str(t.Label) + " end"))
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def robot_paths_of(t):
+    """One trajectory's waypoints [(x, y, z)], placed by its Base. Never raises."""
+    try:
+        base = getattr(t, "Base", None)
+        line = []
+        for w in t.Trajectory.Waypoints:
+            p = base.multiply(w.Pos).Base if base is not None else w.Pos.Base
+            line.append((p.x, p.y, p.z))
+        return line
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def robot_paths(doc):
@@ -2266,10 +2310,31 @@ def sel_path(o):
     return doc, name, ""
 
 
+# Objects the echo never selects: in the Robot workbench a selected robot or
+# trajectory brings up FreeCAD's task watchers (src/Mod/Robot/Gui/
+# Workbench.cpp 73-106: TaskWatcherRobot with TaskRobot6Axis and
+# TaskRobotControl, "Robot Tools", "Trajectory Tools"), which widen the
+# Tasks panel and narrow the 3D view to 920 px (core 0082-0096). The scene
+# marks and their labels show the robot instead.
+NO_SELECT = ("Robot::RobotObject", "Robot::TrajectoryObject", "Robot::TrajectoryCompositionObject",
+             "Robot::TrajectoryDressUpObject", "Robot::Edge2TracObject")
+
+
+def _watcher_type(o):
+    try:
+        return str(getattr(o, "TypeId", "")) in NO_SELECT
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _add_sel(o, sub=""):
     """One object (or one of its parts: sub) added to the selection by its
-    path, else by its own name. True when taken."""
+    path, else by its own name. True when taken. Never a robot or a
+    trajectory (NO_SELECT)."""
     import FreeCADGui
+
+    if _watcher_type(o):
+        return False
 
     path = sel_path(o)
     tries = []
@@ -2352,6 +2417,11 @@ def _select(objs):
     import FreeCADGui
 
     objs = [o for o in objs or () if not _hidden(o)]  # never a hidden object (round 6)
+    if any(_watcher_type(o) for o in objs):
+        # a robot's task watcher left up by an earlier selection goes too
+        objs = [o for o in objs if not _watcher_type(o)]
+        _selected[0] += 1
+        FreeCADGui.Selection.clearSelection()
     if not objs:
         return
     _selected[0] += 1
@@ -4096,6 +4166,12 @@ class Echo:
             # (the selection's green covered them: mesh 009).
             _selected[0] += 1
             FreeCADGui.Selection.clearSelection()
+        if name in COLOUR_TOOLS:
+            # The selection's green drew over the new colours (core 0032: Block
+            # selected, blue and the red face hidden): nothing left selected.
+            _selected[0] += 1
+            FreeCADGui.Selection.clearSelection()
+            tr["selectionCleared"] = "the new colours show only with nothing selected"
         self._step(tr, "modelTab", _model_tab_back)
         self._step(tr, "viewsFollow", views_follow)
         # What was done, said again now that it is done (and naming what it
@@ -4369,12 +4445,15 @@ class Echo:
             # No model file: FreeCAD draws nothing of the arm (core 0081,
             # 0082, 0092: an empty 7 m view). Its base, tool point and the
             # trajectories marked in the scene only, base to tool point as a
-            # line (round 6, item 3).
+            # line (round 6, item 3), each with its word (a line and dots
+            # said nothing, window round 6).
             marks = [q for q in pts[:2]]
             lines = ([pts[:2]] if len(pts) >= 2 else []) + paths
+            words = robot_words(r, doc, pts[:2])
             self.tr["robotModel"] = "none: no RobotVrmlFile, base and tool point marked"
-            self.tr["robotMarks"] = scene_marks(marks, lines)
-        _select([r])
+            self.tr["robotMarks"] = scene_marks(marks + [w[0] for w in words[2:]], lines, labels=words)
+            self.tr["robotLabels"] = [w[1] for w in words]
+        _select([r])  # not selected: NO_SELECT (its task watcher widened the Tasks panel)
         box = grown(box_of(pts), least=ROBOT_MM)
         gd = FreeCADGui.ActiveDocument
         v = getattr(gd, "ActiveView", None) if gd is not None else None

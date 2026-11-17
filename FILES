@@ -497,6 +497,8 @@ tests/test_model.py
 tests/test_model_more.py
 tests/test_more_families.py
 tests/test_needs.py
+tests/test_needs.py
+tests/test_needs.py
 tests/test_nexthint.py
 tests/test_no_addon_names.py
 tests/test_note_faces.py
@@ -544,4 +546,5 @@ tests/test_usage.py
 tests/test_usage_strip.py
 tests/test_view.py
 tests/test_watch_hooks.py
+tests/test_window_r6_fixes.py
 tests/test_window_route.py

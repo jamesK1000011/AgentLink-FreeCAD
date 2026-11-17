@@ -324,38 +324,6 @@
    "expect": "copy \"Pin copy\", from Pin, volume 1570.796 — a Part::Feature where the link showed the Pin: centred on x 0, y -60 (the link's placement stands in for the Pin's own [60,0,0], per App_Link.md; if it sits at x 60 instead, the two were combined: report it)"
   },
   {
-   "tool": "object_duplicate",
-   "arguments": {
-    "objects": [
-     "Block"
-    ],
-    "simple": true,
-    "name": "Block moved"
-   },
-   "expect": "duplicated [{ from Block, copy \"Block moved\", simple true }]"
-  },
-  {
-   "tool": "object_align",
-   "arguments": {
-    "object": "Block moved",
-    "pairs": [
-     [
-      [
-       0,
-       0,
-       0
-      ],
-      [
-       0.5,
-       0,
-       0
-      ]
-     ]
-    ]
-   },
-   "expect": "pairs 1, rms 0, worst 0, placement.at [0.5,0,0]; note: moved only"
-  },
-  {
    "tool": "object_align",
    "arguments": {
     "object": "Pin copy",
@@ -586,6 +554,38 @@
     "offset": 99
    },
    "expect": "REFUSED not_found: the plane misses Block"
+  },
+  {
+   "tool": "object_duplicate",
+   "arguments": {
+    "objects": [
+     "Block"
+    ],
+    "simple": true,
+    "name": "Block moved"
+   },
+   "expect": "duplicated [{ from Block, copy \"Block moved\", simple true }] — made here, just before the clearance call that needs it: a 0.5 mm copy lies over Block, and made earlier (old calls 25-26) it covered Block in every picture from object_appearance on (core 0032-0041: Block's colours, the shape_query and measure faces hidden)"
+  },
+  {
+   "tool": "object_align",
+   "arguments": {
+    "object": "Block moved",
+    "pairs": [
+     [
+      [
+       0,
+       0,
+       0
+      ],
+      [
+       0.5,
+       0,
+       0
+      ]
+     ]
+    ]
+   },
+   "expect": "pairs 1, rms 0, worst 0, placement.at [0.5,0,0]; note: moved only"
   },
   {
    "tool": "clearance",
