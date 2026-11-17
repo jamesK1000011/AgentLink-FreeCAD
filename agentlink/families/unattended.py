@@ -329,9 +329,17 @@ def tools(s):
         sources = keep._load(sources_file, {}) or {}
         if action == "update":
             # An update comes from where the add-on came from, never a new address.
-            if url:
+            # One installed by hand (copied into the Mod folder) has no
+            # recorded source: install refused it as installed already and
+            # update found no place to fetch it from, each pointing at the
+            # other. Its first update may name where it comes from; that
+            # is recorded, and later updates take no url as before.
+            if url and not (sources.get(name) or {}).get("url"):
+                pass
+            elif url:
                 raise bad("update takes no url: it comes from where the add-on was installed from. To change where it comes from, remove it and install it from the new address (each with the person's confirm).")
-            url, branch = (sources.get(name) or {}).get("url"), branch or (sources.get(name) or {}).get("branch") or ""
+            else:
+                url, branch = (sources.get(name) or {}).get("url"), branch or (sources.get(name) or {}).get("branch") or ""
         if url:
             if not (url.startswith(("https://", "git@")) or os.path.isdir(os.path.expanduser(url))):
                 raise bad("url: an https or git address of the add-on's repository, or a folder on this computer.")
@@ -341,7 +349,7 @@ def tools(s):
 
             cat = AddonCatalog(_catalog(fci))
             if name not in cat.get_available_addon_ids():
-                raise ToolError("not_found", f"{name} is not in FreeCAD's add-on catalog (names are exact, capitals too): addon {{ action: \"search\", query }} finds it, or give its url (git or a folder).")
+                raise ToolError("not_found", f"{name} is not in FreeCAD's add-on catalog (names are exact, capitals too): addon {{ action: \"search\", query }} finds it, or give its url (git or a folder)." + (" It was put in the Mod folder by hand, so no source is recorded: update { name, url, confirm } once names where it comes from." if action == "update" else ""))
             ad = cat.get_addon_from_id(name, branch or None)
         # The add-on as it is kept aside first (update), so a failed smoke
         # test puts it back (G).
@@ -379,6 +387,6 @@ def tools(s):
 
     st = {"type": "string"}
     return [
-        Tool("addon", "FreeCAD's Addon Manager without its dialog (FreeCAD 1.1 and newer; works headless): action list (the folders in the Mod folder, with version; managedBy marks Agent Link's own, updated by agentlink_update, not here) | search { query } (part of a name, in the official catalog, fetched once a day) | install { name, url? (https / git address or a folder; else the catalog), branch?, confirm: \"install <name>\" } | update { name, confirm: \"update <name>\" } (from where it was installed) | remove { name, confirm: \"remove <name>\" }. confirm must be typed by the person, word for word: an add-on is code FreeCAD runs. Each install or update is then loaded in a separate headless FreeCAD (a smoke test, a minute or so) and rolled back when that fails. A new add-on's workbench shows in the window only after app_restart. Reply: installed / updated / removed, folder, smoke.",
+        Tool("addon", "FreeCAD's Addon Manager without its dialog (FreeCAD 1.1 and newer; works headless): action list (the folders in the Mod folder, with version; managedBy marks Agent Link's own, updated by agentlink_update, not here) | search { query } (part of a name, in the official catalog, fetched once a day) | install { name, url? (https / git address or a folder; else the catalog), branch?, confirm: \"install <name>\" } | update { name, confirm: \"update <name>\" } (from where it was installed; one copied into the Mod folder by hand has no recorded source, and its first update takes url, which is then recorded) | remove { name, confirm: \"remove <name>\" }. confirm must be typed by the person, word for word: an add-on is code FreeCAD runs. Each install or update is then loaded in a separate headless FreeCAD (a smoke test, a minute or so) and rolled back when that fails. A new add-on's workbench shows in the window only after app_restart. Reply: installed / updated / removed, folder, smoke.",
              obj({"action": {"type": "string", "enum": ["list", "search", "install", "update", "remove"]}, "name": st, "query": st, "url": st, "branch": st, "confirm": st}), addon),
     ] + runners.tools(GROUP, s, helpers)
