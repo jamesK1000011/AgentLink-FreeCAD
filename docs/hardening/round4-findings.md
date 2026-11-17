@@ -281,3 +281,61 @@ at 72, `echo.inspectionsHidden` names the inspection.
 - A batch of socket-thread tools with `to`, `lines`, `file`, `from`, `read`, `at` or `build` now waits for the
   GUI thread like any batch.
 - fea_hold and fea_load answers carry a new key, `window`.
+
+## Round 5: a modal "A dialog is already open in the task panel" during the Spreadsheet model
+
+Seen live: after `sheet_list` (a read) and before the next `window_snapshot`, FreeCAD showed a modal box with no
+title, "A dialog is already open in the task panel. Close this dialog?" (Yes / No). The batch stopped until
+`dialog_answer` pressed Yes.
+
+- Whose words: FreeCAD's. A view provider asks this in its `setEdit` when another task dialog is open:
+  `src/Mod/Sketcher/Gui/ViewProviderSketch.cpp` 3434-3448 (also when a sketch in *another document* holds the
+  panel), `src/Mod/PartDesign/Gui/ViewProvider.cpp` 135, `ViewProviderDatum.cpp` 257,
+  `ViewProviderShapeBinder.cpp` 95, and `Gui/TaskView/TaskDialog.cpp` 92 `canClose`. On Yes, FreeCAD closes the
+  open dialog (`Control().closeDialog()`).
+  `Gui::Document::setEdit` closes only its own document's edit first (`src/Gui/Document.cpp` 603-620).
+- What in the echo could reach those calls:
+  - `enter_edit` → `setEdit`, reached from `_mode` (changing `sketch_` calls), `_open_new_sketch` and
+    `_reopen_sketch`;
+  - `_mode` and `_reopen_sketch` → `resetEdit` (closes an edit with no question);
+  - `show_view_of` → `ViewObject.doubleClicked()`. A sheet's double-click also switches the workbench. Since
+    round 4, reads (`sheet_read`, `sheet_chart`, TechDraw reads) also reached it;
+  - `before` → `activateWorkbench`;
+  - `_container` → `setActiveObject("part")` and `FemGui.setActiveAnalysis`.
+
+  The echo calls no `runCommand`, `doCommand` or `showDialog`, and it never answers a dialog: it cannot press
+  Yes.
+- Which of these fired live is not proven. `sheet_list` itself does nothing that opens an edit, and its usedBy
+  refs are not read. The likely sequence has two parts:
+  - a task dialog or sketch the echo did not record as its own was holding the panel (for example a sketch left
+    open in another document, or from before a FreeCAD restart, when `_agent_edits` is empty);
+  - the next echo step then called `setEdit`, or a round-4 read double-clicked a view.
+- Changes (`agentlink/echo.py`):
+  - `foreign_task(gd)` (2011) blocks when an edit the echo did not open is up in any document. It also blocks for
+    the agent's own edit in another document, and for a task dialog with no edit behind it. It does not block for
+    the echo's own sketch in this document, because `setEdit` there closes it with no question.
+  - `enter_edit` first leaves the echo's own sketch if it is open in another document (`_leave_own_elsewhere`
+    2043). Then, if `foreign_task` blocks, it opens nothing and says why in the trace.
+  - `before` (2744) does no bench switch and no `_mode` while something foreign is open; the trace key is `held`.
+  - `_mode` (2911) and `_reopen_sketch` (3171) close only an edit the agent opened. A person's sketch is never
+    closed by the echo: that is a change from round 3, where a pad closed any sketch.
+  - `show_view_of(o, read)` (2328): a read, or any call while something foreign is open, only brings up a view
+    that is already open (`front_view_of`). It never calls `doubleClicked`.
+  - `_container` (2845) makes nothing active while something foreign is open.
+- Tests: `tests/test_echo_rings.py` `NeverASecondDialog` replays 15 tools through `before` and `after`, reads and
+  changes (sketch_new, sketch_add, sketch_attach, sketch_state, pd_pad, sheet_list, sheet_read, sheet_set,
+  param_set, td_list, td_view, text_document, asm_new, measure, object_get). It runs them twice: once with
+  `Control.activeDialog()` true, once with a person's sketch in edit. Each time it asserts there is no `setEdit`,
+  `resetEdit`, `doubleClicked`, `activateWorkbench`, `runCommand`, `doCommand`, `showDialog` or `closeDialog`.
+  With `foreign_task` disabled, the test fails on `sketch_new` (`activateWorkbench`, `setEdit`).
+  `tests/test_echo_window.py` `KeepTheSketch` now checks both cases: a person's sketch is left open, the agent's
+  is closed.
+- How sure: certain that no echo path can now ask that question while a dialog it did not open is up. Which step
+  fired live is a probe.
+- Live probe: restart FreeCAD, then run the Spreadsheet model calls 0-19 with `window_snapshot` after 17, 18 and
+  19.
+  - No modal box should appear. `session_state` after each shows `echo.held` when a dialog was up.
+  - Then open a sketch by hand (double-click) and run `sheet_read { sheet: "Dimensions" }`, `sketch_add` on
+    NutSketch and `pd_pad`. Expected: no question; `echo.edit` says "not opened" or "left open: not opened by the
+    agent"; the person's sketch stays open.
+- Risk: while a person's dialog or sketch is open, the echo shows less (no bench switch, no edit, no new tab).

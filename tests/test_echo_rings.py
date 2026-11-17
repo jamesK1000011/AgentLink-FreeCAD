@@ -257,3 +257,122 @@ class LightBatch(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---- round 5: the echo never opens a second task dialog ------------------------------------
+
+class NeverASecondDialog(unittest.TestCase):
+    """With a task dialog up that the echo did not open (Control.activeDialog()
+    true, or a person's sketch in edit), every echo path is replayed, reads
+    and changes: nothing may call setEdit, resetEdit, doubleClicked,
+    activateWorkbench, runCommand, doCommand or showDialog — each of those can
+    make FreeCAD ask "A dialog is already open in the task panel" in a modal
+    box (ViewProviderSketch.cpp 3434-3448), which stopped a batch live."""
+
+    TOOLS = [("sketch_new", True, {"body": "Nut"}, {"sketch": "NutSketch"}),
+             ("sketch_add", True, {"sketch": "NutSketch"}, {"added": [{"ids": [0]}]}),
+             ("sketch_attach", True, {"sketch": "NutSketch"}, {"sketch": "NutSketch"}),
+             ("sketch_state", False, {"sketch": "NutSketch"}, {"sketch": "NutSketch"}),
+             ("pd_pad", True, {"sketch": "NutSketch"}, {"feature": "Pad"}),
+             ("sheet_list", False, {}, {"sheets": [{"sheet": "Dimensions", "usedBy": ["NutSketch.Constraints.hex_d"]}]}),
+             ("sheet_read", False, {"sheet": "Dimensions"}, {"sheet": "Dimensions"}),
+             ("sheet_set", True, {"sheet": "Dimensions"}, {"sheet": "Dimensions"}),
+             ("param_set", True, {"name": "w", "value": 1}, {"ref": "Params.w"}),
+             ("td_list", False, {"page": "Page"}, {"page": "Page"}),
+             ("td_view", True, {"page": "Page"}, {"page": "Page", "view": "Pad"}),
+             ("text_document", True, {"name": "Notes"}, {"text": "Notes"}),
+             ("asm_new", True, {"parts": ["Nut"]}, {"assembly": "Nut"}),
+             ("measure", False, {"a": "Pad.Face1", "b": "Pad.Face2"}, {"distance": 8.4}),
+             ("object_get", False, {"object": "Pad"}, {"object": "Pad"})]
+
+    def setUp(self):
+        self.calls = []
+        rec = self.calls
+
+        def obj(name, type_id):
+            o = types.SimpleNamespace(Name=name, Label=name, TypeId=type_id, InList=[], Parents=[], PropertiesList=[],
+                                      isDerivedFrom=lambda t, tid=type_id: t == tid)
+            o.ViewObject = types.SimpleNamespace(Visibility=True, doubleClicked=lambda n=name: rec.append(("doubleClicked", n)))
+            return o
+
+        self.doc = types.SimpleNamespace(Name="Nut", Label="Nut")
+        self.doc.Objects = [obj("NutSketch", "Sketcher::SketchObject"), obj("Dimensions", "Spreadsheet::Sheet"),
+                            obj("Params", "Spreadsheet::Sheet"), obj("Page", "TechDraw::DrawPage"),
+                            obj("Notes", "App::TextDocument"), obj("Pad", "PartDesign::Pad")]
+        for o in self.doc.Objects:
+            o.Document = self.doc
+        self.doc.getObject = lambda n: next((o for o in self.doc.Objects if o.Name == n), None)
+        self.doc.findObjects = lambda *a, **k: []
+        self.person_edit = None
+        gd = types.SimpleNamespace(Document=self.doc, ActiveView=None,
+                                   getInEdit=lambda: self.person_edit,
+                                   setEdit=lambda *a: rec.append(("setEdit",) + a),
+                                   resetEdit=lambda: rec.append(("resetEdit",)))
+        self.gd = gd
+        gui = types.ModuleType("FreeCADGui")
+        gui.ActiveDocument = gd
+        gui.Control = types.SimpleNamespace(activeDialog=lambda: True, showDialog=lambda *a: rec.append(("showDialog",)),
+                                            closeDialog=lambda: rec.append(("closeDialog",)), showModelView=lambda: None)
+        gui.editDocument = lambda: gd if self.person_edit is not None else None
+        gui.runCommand = lambda *a: rec.append(("runCommand",) + a)
+        gui.doCommand = lambda *a: rec.append(("doCommand",) + a)
+        gui.activateWorkbench = lambda wb: rec.append(("activateWorkbench", wb))
+        gui.activeWorkbench = lambda: types.SimpleNamespace(name=lambda: "NoneWorkbench")
+        gui.listWorkbenches = lambda: {w: 1 for _p, w in echo.WORKBENCH}
+        gui.Selection = types.SimpleNamespace(clearSelection=lambda: None, addSelection=lambda *a: None, getSelection=lambda: [])
+        gui.getMainWindow = lambda: types.SimpleNamespace(statusBar=lambda: types.SimpleNamespace(showMessage=lambda *a: None),
+                                                          findChild=lambda *a: None, findChildren=lambda *a: [])
+        gui.SendMsgToActiveView = lambda *a: None
+        self.had = sys.modules.get("FreeCADGui")
+        sys.modules["FreeCADGui"] = gui
+        keys = ("FreeCAD", "enabled", "say", "_paint", "_wait", "_qt", "fit", "rings_off", "flash_command", "restore_covers")
+        self.saved = {k: getattr(echo, k) for k in keys}
+        params = types.SimpleNamespace(GetBool=lambda k, d=True: d, GetInt=lambda k, d=0: d)
+        echo.FreeCAD = types.SimpleNamespace(GuiUp=True, ActiveDocument=self.doc, ParamGet=lambda p: params,
+                                             listDocuments=lambda: {"Nut": self.doc}, getDocument=lambda n: self.doc,
+                                             Console=types.SimpleNamespace(PrintLog=lambda *a: None))
+        echo.enabled = lambda: True
+        echo.say = lambda words, ms=echo.HOLD_MS, where="": words
+        echo._paint = lambda *a, **k: None
+        echo._wait = lambda ms: None
+        echo._qt = lambda: (None, None, types.SimpleNamespace(QMdiArea=object, QToolBar=object, QTabBar=object))
+        echo.fit = lambda animate=True, selection=False: "all"
+        echo.rings_off = lambda: True
+        echo.flash_command = lambda *a, **k: "button"
+        echo.restore_covers = lambda: []
+        self.addCleanup(echo._agent_edits.clear)
+
+    def tearDown(self):
+        for k, v in self.saved.items():
+            setattr(echo, k, v)
+        if self.had is None:
+            sys.modules.pop("FreeCADGui", None)
+        else:
+            sys.modules["FreeCADGui"] = self.had
+
+    def replay(self):
+        from test_echo_hold import Tool, reply
+
+        for name, changes, args, body in self.TOOLS:
+            session = types.SimpleNamespace(doc=self.doc, batch_now=None)
+            e = echo.Echo(session)
+            tool = Tool(name, changes)
+            e.before(tool, dict(args))
+            e.after(tool, dict(args), reply(body))
+            self.assertEqual(self.calls, [], name)
+
+    def test_a_task_dialog_is_open(self):
+        self.replay()
+
+    def test_a_persons_sketch_is_in_edit(self):
+        sk = self.doc.getObject("NutSketch")
+        self.person_edit = types.SimpleNamespace(Object=sk)
+        self.replay()
+
+    def test_the_rule(self):
+        self.assertEqual(echo.foreign_task(), "a task dialog is open")
+        sk = self.doc.getObject("NutSketch")
+        self.person_edit = types.SimpleNamespace(Object=sk)
+        self.assertIn("not by the agent", echo.foreign_task())
+        echo._agent_edits.add(("Nut", "NutSketch"))
+        self.assertIsNone(echo.foreign_task(self.gd))  # the echo's own sketch here: setEdit closes it, asking nothing
