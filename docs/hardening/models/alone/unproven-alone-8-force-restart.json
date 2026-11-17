@@ -1,0 +1,75 @@
+{
+ "about": "app_force_restart on a window held on purpose: the Agent Link Note prompt (a modal dialog) is opened with gui_input, as scripts/live/agentlink.json's step 2 does, and left open; app_force_restart then stops and starts the window process. Needs the person's go in chat (unproven-hub-model.json notCovered): it quits FreeCAD; documents not saved are reopened from their newest saved copies only. The runner sends these last, after every other model, one file at a time, waiting for the heartbeat (session_state answers) before the next.",
+ "direct": true,
+ "restarts": true,
+ "personGo": true,
+ "calls": [
+  {
+   "tool": "live_run",
+   "arguments": {
+    "script": "reset"
+   },
+   "expect": "total.failed 0; WindowTest rebuilt and in front"
+  },
+  {
+   "tool": "workbench",
+   "arguments": {
+    "activate": "Agent Link"
+   },
+   "expect": "active Agent Link"
+  },
+  {
+   "tool": "gui_input",
+   "arguments": {
+    "steps": [
+     {
+      "wait": 800
+     },
+     {
+      "click": {
+       "tab": {
+        "text": "Notes"
+       }
+      }
+     },
+     {
+      "click": {
+       "widget": {
+        "text": "Pin a Note"
+       }
+      }
+     },
+     {
+      "wait": 500
+     },
+     {
+      "click": {
+       "view_world": [
+        10,
+        5,
+        20
+       ]
+      }
+     }
+    ],
+    "inline": false
+   },
+   "expect": "the last step opened a dialog (the Note prompt) and it is still open"
+  },
+  {
+   "tool": "session_state",
+   "arguments": {},
+   "expect": "next names the dialog in front (Note) and its buttons: the window is held"
+  },
+  {
+   "tool": "app_force_restart",
+   "arguments": {},
+   "expect": "the window process stopped and started again by Agent Link outside FreeCAD; the answer says so"
+  },
+  {
+   "tool": "session_state",
+   "arguments": {},
+   "expect": "answers once the heartbeat is back; no dialog in front; WindowTest back from its newest saved copy (or a fresh session)"
+  }
+ ]
+}

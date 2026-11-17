@@ -1,0 +1,63 @@
+{
+ "about": "From unproven-hub-model.json runAlone: job_start cannot run inside a batch (refused 'not inside a batch'), so these are sent one at a time as plain tool calls, in order (direct: true). After unproven-hub-model.json has run (the document UnprovenHub in front, with Bracket and Ball mesh). Call 2 takes call 1's job id: the runner puts call 1's answer field job in its place, exactly as batch's { $from, $at } would (agentlink/chain.py) — nothing for a person to fill in.",
+ "direct": true,
+ "calls": [
+  {
+   "tool": "job_start",
+   "arguments": {
+    "tool": "body_check",
+    "arguments": {
+     "body": "Bracket"
+    }
+   },
+   "expect": "body_check's own answer (body Bracket, ok true, volume 12000) with job: an id beside it — it ended within 45 s. This is the success the list's job_start call cannot show (inside a batch it is refused)"
+  },
+  {
+   "tool": "job_start",
+   "arguments": {
+    "tool": "meshobj_info",
+    "arguments": {
+     "mesh": "Ball mesh"
+    },
+    "wait": false
+   },
+   "expect": "at once: job (an id), tool meshobj_info, status running (or done already), next naming job_status { job, wait: 25 }; note that it goes on as a job"
+  },
+  {
+   "tool": "job_status",
+   "arguments": {
+    "job": {
+     "$from": 1,
+     "$at": "job"
+    },
+    "wait": 20
+   },
+   "expect": "job: the id call 1 answered (taken by reference); tool meshobj_info; status done; took (seconds); result: meshobj_info's answer for Ball mesh (solid true, verdict clean)"
+  },
+  {
+   "tool": "job_status",
+   "arguments": {},
+   "expect": "jobs: two rows, the body_check and the meshobj_info jobs, both done with took"
+  },
+  {
+   "tool": "job_start",
+   "arguments": {
+    "tool": "pd_pad",
+    "arguments": {
+     "body": "Bracket",
+     "sketch": "Base",
+     "length": 1
+    }
+   },
+   "expect": "REFUSED invalid_input: pd_pad cannot run as a job: only a read that leaves the window and the 3D view alone can (not a change, a picture, a window tool or a batch) — call pd_pad itself. Nothing padded (steps_list still counts the same)"
+  },
+  {
+   "tool": "job_start",
+   "arguments": {
+    "tool": "session_state",
+    "arguments": {}
+   },
+   "expect": "REFUSED invalid_input: session_state cannot run as a job: it changes nothing, but it reads the window (workbench, selection, what is open) for next, which only the window's own thread may do — call session_state itself; it runs as a plain call."
+  }
+ ]
+}

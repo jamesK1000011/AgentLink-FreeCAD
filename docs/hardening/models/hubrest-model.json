@@ -2,10 +2,10 @@
  "tutorial": "No wiki tutorial covers the window tools. The model starts from the repo's own live script reset (scripts/live/reset.json: it rebuilds the WindowTest document: a Body with a 20 mm pad) and walks the dev, unattended, notes, app, core and view tools once each, reads only where a read proves the point. docs/hardening/models/coredoc-gui-model.json (the earlier pass) is the deeper click-by-click script for the same tools; this one is the call list in the shape of bimcam-cam-model.json.",
  "reference": null,
  "conventions": {
-  "placeholders": "<NOTE_ID> is result.id of the note_add call (an integer; send it as a number).",
-  "reset": "Call 1 (live_run reset) must run first in every chunk of 20: a chunk that starts later repeats it.",
+  "reset": "Call 0 (live_run reset) runs first. The model is one batch; if it is answered in parts, a part that starts after call 0 repeats it, and one that starts between 22 and 26 starts at 22 instead.",
   "refused": "An expect starting REFUSED means isError with that code.",
-  "window": "All calls go to the window's link. Nothing here takes the cursor, focus or full screen."
+  "window": "All calls go to the window's link. Nothing here takes the cursor, focus or full screen.",
+  "references": "Calls 24, 25 and 26 take the note's id from call 22's answer: { \"$from\": 22, \"$at\": \"note.id\" } (an integer, as note_answer wants; the answer shape read live in the unproven-hub model, call 114). They reach at most four calls back."
  },
  "expected": {
   "document": "WindowTest",
@@ -210,7 +210,7 @@
      20
     ]
    },
-   "expect": "a note with id (use it as <NOTE_ID>), by agent, at [0, 0, 20], done false"
+   "expect": "a note { id, by agent, at [0, 0, 20], done false } (the answer holds it under note); calls 24 to 26 take note.id from here by reference"
   },
   {
    "tool": "note_list",
@@ -220,7 +220,10 @@
   {
    "tool": "note_answer",
    "arguments": {
-    "id": "<NOTE_ID>",
+    "id": {
+     "$from": 22,
+     "$at": "note.id"
+    },
     "text": "yes, z = 20"
    },
    "expect": "the note carries the answer"
@@ -228,16 +231,22 @@
   {
    "tool": "note_done",
    "arguments": {
-    "id": "<NOTE_ID>"
+    "id": {
+     "$from": 22,
+     "$at": "note.id"
+    }
    },
    "expect": "done true"
   },
   {
    "tool": "note_delete",
    "arguments": {
-    "id": "<NOTE_ID>"
+    "id": {
+     "$from": 22,
+     "$at": "note.id"
+    }
    },
-   "expect": "deleted <NOTE_ID>; left counts the rest"
+   "expect": "deleted: that id; left counts the rest"
   },
   {
    "tool": "note_delete",

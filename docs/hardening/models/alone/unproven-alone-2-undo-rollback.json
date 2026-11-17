@@ -1,0 +1,13 @@
+{
+ "about": "From unproven-hub-model.json runAlone: history_undo in a batch that rolls back is refused whole (rollback left out: true). This file is the batch's own list: send it AS IT IS, batch { file } (not through scripts/model_calls.py, which writes rollback: false and would change what is tested). After unproven-hub-model.json has run (the document UnprovenHub in front, with Bracket and Ball mesh).",
+ "sendAsIs": true,
+ "expect": "REFUSED invalid_input: calls.0: history_undo inside a batch that rolls back can't be taken back by undo — call it on its own, or rollback: false. Nothing was run. (rollback is true when left out)",
+ "calls": [
+  {
+   "tool": "history_undo",
+   "arguments": {
+    "steps": 1
+   }
+  }
+ ]
+}

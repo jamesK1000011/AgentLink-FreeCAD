@@ -1,6 +1,6 @@
 {
  "tutorial": "Basic_TechDraw_Tutorial.md (a page, a view at scale 2, a vertical and a horizontal dimension, the title block, an annotation; then an ANSI B page with a projection group at 2:1 and a length dimension on the isometric view that reads foreshortened until linked to the 3D model). Part A follows it on the tutorial's own part; part B is a small plate for the tools the tutorial does not reach.",
- "reference": "github.com/FreeCAD/Examples: Basic_TechDraw_Tutorial_Example_Files/Basic_TechDraw_Tutorial.fcstd (on the Mac: the reference copy: Basic_TechDraw_Tutorial.FCStd)",
+ "reference": "github.com/FreeCAD/Examples: Basic_TechDraw_Tutorial_Example_Files/Basic_TechDraw_Tutorial.fcstd (on the Mac: ~/AgentLink/hardening/refs/Basic_TechDraw_Tutorial.FCStd, never written; the model works on a copy in ~/AgentLink/hardening/work)",
  "expected": {
   "answerKeyPages": 2,
   "page1": {
@@ -76,9 +76,17 @@
   {
    "tool": "doc_open",
    "arguments": {
-    "path": "the reference copy: Basic_TechDraw_Tutorial.FCStd"
+    "path": "~/AgentLink/hardening/refs/Basic_TechDraw_Tutorial.FCStd"
    },
-   "expect": "the tutorial's file (made with 0.17) open and recomputed; any object error listed — record them. Do NOT doc_save over it (doc_save with another path if a copy is wanted)"
+   "expect": "the tutorial's file (made with 0.17) open and recomputed; any object error listed — record them. It is the reference: the next call saves it under the work folder at once, so that every change and Agent Link's auto-save go to the copy, never to the reference"
+  },
+  {
+   "tool": "doc_save",
+   "arguments": {
+    "path": "~/AgentLink/hardening/work/Basic_TechDraw_Tutorial.FCStd",
+    "overwrite": true
+   },
+   "expect": "path ends hardening/work/Basic_TechDraw_Tutorial.FCStd, bytes > 0; label Basic_TechDraw_Tutorial (the file name is the same, so no relabel); touched false. From here the document is the copy: the reference in hardening/refs is not written again. overwrite: true replaces this model's own copy from an earlier run (without it a second run is refused: 'another FreeCAD document already there')"
   },
   {
    "tool": "shape_query",
@@ -215,7 +223,7 @@
    "arguments": {
     "page": "Tut A4"
    },
-   "expect": "fields: the template's own field names with their values (the key's 0.17 template had FC-Title, Designed_by_Name …; 1.1's names differ) — note the title's and the designer's field names for the next call"
+   "expect": "fields: the template's own field names with their values (the key's 0.17 template had FC-Title, Designed_by_Name …; 1.1's names differ) — the next call sets title, one of them (on 16 Nov: approval_person, creator, date_of_issue, document_type, drawing_number, general_tolerances, language_code, legal_owner_1 … 4, part_material, revision_index, scale, sheet_number, title)"
   },
   {
    "tool": "td_title",
@@ -225,7 +233,7 @@
      "title": "My First TechDraw"
     }
    },
-   "expect": "fields with the title set (td_title matches a field's name whatever its case). \"title\" is a guess at this template's field: if the answer is a refusal listing the names, or notInThisTemplate names it, take the title field's name from call 11's fields and send it again. An unknown name is refused with the list of names (try one: {\"nosuchfield\": \"x\"})"
+   "expect": "fields with title 'My First TechDraw'. \"title\" is the field's name in 1.1's A4_Landscape_ISO5457_minimal.svg: call 12's fields listed it on 16 Nov (approval_person, creator, date_of_issue … scale, sheet_number, title); an unknown name is refused with that list (try one: {\"nosuchfield\": \"x\"})"
   },
   {
    "tool": "td_note",
@@ -595,14 +603,14 @@
    "tool": "td_tolerance",
    "arguments": {
     "dimension": {
-     "$from": 34,
+     "$from": 35,
      "$at": "dimension"
     },
     "clear": true,
     "plus": 0.1,
     "minus": 0.05
    },
-   "expect": "dimension: call 34's (its object name, by reference). tolerance +0.1/-0.05, H7 gone from the text"
+   "expect": "dimension: call 35's (its object name, by reference). tolerance +0.1/-0.05, H7 gone from the text"
   },
   {
    "tool": "td_dimset",
@@ -842,7 +850,7 @@
      1
     ]
    },
-   "expect": "one face, the top: note its name (Face<N>) for the next two calls"
+   "expect": "one face, the top: its name is taken by reference by call 51 and written out in call 52 (Face3 on 16 Nov)"
   },
   {
    "tool": "td_hatch",
@@ -850,22 +858,22 @@
     "view": "PlateTop",
     "faces": [
      {
-      "$from": 49,
+      "$from": 50,
       "$at": "items.0.ref"
      }
     ],
     "spacing": 3
    },
-   "expect": "faces: the top face call 49 found (by reference). faces hatched, no warning (the face faces the view)"
+   "expect": "faces: the top face call 50 found (by reference). faces hatched, no warning (the face faces the view)"
   },
   {
    "tool": "td_area",
    "arguments": {
     "view": "PlateTop",
-    "face": "Plate.Face6",
+    "face": "Plate.Face3",
     "decimals": 1
    },
-   "expect": "area 2168.9 mm2 (60 x 40 less the holes and the slot), text A = 2168.9 mm². face is written out (a reference stands for a whole value and cannot be joined to \"Plate.\"): it must be the name call 49 answered in items.0.ref — Face6 is a guess; if call 49 named another face, send this call again with that one (the bottom face has the same area, so the number alone does not tell: read the answer's face)"
+   "expect": "area 2168.9 mm2 (60 x 40 less the holes and the slot), text A = 2168.9 mm². face is written out (a reference stands for a whole value and cannot be joined to \"Plate.\"): Face3 is the top face call 50 found on 16 Nov (items.0.ref, area 2168.91, normal [0, 0, 1]) — a Part::Box's own top is Face6, but the cut renumbers the faces. If call 50 names another face, this call names the wrong one: the area tells (the bottom face has the same area, so read the answer's face too)"
   },
   {
    "tool": "td_cosmetic",
@@ -936,7 +944,7 @@
    "arguments": {
     "dims": [
      {
-      "$from": 31,
+      "$from": 32,
       "$at": "dimension"
      }
     ],
@@ -944,30 +952,30 @@
     "count": 1,
     "decimals": 1
    },
-   "expect": "dims: call 31's dimension (by reference). format with 1× before the value; reads shows the text as drawn"
+   "expect": "dims: call 32's dimension (by reference). format with 1× before the value; reads shows the text as drawn"
   },
   {
    "tool": "td_dim_align",
    "arguments": {
     "dims": [
      {
-      "$from": 36,
+      "$from": 37,
       "$at": "dimensions.0.dimension"
      },
      {
-      "$from": 36,
+      "$from": 37,
       "$at": "dimensions.1.dimension"
      }
     ],
     "direction": "horizontal"
    },
-   "expect": "dims: the two call 36 made (by reference). both at one height"
+   "expect": "dims: the two call 37 made (by reference). both at one height"
   },
   {
    "tool": "td_dim_repair",
    "arguments": {
     "dimension": {
-     "$from": 33,
+     "$from": 34,
      "$at": "dimension"
     },
     "refs": [
@@ -983,7 +991,7 @@
      }
     ]
    },
-   "expect": "dimension: call 33's radius dimension (by reference). now on the slot's other end, measured 3"
+   "expect": "dimension: call 34's radius dimension (by reference). now on the slot's other end, measured 3"
   },
   {
    "tool": "sheet_new",
@@ -1083,8 +1091,9 @@
   "the window: views appearing on the page tab as they are made (the hidden-line thread and the wait) is exercised by every td_view here, but that the page tab repaints is a look, not a reply"
  ],
  "conventions": {
-  "references": "Calls 35, 50, 55, 56 and 57 take a name from an earlier call's answer: { \"$from\": n, \"$at\": \"key\" }, n the call's index in this whole list (agentlink/chain.py). They reach 1, 1, 24, 20 and 24 calls back: a batch answered in parts refuses a reference into an earlier part (invalid_state), so calls 31 to 57 must run in one part — batch { file, from: 28, budget: 100 } starts at the plate's page; if next still lands between 31 and 57, read the names from the earlier answers (dimension; dimensions[].dimension) and send the rest by hand.",
-  "written out": "Call 12's field name (\"title\") and call 51's face (\"Plate.Face6\") cannot be references (an object's key; a value joined to text): each expect says what to check.",
-  "refused": "An expect starting REFUSED means isError."
+  "references": "Calls 36, 51, 56, 57 and 58 take a name from an earlier call's answer: { \"$from\": n, \"$at\": \"key\" }, n the call's index in this whole list (agentlink/chain.py). They reach 1, 1, 24, 20 and 24 calls back: a batch answered in parts refuses a reference into an earlier part (invalid_state), so calls 32 to 58 must run in one part — batch { file, from: 29, budget: 100 } starts at the plate's page if next lands between 32 and 58.",
+  "written out": "Call 13's field name (\"title\", listed by call 12 on 16 Nov) and call 52's face (\"Plate.Face3\", found by call 50 on 16 Nov) cannot be references (an object's key; a value joined to text): each expect says what to check.",
+  "refused": "An expect starting REFUSED means isError.",
+  "reference file": "Calls 0 and 1: the reference is opened from ~/AgentLink/hardening/refs and saved at once as ~/AgentLink/hardening/work/Basic_TechDraw_Tutorial.FCStd; everything after works on that copy. On 16 Nov the model worked on the reference itself and Agent Link's auto-save wrote over it: put a fresh copy from FreeCAD/Examples in refs before the next run."
  }
 }

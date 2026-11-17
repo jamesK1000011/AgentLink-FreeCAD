@@ -1,0 +1,151 @@
+{
+ "tutorial": "No tutorial: the five window tools that had no status mark — dialog_answer, gui_unstick, snapshot_list, queue_go, addon_test — each proven so far only on its empty answer (unproven-findings.md: nothing up, nothing held, the recent jobs). This list proves four of them doing their job, unattended, in the background on the reset document WindowTest; queue_go needs a person (needsPerson below).",
+ "reference": null,
+ "conventions": {
+  "run": "scripts/model_calls.py turns this into a batch file; batch { file }. Window only (each call goes to the window's link). Nothing takes the cursor, focus or full screen: gui_input sends Qt events inside FreeCAD, live_run replays scripts/live/agentlink.json's own steps.",
+  "references": "Calls 8 and 9 take the test job's id from call 7's answer: { \"$from\": 7, \"$at\": \"job\" } (both shapes of addon_test's answer, the result and the running state, carry job: agentlink/testrun.py answer()).",
+  "marks": "What each call proves, for scripts/hardening_status.py mark … --live --model marks-model once the answers are read: dialog_answer (call 1: live_run step 3 types into the Note prompt and presses OK; its checks read result.typed.text and the person's note back), gui_unstick (call 2: the prompt is left open by step 2 and live_run's end closes it with gui_unstick { all: true }, the tool itself, said in leftOpen), snapshot_list (calls 4 to 6: the camera button's own command, AgentLink_Shot, records a shot; snapshot_list lists it and snapshot_latest shows it), addon_test (calls 7 to 10: a real run of one test file in a separate FreeCAD process). queue_go: not marked unattended — see needsPerson.",
+  "refused": "An expect starting REFUSED means isError with that code."
+ },
+ "expected": {
+  "shot": "one new row in snapshot_list, newest first, workbench and document WindowTest",
+  "tests": "tests/test_paths.py passes in the separate process: failed 0, errors 0"
+ },
+ "calls": [
+  {
+   "tool": "live_run",
+   "arguments": {
+    "script": "reset"
+   },
+   "expect": "total.failed 0; WindowTest rebuilt and in front (a 40 x 30 x 20 pad)"
+  },
+  {
+   "tool": "live_run",
+   "arguments": {
+    "script": "agentlink",
+    "steps": [
+     2,
+     3,
+     7
+    ]
+   },
+   "expect": "total.failed 0. Step 2 opens the Note prompt (a modal dialog: a click on the part with Pin a Note); step 3 is dialog_answer { button: \"OK\", text: \"Live script note\" } run while the prompt holds the window — its checks: result.typed.text 'Live script note', and note_list's first note has that text, by person, on Body; step 7 deletes the note again. leftOpen absent. THE PROOF OF dialog_answer WITH A DIALOG UP"
+  },
+  {
+   "tool": "live_run",
+   "arguments": {
+    "script": "agentlink",
+    "steps": [
+     2
+    ]
+   },
+   "expect": "total.failed 0; step 2 ends with the Note prompt still open, so the replay's end closes it with gui_unstick { all: true } and says so: leftOpen names the prompt (a dialog, Note). THE PROOF OF gui_unstick WITH SOMETHING OPEN (live_run calls the tool itself: agentlink/families/dev.py)"
+  },
+  {
+   "tool": "note_list",
+   "arguments": {},
+   "expect": "no note from call 2 (the prompt was closed without OK, as Escape would); the window answers, so nothing holds it any more"
+  },
+  {
+   "tool": "cmd_run",
+   "arguments": {
+    "name": "AgentLink_Shot"
+   },
+   "expect": "wasActive true: the camera button's command (Alt+Shift+S) ran. It grabs the window, records the shot and opens its card beside the window (not modal)"
+  },
+  {
+   "tool": "snapshot_list",
+   "arguments": {},
+   "expect": "shots: the new one first, with time (now), workbench, document 'WindowTest', path ending -plain.png, note '' and pins []. THE PROOF OF snapshot_list WITH A SHOT"
+  },
+  {
+   "tool": "snapshot_latest",
+   "arguments": {},
+   "expect": "the same shot with its picture (inline), time and workbench"
+  },
+  {
+   "tool": "addon_test",
+   "arguments": {
+    "addon": "AgentLink",
+    "pattern": "test_paths.py"
+   },
+   "expect": "job (an id) with state running and counts so far — or, when it ended within 20 s, the result itself: state done, passed > 0, failed 0, errors 0, log under ~/AgentLink/tests. The window and WindowTest are untouched (a separate FreeCAD command-line process)"
+  },
+  {
+   "tool": "addon_test",
+   "arguments": {
+    "job": {
+     "$from": 7,
+     "$at": "job"
+    }
+   },
+   "expect": "how the run stands (waits up to 30 s): state done with passed > 0, failed 0, errors 0, seconds, log; or still running with counts so far. THE PROOF OF addon_test RUNNING A SUITE"
+  },
+  {
+   "tool": "addon_test",
+   "arguments": {
+    "job": {
+     "$from": 7,
+     "$at": "job"
+    }
+   },
+   "expect": "done by now (test_paths.py takes seconds): the same counts as call 8's"
+  },
+  {
+   "tool": "addon_test",
+   "arguments": {},
+   "expect": "the recent jobs: this run's row first, state done, with passed, failed 0, errors 0"
+  },
+  {
+   "tool": "session_state",
+   "arguments": {},
+   "expect": "WindowTest in front, where window; no dialog named in next; the shot's card may still be open beside the window (it is not modal: close it by hand or leave it)"
+  },
+  {
+   "tool": "live_run",
+   "arguments": {
+    "script": "reset"
+   },
+   "expect": "total.failed 0: WindowTest rebuilt for whatever runs next"
+  }
+ ],
+ "needsPerson": {
+  "why": "queue_go is the person's go for heavy jobs held while they work in the window, and the tool's own rule is to call it only on their word in chat, never by an agent's choice. The held state cannot be made unattended either: the supervisor holds new heavy jobs only while a heavy job runs and macOS reports the person's own mouse or keyboard input in the last moments (keep.person_idle_seconds reads IOHIDSystem's HIDIdleTime; gui_input's Qt events are not HID input). So the mark needs the person: they work in the window while a heavy job runs, then say go in chat. The calls below are the runner's part, one at a time (direct), only then.",
+  "direct": true,
+  "calls": [
+   {
+    "tool": "addon_test",
+    "arguments": {
+     "addon": "AgentLink",
+     "timeout": 900
+    },
+    "expect": "Agent Link's whole test suite starts in a separate FreeCAD process (heavy: a job that runs for minutes): job, state running. Meanwhile the person clicks or types in FreeCAD's window for a few seconds"
+   },
+   {
+    "tool": "session_state",
+    "arguments": {},
+    "expect": "queue.held: 'A heavy job is running (addon_test, since …); new heavy jobs wait for your go' — set by the supervisor once the person used the window while the job ran"
+   },
+   {
+    "tool": "queue_go",
+    "arguments": {},
+    "expect": "ONLY AFTER THE PERSON SAYS GO IN CHAT: go true, wasHeld true, running lists what still runs (addon_test while the suite still runs), machine { heavySlots, memoryCeilingGB, fan }"
+   },
+   {
+    "tool": "session_state",
+    "arguments": {},
+    "expect": "no queue.held"
+   },
+   {
+    "tool": "addon_test",
+    "arguments": {
+     "job": {
+      "$from": 0,
+      "$at": "job"
+     }
+    },
+    "expect": "the suite's counts; call again while state is running (failed 0 expected)"
+   }
+  ]
+ }
+}

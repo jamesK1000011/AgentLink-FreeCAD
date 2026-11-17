@@ -1,0 +1,18 @@
+{
+ "about": "agentlink_update with nothing new upstream: proves the update path without changing an add-on. If something new IS there it installs it and restarts FreeCAD (and changes installed add-ons), so it is marked restarts. Needs the person's go in chat (unproven-hub-model.json notCovered): it quits FreeCAD; documents not saved are reopened from their newest saved copies only. The runner sends these last, after every other model, one file at a time, waiting for the heartbeat (session_state answers) before the next.",
+ "direct": true,
+ "restarts": true,
+ "personGo": true,
+ "calls": [
+  {
+   "tool": "agentlink_update",
+   "arguments": {},
+   "expect": "nothing new: restarted false, a note that it is the newest; no leftOut (hubfix-findings.md Job 2). Something new: the add-ons updated, the smoke test passed, FreeCAD started again (restarted true)"
+  },
+  {
+   "tool": "session_state",
+   "arguments": {},
+   "expect": "answers (after a restart: once the heartbeat is back); leftOut absent"
+  }
+ ]
+}

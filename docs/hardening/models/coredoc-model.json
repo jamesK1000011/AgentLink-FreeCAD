@@ -65,7 +65,7 @@
   },
   "refusals": 23
  },
- "conventions": "\"<YPR>\" stands for the tcp.ypr list answered by the robot_move { axes } call: put that list in its place. Face and edge numbers of a Part::Box / Part::Cylinder are stated as FreeCAD usually numbers them (Box: Face1 x-min, Face2 x-max, Face5 z-min, Face6 z-max); where an expect says so, take the ref from the shape_query before it instead.",
+ "conventions": "Calls 83, 84 and 85 take ypr from call 82's answer: { \"$from\": 82, \"$at\": \"tcp.ypr\" } (agentlink/chain.py; at most three calls back). Face and edge numbers of a Part::Box / Part::Cylinder are stated as FreeCAD usually numbers them (Box: Face1 x-min, Face2 x-max, Face5 z-min, Face6 z-max); where an expect says so, take the ref from the shape_query before it instead.",
  "calls": [
   {
    "tool": "doc_new",
@@ -876,7 +876,7 @@
      0
     ]
    },
-   "expect": "axes as given, tcp.at [1825, 0, 2400] (±0.5) — keep tcp.ypr as YPR for the next calls"
+   "expect": "axes as given, tcp.at [1825, 0, 2400] (±0.5) — calls 83 to 85 take tcp.ypr from this answer by reference ([0, -90, 180] on 16 Nov)"
   },
   {
    "tool": "robot_move",
@@ -888,7 +888,10 @@
       100,
       2400
      ],
-     "ypr": "<YPR>"
+     "ypr": {
+      "$from": 82,
+      "$at": "tcp.ypr"
+     }
     }
    },
    "expect": "reached true, tcp.at [1825,100,2400], every axis within ±180 — the waypoint"
@@ -903,7 +906,10 @@
       0,
       0
      ],
-     "ypr": "<YPR>"
+     "ypr": {
+      "$from": 82,
+      "$at": "tcp.ypr"
+     }
     }
    },
    "expect": "reached false, off_mm ≈ 7500, axes unchanged from the call before"
@@ -919,7 +925,10 @@
        0,
        2400
       ],
-      "ypr": "<YPR>",
+      "ypr": {
+       "$from": 82,
+       "$at": "tcp.ypr"
+      },
       "speed": 100
      },
      {
@@ -928,7 +937,10 @@
        200,
        2400
       ],
-      "ypr": "<YPR>",
+      "ypr": {
+       "$from": 82,
+       "$at": "tcp.ypr"
+      },
       "speed": 100
      }
     ]
@@ -1044,9 +1056,10 @@
   {
    "tool": "doc_save",
    "arguments": {
-    "path": "CoreDoc.FCStd"
+    "path": "CoreDoc.FCStd",
+    "overwrite": true
    },
-   "expect": "path ends CoreDoc.FCStd, bytes > 0, label CoreDoc, touched false"
+   "expect": "path ends CoreDoc.FCStd, bytes > 0, label CoreDoc, touched false; overwrite: true replaces this model's own file from an earlier run (without it a second run is refused: 'another FreeCAD document already there', as on 16 Nov)"
   },
   {
    "tool": "export",
@@ -1100,9 +1113,10 @@
   {
    "tool": "doc_save",
    "arguments": {
-    "path": "merge_src.FCStd"
+    "path": "merge_src.FCStd",
+    "overwrite": true
    },
-   "expect": "label \"merge_src\", labelWas \"MergeSrc\", note on the relabel; document still MergeSrc"
+   "expect": "label \"merge_src\", labelWas \"MergeSrc\", note on the relabel; document still MergeSrc; overwrite: true replaces this model's own file from an earlier run (without it a second run is refused: 'another FreeCAD document already there', as on 16 Nov)"
   },
   {
    "tool": "doc_save_all",

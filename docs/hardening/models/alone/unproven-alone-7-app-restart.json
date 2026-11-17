@@ -1,0 +1,23 @@
+{
+ "about": "app_restart quits a working FreeCAD cleanly and starts it again. Needs the person's go in chat (unproven-hub-model.json notCovered): it quits FreeCAD; documents not saved are reopened from their newest saved copies only. The runner sends these last, after every other model, one file at a time, waiting for the heartbeat (session_state answers) before the next.",
+ "direct": true,
+ "restarts": true,
+ "personGo": true,
+ "calls": [
+  {
+   "tool": "doc_save_all",
+   "arguments": {},
+   "expect": "saved: the documents that have a file; neverSaved lists the test documents (they are not wanted after the run)"
+  },
+  {
+   "tool": "app_restart",
+   "arguments": {},
+   "expect": "restarting true; reopens lists the saved documents' files"
+  },
+  {
+   "tool": "session_state",
+   "arguments": {},
+   "expect": "answers once the window is back: where window; the reopened documents"
+  }
+ ]
+}

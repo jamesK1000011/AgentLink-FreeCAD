@@ -1875,129 +1875,16 @@
   }
  ],
  "runAlone": {
-  "about": "Calls that cannot ride in the list above: sent one at a time, each as its own tool call, after the list has run (the document UnprovenHub in front). Same shape as a call; arguments in <angle brackets> are read from the answer named.",
-  "calls": [
-   {
-    "tool": "batch",
-    "arguments": {
-     "calls": [
-      {
-       "tool": "session_state",
-       "arguments": {}
-      },
-      {
-       "tool": "batch",
-       "arguments": {
-        "calls": []
-       }
-      }
-     ]
-    },
-    "expect": "REFUSED invalid_input: calls.1: a batch does not run another batch. Nothing was run. — no results, and session_state did not run either (the list is refused whole)"
-   },
-   {
-    "tool": "batch",
-    "arguments": {
-     "calls": [
-      {
-       "tool": "history_undo",
-       "arguments": {
-        "steps": 1
-       }
-      }
-     ]
-    },
-    "expect": "REFUSED invalid_input: calls.0: history_undo inside a batch that rolls back can't be taken back by undo — call it on its own, or rollback: false. Nothing was run. (rollback is true when left out)"
-   },
-   {
-    "tool": "batch",
-    "arguments": {
-     "calls": [
-      {
-       "tool": "nosuchtool",
-       "arguments": {}
-      }
-     ]
-    },
-    "expect": "REFUSED not_found: No tool named nosuchtool — nothing was run. tool_groups lists them all."
-   },
-   {
-    "tool": "batch",
-    "arguments": {
-     "calls": [
-      {
-       "tool": "session_state",
-       "arguments": {},
-       "to": "unproven_state.json"
-      },
-      {
-       "tool": "steps_list",
-       "arguments": {
-        "body": {
-         "$from": 0,
-         "$at": "bodies.0.name"
-        }
-       }
-      }
-     ],
-     "rollback": false
-    },
-    "expect": "batch's own answer: results[0] { tool session_state, ok true, written { path …/unproven_state.json, bytes }, keys [document, label, freecad, bodies …] } (to keeps the answer out of the reply); results[1]: steps_list of the first body by reference — ok with its steps when that body is Bracket, else the PartDesign refusal naming the body it was given (either proves the reference was filled in); ran 2; record: a path under batches/"
-   },
-   {
-    "tool": "job_start",
-    "arguments": {
-     "tool": "body_check",
-     "arguments": {
-      "body": "Bracket"
-     }
-    },
-    "expect": "body_check's own answer (body Bracket, ok true, volume 12000) with job: an id beside it — it ended within 45 s. This is the success the list's job_start call cannot show (inside a batch it is refused)"
-   },
-   {
-    "tool": "job_start",
-    "arguments": {
-     "tool": "meshobj_info",
-     "arguments": {
-      "mesh": "Ball mesh"
-     },
-     "wait": false
-    },
-    "expect": "at once: job (an id), tool meshobj_info, status running (or done already), next naming job_status { job, wait: 25 }; note that it goes on as a job"
-   },
-   {
-    "tool": "job_status",
-    "arguments": {
-     "job": "<the job id the call above answered>",
-     "wait": 20
-    },
-    "expect": "job: that id; tool meshobj_info; status done; took (seconds); result: meshobj_info's answer for Ball mesh (solid true, verdict clean)"
-   },
-   {
-    "tool": "job_status",
-    "arguments": {},
-    "expect": "jobs: two rows, the body_check and the meshobj_info jobs, both done with took"
-   },
-   {
-    "tool": "job_start",
-    "arguments": {
-     "tool": "pd_pad",
-     "arguments": {
-      "body": "Bracket",
-      "sketch": "Base",
-      "length": 1
-     }
-    },
-    "expect": "REFUSED invalid_input: pd_pad cannot run as a job: only a read that leaves the window and the 3D view alone can (not a change, a picture, a window tool or a batch) — call pd_pad itself. Nothing padded (steps_list still counts the same)"
-   },
-   {
-    "tool": "job_start",
-    "arguments": {
-     "tool": "session_state",
-     "arguments": {}
-    },
-    "expect": "REFUSED invalid_input: session_state cannot run as a job: it changes nothing, but it reads the window (workbench, selection, what is open) for next, which only the window's own thread may do — call session_state itself; it runs as a plain call."
-   }
+  "about": "Moved to files of their own in models/alone (one per group, each with why it cannot be a call of this list), so that this list runs unattended as one batch { file }. Run them after this list, in the order of their names; the ones marked restarts last of all, one at a time, with the person's go.",
+  "files": [
+   "unproven-alone-1-nested-batch.json",
+   "unproven-alone-2-undo-rollback.json",
+   "unproven-alone-3-unknown-tool.json",
+   "unproven-alone-4-to-and-from.json",
+   "unproven-alone-5-jobs.json",
+   "unproven-alone-6-agentlink-update.json",
+   "unproven-alone-7-app-restart.json",
+   "unproven-alone-8-force-restart.json"
   ]
  },
  "notCovered": [

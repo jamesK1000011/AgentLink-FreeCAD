@@ -1,0 +1,22 @@
+{
+ "about": "From unproven-hub-model.json runAlone: to: writes an answer to a file; $from reads an earlier answer. This file is the batch's own list: send it AS IT IS, batch { file } (not through scripts/model_calls.py, which writes rollback: false and would change what is tested). After unproven-hub-model.json has run (the document UnprovenHub in front, with Bracket and Ball mesh).",
+ "sendAsIs": true,
+ "expect": "batch's own answer: results[0] { tool session_state, ok true, written { path …/unproven_state.json, bytes }, keys [document, label, freecad, bodies …] } (to keeps the answer out of the reply); results[1]: steps_list of the first body by reference — ok with its steps when that body is Bracket, else the PartDesign refusal naming the body it was given (either proves the reference was filled in); ran 2; record: a path under batches/",
+ "rollback": false,
+ "calls": [
+  {
+   "tool": "session_state",
+   "arguments": {},
+   "to": "unproven_state.json"
+  },
+  {
+   "tool": "steps_list",
+   "arguments": {
+    "body": {
+     "$from": 0,
+     "$at": "bodies.0.name"
+    }
+   }
+  }
+ ]
+}

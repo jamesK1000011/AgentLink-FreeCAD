@@ -1,0 +1,11 @@
+{
+ "about": "From unproven-hub-model.json runAlone: a tool that does not exist is refused whole. This file is the batch's own list: send it AS IT IS, batch { file } (not through scripts/model_calls.py, which writes rollback: false and would change what is tested). After unproven-hub-model.json has run (the document UnprovenHub in front, with Bracket and Ball mesh).",
+ "sendAsIs": true,
+ "expect": "REFUSED not_found: No tool named nosuchtool — nothing was run. tool_groups lists them all.",
+ "calls": [
+  {
+   "tool": "nosuchtool",
+   "arguments": {}
+  }
+ ]
+}

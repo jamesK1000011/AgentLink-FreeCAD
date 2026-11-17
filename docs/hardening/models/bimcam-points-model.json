@@ -1,6 +1,6 @@
 {
  "tutorial": "Points_Workbench.md with Points_Convert.md, Points_Import.md, Points_Export.md, Points_Merge.md, Points_Structure.md and Reverse_Engineering_Workbench.md. There is no step-by-step Points tutorial on the wiki, so the model samples bodies of known size (as Points Convert does), writes and reads the cloud back (Points Export / Import), and fits the shapes it came from.",
- "reference": "FreeCAD/Examples: Point_cloud_ExampleFiles/PointCloud-Data_Stanford-Bunny.asc (397 points, metres)",
+ "reference": "FreeCAD/Examples: Point_cloud_ExampleFiles/PointCloud-Data_Stanford-Bunny.asc (397 points, metres) (on the Mac: ~/AgentLink/hardening/refs/PointCloud-Data_Stanford-Bunny.asc, put there once; points_import only reads it. On 16 Nov the relative name was looked for in the session's folder and not found)",
  "expected": {
   "sample": {
    "count": 6000
@@ -398,7 +398,7 @@
   {
    "tool": "points_import",
    "arguments": {
-    "path": "PointCloud-Data_Stanford-Bunny.asc",
+    "path": "~/AgentLink/hardening/refs/PointCloud-Data_Stanford-Bunny.asc",
     "scale": 1000,
     "name": "Bunny"
    },

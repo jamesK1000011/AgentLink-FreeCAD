@@ -775,7 +775,7 @@
     "type": "cylinder",
     "radius": 4
    },
-   "expect": "two faces; the one that is not CrankRod's b is the free hole: use its name in the next call"
+   "expect": "two faces; the one that is not CrankRod's b is the free hole (on 16 Nov: Face7, centre [170, 30, 12], beside CrankRod's Face8 at x 120). Call 51 picks it by a query near [170, 30, 14], not by name"
   },
   {
    "tool": "asm_joint",
@@ -796,10 +796,19 @@
     },
     "b": {
      "part": "ConnectingRod",
-     "element": "<the free hole's face name from the shape_query above, e.g. Face7>"
+     "element": {
+      "kind": "face",
+      "type": "cylinder",
+      "radius": 4,
+      "near": [
+       170,
+       30,
+       14
+      ]
+     }
     }
    },
-   "expect": "a is the SliderRod's short pin (area about 201; the shaft's is 2212). solve solved and the loop is closed. The wiki notes the solver may need the parts dragged to an easier position: a solver error here is refused with nothing kept — then asm_pose { joint: \"CrankPivot\", by: 20 } and try again; record what happened"
+   "expect": "a is the SliderRod's short pin; b the rod's free hole, found by a query: the r 4 cylinder face nearest [170, 30, 14] (the hole's middle once call 48 moved the rod to [120, 30, 12]; Face7 on 16 Nov) (area about 201; the shaft's is 2212). solve solved and the loop is closed. The wiki notes the solver may need the parts dragged to an easier position: a solver error here is refused with nothing kept — then asm_pose { joint: \"CrankPivot\", by: 20 } and try again; record what happened"
   },
   {
    "tool": "asm_list",
