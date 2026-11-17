@@ -934,8 +934,10 @@ class Echo:
                 # looks straight down on it: a pad then shows as a flat
                 # outline and nobody sees that it is a solid. Turned to the
                 # isometric view once, as a person turns it to look.
-                if getattr(self, "_left_sketch", False):
-                    self._left_sketch = False
+                self._left_sketch = False
+                # (Whenever a solid was made or changed and no sketch is
+                # open: the sketch may have been closed by an earlier call.)
+                if FreeCADGui.ActiveDocument is not None and FreeCADGui.ActiveDocument.getInEdit() is None:
                     try:
                         if made and any(getattr(o, "Shape", None) is not None and o.Shape.Solids for o in made):
                             # Set, not animated: viewIsometric starts a turn
