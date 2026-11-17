@@ -500,8 +500,6 @@ tests/test_model.py
 tests/test_model_more.py
 tests/test_more_families.py
 tests/test_needs.py
-tests/test_needs.py
-tests/test_needs.py
 tests/test_nexthint.py
 tests/test_no_addon_names.py
 tests/test_note_faces.py

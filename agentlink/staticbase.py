@@ -54,7 +54,7 @@ def ste_descriptions():
     if "ste" not in _cache:
         try:
             with open(_STE, encoding="utf-8") as f:
-                _cache["ste"] = json.load(f)["descriptions"]
+                _cache["ste"] = json.load(f)["entries"]
         except Exception:  # noqa: BLE001
             _cache["ste"] = {}
     return _cache["ste"]
@@ -62,7 +62,10 @@ def ste_descriptions():
 
 def apply(server):
     """Set server.static_base from the mode now (None in classic)."""
-    server.static_base = BASE if mode() == "static" else None
+    # A server without tool_find (a test server, a small add-on server on
+    # this protocol) keeps its own list: the base is no use without a find.
+    has_find = "tool_find" in (getattr(server, "tools", None) or {})
+    server.static_base = BASE if mode() == "static" and has_find else None
     return server.static_base
 
 
