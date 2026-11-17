@@ -2258,7 +2258,7 @@ def _shaped(o):
 
 def attach_bare_views(doc):
     """Python view providers that never attached (measured live, 17 Nov: a
-    CAM operation and Texturizer's Textured result had DisplayMode "None"
+    CAM operation and an add-on's textured result had DisplayMode "None"
     and a mode switch with no child, so nothing was drawn). A Python view
     provider attaches its drawing only once its Proxy is set
     (ViewProviderPythonFeatureT delays attach); an object made by App-side
