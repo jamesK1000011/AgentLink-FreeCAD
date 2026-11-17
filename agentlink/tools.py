@@ -2118,7 +2118,23 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             _around.start()
             if miss is None:
                 _t_sc = time.time()
+                _prof = None
+                if c.get("profile"):
+                    # calls[i].profile: true — where this one call's time
+                    # went, by function (for finding what is slow round a tool).
+                    import cProfile
+
+                    _prof = cProfile.Profile()
+                    _prof.enable()
                 r = server.call({"name": c["tool"], "arguments": args})
+                if _prof is not None:
+                    _prof.disable()
+                    import io
+                    import pstats
+
+                    _buf = io.StringIO()
+                    pstats.Stats(_prof, stream=_buf).sort_stats("cumulative").print_stats(45)
+                    mine["profile"] = [ln.strip()[:170] for ln in _buf.getvalue().splitlines() if ln.strip()][4:52]
                 mine["serverCallMs"] = int((time.time() - _t_sc) * 1000)
                 if mine.get("answered"):
                     # Answered already, from inside this call: the batch stops here.
@@ -2147,6 +2163,8 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                     row = _chain.written_row(c["tool"], body, _chain.write_answer(c["to"], body))
                 except Exception as e:
                     row["toError"] = f"to: not written ({e}). The answer is here in full instead."
+            if mine.get("profile") is not None:
+                row["profile"] = mine.pop("profile")
             results.append(row)
             if mine.get("record") is not None:
                 with _around.part("record"):
