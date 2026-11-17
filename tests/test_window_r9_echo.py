@@ -177,7 +177,8 @@ class PlainWords(unittest.TestCase):
     def test_job_start(self):
         a = {"tool": "measure_mass", "arguments": {"body": "Peg"}}
         got = self.read("job_start", a, {"volume": 6000, "job": "job-0123abcd"})
-        self.assertTrue(got.startswith("Ran a job, done: "), got)
+        # round 10: the inner read's own words after "Ran a job:"
+        self.assertTrue(got.startswith("Ran a job: "), got)
         self.assertNotIn("Job start", got)
         a = {"tool": "meshobj_info", "arguments": {"mesh": "Globe fine"}}
         got = self.read("job_start", a, {"job": "job-0123abcd", "status": "running", "tool": "meshobj_info", "running": 2})
@@ -201,7 +202,7 @@ class PlainWords(unittest.TestCase):
     def test_report_read_names_the_first(self):
         body = {"found": True, "count": 798, "problems": 1, "first": "Traceback: KeyError: 'deadline' (gui_link.py)"}
         got = self.read("report_read", {"problems": True}, body)
-        self.assertIn("1 problem (first: Traceback: KeyError: 'deadline'", got)
+        self.assertIn("1 problem, 798 lines; first: Traceback: KeyError: 'deadline'", got)  # round 10: counts first
         self.assertEqual(report_watch.first_problem(["15:00:05  <Exception> Shape index 29 out of bound 0"]),
                          "<Exception> Shape index 29 out of bound 0")
 

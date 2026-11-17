@@ -138,15 +138,20 @@ class LinearizeMap(WithStandIns):
 class OneSurface(WithStandIns):
     def test_mesh_hidden_off_its_solid_or_the_solid_for_a_mesh_just_made(self):
         # r8fem-6/7: the Gmsh mesh and the Box drawn over each other.
+        # Round 10: the result's mesh and the pipeline on the same solid are
+        # hidden too (they lie on its surface as well).
         doc, box, gmsh, res, res_mesh, pipe = _study()
         res_mesh.ViewObject.Visibility = True
-        self.assertEqual(echo.fem_one_surface(doc), ["Mesh"])
-        self.assertTrue(box.ViewObject.Visibility and res_mesh.ViewObject.Visibility)
+        got = echo.fem_one_surface(doc)
+        self.assertEqual(got["kept"], {"Box": "Box"})
+        self.assertEqual(sorted(got["hidden"]), ["CCX_Results_Mesh", "Mesh", "Pipeline_CCX_Results"])
+        self.assertTrue(box.ViewObject.Visibility)
         gmsh.ViewObject.Visibility = True
-        self.assertEqual(echo.fem_one_surface(doc, [gmsh]), ["Box"])
+        got = echo.fem_one_surface(doc, [gmsh])
+        self.assertEqual((got["kept"], got["hidden"]), ({"Box": "Mesh"}, ["Box"]))
         self.assertTrue(gmsh.ViewObject.Visibility)
         # Nothing over anything: nothing hidden.
-        self.assertEqual(echo.fem_one_surface(doc), [])
+        self.assertEqual(echo.fem_one_surface(doc)["hidden"], [])
 
     def test_the_echo_calls_it_when_no_map_is_drawn(self):
         src = open(os.path.join(HERE, "..", "agentlink", "echo.py"), encoding="utf-8").read()

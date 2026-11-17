@@ -329,8 +329,34 @@ def _job_words(a, b):
     if st in ("running", "queued"):
         inner = did(tool, inner_args, {})
         return f"Started a job: {_lower(inner)}"
-    inner = did(tool, inner_args, {k: v for k, v in b.items() if k not in ("job", "status", "note")})
-    return f"Ran a job, done: {_lower(inner)}"
+    inner_body = job_inner(b)
+    # The inner read's own value first (round 10, r9echo-7: "Ran a job,
+    # done: weighed Plate: a body with no material is taken as PLA …" lost
+    # the mass to its note): "Ran a job: mass of Plate 14.9 g (PLA assumed)".
+    rv = read_value(tool, inner_body)
+    if rv:
+        return f"Ran a job: {_lower(rv)}"
+    return f"Ran a job: {_lower(did(tool, inner_args, inner_body))}"
+
+
+def job_inner(b):
+    """A finished job's answer as its read's own (the job's id and state
+    taken off). Plain Python."""
+    return {k: v for k, v in (b or {}).items() if k not in ("job", "status")}
+
+
+def _job_outcome(a, b, ok):
+    """What came of job_start, after its words: a running or queued job's
+    state; for one done within the call the inner read's own value (its
+    words hold it already) or else its own outcome — so a note comes only
+    after a value, never in place of it (round 10). None for anything
+    else."""
+    tool = a.get("tool") if isinstance(a, dict) else None
+    if not ok or not isinstance(tool, str) or isinstance(b.get("jobs"), list) or isinstance(b.get("status"), str) or "error" in b:
+        return None
+    inner_args = a.get("arguments") if isinstance(a.get("arguments"), dict) else {}
+    inner = job_inner(b)
+    return read_value(tool, inner) or outcome(tool, True, inner, inner_args)
 
 
 def _special(name, args, body):
@@ -770,15 +796,36 @@ def _report_value(b):
     if not isinstance(p, int) and not isinstance(n, int):
         return None
     bits = []
+    first = b.get("first")
     if isinstance(p, int):
         bits.append(_count(p, "problem"))
-        first = b.get("first")
-        if p and isinstance(first, str) and first.strip():
-            # The first one named, short (r8hub-1: "1 problem" said nothing).
-            bits[-1] += f" (first: {_cap(plain(first.strip()), 60)})"
     if isinstance(n, int):
         bits.append(_count(n, "line"))
-    return ", ".join(bits)
+    out = ", ".join(bits)
+    if isinstance(p, int) and p and isinstance(first, str) and first.strip():
+        # The first one named, after the counts and in its useful words
+        # (r8hub-1: "1 problem" said nothing; round 10, r9echo-11: cut at
+        # "R…" behind a "(qt.qpa.fonts)" tag): the tag off, cut at a word.
+        out += f"; first: {problem_words(first)}"
+    return out
+
+
+PROBLEM_MOST = 90  # characters of the first problem named in report_read's words
+
+
+def problem_words(line, most=PROBLEM_MOST):
+    """A Report-view problem line as said: a leading tag in brackets
+    ("(qt.qpa.fonts)", "[Gui]") taken off, cut at a word boundary within
+    most characters, "…" where cut. Plain Python."""
+    t = plain(str(line or "")).strip()
+    t = re.sub(r"^(?:[(\[][\w.:\-]+[)\]]\s*)+", "", t).strip() or plain(str(line or "")).strip()
+    if len(t) <= most:
+        return t
+    cut = t[: most - 1]
+    sp = cut.rfind(" ")
+    if sp >= most // 2:
+        cut = cut[:sp]
+    return cut.rstrip(" ,;:") + "…"
 
 
 def _picture_value(b):
@@ -908,7 +955,9 @@ def _chart_value(b):
     elif _isnum(b.get("max")):
         out += f" up to {_short_num(b['max'])} {unit}".rstrip()
     if _isnum(b.get("samples")):
-        out += f", {_count(int(b['samples']), 'sample')}"
+        # Each sample is read from its nearest nodes (round 10, r9fem-3: a
+        # top-edge line's 377 MPa beside the map's 439 peak at another node).
+        out += f", {_count(int(b['samples']), 'sample')} from the nearest nodes"
     elif _isnum(b.get("nodes")):
         out += f", {_count(int(b['nodes']), 'node')}"
     return out
@@ -935,6 +984,35 @@ def _native_value(b):
     if b.get("skipped"):
         out += f", {len(b['skipped'])} skipped"
     return out + ", not solved"
+
+
+def _mass_value(b):
+    """measure_mass (round 10, r9echo-7: the mass was never said): "mass of
+    Plate 14.9 g (PLA assumed)". The hub's answer (body, mass, densityFrom)
+    or the answer of an add-on that owns mass (bodies [{ body, mass,
+    material }]); several bodies: their count and total."""
+    rows = [r for r in b.get("bodies") or () if isinstance(r, dict) and _isnum(r.get("mass"))]
+    if not rows and _isnum(b.get("mass")):
+        src = str(b.get("densityFrom") or "")
+        m = re.match(r"assumed ([\w\-]+)", src)
+        rows = [{"body": b.get("body"), "mass": b["mass"], "assumed": m.group(1).upper() if m else None}]
+    if not rows:
+        return None
+    for r in rows:
+        if "assumed" not in r:
+            mat = str(r.get("material") or "")
+            r["assumed"] = mat.split(" (")[0].strip() or None if "assumed" in mat.lower() else None
+
+    def grams(v):
+        v = float(v)
+        return f"{v:.0f} g" if abs(v) >= 100 else f"{v:.3g} g"
+
+    guess = sorted({r["assumed"] for r in rows if r.get("assumed")})
+    tail = f" ({' and '.join(guess)} assumed)" if guess else ""
+    if len(rows) == 1:
+        who = _word(rows[0].get("body"))
+        return f"mass{' of ' + who if who else ''} {grams(rows[0]['mass'])}{tail}"
+    return f"mass of {len(rows)} bodies {grams(sum(float(r['mass']) for r in rows))}{tail}"
 
 
 def _prefs_value(b):
@@ -1001,7 +1079,8 @@ READ_VALUES = {"pref_import": _prefs_value, "td_centermarks": _marks_value, "ses
                "view_maps": _maps_value, "snapshot_list": _shots_value, "note_list": _notes_value, "steps_list": _steps_value,
                "job_start": lambda b: _job_value({k: v for k, v in b.items() if k != "tool"}), "job_status": _job_value, "crash_collect": _crash_value, "pref_get": _pref_value,
                "ifc_open": _ifc_value, "app_extensions": _extensions_value,
-               "fea_probe": _probe_value, "fea_chart": _chart_value, "fem_linearize": _linearize_value, "fea_native": _native_value}
+               "fea_probe": _probe_value, "fea_chart": _chart_value, "fem_linearize": _linearize_value, "fea_native": _native_value,
+               "measure_mass": _mass_value}
 
 # Tools whose last word reads: their answer's file is what they read, not
 # what they wrote (round 7: "Read a setting: wrote BaseApp/Preferences/View",
@@ -1025,7 +1104,12 @@ def read_value(name, body):
         got = fn(body)
     except Exception:  # noqa: BLE001
         return None
-    return _cap(plain(got), 90) if isinstance(got, str) and got.strip() else None
+    return _cap(plain(got), READ_CAPS.get(str(name), 90)) if isinstance(got, str) and got.strip() else None
+
+
+# Reads whose value is longer than 90 characters by design: report_read
+# names its first problem in up to PROBLEM_MOST characters after its counts.
+READ_CAPS = {"report_read": 135}
 
 
 def _vols(rows):
@@ -1096,6 +1180,10 @@ def outcome(name, ok, body=None, args=None):
     b = body if isinstance(body, dict) else {}
     if not ok:
         return _cap(refusal(b))
+    if name == "job_start":
+        jo = _job_outcome(args or {}, b, ok)
+        if jo:
+            return jo
     if name == "workbench" and b.get("active") and (args or {}).get("activate"):
         return _cap(plain(f"{bench_text(b['active'])} in front"))
     rv = read_value(name, b)
