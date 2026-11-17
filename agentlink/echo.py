@@ -2116,6 +2116,39 @@ def _shaped(o):
         return False
 
 
+def attach_bare_views(doc):
+    """Python view providers that never attached (measured live, 17 Nov: a
+    CAM operation and Texturizer's Textured result had DisplayMode "None"
+    and a mode switch with no child, so nothing was drawn). A Python view
+    provider attaches its drawing only once its Proxy is set
+    (ViewProviderPythonFeatureT delays attach); an object made by App-side
+    code never sets it. Proxy = 0 (as CAM's own Job does for its group)
+    attaches FreeCAD's own drawing, then its first display mode is set.
+    View state only. Names fixed. Never raises."""
+    done = []
+    try:
+        objs = list(getattr(doc, "Objects", None) or ())
+    except Exception:  # noqa: BLE001
+        return done
+    for o in objs:
+        try:
+            vo = getattr(o, "ViewObject", None)
+            props = getattr(vo, "PropertiesList", None) or ()
+            if vo is None or "Proxy" not in props or getattr(vo, "Proxy", None) is not None:
+                continue
+            modes = list(vo.listDisplayModes() or ())
+            if not modes or str(vo.DisplayMode) in modes:
+                continue
+            vo.Proxy = 0
+            modes = list(vo.listDisplayModes() or ()) or modes
+            want = "Waypoints" if "Waypoints" in modes else ("Shaded" if "Shaded" in modes else modes[0])
+            vo.DisplayMode = want
+            done.append(f"{o.Name}: {want}")
+        except Exception:  # noqa: BLE001
+            continue
+    return done
+
+
 def _seen(o):
     vo = getattr(o, "ViewObject", None)
     try:
@@ -4104,6 +4137,7 @@ class Echo:
         tr["made"] = [getattr(o, "Name", "?") for o in made]
         if made:
             tr["madeFrom"] = how
+        self._step(tr, "viewsAttached", attach_bare_views, doc)
         self._front_other = bool(self._step(tr, "views", self._views, name, args, body, made)) and name.startswith(tuple(PAGES) + SHEET_TOOLS)
         gd = FreeCADGui.ActiveDocument
         # A tool that makes a sketch opens it (S5: a mirror or a merge
