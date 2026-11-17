@@ -8,7 +8,10 @@ format is in `agentlink/tooldata.py`'s docstring and `agentlink/data/tools.schem
 what each construct is for, with one real example of each, and where code is still right.
 
 The whole BIM family (40 handlers in `families/bim.py`, `bim_more.py`, `bim_gaps.py`) is data. Those
-three files now hold only what the entries call by name.
+three files now hold only what the entries call by name. So are the Mesh family (`families/meshobj.py`,
+21 tools) and the Points family (`families/points.py`, 8 tools): the numpy over points and triangles and
+the FreeCAD Mesh calls are named helpers (`plane_sides`, `own_boolean`, `edge_loops`, `flatten_apart`;
+`in_box`, `fitted`, `curve_through`, `grid_mesh`), the checks, the order and the answer are the entries.
 
 ## Two kinds of entry
 
@@ -144,6 +147,8 @@ after the first, or a refusal that cleans up: those are `=`, `choose`, `answer.t
   Every `refuse` in a converted entry is reached by at least one case.
 - The stand-in is not FreeCAD: it proves order and words, not Arch's behaviour. The live model
   (`docs/hardening/models/bimcam-bim-model.json`) on FreeCAD is the proof of that.
+- `tests/test_datamesh_data.py` is the same proof for Mesh and Points (`tests/_datamesh_standin.py`,
+  `_datamesh_cases.py`, `_datamesh_before.py`; numpy is real there, the mesh and the cloud are stand-ins).
 
 ## Adding or converting a tool
 
