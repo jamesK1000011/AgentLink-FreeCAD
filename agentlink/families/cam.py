@@ -9,6 +9,7 @@
 import importlib
 import math
 import os
+import time
 
 import FreeCAD
 
@@ -145,13 +146,20 @@ def path_seen(x):
     moves: the motion commands (G0-G3 and cycles), length: mm of them },
     shown: FreeCAD draws it (the object's Visibility, and every group it is
     in shown), and why not when it is not."""
-    cmds = list(x.Path.Commands) if getattr(x, "Path", None) is not None else []
-    moves = [c for c in cmds if c.Name.upper() in ("G0", "G00", "G1", "G01", "G2", "G02", "G3", "G03") + CYCLES]
-    st = path_stats(cmds, None)
-    out = {"path": {"moves": len(moves), "length": round(st["cutMm"] + st["rapidMm"], 1)}}
     why = None
     try:
-        if not bool(getattr(x, "Visibility", True)):
+        cmds = list(x.Path.Commands) if getattr(x, "Path", None) is not None else []
+        moves = [c for c in cmds if c.Name.upper() in ("G0", "G00", "G1", "G01", "G2", "G02", "G3", "G03") + CYCLES]
+        st = path_stats(cmds, None)
+        out = {"path": {"moves": len(moves), "length": round(st["cutMm"] + st["rapidMm"], 1)}}
+    except Exception as e:  # noqa: BLE001
+        moves = []
+        out = {"path": {"moves": 0, "length": 0.0}}
+        why = f"its path could not be read ({type(e).__name__})"
+    try:
+        if why:
+            pass
+        elif not bool(getattr(x, "Visibility", True)):
             why = f"{x.Label} is hidden"
         elif not bool(getattr(x, "Active", True)):
             why = f"{x.Label} is not Active"
@@ -167,6 +175,246 @@ def path_seen(x):
     out["shown"] = why is None
     if why:
         out["shownWhy"] = why
+    view = path_view(x)
+    if view is not None:
+        out["view"] = view
+    return out
+
+
+VIEW_BUDGET = 0.3  # s: the view facts stop being gathered past this
+
+
+def _gui():
+    """FreeCADGui when a window is up, else None."""
+    try:
+        if not bool(getattr(FreeCAD, "GuiUp", False)):
+            return None
+        import FreeCADGui
+
+        return FreeCADGui
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _vis(o):
+    """An object's view Visibility (None when it has no view)."""
+    try:
+        vo = getattr(o, "ViewObject", None)
+        return None if vo is None else bool(vo.Visibility)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _num(v):
+    try:
+        if hasattr(v, "x") and hasattr(v, "y") and hasattr(v, "z"):
+            return [round(float(v.x), 3), round(float(v.y), 3), round(float(v.z), 3)]
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, (int, float)):
+            return round(float(v), 3) if isinstance(v, float) else v
+        if isinstance(v, tuple):
+            return [_num(c) for c in v]
+        return str(v)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _field(coin, node, name):
+    """A Coin field's value as text-safe Python (a node typed or not)."""
+    for get in (lambda: getattr(node, name),
+                lambda: getattr(coin.cast(node, node.getTypeId().getName().getString()), name)):
+        try:
+            f = get()
+            if name in ("point", "coordIndex"):
+                return int(f.getNum())
+            return int(f.getValue())
+        except Exception:  # noqa: BLE001
+            continue
+    try:
+        return str(node.getField(name).get())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _find(coin, root, type_name, limit=8):
+    """The nodes of a Coin type under root, every switch child searched."""
+    try:
+        t = coin.SoType.fromName(type_name)
+        if t.isBad():
+            return []
+        sa = coin.SoSearchAction()
+        sa.setType(t)
+        sa.setInterest(coin.SoSearchAction.ALL)
+        sa.setSearchingAll(True)
+        sa.apply(root)
+        pl = sa.getPaths()
+        return [pl[i].getTail() for i in range(min(pl.getLength(), limit))]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _box(coin, what):
+    """SoGetBoundingBoxAction on a node or a path: [min, max], or None when
+    nothing in it is drawn (a switch off counts as nothing)."""
+    try:
+        ba = coin.SoGetBoundingBoxAction(coin.SbViewportRegion())
+        ba.apply(what)
+        bb = ba.getBoundingBox()
+        if bb.isEmpty():
+            return None
+        return [[round(float(c), 3) for c in bb.getMin().getValue()], [round(float(c), 3) for c in bb.getMax().getValue()]]
+    except Exception:  # noqa: BLE001
+        return "?"
+
+
+def path_view(x, budget=VIEW_BUDGET):
+    """A probe (round 7, cam 008-032: shown true, no path seen): what
+    FreeCAD's window holds of an operation's or dressup's path — its view
+    provider's properties, its Coin nodes (the mode switch, every switch
+    under the root, the points in each coordinate node, the line indices),
+    the box of what it draws, whether its root is in the 3D view's scene
+    graph (and the switches on the way down), and the view Visibility of
+    its job, the job's Operations and Model groups, the model clones and
+    the stock. None with no window. Never raises; stops past budget
+    seconds ("cut": the part not read)."""
+    G = _gui()
+    if G is None:
+        return None
+    t0 = time.monotonic()
+    out = {}
+
+    def late(part):
+        if time.monotonic() - t0 > budget:
+            out["cut"] = part
+            return True
+        return False
+
+    try:
+        vo = getattr(x, "ViewObject", None)
+        if vo is None:
+            out["vp"] = None
+            out["vpWhy"] = "no view provider: the window has nothing to draw it with"
+        else:
+            out["vp"] = str(getattr(vo, "TypeId", "?"))
+            try:
+                px = getattr(vo, "Proxy", None)
+                out["vpProxy"] = type(px).__name__ if px is not None else None
+            except Exception:  # noqa: BLE001
+                pass
+            props = list(getattr(vo, "PropertiesList", None) or ())
+            for p in ("Visibility", "DisplayMode", "LineWidth", "ShowCount", "StartIndex", "StartPosition", "ShowNodes", "SelectionStyle"):
+                if p in props:
+                    try:
+                        out[p] = _num(getattr(vo, p))
+                    except Exception:  # noqa: BLE001
+                        out[p] = "?"
+            try:
+                out["isVisible"] = bool(vo.isVisible())
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                out["objVisibility"] = bool(x.Visibility)
+            except Exception:  # noqa: BLE001
+                pass
+    except Exception as e:  # noqa: BLE001
+        out["error"] = f"{type(e).__name__}: {e}"
+    try:
+        out["job"] = _job_view(x)
+    except Exception as e:  # noqa: BLE001
+        out["job"] = f"{type(e).__name__}: {e}"
+    if out.get("vp") is None or late("nodes"):
+        return out
+    try:
+        from pivy import coin
+    except Exception as e:  # noqa: BLE001
+        out["coin"] = f"{type(e).__name__}: {e}"
+        return out
+    try:
+        root = vo.RootNode
+        out["rootChildren"] = int(root.getNumChildren())
+        try:
+            sw = vo.SwitchNode
+            out["modeSwitch"] = {"whichChild": _field(coin, sw, "whichChild"), "children": int(sw.getNumChildren())}
+        except Exception:  # noqa: BLE001
+            pass
+        out["switches"] = [{"whichChild": _field(coin, n, "whichChild"), "children": int(n.getNumChildren())} for n in _find(coin, root, "SoSwitch")]
+        if late("coords"):
+            return out
+        out["coordPoints"] = [_field(coin, n, "point") for n in _find(coin, root, "SoCoordinate3")]
+        out["lineIndices"] = [_field(coin, n, "coordIndex") for n in _find(coin, root, "SoBrepEdgeSet")]
+        if late("box"):
+            return out
+        out["box"] = _box(coin, root)
+    except Exception as e:  # noqa: BLE001
+        out["nodesError"] = f"{type(e).__name__}: {e}"
+    if late("scene"):
+        return out
+    try:
+        gd = G.getDocument(x.Document.Name)
+        v = getattr(gd, "ActiveView", None) if gd is not None else None
+        sg = v.getSceneGraph() if v is not None and hasattr(v, "getSceneGraph") else None
+        if sg is None:
+            out["inScene"] = None
+            out["inSceneWhy"] = "no 3D view for its document"
+        else:
+            sa = coin.SoSearchAction()
+            sa.setNode(vo.RootNode)
+            sa.setInterest(coin.SoSearchAction.FIRST)
+            sa.setSearchingAll(True)
+            sa.apply(sg)
+            path = sa.getPath()
+            out["inScene"] = path is not None
+            if path is not None:
+                ups = []
+                for i in range(path.getLength()):
+                    n = path.getNode(i)
+                    if n.isOfType(coin.SoSwitch.getClassTypeId()):
+                        u = {"depth": i, "whichChild": _field(coin, n, "whichChild"), "children": int(n.getNumChildren())}
+                        if i + 1 < path.getLength():
+                            u["childOnPath"] = int(path.getIndex(i + 1))
+                        ups.append(u)
+                out["sceneSwitches"] = ups
+                out["sceneDepth"] = int(path.getLength())
+                if not late("sceneBox"):
+                    out["sceneBox"] = _box(coin, path)
+    except Exception as e:  # noqa: BLE001
+        out["sceneError"] = f"{type(e).__name__}: {e}"
+    return out
+
+
+def _job_view(x):
+    """The view Visibility of the job x is in, its Operations and Model
+    groups, the model clones (with Transparency) and the stock; None when
+    x is in no job."""
+    job = None
+    for p in getattr(x, "InListRecursive", None) or ():
+        if "Operations" in (getattr(p, "PropertiesList", None) or ()) and "Stock" in p.PropertiesList:
+            job = p
+            break
+    if job is None:
+        return None
+    ops = getattr(job, "Operations", None)
+    model = getattr(job, "Model", None)
+    stock = getattr(job, "Stock", None)
+    clones = []
+    for b in list(getattr(model, "Group", None) or ())[:4]:
+        c = {"name": b.Label, "Visibility": _vis(b)}
+        try:
+            c["Transparency"] = int(b.ViewObject.Transparency)
+        except Exception:  # noqa: BLE001
+            pass
+        clones.append(c)
+    out = {"name": job.Label, "Visibility": _vis(job),
+           "Operations": _vis(ops) if ops is not None else None,
+           "inOperations": bool(ops is not None and x in (getattr(ops, "Group", None) or ())),
+           "Model": _vis(model) if model is not None else None,
+           "clones": clones,
+           "Stock": _vis(stock) if stock is not None else None}
+    try:
+        out["StockTransparency"] = int(stock.ViewObject.Transparency)
+    except Exception:  # noqa: BLE001
+        pass
     return out
 
 

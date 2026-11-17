@@ -395,6 +395,7 @@ tests/test_bim_data.py
 tests/test_bim_gaps.py
 tests/test_cam.py
 tests/test_cam_more.py
+tests/test_cam_probe.py
 tests/test_ccx.py
 tests/test_cells.py
 tests/test_chain.py
