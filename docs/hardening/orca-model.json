@@ -1,0 +1,209 @@
+{
+ "tutorial": "No tutorial: the five tools of Agent Link for OrcaSlicer's own MCP server (orca_project, orca_paint, orca_slice, gcode_read, orca_calibrate), each proven once with one refusal, on a 20 x 10 x 5 mm box sliced with the person's own presets.",
+ "reference": null,
+ "conventions": {
+  "server": "The add-on's own MCP server (OrcaSlicer Agent Link: orca_status, guide_read, orca_project, orca_paint, orca_calibrate, orca_slice, gcode_read), NOT Agent Link for FreeCAD. It has no batch tool and no { $from, $at }: run the calls one at a time, in order. So this list starts with orca_status, not doc_new, and has no chained references.",
+  "fixture": "orca-box.stl (beside this file; 684 bytes, 12 triangles, 20 x 10 x 5 mm, written with the repo's own orcalink.meshgen.box and orca3mf.write_stl) must be at ~/AgentLink/hardening/models/orca-box.stl on the Mac before call 1 (the server opens ~ itself). It is the only file to copy.",
+  "inputs": {
+   "<MACHINE>, <PROCESS>, <FILAMENT>": "The names of three presets the person already has in OrcaSlicer, exactly as OrcaSlicer lists them (a printer, a process that fits it, a filament that fits it). They are in call 1 only. This server has no call that lists presets, and it has no chaining, so they cannot be references: read them once with Agent Link for FreeCAD's slicer_presets { action: \"list\", slicer: \"orcaslicer\" } (Workshop Make; the person's own presets come first, marked own) and write them into call 1. A wrong name is refused by call 1 with 'No machine preset named …' and nothing is made."
+  },
+  "needsOrcaSlicer": "true on the calls that run OrcaSlicer's command line (1, 9, 14, 15); the others are answered by the server alone, but 2, 4 to 8 and 13 need the project call 1 made, and 10 to 12 need the sliced file call 9 made.",
+  "presetsUnchanged": "By the code, not by a call: orcalink/presets.py only reads OrcaSlicer's preset folders (scan, resolve) and writes its merged copies under <project>-work/presets/ in the output folder (write_profiles). No call here has machine, process or filament settings changed; call 4 paints the project file only.",
+  "leftBehind": "In the output folder: alink-rest.3mf, alink-rest-work/, alink-rest-out/, alink-rest-sliced.3mf (and the .gcode copied out beside it), alink-rest-cal.3mf, alink-rest-cal-work/. A second run replaces them."
+ },
+ "expected": {
+  "box": {
+   "size": [
+    20,
+    10,
+    5
+   ],
+   "triangles": 12,
+   "topTriangles": 2
+  },
+  "svgLayersAtHalfMm": 10,
+  "layersAtPoint2": 25
+ },
+ "calls": [
+  {
+   "tool": "orca_status",
+   "arguments": {},
+   "expect": "version, out (the output folder: every relative path below is in it), orcaslicer (a path, not null: the Mac has OrcaSlicer) and orcaVersion; no note",
+   "needsOrcaSlicer": false
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "new",
+    "files": [
+     "~/AgentLink/hardening/models/orca-box.stl"
+    ],
+    "path": "alink-rest.3mf",
+    "machine": "<MACHINE>",
+    "process": "<PROCESS>",
+    "filament": "<FILAMENT>"
+   },
+   "expect": "project ends alink-rest.3mf; objects [{ index 1, name 'orca-box.stl' }]; bedType one of bedTypes (chosen from the filament's bed temperatures); next. The three presets are read by name and written as copies into alink-rest-work/presets/ in the output folder: nothing in OrcaSlicer's own preset folders is written",
+   "needsOrcaSlicer": true
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "info",
+    "path": "alink-rest.3mf"
+   },
+   "expect": "objects[0]: name 'orca-box.stl', size [20, 10, 5], parts[0].triangles 12, one instance; plates 1; presets { machine: <MACHINE>, process: <PROCESS> } and filaments[0].preset <FILAMENT> — the person's own preset names, as given; sliced false; fromFile note",
+   "needsOrcaSlicer": false
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "new",
+    "files": [
+     "alink-no-such-model.stl"
+    ],
+    "path": "alink-none.3mf"
+   },
+   "expect": "REFUSED not_found: '<out>/alink-no-such-model.stl: no such file.' No project and no work folder is made",
+   "needsOrcaSlicer": false
+  },
+  {
+   "tool": "orca_paint",
+   "arguments": {
+    "path": "alink-rest.3mf",
+    "object": "orca-box.stl",
+    "kind": "seam",
+    "where": {
+     "normal": [
+      0,
+      0,
+      1
+     ]
+    },
+    "state": "block"
+   },
+   "expect": "project, object 'orca-box.stl', kind 'seam', state 'block', where as given, triangles 2 (the box's top face is two triangles)",
+   "needsOrcaSlicer": false
+  },
+  {
+   "tool": "orca_paint",
+   "arguments": {
+    "path": "alink-rest.3mf",
+    "object": "orca-box.stl",
+    "where": {
+     "face": "top"
+    }
+   },
+   "expect": "REFUSED invalid_input: 'where.face: not a way to choose triangles. Give normal [x, y, z] (with within, degrees), box …, below z and/or above z'. Nothing is painted",
+   "needsOrcaSlicer": false
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "info",
+    "path": "alink-rest.3mf",
+    "object": "orca-box.stl"
+   },
+   "expect": "parts[0].painted ['seam']; effective holds layer_height, wall_loops and sparse_infill_density as <PROCESS> has them (read layer_height: call 9's layer count is 5 / layer_height)",
+   "needsOrcaSlicer": false
+  },
+  {
+   "tool": "orca_slice",
+   "arguments": {
+    "path": "alink-rest.3mf",
+    "export": "svg",
+    "layerHeight": 0.5
+   },
+   "expect": "export 'svg', a path in alink-rest-out/ (slices.svg), layers 10 (5 mm at 0.5 mm), layerHeight 0.5: written by the server itself, no OrcaSlicer run",
+   "needsOrcaSlicer": false
+  },
+  {
+   "tool": "orca_slice",
+   "arguments": {
+    "path": "alink-rest.3mf",
+    "export": "drc",
+    "plate": 9
+   },
+   "expect": "REFUSED invalid_input: 'plate 9: this project has 1 plate(s), numbered from 1 (0 or left out: all of them).'",
+   "needsOrcaSlicer": false
+  },
+  {
+   "tool": "orca_slice",
+   "arguments": {
+    "path": "alink-rest.3mf"
+   },
+   "expect": "gcode [one path in alink-rest-out/]; layers = 5 mm / the process's layer_height (25 at 0.2 mm; the first layer's own height can shift it by one); filamentG over 0 and under 2 (the box is 1 cm³); filamentMm over 0; time; sliced ends alink-rest-sliced.3mf; warnings (OrcaSlicer's own, if any); no customGcode from this model (a gcodeWarning here is about the person's own preset G-code: show them). alink-rest.3mf itself is not changed. A 'failed' naming a bed type is answered with the orca_project set call that fixes it",
+   "needsOrcaSlicer": true
+  },
+  {
+   "tool": "gcode_read",
+   "arguments": {
+    "path": "alink-rest-sliced.3mf"
+   },
+   "expect": "layers the same count as call 9; z [first about the first layer's height, last 5.0]; slicer (the header's values); features with 'Outer wall' among them, each with lengthMm, filamentMm, timeShare; ranges (height, width, speed, fan, temperature …: temperature and speed are <FILAMENT>'s and <PROCESS>'s own); legend for view 'feature'",
+   "needsOrcaSlicer": false,
+   "needs": "the sliced file of call 9"
+  },
+  {
+   "tool": "gcode_read",
+   "arguments": {
+    "path": "alink-rest-sliced.3mf",
+    "layer": 2,
+    "move": 0,
+    "svg": true
+   },
+   "expect": "layer { layer 2, z about 3 layer heights, height, timeS, features, moves over 0 }; move { kind, from, to, speed, feature, line, gcode }; svg: a path beside the G-code ending -layer2-feature.svg, and the file is there",
+   "needsOrcaSlicer": false,
+   "needs": "the sliced file of call 9"
+  },
+  {
+   "tool": "gcode_read",
+   "arguments": {
+    "path": "alink-rest-sliced.3mf",
+    "view": "colour"
+   },
+   "expect": "REFUSED invalid_input: 'view: feature, height, width, speed, …' (the list of views)",
+   "needsOrcaSlicer": false,
+   "needs": "the sliced file of call 9 (without it the refusal is not_found)"
+  },
+  {
+   "tool": "gcode_read",
+   "arguments": {
+    "path": "alink-rest.3mf"
+   },
+   "expect": "REFUSED invalid_state: 'alink-rest.3mf holds no G-code (it is not sliced): orca_slice { path } first, then read the .gcode it answers or its -sliced.3mf.'",
+   "needsOrcaSlicer": false
+  },
+  {
+   "tool": "orca_calibrate",
+   "arguments": {
+    "kind": "temperature",
+    "params": {
+     "start": 230,
+     "end": 200
+    },
+    "path": "alink-rest-cal.3mf"
+   },
+   "expect": "project ends alink-rest-cal.3mf, kind 'temperature', objects 1, howToRead naming 230 °C at the bottom and 5 °C steps down to 200, next naming orca_slice; built with a minimal generic printer (no profiles given: the person's presets are not read and not written). It only makes the file: nothing is sliced or printed",
+   "needsOrcaSlicer": true
+  },
+  {
+   "tool": "orca_calibrate",
+   "arguments": {
+    "kind": "temperature",
+    "params": {
+     "step": 3
+    },
+    "path": "alink-rest-cal.3mf"
+   },
+   "expect": "REFUSED invalid_input: the tower's blocks are 5 °C apart (a step cannot be given); alink-rest-cal.3mf of call 14 is left as it was",
+   "needsOrcaSlicer": true
+  }
+ ],
+ "notCovered": [
+  "orca_calibrate with the person's own presets (profiles { machine, process, filament }: preset JSON file paths): the paths are the files call 1 writes under alink-rest-work/presets/, whose names I did not pin; with them the tower would carry the printer's real values. Here it is built on the minimal generic printer, which proves the tool, not a print.",
+  "Slicing the calibration project (orca_slice { path: \"alink-rest-cal.3mf\" }): a second slice of several minutes that proves nothing new about the five tools.",
+  "Every other orca_project action (set, part_add, gcode, instance, mesh, arrange …), orca_paint kinds supports, fuzzy_skin, color and texture, orca_slice's other exports: the 38-call docs/hardening/orca-model.json in the add-on's repo holds them; this list is the short one the task asked for.",
+  "That OrcaSlicer's window reads the seam paint and the presets as written: read in the window by the person, not by a call."
+ ]
+}
