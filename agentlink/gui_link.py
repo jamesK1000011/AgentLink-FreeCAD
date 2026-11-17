@@ -382,6 +382,36 @@ def blocked_words(d):
 CONTINUE = []
 
 
+def _job_alive(entry):
+    """A heavy queue entry still running as far as this FreeCAD can tell: a
+    job of this process only while it runs here (agentlink/jobs.py); any
+    other entry (the supervisor's, another FreeCAD's) is taken as running."""
+    from . import jobs
+
+    if not isinstance(entry, dict) or entry.get("job") is None or entry.get("pid") not in (os.getpid(),):
+        return True
+    return any(j.get("job") == entry["job"] for j in jobs.running())
+
+
+def _settle_own_jobs():
+    """This process's ended jobs taken out of the heavy queue, and its
+    "is running" notice settled (keep.settled_notice). Never raises."""
+    try:
+        from . import keep
+
+        def drop(q):
+            before = list(q.get("running") or [])
+            q["running"] = [r for r in before if _job_alive(r)]
+            if q["running"] == before:
+                return False
+            keep.settled_notice(q)
+            return None
+
+        keep.update_queue(drop)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _modified(d):
     """A document changed since it was opened or saved (the window's own
     flag), for the heartbeat: a recovered copy nobody changed is not
@@ -812,6 +842,12 @@ class Link:
             # stayed for the rest of the run).
             q = keep._load(keep.path("queue.json"), {}) or {}
             line = keep.status_line(q)
+            if line and keep.status_line(q, alive=_job_alive) is None:
+                # Its own job ended but the queue still names it (round 8,
+                # 00-042: fea_buckle's lock stayed): not said, taken out, the
+                # notice settled.
+                line = None
+                _settle_own_jobs()
             if line:
                 try:
                     import FreeCADGui

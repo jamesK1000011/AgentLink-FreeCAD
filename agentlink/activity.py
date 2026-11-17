@@ -511,7 +511,11 @@ def fem_value(b):
             return f"lowest load factor {_short_num(lf[0])}"
     hot = b.get("hottest")
     if isinstance(hot, dict) and num(hot.get("celsius")):
-        return f"hottest {_short_num(hot['celsius'])} °C"
+        out = f"hottest {_short_num(hot['celsius'])} °C"
+        cold = b.get("coolest")
+        if isinstance(cold, dict) and num(cold.get("celsius")):
+            out += f", coolest {_short_num(cold['celsius'])} °C"
+        return out
     return None
 
 
@@ -759,11 +763,79 @@ def _extensions_value(b):
     return f"{len(b['loaded'])} loaded" + (f", {_count(len(b['repos']), 'listed repo')}" if isinstance(b.get("repos"), list) else "")
 
 
+def _isnum(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _probe_value(b):
+    """fea_probe (round 8, 03-012: "FEM probe: box"): the displacement at
+    each point, the line's samples and largest, the faces' largest."""
+    bits = []
+    pts = [p for p in b.get("points") or () if isinstance(p, dict) and _isnum(p.get("displacementMm"))]
+    if pts:
+        bits.append(", ".join(f"{_short_num(p['displacementMm'])} mm" for p in pts[:3]) + (" …" if len(pts) > 3 else "")
+                    + f" at {_count(len(pts), 'point')}")
+    ln = [p for p in b.get("line") or () if isinstance(p, dict) and _isnum(p.get("displacementMm"))]
+    if ln:
+        bits.append(f"line {len(ln)} samples, {_short_num(ln[0]['displacementMm'])} to {_short_num(ln[-1]['displacementMm'])} mm")
+    fc = b.get("faces")
+    if isinstance(fc, dict):
+        d = (fc.get("displacementMm") or {}).get("max")
+        s = (fc.get("vonMisesMPa") or {}).get("max")
+        on = ", ".join(fc.get("faces") or []) or "faces"
+        if _isnum(d) or _isnum(s):
+            bits.append(f"{on} up to " + ", ".join(x for x in ((f"{_short_num(d)} mm" if _isnum(d) else None), (f"{_short_num(s)} MPa" if _isnum(s) else None)) if x))
+    return "; ".join(bits) or None
+
+
+def _chart_value(b):
+    """fea_chart (round 8, 03-014, 03-016: "FEM chart on histogram: box"):
+    its kind, field and range, with the nodes or samples."""
+    kind, unit = b.get("kind"), b.get("unit") if isinstance(b.get("unit"), str) else ""
+    if not isinstance(kind, str):
+        return None
+    field = {"vonMises": "von Mises", "displacement": "displacement"}.get(b.get("field"), str(b.get("field") or ""))
+    out = f"{kind} of {field}".strip()
+    if _isnum(b.get("min")) and _isnum(b.get("max")):
+        out += f" {_short_num(b['min'])} … {_short_num(b['max'])} {unit}".rstrip()
+    elif _isnum(b.get("max")):
+        out += f" up to {_short_num(b['max'])} {unit}".rstrip()
+    if _isnum(b.get("samples")):
+        out += f", {_count(int(b['samples']), 'sample')}"
+    elif _isnum(b.get("nodes")):
+        out += f", {_count(int(b['nodes']), 'node')}"
+    return out
+
+
+def _linearize_value(b):
+    """fem_linearize (round 8, 03-020: "21 points"): membrane and bending
+    stress through the wall, MPa."""
+    if not (_isnum(b.get("membrane")) and _isnum(b.get("bending"))):
+        return None
+    out = f"membrane {_short_num(b['membrane'])} MPa, bending {_short_num(b['bending'])} MPa"
+    if _isnum(b.get("thickness")):
+        out += f" through {_short_num(b['thickness'])} mm"
+    return out
+
+
+def _native_value(b):
+    """fea_native (round 8, 03-033: "FEM native on Box native"): the
+    analysis, its solver and what it holds; not solved."""
+    if not isinstance(b.get("analysis"), str) or not isinstance(b.get("objects"), (list, dict)):
+        return None
+    solver = {"calculix": "CalculiX", "elmer": "Elmer", "z88": "Z88", "mystran": "Mystran"}.get(str(b.get("solver")).lower(), b.get("solver") or "solver")
+    out = f"{b['analysis']}, {solver}, {_count(len(b['objects']), 'object')}"
+    if b.get("skipped"):
+        out += f", {len(b['skipped'])} skipped"
+    return out + ", not solved"
+
+
 READ_VALUES = {"session_state": _session_value, "guide_read": _guide_value, "tool_groups": _groups_value, "usage_report": _usage_value,
                "report_read": _report_value, "view_render": _picture_value, "view_snapshot": _picture_value, "window_snapshot": _picture_value,
                "view_maps": _maps_value, "snapshot_list": _shots_value, "note_list": _notes_value, "steps_list": _steps_value,
                "job_start": _job_value, "job_status": _job_value, "crash_collect": _crash_value, "pref_get": _pref_value,
-               "ifc_open": _ifc_value, "app_extensions": _extensions_value}
+               "ifc_open": _ifc_value, "app_extensions": _extensions_value,
+               "fea_probe": _probe_value, "fea_chart": _chart_value, "fem_linearize": _linearize_value, "fea_native": _native_value}
 
 # Tools whose last word reads: their answer's file is what they read, not
 # what they wrote (round 7: "Read a setting: wrote BaseApp/Preferences/View",

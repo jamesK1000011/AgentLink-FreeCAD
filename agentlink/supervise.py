@@ -65,19 +65,51 @@ def queue_admit(tool):
         if waited >= QUEUE_WAIT:
             return f"{tool} waited {int(waited)} s and did not start: {why}. Try again in a while, or a rough pass (smaller)."
         time.sleep(min(15.0, max(1.0, QUEUE_WAIT - waited)))
-    q = keep.queue_state()
-    q["running"] = [{"tool": tool, "start": time.time()}]
-    keep.save_queue(q)
+    def admit(q):
+        q["running"] = [{"tool": tool, "start": time.time(), "pid": os.getpid()}]
+
+    keep.update_queue(admit)
     return None
 
 
 def queue_done(tool):
     if keep is None or not keep.is_heavy(tool):
         return
-    q = keep.queue_state()
-    q["running"] = [r for r in q.get("running") or [] if r.get("tool") != tool]
-    keep.settled_notice(q)
-    keep.save_queue(q)
+
+    def done(q):
+        q["running"] = [r for r in q.get("running") or [] if r.get("tool") != tool]
+        keep.settled_notice(q)
+
+    # Under the queue's lock (keep.queue_lock): the watchdog's "held" write
+    # can no longer put back the entry taken out here (round 8, 00-042).
+    keep.update_queue(done)
+
+
+def queue_hold(person_active, busy, now=None):
+    """The watchdog's turn on the queue, under its lock: leftovers taken
+    out (keep.stale_running: no call in hand, or their FreeCAD gone), and,
+    with the person working in the window while a heavy job runs, the queue
+    held with its notice. person_active is asked of macOS before the lock
+    (that is the slow part). {held, dropped} or None."""
+    if keep is None:
+        return None
+    now = time.time() if now is None else now
+    out = {}
+
+    def turn(q):
+        gone = keep.stale_running(q, busy, now=now)
+        if gone:
+            out["dropped"] = [r.get("tool") for r in gone if isinstance(r, dict)]
+            keep.settled_notice(q)
+        if q.get("running") and not q.get("held") and person_active:
+            r = q["running"][0]
+            q["held"] = True
+            q["notice"] = f"A heavy job is running ({r.get('tool')}, since {time.strftime('%H:%M', time.localtime(r.get('start') or r.get('t') or now))}); new heavy jobs wait for your go"
+            out["held"] = r.get("tool")
+        return None if out else False
+
+    keep.update_queue(turn)
+    return out or None
 # A call stuck behind a dialog this long is answered "blocked".
 DIALOG_WAIT = 4.0
 # A call held this long by a menu (a popup in the heartbeat, which no modal
@@ -939,16 +971,20 @@ def run(script, argv):
             try:
                 now = time.time()
                 q = keep.queue_state()
+                active = False
                 if q.get("running") and not q.get("held"):
                     idle = keep.person_idle_seconds()
                     hb = heartbeat() or {}
                     window_up = now - float(hb.get("t") or 0) < 10
-                    if idle is not None and idle < PERSON_ACTIVE and window_up:
-                        r = q["running"][0]
-                        q["held"] = True
-                        q["notice"] = f"A heavy job is running ({r.get('tool')}, since {time.strftime('%H:%M', time.localtime(r.get('start') or now))}); new heavy jobs wait for your go"
-                        keep.save_queue(q)
-                        keep.log_watchdog({"event": "held", "tool": r.get("tool")})
+                    active = idle is not None and idle < PERSON_ACTIVE and window_up
+                if q.get("running"):
+                    # Read again under the lock, after the slow idle check: a
+                    # job that ended meanwhile stays ended (round 8, 00-042).
+                    got = queue_hold(active, bool(window.inflight or inflight), now=now)
+                    if got and got.get("held"):
+                        keep.log_watchdog({"event": "held", "tool": got["held"]})
+                    if got and got.get("dropped"):
+                        keep.log_watchdog({"event": "stale", "tools": got["dropped"]})
                 c = window.inflight
                 if c:
                     hb = heartbeat()

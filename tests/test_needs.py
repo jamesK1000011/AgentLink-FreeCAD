@@ -36,8 +36,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # The readers' pin: sha256 of readers.json's entries (each family's readers and changers, and the methods), as
 # scripts/tool_needs.py writes them. A helper or a method that joins or leaves a list changes it: read why
 # (`python3 scripts/tool_needs.py --why name`), then put the new value here.
-PIN = "9b28e6c5112f9bb5c785b75c19bc8bb3d2a84c234cabfc69e4cf5244608412de"
-COUNTS = {"readers": 890, "changers": 141, "families": 36}
+PIN = "3689f82ccbdd0b05b5c2d20899960bc79e83802d2ef5fafda4b2cf3aebe4ec4a"
+COUNTS = {"readers": 891, "changers": 141, "families": 36}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {

@@ -16003,7 +16003,7 @@
     {"each": "h", "in": "=heat_in", "index": "i", "steps": [{"refuse": {"fmt": "heat.{i}: {{ faces, watts }} going in."}, "when": "=not is_dict(h) or 'watts' not in h"}, {"let": {"picked": "=pick(shape, h.get('faces'), 'heat.' + str(i) + '.faces')"}}, {"let": {"vf, area": "=heated(m, picked, used)", "names": "=[n for n, f in picked]"}}, {"refuse": {"fmt": "heat.{i}: no element faces on {names} — another mesh size."}, "code": "failed", "when": "=not vf or area <= 0"}, {"let": {"q": "=float(h['watts']) * 1000.0 / area"}}, {"do": "=fluxes.extend([(e, fn, q) for e, fn in vf])"}, {"push": {"said": "={'heated': names, 'watts': float(h['watts']), 'mWperMm2': round(q, 5)}"}}]},
     {"when": "=air", "then": [{"let": {"hc": "=float(air.get('h', 10)) * 1e-3", "ta": "=float(air.get('celsius', 25))", "on": "=rest_faces(shape, used)"}}, {"let": {"on": "=pick(shape, air['faces'], 'air.faces')"}, "when": "=air.get('faces') is not None"}, {"do": "=films.extend(film_faces(m, on, hc, ta))"}, {"push": {"said": "={'air': {'h': float(air.get('h', 10)), 'celsius': ta, 'faces': len(on)}}"}}]},
     {"refuse": "Heat goes in but nothing takes it away: hold a face at a temperature or leave air on.", "when": "=not temps and not films"},
-    {"let": {"T": "=heat_solve(m, k, temps, fluxes, films, float((air or {}).get('celsius', 20)) if air else 20.0, timeout)"}},
+    {"let": {"T": "=heat_solve(m, k, temps, fluxes, films, float((air or {}).get('celsius', 20)) if air else 20.0, timeout, c)"}},
     {"refuse": {"fmt": "CalculiX wrote no temperatures: see job.frd in {m.wd}"}, "code": "failed", "when": "=not T"},
     {"let": {"hot": "=max(T, key=T.get)", "cold": "=min(T, key=T.get)", "soft": "=(c or {}).get('softens')", "warnings": "=[]"}},
     {"let": {"peak": "=T[hot]", "seconds": "=round(now() - t0, 1)"}},
@@ -16012,7 +16012,7 @@
     {"push": {"warnings": "Steady state, conduction and still-air convection only (no radiation); film coefficients are rough — 5 to 25 W/(m²·K) for still air, more with a fan."}},
     {"do": "=keep_heat(o, shape, T, m.nodes)"}
    ],
-   "answer": {"fields": {"body": "=o.Label", "material": {"id": "=(c or {}).get('id')", "name": "=(c or {}).get('name')", "conductivity": "=k", "softensC": "=(c or {}).get('softens')"}, "boundary": "=said", "hottest": "=hottest", "coolest": "=coolest", "mesh": {"size": "=st['mesh']", "nodes": "=len(m.nodes)", "elements": "=len(m.elems)"}, "files": "=m.wd", "kept": "Its results are the answer and files in the out folder (files): it makes no FEM objects in the document's tree.", "seconds": "=seconds", "warnings": "=warnings"}}
+   "answer": {"fields": {"body": "=o.Label", "material": {"id": "=(c or {}).get('id')", "name": "=(c or {}).get('name')", "conductivity": "=k", "softensC": "=(c or {}).get('softens')"}, "boundary": "=said", "hottest": "=hottest", "coolest": "=coolest", "mesh": {"size": "=st['mesh']", "nodes": "=len(m.nodes)", "elements": "=len(m.elems)"}, "solveCheck": "=heat_facts(m)", "files": "=m.wd", "kept": "Its results are the answer and files in the out folder (files): it makes no FEM objects in the document's tree.", "seconds": "=seconds", "warnings": "=warnings"}}
   },
   "fea_results": {
    "group": "strength",

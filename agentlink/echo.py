@@ -4029,7 +4029,7 @@ def solve_peak(r):
         return None
 
 
-def fem_result_shown(doc, body, session=None):
+def fem_result_shown(doc, body, session=None, name=None):
     """A strength result shown in colour in the window (round 6, item 2;
     fem 030, 034: none was ever seen).
 
@@ -4048,9 +4048,18 @@ def fem_result_shown(doc, body, session=None):
     view_render draws (render.MAPS["stress"]), on a mesh in the 3D view's
     scene only, with the body hidden under it.
 
+    fea_native (name) makes an analysis that is not solved: no colours are
+    drawn for it, and an older result's are put away (round 8, 03-033: the
+    last solve's von Mises map stood over "Box native"). Only fea_solve
+    (name None or "fea_solve") falls back to Agent Link's own field.
+
     What was shown, or None. Never raises."""
     try:
         b = body if isinstance(body, dict) else {}
+        if name is not None and name != "fea_solve":
+            unsolved = fem_unsolved(doc, b)
+            if unsolved:
+                return {"map": None, "notSolved": unsolved, "hidden": fem_results_away(doc)}
         named = [o for o in _objects(doc, [b.get("analysis")]) if getattr(o, "TypeId", "") == "Fem::FemAnalysis"]
         analyses = named or [o for o in doc.Objects if getattr(o, "TypeId", "") == "Fem::FemAnalysis"]
         results = [o for an in analyses for o in (getattr(an, "Group", None) or ())
@@ -4079,7 +4088,7 @@ def fem_result_shown(doc, body, session=None):
             return {"result": res.Label, "hidden": hid, "range": [round(lo, 3), round(hi, 3)], "legend": bool(leg),
                     "selectionCleared": selection_cleared()}
         r = getattr(session, "_agentlink_fea", None) if session is not None else None
-        if not r or "field" not in r:
+        if not r or "field" not in r or name not in (None, "fea_solve"):
             return None
         from . import render
 
@@ -4126,6 +4135,260 @@ def fem_result_shown(doc, body, session=None):
         return out
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (FEM result): {e}\n")
+        return None
+
+
+# ---- FEM pictures: one map at a time, its scale in its unit (round 8) ----------------------
+
+# FEM reads (and fem_linearize) whose answer is a field: drawn on the part
+# with a scale in the field's unit (round 8, 03-012…03-042: probe, chart,
+# linearize and heat showed no map, only FreeCAD's empty ±0.5 bar).
+FEM_READ_MAPS = ("fea_heat", "fea_probe", "fea_chart", "fem_linearize")
+# FEM calls that make or change an analysis with no new result: the colours
+# of an older result put away (round 8, 03-033: fea_native's unsolved
+# analysis showed the last solve's von Mises map).
+FEM_PUT_AWAY = ("fea_native", "fem_add")
+FEM_LABELS = {"vonMises": ("VON MISES", "MPa"), "displacement": ("DISPLACEMENT", "mm"), "heat": ("TEMPERATURE", "°C")}
+
+
+def _is_fem_view(o):
+    """A FEM mesh (the analysis' Gmsh mesh, a result's mesh) or a FEM post
+    object (a result pipeline, a filter): what lies on the part's surface
+    under a map or draws a colour bar of its own."""
+    t = str(getattr(o, "TypeId", ""))
+    return t.startswith("Fem::FemMeshObject") or t.startswith("Fem::FemPost")
+
+
+def fem_bars_away(doc, all_=False):
+    """FreeCAD's own FEM colour bars put away (round 8, every FEM picture: a
+    fixed ±5.000e-01 scale with no unit). A FEM post object (the result
+    pipeline FreeCAD's CalculiX route makes: importCcxFrdResults.py
+    setupPipeline, shown) whose Field is "None" draws an empty bar from -0.5
+    to 0.5 (ViewProviderFemPostObject.cpp WriteColorData:
+    setRangeOfColorBar(-0.5, 0.5)); it is hidden (view state, shown again at
+    the next change). all_: every shown post object, when Agent Link's own
+    scale is drawn (two bars over each other: 00-033). [label (its field)]
+    hidden. Never raises."""
+    out = []
+    for o in list(getattr(doc, "Objects", None) or ()):
+        try:
+            if not str(getattr(o, "TypeId", "")).startswith("Fem::FemPost") or not _seen(o):
+                continue
+            field = str(getattr(o.ViewObject, "Field", "") or "")
+            if all_ or field in ("", "None"):
+                if hide_for_scene([o]):
+                    out.append(f"{o.Label} ({field or 'no field'})")
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
+def fem_results_away(doc, keep=()):
+    """The FEM result meshes and post objects shown, hidden (view state,
+    back at the next change), but those in keep: an analysis with no
+    result of its own is not shown in another's colours (round 8, 03-033).
+    The labels. Never raises."""
+    try:
+        res_meshes = set()
+        for o in doc.Objects:
+            if str(getattr(o, "TypeId", "")).startswith("Fem::FemResultObject") and getattr(o, "Mesh", None) is not None:
+                res_meshes.add(o.Mesh.Name)
+        kept = {getattr(k, "Name", k) for k in keep or ()}
+        away = [o for o in doc.Objects if _seen(o) and o.Name not in kept
+                and (o.Name in res_meshes or str(getattr(o, "TypeId", "")).startswith("Fem::FemPost"))]
+        return hide_for_scene(away)
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (FEM results away): {e}\n")
+        return []
+
+
+def fem_unsolved(doc, body):
+    """fea_native's analysis when it holds no result yet: its label, else
+    None. Never raises."""
+    try:
+        b = body if isinstance(body, dict) else {}
+        an = [o for o in _objects(doc, [b.get("analysis")]) if getattr(o, "TypeId", "") == "Fem::FemAnalysis"]
+        if not an:
+            return None
+        has = any(str(getattr(o, "TypeId", "")).startswith("Fem::FemResultObject") for o in (getattr(an[0], "Group", None) or ()))
+        return None if has else an[0].Label
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def fem_stops(lo, hi):
+    """FreeCAD's own result colours over [lo, hi] as a scale's stops
+    (ViewProviderFemMeshPyImp.cpp calcColor: blue at the least, cyan at
+    half of it, green at 0, yellow at half the largest, red at it; 0 always
+    inside). Plain Python."""
+    lo, hi = min(0.0, float(lo)), max(0.0, float(hi))
+    span = (hi - lo) or 1.0
+
+    def t(v):
+        return (v - lo) / span
+
+    stops = []
+    if lo < 0:
+        stops += [(0.0, (0.0, 0.0, 1.0)), (t(lo / 2.0), (0.0, 1.0, 1.0))]
+    stops.append((t(0.0), (0.0, 1.0, 0.0)))
+    if hi > 0:
+        stops += [(t(hi / 2.0), (1.0, 1.0, 0.0)), (1.0, (1.0, 0.0, 0.0))]
+    return stops
+
+
+def _fem_labels(field):
+    """A field's scale title and unit: von Mises and stress components in
+    MPa, displacement in mm, temperature in °C."""
+    if field in FEM_LABELS:
+        return FEM_LABELS[field]
+    f = str(field or "")
+    if f.lower().startswith("von"):
+        return FEM_LABELS["vonMises"]
+    if f.startswith("NodeStress"):
+        return (f"STRESS {f[len('NodeStress'):].upper()}", "MPa")
+    if f.startswith(("Principal", "MaxShear")):
+        return (re.sub(r"(?<!^)(?=[A-Z])", " ", f).upper(), "MPa")
+    if f.startswith("Temperature"):
+        return ("TEMPERATURE", "K")
+    if f.startswith("Displacement"):
+        return ("DISPLACEMENT", "mm")
+    return (f.upper() or "VALUE", "")
+
+
+def _scene_map(session, layer, vals, node_vals, label, unit, hide, cmap="jet"):
+    """One field drawn on the part in the scene only (the last map put
+    away first), its scale from the field's own least to its largest
+    (node_vals: the numbers the answer reads), in its unit; hide hidden
+    under it, nothing selected. {map, range, unit, triangles, hidden,
+    legend}, or None."""
+    import numpy as np
+
+    from . import annotate, render
+
+    nv = np.asarray(node_vals, dtype=float)
+    nv = nv[np.isfinite(nv)]
+    if not len(nv):
+        return None
+    lo, hi = float(nv.min()), float(nv.max())
+    if label != "TEMPERATURE":
+        lo = min(0.0, lo)  # a stress or a displacement from 0
+    if hi <= lo:
+        hi = lo + 1e-6
+    try:
+        annotate.service().clear(SCENE_OWNER)  # one map at a time
+    except Exception:  # noqa: BLE001
+        pass
+    drawn = scene_field(layer["V"], layer["F"], render.colours_for(vals, lo, hi, cmap))
+    if not drawn:
+        return None
+    hid = hide_for_scene([o for o in hide if o is not None])
+    leg = scene_legend(label, unit, lo, hi, map_stops(cmap))
+    return {"map": label, "label": label, "unit": unit, "range": [round(lo, 4), round(hi, 4)], "triangles": drawn,
+            "hidden": hid, "legend": bool(leg), "selectionCleared": selection_cleared()}
+
+
+def fem_read_map(doc, name, args, body, session):
+    """A FEM read's field drawn on the part with its scale (round 8, item
+    3/4): fea_heat its temperatures (°C), fea_probe the displacement (mm,
+    the probe points marked), fea_chart the field it charted (MPa or mm),
+    fem_linearize the result's field as FreeCAD colours it
+    (setNodeColorByScalars on the result's own mesh) with the line marked.
+    FreeCAD's own bars are put away by fem_bars_away. {map, range, unit,
+    …}, or {map: None, why}. Never raises."""
+    try:
+        import numpy as np
+
+        from . import render
+
+        a = args if isinstance(args, dict) else {}
+        b = body if isinstance(body, dict) else {}
+        others = [o for o in getattr(doc, "Objects", None) or () if _is_fem_view(o) and _seen(o)]
+        if name == "fem_linearize":
+            res = next(iter(_objects(doc, [b.get("result"), a.get("result")])), None)
+            field = b.get("field") or a.get("field") or "von Mises Stress"
+            if res is None or getattr(res, "Mesh", None) is None or not hasattr(res, "vonMises"):
+                return {"map": None, "why": "no CalculiX result object to colour (a post pipeline draws its own)"}
+            vals = list(res.vonMises) if str(field).lower().startswith("von") else list(getattr(res, field, None) or ())
+            if not vals:
+                return {"map": None, "why": f"{res.Label} holds no {field}"}
+            vals = [float(v) for v in vals]
+            mvo = res.Mesh.ViewObject
+            mvo.Visibility = True
+            mvo.setNodeColorByScalars(list(res.NodeNumbers), vals)
+            lo, hi = min(0.0, min(vals)), max(0.0, max(vals))
+            label, unit = _fem_labels(field)
+            under = [o for o in others if o is not res.Mesh]
+            # The solid under the result (the analysis' mesh names it: its
+            # Shape), as fem_result_shown hides it.
+            parts = []
+            for o in under:
+                part = getattr(o, "Shape", None) if str(getattr(o, "TypeId", "")).startswith("Fem::FemMeshObject") else None
+                if part is not None and hasattr(part, "TypeId") and part not in parts:
+                    parts.append(part)
+            hid = hide_for_scene(under + parts)
+            leg = scene_legend(label, unit, lo, hi if hi > lo else lo + 1e-6, fem_stops(lo, hi))
+            p0, p1 = a.get("from"), a.get("to")
+            marks = scene_marks([tuple(p0), tuple(p1)], lines=[[tuple(p0), tuple(p1)]], labels=[(tuple(p0), "from"), (tuple(p1), "to")]) \
+                if isinstance(p0, (list, tuple)) and isinstance(p1, (list, tuple)) else 0
+            return {"map": f"{label} on {res.Mesh.Label}", "label": label, "unit": unit, "range": [round(lo, 4), round(hi, 4)],
+                    "hidden": hid, "legend": bool(leg), "lineMarked": bool(marks), "selectionCleared": selection_cleared()}
+        if name == "fea_heat":
+            r = getattr(session, "_agentlink_heat", None)
+            fn = (render.MAPS.get("heat") or (None,))[0]
+            if not r or fn is None:
+                return {"map": None, "why": "no temperatures kept (fea_heat refused?)"}
+            m = fn(session, {"detail": 20000})
+            layer = (m.get("layers") or [None])[0]
+            label, unit = FEM_LABELS["heat"]
+            body_o = _body_of(session, r.get("body"))
+            return _scene_map(session, layer, layer["values"], r["field"]["celsius"], label, unit, [body_o] + others) or {"map": None, "why": "nothing drawn"}
+        r = getattr(session, "_agentlink_fea", None)
+        fn = (render.MAPS.get("stress") or (None,))[0]
+        if not r or "field" not in r or fn is None:
+            return {"map": None, "why": "no solve kept"}
+        field = "displacement" if name == "fea_probe" else (b.get("field") or a.get("field") or "vonMises")
+        m = fn(session, {"detail": 20000})
+        layer = (m.get("layers") or [None])[0]
+        f = r["field"]
+        if field == "displacement":
+            P = np.asarray(f["points"], dtype=float)
+            U = np.linalg.norm(np.asarray(f["displacement"], dtype=float).reshape(-1, 3), axis=1)
+            vals, node_vals = render.nearest_values(layer["V"], P, U), U
+        else:
+            vals, node_vals = layer["values"], f.get("vonMises") or layer["values"]
+        label, unit = FEM_LABELS["displacement" if field == "displacement" else "vonMises"]
+        body_o = _body_of(session, r.get("body"))
+        got = _scene_map(session, layer, vals, node_vals, label, unit, [body_o] + others)
+        if got is None:
+            return {"map": None, "why": "nothing drawn"}
+        pts = [tuple(p) for p in (a.get("points") or ()) if isinstance(p, (list, tuple)) and len(p) == 3]
+        ln = a.get("line") if isinstance(a.get("line"), dict) else None
+        lines = [[tuple(ln["from"]), tuple(ln["to"])]] if ln and isinstance(ln.get("from"), (list, tuple)) and isinstance(ln.get("to"), (list, tuple)) else []
+        if pts or lines:
+            words = []
+            for i, q in enumerate((b.get("points") or [])[:len(pts)]):
+                if isinstance(q, dict) and isinstance(q.get("displacementMm"), (int, float)):
+                    words.append((pts[i], f"{_short(q['displacementMm'])} mm"))
+            got["marked"] = scene_marks(pts, lines=lines, labels=words)
+        return got
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (FEM read map, {name}): {e}\n")
+        return {"map": None, "why": f"{type(e).__name__}: {e}"}
+
+
+def _short(v):
+    try:
+        from .annotate import legend_value
+
+        return legend_value(v)
+    except Exception:  # noqa: BLE001
+        return str(v)
+
+
+def _body_of(session, label):
+    try:
+        return session.body(label)
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -4614,6 +4877,16 @@ class Echo:
                 shown = self._step(tr, "mapShown", map_shown, self.s, READ_MAPS[name], args)
                 if shown:
                     self._step(tr, "words", say, map_words(read_words(what, result), shown), HOLD_MS, where)
+            if name in FEM_READ_MAPS and self.s.doc is not None and FreeCAD.ActiveDocument is not None \
+                    and FreeCAD.ActiveDocument.Name == self.s.doc.Name:
+                # A FEM read's field on the part with its scale in its unit
+                # (round 8: fea_heat, fea_probe, fea_chart showed no map).
+                # Its words keep the answer's values (activity.READ_VALUES);
+                # the scale says the range.
+                self._step(tr, "femMap", fem_read_map, self.s.doc, name, args, body, self.s)
+            if name.startswith(("fea_", "fem_")) and self.s.doc is not None:
+                ours = isinstance(tr.get("femMap"), dict) and bool(tr["femMap"].get("legend"))
+                self._step(tr, "femBarsAway", fem_bars_away, self.s.doc, ours)
             return
         import FreeCADGui
 
@@ -4707,7 +4980,18 @@ class Echo:
         if name in FEM_RESULT_TOOLS:
             # Only a call that leaves a result: a later fea_ change (fea_parts,
             # fea_clear) put away the colours (scene_clear) and draws none.
-            self._step(tr, "femResult", fem_result_shown, doc, body, self.s)
+            self._step(tr, "femResult", fem_result_shown, doc, body, self.s, name)
+        if name in FEM_PUT_AWAY and name not in FEM_RESULT_TOOLS:
+            self._step(tr, "femResultsAway", fem_results_away, doc)
+        if name in FEM_READ_MAPS:
+            # A change whose answer is a field (fem_linearize): drawn with
+            # its scale (round 8, 03-020).
+            self._step(tr, "femMap", fem_read_map, doc, name, args, body, self.s)
+        if name.startswith(("fea_", "fem_")):
+            # FreeCAD's own empty ±0.5 bars away; all of its bars when ours
+            # is drawn (round 8, 03-012…03-042, 00-033).
+            ours = any(isinstance(tr.get(k), dict) and tr[k].get("legend") for k in ("femResult", "femMap"))
+            self._step(tr, "femBarsAway", fem_bars_away, doc, ours)
         if name == "fea_hold":
             self._step(tr, "holdMarked", hold_marked, doc, body)
             self._step(tr, "holdFramed", hold_framed, doc, body)
