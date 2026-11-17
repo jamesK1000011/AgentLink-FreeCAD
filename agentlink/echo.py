@@ -42,7 +42,21 @@ COMMAND = {
     "pd_linear_pattern": "PartDesign_LinearPattern", "pd_polar_pattern": "PartDesign_PolarPattern",
     "pd_multitransform": "PartDesign_MultiTransform", "pd_loft": "PartDesign_AdditiveLoft", "pd_pipe": "PartDesign_AdditivePipe",
     "pd_helix": "PartDesign_AdditiveHelix", "pd_boolean": "PartDesign_Boolean", "pd_datum_plane": "PartDesign_Plane",
-    "pd_binder": "PartDesign_ShapeBinder", "pd_primitive": "PartDesign_CompPrimitiveAdditive",
+    # pd_binder makes a PartDesign::SubShapeBinder (agentlink/data/tools.json).
+    "pd_binder": "PartDesign_SubShapeBinder", "pd_primitive": "PartDesign_CompPrimitiveAdditive",
+    "pd_clone": "PartDesign_Clone", "pd_gear": "PartDesign_InvoluteGear", "pd_shaft": "PartDesign_WizardShaft",
+    "pd_move_feature": "PartDesign_MoveFeature", "pd_reorder": "PartDesign_MoveFeatureInTree", "pd_tip": "PartDesign_MoveTip",
+    # feature_edit: what a double-click on the feature runs. feature_suppress:
+    # FreeCAD 1.1 has no command for it (a tick in the feature's own menu).
+    "feature_edit": "Std_Edit",
+    # Sketcher (FreeCAD 1.1: src/Mod/Sketcher/Gui/Command*.cpp). sketch_add,
+    # sketch_constrain, sketch_edit, sketch_copy and sketch_bspline go by
+    # what was asked for (command_for).
+    "sketch_offset": "Sketcher_Offset", "sketch_array": "Sketcher_RectangularArray", "sketch_carbon": "Sketcher_CarbonCopy",
+    "sketch_project": "Sketcher_Projection", "sketch_external": "Sketcher_Projection", "sketch_extend": "Sketcher_Extend",
+    "sketch_join": "Sketcher_JoinCurves", "sketch_mirror": "Sketcher_MirrorSketch", "sketch_merge": "Sketcher_MergeSketches",
+    "sketch_validate": "Sketcher_ValidateSketch", "sketch_to_bspline": "Sketcher_BSplineConvertToNURBS",
+    "sketch_attach": "Sketcher_MapSketch", "sketch_copy": "Sketcher_Translate",
     "part_primitive": "Part_Primitives", "part_boolean": "Part_Boolean", "part_fillet": "Part_Fillet",
     "part_chamfer": "Part_Chamfer", "part_extrude": "Part_Extrude", "part_revolve": "Part_Revolve",
     "part_loft": "Part_Loft", "part_sweep": "Part_Sweep", "part_offset": "Part_Offset", "part_thickness": "Part_Thickness",
@@ -64,7 +78,8 @@ COMMAND = {
 }
 
 COMMAND.update({
-    "asm_ground": "Assembly_ToggleGrounded", "asm_sub": "Assembly_InsertLink", "asm_motion": "Assembly_CreateJointRevolute",
+    "asm_ground": "Assembly_ToggleGrounded", "asm_sub": "Assembly_InsertLink", "asm_new_part": "Assembly_InsertNewPart",
+    # asm_motion keeps its own saved motions, not FreeCAD's Simulation: no button.
     "bim_building": "Arch_Building", "bim_section": "Arch_SectionPlane", "bim_grid": "Arch_AxisSystem", "bim_member": "BIM_Beam",
     "bim_frame": "Arch_Frame", "bim_equipment": "Arch_Equipment", "bim_panel": "Arch_Panel", "bim_rebar": "Arch_Rebar",
     "bim_truss": "Arch_Truss", "bim_curtain_wall": "Arch_CurtainWall", "bim_fence": "Arch_Fence", "bim_pipe": "Arch_Pipe",
@@ -77,6 +92,64 @@ COMMAND.update({
 CAM_OP = {"profile": "CAM_Profile", "pocket": "CAM_Pocket_Shape", "adaptive": "CAM_Adaptive", "face": "CAM_MillFace",
           "drill": "CAM_Drilling", "engrave": "CAM_Engrave", "helix": "CAM_Helix", "slot": "CAM_Slot", "deburr": "CAM_Deburr",
           "vcarve": "CAM_Vcarve", "thread": "CAM_ThreadMilling", "surface": "CAM_Surface", "waterline": "CAM_Waterline"}
+# pd_datum's kinds (pd_datum_plane has its own entry above).
+PD_DATUM = {"line": "PartDesign_Line", "point": "PartDesign_Point", "lcs": "PartDesign_CoordinateSystem"}
+# Part Design tools that cut with subtractive: true: the cutting button.
+PD_SUBTRACTIVE = {"pd_primitive": "PartDesign_CompPrimitiveSubtractive", "pd_loft": "PartDesign_SubtractiveLoft",
+                  "pd_pipe": "PartDesign_SubtractivePipe", "pd_helix": "PartDesign_SubtractiveHelix"}
+# sketch_add's kinds, sketch_constrain's types and sketch_edit's keys: the
+# button a person would push for the first one asked for.
+SKETCH_ADD = {"line": "Sketcher_CreateLine", "polyline": "Sketcher_CreatePolyline", "arc": "Sketcher_CreateArc",
+              "arc3": "Sketcher_Create3PointArc", "circle": "Sketcher_CreateCircle", "circle3": "Sketcher_Create3PointCircle",
+              "ellipse": "Sketcher_CreateEllipseByCenter", "parabola": "Sketcher_CreateArcOfParabola",
+              "hyperbola": "Sketcher_CreateArcOfHyperbola", "bspline": "Sketcher_CreateBSpline",
+              "rectangle": "Sketcher_CreateRectangle", "roundedrectangle": "Sketcher_CreateOblong",
+              "polygon": "Sketcher_CreateRegularPolygon", "slot": "Sketcher_CreateSlot", "arcslot": "Sketcher_CreateArcSlot",
+              "point": "Sketcher_CreatePoint"}
+SKETCH_CONSTRAIN = {"coincident": "Sketcher_ConstrainCoincidentUnified", "pointonobject": "Sketcher_ConstrainCoincidentUnified",
+                    "horizontal": "Sketcher_ConstrainHorizontal", "vertical": "Sketcher_ConstrainVertical",
+                    "parallel": "Sketcher_ConstrainParallel", "perpendicular": "Sketcher_ConstrainPerpendicular",
+                    "equal": "Sketcher_ConstrainEqual", "tangent": "Sketcher_ConstrainTangent",
+                    "symmetric": "Sketcher_ConstrainSymmetric", "distance": "Sketcher_ConstrainDistance",
+                    "distancex": "Sketcher_ConstrainDistanceX", "distancey": "Sketcher_ConstrainDistanceY",
+                    "radius": "Sketcher_ConstrainRadius", "diameter": "Sketcher_ConstrainDiameter",
+                    "angle": "Sketcher_ConstrainAngle", "fix": "Sketcher_ConstrainLock"}
+SKETCH_EDIT = (("fillet", "Sketcher_CreateFillet"), ("trim", "Sketcher_Trimming"), ("split", "Sketcher_Split"),
+               ("mirror", "Sketcher_Symmetry"), ("construction", "Sketcher_ToggleConstruction"),
+               ("set", "Sketcher_ChangeDimensionConstraint"), ("deleteConstraints", "Sketcher_DeleteAllConstraints"),
+               ("removeAxesAlignment", "Sketcher_RemoveAxesAlignment"),
+               ("exposeInternal", "Sketcher_RestoreInternalAlignmentGeometry"))
+
+
+def _flat(word):
+    return str(word or "").lower().replace("-", "").replace("_", "")
+
+
+def _sketch_command(name, a):
+    """The Sketcher button for a sketch tool that goes by what was asked."""
+    if name == "sketch_add":
+        first = next((it for it in a.get("items") or [] if isinstance(it, dict)), {}) if isinstance(a.get("items"), list) else {}
+        return SKETCH_ADD.get(_flat(first.get("kind")))
+    if name == "sketch_constrain":
+        first = next((c for c in a.get("constraints") or [] if isinstance(c, dict)), {}) if isinstance(a.get("constraints"), list) else {}
+        return SKETCH_CONSTRAIN.get(_flat(first.get("type") or first.get("kind")))
+    if name == "sketch_edit":
+        return next((cmd for key, cmd in SKETCH_EDIT if a.get(key)), None)
+    if name == "sketch_copy":
+        return "Sketcher_Rotate" if a.get("rotate") else "Sketcher_Scale" if a.get("scale") else "Sketcher_Translate"
+    if name == "sketch_array":
+        return "Sketcher_Rotate" if a.get("polar") else "Sketcher_RectangularArray"
+    if name == "sketch_bspline":
+        down = isinstance(a.get("by"), (int, float)) and a["by"] < 0
+        if _flat(a.get("op")) == "degree":
+            return "Sketcher_BSplineDecreaseDegree" if down else "Sketcher_BSplineIncreaseDegree"
+        if a.get("param") is not None:
+            return "Sketcher_BSplineInsertKnot"
+        return "Sketcher_BSplineDecreaseKnotMultiplicity" if down else "Sketcher_BSplineIncreaseKnotMultiplicity"
+    return None
+
+
+SKETCH_BY_ASK = ("sketch_add", "sketch_constrain", "sketch_edit", "sketch_copy", "sketch_array", "sketch_bspline")
 CAM_DRESSUP = {"dogbone": "CAM_DressupDogbone", "tag": "CAM_DressupTag", "tags": "CAM_DressupTag", "ramp": "CAM_DressupRampEntry",
                "boundary": "CAM_DressupPathBoundary", "leadinout": "CAM_DressupLeadInOut", "axismap": "CAM_DressupAxisMap", "zcorrect": "CAM_DressupZCorrect"}
 
@@ -93,6 +166,14 @@ def command_for(name, args):
         return CAM_OP[kind]
     if name == "cam_dressup" and kind in CAM_DRESSUP:
         return CAM_DRESSUP[kind]
+    if name in SKETCH_BY_ASK:
+        return _sketch_command(name, args or {})
+    if name == "pd_datum":
+        return PD_DATUM.get(kind)
+    if name == "pd_tip" and not (args or {}).get("feature"):
+        return None  # it only reads the tip
+    if name in PD_SUBTRACTIVE and (args or {}).get("subtractive") is True:
+        return PD_SUBTRACTIVE[name]
     if name in COMMAND:
         return COMMAND[name]
     # What add-ons declared (declare()): their own callables first, then
@@ -157,6 +238,71 @@ def switches_bench(tool):
 # What a tool's arguments and answer name: the objects to select.
 ARG_KEYS = ("body", "sketch", "object", "base", "target", "feature", "page", "op", "joint")
 OUT_KEYS = ("feature", "sketch", "object", "body", "created", "page", "view", "joint", "op", "sub")
+# More of the same for single tools, where the answer (or, for a call that
+# moves a thing, its arguments) names what was made or changed under a key
+# of its own. A value is a name or a list of names.
+OUT_MORE = {"pd_datum": ("datum",), "pd_datum_plane": ("plane",), "pd_binder": ("binder",), "pd_shaft": ("shaft",),
+            "pd_move_feature": ("moved",), "pd_tip": ("tip",), "pd_reorder": ("feature",),
+            "asm_add": ("added",), "asm_sub": ("as",), "asm_new_part": ("inAssembly", "part"), "asm_bom": ("sheet",),
+            "asm_explode": ("view",)}
+# The keys that name the bodies a Part Design call worked in.
+BODY_KEYS = ("body", "to", "from")
+
+
+def out_names(name, args, body):
+    """The names of what a call made or changed, the most exact first: the
+    tool's own keys (OUT_MORE: its answer's, else its arguments'), then
+    OUT_KEYS of the answer. Plain Python."""
+    a = args if isinstance(args, dict) else {}
+    b = body if isinstance(body, dict) else {}
+    out = []
+
+    def take(v):
+        for x in v if isinstance(v, (list, tuple)) else [v]:
+            if isinstance(x, str) and x and x not in out:
+                out.append(x)
+
+    for k in OUT_MORE.get(name, ()):
+        take(b.get(k) if b.get(k) else a.get(k))
+    for k in OUT_KEYS:
+        take(b.get(k))
+    return out
+
+
+SUBS_MOST = 60
+
+
+def sub_names(name, body):
+    """The sketch's own names of what a sketch tool's answer says it added
+    ("Edge3" for geometry id 2, "Constraint5" for constraint id 4,
+    "ExternalEdge1" for outside geometry -3), to select in the open sketch.
+    [] where the answer gives no ids. Plain Python."""
+    b = body if isinstance(body, dict) else {}
+    out = []
+
+    def ints(v):
+        return [x for x in v if isinstance(x, int) and not isinstance(x, bool)] if isinstance(v, (list, tuple)) else []
+
+    if name == "sketch_constrain":
+        out = [f"Constraint{i + 1}" for i in ints(b.get("added")) if i >= 0]
+    elif name == "sketch_external":
+        out = [f"ExternalEdge{-i - 2}" for i in ints(b.get("ids")) if i <= -3]
+    elif name.startswith("sketch_"):
+        ids = []
+        for row in b.get("added") if isinstance(b.get("added"), list) else []:
+            ids += ints(row.get("ids")) if isinstance(row, dict) else ints([row])
+        ids += ints(b.get("new"))
+        out = [f"Edge{i + 1}" for i in ids if i >= 0]
+    return list(dict.fromkeys(out))[:SUBS_MOST]
+
+
+def result_of(objs):
+    """What to select and frame of the objects a call's answer names: the
+    new or changed feature itself, not the body it is in (the whole body
+    went green and nobody saw which feature was new); a body only when the
+    answer names nothing else (a new body, a clone)."""
+    inner = [o for o in objs if getattr(o, "TypeId", "") != "PartDesign::Body"]
+    return inner or list(objs)
 
 _log = []
 _listeners = []
@@ -381,14 +527,16 @@ def did_name(name):
     return f"{area} › {what[:1].upper() + what[1:]}" if what else area
 
 
-def _describe(name, args):
+def _describe(name, args, body=None, template=None):
     """A tool call in words a person reads at a glance, the same as the
     Activity tab says it ("Padded Sketch by 20 mm", "Clicked Pin a Note"):
-    agentlink/activity.py, never raw arguments or a folder."""
+    agentlink/activity.py, never raw arguments or a folder. body: the
+    call's answer, once there is one (the words then name what it made);
+    template: the tool's own words (its "activity")."""
     from . import activity
 
     try:
-        return activity.did(name, args)
+        return activity.did(name, args, body, template)
     except Exception:
         return did_name(name)
 
@@ -407,6 +555,10 @@ def _view_widget():
 
 
 _caption = None
+# Counts the captions shown: a caption's timer hides the label only while it
+# still shows that caption (the words said again after a slow call are the
+# same text, and the first timer hid them the moment they were back).
+_caption_no = [0]
 CAPTION_MARGIN, CAPTION_MAX, SLIDE_ROOM = 14, 420, 300
 
 
@@ -443,19 +595,64 @@ def caption(text, ms=2600):
     _caption.show()
     _caption.raise_()
     lbl = _caption
-    QtCore.QTimer.singleShot(ms, lambda: _hide_later(lbl, text))
+    _caption_no[0] += 1
+    QtCore.QTimer.singleShot(ms, lambda no=_caption_no[0]: _hide_later(lbl, text, no))
 
 
-def _hide_later(lbl, text):
-    """Hide the caption after its moment, unless it shows newer words or is
+def _hide_later(lbl, text, no=None):
+    """Hide the caption after its moment, unless it shows newer words (or
+    the same words said again since: no, its count when shown) or is
     gone: closing a document deletes the 3D view and the label with it, and
     the timer then raised "Internal C++ object already deleted" in the
     Report view (as _later guards the lit buttons)."""
+    if no is not None and no != _caption_no[0]:
+        return
     try:
         if lbl.isVisible() and lbl.text().endswith(text):
             lbl.hide()
     except RuntimeError:
         pass
+
+
+STATUS_HEAD = "Agent"
+
+
+def words_showing():
+    """Whether the echo's words of an earlier call are still on screen: the
+    caption over the 3D view, or the status bar's message."""
+    try:
+        if _caption is not None and _caption.isVisible():
+            return True
+    except RuntimeError:
+        pass
+    try:
+        import FreeCADGui
+
+        return str(FreeCADGui.getMainWindow().statusBar().currentMessage() or "").startswith(STATUS_HEAD)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def say(words, ms=2600, where=""):
+    """The words over the 3D view and in the status bar."""
+    import FreeCADGui
+
+    caption(words, ms)
+    FreeCADGui.getMainWindow().statusBar().showMessage(STATUS_HEAD + where + ": " + words, ms + 1400)
+
+
+def rings_off():
+    """The buttons the echo lit for an earlier call, put out: a ring lasts
+    1.3 s and calls come faster, so the next call's picture had the last
+    call's button lit (New Body for a move, a primitive for a pattern).
+    Never raises."""
+    try:
+        from . import overlay
+
+        overlay.service().clear(owner="echo")
+        return True
+    except Exception:  # noqa: BLE001  (no window, or no overlay yet)
+        return False
 
 
 def flash_command(cmd, ms=1300, settle=False):
@@ -472,27 +669,41 @@ def flash_command(cmd, ms=1300, settle=False):
     lit = []
     painter = overlay.service()
     flashed = False
+    how, unseen = "none", 0
     for act in targets.actions(cmd):
         for w in targets.associated(act):
             if isinstance(w, QtW.QToolButton):
-                flashed = painter.flash(w, ms) or flashed
+                if painter.flash(w, ms):
+                    flashed = True
+                else:
+                    unseen += 1
             elif isinstance(w, QtW.QMenu):
                 # The menu item and its menu's title in bold for a moment
                 # (no menu is opened: that would take the person's input).
                 lit += [act, w.menuAction()]
-    if not flashed:
+    if flashed:
+        how = "button"
+    else:
         # Inside a toolbar dropdown (a group command): its button lights.
         try:
             for b, _m, _a in targets.group_buttons(cmd):
-                painter.flash(b, ms)
+                if painter.flash(b, ms):
+                    how = "group"
         except Exception:  # noqa: BLE001  (a nicety; the call has run)
             pass
+    if how == "none":
+        # Said as it is (Echo.after's trace): a button that exists and is
+        # not on screen — in a narrow window, behind its toolbar's "»" —
+        # or a command with a menu item only. No other button is lit in
+        # its place.
+        how = "button not on screen" if unseen else "menu only" if lit else "no button"
     for a in dict.fromkeys(x for x in lit if x is not None):
         old = QtGui.QFont(a.font())
         f = QtGui.QFont(old)
         f.setBold(True)
         a.setFont(f)
         QtCore.QTimer.singleShot(ms, lambda a=a, old=old: _later(a, "setFont", old))
+    return how
 
 
 def _later(obj, method, value):
@@ -506,12 +717,15 @@ def _later(obj, method, value):
         pass
 
 
-def fit(animate=True):
+def fit(animate=True, selection=False):
     """Frame the part in the 3D view in front — only a live 3D view of an
     open document, and not while a restart is reopening documents (a view
     being made or torn down then crashes FreeCAD in its fit animation).
     animate: False frames it at once: the view's animation is switched off
-    for the fit and put back as it was (fit_animated says when)."""
+    for the fit and put back as it was (fit_animated says when).
+    selection: frame what is selected (what the call made), with a margin,
+    not the whole document: in a document of many parts the new one was a
+    few pixels. The whole document when nothing selected can be framed."""
     try:
         import FreeCADGui
 
@@ -534,7 +748,8 @@ def fit(animate=True):
             except Exception:
                 was = None
         try:
-            v.fitAll()
+            if not (selection and _fit_selection(v)):
+                v.fitAll()
         finally:
             if was:
                 try:
@@ -545,6 +760,122 @@ def fit(animate=True):
     except Exception as e:
         FreeCAD.Console.PrintLog(f"Agent Link fit: {e}\n")
         return False
+
+
+def _fit_selection(v):
+    """The view framed on the selection (FreeCAD's own View > Standard
+    views > Fit selection: the box of what is selected, as its view
+    providers draw it), then one zoom step out for a margin. False when it
+    was not done (nothing selected, or a view that does not take it): the
+    caller then fits the whole document."""
+    import FreeCADGui
+
+    try:
+        if not FreeCADGui.Selection.getSelection():
+            return False
+        send = getattr(v, "sendMessage", None)
+        if callable(send):
+            if send("ViewSelection") is False:
+                return False
+        else:
+            FreeCADGui.SendMsgToActiveView("ViewSelection")
+    except Exception:  # noqa: BLE001
+        return False
+    try:
+        if callable(getattr(v, "zoomOut", None)):
+            v.zoomOut()
+    except Exception:  # noqa: BLE001  (a margin only)
+        pass
+    return True
+
+
+def framed(objs):
+    """Of what a call made, the objects the view can be framed on: those
+    shown that have a shape with a size. A new empty body or sketch, or a
+    hidden object, has no box: the whole document is framed then."""
+    out = []
+    for o in objs or ():
+        try:
+            vo = getattr(o, "ViewObject", None)
+            if vo is not None and not vo.Visibility:
+                continue
+            sh = getattr(o, "Shape", None)
+            if sh is None or sh.isNull():
+                continue
+            bb = sh.BoundBox
+            if bb.isValid() and bb.DiagonalLength > 0:
+                out.append(o)
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
+# ---- a body's tip shown (P4) ----------------------------------------------------------------
+
+def _shaped(o):
+    sh = getattr(o, "Shape", None)
+    try:
+        return sh is not None and not sh.isNull()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _seen(o):
+    vo = getattr(o, "ViewObject", None)
+    try:
+        return vo is not None and bool(vo.Visibility)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _is_feature(o):
+    try:
+        return bool(o.isDerivedFrom("PartDesign::Feature"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def tip_shown(body):
+    """A Part Design body left showing its tip, as FreeCAD's own commands
+    leave it: the tip visible, the body's other solid features hidden.
+    A body shows through one feature. A feature made by the Python API is
+    visible from the start and FreeCAD then hides the body's others: a
+    MultiTransform's steps are made after it, have no shape of their own
+    and so left the body showing nothing; a feature moved out left the
+    old body with its tip still hidden. Only a body that is itself shown
+    and whose tip has a shape; sketches, datums and binders are not
+    touched. True when something was changed. Never raises."""
+    try:
+        if getattr(body, "TypeId", "") != "PartDesign::Body" or not _seen(body):
+            return False
+        tip = getattr(body, "Tip", None)
+        if tip is None or not _shaped(tip) or getattr(tip, "ViewObject", None) is None:
+            return False
+        others = [o for o in body.Group if o is not tip and _is_feature(o) and _seen(o)]
+        if _seen(tip) and not others:
+            return False
+        for o in others:
+            o.ViewObject.Visibility = False
+        if not _seen(tip):
+            tip.ViewObject.Visibility = True
+        return True
+    except Exception as e:  # noqa: BLE001
+        if FreeCAD is not None:
+            FreeCAD.Console.PrintLog(f"Agent Link echo (tip shown): {e}\n")
+        return False
+
+
+def bodies_of(doc, args, body, made):
+    """The Part Design bodies a call worked in: those its arguments and
+    answer name (BODY_KEYS) and those that hold what it made."""
+    names = [src.get(k) for src in (args, body) if isinstance(src, dict) for k in BODY_KEYS]
+    out = []
+    for o in list(made or ()) + _objects(doc, names):
+        cands = [o] + [p for p in getattr(o, "InList", ()) or ()]
+        for b in cands:
+            if getattr(b, "TypeId", "") == "PartDesign::Body" and b not in out:
+                out.append(b)
+    return out
 
 
 def _objects(doc, names):
@@ -586,9 +917,129 @@ def _select(objs):
     FreeCADGui.Selection.clearSelection()
     for o in objs:
         try:
-            FreeCADGui.Selection.addSelection(o)
+            FreeCADGui.Selection.addSelection(o.Document.Name, o.Name)
         except Exception:
+            try:
+                FreeCADGui.Selection.addSelection(o)
+            except Exception:
+                pass
+
+
+def _select_subs(obj, subs):
+    """obj's named parts selected (a sketch's new edges and constraints).
+    True when at least one was taken."""
+    import FreeCADGui
+
+    if obj is None or not subs:
+        return False
+    _selected[0] += 1
+    FreeCADGui.Selection.clearSelection()
+    got = False
+    for sub in subs:
+        try:
+            FreeCADGui.Selection.addSelection(obj.Document.Name, obj.Name, sub)
+            got = True
+        except Exception:  # noqa: BLE001  (a name this sketch does not have)
             pass
+    return got
+
+
+class _Still:
+    """A view's animation off for one step, then as it was: a camera turn
+    FreeCAD starts animated is cut off at its first frame by the echo's
+    next fit, and the view stayed where it was."""
+
+    def __init__(self, view):
+        self.v, self.was = view, None
+
+    def __enter__(self):
+        try:
+            self.was = bool(self.v.isAnimationEnabled())
+            if self.was:
+                self.v.setAnimationEnabled(False)
+        except Exception:  # noqa: BLE001
+            self.was = None
+        return self
+
+    def __exit__(self, *exc):
+        if self.was:
+            try:
+                self.v.setAnimationEnabled(True)
+            except Exception:  # noqa: BLE001
+                pass
+        return False
+
+
+def faces_plane(direction, normal):
+    """Whether a camera looking along direction faces a plane with this
+    normal (from either side). Plain: (x, y, z) each."""
+    try:
+        d = sum(a * b for a, b in zip(direction, normal))
+        ld = sum(a * a for a in direction) ** 0.5
+        ln = sum(a * a for a in normal) ** 0.5
+        return ld > 0 and ln > 0 and abs(d) / (ld * ln) > 0.999
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def enter_edit(gd, obj):
+    """obj (a sketch) opened for editing as a double-click opens it, with
+    the camera turned to face it at once: FreeCAD turns it itself, animated,
+    and the echo's fit then cut the turn off, so the sketch was edited in
+    the isometric view with the solid in front of it. If the camera still
+    does not face the sketch after that, it is set to the sketch's own
+    orientation. Returns what was done, for the trace."""
+    v = getattr(gd, "ActiveView", None)
+    with _Still(v):
+        gd.setEdit(obj.Name)
+    did = "opened"
+    try:
+        rot = obj.getGlobalPlacement().Rotation
+        n = rot.multVec(FreeCAD.Vector(0, 0, 1))
+        d = v.getViewDirection()
+        if not faces_plane((d.x, d.y, d.z), (n.x, n.y, n.z)):
+            with _Still(v):
+                v.setCameraOrientation(rot)
+            did = "opened, camera turned to it"
+    except Exception as e:  # noqa: BLE001
+        did = f"opened ({type(e).__name__} on the camera check)"
+    return did
+
+
+def edit_document():
+    """The window's document that has something open for editing (one at
+    most in FreeCAD), or None."""
+    import FreeCADGui
+
+    try:
+        fn = getattr(FreeCADGui, "editDocument", None)
+        ed = fn() if callable(fn) else None
+        if ed is not None and ed.getInEdit() is not None:
+            return ed
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def leave_edit(ed, at_once=True):
+    """What is open for editing in the window's document ed closed, as
+    Sketcher's Leave Sketch does (resetEdit, then a recompute when the
+    edit left the object touched). at_once: the camera's turn back made
+    without animation."""
+    obj = None
+    try:
+        obj = ed.getInEdit().Object
+    except Exception:  # noqa: BLE001
+        pass
+    v = getattr(ed, "ActiveView", None) if at_once else None
+    with _Still(v):
+        ed.resetEdit()
+    try:
+        if obj is not None and "Touched" in obj.State:
+            ed.Document.recompute()
+    except Exception:  # noqa: BLE001
+        pass
+    return getattr(obj, "Label", None)
 
 
 def _workbench_for(name):
