@@ -973,10 +973,18 @@ def batch_words(args, body):
     ran = b.get("ran") if _isnum(b.get("ran")) else len(rows) if rows is not None else None
     if not ran:
         return None  # an empty batch says nothing
-    ok = sum(1 for r in rows or () if isinstance(r, dict) and r.get("ok"))
-    out = f"ran {_count(int(ran), 'call')} in one batch: {ok} ok"
-    bad = int(ran) - ok
-    if rows is not None and bad > 0:
+    c = b.get("counts") if isinstance(b.get("counts"), dict) else None
+    if c is not None and _isnum(c.get("ok")):
+        # lines "counts" or "refused" (live 17 Nov): the rows are not every
+        # call, so a missing row is no refusal — the counts are the truth.
+        ok, bad = int(c["ok"]), int(c.get("refused") or 0)
+    elif rows is not None and len(rows) >= int(ran):
+        ok = sum(1 for r in rows if isinstance(r, dict) and r.get("ok"))
+        bad = int(ran) - ok
+    else:
+        ok, bad = None, 0
+    out = f"ran {_count(int(ran), 'call')} in one batch" + (f": {ok} ok" if ok is not None else "")
+    if bad > 0:
         out += f", {bad} refused"
     if _isnum(b.get("notRun")) and b["notRun"]:
         out += f", {int(b['notRun'])} not run"
