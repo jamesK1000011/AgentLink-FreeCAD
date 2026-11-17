@@ -16008,7 +16008,7 @@
     {"refuse": "Heat goes in but nothing takes it away: hold a face at a temperature or leave air on.", "when": "=not temps and not films"},
     {"let": {"T": "=heat_solve(m, k, temps, fluxes, films, float((air or {}).get('celsius', 20)) if air else 20.0, timeout, c)"}},
     {"refuse": {"fmt": "CalculiX wrote no temperatures: see job.frd in {m.wd}"}, "code": "failed", "when": "=not T"},
-    {"let": {"hot": "=max(T, key=T.get)", "cold": "=min(T, key=T.get)", "soft": "=(c or {}).get('softens')", "warnings": "=[]"}},
+    {"let": {"hot": "=max(T, key=lambda n: T[n])", "cold": "=min(T, key=lambda n: T[n])", "soft": "=(c or {}).get('softens')", "warnings": "=[]"}},
     {"let": {"peak": "=T[hot]", "seconds": "=round(now() - t0, 1)"}},
     {"let": {"hottest": "=merged({'celsius': round(T[hot], 2)}, where(m.nodes, shape, hot))", "coolest": "=merged({'celsius': round(T[cold], 2)}, where(m.nodes, shape, cold))"}},
     {"when": "=soft and peak >= soft", "then": [{"push": {"warnings": {"fmt": "Hotter than {c['name']} takes ({peak:.0f} °C against about {soft} °C where it softens under load): it will sag or creep there — a higher-temperature material, or more cooling."}}}], "else": [{"push": {"warnings": {"fmt": "Within 10 °C of where {c['name']} softens ({soft} °C): little margin."}}, "when": "=soft and peak >= soft - 10"}]},

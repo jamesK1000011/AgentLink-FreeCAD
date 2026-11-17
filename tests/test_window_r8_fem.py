@@ -270,3 +270,22 @@ class ReadMaps(WithStandIns):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HeatPeaks(unittest.TestCase):
+    """Live 17 Nov: fea_heat said hottest 23.96 and coolest 100 for faces
+    held at 100 and 20. In the data expressions T.get is not dict.get (a
+    dotted name reads a key), so max(T, key=T.get) ranked node numbers."""
+
+    def test_peaks_rank_temperatures(self):
+        from agentlink import expr
+        T = {1: 100.0, 2: 20.0, 5: 23.96}
+        self.assertEqual(expr.evaluate("max(T, key=lambda n: T[n])", {"T": T}), 1)
+        self.assertEqual(expr.evaluate("min(T, key=lambda n: T[n])", {"T": T}), 2)
+
+    def test_heat_uses_the_lambda(self):
+        import json, os
+        here = os.path.join(os.path.dirname(__file__), "..", "agentlink", "data", "tools.json")
+        text = open(here).read()
+        import re
+        self.assertEqual(re.findall(r"key=[A-Za-z_]+\.get\b", text), [], "a dotted name reads a key in the data expressions: key=lambda n: X[n]")
