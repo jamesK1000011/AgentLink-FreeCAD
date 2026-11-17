@@ -95,6 +95,13 @@ class Drawn(unittest.TestCase):
         vo.Visibility = False
         self.assertFalse(echo.path_redraw(types.SimpleNamespace(Label="P", ViewObject=vo)))
 
+    def test_redraw_sets_the_waypoints_mode(self):
+        # Measured live: an op made by CAM's App-side Create had DisplayMode "None" (nothing drawn).
+        vo = types.SimpleNamespace(Visibility=True, DisplayMode="None", PropertiesList=["DisplayMode"],
+                                   listDisplayModes=lambda: ["Waypoints"], update=lambda: None, show=lambda: None)
+        self.assertTrue(echo.path_redraw(types.SimpleNamespace(Label="P", ViewObject=vo)))
+        self.assertEqual(vo.DisplayMode, "Waypoints")
+
 
 class Honest(unittest.TestCase):
     def setUp(self):
