@@ -167,8 +167,8 @@ def cases(fc, tmp, old, new):
     add(V, "views of one", prep(block, gui=True), {"views": "isometric", "width": 320, "height": 240})
     add(V, "an empty list of views", prep(block, gui=True), {"views": []})
     add(V, "saved at another size", prep(block, gui=True, saved_size=(1600, 1200)), {"view": "top"})
-    add(V, "nothing in the view", prep(block, in_view("_snap_empty", lambda s, view: "Nothing of the model is in the view."), gui=True), {"view": "top"})
-    add(V, "nothing in the view as it was left", prep(block, in_view("_snap_empty", lambda s, view: "Nothing of the model is in the view."), gui=True), {})
+    add(V, "nothing in the view", prep(block, in_view("_snap_empty", lambda s, view, *more: "Nothing of the model is in the view."), gui=True), {"view": "top"})
+    add(V, "nothing in the view as it was left", prep(block, in_view("_snap_empty", lambda s, view, *more: "Nothing of the model is in the view."), gui=True), {})
     add(V, "crash: the view will not save", prep(block, gui=True, fail=("saveImage",)), {"view": "top"})
     add(V, "all, no picture of them", prep(block, gui=True), {"views": "all"})
 

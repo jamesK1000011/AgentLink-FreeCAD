@@ -22,7 +22,73 @@ QUIET = re.compile(r"(populating font family aliases took|replace uses of missin
 def quiet(line):
     """Whether a problem-looking line is start-up noise kept off the answers."""
     return bool(QUIET.search(line or ""))
-_state = {"seen": 0}
+
+
+# FreeCAD's own faults, known, that no call of the agent's causes or can
+# mend: said once in a FreeCAD session on a call's answer, counted (not
+# repeated) by report_read, and not a reason to open the Report view. Each:
+# (what its error line says, the words said for it).
+#  - FreeCAD 1.1's BIM wall: ArchWall.py's _ViewProviderWall.updateData
+#    (about line 1684) reads obj.ViewObject.DiffuseColor on every change of
+#    a wall, which only a Part view provider has; on a wall whose view
+#    object answers as Gui.ViewProviderGeometryObject it raises each time.
+#    bim_wall makes walls with Arch.makeWall, as FreeCAD's own BIM_Wall
+#    command does (docs/hardening/hubfix5-findings.md).
+KNOWN = [
+    (re.compile(r"'Gui\.ViewProviderGeometryObject' object has no attribute 'DiffuseColor'"),
+     "FreeCAD's own, known: BIM's ArchWall.py (updateData) asks a wall's view for DiffuseColor, which it lacks — "
+     "FreeCAD 1.1 says it on every change of a wall; harmless here, not from this call"),
+]
+_TIME = re.compile(r"^\d{1,2}:\d{2}:\d{2}(?:\.\d+)?\s+")
+_TB_START = re.compile(r"Traceback \(most recent call last\)")
+_TB_END = re.compile(r"^(?:<class '[\w.]+'>|[A-Za-z_][\w.]*(?:Error|Exception|Exit|Interrupt))\s*:")
+_TB_MAX = 40   # lines a traceback is followed for, at most
+
+
+def known_of(line):
+    """The words for a known FreeCAD fault this line is, or None."""
+    for rx, words in KNOWN:
+        if rx.search(line or ""):
+            return words
+    return None
+
+
+def fold_known(lines):
+    """(lines with every known FreeCAD fault taken out — its whole
+    traceback with it — and {words: times}). A traceback whose last line
+    is not a known fault is kept whole."""
+    out, counts, i, n = [], {}, 0, len(lines)
+    while i < n:
+        line = lines[i]
+        bare = _TIME.sub("", line.strip())
+        if _TB_START.search(bare):
+            j, end = i + 1, None
+            while j < n and j - i <= _TB_MAX:
+                b = _TIME.sub("", lines[j].strip())
+                if _TB_START.search(b):
+                    break  # another traceback began: this one had no last line here
+                if _TB_END.search(b) or known_of(b):
+                    end = j
+                    break
+                j += 1
+            words = known_of(lines[end]) if end is not None else None
+            if words:
+                counts[words] = counts.get(words, 0) + 1
+                i = end + 1
+                continue
+            out.append(line)
+            i += 1
+            continue
+        words = known_of(bare)
+        if words:
+            counts[words] = counts.get(words, 0) + 1
+        else:
+            out.append(line)
+        i += 1
+    return out, counts
+
+
+_state = {"seen": 0, "known": {}}
 
 
 def problems(text, start):
@@ -74,13 +140,24 @@ def read(last=40, problems_only=False):
     if text is None:
         return {"found": False, "lines": [], "note": "The Report view could not be found in this window."}
     lines = [l for l in text.splitlines() if l.strip()]
+    count = len(lines)
     try:
         rows, _n = _blocks(_report_widget(), 0)
         probs = coloured(rows, _problem_colours())
     except Exception:
         probs = [l for l in lines if MARK.search(l)]
-    pick = probs if problems_only else lines
-    return {"found": True, "count": len(lines), "problems": len(probs), "lines": pick[-max(1, min(int(last), 200)):]}
+    # FreeCAD's own known faults counted, each said once (KNOWN).
+    probs, known = fold_known(probs)
+    if not problems_only:
+        lines, known_all = fold_known(lines)
+        for k, v in known_all.items():
+            known[k] = max(known.get(k, 0), v)
+    said = [f"{k} (× {v})" for k, v in known.items()]
+    pick = said + (probs if problems_only else lines)
+    out = {"found": True, "count": count, "problems": len(probs), "lines": pick[-max(1, min(int(last), 200)):]}
+    if known:
+        out["known"] = [{"what": k, "times": v} for k, v in known.items()]
+    return out
 
 
 PARAM = "User parameter:BaseApp/Preferences/OutputWindow"
@@ -163,7 +240,12 @@ def take():
         rows, _state["seen"] = _blocks(w, _state["seen"])
     except Exception:
         return []
-    out = [t for t in coloured(rows, _problem_colours()) if not quiet(t)]
+    out, known = fold_known([t for t in coloured(rows, _problem_colours()) if not quiet(t)])
+    said = _state.setdefault("known", {})
+    first = [k for k in known if k not in said]
+    for k, v in known.items():
+        said[k] = said.get(k, 0) + v
+    out = [f"{k} (said once; report_read counts them)" for k in first] + out
     if len(out) > MAX_LINES:
         out = out[:MAX_LINES - 1] + [f"… and {len(out) - MAX_LINES + 1} more lines (report_read problems: true)"]
     return out
@@ -210,9 +292,9 @@ GRACE = 6.0
 
 
 def problems_to_open(rows, colours):
-    """The problem lines (coloured()) that open the Report view: noise left
-    out."""
-    return [t for t in coloured(rows, colours) if not NOISE.search(t)]
+    """The problem lines (coloured()) that open the Report view: noise and
+    FreeCAD's own known faults (KNOWN) left out."""
+    return [t for t in fold_known(coloured(rows, colours))[0] if not NOISE.search(t)]
 
 
 class AutoOpen:

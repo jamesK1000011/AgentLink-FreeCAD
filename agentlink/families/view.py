@@ -79,6 +79,39 @@ def fit_png(path, w, h):
         return False
 
 
+class still:
+    """While it holds, the view moves at once, not in steps over time:
+    FreeCAD turns a view (viewIsometric …) as an animation that goes on
+    after the call returns, and its fitAll steps the zoom inside an event
+    loop of its own — so a picture taken right after was of a view still
+    on its way, and a fit worked out for it was undone as the turn went
+    on. The person's setting is put back. A view without the switch is
+    left as it is."""
+
+    def __init__(self, view):
+        self.view, self.was = view, False
+
+    def __enter__(self):
+        try:
+            self.was = bool(self.view.isAnimationEnabled())
+            if self.was:
+                self.view.setAnimationEnabled(False)
+        except Exception:  # noqa: BLE001 - no such switch on this view
+            self.was = False
+        return self
+
+    def __exit__(self, *exc):
+        if self.was:
+            try:
+                self.view.setAnimationEnabled(True)
+            except Exception:  # noqa: BLE001
+                pass
+        return False
+
+
+FAR = 1e9  # mm: a box reaching past this is not a part's (a datum plane or line has no end: 1e100)
+
+
 def snap_fit(view, w, h, box=None):
     """Fit the parts to a picture w x h, not to the window: fitAll fits the
     window's shape, so a picture of another shape (a grid's cell, a tall
@@ -95,7 +128,8 @@ def snap_fit(view, w, h, box=None):
     of the scene then left the parts a speck (seen live: view_snapshot
     { view: iso, fit: true } answered "a speck" on a 40 mm bracket), and
     the check that follows reads this same box. No box: the scene graph."""
-    view.fitAll()
+    with still(view):
+        view.fitAll()
     try:
         from pivy import coin
 
@@ -104,7 +138,7 @@ def snap_fit(view, w, h, box=None):
         size = None
         if box is not None:
             size = [max(float(v), 1e-6) for v in (box.XLength, box.YLength, box.ZLength)]
-        if size is not None and max(size) > 1e-6:
+        if size is not None and 1e-6 < max(size) < 2 * FAR:
             graph = coin.SoSeparator()
             graph.ref()
             try:
@@ -308,9 +342,49 @@ def _snap_shown(s):
         return True
 
 
+def _seen(o):
+    """Whether nothing that holds o is hidden: a feature keeps its own
+    Visibility when its Body or its App::Part is hidden, and is not drawn."""
+    for _ in range(32):
+        p = None
+        for get in ("getParentGeoFeatureGroup", "getParentGroup"):
+            try:
+                p = getattr(o, get)()
+            except Exception:  # noqa: BLE001
+                p = None
+            if p is not None:
+                break
+        if p is None:
+            return True
+        try:
+            if p.ViewObject is not None and not p.ViewObject.Visibility:
+                return False
+        except Exception:  # noqa: BLE001
+            return True
+        o = p
+    return True
+
+
+def _placed(o, bb):
+    """bb (o's box, in the frame of what holds o) in the document's frame:
+    a body in a moved App::Part is drawn where the Part puts it."""
+    try:
+        move = o.getGlobalPlacement().multiply(o.Placement.inverse())
+        if move.isIdentity():
+            return bb
+        return bb.transformed(move.toMatrix())
+    except Exception:  # noqa: BLE001 - as it reads
+        return bb
+
+
 def shown_box(s):
     """(how many objects with a shape, a mesh or points are shown in the
-    window, their box together or None). Reads only."""
+    window, their box together or None). Reads only. What is held by a
+    hidden Body or Part is not shown. A shape without an end (a datum
+    plane, a datum line: its box reaches 1e100 mm) counts as shown but is
+    left out of the box: seen live, such a box could not be fitted (it
+    does not go in Coin's numbers) and every corner of it landed on one
+    pixel, so a fitted view was called a speck."""
     import FreeCAD
 
     shown, box = 0, None
@@ -327,9 +401,12 @@ def shown_box(s):
                 bb = o.Mesh.BoundBox
             elif getattr(o, "Points", None) is not None and o.Points.CountPoints:
                 bb = o.Points.BoundBox
-            if bb is None or not bb.isValid():
+            if bb is None or not bb.isValid() or not _seen(o):
                 continue
             shown += 1
+            if max(abs(float(v)) for v in (bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax)) > FAR:
+                continue
+            bb = _placed(o, bb)
             if box is None:
                 box = FreeCAD.BoundBox(bb)
             else:
@@ -347,10 +424,13 @@ def _fit_box(s):
         return None
 
 
-def _snap_empty(s, view):
+def _snap_empty(s, view, w=None, h=None, fitted=False):
     """Why the window's view shows nothing or almost nothing of the model
     (emptywhy.off_screen), or None: what is shown, and where the shown
-    objects' box lands in the view's pixels. Reads only."""
+    objects' box lands in the picture w x h as the camera stands (worked
+    out from the camera itself: emptywhy.in_picture) — in the window's own
+    pixels when the camera cannot be read. fitted: the call fitted the
+    view first. Reads only."""
     from .. import emptywhy
 
     try:
@@ -362,13 +442,24 @@ def _snap_empty(s, view):
             hidden = [o.Label for o in s.hidden_in(s.doc)]
         except Exception:
             pass
-        pts = []
+        pts, size, span = [], tuple(view.getSize()), None
         if box is not None:
-            for x in (box.XMin, box.XMax):
-                for y in (box.YMin, box.YMax):
-                    for z in (box.ZMin, box.ZMax):
-                        pts.append(tuple(view.getPointOnViewport(FreeCAD.Vector(x, y, z))))
-        return emptywhy.off_screen(pts, tuple(view.getSize()), shown=shown, hidden=hidden)
+            span = {"min": [box.XMin, box.YMin, box.ZMin], "max": [box.XMax, box.YMax, box.ZMax]}
+            corners = [(x, y, z) for x in (box.XMin, box.XMax) for y in (box.YMin, box.YMax) for z in (box.ZMin, box.ZMax)]
+            cam, own = None, None
+            if w and h:
+                try:
+                    cam = emptywhy.camera_of(view.getCamera())
+                except Exception:  # noqa: BLE001
+                    cam = None
+                own = emptywhy.in_picture(cam, corners, w, h) if cam else None
+            if own is not None:
+                pts, size = own, (w, h)
+            else:
+                pts = [tuple(view.getPointOnViewport(FreeCAD.Vector(*c))) for c in corners]
+                if size[0] < 16 or size[1] < 16:
+                    pts = []  # a view with no size yet (never in front): its pixels say nothing
+        return emptywhy.off_screen(pts, size, shown=shown, hidden=hidden, fitted=fitted, box=span)
     except Exception:
         return None
 
@@ -671,12 +762,21 @@ def tools(session):
         import FreeCADGui
 
         gd = FreeCADGui.getDocument(s.doc.Name)
-        return gd.activeView() if gd else None
+        view = gd.activeView() if gd else None
+        if view is not None and not hasattr(view, "saveImage"):
+            # A drawing page or a spreadsheet is the document's front tab: its 3D view behind it.
+            try:
+                more = gd.mdiViewsOfType("Gui::View3DInventor")
+                view = more[0] if more else view
+            except Exception:  # noqa: BLE001 - as it was
+                pass
+        return view
 
     def turn(view, name):
         """The view turned to a standard view (SNAP_TURN: FreeCAD's own
         viewFront, viewIsometric …)."""
-        getattr(view, SNAP_TURN[name])()
+        with still(view):
+            getattr(view, SNAP_TURN[name])()
 
     def nothing_shown():
         """Why a grid of views would show nothing (emptywhy.off_screen), or
@@ -719,7 +819,7 @@ def tools(session):
         "maps": lambda: render.MAPS, "layers": lambda: render.LAYERS, "views": lambda: list(render.VIEWS),
         "SNAP_TURN": SNAP_TURN, "GRID": GRID, "alias": lambda n: ALIASES.get(str(n).lower(), str(n).lower()),
         "gui_up": gui_up, "active_view": active_view, "turn": turn,
-        "snap_fit": lambda view, w, h: snap_fit(view, w, h, _fit_box(s)), "snap_empty": lambda view: _snap_empty(s, view), "nothing_shown": nothing_shown,
+        "snap_fit": lambda view, w, h: snap_fit(view, w, h, _fit_box(s)), "snap_empty": lambda view, w=None, h=None, fitted=False: _snap_empty(s, view, w, h, fitted), "nothing_shown": nothing_shown,
         "snap_size": snap_size, "shots": shots, "snap_combine": snap_combine, "fit_png": fit_png, "png_size": png_size,
         "out_file": lambda name: paths.out_file(s, "view_snapshot", name, ".png"),
         "filesize": os.path.getsize, "read_bytes": read_bytes,

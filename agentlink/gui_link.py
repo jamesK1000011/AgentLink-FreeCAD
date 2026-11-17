@@ -1002,6 +1002,34 @@ class Link:
         text = compact({"error": {"code": "busy", "message": msg}})
         return {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}}
 
+    def _meter_refused(self, line, reply):
+        """A refusal this window wrote itself, before the call ran, counted
+        by usage_report as an erred call (usage.Meter.refused): the meter
+        sits in the server's call, which these never reach."""
+        try:
+            meter = getattr(getattr(self, "server", None), "meter", None)
+            name = _tool_name(line)
+            if meter is None or name is None:
+                return
+            from .protocol import compact
+            from .usage import err_code
+
+            result = reply.get("result") or {}
+            args = (json.loads(line).get("params") or {}).get("arguments") or {}
+            text = "".join(c.get("text", "") for c in result.get("content") or [] if c.get("type") == "text")
+            meter.refused(name, compact(args), text, err_code(result))
+        except Exception:  # noqa: BLE001 - the count only
+            pass
+
+    def _meter_amend(self, name):
+        """A call answered busy while it ran: counted as erred, as the agent saw it."""
+        try:
+            meter = getattr(getattr(self, "server", None), "meter", None)
+            if meter is not None and name:
+                meter.amend(name, "busy")
+        except Exception:  # noqa: BLE001
+            pass
+
     def _write(self, f, reply):
         with self._writes():
             try:
@@ -1032,7 +1060,9 @@ class Link:
                     continue
                 why = self._stuck()
                 if why is not None and self._claim(line, "busy"):
-                    self._write(f, self.busy_reply(mid, why))
+                    reply = self.busy_reply(mid, why)
+                    self._write(f, reply)
+                    self._meter_refused(line, reply)
                     return
 
         th = threading.Thread(target=watch, name="agentlink-busy", daemon=True)
@@ -1240,7 +1270,9 @@ class Link:
             mid = None
         msg = blocked_words(d)
         text = compact({"error": {"code": "invalid_state", "message": msg}})
-        self._write(f, {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
+        reply = {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}}
+        self._write(f, reply)
+        self._meter_refused(line, reply)
 
     def _drain_nested(self):
         """Only while _drain is on the stack (a call in hand inside a dialog's
@@ -1342,7 +1374,9 @@ class Link:
                 except ValueError:
                     mid = None
                 text = compact({"error": {"code": "invalid_state", "message": f"{gone} was closed — doc_open it again, or doc_switch to another open document (doc_new for a fresh one). This call was not run."}})
-                self._write(f, {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
+                reply = {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}}
+                self._write(f, reply)
+                self._meter_refused(line, reply)
                 return
             if self.session:
                 self.session.closed_doc = None
@@ -1355,7 +1389,9 @@ class Link:
                     except ValueError:
                         mid = None
                     text = compact({"error": {"code": "invalid_state", "message": f"{name} acts on the window's front document, and the person has {front.Label} in front while the agent is on {mine.Label}: doc_switch {{ document: \"{mine.Label}\", front: true }} brings the agent's back (their view moves), or ask them. This call was not run."}})
-                    self._write(f, {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
+                    reply = {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}}
+                    self._write(f, reply)
+                    self._meter_refused(line, reply)
                     return
             if name is not None and name != "dialog_answer":
                 if not prev[0]:
@@ -1373,6 +1409,8 @@ class Link:
                     self.until = self.stuck = None
                 self.calls = [c for c in self.calls if c is not call]
             if call["answered"]:
+                if not ((reply or {}).get("result") or {}).get("isError"):
+                    self._meter_amend(name)  # counted as answered; the agent was told busy
                 reply = None  # sent already, while a dialog held the call
         except ValueError:
             reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}
