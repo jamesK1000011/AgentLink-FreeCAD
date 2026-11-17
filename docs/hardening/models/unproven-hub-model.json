@@ -1,0 +1,2024 @@
+{
+ "tutorial": "No wiki tutorial: this is the list of hub tools still not proven on a model (patches/unproven.json: Part Design, Assembly, TechDraw, FEM, Draft, Mesh, OpenSCAD, Core, Window), each called at least once on one small document built for it — a 40 x 30 x 10 PartDesign bracket, a box and a post in an assembly, a tile, a 100 x 10 x 10 cantilever, a ball, a wall with a section plane and two drawing pages. Figures are derived by hand (volumes, beam theory) and said so; nothing here was run. Written from the sources (agentlink/data/tools.json entries and their steps, agentlink/tools.py, agentlink/jobs.py, agentlink/chain.py) at 9f8a34d.",
+ "reference": null,
+ "expected": {
+  "document": "UnprovenHub",
+  "bracket": {
+   "size_mm": [
+    40,
+    30,
+    10
+   ],
+   "padVolume_mm3": 12000,
+   "withHole_mm3": 11214.6,
+   "hole": "r 5 through: pi x 25 x 10 = 785.4",
+   "withSlot_mm3": 11460
+  },
+  "foot": {
+   "size_mm": [
+    20,
+    20,
+    5
+   ],
+   "topFace": "Face6",
+   "topArea_mm2": 400
+  },
+  "post": {
+   "radius_mm": 5,
+   "height_mm": 30,
+   "sideUnrolled_mm": [
+    31.416,
+    30
+   ],
+   "sideArea_mm2": 942.478
+  },
+  "tile": {
+   "size_mm": [
+    30,
+    30,
+    4
+   ],
+   "engraved_mm3": -99
+  },
+  "cantilever": {
+   "size_mm": [
+    100,
+    10,
+    10
+   ],
+   "E_MPa": 210000,
+   "force_N": 100,
+   "I_mm4": 833.33,
+   "tipDeflection_mm": 0.1905,
+   "rootStress_MPa": 60,
+   "yield_MPa": 250
+  },
+  "ball": {
+   "radius_mm": 10,
+   "capAbove_z5_area_mm2": 314.16
+  },
+  "wall": {
+   "length_mm": 4000,
+   "width_mm": 200,
+   "height_mm": 2500,
+   "onPaperAt_1_50_mm": [
+    80,
+    4
+   ]
+  },
+  "freecad": "1.1.3 (asm_rigid_group answers unavailable; OpenSCAD was not installed in the earlier runs)"
+ },
+ "conventions": {
+  "run": "scripts/model_calls.py turns this file into a batch file ({ calls, rollback: false, stopOnError: false }): rollback false because the list runs past its refusals and uses history_undo, history_redo and history_restore, which a batch that rolls back refuses whole. batch { file, budget: 100 }; from: next goes on.",
+  "references": "{ \"$from\": n, \"$at\": \"key\" } takes a value from call n's answer (n: the index in this whole list; agentlink/chain.py). Used for: the checkpoint's id (24 -> 29), the note's id (114 -> the four note calls up to 121), the unwrap's SVG path (147 -> td_view_more symbol 148 and draft_outline 149, 151, 152), a window picture's path (154 -> td_view_more image 155). No reference reaches more than 7 calls back. The list is long (200 calls; a batch starts calls for 55 s, 100 at most with budget) and is answered in parts, and a part refuses a reference into an earlier part (invalid_state: \"its answer is not kept between parts\"): when next lands between a source and its reader, start the part at the source instead — batch { file, from: <the source's index> } runs it again (the sources here are a checkpoint, a note, an SVG and a picture: a second one harms nothing) — or send the reader by hand with the value the source answered.",
+  "refused": "An expect starting REFUSED means isError with that code; one that names a state in capitals first (BEFORE ANY SOLVE: REFUSED …, ON FREECAD 1.1.3: REFUSED …, INSIDE A BATCH: REFUSED …) or gives two cases means the refusal in that state; the words after it are the refusal's own, from the tool's entry or the hub's code. \"…\" stands for words left out.",
+  "window": "Every call goes to the window's link (session_state where: window). Nothing here takes the cursor, focus or full screen: window_snapshot is drawn by Qt in the background, cmd_run and menu_run press view commands only.",
+  "batch": "batch is the carrier: every row of the run's answer (results[n]: tool, ok, result or error) is batch's proof, with ran, record (batches/<date>-<time>.json), and notRun / next when the budget ends a part. Its own refusals cannot be calls of this list (a batch holding a batch is refused whole): they are in runAlone.",
+  "leftBehind": "The document UnprovenHub stays open and unsaved. Files in the session's folder: unproven_steps/ (3 PNG), unproven_window.png, unproven_report.png, unproven_render.png, unproven_snap.png, unproven_stress.png, unproven_foot_top.svg, unproven_cap.dxf, unproven-cantilever.vtu / .csv, Beam-stress.csv, one checkpoint copy (and a second if history_restore went by file). Settings: none (Mod/AgentLink/LiveTest/Probe is set and removed)."
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "UnprovenHub"
+   },
+   "expect": "document \"UnprovenHub\" (UnprovenHub1 … when one is open already: then every doc_switch below takes that name), label \"UnprovenHub\", previous: the document before"
+  },
+  {
+   "tool": "session_state",
+   "arguments": {},
+   "expect": "document and label UnprovenHub; freecad \"1.1.3\"; bodies []; step (a number); outDir (the session's folder: every relative path below lands there); where \"window\" (\"hidden\" means the window's link is off: the Window calls below then answer unavailable); next: one line naming the active workbench"
+  },
+  {
+   "tool": "tool_groups",
+   "arguments": {},
+   "expect": "groups: a row a group { group, on, count } (about on those not listed), core on; listed: a count; note says every tool is callable by name. No tool names in it"
+  },
+  {
+   "tool": "tool_groups",
+   "arguments": {
+    "find": "remove a feature",
+    "limit": 5
+   },
+   "expect": "find echoed; count 1 or more; tools: at most 5 rows { tool, group, does }, feature_remove among them (group feature)"
+  },
+  {
+   "tool": "tool_groups",
+   "arguments": {
+    "tool": "feature_remove"
+   },
+   "expect": "tools[0]: tool feature_remove, group feature, changes true, listed true or false, description beginning \"Remove a feature\", inputSchema.required [\"feature\"]"
+  },
+  {
+   "tool": "tool_groups",
+   "arguments": {
+    "group": "core"
+   },
+   "expect": "group core, on true, count (over 15), about, tools: a row a tool { tool, does } with batch, session_state and job_start among them; no note (core is listed)"
+  },
+  {
+   "tool": "tool_groups",
+   "arguments": {
+    "now": true,
+    "limit": 5
+   },
+   "expect": "now { workbench, editing, selected } (the window's state; { window: false } headless); count; tools: at most 5 rows each with fits (why); next [{ tool, why }] at most three — for an empty document pd_body_new or part_primitive is the likely next"
+  },
+  {
+   "tool": "tool_groups",
+   "arguments": {
+    "tool": "feature_remov"
+   },
+   "expect": "REFUSED not_found: tool 'feature_remov': not here — did you mean feature_remove …; names tool_groups { find }"
+  },
+  {
+   "tool": "tool_groups",
+   "arguments": {
+    "group": "nosuchgroup"
+   },
+   "expect": "REFUSED not_found: group 'nosuchgroup': not here … The groups: (the list)"
+  },
+  {
+   "tool": "guide_read",
+   "arguments": {},
+   "expect": "guides: a row a guide (assembly, bim, cam, doc, draft, feature … view: 20 of the hub's own, more with add-ons), each { topic, title, sections, chars, tokens, sectionTokens }, start \"Start here\" where it has one; note on tokens"
+  },
+  {
+   "tool": "guide_read",
+   "arguments": {
+    "topic": "feature",
+    "section": "Start here"
+   },
+   "expect": "topic feature; text: that one section only (it begins \"## Start here\" or with its first line; far shorter than the guide)"
+  },
+  {
+   "tool": "guide_read",
+   "arguments": {
+    "topic": "feature",
+    "section": "no such section"
+   },
+   "expect": "REFUSED not_found: section 'no such section': the sections are: Start here, workflow, reading the answer, traps, pad and pocket, holes, patterns and mirrors, the history and the tip, More features, gears and sprockets"
+  },
+  {
+   "tool": "guide_read",
+   "arguments": {
+    "topic": "nosuchguide"
+   },
+   "expect": "REFUSED not_found: nosuchguide: no such guide — they are: (the topics)"
+  },
+  {
+   "tool": "usage_report",
+   "arguments": {
+    "session": true
+   },
+   "expect": "session: this session's id; calls (at least the calls so far in this session); tokens; imageTokens; errors (the refusals above count: 4 or more); byTool: at most 12 rows, costliest first. (REFUSED unavailable only where AGENTLINK_USAGE=off)"
+  },
+  {
+   "tool": "usage_report",
+   "arguments": {
+    "days": 1
+   },
+   "expect": "days 1; calls; tokens = callTokens + toolListTokens; per day and per session rows; the costliest tools"
+  },
+  {
+   "tool": "app_extensions",
+   "arguments": {
+    "action": "list"
+   },
+   "expect": "repos: the person's list (a list, may be empty); loaded: { name: … } of those running in this FreeCAD; note. Nothing changed"
+  },
+  {
+   "tool": "app_extensions",
+   "arguments": {
+    "action": "add"
+   },
+   "expect": "REFUSED invalid_input: repo: owner/repo, with @branch if not main. (No repo is given on purpose: the refusal comes before anything is written; ExtensionRepos is unchanged — app_extensions { action: list } again shows the same repos)"
+  },
+  {
+   "tool": "pd_body_new",
+   "arguments": {
+    "name": "Bracket"
+   },
+   "expect": "body \"Bracket\""
+  },
+  {
+   "tool": "workbench",
+   "arguments": {
+    "activate": "Sketcher"
+   },
+   "expect": "active \"SketcherWorkbench\"; was: the workbench before (PartDesignWorkbench after pd_body_new's echo, or another); workbenches: the menu names. It loads Sketcher's commands, so Sketcher_LeaveSketch exists for the two cmd_run calls below"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Bracket",
+    "plane": "XY",
+    "name": "Base"
+   },
+   "expect": "sketch \"Base\" on XY; frame origin [0,0,0], xAxis [1,0,0], yAxis [0,1,0]. In the window the sketch opens for editing (the echo)"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "Base",
+    "items": [
+     {
+      "kind": "rectangle",
+      "corner": [
+       0,
+       0
+      ],
+      "size": [
+       40,
+       30
+      ]
+     }
+    ]
+   },
+   "expect": "added: a rectangle of 4 lines, 40 x 30 from the origin; the sketch stays open in the window"
+  },
+  {
+   "tool": "cmd_run",
+   "arguments": {
+    "name": "Sketcher_LeaveSketch"
+   },
+   "expect": "WITH A SKETCH OPEN: ran \"Sketcher_LeaveSketch\", wasActive true, workbench, document UnprovenHub, objectsAdded 0 — or, when a drawing tool was still on, wasActive false with closed \"Base\" and the note that it was ended. Either way the sketch is closed after it. (ran null with \"already\" here means the echo is off and the sketch was never open: Agent Link's live echo setting; not a failure of cmd_run, but the open case is then not proven)"
+  },
+  {
+   "tool": "cmd_run",
+   "arguments": {
+    "name": "Sketcher_LeaveSketch"
+   },
+   "expect": "WITH NONE OPEN: ran null; already \"no sketch is open for editing, so there is nothing to close\"; workbench; document UnprovenHub — an answer, not a refusal"
+  },
+  {
+   "tool": "pd_pad",
+   "arguments": {
+    "body": "Bracket",
+    "sketch": "Base",
+    "length": 10
+   },
+   "expect": "feature \"Pad\"; volume 12000; volumeChange 12000; faces 6; solids 1; box [40, 30, 10]"
+  },
+  {
+   "tool": "history_checkpoint",
+   "arguments": {
+    "name": "padded"
+   },
+   "expect": "checkpoint: an id (cp1, or the next number); name \"padded\"; step; file (a saved copy under ~/AgentLink, not the person's file); bytes over 0; note. (REFUSED / not found as a tool where no installed add-on keeps checkpoints: then history_restore and history_diff { since: \"padded\" } below are not proven either)"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Bracket",
+    "face": {
+     "at": [
+      20,
+      15,
+      10
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ]
+    },
+    "name": "Hole"
+   },
+   "expect": "sketch \"Hole\" on the pad's top face; frame origin [0, 0, 10], xAxis [1,0,0], yAxis [0,1,0]"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "Hole",
+    "items": [
+     {
+      "kind": "circle",
+      "center": [
+       20,
+       15
+      ],
+      "radius": 5
+     }
+    ]
+   },
+   "expect": "added: one circle, radius 5, centre [20, 15]"
+  },
+  {
+   "tool": "pd_pocket",
+   "arguments": {
+    "body": "Bracket",
+    "sketch": "Hole",
+    "type": "through_all"
+   },
+   "expect": "feature \"Pocket\"; volume 11214.6 (12000 - pi x 25 x 10); volumeChange -785.4; solids 1; faces 7"
+  },
+  {
+   "tool": "history_diff",
+   "arguments": {},
+   "expect": "since and to: two step numbers one apart; steps [\"pd_pocket\"]; bodies.Bracket: volume from 12000 to 11214.6, faces from 6 to 7; features: added Pocket. Nothing about Base or Pad (only what changed)"
+  },
+  {
+   "tool": "history_diff",
+   "arguments": {
+    "since": {
+     "$from": 24,
+     "$at": "checkpoint"
+    }
+   },
+   "expect": "since is the checkpoint's id, taken from call 24 by reference (checkpoint). The answer's since is that checkpoint's step as a number (it was taken in this session) and to the step now; bodies.Bracket volume from 12000 to 11214.6, faces 6 to 7; features added: Hole and Pocket; steps [sketch_new, sketch_add, pd_pocket]"
+  },
+  {
+   "tool": "history_diff",
+   "arguments": {
+    "since": 99999
+   },
+   "expect": "REFUSED invalid_input: since: a step from 0 to (the last step - 1) (session_state gives the step now), or a checkpoint (cp3 or its name)"
+  },
+  {
+   "tool": "steps_list",
+   "arguments": {
+    "body": "Bracket"
+   },
+   "expect": "body Bracket; count 2; steps[0]: step 1, label Pad, type Pad, volume 12000, change 12000, key \"Length 10.00 mm\" (or as FreeCAD writes the length); steps[1]: step 2, label Pocket, volume 11214.6, change -785.4, tip true"
+  },
+  {
+   "tool": "steps_list",
+   "arguments": {
+    "body": "Bracket",
+    "sketches": true
+   },
+   "expect": "count 4, in the body's order: Base (type SketchObject, no volume), Pad, Hole, Pocket; steps numbered 1 to 4"
+  },
+  {
+   "tool": "steps_list",
+   "arguments": {
+    "body": "NoSuchBody"
+   },
+   "expect": "REFUSED not_found: body: no PartDesign body 'NoSuchBody' — Bracket."
+  },
+  {
+   "tool": "steps_render",
+   "arguments": {
+    "body": "Bracket",
+    "width": 320,
+    "height": 240,
+    "inline": false,
+    "path": "unproven_steps"
+   },
+   "expect": "body Bracket; folder: …/unproven_steps in the session's folder; files: 2 (step_01.png, step_02.png); sheet: …/steps.png; steps: the two rows of steps_list; no picture in the reply (inline false). The model is unchanged (steps_list after it still counts 2)"
+  },
+  {
+   "tool": "steps_render",
+   "arguments": {
+    "body": "Bracket",
+    "width": 50
+   },
+   "expect": "REFUSED invalid_input: width, height: pixels a picture, 120 … 2000 (480 × 360 by default)"
+  },
+  {
+   "tool": "body_check",
+   "arguments": {
+    "body": "Bracket"
+   },
+   "expect": "body Bracket; ok true; valid true; closed true; solids 1; problems []; checkGeometry { ok true }; volume 11214.6, faces 7 and the size [40, 30, 10] beside them"
+  },
+  {
+   "tool": "body_check",
+   "arguments": {
+    "body": "NoSuchBody"
+   },
+   "expect": "REFUSED not_found: body 'NoSuchBody': not here — the bodies: Bracket."
+  },
+  {
+   "tool": "history_undo",
+   "arguments": {
+    "steps": 1
+   },
+   "expect": "done \"undo\"; steps: one name (the pocket's transaction); redoCount 1; undoCount one lower than before; bodies [\"Bracket\"]"
+  },
+  {
+   "tool": "steps_list",
+   "arguments": {
+    "body": "Bracket"
+   },
+   "expect": "THE UNDO'S PROOF: count 1 (Pad only, volume 12000, tip true) — the pocket is gone. Count 2 with a failed or empty Pocket means the undo step was not the whole call"
+  },
+  {
+   "tool": "history_redo",
+   "arguments": {
+    "steps": 1
+   },
+   "expect": "done \"redo\"; steps: the same name; redoCount 0; bodies [\"Bracket\"]"
+  },
+  {
+   "tool": "steps_list",
+   "arguments": {
+    "body": "Bracket"
+   },
+   "expect": "THE REDO'S PROOF: count 2 again, Pocket volume 11214.6, tip true"
+  },
+  {
+   "tool": "feature_remove",
+   "arguments": {
+    "body": "Bracket",
+    "feature": "Pad"
+   },
+   "expect": "REFUSED invalid_state: \"Pad is used by Hole: feature_remove those first (the last made first). force: true removes it anyway …\" — Hole is the sketch on Pad's top face. Pocket, the feature after it, should not be named (the body re-links that itself); if it is, say so. Nothing changed: the steps_list before still holds"
+  },
+  {
+   "tool": "feature_remove",
+   "arguments": {
+    "body": "Bracket",
+    "feature": "NoSuchFeature"
+   },
+   "expect": "REFUSED not_found: … 'NoSuchFeature': not in Bracket — there: (the body's features and sketches by label: Base, Pad, Hole, Pocket)"
+  },
+  {
+   "tool": "feature_remove",
+   "arguments": {
+    "body": "Bracket",
+    "feature": "Pocket"
+   },
+   "expect": "THE SUCCESS: removed [\"Pocket\", \"Hole\"] (its sketch goes with it: nothing else uses it); tip \"Pad\"; the health / reading beside it shows volume 12000, volumeChange +785.4, solids 1"
+  },
+  {
+   "tool": "steps_list",
+   "arguments": {
+    "body": "Bracket",
+    "sketches": true
+   },
+   "expect": "count 2: Base and Pad (tip true, volume 12000); no Hole, no Pocket"
+  },
+  {
+   "tool": "sketch_new",
+   "arguments": {
+    "body": "Bracket",
+    "face": {
+     "at": [
+      20,
+      15,
+      10
+     ],
+     "normal": [
+      0,
+      0,
+      1
+     ]
+    },
+    "name": "Slot"
+   },
+   "expect": "sketch \"Slot\" on the top face, frame origin [0, 0, 10]"
+  },
+  {
+   "tool": "sketch_add",
+   "arguments": {
+    "sketch": "Slot",
+    "items": [
+     {
+      "kind": "rectangle",
+      "corner": [
+       5,
+       12
+      ],
+      "size": [
+       30,
+       6
+      ]
+     }
+    ]
+   },
+   "expect": "added: a rectangle 30 x 6"
+  },
+  {
+   "tool": "pd_pocket",
+   "arguments": {
+    "body": "Bracket",
+    "sketch": "Slot",
+    "type": "length",
+    "length": 3
+   },
+   "expect": "feature \"Pocket\" (the label is free again); volume 11460 (12000 - 30 x 6 x 3); volumeChange -540"
+  },
+  {
+   "tool": "feature_remove",
+   "arguments": {
+    "body": "Bracket",
+    "feature": "Pocket",
+    "keepSketch": true
+   },
+   "expect": "keepSketch: removed [\"Pocket\"] only; tip \"Pad\"; volume 12000 again; the sketch Slot stays in the body (the next call lists it)"
+  },
+  {
+   "tool": "steps_list",
+   "arguments": {
+    "body": "Bracket",
+    "sketches": true
+   },
+   "expect": "count 3: Base, Pad (tip true), Slot (a sketch no feature uses)"
+  },
+  {
+   "tool": "history_checkpoint",
+   "arguments": {
+    "list": true
+   },
+   "expect": "document UnprovenHub; checkpoints: one row at least, the one named \"padded\" { checkpoint (the id call 24 answered), name, time, bytes }"
+  },
+  {
+   "tool": "history_restore",
+   "arguments": {
+    "checkpoint": "padded"
+   },
+   "expect": "done \"restore\"; checkpoint: the id; how \"undo\" with steps: the names undone (the sketches, pockets and removals since the checkpoint) and redo \"history_redo takes them back\" — or how \"file\" with before: a new checkpoint id and the note, when the undo stack no longer reaches (then the document may have come back under another name: session_state says)"
+  },
+  {
+   "tool": "steps_list",
+   "arguments": {
+    "body": "Bracket",
+    "sketches": true
+   },
+   "expect": "THE RESTORE'S PROOF: count 2 — Base and Pad (volume 12000, tip true); the sketch Slot is gone (it was made after the checkpoint)"
+  },
+  {
+   "tool": "history_restore",
+   "arguments": {
+    "checkpoint": "nosuchcheckpoint"
+   },
+   "expect": "REFUSED not_found: checkpoint 'nosuchcheckpoint': the checkpoints: (ids with names, padded among them) — history_checkpoint takes one"
+  },
+  {
+   "tool": "doc_switch",
+   "arguments": {},
+   "expect": "document UnprovenHub; label UnprovenHub; open: a row a document { name, label, file (null: never saved), modified }, UnprovenHub among them"
+  },
+  {
+   "tool": "doc_switch",
+   "arguments": {
+    "document": "UnprovenHub",
+    "front": true
+   },
+   "expect": "document UnprovenHub; note \"Already on it.\"; front true (its 3D view is the window's active tab: cmd_run and menu_run below act on it)"
+  },
+  {
+   "tool": "doc_switch",
+   "arguments": {
+    "document": "NoSuchDocument"
+   },
+   "expect": "REFUSED not_found: NoSuchDocument: not open — open, as label (name): … UnprovenHub (UnprovenHub) …. doc_open { path } opens a file"
+  },
+  {
+   "tool": "workbench",
+   "arguments": {},
+   "expect": "active: an internal name (SketcherWorkbench or PartDesignWorkbench); workbenches: the sorted menu names, \"Part Design\" and \"Sketcher\" among them"
+  },
+  {
+   "tool": "workbench",
+   "arguments": {
+    "activate": "Part Design"
+   },
+   "expect": "active \"PartDesignWorkbench\"; was: the one before; workbenches"
+  },
+  {
+   "tool": "workbench",
+   "arguments": {
+    "activate": "No Such Bench"
+   },
+   "expect": "REFUSED not_found: activate: no workbench 'No Such Bench' — the workbenches: (the menu names)"
+  },
+  {
+   "tool": "cmd_list",
+   "arguments": {
+    "query": "Std_ViewFit"
+   },
+   "expect": "commands: Std_ViewFitAll and Std_ViewFitSelection, each with name, menu text, tip, shortcut; count 2; workbench \"PartDesignWorkbench\""
+  },
+  {
+   "tool": "cmd_list",
+   "arguments": {
+    "query": "Std_Quit"
+   },
+   "expect": "commands: one row, Std_Quit, with refused \"the person closes FreeCAD\" — cmd_list marks what cmd_run will not run (the refusal itself is not called here: see notCovered)"
+  },
+  {
+   "tool": "cmd_list",
+   "arguments": {
+    "query": "zzznosuchcommand"
+   },
+   "expect": "commands []; count 0 (an answer, not a refusal)"
+  },
+  {
+   "tool": "cmd_run",
+   "arguments": {
+    "name": "Std_ViewIsometric"
+   },
+   "expect": "ran \"Std_ViewIsometric\"; wasActive true; workbench PartDesignWorkbench; document UnprovenHub; objectsAdded 0; no note (the document in front is the session's)"
+  },
+  {
+   "tool": "cmd_run",
+   "arguments": {
+    "name": "Std_NoSuchCommand"
+   },
+   "expect": "REFUSED not_found: No command 'Std_NoSuchCommand' in this FreeCAD … cmd_list { query } finds them"
+  },
+  {
+   "tool": "menu_list",
+   "arguments": {
+    "menu": "View"
+   },
+   "expect": "items: every item of the View menu, each { path: [\"View\", …], command, enabled false when greyed, checked on toggles }; one with command \"Std_ViewFitAll\" — read its path: the menu_run call below uses [\"View\", \"Standard views\", \"Fit all\"]; count"
+  },
+  {
+   "tool": "menu_list",
+   "arguments": {
+    "menu": "NoSuchMenu"
+   },
+   "expect": "REFUSED not_found: No menu 'NoSuchMenu' in the PartDesignWorkbench workbench's menu bar: File, Edit, View, …"
+  },
+  {
+   "tool": "menu_run",
+   "arguments": {
+    "path": [
+     "View",
+     "Standard views",
+     "Fit all"
+    ]
+   },
+   "expect": "pressed [\"View\", \"Standard views\", \"Fit all\"]; command \"Std_ViewFitAll\"; checked null (not a toggle). Harmless: it only fits the 3D view. If FreeCAD 1.1.3 words the path differently the answer is a refusal naming what there is: send it again with the path call 66 listed for Std_ViewFitAll"
+  },
+  {
+   "tool": "menu_run",
+   "arguments": {
+    "path": [
+     "View",
+     "Standard views"
+    ]
+   },
+   "expect": "REFUSED invalid_input: 'View > Standard views' is a menu, not an item: menu_list { menu: \"View\" } shows its items"
+  },
+  {
+   "tool": "menu_run",
+   "arguments": {
+    "path": [
+     "View",
+     "No Such Item"
+    ]
+   },
+   "expect": "REFUSED not_found: No menu item 'No Such Item' there: (the View menu's titles, up to 40)"
+  },
+  {
+   "tool": "selection",
+   "arguments": {
+    "objects": [
+     "Bracket"
+    ]
+   },
+   "expect": "selected [\"Bracket\"]; document UnprovenHub; no note"
+  },
+  {
+   "tool": "selection",
+   "arguments": {
+    "clear": false
+   },
+   "expect": "reads it: selected [\"Bracket\"]; detail [{ object: \"Bracket\" }]; document UnprovenHub; nothing cleared"
+  },
+  {
+   "tool": "selection",
+   "arguments": {
+    "objects": [
+     "NoSuchObject"
+    ]
+   },
+   "expect": "REFUSED not_found: objects: no object 'NoSuchObject' in UnprovenHub — object_list names them. The selection was left as it was"
+  },
+  {
+   "tool": "selection",
+   "arguments": {
+    "clear": false
+   },
+   "expect": "selected [\"Bracket\"] still (the refused call left it)"
+  },
+  {
+   "tool": "selection",
+   "arguments": {},
+   "expect": "selected []; cleared true"
+  },
+  {
+   "tool": "cmd_run",
+   "arguments": {
+    "name": "Std_Delete"
+   },
+   "expect": "REFUSED invalid_state: Std_Delete is not active just now (its button is greyed out) … (nothing is selected: selection { objects }) … Nothing was run. The proof that nothing ran: Bracket is still there (the show calls below find it)"
+  },
+  {
+   "tool": "show",
+   "arguments": {
+    "objects": [
+     "Bracket"
+    ],
+    "visible": false
+   },
+   "expect": "hidden [\"Bracket\"]"
+  },
+  {
+   "tool": "session_state",
+   "arguments": {},
+   "expect": "hidden [\"Bracket\"] with hiddenNote; bodies [] (a hidden part is left out of bodies)"
+  },
+  {
+   "tool": "show",
+   "arguments": {
+    "objects": [
+     "Bracket",
+     "Ghost"
+    ]
+   },
+   "expect": "visible [\"Bracket\"]; unknown [\"Ghost\"]; note \"Not found, so left out; the rest done.\""
+  },
+  {
+   "tool": "show",
+   "arguments": {
+    "objects": [
+     "Ghost"
+    ]
+   },
+   "expect": "REFUSED not_found: No object 'Ghost' in UnprovenHub"
+  },
+  {
+   "tool": "session_state",
+   "arguments": {},
+   "expect": "bodies: Bracket again, volume 12000, faces 6, size [40, 30, 10]; no hidden key"
+  },
+  {
+   "tool": "pref_get",
+   "arguments": {
+    "path": "BaseApp/Preferences/View"
+   },
+   "expect": "path BaseApp/Preferences/View; values { name: { type, value } } (only what was ever changed); groups: its subgroups. Changes nothing"
+  },
+  {
+   "tool": "pref_set",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+    "name": "Probe",
+    "value": 3,
+    "type": "int"
+   },
+   "expect": "path …/LiveTest; set.Probe { was null, now 3, type: an integer kind }; note; no appliesAtNextLaunch. Harmless: Mod/AgentLink/LiveTest is a group nothing reads"
+  },
+  {
+   "tool": "pref_get",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+    "name": "Probe"
+   },
+   "expect": "path, name Probe, type \"Integer\", value 3"
+  },
+  {
+   "tool": "pref_set",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+    "values": {
+     "Probe": 4
+    }
+   },
+   "expect": "set.Probe { was 3, now 4 } — the type follows the stored one (Integer), no type given"
+  },
+  {
+   "tool": "pref_set",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+    "name": "ProbeExecutable",
+    "value": "x"
+   },
+   "expect": "REFUSED not_allowed: ProbeExecutable: the person's to set … Nothing was changed. (A name holding \"executable\" is guarded wherever it is: the guard is proven on a name of our own, not on a real program path)"
+  },
+  {
+   "tool": "pref_set",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest"
+   },
+   "expect": "REFUSED invalid_input: name and value, or values { name: value } …"
+  },
+  {
+   "tool": "pref_reset",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+    "names": [
+     "Probe",
+     "NeverSet"
+    ]
+   },
+   "expect": "THE RESTORE: reset [\"Probe\"]; notSet [\"NeverSet\"]; note on notSet"
+  },
+  {
+   "tool": "pref_get",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+    "name": "Probe"
+   },
+   "expect": "REFUSED not_found: No setting 'Probe' in …/LiveTest (FreeCAD's default applies until one is set): (the names stored there: none, and no ProbeExecutable) — the group is as it was before the run"
+  },
+  {
+   "tool": "pref_reset",
+   "arguments": {
+    "path": "BaseApp/Preferences/Mod/AgentLink/LiveTest",
+    "names": [
+     "ProbeExecutable"
+    ]
+   },
+   "expect": "REFUSED not_allowed: ProbeExecutable: the person's to reset (Edit > Preferences, or Agent Link's panel). Nothing was changed. (The same guard as pref_set's, again on a name of our own: no real guarded setting is touched)"
+  },
+  {
+   "tool": "pref_pack",
+   "arguments": {},
+   "expect": "packs: the sorted names (FreeCAD's own, e.g. \"FreeCAD Classic\", \"FreeCAD Dark\", \"FreeCAD Light\"; the names are the build's); next. Nothing applied"
+  },
+  {
+   "tool": "pref_pack",
+   "arguments": {
+    "apply": "No Such Pack zz"
+   },
+   "expect": "REFUSED not_found: apply: no preference pack 'No Such Pack zz' — the packs: (the names). Nothing applied (a real pack is not applied here: see notCovered)"
+  },
+  {
+   "tool": "window_snapshot",
+   "arguments": {
+    "inline": false,
+    "path": "unproven_window.png"
+   },
+   "expect": "path: …/unproven_window.png in the session's folder (absolute); width and height: the window's, in pixels (hundreds each); no picture in the reply"
+  },
+  {
+   "tool": "window_snapshot",
+   "arguments": {
+    "part": "Report view",
+    "inline": false,
+    "path": "unproven_report.png"
+   },
+   "expect": "path …/unproven_report.png; width and height smaller than the whole window's (one dock panel). REFUSED not_found listing the panels where this FreeCAD titles it otherwise: then the list is the proof"
+  },
+  {
+   "tool": "window_snapshot",
+   "arguments": {
+    "part": "No Such Panel",
+    "inline": false
+   },
+   "expect": "REFUSED not_found: part: no panel titled 'No Such Panel' — the panels: (their titles, Model and Report view among them)"
+  },
+  {
+   "tool": "snapshot_list",
+   "arguments": {},
+   "expect": "shots: the person's screenshots newest first, without pictures (time, note, pins, path) — [] when they took none"
+  },
+  {
+   "tool": "snapshot_latest",
+   "arguments": {},
+   "expect": "with no screenshots: REFUSED not_found \"No screenshots yet: the person takes one with the camera button (Agent Link toolbar) or Alt+Shift+S.\"; with some (the list above not empty): the newest as a picture with note, pins, workbench, time. Which of the two must agree with the call before"
+  },
+  {
+   "tool": "snapshot_latest",
+   "arguments": {
+    "index": 9999
+   },
+   "expect": "REFUSED: not_found \"No screenshots yet …\" with none, else invalid_input \"index: 1 to N\" (N the length of the list above)"
+  },
+  {
+   "tool": "view_maps",
+   "arguments": {},
+   "expect": "maps: wall, stress, heat (and curvature and any add-on's), each { name, about }; layers; views: iso, top, bottom, front, rear, left, right …"
+  },
+  {
+   "tool": "view_render",
+   "arguments": {
+    "views": "all",
+    "objects": [
+     "Bracket"
+    ],
+    "inline": false,
+    "path": "unproven_render.png"
+   },
+   "expect": "path …/unproven_render.png; views [iso, top, front, right]; width 900, height 700; bytes over 1000; mmAcross; time { took, triangles }; no empty key"
+  },
+  {
+   "tool": "view_render",
+   "arguments": {
+    "map": "stress",
+    "inline": false
+   },
+   "expect": "NO SOLVE YET: empty — words saying the stress map has no data (no fea_solve in this session) and what to do; map \"stress\"; no path, no picture. An answer, not a refusal"
+  },
+  {
+   "tool": "view_render",
+   "arguments": {
+    "width": 10
+   },
+   "expect": "REFUSED invalid_input: width and height: 64 to 3000 px."
+  },
+  {
+   "tool": "view_snapshot",
+   "arguments": {
+    "view": "iso",
+    "fit": true,
+    "inline": false,
+    "path": "unproven_snap.png"
+   },
+   "expect": "path …/unproven_snap.png; view \"iso\"; width 800, height 600; bytes over 1000; no fitted: false (it was fitted)"
+  },
+  {
+   "tool": "view_snapshot",
+   "arguments": {
+    "view": "sideways"
+   },
+   "expect": "REFUSED invalid_input: view: one of (iso, top, bottom, front, rear, left, right …), or left out to keep the person's view"
+  },
+  {
+   "tool": "report_read",
+   "arguments": {
+    "last": 5
+   },
+   "expect": "found true; count (the Report view's lines); problems (a count); lines: at most 5, the last ones"
+  },
+  {
+   "tool": "report_read",
+   "arguments": {
+    "problems": true
+   },
+   "expect": "found true; lines: only warnings and errors (at most 40); problems = how many there are in all — the refusals above are not Report lines, so a clean run reads the same count as before the run"
+  },
+  {
+   "tool": "gui_unstick",
+   "arguments": {},
+   "expect": "nothing held the window: closed [] and open: nothing (or the words saying nothing was open)"
+  },
+  {
+   "tool": "dialog_answer",
+   "arguments": {},
+   "expect": "WITH NO DIALOG: dialog null; note \"No dialog or task panel is open in the FreeCAD window.\" (task { title, buttons } instead means a task panel is open: something above left one — say which)"
+  },
+  {
+   "tool": "dialog_answer",
+   "arguments": {
+    "button": "Cancel"
+   },
+   "expect": "the same answer: dialog null and the note; nothing pressed (no \"pressed\" key) — with nothing open a button has nothing to press, and it is not a refusal"
+  },
+  {
+   "tool": "crash_collect",
+   "arguments": {},
+   "expect": "note \"No recovery files from another FreeCAD and no new crash reports.\" — or, when a FreeCAD crashed earlier, a folder under ~/AgentLink/crash/<time>/ with what was copied. Copies only"
+  },
+  {
+   "tool": "queue_go",
+   "arguments": {},
+   "expect": "go true; wasHeld false (no heavy job is held in this run; true only if the person's own work held one); running []; machine { heavySlots, memoryCeilingGB, fan }; note. Run it only as part of this test the person asked for: its own rule is the person's word in chat"
+  },
+  {
+   "tool": "outputs_clean",
+   "arguments": {
+    "dry_run": true
+   },
+   "expect": "dryRun true; wouldGo: by kind (shot, run, fcbak) what would go to the Trash — {} in a fresh folder; total { count, mb }; kept: a count that includes this run's pictures; exports: listed only. Nothing removed: unproven_window.png and unproven_render.png are still in the folder"
+  },
+  {
+   "tool": "outputs_clean",
+   "arguments": {
+    "dry_run": true,
+    "kinds": [
+     "nosuchkind"
+    ]
+   },
+   "expect": "REFUSED invalid_input: kinds: any of shot, run, export, fcbak (the hub's input check names the same four)"
+  },
+  {
+   "tool": "note_add",
+   "arguments": {
+    "text": "unproven: is this the top face?",
+    "body": "Bracket",
+    "faces": {
+     "normal": [
+      0,
+      0,
+      1
+     ]
+    }
+   },
+   "expect": "note { id (a whole number: the calls below take it by reference), by \"agent\", text, at [20, 15, 10] (the top face's centre), body \"Bracket\", face \"Face6\" or as numbered, done false }; note_count 1"
+  },
+  {
+   "tool": "note_add",
+   "arguments": {
+    "text": "   ",
+    "at": [
+     0,
+     0,
+     0
+    ]
+   },
+   "expect": "REFUSED invalid_input: text: what the note says (a question to the person, or a remark)"
+  },
+  {
+   "tool": "note_list",
+   "arguments": {},
+   "expect": "notes: one row, the note above (id, text, by agent, at, face, done false); no waiting (waiting lists only the person's unanswered notes)"
+  },
+  {
+   "tool": "note_answer",
+   "arguments": {
+    "id": {
+     "$from": 114,
+     "$at": "note.id"
+    },
+    "text": "yes, z = 10"
+   },
+   "expect": "note: the same id, answer \"yes, z = 10\""
+  },
+  {
+   "tool": "note_done",
+   "arguments": {
+    "id": {
+     "$from": 114,
+     "$at": "note.id"
+    }
+   },
+   "expect": "note: done true"
+  },
+  {
+   "tool": "note_list",
+   "arguments": {
+    "open": true
+   },
+   "expect": "notes [] (the one note is done, and open: true leaves it out)"
+  },
+  {
+   "tool": "note_done",
+   "arguments": {
+    "id": {
+     "$from": 114,
+     "$at": "note.id"
+    },
+    "done": false
+   },
+   "expect": "note: done false again"
+  },
+  {
+   "tool": "note_delete",
+   "arguments": {
+    "id": {
+     "$from": 114,
+     "$at": "note.id"
+    }
+   },
+   "expect": "deleted: the id; left 0"
+  },
+  {
+   "tool": "note_delete",
+   "arguments": {
+    "id": 99999
+   },
+   "expect": "REFUSED not_found: id: no note 99999 in this document — note_list shows them with their ids"
+  },
+  {
+   "tool": "addon",
+   "arguments": {
+    "action": "list"
+   },
+   "expect": "folder: FreeCAD's Mod folder; installed: a row a folder with its version, Agent Link's own marked managedBy. Nothing changed"
+  },
+  {
+   "tool": "addon",
+   "arguments": {
+    "action": "search",
+    "query": "sheetmetal"
+   },
+   "expect": "found 1 or more; addons: rows { name, branches }, \"sheetmetal\" among them (any case); note. It reads the official catalog (fetched once a day): REFUSED unavailable / failed only when the catalog cannot be reached — then say so, it is not proven"
+  },
+  {
+   "tool": "addon_test",
+   "arguments": {},
+   "expect": "jobs: the test jobs since this FreeCAD started ([] with the note \"No test jobs since this FreeCAD started: addon_test { addon } starts one.\"). Nothing is started without addon"
+  },
+  {
+   "tool": "addon_test",
+   "arguments": {
+    "addon": "AgentLink",
+    "job": "x"
+   },
+   "expect": "REFUSED invalid_input: addon starts a run, job reads one: give one of them (neither lists the recent jobs). Refused before anything starts: the next call's list is unchanged"
+  },
+  {
+   "tool": "job_status",
+   "arguments": {},
+   "expect": "jobs: every job kept ([] with the note \"No jobs: a long read … runs as one.\" in a fresh FreeCAD)"
+  },
+  {
+   "tool": "job_status",
+   "arguments": {
+    "job": "nosuchjob"
+   },
+   "expect": "REFUSED not_found: job 'nosuchjob': no such job here … the jobs: none (or the last five ids)"
+  },
+  {
+   "tool": "job_start",
+   "arguments": {
+    "tool": "body_check",
+    "arguments": {
+     "body": "Bracket"
+    }
+   },
+   "expect": "INSIDE A BATCH: REFUSED invalid_input \"body_check cannot run as a job: only a read that leaves the window and the 3D view alone can (not a change, a picture, a window tool or a batch) — call body_check itself.\" A batch is one answer and starts no job (jobs.wanted). The words blame the tool, not the batch: a finding. job_start's success is in runAlone below"
+  },
+  {
+   "tool": "job_start",
+   "arguments": {
+    "tool": "nosuchtool"
+   },
+   "expect": "REFUSED not_found: nosuchtool: no such tool — tool_groups lists them"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     20,
+     20,
+     5
+    ],
+    "at": [
+     100,
+     0,
+     0
+    ],
+    "name": "Foot"
+   },
+   "expect": "body Foot; a Part::Box; volume 2000; box [20, 20, 5]"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "cylinder",
+    "radius": 5,
+    "height": 30,
+    "at": [
+     110,
+     10,
+     5
+    ],
+    "name": "Post"
+   },
+   "expect": "body Post; volume 2356.19 (pi x 25 x 30)"
+  },
+  {
+   "tool": "shape_query",
+   "arguments": {
+    "body": "Foot",
+    "kind": "face",
+    "normal": [
+     0,
+     0,
+     1
+    ]
+   },
+   "expect": "found 1; items[0].ref \"Face6\" (a Part::Box's z-max face), area 400, centroid [110, 10, 5]. The meshobj_unwrap call on \"Foot.Face6\" below rests on this name: another ref here means that call needs it"
+  },
+  {
+   "tool": "bim_wall",
+   "arguments": {
+    "points": [
+     [
+      0,
+      -3000
+     ],
+     [
+      4000,
+      -3000
+     ]
+    ],
+    "width": 200,
+    "height": 2500,
+    "name": "Wall"
+   },
+   "expect": "length 4000; width 200; height 2500; box [4000, 200, 2500]; volume_m3 2.0000"
+  },
+  {
+   "tool": "bim_section",
+   "arguments": {
+    "objects": [
+     "Wall"
+    ],
+    "at": [
+     0,
+     0,
+     1200
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "name": "Plan cut"
+   },
+   "expect": "object \"Plan cut\"; cuts [\"Wall\"]; note"
+  },
+  {
+   "tool": "td_page",
+   "arguments": {
+    "action": "new",
+    "paper": "A3",
+    "name": "Plan sheet"
+   },
+   "expect": "page \"Plan sheet\"; paper [420, 297]"
+  },
+  {
+   "tool": "td_bim",
+   "arguments": {
+    "page": "Plan sheet",
+    "section": "Plan cut",
+    "scale": 0.02,
+    "at": [
+     250,
+     120
+    ],
+    "name": "Plan view"
+   },
+   "expect": "view \"Plan view\"; section \"Plan cut\"; scale 0.02; svgBytes over 0 and no warning — the wall's cut (80 x 4 mm on the paper) is drawn. svgBytes 0 with the warning \"The view drew nothing here …\" means FreeCAD drew no Arch view: the object is made but the drawing is not proven"
+  },
+  {
+   "tool": "td_bim",
+   "arguments": {
+    "page": "Plan sheet",
+    "section": "Bracket"
+   },
+   "expect": "REFUSED invalid_input: section: Bracket is not a BIM section plane (bim_section makes one)."
+  },
+  {
+   "tool": "td_view",
+   "arguments": {
+    "page": "Plan sheet",
+    "bodies": [
+     "Bracket"
+    ],
+    "direction": "top",
+    "scale": 1,
+    "at": [
+     100,
+     200
+    ],
+    "name": "BracketTop"
+   },
+   "expect": "view \"BracketTop\"; scale 1; size [40, 30]; edges 4"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "lock",
+    "view": "BracketTop",
+    "locked": true
+   },
+   "expect": "kind lock; view BracketTop; locked true"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "lock",
+    "view": "BracketTop",
+    "locked": false
+   },
+   "expect": "locked false (unlocked again, so the move below is not held)"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "stack",
+    "view": "BracketTop",
+    "to": "top"
+   },
+   "expect": "IN THE WINDOW: kind stack; view BracketTop; stackOrder: a whole number above Plan view's (the fix after the TechDraw run: this is its re-run). REFUSED unavailable (\"A view's stacking order is kept by the window …\") only headless"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "stack",
+    "view": "BracketTop",
+    "to": "down"
+   },
+   "expect": "stackOrder one lower than the call before"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "clip",
+    "page": "Plan sheet",
+    "width": 60,
+    "height": 40,
+    "at": [
+     330,
+     60
+    ],
+    "name": "ClipBox"
+   },
+   "expect": "kind clip; view \"ClipBox\"; type DrawViewClip; at [330, 60]"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "clip_add",
+    "page": "Plan sheet",
+    "clip": "ClipBox",
+    "view": "BracketTop"
+   },
+   "expect": "kind clip_add; clip ClipBox; views [\"BracketTop\"]"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "clip_remove",
+    "page": "Plan sheet",
+    "clip": "ClipBox",
+    "view": "BracketTop"
+   },
+   "expect": "kind clip_remove; clip ClipBox; views []"
+  },
+  {
+   "tool": "meshobj_unwrap",
+   "arguments": {
+    "of": "Foot.Face6",
+    "path": "unproven_foot_top.svg",
+    "make": false
+   },
+   "expect": "A FLAT FACE, EXACT: of \"Foot.Face6\"; surface \"plane\"; exact true; area3d 400; areaFlat 400; stretch { mean 0, max 0, unit % }; outlines 1; size [20, 20]; path: …/unproven_foot_top.svg in the session's folder (absolute: draft_outline and td_view_more symbol take it by reference); no pattern (make false). REFUSED unavailable \"This FreeCAD has no flatmesh\" only on a build without it: then the SVG is not written and the three calls that read it are refused too"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "symbol",
+    "page": "Plan sheet",
+    "path": {
+     "$from": 147,
+     "$at": "path"
+    },
+    "scale": 1,
+    "at": [
+     60,
+     60
+    ],
+    "name": "Top outline"
+   },
+   "expect": "path: the unwrap's SVG, by reference (symbol and image take a full path: a bare file name is not looked for in the session's folder). kind symbol; view \"Top outline\"; type DrawViewSymbol; at [60, 60]"
+  },
+  {
+   "tool": "draft_outline",
+   "arguments": {
+    "path": {
+     "$from": 147,
+     "$at": "path"
+    },
+    "width": 20,
+    "depth": 2,
+    "mode": "extrude",
+    "name": "Foot plate"
+   },
+   "expect": "path: the SVG call 147 wrote, by reference. outlines 1; size [20, 20]; scale 1 (the file is 20 mm wide already; 0.999 … 1.001); mode extrude; depth 2; body \"Foot plate\"; volume 800 (20 x 20 x 2); no openCurvesLeftOut; no printNote"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     30,
+     30,
+     4
+    ],
+    "at": [
+     0,
+     60,
+     0
+    ],
+    "name": "Tile"
+   },
+   "expect": "body Tile; volume 3600"
+  },
+  {
+   "tool": "draft_outline",
+   "arguments": {
+    "path": {
+     "$from": 147,
+     "$at": "path"
+    },
+    "body": "Tile",
+    "width": 10,
+    "depth": 1,
+    "mode": "engrave"
+   },
+   "expect": "outlines 1; size [10, 10]; scale 0.5; mode engrave; depth 1; body: the result's label (Tile, or the label of the plain shape it was baked to); volumeChange -99 (10 x 10 x 0.99: the cut starts 0.01 above the face) — -100 means the hair above the face is gone; box min [10, 70, …] max [20, 80, …] (centred on the top face); no warning (inside the face's edge)"
+  },
+  {
+   "tool": "draft_outline",
+   "arguments": {
+    "path": {
+     "$from": 147,
+     "$at": "path"
+    },
+    "depth": 0
+   },
+   "expect": "REFUSED invalid_input: depth: mm, over 0."
+  },
+  {
+   "tool": "draft_outline",
+   "arguments": {
+    "path": "/nonexistent/unproven_logo.svg"
+   },
+   "expect": "REFUSED not_found: path: no file at /nonexistent/unproven_logo.svg."
+  },
+  {
+   "tool": "window_snapshot",
+   "arguments": {
+    "inline": false,
+    "path": "unproven_window_page.png"
+   },
+   "expect": "path …/unproven_window_page.png (absolute); width and height as the first window picture's; the drawing page or the 3D view, whichever tab is in front — a second picture taken here so the next call reads its path one call back"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "image",
+    "page": "Plan sheet",
+    "path": {
+     "$from": 154,
+     "$at": "path"
+    },
+    "width": 60,
+    "height": 40,
+    "at": [
+     330,
+     230
+    ],
+    "name": "Window picture"
+   },
+   "expect": "path: the window picture of the call before, by reference. kind image; view \"Window picture\"; type DrawViewImage; at [330, 230]"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "symbol",
+    "page": "Plan sheet",
+    "path": "/nonexistent/unproven_none.svg"
+   },
+   "expect": "REFUSED not_found: path '/nonexistent/unproven_none.svg': no such SVG."
+  },
+  {
+   "tool": "td_page",
+   "arguments": {
+    "action": "new",
+    "paper": "A4",
+    "name": "Second sheet"
+   },
+   "expect": "page \"Second sheet\"; paper [297, 210]"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "share",
+    "view": "BracketTop",
+    "page": "Second sheet"
+   },
+   "expect": "kind share; view BracketTop; alsoOn \"Second sheet\"; with [] (it has no dimensions or balloons)"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "move",
+    "view": "ClipBox",
+    "page": "Second sheet"
+   },
+   "expect": "kind move; view ClipBox; from \"Plan sheet\"; page \"Second sheet\"; no note (it is in no projection group)"
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "move",
+    "view": "ClipBox",
+    "page": "Second sheet"
+   },
+   "expect": "kind move; view ClipBox; page \"Second sheet\"; note \"Already on that page.\""
+  },
+  {
+   "tool": "td_view_more",
+   "arguments": {
+    "kind": "broken",
+    "view": "BracketTop",
+    "breaks": []
+   },
+   "expect": "REFUSED invalid_input: breaks: objects that mark the break (two parallel sketch lines or a sketch with two lines across the part). Nothing kept (the BrokenView it began is removed: td_page { action: read, page: \"Plan sheet\" } lists no BrokenView)"
+  },
+  {
+   "tool": "td_page",
+   "arguments": {
+    "action": "read",
+    "page": "Plan sheet"
+   },
+   "expect": "views on Plan sheet: Plan view (DrawViewArch), BracketTop, Top outline (DrawViewSymbol), Window picture (DrawViewImage); no ClipBox (moved) and no BrokenView"
+  },
+  {
+   "tool": "meshobj_unwrap",
+   "arguments": {
+    "of": "Post.Face1",
+    "name": "Post flat"
+   },
+   "expect": "A CYLINDER'S SIDE, EXACT: surface \"cylinder\"; exact true; size [31.416, 30] (2 pi x 5 by 30); area3d 942.478; areaFlat 942.478; stretch max 0; outlines 1; pattern \"Post flat\" (a wire object in the document). If Face1 is not the side on this build the surface reads \"plane\" with area 78.54: use the cylinder face shape_query { body: Post, type: cylinder } names"
+  },
+  {
+   "tool": "meshobj_unwrap",
+   "arguments": {
+    "of": "Foot"
+   },
+   "expect": "REFUSED invalid_input: of: Foot is a whole body — name one of its faces (\"Foot.Face3\"; shape_query lists them), or a mesh"
+  },
+  {
+   "tool": "asm_new",
+   "arguments": {
+    "parts": [
+     "Foot",
+     "Post"
+    ],
+    "name": "Stand"
+   },
+   "expect": "assembly \"Stand\"; parts [\"Foot\", \"Post\"]; grounded [\"Foot\"]"
+  },
+  {
+   "tool": "asm_rigid_group",
+   "arguments": {
+    "assembly": "Stand",
+    "parts": [
+     "Foot",
+     "Post"
+    ],
+    "name": "Welded"
+   },
+   "expect": "ON FREECAD 1.1.3: REFUSED unavailable \"Rigid groups came in FreeCAD 1.2; this is 1.1.3. asm_joint kind fixed between each pair does the same.\" Nothing added (asm_list would show no joint). On 1.2 and newer: joint \"Welded\", parts [\"Foot\", \"Post\"]"
+  },
+  {
+   "tool": "asm_rigid_group",
+   "arguments": {
+    "assembly": "Stand",
+    "parts": [
+     "Foot"
+    ]
+   },
+   "expect": "REFUSED invalid_input: parts: two or more parts of Stand, held fixed to each other (asm_list lists them) — this check comes before the version's, so it reads the same on 1.1.3 and 1.2"
+  },
+  {
+   "tool": "asm_rigid_group",
+   "arguments": {
+    "assembly": "Stand",
+    "parts": [
+     "Foot",
+     "Ghost"
+    ]
+   },
+   "expect": "REFUSED not_found: part 'Ghost' is not in Stand: its parts are Foot, Post (asm_add puts one in). — this check comes first of the three"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     100,
+     10,
+     10
+    ],
+    "at": [
+     0,
+     120,
+     0
+    ],
+    "name": "Beam"
+   },
+   "expect": "body Beam; volume 10000; box [100, 10, 10]"
+  },
+  {
+   "tool": "material_set",
+   "arguments": {
+    "bodies": [
+     "Beam"
+    ],
+    "custom": {
+     "name": "TestSteel",
+     "density": 7.85,
+     "youngsMPa": 210000,
+     "yieldMPa": 250,
+     "poisson": 0.3,
+     "source": "unproven-hub-model: round figures for a hand check"
+    }
+   },
+   "expect": "bodies [\"Beam\"]; material: id custom:<name> (custom:teststeel, or as answered), E 210000, yield 250; mass_g 78.5 (10 cm3 x 7.85)"
+  },
+  {
+   "tool": "fea_results",
+   "arguments": {},
+   "expect": "BEFORE ANY SOLVE: REFUSED not_found \"No results in this session: fea_solve first.\" (An answer here means an earlier study's solve is still kept with the session: fea_clear, and say so)"
+  },
+  {
+   "tool": "fea_export",
+   "arguments": {},
+   "expect": "BEFORE ANY SOLVE: REFUSED not_found \"No solve to write: fea_solve first.\""
+  },
+  {
+   "tool": "fea_setup",
+   "arguments": {
+    "body": "Beam",
+    "mesh": 4
+   },
+   "expect": "study { body Beam, material: the custom id, mesh 4 }; material E 210000, nu 0.3, yield 250; no warning (4 mm is under half the least size, 10); next names fea_hold"
+  },
+  {
+   "tool": "fea_solve",
+   "arguments": {},
+   "expect": "REFUSED invalid_state: Nothing holds the part: fea_hold the faces it is mounted by — a free body has no static answer."
+  },
+  {
+   "tool": "fea_hold",
+   "arguments": {
+    "faces": {
+     "normal": [
+      -1,
+      0,
+      0
+     ],
+     "x": 0
+    }
+   },
+   "expect": "held: one face (Face1), area 100, centre [0, 125, 5]; kind fixed; holds 1"
+  },
+  {
+   "tool": "fea_solve",
+   "arguments": {},
+   "expect": "REFUSED invalid_state: Nothing loads the part: fea_load a force, pressure or gravity."
+  },
+  {
+   "tool": "fea_load",
+   "arguments": {
+    "faces": {
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "x": 100
+    },
+    "force": [
+     0,
+     0,
+     -100
+    ]
+   },
+   "expect": "on: one face (Face2), area 100; load { kind force, force [0, 0, -100] }; loads 1"
+  },
+  {
+   "tool": "fea_solve",
+   "arguments": {
+    "timeout": 240
+   },
+   "expect": "THE SOLVE: solvedBy begins \"FreeCAD's FEM (Beam strength (fea_solve)\"; displacementMax.mm 0.185 to 0.200 at x = 100 (beam theory F L^3 / 3 E I = 100 x 100^3 / (3 x 210000 x 833.33) = 0.1905, a little more with shear); vonMisesMax.MPa 55 to 120 at x near 0 on or beside the held face (beam theory 60 = M c / I at the root; the rigid hold's corners read higher); safety = 250 / the peak (2 to 4.5); mesh { nodes, elements } both over 100; files; loads[0].area 100 (not 104 or 107: the face nodes' order, fixed after the FEM run). REFUSED unavailable naming ccx or gmsh where one is not installed: then this, fea_results and fea_export are not proven"
+  },
+  {
+   "tool": "fea_results",
+   "arguments": {},
+   "expect": "the same answer again (vonMisesMax, displacementMax, safety, mesh equal to call 178's); stale false; no staleWhy"
+  },
+  {
+   "tool": "fea_export",
+   "arguments": {
+    "formats": [
+     "vtu",
+     "csv"
+    ],
+    "name": "unproven-cantilever"
+   },
+   "expect": "body Beam; files { vtu: …/unproven-cantilever.vtu, csv: …/unproven-cantilever.csv } in the out folder; nodes = call 178's mesh.nodes; elements = its mesh.elements; note. The CSV has one line a node (nodes + a header)"
+  },
+  {
+   "tool": "fea_export",
+   "arguments": {
+    "formats": [
+     "csv"
+    ]
+   },
+   "expect": "files { csv: …/Beam-stress.csv } only (the default name is <body>-stress); no vtu key"
+  },
+  {
+   "tool": "view_render",
+   "arguments": {
+    "views": "iso",
+    "map": "stress",
+    "objects": [
+     "Beam"
+    ],
+    "inline": false,
+    "path": "unproven_stress.png"
+   },
+   "expect": "THE MAP AFTER A SOLVE: path …/unproven_stress.png; a legend with min and max (max = the solve's vonMisesMax, MPa) and the worst spot's at (x near 0); no empty key — where the same call before the solve answered empty"
+  },
+  {
+   "tool": "fea_load",
+   "arguments": {
+    "faces": {
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "x": 100
+    },
+    "force": [
+     0,
+     0,
+     -200
+    ],
+    "replace": true
+   },
+   "expect": "loads 1: the force doubled"
+  },
+  {
+   "tool": "fea_results",
+   "arguments": {},
+   "expect": "the kept answer still (displacementMax as call 178's, not doubled); stale true; staleWhy names the study (holds, loads, material, mesh) changed; next \"fea_solve again.\""
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "sphere",
+    "radius": 10,
+    "at": [
+     0,
+     200,
+     0
+    ],
+    "name": "Ball"
+   },
+   "expect": "body Ball; volume 4188.79"
+  },
+  {
+   "tool": "meshobj_from_shape",
+   "arguments": {
+    "body": "Ball",
+    "deflection": 0.02,
+    "angle": 8,
+    "name": "Ball mesh"
+   },
+   "expect": "mesh \"Ball mesh\"; solid true; components 1; volume a little under 4188.8; points over 500"
+  },
+  {
+   "tool": "meshobj_curvature",
+   "arguments": {
+    "mesh": "Ball mesh"
+   },
+   "expect": "mesh \"Ball mesh\"; points = the mesh's; medianRadius 9.8 to 10.2 (a sphere of radius 10); flatPercent 0; meanCurvature min and max of size about 0.1 (1/radius), the sign by the normals; tightestRadius of the order of 10 but may read down to about 1.3 at the two poles, where the mesher's triangles fan out (seen in the mesh run: the median is the figure to judge by); next names view_render { map: \"curvature\" }"
+  },
+  {
+   "tool": "meshobj_curvature",
+   "arguments": {
+    "mesh": "Ball mesh",
+    "flat": 0.5
+   },
+   "expect": "flat 0.5 1/mm counts everything flatter than a 2 mm radius as flat: flatPercent 100 (or just under, for the poles); the radii as the call before"
+  },
+  {
+   "tool": "meshobj_from_shape",
+   "arguments": {
+    "body": "Foot plate",
+    "method": "mefisto",
+    "maxLength": 1,
+    "name": "Plate mesh"
+   },
+   "expect": "mesh \"Plate mesh\" of the 20 x 20 x 2 plate draft_outline made; points over 500 (even triangles about 1 mm); area 960; volume 800; solid true (a warning instead if mefisto left it open: the curvature below still reads)"
+  },
+  {
+   "tool": "meshobj_curvature",
+   "arguments": {
+    "mesh": "Plate mesh"
+   },
+   "expect": "A FLAT-SIDED PART: flatPercent over 70 (the points inside the flat faces; edge and corner points are the rest — a guess at the share, not a derived figure); medianRadius: small (the edge points' own) or inf when no point curves"
+  },
+  {
+   "tool": "meshobj_curvature",
+   "arguments": {
+    "mesh": "NoSuchMesh"
+   },
+   "expect": "REFUSED not_found: no mesh 'NoSuchMesh' (the refusal names the meshes there are: Ball mesh, Plate mesh)"
+  },
+  {
+   "tool": "meshobj_trim",
+   "arguments": {
+    "mesh": "Ball mesh",
+    "at": [
+     0,
+     200,
+     5
+    ],
+    "normal": [
+     0,
+     0,
+     -1
+    ],
+    "copy": true,
+    "name": "Cap"
+   },
+   "expect": "a copy \"Cap\": the ball's cap above z = 5 (the side the normal points to, below, is removed); solid false; components 1; area about 314 (2 pi x 10 x 5 = 314.16; a little under); box [17.32, 17.32, 5]"
+  },
+  {
+   "tool": "meshobj_unwrap",
+   "arguments": {
+    "of": "Cap",
+    "name": "Cap flat",
+    "path": "unproven_cap.dxf"
+   },
+   "expect": "AN OPEN MESH THROUGH FLATMESH (run apart from FreeCAD): of \"Cap\"; no exact key; area3d about 314; areaFlat within a few percent of it; stretch { mean, max } over 0 (doubly curved: max a few percent to some tens; note \"Doubly curved …\" when max is over 5); outlines 1; size about [20, 20] or a little more; pattern \"Cap flat\"; path …/unproven_cap.dxf and writer (the DXF writer's name). REFUSED unavailable \"No Python to run the unwrapping in apart from FreeCAD here …\" is the state before the fix (hubfix): then the mesh route is not proven, only the two exact faces above"
+  },
+  {
+   "tool": "meshobj_unwrap",
+   "arguments": {
+    "of": "Ball mesh"
+   },
+   "expect": "REFUSED invalid_state: Ball mesh is a closed mesh, which cannot be laid flat in one piece: meshobj_trim or meshobj_segments { keep: true } gives an open patch of it to unwrap."
+  },
+  {
+   "tool": "scad_status",
+   "arguments": {},
+   "expect": "openscad: its path, or null with the note \"OpenSCAD is not installed …\" (the Mac's state in the earlier runs); csgParser true. It says which of the two expectations of the next call applies"
+  },
+  {
+   "tool": "scad_code",
+   "arguments": {
+    "code": "cube([10, 20, 30]);",
+    "name": "Scad cube"
+   },
+   "expect": "openscad null: REFUSED unavailable \"OpenSCAD code needs the OpenSCAD program, not found on this computer: the person installs it (openscad.org) or sets its path in FreeCAD's OpenSCAD preferences.\" Nothing made. With OpenSCAD installed: top [\"Scad cube\"]; objects 1 or more; made lists them; the object's volume is 6000"
+  },
+  {
+   "tool": "scad_code",
+   "arguments": {
+    "code": "   "
+   },
+   "expect": "REFUSED invalid_input: code: OpenSCAD source, e.g. \"difference() { cube(20, center=true); sphere(13); }\" — this check comes before the program is looked for, so it reads the same with and without OpenSCAD"
+  },
+  {
+   "tool": "session_state",
+   "arguments": {},
+   "expect": "document UnprovenHub; bodies: Bracket (12000), the engraved tile (3501), Foot plate (800), Beam (10000), Ball (4188.79) and the rest shown; assemblies: Stand; step: higher than call 1's by the changing calls that ran; no leftOut, no warning; next: no dialog and no sketch open. The document is left open and unsaved for the person to look at or close (doc_close { documents: [\"UnprovenHub\"], discard: true })"
+  },
+  {
+   "tool": "usage_report",
+   "arguments": {
+    "session": true
+   },
+   "expect": "calls: higher than call 13's reading by the calls since; byTool: the costliest of this run first; errors: higher by the refusals since (each REFUSED above is one)"
+  }
+ ],
+ "runAlone": {
+  "about": "Calls that cannot ride in the list above: sent one at a time, each as its own tool call, after the list has run (the document UnprovenHub in front). Same shape as a call; arguments in <angle brackets> are read from the answer named.",
+  "calls": [
+   {
+    "tool": "batch",
+    "arguments": {
+     "calls": [
+      {
+       "tool": "session_state",
+       "arguments": {}
+      },
+      {
+       "tool": "batch",
+       "arguments": {
+        "calls": []
+       }
+      }
+     ]
+    },
+    "expect": "REFUSED invalid_input: calls.1: a batch does not run another batch. Nothing was run. — no results, and session_state did not run either (the list is refused whole)"
+   },
+   {
+    "tool": "batch",
+    "arguments": {
+     "calls": [
+      {
+       "tool": "history_undo",
+       "arguments": {
+        "steps": 1
+       }
+      }
+     ]
+    },
+    "expect": "REFUSED invalid_input: calls.0: history_undo inside a batch that rolls back can't be taken back by undo — call it on its own, or rollback: false. Nothing was run. (rollback is true when left out)"
+   },
+   {
+    "tool": "batch",
+    "arguments": {
+     "calls": [
+      {
+       "tool": "nosuchtool",
+       "arguments": {}
+      }
+     ]
+    },
+    "expect": "REFUSED not_found: No tool named nosuchtool — nothing was run. tool_groups lists them all."
+   },
+   {
+    "tool": "batch",
+    "arguments": {
+     "calls": [
+      {
+       "tool": "session_state",
+       "arguments": {},
+       "to": "unproven_state.json"
+      },
+      {
+       "tool": "steps_list",
+       "arguments": {
+        "body": {
+         "$from": 0,
+         "$at": "bodies.0.name"
+        }
+       }
+      }
+     ],
+     "rollback": false
+    },
+    "expect": "batch's own answer: results[0] { tool session_state, ok true, written { path …/unproven_state.json, bytes }, keys [document, label, freecad, bodies …] } (to keeps the answer out of the reply); results[1]: steps_list of the first body by reference — ok with its steps when that body is Bracket, else the PartDesign refusal naming the body it was given (either proves the reference was filled in); ran 2; record: a path under batches/"
+   },
+   {
+    "tool": "job_start",
+    "arguments": {
+     "tool": "body_check",
+     "arguments": {
+      "body": "Bracket"
+     }
+    },
+    "expect": "body_check's own answer (body Bracket, ok true, volume 12000) with job: an id beside it — it ended within 45 s. This is the success the list's job_start call cannot show (inside a batch it is refused)"
+   },
+   {
+    "tool": "job_start",
+    "arguments": {
+     "tool": "meshobj_info",
+     "arguments": {
+      "mesh": "Ball mesh"
+     },
+     "wait": false
+    },
+    "expect": "at once: job (an id), tool meshobj_info, status running (or done already), next naming job_status { job, wait: 25 }; note that it goes on as a job"
+   },
+   {
+    "tool": "job_status",
+    "arguments": {
+     "job": "<the job id the call above answered>",
+     "wait": 20
+    },
+    "expect": "job: that id; tool meshobj_info; status done; took (seconds); result: meshobj_info's answer for Ball mesh (solid true, verdict clean)"
+   },
+   {
+    "tool": "job_status",
+    "arguments": {},
+    "expect": "jobs: two rows, the body_check and the meshobj_info jobs, both done with took"
+   },
+   {
+    "tool": "job_start",
+    "arguments": {
+     "tool": "pd_pad",
+     "arguments": {
+      "body": "Bracket",
+      "sketch": "Base",
+      "length": 1
+     }
+    },
+    "expect": "REFUSED invalid_input: pd_pad cannot run as a job: only a read that leaves the window and the 3D view alone can (not a change, a picture, a window tool or a batch) — call pd_pad itself. Nothing padded (steps_list still counts the same)"
+   },
+   {
+    "tool": "job_start",
+    "arguments": {
+     "tool": "session_state",
+     "arguments": {}
+    },
+    "expect": "REFUSED invalid_input: session_state cannot run as a job: it changes nothing, but it reads the window (workbench, selection, what is open) for next, which only the window's own thread may do — call session_state itself; it runs as a plain call."
+   }
+  ]
+ },
+ "notCovered": [
+  "app_restart, app_force_restart, app_install: they quit FreeCAD or download and install a release. A safe proof needs the person's go, saved documents and a FreeCAD they can lose a session of: app_restart alone on an empty document, then session_state for the same document list; app_force_restart only on a window made stuck on purpose (a modal dialog opened by hand); app_install only with a version they name.",
+  "pref_import: it writes a whole settings file over the person's. A safe proof: export the present settings first, import a file holding only Mod/AgentLink/LiveTest/Probe, pref_get it, then import the export back — with the person's go, since a wrong file changes their FreeCAD.",
+  "pref_pack { apply }: there is no un-apply. A safe proof needs a settings history to take it back (pref_history / pref_rollback of the add-on that keeps one) and the person's go; the list above proves the listing and the refusal of a wrong name only.",
+  "addon install / update / remove: code FreeCAD runs, confirmed by words the person types. A safe proof: the person types confirm for a tiny add-on they do not use, install, addon list shows it, remove with their confirm, list again. The list above runs list and search only; the refusal for a missing confirm (not_allowed, \"Nothing was changed\") is not called either, by the brief.",
+  "app_extensions add / remove / sync: the person's list of repositories (code fetched and run). Only list and the refusal for a missing repo are called.",
+  "collab: it shares work with other agents and people (its own private add-on); a proof needs a second party and the person's say.",
+  "gui_input: real mouse and keyboard input into the window; coredoc-gui-model.json holds its steps. A safe proof is that script on the reset document, in the background, with the person not typing in FreeCAD at that moment.",
+  "live_run: it runs whole scripts of calls, changes among them, and its reset rebuilds the WindowTest document. A safe proof: live_run { script: \"reset\" } then live_run { script: \"agentlink\", budget: 60 } in a session with no document of the person's in front.",
+  "cmd_run's and menu_run's refusal of what they will not run (Std_Quit, Std_DlgMacroExecute, Std_Open …): not called. If the refusal failed the command would run — quit FreeCAD or open a modal dialog. cmd_list { query: \"Std_Quit\" } shows the refused mark instead; a safe proof of the refusal itself is cmd_run { name: \"Std_About\" } (the worst case is an About box, which gui_unstick closes) run alone, not in a batch.",
+  "outputs_clean { dry_run: false }: it moves files to the Trash. Dry run only, by the brief.",
+  "dialog_answer and gui_unstick with a dialog up: the list reads the no-dialog answers only. A proof with one up needs a dialog opened on purpose (gui_input, or the person), then dialog_answer {} to read it and { button: \"Cancel\" }; gui_unstick the same with a menu left open.",
+  "snapshot_latest with a picture: only the person takes screenshots (the camera button, Alt+Shift+S). With none the refusal is the proof; the picture path needs them to take one.",
+  "queue_go with a job held: the hold is set only while the person works in the window and a heavy job waits. The list proves the answer with nothing held.",
+  "asm_rigid_group's success: FreeCAD 1.2 and newer only; on 1.1.3 the unavailable refusal is all there is.",
+  "scad_code's success: needs the OpenSCAD program, which the person installs; without it the refusal is what runs.",
+  "td_view_more kinds broken (with real break marks) and draft (a Draft object): not called; lock, stack, clip, clip_add, clip_remove, symbol, image, share and move are.",
+  "history_checkpoint / history_restore across a restart (how: file) and history_diff against a checkpoint older than the session: the restart is not made here.",
+  "fea_solve { nonlinear } and the solve on Agent Link's own deck: the FEM model (sheetfem-fem-model.json) has the own-deck solve after fea_refine; this list solves once, linear, by FreeCAD's FEM route.",
+  "usage_report's refusal (AGENTLINK_USAGE=off) and report_read / view_snapshot headless (unavailable): states of the installation, not of a call."
+ ]
+}

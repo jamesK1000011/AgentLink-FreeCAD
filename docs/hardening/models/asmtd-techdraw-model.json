@@ -222,10 +222,10 @@
    "arguments": {
     "page": "Tut A4",
     "fields": {
-     "<the title field's name from the call above>": "My First TechDraw"
+     "title": "My First TechDraw"
     }
    },
-   "expect": "fields with the title set; an unknown name is refused with the list of names (try one: {\"nosuchfield\": \"x\"})"
+   "expect": "fields with the title set (td_title matches a field's name whatever its case). \"title\" is a guess at this template's field: if the answer is a refusal listing the names, or notInThisTemplate names it, take the title field's name from call 11's fields and send it again. An unknown name is refused with the list of names (try one: {\"nosuchfield\": \"x\"})"
   },
   {
    "tool": "td_note",
@@ -594,12 +594,15 @@
   {
    "tool": "td_tolerance",
    "arguments": {
-    "dimension": "<the name of the 10 mm diameter dimension from the call above, e.g. Dimension006>",
+    "dimension": {
+     "$from": 34,
+     "$at": "dimension"
+    },
     "clear": true,
     "plus": 0.1,
     "minus": 0.05
    },
-   "expect": "tolerance +0.1/-0.05, H7 gone from the text"
+   "expect": "dimension: call 34's (its object name, by reference). tolerance +0.1/-0.05, H7 gone from the text"
   },
   {
    "tool": "td_dimset",
@@ -846,20 +849,23 @@
    "arguments": {
     "view": "PlateTop",
     "faces": [
-     "<the top face's name from shape_query, e.g. Face6>"
+     {
+      "$from": 49,
+      "$at": "items.0.ref"
+     }
     ],
     "spacing": 3
    },
-   "expect": "faces hatched, no warning (the face faces the view)"
+   "expect": "faces: the top face call 49 found (by reference). faces hatched, no warning (the face faces the view)"
   },
   {
    "tool": "td_area",
    "arguments": {
     "view": "PlateTop",
-    "face": "Plate.<the same face name>",
+    "face": "Plate.Face6",
     "decimals": 1
    },
-   "expect": "area 2168.9 mm2 (60 x 40 less the holes and the slot), text A = 2168.9 mm²"
+   "expect": "area 2168.9 mm2 (60 x 40 less the holes and the slot), text A = 2168.9 mm². face is written out (a reference stands for a whole value and cannot be joined to \"Plate.\"): it must be the name call 49 answered in items.0.ref — Face6 is a guess; if call 49 named another face, send this call again with that one (the bottom face has the same area, so the number alone does not tell: read the answer's face)"
   },
   {
    "tool": "td_cosmetic",
@@ -929,29 +935,41 @@
    "tool": "td_dim_format",
    "arguments": {
     "dims": [
-     "<the name of the first 6 mm diameter dimension>"
+     {
+      "$from": 31,
+      "$at": "dimension"
+     }
     ],
     "prefix": "count",
     "count": 1,
     "decimals": 1
    },
-   "expect": "format with 1× before the value; reads shows the text as drawn"
+   "expect": "dims: call 31's dimension (by reference). format with 1× before the value; reads shows the text as drawn"
   },
   {
    "tool": "td_dim_align",
    "arguments": {
     "dims": [
-     "<the first dimension td_dimset made, by name>",
-     "<the second>"
+     {
+      "$from": 36,
+      "$at": "dimensions.0.dimension"
+     },
+     {
+      "$from": 36,
+      "$at": "dimensions.1.dimension"
+     }
     ],
     "direction": "horizontal"
    },
-   "expect": "both at one height"
+   "expect": "dims: the two call 36 made (by reference). both at one height"
   },
   {
    "tool": "td_dim_repair",
    "arguments": {
-    "dimension": "<the radius dimension's name>",
+    "dimension": {
+     "$from": 33,
+     "$at": "dimension"
+    },
     "refs": [
      {
       "circle": {
@@ -965,7 +983,7 @@
      }
     ]
    },
-   "expect": "now on the slot's other end, measured 3"
+   "expect": "dimension: call 33's radius dimension (by reference). now on the slot's other end, measured 3"
   },
   {
    "tool": "sheet_new",
@@ -1063,5 +1081,10 @@
   "linking a dimension to the 3D model (TechDraw LinkDimension: References3D, MeasureType True), the tutorial's last step: no td_ tool does it; td_dim_special axo_length is the stand-in",
   "TechDraw's own PDF / SVG export of a page (TechDrawGui.exportPageAsPdf / exportPageAsSvg): window only, not a td_ tool",
   "the window: views appearing on the page tab as they are made (the hidden-line thread and the wait) is exercised by every td_view here, but that the page tab repaints is a look, not a reply"
- ]
+ ],
+ "conventions": {
+  "references": "Calls 35, 50, 55, 56 and 57 take a name from an earlier call's answer: { \"$from\": n, \"$at\": \"key\" }, n the call's index in this whole list (agentlink/chain.py). They reach 1, 1, 24, 20 and 24 calls back: a batch answered in parts refuses a reference into an earlier part (invalid_state), so calls 31 to 57 must run in one part — batch { file, from: 28, budget: 100 } starts at the plate's page; if next still lands between 31 and 57, read the names from the earlier answers (dimension; dimensions[].dimension) and send the rest by hand.",
+  "written out": "Call 12's field name (\"title\") and call 51's face (\"Plate.Face6\") cannot be references (an object's key; a value joined to text): each expect says what to check.",
+  "refused": "An expect starting REFUSED means isError."
+ }
 }

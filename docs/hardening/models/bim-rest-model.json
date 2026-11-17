@@ -1,0 +1,563 @@
+{
+ "tutorial": "No tutorial: the eight BIM tools of the hub that bimcam-bim-model.json left in notCovered (bim_reference, bim_library, bim_image_plane, bim_reextrude, bim_remove_shape, bim_glue, bim_rewire, bim_nest). The house shell is the Arch tutorial's outer walls with one window, as bimcam-bim-model.json starts; each tool then gets the small thing it needs, set beside the house.",
+ "reference": null,
+ "conventions": {
+  "run": "Agent Link for FreeCAD's batch, in order; { $from, $at } takes a value from an earlier call's answer (2 → 6, 8 → 9, 11 → 12 and 13). A runner that cuts the list into parts must keep each pair in one part or write the answer to a file (chain.py: an answer is not kept between parts).",
+  "sessionFolder": "bim_library's folder and the three refusal paths are written as ~/AgentLink/…: the window link's session folder is ~/AgentLink (agentlink/gui_link.py). No answer gives a folder alone, and { $at } cannot cut a file name off a path, so the folder cannot be a reference. If the session's folder is another one, call 8 is refused 'No objects library here' (or finds nothing): put that folder in calls 8 to 10.",
+  "units": "mm in; the gap tools answer volume in mm³ and box in mm (bim_wall and bim_structure answer volume_m3).",
+  "leftBehind": "In the session's folder: bim-rest-lib/shelf-block.FCStd, bim-rest-plan.png, bim-rest-nest.png. Two unsaved documents stay open (BimRest, and shelf-block saved)."
+ },
+ "expected": {
+  "shelfBlock": {
+   "box": [
+    1000,
+    500,
+    300
+   ],
+   "volume_mm3": 150000000
+  },
+  "outerWalls": {
+   "length_mm": 28000,
+   "volume_m3": 17.55,
+   "afterWindow_m3": 17.19
+  },
+  "stubWall": {
+   "box": [
+    3000,
+    200,
+    2600
+   ],
+   "volume_mm3": 1560000000
+  },
+  "post": {
+   "box": [
+    250,
+    250,
+    2000
+   ],
+   "volume_mm3": 125000000
+  },
+  "glue": {
+   "solids": 2,
+   "volume_mm3": 250000000
+  },
+  "rewire": {
+   "from": 3,
+   "wires": 2,
+   "lengths_mm": [
+    1500,
+    800
+   ]
+  },
+  "nest": {
+   "sheets": 1,
+   "placed": 3,
+   "of": 3
+  }
+ },
+ "calls": [
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "BimRestRef"
+   },
+   "expect": "a new empty document: the small file the house will reference and find in a library folder"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     1000,
+     500,
+     300
+    ],
+    "name": "Shelf block"
+   },
+   "expect": "body 'Shelf block', volume 150000000, box [1000, 500, 300]"
+  },
+  {
+   "tool": "doc_save",
+   "arguments": {
+    "path": "bim-rest-lib/shelf-block",
+    "overwrite": true
+   },
+   "expect": "path ends bim-rest-lib/shelf-block.FCStd in the session's folder (the folder is made); bytes over 0; label 'shelf-block' with labelWas 'BimRestRef' and the relabel note. overwrite: true only replaces this model's own file from an earlier run"
+  },
+  {
+   "tool": "doc_new",
+   "arguments": {
+    "name": "BimRest"
+   },
+   "expect": "a new empty document: the house"
+  },
+  {
+   "tool": "bim_wall",
+   "arguments": {
+    "points": [
+     [
+      0,
+      0
+     ],
+     [
+      8000,
+      0
+     ],
+     [
+      8000,
+      6000
+     ],
+     [
+      0,
+      6000
+     ]
+    ],
+    "closed": true,
+    "width": 250,
+    "height": 2600,
+    "align": "right",
+    "name": "Outer walls"
+   },
+   "expect": "length 28000; box [8000, 6000, 2600]; min [0, 0, 0]; volume_m3 17.55; base 'Outer walls line' (the same shell as bimcam-bim-model.json call 1)"
+  },
+  {
+   "tool": "bim_opening",
+   "arguments": {
+    "wall": "Outer walls",
+    "kind": "window",
+    "width": 1200,
+    "height": 1200,
+    "at": 5000,
+    "sill": 900,
+    "name": "Front window"
+   },
+   "expect": "wallCut_m3 0.36; no warning; min z 900"
+  },
+  {
+   "tool": "bim_reference",
+   "arguments": {
+    "path": {
+     "$from": 2,
+     "$at": "path"
+    },
+    "name": "Shelf reference"
+   },
+   "expect": "reference 'Shelf reference', file 'shelf-block.FCStd', part null (none asked: every part of the file, as one compound), volume 150000000.0 (mm³), box [1000, 500, 300], note 'Shown from the other file and kept up to date with it; not copied in.'"
+  },
+  {
+   "tool": "bim_reference",
+   "arguments": {
+    "path": "~/AgentLink/bim-rest-lib/no-such-file.FCStd"
+   },
+   "expect": "REFUSED not_found: \"path '~/AgentLink/bim-rest-lib/no-such-file.FCStd': no such file. Give the full path of an .FCStd (or .ifc, .dxf) to reference.\" No object is added"
+  },
+  {
+   "tool": "bim_library",
+   "arguments": {
+    "folder": "~/AgentLink/bim-rest-lib",
+    "search": "shelf"
+   },
+   "expect": "found [{ name 'shelf-block.FCStd', path = the path call 2 answered }] (other files only if the parts_library add-on has one with 'shelf' in its path); more 0; roots begins with the folder given. A read: nothing changes"
+  },
+  {
+   "tool": "bim_library",
+   "arguments": {
+    "folder": "~/AgentLink/bim-rest-lib",
+    "insert": {
+     "$from": 8,
+     "$at": "found.0.path"
+    }
+   },
+   "expect": "inserted 'shelf-block.FCStd'; objects ['Shelf block'] (the file's box merged into the house document as its own object: a copy, unlike the reference)"
+  },
+  {
+   "tool": "bim_library",
+   "arguments": {
+    "folder": "~/AgentLink/bim-rest-lib",
+    "insert": "no-such-part.FCStd"
+   },
+   "expect": "REFUSED not_found: \"insert 'no-such-part.FCStd': not found — search first.\""
+  },
+  {
+   "tool": "view_render",
+   "arguments": {
+    "view": "top",
+    "width": 800,
+    "height": 600,
+    "inline": false,
+    "path": "bim-rest-plan.png"
+   },
+   "expect": "path ends bim-rest-plan.png in the session's folder; views ['top']; width 800, height 600; bytes over 0: a picture of the house from above, to use as the image to trace"
+  },
+  {
+   "tool": "bim_image_plane",
+   "arguments": {
+    "path": {
+     "$from": 11,
+     "$at": "path"
+    },
+    "width": 8000,
+    "height": 6000,
+    "at": [
+     0,
+     0,
+     -200
+    ],
+    "name": "Plan picture"
+   },
+   "expect": "image 'Plan picture'; size [8000.0, 6000.0]; note 'A picture to trace over …'. An Image::ImagePlane 200 mm under the floor"
+  },
+  {
+   "tool": "bim_image_plane",
+   "arguments": {
+    "path": {
+     "$from": 11,
+     "$at": "path"
+    },
+    "width": 4000,
+    "name": "Plan picture small"
+   },
+   "expect": "image 'Plan picture small'; size [4000.0, 3000.0] (the height follows the picture's 800 x 600) — [4000.0, 4000.0] only if FreeCAD's Python has no Pillow to read the picture's size with: say which it was"
+  },
+  {
+   "tool": "bim_image_plane",
+   "arguments": {
+    "path": "~/AgentLink/alink-no-such-plan.png"
+   },
+   "expect": "REFUSED not_found: \"path '~/AgentLink/alink-no-such-plan.png': no such image file; give its full path (png, jpg, bmp, svg).\" No object is added"
+  },
+  {
+   "tool": "bim_wall",
+   "arguments": {
+    "points": [
+     [
+      10000,
+      0
+     ],
+     [
+      13000,
+      0
+     ]
+    ],
+    "width": 200,
+    "height": 2600,
+    "align": "center",
+    "name": "Stub wall"
+   },
+   "expect": "length 3000; box [3000, 200, 2600]; min [10000, -100, 0]; volume_m3 1.56"
+  },
+  {
+   "tool": "bim_reextrude",
+   "arguments": {
+    "face": "Stub wall.Face6",
+    "name": "Stub wall again"
+   },
+   "expect": "object 'Stub wall again', from 'Stub wall', face 'Face6', wire true (a straight-edged face: a Draft wire is its base), volume 1560000000.0 and box [3000, 200, 2600] — the same block again, whichever of the six faces Face6 is (a box re-extruded from any face by its own depth is itself); the old Stub wall is deleted (its base line 'Stub wall line' stays)"
+  },
+  {
+   "tool": "bim_reextrude",
+   "arguments": {
+    "face": "Stub wall again"
+   },
+   "expect": "REFUSED invalid_input: 'face: \"Wall.Face3\", the object's label, a dot and one of its faces: the face to extrude from again.' Nothing changes"
+  },
+  {
+   "tool": "bim_structure",
+   "arguments": {
+    "kind": "column",
+    "at": [
+     6000,
+     -3000,
+     0
+    ],
+    "width": 250,
+    "depth": 250,
+    "height": 2000,
+    "name": "Post"
+   },
+   "expect": "kind 'column'; box [250, 250, 2000]; min [5875, -3125, 0]; volume_m3 0.125"
+  },
+  {
+   "tool": "bim_remove_shape",
+   "arguments": {
+    "objects": [
+     "Post"
+    ]
+   },
+   "expect": "turned ['Post']; note that box-shaped structures and walls were rebuilt from their length, width and height and now carry their old internal name as label"
+  },
+  {
+   "tool": "object_list",
+   "arguments": {},
+   "expect": "no object labelled 'Post' any more; one Arch structure whose label is Post's old internal name (such as 'Structure') with volume 125000000 and size 250, 250, 2000 in some order; 'Stub wall again', 'Shelf reference', 'Shelf block', the two image planes, 'Outer walls' and 'Front window' are there; no entry has error true"
+  },
+  {
+   "tool": "bim_remove_shape",
+   "arguments": {
+    "objects": [
+     "No such post"
+    ]
+   },
+   "expect": "REFUSED not_found (or invalid_input): no object 'No such post'. Nothing changes"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     500,
+     500,
+     500
+    ],
+    "at": [
+     6000,
+     -6000,
+     0
+    ],
+    "name": "Block A"
+   },
+   "expect": "volume 125000000"
+  },
+  {
+   "tool": "part_primitive",
+   "arguments": {
+    "kind": "box",
+    "size": [
+     500,
+     500,
+     500
+    ],
+    "at": [
+     6500,
+     -6000,
+     0
+    ],
+    "name": "Block B"
+   },
+   "expect": "volume 125000000; it touches Block A on the plane x = 6500"
+  },
+  {
+   "tool": "bim_glue",
+   "arguments": {
+    "objects": [
+     "Block A",
+     "Block B"
+    ],
+    "name": "Glued blocks"
+   },
+   "expect": "object 'Glued blocks', of 2, note 'One plain shape of them all, no longer parametric.' Block A and Block B are deleted; the compound holds two solids (not fused), 250000000 mm³ in all"
+  },
+  {
+   "tool": "bim_glue",
+   "arguments": {
+    "objects": [
+     "Glued blocks"
+    ]
+   },
+   "expect": "REFUSED invalid_input: 'objects: two or more objects with shapes to glue into one.' Glued blocks stays"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "wire",
+    "points": [
+     [
+      0,
+      -3000,
+      0
+     ],
+     [
+      1000,
+      -3000,
+      0
+     ]
+    ],
+    "name": "Loose a"
+   },
+   "expect": "object 'Loose a', length 1000"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "wire",
+    "points": [
+     [
+      1000,
+      -3000,
+      0
+     ],
+     [
+      1000,
+      -2500,
+      0
+     ]
+    ],
+    "name": "Loose b"
+   },
+   "expect": "object 'Loose b', length 500: it starts where Loose a ends"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "wire",
+    "points": [
+     [
+      3000,
+      -3000,
+      0
+     ],
+     [
+      3000,
+      -2200,
+      0
+     ]
+    ],
+    "name": "Loose c"
+   },
+   "expect": "object 'Loose c', length 800: it touches neither"
+  },
+  {
+   "tool": "bim_rewire",
+   "arguments": {
+    "objects": [
+     "Loose a",
+     "Loose b",
+     "Loose c"
+    ]
+   },
+   "expect": "wires: two labels (Draft wires: one of 1500 mm through [0, -3000], [1000, -3000], [1000, -2500], one of 800 mm); from 3; Loose a, Loose b and Loose c are deleted"
+  },
+  {
+   "tool": "bim_rewire",
+   "arguments": {
+    "objects": [
+     "No such line"
+    ]
+   },
+   "expect": "REFUSED not_found (or invalid_input): no object 'No such line'. Nothing changes"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "rectangle",
+    "length": 1200,
+    "height": 600,
+    "at": [
+     0,
+     -8000,
+     0
+    ],
+    "name": "Sheet"
+   },
+   "expect": "object 'Sheet', area 720000, box [1200, 600, 0]: one flat face"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "rectangle",
+    "length": 500,
+    "height": 300,
+    "at": [
+     2000,
+     -8000,
+     0
+    ],
+    "name": "Piece a"
+   },
+   "expect": "area 150000"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "rectangle",
+    "length": 400,
+    "height": 300,
+    "at": [
+     3000,
+     -8000,
+     0
+    ],
+    "name": "Piece b"
+   },
+   "expect": "area 120000"
+  },
+  {
+   "tool": "draft_shape",
+   "arguments": {
+    "kind": "rectangle",
+    "length": 300,
+    "height": 200,
+    "at": [
+     4000,
+     -8000,
+     0
+    ],
+    "name": "Piece c"
+   },
+   "expect": "area 60000"
+  },
+  {
+   "tool": "bim_nest",
+   "arguments": {
+    "container": "Sheet",
+    "pieces": [
+     "Outer walls"
+    ]
+   },
+   "expect": "REFUSED invalid_input: 'pieces: each must be a single flat face (an outline with a face), not a solid: Outer walls. A panel's outline (its base) is such a face.' Nothing moves"
+  },
+  {
+   "tool": "bim_nest",
+   "arguments": {
+    "container": "Outer walls",
+    "pieces": [
+     "Piece a"
+    ]
+   },
+   "expect": "REFUSED invalid_input: 'container: Outer walls must be one flat face (the sheet), not a solid or a wire: draft_shape makes a rectangle with a face.'"
+  },
+  {
+   "tool": "bim_nest",
+   "arguments": {
+    "container": "Sheet",
+    "pieces": [
+     "Piece a",
+     "Piece b",
+     "Piece c"
+    ],
+    "rotations": [
+     0,
+     90
+    ],
+    "margin": 5
+   },
+   "expect": "sheets 1, placed 3, of 3, rotations [0, 90], margin 'not applied: FreeCAD 1.1's nester has no margin. …'; no note (all on one sheet: 330000 mm² of pieces on 720000). The three pieces are moved onto the sheet (x 0 to 1200, y -8000 to -7400). A 'failed' here ('The pieces would not nest') is FreeCAD's nester stopping: report_read { problems: true } gives its reason"
+  },
+  {
+   "tool": "view_render",
+   "arguments": {
+    "view": "top",
+    "objects": [
+     "Sheet",
+     "Piece a",
+     "Piece b",
+     "Piece c"
+    ],
+    "width": 800,
+    "height": 600,
+    "inline": false,
+    "path": "bim-rest-nest.png"
+   },
+   "expect": "path ends bim-rest-nest.png; mmAcross about 1200 to 1500 (the frame is the sheet, so the pieces lie on it: before the nest they spread over 4300 mm); notDrawn absent or naming these flat faces (view_render draws solids: then read the pieces' places with object_list instead)"
+  }
+ ],
+ "notCovered": [
+  "code_* (code_answer, code_check, code_facts, code_fem, code_missing, code_packet, code_packs, code_project, code_span): the private Home add-on's tools; its repository is not checked out where this model was written, so no call of them is here.",
+  "bim_reference { part } (one named part of the file) and an .ifc or .dxf file: the part's name is the object's internal name inside the other file ('Box' for the shelf block by FreeCAD's naming, not checked live); one live call bim_reference { path, part: \"Box\" } would say.",
+  "bim_library with the parts_library add-on itself (no folder given): it is not known to be installed on the Mac; with it, bim_library { search: \"bolt\" } alone answers found from its roots.",
+  "bim_reextrude on a panel (Thickness) or a structure, with delete: false, and from a face with a curved edge (wire false: the face itself becomes the base).",
+  "bim_remove_shape on a wall (a line and a new wall replace it) and on a shape that is not a box (left as it was, coloured red in the window by FreeCAD).",
+  "bim_rewire with an arc (a plain Part wire is made, not a Draft wire) and bim_nest with more pieces than fit one sheet (sheets over 1, with the note).",
+  "Which face of the wall Face6 is: not needed for the answer (see call 16), and shape_query { body: \"Stub wall\", kind: \"face\", normal: [0, 0, 1] } says if wanted."
+ ]
+}

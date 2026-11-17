@@ -1090,13 +1090,23 @@
    "expect": "counts { added 0, removed 0, changed 1 }: Inner wall's Pset_WallCommon.FireRating [None or old, REI30] and material"
   },
   {
+   "tool": "ifc_find",
+   "arguments": {
+    "name": "Plinth"
+   },
+   "expect": "count 1: the Plinth (class IfcFooting since call 28 retyped it; the name stays), with its id (22 characters). count 0 or 2 or more: the next call would remove nothing or the wrong element — find it by class and storey instead"
+  },
+  {
    "tool": "ifc_remove",
    "arguments": {
     "ids": [
-     "<the id ifc_find gave for the Plinth: ifc_find { name: \"Plinth\" } first>"
+     {
+      "$from": 67,
+      "$at": "elements.0.id"
+     }
     ]
    },
-   "expect": "removed [the plinth]; held in memory (not saved)"
+   "expect": "ids: the Plinth's id from call 67 (by reference). removed [the plinth]; held in memory (not saved)"
   },
   {
    "tool": "bim_import",
