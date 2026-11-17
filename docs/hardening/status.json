@@ -11,7 +11,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler measure model, run 3, answers read: dry run factor 1.000121 from BoreDia 11.9985; factor 2 box -60..60, -40..40, -20..20; factor 0.5 back to -30..30, -20..20, -10..10 still aligned (run 2: 0..60, the alignment lost); align_clear after it accepted, appliedAlignment null (run 2: refused); cleared and then refused when there is none. Not read: the box after the last clear"
  },
  "align_datum": {
   "description": true,
@@ -25,7 +25,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler measure model, run 3, answers read: Worn overlapsInPlace true, the way in not swept, blocked 1 (run 2: blocked 19.25 mm short); symmetry rms 0, matchedShare 0.992 from Mirror with the note that 0.8 % of the samples have no mirror image; pre-warp rms 0 at the target vertices, seenFromPrint largest 1.0, warning, stop false (run 2: stop true)"
  },
  "asm_add": {
   "description": true,
@@ -867,7 +867,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Documents model 18:38 (23 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "Workshop Documents model, run 3, answers read (the body is the object Body, labelled Tut, 53 x 26 x 26): drawing A3 2:1 with four views and 53 / 26 / 26, page.settled cleared the template and three dimensions (waited 0.95 s); the section B-B drawing cleared Template001 and Dimension003 to 007 (waited 1.49 s), no late, no left, and the next call reads nothing red (run 2: 6 objects not recomputed yet); files-only from the sheet writer; seven refusals as before. Patent figures: two pages, files from the TechDraw page (run 2: the sheet writer), numerals Tut 10, health present, numerals.Body 0 refused as a whole number over 0. Cost: 4.6 to 6.6 s a call (run 2: 0.8 to 1.2 s)"
  },
  "element_construct": {
   "description": true,
@@ -1184,7 +1184,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler measure, Mesh Tools and 2D models, run 3, answers read: with the measure document open (WornScan, 9 elements), scan_open with no discard accepted in three new documents (608, 12 and 300 triangles, boxes 60 x 40 x 20 and 40 x 30 x 20); flat_edges refused in a new document (nothing on the sheet), then 2 chains of 140.0 and 31.4057 mm on its own section; the other documents save at 7 to 16 kB (run 2: 3.3 to 6.0 MB with the measure state in them). Not run: scan_info in the new document and the switch back to the first"
  },
  "flat_edit": {
   "description": true,
@@ -1430,7 +1430,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler measure model, run 3, answers read: Worn overlapsInPlace true, the way in not swept, blocked 1 (run 2: blocked 19.25 mm short); symmetry rms 0, matchedShare 0.992 from Mirror with the note that 0.8 % of the samples have no mirror image; pre-warp rms 0 at the target vertices, seenFromPrint largest 1.0, warning, stop false (run 2: stop true)"
  },
  "manual_plan": {
   "description": true,
@@ -1522,7 +1522,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler Mesh Tools model 18:37 (64 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler Mesh Tools model, run 3, answers read: applies the reduction on hand (2,142 triangles = the report, edited copy, open 0, bad 0, volume 16,769.173) and warns that it does not hold its tolerance (up to 10.4245 mm for 0.05 mm) with mesh_undo named. Only the case that does not hold was run: mesh_reduce is still wrong and unmarked"
  },
  "mesh_boolean": {
   "description": true,
@@ -2162,7 +2162,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Documents model 18:38 (23 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "Workshop Documents model, run 3, answers read (the body is the object Body, labelled Tut, 53 x 26 x 26): drawing A3 2:1 with four views and 53 / 26 / 26, page.settled cleared the template and three dimensions (waited 0.95 s); the section B-B drawing cleared Template001 and Dimension003 to 007 (waited 1.49 s), no late, no left, and the next call reads nothing red (run 2: 6 objects not recomputed yet); files-only from the sheet writer; seven refusals as before. Patent figures: two pages, files from the TechDraw page (run 2: the sheet writer), numerals Tut 10, health present, numerals.Body 0 refused as a whole number over 0. Cost: 4.6 to 6.6 s a call (run 2: 0.8 to 1.2 s)"
  },
  "pcb_order_package": {
   "description": true,
@@ -2460,7 +2460,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: body Dowel answers name Peg with shownAs Dowel, closed, valid, 1 solid, volume 1000.0"
  },
  "reverse_body_clearance": {
   "description": true,
@@ -2474,35 +2474,35 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_body_names": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_body_set": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_build": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_feature_add": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_feature_clear": {
   "description": true,
@@ -2523,21 +2523,21 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_feature_remove": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_feature_rollback": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_feature_schema": {
   "description": true,
@@ -2551,28 +2551,28 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_feature_update": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_import_step": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_parameter_add": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_parameter_list": {
   "description": true,
@@ -2586,14 +2586,14 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "reverse_parameter_set": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler reverse model 18:36 (57 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block"
  },
  "robot_export": {
   "description": true,
@@ -2709,7 +2709,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler measure model, run 3, answers read: thickness 16,647 of 20,000 measured, min 10.0, max 24.848, mean 18.8972, sigma 2.2177, no thin spot at 1 mm, its own reply kept; scan_qa sparse p5 14.048 / p50 20.048 with the note to densify, dense p5 19 / p50 20 / p95 20, tilt 0; four heightmaps identical to run 2 (19.0..20.0; deviation -1.0..0.0). Time not in the answers: the 17 heavy reads of the model together took under 21 s (run 2: 221 s for the thickness alone)"
  },
  "scan_info": {
   "description": true,
@@ -2730,7 +2730,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model 18:38 (64 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler measure, Mesh Tools and 2D models, run 3, answers read: with the measure document open (WornScan, 9 elements), scan_open with no discard accepted in three new documents (608, 12 and 300 triangles, boxes 60 x 40 x 20 and 40 x 30 x 20); flat_edges refused in a new document (nothing on the sheet), then 2 chains of 140.0 and 31.4057 mm on its own section; the other documents save at 7 to 16 kB (run 2: 3.3 to 6.0 MB with the measure state in them). Not run: scan_info in the new document and the switch back to the first"
  },
  "scan_outline": {
   "description": true,
@@ -2751,7 +2751,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler measure model, run 3, answers read: thickness 16,647 of 20,000 measured, min 10.0, max 24.848, mean 18.8972, sigma 2.2177, no thin spot at 1 mm, its own reply kept; scan_qa sparse p5 14.048 / p50 20.048 with the note to densify, dense p5 19 / p50 20 / p95 20, tilt 0; four heightmaps identical to run 2 (19.0..20.0; deviation -1.0..0.0). Time not in the answers: the 17 heavy reads of the model together took under 21 s (run 2: 221 s for the thickness alone)"
  },
  "scan_query": {
   "description": true,
@@ -2765,7 +2765,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler measure model, run 3, answers read: dry run factor 1.000121 from BoreDia 11.9985; factor 2 box -60..60, -40..40, -20..20; factor 0.5 back to -30..30, -20..20, -10..10 still aligned (run 2: 0..60, the alignment lost); align_clear after it accepted, appliedAlignment null (run 2: refused); cleared and then refused when there is none. Not read: the box after the last clear"
  },
  "scan_segment": {
   "description": true,
@@ -3488,7 +3488,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler measure model, run 3, answers read: thickness 16,647 of 20,000 measured, min 10.0, max 24.848, mean 18.8972, sigma 2.2177, no thin spot at 1 mm, its own reply kept; scan_qa sparse p5 14.048 / p50 20.048 with the note to densify, dense p5 19 / p50 20 / p95 20, tilt 0; four heightmaps identical to run 2 (19.0..20.0; deviation -1.0..0.0). Time not in the answers: the 17 heavy reads of the model together took under 21 s (run 2: 221 s for the thickness alone)"
  },
  "thickness_settings": {
   "description": true,
@@ -3557,7 +3557,7 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model 18:25 (119 calls): accepted or refused as expected; values not yet read one by one"
+  "model": "ScanRuler measure model, run 3, answers read: Worn overlapsInPlace true, the way in not swept, blocked 1 (run 2: blocked 19.25 mm short); symmetry rms 0, matchedShare 0.992 from Mirror with the note that 0.8 % of the samples have no mirror image; pre-warp rms 0 at the target vertices, seenFromPrint largest 1.0, warning, stop false (run 2: stop true)"
  },
  "wear_rebuild": {
   "description": true,
