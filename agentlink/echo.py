@@ -3190,8 +3190,18 @@ def path_redraw(op):
             return False
         props = getattr(vo, "PropertiesList", None) or ()
         if "DisplayMode" in props:
+            # Measured live (17 Nov, the path_seen probe): an operation made by
+            # CAM's App-side Create has no GUI proxy and its DisplayMode is
+            # "None", so ViewProviderPath's mode switch stays -1 with no child
+            # and nothing is drawn. Its one mode is "Waypoints"
+            # (src/Mod/CAM/Gui/ViewProviderPath.cpp 302, 318).
             try:
-                vo.DisplayMode = vo.DisplayMode
+                modes = list(vo.listDisplayModes() or ())
+            except Exception:  # noqa: BLE001
+                modes = []
+            try:
+                cur = str(vo.DisplayMode)
+                vo.DisplayMode = cur if cur in modes else ("Waypoints" if "Waypoints" in modes or not modes else modes[0])
             except Exception:  # noqa: BLE001
                 pass
         for prop in ("StartIndex", "ShowCount"):
