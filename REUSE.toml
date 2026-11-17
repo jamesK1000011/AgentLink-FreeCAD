@@ -41,3 +41,11 @@ SPDX-License-Identifier = "LGPL-2.1-or-later"
 # Files that cannot carry a comment (or whose format is read as a whole):
 # the file list, the Addon Manager metadata, the live window scripts, the MCP Registry entry, the theme parameter files, the
 # privacy check's rule lists.
+
+[[annotations]]
+path = "scripts/ste_originals.json"
+SPDX-FileCopyrightText = "Agent Link contributors"
+SPDX-License-Identifier = "LGPL-2.1-or-later AND CC-BY-4.0"
+# Branch explore/full-ste: main's tool descriptions before the ASD-STE100
+# rewrite, for scripts/ste_check.py. The data tools' words come from
+# agentlink/data/tools.json (CC-BY-4.0), the coded tools' from the code.
