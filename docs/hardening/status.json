@@ -322,7 +322,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "bim_ifc": {
   "description": true,
@@ -378,7 +380,9 @@
  },
  "bim_library": {
   "headless": true,
-  "note": "17 Nov: re-run after the hub fixes"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "bim_list": {
   "description": true,
@@ -408,7 +412,9 @@
  },
  "bim_nest": {
   "headless": true,
-  "note": "17 Nov: re-run after the hub fixes"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "bim_opening": {
   "description": true,
@@ -432,7 +438,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "bim_pipe": {
   "description": true,
@@ -631,7 +639,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Electronics model, run 2, answers read: board 50 x 30 x 1.6, 2 copper layers, holes 3.2, 3.2 and 2.2, J1 and C1 tall, R1 and U1 with no height, moved [-125,115]; enclosure 56 x 36 x 21.6 with M3 standoffs and the J1 opening; a Part::Box refused with the plain-copy call, the channel 46.14 mm open both ends, 138.67 mm3 out, 4,406 ohm of filament, awg 22 fits, awg 99 refused before any cut, a path outside refused; order zips with 3 gerbers, drill, BOM, CPL, DRC not run (no kicad-cli)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "body_check": {
   "description": true,
@@ -875,7 +885,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: body_check Bracket ok, valid, closed, 1 solid, 11214.6, 7 faces, checkGeometry ok, and not_found naming Bracket; report_read last 5 and problems only (count 2, problems 1: a Qt font line); crash_collect copied 15 recovery folders into crash/<time>/recovery, reports []; outputs_clean dry run: wouldGo {}, kept 210, 61 exports listed, nothing removed, and kinds refused. Not run: outputs_clean with dry_run false"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "cut_check": {
   "description": true,
@@ -978,8 +990,9 @@
  },
  "dialog_answer": {
   "headless": true,
-  "model": "unproven-hub model, window pass 3 (17 Nov)",
-  "note": "17 Nov: answers read: steps_list Bracket Pad 12000 then Pocket; view_snapshot iso 800x600 png; snapshot_latest the newest shot; dialog_answer with none open says so (the dialog case is run-alone 8)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "dimension_add": {
   "description": true,
@@ -1337,7 +1350,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, run 2, answers read: planes at z 20, z 0, x 0, y 0 and the pocket floor z 19 with sigma 0, bore r 5.99927 over 359.7 deg, corner [0,0,0], bore foot [20,20,0], the sparse-mesh refusal with mesh_densify, unlink to line-coords, 4 Part objects and a STEP file"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "element_to_document": {
   "description": true,
@@ -1422,8 +1437,9 @@
   "description": true,
   "headless": true,
   "health": true,
-  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
-  "note": "docs: body not read line by line in the FEM pass"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "fea_chart": {
   "description": true,
@@ -1454,7 +1470,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Make model: simply supported 1000 mm steel beam 50 x 100 under 10 N/mm: deflection 0.159 mm (0.156 Euler, 0.160 with shear), bending 15.16 MPa (15.0), reactions 5000 N each; a from of two numbers refused"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "fea_heat": {
   "description": true,
@@ -1586,7 +1604,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "fem_linearize": {
   "description": true,
@@ -1599,7 +1619,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "fit": {
   "description": true,
@@ -1624,21 +1646,27 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, run 2, answers read: six planes and hole H1 r 6.0, scale 1.000 on all axes, hole 0.0007, no slicer change; scanner added, listed, removed; 608 bearing worst 0, M5 socket head, one link, provenance kept; pack zip of six files with 608.step left out; manual of 2 steps and 2 pictures; no shots, wait answers at once"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "fit_scan_measure": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, run 2, answers read: six planes and hole H1 r 6.0, scale 1.000 on all axes, hole 0.0007, no slicer change; scanner added, listed, removed; 608 bearing worst 0, M5 socket head, one link, provenance kept; pack zip of six files with 608.step left out; manual of 2 steps and 2 pictures; no shots, wait answers at once"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "fit_scan_setup": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, run 2, answers read: six planes and hole H1 r 6.0, scale 1.000 on all axes, hole 0.0007, no slicer change; scanner added, listed, removed; 608 bearing worst 0, M5 socket head, one link, provenance kept; pack zip of six files with 608.step left out; manual of 2 steps and 2 pictures; no shots, wait answers at once"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "flat_calibrate": {
   "description": true,
@@ -1652,7 +1680,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "flat_detect_edges": {
   "description": true,
@@ -1677,7 +1707,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure, Mesh Tools and 2D models, run 3, answers read: with the measure document open (WornScan, 9 elements), scan_open with no discard accepted in three new documents (608, 12 and 300 triangles, boxes 60 x 40 x 20 and 40 x 30 x 20); flat_edges refused in a new document (nothing on the sheet), then 2 chains of 140.0 and 31.4057 mm on its own section; the other documents save at 7 to 16 kB (run 2: 3.3 to 6.0 MB with the measure state in them). Not run: scan_info in the new document and the switch back to the first"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "flat_edit": {
   "description": true,
@@ -1711,7 +1743,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "flat_objects": {
   "description": true,
@@ -1732,14 +1766,18 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "flat_remove": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "flat_render": {
   "description": true,
@@ -1755,14 +1793,18 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "flat_set_alignment": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "gcode_read": {
   "headless": true,
@@ -1799,7 +1841,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: session_state on the empty document (freecad 1.1.3, where window, outDir), with Bracket hidden (hidden and hiddenNote, bodies []), shown again (12000, 6 faces) and at the end (8 bodies, assembly Stand of Foot and Post, step 49); tool_groups: 68 groups with core on and no tool names, find (feature_remove first of 5), one tool card (required [feature]), group core (21 tools), now with fits and next, and both refusals (did you mean feature_remove; the groups listed); guide_read: the index of 40 guides with tokens, one section of feature, and the refusals naming its ten sections and the guides"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "history_checkpoint": {
   "description": true,
@@ -1923,8 +1967,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
-  "note": "a storey at 0 reads elevation null: FreeCAD's exporter leaves a zero out"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "ifc_remove": {
   "description": true,
@@ -2010,15 +2055,18 @@
  },
  "job_status": {
   "headless": true,
-  "model": "run-alone 1-5 (17 Nov)",
-  "note": "17 Nov: run-alone 1-5 sent as they are: a batch in a batch, undo in a rolling-back batch and an unknown tool refused whole; to and $from chain; job_start answers and an id, job_status by reference and the list, pd_pad and session_state refused as jobs with why"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "kicad_import": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Electronics model, run 2, answers read: board 50 x 30 x 1.6, 2 copper layers, holes 3.2, 3.2 and 2.2, J1 and C1 tall, R1 and U1 with no height, moved [-125,115]; enclosure 56 x 36 x 21.6 with M3 standoffs and the J1 opening; a Part::Box refused with the plain-copy call, the channel 46.14 mm open both ends, 138.67 mm3 out, 4,406 ohm of filament, awg 22 fits, awg 99 refused before any cut, a path outside refused; order zips with 3 gerbers, drill, BOM, CPL, DRC not run (no kicad-cli)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "link_edit": {
   "description": true,
@@ -2397,7 +2445,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler Mesh Tools model, run 2, answers read: densify 8,192 at 24,000 mm3 (219,600 on the measure scan), cut to 18,000 capped, subtract -1,570.6, the inside and the apart solids refused, island of 12 triangles found and removed, offset 28,462.1, mirror and flip keep 22,429.4, a 15.91 mm hole deleted and filled flat, smooth max 0.0047, trim 499.0 with mating 100.0, shell 9,049.1, wrap 24,000.0 and grown 29,467.8, every undo back to what it was, STL 106,884 bytes and 3MF written"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "mesh_undo": {
   "description": true,
@@ -2438,7 +2488,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "MeshHardening: Mesh to Part, Mesh Scripting pipe + tour (63 calls)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "meshobj_curvature": {
   "description": true,
@@ -2652,7 +2704,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: a note on the top face of Bracket (id 1, at [20, 15, 10], Face6), empty text refused; listed; answered (id by reference); done true, left out of the open list, done false again; deleted (left 0), a wrong id refused; steps_render: two step pictures and the sheet in unproven_steps with the two rows, width 50 refused (that refusal is kept in the job list as a failed job). Not read: the pictures"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "object_align": {
   "description": true,
@@ -2743,14 +2797,16 @@
  "orca_calibrate": {
   "headless": true,
   "health": true,
-  "model": "OrcaModel",
-  "note": "17 Nov: orca-model calls through the hub bridge on the Mac's OrcaSlicer 2.5.0 with its own H2D system presets, link 7575e54: 15 answers read against their expectations (H2D start G-code, 220 C, 25 layers)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "orca_paint": {
   "headless": true,
   "health": true,
-  "model": "OrcaModel",
-  "note": "17 Nov: orca-model calls through the hub bridge on the Mac's OrcaSlicer 2.5.0 with its own H2D system presets, link 7575e54: 15 answers read against their expectations (H2D start G-code, 220 C, 25 layers)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "orca_project": {
   "headless": true,
@@ -2762,8 +2818,9 @@
  "orca_slice": {
   "headless": true,
   "health": true,
-  "model": "OrcaModel",
-  "note": "17 Nov: orca-model calls through the hub bridge on the Mac's OrcaSlicer 2.5.0 with its own H2D system presets, link 7575e54: 15 answers read against their expectations (H2D start G-code, 220 C, 25 layers)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "outputs_clean": {
   "description": true,
@@ -3083,7 +3140,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "PartTutorial: Whiffle Ball tutorial (volumes matched) + tour (98 calls)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "part_sweep": {
   "description": true,
@@ -3580,14 +3639,18 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, run 2, answers read: height 20.000 in band, bore 11.9985, axis to plane -20.000, pocket depth 1.000 with the no-overlap warning, flatness 0, 90.00 deg, angularity 1.047 mm at basic 89, limit over by 0.099 then cleared, not_found lists the six, report 1 checked 1 pass, CSV 15 rows"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "report_read": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: body_check Bracket ok, valid, closed, 1 solid, 11214.6, 7 faces, checkGeometry ok, and not_found naming Bracket; report_read last 5 and problems only (count 2, problems 1: a Qt font line); crash_collect copied 15 recovery folders into crash/<time>/recovery, reports []; outputs_clean dry run: wouldGo {}, kept 210, 61 exports listed, nothing removed, and kinds refused. Not run: outputs_clean with dry_run false"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "reverse_body_check": {
   "description": true,
@@ -3833,7 +3896,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "scad_code": {
   "description": true,
@@ -3944,7 +4009,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model (repo, 144 calls), run 4: densified and smoothed scan reads sigma 0.0359 mm from 5859 samples (133); a CAD tessellation is refused (11)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "scan_open": {
   "description": true,
@@ -3969,7 +4036,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, run 2, answers read: top face 23,465 vertices at z 20, nearest 5.024 mm, 155 regions with the six faces first (2234.9, 2135.8, 1156.8 x 2, 771.2 x 2 mm2, the pocket floor 98.3), flat patch rms 0, draft 0 on every patch, six bore rings r 5.999, outline 2400 mm2 and the bore r 5.998, cloud 109,800 points, no thread"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "scan_qa": {
   "description": true,
@@ -4129,7 +4198,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: session_state on the empty document (freecad 1.1.3, where window, outDir), with Bracket hidden (hidden and hiddenNote, bodies []), shown again (12000, 6 faces) and at the end (8 bodies, assembly Stand of Foot and Post, step 49); tool_groups: 68 groups with core on and no tool names, find (feature_remove first of 5), one tool card (required [feature]), group core (21 tools), now with fits and next, and both refusals (did you mean feature_remove; the groups listed); guide_read: the index of 40 guides with tokens, one section of feature, and the refusals naming its ten sections and the guides"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "setup": {
   "description": true,
@@ -4476,17 +4547,21 @@
  },
  "snapshot_latest": {
   "headless": true,
-  "model": "unproven-hub model, window pass 3 (17 Nov)",
-  "note": "17 Nov: answers read: steps_list Bracket Pad 12000 then Pocket; view_snapshot iso 800x600 png; snapshot_latest the newest shot; dialog_answer with none open says so (the dialog case is run-alone 8)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "snapshot_list": {
   "headless": true,
-  "note": "17 Nov: marks model and hubrest model on the Mac, answers read"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "steps_list": {
   "headless": true,
-  "model": "unproven-hub model, window pass 3 (17 Nov)",
-  "note": "17 Nov: answers read: steps_list Bracket Pad 12000 then Pocket; view_snapshot iso 800x600 png; snapshot_latest the newest shot; dialog_answer with none open says so (the dialog case is run-alone 8)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "steps_render": {
   "description": true,
@@ -4665,7 +4740,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "td_dim_format": {
   "description": true,
@@ -4707,8 +4784,9 @@
   "description": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
-  "note": "docs: drawing code not reviewed"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "td_finish": {
   "description": true,
@@ -4740,7 +4818,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "td_leader": {
   "description": true,
@@ -5019,7 +5099,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: session_state on the empty document (freecad 1.1.3, where window, outDir), with Bracket hidden (hidden and hiddenNote, bodies []), shown again (12000, 6 faces) and at the end (8 bodies, assembly Stand of Foot and Post, step 49); tool_groups: 68 groups with core on and no tool names, find (feature_remove first of 5), one tool card (required [feature]), group core (21 tools), now with fits and next, and both refusals (did you mean feature_remove; the groups listed); guide_read: the index of 40 guides with tokens, one section of feature, and the refusals naming its ten sections and the guides"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "tutor": {
   "description": true,
@@ -5047,7 +5129,9 @@
  },
  "usage_report": {
   "headless": true,
-  "note": "17 Nov: live proof after the fixes: 10 mm cube 600 mm2 before and after reopen; one refusal adds one error"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "varset_new": {
   "description": true,
@@ -5071,19 +5155,24 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: view_maps lists 8 maps (wall, stress, heat, curvature and the add-ons), 2 layers, 10 views; view_render four views of Bracket at 900 x 700 (7822 bytes, mmAcross each, 12 triangles), map stress before any solve answered empty in words, after the solve drawn with a legend (min 0.9497, max 59.9059 MPa = the solve, worst at [3.12, 127.19, 10]; 6.4 s), width 10 refused. bim-rest model: a top view written (800 x 600), and four flat faces answered empty (no solid shape): the tool is right there, the model expected a picture"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "view_render": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: view_maps lists 8 maps (wall, stress, heat, curvature and the add-ons), 2 layers, 10 views; view_render four views of Bracket at 900 x 700 (7822 bytes, mmAcross each, 12 triangles), map stress before any solve answered empty in words, after the solve drawn with a legend (min 0.9497, max 59.9059 MPa = the solve, worst at [3.12, 127.19, 10]; 6.4 s), width 10 refused. bim-rest model: a top view written (800 x 600), and four flat faces answered empty (no solid shape): the tool is right there, the model expected a picture"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "view_snapshot": {
   "headless": true,
-  "model": "unproven-hub model, window pass 3 (17 Nov)",
-  "note": "17 Nov: answers read: steps_list Bracket Pad 12000 then Pocket; view_snapshot iso 800x600 png; snapshot_latest the newest shot; dialog_answer with none open says so (the dialog case is run-alone 8)"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "wear_diff": {
   "description": true,
@@ -5117,14 +5206,18 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler measure model, run 2, answers read: limit 12 gives 21 measured points under it and two thin patches at 10.0 (the pocket wall and the x 60 face); pocket lost -1.0 on 549 points, rebuilt to 0 lost, largest move 1.0"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "window_snapshot": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "unproven-hub model, run 5, answers read: selection set to Bracket, read back with detail, a wrong name refused with the selection kept (read again), cleared; show hides Bracket (session_state: hidden, bodies []), shows it with Ghost answered as unknown, and refuses when nothing named exists; window_snapshot: the whole window (1712 x 2082) twice, the Report view panel alone (1712 x 420), a wrong panel refused listing the six panels. Not read: the pictures themselves"
+  "live": true,
+  "model": "window pass 5 (17 Nov), win5 models",
+  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
  },
  "workbench": {
   "headless": true,
