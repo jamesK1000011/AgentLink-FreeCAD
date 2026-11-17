@@ -192,3 +192,44 @@ No FreeCAD ran here. "Test" means a test with stand-ins, not a live check. "Old"
 - Showing the Sketcher's edit toolbars makes FreeCAD save them as shown on the next leave. This puts back the
   default it had before.
 - The new-object fallback can select helpers that a tool made and left shown.
+
+## Round 4: the SIGBUS in updateGui (crash on the Mac)
+
+What the report shows: inside a Python slot, `FreeCADGui.updateGui()` (window_snapshot, `grab.py` 32) ran
+the event loop. A QTimer fired, and the object that should receive it had already been deleted. This
+happened on the first picture of a new batch, after a Texturizer batch, in a session of about 900 calls. It
+did not happen again on a fresh FreeCAD. No FreeCAD ran here, so the exact receiver is not proven.
+
+Audit of every timer and deferred call in `echo.py` and `overlay.py`:
+
+| where (at a2729fa) | what | risk | now |
+|---|---|---|---|
+| `echo.caption` (679) | `QTimer.singleShot(30 s, …)` hid the caption label, a child of a 3D view. Round 3 lengthened this from 2.6 s to 30 s. | The view closes (doc_new, doc_close, a restart) with the timer pending. The callback then touched the label. Also, the global `_caption` was read through `.parent()` after its view had died: a RuntimeError each time, and the caption was never made again. | `overlay.later(ms, fn, label)`: the timer belongs to our own QObject; it stops on the label's `destroyed` and checks `alive()` before it runs. A dead `_caption` is dropped without being touched. |
+| `echo.flash_command` (782) | `singleShot(1.3 s)` put a menu item's font back. | The QAction goes with its workbench. | `overlay.later(…, action)`; `_later` checks `alive()`. |
+| `overlay._tick` (720) | A 250 ms `QTimer()` with no parent, running for as long as a ring was held (30 s since round 3). | Its own object was safe, but each tick mapped, mapped onto and installed event filters on ringed toolbar buttons that a workbench change had deleted. | Parented to our owner QObject. At each refresh `gone()` drops marks whose widget, viewport or menu host has died, and painters whose host or self has died, without touching them. |
+| `overlay` Watcher (event filters) | Keyed by `id(widget)`; `removeEventFilter` on a dead widget. | A dead wrapper was touched, or an id was used again for a new widget. | Dead widgets are dropped from the watcher without being touched; a wrapper swapped under the same id is followed again. |
+| Painter (`sync`), `_map`, `visible`, `flash`, menu `closed` / `_unwatch_menus` | Calls on painters, menus and buttons. | A menu or painter that a workbench change had deleted. | `alive()` is checked first everywhere. |
+| `restore_covers` | Kept the FreeCAD objects for up to 30 s. | The document is closed or the object deleted before the next change. | Kept by (document, object) name and looked up again. A closed document or a gone object is passed over. |
+| Selection hold | No timer since round 3 (the clear-later timer was removed). | A closed document. | Nothing deferred. |
+
+- `overlay.alive(obj)` uses `shiboken6.isValid` (or `shiboken2`) on the object and on every parent up its
+  chain. An object that raises "already deleted" counts as dead.
+- `overlay.later()` / `Later`: one long-lived, unparented QObject of ours owns every deferred call of the echo
+  and the overlay. There is no `QTimer.singleShot` left in either file.
+- Tests (stand-in Qt, `tests/test_echo_hold.py`):
+  - `NothingDeferredOutlivesItsTarget`: the target is destroyed before the timer fires; it dies with no
+    signal seen; the timer's owner is never the target; a caption whose view closed is made again and its
+    timer stops when that view closes too.
+  - `OverlayDropsTheDead`.
+  - `Uncover.test_put_back_after_the_document_closed_or_the_object_went`.
+- How sure: these cover every timer of ours. Whether one of them was *the* receiver is not proven. A
+  `singleShot` with a Python callable has no receiver of ours, and the crash came right after a Texturizer
+  batch whose preview was cancelled.
+- Not mine, for the owners to check:
+  - `layout.py` 672 and 1064, `panel.py` 1056, `outputs.py` 602 and `workbench.py` 77-82 use
+    `QTimer.singleShot` with callables, and these can touch the window later.
+  - `gui_input.py` 1664 makes an unparented `QTimer()` in a nested loop.
+  - Texturizer's own timers (its preview).
+- Live check: a long session that switches workbenches and opens and closes documents during held rings and
+  captions. In particular: `pd_pad`, then `doc_close` on that document, then `doc_new`, `part_primitive`,
+  `window_snapshot` within 30 s. The Report view must stay clean and FreeCAD must not crash.
