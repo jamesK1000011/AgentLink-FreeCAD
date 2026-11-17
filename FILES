@@ -232,6 +232,15 @@ docs/hardening/hubfix5-findings.md
 docs/hardening/hubrest-findings.md
 docs/hardening/inventory.json
 docs/hardening/map-findings.md
+docs/hardening/models-findings.md
+docs/hardening/models/alone/unproven-alone-1-nested-batch.json
+docs/hardening/models/alone/unproven-alone-2-undo-rollback.json
+docs/hardening/models/alone/unproven-alone-3-unknown-tool.json
+docs/hardening/models/alone/unproven-alone-4-to-and-from.json
+docs/hardening/models/alone/unproven-alone-5-jobs.json
+docs/hardening/models/alone/unproven-alone-6-agentlink-update.json
+docs/hardening/models/alone/unproven-alone-7-app-restart.json
+docs/hardening/models/alone/unproven-alone-8-force-restart.json
 docs/hardening/models/asmtd-assembly-model.json
 docs/hardening/models/asmtd-techdraw-model.json
 docs/hardening/models/bim-rest-model.json
@@ -244,6 +253,7 @@ docs/hardening/models/draftmesh-draft-model.json
 docs/hardening/models/draftmesh-mesh-model.json
 docs/hardening/models/draftmesh-surface-model.json
 docs/hardening/models/hubrest-model.json
+docs/hardening/models/marks-model.json
 docs/hardening/models/part-model.json
 docs/hardening/models/partdesign-model.json
 docs/hardening/models/sheetfem-fem-model.json
@@ -289,6 +299,7 @@ scripts/live/tutor-watch.json
 scripts/live/workshop.json
 scripts/merge_chunks.py
 scripts/model_calls.py
+scripts/model_check.py
 scripts/release.py
 scripts/sync_shared.py
 scripts/tool_index.py
