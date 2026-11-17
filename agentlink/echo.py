@@ -399,7 +399,10 @@ def _view_widget():
     QtCore, _QtGui, QtW = _qt()
     mw = FreeCADGui.getMainWindow()
     area = mw.findChild(QtW.QMdiArea)
-    sub = area.activeSubWindow() if area else None
+    # currentSubWindow too: activeSubWindow is None while FreeCAD is not the
+    # application in front (the agent works in the background), and the
+    # caption then went nowhere.
+    sub = (area.activeSubWindow() or area.currentSubWindow()) if area else None
     return sub.widget() if sub else None
 
 
@@ -915,13 +918,25 @@ class Echo:
                     self._left_sketch = False
                     try:
                         if made and any(getattr(o, "Shape", None) is not None and o.Shape.Solids for o in made):
-                            FreeCADGui.ActiveDocument.ActiveView.viewIsometric()
+                            # Set, not animated: viewIsometric starts a turn
+                            # that the fit just below cut off at its first
+                            # frame inside a batch (the view stayed flat).
+                            FreeCADGui.ActiveDocument.ActiveView.setCameraOrientation(FreeCAD.Rotation(0.424708, 0.17592, 0.339851, 0.820473))
                     except Exception:
                         pass
                 _model_tab_back()
 
                 with around.part("fit"):
                     fit(animate=fit_animated(getattr(self.s, "batch_now", None), self.mode))
+            # What was done, said again now that it is done: at a batch's
+            # pace the words set before the call were gone from the view and
+            # the status bar by the time the result showed.
+            try:
+                words = _describe(name, args)
+                caption(words)
+                FreeCADGui.getMainWindow().statusBar().showMessage("Agent: " + words, 4000)
+            except Exception:
+                pass
             _paint()
         except Exception as e:
             FreeCAD.Console.PrintLog(f"Agent Link echo (after {name}): {e}\n")
