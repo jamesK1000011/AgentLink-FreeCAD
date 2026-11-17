@@ -246,3 +246,18 @@ class TableFit(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BatchCounts(unittest.TestCase):
+    def test_counts_win_over_rows(self):
+        from agentlink import activity
+        w = activity.batch_words({}, {"ran": 6, "results": [], "counts": {"ok": 6, "refused": 0}})
+        self.assertIn("6 ok", w)
+        self.assertNotIn("refused", w)
+        w = activity.batch_words({}, {"ran": 6, "results": [{"i": 2, "ok": False}], "counts": {"ok": 5, "refused": 1}})
+        self.assertIn("5 ok, 1 refused", w)
+
+    def test_only_refused_rows_without_counts_say_no_ok_count(self):
+        from agentlink import activity
+        w = activity.batch_words({}, {"ran": 6, "results": [{"i": 2, "ok": False}]})
+        self.assertNotIn("0 ok", w)
