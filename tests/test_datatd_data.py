@@ -24,6 +24,7 @@ sys.path.insert(0, ROOT)
 
 BASE = "99489bb"  # the commit whose handlers were converted
 sys.path.insert(0, HERE)
+import _meant  # noqa: E402
 from _datatd_cases import CONVERTED, FILES, KEPT  # noqa: E402
 
 try:
@@ -73,7 +74,7 @@ class TechDrawData(unittest.TestCase):
             t = runners.tool(name, e, {})
             b = self.before[name]
             self.assertEqual(t.name, b["name"], name)
-            self.assertEqual(t.description.encode("utf-8"), b["description"].encode("utf-8"), name)
+            self.assertEqual(t.description.encode("utf-8"), _meant.description(name, b["description"]).encode("utf-8"), name)  # meant changes: tests/_meant.py
             self.assertEqual(t.schema, b["inputSchema"], name)
             self.assertEqual(json.dumps(t.schema), json.dumps(b["inputSchema"]), name)  # the order of every key too
             self.assertIs(t.changes, b["changes"], name)

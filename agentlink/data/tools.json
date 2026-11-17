@@ -2149,7 +2149,7 @@
   },
   "bim_import": {
    "group": "bim",
-   "description": "Read an IFC file (path) into the document as FreeCAD objects. Answers objects, byType, read (which reader). Thousands of elements can outlast the call; to edit a file in place, ifc_open instead. Needs IfcOpenShell.",
+   "description": "Read an IFC file (path) into the document as FreeCAD objects. Answers objects, byType, read (which reader), and a note when what was read lies over the document's own model: the file is read in its own coordinates into this document (doc_new first for a document of its own). Thousands of elements can outlast the call; to edit a file in place, ifc_open instead. Needs IfcOpenShell.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -2194,7 +2194,7 @@
     "via": "recorded",
     "with": ["=tool", "$fields"],
     "late": true,
-    "fields": {"path": "=p", "objects": "=len(made)", "byType": "=tally(ifc_type(o) for o in made)", "read": "=how"}
+    "fields": {"path": "=p", "objects": "=len(made)", "byType": "=tally(ifc_type(o) for o in made)", "read": "=how", "note": {"when": "=lies_over(made, before)", "value": "Read in the file's own coordinates, it lies where this document's model already is (a file exported from this document lands on its original): doc_new first to read it into a document of its own, or move what was read."}}
    }
   },
   "bim_curtain_wall": {
@@ -2285,7 +2285,7 @@
   },
   "bim_rebar": {
    "group": "bim",
-   "description": "Straight bars in a structure, laid out in its bounding box: along x | y | z (the bars' direction), layer bottom | top, diameter (12), cover (30), spacing mm (never wider than asked) or amount (4). Answers made (FreeCAD's rebar, or plain bars), bars, spacing, totalLength_m, mass_kg.",
+   "description": "Straight bars in a structure, laid out in its bounding box: along x | y | z (the bars' direction), layer bottom | top, diameter (12), cover (30), spacing mm (never wider than asked) or amount (4). Answers made (FreeCAD's rebar, or plain bars), bars, spacing, totalLength_m, mass_kg. FreeCAD's rebar is laid on a hidden Draft wire (its base, from which FreeCAD reads the bar's length).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -2372,14 +2372,16 @@
     {"refuse": {"fmt": "{n} bars: too many to build in one call; a wider spacing or a smaller amount."}, "when": "=n > 2000"},
     {"add": "Part::Feature", "name": "RebarLine", "as": "bar"},
     {"set": {"bar.Label": "=unique((a.name or 'Rebar') + ' line')", "bar.Shape": "=polygon([p0, p1])"}},
+    {"let": {"line": "=rebar_line(p0, p1, bar)"}},
     {
      "try": [
-      {"make": "Arch.makeRebar", "headless": true, "call": ["=host", "=bar"], "kw": {"diameter": "=dia", "amount": "=n", "offset": "=cover + dia / 2"}},
+      {"make": "Arch.makeRebar", "headless": true, "call": ["=host", "=line"], "kw": {"diameter": "=dia", "amount": "=n", "offset": "=cover + dia / 2"}},
       {"do": "=setprops(o, {'Direction': spread})"},
-      {"let": {"how": "FreeCAD's rebar"}}
+      {"let": {"how": "FreeCAD's rebar"}},
+      {"do": "=drop(bar) if line is not bar else None"}
      ],
      "on": "refusal",
-     "except": [{"let": {"o": "=plain_bars(bar, p0, p1, spread, cover + dia / 2, span, n, dia)", "how": "bars made here (FreeCAD's rebar needs its window)"}}]
+     "except": [{"do": "=drop(line) if line is not bar else None"}, {"let": {"o": "=plain_bars(bar, p0, p1, spread, cover + dia / 2, span, n, dia)", "how": "bars made here (FreeCAD's rebar needs its window)"}}]
     },
     {"do": "=named(o, a.name or 'Rebar')"}
    ],
@@ -4697,7 +4699,7 @@
   },
   "meshobj_segments": {
    "group": "mesh",
-   "description": "Find a mesh's flat regions: kind planar (deviation mm off a fitted plane, 0.01; about the noise on a scan) | curvature (both curvatures within tolerance 1/mm of 0); minFacets (20). Reply: segments (count), largest [{ facets, area, center, normal }] up to top (12); keep: true makes those meshes. On a scan: where to put a sketch. Slow on a dense mesh (every region is walked; not measured).",
+   "description": "Find a mesh's flat regions: kind planar (deviation mm off a fitted plane, 0.01; about the noise on a scan) | curvature (both curvatures within tolerance 1/mm of 0); minFacets (20). Reply: segments (count), largest [{ facets, area, center, normal }] up to top (12); keep: true makes those meshes, each in a colour of its own in the window (as FreeCAD's Mesh_Segmentation colours its segments). On a scan: where to put a sketch. Slow on a dense mesh (every region is walked; not measured).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -4742,7 +4744,7 @@
     {"let": {"rows": "=[r[0] for r in found]"}},
     {"let": {"out": {"mesh": "=o.Label", "kind": "=kind", "segments": "=len(rows)", "largest": "=rows[:top]"}}},
     {"put": {"note": "='No flat region of that size: a larger deviation (a scan\\'s noise), or a smaller minFacets.' if kind == 'planar' else 'No flat region of that size: a larger tolerance, or a smaller minFacets.'"}, "into": "out", "when": "=not rows"},
-    {"when": "=a.keep and rows", "then": [{"put": {"kept": "=[new_mesh(r[1], o.Label + ' segment ' + str(i)).Label for i, r in enumerate(found[:top], 1)]"}, "into": "out"}, {"do": "=finish(tool, out)"}]},
+    {"when": "=a.keep and rows", "then": [{"put": {"kept": "=[tinted(new_mesh(r[1], o.Label + ' segment ' + str(i)), i).Label for i, r in enumerate(found[:top], 1)]"}, "into": "out"}, {"do": "=finish(tool, out)"}]},
     {"put": {"use": "A flat segment's normal and centre place a sketch (sketch_new { face }) or a datum plane on a scan."}, "into": "out"}
    ],
    "answer": {"fields": {"...": "=out"}}
@@ -9064,7 +9066,7 @@
   },
   "td_centermarks": {
    "group": "techdraw",
-   "description": "Centre marks (thin chain crosses) on the holes and round edges of views (all part views when left out): extend mm past each circle (2); on: false takes them off. Whole circles and arcs past a half turn only. Drawn by td_export, not in the window.",
+   "description": "Centre marks (thin chain crosses) on the holes and round edges of views (all part views when left out): extend mm past each circle (2); on: false takes them off. Whole circles and arcs past a half turn only. Drawn by td_export; in the window FreeCAD's own centre marks of the view are switched on (or off) instead — a small cross at each centre (its ArcCenterMarks), not the chain lines.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -9089,9 +9091,9 @@
     {"let": {"ext": "=float(a.get('extend', 2.0)) if a.get('on', True) else 0.0", "rows": []}},
     {"let": {"late": "=[v for v in views if not edges_of(v)]"}},
     {"do": "=recompute(late)", "when": "=late"},
-    {"each": "v", "in": "=views", "steps": [{"do": ["=own_prop(v, MARKS_PROP, 'App::PropertyFloat', 'Centre marks on its circles: how far past each, mm (0: none)')", "=setprop(v, MARKS_PROP, ext)"]}, {"push": {"rows": {"view": "=v.Label", "circles": "=len(circle_centres(v))"}}}]}
+    {"each": "v", "in": "=views", "steps": [{"do": ["=own_prop(v, MARKS_PROP, 'App::PropertyFloat', 'Centre marks on its circles: how far past each, mm (0: none)')", "=setprop(v, MARKS_PROP, ext)"]}, {"let": {"shown": "=native_marks(v, ext > 0)"}}, {"push": {"rows": {"view": "=v.Label", "circles": "=len(circle_centres(v))", "window": "=shown"}}}]}
    ],
-   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"views": "=rows", "extend": "=ext", "note": "Drawn as thin chain lines by td_export."}}
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"views": "=rows", "extend": "=ext", "note": "Drawn as thin chain lines by td_export; in the window FreeCAD's own centre marks are switched on (window: true), a small cross at each centre."}}
   },
   "td_hatch": {
    "group": "techdraw",
@@ -9134,7 +9136,7 @@
   },
   "td_weld": {
    "group": "techdraw",
-   "description": "A weld symbol on a leader from a feature of a view (on, as td_dim takes it; at the leader's end on the page), drawn by td_export (the window shows the leader only): kind fillet, square, v, bevel, u, j, plug, spot, seam, flare-v, flare-bevel, backing, surfacing, size (left of it), length (right: \"50\" or \"50-100\" for pitch), side arrow | other | both, allAround, field (a site weld), tail (process, \"GMAW\").",
+   "description": "A weld symbol on a leader from a feature of a view (on, as td_dim takes it; at the leader's end on the page), drawn by td_export, and in the window as FreeCAD's own weld symbol on the leader (TechDraw::DrawWeldSymbol, with FreeCAD's own symbol for fillet, square, v, plug and surfacing; the other kinds show their words only, and window says which): kind fillet, square, v, bevel, u, j, plug, spot, seam, flare-v, flare-bevel, backing, surfacing, size (left of it), length (right: \"50\" or \"50-100\" for pitch), side arrow | other | both, allAround, field (a site weld), tail (process, \"GMAW\").",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -9211,9 +9213,11 @@
     {"let": {"to": "=pt2(a.at, 'at') if a.at is not None else (X + p[0] + 15, Y - p[1] + 15)"}},
     {"let": {"ln": "=leader(v, p, to)"}},
     {"set": {"ln.Label": "=unique(a.name or 'Weld ' + spec['kind'], ln)"}},
-    {"do": ["=own_prop(ln, WELD_PROP, 'App::PropertyString', 'The weld symbol drawn at the leader\\'s end (JSON)')", "=setprop(ln, WELD_PROP, dumps(spec))", "=recompute()"]}
+    {"do": ["=own_prop(ln, WELD_PROP, 'App::PropertyString', 'The weld symbol drawn at the leader\\'s end (JSON)')", "=setprop(ln, WELD_PROP, dumps(spec))"]},
+    {"let": {"ws, has_svg": "=native_weld(page_holding(v), ln, spec)"}},
+    {"do": "=recompute()"}
    ],
-   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"weld": "=ln.Label", "on": "=ref", "...": "={k: spec[k] for k in ('kind', 'size', 'length', 'side', 'allAround', 'field', 'tail')}", "note": "Drawn by td_export: the symbol below the reference line is the arrow side, above it the other side."}}
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"weld": "=ln.Label", "on": "=ref", "...": "={k: spec[k] for k in ('kind', 'size', 'length', 'side', 'allAround', 'field', 'tail')}", "note": "Drawn by td_export: the symbol below the reference line is the arrow side, above it the other side.", "symbol": {"when": "=ws is not None", "value": "=ws.Label"}, "window": "='FreeCAD\\'s own weld symbol on the leader, with its ' + spec['kind'] + ' symbol' if ws is not None and has_svg else ('FreeCAD\\'s own weld symbol on the leader, its words only: FreeCAD has no ' + spec['kind'] + ' symbol (td_export draws it)' if ws is not None else 'the leader only (this FreeCAD made no weld symbol; td_export draws it)')"}}
   },
   "td_bim": {
    "group": "techdraw",
@@ -9871,7 +9875,7 @@
   },
   "td_balloon": {
    "group": "techdraw",
-   "description": "A balloon pointing at a feature of a view: view, on (a ref as td_dim takes), text (default the page's next number), at [dx, dy] from the view's centre.",
+   "description": "A balloon pointing at a feature of a view: view, on (a ref as td_dim takes), text (default the page's next number), at [dx, dy] paper mm from the view's centre. Its tip and bubble are kept as FreeCAD keeps them, in the view's own unscaled frame (OriginX/Y, X/Y over the view's scale).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -9910,11 +9914,12 @@
     {"add": "TechDraw::DrawViewBalloon", "name": "Balloon", "as": "b"},
     {"set": {"b.SourceView": "=v"}},
     {"do": "=page.addView(b)"},
-    {"set": {"b.OriginX": "=p[0]", "b.OriginY": "=-p[1]"}},
+    {"let": {"sc": "=view_scale(v) or 1.0"}},
+    {"set": {"b.OriginX": "=p[0] / sc", "b.OriginY": "=-p[1] / sc"}},
     {"let": {"text": "=a.text"}},
     {"let": {"text": "=next_balloon(page)"}, "when": "=text is None"},
     {"set": {"b.Text": "=str(text)"}},
-    {"when": "=a.at is not None", "then": [{"let": {"ox, oy": "=pt2(a.at, 'at')"}}, {"set": {"b.X": "=ox", "b.Y": "=oy"}}], "else": [{"set": {"b.X": "=p[0] + 15", "b.Y": "=-p[1] + 15"}}]},
+    {"when": "=a.at is not None", "then": [{"let": {"ox, oy": "=pt2(a.at, 'at')"}}, {"set": {"b.X": "=ox / sc", "b.Y": "=oy / sc"}}], "else": [{"set": {"b.X": "=(p[0] + 15) / sc", "b.Y": "=(-p[1] + 15) / sc"}}]},
     {"do": "=recompute()"}
    ],
    "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"balloon": "=b.Name", "text": "=b.Text", "on": "=ref"}}
@@ -14534,7 +14539,7 @@
     {"let": {"items": "=a.items or []", "prims": "=loads(get(v, COSMETIC_PROP)) if COSMETIC_PROP in v.PropertiesList and get(v, COSMETIC_PROP) else []"}},
     {"when": "=a.clear", "then": [{"each": "p", "in": "=prims", "steps": [{"do": "=drop_native(v, p)"}]}, {"let": {"prims": []}}]},
     {"let": {"first_new": "=len(prims)", "made": [], "k": "=view_scale(v) / gscale(v)"}},
-    {"each": "it", "in": "=items", "steps": [{"let": {"kind": "=it.get('kind')"}}, {"let": {"style": "=it.get('style', 'center' if kind == 'centerline' else 'thin')"}}, {"refuse": "style: thin | visible | hidden | center.", "when": "=style not in ('thin', 'visible', 'hidden', 'center')"}, {"choose": "=kind", "of": {"line": [{"let": {"p": "=paper_of3d(v, it.get('from'))"}}, {"let": {"q": "=paper_of3d(v, it.to)"}}, {"push": {"prims": {"pts": "=[p, q]", "style": "=style"}}}, {"push": {"made": {"kind": "line", "length_mm": "=num(hypot(q[0] - p[0], q[1] - p[1]) / view_scale(v), 3)"}}}], "circle": [{"let": {"c": "=paper_of3d(v, it.center)"}}, {"let": {"r": "=float(it.get('radius', 0)) * view_scale(v)"}}, {"refuse": "circle: radius mm on the part.", "when": "=r <= 0"}, {"push": {"prims": {"pts": "=circle_points(c, r)", "style": "=style", "closed": true, "circle": "=[c[0], c[1], r]"}}}, {"push": {"made": {"kind": "circle", "radius": "=float(it['radius'])"}}}], "centerline": [{"let": {"refs": "=it.edges or []"}}, {"refuse": "centerline: edges [two lines of the view] (a shaft's or hole's sides).", "when": "=len(refs) != 2"}, {"let": {"es": []}}, {"each": "r", "in": "=refs", "steps": [{"let": {"n": "=resolve_ref(v, r)"}}, {"refuse": {"fmt": "{r}: an edge of the view (td_geometry lists them)."}, "when": "=not n.startswith('Edge')"}, {"push": {"es": "=edges_of(v)[int(n[4:])]"}}]}, {"let": {"ext": "=float(it.get('extend', 3))"}}, {"let": {"pts, d": "=mid_line(es[0], es[1], k, ext)"}}, {"push": {"prims": {"pts": "=pts", "style": "center"}}}, {"push": {"made": {"kind": "centerline", "length_mm": "=num((d + 2 * ext) / view_scale(v), 2)"}}}], "thread": [{"let": {"internal": "=bool(it.get('internal', False))", "refs": "=it.edges or ([it['circle']] if it.circle else [])"}}, {"refuse": "thread: edges [two outline lines] (side view) or circle (end view).", "when": "=len(refs) not in (1, 2)"}, {"let": {"es": []}}, {"each": "r", "in": "=refs", "steps": [{"let": {"n": "=resolve_ref(v, r)"}}, {"refuse": {"fmt": "{r}: an edge of the view (td_geometry lists them)."}, "when": "=not n.startswith('Edge')"}, {"push": {"es": "=edges_of(v)[int(n[4:])]"}}]}, {"when": "=len(refs) == 1", "then": [{"let": {"cu": "=get(es[0], 'Curve')"}}, {"refuse": "thread: circle — a round edge seen end-on (a hole or shaft from its end).", "when": "=not has(cu, 'Radius')"}, {"let": {"D": "=2 * float(cu.Radius) * k / view_scale(v)"}}, {"let": {"P": "=float(it.pitch or coarse_pitch(D if not internal else D + 1.0825 * coarse_pitch(D)))"}}, {"let": {"h3": "=0.6134 * P"}}, {"push": {"prims": {"pts": "=thread_arc(cu, k, (D / 2 + (h3 if internal else -h3)) * view_scale(v))", "style": "thin"}}}, {"push": {"made": {"kind": "thread", "end": true, "diameter": "=num(D + (2 * h3 if internal else 0), 3)", "pitch": "=P"}}}], "else": [{"let": {"sides": "=side_outline(es[0], es[1], k)"}}, {"let": {"D": "=abs(sides.gap) / view_scale(v)"}}, {"let": {"P": "=float(it.pitch or coarse_pitch(D if not internal else D + 1.0825 * coarse_pitch(D)))"}}, {"let": {"h3": "=0.6134 * P * view_scale(v)", "length": "=float(it['length']) * view_scale(v) if it.length else sides.L"}}, {"each": "pts", "in": "=root_lines(sides, h3 if not internal else -h3, length)", "steps": [{"push": {"prims": {"pts": "=pts", "style": "thin"}}}]}, {"push": {"made": {"kind": "thread", "end": false, "nominal": "=num(D + (2 * 0.6134 * P if internal else 0), 3)", "pitch": "=P", "note": {"fmt": "M{num(D + (2 * 0.6134 * P if internal else 0), 1):g}x{P:g}"}}}}]}]}, "else": [{"refuse": "kind: line { from, to } | circle { center, radius } | centerline { edges } | thread { edges | circle, internal, pitch, length }."}]}]},
+    {"each": "it", "in": "=items", "steps": [{"let": {"kind": "=it.get('kind')"}}, {"let": {"style": "=it.get('style', 'center' if kind == 'centerline' else 'thin')"}}, {"refuse": "style: thin | visible | hidden | center.", "when": "=style not in ('thin', 'visible', 'hidden', 'center')"}, {"choose": "=kind", "of": {"line": [{"let": {"p": "=paper_of3d(v, it.get('from'))"}}, {"let": {"q": "=paper_of3d(v, it.to)"}}, {"push": {"prims": {"pts": "=[p, q]", "style": "=style"}}}, {"push": {"made": {"kind": "line", "length_mm": "=num(hypot(q[0] - p[0], q[1] - p[1]) / view_scale(v), 3)"}}}], "circle": [{"let": {"c": "=paper_of3d(v, it.center)"}}, {"let": {"r": "=float(it.get('radius', 0)) * view_scale(v)"}}, {"refuse": "circle: radius mm on the part.", "when": "=r <= 0"}, {"push": {"prims": {"pts": "=circle_points(c, r)", "style": "=style", "closed": true, "circle": "=[c[0], c[1], r]"}}}, {"push": {"made": {"kind": "circle", "radius": "=float(it['radius'])"}}}], "centerline": [{"let": {"refs": "=it.edges or []"}}, {"refuse": "centerline: edges [two lines of the view] (a shaft's or hole's sides).", "when": "=len(refs) != 2"}, {"let": {"es": []}}, {"each": "r", "in": "=refs", "steps": [{"let": {"n": "=resolve_ref(v, r)"}}, {"refuse": {"fmt": "{r}: an edge of the view (td_geometry lists them)."}, "when": "=not n.startswith('Edge')"}, {"push": {"es": "=edges_of(v)[int(n[4:])]"}}]}, {"let": {"ext": "=float(it.get('extend', 3))"}}, {"let": {"pts, d": "=mid_line(es[0], es[1], k, ext)"}}, {"let": {"pts": "=flip_y(v, pts)"}}, {"push": {"prims": {"pts": "=pts", "style": "center"}}}, {"push": {"made": {"kind": "centerline", "length_mm": "=num((d + 2 * ext) / view_scale(v), 2)"}}}], "thread": [{"let": {"internal": "=bool(it.get('internal', False))", "refs": "=it.edges or ([it['circle']] if it.circle else [])"}}, {"refuse": "thread: edges [two outline lines] (side view) or circle (end view).", "when": "=len(refs) not in (1, 2)"}, {"let": {"es": []}}, {"each": "r", "in": "=refs", "steps": [{"let": {"n": "=resolve_ref(v, r)"}}, {"refuse": {"fmt": "{r}: an edge of the view (td_geometry lists them)."}, "when": "=not n.startswith('Edge')"}, {"push": {"es": "=edges_of(v)[int(n[4:])]"}}]}, {"when": "=len(refs) == 1", "then": [{"let": {"cu": "=get(es[0], 'Curve')"}}, {"refuse": "thread: circle — a round edge seen end-on (a hole or shaft from its end).", "when": "=not has(cu, 'Radius')"}, {"let": {"D": "=2 * float(cu.Radius) * k / view_scale(v)"}}, {"let": {"P": "=float(it.pitch or coarse_pitch(D if not internal else D + 1.0825 * coarse_pitch(D)))"}}, {"let": {"h3": "=0.6134 * P"}}, {"push": {"prims": {"pts": "=flip_y(v, thread_arc(cu, k, (D / 2 + (h3 if internal else -h3)) * view_scale(v)))", "style": "thin"}}}, {"push": {"made": {"kind": "thread", "end": true, "diameter": "=num(D + (2 * h3 if internal else 0), 3)", "pitch": "=P"}}}], "else": [{"let": {"sides": "=side_outline(es[0], es[1], k)"}}, {"let": {"D": "=abs(sides.gap) / view_scale(v)"}}, {"let": {"P": "=float(it.pitch or coarse_pitch(D if not internal else D + 1.0825 * coarse_pitch(D)))"}}, {"let": {"h3": "=0.6134 * P * view_scale(v)", "length": "=float(it['length']) * view_scale(v) if it.length else sides.L"}}, {"each": "pts", "in": "=[flip_y(v, q) for q in root_lines(sides, h3 if not internal else -h3, length)]", "steps": [{"push": {"prims": {"pts": "=pts", "style": "thin"}}}]}, {"push": {"made": {"kind": "thread", "end": false, "nominal": "=num(D + (2 * 0.6134 * P if internal else 0), 3)", "pitch": "=P", "note": {"fmt": "M{num(D + (2 * 0.6134 * P if internal else 0), 1):g}x{P:g}"}}}}]}]}, "else": [{"refuse": "kind: line { from, to } | circle { center, radius } | centerline { edges } | thread { edges | circle, internal, pitch, length }."}]}]},
     {"let": {"native": 0}},
     {"each": "p", "in": "=prims[first_new:]", "steps": [{"do": "=p.update({'tags': native_cosmetic(v, p)})"}, {"let": {"native": "=native + len(p['tags'])"}}]},
     {"do": ["=own_prop(v, COSMETIC_PROP, 'App::PropertyString', \"Cosmetic lines (JSON, paper mm), each with the tags of FreeCAD's own cosmetic edges that show it\")", "=setprop(v, COSMETIC_PROP, dumps(prims))", "=recompute()"]}
@@ -15466,7 +15471,7 @@
     {"let": {"F": "=objects_fem()"}},
     {"refuse": "FreeCAD's FEM workbench is not in this build.", "code": "unavailable", "when": "=F is None"},
     {"let": {"act": "=a.action"}},
-    {"when": "=act == 'netgen'", "then": [{"let": {"b": "=shaped(a.body, 'body')", "an": null}}, {"when": "=a.analysis or any(x.TypeId == 'Fem::FemAnalysis' for x in doc().Objects)", "then": [{"let": {"which": "analysis: which — {labels}.", "unknown": "analysis {ref}: they are {labels}.", "nothing": "No FEM analysis: fea_native makes one (or kind solver_* with a new analysis: true)."}}, {"let": {"an": "=one_of(analyses(), a.analysis, which, unknown, none=nothing)"}}]}, {"make": "=F.makeMeshNetgen", "call": ["=doc()", "MeshNetgen"], "as": "m"}, {"set": {"m.Shape": "=b"}}, {"do": "=set_props(m, a.props)"}, {"do": "=an.addObject(m)", "when": "=an is not None"}, {"do": "=recompute_quietly()"}, {"let": {"nodes": "=m.FemMesh.NodeCount if m.FemMesh is not None else 0"}}, {"when": "=not nodes", "then": [{"try": [{"let": {"said": "=netgen_run(m)"}}, {"let": {"nodes": "=m.FemMesh.NodeCount", "why": "=' | '.join([ln.strip() for ln in said.splitlines() if ln.strip()][-2:])[:400] or 'no mesh came back'"}}], "on": "failure", "except": [{"let": {"nodes": 0, "why": "=error"}}]}, {"refuse": {"fmt": "Netgen did not mesh here ({why}): it needs Netgen installed with this FreeCAD's Python. fea_native makes a Gmsh mesh instead."}, "code": "unavailable", "first": [{"do": "=doc().removeObject(m.Name)"}], "when": "=not nodes"}]}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"mesh": "=m.Label", "nodes": "=nodes", "volumes": "=m.FemMesh.VolumeCount"}}}]},
+    {"when": "=act == 'netgen'", "then": [{"do": "=fem_views_ready()"}, {"let": {"b": "=shaped(a.body, 'body')", "an": null}}, {"when": "=a.analysis or any(x.TypeId == 'Fem::FemAnalysis' for x in doc().Objects)", "then": [{"let": {"which": "analysis: which — {labels}.", "unknown": "analysis {ref}: they are {labels}.", "nothing": "No FEM analysis: fea_native makes one (or kind solver_* with a new analysis: true)."}}, {"let": {"an": "=one_of(analyses(), a.analysis, which, unknown, none=nothing)"}}]}, {"make": "=F.makeMeshNetgen", "call": ["=doc()", "MeshNetgen"], "as": "m"}, {"set": {"m.Shape": "=b"}}, {"do": "=set_props(m, a.props)"}, {"do": "=an.addObject(m)", "when": "=an is not None"}, {"do": "=recompute_quietly()"}, {"let": {"nodes": "=m.FemMesh.NodeCount if m.FemMesh is not None else 0"}}, {"when": "=not nodes", "then": [{"try": [{"let": {"said": "=netgen_run(m)"}}, {"let": {"nodes": "=m.FemMesh.NodeCount", "why": "=' | '.join([ln.strip() for ln in said.splitlines() if ln.strip()][-2:])[:400] or 'no mesh came back'"}}], "on": "failure", "except": [{"let": {"nodes": 0, "why": "=error"}}]}, {"refuse": {"fmt": "Netgen did not mesh here ({why}): it needs Netgen installed with this FreeCAD's Python. fea_native makes a Gmsh mesh instead."}, "code": "unavailable", "first": [{"do": "=doc().removeObject(m.Name)"}], "when": "=not nodes"}]}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"mesh": "=m.Label", "nodes": "=nodes", "volumes": "=m.FemMesh.VolumeCount"}}}]},
     {"let": {"m": "=find(a.mesh, 'mesh')"}},
     {"refuse": {"fmt": "{m.Label} is not a FEM mesh."}, "when": "=not has(m, 'FemMesh')"},
     {"choose": "=act", "of": {"to_mesh": [{"do": "=surface_maker()"}, {"let": {"res": "=find(a.result, 'result') if a.result else None"}}, {"let": {"facets": "=fem_surface(m.FemMesh, res) if res is not None else fem_surface(m.FemMesh)"}}, {"let": {"mesh_mod": "=mesh_module()"}}, {"add": "Mesh::Feature", "name": "Mesh", "as": "o"}, {"set": {"o.Mesh": "=mesh_mod.Mesh(facets)"}}, {"set": {"o.Label": "=unique(a.name or m.Label + ' surface', o)"}}, {"do": "=doc().recompute()"}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"mesh": "=o.Label", "facets": "=o.Mesh.CountFacets", "deformed": {"when": "=res is not None", "value": "=res.Label"}}}}], "clear_groups": [{"let": {"fm": "=m.FemMesh"}}, {"let": {"ids": "=list(fm.Groups)"}}, {"each": "g", "in": "=ids", "steps": [{"do": "=fm.removeGroup(g)"}]}, {"set": {"m.FemMesh": "=fm"}}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"mesh": "=m.Label", "cleared": "=len(ids)", "groups": "=fm.GroupCount"}}}]}, "else": [{"refuse": "action: netgen { body, props } | to_mesh { mesh, result } | clear_groups { mesh }."}]}
@@ -15674,7 +15679,7 @@
   },
   "fea_setup": {
    "group": "strength",
-   "description": "Start (or change) a strength study of one body: body; solid: n studies one solid of a multi-solid body alone (a hidden helper, read again from the body at each solve; its faces are numbered on their own); material (the body's by default; it needs a Young's modulus), mesh (largest element edge, mm; by default a third of the least size; one that makes over about 400,000 elements is refused). The same body's holds and loads are kept (said as kept; unmatched lists those that fit no face now); reset: true drops them (said as dropped). Answers study, material and next. A rigid hold makes stress no real mount does; a coarse mesh under-reads peaks; library figures are typical.",
+   "description": "Start (or change) a strength study of one body: body; solid: n studies one solid of a multi-solid body alone (a hidden helper, read again from the body at each solve; its faces are numbered on their own); material (the body's by default; it needs a Young's modulus), mesh (largest element edge, mm; by default a third of the least size; one that makes over about 400,000 elements is refused). The same body's holds and loads are kept (said as kept; unmatched lists those that fit no face now); reset: true drops them (said as dropped). Answers study, material and next. A rigid hold makes stress no real mount does; a coarse mesh under-reads peaks; library figures are typical. The study is Agent Link's, kept with the document: fea_setup, fea_hold and fea_load add no FEM objects to the tree (fea_native builds it as FreeCAD's own analysis, fea_solve where its FEM route runs).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -15839,7 +15844,7 @@
   },
   "fea_solve": {
    "group": "strength",
-   "description": "Solve the study: as FreeCAD's own FEM analysis (CalculiX solver object, Gmsh mesh object, its constraints, results loaded into it; made anew each solve as \"<body> strength (fea_solve)\") where the study is one body, fixed holds, force/pressure/gravity, linear; else Agent Link's own CalculiX deck (solvedBy says which and why). Second-order tetrahedra, linear static; mm, N, MPa. Answers vonMisesMax { MPa, at, face } and displacementMax { mm, at, face }, safety (yield over the peak), mesh { nodes, elements }, warnings, files; health carries CalculiX's own warning lines. nonlinear: true follows large deflections and each material into yield (elasticOnly: true keeps it elastic) and answers the plastic strain. Runs in the foreground, FreeCAD waiting: seconds for a few thousand elements, minutes past 100,000 (timeout s, 300, bounds Gmsh and the own deck). A rigid hold makes stress no real mount does; a coarse mesh under-reads peaks; library figures are typical. Needs ccx and gmsh installed.",
+   "description": "Solve the study: as FreeCAD's own FEM analysis (CalculiX solver object, Gmsh mesh object, its constraints, results loaded into it; made anew each solve as \"<body> strength (fea_solve)\") where the study is one body, fixed holds, force/pressure/gravity, linear; else Agent Link's own CalculiX deck (solvedBy says which and why). Second-order tetrahedra, linear static; mm, N, MPa. Answers vonMisesMax { MPa, at, face } and displacementMax { mm, at, face }, safety (yield over the peak), mesh { nodes, elements }, warnings, files; health carries CalculiX's own warning lines. nonlinear: true follows large deflections and each material into yield (elasticOnly: true keeps it elastic) and answers the plastic strain. Runs in the foreground, FreeCAD waiting: seconds for a few thousand elements, minutes past 100,000 (timeout s, 300, bounds Gmsh and the own deck). A rigid hold makes stress no real mount does; a coarse mesh under-reads peaks; library figures are typical. Needs ccx and gmsh installed. When FreeCAD's FEM route fails, what it had made is taken out again and the own deck's results are the answer and files only (solvedBy says so). In a FreeCAD session where FreeCAD can no longer draw a FEM mesh (\"Cannot add static property\", a FreeCAD fault left by the first FEM mesh made while a window observer listened) the route fails until FreeCAD is restarted.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -15898,7 +15903,7 @@
   },
   "fea_modes": {
    "group": "strength",
-   "description": "Natural frequencies of the study's body: the lowest count (6, up to 30) modes, held by the study's holds (none: free, its rigid motions left out). Answers each mode's Hz and where it swings most and which way. Keep what shakes the part well away from the lowest. Runs in the foreground; needs ccx and gmsh (timeout s, 300).",
+   "description": "Natural frequencies of the study's body: the lowest count (6, up to 30) modes, held by the study's holds (none: free, its rigid motions left out). Answers each mode's Hz and where it swings most and which way. Keep what shakes the part well away from the lowest. Runs in the foreground; needs ccx and gmsh (timeout s, 300). Its results are the answer and files in the out folder (files): it makes no FEM objects in the document's tree.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -15929,11 +15934,11 @@
     {"refuse": {"fmt": "CalculiX wrote no frequencies: see job.dat in {run.wd}"}, "code": "failed", "when": "=not run.freqs"},
     {"let": {"modes": "=mode_rows(run, shape, count)"}}
    ],
-   "answer": {"fields": {"body": "=o.Label", "material": {"id": "=c['id']", "name": "=c['name']", "E": "=c['E']", "density": "=c['density']"}, "held": "='free (no holds: the six rigid motions left out)' if run.free else str(len(st['holds'])) + ' hold(s) from the study'", "mesh": {"size": "=st['mesh']", "nodes": "=len(run.nodes)", "elements": "=len(run.elems)"}, "modes": "=modes", "note": "Natural frequencies: keep what shakes the part (a motor, a fan, a vehicle) well away from the lowest, by a factor of two or more. moves is where each mode swings most, and which way.", "warnings": "=([] if run.free else ['Rigid holds make a part stiffer than a real mount: real frequencies read lower.']) + ([] if str(c['id']).startswith('custom:') else [\"Library and filament figures are typical: for a part that must not fail, use the supplier's data sheet (material_set custom).\"])", "files": "=run.wd", "seconds": "=round(now() - t0, 1)"}}
+   "answer": {"fields": {"body": "=o.Label", "material": {"id": "=c['id']", "name": "=c['name']", "E": "=c['E']", "density": "=c['density']"}, "held": "='free (no holds: the six rigid motions left out)' if run.free else str(len(st['holds'])) + ' hold(s) from the study'", "mesh": {"size": "=st['mesh']", "nodes": "=len(run.nodes)", "elements": "=len(run.elems)"}, "modes": "=modes", "kept": "Its results are the answer and files in the out folder (files): it makes no FEM objects in the document's tree.", "note": "Natural frequencies: keep what shakes the part (a motor, a fan, a vehicle) well away from the lowest, by a factor of two or more. moves is where each mode swings most, and which way.", "warnings": "=([] if run.free else ['Rigid holds make a part stiffer than a real mount: real frequencies read lower.']) + ([] if str(c['id']).startswith('custom:') else [\"Library and filament figures are typical: for a part that must not fail, use the supplier's data sheet (material_set custom).\"])", "files": "=run.wd", "seconds": "=round(now() - t0, 1)"}}
   },
   "fea_heat": {
    "group": "strength",
-   "description": "Steady heat through the study's body: temperatures [{ faces, celsius }] held, heat [{ faces, watts }] going in (one of the two at least), air { h W/(m²·K) (10, still air), celsius (25), faces (the rest) } taking it away — air: false for none. Answers the hottest and coolest place and warns when the part passes where its material softens (k from the card, or conductivity W/(m·K) here). Conduction and convection only. view_render map heat shows it. Runs in the foreground (timeout s, 300); needs ccx and gmsh.",
+   "description": "Steady heat through the study's body: temperatures [{ faces, celsius }] held, heat [{ faces, watts }] going in (one of the two at least), air { h W/(m²·K) (10, still air), celsius (25), faces (the rest) } taking it away — air: false for none. Answers the hottest and coolest place and warns when the part passes where its material softens (k from the card, or conductivity W/(m·K) here). Conduction and convection only. view_render map heat shows it. Runs in the foreground (timeout s, 300); needs ccx and gmsh. Its results are the answer and files in the out folder (files): it makes no FEM objects in the document's tree.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -15987,7 +15992,7 @@
     {"push": {"warnings": "Steady state, conduction and still-air convection only (no radiation); film coefficients are rough — 5 to 25 W/(m²·K) for still air, more with a fan."}},
     {"do": "=keep_heat(o, shape, T, m.nodes)"}
    ],
-   "answer": {"fields": {"body": "=o.Label", "material": {"id": "=(c or {}).get('id')", "name": "=(c or {}).get('name')", "conductivity": "=k", "softensC": "=(c or {}).get('softens')"}, "boundary": "=said", "hottest": "=hottest", "coolest": "=coolest", "mesh": {"size": "=st['mesh']", "nodes": "=len(m.nodes)", "elements": "=len(m.elems)"}, "files": "=m.wd", "seconds": "=seconds", "warnings": "=warnings"}}
+   "answer": {"fields": {"body": "=o.Label", "material": {"id": "=(c or {}).get('id')", "name": "=(c or {}).get('name')", "conductivity": "=k", "softensC": "=(c or {}).get('softens')"}, "boundary": "=said", "hottest": "=hottest", "coolest": "=coolest", "mesh": {"size": "=st['mesh']", "nodes": "=len(m.nodes)", "elements": "=len(m.elems)"}, "files": "=m.wd", "kept": "Its results are the answer and files in the out folder (files): it makes no FEM objects in the document's tree.", "seconds": "=seconds", "warnings": "=warnings"}}
   },
   "fea_results": {
    "group": "strength",
@@ -16033,7 +16038,7 @@
   },
   "fea_buckle": {
    "group": "strength",
-   "description": "Linear buckling of the study (its holds and loads): the lowest count (3) buckling factors — the loads times the factor is where each mode buckles; under 1 it buckles as loaded — and where each bulges. Thin walls, columns, ribs under compression. Runs in the foreground; needs ccx and gmsh (timeout s, 300).",
+   "description": "Linear buckling of the study (its holds and loads): the lowest count (3) buckling factors — the loads times the factor is where each mode buckles; under 1 it buckles as loaded — and where each bulges. Thin walls, columns, ribs under compression. Runs in the foreground; needs ccx and gmsh (timeout s, 300). Its results are the answer and files in the out folder (files): it makes no FEM objects in the document's tree.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -16067,7 +16072,7 @@
     {"let": {"low": "=modes[0]['factor']", "said": "", "verdict": null, "seconds": "=round(now() - t0, 1)"}},
     {"when": "=low < 0", "then": [{"let": {"said": "A negative factor: the part buckles with the loads reversed — reverse them and read again."}}], "else": [{"when": "=low < 1", "then": [{"let": {"verdict": {"fmt": "Buckles under these loads: at {low:.2f}× them."}}}], "else": [{"let": {"tail": "=' — under 3×: little margin; thin walls and columns want more.' if low < 3 else '.'"}}, {"let": {"verdict": {"fmt": "Buckles at {low:.2f}× these loads{tail}"}}}]}]}
    ],
-   "answer": {"fields": {"body": "=o.Label", "loads": "=run.applied", "modes": "=modes", "lowest": "=low", "seconds": "=seconds", "files": "=run.wd", "verdict": {"when": "=verdict is not None", "value": "=verdict"}, "note": "=(said + ' Linear (eigenvalue) buckling: an upper bound — real parts, imperfect and printed, go sooner; keep a margin of 3 or more.').strip()"}}
+   "answer": {"fields": {"body": "=o.Label", "loads": "=run.applied", "modes": "=modes", "lowest": "=low", "seconds": "=seconds", "files": "=run.wd", "kept": "Its results are the answer and files in the out folder (files): it makes no FEM objects in the document's tree.", "verdict": {"when": "=verdict is not None", "value": "=verdict"}, "note": "=(said + ' Linear (eigenvalue) buckling: an upper bound — real parts, imperfect and printed, go sooner; keep a margin of 3 or more.').strip()"}}
   },
   "fea_refine": {
    "group": "strength",
@@ -16234,7 +16239,7 @@
   },
   "fea_native": {
    "group": "strength",
-   "description": "Build the study as FreeCAD's own FEM analysis (Analysis, solver, material, Gmsh mesh, fixed / force / pressure / self-weight constraints), to open and run in the FEM workbench; it is not solved here (fea_solve does that), and skipped lists what the FEM objects could not take. solver elmer (multiphysics) takes equations [elasticity, heat, flow, electrostatic, electricforce, flux, staticcurrent, magnetodynamic, deformation (nonlinear elasticity)] together, temperatures [{ faces, celsius }] and heat [{ faces, watts }] for heat, potentials [{ faces, volts }] for electrostatics; with flow the body is the fluid's space (fluid air | water; inlets and walls are set in the FEM workbench); write: true meshes it and writes Elmer's case (case.sif), run: true solves it where ElmerSolver is installed.",
+   "description": "Build the study as FreeCAD's own FEM analysis (Analysis, solver, material, Gmsh mesh, fixed / force / pressure / self-weight constraints), to open and run in the FEM workbench; it is not solved here (fea_solve does that), and skipped lists what the FEM objects could not take. solver elmer (multiphysics) takes equations [elasticity, heat, flow, electrostatic, electricforce, flux, staticcurrent, magnetodynamic, deformation (nonlinear elasticity)] together, temperatures [{ faces, celsius }] and heat [{ faces, watts }] for heat, potentials [{ faces, volts }] for electrostatics; with flow the body is the fluid's space (fluid air | water; inlets and walls are set in the FEM workbench); write: true meshes it and writes Elmer's case (case.sif), run: true solves it where ElmerSolver is installed. Refused, with nothing made, in a FreeCAD session that can no longer draw a FEM mesh (\"Cannot add static property\", FreeCAD's own fault): restart FreeCAD.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -16314,6 +16319,7 @@
     {"let": {"o": "=study_body(st)"}},
     {"let": {"F": "=objects_fem()"}},
     {"refuse": "FreeCAD's FEM module is not in this build.", "code": "unavailable", "when": "=F is None"},
+    {"do": "=fem_views_ready()"},
     {"let": {"c": "=card(st['material']) or {}", "made": "=[]", "skipped": "=[]", "kind": "=str(a.get('solver', 'calculix')).lower()"}},
     {"refuse": "solver: calculix or elmer.", "when": "=kind not in ('calculix', 'elmer')"},
     {"let": {"eqs": "=[str(e).lower() for e in (a.equations or ['elasticity'])]"}},
@@ -20128,7 +20134,7 @@
   },
   "pd_multitransform": {
    "group": "feature",
-   "description": "Repeat features through a chain of steps, each on what the steps before made: steps [{ kind: mirror, plane } | { kind: linear, direction, occurrences, spacing } | { kind: polar, axis, angle, occurrences } | { kind: scale, factor, occurrences }] — a grid is two linear steps; a bolt circle mirrored is polar then mirror. The steps stay in the body (feature_list: stepOf) and go with it.",
+   "description": "Repeat features through a chain of steps, each on what the steps before made: steps [{ kind: mirror, plane } | { kind: linear, direction, occurrences, spacing } | { kind: polar, axis, angle, occurrences } | { kind: scale, factor, occurrences }] — a grid is two linear steps; a bolt circle mirrored is polar then mirror. The steps stay in the body (feature_list: stepOf) and go with it; as FreeCAD's own command leaves them, the steps are hidden and listed after the MultiTransform, which is the tip and the one shown.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20173,9 +20179,10 @@
     {"let": {"mt": "=new(b, 'PartDesign::MultiTransform', a.name or 'MultiTransform')"}},
     {"set": {"mt.Originals": "=orig"}},
     {"let": {"subs": "=[]"}},
-    {"each": "st", "in": "=sts", "index": "i", "steps": [{"let": {"k": "=st.get('kind')", "where": {"fmt": "steps[{i}]"}}}, {"when": "=k == 'mirror'", "then": [{"let": {"t": "=b.newObject('PartDesign::Mirrored', 'Mirrored')"}}, {"set": {"t.MirrorPlane": "=plane_ref(b, st.get('plane', 'YZ'), where + '.plane')[0]"}}], "else": [{"refuse": {"fmt": "steps[{i}].kind: mirror, linear, polar or scale."}, "when": "=k not in ('linear', 'polar', 'scale')"}, {"let": {"n": "=int(st.get('occurrences', 2))"}}, {"refuse": {"fmt": "steps[{i}].occurrences: 2 or more, the original counted."}, "when": "=n < 2"}, {"choose": "=k", "of": {"linear": [{"let": {"step": "=st.get('spacing', st.get('length'))"}}, {"refuse": {"fmt": "steps[{i}]: spacing (mm between copies) or length (mm, first to last), over 0."}, "when": "=not is_num(step) or step <= 0"}, {"let": {"t": "=b.newObject('PartDesign::LinearPattern', 'LinearPattern')"}}, {"set": {"t.Direction": "=axis_ref(b, st.get('direction', 'x'), None, where + '.direction')[0]", "t.Length": "=float(step) * (n - 1) if 'spacing' in st else float(step)"}}], "polar": [{"let": {"t": "=b.newObject('PartDesign::PolarPattern', 'PolarPattern')"}}, {"set": {"t.Axis": "=axis_ref(b, st.get('axis', 'z'), None, where + '.axis')[0]", "t.Angle": "=float(st.get('angle', 360))"}}], "scale": [{"let": {"t": "=b.newObject('PartDesign::Scaled', 'Scaled')"}}, {"set": {"t.Factor": "=float(st.get('factor', 2))"}}]}}, {"set": {"t.Occurrences": "=n"}}, {"set": {"t.Reversed": true}, "when": "=st.get('reversed') and 'Reversed' in t.PropertiesList"}]}, {"set": {"t.Label": "=unique(mt.Label + ' ' + k + ' ' + str(i + 1), t)"}}, {"push": {"subs": "=t"}}]},
+    {"each": "st", "in": "=sts", "index": "i", "steps": [{"let": {"k": "=st.get('kind')", "where": {"fmt": "steps[{i}]"}}}, {"when": "=k == 'mirror'", "then": [{"let": {"t": "=b.newObject('PartDesign::Mirrored', 'Mirrored')"}}, {"set": {"t.MirrorPlane": "=plane_ref(b, st.get('plane', 'YZ'), where + '.plane')[0]"}}], "else": [{"refuse": {"fmt": "steps[{i}].kind: mirror, linear, polar or scale."}, "when": "=k not in ('linear', 'polar', 'scale')"}, {"let": {"n": "=int(st.get('occurrences', 2))"}}, {"refuse": {"fmt": "steps[{i}].occurrences: 2 or more, the original counted."}, "when": "=n < 2"}, {"choose": "=k", "of": {"linear": [{"let": {"step": "=st.get('spacing', st.get('length'))"}}, {"refuse": {"fmt": "steps[{i}]: spacing (mm between copies) or length (mm, first to last), over 0."}, "when": "=not is_num(step) or step <= 0"}, {"let": {"t": "=b.newObject('PartDesign::LinearPattern', 'LinearPattern')"}}, {"set": {"t.Direction": "=axis_ref(b, st.get('direction', 'x'), None, where + '.direction')[0]", "t.Length": "=float(step) * (n - 1) if 'spacing' in st else float(step)"}}], "polar": [{"let": {"t": "=b.newObject('PartDesign::PolarPattern', 'PolarPattern')"}}, {"set": {"t.Axis": "=axis_ref(b, st.get('axis', 'z'), None, where + '.axis')[0]", "t.Angle": "=float(st.get('angle', 360))"}}], "scale": [{"let": {"t": "=b.newObject('PartDesign::Scaled', 'Scaled')"}}, {"set": {"t.Factor": "=float(st.get('factor', 2))"}}]}}, {"set": {"t.Occurrences": "=n"}}, {"set": {"t.Reversed": true}, "when": "=st.get('reversed') and 'Reversed' in t.PropertiesList"}]}, {"set": {"t.Label": "=unique(mt.Label + ' ' + k + ' ' + str(i + 1), t)"}}, {"set": {"t.Visibility": false}}, {"push": {"subs": "=t"}}]},
     {"set": {"mt.Transformations": "=subs"}},
-    {"set": {"b.Tip": "=mt"}, "when": "=b.Tip != mt"}
+    {"set": {"b.Tip": "=mt"}, "when": "=b.Tip != mt"},
+    {"set": {"mt.Visibility": true}}
    ],
    "answer": {"via": "settle", "with": ["=b", "=mt", "pd_multitransform", "=before", null, "A copy of a pocket must land on material; a scale step grows the copies about the originals' centre and comes after a pattern step with the same occurrences."], "then": [{"put": {"steps": "=[t.Label for t in subs]"}}]}
   },

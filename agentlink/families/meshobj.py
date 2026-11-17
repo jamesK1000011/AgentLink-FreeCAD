@@ -584,6 +584,11 @@ def closed_polygon(points):
     return Part.makePolygon([FreeCAD.Vector(x, y, 0) for x, y in points] + [FreeCAD.Vector(*points[0], 0)])
 
 
+# Distinct colours for kept segments (RGB 0..1), in turn.
+SEGMENT_COLOURS = [(0.90, 0.30, 0.25), (0.25, 0.60, 0.90), (0.35, 0.75, 0.35), (0.95, 0.70, 0.20), (0.65, 0.40, 0.85),
+                   (0.20, 0.75, 0.75), (0.90, 0.45, 0.70), (0.60, 0.60, 0.30), (0.45, 0.45, 0.90), (0.85, 0.55, 0.35),
+                   (0.40, 0.80, 0.60), (0.75, 0.75, 0.75)]
+
 def tools(session):
     s = session
     doc = lambda: s.doc  # noqa: E731
@@ -630,6 +635,19 @@ def tools(session):
             out["before"] = before
         return out
 
+    def tinted(o, i):
+        """A kept segment given a colour of its own in the window, as FreeCAD's
+        Mesh_Segmentation colours each segment it finds; o unchanged where
+        there is no window."""
+        vo = getattr(o, "ViewObject", None) if getattr(FreeCAD, "GuiUp", False) else None
+        if vo is not None:
+            c = SEGMENT_COLOURS[(int(i) - 1) % len(SEGMENT_COLOURS)]
+            try:
+                vo.ShapeColor = c
+            except Exception:
+                pass
+        return o
+
     def new_mesh(m, label):
         n = doc().addObject("Mesh::Feature", "Mesh")
         n.Label = s.unique(label)
@@ -656,7 +674,7 @@ def tools(session):
         return flat2d.bounds(items)
 
     # What the tools' entries (agentlink/data/tools.json) call by name.
-    helpers = {"doc": doc, "mesh_of": mesh_of, "keep": keep, "new_mesh": new_mesh, "editing": editing,
+    helpers = {"doc": doc, "mesh_of": mesh_of, "keep": keep, "new_mesh": new_mesh, "tinted": tinted, "editing": editing,
                "edit_store": lambda ed: store.write(doc(), EDIT, ed), "meshes": lambda: meshes(doc()), "bodies": lambda: s.bodies(),
                "finish": lambda tool, read: picks.finish(s, tool, read), "snapshot": lambda tool: s.snapshot(tool), "steps_n": lambda: len(s.steps),
                "unique": lambda label: s.unique(label), "num": picks.num, "vec": vec, "xyz": geo.vec, "reading": reading, "evaluation": evaluation,

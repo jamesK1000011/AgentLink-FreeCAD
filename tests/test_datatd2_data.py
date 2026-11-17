@@ -28,6 +28,7 @@ sys.path.insert(0, ROOT)
 
 BASE = "2097f32"  # the commit whose handlers were converted
 sys.path.insert(0, HERE)
+import _meant  # noqa: E402
 import _datatd2_cases  # noqa: E402
 from _datatd2_cases import CONVERTED, FILES, KEPT, STANDIN  # noqa: E402
 
@@ -84,7 +85,7 @@ class Td2Data(unittest.TestCase):
             t = runners.tool(name, e, {})
             b = self.before[name]
             self.assertEqual(t.name, b["name"], name)
-            self.assertEqual(t.description.encode("utf-8"), b["description"].encode("utf-8"), name)
+            self.assertEqual(t.description.encode("utf-8"), _meant.description(name, b["description"]).encode("utf-8"), name)  # meant changes: tests/_meant.py
             self.assertEqual(t.schema, b["inputSchema"], name)
             self.assertEqual(json.dumps(t.schema), json.dumps(b["inputSchema"]), name)  # the order of every key too
             self.assertIs(t.changes, b["changes"], name)
@@ -137,7 +138,7 @@ class Td2Data(unittest.TestCase):
                  ("td_view_more", "image, a bare name in the session's folder"): ("ok", "DrawViewImage"),
                  ("td_view_more", "symbol, a bare name that is not there"): ("refused", "path '<out>/rel-none.svg': no such SVG."),
                  ("td_view_more", "image, a bare name that is not there"): ("refused", "path '<out>/rel-none.png': no such image.")}
-        seen, shared = set(), []
+        seen, shared, flipped = set(), [], []
         for c in got:
             want = meant.get((c["tool"], c["case"]))
             if want:
@@ -164,9 +165,25 @@ class Td2Data(unittest.TestCase):
                 i = next(n for n, line in enumerate(t) if ".addView(<View>)" in line)
                 self.assertEqual(t[i + 1:i + 3], ["View.X = 100", "View.Y = 120"], c["case"])
                 c = {**c, "new": {**c["new"], "trace": t[:i + 1] + t[i + 3:]}}
+            # Meant difference (famfix), td_cosmetic centerline / thread: points worked out on the
+            # view's indexed geometry are turned to paper y down by the frame's own y direction
+            # (y up from FreeCAD 1.1, src/Mod/TechDraw/App/DrawViewPartPyImp.cpp getEdgeByIndex), not
+            # taken as y down. The cosmetic lines may differ in the sign of y only; the rest is the same.
+            if c["tool"] == "td_cosmetic" and c["new"] != c["old"]:
+                import re as _re
+
+                def _unsigned(lines):
+                    return [_re.sub(r"-(?=\d)", "", ln) if "osmetic" in ln else ln for ln in lines]
+
+                self.assertEqual(_unsigned(c["new"]["trace"]), _unsigned(c["old"]["trace"]), c["case"])
+                self.assertEqual(json.loads(_re.sub(r"-(?=\d)", "", json.dumps(c["new"]["result"]))), json.loads(_re.sub(r"-(?=\d)", "", json.dumps(c["old"]["result"]))), c["case"])
+                self.assertEqual({k: v for k, v in c["new"].items() if k not in ("trace", "result")}, {k: v for k, v in c["old"].items() if k not in ("trace", "result")}, c["case"])
+                flipped.append(c["case"])
+                continue
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
         self.assertEqual(seen, set(meant))
+        self.assertLessEqual(len(flipped), 6, flipped)
         self.assertEqual(shared, ["share", "share with its dimensions"])
         for c in got:
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")

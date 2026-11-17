@@ -266,7 +266,7 @@ def frame_of(v, cache):
         return cache[v.Name]
     sh = source_shapes(v)
     verts = vertices_of(v)
-    if sh is None or not verts:
+    if sh is None or not verts or not box_ok(sh):
         cache[v.Name] = None
         return None
     pts3 = [x.Point for x in sh.Vertexes][:400] or [sh.BoundBox.Center]
@@ -277,10 +277,13 @@ def frame_of(v, cache):
         c = v.projectPoint(sh.BoundBox.Center)
     sc = view_scale(v)
     best = None
-    # TechDraw keeps a view's geometry centred on the source, scaled and
-    # with y inverted (as Qt draws): that first, and another reading only
-    # if it fits clearly better — a symmetric part fits a flipped frame as
-    # well, and would put a datum on the opposite edge.
+    # The indexed geometry (getVertexByIndex, getEdgeByIndex) is the view's
+    # own, centred on the source. FreeCAD 1.1.3 gives it unscaled and y up
+    # (src/Mod/TechDraw/App/DrawViewPartPyImp.cpp: invertY of the stored
+    # y-down geometry, over the scale); other releases scaled, or y down. The
+    # fit finds which (sy); to_paper and flip_y turn it to paper y down by it.
+    # A symmetric part fits both ways alike: the first is kept, and either
+    # way the mark lands where it was asked (the same frame places it).
     for s in (sc, 1.0):
         for sy in (-1, 1):
             for centred in (True, False):
@@ -305,10 +308,25 @@ def gscale(v, cache):
     return fr[0] if fr else view_scale(v)
 
 
+def box_ok(sh):
+    """Whether a shape has a bounding box with a size (an empty compound's
+    is invalid: FreeCAD raises "Cannot determine diagonal length of invalid
+    bounding box" when asked its diagonal)."""
+    try:
+        bb = sh.BoundBox
+        return bool(bb.isValid()) and bb.DiagonalLength >= 0
+    except Exception:
+        return False
+
+
 def to_paper(v, cache, xy):
-    """A point of the view's indexed geometry in paper mm from its centre."""
-    k = view_scale(v) / gscale(v, cache)
-    return xy[0] * k, xy[1] * k
+    """A point of the view's indexed geometry in paper mm from its centre,
+    y down (as the visible edges and the page's svg hold it): the frame says
+    which way the indexed geometry's y runs (y up from FreeCAD 1.1)."""
+    fr = frame_of(v, cache)
+    k = view_scale(v) / (fr[0] if fr else view_scale(v))
+    ysign = -fr[1] if fr else 1
+    return xy[0] * k, xy[1] * k * ysign + 0.0  # no -0.0
 
 
 def to_view(fr, v, p3):
@@ -422,7 +440,7 @@ def resolve_ref(v, r, cache, want="any"):
         verts = vertices_of(v)
         k = min(range(len(verts)), key=lambda i: math.hypot(verts[i].x - q[0], verts[i].y - q[1]))
         d = math.hypot(verts[k].x - q[0], verts[k].y - q[1]) / sc
-        if d > max(0.05, 0.002 * (source_shapes(v).BoundBox.DiagonalLength)):
+        if d > max(0.05, 0.002 * (source_shapes(v).BoundBox.DiagonalLength)):  # frame_of: a valid box
             raise ToolError("not_found", f"No vertex of {v.Label} at {r['point']} (nearest {d:.3g} mm off): a hidden point, or one this view does not draw.")
         return f"Vertex{k}"
     if "center" in r or "centre" in r:
@@ -568,7 +586,7 @@ def draw_arch(sh, v, H):
     inv = pl.inverse()
     shapes = [o.Shape.transformGeometry(inv.toMatrix()) for o in flat]
     lines = []
-    big = max(s.BoundBox.DiagonalLength for s in shapes) * 4 + 1
+    big = max([s.BoundBox.DiagonalLength for s in shapes if box_ok(s)] or [0.0]) * 4 + 1
     beyond = Part.makeBox(big, big, big, FreeCAD.Vector(-big / 2, -big / 2, -big))
     belows = []
     for s in shapes:
@@ -1076,6 +1094,7 @@ def cut_line(sh, base, sv, X, Y, H):
     k = view_scale(base) / fr[0]
     a0 = [c * k for c in to_view(fr, base, o)]
     a1 = [c * k for c in to_view(fr, base, o + n * 10)]
+    a0[1], a1[1] = -fr[1] * a0[1] + 0.0, -fr[1] * a1[1] + 0.0  # y down, as the page's svg
     nx, ny = a1[0] - a0[0], a1[1] - a0[1]
     ln = math.hypot(nx, ny)
     if ln < 1e-9:
@@ -1257,6 +1276,92 @@ def edge_on(v, src, faces):
         if area < 0.01:
             flat.append(f)
     return flat
+
+
+def flip_y(v, cache, pts):
+    """Points worked out on the view's indexed geometry, multiplied to paper
+    mm (k), as paper mm y down: the indexed geometry runs y up from FreeCAD
+    1.1 (frame_of says which), the paper as the page's svg, y down."""
+    fr = frame_of(v, cache)
+    ys = -fr[1] if fr else 1
+    return [(x, y * ys + 0.0) for x, y in pts]
+
+
+def native_marks(v, on):
+    """FreeCAD's own centre marks of a view switched on or off in the window
+    (ViewProviderViewPart.ArcCenterMarks: a small cross at each circle's
+    centre, as the Decorations/ShowCenterMarks preference sets it for new views).
+    False where there is no window."""
+    vo = getattr(v, "ViewObject", None) if getattr(FreeCAD, "GuiUp", False) else None
+    if vo is None or not hasattr(vo, "ArcCenterMarks"):
+        return False
+    try:
+        vo.ArcCenterMarks = bool(on)
+        return True
+    except Exception:
+        return False
+
+
+# A weld kind's symbol in FreeCAD's own AWS set (Mod/TechDraw/Symbols/Welding/AWS):
+# the file's stem, with Up / Down where it has both.
+WELD_SVG = {"fillet": "fillet", "square": "Square", "v": "V", "plug": "plug", "surfacing": "bead"}
+
+
+def weld_svg(kind, above):
+    """The path of FreeCAD's own AWS weld symbol for a kind, drawn above the
+    line (above) or below it; None where FreeCAD has none for it."""
+    stem = WELD_SVG.get(kind)
+    if stem is None:
+        return None
+    d = os.path.join(FreeCAD.getResourceDir(), "Mod", "TechDraw", "Symbols", "Welding", "AWS")
+    for name in ((stem + ("Up" if above else "Down")) + ".svg", stem + ".svg"):
+        p = os.path.join(d, name)
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def native_weld(doc, page, ln, spec):
+    """FreeCAD's own weld symbol (TechDraw::DrawWeldSymbol, its two tiles
+    made by FreeCAD as it joins the document) on a leader, as the
+    TechDraw_WeldSymbol command makes it (src/Mod/TechDraw/Gui/
+    TaskWeldingSymbol.cpp createWeldingSymbol, updateTiles): AllAround,
+    FieldWeld, TailText, and the arrow-side tile (row 0) and other-side tile
+    (row -1) with the kind's symbol and size / length. Returns (the symbol or
+    None, whether FreeCAD has the kind's symbol)."""
+    try:
+        w = doc.addObject("TechDraw::DrawWeldSymbol", "WeldSymbol")
+    except Exception:
+        return None, False
+    try:
+        w.Leader = ln
+        w.AllAround = bool(spec.get("allAround"))
+        w.FieldWeld = bool(spec.get("field"))
+        w.TailText = str(spec.get("tail") or "")
+        page.addView(w)
+    except Exception:
+        try:
+            doc.removeObject(w.Name)
+        except Exception:
+            pass
+        return None, False
+    side = spec.get("side", "arrow")
+    found = True
+    for tile in [o for o in w.InList if o.isDerivedFrom("TechDraw::DrawTileWeld")]:
+        row = int(getattr(tile, "TileRow", 0))
+        if (row == 0 and side not in ("arrow", "both")) or (row != 0 and side not in ("other", "both")):
+            continue
+        svg = weld_svg(spec.get("kind", "fillet"), row == 0)  # QGITile draws row 0 above the line, row -1 below
+        try:
+            if svg:
+                tile.SymbolFile = svg
+            else:
+                found = False
+            tile.LeftText = str(spec.get("size") or "")
+            tile.RightText = str(spec.get("length") or "")
+        except Exception:
+            found = False
+    return w, found
 
 
 def weld_wrong(spec):
@@ -1968,6 +2073,7 @@ def tools(session):
                "obj_of": lambda ref, types=None, what="object": obj_of(doc(), ref, types, what), "ref_list": picks.ref_list,
                "isfile": os.path.isfile, "relpath": os.path.relpath, "basename": os.path.basename, "sep": os.sep, "dumps": json.dumps,
                # the family's
+               "flip_y": lambda v, pts: flip_y(v, frames, pts), "native_marks": native_marks, "native_weld": lambda page, ln, spec: native_weld(doc(), page, ln, spec),
                "PAPERS": PAPERS, "PROJ_ITEMS": PROJ_ITEMS, "MARKS_PROP": MARKS_PROP, "HATCH_PROP": HATCH_PROP, "WELD_PROP": WELD_PROP,
                "template_root": template_root, "templates": templates, "find_template": find_template, "template_path": template_path,
                "clear_samples": clear_samples, "load_presets": load_presets, "save_presets": save_presets, "set_enum": set_enum,

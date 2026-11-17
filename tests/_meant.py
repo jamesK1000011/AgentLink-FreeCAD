@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Meant changes to tool descriptions since the data tests' snapshots were taken
+# (docs/hardening/famfix-findings.md): each tool's old words and the true facts
+# added or changed. The data tests apply them to the snapshot before comparing
+# byte for byte, so any other change to a description still fails.
+
+DESCRIPTIONS = {
+    'bim_import': ('Type, read (which reader)',
+        "Type, read (which reader), and a note when what was read lies over the document's own model: the file is read in its own coordinates into this document (doc_new first for a document of its own)"),
+    'bim_rebar': (', totalLength_m, mass_kg.',
+        ", totalLength_m, mass_kg. FreeCAD's rebar is laid on a hidden Draft wire (its base, from which FreeCAD reads the bar's length)."),
+    'fea_buckle': ('nd gmsh (timeout s, 300).',
+        "nd gmsh (timeout s, 300). Its results are the answer and files in the out folder (files): it makes no FEM objects in the document's tree."),
+    'fea_heat': ('300); needs ccx and gmsh.',
+        "300); needs ccx and gmsh. Its results are the answer and files in the out folder (files): it makes no FEM objects in the document's tree."),
+    'fea_modes': ('nd gmsh (timeout s, 300).',
+        "nd gmsh (timeout s, 300). Its results are the answer and files in the out folder (files): it makes no FEM objects in the document's tree."),
+    'fea_native': ('ElmerSolver is installed.',
+        'ElmerSolver is installed. Refused, with nothing made, in a FreeCAD session that can no longer draw a FEM mesh ("Cannot add static property", FreeCAD\'s own fault): restart FreeCAD.'),
+    'fea_setup': ('rary figures are typical.',
+        "rary figures are typical. The study is Agent Link's, kept with the document: fea_setup, fea_hold and fea_load add no FEM objects to the tree (fea_native builds it as FreeCAD's own analysis, fea_solve where its FEM route runs)."),
+    'fea_solve': ('s ccx and gmsh installed.',
+        's ccx and gmsh installed. When FreeCAD\'s FEM route fails, what it had made is taken out again and the own deck\'s results are the answer and files only (solvedBy says so). In a FreeCAD session where FreeCAD can no longer draw a FEM mesh ("Cannot add static property", a FreeCAD fault left by the first FEM mesh made while a window observer listened) the route fails until FreeCAD is restarted.'),
+    'meshobj_segments': (': true makes those meshes',
+        ": true makes those meshes, each in a colour of its own in the window (as FreeCAD's Mesh_Segmentation colours its segments)"),
+    'pd_multitransform': ('t: stepOf) and go with it',
+        "t: stepOf) and go with it; as FreeCAD's own command leaves them, the steps are hidden and listed after the MultiTransform, which is the tip and the one shown"),
+    'td_balloon': ("ext number), at [dx, dy] from the view's centre",
+        "ext number), at [dx, dy] paper mm from the view's centre. Its tip and bubble are kept as FreeCAD keeps them, in the view's own unscaled frame (OriginX/Y, X/Y over the view's scale)"),
+    'td_centermarks': (' only. Drawn by td_export, not in the window',
+        " only. Drawn by td_export; in the window FreeCAD's own centre marks of the view are switched on (or off) instead — a small cross at each centre (its ArcCenterMarks), not the chain lines"),
+    'td_weld': ('page), drawn by td_export (the window shows the leader only',
+        "page), drawn by td_export, and in the window as FreeCAD's own weld symbol on the leader (TechDraw::DrawWeldSymbol, with FreeCAD's own symbol for fillet, square, v, plug and surfacing; the other kinds show their words only, and window says which"),
+}
+
+
+def description(name, old):
+    """The snapshot's description of a tool with its meant change made."""
+    if name not in DESCRIPTIONS:
+        return old
+    was, now = DESCRIPTIONS[name]
+    assert old.count(was) == 1, (name, was)
+    return old.replace(was, now)

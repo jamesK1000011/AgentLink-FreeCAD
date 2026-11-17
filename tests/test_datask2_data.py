@@ -26,6 +26,7 @@ sys.path.insert(0, ROOT)
 
 BASE = "effbcc7"  # the commit whose handlers were converted
 sys.path.insert(0, HERE)
+import _meant  # noqa: E402
 from _datask2_cases import CONVERTED, FILES, KEPT  # noqa: E402
 
 
@@ -71,7 +72,7 @@ class Sk2Data(unittest.TestCase):
             t = runners.tool(name, e, {})
             b = self.before[name]
             self.assertEqual(t.name, b["name"], name)
-            self.assertEqual(t.description.encode("utf-8"), b["description"].encode("utf-8"), name)
+            self.assertEqual(t.description.encode("utf-8"), _meant.description(name, b["description"]).encode("utf-8"), name)  # meant changes: tests/_meant.py
             self.assertEqual(t.schema, b["inputSchema"], name)
             self.assertEqual(json.dumps(t.schema), json.dumps(b["inputSchema"]), name)  # the order of every key too
             self.assertIs(t.changes, b["changes"], name)
@@ -115,10 +116,24 @@ class Sk2Data(unittest.TestCase):
     def test_same_steps_and_words_as_the_handlers(self):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
+        hid = 0
         for c in got:
+            # Meant difference (famfix), pd_multitransform: as FreeCAD's own command leaves them
+            # (src/Mod/PartDesign/Gui/TaskMultiTransformParameters.cpp finishAdd: FCMD_OBJ_HIDE of
+            # each step; the MultiTransform shown), each step is hidden as it is made and the
+            # MultiTransform is shown at the end: those trace lines, nothing else.
+            if c["tool"] == "pd_multitransform":
+                t = c["new"]["trace"]
+                extra = [ln for ln in t if ln.endswith(".Visibility = False") or ln.endswith(".Visibility = True")]
+                if extra:
+                    hid += 1
+                    if c["new"]["result"][0] == "ok":  # a refused call stops before the MultiTransform is shown
+                        self.assertTrue(any(ln.endswith(".Visibility = True") for ln in extra), c["case"])
+                    c = {**c, "new": {**c["new"], "trace": [ln for ln in t if ln not in extra]}}
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
+        self.assertGreaterEqual(hid, 1)
         # Each tool: a case that answers.
         for name in CONVERTED:
             kinds = {c["new"]["result"][0] for c in got if c["tool"] == name}

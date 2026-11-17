@@ -226,6 +226,14 @@ def membrane_bending(xs, ys, L):
     return T, mem, slope * T / 2, max(abs(y) for y in ys)
 
 
+def _fem_views_ready(doc):
+    """strength.fem_views_ready: FreeCAD's FEM mesh view made once with
+    Agent Link's window observer off (a Netgen mesh is one)."""
+    from . import strength
+
+    strength.fem_views_ready(doc)
+
+
 def tools(s):
     """The fem_more tools are data (agentlink/data/tools.json, group
     "fem_more"): what their entries call by name is here (docs/data-tools.md)."""
@@ -243,7 +251,8 @@ def tools(s):
                # the family's
                "KINDS": KINDS, "objects_fem": objects_fem, "analyses": lambda: analyses(d()), "ref_parts": ref_parts, "face_names": face_names, "set_props": set_props,
                "settable": settable, "shown": _show, "recompute_quietly": lambda: recompute_quietly(d()), "netgen_run": netgen_run, "surface_maker": surface_maker, "fem_surface": fem_surface,
-               "mesh_module": mesh_module, "nearest_samples": nearest_samples, "membrane_bending": membrane_bending}
+               "mesh_module": mesh_module, "nearest_samples": nearest_samples, "membrane_bending": membrane_bending,
+               "fem_views_ready": lambda: _fem_views_ready(d())}
     return runners.tools(GROUP, s, helpers)
 
 
