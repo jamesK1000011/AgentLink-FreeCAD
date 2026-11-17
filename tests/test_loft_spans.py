@@ -196,6 +196,14 @@ class LoftLive(unittest.TestCase):
         err, e = self.call("batch", {"file": "calls.json", "calls": calls})
         self.assertTrue(err)
 
+    def test_batch_file_keeps_its_title(self):
+        with open(os.path.join(self.session.out_dir, "titled.json"), "w") as f:
+            json.dump({"title": "Two boxes", "calls": [{"tool": "part_primitive", "arguments": {"kind": "box", "size": [5, 5, 5], "name": "T1"}}]}, f)
+        out = self.ok("batch", {"file": "titled.json"})
+        rec = out.get("record") or out.get("written", {}).get("path")
+        with open(rec) as f:
+            self.assertEqual(json.load(f).get("title"), "Two boxes")
+
 
 if __name__ == "__main__":
     unittest.main()
