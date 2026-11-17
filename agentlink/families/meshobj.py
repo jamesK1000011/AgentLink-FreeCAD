@@ -475,54 +475,68 @@ UNWRAP_MARK = "agentlink-unwrap: "
 
 
 def unwrap_stop(stderr, returncode):
-    """How the unwrapping's own Python ended, from its error stream and its
-    exit code: ("load", why) when it had begun loading FreeCAD's modules and
-    never finished (a crash or an error at import), else ("stopped", why).
-    why: its last own word (not one of the marks), or the code it ended with."""
+    """How the unwrapping's own Python ended, from its error stream (and its
+    step log) and its exit code: ("load", why) when it had begun loading
+    FreeCAD's modules and never finished (a crash or an error at import),
+    else ("stopped", why). why: its last own word (not one of the marks),
+    or the code it ended with and, while loading, the step it was on
+    ("it stopped (code -11) at import Part")."""
     lines = (stderr or "").strip().splitlines()
     marks = [x[len(UNWRAP_MARK):].strip() for x in lines if x.startswith(UNWRAP_MARK)]
-    said = [x for x in lines if not x.startswith(UNWRAP_MARK)]
+    said = [x for x in lines if x.strip() and not x.startswith(UNWRAP_MARK)]
+    load = "loading" in marks and "loaded" not in marks
     why = said[-1] if said else f"it stopped (code {returncode})"
-    return ("load" if "loading" in marks and "loaded" not in marks else "stopped"), why
+    if load and marks[-1].startswith("import "):
+        why += f" at {marks[-1]}"
+    return ("load" if load else "stopped"), why
 
 
-def flatten_apart(P, F, iters, weight):
-    """FreeCAD's flatmesh on a surface (points P, triangles F), run in a
-    Python of its own: flatmesh can bring FreeCAD down on a surface it
-    cannot handle, and a crash there is then only a refusal. Answers
-    (flat points, boundary loops, None, None), or (None, None, stop, why):
-    stop "python" (no Python to run it in apart from FreeCAD), "time" (over
-    5 minutes), "load" (it ended while FreeCAD's own modules were being
-    loaded there, before any unwrapping: the surface is not at fault) or
-    "stopped" (why: its last word). It marks where it is on its error
-    stream (UNWRAP_MARK), so that a crash with no word of its own (seen
-    live: code -11 on a sphere's cap of 1,651 triangles) says which:
-    "loading" … "loaded" for FreeCAD's modules, "unwrapping" … "unwrapped"
-    for flatmesh's own work. The outlines are found here (flat_loops), not
-    by flatmesh."""
-    import subprocess
+# The unwrapping's own script, run by a Python beside FreeCAD or by
+# FreeCAD's console program (which takes the arguments after a script for
+# files: so the paths come by the environment). Each step is marked in a
+# log file (and on the error stream) BEFORE it is taken, so a crash with no
+# word of its own still says where it was.
+UNWRAP_SCRIPT = (
+    "import os, sys\n"
+    "LOG = os.environ['AGENTLINK_UNWRAP_LOG']\n"
+    f"def at(where):\n    line = {UNWRAP_MARK!r} + where + chr(10)\n"
+    "    with open(LOG, 'a') as f:\n        f.write(line)\n"
+    "    sys.stderr.write(line)\n    sys.stderr.flush()\n"
+    "at('started ' + os.path.basename(sys.executable or '?') + ' ' + sys.version.split()[0])\n"
+    "at('loading')\n"
+    "at('import numpy')\n"
+    "import numpy as np\n"
+    "at('import FreeCAD')\n"
+    "import FreeCAD\n"
+    "at('import Part')\n"
+    "import Part  # flatmesh stands on Part and Mesh: loaded first\n"
+    "at('import Mesh')\n"
+    "import Mesh\n"
+    "at('import flatmesh')\n"
+    "import flatmesh\n"
+    "at('loaded')\n"
+    "z = np.load(os.environ['AGENTLINK_UNWRAP_IN'])\n"
+    "at('unwrapping')\n"
+    "fl = flatmesh.FaceUnwrapper(np.ascontiguousarray(z['P'], dtype=np.float64), np.ascontiguousarray(z['F'], dtype=np.int64))\n"
+    "fl.findFlatNodes(int(os.environ['AGENTLINK_UNWRAP_ITERS']), float(os.environ['AGENTLINK_UNWRAP_WEIGHT']))\n"
+    "np.savez(os.environ['AGENTLINK_UNWRAP_OUT'], Q=np.asarray(fl.ze_nodes, float))\n"
+    "at('unwrapped')\n"
+)
+
+# What FreeCAD's window set for its own Python: another Python started from
+# it must find its own.
+UNWRAP_DROP_ENV = ("PYTHONHOME", "PYTHONEXECUTABLE", "PYTHONSTARTUP", "__PYVENV_LAUNCHER__")
+
+
+def unwrap_runners():
+    """Where the unwrapping can run apart from FreeCAD, in turn:
+    [(name, program)]. A Python beside FreeCAD's program (in the Mac bundle,
+    Resources/bin), then FreeCAD's console program (freecadcmd: the Python
+    FreeCAD itself is built with, so it never loads a second copy of
+    Python's library)."""
     import sys
-    import tempfile
 
-    d = tempfile.mkdtemp(prefix="agentlink-unwrap-")
-    src, dst = os.path.join(d, "in.npz"), os.path.join(d, "out.npz")
-    np.savez(src, P=P, F=F)
-    code = (
-        "import sys, numpy as np\n"
-        f"def at(where):\n    sys.stderr.write({UNWRAP_MARK!r} + where + chr(10))\n    sys.stderr.flush()\n"
-        "at('loading')\n"
-        "import FreeCAD, Part, Mesh  # flatmesh stands on them: loaded first\n"
-        "import flatmesh\n"
-        "at('loaded')\n"
-        "z = np.load(sys.argv[1])\n"
-        "at('unwrapping')\n"
-        "fl = flatmesh.FaceUnwrapper(np.ascontiguousarray(z['P'], dtype=np.float64), np.ascontiguousarray(z['F'], dtype=np.int64))\n"
-        f"fl.findFlatNodes({iters}, {weight})\n"
-        "at('unwrapped')\n"
-        "np.savez(sys.argv[2], Q=np.asarray(fl.ze_nodes, float))\n"
-    )
-    env = dict(os.environ)
-    env["PYTHONPATH"] = os.pathsep.join([x for x in sys.path if x])
+    out = []
     exe = sys.executable if sys.executable and "python" in os.path.basename(sys.executable).lower() else None
     if exe is None:
         # FreeCAD's window is its own program, not a Python: the one shipped
@@ -531,18 +545,91 @@ def flatten_apart(P, F, iters, weight):
         from .app import _bundle_python
 
         exe = testrun.real_python(sys.executable) or _bundle_python()
-    if exe is None:
-        return None, None, "python", None
+    if exe:
+        out.append(("python", exe))
     try:
-        r = subprocess.run([exe, "-c", code, src, dst], env=env, capture_output=True, text=True, timeout=300)
-    except subprocess.TimeoutExpired:
-        return None, None, "time", None
-    if r.returncode != 0 or not os.path.isfile(dst):
-        stop, why = unwrap_stop(r.stderr, r.returncode)
-        return None, None, stop, why
-    z = np.load(dst)
-    Q = np.asarray(z["Q"], float)[:, :2]
-    return Q, flat_loops(Q, F), None, None
+        from .. import testrun
+
+        cmd = testrun.find_cmd()[0]
+    except Exception:  # noqa: BLE001 — no console program found
+        cmd = None
+    if cmd:
+        out.append(("freecadcmd", cmd))
+    return out
+
+
+def flatten_apart(P, F, iters, weight, runners_=None):
+    """FreeCAD's flatmesh on a surface (points P, triangles F), run in a
+    process of its own: flatmesh can bring FreeCAD down on a surface it
+    cannot handle, and a crash there is then only a refusal. Answers
+    (flat points, boundary loops, None, note), or (None, None, stop, why):
+    stop "python" (nothing to run it in apart from FreeCAD), "time" (over
+    5 minutes), "load" (it ended while FreeCAD's own modules were being
+    loaded there, before any unwrapping: the surface is not at fault) or
+    "stopped" (why: its last word). note: None, or which program ran it
+    when the first one would not load FreeCAD's modules. The helper marks
+    each step before it takes it (UNWRAP_SCRIPT), so a crash with no word
+    of its own (seen live: code -11 while loading) names the import it was
+    on. One that ends while loading is tried again with the next program
+    (unwrap_runners: a Python beside FreeCAD, then freecadcmd). The
+    outlines are found here (flat_loops), not by flatmesh."""
+    import subprocess
+    import sys
+    import tempfile
+
+    rs = unwrap_runners() if runners_ is None else runners_
+    if not rs:
+        return None, None, "python", None
+    d = tempfile.mkdtemp(prefix="agentlink-unwrap-")
+    src, script = os.path.join(d, "in.npz"), os.path.join(d, "agentlink_unwrap.py")
+    np.savez(src, P=P, F=F)
+    with open(script, "w", encoding="utf-8") as f:
+        f.write(UNWRAP_SCRIPT)
+    base = {k: v for k, v in os.environ.items() if k not in UNWRAP_DROP_ENV}
+    base["PYTHONPATH"] = os.pathsep.join([x for x in sys.path if x])
+    # A settings folder of its own: the person's add-ons are not loaded
+    # there, and FreeCAD's settings are never written over.
+    base["FREECAD_USER_HOME"] = os.path.join(d, "freecad")
+    os.makedirs(base["FREECAD_USER_HOME"], exist_ok=True)
+    failed = []
+    for name, exe in rs:
+        dst, log = os.path.join(d, f"out-{name}.npz"), os.path.join(d, f"steps-{name}.log")
+        env = dict(base, AGENTLINK_UNWRAP_IN=src, AGENTLINK_UNWRAP_OUT=dst, AGENTLINK_UNWRAP_LOG=log,
+                   AGENTLINK_UNWRAP_ITERS=str(int(iters)), AGENTLINK_UNWRAP_WEIGHT=repr(float(weight)))
+        try:
+            r = subprocess.run([exe, script], env=env, capture_output=True, text=True, timeout=300, cwd=d)
+        except subprocess.TimeoutExpired:
+            return None, None, "time", None
+        except OSError as e:
+            failed.append((name, f"could not start it ({e})"))
+            continue
+        try:
+            with open(log, encoding="utf-8", errors="replace") as f:
+                steps = f.read()
+        except OSError:
+            steps = ""
+        err = (r.stderr or "")
+        # freecadcmd sends Python's error stream through its own console:
+        # its words may come on stdout.
+        # Only its error lines: the rest of what it prints is not a reason.
+        if name == "freecadcmd":
+            err += "\n" + "\n".join(x for x in (r.stdout or "").splitlines() if "Error" in x or "Exception" in x)
+        done = os.path.isfile(dst) and (r.returncode == 0 or "unwrapped" in steps)
+        if done:
+            z = np.load(dst)
+            Q = np.asarray(z["Q"], float)[:, :2]
+            note = None
+            if failed:
+                note = f"ran in {name}: " + "; ".join(f"{n}: {w}" for n, w in failed)
+            return Q, flat_loops(Q, F), None, note
+        # The log's marks, then the stream's (the same marks again, and its words).
+        stop, why = unwrap_stop(steps + "\n" + err, r.returncode)
+        if stop != "load":
+            return None, None, stop, why
+        failed.append((name, why))
+    if len(failed) == 1:
+        return None, None, "load", failed[0][1]
+    return None, None, "load", "; ".join(f"{n}: {w}" for n, w in failed)
 
 
 def flat_loops(Q, F):

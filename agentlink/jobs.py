@@ -413,10 +413,58 @@ def guard_change(tool, args, session):
                         f"job_status {{ job: \"{j['job']}\", wait: 25 }} waits for it (or doc_switch to another document). Nothing was run.")
 
 
+# Each tool's last few times in this FreeCAD (every call that answered
+# here, any tool): what a batch reads so that it does not start a call it
+# has too little of its budget left for (one slow call took a 55 s batch
+# to 75 s, past what a client waits).
+_RECENT = {}
+RECENT_KEEP = 5
+_recent_lock = threading.Lock()
+
+
+def note_time(name, secs):
+    """One call of tool name took secs (kept in memory, the last few)."""
+    try:
+        secs = float(secs)
+    except (TypeError, ValueError):
+        return
+    if secs < 0:
+        return
+    with _recent_lock:
+        t = _RECENT.setdefault(name, [])
+        t.append(secs)
+        del t[:-RECENT_KEEP]
+
+
+def typical(name, session=None):
+    """Seconds a call of tool name typically takes here, or None when not
+    known: the middle of its last times in this FreeCAD, and, where a slow
+    read of it was logged (note_slow), its typical time at the open
+    document's size — the larger of the two."""
+    out = []
+    with _recent_lock:
+        t = sorted(_RECENT.get(name) or [])
+    if t:
+        out.append(t[len(t) // 2])
+    try:
+        q = keep.queue_state()
+        if (q.get("timings") or {}).get(name):
+            from . import heavy
+
+            r = keep.estimate_range(q, name, heavy.size_of(session) if session is not None else 1)
+            if r:
+                out.append(r[1])
+    except Exception:
+        pass
+    return max(out) if out else None
+
+
 def note_slow(tool, args, session, secs):
     """A read that took longer than SLOW_READ, not a heavy tool: its time
     logged, so the next call of its size goes to a job at once (a read past
-    a client's 80 s never got its answer back)."""
+    a client's 80 s never got its answer back). Every call's time is also
+    kept in memory (note_time), for a batch's budget."""
+    note_time(getattr(tool, "name", None), secs)
     if secs <= SLOW_READ or keep.is_heavy(tool.name) or not eligible(tool, args, session):
         return
     try:

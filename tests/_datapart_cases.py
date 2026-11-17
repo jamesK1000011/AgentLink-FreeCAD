@@ -351,7 +351,9 @@ def cases(fc, tmp, old, new):
     yield T, "items as they come", prep(pieces3), {"compound": "Parts"}
     yield T, "two items, named, in the window", prep(pieces3, lambda s: fc.doc().getObject("Parts").__dict__.update(ViewObject=fc.View("Parts"))), {"compound": "Parts", "keep": "items", "items": [0, 2], "name": "Ends"}
     yield T, "touching a stencil", prep(pieces3, block), {"compound": "Parts", "keep": "collision-pass", "stencil": "Block"}
-    yield T, "not touching a stencil", prep(pieces3, block), {"compound": "Parts", "keep": "collision-fail", "stencil": "Block"}
+    # A stencil apart from the pieces (the entry works the filter's own test out before it makes the filter:
+    # pieces in the stand-in all touch a stencil over them).
+    yield T, "not touching a stencil", prep(pieces3, far), {"compound": "Parts", "keep": "collision-fail", "stencil": "Far"}
     yield T, "by volume", prep(pieces3), {"compound": "Parts", "keep": "window-volume", "from": 50, "to": 100}
     yield T, "by distance, the old word", prep(pieces3, block), {"compound": "Parts", "keep": "window-distribution", "stencil": "Block", "from": 0}
     yield T, "keep wrong", prep(pieces3), {"compound": "Parts", "keep": "largest"}

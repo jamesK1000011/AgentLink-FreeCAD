@@ -154,6 +154,29 @@ def tools(session):
 
         return os.path.isfile(p)
 
+    def attach_check(o, tgt, sub, mode):
+        """Why o cannot attach to (tgt, sub) as mode, worked out on a copy of
+        its attacher before anything is set (FreeCAD prints a red
+        "PositionBySupport: …" in the Report view for every attachment
+        property set that does not fit); None when it fits, or when this
+        FreeCAD gives no attacher to ask."""
+        if mode == "Deactivated":
+            return None
+        try:
+            att = o.Attacher  # already a copy; copied again so the check plainly changes nothing of o
+            if att is None:
+                return None
+            eng = att.copy()
+            eng.References = [(tgt, sub)]
+            eng.Mode = mode
+        except Exception:  # noqa: BLE001 — no copy to ask: the recompute's check stays
+            return None
+        try:
+            eng.calculateAttachedPlacement(o.Placement)
+        except Exception as e:  # noqa: BLE001 — the attacher's own reason
+            return str(e) or type(e).__name__
+        return None
+
     # What the tools' entries (agentlink/data/tools.json, "family": "model_more") call by name.
     # FreeCAD's and Part's own are reached when called, not here: the module may be a trimmed one.
     helpers = {"doc": doc, "unique": lambda label: s.unique(label), "snapshot": lambda tool: s.snapshot(tool), "step": lambda: len(s.steps),
@@ -171,5 +194,6 @@ def tools(session):
                "read_mesh": lambda p: mesh_module().Mesh(p),
                # the family's
                "frame": frame, "stats_of": stats_of, "outline_file": outline_file, "fit_of": fit_of, "split_features": split_features, "bop_feature": bop_feature,
-               "explode_into": explode_into, "section_area": section_area, "mesh_module": mesh_module, "stem": stem, "isfile": isfile}
+               "explode_into": explode_into, "section_area": section_area, "mesh_module": mesh_module, "stem": stem, "isfile": isfile,
+               "attach_check": attach_check}
     return runners.tools(GROUP, s, helpers, family="model_more")

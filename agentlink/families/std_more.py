@@ -354,6 +354,39 @@ def tools(s):
         res = z - f(u, v)
         return bz.toShape(), round(float(np.sqrt((res ** 2).mean())), 4), round(float(np.abs(res).max()), 4)
 
+    def filter_keeps(o, kind, invert, stencil, frm=None, to=None):
+        """How many of o's pieces FreeCAD's CompoundFilter (kind, invert)
+        would keep: its own tests (Part/CompoundTools/CompoundFilter.py,
+        execute), worked out before the filter is made. A filter that keeps
+        nothing raises "Nothing passes through the filter" at its recompute,
+        a red traceback in the Report view; it is refused before instead.
+        None when not known (the filter's recompute still decides)."""
+        try:
+            shps = o.Shape.childShapes()
+            st = stencil.Shape if stencil is not None else None
+            if kind == "collision-pass":
+                if st is None:
+                    return None
+                conf = 1e-7  # Part.Precision.confusion(): OCC's Precision::Confusion
+                return sum(1 for x in shps if bool(x.distToShape(st)[0] < conf) ^ bool(invert))
+            if kind not in ("window-volume", "window-area", "window-length", "window-distance") or not shps:
+                return None
+            if kind == "window-distance":
+                if st is None:
+                    return None
+                vals = [x.distToShape(st)[0] for x in shps]
+            else:
+                attr = {"window-volume": "Volume", "window-area": "Area", "window-length": "Length"}[kind]
+                vals = [getattr(x, attr) for x in shps]
+            top = max(vals)
+            if st is not None and kind != "window-distance":
+                top = getattr(st, {"window-volume": "Volume", "window-area": "Area", "window-length": "Length"}[kind])
+            lo = (80.0 if frm is None else float(frm)) / 100.0 * top
+            hi = (100.0 if to is None else float(to)) / 100.0 * top
+            return sum(1 for v in vals if bool(lo <= v <= hi) ^ bool(invert))
+        except Exception:  # noqa: BLE001 — not known here: the recompute's check stays
+            return None
+
     def tool_module(name):
         """One of FreeCAD's Python modules by name (CompoundTools.Explode), loaded when the tool runs."""
         import importlib
@@ -367,7 +400,7 @@ def tools(s):
                     "window-area": ("window-area", False), "window-length": ("window-length", False), "window-distance": ("window-distance", False),
                     "window-distribution": ("window-distance", False)}
     part_helpers = {"objs": objs, "find": lambda ref, what="object": picks.find(d(), ref, what), "ref_list": picks.ref_list, "snapshot": lambda tool: s.snapshot(tool),
-                    "tool_module": tool_module, "FILTER_KINDS": FILTER_KINDS, "join_feature": join_feature,
+                    "tool_module": tool_module, "FILTER_KINDS": FILTER_KINDS, "filter_keeps": filter_keeps, "join_feature": join_feature,
                     "in_file": lambda tool, path: paths.in_file(s, tool, path), "isfile": os.path.isfile, "basename": os.path.basename,
                     "stem": lambda p: os.path.splitext(os.path.basename(p))[0], "read_shape": lambda *a, **k: Part.read(*a, **k), "compound": lambda *a, **k: Part.Compound(*a, **k),
                     "cloud_points": cloud_points, "quadric_patch": quadric_patch}
@@ -378,6 +411,9 @@ def tools(s):
                "find": lambda ref, what="object": picks.find(d(), ref, what), "snapshot": lambda tool: s.snapshot(tool), "V": V,
                # PartDesign: bodies, their features and their tip
                "pd_body": lambda ref: pdc.pd_body(d(), ref), "body_of": pdc.body_of, "in_body": pdc.in_body, "broken": lambda: pdc.newly_broken(d()),
+               # every failing object after the call, old ones too (compound_explode: which one a red
+               # "Nothing passes through the filter" came from)
+               "all_broken": lambda: pdc.broken(d()),
                "solid_feature": solid_feature, "after_tip": after_tip, "profile_sketch": profile_sketch, "reattach": reattach, "shaft_solid": shaft_solid}
 
     helpers.update(part_helpers)

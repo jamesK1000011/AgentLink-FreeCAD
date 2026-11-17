@@ -119,6 +119,14 @@ class PartData(unittest.TestCase):
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
+            # Meant difference, compound_filter: a filter that keeps nothing is refused before it is
+            # made (its recompute raised "Nothing passes through the filter", a red traceback in the
+            # Report view, live part 0030): the same words, without the filter made and taken back.
+            if c["tool"] == "compound_filter" and c["case"] in ("every piece touches", "none in the window"):
+                self.assertIn("makeCompoundFilter('CompoundFilter')", c["old"]["trace"])
+                self.assertNotIn("makeCompoundFilter('CompoundFilter')", c["new"]["trace"])
+                self.assertEqual(c["new"]["trace"], c["old"]["trace"][:len(c["new"]["trace"])])
+                continue
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
         # Each tool: a case that answers.

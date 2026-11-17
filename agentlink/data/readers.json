@@ -185,6 +185,7 @@
     "as_shell",
     "as_solid",
     "as_wire",
+    "attach_check",
     "bspline",
     "compound",
     "direction",
@@ -1062,6 +1063,7 @@
    "readers": [
     "V",
     "after_tip",
+    "all_broken",
     "basename",
     "body_of",
     "broken",
@@ -1074,6 +1076,7 @@
     "dot_text",
     "element",
     "errors",
+    "filter_keeps",
     "find",
     "frozen",
     "get_shape",

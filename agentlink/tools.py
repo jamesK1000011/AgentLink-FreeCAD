@@ -2207,6 +2207,27 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 heavy_read = bool(_t is not None and _keep.is_heavy(c["tool"]) and _jobs.eligible(_t, c.get("arguments") or {}, s))
             except Exception:
                 heavy_read = False
+            if i and not heavy_read:
+                # Not started with less of the budget left than the call
+                # typically takes here (jobs.typical: its last times in this
+                # FreeCAD): one slow call took a 55 s batch to 75 s, past
+                # what a client waits. The first call always runs.
+                left = mine.get("budget", BATCH_BUDGET) - (time.time() - mine["t0"])
+                try:
+                    from . import jobs as _jobs
+
+                    usual = _jobs.typical(c["tool"], s)
+                except Exception:
+                    usual = None
+                if usual is not None and usual > left:
+                    nxt = first + i
+                    how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else f"batch again with the calls from index {nxt} on (calls.{i} of this list)"
+                    if hold is not None:
+                        hold.build("end: out of time")
+                    return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": nxt,
+                                  "note": f"Stopped before calls.{nxt} ({c['tool']}) after {time.time() - mine['t0']:.0f} s: it typically takes about {usual:.0f} s here "
+                                          f"and {max(left, 0):.0f} s of the budget ({mine.get('budget', BATCH_BUDGET):g} s) was left; a client waits about 80 s for an answer, so a long batch is answered in parts. "
+                                          f"The {len(results)} calls above ran and stay; {len(calls) - i} were not started: {how}."})
             if heavy_read:
                 # It runs as a job on a worker thread, as it would alone, and
                 # the batch waits for it while its budget lasts: done in
