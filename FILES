@@ -35,6 +35,7 @@ agentlink/data/nexthint.json
 agentlink/data/nexthint.schema.json
 agentlink/data/readers.json
 agentlink/data/readers.schema.json
+agentlink/data/ste.json
 agentlink/data/stock.json
 agentlink/data/stock.schema.json
 agentlink/data/tool_index.json
@@ -103,6 +104,7 @@ agentlink/gui_input.py
 agentlink/gui_link.py
 agentlink/guideidx.py
 agentlink/guides/assembly.md
+agentlink/guides/batch.md
 agentlink/guides/bim.md
 agentlink/guides/cam.md
 agentlink/guides/doc.md
@@ -171,6 +173,7 @@ agentlink/setup_check.py
 agentlink/sheets.py
 agentlink/shots.py
 agentlink/smoke.py
+agentlink/staticbase.py
 agentlink/store.py
 agentlink/supervise.py
 agentlink/targets.py
@@ -497,6 +500,8 @@ tests/test_model.py
 tests/test_model_more.py
 tests/test_more_families.py
 tests/test_needs.py
+tests/test_needs.py
+tests/test_needs.py
 tests/test_nexthint.py
 tests/test_no_addon_names.py
 tests/test_note_faces.py
@@ -527,6 +532,7 @@ tests/test_sheets.py
 tests/test_sketch.py
 tests/test_sketch_gaps.py
 tests/test_smart_calls.py
+tests/test_staticbase.py
 tests/test_std_more.py
 tests/test_stem_findings.py
 tests/test_stem_findings_more.py

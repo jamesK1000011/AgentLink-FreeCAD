@@ -347,7 +347,18 @@ class Server:
 
     def listed(self):
         # An alias (an old name kept callable) is never listed beside its tool.
+        base = getattr(self, "static_base", None)
+        if base is not None:
+            # The static minimal list (agentlink/staticbase.py): its base and any group turned on beyond the lean default.
+            extra = set(self.groups or ()) - set(getattr(self, "lean_groups", None) or ())
+            order = {n: i for i, n in enumerate(base)}
+            out = [t for t in self.tools.values() if (t.name in base or t.group in extra) and not getattr(t, "alias_of", None)]
+            return sorted(out, key=lambda t: order.get(t.name, len(order)))
         return [t for t in self.tools.values() if (self.groups is None or t.group in self.groups) and not getattr(t, "alias_of", None)]
+
+    def is_listed(self, name):
+        """Whether the client was shown this tool in the list as it is now."""
+        return any(t.name == name for t in self.listed())
 
     def _list_sig(self):
         out = {}
@@ -419,7 +430,10 @@ class Server:
             elif method == "ping":
                 result = {}
             elif method == "tools/list":
-                result = {"tools": [t.listing() for t in self.listed()]}
+                from . import staticbase
+
+                staticbase.apply(self)
+                result = {"tools": staticbase.listing(self, self.listed())}
                 self.note_listed()
                 if self.meter is not None:
                     self.meter.list(result["tools"], self.instructions)
@@ -645,6 +659,10 @@ class Server:
                 except Exception:
                     pass
         except ToolError as e:
+            if name == "batch":
+                from . import staticbase
+
+                return self.refusal(e.code, staticbase.batch_hint(e.message))
             return self.refusal(e.code, e.message)
         except ValueError as e:
             return self.refusal("invalid_input", str(e))
