@@ -301,7 +301,7 @@ class KeepTheSketch(unittest.TestCase):
     def test_cmd_run_keeps_the_sketch_open(self):
         resets = []
         gd = types.SimpleNamespace(getInEdit=lambda: types.SimpleNamespace(Object=types.SimpleNamespace(Name="S", Label="S")),
-                                   resetEdit=lambda: resets.append(1), ActiveView=None)
+                                   resetEdit=lambda: resets.append(1), ActiveView=None, Document=types.SimpleNamespace(Name="D"))
         gui = types.ModuleType("FreeCADGui")
         gui.ActiveDocument = gd
         had = sys.modules.get("FreeCADGui")
@@ -312,7 +312,12 @@ class KeepTheSketch(unittest.TestCase):
             e._mode("cmd_run", {"name": "Sketcher_LeaveSketch"})
             self.assertEqual(resets, [])
             e._mode("pd_pad", {"sketch": "S"})
-            self.assertEqual(resets, [1])
+            self.assertEqual(resets, [])  # round 5: a sketch the agent did not open is never closed by the echo
+            self.assertEqual(e.tr["edit"], "left open: not opened by the agent")
+            echo._agent_edits.add(("D", "S"))
+            self.addCleanup(echo._agent_edits.discard, ("D", "S"))
+            e._mode("pd_pad", {"sketch": "S"})
+            self.assertEqual(resets, [1])  # the agent's own: a pad builds on it
         finally:
             if had is None:
                 sys.modules.pop("FreeCADGui", None)

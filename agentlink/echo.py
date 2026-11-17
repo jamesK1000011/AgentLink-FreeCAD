@@ -2006,13 +2006,71 @@ def faces_plane(direction, normal):
         return False
 
 
+# ---- never a second task dialog (round 5) --------------------------------------------------
+
+def foreign_task(gd=None):
+    """What keeps the echo from opening or closing anything in the task
+    panel, in words, or None. FreeCAD asks "A dialog is already open in the
+    task panel — Close this dialog?" in a modal box when a sketch or a Part
+    Design feature is opened for editing while another task dialog is open
+    (src/Mod/Sketcher/Gui/ViewProviderSketch.cpp 3434-3448, src/Mod/PartDesign/
+    Gui/ViewProvider.cpp 135; a sketch left open in another document counts:
+    Gui::Document::setEdit resets only its own document's edit). Such a box
+    stopped a batch live (round 4). Blocking: an edit the echo did not open,
+    in any document; a task dialog with no edit behind it (a Part Design or
+    other task a person or a tool opened). Not blocking: the echo's own sketch
+    in gd's document (setEdit there closes it first, with no question).
+    Never raises."""
+    try:
+        import FreeCADGui
+
+        ed = edit_document()
+        if ed is not None:
+            obj = getattr(ed.getInEdit(), "Object", None)
+            key = (ed.Document.Name, getattr(obj, "Name", None))
+            if key not in _agent_edits:
+                return f"{key[0]}.{key[1]} is open for editing, not by the agent"
+            if gd is not None and ed is not gd and getattr(gd, "Document", None) is not ed.Document:
+                return f"the agent's {key[0]}.{key[1]} is open in another document"
+            return None
+        if FreeCADGui.Control.activeDialog():
+            return "a task dialog is open"
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def _leave_own_elsewhere(gd):
+    """The echo's own sketch open in another document than gd left first, so
+    opening one in gd asks nothing. True when one was left."""
+    try:
+        ed = edit_document()
+        if ed is None or ed is gd or getattr(gd, "Document", None) is ed.Document:
+            return False
+        obj = getattr(ed.getInEdit(), "Object", None)
+        key = (ed.Document.Name, getattr(obj, "Name", None))
+        if key not in _agent_edits:
+            return False
+        ed.resetEdit()
+        _agent_edits.discard(key)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def enter_edit(gd, obj):
     """obj (a sketch) opened for editing as a double-click opens it, with
     the camera turned to face it at once: FreeCAD turns it itself, animated,
     and the echo's fit then cut the turn off, so the sketch was edited in
     the isometric view with the solid in front of it. If the camera still
     does not face the sketch after that, it is set to the sketch's own
-    orientation. Returns what was done, for the trace."""
+    orientation. Returns what was done, for the trace. Never while a task
+    dialog the echo did not open is up (foreign_task): then nothing is
+    opened and the trace says why."""
+    _leave_own_elsewhere(gd)
+    why = foreign_task(gd)
+    if why:
+        return f"not opened: {why}"
     v = getattr(gd, "ActiveView", None)
     with _Still(v):
         gd.setEdit(obj.Name)
@@ -2248,9 +2306,34 @@ def sheet_refs(name, args, body):
     return list(dict.fromkeys(out))
 
 
-def show_view_of(o):
-    """o's own view brought to the front (a page, a spreadsheet: what a
-    double-click on its tree row opens). Its label, or None."""
+def front_view_of(o):
+    """o's view already open (a page's, a sheet's, a text's tab) brought to
+    the front, by its title; nothing is opened. Its label, or None."""
+    try:
+        import FreeCADGui
+
+        _QtCore, _QtGui, QtW = _qt()
+        area = FreeCADGui.getMainWindow().findChild(QtW.QMdiArea)
+        label = getattr(o, "Label", None)
+        for sub in area.subWindowList() if area is not None else []:
+            w = sub.widget()
+            if w is not None and not _is_3d(sub) and view_title_is(w.windowTitle(), label):
+                area.setActiveSubWindow(sub)
+                return label
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (front view of {getattr(o, 'Label', '?')}): {e}\n")
+    return None
+
+
+def show_view_of(o, read=False):
+    """o's own view brought to the front (a page, a spreadsheet, a text: what
+    a double-click on its tree row opens). Its label, or None. For a read,
+    or while a task dialog the echo did not open is up, only a view already
+    open is brought up (front_view_of): a double-click runs the object's own
+    code (a sheet's switches the workbench), and a read never starts
+    anything (round 5)."""
+    if read or foreign_task():
+        return front_view_of(o)
     vo = getattr(o, "ViewObject", None)
     if vo is None:
         return None
@@ -2656,14 +2739,18 @@ class Echo:
             import FreeCADGui
 
             wb = None
-            if switch:
+            held = foreign_task() if switch else None
+            if held:
+                tr["held"] = held  # no bench switch, no edit opened or closed (round 5)
+            if switch and not held:
                 act = FreeCADGui.activeWorkbench()
                 wb = bench_to_switch(tool.name, FreeCADGui.listWorkbenches(), act.name() if act else None)
                 if wb:
                     bench_ready(wb)
                     FreeCADGui.activateWorkbench(wb)
                 try:
-                    self._mode(tool.name, args)
+                    if not held:
+                        self._mode(tool.name, args)
                 except Exception as e:  # noqa: BLE001  (the words still come)
                     tr["modeError"] = f"{type(e).__name__}: {e}"
                 if tool.name.startswith("sketch_"):
@@ -2755,6 +2842,8 @@ class Echo:
         view = getattr(gd, "ActiveView", None) if gd else None
         if view is None:
             return
+        if foreign_task():
+            return  # nothing made active while a task dialog the echo did not open is up (round 5)
         if name.startswith("asm_"):
             asm = _objects(doc, [body.get("assembly") or args.get("assembly")])
             if asm:
@@ -2816,6 +2905,11 @@ class Echo:
             if editing is None or editing.Object is not target:
                 self.tr["edit"] = enter_edit(gd, target)
         elif editing is not None and closes_edit(name, args, getattr(editing, "Object", None)):
+            key = (gd.Document.Name, getattr(getattr(editing, "Object", None), "Name", None))
+            if key not in _agent_edits:
+                # Never the person's own edit: closing it is theirs to do.
+                self.tr["edit"] = "left open: not opened by the agent"
+                return
             # FreeCAD turns the camera back to where it was before the
             # sketch, animated. Inside a batch the next fit cut that turn off
             # at its first frame and the view stayed flat on the sketch: the
@@ -3023,11 +3117,11 @@ class Echo:
         if name.startswith(tuple(PAGES)):
             ref = (body or {}).get("page") or (args or {}).get("page")
             page = _objects(doc, [ref]) if isinstance(ref, str) else []
-            return show_view_of(page[0]) if page else None
+            return show_view_of(page[0], read=True) if page else None
         if name.startswith(SHEET_TOOLS):
             sheet = [o for o in _objects(doc, sheet_refs(name, args, body)) if is_sheet(o)]
             if sheet:
-                return show_view_of(sheet[0])
+                return show_view_of(sheet[0], read=True)
         subs = read_refs(name, args, body)
         objs = [o for o in _objects(doc, [args.get(k) for k in READ_KEYS if args.get(k)])
                 if getattr(o, "TypeId", "") not in ("PartDesign::Body", "Sketcher::SketchObject") or subs]
@@ -3073,6 +3167,8 @@ class Echo:
         if getattr(sk, "TypeId", "") != "Sketcher::SketchObject":
             return None
         if ed is not None:
+            if (gd.Document.Name, sk.Name) not in _agent_edits:
+                return "left open: not opened by the agent"
             gd.resetEdit()
         return enter_edit(gd, sk)
 
