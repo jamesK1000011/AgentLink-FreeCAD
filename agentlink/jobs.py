@@ -422,6 +422,9 @@ RECENT_KEEP = 5
 _recent_lock = threading.Lock()
 
 
+TYPICAL_MAX = 300.0  # s: a logged estimate above this is not trusted for a batch budget
+
+
 def note_time(name, secs):
     """One call of tool name took secs (kept in memory, the last few)."""
     try:
@@ -441,22 +444,24 @@ def typical(name, session=None):
     known: the middle of its last times in this FreeCAD, and, where a slow
     read of it was logged (note_slow), its typical time at the open
     document's size — the larger of the two."""
-    out = []
     with _recent_lock:
         t = sorted(_RECENT.get(name) or [])
     if t:
-        out.append(t[len(t) // 2])
+        # Measured here, now: the middle of the last times.
+        return t[len(t) // 2]
     try:
         q = keep.queue_state()
         if (q.get("timings") or {}).get(name):
             from . import heavy
 
             r = keep.estimate_range(q, name, heavy.size_of(session) if session is not None else 1)
-            if r:
-                out.append(r[1])
+            # The size-scaled estimate of the slow-read log can run wild (live,
+            # 17 Nov: insp_run "2466 s", part_loft "7813307 s"): used only when sane.
+            if r and 0 < r[1] <= TYPICAL_MAX:
+                return r[1]
     except Exception:
         pass
-    return max(out) if out else None
+    return None
 
 
 def note_slow(tool, args, session, secs):

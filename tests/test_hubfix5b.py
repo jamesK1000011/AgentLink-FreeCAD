@@ -304,6 +304,19 @@ class BatchTypical(unittest.TestCase):
             jobs.note_time("t_tool", x)
         self.assertEqual(jobs._RECENT["t_tool"], [30, 2, 50, 40, 3])
         self.assertEqual(jobs.typical("t_tool"), 30)
+        # A wild size-scaled estimate from the slow-read log is not trusted (live: part_loft "7813307 s").
+        jobs._RECENT.pop("t_tool", None)
+        real = jobs.keep.queue_state, jobs.keep.estimate_range
+        try:
+            jobs.keep.queue_state = lambda: {"timings": {"t_tool": [1]}}
+            jobs.keep.estimate_range = lambda q, n, size: (1.0, 7813307.0, 9e9)
+            self.assertIsNone(jobs.typical("t_tool"))
+            jobs.keep.estimate_range = lambda q, n, size: (1.0, 12.0, 30.0)
+            self.assertEqual(jobs.typical("t_tool"), 12.0)
+        finally:
+            jobs.keep.queue_state, jobs.keep.estimate_range = real
+        for x in (30, 2, 50, 40, 3):
+            jobs.note_time("t_tool", x)
         jobs.note_time("t_tool", "x")
         jobs.note_time("t_tool", -1)
         self.assertEqual(len(jobs._RECENT["t_tool"]), 5)
