@@ -3189,6 +3189,17 @@ def path_redraw(op):
         if vo is None or not bool(vo.Visibility):
             return False
         props = getattr(vo, "PropertiesList", None) or ()
+        try:
+            # Measured live (17 Nov, second probe): the mode switch had no
+            # child at all. A Python view provider attaches its drawing only
+            # when its Proxy is set (ViewProviderPythonFeatureT delays attach;
+            # CAM's App-side Create never sets it). CAM's own Job does
+            # ViewObject.Proxy = 0 for the same reason (Path/Main/Job.py 459).
+            if getattr(vo, "Proxy", None) is None and "Proxy" in props:
+                vo.Proxy = 0
+                props = getattr(vo, "PropertiesList", None) or props
+        except Exception:  # noqa: BLE001
+            pass
         if "DisplayMode" in props:
             # Measured live (17 Nov, the path_seen probe): an operation made by
             # CAM's App-side Create has no GUI proxy and its DisplayMode is
