@@ -59,11 +59,21 @@
   "model": "window pass 3 (17 Nov), win3 models",
   "note": "17 Nov: window pass 3, the picture after the tool's first accepted call reviewed GOOD or MINOR (live/w3/review0-3)"
  },
+ "app_force_restart": {
+  "live": true,
+  "model": "alone-8",
+  "note": "17 Nov: live_run reset passed 3 of 3; gui_input clicked the Notes tab and Pin a Note and opened the Note dialog; app_force_restart recovered the window held by that dialog and reopened 11 documents"
+ },
  "app_recover": {
   "headless": true,
   "live": true,
   "model": "WorkshopRest",
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
+ },
+ "app_restart": {
+  "live": true,
+  "model": "alone-7",
+  "note": "17 Nov: app_restart saved 2 and reopened 14 documents; session_state answered after it"
  },
  "asm_add": {
   "description": true,
@@ -1850,6 +1860,11 @@
   "model": "Workshop Parts model: baseplate 2x2 [84, 84, 4.65], magnet baseplate 7.65 high with 8 holes of 6.2, project box inside [76, 56, 28] with pilot 2.8 and lid hole 3.7 at calibration 0.3, board box with standoffs and one opening; each put clear beside the last, all sound; floor range refused",
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
+ "gui_input": {
+  "live": true,
+  "model": "alone-8",
+  "note": "17 Nov: live_run reset passed 3 of 3; gui_input clicked the Notes tab and Pin a Note and opened the Note dialog; app_force_restart recovered the window held by that dialog and reopened 11 documents"
+ },
  "gui_unstick": {
   "headless": true,
   "live": true,
@@ -2107,6 +2122,11 @@
   "live": true,
   "model": "CoreDoc: document, measure, material, inspection, robot script (114 calls; 72-80 OpenSCAD not run)",
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
+ },
+ "live_run": {
+  "live": true,
+  "model": "alone-8",
+  "note": "17 Nov: live_run reset passed 3 of 3; gui_input clicked the Notes tab and Pin a Note and opened the Note dialog; app_force_restart recovered the window held by that dialog and reopened 11 documents"
  },
  "macro_approve": {
   "headless": true,
