@@ -250,13 +250,238 @@ class Uncover(unittest.TestCase):
 
         space = obj("Space", bb(2, 2, 0, 8, 8, 3))
         roof = obj("Roof", bb(0, 0, 0, 10, 10, 6))
-        doc = types.SimpleNamespace(Objects=[space, roof])
+        doc = types.SimpleNamespace(Name="House", Objects=[space, roof])
+        doc.getObject = lambda n: next((o for o in doc.Objects if o.Name == n), None)
+        for o in (space, roof):
+            o.Document = doc
+        docs = {"House": doc}
+        saved = echo.FreeCAD
+        echo.FreeCAD = types.SimpleNamespace(listDocuments=lambda: dict(docs), getDocument=lambda n: docs[n],
+                                             Console=types.SimpleNamespace(PrintLog=lambda *a: None))
+        self.addCleanup(setattr, echo, "FreeCAD", saved)
         self.assertEqual(echo.uncover(doc, [space]), ["Roof"])
         self.assertEqual(roof.ViewObject.Transparency, echo.COVER_ALPHA)
         self.assertEqual(echo.restore_covers(), ["Roof"])
         self.assertEqual(roof.ViewObject.Transparency, 0)
         self.assertTrue(all(k == "Transparency" for _n, k, _v in log))  # nothing but the view's transparency
         self.assertTrue(all(n == "Roof" for n, _k, _v in log))
+
+
+    def test_put_back_after_the_document_closed_or_the_object_went(self):
+        """A cover is looked up by name at the next change: a closed document
+        or a deleted object is passed over, never touched."""
+        vo = types.SimpleNamespace()
+        doc = types.SimpleNamespace(getObject=lambda n: None)  # the roof was deleted
+        saved = echo.FreeCAD
+        echo.FreeCAD = types.SimpleNamespace(listDocuments=lambda: {"Kept": doc}, getDocument=lambda n: doc,
+                                             Console=types.SimpleNamespace(PrintLog=lambda *a: None))
+        self.addCleanup(setattr, echo, "FreeCAD", saved)
+        echo._covers[:] = [("Closed", "Roof", 0), ("Kept", "Roof", 10)]
+        self.assertEqual(echo.restore_covers(), [])
+        self.assertEqual(echo._covers, [])
+        self.assertFalse(hasattr(vo, "Transparency"))
+
+
+# ---- round 4: nothing deferred outlives what it touches ---------------------------------
+
+class Signal:
+    def __init__(self):
+        self.slots = []
+
+    def connect(self, fn):
+        self.slots.append(fn)
+        return fn
+
+    def disconnect(self, fn):
+        self.slots.remove(fn)
+
+    def emit(self, *a):
+        for fn in list(self.slots):
+            fn(*a)
+
+
+class FakeQObject:
+    def __init__(self, parent=None):
+        self._parent, self.dead = parent, False
+        self.destroyed = Signal()
+
+    def parent(self):
+        if self.dead:
+            raise RuntimeError("Internal C++ object already deleted.")
+        return self._parent
+
+    def setObjectName(self, n):
+        self.name = n
+
+    def destroy(self):
+        """C++ deletes it: destroyed is sent, then any call raises."""
+        self.destroyed.emit()
+        self.dead = True
+
+
+class FakeTimer(FakeQObject):
+    made = []
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.timeout, self.running, self.deleted = Signal(), False, False
+        FakeTimer.made.append(self)
+
+    def setSingleShot(self, on):
+        pass
+
+    def start(self, ms):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+    def deleteLater(self):
+        self.deleted = True
+
+    def fire(self):
+        if self.running:
+            self.running = False
+            self.timeout.emit()
+
+
+FakeQtCore = types.SimpleNamespace(QObject=FakeQObject, QTimer=FakeTimer)
+
+
+class NothingDeferredOutlivesItsTarget(unittest.TestCase):
+    def setUp(self):
+        FakeTimer.made = []
+        self.later = overlay.Later((FakeQtCore,))
+        self.ran = []
+
+    def test_alive(self):
+        window = FakeQObject()
+        button = FakeQObject(FakeQObject(window))
+        self.assertTrue(overlay.alive(button))
+        window.dead = True  # the toolbar's window went: the whole chain is gone
+        self.assertFalse(overlay.alive(button))
+        self.assertFalse(overlay.alive(None))
+        self.assertFalse(overlay.alive(object(), valid=lambda o: False))  # shiboken: deleted
+
+    def test_timers_are_ours_not_the_targets(self):
+        label = FakeQObject()
+        self.later.later(30000, lambda: self.ran.append(1), label)
+        t = FakeTimer.made[-1]
+        self.assertIs(t._parent, self.later.owner())  # owned by our QObject, never the label
+        self.assertIsNot(t._parent, label)
+
+    def test_target_destroyed_before_the_timer_fires(self):
+        label = FakeQObject()
+        self.later.later(30000, lambda: self.ran.append(1), label)
+        t = FakeTimer.made[-1]
+        label.destroy()  # the document closed and its 3D view with the caption
+        self.assertFalse(t.running)       # stopped by destroyed
+        self.assertTrue(t.deleted)
+        self.assertEqual(self.later.pending, {})
+        t.fire()
+        self.assertEqual(self.ran, [])
+
+    def test_target_dead_without_a_destroyed_signal(self):
+        """A wrapper whose C++ object went without a signal seen: the
+        callback checks alive() and does nothing."""
+        button = FakeQObject()
+        self.later.later(1300, lambda: self.ran.append(1), button)
+        t = FakeTimer.made[-1]
+        button.dead = True
+        t.fire()
+        self.assertEqual(self.ran, [])
+        self.assertEqual(self.later.pending, {})
+
+    def test_alive_target_runs_once(self):
+        action = FakeQObject()
+        self.later.later(1300, lambda: self.ran.append(1), action)
+        t = FakeTimer.made[-1]
+        t.fire()
+        t.fire()
+        self.assertEqual(self.ran, [1])
+        self.assertEqual(action.destroyed.slots, [])  # its connection taken off
+        action.destroy()  # later: nothing left to call
+
+    def test_a_failing_callback_never_raises(self):
+        self.later.later(10, lambda: 1 / 0, None)
+        FakeTimer.made[-1].fire()
+
+    def test_caption_on_a_closed_view_is_not_touched(self):
+        dead = FakeQObject()
+        dead.dead = True
+        calls = []
+        dead.isVisible = lambda: calls.append("isVisible")
+        echo._hide_later(dead, "words", None)
+        self.assertEqual(calls, [])
+
+    def test_a_caption_whose_view_closed_is_made_again(self):
+        """The held caption's 3D view was closed: the old label is never
+        touched; a new one is made on the view in front."""
+        made = []
+
+        class Label(FakeQObject):
+            def __init__(self, parent):
+                super().__init__(parent)
+                made.append(self)
+                self.w = self.h = 10
+
+            def __getattr__(self, k):  # setText, show, move, ...
+                return lambda *a, **kw: None
+
+            def width(self):
+                return self.w
+
+            def height(self):
+                return self.h
+
+        old = FakeQObject()
+        old.dead = True
+        old.hide = lambda: self.fail("a dead label touched")
+        host = FakeQObject()
+        host.width = lambda: 800
+        host.height = lambda: 600
+        keys = ("_caption", "_qt", "_view_widget")
+        saved = {k: getattr(echo, k) for k in keys}
+        self.addCleanup(lambda: [setattr(echo, k, v) for k, v in saved.items()])
+        echo._caption = old
+        qtcore = types.SimpleNamespace(Qt=types.SimpleNamespace(WA_TransparentForMouseEvents=1))
+        echo._qt = lambda: (qtcore, None, types.SimpleNamespace(QLabel=Label))
+        echo._view_widget = lambda: host
+        saved_later = overlay._LATER[:]
+        overlay._LATER[:] = [self.later]
+        self.addCleanup(lambda: overlay._LATER.__setitem__(slice(None), saved_later))
+        echo.caption("Padded Profile")
+        self.assertEqual(len(made), 1)
+        self.assertIs(echo._caption, made[0])
+        t = FakeTimer.made[-1]
+        self.assertIs(t._parent, self.later.owner())
+        made[0].destroy()  # this view closes too, before the 30 s are up
+        self.assertFalse(t.running)
+
+    def test_lit_menu_item_gone(self):
+        dead = FakeQObject()
+        dead.dead = True
+        calls = []
+        dead.setFont = lambda f: calls.append(f)
+        echo._later(dead, "setFont", "font")
+        self.assertEqual(calls, [])
+
+
+class OverlayDropsTheDead(unittest.TestCase):
+    def test_marks_of_destroyed_buttons_go_without_a_touch(self):
+        ov = overlay.Overlay(gui=None)
+        live, gone, menu = FakeQObject(), FakeQObject(), FakeQObject()
+        ov.board.add("echo", [{"widget": live, "style": "flash"}, {"widget": gone, "style": "flash"}], ms=echo.HOLD_MS)
+        ov.board.add("x", [{"widget": live, "host": menu}])
+        painter = FakeQObject()
+        ov._painters[menu] = painter
+        gone.dead = True  # a workbench change deleted its toolbar
+        menu.dead = True  # and its menu
+        dropped = ov.gone()
+        self.assertEqual(len(dropped), 2)
+        self.assertEqual([m.widget for m in ov.board.marks], [live])
+        self.assertNotIn(menu, ov._painters)
+        self.assertIsNone(ov._map(types.SimpleNamespace(host=None, widget=gone, rect=None, viewport=None)))
 
 
 class Names(unittest.TestCase):

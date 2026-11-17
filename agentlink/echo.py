@@ -650,17 +650,21 @@ def caption(text, ms=HOLD_MS):
     """A line of text over the 3D view, bottom right, gone after ms (or
     when newer words take its place)."""
     global _caption
+    from .overlay import alive, later
+
     QtCore, _QtGui, QtW = _qt()
     host = _view_widget()
-    if host is None:
+    if host is None or not alive(host):
         return
+    if _caption is not None and not alive(_caption):
+        _caption = None  # its view was closed, and the label with it: never touched again
     if _caption is None or _caption.parent() is not host:
         if _caption is not None:
             # Words held on another view (a page, the last document's 3D
             # view) go: only one caption is ever up.
             try:
                 _caption.hide()
-            except RuntimeError:  # its view was closed
+            except RuntimeError:
                 pass
         _caption = QtW.QLabel(host)
         _caption.setStyleSheet("QLabel { background: rgba(20,22,26,200); color: #f2f2f2; border-radius: 6px; padding: 6px 10px; font-size: 13px; }")
@@ -676,7 +680,10 @@ def caption(text, ms=HOLD_MS):
     _caption.raise_()
     lbl = _caption
     _caption_no[0] += 1
-    QtCore.QTimer.singleShot(ms, lambda no=_caption_no[0]: _hide_later(lbl, text, no))
+    # Our own timer (overlay.later: owned by a QObject of ours, stopped when
+    # the label is destroyed, and run only while it is alive), never one
+    # left on the label or its view.
+    later(ms, lambda no=_caption_no[0]: _hide_later(lbl, text, no), lbl)
 
 
 def _hide_later(lbl, text, no=None):
@@ -685,7 +692,11 @@ def _hide_later(lbl, text, no=None):
     gone: closing a document deletes the 3D view and the label with it, and
     the timer then raised "Internal C++ object already deleted" in the
     Report view (as _later guards the lit buttons)."""
+    from .overlay import alive
+
     if no is not None and no != _caption_no[0]:
+        return
+    if not alive(lbl):
         return
     try:
         if lbl.isVisible() and lbl.text().endswith(text):
@@ -779,7 +790,7 @@ def flash_command(cmd, ms=HOLD_MS, settle=False, menu_ms=1300):
         f = QtGui.QFont(old)
         f.setBold(True)
         a.setFont(f)
-        QtCore.QTimer.singleShot(menu_ms, lambda a=a, old=old: _later(a, "setFont", old))
+        overlay.later(menu_ms, lambda a=a, old=old: _later(a, "setFont", old), a)
     return how
 
 
@@ -827,6 +838,10 @@ def _later(obj, method, value):
     a workbench switch in the meantime deletes its toolbars' actions, and
     calling into one raised "Internal C++ object already deleted" in the
     Report view (GUI pass on the Mac)."""
+    from .overlay import alive
+
+    if not alive(obj):
+        return
     try:
         getattr(obj, method)(value)
     except RuntimeError:
@@ -1062,8 +1077,10 @@ def frame_box(v, box):
 
 # ---- a result hidden under other things (round 3, item 4) ---------------------------------
 
-# Objects the echo made see-through for a result under them: (object, the
-# Transparency it had), put back at the next changing call (restore_covers).
+# Objects the echo made see-through for a result under them: (document
+# name, object name, the Transparency it had), put back at the next changing
+# call (restore_covers). Names, never the objects: a document closed or an
+# object deleted in between is looked up and found gone, not touched.
 _covers = []
 COVER_ALPHA = 80      # how see-through a cover is made (FreeCAD's Transparency, 0-100)
 COVERS_MOST = 30      # at most this many made see-through for one call
@@ -1187,7 +1204,7 @@ def uncover(doc, made):
                 others.append((o, b))
         for o in covers(mine, others)[:COVERS_MOST]:
             vo = o.ViewObject
-            _covers.append((o, int(vo.Transparency or 0)))
+            _covers.append((o.Document.Name, o.Name, int(vo.Transparency or 0)))
             vo.Transparency = COVER_ALPHA
             done.append(getattr(o, "Label", "?"))
     except Exception as e:  # noqa: BLE001
@@ -1200,11 +1217,17 @@ def restore_covers():
     back. Never raises."""
     back = []
     while _covers:
-        o, was = _covers.pop()
+        doc_name, name, was = _covers.pop()
         try:
-            o.ViewObject.Transparency = was
+            if doc_name not in FreeCAD.listDocuments():
+                continue  # closed since: nothing to put back
+            o = FreeCAD.getDocument(doc_name).getObject(name)
+            vo = getattr(o, "ViewObject", None) if o is not None else None
+            if vo is None:
+                continue  # deleted since
+            vo.Transparency = was
             back.append(o.Label)
-        except Exception:  # noqa: BLE001  (deleted since)
+        except Exception:  # noqa: BLE001
             continue
     return back
 

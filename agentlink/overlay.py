@@ -417,6 +417,8 @@ class Overlay:
         try:
             if widget is None:
                 return "not found"
+            if not alive(widget):
+                return "gone"
             if not widget.isVisible():
                 return "hidden"
             if widget.window() is not mw and not _is_menu(widget):
@@ -514,7 +516,7 @@ class Overlay:
 
     def flash(self, widget, ms=1300, owner="echo"):
         """A button lit for ms, filled with the accent under its ring."""
-        if self.visible(widget) is not None:
+        if not alive(widget) or self.visible(widget) is not None:
             return False
         self.board.add(owner, [{"widget": widget, "style": "flash"}], ms=ms)
         self._refresh()
@@ -570,7 +572,7 @@ class Overlay:
         def closed(m=menu):
             self.board.drop(lambda x: x.host is m)
             p = self._painters.pop(m, None)
-            if p is not None:
+            if p is not None and alive(p):
                 try:
                     p.deleteLater()
                 except RuntimeError:
@@ -589,13 +591,14 @@ class Overlay:
             if owner is not None and who != owner:
                 keep.append((menu, opened, closed, who))
                 continue
-            try:
-                menu.aboutToShow.disconnect(opened)
-                menu.aboutToHide.disconnect(closed)
-            except Exception:
-                pass
+            if alive(menu):
+                try:
+                    menu.aboutToShow.disconnect(opened)
+                    menu.aboutToHide.disconnect(closed)
+                except Exception:
+                    pass
             p = self._painters.pop(menu, None)
-            if p is not None:
+            if p is not None and alive(p):
                 try:
                     p.deleteLater()
                 except RuntimeError:
@@ -608,6 +611,8 @@ class Overlay:
         w = m.get("widget") if isinstance(m, dict) else m.widget
         rect = m.get("rect") if isinstance(m, dict) else m.rect
         port = (m.get("viewport") if isinstance(m, dict) else m.viewport) or w
+        if not alive(w) or not alive(port) or (host is not None and not alive(host)):
+            return None
         try:
             if w is None or not w.isVisible():
                 return None
@@ -657,16 +662,33 @@ class Overlay:
             at = traceback.extract_tb(e.__traceback__)[-1]
             return f" ({type(e).__name__}: {str(e)[:120]} at {at.name}:{at.lineno})"
 
+    def gone(self):
+        """Marks whose widget, viewport or host (a menu) was destroyed (a
+        workbench change deletes its toolbars' buttons and its menus), and
+        painters whose host or self is gone, dropped without touching them.
+        The marks dropped."""
+        dead = self.board.drop(lambda m: (m.widget is not None and not alive(m.widget)) or (m.viewport is not None and not alive(m.viewport))
+                               or (m.host is not None and not alive(m.host)))
+        for host in list(self._painters):
+            p = self._painters[host]
+            if (host is not None and not alive(host)) or not alive(p):
+                self._painters.pop(host, None)
+        self._menus = [x for x in self._menus if alive(x[0])]
+        return dead
+
     def _refresh(self):
         try:
             self.board.expire()
+            self.gone()
             mw = self.window()
-            if mw is None:
+            if mw is None or not alive(mw):
                 return
             hosts = {None} | {m.host for m in self.board.marks}
             for host in list(self._painters):
                 if host not in hosts:
                     p = self._painters.pop(host)
+                    if not alive(p):
+                        continue
                     try:
                         p.hide()
                         p.deleteLater() if host is not None else None
@@ -687,12 +709,8 @@ class Overlay:
 
     def _painter(self, widget, host):
         p = self._painters.get(host)
-        try:
-            if p is not None:
-                p.isVisible()  # RuntimeError when gone
-                return p
-        except RuntimeError:
-            pass
+        if p is not None and alive(p):
+            return p
         cls = _painter_class()
         if cls is None:
             return None
@@ -717,7 +735,7 @@ class Overlay:
             from PySide import QtCore
 
             if self._timer is None:
-                self._timer = QtCore.QTimer()
+                self._timer = QtCore.QTimer(timer_owner())  # ours, never a ringed widget's
                 self._timer.setInterval(TICK_MS)
                 self._timer.timeout.connect(self._refresh)
             if on and not self._timer.isActive():
@@ -774,6 +792,165 @@ def _log(what, e):
 
 
 _SERVICE = None
+
+
+# ---- Qt objects that may be gone, and timers that outlive nothing ---------------
+#
+# A ringed toolbar button dies when the workbench changes, a caption's 3D
+# view when its document closes, a menu when its bench goes. A timer whose
+# receiver died, or a callback that touches a widget C++ already deleted,
+# crashed FreeCAD (SIGBUS in QTimerInfoList::activateTimers, inside an
+# updateGui() of window_snapshot). So: every check goes through alive(),
+# every deferred call through later(): its QTimer is owned by one long-lived
+# QObject of ours (never the target), stopped when the target is destroyed,
+# and its callback runs only when the target is still alive.
+
+_SHIBOKEN = []
+
+
+def _shiboken():
+    if not _SHIBOKEN:
+        mod = None
+        for name in ("shiboken6", "shiboken2"):
+            try:
+                mod = __import__(name)
+                break
+            except Exception:  # noqa: BLE001
+                continue
+        _SHIBOKEN.append(mod)
+    return _SHIBOKEN[0]
+
+
+PARENTS_MOST = 64
+
+
+def alive(obj, valid=None):
+    """Whether a Qt object can be touched: its C++ object is there (shiboken's
+    isValid), and so is every parent up its chain. None is not alive. A
+    non-Qt stand-in counts as alive. valid: the check for one object (tests).
+    Never raises."""
+    if obj is None:
+        return False
+    if valid is None:
+        sh = _shiboken()
+
+        def valid(o):
+            if sh is None:
+                return True
+            try:
+                return bool(sh.isValid(o))
+            except Exception:  # noqa: BLE001  (not a Qt object)
+                return True
+    try:
+        o = obj
+        for _ in range(PARENTS_MOST):
+            if not valid(o):
+                return False
+            fn = getattr(o, "parent", None)
+            if not callable(fn):
+                return True
+            o = fn()
+            if o is None:
+                return True
+        return True
+    except RuntimeError:  # "Internal C++ object already deleted"
+        return False
+    except Exception:  # noqa: BLE001
+        return False
+
+
+class Later:
+    """Deferred calls: later(ms, fn, target). Each is a single-shot QTimer
+    owned by this object's own QObject (made once, parented to nothing that
+    goes away), stopped when target is destroyed, and fn runs only while
+    target is alive(). Plain enough to drive with stand-ins: qt is
+    (QtCore,) or None (made on first use)."""
+
+    def __init__(self, qt=None):
+        self._qt = qt
+        self._owner = None
+        self.pending = {}  # id -> (timer, target, connection)
+        self._n = 0
+
+    def owner(self):
+        if self._owner is None or not alive(self._owner):
+            QtCore = self._qt[0] if self._qt else _qt()[0]
+            self._owner = QtCore.QObject()
+            self._owner.setObjectName("AgentLinkTimers")
+        return self._owner
+
+    def later(self, ms, fn, target=None):
+        """fn() after ms, unless target (a Qt object) is gone by then. The
+        handle, or None (no Qt). Never raises."""
+        try:
+            QtCore = self._qt[0] if self._qt else _qt()[0]
+            t = QtCore.QTimer(self.owner())
+            t.setSingleShot(True)
+            self._n += 1
+            key = self._n
+            conn = None
+            if target is not None:
+                try:
+                    conn = target.destroyed.connect(lambda *_a, k=key: self.cancel(k))
+                except Exception:  # noqa: BLE001  (not a QObject: checked with alive() at the time)
+                    conn = None
+            self.pending[key] = (t, target, conn)
+            t.timeout.connect(lambda k=key: self._fire(k, fn))
+            t.start(max(0, int(ms)))
+            return key
+        except Exception as e:  # noqa: BLE001
+            _log("overlay: a deferred call was not set", e)
+            return None
+
+    def _drop(self, key):
+        t, target, conn = self.pending.pop(key, (None, None, None))
+        if conn is not None and target is not None and alive(target):
+            try:
+                target.destroyed.disconnect(conn)
+            except Exception:  # noqa: BLE001
+                pass
+        if t is not None and alive(t):
+            try:
+                t.stop()
+                t.deleteLater()
+            except Exception:  # noqa: BLE001
+                pass
+        return t
+
+    def cancel(self, key):
+        """A pending call dropped (its target was destroyed)."""
+        self._drop(key)
+
+    def _fire(self, key, fn):
+        if key not in self.pending:
+            return
+        _t, target, _c = self.pending[key]
+        self._drop(key)
+        if target is not None and not alive(target):
+            return
+        try:
+            fn()
+        except RuntimeError:  # gone in the meantime
+            pass
+        except Exception as e:  # noqa: BLE001
+            _log("overlay: a deferred call failed", e)
+
+
+_LATER = []
+
+
+def later(ms, fn, target=None):
+    """The one Later of this FreeCAD: fn() after ms while target lives."""
+    if not _LATER:
+        _LATER.append(Later())
+    return _LATER[0].later(ms, fn, target)
+
+
+def timer_owner():
+    """The long-lived QObject our own timers belong to."""
+    if not _LATER:
+        _LATER.append(Later())
+    return _LATER[0].owner()
 
 
 def service():
@@ -835,6 +1012,8 @@ def _painter_class():
             self.setGeometry(parent.rect())
 
         def sync(self):
+            if not alive(self):
+                return
             par = self.parentWidget()
             moved = False
             if par is not None and self.geometry() != par.rect():
@@ -955,13 +1134,20 @@ def _watcher_class():
 
         def follow(self, widgets):
             for k in list(self.on):
-                if k not in widgets:
-                    w = self.on.pop(k)
+                w = self.on[k]
+                if not alive(w):
+                    # Destroyed: Qt took its filters with it; never touched
+                    # (an id can be used again by a new widget).
+                    self.on.pop(k)
+                elif k not in widgets or widgets[k] is not w:
+                    self.on.pop(k)
                     try:
                         w.removeEventFilter(self)
                     except RuntimeError:
                         pass
             for k, w in widgets.items():
+                if not alive(w):
+                    continue
                 if k not in self.on:
                     try:
                         w.installEventFilter(self)
@@ -973,6 +1159,8 @@ def _watcher_class():
             try:
                 if ev.type() in kinds:
                     for p in list(self.ov._painters.values()):
+                        if not alive(p):
+                            continue
                         try:
                             p.sync()
                         except RuntimeError:
