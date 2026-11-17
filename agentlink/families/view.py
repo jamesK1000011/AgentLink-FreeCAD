@@ -12,6 +12,7 @@ import numpy as np
 
 from .. import render
 from .. import paths
+from .. import runners
 from ..protocol import Tool, ToolError
 from ..tools import obj
 from . import picks
@@ -609,93 +610,39 @@ def tools(session):
             out["fitted"] = False  # framed on the zoom, not fitted to the parts
         return out
 
-    def view_maps(a):
-        return {"maps": [{"name": n, "about": about} for n, (_, about) in render.MAPS.items()],
-                "layers": [{"name": n, "about": about} for n, (_, about) in render.LAYERS.items()],
-                "views": list(render.VIEWS)}
-
     SNAP_TURN = {"iso": "viewIsometric", "front": "viewFront", "rear": "viewRear", "top": "viewTop", "bottom": "viewBottom", "left": "viewLeft", "right": "viewRight"}
 
-    def snap_views(a):
-        """The views asked for: view (one) or views (a list, up to 6, or
-        "all"); [] keeps the person's view."""
-        v = a.get("views")
-        if v is None:
-            v = a.get("view")
-            v = [v] if v else []
-        elif v == "all":
-            v = list(GRID)
-        elif isinstance(v, str):
-            v = [v]
-        if not isinstance(v, list):
-            raise ToolError("invalid_input", f"views: a list of {', '.join(SNAP_TURN)} (up to 6), or \"all\".")
-        out = []
-        for n in v:
-            n = ALIASES.get(str(n).lower(), str(n).lower())
-            if n not in SNAP_TURN:
-                raise ToolError("invalid_input", f"view: one of {', '.join(SNAP_TURN)}, or left out to keep the person's view.")
-            out.append(n)
-        if len(out) > 6:
-            raise ToolError("invalid_input", "views: 1 to 6.")
-        return out
+    # ---- view_maps and view_snapshot are data (agentlink/data/tools.json): what their entries call ----
 
-    def view_snapshot(a):
+    def gui_up():
+        """Whether this FreeCAD has a window."""
         import FreeCAD
 
-        views = snap_views(a)
-        w, h = int(a.get("width", 800)), int(a.get("height", 600))
-        if not (16 <= w <= 4096 and 16 <= h <= 4096):
-            raise ToolError("invalid_input", "width and height: 16 to 4096 px.")
-        if not FreeCAD.GuiUp:
-            raise ToolError("unavailable", "view_snapshot is the FreeCAD window's own view: there is no window (headless). view_render draws the parts without one.")
+        return bool(FreeCAD.GuiUp)
+
+    def active_view():
+        """The window's 3D view of the session's document, or None when the
+        document has none open."""
         import FreeCADGui
 
         gd = FreeCADGui.getDocument(s.doc.Name)
-        view = gd.activeView() if gd else None
-        if view is None or not hasattr(view, "saveImage"):
-            raise ToolError("unavailable", "No 3D view open for this document: open one in FreeCAD, then again — or view_render.")
-        bg = a.get("background", "Current")
-        if len(views) <= 1:
-            which = views[0] if views else None
-            fitted = False
-            if which:
-                getattr(view, SNAP_TURN[which])()
-                if a.get("fit", True):
-                    snap_fit(view, w, h)
-                    fitted = True
-            # Nothing (or a speck) of the model in the view: said, with no
-            # picture taken to look at.
-            why = _snap_empty(s, view)
-            if why:
-                return {"empty": why, "view": which or "as the person left it", "fitted": fitted}
-            p = paths.out_file(s, "view_snapshot", a.get("path") or f"snapshot_{which or 'current'}.png", ".png")
-            view.saveImage(p, w, h, bg)
-            fit_png(p, w, h)
-            got = png_size(p) or (w, h)
-            out = {"path": p, "view": which or "as the person left it", "width": got[0], "height": got[1], "bytes": os.path.getsize(p)}
-            if not fitted:
-                out["fitted"] = False
-                out["fitNote"] = ("Not re-fitted: the view is as the person left it (its zoom and pan), so parts may be cut off or out of frame."
-                                  if not which else "Turned but not re-fitted (fit: false): the zoom is the person's, so parts may be cut off.")
-            if got != (w, h):
-                out["warning"] = f"Asked {w} x {h}; FreeCAD saved {got[0]} x {got[1]} and it could not be resized here."
-            if a.get("inline", True):
-                with open(p, "rb") as f:
-                    out["_png"] = f.read()
-            return out
-        # Several views: each saved on its own, then one grid picture of them
-        # (2 across up to 4, 3 across for 5 or 6). The person's camera is put
-        # back afterwards.
-        # width and height are the whole picture; cell: true makes them each
-        # view's (the grid then cols x that).
-        cols, rows, cw, ch = snap_size(w, h, len(views), bool(a.get("cell")))
-        if cw * cols > 8192 or ch * rows > 8192:
-            raise ToolError("invalid_input", f"cell {cw} x {ch} in a {cols} x {rows} grid is {cw * cols} x {ch * rows} px: 8192 at most each way.")
+        return gd.activeView() if gd else None
+
+    def turn(view, name):
+        """The view turned to a standard view (SNAP_TURN: FreeCAD's own
+        viewFront, viewIsometric …)."""
+        getattr(view, SNAP_TURN[name])()
+
+    def nothing_shown():
+        """Why a grid of views would show nothing (emptywhy.off_screen), or
+        None: nothing with a shape is visible in the window."""
         from .. import emptywhy
 
-        why = emptywhy.off_screen([], None, shown=0, hidden=[o.Label for o in s.hidden_in(s.doc)]) if not _snap_shown(s) else None
-        if why:
-            return {"empty": why, "views": views}
+        return emptywhy.off_screen([], None, shown=0, hidden=[o.Label for o in s.hidden_in(s.doc)]) if not _snap_shown(s) else None
+
+    def shots(view, views, cw, ch, bg, fit):
+        """Each view saved on its own (turned, fitted when asked, cw x ch),
+        the person's camera put back afterwards whatever happens. The files."""
         try:
             cam = view.getCamera()
         except Exception:
@@ -703,8 +650,8 @@ def tools(session):
         each = []
         try:
             for n in views:
-                getattr(view, SNAP_TURN[n])()
-                if a.get("fit", True):
+                turn(view, n)
+                if fit:
                     snap_fit(view, cw, ch)
                 q = paths.out_file(s, "view_snapshot", f"snapshot_{n}.png", ".png")
                 view.saveImage(q, cw, ch, bg)
@@ -716,27 +663,22 @@ def tools(session):
                     view.setCamera(cam)
                 except Exception:
                     pass
-        p = paths.out_file(s, "view_snapshot", a.get("path") or f"snapshot_{'_'.join(views)}.png", ".png")
-        combined = snap_combine(each, views, cols, rows, cw, ch, p)
-        out = {"views": views, "paths": each, "width": cw * cols, "height": ch * rows, "grid": [cols, rows], "cell": [cw, ch],
-               **({} if a.get("fit", True) else {"fitted": False, "fitNote": "Turned but not re-fitted (fit: false): each view keeps the person's zoom, so parts may be cut off or out of frame."}),
-               "sizeIs": "each view's (cell: true)" if a.get("cell") else "the whole grid (cell: true makes it each view's)",
-               "note": "The person's own view is put back."}
-        if combined:
-            got = png_size(p)
-            if got and got != (cw * cols, ch * rows):
-                fit_png(p, cw * cols, ch * rows)
-                got = png_size(p) or got
-            if got:
-                out["width"], out["height"] = got
-            out["path"] = p
-            out["bytes"] = os.path.getsize(p)
-            if a.get("inline", True):
-                with open(p, "rb") as f:
-                    out["_png"] = f.read()
-        else:
-            out["warning"] = "The views could not be put in one picture here: each view's own file is in paths."
-        return out
+        return each
+
+    def read_bytes(p):
+        """A file's bytes (the picture sent back with the answer)."""
+        with open(p, "rb") as f:
+            return f.read()
+
+    helpers = {
+        "maps": lambda: render.MAPS, "layers": lambda: render.LAYERS, "views": lambda: list(render.VIEWS),
+        "SNAP_TURN": SNAP_TURN, "GRID": GRID, "alias": lambda n: ALIASES.get(str(n).lower(), str(n).lower()),
+        "gui_up": gui_up, "active_view": active_view, "turn": turn,
+        "snap_fit": snap_fit, "snap_empty": lambda view: _snap_empty(s, view), "nothing_shown": nothing_shown,
+        "snap_size": snap_size, "shots": shots, "snap_combine": snap_combine, "fit_png": fit_png, "png_size": png_size,
+        "out_file": lambda name: paths.out_file(s, "view_snapshot", name, ".png"),
+        "filesize": os.path.getsize, "read_bytes": read_bytes,
+    }
 
     vschema = {"description": "A view (iso, top, bottom, front, rear, left, right, iso-front-left, iso-rear-left, iso-rear-right), a list of up to 6 drawn side by side, or \"all\"."}
     return [
@@ -758,6 +700,4 @@ def tools(session):
             }),
             view_render,
         ),
-        Tool("view_maps", "The maps and layers view_render can draw here (add-ons add theirs), and the views.", obj({}), view_maps),
-        Tool("view_snapshot", "Save the FreeCAD window's own 3D view as the person sees it (view: turn it to a standard view first, fit true) and look at it. views [..] (up to 6, or \"all\") gives one grid picture of them, each view's file in paths, and puts the person's view back. width and height (800 x 600) are the whole picture — the grid with several views, split among them; cell: true makes them each view's size instead. The answer gives the sizes as saved. When nothing with a shape is shown (an empty document, everything hidden), or the model lies outside the frame or is under 6 pixels across as the view stands, the answer is empty with the reason and what to do, and no picture is taken. fitted: false with fitNote says the view was not re-fitted (no view given: as the person left it; or fit: false), so parts may be cut off. Needs the window; view_render draws without one.", obj({"cell": {"type": "boolean", "description": "width and height are each view's in the grid, not the whole grid's."}, "view": {"type": "string"}, "views": {"description": "A list of views (iso, top, bottom, front, rear, left, right), up to 6, or \"all\" (iso, top, front, right): one grid picture."}, "fit": {"type": "boolean"}, "width": {"type": "integer"}, "height": {"type": "integer"}, "background": {"type": "string"}, "inline": {"type": "boolean"}, "path": {"type": "string"}}), view_snapshot),
-    ]
+    ] + runners.tools(GROUP, s, helpers)

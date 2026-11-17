@@ -17,7 +17,7 @@ import time
 
 import FreeCAD
 
-from .. import keep
+from .. import keep, runners
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 
@@ -80,65 +80,36 @@ def _modified(d):
 
 
 def tools(s):
-    def dialog_answer(a):
+    # ---- dialog_answer, crash_collect, doc_switch and queue_go are data (agentlink/data/tools.json):
+    # what their entries call ----
+
+    def modal():
+        """The modal dialog in front of the window (gui_link.modal_info), or
+        None: none open, or no window."""
         from .. import gui_link
 
-        d = gui_link.modal_info() if FreeCAD.GuiUp else None
-        task = gui_link.task_info() if FreeCAD.GuiUp and d is None else None
-        if d is None and task is None:
-            return {"dialog": None, "note": "No dialog or task panel is open in the FreeCAD window."}
-        btn = a.get("button")
-        if d is None:
-            # No modal dialog, but a task panel (Combo View's Tasks): its OK,
-            # Cancel or other buttons, pressed the same way.
-            info = {k: v for k, v in task.items() if k != "widget"}
-            if a.get("text") is not None or a.get("item") is not None:
-                raise bad("text and item fill a modal dialog; a task panel's fields take gui_input.")
-            if not btn:
-                return {"task": info}
-            if not gui_link.press_task(task, btn):
-                raise bad(f"button: one of {', '.join(task['buttons'])} (Cancel closes the task).")
-            keep.log_watchdog({"event": "task", "title": task["title"], "pressed": btn, "by": "dialog_answer"})
-            return {"pressed": btn, "task": info}
-        info = {k: v for k, v in d.items() if k != "widget"}
-        typed = None
-        if a.get("text") is not None or a.get("item") is not None:
-            if not btn:
-                raise bad("text and item are set before a button is pressed: give button too (OK, usually).")
-            try:
-                typed = gui_link.fill(d, a.get("text"), a.get("item"))
-            except ValueError as e:
-                raise bad(str(e)) from None
-        if not btn:
-            return {"dialog": info}
-        # The agent operates FreeCAD as the person would, whoever opened the
-        # dialog: it reads it and presses the button the job needs, as if the
-        # person were just watching. What was pressed is logged and said in
-        # the answer, so the person can see it.
-        if btn.lower() not in [b.lower() for b in d["buttons"]] and btn.lower() not in gui_link.BACK_OUT:
-            raise bad(f"button: one of {', '.join(d['buttons']) or 'none (Cancel closes it)'}.")
-        kept = None
-        if btn.lower() == "cleanup" and "DocumentRecovery" in str(d.get("class")):
-            # Cleanup deletes FreeCAD's recovery files: they are copied into
-            # ~/AgentLink/crash first, so the crash can still be looked into.
-            from .. import crash_logs
+        return gui_link.modal_info() if FreeCAD.GuiUp else None
 
-            kept = crash_logs.collect()
-        if not gui_link.press(d, btn):
-            raise ToolError("failed", f"Could not press {btn}.")
-        keep.log_watchdog({"event": "dialog", "title": d["title"], "pressed": btn, "by": "dialog_answer"})
-        out = {"pressed": btn, "dialog": info}
-        if typed:
-            out["typed"] = typed
-        if kept is not None:
-            out["kept"] = kept or {"note": "No recovery files or crash reports were found to keep."}
-        return out
+    def task_panel():
+        """The open task panel (Combo View's Tasks) and its buttons
+        (gui_link.task_info), or None."""
+        from .. import gui_link
 
-    def crash_collect(a):
+        return gui_link.task_info() if FreeCAD.GuiUp else None
+
+    def gl(name):
+        """One of gui_link's dialog functions by name (press, press_task,
+        fill), loaded when a dialog is there to answer."""
+        from .. import gui_link
+
+        return getattr(gui_link, name)
+
+    def crash_kept():
+        """Crash evidence copied into ~/AgentLink/crash (crash_logs.collect):
+        what was kept, or nothing."""
         from .. import crash_logs
 
-        got = crash_logs.collect()
-        return got or {"note": "No recovery files from another FreeCAD and no new crash reports."}
+        return crash_logs.collect()
 
     def _bring_front(nd):
         """The document's 3D view made the window's active tab: the GUI's own
@@ -161,27 +132,18 @@ def tools(s):
             pass
         return True
 
-    def doc_switch(a):
-        ref = a.get("document")
-        if ref is not None and not isinstance(ref, str):
-            raise bad("document: an open document's name, label or .FCStd path (left out: the list of open ones).")
-        if not ref:
-            return {"document": s.doc.Name if s.doc else None, "label": s.doc.Label if s.doc else None,
-                    "open": [{"name": d.Name, "label": d.Label, "file": d.FileName or None, **_modified(d)} for d in FreeCAD.listDocuments().values()]}
+    def doc_by(ref):
+        """The open document ref names: by its name, its label or its
+        .FCStd file, then by name or label in any case; None when none."""
         want = os.path.abspath(os.path.expanduser(ref)) if (os.sep in ref or ref.lower().endswith(".fcstd")) else None
         nd = next((d for d in FreeCAD.listDocuments().values() if ref in (d.Name, d.Label) or (want and d.FileName and os.path.abspath(d.FileName) == want)), None)
         if nd is None:
-            docs = list(FreeCAD.listDocuments().values())
-            nd = next((d for d in docs if str(ref).lower() in (d.Name.lower(), d.Label.lower())), None)
-        if nd is None:
-            from .doc import doc_names
+            nd = next((d for d in FreeCAD.listDocuments().values() if str(ref).lower() in (d.Name.lower(), d.Label.lower())), None)
+        return nd
 
-            raise ToolError("not_found", f"{ref}: not open — open, as label (name): " + (doc_names(docs) if docs else "no documents are open") + ". doc_open { path } opens a file.")
-        if s.doc is not None and nd.Name == s.doc.Name:
-            out = {"document": nd.Name, "label": nd.Label, "note": "Already on it."}
-            if a.get("front") and getattr(FreeCAD, "GuiUp", False):
-                out["front"] = _bring_front(nd)
-            return out
+    def moved_to(nd):
+        """The session moved to nd and pinned there: where it came from is
+        noted (doc.went_from), so closing nd goes back to it."""
         from .doc import went_from
 
         went_from(s, s.doc)
@@ -190,9 +152,28 @@ def tools(s):
             s.pinned_label = nd.Label
         except Exception:
             pass
-        front = bool(a.get("front") and getattr(FreeCAD, "GuiUp", False) and _bring_front(nd))
-        return {"document": nd.Name, "label": nd.Label, "front": front, "bodies": [o.Label for o in s.bodies()],
-                "note": "The agent works here from now on, whatever is in front of the window." + ("" if front else " front: true also brings it to the front.")}
+
+    def doc_names(docs):
+        """Open documents for a refusal, as doc.doc_names writes them."""
+        from .doc import doc_names as names
+
+        return names(docs)
+
+    def lifted(q):
+        """The heavy-job queue's hold lifted and its notice cleared, saved."""
+        q["held"] = False
+        q["notice"] = None
+        keep.save_queue(q)
+
+    helpers = {
+        "modal": modal, "task_panel": task_panel, "press": lambda d, btn: gl("press")(d, btn), "press_task": lambda task, btn: gl("press_task")(task, btn),
+        "fill": lambda d, text, item: gl("fill")(d, text, item), "back_out": lambda: gl("BACK_OUT"), "log_watchdog": lambda row: keep.log_watchdog(row),
+        "crash_kept": crash_kept,
+        "current": lambda: s.doc, "docs": lambda: list(FreeCAD.listDocuments().values()), "open_row": lambda d: {"name": d.Name, "label": d.Label, "file": d.FileName or None, **_modified(d)},
+        "doc_by": doc_by, "doc_names": doc_names, "moved_to": moved_to, "gui_up": lambda: bool(getattr(FreeCAD, "GuiUp", False)), "bring_front": _bring_front,
+        "bodies": lambda: s.bodies(),
+        "queue_state": lambda: keep.queue_state(), "lifted": lifted, "preset": lambda: keep.preset(),
+    }
 
     # ---- the Addon Manager, headless (I) ---------------------------------------------------
 
@@ -396,25 +377,8 @@ def tools(s):
         return {action + "ed" if action == "install" else "updated": name, "folder": where, "smoke": "passed", **({"previous": kept} if kept else {}),
                 "note": "In the Mod folder and checked headless; app_restart (window) loads it there."}
 
-    def queue_go(a):
-        q = keep.queue_state()
-        was = q.get("held")
-        q["held"] = False
-        q["notice"] = None
-        keep.save_queue(q)
-        m = keep.preset()
-        return {"go": True, "wasHeld": bool(was), "running": [r.get("tool") for r in q.get("running") or []],
-                "machine": {k: m.get(k) for k in ("heavySlots", "memoryCeilingGB", "fan")},
-                "note": "Heavy jobs start again. Only on the person's go (their words in chat)."}
-
     st = {"type": "string"}
     return [
-        Tool("queue_go", "The person's go for heavy jobs held while they worked in the window: call it only on their word in chat, never by yourself. It lifts the hold; nothing else changes. Reply: wasHeld, running (the heavy tools running now), machine (this computer's preset: heavySlots, memoryCeilingGB, fan).", obj({}), queue_go),
         Tool("addon", "FreeCAD's Addon Manager without its dialog (FreeCAD 1.1 and newer; works headless): action list (the folders in the Mod folder, with version; managedBy marks Agent Link's own, updated by agentlink_update, not here) | search { query } (part of a name, in the official catalog, fetched once a day) | install { name, url? (https / git address or a folder; else the catalog), branch?, confirm: \"install <name>\" } | update { name, confirm: \"update <name>\" } (from where it was installed) | remove { name, confirm: \"remove <name>\" }. confirm must be typed by the person, word for word: an add-on is code FreeCAD runs. Each install or update is then loaded in a separate headless FreeCAD (a smoke test, a minute or so) and rolled back when that fails. A new add-on's workbench shows in the window only after app_restart. Reply: installed / updated / removed, folder, smoke.",
              obj({"action": {"type": "string", "enum": ["list", "search", "install", "update", "remove"]}, "name": st, "query": st, "url": st, "branch": st, "confirm": st}), addon),
-        Tool("doc_switch", "Which open document the agent works in. document (internal name, label or .FCStd path) switches the session to it; it stays there whatever the person brings to the front of the window. front: true also brings its 3D view to the front — needed before gui_input, cmd_run and menu_run, which act on the document in front. With no document: the session's one and open [{ name, label, file, modified }]. Reply: document, label, front, bodies. Changes no document; the session's undo steps start afresh in the new one.",
-             obj({"document": st, "front": {"type": "boolean"}}), doc_switch),
-        Tool("crash_collect", "Copy crash evidence into ~/AgentLink/crash/<time>/: FreeCAD's document-recovery folders (from a FreeCAD that crashed or was stopped), its crash.log and the system's crash reports for FreeCAD (new ones only). Copies only, never removes. dialog_answer runs it by itself before Document Recovery's Cleanup.", obj({}), crash_collect),
-        Tool("dialog_answer", "The modal dialog in the FreeCAD window, if any (title, text, buttons); button presses one by its text (Cancel also closes a file picker; Document Recovery's Cleanup keeps a copy in ~/AgentLink/crash first). With no dialog, the open task panel and its buttons (OK, Cancel …). You operate FreeCAD as the person would: read it and press what the job needs (Cancel backs out of anything you did not mean to open); say what you pressed. text: typed into a text prompt (or the dialog's one text field), item: picked from a prompt's list, before button. A stuck window: app_force_restart.",
-             obj({"button": st, "text": st, "item": st}), dialog_answer),
-    ]
+    ] + runners.tools(GROUP, s, helpers)

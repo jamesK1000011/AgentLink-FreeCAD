@@ -11,7 +11,7 @@ import types
 
 import FreeCAD
 
-from .. import keep, paths, testrun
+from .. import keep, paths, runners, testrun
 from ..protocol import Tool, ToolError, bad
 from ..tools import obj
 from .unattended import installed_names, mod_dir
@@ -38,39 +38,44 @@ def tools(s):
     from ..gui_input import DRAG_STEPS as gi_steps
     from ..gui_input import MAX_WAIT as gi_wait
 
-    def addon_test(a):
-        job, addon = a.get("job"), a.get("addon")
-        if job is not None and addon is not None:
-            raise bad("addon starts a run, job reads one: give one of them (neither lists the recent jobs).")
-        if job is not None:
-            return testrun.wait(testrun.find(job), testrun.STATUS_WAIT, _pump())
-        if addon is None:
-            return testrun.listing()
-        pattern = a.get("pattern") or "test_*.py"
-        select = a.get("select") or None
-        timeout = a.get("timeout", testrun.TIMEOUT)
-        folder = a.get("folder") or None
-        if not testrun.PATTERN.fullmatch(str(pattern)):
-            raise bad("pattern: a file name glob ending in .py, no folders (test_*.py by default).")
-        if select is not None and not testrun.SELECT.fullmatch(str(select)):
-            raise bad("select: letters, digits and _ (part of a test's name).")
-        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout <= testrun.TIMEOUT_MAX:
-            raise bad(f"timeout: seconds, over 0 and at most {testrun.TIMEOUT_MAX:g} ({testrun.TIMEOUT:g} by default).")
-        if folder is not None and not testrun.FOLDER.fullmatch(str(folder)):
-            raise bad('folder: a subfolder of tests/, such as "make" (names joined by /; no "..").')
-        mod = mod_dir()
-        installed = installed_names(mod)
-        root = testrun.root_for(addon, mod, OWN_ROOT, installed)
+    # ---- addon_test and gui_unstick are data (agentlink/data/tools.json): what their entries call ----
+
+    def find_cmd():
+        """(FreeCAD's command-line binary, its library folder) beside this
+        FreeCAD, in FREECAD_APP or on the PATH; (None, None) when there is
+        none."""
         try:
             home = FreeCAD.getHomePath()
         except Exception:  # noqa: BLE001
             home = None
-        cmd, lib = testrun.find_cmd(home=home)
-        if cmd is None:
-            raise ToolError("unavailable", "No FreeCAD command-line binary (freecadcmd) beside this FreeCAD, in FREECAD_APP or on the PATH: the tests need it to run apart from this FreeCAD. Nothing was started.")
+        return testrun.find_cmd(home=home)
+
+    def job_wait(job):
+        """How a test job stands, waiting a while for its end (the window
+        keeps painting meanwhile)."""
+        return testrun.wait(testrun.find(job), testrun.STATUS_WAIT, _pump())
+
+    def started(cmd, addon, root, mod, installed, lib, pattern, select, timeout, folder):
+        """A test run started apart from this FreeCAD, with the other
+        installed add-ons on its path and its log under ~/AgentLink/tests;
+        its job (the result itself when it ends at once)."""
         roots = [os.path.join(mod, n) for n in sorted((installed or set()) - {"AgentLink", "AddonManager"}) if os.path.isdir(os.path.join(mod, n))]
         log = keep.path("tests", f"{addon}-{keep.stamp()}.log")
-        return testrun.wait(testrun.start(cmd, addon, root, OWN_ROOT, roots, lib, log, pattern, select, float(timeout), folder), testrun.START_WAIT, _pump())
+        return testrun.wait(testrun.start(cmd, addon, root, OWN_ROOT, roots, lib, log, pattern, select, timeout, folder), testrun.START_WAIT, _pump())
+
+    def unstick(all_):
+        """The menu, list or dialog in front closed (gui_link.unstick):
+        what was closed and what is still open."""
+        from .. import gui_link
+
+        return gui_link.unstick(all_=all_)
+
+    helpers = {
+        "listing": lambda: testrun.listing(), "job_wait": job_wait, "fits": lambda what, text: bool(getattr(testrun, what).fullmatch(text)),
+        "test_timeouts": lambda: (testrun.TIMEOUT, testrun.TIMEOUT_MAX), "mod_dir": lambda: mod_dir(), "installed_names": lambda mod: installed_names(mod),
+        "test_root": lambda addon, mod, installed: testrun.root_for(addon, mod, OWN_ROOT, installed), "find_cmd": find_cmd, "started": started,
+        "unstick": unstick,
+    }
 
     def gui_input(a):
         from .. import gui_input as gi
@@ -128,11 +133,6 @@ def tools(s):
             except OSError:
                 pass
         return out
-
-    def gui_unstick(a):
-        from .. import gui_link
-
-        return gui_link.unstick(all_=bool(a.get("all", False)))
 
     # Answered on the link's socket thread: it works while a menu's or a
     # dialog's own event loop holds the GUI thread (agentlink/hooks.py).
@@ -266,11 +266,6 @@ def tools(s):
                   "as": {"type": "string", "enum": ["person"],
                          "description": "Dev, testing an add-on that follows the person: this call's input counts as the person's, not the agent's."}},
                  ["steps"]), gui_input),
-        Tool("gui_unstick",
-             "Close the menu, drop-down list or dialog that holds the FreeCAD window (Escape's effect: a menu closes, a dialog is cancelled, nothing in it is accepted), "
-             "even while it holds every other call (it is answered off the GUI thread). all: true closes each one in front, dialogs under a menu too. Reply: what was closed and "
-             "what is still open (dialog_answer presses a named button instead; a window that stays stuck: app_force_restart). Window only.",
-             obj({"all": {"type": "boolean"}}), gui_unstick),
         Tool("live_run",
              "Replay a live window script (scripts/live, its README's format) and check every step's answers. Reset the test document first, every time: live_run { script: \"reset\" } closes what earlier runs left, rebuilds the WindowTest document and brings it to the front, and every other script is written to start from exactly that; run without it, a script acts on whatever document is in front and its checks fail for reasons that are not the tools'. "
              "script: a name (reset, agentlink, or another found in the installed add-ons' scripts/live folders; a wrong name is refused with the names there are) or a .json file's path. "
@@ -281,13 +276,4 @@ def tools(s):
              f"budget: seconds the replay may hold the window ({ls.BUDGET:g} by default, at most {ls.BUDGET_MAX:g}): no call starts past it, and the answer names the steps not run (notRun) — live_run {{ steps: [...] }} runs them, so a long script is split across calls. A nested event loop still holding the window past the budget is closed, then the call is answered with what ran so far and FreeCAD is started again by the watchdog. The answer is always live_run's own summary. "
              "Reply: total { passed, failed, skipped, run } and steps, each with result pass, fail or skipped, a failing check's call, path, wanted and got, refused calls, the step's shot (a window picture, in the window) and look (what it should show), and the totals. stopOnFail: true stops at the first failing step. It changes the document as the script does.",
              obj({"script": st, "steps": {"type": "array", "items": {}}, "vars": {"type": "object"}, "stopOnFail": {"type": "boolean"}, "budget": {"type": "number"}}, ["script"]), live_run),
-        Tool("addon_test",
-             "An installed add-on's own tests (its tests/ folder) run in the background in a separate FreeCAD command-line process, never this "
-             "FreeCAD: documents, the window and settings are untouched, and the tests get a fresh ~/AgentLink. addon starts a run: its folder "
-             "in FreeCAD's Mod folder (one the launcher installed) or AgentLink; folder: only this subfolder of tests/ (e.g. make); pattern: test files (test_*.py); select: only tests whose id "
-             f"holds it; timeout: seconds ({testrun.TIMEOUT:g}, at most {testrun.TIMEOUT_MAX:g}). It answers at once with the job (the result "
-             f"itself when it finishes within {testrun.START_WAIT:g} s); job answers how it stands (counts so far, or the counts, the time and each "
-             f"failure's last traceback lines), waiting up to {testrun.STATUS_WAIT:g} s for the end — call it again while state is running. Neither: the recent jobs. The full log is "
-             "under ~/AgentLink/tests; a run is stopped at its timeout or when FreeCAD quits.",
-             obj({"addon": st, "job": st, "folder": st, "pattern": st, "select": st, "timeout": {"type": "number"}}), addon_test),
-    ]
+    ] + runners.tools(GROUP, s, helpers)

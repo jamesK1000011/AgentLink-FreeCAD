@@ -40,13 +40,22 @@ _lock = threading.Lock()
 JOBS = {}
 
 
+# Reads that leave the document as it was but move its parts on the way
+# (each pose placed, recomputed and put back): they change nothing, yet they
+# drive the document and the 3D view, which only the GUI thread may do. On a
+# worker thread, with the GUI thread waiting for the job inside a batch,
+# asm_sweep stopped FreeCAD for good (the watchdog started it again, three
+# times). They run in place.
+MOVES_PARTS = {"asm_sweep", "asm_motion"}
+
+
 def eligible(tool, args):
     """A read that may run on a worker thread: changes nothing and touches
     neither Qt nor the 3D view."""
     from . import outputs
 
     name = tool.name
-    if name in outputs.SHOT_TOOLS or name.startswith(NOT_JOBS_PREFIX) or name == "batch":
+    if name in outputs.SHOT_TOOLS or name.startswith(NOT_JOBS_PREFIX) or name == "batch" or name in MOVES_PARTS:
         return False
     try:
         return not tool.changes_for(args or {})
@@ -128,7 +137,12 @@ def _queue(add=None, drop=None):
     """The heavy queue's "running" list carries the job while it runs."""
     try:
         q = keep.queue_state()
-        r = [x for x in (q.get("running") or []) if not (drop and x.get("job") == drop)]
+        # A job dies with its FreeCAD: one this process does not know is a
+        # leftover of a FreeCAD that was stopped, and would hold the queue's
+        # one slot (and the person's "held") for good.
+        with _lock:
+            mine = set(JOBS)
+        r = [x for x in (q.get("running") or []) if not (drop and x.get("job") == drop) and (x.get("job") is None or x.get("job") in mine)]
         if add:
             r.append(add)
         q["running"] = r
