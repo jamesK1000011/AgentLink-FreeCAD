@@ -378,7 +378,10 @@ def summary(job):
             out["expected"] = job["estimate"] + " (from past runs here)"
         out["next"] = f"job_status {{ job: \"{job['job']}\", wait: 25 }} waits for it and gives its answer."
     else:
-        out["took"] = round((job.get("finished") or now) - job["started"], 1)
+        # Seconds; a short job to the millisecond (live, 17 Nov: body_check
+        # and meshobj_info jobs all said 0.0 at one decimal).
+        secs = max(0.0, (job.get("finished") or now) - job["started"])
+        out["took"] = round(secs, 1) if secs >= 1.0 else round(secs, 3)
     return out
 
 

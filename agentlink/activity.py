@@ -390,12 +390,30 @@ def fallback(name, args):
     return friendly(name) + (f" on {main}" if main else "")
 
 
+_JOB_ID = re.compile(r"^job-[0-9a-f]{8}$")
+
+
+def finished_job(b):
+    """True for a tool's own answer that carries the id of the job it ran as
+    (agentlink/jobs.py "job-" + 8 hex), not a running job's summary. Plain
+    Python."""
+    return isinstance(b, dict) and isinstance(b.get("job"), str) and bool(_JOB_ID.match(b["job"])) \
+        and b.get("status") not in ("running", "queued")
+
+
 def did(name, args=None, body=None, template=None):
     """What a call did, in a short plain sentence. template: the tool's own
     (its tools.json "activity"), tried first."""
     name = str(name or "?")
     a = args if isinstance(args, dict) else {}
     b = body if isinstance(body, dict) else {}
+    if finished_job(b):
+        # A heavy read that ended within the call carries its job's id too
+        # (protocol._as_job, the batch: setdefault("job")): not "in the
+        # background" (round 7, make 04-085: "Solving the frame in the
+        # background" over a finished answer). Only a running job's summary
+        # (status "running") fills an add-on's "… if {job}".
+        b = {k: v for k, v in b.items() if k != "job"}
     text = None
     if template:
         text = _first([template] if isinstance(template, str) else template, a, b)
@@ -493,6 +511,33 @@ def cam_value(b):
     return ", ".join(out)
 
 
+def mesh_value(b):
+    """A mesh read's count in a few words (round 7, mesh 12-013, 12-035: the
+    captions "Mesh boundary on Half rim", "Mesh segments on curvature" gave
+    none): meshobj_boundary's loops and its longest rim ("1 loop, 40 mm,
+    closed, 100 mm²"); meshobj_segments' regions ("6 segments"). None for any
+    other answer. Plain Python."""
+    def num(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+    if num(b.get("loops")) and isinstance(b.get("mesh"), str) and ("openEdges" in b or b.get("loops") == 0):
+        n = int(b["loops"])
+        out = f"{n} loop{'' if n == 1 else 's'}"
+        rims = b.get("boundaries")
+        top = rims[0] if isinstance(rims, list) and rims and isinstance(rims[0], dict) else None
+        if top and num(top.get("length")):
+            out += f", {_short_num(top['length'])} mm"
+            if top.get("closed"):
+                out += ", closed"
+            if num(top.get("area")):
+                out += f", {_short_num(top['area'])} mm²"
+        return out
+    if num(b.get("segments")) and isinstance(b.get("largest"), list):
+        n = int(b["segments"])
+        return f"{n} segment{'' if n == 1 else 's'}"
+    return None
+
+
 def key_value(body):
     """The answer's key value in a few words ("24 g", "152 facets", "3
     found", "wrote house.ifc"), or None. A file shows as its name, never its
@@ -500,7 +545,7 @@ def key_value(body):
     b = body if isinstance(body, dict) else {}
     if isinstance(b.get("result"), (int, float)) and not isinstance(b.get("result"), bool) and isinstance(b.get("to"), str):
         return plain(f"{_short_num(b['result'])} {b['to']}")
-    fem = fem_value(b) or cam_value(b)
+    fem = fem_value(b) or cam_value(b) or mesh_value(b)
     if fem:
         return fem
     for k, fmt in KEY_NUMBERS:

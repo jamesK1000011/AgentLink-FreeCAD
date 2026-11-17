@@ -519,6 +519,7 @@ tests/test_render_sizing.py
 tests/test_report_watch.py
 tests/test_restart_temp_copy.py
 tests/test_rider_calldone.py
+tests/test_round7_misc.py
 tests/test_runners.py
 tests/test_settle_copies.py
 tests/test_sheet.py

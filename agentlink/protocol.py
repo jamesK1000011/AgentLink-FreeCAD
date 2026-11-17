@@ -683,7 +683,8 @@ class Server:
         from . import jobs
 
         job = jobs.start(tool, args, self.session)
-        if jobs.wait_for(job, jobs.JOB_WAIT if wait is None else wait):
+        waited = jobs.JOB_WAIT if wait is None else max(0.0, float(wait))
+        if jobs.wait_for(job, waited):
             # Its answer goes back in this call: the echo shows it with the
             # call (agentlink/echo.py), not again when the job's end is heard.
             jobs.answered(job)
@@ -694,7 +695,11 @@ class Server:
                 out = dict(out)
                 out.setdefault("job", job["job"])
             return out
-        return {**jobs.summary(job), "note": f"{tool.name} is still running (past {jobs.JOB_WAIT:.0f} s, longer than a call may wait): it goes on as a job; nothing else was changed."}
+        if waited <= 0:
+            # job_start { wait: false } (live, 17 Nov: it said "past 45 s"
+            # with no wait at all): the words say what was done.
+            return {**jobs.summary(job), "note": f"{tool.name} started as a job and was not waited for (wait: false); nothing else was changed."}
+        return {**jobs.summary(job), "note": f"{tool.name} is still running (past {waited:.0f} s, longer than a call may wait): it goes on as a job; nothing else was changed."}
 
     @staticmethod
     def refusal(code, message, trace=None):
