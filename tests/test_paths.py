@@ -51,7 +51,8 @@ class Paths(unittest.TestCase):
         self.assertEqual(paths.out_file(s, "view_render", "a.PNG", ".png"), os.path.join(self.out, "a.PNG"))
         self.assertEqual(paths.out_file(s, "view_render", "a", ".png"), os.path.join(self.out, "a.png"))
         self.assertEqual(paths.local(s, "~/x.stl"), os.path.expanduser("~/x.stl"))
-        self.assertEqual(paths.local(s, "~/x.stl", expand=False), os.path.join(self.out, "~/x.stl"))
+        # "~/x" is home here too: paths.check reads it so (bim_export, 17 Nov).
+        self.assertEqual(paths.local(s, "~/x.stl", expand=False), os.path.expanduser("~/x.stl"))
         with self.assertRaises(ToolError):
             paths.out_file(s, "view_render", "~/.ssh/x", ".png")
         with self.assertRaises(ToolError):
@@ -72,3 +73,13 @@ class Paths(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TildeAlways(unittest.TestCase):
+    def test_tilde_is_home_even_without_expand(self):
+        import types
+        from agentlink import paths
+        s = types.SimpleNamespace(out_dir="/tmp/out")
+        got = paths.local(s, "~/AgentLink/x.ifc", expand=False)
+        self.assertEqual(got, os.path.expanduser("~/AgentLink/x.ifc"))
+        self.assertEqual(paths.local(s, "x.ifc", expand=False), "/tmp/out/x.ifc")
