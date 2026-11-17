@@ -737,6 +737,10 @@ def install():
         log("flatmesh", z["P"], z["F"], cmd[2].split("findFlatNodes")[1].split("\n")[0])
         if flag("unwrap") == "stops":
             return types.SimpleNamespace(returncode=1, stderr="Traceback\nRuntimeError: singular matrix\n", stdout="")
+        # The Python beside FreeCAD brought down while it loads FreeCAD's modules: no word of its
+        # own, only the code it ended with and (from the entry's helper) the mark it had reached.
+        if flag("unwrap") == "dies loading":
+            return types.SimpleNamespace(returncode=-11, stderr="agentlink-unwrap: loading\n" if "agentlink-unwrap" in cmd[2] else "", stdout="")
         Q = np.array(z["P"], float)
         if flag("unwrap") == "stretched":
             Q[:, 0] *= 1.5

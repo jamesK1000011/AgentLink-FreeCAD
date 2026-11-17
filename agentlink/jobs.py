@@ -212,6 +212,14 @@ def background_refusal(tool, args, in_batch, session=None):
             "Leave background out" + (": it runs here in the batch's order." if in_batch else "."))
 
 
+def start_in_batch_refusal(name):
+    """job_start inside a batch, for a read that would be a job on its own:
+    it is the batch that starts no job (wanted), not the tool that cannot be
+    one — and what to do instead."""
+    return (f"job_start: not inside a batch, which is one answer and starts no job — call job_start {{ tool: \"{name}\", arguments }} on its own, "
+            f"or call {name} itself here: a heavy read inside a batch runs in its place and the batch waits for it.")
+
+
 def past_slow(tool_name, size):
     """Its past runs here say it takes longer than SLOW_READ at this size."""
     try:

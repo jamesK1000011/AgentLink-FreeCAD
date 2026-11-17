@@ -256,6 +256,20 @@ def techdraw(fc, tmp, C):
     C("td_view_more", "symbol", {"kind": "symbol", "page": "Drawing", "path": svg, "scale": 2}, two_pages)
     C("td_view_more", "symbol, plain", {"kind": "symbol", "page": "Drawing", "path": svg}, two_pages)
     C("td_view_more", "symbol not there", {"kind": "symbol", "page": "Drawing", "path": os.path.join(tmp, "none.svg")}, two_pages)
+    # A relative path is looked for in the session's folder (tests/test_datatd2_data.py: the meant differences from the handlers).
+
+    def with_file(name):
+        def prep(s):
+            two_pages(s)
+            with open(os.path.join(s.out_dir, name), "w", encoding="utf-8") as f:
+                f.write("<svg><circle r='3'/></svg>")
+
+        return prep
+
+    C("td_view_more", "symbol, a bare name in the session's folder", {"kind": "symbol", "page": "Drawing", "path": "rel-mark.svg"}, with_file("rel-mark.svg"))
+    C("td_view_more", "image, a bare name in the session's folder", {"kind": "image", "page": "Drawing", "path": "rel-mark.svg", "width": 30}, with_file("rel-mark.svg"))
+    C("td_view_more", "symbol, a bare name that is not there", {"kind": "symbol", "page": "Drawing", "path": "rel-none.svg"}, two_pages)
+    C("td_view_more", "image, a bare name that is not there", {"kind": "image", "page": "Drawing", "path": "rel-none.png"}, two_pages)
     C("td_view_more", "share", {"kind": "share", "page": "Second", "view": "Front"}, two_pages)
     C("td_view_more", "share with its dimensions", {"kind": "share", "page": "Second", "view": "Front"}, shared)
     C("td_view_more", "share what is no view", {"kind": "share", "page": "Second", "view": "Box"}, two_pages)

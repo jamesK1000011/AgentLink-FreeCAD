@@ -119,9 +119,24 @@ class FemData(unittest.TestCase):
     def test_same_steps_and_words_as_the_handlers(self):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
+        import re
+
+        placed = 0
         for c in got:
+            # Meant difference from the handler, fea_solve: when FreeCAD's FEM route fails and
+            # Agent Link's own deck solves, solvedBy says where in the route the error came up
+            # (" (strength.py:820)" after FreeCAD's words). Live the route failed with
+            # "RuntimeError: Cannot add static property", which names no object: the line does.
+            where = re.compile(r"(FreeCAD's FEM route failed here: [^\"]*?) \(strength\.py:\d+\)")
+            text = json.dumps(c["new"], ensure_ascii=False)
+            if where.search(text):
+                placed += 1
+                self.assertNotRegex(json.dumps(c["old"], ensure_ascii=False), r"\(strength\.py:\d+\)", c["case"])
+                c = {**c, "new": json.loads(where.sub(r"\1", text))}
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
+        self.assertGreaterEqual(placed, 1)
+        for c in got:
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
         # Each tool: a case that answers.
         for name in CONVERTED:

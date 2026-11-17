@@ -128,9 +128,47 @@ class Td2Data(unittest.TestCase):
     def test_same_steps_and_words_as_the_handlers(self):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
+        # Meant differences from the handler: td_view_more { kind: symbol | image } looks
+        # for a relative path in the session's folder, as the other tools' files are (the
+        # handler took it as it was: a bare file name was refused "no such SVG" from
+        # wherever FreeCAD was started). One that is there is placed; one that is not is
+        # refused in the handler's words, with the place that was looked in.
+        meant = {("td_view_more", "symbol, a bare name in the session's folder"): ("ok", "DrawViewSymbol"),
+                 ("td_view_more", "image, a bare name in the session's folder"): ("ok", "DrawViewImage"),
+                 ("td_view_more", "symbol, a bare name that is not there"): ("refused", "path '<out>/rel-none.svg': no such SVG."),
+                 ("td_view_more", "image, a bare name that is not there"): ("refused", "path '<out>/rel-none.png': no such image.")}
+        seen, shared = set(), []
         for c in got:
+            want = meant.get((c["tool"], c["case"]))
+            if want:
+                seen.add((c["tool"], c["case"]))
+                self.assertEqual(c["old"]["result"][:2], ["refused", "not_found"], f"{c['case']}: {c['old']['result']}")
+                self.assertIn("'rel-", c["old"]["result"][2], c["case"])
+                self.assertEqual(c["new"]["result"][0], want[0], f"{c['case']}: {c['new']['result']}")
+                if want[0] == "ok":
+                    self.assertEqual(c["new"]["result"][1]["type"], want[1], c["case"])
+                    # the file in the session's folder is the one read (a symbol keeps its text, an image its path)
+                    self.assertIn("r='3'" if want[1] == "DrawViewSymbol" else "<out>/rel-mark.svg", json.dumps(c["new"]["trace"]), c["case"])
+                else:
+                    self.assertEqual(c["new"]["result"][1:], ["not_found", want[1]], c["case"])
+                    self.assertEqual(c["new"]["trace"], c["old"]["trace"], c["case"])
+                continue
+            # Meant difference, td_view_more { kind: share }: FreeCAD's addView puts a view it is
+            # given in the middle of the page (TechDraw DrawPage::addView: "position all new views
+            # without owners in center of Page"), so sharing a view moved it on its first page too
+            # (seen live: BracketTop from [100, 200] to the second sheet's middle). The entry puts
+            # its X and Y back right after: two more lines in the trace, nothing else.
+            if c["tool"] == "td_view_more" and c["case"] in ("share", "share with its dimensions"):
+                shared.append(c["case"])
+                t = c["new"]["trace"]
+                i = next(n for n, line in enumerate(t) if ".addView(<View>)" in line)
+                self.assertEqual(t[i + 1:i + 3], ["View.X = 100", "View.Y = 120"], c["case"])
+                c = {**c, "new": {**c["new"], "trace": t[:i + 1] + t[i + 3:]}}
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
+        self.assertEqual(seen, set(meant))
+        self.assertEqual(shared, ["share", "share with its dimensions"])
+        for c in got:
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
         # Each tool: a case that answers.
         for name in CONVERTED:

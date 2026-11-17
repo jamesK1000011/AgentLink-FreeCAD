@@ -114,6 +114,10 @@ def install():
         log("activateWorkbench", key)
         if flag("bench_fails"):
             return False
+        # FreeCAD answers False for the workbench that is active already
+        # (src/Gui/Application.cpp, Application::activateWorkbench: "return false; // already active").
+        if key == state.setdefault("bench", "PartDesignWorkbench"):
+            return False
         if not flag("bench_stays"):
             state["bench"] = key
         return flag("bench_answer")

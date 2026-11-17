@@ -1765,6 +1765,9 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         t = t.for_call(args)
         check_input(t.schema, args)
         if not jobs.wanted(t, args, s, asked=True):
+            # A read that could be a job, asked for inside a batch: the batch is why not.
+            if getattr(s, "batch_now", None) and jobs.eligible(t, args, s):
+                raise ToolError("invalid_input", jobs.start_in_batch_refusal(name))
             why = jobs.why_in_place(name, s)
             if why:
                 raise ToolError("invalid_input", f"{name} cannot run as a job: it changes nothing, but it {why}, which only the window's own thread may do — call {name} itself; it runs as a plain call.")

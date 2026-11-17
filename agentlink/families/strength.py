@@ -115,6 +115,16 @@ def _nonlinear(text, cards, a):
     return text
 
 
+def failed_at(e, own=__file__):
+    """Where in this file an exception of FreeCAD's came up, as " (strength.py:820)":
+    which of the FEM route's steps it was (an error such as "Cannot add static
+    property" names no object), or "" when no frame of the traceback is here."""
+    import traceback
+
+    here = [f for f in traceback.extract_tb(e.__traceback__) if os.path.basename(f.filename) == os.path.basename(own)]
+    return f" ({os.path.basename(own)}:{here[-1].lineno})" if here else ""
+
+
 def mark_helper(o):
     """An object Agent Link keeps for a study (a compound of parts, one
     solid studied alone): hidden, and not a part of its own to
@@ -1491,7 +1501,7 @@ def tools(session):
             except ToolError:
                 raise
             except Exception as e:  # noqa: BLE001 - its own failure: the deck below runs, and the answer says why
-                route_why = f"FreeCAD's FEM route failed here: {type(e).__name__}: {e}"
+                route_why = f"FreeCAD's FEM route failed here: {type(e).__name__}: {e}{failed_at(e)}"
         if fem is not None:
             wd, femmesh, nodes, elems, disp, stress, an_label = fem
             fixed, held_faces, _cl, _dl, _gr, applied = _assemble(st, shape, femmesh, nodes, elems)

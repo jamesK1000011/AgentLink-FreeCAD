@@ -51,6 +51,15 @@ def image_ratio(path):
         return None
 
 
+def nest_reason(text):
+    """What FreeCAD's nester printed before it gave up ("… Aborting."): its last such sentence, or None."""
+    import re
+
+    # its sentences are plain words ("Could not determine location on sheet."), printed after the piece's line so far
+    found = re.findall(r"([A-Z][A-Za-z' \-]*\.)\s*Aborting\.", text or "")
+    return found[-1].strip() if found else None
+
+
 def unclone(o, src):
     """A clone cut loose from its original src: it keeps its place and takes src's own properties."""
     pl = FreeCAD.Placement(o.Placement)
@@ -131,6 +140,14 @@ def tools(s):
             return {}
         return {"volume": round(sh.Volume, 3) if sh.Solids else None, "box": geo.box_json(sh, 3)["size"]}
 
+    def is_records(o):
+        """Whether o is a file's own hidden records object (agentlink/store.py: its steps,
+        materials and setups): not part of the model, so a library file merged in leaves it out
+        (as doc_merge does)."""
+        from ..store import HOLDER
+
+        return o.Name.startswith(HOLDER)
+
     def nester(sheet, pieces):
         """FreeCAD's nester (ArchNesting.Nester) with its sheet (one flat face) and its pieces."""
         import ArchNesting
@@ -148,16 +165,67 @@ def tools(s):
     def nest_run(n, rotations):
         """The nester run. It has no settings of its own: the rotations it
         tries are the module's ROTATIONS (0, 90, 180, 270), set for this run
-        and put back after it; it has no margin in 1.1."""
+        and put back after it; it has no margin in 1.1.
+
+        FreeCAD's nester gives up on the whole run when, at one of the
+        rotations, a piece has room on a sheet only where it would touch a
+        piece already there (ArchNesting.py, "Could not determine location on
+        sheet. Aborting.": its placing test takes a touching corner for an
+        overlap, since Part's isInside goes by distance for a face). Three
+        rectangles on a sheet with room to spare stopped so with [0, 90].
+        So when the rotations together stop it, each is tried alone, in the
+        order given, and the first that lays the pieces out is taken
+        (nest_alone says which). What the nester printed as its reason is
+        kept (nest_why) and written on to where it would have gone."""
         import ArchNesting
 
         was = list(ArchNesting.ROTATIONS)
+        asked = list(rotations) if rotations else list(was)
+        n.agentlink_said, n.agentlink_alone = None, None
+
+        def once(turns):
+            import contextlib
+            import io
+            import sys
+
+            ArchNesting.ROTATIONS = turns
+            buf = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(buf):
+                    return n.run()
+            finally:
+                text = buf.getvalue()
+                try:
+                    if text:
+                        sys.stdout.write(text)
+                except Exception:  # noqa: BLE001 - a console that takes no text
+                    pass
+                said = nest_reason(text)
+                if said:
+                    n.agentlink_said = said
+
         try:
-            if rotations:
-                ArchNesting.ROTATIONS = rotations
-            return n.run()
+            got = once(asked)
+            if not got and len(asked) > 1:
+                for r in asked:
+                    got = once([r])
+                    if got:
+                        n.agentlink_alone = [r]
+                        break
+            return got
         finally:
             ArchNesting.ROTATIONS = was
+
+    def nest_why(n):
+        """How the refusal goes on after "FreeCAD's nester stopped": its own reason when it printed one, else where to read it."""
+        said = getattr(n, "agentlink_said", None)
+        if not said:
+            return " (its reason is in the report view; report_read shows it)."
+        return f" — it said: {said} (rotations: together, then each alone)."
+
+    def nest_alone(n):
+        """The one rotation the pieces were laid out with after the rotations together stopped the nester; None when they did not."""
+        return getattr(n, "agentlink_alone", None)
 
     def emptied(trash):
         """The trash's own children deleted, each with the children nothing else uses: their labels."""
@@ -200,5 +268,6 @@ def tools(s):
                # the family's
                "stem": stem, "image_ratio": image_ratio, "unclone": unclone, "depth_along": depth_along, "copy_props": copy_props,
                "library_roots": library_roots, "library_files": library_files, "nester": nester, "nest_rotations": nest_rotations,
-               "nest_run": nest_run, "emptied": emptied}
+               "nest_run": nest_run, "nest_why": nest_why, "nest_alone": nest_alone, "emptied": emptied,
+               "is_records": is_records}
     return runners.tools(GROUP, s, helpers)

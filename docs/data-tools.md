@@ -280,7 +280,7 @@ wrappers, not checked):
 | need arguments | 194 | read to the end of their leading part once the arguments are given |
 | blocked | 116 | a leading step calls a helper that is neither a reader nor a changer; read as far as that step |
 
-Of the 773 leading refusals written in the entries, 36 read no argument: a strength study that is not set up (11 tools),
+Of the 775 leading refusals written in the entries, 36 read no argument: a strength study that is not set up (11 tools),
 a workbench or a maker this FreeCAD does not have, results not solved yet, no variable set. Per family:
 
 | Family | Tools | Readers | Changers | Leading refusals | of them without arguments | Whole without arguments | Need arguments | Blocked |
@@ -321,7 +321,7 @@ a workbench or a maker this FreeCAD does not have, results not solved yet, no va
 | techdraw | 32 | 69 | 10 | 23 | 1 | 2 | 24 | 6 |
 | unattended | 5 | 11 | 1 | 1 | 0 | 0 | 1 | 4 |
 | view | 2 | 8 | 0 | 6 | 1 | 1 | 0 | 1 |
-| **all** | **383** | **878** | **137** | **773** | **36** | **60** | **194** | **116** |
+| **all** | **383** | **881** | **136** | **775** | **36** | **60** | **194** | **116** |
 
 **The live filter** (`agentlink/appliesnow.py`). After each changing call the reading is taken for a small set of tools,
 within a time budget, and one short line goes into the answer's health beside `next` — group names and counts, never a

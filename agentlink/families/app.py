@@ -591,8 +591,11 @@ def cmd_row(gui, name):
         tip = str(info.get("toolTip", "")).strip()
         if tip:
             row["tip"] = re.sub(r"<[^>]+>", "", tip)[:160]
-        if info.get("shortcutText"):
-            row["shortcut"] = info["shortcutText"]
+        # FreeCAD 1.1's getInfo names it "shortcut" (src/Gui/CommandPyImp.cpp); "shortcutText" was read
+        # here, which no FreeCAD gives, so no row ever had one.
+        keys = info.get("shortcut") or info.get("shortcutText")
+        if keys:
+            row["shortcut"] = str(keys)
     except Exception:
         pass
     return row

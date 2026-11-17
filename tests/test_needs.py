@@ -36,8 +36,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # The readers' pin: sha256 of readers.json's entries (each family's readers and changers, and the methods), as
 # scripts/tool_needs.py writes them. A helper or a method that joins or leaves a list changes it: read why
 # (`python3 scripts/tool_needs.py --why name`), then put the new value here.
-PIN = "90e35863c546e4560310f6372716b5a82d722582deca8c4b75dfe633c209a37b"
-COUNTS = {"readers": 878, "changers": 137, "families": 36}
+PIN = "2d39f4c25a6fd136000cfb6cba2697245163e44e55013b8a9cf6d739c4b0d08f"
+COUNTS = {"readers": 881, "changers": 136, "families": 36}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -76,7 +76,8 @@ def _child(*mode):
         r = subprocess.run([sys.executable, os.path.abspath(__file__), *mode], capture_output=True, text=True, timeout=280)
         if r.returncode != 0:
             raise AssertionError(f"child {mode} failed:\n{r.stderr[-3000:]}")
-        _ran[mode] = json.loads(r.stdout)
+        # (the last line: a stand-in may print on the way, as FreeCAD's nester does)
+        _ran[mode] = json.loads([ln for ln in r.stdout.splitlines() if ln.startswith(("{", "["))][-1])
     return _ran[mode]
 
 
@@ -365,7 +366,7 @@ class Census(unittest.TestCase):
             self.assertGreaterEqual(needs.later_refusals(e), 0, name)
 
 
-TOTAL = {"tools": 383, "steps": 370, "leadingRefusals": 773, "noArgument": 36, "blocked": 116, "needsArguments": 194, "complete": 60, "noCheck": 51}
+TOTAL = {"tools": 383, "steps": 370, "leadingRefusals": 775, "noArgument": 36, "blocked": 116, "needsArguments": 194, "complete": 60, "noCheck": 51}
 
 
 class Agreement(unittest.TestCase):

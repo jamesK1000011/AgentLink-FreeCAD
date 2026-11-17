@@ -705,6 +705,9 @@ def cases(fc, tmp):
         ("bim_nest", "the container among the pieces", flats, {"container": "Sheet", "pieces": ["P1", "Sheet"]}),
         ("bim_nest", "rotations not numbers", flats, {"container": "Sheet", "pieces": ["P1"], "rotations": ["a"]}),
         ("bim_nest", "would not nest", then(flats, no_nest=True), {"container": "Sheet", "pieces": ["P1"], "rotations": [45]}),
+        # FreeCAD's nester stopped by the rotations together (tests/test_bim_data.py: the meant differences from the handler)
+        ("bim_nest", "stops with the rotations together, laid out with one alone", then(flats, nest_only=90.0), {"container": "Sheet", "pieces": ["P1", "P2"], "rotations": [0, 90]}),
+        ("bim_nest", "stops at every rotation and says why", then(flats, nest_only=45.0), {"container": "Sheet", "pieces": ["P1", "P2"], "rotations": [0, 90]}),
 
         ("bim_ifc_brep", "model call 55", comps, {"objects": ["Comp"], "on": True}),
         ("bim_ifc_brep", "toggled: on, then off", lambda s: (comps(s), s.doc.getObject("Clone").__dict__.update(IfcData={"FlagForceBrep": "True", "x": "1"})), {"objects": ["Comp", "Copy"]}),
@@ -729,6 +732,8 @@ def cases(fc, tmp):
         ("bim_library", "everything", empty, {"folder": library}),
         ("bim_library", "insert by name", empty, {"folder": library, "insert": "chair wood.step"}),
         ("bim_library", "insert a document by path", empty, {"folder": library, "insert": os.path.join(library, "sub", "Table.FCStd")}),
+        # (tests/test_bim_data.py: a meant difference from the handler)
+        ("bim_library", "insert a document that carries Agent Link's records", then(empty, merge_records=True), {"folder": library, "insert": os.path.join(library, "sub", "Table.FCStd")}),
         ("bim_library", "no library", empty, {"search": "chair"}),
         ("bim_library", "folder not there", empty, {"folder": "/nowhere/lib", "insert": "x"}),
         ("bim_library", "insert what is not there", empty, {"folder": library, "insert": "sofa.step"}),

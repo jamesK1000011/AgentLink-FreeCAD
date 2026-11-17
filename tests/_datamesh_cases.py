@@ -340,6 +340,7 @@ def cases(fc, tmp):
     C("meshobj_unwrap", "too dense", {"of": "Big"}, lambda s: s.mesh("Big", fc.Mesh([(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0)], [(0, 1, 2)] * 50001, solid=False)))
     C("meshobj_unwrap", "no area", {"of": "Tri"}, lambda s: s.mesh("Tri", fc.Mesh([(0, 0, 0), (1, 0, 0), (0, 1, 0)], [(0, 1, 2)])))
     C("meshobj_unwrap", "flatmesh stops", {"of": "Patch"}, patch, unwrap="stops")
+    C("meshobj_unwrap", "its Python dies loading FreeCAD's modules", {"of": "Patch"}, patch, unwrap="dies loading")  # tests/test_datamesh_data.py: a meant difference
     C("meshobj_unwrap", "a whole body", {"of": "Body"}, lambda s: s.shape("Body", fc.faced("Cylinder")))
     C("meshobj_unwrap", "no such object", {"of": "Nope.Face1"}, patch)
     for kind in ("Plane", "Cylinder", "Cone"):

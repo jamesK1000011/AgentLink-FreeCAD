@@ -125,15 +125,39 @@ class AppData(unittest.TestCase):
         # recorded (the handler said so and did not), and one with a
         # recorded source of any kind, an addressless catalog one too, takes
         # no url (the handler let that one be pointed elsewhere).
+        # workbench { activate } on the workbench that is active already: FreeCAD's
+        # activateWorkbench answers False for it (Application.cpp: "already active"),
+        # which the handler took for a workbench that failed to load and refused
+        # ("did not switch to PartDesignWorkbench (still PartDesignWorkbench)", seen live).
+        # The entry answers without calling FreeCAD (tests/test_hubfix4.py reads the answer).
         meant = {("addon", "update one put there by hand, its address given"): "ok",
-                 ("addon", "update one put there by hand, a source with no address"): "refused"}
+                 ("addon", "update one put there by hand, a source with no address"): "refused",
+                 ("workbench", "by its menu name with a space"): "ok"}
+        with_keys = 0
         for c in got:
             if (c["tool"], c["case"]) in meant:
                 self.assertEqual(c["new"]["result"][0], meant[(c["tool"], c["case"])], f"{c['tool']} {c['case']}: {c['new']['result']}")
+                if c["tool"] == "workbench":
+                    self.assertEqual(c["old"]["result"][:2], ["refused", "failed"], c["old"]["result"])
+                    self.assertEqual({k: c["new"]["result"][1].get(k) for k in ("active", "was", "note")},
+                                     {"active": "PartDesignWorkbench", "was": "PartDesignWorkbench", "note": "Already active."})
+                    self.assertNotIn("activateWorkbench", json.dumps(c["new"]["trace"]))
                 continue
+            # Meant difference, cmd_list: a command's shortcut. FreeCAD's Command.getInfo() names
+            # it "shortcut" (the stand-in now does too); the handler read "shortcutText", which no
+            # FreeCAD gives, so live no row ever had one (Std_ViewFitAll: V, F). Rows are alike
+            # but for that field.
+            if c["tool"] == "cmd_list" and c["new"]["result"][0] == "ok" and any("shortcut" in r for r in c["new"]["result"][1]["commands"]):
+                with_keys += 1
+                rows = c["new"]["result"][1]["commands"]
+                self.assertEqual([r["shortcut"] for r in rows if "shortcut" in r], ["V, F"], c["case"])
+                self.assertFalse(any("shortcut" in r for r in c["old"]["result"][1]["commands"]), c["case"])
+                bare = {**c["new"]["result"][1], "commands": [{k: v for k, v in r.items() if k != "shortcut"} for r in rows]}
+                c = {**c, "new": {**c["new"], "result": ["ok", bare]}}
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
+        self.assertGreaterEqual(with_keys, 1)
         # Each tool: a case that answers.
         for name in CONVERTED:
             kinds = {c["new"]["result"][0] for c in got if c["tool"] == name}

@@ -257,6 +257,7 @@ docs/hardening/sketcher-findings.md
 docs/hardening/status-findings.md
 docs/hardening/status.json
 docs/hardening/unproven-findings.md
+docs/hardening/unproven-run-findings.md
 docs/hardening/window-pd-findings.md
 docs/hooks.md
 docs/packaging.md
@@ -414,6 +415,7 @@ tests/test_hooks.py
 tests/test_hubfix2.py
 tests/test_hubfix2_fc.py
 tests/test_hubfix3.py
+tests/test_hubfix4.py
 tests/test_hubfix_small.py
 tests/test_hull3d.py
 tests/test_inspection.py

@@ -349,6 +349,11 @@ def steps_of(body, sketches=False):
             if hasattr(o, k) and k in o.PropertiesList:
                 v = getattr(o, k)
                 row["key"] = f"{k} {getattr(v, 'UserString', v)}"
+                # A pad or pocket that runs through all, to a face or to the first face keeps a
+                # Length it does not use (FreeCAD's default, 5 mm for a pocket): its Type is the figure.
+                how = str(getattr(o, "Type", "") or "") if k == "Length" and "Type" in o.PropertiesList else ""
+                if how and how not in ("Length", "TwoLengths"):
+                    row["key"] = f"Type {how}"
                 break
         if body.Tip == o:
             row["tip"] = True

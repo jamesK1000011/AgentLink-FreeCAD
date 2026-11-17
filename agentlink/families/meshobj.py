@@ -471,13 +471,32 @@ def face_arrays(face, tolerance):
     return np.array([(v.x, v.y, v.z) for v in vs], float), np.array(ts, int)
 
 
+UNWRAP_MARK = "agentlink-unwrap: "
+
+
+def unwrap_stop(stderr, returncode):
+    """How the unwrapping's own Python ended, from its error stream and its
+    exit code: ("load", why) when it had begun loading FreeCAD's modules and
+    never finished (a crash or an error at import), else ("stopped", why).
+    why: its last own word (not one of the marks), or the code it ended with."""
+    lines = (stderr or "").strip().splitlines()
+    marks = [x[len(UNWRAP_MARK):].strip() for x in lines if x.startswith(UNWRAP_MARK)]
+    said = [x for x in lines if not x.startswith(UNWRAP_MARK)]
+    why = said[-1] if said else f"it stopped (code {returncode})"
+    return ("load" if "loading" in marks and "loaded" not in marks else "stopped"), why
+
+
 def flatten_apart(P, F, iters, weight):
     """FreeCAD's flatmesh on a surface (points P, triangles F), run in a
     Python of its own: flatmesh can bring FreeCAD down on a surface it
     cannot handle, and a crash there is then only a refusal. Answers
     (flat points, boundary loops, None, None), or (None, None, stop, why):
     stop "python" (no Python to run it in apart from FreeCAD), "time" (over
-    5 minutes) or "stopped" (why: its last word)."""
+    5 minutes), "load" (it ended while FreeCAD's own modules were being
+    loaded there, before any unwrapping: the surface is not at fault) or
+    "stopped" (why: its last word). It marks where it is on its error
+    stream (UNWRAP_MARK), so that a crash with no word of its own (seen
+    live: code -11 on a sphere's cap of 1,651 triangles) says which."""
     import subprocess
     import sys
     import tempfile
@@ -487,8 +506,11 @@ def flatten_apart(P, F, iters, weight):
     np.savez(src, P=P, F=F)
     code = (
         "import sys, numpy as np\n"
+        f"def at(where):\n    sys.stderr.write({UNWRAP_MARK!r} + where + chr(10))\n    sys.stderr.flush()\n"
+        "at('loading')\n"
         "import FreeCAD, Part, Mesh  # flatmesh stands on them: loaded first\n"
         "import flatmesh\n"
+        "at('loaded')\n"
         "z = np.load(sys.argv[1])\n"
         "fl = flatmesh.FaceUnwrapper(np.ascontiguousarray(z['P'], dtype=np.float64), np.ascontiguousarray(z['F'], dtype=np.int64))\n"
         f"fl.findFlatNodes({iters}, {weight})\n"
@@ -512,8 +534,8 @@ def flatten_apart(P, F, iters, weight):
     except subprocess.TimeoutExpired:
         return None, None, "time", None
     if r.returncode != 0 or not os.path.isfile(dst):
-        why = (r.stderr or "").strip().splitlines()[-1:] or [f"it stopped (code {r.returncode})"]
-        return None, None, "stopped", why[0]
+        stop, why = unwrap_stop(r.stderr, r.returncode)
+        return None, None, stop, why
     z = np.load(dst)
     Q = np.asarray(z["Q"], float)[:, :2]
     n, B = list(z["n"]), np.asarray(z["B"], float)
