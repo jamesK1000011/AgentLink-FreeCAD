@@ -261,6 +261,9 @@ tests/_datadraft_cases.py
 tests/_datadraftmore_before.py
 tests/_datadraftmore_cases.py
 tests/_datadraftmore_standin.py
+tests/_datafem_before.py
+tests/_datafem_cases.py
+tests/_datafem_standin.py
 tests/_datamesh_before.py
 tests/_datamesh_cases.py
 tests/_datamesh_standin.py
@@ -273,6 +276,11 @@ tests/_datapart_standin.py
 tests/_datapd_before.py
 tests/_datapd_cases.py
 tests/_datapd_standin.py
+tests/_datatd2_before.py
+tests/_datatd2_cam_standin.py
+tests/_datatd2_cases.py
+tests/_datatd2_scad_standin.py
+tests/_datatd2_standin.py
 tests/_datatd_before.py
 tests/_datatd_cases.py
 tests/_datatd_standin.py
@@ -303,10 +311,12 @@ tests/test_dataasm_data.py
 tests/test_datacam_data.py
 tests/test_datadraft_data.py
 tests/test_datadraftmore_data.py
+tests/test_datafem_data.py
 tests/test_datamesh_data.py
 tests/test_datapart2_data.py
 tests/test_datapart_data.py
 tests/test_datapd_data.py
+tests/test_datatd2_data.py
 tests/test_datatd_data.py
 tests/test_declared.py
 tests/test_doc.py

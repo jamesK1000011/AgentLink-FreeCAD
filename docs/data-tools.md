@@ -12,11 +12,23 @@ three files now hold only what the entries call by name. So are the Mesh family 
 21 tools) and the Points family (`families/points.py`, 8 tools): the numpy over points and triangles and
 the FreeCAD Mesh calls are named helpers (`plane_sides`, `own_boolean`, `edge_loops`, `flatten_apart`;
 `in_box`, `fitted`, `curve_through`, `grid_mesh`), the checks, the order and the answer are the entries.
-TechDraw (`families/techdraw.py`) is data for 27 of its 32 tools; `td_list`, `td_export`, `td_cosmetic`,
-`td_view_more` and `td_lines` are still handlers there, beside the entries (`tests/test_datatd_data.py` is its proof).
+TechDraw (`families/techdraw.py`) is data for all 32 of its tools (`tests/test_datatd_data.py` is the proof of 27; `td_list`, `td_export`,
+`td_cosmetic`, `td_view_more` and `td_lines` came after, proven by `tests/test_datatd2_data.py`): the cold views' warm-up (`warm`), the page drawn
+here (`page_sheet`, `drawn`) and a thread's or a centreline's geometry (`thread_arc`, `side_outline`, `root_lines`, `mid_line`) are named helpers.
 CAM's twelve tools in `families/cam.py` are data (`tests/test_datacam_data.py`): the path's reading (`path_stats`), the height-map
 simulation (`sim_run`, `sim_picture`), the two ways of posting (`by_job`, `post_script`) and what differs between FreeCAD's releases
-(`make_op`, `bit_factory`, `toolbit`, `dress`) are named helpers; `cam_more.py` is still handlers.
+(`make_op`, `bit_factory`, `toolbit`, `dress`) are named helpers. `families/cam_more.py`'s six (cam_path, cam_property_bag, cam_template_export,
+draft_fix, asm_rigid_group, asm_new_part) and `families/openscad.py`'s five (scad_status, scad_import, scad_code, scad_export, scad_op) are data too
+(`tests/test_datatd2_data.py`, each file on its own stand-in): which module of FreeCAD a proxy class is in (`from_module`, `proxied`), FreeCAD's CSG
+reader and writer run with the window's parts off (`read_in`, `export_csg`, `run_code`) and the hull made here (`hull_here`) are named helpers.
+
+Materials, FEM and strength are data too (`tests/test_datafem_data.py`): the 4 of `families/material.py`, the 3 of
+`families/fem_more.py` and the 16 `fea_*` of `families/strength.py`. There the solver stays code, as named helpers:
+the Gmsh and CalculiX runs (`_meshed`, `_run`, `solve_run`, `modes_run`, `buckle_run`, `heat_solve`, `shell_solve`),
+FreeCAD's own FEM route (`_fem_build_and_run`, `gmsh_run`), the result reading (`peaks`, `part_rows`, `Probe`) and
+the FEM objects one at a time (`fixed_on`, `force_on`, `native_mesh`). The entry has the study's checks, each
+refusal, the order, the answer's fields and the words about what a result is worth: FEA is a feasibility check,
+never a sign-off.
 
 The Part workbench's modelling tools are data as well: the 11 of `families/model.py`, the 10 of
 `families/model_more.py` (part_wire, part_split, part_compound, part_refine, part_attach, part_face, part_ruled,

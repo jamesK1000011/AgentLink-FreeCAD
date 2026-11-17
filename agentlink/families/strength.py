@@ -22,11 +22,11 @@ import Part
 
 from .. import ccx_io
 from .. import paths
+from .. import runners
 from .. import facepick
 from .. import geometry as geo
 from .. import store
-from ..protocol import Tool, ToolError
-from ..tools import obj
+from ..protocol import ToolError
 from . import material as matfam
 from . import picks
 
@@ -36,18 +36,20 @@ INFO = "Strength by finite elements (Gmsh and CalculiX): set up a body, hold fac
 V = FreeCAD.Vector
 KEY = "fea"
 G = 9810.0  # mm/s²
-TRAPS = "A rigid hold makes stress no real mount does; a coarse mesh under-reads peaks; library figures are typical."
 
 
 def _study(doc):
+    """The strength study kept with the document, or None."""
     return store.read(doc, KEY, None)
 
 
 def _save(doc, st):
+    """The study written to the document."""
     store.write(doc, KEY, st)
 
 
 def _results(session):
+    """The last solve kept with the session, or None."""
     return getattr(session, "_agentlink_fea", None)
 
 
@@ -73,12 +75,22 @@ def _setq(o, prop, text, number):
 
 
 def ObjectsFem_():
+    """FreeCAD's ObjectsFem, the makers of every FEM object."""
     import ObjectsFem
 
     return ObjectsFem
 
 
+def objects_fem():
+    """FreeCAD's ObjectsFem, or None where the FEM module is not in this build."""
+    try:
+        return ObjectsFem_()
+    except ImportError:
+        return None
+
+
 def _binary(name, pref_group, pref_key, env):
+    """A program's path: FreeCAD's FEM preference, the environment variable, the PATH; None when it is not found."""
     return ccx_io.find_binary(name, pref_group, pref_key, env)
 
 
@@ -257,19 +269,8 @@ def unheld_words(label, count, free):
             "Hold each solid too (fea_hold its faces), study one alone (fea_setup { solid: n }), or fuse them for a check of the whole.")
 
 
-def _need_study(session):
-    st = _study(session.doc)
-    if not st:
-        raise ToolError("invalid_state", "No strength study: fea_setup { body } first.")
-    of = st.get("of")
-    if of:
-        # One solid of a body studied alone: read again from the body as it is now.
-        return st, solid_holder(session, session.body(of["body"]), int(of["solid"]))
-    o = session.body(st["body"])
-    return st, o
-
-
 def _pick_report(shape, q, what):
+    """The faces a query picks, and each described (name, area, centre) for the answer."""
     picked = facepick.pick(shape, q, what)
     return picked, [facepick.describe(n, f) for n, f in picked]
 
@@ -409,7 +410,123 @@ def _health(session, tool, changed):
              "todo": "read the lines: a part free to move wants more held faces (fea_hold); a bad element a coarser or finer mesh"}]
 
 
+def faces_normal(picked):
+    """The picked faces' outward normals summed by area: the one way they
+    face (near nothing when they face no one way)."""
+    n = V(0, 0, 0)
+    for _, f in picked:
+        n += facepick.outward_normal(f) * f.Area
+    return n
+
+
+def write_vtu(path, f):
+    """A solve's kept field written as a VTU (ParaView, FreeCAD's FEM post-processing)."""
+    with open(path, "w") as fh:
+        fh.write(ccx_io.vtu(f["points"], f["elements"], {"von_Mises_MPa": f["vonMises"], "displacement_mm": f["displacement"]}))
+
+
+def write_csv(path, f):
+    """A solve's kept field written as a CSV: every node's position, von Mises stress and displacement."""
+    with open(path, "w") as fh:
+        fh.write("x,y,z,von_mises_MPa,ux,uy,uz\n")
+        for p, vm, u in zip(f["points"], f["vonMises"], f["displacement"]):
+            fh.write(f"{p[0]:.5f},{p[1]:.5f},{p[2]:.5f},{vm:.5f},{u[0]:.6g},{u[1]:.6g},{u[2]:.6g}\n")
+
+
+class Probe:
+    """The last solve's kept field read where asked: at a point (from the four
+    nearest nodes, by inverse distance), along a line, over faces. msize is
+    the solve's element size: the study's mesh (the session keeps body,
+    study, result, field)."""
+
+    def __init__(self, r):
+        import numpy as np
+
+        f = r["field"]
+        self.np = np
+        self.P = np.asarray(f["points"], float)
+        self.VM = np.asarray(f["vonMises"], float)
+        self.um = np.linalg.norm(np.asarray(f["displacement"], float), axis=1)
+        m_ = (r.get("study") or {}).get("mesh") or ((r.get("result") or {}).get("mesh") or {}).get("size")
+        self.msize = float(m_ or 1.0)
+
+    def at(self, q):
+        """von Mises and displacement at q, and how near the nearest node is."""
+        np = self.np
+        d = np.linalg.norm(self.P - np.asarray(q, float), axis=1)
+        k = np.argsort(d)[:4]
+        w = 1.0 / np.maximum(d[k], 1e-9)
+        if d[k[0]] < 1e-6:
+            w = (d[k] < 1e-6).astype(float)
+        w = w / w.sum()
+        return {"at": [round(float(c), 3) for c in q], "vonMisesMPa": round(float(self.VM[k] @ w), 3),
+                "displacementMm": round(float(self.um[k] @ w), 5), "nearestNodeMm": round(float(d[k[0]]), 3)}
+
+    def ends(self, ln):
+        """A line's two ends as arrays."""
+        return self.np.asarray(ln.get("from"), float), self.np.asarray(ln.get("to"), float)
+
+    def along(self, p0, p1, n):
+        """n samples from p0 to p1."""
+        return [self.at(p0 + (p1 - p0) * i / (n - 1)) for i in range(n)]
+
+    def on_faces(self, faces):
+        """The nodes lying on the faces: how many, the largest and mean von
+        Mises and displacement, and where the largest stress is; None when no
+        node lies on them."""
+        np, P, VM, um = self.np, self.P, self.VM, self.um
+        tol = max(0.05, 0.02 * self.msize)
+        on = np.zeros(len(P), bool)
+        for fc in faces:
+            bb = fc.BoundBox
+            cand = np.where((P[:, 0] >= bb.XMin - tol) & (P[:, 0] <= bb.XMax + tol) & (P[:, 1] >= bb.YMin - tol) & (P[:, 1] <= bb.YMax + tol)
+                            & (P[:, 2] >= bb.ZMin - tol) & (P[:, 2] <= bb.ZMax + tol))[0]
+            for i in cand:
+                if not on[i] and fc.distToShape(Part.Vertex(FreeCAD.Vector(*P[i])))[0] <= tol:
+                    on[i] = True
+        if not on.any():
+            return None
+        i_max = int(np.argmax(np.where(on, VM, -1)))
+        return {"nodes": int(on.sum()), "vm_max": float(VM[on].max()), "vm_mean": float(VM[on].mean()), "max_at": [float(c) for c in P[i_max]],
+                "u_max": float(um[on].max()), "u_mean": float(um[on].mean())}
+
+
+def field_values(r, field):
+    """The kept field's values over every node: von Mises, or the size of the displacement."""
+    import numpy as np
+
+    f = r["field"]
+    return np.asarray(f["vonMises"], float) if field == "vonMises" else np.linalg.norm(np.asarray(f["displacement"], float), axis=1)
+
+
+def histogram(vals, bins):
+    """Values counted into bins: counts, the bins' edges, and the least,
+    median, 95th and 99th percentile and largest."""
+    import numpy as np
+
+    counts, edges = np.histogram(vals, bins=bins)
+    pct = np.percentile(vals, [50, 95, 99]) if len(vals) else [0, 0, 0]
+    return {"counts": [int(c) for c in counts], "edges": [float(e) for e in edges], "min": float(vals.min()), "max": float(vals.max()),
+            "median": float(pct[0]), "p95": float(pct[1]), "p99": float(pct[2])}
+
+
+def distance(p, q):
+    """How far two points are apart."""
+    import numpy as np
+
+    return float(np.linalg.norm(np.asarray(p, float) - np.asarray(q, float)))
+
+
+def write_text(path, text):
+    """A text file written (UTF-8)."""
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+
 def tools(session):
+    """The strength tools are data (agentlink/data/tools.json, group "strength"): the
+    solver runs, the result reading and the FreeCAD FEM objects their entries call
+    by name are here (docs/data-tools.md). FEA here is a feasibility check, never a sign-off."""
     s = session
     try:
         from .. import health
@@ -418,113 +535,13 @@ def tools(session):
     except Exception:
         pass
 
-    def fea_setup(a):
-        o = s.body(a.get("body"))
-        of = None
-        if a.get("solid") is not None:
-            n = a["solid"]
-            if isinstance(n, bool) or not isinstance(n, int):
-                raise ToolError("invalid_input", "solid: a solid's number in the body, from 1 (body_check lists them).")
-            src = o
-            o = solid_holder(s, src, n)
-            of = {"body": src.Label, "solid": n}
-        bb = o.Shape.BoundBox
-        least = min(bb.XLength, bb.YLength, bb.ZLength)
-        mesh = a.get("mesh")
-        if mesh is None:
-            mesh = round(max(0.5, min(least / 3.0, bb.DiagonalLength / 15.0)), 2)
-        mesh = float(mesh)
-        if mesh <= 0:
-            raise ToolError("invalid_input", "mesh: the largest element edge, mm, over 0.")
-        est = o.Shape.Volume / (mesh ** 3 / 8.0)
-        if est > 400000:
-            raise ToolError("invalid_input", f"mesh {mesh:g} mm makes some {int(est):,} elements: too many to solve here — {round(mesh * (est / 300000) ** (1 / 3), 1)} mm or more.")
-        if a.get("material"):
-            c = matfam.card(s.doc, a["material"]) or matfam.card(s.doc, str(a["material"]).lower())
-            if c is None:
-                raise ToolError("not_found", f"material {a['material']!r}: no such material by id or name — material_list {{ words }} finds one.")
-            mid, said = c["id"], "given"
-        else:
-            c, set_ = matfam.of_body(s.doc, of["body"] if of else o.Label)
-            mid, said = c["id"], "the body's" if set_ else "assumed PLA: material_set records the real one"
-        if not c.get("E"):
-            raise ToolError("invalid_state", f"{c['name']} has no Young's modulus on its card: material_set custom {{ name, density, youngsMPa, yieldMPa }} gives one.")
-        old = _study(s.doc) or {}
-        keep = old.get("body") == o.Label and not a.get("reset")
-        st = {"body": o.Label, "material": mid, "mesh": mesh, "holds": old.get("holds", []) if keep else [], "loads": old.get("loads", []) if keep else []}
-        if of:
-            st["of"] = of
-        _save(s.doc, st)
-        s.snapshot("fea_setup")
-        out = {"study": st, "material": {"id": mid, "name": c["name"], "E": c["E"], "nu": c.get("nu"), "yield": c.get("yield"), "from": said}}
-        out.update(_setup_said(old, keep, bool(a.get("reset"))))
-        lost = unmatched(st, o.Shape, facepick.pick) if keep else []
-        if lost:
-            out["unmatched"] = lost
-        if mesh > least / 2:
-            out["warning"] = f"mesh {mesh:g} mm is over half the part's least size ({least:.1f} mm): too coarse to read stress — {round(least / 3, 2)} mm or less."
-        if of:
-            out["solid"] = (f"Solid {of['solid']} of {of['body']} alone, as {o.Label} (hidden, kept for the study and read again from {of['body']} at each solve): "
-                            "its faces are numbered on their own — pick holds and loads by where they are (near, normal) or shape_query it.")
-        elif len(o.Shape.Solids) > 1:
-            out["solids"] = f"{o.Label} is {len(o.Shape.Solids)} solids: every one needs a hold of its own (they are not joined), or solid: n studies one alone."
-        out["next"] = "fea_hold the faces it is held by, fea_load what pushes on it, then fea_solve."
-        return out
-
-    def fea_hold(a):
-        st, o = _need_study(s)
-        if a.get("clear"):
-            st["holds"] = []
-            _save(s.doc, st)
-            s.snapshot("fea_hold")
-            return {"holds": []}
-        q = a.get("faces")
-        pk, picked = _pick_report(o.Shape, q, "faces")
-        kind = a.get("kind", "fixed")
-        h = {"faces": q, "kind": kind}
-        AX = {"x": 1, "y": 2, "z": 3}
-        if kind == "fixed":
-            note = "Held rigidly: no movement at all on these faces. Real bolts and clamps give a little, so stress right at a hold reads high."
-        elif kind == "slide":
-            n = V(0, 0, 0)
-            for _, f in pk:
-                n += facepick.outward_normal(f) * f.Area
-            if n.Length < 1e-9:
-                raise ToolError("invalid_input", "slide: these faces have no one normal — slide holds a flat face (or faces facing one way).")
-            n.normalize()
-            k = max(range(3), key=lambda i: abs(n[i]))
-            if abs(n[k]) < 0.999:
-                raise ToolError("invalid_input", f"slide: the faces face {[round(c, 3) for c in n]} — a slide holds along x, y or z; turn the part square or use pin with dofs.")
-            h["dofs"], h["values"] = [k + 1], [0.0]
-            note = f"Held only along {'xyz'[k]} (a roller or a smooth floor): free to slide in the face. Add another hold or slide so the part cannot drift."
-        elif kind == "pin":
-            dofs = a.get("dofs")
-            if not dofs or not all(d in AX for d in dofs):
-                raise ToolError("invalid_input", "pin: dofs [\"x\", \"y\", \"z\"] — the directions held (the rest free).")
-            h["dofs"], h["values"] = sorted(AX[d] for d in set(dofs)), [0.0] * len(set(dofs))
-            note = f"Held in {', '.join(sorted(set(dofs)))} only."
-        elif kind == "move":
-            m = a.get("move")
-            if not (isinstance(m, list) and len(m) == 3):
-                raise ToolError("invalid_input", "move: [dx, dy, dz] mm the faces are pushed to (null leaves that direction free).")
-            h["dofs"] = [i + 1 for i in range(3) if m[i] is not None]
-            h["values"] = [float(m[i]) for i in range(3) if m[i] is not None]
-            if not h["dofs"]:
-                raise ToolError("invalid_input", "move: give at least one direction a value.")
-            note = "These faces are moved by that much (a set displacement): the answer reads the force it takes as stress."
-        else:
-            raise ToolError("invalid_input", "kind: fixed | slide (held along the face normal only) | pin (dofs held) | move (set displacement).")
-        if not a.get("replace") and _same_in(h, st["holds"]):
-            raise ToolError("invalid_state", f"That hold is already in the study (holds: {len(st['holds'])}): adding it again changes nothing real — replace: true to start the holds over, or clear: true.")
-        st["holds"] = ([] if a.get("replace") else st["holds"]) + [h]
-        _save(s.doc, st)
-        s.snapshot("fea_hold")
-        return {"held": picked, "kind": kind, "holds": len(st["holds"]), "note": note}
-
     TYPICAL_ALPHA = {"pla": 68e-6, "petg": 60e-6, "abs": 90e-6, "asa": 95e-6, "nylon": 110e-6, "pa": 110e-6, "tpu": 150e-6, "pc": 68e-6,
                      "steel": 12e-6, "stainless": 16e-6, "aluminium": 23e-6, "aluminum": 23e-6, "brass": 19e-6, "copper": 17e-6, "titanium": 8.6e-6}
 
     def _alpha(st, ld):
+        """A temperature load's expansion coefficient, 1/K: the load's own,
+        the material card's, else a typical one by the material's name; None
+        when there is none."""
         if ld.get("alpha") is not None:
             return float(ld["alpha"])
         c = matfam.card(s.doc, st["material"]) or {}
@@ -540,90 +557,12 @@ def tools(session):
         return next((v for k, v in TYPICAL_ALPHA.items() if k in key), None)
 
     def _thermal(st, nodes):
+        """The study's temperature loads as the deck takes them (alpha, the
+        summed change, every node), or None."""
         lds = [ld for ld in st["loads"] if ld["kind"] == "temperature"]
         if not lds:
             return None
         return {"alpha": _alpha(st, lds[-1]), "delta": sum(ld["delta"] for ld in lds), "nodes": list(nodes.keys()) if isinstance(nodes, dict) else list(range(1, len(nodes) + 1))}
-
-    def fea_load(a):
-        st, o = _need_study(s)
-        if a.get("clear"):
-            st["loads"] = []
-            _save(s.doc, st)
-            s.snapshot("fea_load")
-            return {"loads": []}
-        kinds = [k for k in ("force", "pressure", "gravity", "temperature", "spin") if k in a]
-        if len(kinds) != 1:
-            raise ToolError("invalid_input", "One of force (N: [fx, fy, fz] total, or a number pushing into the faces), pressure (MPa, pushing into the faces), gravity (true for 1 g down -z, a number of g, or [gx, gy, gz] in g), temperature (K the whole part warms by, negative cools; alpha 1/K) or spin { rpm, axis, at }.")
-        kind = kinds[0]
-        ld = {"kind": kind}
-        out = {}
-        if kind == "spin":
-            sp = a["spin"]
-            if not isinstance(sp, dict) or not isinstance(sp.get("rpm"), (int, float)):
-                raise ToolError("invalid_input", "spin: { rpm, axis [x,y,z] (z), at [x,y,z] a point on the axis (origin) } — a rotor, a fan, a flywheel.")
-            ax = V(*[float(c) for c in sp.get("axis", [0, 0, 1])])
-            if ax.Length < 1e-9:
-                raise ToolError("invalid_input", "spin.axis: a direction.")
-            ax = ax.multiply(1.0 / ax.Length)
-            ld["spin"] = {"rpm": float(sp["rpm"]), "axis": [ax.x, ax.y, ax.z], "at": [float(c) for c in sp.get("at", [0, 0, 0])]}
-            out["note"] = "Spinning loads every bit of the part outward by its mass: hoop stress grows with rpm² — the material needs a density."
-        elif kind == "temperature":
-            dT = a["temperature"]
-            if not isinstance(dT, (int, float)) or isinstance(dT, bool):
-                raise ToolError("invalid_input", "temperature: K (°C) the whole part changes by from as it was held — a number, negative to cool.")
-            ld["delta"] = float(dT)
-            if a.get("alpha") is not None:
-                ld["alpha"] = float(a["alpha"])
-            alpha = _alpha(st, ld)
-            if alpha is None:
-                raise ToolError("invalid_input", f"alpha: the material's expansion, 1/K (steel 12e-6, aluminium 23e-6, PLA 68e-6) — {st['material']} carries none.")
-            out["alpha"] = alpha
-            out["note"] = "Held faces stop it growing: stress builds where they do — a fully held part sees about E·alpha·dT."
-        elif kind in ("force", "pressure"):
-            q = a.get("faces")
-            picked, desc = _pick_report(o.Shape, q, "faces")
-            ld["faces"] = q
-            v = a[kind]
-            if kind == "force":
-                if isinstance(v, (int, float)):
-                    n = V(0, 0, 0)
-                    for _, f in picked:
-                        n += facepick.outward_normal(f) * f.Area
-                    if n.Length < 1e-9:
-                        raise ToolError("invalid_input", "force: these faces have no one direction to push along — give [fx, fy, fz].")
-                    n.normalize()
-                    v = [-n.x * v, -n.y * v, -n.z * v]
-                elif not (isinstance(v, list) and len(v) == 3):
-                    raise ToolError("invalid_input", "force: [fx, fy, fz] N in total over the faces, or a number pushing into them.")
-                ld["force"] = [float(x) for x in v]
-                if not any(abs(x) > 0 for x in ld["force"]):
-                    raise ToolError("invalid_input", "force: [0, 0, 0] loads nothing — give its size and direction in N, [fx, fy, fz], or a number pushing into the faces.")
-            else:
-                if not isinstance(v, (int, float)):
-                    raise ToolError("invalid_input", "pressure: MPa (N/mm²), a number; positive pushes into the faces.")
-                ld["pressure"] = float(v)
-            out["on"] = desc
-        else:
-            v = a["gravity"]
-            if v is True:
-                g = [0.0, 0.0, -1.0]
-            elif isinstance(v, (int, float)) and not isinstance(v, bool):
-                g = [0.0, 0.0, -float(v)]
-            elif isinstance(v, list) and len(v) == 3:
-                g = [float(x) for x in v]
-            else:
-                raise ToolError("invalid_input", "gravity: true (1 g down -z), a number of g down -z, or [gx, gy, gz] in g.")
-            if not any(abs(x) > 0 for x in g):
-                raise ToolError("invalid_input", "gravity: 0 g loads nothing — true (1 g down -z), a number of g, or [gx, gy, gz] in g.")
-            ld["gravity"] = g
-        if not a.get("replace") and _same_in(ld, st["loads"]):
-            raise ToolError("invalid_state", f"That load is already in the study (loads: {len(st['loads'])}): adding it again would apply it twice — replace: true to start the loads over, or clear: true.")
-        st["loads"] = ([] if a.get("replace") else st["loads"]) + [ld]
-        _save(s.doc, st)
-        s.snapshot("fea_load")
-        out.update({"load": ld, "loads": len(st["loads"])})
-        return out
 
     def _meshed(o, st, timeout, tag="fea"):
         """(ccx binary, work folder, femmesh, mesh deck text, nodes, elements)
@@ -704,6 +643,7 @@ def tools(session):
         """The study's holds and loads on the mesh: (fixed nodes, held face
         names, nodal loads, face pressures, gravity, what was applied)."""
         def resolve(q):
+            """The faces a query picks on the shape."""
             return facepick.pick(shape, q, "faces")
 
         fixed = set()
@@ -757,74 +697,6 @@ def tools(session):
                 applied.append({"force": ld["force"], "faces": [n for n, _ in picked], "area": round(area, 2)})
         return fixed, held_faces, cloads, dloads, gravity, applied
 
-    def fea_parts(a):
-        """A study of several bodies at once: their solids kept apart in one
-        compound (the study's body), each with its own material, joined where
-        they touch — tie (bonded: glued, welded, tight press fit) or contact
-        (they push but do not pull, may slide: friction)."""
-        refs = a.get("bodies")
-        if not isinstance(refs, list) or len(refs) < 2:
-            raise ToolError("invalid_input", "bodies: two or more parts to study together.")
-        objs = [s.body(r) for r in refs]
-        how = picks.choice(a, "join", ("tie", "contact", "none"), "join: tie (bonded where they touch) | contact (pushing, not pulling; friction) | none.", "tie")
-        mats = a.get("materials") or {}
-        parts = []
-        for o in objs:
-            if mats.get(o.Label):
-                c = matfam.card(s.doc, mats[o.Label]) or matfam.card(s.doc, str(mats[o.Label]).lower())
-                if c is None:
-                    raise ToolError("not_found", f"materials.{o.Label}: no material {mats[o.Label]!r} — material_list finds one.")
-            else:
-                c, _ = matfam.of_body(s.doc, o.Label)
-            if not c.get("E"):
-                raise ToolError("invalid_state", f"{o.Label}'s material {c['name']} has no Young's modulus.")
-            if len(o.Shape.Solids) != 1:
-                raise ToolError("invalid_state", f"{o.Label} has {len(o.Shape.Solids)} solids: one solid a part (part_compound explode splits it).")
-            parts.append({"body": o.Label, "material": c["id"]})
-        comp = Part.makeCompound([o.Shape.Solids[0].copy() for o in objs])
-        name = a.get("name") or "FEA parts"
-        holder = next((x for x in s.doc.Objects if x.Label == name), None)
-        if holder is None:
-            holder = s.doc.addObject("Part::Feature", "FeaParts")
-            holder.Label = s.unique(name, holder)
-        holder.Shape = comp
-        mark_helper(holder)
-        s.doc.recompute()
-        tol = float(a.get("tolerance", 0.05))
-        # where they touch: faces of two parts that lie on each other
-        found = []
-        sol = comp.Solids
-        for i in range(len(sol)):
-            for j in range(i + 1, len(sol)):
-                if sol[i].BoundBox.intersect(sol[j].BoundBox) or sol[i].distToShape(sol[j])[0] <= tol:
-                    for fa in sol[i].Faces:
-                        for fb in sol[j].Faces:
-                            if not fa.BoundBox.intersect(fb.BoundBox) and fa.distToShape(fb)[0] > tol:
-                                continue
-                            try:
-                                ar = fa.common(fb).Area
-                            except Exception:
-                                ar = 0.0
-                            if ar > 1e-3:
-                                found.append({"a": i, "b": j, "area": round(ar, 2)})
-        bb = comp.BoundBox
-        least = min(min(x.BoundBox.XLength, x.BoundBox.YLength, x.BoundBox.ZLength) for x in sol)
-        mesh = float(a.get("mesh") or round(max(0.5, min(least / 3.0, bb.DiagonalLength / 15.0)), 2))
-        st = {"body": holder.Label, "material": parts[0]["material"], "mesh": mesh, "holds": [], "loads": [],
-              "parts": parts, "join": how, "friction": float(a.get("friction", 0)), "tolerance": tol}
-        _save(s.doc, st)
-        s.snapshot("fea_parts")
-        overlap = [f"{objs[i].Label} / {objs[j].Label}" for i in range(len(sol)) for j in range(i + 1, len(sol)) if sol[i].common(sol[j]).Volume > 1e-3]
-        out = {"study": holder.Label, "parts": parts, "join": how, "touching": [{"a": objs[x["a"]].Label, "b": objs[x["b"]].Label, "area": x["area"]} for x in found], "mesh": mesh,
-               "next": "fea_hold and fea_load pick faces of the study's body (the parts together), then fea_solve: each part's peak and safety come back."}
-        if overlap:
-            out["warning"] = f"overlapping, not touching: {', '.join(overlap)} — a tie or contact needs faces that meet, not volumes that cross (asm_check, part_boolean)."
-        if how != "none" and not found:
-            out["warning"] = "nothing touches within tolerance: each part must be held on its own, or move them together."
-        if how == "contact":
-            out["note"] = "Contact is nonlinear: the solve runs in steps and takes longer. Each part still needs enough holds not to fly off before contact closes."
-        return out
-
     def _parts_split(st, shape, femmesh, nodes, elems):
         """Elements per part (by their centre inside its solid) and the
         element faces where two parts touch."""
@@ -866,251 +738,6 @@ def tools(session):
                 if sa and sb:
                     pairs.append((i, j, sorted(set(sb)), sorted(set(sa))))  # slave on the second part
         return groups, pairs
-
-    def fea_shell(a):
-        """A thin plate or shell by shell elements (CalculiX S6 on Gmsh's
-        second-order triangles): the faces of an object (a face, a shell, a
-        sheet) with a thickness, held along edges, under pressure or its own
-        weight."""
-        ccx = _binary("ccx", "Ccx", "ccxBinaryPath", "AGENTLINK_CCX")
-        gmsh = _binary("gmsh", "Gmsh", "gmshBinaryPath", "AGENTLINK_GMSH")
-        if not (ccx and gmsh):
-            raise ToolError("unavailable", "CalculiX (ccx) and Gmsh are needed: install them, or set their paths in FreeCAD's FEM preferences.")
-        import Fem
-
-        o = picks.shaped(s.doc, a.get("object"), "object")
-        faces = list(o.Shape.Faces)
-        if a.get("faces"):
-            faces = [picks.element(o.Shape, f.split(".")[-1], o.Label) for f in a["faces"]]
-        if not faces:
-            raise ToolError("invalid_input", "object: a face, shell or sheet (its faces are the shell's mid-surface); faces [\"Face1\"] narrows it.")
-        th = float(a.get("thickness", 0))
-        if th <= 0:
-            raise ToolError("invalid_input", "thickness: the shell's thickness, mm.")
-        c = matfam.card(s.doc, a["material"]) if a.get("material") else matfam.of_body(s.doc, o.Label)[0]
-        if c is None or not c.get("E"):
-            raise ToolError("invalid_input", "material: an id with a Young's modulus (material_list).")
-        shell = Part.makeShell(faces) if len(faces) > 1 else faces[0]
-        bb = shell.BoundBox
-        mesh = float(a.get("mesh") or round(max(1.0, bb.DiagonalLength / 25.0), 2))
-        wd = paths.made(s, os.path.join(s.out_dir, "shell_" + "".join(ch if ch.isalnum() else "_" for ch in o.Label)), "run")
-        os.makedirs(wd, exist_ok=True)
-        for n in os.listdir(wd):
-            if n.startswith(("job.", "shell.")):
-                os.remove(os.path.join(wd, n))
-        shell.exportBrep(os.path.join(wd, "shell.brep"))
-        with open(os.path.join(wd, "shell.geo"), "w") as f:
-            f.write("\n".join(['Merge "shell.brep";', f"Mesh.MeshSizeMax = {mesh};", "Mesh.MeshSizeMin = 0;", "Mesh.ElementOrder = 2;", "Mesh.SecondOrderLinear = 0;",
-                               "Mesh.Algorithm = 6;", "Mesh 2;", "Mesh.SaveAll = 1;", 'Save "shell.unv";', ""]))
-        timeout = float(a.get("timeout", 300))
-        r = subprocess.run([gmsh, "-", "shell.geo"], cwd=wd, capture_output=True, text=True, timeout=timeout)
-        unv = os.path.join(wd, "shell.unv")
-        if r.returncode != 0 or not os.path.isfile(unv):
-            raise ToolError("failed", "Gmsh could not mesh the faces: " + " | ".join((r.stderr or r.stdout or "").strip().splitlines()[-2:]))
-        fm = Fem.read(unv)
-        inp = os.path.join(wd, "shell.inp")
-        fm.writeABAQUS(inp, 1, False)
-        with open(inp) as f:
-            mesh_text = f.read()
-        import re
-
-        m = re.search(r"\*Element, TYPE=(\w+), ELSET=(\w+)", mesh_text, re.I)
-        if not m:
-            raise ToolError("failed", "No shell elements came out of the mesh.")
-        etype, eset = m.group(1).upper(), m.group(2)
-        if etype not in ("S6", "S3", "S8", "S4"):
-            raise ToolError("failed", f"The mesh gave {etype} elements, not shells.")
-        holds = a.get("holds") or []
-        if not holds:
-            raise ToolError("invalid_input", "holds [{ edges: \"boundary\" | [{ near: [x,y,z] }], kind pinned (simply supported) | fixed (clamped) }].")
-        outer = []
-        for e in shell.Edges:
-            # an edge on one face only is on the boundary
-            n_ = sum(1 for f in shell.Faces for fe in f.Edges if fe.isSame(e))
-            if n_ <= 1:
-                outer.append(e)
-        bl = []
-        held = 0
-        for h in holds:
-            kind = h.get("kind", "pinned")
-            if kind not in ("pinned", "fixed"):
-                raise ToolError("invalid_input", "holds.kind: pinned (simply supported: held, free to turn) | fixed (clamped).")
-            if h.get("edges", "boundary") == "boundary":
-                es = outer
-            else:
-                es = []
-                for q in h["edges"]:
-                    p = V(*[float(x) for x in q["near"]])
-                    es.append(min(shell.Edges, key=lambda e: e.distToShape(Part.Vertex(p))[0]))
-            ns = set()
-            for e in es:
-                ns.update(fm.getNodesByEdge(e))
-            held += len(ns)
-            dof = "1, 6" if kind == "fixed" else "1, 3"
-            bl += [f"{n}, {dof}" for n in sorted(ns)]
-        if held < 3:
-            raise ToolError("invalid_input", "The holds catch fewer than 3 mesh nodes: pick the edges again.")
-        nu = float(c.get("nu") or 0.3)
-        lines = [mesh_text.rstrip(), "*MATERIAL, NAME=SM", "*ELASTIC", f"{float(c['E']):.6g}, {nu:.6g}", "*DENSITY", f"{float(c.get('density') or 1) * 1e-9:.6g}",
-                 f"*SHELL SECTION, ELSET={eset}, MATERIAL=SM", f"{th:.6g}", "*STEP", "*STATIC", "*BOUNDARY"] + bl
-        dl = []
-        if a.get("pressure"):
-            dl.append(f"{eset}, P, {float(a['pressure']):.9g}")
-        if a.get("gravity"):
-            dl.append(f"{eset}, GRAV, {G:.6g}, 0, 0, -1")
-        if not dl:
-            raise ToolError("invalid_input", "pressure (MPa, on the faces' normal side) or gravity: true.")
-        lines += ["*DLOAD"] + dl + ["*NODE FILE", "U", "*EL FILE", "S", "*END STEP", ""]
-        with open(os.path.join(wd, "job.inp"), "w") as f:
-            f.write("\n".join(lines))
-        frd, _ = _run(ccx, wd, timeout, "shell")
-        disp, stress = ccx_io.read_frd(frd)
-        if not disp:
-            raise ToolError("failed", "CalculiX wrote no displacements.")
-        dmax = max(math.sqrt(sum(x * x for x in u[:3])) for u in disp.values())
-        vm = max((ccx_io.von_mises(sv) for sv in stress.values()), default=0.0)
-        y = c.get("yield")
-        out = {"object": o.Label, "faces": len(faces), "thickness": th, "material": c["name"], "mesh": {"size": mesh, "elements": fm.FaceCount, "type": etype},
-               "held": held, "deflectionMaxMm": round(dmax, 4), "vonMisesMaxMPa": round(vm, 3), **({"safety": round(y / vm, 2)} if y and vm else {}),
-               "files": wd, "note": "Shell elements carry bending through the thickness: the stress is the larger of the two faces'."}
-        if dmax > th / 2:
-            out["warning"] = f"The deflection ({dmax:.2f} mm) is over half the thickness: the plate is working as a membrane too, which a linear solve misses — real deflection is less."
-        return out
-
-    def fea_solve(a):
-        s._ccx_tail = s._ccx_fem_tail = None
-        st, o = _need_study(s)
-        if not st["holds"]:
-            raise ToolError("invalid_state", "Nothing holds the part: fea_hold the faces it is mounted by — a free body has no static answer.")
-        if not st["loads"]:
-            raise ToolError("invalid_state", "Nothing loads the part: fea_load a force, pressure or gravity.")
-        lost = unmatched(st, o.Shape, facepick.pick)
-        if lost:
-            raise ToolError("invalid_state", "The study no longer fits the part, so it was not solved (it would run without them): " + " ".join(lost))
-        c = matfam.card(s.doc, st["material"])
-        if c is None or not c.get("E"):
-            raise ToolError("invalid_state", f"The study's material {st['material']!r} is gone or has no Young's modulus: fea_setup {{ material }} again.")
-        shape = o.Shape
-        free = _unheld_solids(st, shape)
-        if free:
-            raise ToolError("invalid_state", unheld_words(o.Label, len(shape.Solids), free))
-        t0 = time.time()
-        timeout = float(a.get("timeout", 300))
-        mesh = float(st["mesh"])
-        faces = shape.Faces
-        nonlin = bool(a.get("nonlinear"))
-        groups = pairs = None
-        part_cards = []
-        # FreeCAD's own FEM first: an analysis with its CalculiX solver,
-        # Gmsh mesh, material and constraints, solved by FemToolsCcx and its
-        # results loaded into the analysis. Agent Link's own deck only for
-        # what that route does not take here (fem_route_why), or where it fails.
-        route_why = fem_route_why(st, a)
-        fem = None
-        if route_why is None:
-            try:
-                fem = _solve_fem(st, o, c, timeout)
-            except ToolError:
-                raise
-            except Exception as e:  # noqa: BLE001 - its own failure: the deck below runs, and the answer says why
-                route_why = f"FreeCAD's FEM route failed here: {type(e).__name__}: {e}"
-        if fem is not None:
-            wd, femmesh, nodes, elems, disp, stress, an_label = fem
-            fixed, held_faces, _cl, _dl, _gr, applied = _assemble(st, shape, femmesh, nodes, elems)
-            st.pop("_bounds", None)
-            st.pop("_centrif", None)
-            frd = os.path.join(wd, "job.frd")
-        else:
-            wd, femmesh, nodes, elems, disp, stress, fixed, held_faces, applied, groups, pairs, part_cards, frd = _solve_own(st, o, c, a, timeout)
-        if not disp or not stress:
-            said = getattr(s, "_ccx_tail", None) if fem is None else getattr(s, "_ccx_fem_tail", None)
-            raise ToolError("failed", "CalculiX wrote no displacements or stresses — most often a part free to move (a solid or region no hold reaches, a hold on too few faces) or a mesh that failed"
-                            + (f". CalculiX's last lines: {said}.{ccx_hint(said)}" if said else "")
-                            + (f". FreeCAD's FEM route first: {route_why}" if route_why and fem is None else "")
-                            + (". A multi-solid body: fea_setup { solid: n } studies one solid alone" if len(shape.Solids) > 1 else "")
-                            + "; the files are in " + wd)
-        vm = {n: ccx_io.von_mises(sv) for n, sv in stress.items()}
-        n_max = max(vm, key=vm.get)
-        dmag = {n: math.sqrt(sum(x * x for x in u[:3])) for n, u in disp.items()}
-        n_dmax = max(dmag, key=dmag.get)
-
-        def where(n):
-            p = nodes.get(n, (0, 0, 0))
-            vx = Part.Vertex(V(*p))
-            best = min(((vx.distToShape(f)[0], i) for i, f in enumerate(faces)), default=(0, 0))
-            return {"at": [round(p[0], 2), round(p[1], 2), round(p[2], 2)], "face": f"Face{best[1] + 1}"}
-
-        smax = vm[n_max]
-        y = c.get("yield")
-        out = {
-            "body": o.Label,
-            "material": {"id": c["id"], "name": c["name"], "E": c["E"], "yield": y},
-            "mesh": {"size": mesh, "nodes": len(nodes), "elements": len(elems), "type": "C3D10"},
-            "loads": applied,
-            "held": sorted(held_faces),
-            "vonMisesMax": {"MPa": round(smax, 3), **where(n_max)},
-            "displacementMax": {"mm": round(dmag[n_dmax], 4), **where(n_dmax)},
-            "solvedBy": (f"FreeCAD's FEM ({an_label}: CalculiX solver, Gmsh mesh, its constraints; results in the analysis)" if fem is not None
-                         else f"Agent Link's own CalculiX deck — {route_why}"),
-        }
-        warnings = []
-        if nonlin:
-            try:
-                pe = ccx_io.read_frd_blocks(open(frd).read(), "PE")
-                peeq = max((v[0] for v in pe[-1].values()), default=0.0) if pe else 0.0
-            except Exception:
-                peeq = None
-            out["nonlinear"] = {"geometry": True, "plastic": bool(y) and not a.get("elasticOnly"), **({"plasticStrainMax": round(peeq, 5)} if peeq is not None else {})}
-            if peeq:
-                warnings.append(f"It yields: plastic strain up to {peeq * 100:.2f} % — it takes a permanent set there.")
-        if y:
-            out["safety"] = round(y / smax, 2) if smax > 0 else None
-            if smax > y and not nonlin:
-                warnings.append(f"Past yield ({smax:.1f} over {y:g} MPa): a linear solve is not right past yield — the part yields or breaks there (nonlinear: true follows it into yield).")
-        else:
-            warnings.append("The card has no yield strength: no safety factor — material_set custom with the supplier's yieldMPa.")
-        if n_max in fixed:
-            warnings.append("The peak is on a held face: a rigid hold makes stress no real mount does — read it as high, and look a little away from the hold.")
-        bb = shape.BoundBox
-        least = min(bb.XLength, bb.YLength, bb.ZLength)
-        if mesh > least / 4:
-            warnings.append(f"Coarse mesh ({mesh:g} mm against a least size of {least:.1f} mm): peaks are under-read — fea_setup {{ mesh: {round(mesh / 2, 2)} }} and solve again; if the peak rises by more than 10% keep refining.")
-        if not nonlin and dmag[n_dmax] > 0.05 * max(bb.XLength, bb.YLength, bb.ZLength):
-            warnings.append("The displacement is large for the part: a linear solve is rough here.")
-        if not str(c["id"]).startswith("custom:"):
-            warnings.append(matfam.TYPICAL)
-        if groups is not None:
-            rows = []
-            for k, pinfo in enumerate(st["parts"]):
-                ns = {n for e in groups[k] for n in elems[e]}
-                pv = {n: vm[n] for n in ns if n in vm}
-                if not pv:
-                    continue
-                nm = max(pv, key=pv.get)
-                yk = part_cards[k].get("yield")
-                rows.append({"body": pinfo["body"], "material": part_cards[k]["name"], "vonMisesMaxMPa": round(pv[nm], 3), **where(nm),
-                             **({"safety": round(yk / pv[nm], 2)} if yk and pv[nm] > 0 else {})})
-            out["parts"] = rows
-            out["joined"] = {"how": st.get("join"), "interfaces": len(pairs)}
-            if st.get("join") != "none" and not pairs:
-                warnings.append("No touching faces were found in the mesh: the parts were solved apart.")
-            if y and len(rows) > 1:
-                out.pop("safety", None)
-        out["warnings"] = warnings
-        out["files"] = wd
-        out["seconds"] = round(time.time() - t0, 1)
-        # Every node's stress and displacement, for a map of the part
-        # (view_render map stress): kept with the session, not the file.
-        ids = [n for n in vm if n in nodes]
-        field = {"points": [nodes[n] for n in ids], "vonMises": [vm[n] for n in ids], "displacement": [list(disp.get(n, (0, 0, 0))[:3]) for n in ids],
-                 "stress": [list(stress.get(n, (0.0,) * 6)) for n in ids]}
-        at = {n: i for i, n in enumerate(ids)}
-        field["elements"] = [[at[n] for n in e] for e in elems.values() if all(n in at for n in e)]
-        s._agentlink_fea = {"body": o.Label, "stats": geo.stats(shape), "study": st, "result": out, "field": field}
-        from .. import hooks
-
-        hooks.remember(s, "fea", s._agentlink_fea)
-        return out
 
     def _solve_fem(st, o, c, timeout):
         """_fem_build_and_run, and on its own failure what it made taken out
@@ -1327,44 +954,18 @@ def tools(session):
             disp, stress = ccx_io.read_frd(f.read())
         return wd, femmesh, nodes, elems, disp, stress, fixed, held_faces, applied, groups, pairs, part_cards, frd
 
-    def fea_results(a):
-        r = _results(s)
-        if not r:
-            raise ToolError("not_found", "No results in this session: fea_solve first.")
-        out = dict(r["result"])
-        stale = []
-        try:
-            o = s.body(r["body"])
-            if geo.stats(o.Shape) != r["stats"]:
-                stale.append("the body changed since the solve")
-        except ToolError:
-            stale.append("the body is gone")
-        if _study(s.doc) != r["study"]:
-            stale.append("the study (holds, loads, material, mesh) changed")
-        out["stale"] = bool(stale)
-        if stale:
-            out["staleWhy"] = stale
-            out["next"] = "fea_solve again."
-        return out
-
-    def fea_clear(a):
-        had = _study(s.doc) is not None
-        store.remove(s.doc, KEY)
-        s._agentlink_fea = None
-        from .. import hooks
-
-        hooks.remember(s, "fea", None)
-        s.snapshot("fea_clear")
-        return {"cleared": had}
-
 
     def _where(nodes, shape, n):
+        """Where a node is: its place, and the face of the shape nearest to it."""
         p = nodes.get(n, (0, 0, 0))
         vx = Part.Vertex(V(*p))
         best = min(((vx.distToShape(f)[0], i) for i, f in enumerate(shape.Faces)), default=(0, 0))
         return {"at": [round(p[0], 2), round(p[1], 2), round(p[2], 2)], "face": f"Face{best[1] + 1}"}
 
     def _run(ccx, wd, timeout, what):
+        """CalculiX run on job.inp in a folder, bounded: (job.frd, job.dat) as
+        text. A run over the time or one CalculiX refuses is refused here,
+        with its own error lines."""
         env = dict(os.environ)
         env.setdefault("OMP_NUM_THREADS", str(max(1, min(4, os.cpu_count() or 1))))
         try:
@@ -1383,512 +984,10 @@ def tools(session):
                 dat = f.read()
         return frd, dat
 
-    def fea_modes(a):
-        st, o = _need_study(s)
-        c = matfam.card(s.doc, st["material"])
-        if c is None or not c.get("E") or not c.get("density"):
-            raise ToolError("invalid_state", f"The study's material {st['material']!r} needs a Young's modulus and a density: fea_setup {{ material }} again.")
-        count = int(a.get("count", 6))
-        if not 1 <= count <= 30:
-            raise ToolError("invalid_input", "count: modes to find, 1 to 30.")
-        shape = o.Shape
-        t0 = time.time()
-        timeout = float(a.get("timeout", 300))
-        ccx, wd, femmesh, mesh_text, nodes, elems = _meshed(o, st, timeout, "modes")
-        fixed = set()
-        mbounds = set()
-        for h in st["holds"]:
-            for _, f in facepick.pick(shape, h["faces"], "faces"):
-                if h.get("kind", "fixed") == "fixed":
-                    fixed.update(femmesh.getNodesByFace(f))
-                else:
-                    mbounds.update((n, d, 0.0) for n in femmesh.getNodesByFace(f) for d in h["dofs"])
-        mbounds = [b for b in mbounds if b[0] not in fixed]
-        free = not fixed and not mbounds
-        # A free part's first six modes are its rigid motions, near 0 Hz.
-        ask = count + (6 if free else 0)
-        mat = {"E": float(c["E"]), "nu": float(c.get("nu") or 0.35), "rho": float(c["density"])}
-        with open(os.path.join(wd, "job.inp"), "w") as f:
-            f.write(ccx_io.deck_modes(mesh_text, mat, fixed, ask, bounds=mbounds))
-        frd, dat = _run(ccx, wd, timeout, "frequency step")
-        freqs = ccx_io.read_frequencies(dat)
-        shapes = ccx_io.read_frd_blocks(frd, "DISP")
-        if not freqs:
-            raise ToolError("failed", "CalculiX wrote no frequencies: see job.dat in " + wd)
-        modes = []
-        for k, (no, hz) in enumerate(freqs):
-            if free and k < 6:
-                continue
-            m = {"mode": len(modes) + 1, "hz": round(hz, 2)}
-            if k < len(shapes) and shapes[k]:
-                mag = {n: math.sqrt(sum(x * x for x in u[:3])) for n, u in shapes[k].items() if n in nodes}
-                if mag:
-                    n_max = max(mag, key=mag.get)
-                    m["moves"] = _where(nodes, shape, n_max)
-                    # Which way that place swings, as a unit direction.
-                    u = shapes[k][n_max][:3]
-                    L = math.sqrt(sum(x * x for x in u)) or 1.0
-                    m["moves"]["along"] = [round(x / L, 3) for x in u]
-            modes.append(m)
-            if len(modes) >= count:
-                break
-        out = {"body": o.Label, "material": {"id": c["id"], "name": c["name"], "E": c["E"], "density": c["density"]},
-               "held": "free (no holds: the six rigid motions left out)" if free else f"{len(st['holds'])} hold(s) from the study",
-               "mesh": {"size": st["mesh"], "nodes": len(nodes), "elements": len(elems)}, "modes": modes,
-               "note": "Natural frequencies: keep what shakes the part (a motor, a fan, a vehicle) well away from the lowest, by a factor of two or more. moves is where each mode swings most, and which way.",
-               "warnings": ([] if free else ["Rigid holds make a part stiffer than a real mount: real frequencies read lower."]) + ([] if str(c["id"]).startswith("custom:") else [matfam.TYPICAL]),
-               "files": wd, "seconds": round(time.time() - t0, 1)}
-        return out
-
-    def fea_heat(a):
-        st, o = _need_study(s)
-        c = matfam.card(s.doc, st["material"])
-        k = a.get("conductivity") or (c or {}).get("k")
-        if not k:
-            raise ToolError("invalid_state", f"{(c or {}).get('name', st['material'])} has no thermal conductivity on its card: conductivity W/(m·K) here, or material_set custom with one.")
-        k = float(k)
-        temps_in = a.get("temperatures") or []
-        heat_in = a.get("heat") or []
-        if not temps_in and not heat_in:
-            raise ToolError("invalid_input", "temperatures [{ faces, celsius }] held, and/or heat [{ faces, watts }] going in: something must drive the heat.")
-        air = a.get("air", {"h": 10, "celsius": 25})
-        if air is True:
-            air = {"h": 10, "celsius": 25}
-        shape = o.Shape
-        t0 = time.time()
-        timeout = float(a.get("timeout", 300))
-        ccx, wd, femmesh, mesh_text, nodes, elems = _meshed(o, st, timeout, "heat")
-        used, temps, fluxes, films, said = set(), {}, [], [], []
-        for i, t in enumerate(temps_in):
-            if not isinstance(t, dict) or "celsius" not in t:
-                raise ToolError("invalid_input", f"temperatures.{i}: {{ faces, celsius }}.")
-            picked = facepick.pick(shape, t.get("faces"), f"temperatures.{i}.faces")
-            for name, f in picked:
-                used.add(name)
-                for n in femmesh.getNodesByFace(f):
-                    temps[n] = float(t["celsius"])
-            said.append({"held": [n for n, _ in picked], "celsius": float(t["celsius"])})
-        for i, h in enumerate(heat_in):
-            if not isinstance(h, dict) or "watts" not in h:
-                raise ToolError("invalid_input", f"heat.{i}: {{ faces, watts }} going in.")
-            picked = facepick.pick(shape, h.get("faces"), f"heat.{i}.faces")
-            vf = []
-            for name, f in picked:
-                used.add(name)
-                vf += [tuple(x) for x in femmesh.getccxVolumesByFace(f)]
-            area = sum(f.Area for _, f in picked)
-            if not vf or area <= 0:
-                raise ToolError("failed", f"heat.{i}: no element faces on {[n for n, _ in picked]} — another mesh size.")
-            q = float(h["watts"]) * 1000.0 / area  # mW/mm²
-            fluxes += [(e, fn, q) for e, fn in vf]
-            said.append({"heated": [n for n, _ in picked], "watts": float(h["watts"]), "mWperMm2": round(q, 5)})
-        if air:
-            hc = float(air.get("h", 10)) * 1e-3  # W/(m²·K) is 1e-3 mW/(mm²·K)
-            ta = float(air.get("celsius", 25))
-            on = [(n, f) for n, f in ((f"Face{i + 1}", f) for i, f in enumerate(shape.Faces)) if n not in used]
-            if air.get("faces") is not None:
-                on = facepick.pick(shape, air["faces"], "air.faces")
-            for _, f in on:
-                films += [(e, fn, hc, ta) for e, fn in (tuple(x) for x in femmesh.getccxVolumesByFace(f))]
-            said.append({"air": {"h": float(air.get("h", 10)), "celsius": ta, "faces": len(on)}})
-        if not temps and not films:
-            raise ToolError("invalid_input", "Heat goes in but nothing takes it away: hold a face at a temperature or leave air on.")
-        with open(os.path.join(wd, "job.inp"), "w") as f:
-            f.write(ccx_io.deck_heat(mesh_text, k, temps, fluxes, films, start=float((air or {}).get("celsius", 20)) if air else 20.0))
-        frd, _ = _run(ccx, wd, timeout, "heat step")
-        T = {n: t for n, t in ccx_io.read_temperatures(frd).items() if n in nodes}
-        if not T:
-            raise ToolError("failed", "CalculiX wrote no temperatures: see job.frd in " + wd)
-        hot, cold = max(T, key=T.get), min(T, key=T.get)
-        out = {"body": o.Label, "material": {"id": (c or {}).get("id"), "name": (c or {}).get("name"), "conductivity": k, "softensC": (c or {}).get("softens")},
-               "boundary": said, "hottest": {"celsius": round(T[hot], 2), **_where(nodes, shape, hot)}, "coolest": {"celsius": round(T[cold], 2), **_where(nodes, shape, cold)},
-               "mesh": {"size": st["mesh"], "nodes": len(nodes), "elements": len(elems)}, "files": wd, "seconds": round(time.time() - t0, 1)}
-        warnings = []
-        soft = (c or {}).get("softens")
-        if soft and T[hot] >= soft:
-            warnings.append(f"Hotter than {c['name']} takes ({T[hot]:.0f} °C against about {soft} °C where it softens under load): it will sag or creep there — a higher-temperature material, or more cooling.")
-        elif soft and T[hot] >= soft - 10:
-            warnings.append(f"Within 10 °C of where {c['name']} softens ({soft} °C): little margin.")
-        warnings.append("Steady state, conduction and still-air convection only (no radiation); film coefficients are rough — 5 to 25 W/(m²·K) for still air, more with a fan.")
-        out["warnings"] = warnings
-        # The field for view_render map heat.
-        ids = list(T)
-        s._agentlink_heat = {"body": o.Label, "stats": geo.stats(shape), "field": {"points": [nodes[n] for n in ids], "celsius": [T[n] for n in ids]}}
-        return out
-
-    query = {"description": "Faces by query: { near: [x,y,z], radius }, { normal: [nx,ny,nz], x|y|z: plane, largest }, { faces: [\"Face3\"] }; or what shape_query answers — \"Face8\", \"Body.Face8\", a list of them, its items — or its filters ({ type: cylinder, radius: 3 }, { type: plane, normal, z }, …)"}
-    # ---- buckling, local refinement, export, FreeCAD's own FEM objects ----
-
-    def fea_buckle(a):
-        st, o = _need_study(s)
-        if not st["holds"] or not st["loads"]:
-            raise ToolError("invalid_state", "Buckling needs the study's holds and loads (the load whose multiple buckles it): fea_hold and fea_load first.")
-        c = matfam.card(s.doc, st["material"])
-        if c is None or not c.get("E"):
-            raise ToolError("invalid_state", "The study's material has no Young's modulus: fea_setup { material }.")
-        count = int(a.get("count", 3))
-        if not 1 <= count <= 10:
-            raise ToolError("invalid_input", "count: modes, 1 … 10.")
-        timeout = float(a.get("timeout", 300))
-        shape = o.Shape
-        t0 = time.time()
-        ccx, wd, femmesh, mesh_text, nodes, elems = _meshed(o, st, timeout, "buckle")
-        fixed, held_faces, cloads, dloads, gravity, applied = _assemble(st, shape, femmesh, nodes, elems)
-        mat = {"E": float(c["E"]), "nu": float(c.get("nu") or 0.35), "rho": float(c["density"])}
-        with open(os.path.join(wd, "job.inp"), "w") as f:
-            f.write(ccx_io.deck(mesh_text, mat, fixed, cloads, dloads, gravity, buckle=count, thermal=_thermal(st, nodes), bounds=st.pop("_bounds", None), centrif=st.pop("_centrif", None)))
-        frd, dat = _run(ccx, wd, timeout, "buckling step")
-        factors = ccx_io.read_buckling(dat)
-        if not factors:
-            raise ToolError("failed", "CalculiX wrote no buckling factors: see job.dat in " + wd)
-        shapes = ccx_io.read_frd_blocks(frd, "DISP")
-        modes = []
-        for k, (no, fac) in enumerate(factors):
-            m = {"mode": no, "factor": round(fac, 4)}
-            if k < len(shapes) and shapes[k]:
-                mag = {n: math.sqrt(sum(x * x for x in u[:3])) for n, u in shapes[k].items() if n in nodes}
-                if mag:
-                    m["bulges"] = _where(nodes, shape, max(mag, key=mag.get))
-            modes.append(m)
-        low = modes[0]["factor"]
-        out = {"body": o.Label, "loads": applied, "modes": modes, "lowest": low, "seconds": round(time.time() - t0, 1), "files": wd}
-        if low < 0:
-            out["note"] = "A negative factor: the part buckles with the loads reversed — reverse them and read again."
-        elif low < 1:
-            out["verdict"] = f"Buckles under these loads: at {low:.2f}× them."
-        else:
-            out["verdict"] = f"Buckles at {low:.2f}× these loads" + (" — under 3×: little margin; thin walls and columns want more." if low < 3 else ".")
-        out["note"] = (out.get("note", "") + " Linear (eigenvalue) buckling: an upper bound — real parts, imperfect and printed, go sooner; keep a margin of 3 or more.").strip()
-        return out
-
-    def fea_refine(a):
-        st, o = _need_study(s)
-        if a.get("clear"):
-            st["refine"] = []
-        else:
-            size = a.get("size")
-            if not isinstance(size, (int, float)) or size <= 0:
-                raise ToolError("invalid_input", "size: the element edge near the faces, mm, over 0 (smaller than the study's mesh).")
-            if size >= float(st["mesh"]):
-                raise ToolError("invalid_input", f"size {size:g} is not finer than the study's mesh ({st['mesh']:g} mm).")
-            _, picked = _pick_report(o.Shape, a.get("faces"), "faces")
-            st["refine"] = list(st.get("refine") or []) + [{"faces": a["faces"], "size": float(size)}]
-            out_p = picked
-        _save(s.doc, st)
-        s.snapshot("fea_refine")
-        return {"refine": st.get("refine", []), **({"faces": out_p} if not a.get("clear") else {}), "note": "Finer near those faces, growing back to the study's size over three elements: where a peak sits (a fillet, a hole's edge) — solve again and see the peak settle."}
-
-    def fea_export(a):
-        r = _results(s)
-        if not r or "field" not in r:
-            raise ToolError("not_found", "No solve to write: fea_solve first.")
-        f = r["field"]
-        base = os.path.join(s.out_dir, (a.get("name") or f"{r['body']}-stress").replace(" ", "-"))
-        kinds = a.get("formats") or ["vtu", "csv"]
-        for k in kinds:
-            paths.made(s, base + "." + k)
-        files = {}
-        if "vtu" in kinds:
-            if not f.get("elements"):
-                raise ToolError("invalid_state", "This solve kept no elements: fea_solve again, then export.")
-            with open(base + ".vtu", "w") as fh:
-                fh.write(ccx_io.vtu(f["points"], f["elements"], {"von_Mises_MPa": f["vonMises"], "displacement_mm": f["displacement"]}))
-            files["vtu"] = base + ".vtu"
-        if "csv" in kinds:
-            with open(base + ".csv", "w") as fh:
-                fh.write("x,y,z,von_mises_MPa,ux,uy,uz\n")
-                for p, vm, u in zip(f["points"], f["vonMises"], f["displacement"]):
-                    fh.write(f"{p[0]:.5f},{p[1]:.5f},{p[2]:.5f},{vm:.5f},{u[0]:.6g},{u[1]:.6g},{u[2]:.6g}\n")
-            files["csv"] = base + ".csv"
-        return {"body": r["body"], "files": files, "nodes": len(f["points"]), "elements": len(f.get("elements") or []),
-                "note": "The VTU opens in ParaView (and FreeCAD's FEM post-processing); the CSV has every node."}
-
-    def fea_chart(a):
-        """FreeCAD 1.1's post-processing visualisations (data visualisation,
-        histogram, line plot, table) for the last solve, headless: an SVG
-        chart and a CSV beside it."""
-        import numpy as np
-
-        from .. import charts
-
-        r = _results(s)
-        if not r or "field" not in r:
-            raise ToolError("not_found", "No solve to read: fea_solve first.")
-        kind = a.get("kind", "histogram")
-        field = picks.choice(a, "field", ("vonMises", "displacement"), "field: vonMises (MPa) or displacement (mm, its size).", "vonMises")
-        unit = "MPa" if field == "vonMises" else "mm"
-        f = r["field"]
-        vals = np.asarray(f["vonMises"], float) if field == "vonMises" else np.linalg.norm(np.asarray(f["displacement"], float), axis=1)
-        base = "".join(ch if ch.isalnum() else "_" for ch in (a.get("name") or f"{r['body']}-{field}-{kind}"))
-        os.makedirs(s.out_dir, exist_ok=True)
-        svg_path, csv_path = paths.made(s, os.path.join(s.out_dir, base + ".svg")), paths.made(s, os.path.join(s.out_dir, base + ".csv"))
-        label = "von Mises stress (MPa)" if field == "vonMises" else "displacement (mm)"
-        out = {"body": r["body"], "kind": kind, "field": field, "unit": unit, "nodes": int(len(vals))}
-        if kind == "histogram":
-            bins = int(a.get("bins", 20))
-            if not 2 <= bins <= 200:
-                raise ToolError("invalid_input", "bins: 2 … 200.")
-            counts, edges = np.histogram(vals, bins=bins)
-            mids = [round(float((edges[i] + edges[i + 1]) / 2), 4) for i in range(bins)]
-            text = charts.svg([{"name": "nodes", "values": [int(c) for c in counts]}], x=mids, kind="bar", title=a.get("title") or f"{r['body']}: {label}",
-                              xlabel=label, ylabel="nodes")
-            rows = [["from", "to", "nodes"]] + [[round(float(edges[i]), 4), round(float(edges[i + 1]), 4), int(counts[i])] for i in range(bins)]
-            pct = np.percentile(vals, [50, 95, 99]) if len(vals) else [0, 0, 0]
-            out.update({"bins": bins, "min": round(float(vals.min()), 4), "max": round(float(vals.max()), 4),
-                        "median": round(float(pct[0]), 4), "p95": round(float(pct[1]), 4), "p99": round(float(pct[2]), 4)})
-        elif kind in ("line", "table"):
-            if kind == "line" and not a.get("line"):
-                raise ToolError("invalid_input", "line { from: [x,y,z], to: [x,y,z], samples }: the line to plot along, mm.")
-            if kind == "table" and not (a.get("line") or a.get("points")):
-                raise ToolError("invalid_input", "points [[x,y,z] …] or line { from, to, samples }: where to read the table.")
-            pr = fea_probe({k: a[k] for k in ("line", "points") if a.get(k)})
-            got = pr.get("line") or pr.get("points") or []
-            key = "vonMisesMPa" if field == "vonMises" else "displacementMm"
-            rows = [["x", "y", "z", "vonMisesMPa", "displacementMm", "nearestNodeMm"]] + [g["at"] + [g["vonMisesMPa"], g["displacementMm"], g["nearestNodeMm"]] for g in got]
-            text = None
-            if kind == "line" or a.get("line"):
-                p0 = np.asarray(a["line"]["from"], float) if a.get("line") else None
-                dist = [round(float(np.linalg.norm(np.asarray(g["at"], float) - p0)), 3) for g in got] if p0 is not None else list(range(len(got)))
-                text = charts.svg([{"name": label, "values": [g[key] for g in got]}], x=dist, kind="line", title=a.get("title") or f"{r['body']}: {label} along the line",
-                                  xlabel="distance along the line (mm)", ylabel=label)
-            out["samples"] = len(got)
-            out["max"] = max((g[key] for g in got), default=None)
-            if pr.get("warning"):
-                out["warning"] = pr["warning"]
-            if kind == "table" and len(got) <= 25:
-                out["table"] = rows
-        else:
-            raise ToolError("invalid_input", "kind: histogram (field over every node) | line (along line { from, to, samples }) | table (points or a line, as CSV).")
-        with open(csv_path, "w", encoding="utf-8") as fh:
-            fh.write("\n".join(",".join(str(c) for c in row) for row in rows) + "\n")
-        out["csv"] = csv_path
-        if text:
-            with open(svg_path, "w", encoding="utf-8") as fh:
-                fh.write(text)
-            out["svg"] = svg_path
-        return out
-
-    def fea_probe(a):
-        """Values of the last solve where asked: points, along a line, or over faces."""
-        import numpy as np
-
-        r = _results(s)
-        if not r or "field" not in r:
-            raise ToolError("not_found", "No solve to read: fea_solve first.")
-        f = r["field"]
-        P = np.asarray(f["points"], float)
-        VM = np.asarray(f["vonMises"], float)
-        U = np.asarray(f["displacement"], float)
-        um = np.linalg.norm(U, axis=1)
-        # the solve's element size: the study's mesh (the session keeps body, study, result, field)
-        m_ = (r.get("study") or {}).get("mesh") or ((r.get("result") or {}).get("mesh") or {}).get("size")
-        msize = float(m_ or 1.0)
-
-        def at(q):
-            d = np.linalg.norm(P - np.asarray(q, float), axis=1)
-            k = np.argsort(d)[:4]
-            w = 1.0 / np.maximum(d[k], 1e-9)
-            if d[k[0]] < 1e-6:
-                w = (d[k] < 1e-6).astype(float)
-            w = w / w.sum()
-            return {"at": [round(float(c), 3) for c in q], "vonMisesMPa": round(float(VM[k] @ w), 3),
-                    "displacementMm": round(float(um[k] @ w), 5), "nearestNodeMm": round(float(d[k[0]]), 3)}
-
-        out = {"body": r["body"]}
-        if a.get("points"):
-            out["points"] = [at(q) for q in a["points"]]
-        if a.get("line"):
-            ln = a["line"]
-            p0, p1 = np.asarray(ln.get("from"), float), np.asarray(ln.get("to"), float)
-            n = int(ln.get("samples", 11))
-            if not 2 <= n <= 500:
-                raise ToolError("invalid_input", "line.samples: 2 … 500.")
-            rows = [at(p0 + (p1 - p0) * i / (n - 1)) for i in range(n)]
-            far = max(x["nearestNodeMm"] for x in rows)
-            out["line"] = rows
-            if far > msize * 2 and far > 2:
-                out["warning"] = f"Some samples lie {far:.1f} mm from any node: the line leaves the part there."
-        if a.get("faces") is not None:
-            o = s.doc.getObject(r.get("bodyName", "")) if r.get("bodyName") else None
-            if o is None:
-                o = next((x for x in s.doc.Objects if x.Label == r["body"]), None)
-            if o is None:
-                raise ToolError("not_found", f"{r['body']}: the body solved is no longer here.")
-            picked = facepick.pick(o.Shape, a["faces"], "faces")
-            faces = [fc for _, fc in picked]
-            tol = max(0.05, 0.02 * msize)
-            on = np.zeros(len(P), bool)
-            for fc in faces:
-                bb = fc.BoundBox
-                cand = np.where((P[:, 0] >= bb.XMin - tol) & (P[:, 0] <= bb.XMax + tol) & (P[:, 1] >= bb.YMin - tol) & (P[:, 1] <= bb.YMax + tol)
-                                & (P[:, 2] >= bb.ZMin - tol) & (P[:, 2] <= bb.ZMax + tol))[0]
-                for i in cand:
-                    if not on[i] and fc.distToShape(Part.Vertex(FreeCAD.Vector(*P[i])))[0] <= tol:
-                        on[i] = True
-            if not on.any():
-                raise ToolError("failed", "No mesh nodes found on those faces.")
-            i_max = int(np.argmax(np.where(on, VM, -1)))
-            out["faces"] = {"faces": [n_ for n_, _ in picked], "nodes": int(on.sum()),
-                            "vonMisesMPa": {"max": round(float(VM[on].max()), 3), "mean": round(float(VM[on].mean()), 3), "maxAt": [round(float(c), 3) for c in P[i_max]]},
-                            "displacementMm": {"max": round(float(um[on].max()), 5), "mean": round(float(um[on].mean()), 5)}}
-        if len(out) == 1:
-            raise ToolError("invalid_input", "points [[x,y,z] …], line { from, to, samples }, and/or faces (a query as fea_hold takes).")
-        if r.get("stale"):
-            out["stale"] = True
-        return out
-
-    def fea_native(a):
-        st, o = _need_study(s)
-        try:
-            import ObjectsFem
-        except ImportError:
-            raise ToolError("unavailable", "FreeCAD's FEM module is not in this build.")
-        doc = s.doc
-        c = matfam.card(doc, st["material"]) or {}
-        made = []
-        kind = str(a.get("solver", "calculix")).lower()
-        if kind not in ("calculix", "elmer"):
-            raise ToolError("invalid_input", "solver: calculix or elmer.")
-        eqs = [str(e).lower() for e in (a.get("equations") or ["elasticity"])]
-        if kind == "calculix" and (a.get("equations") or a.get("temperatures") or a.get("potentials")):
-            raise ToolError("invalid_input", "equations, temperatures and potentials are Elmer's: solver elmer.")
-        if kind == "elmer":
-            bad = [e for e in eqs if e not in ELMER_EQUATIONS]
-            if bad:
-                raise ToolError("invalid_input", f"equations: {', '.join(bad)} unknown — " + ", ".join(ELMER_EQUATIONS) + ".")
-            if str(a.get("fluid", "air")).lower() not in FLUIDS:
-                raise ToolError("invalid_input", "fluid: " + " or ".join(FLUIDS) + " (with flow, the body is the fluid's space).")
-            for key, eq in (("temperatures", "heat"), ("heat", "heat"), ("potentials", "electrostatic")):
-                if a.get(key) and eq not in eqs:
-                    raise ToolError("invalid_input", f"{key} need the {eq} equation: equations [..., {eq}].")
-            if not hasattr(ObjectsFem, "makeSolverElmer"):
-                raise ToolError("unavailable", "This FreeCAD's FEM has no Elmer solver object.")
-            an = _analysis(doc, a, o)
-            solver = ObjectsFem.makeSolverElmer(doc)
-            an.addObject(solver)
-            made.append(solver.Label)
-            for e in eqs:
-                mk = getattr(ObjectsFem, ELMER_EQUATIONS[e], None)
-                if mk is None:
-                    raise ToolError("unavailable", f"This FreeCAD's Elmer has no {e} equation.")
-                eq = mk(doc, solver)
-                made.append(eq.Label)
-        else:
-            names = ("makeSolverCalculiX", "makeSolverCalculix", "makeSolverCalculixCcxTools", "makeSolverCcxTools")
-            mk_solver = next((getattr(ObjectsFem, n) for n in names if hasattr(ObjectsFem, n)), None)
-            if mk_solver is None:
-                raise ToolError("unavailable", "This FreeCAD's FEM has no CalculiX solver object to add: " + ", ".join(n for n in dir(ObjectsFem) if n.startswith("makeSolver")))
-            an = _analysis(doc, a, o)
-            solver = mk_solver(doc)
-            an.addObject(solver)
-            made.append(solver.Label)
-        fluid = kind == "elmer" and "flow" in eqs
-        if fluid:
-            mo = ObjectsFem.makeMaterialFluid(doc, "Fluid")
-            mo.Material = dict(FLUIDS[str(a.get("fluid", "air")).lower()])
-            an.addObject(mo)
-            made.append(mo.Label)
-        else:
-            mo = ObjectsFem.makeMaterialSolid(doc, "Material")
-            props = {"Name": c.get("name", st["material"])}
-            if c.get("E"):
-                props["YoungsModulus"] = f"{float(c['E'])} MPa"
-            if c.get("nu"):
-                props["PoissonRatio"] = str(float(c["nu"]))
-            if c.get("density"):
-                # cards keep g/cm³: FreeCAD's material wants kg/m³
-                props["Density"] = f"{float(c['density']) * 1000} kg/m^3"
-            if c.get("k"):
-                props["ThermalConductivity"] = f"{float(c['k'])} W/m/K"
-            props["SpecificHeat"] = f"{float(c.get('cp', 1500))} J/kg/K"
-            if c.get("alpha"):
-                props["ThermalExpansionCoefficient"] = f"{float(c['alpha'])} 1/K"
-            props["RelativePermittivity"] = str(float(c.get("permittivity", 1)))
-            mo.Material = props
-            # No References: one material is every element's, for CalculiX and
-            # Elmer alike (a reference makes FreeCAD's check print an error line).
-            an.addObject(mo)
-            made.append(mo.Label)
-        mesh = ObjectsFem.makeMeshGmsh(doc, "Mesh")
-        if "Shape" in mesh.PropertiesList:
-            mesh.Shape = o
-        else:
-            mesh.Part = o  # before FreeCAD 1.1
-        mesh.CharacteristicLengthMax = f"{float(st['mesh'])} mm"
-        try:
-            mesh.ElementOrder = "2nd"
-        except Exception:
-            pass
-        an.addObject(mesh)
-        made.append(mesh.Label)
-        shape = o.Shape
-        skipped = []
-        structural = kind == "calculix" or bool({"elasticity", "deformation"} & set(eqs))
-        for h in (st["holds"] if structural else []):
-            if h.get("kind", "fixed") != "fixed":
-                skipped.append(f"a {h['kind']} hold (add it as a displacement constraint in the FEM workbench)")
-                continue
-            fx = ObjectsFem.makeConstraintFixed(doc, "Fixed")
-            fx.References = [(o, tuple(n for n, _ in facepick.pick(shape, h["faces"], "faces")))]
-            an.addObject(fx)
-            made.append(fx.Label)
-        for ld in (st["loads"] if structural else []):
-            if ld["kind"] == "pressure":
-                pr = ObjectsFem.makeConstraintPressure(doc, "Pressure")
-                pr.References = [(o, tuple(n for n, _ in facepick.pick(shape, ld["faces"], "faces")))]
-                pr.Pressure = f"{float(ld['pressure'])} MPa"
-                an.addObject(pr)
-                made.append(pr.Label)
-            elif ld["kind"] == "temperature":
-                try:
-                    it = ObjectsFem.makeConstraintInitialTemperature(doc, "InitialTemperature")
-                    it.initialTemperature = "293.15 K"
-                    an.addObject(it)
-                    tc = ObjectsFem.makeConstraintTemperature(doc, "Temperature")
-                    tc.References = [(o, tuple(f"Face{i + 1}" for i in range(len(shape.Faces))))]
-                    tc.Temperature = f"{293.15 + float(ld['delta'])} K"
-                    an.addObject(tc)
-                    made += [it.Label, tc.Label]
-                    skipped.append("the material's expansion coefficient and a thermomechanical solver setting (set them in the FEM workbench)")
-                except Exception:
-                    skipped.append("the temperature change (add it in the FEM workbench)")
-            elif ld["kind"] == "spin":
-                skipped.append("the spin (FreeCAD 1.0's centrifugal constraint is Elmer's; CalculiX takes it as *DLOAD CENTRIF)")
-            elif ld["kind"] == "gravity":
-                g = ObjectsFem.makeConstraintSelfWeight(doc, "SelfWeight")
-                self_weight(g, ld["gravity"])
-                an.addObject(g)
-                made.append(g.Label)
-            else:
-                # a force's direction is a line in the model: one drawn for it, hidden
-                fv = V(*ld["force"])
-                ln = doc.addObject("Part::Line", "ForceDirection")
-                ln.X2, ln.Y2, ln.Z2 = fv.normalize().x, fv.y, fv.z
-                ln.Visibility = False
-                fo = ObjectsFem.makeConstraintForce(doc, "Force")
-                fo.References = [(o, tuple(n for n, _ in facepick.pick(shape, ld["faces"], "faces")))]
-                fo.Force = f"{V(*ld['force']).Length} N"
-                try:
-                    fo.Direction = (ln, ["Edge1"])
-                except Exception:
-                    skipped.append("a force's direction (set it in the GUI)")
-                an.addObject(fo)
-                made.append(fo.Label)
-        if kind == "elmer":
-            made += _elmer_conditions(doc, an, o, shape, a, eqs)
-        doc.recompute()
-        s.snapshot("fea_native")
-        out = {"analysis": an.Label, "solver": kind, "objects": made, "next": "In FreeCAD's FEM workbench: mesh it (double-click the mesh), then run the solver — the same study fea_solve runs headless."}
-        if kind == "elmer":
-            out["equations"] = eqs
-            out["next"] = "write: true meshes it and writes Elmer's case here; with ElmerSolver installed, run: true solves it. Or open it in the FEM workbench."
-            if a.get("write") or a.get("run"):
-                out.update(_elmer_write(o, mesh, solver, bool(a.get("run")), float(a.get("timeout", 600))))
-        if skipped:
-            out["skipped"] = skipped
-        return out
+    # ---- FreeCAD's own FEM objects (fea_native) ----
 
     def _analysis(doc, a, o):
+        """A new FEM analysis, under the name given or "<body> analysis" (a label no other has)."""
         an = ObjectsFem_().makeAnalysis(doc, "Analysis")
         an.Label = s.unique(a.get("name") or f"{o.Label} analysis")
         return an
@@ -1900,6 +999,7 @@ def tools(session):
         made = []
 
         def refs(q, where):
+            """A face query as a FEM object's References."""
             return [(o, tuple(n for n, _ in facepick.pick(shape, q, where)))]
 
         for i, tq in enumerate(a.get("temperatures") or []):
@@ -1985,70 +1085,499 @@ def tools(session):
         out["note"] = "Solved: open the .vtu in ParaView, or in the FEM workbench (the Elmer solver's results)."
         return out
 
-    return [
-        Tool("fea_shell", "A thin plate or shell by shell elements (CalculiX on Gmsh's triangles): object (a face, shell or sheet: its faces are the mid-surface; faces narrows), thickness mm, material, holds [{ edges \"boundary\" (every free edge) | [{ near: [x,y,z] }], kind pinned (simply supported) | fixed (clamped) }], pressure MPa and/or gravity: true, mesh mm. Answers the largest deflection (mm) and stress (MPa). Panels, lids, sheet-metal, floors and walls as plates. Runs in the foreground (timeout s, 300); needs ccx and gmsh.",
-             obj({"object": {"type": "string"}, "faces": {"type": "array", "items": {"type": "string"}}, "thickness": {"type": "number"}, "material": {"type": "string"},
-                  "holds": {"type": "array", "items": {"type": "object"}}, "pressure": {"type": "number"}, "gravity": {"type": "boolean"}, "mesh": {"type": "number"}, "timeout": {"type": "number"}}, ["object", "thickness"]), fea_shell),
-        Tool("fea_parts", "A strength study of several parts together (instead of fea_setup): bodies [labels, one solid each], materials { label: id } (else each body's own), join tie (bonded where they touch: glued, welded, press-fit) | contact (they push but do not pull; friction 0.2 lets them slide) | none, tolerance mm for touching (0.05), mesh mm. Makes a hidden compound, the study's body; answers touching (pairs and area) and warns of overlaps. Then fea_hold / fea_load on the parts' faces and fea_solve: each part's peak stress and safety.",
-             obj({"bodies": {"type": "array", "items": {"type": "string"}}, "materials": {"type": "object"}, "join": {"type": "string", "enum": ["tie", "contact", "none"]},
-                  "friction": {"type": "number"}, "tolerance": {"type": "number"}, "mesh": {"type": "number"}, "name": {"type": "string"}}, ["bodies"]), fea_parts, changes=True),
-        Tool(
-            "fea_setup",
-            "Start (or change) a strength study of one body: body; solid: n studies one solid of a multi-solid body alone (a hidden helper, read again from the body at each solve; its faces are numbered on their own); material (the body's by default; it needs a Young's modulus), mesh (largest element edge, mm; by default a third of the least size; one that makes over about 400,000 elements is refused). The same body's holds and loads are kept (said as kept; unmatched lists those that fit no face now); reset: true drops them (said as dropped). Answers study, material and next. " + TRAPS,
-            obj({"body": {"type": "string"}, "solid": {"type": "integer", "description": "One solid of a multi-solid body (an AllowCompound Body), from 1, studied alone."}, "material": {"type": "string"}, "mesh": {"type": "number"}, "reset": {"type": "boolean"}}),
-            fea_setup,
-            changes=True,
-        ),
-        Tool(
-            "fea_hold",
-            "Hold faces: faces by query — { near: [x,y,z] }, { normal: [0,0,-1], z: 0 }, { faces: [\"Face1\"] }, shape_query's references (\"Face8\", a list) or its filters ({ type: cylinder, radius: 3 }); kind fixed (no movement at all, the default) | slide (held only along the face's normal, x/y/z: a roller, a smooth floor, a symmetry plane) | pin (dofs [\"x\",\"y\",\"z\"] held, the rest free) | move (move [dx,dy,dz] mm, null for free: a set displacement, a press fit). Adds to the holds (replace: true starts again; clear: true drops them). The query is kept, not the face numbers (they change when the part is edited): fea_solve matches it again and refuses if it finds nothing. Answers held (the faces picked, with area and centre): check them.",
-            obj({"faces": query, "kind": {"type": "string", "enum": ["fixed", "slide", "pin", "move"]}, "dofs": {"type": "array", "items": {"type": "string"}}, "move": {"type": "array", "items": {}}, "replace": {"type": "boolean"}, "clear": {"type": "boolean"}}),
-            fea_hold,
-            changes=True,
-        ),
-        Tool(
-            "fea_load",
-            "Load the part: force on faces (N; [fx, fy, fz] in total spread by area, or a number pushing into the faces), pressure on faces (MPa = N/mm², positive pushes in), gravity (true is 1 g down -z; a number of g; [gx, gy, gz] in g), or temperature (K the whole part warms by, against its holds; alpha 1/K, else the material's), or spin { rpm, axis [x,y,z], at [x,y,z] } (a rotor's own mass flung outward). One kind a call; faces as fea_hold takes them. Adds to the loads (replace: true starts again; clear: true drops them); an identical or zero load is refused. Answers on (the faces picked) and load.",
-            obj({"faces": query, "force": {}, "pressure": {"type": "number"}, "gravity": {}, "temperature": {"type": "number"}, "alpha": {"type": "number"}, "spin": {"type": "object"}, "replace": {"type": "boolean"}, "clear": {"type": "boolean"}}),
-            fea_load,
-            changes=True,
-        ),
-        Tool(
-            "fea_solve",
-            "Solve the study: as FreeCAD's own FEM analysis (CalculiX solver object, Gmsh mesh object, its constraints, results loaded into it; made anew each solve as \"<body> strength (fea_solve)\") where the study is one body, fixed holds, force/pressure/gravity, linear; else Agent Link's own CalculiX deck (solvedBy says which and why). Second-order tetrahedra, linear static; mm, N, MPa. Answers vonMisesMax { MPa, at, face } and displacementMax { mm, at, face }, safety (yield over the peak), mesh { nodes, elements }, warnings, files; health carries CalculiX's own warning lines. nonlinear: true follows large deflections and each material into yield (elasticOnly: true keeps it elastic) and answers the plastic strain. Runs in the foreground, FreeCAD waiting: seconds for a few thousand elements, minutes past 100,000 (timeout s, 300, bounds Gmsh and the own deck). " + TRAPS + " Needs ccx and gmsh installed.",
-            obj({"timeout": {"type": "number"}, "nonlinear": {"type": "boolean"}, "elasticOnly": {"type": "boolean"}}),
-            fea_solve,
-            changes=True,
-        ),
-        Tool(
-            "fea_modes",
-            "Natural frequencies of the study's body: the lowest count (6, up to 30) modes, held by the study's holds (none: free, its rigid motions left out). Answers each mode's Hz and where it swings most and which way. Keep what shakes the part well away from the lowest. Runs in the foreground; needs ccx and gmsh (timeout s, 300).",
-            obj({"count": {"type": "integer"}, "timeout": {"type": "number"}}),
-            fea_modes,
-        ),
-        Tool(
-            "fea_heat",
-            "Steady heat through the study's body: temperatures [{ faces, celsius }] held, heat [{ faces, watts }] going in (one of the two at least), air { h W/(m²·K) (10, still air), celsius (25), faces (the rest) } taking it away — air: false for none. Answers the hottest and coolest place and warns when the part passes where its material softens (k from the card, or conductivity W/(m·K) here). Conduction and convection only. view_render map heat shows it. Runs in the foreground (timeout s, 300); needs ccx and gmsh.",
-            obj({"temperatures": {"type": "array", "items": {}}, "heat": {"type": "array", "items": {}}, "air": {}, "conductivity": {"type": "number"}, "timeout": {"type": "number"}}),
-            fea_heat,
-        ),
-        Tool("fea_results", "The last solve's answer again (kept with the session, not the file), with stale: true and staleWhy when the body or the study changed since. Changes nothing.", obj({}), fea_results),
-        Tool("fea_clear", "Drop the strength study (body, material, holds, loads, refined regions) and its results. FEM analyses already made in the document stay.", obj({}), fea_clear, changes=True),
-        Tool("fea_buckle", "Linear buckling of the study (its holds and loads): the lowest count (3) buckling factors — the loads times the factor is where each mode buckles; under 1 it buckles as loaded — and where each bulges. Thin walls, columns, ribs under compression. Runs in the foreground; needs ccx and gmsh (timeout s, 300).",
-             obj({"count": {"type": "integer"}, "timeout": {"type": "number"}}), fea_buckle),
-        Tool("fea_refine", "A finer mesh near faces (a fillet, a hole's edge, where the peak sits): faces (a query as fea_hold takes), size mm (under the study's mesh); clear: true drops every region. Kept in the study; the next solve uses it (by Agent Link's own deck).",
-             obj({"faces": {}, "size": {"type": "number"}, "clear": {"type": "boolean"}}), fea_refine, changes=True),
-        Tool("fea_probe", "Read the last solve where asked: points [[x,y,z] …] (von Mises MPa and displacement mm there, from the nearest nodes; nearestNodeMm says how near), line { from, to, samples } (a profile along it; warns where it leaves the part), faces (a query as fea_hold takes: max, mean and where on them). Changes nothing.",
-             obj({"points": {"type": "array", "items": {}}, "line": {"type": "object"}, "faces": {}}), fea_probe),
-        Tool("fea_chart", "The last solve as FreeCAD's FEM post-processing charts, headless: kind histogram (field over every node, bins 20: an SVG bar chart, the CSV of the bins, min, median, p95, p99, max) | line (along line { from, to, samples } mm: an SVG line plot and CSV) | table (points [[x,y,z] …] or a line: a CSV, and the rows in the answer when 25 or fewer). field vonMises (MPa, default) or displacement (mm). name, title. Files go to the out folder. Changes nothing in the document.",
-             obj({"kind": {"type": "string", "enum": ["histogram", "line", "table"]}, "field": {"type": "string", "enum": ["vonMises", "displacement"]}, "bins": {"type": "integer"},
-                  "line": {"type": "object"}, "points": {"type": "array", "items": {}}, "name": {"type": "string"}, "title": {"type": "string"}}), fea_chart),
-        Tool("fea_export", "Write the last solve to the out folder: formats [vtu (ParaView, FreeCAD FEM post-processing), csv (every node: position mm, von Mises MPa, displacement mm)] (both by default), name. Changes nothing in the document.",
-             obj({"formats": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}}), fea_export),
-        Tool("fea_native", "Build the study as FreeCAD's own FEM analysis (Analysis, solver, material, Gmsh mesh, fixed / force / pressure / self-weight constraints), to open and run in the FEM workbench; it is not solved here (fea_solve does that), and skipped lists what the FEM objects could not take. solver elmer (multiphysics) takes equations [elasticity, heat, flow, electrostatic, electricforce, flux, staticcurrent, magnetodynamic, deformation (nonlinear elasticity)] together, temperatures [{ faces, celsius }] and heat [{ faces, watts }] for heat, potentials [{ faces, volts }] for electrostatics; with flow the body is the fluid's space (fluid air | water; inlets and walls are set in the FEM workbench); write: true meshes it and writes Elmer's case (case.sif), run: true solves it where ElmerSolver is installed.",
-             obj({"name": {"type": "string"}, "solver": {"type": "string", "enum": ["calculix", "elmer"]},
-                  "equations": {"type": "array", "items": {"type": "string", "enum": list(ELMER_EQUATIONS)}},
-                  "temperatures": {"type": "array", "items": {"type": "object"}}, "heat": {"type": "array", "items": {"type": "object"}},
-                  "potentials": {"type": "array", "items": {"type": "object"}}, "fluid": {"type": "string", "enum": list(FLUIDS)},
-                  "write": {"type": "boolean"}, "run": {"type": "boolean"}, "timeout": {"type": "number"}}), fea_native, changes=True),
-    ]
+    # ---- what the tools' entries (agentlink/data/tools.json, group "strength") call by name ----
+
+    def study_body(st):
+        """The study's body as it is now. One solid of a body studied alone
+        is read again from that body (its hidden helper made or refreshed)."""
+        of = st.get("of")
+        if of:
+            return solid_holder(s, s.body(of["body"]), int(of["solid"]))
+        return s.body(st["body"])
+
+    def forget():
+        """The study dropped from the document, its results from the session."""
+        store.remove(s.doc, KEY)
+        s._agentlink_fea = None
+        from .. import hooks
+
+        hooks.remember(s, "fea", None)
+
+    def meshed(o, st, timeout, tag="fea"):
+        """A body meshed for Agent Link's own deck (_meshed), by name: ccx,
+        wd, femmesh, mesh_text, nodes, elems."""
+        return dict(zip(("ccx", "wd", "femmesh", "mesh_text", "nodes", "elems"), _meshed(o, st, timeout, tag)))
+
+    def modes_run(o, st, c, count, timeout):
+        """The frequency step run: the body meshed, held by the study's holds
+        (none: free, six more modes asked for its rigid motions), CalculiX
+        run, its frequencies and mode shapes read."""
+        shape = o.Shape
+        ccx, wd, femmesh, mesh_text, nodes, elems = _meshed(o, st, timeout, "modes")
+        fixed = set()
+        mbounds = set()
+        for h in st["holds"]:
+            for _, f in facepick.pick(shape, h["faces"], "faces"):
+                if h.get("kind", "fixed") == "fixed":
+                    fixed.update(femmesh.getNodesByFace(f))
+                else:
+                    mbounds.update((n, d, 0.0) for n in femmesh.getNodesByFace(f) for d in h["dofs"])
+        mbounds = [b for b in mbounds if b[0] not in fixed]
+        free = not fixed and not mbounds
+        # A free part's first six modes are its rigid motions, near 0 Hz.
+        ask = count + (6 if free else 0)
+        mat = {"E": float(c["E"]), "nu": float(c.get("nu") or 0.35), "rho": float(c["density"])}
+        with open(os.path.join(wd, "job.inp"), "w") as f:
+            f.write(ccx_io.deck_modes(mesh_text, mat, fixed, ask, bounds=mbounds))
+        frd, dat = _run(ccx, wd, timeout, "frequency step")
+        return {"wd": wd, "nodes": nodes, "elems": elems, "free": free, "freqs": ccx_io.read_frequencies(dat), "shapes": ccx_io.read_frd_blocks(frd, "DISP")}
+
+    def mode_rows(run, shape, count):
+        """Each mode's Hz, where it swings most and which way (a unit
+        direction); a free part's six rigid motions left out."""
+        nodes, shapes = run["nodes"], run["shapes"]
+        modes = []
+        for k, (no, hz) in enumerate(run["freqs"]):
+            if run["free"] and k < 6:
+                continue
+            m = {"mode": len(modes) + 1, "hz": round(hz, 2)}
+            if k < len(shapes) and shapes[k]:
+                mag = {n: math.sqrt(sum(x * x for x in u[:3])) for n, u in shapes[k].items() if n in nodes}
+                if mag:
+                    n_max = max(mag, key=mag.get)
+                    m["moves"] = _where(nodes, shape, n_max)
+                    u = shapes[k][n_max][:3]
+                    L = math.sqrt(sum(x * x for x in u)) or 1.0
+                    m["moves"]["along"] = [round(x / L, 3) for x in u]
+            modes.append(m)
+            if len(modes) >= count:
+                break
+        return modes
+
+    def buckle_run(o, st, c, count, timeout):
+        """The buckling step run: the body meshed, the study's holds and loads
+        put on the mesh, CalculiX run, its buckling factors read."""
+        shape = o.Shape
+        ccx, wd, femmesh, mesh_text, nodes, elems = _meshed(o, st, timeout, "buckle")
+        fixed, held_faces, cloads, dloads, gravity, applied = _assemble(st, shape, femmesh, nodes, elems)
+        mat = {"E": float(c["E"]), "nu": float(c.get("nu") or 0.35), "rho": float(c["density"])}
+        with open(os.path.join(wd, "job.inp"), "w") as f:
+            f.write(ccx_io.deck(mesh_text, mat, fixed, cloads, dloads, gravity, buckle=count, thermal=_thermal(st, nodes), bounds=st.pop("_bounds", None), centrif=st.pop("_centrif", None)))
+        frd, dat = _run(ccx, wd, timeout, "buckling step")
+        return {"wd": wd, "nodes": nodes, "applied": applied, "frd": frd, "factors": ccx_io.read_buckling(dat)}
+
+    def bulge_rows(run, shape):
+        """Each buckling mode's factor and where it bulges most."""
+        nodes = run["nodes"]
+        shapes = ccx_io.read_frd_blocks(run["frd"], "DISP")
+        modes = []
+        for k, (no, fac) in enumerate(run["factors"]):
+            m = {"mode": no, "factor": round(fac, 4)}
+            if k < len(shapes) and shapes[k]:
+                mag = {n: math.sqrt(sum(x * x for x in u[:3])) for n, u in shapes[k].items() if n in nodes}
+                if mag:
+                    m["bulges"] = _where(nodes, shape, max(mag, key=mag.get))
+            modes.append(m)
+        return modes
+
+    def hold_temperature(m, picked, celsius, used, temps):
+        """Faces held at a temperature: their nodes into temps, their names into used."""
+        for name, f in picked:
+            used.add(name)
+            for n in m["femmesh"].getNodesByFace(f):
+                temps[n] = celsius
+
+    def heated(m, picked, used):
+        """Faces heat goes in through: (their element faces, their area); their names into used."""
+        vf = []
+        for name, f in picked:
+            used.add(name)
+            vf += [tuple(x) for x in m["femmesh"].getccxVolumesByFace(f)]
+        return vf, sum(f.Area for _, f in picked)
+
+    def rest_faces(shape, used):
+        """The faces no temperature or heat was given on: where still air takes heat away."""
+        return [(n, f) for n, f in ((f"Face{i + 1}", f) for i, f in enumerate(shape.Faces)) if n not in used]
+
+    def film_faces(m, on, hc, ta):
+        """The element faces of faces air cools, each with the film coefficient and the air's temperature."""
+        films = []
+        for _, f in on:
+            films += [(e, fn, hc, ta) for e, fn in (tuple(x) for x in m["femmesh"].getccxVolumesByFace(f))]
+        return films
+
+    def heat_solve(m, k, temps, fluxes, films, start, timeout):
+        """The heat step run on the mesh: the deck written, CalculiX run, each node's temperature read."""
+        with open(os.path.join(m["wd"], "job.inp"), "w") as f:
+            f.write(ccx_io.deck_heat(m["mesh_text"], k, temps, fluxes, films, start=start))
+        frd, _ = _run(m["ccx"], m["wd"], timeout, "heat step")
+        return {n: t for n, t in ccx_io.read_temperatures(frd).items() if n in m["nodes"]}
+
+    def keep_heat(o, shape, T, nodes):
+        """The temperatures kept with the session, the field for view_render map heat."""
+        ids = list(T)
+        s._agentlink_heat = {"body": o.Label, "stats": geo.stats(shape), "field": {"points": [nodes[n] for n in ids], "celsius": [T[n] for n in ids]}}
+
+    def solved_body(r):
+        """The body the last solve was of, as it is in the document now, or None."""
+        o = s.doc.getObject(r.get("bodyName", "")) if r.get("bodyName") else None
+        if o is None:
+            o = next((x for x in s.doc.Objects if x.Label == r["body"]), None)
+        return o
+
+    def chart_svg(series, **kw):
+        """An SVG chart (agentlink/charts.py)."""
+        from .. import charts
+
+        return charts.svg(series, **kw)
+
+    # ---- fea_shell ----
+
+    def shell_of(faces):
+        """The faces as one shell (a single face as itself): the plate's mid-surface."""
+        return Part.makeShell(faces) if len(faces) > 1 else faces[0]
+
+    def shell_meshed(o, shell, mesh, gmsh, timeout):
+        """The shell meshed by Gmsh into second-order triangles, in its own
+        run folder: wd, ok (Gmsh ended well and wrote the mesh), said (its
+        last two lines)."""
+        wd = paths.made(s, os.path.join(s.out_dir, "shell_" + "".join(ch if ch.isalnum() else "_" for ch in o.Label)), "run")
+        os.makedirs(wd, exist_ok=True)
+        for n in os.listdir(wd):
+            if n.startswith(("job.", "shell.")):
+                os.remove(os.path.join(wd, n))
+        shell.exportBrep(os.path.join(wd, "shell.brep"))
+        with open(os.path.join(wd, "shell.geo"), "w") as f:
+            f.write("\n".join(['Merge "shell.brep";', f"Mesh.MeshSizeMax = {mesh};", "Mesh.MeshSizeMin = 0;", "Mesh.ElementOrder = 2;", "Mesh.SecondOrderLinear = 0;",
+                               "Mesh.Algorithm = 6;", "Mesh 2;", "Mesh.SaveAll = 1;", 'Save "shell.unv";', ""]))
+        r = subprocess.run([gmsh, "-", "shell.geo"], cwd=wd, capture_output=True, text=True, timeout=timeout)
+        return {"wd": wd, "ok": r.returncode == 0 and os.path.isfile(os.path.join(wd, "shell.unv")), "said": " | ".join((r.stderr or r.stdout or "").strip().splitlines()[-2:])}
+
+    def shell_elements(m):
+        """Gmsh's mesh read into a FemMesh and written as a deck's mesh, into
+        m: fm, mesh_text, and the element type and set it holds (etype None
+        when the deck names none)."""
+        import re
+
+        import Fem
+
+        fm = Fem.read(os.path.join(m["wd"], "shell.unv"))
+        inp = os.path.join(m["wd"], "shell.inp")
+        fm.writeABAQUS(inp, 1, False)
+        with open(inp) as f:
+            mesh_text = f.read()
+        hit = re.search(r"\*Element, TYPE=(\w+), ELSET=(\w+)", mesh_text, re.I)
+        m.update(fm=fm, mesh_text=mesh_text, etype=hit.group(1).upper() if hit else None, eset=hit.group(2) if hit else None)
+        return m
+
+    def boundary_edges(shell):
+        """The shell's free edges: an edge on one face only is on the boundary."""
+        return [e for e in shell.Edges if sum(1 for f in shell.Faces for fe in f.Edges if fe.isSame(e)) <= 1]
+
+    def nearest_edges(shell, queries):
+        """The shell's edge nearest each { near: [x, y, z] }."""
+        es = []
+        for q in queries:
+            p = V(*[float(x) for x in q["near"]])
+            es.append(min(shell.Edges, key=lambda e: e.distToShape(Part.Vertex(p))[0]))
+        return es
+
+    def edge_nodes(m, edges):
+        """The mesh nodes on the edges, in order."""
+        ns = set()
+        for e in edges:
+            ns.update(m["fm"].getNodesByEdge(e))
+        return sorted(ns)
+
+    def shell_deck(m, c, th, bl, pressure, gravity):
+        """The shell's deck written (job.inp): the mesh, the material, the
+        section of that thickness, the held nodes, pressure and its own weight."""
+        nu = float(c.get("nu") or 0.3)
+        eset = m["eset"]
+        lines = [m["mesh_text"].rstrip(), "*MATERIAL, NAME=SM", "*ELASTIC", f"{float(c['E']):.6g}, {nu:.6g}", "*DENSITY", f"{float(c.get('density') or 1) * 1e-9:.6g}",
+                 f"*SHELL SECTION, ELSET={eset}, MATERIAL=SM", f"{th:.6g}", "*STEP", "*STATIC", "*BOUNDARY"] + bl
+        dl = []
+        if pressure:
+            dl.append(f"{eset}, P, {float(pressure):.9g}")
+        if gravity:
+            dl.append(f"{eset}, GRAV, {G:.6g}, 0, 0, -1")
+        lines += ["*DLOAD"] + dl + ["*NODE FILE", "U", "*EL FILE", "S", "*END STEP", ""]
+        with open(os.path.join(m["wd"], "job.inp"), "w") as f:
+            f.write("\n".join(lines))
+
+    def shell_solve(m, ccx, timeout):
+        """CalculiX run on the shell's deck: its displacements and stresses."""
+        frd, _ = _run(ccx, m["wd"], timeout, "shell")
+        disp, stress = ccx_io.read_frd(frd)
+        return {"disp": disp, "stress": stress}
+
+    def shell_peaks(res):
+        """(the largest deflection, the largest von Mises stress) of a shell's results."""
+        dmax = max(math.sqrt(sum(x * x for x in u[:3])) for u in res["disp"].values())
+        return dmax, max((ccx_io.von_mises(sv) for sv in res["stress"].values()), default=0.0)
+
+    # ---- fea_parts ----
+
+    def parts_holder(objs, name):
+        """The parts' solids kept apart in one compound, on the hidden object
+        of that name (found, or made under a label no other has): (holder, compound)."""
+        comp = Part.makeCompound([o.Shape.Solids[0].copy() for o in objs])
+        holder = next((x for x in s.doc.Objects if x.Label == name), None)
+        if holder is None:
+            holder = s.doc.addObject("Part::Feature", "FeaParts")
+            holder.Label = s.unique(name, holder)
+        holder.Shape = comp
+        mark_helper(holder)
+        s.doc.recompute()
+        return holder, comp
+
+    def touching(comp, tol):
+        """Where the parts touch: faces of two parts that lie on each other
+        within tol, as [{a, b (their numbers from 0), area}]."""
+        found = []
+        sol = comp.Solids
+        for i in range(len(sol)):
+            for j in range(i + 1, len(sol)):
+                if sol[i].BoundBox.intersect(sol[j].BoundBox) or sol[i].distToShape(sol[j])[0] <= tol:
+                    for fa in sol[i].Faces:
+                        for fb in sol[j].Faces:
+                            if not fa.BoundBox.intersect(fb.BoundBox) and fa.distToShape(fb)[0] > tol:
+                                continue
+                            try:
+                                ar = fa.common(fb).Area
+                            except Exception:
+                                ar = 0.0
+                            if ar > 1e-3:
+                                found.append({"a": i, "b": j, "area": round(ar, 2)})
+        return found
+
+    def overlapping(comp):
+        """The pairs of parts (their numbers from 0) whose volumes cross."""
+        sol = comp.Solids
+        return [(i, j) for i in range(len(sol)) for j in range(i + 1, len(sol)) if sol[i].common(sol[j]).Volume > 1e-3]
+
+    # ---- fea_native ----
+
+    def native_material(F, an, st, c, fluid):
+        """The analysis's material object: a fluid's (air, water) where flow
+        is asked, else the study's card as FreeCAD's solid material (cards
+        keep g/cm³: FreeCAD's material wants kg/m³). No References: one
+        material is every element's, for CalculiX and Elmer alike (a
+        reference makes FreeCAD's check print an error line)."""
+        doc = s.doc
+        if fluid:
+            mo = F.makeMaterialFluid(doc, "Fluid")
+            mo.Material = dict(FLUIDS[fluid])
+            an.addObject(mo)
+            return mo.Label
+        mo = F.makeMaterialSolid(doc, "Material")
+        props = {"Name": c.get("name", st["material"])}
+        if c.get("E"):
+            props["YoungsModulus"] = f"{float(c['E'])} MPa"
+        if c.get("nu"):
+            props["PoissonRatio"] = str(float(c["nu"]))
+        if c.get("density"):
+            props["Density"] = f"{float(c['density']) * 1000} kg/m^3"
+        if c.get("k"):
+            props["ThermalConductivity"] = f"{float(c['k'])} W/m/K"
+        props["SpecificHeat"] = f"{float(c.get('cp', 1500))} J/kg/K"
+        if c.get("alpha"):
+            props["ThermalExpansionCoefficient"] = f"{float(c['alpha'])} 1/K"
+        props["RelativePermittivity"] = str(float(c.get("permittivity", 1)))
+        mo.Material = props
+        an.addObject(mo)
+        return mo.Label
+
+    def native_mesh(F, an, o, st):
+        """The analysis's Gmsh mesh object of the body, at the study's size, second order."""
+        mesh = F.makeMeshGmsh(s.doc, "Mesh")
+        if "Shape" in mesh.PropertiesList:
+            mesh.Shape = o
+        else:
+            mesh.Part = o  # before FreeCAD 1.1
+        mesh.CharacteristicLengthMax = f"{float(st['mesh'])} mm"
+        try:
+            mesh.ElementOrder = "2nd"
+        except Exception:
+            pass
+        an.addObject(mesh)
+        return mesh
+
+    def face_refs(o, q):
+        """A face query as a FEM object's References."""
+        return [(o, tuple(n for n, _ in facepick.pick(o.Shape, q, "faces")))]
+
+    def fixed_on(F, an, o, q):
+        """A fixed constraint on the faces: its label."""
+        fx = F.makeConstraintFixed(s.doc, "Fixed")
+        fx.References = face_refs(o, q)
+        an.addObject(fx)
+        return fx.Label
+
+    def pressure_on(F, an, o, ld):
+        """A pressure constraint for a pressure load: its label."""
+        pr = F.makeConstraintPressure(s.doc, "Pressure")
+        pr.References = face_refs(o, ld["faces"])
+        pr.Pressure = f"{float(ld['pressure'])} MPa"
+        an.addObject(pr)
+        return pr.Label
+
+    def temperature_on(F, an, o, delta):
+        """A temperature change as an initial temperature and a temperature on
+        every face: their labels, or None where this FEM does not take them."""
+        try:
+            it = F.makeConstraintInitialTemperature(s.doc, "InitialTemperature")
+            it.initialTemperature = "293.15 K"
+            an.addObject(it)
+            tc = F.makeConstraintTemperature(s.doc, "Temperature")
+            tc.References = [(o, tuple(f"Face{i + 1}" for i in range(len(o.Shape.Faces))))]
+            tc.Temperature = f"{293.15 + float(delta)} K"
+            an.addObject(tc)
+            return [it.Label, tc.Label]
+        except Exception:
+            return None
+
+    def gravity_on(F, an, gravity):
+        """A self-weight constraint for a gravity load: its label."""
+        g = F.makeConstraintSelfWeight(s.doc, "SelfWeight")
+        self_weight(g, gravity)
+        an.addObject(g)
+        return g.Label
+
+    def force_on(F, an, o, ld):
+        """A force constraint for a force load: (its label, whether its
+        direction was set). A force's direction is a line in the model: one
+        drawn for it, hidden."""
+        doc = s.doc
+        fv = V(*ld["force"])
+        ln = doc.addObject("Part::Line", "ForceDirection")
+        ln.X2, ln.Y2, ln.Z2 = fv.normalize().x, fv.y, fv.z
+        ln.Visibility = False
+        fo = F.makeConstraintForce(doc, "Force")
+        fo.References = face_refs(o, ld["faces"])
+        fo.Force = f"{V(*ld['force']).Length} N"
+        ok = True
+        try:
+            fo.Direction = (ln, ["Edge1"])
+        except Exception:
+            ok = False
+        an.addObject(fo)
+        return fo.Label, ok
+
+    # ---- fea_solve ----
+
+    def reset_tails():
+        """CalculiX's lines kept from the solve before, forgotten."""
+        s._ccx_tail = s._ccx_fem_tail = None
+
+    def solve_run(st, o, c, a, timeout):
+        """The study solved. FreeCAD's own FEM first: an analysis with its
+        CalculiX solver, Gmsh mesh, material and constraints, solved by
+        FemToolsCcx and its results loaded into the analysis. Agent Link's
+        own deck only for what that route does not take here
+        (fem_route_why), or where it fails. By name: fem (which route),
+        an_label, route_why, wd, nodes, elems, disp, stress, fixed,
+        held_faces, applied, groups, pairs, part_cards, frd, said
+        (CalculiX's last lines)."""
+        shape = o.Shape
+        groups = pairs = None
+        part_cards = []
+        an_label = None
+        route_why = fem_route_why(st, a)
+        fem = None
+        if route_why is None:
+            try:
+                fem = _solve_fem(st, o, c, timeout)
+            except ToolError:
+                raise
+            except Exception as e:  # noqa: BLE001 - its own failure: the deck below runs, and the answer says why
+                route_why = f"FreeCAD's FEM route failed here: {type(e).__name__}: {e}"
+        if fem is not None:
+            wd, femmesh, nodes, elems, disp, stress, an_label = fem
+            fixed, held_faces, _cl, _dl, _gr, applied = _assemble(st, shape, femmesh, nodes, elems)
+            st.pop("_bounds", None)
+            st.pop("_centrif", None)
+            frd = os.path.join(wd, "job.frd")
+        else:
+            wd, femmesh, nodes, elems, disp, stress, fixed, held_faces, applied, groups, pairs, part_cards, frd = _solve_own(st, o, c, a, timeout)
+        said = getattr(s, "_ccx_tail", None) if fem is None else getattr(s, "_ccx_fem_tail", None)
+        return {"fem": fem is not None, "an_label": an_label, "route_why": route_why, "wd": wd, "nodes": nodes, "elems": elems, "disp": disp, "stress": stress, "fixed": fixed,
+                "held_faces": held_faces, "applied": applied, "groups": groups, "pairs": pairs, "part_cards": part_cards, "frd": frd, "said": said}
+
+    def peaks(run, shape):
+        """The results read: each node's von Mises stress and displacement
+        (kept in run as vm, dmag), the largest of each, the node it is at
+        and where that is."""
+        nodes = run["nodes"]
+        vm = {n: ccx_io.von_mises(sv) for n, sv in run["stress"].items()}
+        n_max = max(vm, key=vm.get)
+        dmag = {n: math.sqrt(sum(x * x for x in u[:3])) for n, u in run["disp"].items()}
+        n_dmax = max(dmag, key=dmag.get)
+        run.update(vm=vm, dmag=dmag)
+        return {"smax": vm[n_max], "n_max": n_max, "dmax": dmag[n_dmax], "at_max": _where(nodes, shape, n_max), "at_dmax": _where(nodes, shape, n_dmax)}
+
+    def plastic_strain(frd):
+        """The largest equivalent plastic strain of a nonlinear run's last
+        increment (0.0 with none written), or None when it cannot be read."""
+        try:
+            pe = ccx_io.read_frd_blocks(open(frd).read(), "PE")
+            return max((v[0] for v in pe[-1].values()), default=0.0) if pe else 0.0
+        except Exception:
+            return None
+
+    def part_rows(run, st, shape):
+        """Each part's own peak (several parts solved together): its body,
+        material, largest von Mises stress, where, and its safety factor."""
+        vm, elems, groups, part_cards = run["vm"], run["elems"], run["groups"], run["part_cards"]
+        rows = []
+        for k, pinfo in enumerate(st["parts"]):
+            ns = {n for e in groups[k] for n in elems[e]}
+            pv = {n: vm[n] for n in ns if n in vm}
+            if not pv:
+                continue
+            nm = max(pv, key=pv.get)
+            yk = part_cards[k].get("yield")
+            rows.append({"body": pinfo["body"], "material": part_cards[k]["name"], "vonMisesMaxMPa": round(pv[nm], 3), **_where(run["nodes"], shape, nm),
+                         **({"safety": round(yk / pv[nm], 2)} if yk and pv[nm] > 0 else {})})
+        return rows
+
+    def keep_solve(o, shape, st, out, run):
+        """Every node's stress and displacement, for a map of the part
+        (view_render map stress): kept with the session, not the file."""
+        nodes, vm, disp, stress, elems = run["nodes"], run["vm"], run["disp"], run["stress"], run["elems"]
+        ids = [n for n in vm if n in nodes]
+        field = {"points": [nodes[n] for n in ids], "vonMises": [vm[n] for n in ids], "displacement": [list(disp.get(n, (0, 0, 0))[:3]) for n in ids],
+                 "stress": [list(stress.get(n, (0.0,) * 6)) for n in ids]}
+        at = {n: i for i, n in enumerate(ids)}
+        field["elements"] = [[at[n] for n in e] for e in elems.values() if all(n in at for n in e)]
+        s._agentlink_fea = {"body": o.Label, "stats": geo.stats(shape), "study": st, "result": out, "field": field}
+        from .. import hooks
+
+        hooks.remember(s, "fea", s._agentlink_fea)
+
+    # FreeCAD's own and the other modules' are reached when called, not here.
+    helpers = {"binaries": lambda: (_binary("ccx", "Ccx", "ccxBinaryPath", "AGENTLINK_CCX"), _binary("gmsh", "Gmsh", "gmshBinaryPath", "AGENTLINK_GMSH")),
+               "fem_module": lambda: __import__("Fem"), "shaped": lambda ref, what="body": picks.shaped(s.doc, ref, what), "element": picks.element,
+               "shell_of": shell_of, "shell_meshed": shell_meshed, "shell_elements": shell_elements, "boundary_edges": boundary_edges, "nearest_edges": nearest_edges,
+               "edge_nodes": edge_nodes, "shell_deck": shell_deck, "shell_solve": shell_solve, "shell_peaks": shell_peaks,
+               "parts_holder": parts_holder, "touching": touching, "overlapping": overlapping,
+               "doc": lambda: s.doc, "objects_fem": objects_fem, "ELMER_EQUATIONS": ELMER_EQUATIONS, "FLUIDS": FLUIDS, "new_analysis": lambda a, o: _analysis(s.doc, a, o),
+               "solver_makers": lambda F: [n for n in dir(F) if n.startswith("makeSolver")], "native_material": native_material, "native_mesh": native_mesh, "fixed_on": fixed_on,
+               "pressure_on": pressure_on, "temperature_on": temperature_on, "gravity_on": gravity_on, "force_on": force_on,
+               "elmer_conditions": lambda an, o, a, eqs: _elmer_conditions(s.doc, an, o, o.Shape, a, eqs), "elmer_write": _elmer_write,
+               "reset_tails": reset_tails, "unheld_solids": _unheld_solids, "unheld_words": unheld_words, "ccx_hint": ccx_hint, "solve_run": solve_run, "peaks": peaks,
+               "plastic_strain": plastic_strain, "part_rows": part_rows, "keep_solve": keep_solve,
+               "now": lambda: time.time(), "merged": lambda *ds: {k: v for d in ds for k, v in d.items()}, "where": _where,
+               "meshed": meshed, "modes_run": modes_run, "mode_rows": mode_rows, "buckle_run": buckle_run, "bulge_rows": bulge_rows,
+               "hold_temperature": hold_temperature, "heated": heated, "rest_faces": rest_faces, "film_faces": film_faces, "heat_solve": heat_solve, "keep_heat": keep_heat,
+               "probe": Probe, "solved_body": solved_body, "field_values": field_values, "histogram": histogram, "distance": distance, "chart_svg": chart_svg,
+               "safe_name": lambda text: "".join(ch if ch.isalnum() else "_" for ch in text), "ensure_out": lambda: os.makedirs(s.out_dir, exist_ok=True),
+               "csv_text": lambda rows: "\n".join(",".join(str(c) for c in row) for row in rows) + "\n", "write_text": write_text,
+               "study": lambda: _study(s.doc), "save": lambda st: _save(s.doc, st), "study_body": study_body, "results": lambda: _results(s), "forget": forget,
+               "snapshot": lambda tool: s.snapshot(tool), "body": lambda ref: s.body(ref), "stats": lambda shape: geo.stats(shape),
+               "solid_holder": lambda src, n: solid_holder(s, src, n), "card": lambda mid: matfam.card(s.doc, mid), "of_body": lambda label: matfam.of_body(s.doc, label),
+               "setup_said": _setup_said, "unmatched": lambda st, shape: unmatched(st, shape, facepick.pick),
+               "pick": lambda shape, q, what="faces": facepick.pick(shape, q, what), "pick_both": lambda shape, q: _pick_report(shape, q, "faces"),
+               "faces_normal": faces_normal, "same_in": _same_in, "alpha_of": _alpha, "vector": lambda xs: V(*[float(c) for c in xs]),
+               "out_path": lambda name: os.path.join(s.out_dir, name), "made": lambda path, kind=None: paths.made(s, path, kind), "write_vtu": write_vtu, "write_csv": write_csv}
+    return runners.tools(GROUP, s, helpers)
