@@ -10839,6 +10839,2802 @@
     {"let": {"bb": "=made.Shape.BoundBox"}}
    ],
    "answer": {"fields": {"kind": "=kind", "copies": "=len(copies)", "note": {"when": "=apart and not a.allowApart", "value": "=said"}, "body": "=made.Label", "solids": "=len(res.Solids)", "volume": "=round(made.Shape.Volume, 2)", "size": "=[round(bb.XLength, 2), round(bb.YLength, 2), round(bb.ZLength, 2)]", "step": "=step()"}}
+  },
+  "part_wire": {
+   "group": "model",
+   "description": "A wire, curve or flat face as FreeCAD's own parametric object: kind line (from, to) | circle (radius) | arc (radius, start, end: 0–360° counter-clockwise) | ellipse (major, minor: full sizes) | polygon (regular: sides, radius to corners) | polyline (points, the corners in place, closed) | helix (pitch, height, radius, taper, leftHanded) | spiral (growth per turn, turns, radius) | plane (length, width) | bspline (points it passes through; closed: a smooth periodic loop; fit.maxDistance is how far it lies from them). at and normal place it: its centre (a plane's corner, a helix's base) at at, its z along normal. polyline and bspline take points_file (a .json list of [x,y,z] or a .csv of x,y,z rows in the session's folder; key picks one list) instead of points, so long lists are not sent in the call. Profiles and paths for extrude, sweep, loft; a plane cuts in part_split.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string"
+     },
+     "from": {
+      "type": "array",
+      "items": {}
+     },
+     "to": {
+      "type": "array",
+      "items": {}
+     },
+     "radius": {
+      "type": "number"
+     },
+     "start": {
+      "type": "number"
+     },
+     "end": {
+      "type": "number"
+     },
+     "major": {
+      "type": "number"
+     },
+     "minor": {
+      "type": "number"
+     },
+     "sides": {
+      "type": "integer"
+     },
+     "pitch": {
+      "type": "number"
+     },
+     "height": {
+      "type": "number"
+     },
+     "taper": {
+      "type": "number"
+     },
+     "leftHanded": {
+      "type": "boolean"
+     },
+     "growth": {
+      "type": "number"
+     },
+     "turns": {
+      "type": "number"
+     },
+     "length": {
+      "type": "number"
+     },
+     "width": {
+      "type": "number"
+     },
+     "points": {
+      "type": "array",
+      "items": {}
+     },
+     "points_file": {
+      "type": "string"
+     },
+     "key": {},
+     "closed": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "normal": {
+      "type": "array",
+      "items": {}
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model_more.py)",
+   "date": "2026-11-16",
+   "family": "model_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"kind": "=a.kind", "fit": "=None"}},
+    {"let": {"name": "=(a.name or kind.capitalize()) if kind else None"}},
+    {"when": "=kind in ('polyline', 'bspline')", "then": [{"when": "=a.points_file is not None", "then": [{"refuse": "points or points_file, not both.", "when": "=a.points is not None"}, {"refuse": "points_file: a file's path (.json or .csv).", "when": "=not is_str(a.points_file) or not a.points_file.strip()"}, {"let": {"given": "=outline_file(a.points_file, a.key)"}}], "else": [{"let": {"given": "=a.points or []"}}]}, {"let": {"pts": "=[vec3(p, 'points') for p in given]", "closed": "=bool(a.closed)"}}]},
+    {"choose": "='circle' if kind == 'arc' else kind", "of": {"line": [{"let": {"p": "=vec3(a.get('from'), 'from')", "q": "=vec3(a.to, 'to')"}}, {"refuse": "from and to: two different points.", "when": "=(p - q).Length < 1e-9"}, {"let": {"o": "=new_obj('Part::Line', name)"}}, {"set": {"o.X1": "=p.x", "o.Y1": "=p.y", "o.Z1": "=p.z"}}, {"set": {"o.X2": "=q.x", "o.Y2": "=q.y", "o.Z2": "=q.z"}}], "circle": [{"let": {"r": "=num(a.get('radius'), 'radius')"}}, {"refuse": "radius: above 0.", "when": "=r <= 0"}, {"let": {"o": "=new_obj('Part::Circle', name)"}}, {"set": {"o.Radius": "=r"}}, {"when": "=kind == 'arc'", "then": [{"let": {"a1": "=num(a.get('start', 0), 'start')", "a2": "=num(a.get('end', 90), 'end')"}}, {"refuse": "start and end: degrees within 0 … 360, counter-clockwise from the circle's x, and not equal (an arc through 0 runs start 300, end 60).", "when": "=not (0 <= a1 <= 360 and 0 <= a2 <= 360) or abs(a1 - a2) < 1e-9"}, {"set": {"o.Angle1": "=a1", "o.Angle2": "=a2"}}]}, {"set": {"o.Placement": "=frame(a)"}}], "ellipse": [{"let": {"major": "=num(a.major, 'major')", "minor": "=num(a.minor, 'minor')"}}, {"refuse": "major and minor: the ellipse's full length and width in mm, major ≥ minor > 0 (major lies along its x).", "when": "=minor > major or minor <= 0"}, {"let": {"o": "=new_obj('Part::Ellipse', name)"}}, {"set": {"o.MajorRadius": "=major / 2", "o.MinorRadius": "=minor / 2"}}, {"set": {"o.Placement": "=frame(a)"}}], "polygon": [{"refuse": "polygon is a regular polygon (sides, radius to corners). For a shape through your points: part_wire { kind: \"polyline\", points, closed: true }, or part_extrude { profile: { points } } for a solid at once.", "when": "=a.points is not None and a.radius is None"}, {"let": {"n": "=int(a.get('sides', 6))"}}, {"refuse": "sides: 3 or more.", "when": "=n < 3"}, {"let": {"rad": "=num(a.get('radius'), 'radius')"}}, {"refuse": "radius: centre to a corner, above 0 mm.", "when": "=rad <= 0"}, {"let": {"o": "=new_obj('Part::RegularPolygon', name)"}}, {"set": {"o.Polygon": "=n", "o.Circumradius": "=rad", "o.Placement": "=frame(a)"}}], "helix": [{"let": {"pitch": "=num(a.get('pitch'), 'pitch')"}}, {"refuse": "pitch: mm a turn, above 0.", "when": "=pitch <= 0"}, {"let": {"height": "=num(a.get('height'), 'height')"}}, {"refuse": "height: mm, above 0.", "when": "=height <= 0"}, {"let": {"rad": "=num(a.get('radius'), 'radius')"}}, {"refuse": "radius: mm, above 0.", "when": "=rad <= 0"}, {"refuse": {"fmt": "height / pitch is {height / pitch:.0f} turns: FreeCAD's helix takes 10000 at most — a larger pitch or a lower height."}, "when": "=height / pitch > 1e4"}, {"let": {"taper": "=num(a.taper or 0, 'taper')"}}, {"refuse": "taper: degrees the helix widens (+) or narrows (-) by, within -89.9 … 89.9.", "when": "=abs(taper) > 89.9"}, {"let": {"o": "=new_obj('Part::Helix', name)"}}, {"set": {"o.Pitch": "=pitch", "o.Height": "=height", "o.Radius": "=rad"}}, {"set": {"o.Angle": "=taper"}, "when": "=taper"}, {"set": {"o.LocalCoord": "Left-handed"}, "when": "=a.leftHanded"}, {"set": {"o.Placement": "=frame(a)"}}], "spiral": [{"let": {"growth": "=num(a.growth, 'growth')"}}, {"refuse": "growth: mm the radius grows a turn, 0 or more.", "when": "=growth < 0"}, {"let": {"turns": "=num(a.get('turns'), 'turns')"}}, {"refuse": "turns: above 0.", "when": "=turns <= 0"}, {"let": {"rad": "=num(a.get('radius', 1), 'radius')"}}, {"refuse": "radius: where it starts, 0 or more mm.", "when": "=rad < 0"}, {"let": {"o": "=new_obj('Part::Spiral', name)"}}, {"set": {"o.Growth": "=growth", "o.Rotations": "=turns", "o.Radius": "=rad"}}, {"set": {"o.Placement": "=frame(a)"}}], "plane": [{"let": {"ln": "=num(a.get('length'), 'length')"}}, {"refuse": "length: along the plane's x, above 0 mm.", "when": "=ln <= 0"}, {"let": {"wd": "=num(a.get('width'), 'width')"}}, {"refuse": "width: along the plane's y, above 0 mm.", "when": "=wd <= 0"}, {"let": {"o": "=new_obj('Part::Plane', name)"}}, {"set": {"o.Length": "=ln", "o.Width": "=wd"}}, {"set": {"o.Placement": "=frame(a)"}}], "polyline": [{"let": {"pts, closed": "=(pts[:-1], True) if len(pts) > 2 and (pts[0] - pts[-1]).Length < 1e-9 else (pts, closed)"}}, {"refuse": "points: two or more [x, y, z] corners (three or more when closed).", "when": "=len(pts) < (3 if closed else 2)"}, {"refuse": "points: two corners in a row are the same point.", "when": "=any((pts[i] - pts[i + 1]).Length < 1e-9 for i in range(len(pts) - 1))"}, {"let": {"o": "=new_obj('Part::Polygon', name)"}}, {"set": {"o.Nodes": "=pts", "o.Close": "=closed"}}], "bspline": [{"let": {"pts, closed": "=(pts[:-1], True) if len(pts) > 3 and (pts[0] - pts[-1]).Length < 1e-9 else (pts, closed)"}}, {"refuse": "points: two or more [x, y, z] it passes through (three or more when closed).", "when": "=len(pts) < (3 if closed else 2)"}, {"refuse": "points: two in a row are the same point.", "when": "=any((pts[i] - pts[i + 1]).Length < 1e-9 for i in range(len(pts) - 1))"}, {"let": {"c": "=bspline()"}}, {"try": [{"do": "=c.interpolate(pts, PeriodicFlag=closed)"}], "on": "error", "except": [{"refuse": {"fmt": "points: no smooth curve through them ({error}) — points far apart along it, in order, none doubled."}}]}, {"let": {"o": "=new_obj('Part::Feature', name)"}}, {"let": {"w": "=as_wire([c.toShape()])"}}, {"refuse": "The B-spline did not close — check the points run round in order.", "code": "failed", "when": "=closed and not w.isClosed()"}, {"set": {"o.Shape": "=w"}}, {"let": {"fit": "=fit_of(c, pts)"}}]}, "else": [{"refuse": "kind: line { from, to } | circle { radius } | arc { radius, start, end } | ellipse { major, minor } | polygon { sides, radius } | polyline { points, closed } | helix { pitch, height, radius } | spiral { growth, turns, radius } | plane { length, width } | bspline { points, closed }."}]}
+   ],
+   "answer": {"via": "added", "with": ["=o", "=tool", "$fields"], "fields": {"use": "A profile or path for part_extrude, part_revolve, part_loft, part_sweep (a helix as a path: a spring or thread), part_ruled.", "fit": {"when": "=fit", "value": "=fit"}}}
+  },
+  "part_split": {
+   "group": "model",
+   "description": "Split bodies (Part's BOPTools, parametric; inputs hidden, not removed): mode slice (bodies [one], tools [objects by name that cut right through it: a part_wire plane, a face copied out by part_extract, bodies]) | fragments (bodies: every piece where they overlap, kept apart) | xor (bodies: what is in an odd number of them); explode: true makes each piece a body. Reply: object, pieces, solids [{ volume, center }]; note when a slice cut nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mode": {
+      "type": "string",
+      "enum": [
+       "slice",
+       "fragments",
+       "xor"
+      ]
+     },
+     "bodies": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "tools": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "split": {
+      "type": "boolean"
+     },
+     "explode": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "bodies"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model_more.py)",
+   "date": "2026-11-16",
+   "family": "model_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"SF": "=split_features()", "mode": "=a.get('mode', 'slice')"}},
+    {"let": {"objs": "=[]"}},
+    {"each": "r", "in": "=a.bodies or []", "steps": [{"refuse": {"fmt": "bodies: {r!r} is an element — whole objects by name here. part_extract {{ refs: [\"{r}\"] }} copies a face out as an object that can cut; part_wire {{ kind: \"plane\" }} makes a plane."}, "when": "=is_str(r) and split_ref(r)[1]"}, {"push": {"objs": "=shaped(r, 'bodies')"}}]},
+    {"choose": "=mode", "of": {"slice": [{"refuse": "slice: bodies [the one to cut] (one), tools [the objects that cut it: a plane from part_wire, a face copied out by part_extract, other bodies].", "when": "=len(objs) != 1"}, {"let": {"tl": "=[]"}}, {"each": "r", "in": "=a.tools or []", "steps": [{"refuse": {"fmt": "tools: {r!r} is an element — whole objects by name here. part_extract {{ refs: [\"{r}\"] }} copies a face out as an object that can cut; part_wire {{ kind: \"plane\" }} makes a plane."}, "when": "=is_str(r) and split_ref(r)[1]"}, {"push": {"tl": "=shaped(r, 'tools')"}}]}, {"refuse": "tools: the objects that cut it, by name — a plane (part_wire { kind: \"plane\" }, larger than the body's section), a face copied out (part_extract), or bodies.", "when": "=not tl"}, {"let": {"f": "=bop_feature(SF.FeatureSlice, SF.ViewProviderSlice, unique(a.name or 'Slice').replace(' ', '_'))"}}, {"set": {"f.Base": "=objs[0]", "f.Tools": "=tl", "f.Mode": "='Split' if a.get('split', True) else 'Standard'"}}], "fragments": [{"refuse": {"fmt": "{mode}: bodies, two or more by name (tools is for mode slice)."}, "when": "=len(objs) < 2"}, {"let": {"f": "=bop_feature(SF.FeatureBooleanFragments, SF.ViewProviderBooleanFragments, unique(a.name or 'Fragments').replace(' ', '_'))"}}, {"set": {"f.Objects": "=objs"}}, {"set": {"f.Mode": "Split"}, "when": "=a.get('split', True)"}], "xor": [{"refuse": {"fmt": "{mode}: bodies, two or more by name (tools is for mode slice)."}, "when": "=len(objs) < 2"}, {"let": {"f": "=bop_feature(SF.FeatureXOR, SF.ViewProviderXOR, unique(a.name or 'Xor').replace(' ', '_'))"}}, {"set": {"f.Objects": "=objs"}}]}, "else": [{"refuse": "mode: slice { bodies [one], tools } | fragments { bodies } | xor { bodies }."}]},
+    {"do": "=doc().recompute()"},
+    {"refuse": {"fmt": "The {mode} failed: {msg} — nothing was kept. The tools must cross the bodies; part_section {{ body, with }} shows whether they meet."}, "code": "failed", "first": [{"let": {"msg": "=f.getStatusString()"}}, {"do": "=doc().removeObject(f.Name)"}], "when": "=not f.isValid() or f.Shape.isNull()"},
+    {"let": {"pieces": "=[{'volume': round(x.Volume, 3), 'center': vec(x.CenterOfMass)} for x in f.Shape.Solids]"}},
+    {"let": {"out": "={'object': f.Label, 'mode': mode, 'pieces': len(pieces), 'solids': pieces[:20]}"}},
+    {"put": {"note": {"fmt": "Not cut: still {len(pieces)} piece(s) — the tools do not pass right through {objs[0].Label} (a plane must reach past the body on every side)."}}, "when": "=mode == 'slice' and pieces and len(objs[0].Shape.Solids) >= len(pieces)"},
+    {"put": {"bodies": "=explode_into(f, a.name or f.Label)"}, "when": "=a.explode"},
+    {"each": "x", "in": "=objs + (tl if mode == 'slice' else [])", "steps": [{"set": {"x.Visibility": false}, "when": "=has(x, 'Visibility')"}]}
+   ],
+   "answer": {"via": "settled", "with": ["=tool", "=out"], "then": [{"put": {"next": "explode: true (or part_compound { explode }) makes each piece a body of its own."}, "when": "=not a.explode"}]}
+  },
+  "part_compound": {
+   "group": "model",
+   "description": "Group bodies into one compound (kept apart, not fused; it follows its parts): bodies [names] — or explode: the name of a body of several solids, each copied out as a body (the original hidden).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "bodies": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "explode": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model_more.py)",
+   "date": "2026-11-16",
+   "family": "model_more",
+   "runner": "steps",
+   "steps": [
+    {"when": "=a.explode", "then": [{"let": {"o": "=shaped(a.explode)"}}, {"refuse": {"fmt": "explode: {o.Label} is {len(o.Shape.Solids)} solid, nothing to take apart — it takes a body of several solids (a part_split result, a fuse: false array)."}, "when": "=len(o.Shape.Solids) < 2"}, {"let": {"made": "=explode_into(o, a.name or o.Label)"}}, {"answer": {"via": "settled", "with": ["=tool", "$fields"], "fields": {"from": "=o.Label", "bodies": "=made"}}}]},
+    {"let": {"objs": "=[shaped(r) for r in (a.bodies or [])]"}},
+    {"refuse": "bodies: two or more objects by name to group into one compound, or explode: the name of a body of several solids.", "when": "=len(objs) < 2"},
+    {"let": {"c": "=new_obj('Part::Compound', a.name or 'Compound')"}},
+    {"set": {"c.Links": "=objs"}}
+   ],
+   "answer": {"via": "added", "with": ["=c", "=tool", "$fields"], "fields": {"of": "=[o.Label for o in objs]", "note": "A compound keeps its parts separate (no fusing): one object to move, export or pattern."}}
+  },
+  "part_refine": {
+   "group": "model",
+   "description": "Merge a body's coplanar and co-cylindrical faces left by booleans (refine); a PartDesign Body gets its tip's Refine turned on and stays parametric. fix: true first repairs it (ShapeFix at tolerance mm, 0.001) and makes a closed shell a solid. Renumbers faces. Reply: faces { before, after }, done, sound.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "fix": {
+      "type": "boolean"
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model_more.py)",
+   "date": "2026-11-16",
+   "family": "model_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=solid_body(a.body)"}},
+    {"let": {"tip": "=get(o, 'Tip') if o.TypeId == 'PartDesign::Body' else None"}},
+    {"when": "=tip is not None and 'Refine' in tip.PropertiesList and not a.fix and not a.name", "then": [{"let": {"before": "=len(o.Shape.Faces)"}}, {"set": {"tip.Refine": true}}, {"do": "=doc().recompute()"}, {"let": {"snd": "=soundness(o.Shape)"}}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"body": "=o.Label", "faces": {"before": "=before", "after": "=len(o.Shape.Faces)"}, "done": [{"fmt": "Refine turned on for {tip.Label}, the body's tip (it stays parametric)"}], "sound": "=snd['ok']", "problems": {"when": "=not snd['ok']", "value": "=snd['problems']"}, "step": "=step()"}}}]},
+    {"let": {"sh": "=o.Shape"}},
+    {"let": {"before": "=len(sh.Faces)", "tol": "=float(a.get('tolerance', 0))", "fixed": "=sh.copy()", "notes": "=[]"}},
+    {"when": "=a.fix", "then": [{"try": [{"do": "=fixed.fix(tol or 1e-3, tol or 1e-3, tol or 1e-3)"}, {"push": {"notes": "fixed"}}], "on": "error", "except": [{"push": {"notes": {"fmt": "fix failed: {error}"}}}]}, {"try": [{"let": {"fixed": "=as_solid(as_shell(fixed.Faces) if len(fixed.Shells) != 1 else fixed.Shells[0])"}}, {"push": {"notes": "closed shell made solid"}}], "on": "error", "except": [{"push": {"notes": {"fmt": "no solid from the shell: {error}"}}}], "when": "=not fixed.Solids and fixed.Shells"}]},
+    {"let": {"ref": "=fixed.removeSplitter()"}},
+    {"let": {"o2": "=bake(o, ref, a.name)"}},
+    {"let": {"snd": "=soundness(o2.Shape)"}}
+   ],
+   "answer": {"via": "settled", "with": ["=tool", "$fields"], "fields": {"body": "=o2.Label", "faces": {"before": "=before", "after": "=len(o2.Shape.Faces)"}, "done": "=notes + ['coplanar faces merged']", "sound": "=snd['ok']", "problems": {"when": "=not snd['ok']", "value": "=snd['problems']"}}}
+  },
+  "part_attach": {
+   "group": "model",
+   "description": "Attach a primitive, wire or datum (not a plain modelling result) so it follows its support: to \"Body.Face6\", an edge, a vertex or a whole object; mode, a FreeCAD MapMode, by default FlatFace (flat face) | NormalToEdge (edge) | Translate (vertex) | ObjectXY (object); also Concentric, FrenetNB … (modes needing two references are not reachable). offset [x, y, z] and rotate degrees in the support's frame. Trap: a later boolean on the support renumbers its faces.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "to": {
+      "type": "string"
+     },
+     "mode": {
+      "type": "string"
+     },
+     "offset": {
+      "type": "array",
+      "items": {}
+     },
+     "rotate": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "body",
+     "to"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model_more.py)",
+   "date": "2026-11-16",
+   "family": "model_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=find(a.body)"}},
+    {"refuse": {"fmt": "body: {o.Label} is a {o.TypeId}, which has no attachment — FreeCAD's own primitives, wires and datums attach (part_primitive, part_wire, part_datum {{ to }}); a modelling result is a plain shape: part_transform or object_align places it."}, "when": "='AttachmentOffset' not in o.PropertiesList"},
+    {"let": {"ref": "=a.to"}},
+    {"refuse": "to: a face, edge or vertex as \"Body.Face6\" (shape_query finds it), or a whole object's name (a datum from part_datum, a body).", "when": "=not is_str(ref) or not ref"},
+    {"let": {"head, sub": "=split_ref(ref)"}},
+    {"when": "=sub is None", "then": [{"let": {"tgt": "=find(ref, 'to')", "sub": "=''"}}], "else": [{"refuse": {"fmt": "to: {ref!r} names no object — \"Body.{ref}\"."}, "when": "=head is None"}, {"let": {"label, sub, el": "=resolve(ref)"}}, {"let": {"tgt": "=find(label)"}}]},
+    {"refuse": "to: another object than itself.", "when": "=tgt is o"},
+    {"let": {"mode": "=a.mode or ('FlatFace' if sub.startswith('Face') else 'NormalToEdge' if sub.startswith('Edge') else 'Translate' if sub.startswith('Vertex') else 'ObjectXY')"}},
+    {"let": {"modes": "=list(o.getEnumerationsOfProperty('MapMode') or [])"}},
+    {"refuse": {"fmt": "mode {mode!r}: not a FreeCAD attachment mode. With one reference — a flat face: FlatFace; an edge: NormalToEdge, FrenetNB, Concentric (a circle or arc); a vertex: Translate; a whole object: ObjectXY, ObjectXZ, ObjectYZ. All: {', '.join(modes)}."}, "when": "=modes and mode not in modes"},
+    {"do": {"set": ["=o", "='AttachmentSupport' if 'AttachmentSupport' in o.PropertiesList else 'Support'", "=[(tgt, sub)]"]}},
+    {"set": {"o.MapMode": "=mode", "o.AttachmentOffset": "=placement(vec3(a.offset, 'offset', (0, 0, 0)), rotation(V(0, 0, 1), float(a.get('rotate', 0))))"}},
+    {"do": "=doc().recompute()"},
+    {"refuse": {"fmt": "{o.Label} would not attach to {ref} as {mode}: {o.getStatusString()} — nothing was changed. With one reference: FlatFace takes a flat face; NormalToEdge or FrenetNB an edge; Concentric a circle or arc; Translate a vertex; ObjectXY a whole object."}, "code": "failed", "when": "=not o.isValid()"}
+   ],
+   "answer": {"via": "settled", "with": ["=tool", "$fields"], "fields": {"body": "=o.Label", "attachedTo": "=ref", "mode": "=o.MapMode", "placement": "=placement_json(o.Placement)", "note": {"fmt": "It follows {tgt.Label} from now on."}}}
+  },
+  "part_face": {
+   "group": "model",
+   "description": "A flat face from closed wires or sketches in one plane: from [object names], the outline and any holes inside it (found by nesting).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "from": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "from"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model_more.py)",
+   "date": "2026-11-16",
+   "family": "model_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"wires": "=[]"}},
+    {"each": "r", "in": "=a.get('from') or []", "steps": [{"let": {"x": "=shaped(r, 'from')"}}, {"do": "=wires.extend(x.Shape.Wires or ([as_wire(in_order(x.Shape.Edges))] if x.Shape.Edges else []))"}]},
+    {"refuse": "from: [names] of closed wires or sketches (whole objects) — the outline and any holes inside it.", "when": "=not wires"},
+    {"refuse": {"fmt": "from: {sum(1 for w in wires if not w.isClosed())} of the {len(wires)} wires are open — every wire must be closed (part_wire {{ closed: true }}; a sketch's open ends joined)."}, "when": "=not all(w.isClosed() for w in wires)"},
+    {"try": [{"let": {"face": "=flat_face(wires)"}}], "on": "error", "except": [{"refuse": {"fmt": "No face from those wires ({error}): they must be flat, in one plane, and not cross."}, "code": "failed"}]},
+    {"let": {"o": "=new_obj('Part::Feature', a.name or 'Face')"}},
+    {"set": {"o.Shape": "=face"}}
+   ],
+   "answer": {"via": "added", "with": ["=o", "=tool"]}
+  },
+  "part_ruled": {
+   "group": "model",
+   "description": "A ruled surface (parametric) of straight lines between two curves: a and b each an edge or wire by name, or one edge of a body as \"Box.Edge3\". reversed: true if it twists. A surface, not a solid (surface_thicken).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "a": {
+      "type": "string"
+     },
+     "b": {
+      "type": "string"
+     },
+     "reversed": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "a",
+     "b"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model_more.py)",
+   "date": "2026-11-16",
+   "family": "model_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"curves": "=[]"}},
+    {"each": "key", "in": "=['a', 'b']", "steps": [{"let": {"ref": "=a.get(key)"}}, {"refuse": {"fmt": "{key}: an edge or wire by name (a part_wire, a sketch), or one edge of a body as \"Box.Edge3\"."}, "when": "=not is_str(ref) or not ref"}, {"let": {"head, sub": "=split_ref(ref)"}}, {"when": "=sub is None", "then": [{"let": {"x": "=shaped(ref, key)"}}, {"refuse": {"fmt": "{key}: {x.Label} has no edge."}, "when": "=not x.Shape.Edges"}, {"push": {"curves": "=(x, [])"}}], "else": [{"refuse": {"fmt": "{key}: {ref!r} — an edge with its object, \"Box.Edge3\" (a face has several: name one)."}, "when": "=head is None or not sub.startswith('Edge')"}, {"let": {"x": "=shaped(head, key)"}}, {"do": "=element(x.Shape, sub, x.Label)"}, {"push": {"curves": "=(x, [sub])"}}]}]},
+    {"let": {"o": "=new_obj('Part::RuledSurface', a.name or 'Ruled')"}},
+    {"set": {"o.Curve1": "=curves[0]", "o.Curve2": "=curves[1]"}},
+    {"set": {"o.Orientation": "Reversed"}, "when": "=a.reversed"}
+   ],
+   "answer": {"via": "added", "with": ["=o", "=tool", "$fields"], "fields": {"note": "A surface, not a solid: surface_thicken gives it thickness."}}
+  },
+  "part_project": {
+   "group": "model",
+   "description": "Project a wire's, sketch's or body's edges onto one face: shape (a name), onto \"Body.Face6\", direction [x, y, z] from the shape towards the face (left out: along the face's normals). Lettering wrapped onto a curved face, an outline traced onto a surface. Reply: edges, length, missed (wires that did not land).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "shape": {
+      "type": "string"
+     },
+     "onto": {
+      "type": "string"
+     },
+     "direction": {
+      "type": "array",
+      "items": {}
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "shape",
+     "onto"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model_more.py)",
+   "date": "2026-11-16",
+   "family": "model_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"src": "=shaped(a.shape, 'shape')", "ref": "=a.onto"}},
+    {"refuse": "onto: one face with its body, as \"Body.Face6\" (shape_query { kind: \"face\" } finds it).", "when": "=not is_str(ref) or '.Face' not in ref"},
+    {"let": {"face": "=resolve(ref)[2]"}},
+    {"let": {"d": "=direction(a.direction, 'direction', (0, 0, -1)) if a.direction is not None else None"}},
+    {"let": {"edges": "=src.Shape.Edges"}},
+    {"refuse": {"fmt": "shape: {src.Label} has no edges to project — a wire, sketch or body by name."}, "when": "=not edges"},
+    {"let": {"got": "=[]", "missed": "=0"}},
+    {"each": "w", "in": "=src.Shape.Wires or [as_wire([e]) for e in edges]", "steps": [{"try": [{"let": {"r": "=face.makeParallelProjection(w, d) if d is not None else face.project(w.Edges)"}}, {"when": "=not r.isNull() and r.Edges", "then": [{"do": "=got.extend(r.Edges)"}], "else": [{"let": {"missed": "=missed + 1"}}]}], "on": "error", "except": [{"let": {"missed": "=missed + 1"}}]}]},
+    {"let": {"res": "=compound(got) if got else empty_shape()"}},
+    {"refuse": {"fmt": "Nothing of {src.Label} landed on {ref}: it misses the face along that direction — direction points from the shape towards the face. Nothing was added."}, "code": "failed", "when": "=(res.isNull() or not res.Edges) and d is not None"},
+    {"refuse": {"fmt": "Nothing of {src.Label} landed on {ref}: along the face's normals it misses the face — give direction [x, y, z] from the shape towards it. Nothing was added."}, "code": "failed", "when": "=res.isNull() or not res.Edges"},
+    {"let": {"o": "=new_obj('Part::Feature', a.name or src.Label + ' on face')"}},
+    {"set": {"o.Shape": "=res"}}
+   ],
+   "answer": {"via": "added", "with": ["=o", "=tool", "$fields"], "fields": {"onto": "=ref", "how": "=('along ' + str(vec(d))) if d is not None else \"along the face's normals\"", "missed": {"when": "=missed", "value": {"fmt": "{missed} wire(s) did not land on the face"}}}}
+  },
+  "part_slices": {
+   "group": "model",
+   "description": "Cross-sections of a body: normal [x, y, z] (default z), count (1–500, evenly through it) or at [distances along the normal from the origin]; each slice's wires, length and material area (inner loops are holes), kept as one compound; range is the body's reach along the normal. Layer outlines, laser-cut stacks.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "normal": {
+      "type": "array",
+      "items": {}
+     },
+     "count": {
+      "type": "integer"
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model_more.py)",
+   "date": "2026-11-16",
+   "family": "model_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=solid_body(a.body)", "n": "=direction(a.normal, 'normal', (0, 0, 1))"}},
+    {"let": {"bb": "=o.Shape.BoundBox"}},
+    {"let": {"span": "=[x * n.x + y * n.y + z * n.z for x in (bb.XMin, bb.XMax) for y in (bb.YMin, bb.YMax) for z in (bb.ZMin, bb.ZMax)]"}},
+    {"let": {"lo": "=min(span)", "hi": "=max(span)"}},
+    {"when": "=a.at is not None", "then": [{"let": {"ds": "=[num(x, 'at') for x in a.at]"}}, {"refuse": "at: [distances along the normal from the origin, mm], or count.", "when": "=not ds"}, {"refuse": "at: 500 distances at most a call.", "when": "=len(ds) > 500"}], "else": [{"let": {"k": "=int(a.get('count', 5))"}}, {"refuse": "count: 1 … 500 slices, spread evenly through the body (or at: [distances]).", "when": "=not 1 <= k <= 500"}, {"let": {"ds": "=[lo + (hi - lo) * (i + 1) / (k + 1) for i in range(k)]"}}]},
+    {"let": {"wires": "=[]", "rows": "=[]"}},
+    {"each": "dv", "in": "=ds", "steps": [{"let": {"ws": "=o.Shape.slice(n, dv)"}}, {"do": "=wires.extend(ws)"}, {"push": {"rows": "={'at': round(dv, 4), 'wires': len(ws), 'length': round(sum(w.Length for w in ws), 3), 'area': section_area(ws)}"}}]},
+    {"refuse": {"fmt": "No slice met {o.Label} along {vec(n)} at those distances: the body runs from {lo:.3g} to {hi:.3g} mm along that normal (measured from the origin). at inside that range, or count. Nothing was added."}, "code": "failed", "when": "=not wires"},
+    {"let": {"c": "=new_obj('Part::Feature', a.name or o.Label + ' slices')"}},
+    {"set": {"c.Shape": "=compound(wires)"}}
+   ],
+   "answer": {"via": "added", "with": ["=c", "=tool", "$fields"], "fields": {"normal": "=vec(n)", "range": "=[round(lo, 3), round(hi, 3)]", "slices": "=rows"}, "then": [{"put": {"use": "export writes them as DXF for a laser (and a cutting add-on, where installed); a sketch can be made from one."}}]}
+  },
+  "part_from_mesh": {
+   "group": "model",
+   "description": "A mesh made a solid, every triangle a face: mesh (an object) or file (STL, OBJ …); tolerance sews it, refine (default) merges flat triangles. For a closed, modest mesh: over maxFacets (60000) refused (meshobj_decimate first); thousands of faces already make it and every later boolean slow, the window frozen meanwhile. Of several pieces only the largest becomes the solid (note says so).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "mesh": {
+      "type": "string"
+     },
+     "file": {
+      "type": "string"
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "refine": {
+      "type": "boolean"
+     },
+     "maxFacets": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model_more.py)",
+   "date": "2026-11-16",
+   "family": "model_more",
+   "runner": "steps",
+   "steps": [
+    {"do": "=mesh_module()"},
+    {"when": "=a.file", "then": [{"let": {"p": "=local(a.file)"}}, {"refuse": {"fmt": "{p}: no such file."}, "code": "not_found", "when": "=not isfile(p)"}, {"let": {"m": "=read_mesh(p)", "label": "=stem(p)"}}], "else": [{"refuse": "mesh (a mesh object's name) or file (an STL, OBJ, PLY … path): one of them.", "when": "=not a.mesh"}, {"let": {"src": "=find(a.mesh, 'mesh')"}}, {"refuse": {"fmt": "mesh: {src.Label} is a {src.TypeId}, not a mesh — a mesh object's name (object_list shows them), or file."}, "when": "=not src.isDerivedFrom('Mesh::Feature')"}, {"let": {"m": "=src.Mesh", "label": "=src.Label"}}]},
+    {"let": {"limit": "=int(a.get('maxFacets', 60000))"}},
+    {"refuse": {"fmt": "{m.CountFacets} triangles, over maxFacets ({limit}): every triangle becomes a face of the solid, which is slow to make and slower in every boolean after — reduce it first (meshobj_decimate), or raise maxFacets."}, "when": "=m.CountFacets > limit"},
+    {"refuse": {"fmt": "The mesh has {m.CountFacets} triangles: no closed solid from it."}, "when": "=m.CountFacets < 4"},
+    {"let": {"tol": "=num(a.get('tolerance', 0.05), 'tolerance')"}},
+    {"refuse": "tolerance: mm within which triangle edges are sewn, above 0 (0.05 by default).", "when": "=tol <= 0"},
+    {"let": {"sh": "=empty_shape()"}},
+    {"try": [{"do": "=sh.makeShapeFromMesh(m.Topology, tol)"}], "on": "error", "except": [{"refuse": {"fmt": "FreeCAD could not make faces from the mesh ({error}): repair it first (meshobj_repair). Nothing was added."}, "code": "failed"}]},
+    {"let": {"shells": "=sorted(sh.Shells, key=lambda x: -len(x.Faces))"}},
+    {"try": [{"let": {"sol": "=as_solid(make_shell(sh.Faces) if not shells else shells[0])"}}], "on": "error", "except": [{"refuse": {"fmt": "The mesh does not close into a solid ({error}): fill its holes first (meshobj_repair), or a larger tolerance where edges lie a hair apart. Nothing was added."}, "code": "failed"}]},
+    {"try": [{"let": {"sol": "=sol.removeSplitter()"}}], "on": "error", "except": [], "when": "=a.get('refine', True)"},
+    {"let": {"o": "=new_obj('Part::Feature', a.name or label + ' solid')"}},
+    {"set": {"o.Shape": "=sol"}},
+    {"let": {"snd": "=soundness(sol)"}},
+    {"let": {"note": "Flat triangles merged where they lie in one plane (refine); curved areas stay faceted — for a clean model, fit features instead."}},
+    {"let": {"note": {"fmt": "The mesh sewed into {len(shells)} separate shells: only the largest ({len(shells[0].Faces)} of {len(sh.Faces)} triangles) was made the solid — split the mesh first (meshobj_split) and convert each piece. {note}"}}, "when": "=len(shells) > 1"}
+   ],
+   "answer": {"via": "added", "with": ["=o", "=tool", "$fields"], "fields": {"triangles": "=m.CountFacets", "sound": "=snd['ok']", "problems": {"when": "=not snd['ok']", "value": "=snd['problems']"}, "note": "=note"}}
+  },
+  "part_section": {
+   "group": "model",
+   "description": "Section curves where a body meets another body (with: a parametric Part::Section; parametric: false for a plain shape) or a plane { normal, at }; face: true also fills the closed loops into a face. Refused when they do not meet. Reply: section, edges, length_mm, closedLoops, area_mm2. Cut-lines, outlines at a height.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "with": {
+      "type": "string"
+     },
+     "plane": {
+      "type": "object"
+     },
+     "face": {
+      "type": "boolean"
+     },
+     "approximate": {
+      "type": "boolean"
+     },
+     "parametric": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "body"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/part_more.py)",
+   "date": "2026-11-16",
+   "family": "part_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=shaped(a.body, 'body')"}},
+    {"let": {"size": "=b.Shape.BoundBox.DiagonalLength"}},
+    {"when": "=a.plane is not None", "then": [{"let": {"other": "=plane_face(a.plane, size, b.Shape.BoundBox.Center)", "tool_o": "=None"}}], "else": [{"refuse": "with (another body's name) or plane { normal: [x,y,z], at: [x,y,z] }: what the body is cut by.", "when": "=not a.get('with')"}, {"let": {"tool_o": "=shaped(a.get('with'), 'with')"}}, {"let": {"other": "=tool_o.Shape"}}]},
+    {"when": "=tool_o is not None and a.get('parametric', True)", "then": [{"add": "Part::Section", "name": "Section", "as": "o"}, {"set": {"o.Base": "=b", "o.Tool": "=tool_o", "o.Approximation": "=bool(a.get('approximate', False))", "o.Label": "=unique(a.name or b.Label + ' section')"}}, {"do": "=doc().recompute()"}, {"let": {"sh": "=o.Shape"}}], "else": [{"let": {"sh": "=b.Shape.section(other)"}}, {"refuse": {"fmt": "The plane misses {b.Label}: no section. Its box runs {[round(bb.XMin, 3), round(bb.YMin, 3), round(bb.ZMin, 3)]} to {[round(bb.XMax, 3), round(bb.YMax, 3), round(bb.ZMax, 3)]} — plane.at inside it. Nothing was added."}, "code": "invalid_state", "first": [{"let": {"bb": "=b.Shape.BoundBox"}}], "when": "=not sh.Edges"}, {"let": {"o": "=add_shape(sh, a.name or b.Label + ' section')"}}]},
+    {"refuse": {"fmt": "{b.Label} and {a.get('with')} do not meet: no section curves (measure gives the gap between them; part_transform moves one). Nothing was added."}, "code": "invalid_state", "when": "=not sh.Edges"},
+    {"let": {"out": "={'section': o.Label}"}},
+    {"do": "=out.update(shape_stats(sh))"},
+    {"try": [{"let": {"wires": "=[as_wire(es) for es in sort_edges(sh.Edges)]"}}, {"let": {"closed": "=[w for w in wires if w.isClosed()]"}}, {"let": {"f": "=flat_face(closed)"}}, {"set": {"o.Shape": "=f if o.TypeId == 'Part::Feature' else o.Shape"}}, {"when": "=o.TypeId != 'Part::Feature'", "then": [{"let": {"o2": "=add_shape(f, o.Label + ' face')"}}, {"put": {"face": "=o2.Label"}}]}, {"put": {"area_mm2": "=round(f.Area, 3)"}}], "on": "error", "except": [{"put": {"faceNote": {"fmt": "no face from the curves: {error}"}}}], "when": "=a.face and sh.Edges"},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"...out": "=out"}}
+  },
+  "part_offset2d": {
+   "group": "model",
+   "description": "Offset a flat wire, sketch or face in its plane (Part::Offset2D; a closed wire goes through its face, as a plain shape): distance mm (+ out, − in), join arc | tangent | intersection, fill: true for the band between the two, intersection: true to offset several wires as one. Refused when the loop vanishes or is not flat. Kerf and clearance outlines, gasket bands.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "shape": {
+      "type": "string"
+     },
+     "distance": {
+      "type": "number"
+     },
+     "join": {
+      "type": "string",
+      "enum": [
+       "arc",
+       "tangent",
+       "intersection"
+      ]
+     },
+     "fill": {
+      "type": "boolean"
+     },
+     "intersection": {
+      "type": "boolean"
+     },
+     "parametric": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "shape",
+     "distance"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/part_more.py)",
+   "date": "2026-11-16",
+   "family": "part_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"src": "=shaped(a.shape, 'shape')"}},
+    {"refuse": "distance: mm, + outward, - inward.", "when": "=a.distance is None"},
+    {"let": {"d": "=float(a.distance)", "sh": "=src.Shape"}},
+    {"refuse": {"fmt": "shape: {src.Label} has no wire or face — a wire, sketch or flat face by name (part_extract copies a body's face out; part_section cuts an outline)."}, "code": "invalid_state", "when": "=not (sh.Wires or sh.Faces)"},
+    {"let": {"join": "={'arc': 0, 'tangent': 1, 'intersection': 2}.get(a.get('join', 'arc'))"}},
+    {"refuse": "join: arc | tangent | intersection.", "when": "=join is None"},
+    {"let": {"loops": "=[w for w in sh.Wires if w.isClosed()] if not sh.Faces else []"}},
+    {"when": "=loops and len(loops) == len(sh.Wires)", "then": [{"try": [{"let": {"face": "=flat_face(loops)"}}, {"let": {"grown": "=face.makeOffset2D(d, join, False, False, bool(a.get('intersection', False)))"}}], "on": "error", "except": [{"refuse": {"fmt": "No offset of {src.Label} by {d} mm: {error} — a loop shrunk past half its own width vanishes, and the outline must be flat. Nothing was added."}, "code": "invalid_state"}]}, {"when": "=a.fill", "then": [{"let": {"res": "=grown.cut(face) if d > 0 else face.cut(grown)"}}], "else": [{"let": {"res": "=grown.Faces[0].OuterWire if len(grown.Faces) == 1 else compound([f.OuterWire for f in grown.Faces])"}}]}, {"let": {"o": "=add_shape(res, a.name or src.Label + ' offset')"}}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"offset": "=o.Label", "...stats": "=shape_stats(res)", "note": "a plain shape (a closed wire's offset is taken through its face)"}}}]},
+    {"add": "Part::Offset2D", "name": "Offset2D", "as": "o"},
+    {"set": {"o.Source": "=src", "o.Value": "=d", "o.Join": "=join", "o.Fill": "=bool(a.get('fill', False))", "o.Intersection": "=bool(a.get('intersection', False))", "o.Label": "=unique(a.name or src.Label + ' offset')"}},
+    {"do": "=doc().recompute()"},
+    {"refuse": {"fmt": "No offset of {src.Label} by {d} mm ({msg}) — a wire shrunk past half its own width vanishes; a wire that is not flat cannot be offset in 2D (part_offset grows a solid). Nothing was added."}, "code": "invalid_state", "first": [{"let": {"msg": "=str(o.getStatusString()) if has(o, 'getStatusString') else ''"}}, {"do": "=doc().removeObject(o.Name)"}], "when": "=o.Shape.isNull() or not o.Shape.Edges"},
+    {"when": "=not a.get('parametric', True)", "then": [{"let": {"sh2": "=o.Shape.copy()"}}, {"do": "=doc().removeObject(o.Name)"}, {"let": {"o": "=add_shape(sh2, a.name or src.Label + ' offset')"}}]},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"offset": "=o.Label", "...stats": "=shape_stats(o.Shape)"}}
+  },
+  "part_extract": {
+   "group": "model",
+   "description": "Copy elements out as a plain body of their own (Part's element copy and shape builder): refs [\"Box.Face3\", \"Box.Edge2\", whole objects], numbered from 1; build copy (as they are) | wire (edges joined) | face (closed edge loops filled) | shell (faces sewn at tolerance mm, 0.01) | solid (a closed shell made a solid; refused with a gap). Reply: shape, counts, valid.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "refs": {
+      "type": "array",
+      "items": {}
+     },
+     "build": {
+      "type": "string",
+      "enum": [
+       "copy",
+       "wire",
+       "face",
+       "shell",
+       "solid"
+      ]
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "refs"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/part_more.py)",
+   "date": "2026-11-16",
+   "family": "part_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"build": "=a.get('build', 'copy')"}},
+    {"let": {"what": "='faces' if build in ('shell', 'solid') else 'refs'", "refs": "=ref_list(a.refs)"}},
+    {"refuse": {"fmt": "refs: [\"Box.Face3\", \"Box.Edge2\", …] ({what}, numbered from 1 as shape_query lists them) or whole objects by name."}, "when": "=not is_list(refs) or not refs"},
+    {"let": {"parts": "=picked(refs, what)"}},
+    {"choose": "='shell' if build == 'solid' else build", "of": {"copy": [{"let": {"sh": "=parts[0].copy() if len(parts) == 1 else compound([p.copy() for p in parts])"}}], "shell": [{"let": {"faces": "=[f for p in parts for f in p.Faces]"}}, {"refuse": {"fmt": "refs: no face among them — build {build} takes faces (\"Box.Face3\") or whole objects with faces."}, "when": "=not faces"}, {"let": {"sh": "=make_shell(faces)", "tol": "=float(a.get('tolerance', 0.01))"}}, {"when": "=not sh.isClosed()", "then": [{"let": {"sew": "=sewn(compound(faces), tol)"}}, {"let": {"sh": "=max(sew.Shells, key=lambda x: len(x.Faces))"}, "when": "=sew.Shells"}]}, {"when": "=build == 'solid'", "then": [{"let": {"shells": "=sh.Shells or [sh]"}}, {"refuse": {"fmt": "The {len(faces)} faces leave a gap: a solid needs a closed shell, and tolerance {tol} mm did not close it — every face of the solid in refs, or a larger tolerance; build: \"shell\" keeps the open shell to look at. Nothing was added."}, "code": "invalid_state", "when": "=not shells[0].isClosed()"}, {"let": {"sh": "=as_solid(shells[0])"}}, {"do": "=sh.reverse()", "when": "=sh.Volume < 0"}]}], "wire": [{"let": {"edges": "=[e for p in parts for e in p.Edges]"}}, {"refuse": "refs: no edge among them — build wire takes edges (\"Box.Edge2\"), faces or whole objects.", "when": "=not edges"}, {"let": {"ws": "=[as_wire(es) for es in sort_edges(edges)]"}}, {"let": {"sh": "=ws[0] if len(ws) == 1 else compound(ws)"}}], "face": [{"let": {"edges": "=[e for p in parts for e in p.Edges]"}}, {"let": {"ws": "=[as_wire(es) for es in sort_edges(edges)]"}}, {"refuse": {"fmt": "The edges make {len(ws)} wire(s), not all closed: no face — every edge of each loop in refs; build: \"wire\" shows what they join into. Nothing was added."}, "code": "invalid_state", "when": "=not all(w.isClosed() for w in ws)"}, {"let": {"sh": "=flat_face(ws)"}}]}, "else": [{"refuse": "build: copy | wire | face | shell | solid."}]},
+    {"let": {"o": "=add_shape(sh, a.name or ('Copy' if build == 'copy' else build.capitalize()))"}},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"shape": "=o.Label", "build": "=build", "...stats": "=shape_stats(sh)", "valid": "=bool(sh.isValid())"}}
+  },
+  "part_defeature": {
+   "group": "model",
+   "description": "Take features off a solid by their faces (Part defeaturing): faces [\"Face12\", …] numbered from 1 — every face of a hole, boss or fillet together; the faces around grow over the gap. Renumbers faces; refused when OCC cannot close it. For simplifying imported bodies before FEA or CAM.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "faces": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "faces"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/part_more.py)",
+   "date": "2026-11-16",
+   "family": "part_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=solid_body(a.body)", "faces": "=a.faces"}},
+    {"refuse": "faces: [\"Face12\", …] of the body, numbered from 1 (shape_query { kind: \"face\" } lists them) — every face of the boss, hole or fillet to take away.", "when": "=not faces"},
+    {"let": {"subs": "=[]"}},
+    {"each": "f", "in": "=faces", "steps": [{"let": {"head, sub": "=split_ref(f)"}}, {"refuse": {"fmt": "faces: {f!r} is not a face — \"Face12\"."}, "when": "=sub is None or not sub.startswith('Face')"}, {"push": {"subs": "=element(b.Shape, sub, b.Label)"}}]},
+    {"let": {"before": "=b.Shape"}},
+    {"try": [{"let": {"res": "=before.defeaturing(subs)"}}], "on": "error", "except": [{"refuse": {"fmt": "Defeaturing refused: {error} — pick every face of the feature together (a hole's wall and its floor, a fillet's whole band); the faces around it must be able to grow over the gap. Nothing was changed."}, "code": "invalid_state"}]},
+    {"refuse": "Defeaturing left the body as it was: pick all faces of one feature together (a hole's wall and floor, a fillet's whole band). Nothing was changed.", "code": "invalid_state", "when": "=res.isNull() or not res.Solids or res.isSame(before)"},
+    {"let": {"kept": "=bake(b, res, a.name)"}},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"body": "=kept.Label", "facesBefore": "=len(before.Faces)", "facesAfter": "=len(res.Faces)", "volumeBefore_mm3": "=round(before.Volume, 3)", "volume_mm3": "=round(res.Volume, 3)"}}
+  },
+  "part_fix": {
+   "group": "model",
+   "description": "Repair a shape: op reverse (flip an inside-out solid) | solid (closed shells or faces made solids) | sew (faces joined within tolerance mm, 0.01) | fix (ShapeFix at tolerance, 0.001). Reply: valid, closed, solids, notes.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "op": {
+      "type": "string",
+      "enum": [
+       "reverse",
+       "solid",
+       "sew",
+       "fix"
+      ]
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "body",
+     "op"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/part_more.py)",
+   "date": "2026-11-16",
+   "family": "part_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=shaped(a.body, 'body')", "op": "=a.op"}},
+    {"let": {"sh": "=b.Shape.copy()", "notes": "=[]"}},
+    {"choose": "=op", "of": {"reverse": [{"do": "=sh.reverse()"}, {"push": {"notes": "a solid turned inside out has a negative volume — reverse it back if that was not the aim"}, "when": "=sh.Solids and sh.Volume < 0"}], "solid": [{"let": {"shells": "=sh.Shells"}}, {"try": [{"let": {"shells": "=[make_shell(sh.Faces)]"}}], "on": "error", "except": [{"let": {"shells": "=[]"}}], "when": "=not shells"}, {"let": {"closed": "=[x for x in shells if x.isClosed()]"}}, {"refuse": {"fmt": "{b.Label} has no closed shell: part_fix {{ op: \"sew\", tolerance }} joins its faces first; gaps wider than the tolerance need a face (surface_fill). Nothing was changed."}, "code": "invalid_state", "when": "=not closed"}, {"let": {"solids": "=[as_solid(x) for x in closed]"}}, {"each": "x", "in": "=solids", "steps": [{"do": "=x.reverse()", "when": "=x.Volume < 0"}]}, {"let": {"sh": "=solids[0] if len(solids) == 1 else compound(solids)"}}], "sew": [{"let": {"tol": "=float(a.get('tolerance', 0.01))"}}, {"let": {"sh": "=sewn(sh, tol)"}}, {"try": [{"let": {"sh": "=sh.copy()"}}, {"do": "=sh.fix(tol, tol, tol)"}], "on": "error", "except": []}, {"push": {"notes": {"fmt": "sewn at {tol} mm"}}}], "fix": [{"let": {"tol": "=float(a.get('tolerance', 0.001))"}}, {"do": "=sh.fix(tol, tol, tol)"}]}, "else": [{"refuse": "op: reverse (flip inside out) | solid (closed shells made solids) | sew (faces joined at tolerance) | fix (ShapeFix at tolerance)."}]},
+    {"when": "=op == 'reverse'", "then": [{"when": "=b.TypeId == 'Part::Feature' and not a.name", "then": [{"set": {"b.Shape": "=sh"}}, {"let": {"o": "=b"}}], "else": [{"let": {"o": "=add_shape(sh, a.name or b.Label + ' reversed')"}}]}, {"do": "=doc().recompute()"}], "else": [{"let": {"o": "=bake(b, sh, a.name)"}}]},
+    {"let": {"sh": "=o.Shape"}},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"body": "=o.Label", "op": "=op", "...stats": "=shape_stats(sh)", "valid": "=bool(sh.isValid())", "closed": "=bool(sh.Shells and all(x.isClosed() for x in sh.Shells))", "notes": {"when": "=notes", "value": "=notes"}}}
+  },
+  "part_datum": {
+   "group": "model",
+   "description": "A datum: kind point | line | plane | csys, at [x,y,z], normal (plane, line) or axis + angle; or attached by one reference (to \"Box.Face6\", an edge, a vertex), the placement then its offset. mode: a FreeCAD MapMode, by default by what to is (FlatFace, NormalToEdge, Translate; a line along a straight edge or a circle's axis; a point at a vertex or centre); a line on a face needs mode. Refused when it cannot attach.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "point",
+       "line",
+       "plane",
+       "csys"
+      ]
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "normal": {},
+     "axis": {},
+     "angle": {
+      "type": "number"
+     },
+     "to": {
+      "type": "string"
+     },
+     "mode": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/part_more.py)",
+   "date": "2026-11-16",
+   "family": "part_more",
+   "runner": "steps",
+   "steps": [
+    {"let": {"kind": "=a.get('kind', 'plane')"}},
+    {"refuse": "kind: point | line | plane | csys (a coordinate system).", "when": "=kind not in DATUMS"},
+    {"let": {"pl": "=placement_of(a)"}},
+    {"when": "=a.normal is not None and kind in ('plane', 'line')", "then": [{"let": {"n": "=direction(a.normal, 'normal')"}}, {"set": {"pl.Rotation": "=rotation(V(0, 0, 1), n)"}}]},
+    {"let": {"o": "=None", "tried": "=[]"}},
+    {"each": "t", "in": "=DATUMS[kind]", "steps": [{"try": [{"let": {"o": "=doc().addObject(t, kind.capitalize())"}}], "on": "error", "except": [{"push": {"tried": {"fmt": "{t}: {error}"}}}], "when": "=o is None"}]},
+    {"let": {"made": "datum"}},
+    {"when": "=o is None", "then": [{"let": {"made": "shape", "sh": "=datum_shape(kind)"}}, {"let": {"o": "=doc().addObject('Part::FeaturePython', kind.capitalize())"}}, {"try": [{"do": "=o.addExtension('Part::AttachExtensionPython')"}], "on": "error", "except": [{"push": {"tried": {"fmt": "attach: {error}"}}}]}, {"set": {"o.Shape": "=sh"}}]},
+    {"set": {"o.Placement": "=pl"}},
+    {"refuse": {"fmt": "This FreeCAD cannot attach a datum here: {'; '.join(tried)}"}, "code": "invalid_state", "when": "=a.to and not (has(o, 'AttachmentSupport') or has(o, 'Support'))"},
+    {"when": "=a.to", "then": [{"let": {"label, sub, el": "=resolve(a.to)"}}, {"let": {"target": "=find(label)"}}, {"do": {"set": ["=o", "='AttachmentSupport' if has(o, 'AttachmentSupport') else 'Support'", "=[(target, sub or '')]"]}}, {"let": {"mode": "=a.mode"}}, {"when": "=not mode or mode == 'Deactivated'", "then": [{"let": {"elt": "=(sub or '')[:4]"}}, {"let": {"round_edge": "=elt == 'Edge' and is_round(el)"}}, {"refuse": "A line datum on a face needs mode: FreeCAD's line normal to a face (FaceNormal) takes a face and a vertex, and to is one reference. mode AxisOfInertia1 | AxisOfInertia2 | AxisOfInertia3 (through the face's centre of mass) or ObjectZ (the object's own z); or to an edge (a straight one: the line along it; a circle's: its axis); or leave to out and place it with at and normal.", "when": "=(kind, elt) == ('line', 'Face')"}, {"let": {"mode": "={('point', 'Vert'): 'Vertex', ('point', 'Edge'): 'CenterOfCurvature' if round_edge else 'CenterOfMass', ('point', 'Face'): 'CenterOfMass', ('line', 'Edge'): 'AxisOfCurvature' if round_edge else 'TwoPointLine', ('line', 'Vert'): 'ObjectZ', ('plane', 'Face'): 'FlatFace', ('plane', 'Edge'): 'NormalToEdge', ('plane', 'Vert'): 'Translate', ('csys', 'Face'): 'FlatFace', ('csys', 'Edge'): 'NormalToEdge', ('csys', 'Vert'): 'Translate'}.get((kind, elt), 'ObjectXY')"}}]}, {"try": [{"set": {"o.MapMode": "=mode"}}], "on": "error", "except": [{"refuse": {"fmt": "mode {mode!r}: not a FreeCAD attachment mode — the modes: {', '.join(o.getEnumerationsOfProperty('MapMode'))}."}}]}, {"set": {"o.AttachmentOffset": "=pl"}}]},
+    {"set": {"o.Label": "=unique(a.name or 'Datum ' + kind)"}},
+    {"do": "=doc().recompute()"},
+    {"when": "=a.to and get(o, 'MapMode', '') == 'Deactivated'", "then": [{"push": {"tried": "left unattached"}}], "else": [{"when": "=a.to", "then": [{"let": {"failed": "=False"}}, {"try": [{"let": {"failed": "=not o.isValid()"}}], "on": "error", "except": [{"let": {"failed": "=False"}}]}, {"refuse": {"fmt": "The {kind} datum would not attach to {a.to} as {o.MapMode}: {o.getStatusString()} — nothing was kept. With one reference: a plane or csys takes FlatFace (a flat face), NormalToEdge (an edge), Translate (a vertex), ObjectXY (a whole object); a line TwoPointLine (a straight edge), AxisOfCurvature (a circle or arc); a point Vertex, CenterOfCurvature, CenterOfMass."}, "code": "failed", "when": "=failed"}]}]},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"datum": "=o.Label", "kind": "=kind", "type": "=o.TypeId", "made": "=made", "placement": "=placement_json(o.Placement)", "mode": {"when": "=a.to", "value": "=o.MapMode"}, "notes": {"when": "=a.to and get(o, 'MapMode', '') == 'Deactivated'", "value": "=tried"}}}
+  },
+  "draft_from_sketch": {
+   "group": "draft",
+   "description": "Sketches or shapes made Draft objects (Draft's draftify): objects; straight runs become Draft wires, a lone circle or arc a Draft circle, runs with curves stay plain shapes. block: true compounds the results; delete: true removes the originals.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "block": {
+      "type": "boolean"
+     },
+     "delete": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "objects"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=active()"},
+    {"let": {"objs": "=objs_of(a.objects)"}},
+    {"each": "o", "in": "=objs", "steps": [{"refuse": {"fmt": "objects: {o.Label} has no edges to turn into Draft objects — a sketch, a wire or a shape with edges."}, "when": "=not get(get(o, 'Shape'), 'Edges')"}]},
+    {"make": "Draft.draftify", "call": ["=objs"], "kw": {"makeblock": "=bool(a.block)", "delete": "=bool(a.delete)"}, "as": "r"},
+    {"let": {"res": "=r if is_list(r) else [r]"}}
+   ],
+   "answer": {"via": "finish", "with": ["=[x for x in res if x is not None]", "$tool"]}
+  },
+  "draft_facebinder": {
+   "group": "draft",
+   "description": "A facebinder: faces [\"Body.Face6\" …] as a surface that follows them; extrusion mm makes it a skin, offset moves it off. Reply: object, area, volume, box.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "faces": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "extrusion": {
+      "type": "number"
+     },
+     "offset": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "faces"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=active()"},
+    {"let": {"sel": "=[]"}},
+    {"each": "r", "in": "=a.faces or []", "steps": [{"let": {"label, sub, shape": "=resolve(r)"}}, {"refuse": {"fmt": "{r}: a face (\"Body.Face6\")."}, "when": "=not sub or not sub.startswith('Face')"}, {"push": {"sel": "=(find(label), [sub])"}}]},
+    {"refuse": "faces: [\"Body.Face6\", …].", "when": "=not sel"},
+    {"try": [{"make": "Draft.make_facebinder", "call": ["=sel"], "as": "fb"}], "on": "error", "except": [{"make": "Draft.make_facebinder", "call": ["=[(o, tuple(sub)) for o, sub in sel]"], "as": "fb"}]},
+    {"set": {"fb.Extrusion": "=num(a.extrusion, 'extrusion')"}, "when": "=a.extrusion and 'Extrusion' in fb.PropertiesList"},
+    {"set": {"fb.Offset": "=num(a.offset, 'offset')"}, "when": "=a.offset and 'Offset' in fb.PropertiesList"},
+    {"let": {"fb": "=named(fb, a.name, 'Facebinder')"}}
+   ],
+   "answer": {"via": "finish", "with": ["=fb", "$tool", "$fields"], "fields": {"note": "It follows the faces; extrusion makes a skin of that thickness (a gasket, a pad on a face)."}}
+  },
+  "draft_2d_view": {
+   "group": "draft",
+   "description": "A 2D view of a body projected along direction (Draft's Shape2DView, parametric; default from above, laid on XY): hidden: true adds hidden lines. section: true (cut faces only) needs object to be a BIM section plane (bim_section); for a body use part_section. Reply: object, length, box; warning when empty.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "object": {
+      "type": "string"
+     },
+     "direction": {
+      "type": "array",
+      "items": {}
+     },
+     "hidden": {
+      "type": "boolean"
+     },
+     "section": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "object"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=active()"},
+    {"let": {"base": "=find(a.object)"}},
+    {"let": {"d": "=direction(a.direction, 'direction', (0, 0, 1))", "kind": "=kind_of(base)"}},
+    {"refuse": {"fmt": "section: Draft draws cut faces only of a BIM section plane (bim_section makes one; give it as object), and {base.Label} is not one. For a cut through a body: part_section, or td_section on a drawing."}, "when": "=a.section and kind != 'SectionPlane'"},
+    {"let": {"sh": "=get(base, 'Shape')"}},
+    {"refuse": {"fmt": "object: {base.Label} has no shape to project — a body, a shape, or a group of them."}, "when": "=kind not in ('SectionPlane', 'BuildingPart', 'IfcAnnotation') and not base.isDerivedFrom('App::DocumentObjectGroup') and (sh is None or sh.isNull())"},
+    {"let": {"mk": "=maker('Draft.make_shape_2d_view') or maker('Draft.make_shape2dview')"}},
+    {"try": [{"make": "=mk", "call": ["=base", "=d"], "as": "v"}], "on": ["TypeError"], "except": [{"make": "=mk", "call": ["=base"], "kw": {"projection": "=d"}, "as": "v"}]},
+    {"set": {"v.HiddenLines": true}, "when": "=a.hidden and 'HiddenLines' in v.PropertiesList"},
+    {"set": {"v.ProjectionMode": "Cutfaces"}, "when": "=a.section and 'ProjectionMode' in v.PropertiesList"},
+    {"let": {"label": {"fmt": "{base.Label} 2D view"}}},
+    {"let": {"v": "=named(v, a.name, label)"}}
+   ],
+   "answer": {"via": "finish", "with": ["=v", "$tool", "$fields"], "fields": {"use": "export (DXF) writes it; draft_dimension measures on it."}, "then": [{"put": {"warning": "The view came out empty: nothing of the object shows from that direction, or FreeCAD could not project it (see the report view)."}, "when": "='length' not in out"}]}
+  },
+  "draft_clone": {
+   "group": "draft",
+   "description": "A Draft clone: a copy that follows the original (it starts on top of it); scale (a factor or [x,y,z]), move [x,y,z]. Reply: object, of, box.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "object": {
+      "type": "string"
+     },
+     "scale": {},
+     "move": {
+      "type": "array",
+      "items": {}
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "object"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=active()"},
+    {"let": {"o": "=find(a.object)", "sc": "=a.scale"}},
+    {"when": "=sc is not None", "then": [{"let": {"sc": "=[sc, sc, sc] if is_num(sc) else sc"}}, {"refuse": "scale: a factor above 0, or [sx, sy, sz].", "when": "=not (is_list(sc) and len(sc) == 3 and all(is_num(x) and x > 0 for x in sc))"}]},
+    {"refuse": {"fmt": "object: {o.Label} has no shape to clone ({o.TypeId})."}, "when": "=get(o, 'Shape') is None"},
+    {"make": "Draft.make_clone", "call": ["=o"], "as": "c"},
+    {"when": "=sc is not None", "then": [{"refuse": {"fmt": "scale: {o.Label} is a BIM object, and its clone cannot be scaled — leave scale out, or draft_modify op scale with copy: true."}, "first": [{"do": "=doc().removeObject(c.Name)"}], "when": "='Scale' not in c.PropertiesList"}, {"set": {"c.Scale": "=V(float(sc[0]), float(sc[1]), float(sc[2]))"}}, {"do": "=doc().recompute()"}]},
+    {"set": {"c.Placement": "=placement(vec(a.move, 'move'), rotation()).multiply(c.Placement)"}, "when": "=a.move"},
+    {"let": {"label": {"fmt": "{o.Label} clone"}}},
+    {"let": {"c": "=named(c, a.name, label)"}}
+   ],
+   "answer": {"via": "finish", "with": ["=c", "$tool", "$fields"], "fields": {"of": "=o.Label"}}
+  },
+  "draft_layer": {
+   "group": "draft",
+   "description": "A Draft layer (made if new) and objects put on it: name, objects (each leaves its old layer), lineWidth pixels. Without the window only the grouping happens. Reply: layer, made, objects.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "lineWidth": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=active()"},
+    {"let": {"name": "=a.name"}},
+    {"refuse": "name: the layer's name (an existing layer by that name is used, else one is made).", "when": "=not is_str(name) or not name.strip()"},
+    {"let": {"lw": "=a.lineWidth"}},
+    {"refuse": "lineWidth: screen pixels, over 0.", "when": "=lw is not None and (not is_num(lw) or lw <= 0)"},
+    {"let": {"lay": "=first(o for o in doc().Objects if kind_of(o) == 'Layer' and name in (o.Label, o.Name))"}},
+    {"let": {"made": "=lay is None"}},
+    {"when": "=made", "then": [{"make": "Draft.make_layer", "kw": {"name": "=name", "line_width": "=float(lw)"}, "as": "lay", "when": "=lw"}, {"make": "Draft.make_layer", "kw": {"name": "=name"}, "as": "lay", "when": "=not lw"}], "else": [{"set": {"lay.ViewObject.LineWidth": "=float(lw)"}, "when": "=lw and gui() and has(get(lay, 'ViewObject'), 'LineWidth')"}]},
+    {"when": "=a.objects", "then": [{"let": {"grp": "=list(lay.Group)"}}, {"each": "o", "in": "=objs_of(a.objects)", "steps": [{"refuse": {"fmt": "objects: {o.Label} is a layer itself — layers do not nest."}, "when": "=kind_of(o) in ('Layer', 'LayerContainer')"}, {"push": {"grp": "=o"}, "when": "=o not in grp"}]}, {"set": {"lay.Group": "=grp"}}]},
+    {"let": {"extra": null}},
+    {"let": {"extra": {"note": "No window here: the layer groups the objects, but its line width and colours show only once the file is open in FreeCAD."}}, "when": "=not gui()"}
+   ],
+   "answer": {"via": "done", "with": ["$tool", "$fields", "=extra"], "late": true, "fields": {"layer": "=lay.Label", "made": "=made", "objects": "=[o.Label for o in lay.Group]"}}
+  },
+  "draft_hatch": {
+   "group": "draft",
+   "description": "Hatch an object's flat faces with a PAT pattern, as lines in the model (a Hatch object that follows it): object, pattern (default Diagonal4; FreeCAD's FCPAT.pat lists them, or file: your own .pat), scale (1: the pattern's own mm spacing), rotation degrees. Reply: pattern, file, length; warning when no lines were drawn. A wrong pattern name is refused with the names.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "object": {
+      "type": "string"
+     },
+     "pattern": {
+      "type": "string"
+     },
+     "file": {
+      "type": "string"
+     },
+     "scale": {
+      "type": "number"
+     },
+     "rotation": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "object"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=active()"},
+    {"let": {"base": "=find(a.object)"}},
+    {"let": {"sh": "=get(base, 'Shape')"}},
+    {"refuse": {"fmt": "object: {base.Label} has no flat face to hatch — a closed Draft shape made with face: true, a face, or a body (each flat face is hatched). draft_modify op upgrade makes a closed wire a face."}, "when": "=sh is None or sh.isNull() or not any(f.findPlane() is not None for f in sh.Faces)"},
+    {"let": {"sc": "=num(a.get('scale', 1), 'scale')"}},
+    {"refuse": "scale: over 0 (1 draws the pattern at its own spacing in mm; FCPAT's Diagonal4 is 4 mm apart).", "when": "=sc <= 0"},
+    {"let": {"pat": "=pattern_file(a.file)"}},
+    {"refuse": {"fmt": "file: no .pat file at {pat} — leave file out for FreeCAD's own FCPAT.pat."}, "code": "not_found", "when": "=not is_pat(pat)"},
+    {"let": {"name": "=a.get('pattern', 'Diagonal4')", "names": "=pattern_names(pat)"}},
+    {"let": {"shown": "=', '.join(names[:20])", "more": "=' …' if len(names) > 20 else ''", "file": "=basename(pat)"}},
+    {"refuse": {"fmt": "pattern: one of {shown}{more} (in {file})."}, "when": "=name not in names"},
+    {"make": "Draft.make_hatch", "call": ["=base", "=pat", "=name", "=sc", "=num(a.get('rotation', 0), 'rotation')"], "as": "h"},
+    {"let": {"label": {"fmt": "{base.Label} hatch"}}},
+    {"let": {"h": "=named(h, a.name, label)"}}
+   ],
+   "answer": {"via": "finish", "with": ["=h", "$tool", "$fields"], "fields": {"pattern": "=name", "file": "=file"}, "then": [{"put": {"warning": "The hatch drew no lines (see the report view): a larger face or a smaller scale, and check the pattern file."}, "when": "='length' not in out"}]}
+  },
+  "draft_label": {
+   "group": "draft",
+   "description": "A Draft label: a leader from target [x,y,z] to text at [x,y,z]; show custom (text, \\n for lines) | name | area | length | position | material | tag of object (\"Body\", or \"Body.Face6\" / \"Body.Edge3\" for one element), which it follows. Reply: text.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "target": {
+      "type": "array",
+      "items": {}
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "object": {
+      "type": "string"
+     },
+     "show": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "target"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=active()"},
+    {"let": {"tp": "=vec(a.target, 'target')"}},
+    {"let": {"at": "=vec(a.at, 'at', (tp.x + 20, tp.y + 20, tp.z))"}},
+    {"let": {"kw": "={'target_point': tp, 'placement': placement(at, rotation())}"}},
+    {"when": "=a.object", "then": [{"let": {"label, sub, shape": "=resolve(a.object)"}}, {"put": {"target_object": "=find(label)"}, "into": "kw"}, {"put": {"subelements": "=sub"}, "into": "kw", "when": "=sub"}]},
+    {"let": {"show": "=a.get('show', 'custom')", "kinds": {"custom": "Custom", "name": "Label", "area": "Area", "length": "Length", "position": "Position", "material": "Material", "tag": "Tag"}}},
+    {"refuse": {"fmt": "show: {', '.join(kinds)}."}, "when": "=show not in kinds"},
+    {"refuse": {"fmt": "show {show}: needs object (\"Body\", or \"Body.Face6\" / \"Body.Edge3\" for the area or length of one element); show custom takes text instead."}, "when": "=show != 'custom' and kw.get('target_object') is None"},
+    {"put": {"label_type": "=kinds[show]"}, "into": "kw"},
+    {"put": {"custom_text": "=str(a.text or 'Label').split('\\n')"}, "into": "kw", "when": "=show == 'custom'"},
+    {"let": {"o": "=make_label(kw)"}},
+    {"do": "=doc().recompute()"},
+    {"let": {"text": "=[str(x) for x in (get(o, 'Text', []) or []) if str(x)]"}},
+    {"when": "=not text and show in ('area', 'length', 'position', 'name') and kw.get('target_object') is not None", "then": [{"let": {"text": "=[label_text(show, kw['target_object'], kw.get('subelements'))]"}}, {"set": {"o.LabelType": "Custom", "o.CustomText": "=text"}}]},
+    {"let": {"o": "=named(o, a.name, 'Label')"}}
+   ],
+   "answer": {"via": "finish", "with": ["=o", "$tool", "$fields"], "fields": {"text": "=text"}}
+  },
+  "draft_plane": {
+   "group": "draft",
+   "description": "A saved working plane (Draft's working-plane proxy): at [x,y,z] with normal, or on a flat face (\"Box.Face6\"); rotate degrees about the normal; name. It records the plane (reply: origin, normal, xAxis) and does not switch Draft's working plane. With the window up the 3D view must be the tab in front.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "normal": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "face": {
+      "type": "string"
+     },
+     "rotate": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"when": "=a.face", "then": [{"let": {"label, sub, f": "=resolve(a.face)"}}, {"refuse": "face: a flat face (\"Box.Face6\").", "when": "=not sub or not sub.startswith('Face') or f.findPlane() is None"}, {"let": {"u0, u1, v0, v1": "=f.ParameterRange"}}, {"let": {"n": "=f.normalAt((u0 + u1) / 2, (v0 + v1) / 2)", "at": "=f.CenterOfMass"}}], "else": [{"let": {"at": "=vec(a.get('at', [0, 0, 0]), 'at')", "n": "=direction(a.get('normal', [0, 0, 1]), 'normal')"}}]},
+    {"let": {"rot": "=rotation(V(0, 0, 1), n)"}},
+    {"let": {"rot": "=rot.multiply(rotation(V(0, 0, 1), float(a.rotate)))"}, "when": "=a.rotate"},
+    {"let": {"pl": "=placement(at, rot)", "mk": "=maker('Draft.make_workingplaneproxy') or maker('Draft.makeWorkingPlaneProxy')"}},
+    {"refuse": "This FreeCAD's Draft has no working-plane proxy.", "code": "unavailable", "when": "=mk is None"},
+    {"do": "=active()"},
+    {"let": {"n0": "=len(doc().Objects)"}},
+    {"try": [{"make": "=mk", "call": ["=pl"], "as": "o"}], "on": ["AttributeError"], "except": [{"each": "x", "in": "=doc().Objects[n0:]", "steps": [{"do": "=doc().removeObject(x.Name)"}]}, {"refuse": {"fmt": "Draft stores the 3D view's camera with a working plane, and the tab in front is not a 3D view ({error}): bring the model's 3D view to the front in FreeCAD, then call this again. Nothing was kept."}, "code": "invalid_state", "when": "=gui()"}], "reraise": true},
+    {"set": {"o.Label": "=unique(a.name or 'Working plane', o)"}},
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]},
+    {"let": {"x": "=rot.multVec(V(1, 0, 0))"}}
+   ],
+   "answer": {"fields": {"plane": "=o.Label", "origin": "=[round(c, 3) for c in at]", "normal": "=[round(c, 4) for c in n]", "xAxis": "=[round(c, 4) for c in x]", "step": "=step()", "note": "In FreeCAD's window a double-click on it makes it the working plane; here it records the plane for drawings and sketches to use."}}
+  },
+  "draft_shape": {
+   "group": "draft",
+   "description": "A Draft 2D shape (parametric: object_set edits it): kind wire | bspline | bezier (points where given, closed; at and normal do not move these) | rectangle (length along x, height along y, corner at `at`) | circle (radius) | arc (radius, start, end degrees counter-clockwise from x) | ellipse (major, minor: whole axes) | polygon (sides, radius; inscribed false: flats on the radius) | point (at). at and normal place it. A closed shape is a filled face unless face: false. Reply: object, type, length, area, box.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string"
+     },
+     "points": {
+      "type": "array",
+      "items": {}
+     },
+     "closed": {
+      "type": "boolean"
+     },
+     "length": {
+      "type": "number"
+     },
+     "height": {
+      "type": "number"
+     },
+     "radius": {
+      "type": "number"
+     },
+     "start": {
+      "type": "number"
+     },
+     "end": {
+      "type": "number"
+     },
+     "major": {
+      "type": "number"
+     },
+     "minor": {
+      "type": "number"
+     },
+     "sides": {
+      "type": "integer"
+     },
+     "inscribed": {
+      "type": "boolean"
+     },
+     "face": {
+      "type": "boolean"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "normal": {
+      "type": "array",
+      "items": {}
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=active()"},
+    {"let": {"kind": "=a.kind", "face": "=a.face"}},
+    {"refuse": "face: true (a closed shape is a filled face) or false (its outline only); left out, Draft's Make Face preference decides (true as installed).", "when": "=face is not None and not is_bool(face)"},
+    {"let": {"pl": "=pl_of(a)"}},
+    {"choose": "='wire' if kind in ('wire', 'bspline', 'bezier') else 'circle' if kind in ('circle', 'arc') else kind", "of": {"wire": [{"let": {"pts": "=[vec(p, 'points') for p in (a.points or [])]", "closed": "=bool(a.closed)"}}, {"let": {"pts": "=pts[:-1]", "closed": true}, "when": "=kind != 'bezier' and len(pts) > 2 and pts[0].isEqual(pts[-1], 1e-9)"}, {"refuse": "points: two or more different [x, y, z].", "when": "=len(pts) < 2 or (len(pts) == 2 and pts[0].isEqual(pts[1], 1e-9))"}, {"refuse": "closed: needs three or more points.", "when": "=closed and len(pts) < 3"}, {"make": "=maker({'wire': 'Draft.make_wire', 'bspline': 'Draft.make_bspline', 'bezier': 'Draft.make_bezcurve'}[kind])", "call": ["=pts"], "kw": {"closed": "=closed", "face": "=face"}, "as": "o"}], "rectangle": [{"let": {"length": "=num(a.length, 'length')"}}, {"refuse": "length: its size along x, mm, over 0.", "when": "=length <= 0"}, {"let": {"height": "=num(a.height, 'height')"}}, {"refuse": "height: its size along y, mm, over 0.", "when": "=height <= 0"}, {"make": "Draft.make_rectangle", "call": ["=length", "=height"], "kw": {"placement": "=pl", "face": "=face"}, "as": "o"}], "circle": [{"let": {"r": "=num(a.radius, 'radius')"}}, {"refuse": "radius: the radius, mm, over 0.", "when": "=r <= 0"}, {"when": "=kind == 'arc'", "then": [{"let": {"st": "=num(a.get('start', 0), 'start')", "en": "=num(a.get('end', 90), 'end')"}}, {"refuse": "start, end: degrees, counter-clockwise from x, and not the same angle (kind circle makes the whole circle).", "when": "=abs(st - en) % 360 < 1e-9"}, {"make": "Draft.make_circle", "call": ["=r"], "kw": {"placement": "=pl", "face": "=face", "startangle": "=st", "endangle": "=en"}, "as": "o"}], "else": [{"make": "Draft.make_circle", "call": ["=r"], "kw": {"placement": "=pl", "face": "=face"}, "as": "o"}]}], "ellipse": [{"let": {"major": "=num(a.major, 'major')"}}, {"refuse": "major: the long axis, end to end, mm, over 0.", "when": "=major <= 0"}, {"let": {"minor": "=num(a.minor, 'minor')"}}, {"refuse": "minor: the short axis, end to end, mm, over 0.", "when": "=minor <= 0"}, {"make": "Draft.make_ellipse", "call": ["=major / 2", "=minor / 2"], "kw": {"placement": "=pl", "face": "=face"}, "as": "o"}], "polygon": [{"let": {"sides": "=a.get('sides', 6)"}}, {"refuse": "sides: a whole number, 3 or more.", "when": "=not is_int(sides) or sides < 3"}, {"let": {"r": "=num(a.radius, 'radius')"}}, {"refuse": "radius: the radius of the circle it is drawn on, mm, over 0.", "when": "=r <= 0"}, {"make": "Draft.make_polygon", "call": ["=sides", "=r"], "kw": {"inscribed": "=bool(a.get('inscribed', True))", "placement": "=pl", "face": "=face"}, "as": "o"}], "point": [{"let": {"p": "=vec(a.at, 'at')"}}, {"make": "Draft.make_point", "call": ["=p.x", "=p.y", "=p.z"], "as": "o"}]}, "else": [{"refuse": "kind: wire, rectangle, circle, arc, ellipse, polygon, bspline, bezier or point."}]}
+   ],
+   "answer": {"via": "finish", "with": ["=named(o, a.name, kind.capitalize())", "$tool"]}
+  },
+  "draft_link_array": {
+   "group": "draft",
+   "description": "A Draft array of any object, parametric (the copies follow it; the original is hidden in the window): kind ortho (count [nx,ny,nz] including the original, spacing [dx,dy,dz] from one copy to the next) | polar (count, angle, center; about z) | circular (rings counting the original, ringSpacing, tangentSpacing, symmetry) | path (path, count, align) | points (points: an object whose points place the copies); link: false makes real shapes, not links. Reply: count, of, box. object_set changes it (NumberX, IntervalX, NumberPolar, Angle …).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "object": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "count": {},
+     "spacing": {
+      "type": "array",
+      "items": {}
+     },
+     "angle": {
+      "type": "number"
+     },
+     "center": {
+      "type": "array",
+      "items": {}
+     },
+     "rings": {
+      "type": "integer"
+     },
+     "ringSpacing": {
+      "type": "number"
+     },
+     "tangentSpacing": {
+      "type": "number"
+     },
+     "symmetry": {
+      "type": "integer"
+     },
+     "path": {
+      "type": "string"
+     },
+     "align": {
+      "type": "boolean"
+     },
+     "points": {
+      "type": "string"
+     },
+     "link": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "object"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=active()"},
+    {"let": {"base": "=find(a.object)", "kind": "=a.get('kind', 'ortho')", "link": "=bool(a.get('link', True))"}},
+    {"choose": "=kind", "of": {"ortho": [{"let": {"cnt": "=a.count or [2, 2, 1]", "spc": "=a.spacing or [10, 10, 10]"}}, {"refuse": "count: [nx, ny, nz] whole numbers, each 1 or more (the original counts as one).", "when": "=not (is_list(cnt) and 1 <= len(cnt) <= 3 and all(is_int(x) and x >= 1 for x in cnt))"}, {"refuse": "spacing: [dx, dy, dz] mm from one copy to the next (not the gap between them).", "when": "=not (is_list(spc) and 1 <= len(spc) <= 3 and all(is_num(x) for x in spc))"}, {"let": {"n": "=cnt + [1, 1, 1]", "sp": "=[float(x) for x in spc] + [10, 10, 10]"}}, {"refuse": "spacing: not 0 along a direction that has more than one copy — they would lie on top of each other.", "when": "=any(n[i] > 1 and sp[i] == 0 for i in range(3))"}, {"make": "Draft.make_ortho_array", "call": ["=base", "=V(sp[0], 0, 0)", "=V(0, sp[1], 0)", "=V(0, 0, sp[2])", "=n[0]", "=n[1]", "=n[2]"], "kw": {"use_link": "=link"}, "as": "o"}], "polar": [{"let": {"count": "=a.get('count', 6)"}}, {"refuse": "count: a whole number, 2 or more.", "when": "=not is_int(count) or count < 2"}, {"make": "Draft.make_polar_array", "call": ["=base", "=count", "=num(a.get('angle', 360), 'angle')", "=vec(a.center, 'center', (0, 0, 0))"], "kw": {"use_link": "=link"}, "as": "o"}], "circular": [{"let": {"rs": "=num(a.get('ringSpacing', 20), 'ringSpacing')", "ts": "=num(a.get('tangentSpacing', 10), 'tangentSpacing')"}}, {"refuse": "ringSpacing (between rings) and tangentSpacing (between copies along a ring): mm, over 0.", "when": "=rs <= 0 or ts <= 0"}, {"let": {"rings": "=a.get('rings', 3)"}}, {"refuse": "rings: a whole number, 2 or more.", "when": "=not is_int(rings) or rings < 2"}, {"let": {"symmetry": "=a.get('symmetry', 1)"}}, {"refuse": "symmetry: a whole number, 1 or more.", "when": "=not is_int(symmetry) or symmetry < 1"}, {"make": "Draft.make_circular_array", "call": ["=base", "=rs", "=ts", "=rings", "=symmetry"], "kw": {"use_link": "=link"}, "as": "o"}], "path": [{"let": {"path": "=find(a.path, 'path')"}}, {"refuse": {"fmt": "path: {path.Label} has no edges to follow — a Draft wire, a sketch or another object with edges."}, "when": "=not get(get(path, 'Shape'), 'Edges')"}, {"let": {"count": "=a.get('count', 4)"}}, {"refuse": "count: a whole number, 1 or more.", "when": "=not is_int(count) or count < 1"}, {"make": "Draft.make_path_array", "call": ["=base", "=path", "=count"], "kw": {"align": "=bool(a.align)", "use_link": "=link"}, "as": "o"}], "points": [{"let": {"pts": "=find(a.points, 'points')"}}, {"refuse": {"fmt": "points: {pts.Label} holds no points — a sketch or compound of points, a Draft wire (its vertices), a mesh or a point cloud."}, "when": "=not (get(get(pts, 'Shape'), 'Vertexes') or has(pts, 'Mesh') or has(pts, 'Points'))"}, {"make": "Draft.make_point_array", "call": ["=base", "=pts"], "kw": {"use_link": "=link"}, "as": "o"}]}, "else": [{"refuse": "kind: ortho (count [nx, ny, nz], spacing [dx, dy, dz]), polar (count, angle, center), circular (rings, ringSpacing, tangentSpacing), path (path, count, align), points (points: a compound or sketch of points)."}]},
+    {"let": {"label": {"fmt": "{kind.capitalize()} array"}}}
+   ],
+   "answer": {"via": "finish", "with": ["=named(o, a.name, label)", "$tool"], "then": [{"put": {"count": "=get(o, 'Count')", "of": "=base.Label", "note": "Parametric: object_set changes its counts and spacing; the copies follow the original (hidden in the window while the array shows it)."}}]}
+  },
+  "draft_dimension": {
+   "group": "draft",
+   "description": "A Draft dimension in the 3D model (on a drawing: td_dim): kind linear (from, to; or object and vertices [i, j], numbered from 1, following it) | radius / diameter (object, edge: a circle or arc's number from 1) | angular (center, angles [a, b] degrees counter-clockwise, normal); at: a point the dimension line passes through (left out: on the measured line). Reply: measures, unit. With the window up the 3D view must be the tab in front. Looks: draft_style.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string"
+     },
+     "from": {
+      "type": "array",
+      "items": {}
+     },
+     "to": {
+      "type": "array",
+      "items": {}
+     },
+     "object": {
+      "type": "string"
+     },
+     "vertices": {
+      "type": "array",
+      "items": {}
+     },
+     "edge": {
+      "type": "integer"
+     },
+     "center": {
+      "type": "array",
+      "items": {}
+     },
+     "angles": {
+      "type": "array",
+      "items": {}
+     },
+     "normal": {
+      "type": "array",
+      "items": {}
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=active()"},
+    {"let": {"kind": "=a.get('kind', 'linear')"}},
+    {"let": {"line": "=vec(a.at, 'at') if a.at is not None else None"}},
+    {"let": {"n0": "=len(doc().Objects)"}},
+    {"try": [{"choose": "='radial' if kind in ('radius', 'diameter') else kind", "of": {"linear": [{"when": "=a.object", "then": [{"let": {"o": "=find(a.object)"}}, {"let": {"sh": "=get(o, 'Shape')"}}, {"refuse": {"fmt": "object: {o.Label} has no shape to measure — a Draft shape, a sketch or a body."}, "when": "=sh is None or sh.isNull()"}, {"let": {"n": "=len(sh.Vertexes)", "vs": "=a.get('vertices', [1, 2])"}}, {"refuse": {"fmt": "vertices: [i, j], two different vertex numbers of {o.Label}, counted from 1 as Vertex1 … Vertex{n} (shape_query lists them)."}, "when": "=not (is_list(vs) and len(vs) == 2 and all(is_int(i) and 1 <= i <= n for i in vs) and vs[0] != vs[1])"}, {"make": "Draft.make_linear_dimension_obj", "call": ["=o", "=vs[0]", "=vs[1]", "=line"], "as": "d"}], "else": [{"let": {"p1": "=vec(a.get('from'), 'from')", "p2": "=vec(a.to, 'to')"}}, {"refuse": "from, to: two different points.", "when": "=p1.isEqual(p2, 1e-9)"}, {"make": "Draft.make_linear_dimension", "call": ["=p1", "=p2", "=line"], "as": "d"}]}], "radial": [{"let": {"o": "=find(a.object)"}}, {"let": {"sh": "=get(o, 'Shape')"}}, {"refuse": {"fmt": "object: {o.Label} has no shape to measure — a Draft shape, a sketch or a body."}, "when": "=sh is None or sh.isNull()"}, {"let": {"edges": "=sh.Edges", "k": "=a.get('edge', 1)"}}, {"refuse": {"fmt": "edge: which edge of {o.Label}, counted from 1 as Edge1 … Edge{len(edges)}."}, "when": "=not is_int(k) or not 1 <= k <= len(edges)"}, {"when": "=not is_round(edges[k - 1])", "then": [{"let": {"rounds": "=[str(i) for i, e in enumerate(edges, 1) if is_round(e)]"}}, {"refuse": {"fmt": "edge: Edge{k} of {o.Label} is not a circle or an arc — its round edges: {', '.join(rounds[:12])}."}, "when": "=rounds"}, {"refuse": {"fmt": "edge: Edge{k} of {o.Label} is not a circle or an arc — it has no round edge; kind linear measures between points."}}]}, {"make": "Draft.make_radial_dimension_obj", "call": ["=o", "=k", "=kind", "=line"], "as": "d"}], "angular": [{"let": {"ang": "=a.angles or [0, 90]"}}, {"refuse": "angles: [a, b] degrees, counter-clockwise from x about normal.", "when": "=not (is_list(ang) and len(ang) == 2 and all(is_number(x) and not is_bool(x) for x in ang))"}, {"make": "Draft.make_angular_dimension", "call": ["=vec(a.center, 'center', (0, 0, 0))", "=[float(x) for x in ang]", "=line or V(10, 10, 0)", "=direction(a.normal, 'normal', (0, 0, 1))"], "as": "d"}]}, "else": [{"refuse": "kind: linear (from, to — or object and vertices [i, j]), radius / diameter (object, edge), angular (center, angles [a, b])."}]}], "on": ["AttributeError"], "except": [{"each": "x", "in": "=doc().Objects[n0:]", "steps": [{"do": "=doc().removeObject(x.Name)"}]}, {"refuse": "Draft needs the model's 3D view in front to make a dimension, and another tab is (a drawing page, a spreadsheet, the start page): bring the 3D view's tab to the front in FreeCAD, then call this again. Nothing was kept.", "code": "invalid_state", "when": "=gui() and 'getViewDirection' in str(error)"}], "reraise": true}
+   ],
+   "answer": {"via": "finish", "with": ["=named(d, a.name, 'Dimension')", "$tool"], "then": [{"try": [{"when": "=has(d, 'Distance')", "then": [{"put": {"measures": "=round(float(d.Distance), 4)"}}], "else": [{"let": {"a1": "=float(d.FirstAngle)", "a2": "=float(d.LastAngle)"}}, {"put": {"measures": "=round(a2 - a1 if a2 > a1 else 360 - a1 + a2, 4)"}}]}, {"put": {"unit": "='deg' if kind == 'angular' else 'mm'"}}], "on": "error", "except": []}]}
+  },
+  "draft_style": {
+   "group": "draft",
+   "description": "Draft annotation styles, kept in the document as Draft keeps them: action list | set (name, values { FontSize, FontName, ArrowSize, ArrowType (Dot, Circle, Arrow, Tick, Tick-2, None), Decimals, ShowUnit, UnitOverride, LineWidth, TextColor, LineColor (0xRRGGBBAA numbers), ScaleMultiplier, ExtLines, ExtOvershoot, DimOvershoot, LineSpacing, TextSpacing, ShowLine }) | apply (name, objects: dimensions, labels) | delete. Styles show only in the window: without one, apply only records the name (reply: recorded).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "list",
+       "set",
+       "apply",
+       "delete"
+      ]
+     },
+     "name": {
+      "type": "string"
+     },
+     "values": {
+      "type": "object"
+     },
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"d": "=doc()"}},
+    {"let": {"meta": "=dict(d.Meta or {})", "action": "=a.get('action', 'list')"}},
+    {"let": {"styles": "=styles_in(meta)"}},
+    {"answer": {"fields": {"styles": "=styles"}}, "when": "=action == 'list'"},
+    {"let": {"name": "=a.name"}},
+    {"refuse": "name: the style's name.", "when": "=not name or not is_str(name)"},
+    {"choose": "=action", "of": {"delete": [{"refuse": {"fmt": "style {name!r}: not in this document — its styles: {', '.join(styles) or 'none'}."}, "code": "not_found", "when": "=name not in styles"}, {"let": {"using": "=style_users(name)"}}, {"do": "=meta.pop('Draft_Style_' + name, None)"}, {"set": {"d.Meta": "=meta"}}, {"each": "o", "in": "=using", "steps": [{"do": "=offer_styles(o.ViewObject, [n for n in styles if n != name])"}]}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"deleted": "=name", "unstyled": {"when": "=using", "value": "=[o.Label for o in using]"}}}}], "set": [{"let": {"keys": {"ArrowSize": "float", "ArrowSizeStart": "float", "ArrowSizeEnd": "float", "ArrowType": "arrow", "ArrowTypeStart": "arrow", "ArrowTypeEnd": "arrow", "Decimals": "int", "DimOvershoot": "float", "ExtLines": "float", "ExtOvershoot": "float", "FontName": "str", "FontSize": "float", "LineColor": "int", "LineSpacing": "float", "LineWidth": "int", "ScaleMultiplier": "float", "ShowLine": "bool", "ShowUnit": "bool", "TextColor": "int", "TextSpacing": "float", "UnitOverride": "str"}, "arrows": ["Dot", "Circle", "Arrow", "Tick", "Tick-2", "None"]}}, {"let": {"vals": "=dict(styles.get(name, {}))", "given": "=a.values or {}"}}, {"refuse": {"fmt": "values: {{ key: value }} — keys {', '.join(keys)}."}, "when": "=not is_dict(given) or (not given and name not in styles)"}, {"each": "k, v", "in": "=given.items()", "steps": [{"refuse": {"fmt": "values.{k}: one of {', '.join(keys)}."}, "when": "=k not in keys"}, {"let": {"want": "=keys[k]"}}, {"choose": "=want", "of": {"arrow": [{"let": {"hit": "=first(i for i, n in enumerate(arrows) if n.lower() == v.strip().lower()) if is_str(v) else (v if is_int(v) and 0 <= v < len(arrows) else None)"}}, {"refuse": {"fmt": "values.{k}: one of {', '.join(arrows)} (or its index 0 … {len(arrows) - 1})."}, "when": "=hit is None"}, {"let": {"v": "=hit"}}], "bool": [{"refuse": {"fmt": "values.{k}: true or false."}, "when": "=not is_bool(v)"}], "str": [{"refuse": {"fmt": "values.{k}: text."}, "when": "=not is_str(v)"}]}, "else": [{"refuse": {"fmt": "values.{k}: a number (a colour: 0xRRGGBBAA as one whole number, e.g. 255 for black)."}, "when": "=not is_num(v) and k.endswith('Color')"}, {"refuse": {"fmt": "values.{k}: a number."}, "when": "=not is_num(v)"}, {"let": {"v": "=int(v) if want == 'int' else float(v)"}}]}, {"when": "=k in ('ArrowSize', 'ArrowType')", "then": [{"do": ["=vals.pop(k, None)", "=vals.update({k + 'Start': v, k + 'End': v})"]}], "else": [{"do": "=vals.update({k: v})"}]}]}, {"each": "k", "in": ["ArrowType", "ArrowTypeStart", "ArrowTypeEnd"], "steps": [{"when": "=is_str(vals.get(k))", "then": [{"let": {"hit": "=first(i for i, n in enumerate(arrows) if n.lower() == vals[k].lower())"}}, {"do": "=vals.pop(k) if hit is None else vals.update({k: hit})"}]}]}, {"do": "=meta.update({'Draft_Style_' + name: dumps(vals)})"}, {"set": {"d.Meta": "=meta"}}, {"let": {"shown": "=restyled(style_users(name), vals)"}}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"style": "=name", "values": "=vals", "updated": {"when": "=shown", "value": "=shown"}}}}], "apply": [{"refuse": {"fmt": "style {name!r}: not in this document — its styles: {', '.join(styles) or 'none'} (draft_style action set makes one)."}, "code": "not_found", "when": "=name not in styles"}, {"refuse": "objects: the dimensions, labels and texts to show in the style.", "when": "=not a.objects"}, {"let": {"done": "=[]", "later": "=[]", "why": null}}, {"each": "r", "in": "=a.objects or []", "steps": [{"let": {"o": "=find(r)", "worn": false}}, {"let": {"vo": "=get(o, 'ViewObject')"}}, {"when": "=vo is not None and 'AnnotationStyle' in get(vo, 'PropertiesList', [])", "then": [{"try": [{"do": "=offer_styles(vo, list(styles))"}, {"set": {"vo.AnnotationStyle": "=name"}}, {"push": {"done": "=o.Label"}}, {"let": {"worn": true}}], "on": "error", "except": [{"let": {"why": "=str(error)"}}]}], "else": [{"refuse": {"fmt": "objects: {o.Label} is not a Draft dimension, label or text (they carry an annotation style)."}, "when": "=gui()"}]}, {"when": "=not worn", "then": [{"do": "=o.addProperty('App::PropertyString', 'AgentLinkStyle', 'AgentLink', 'The Draft annotation style to show it in')", "when": "='AgentLinkStyle' not in o.PropertiesList"}, {"set": {"o.AgentLinkStyle": "=name"}}, {"push": {"later": "=o.Label"}}]}]}, {"do": "=snapshot(tool)"}, {"let": {"note": "No window here to show styles: the name is recorded on them (property AgentLinkStyle); call apply again once the file is open in FreeCAD's window."}}, {"let": {"note": {"fmt": "FreeCAD refused the style on these ({why}): its name is recorded on them only."}}, "when": "=why"}, {"answer": {"fields": {"style": "=name", "applied": "=done", "recorded": {"when": "=later", "value": "=later"}, "note": {"when": "=later", "value": "=note"}}}}]}, "else": [{"refuse": "action: list | set (name, values) | apply (name, objects) | delete (name)."}]}
+   ],
+   "answer": {}
+  },
+  "draft_modify": {
+   "group": "draft",
+   "description": "Draft's modify tools on objects: op move (by) | rotate (angle, center, axis) | scale (factor, center) | mirror (from, to: the mirror line in XY; a new Mirror object) | offset (one object; by: a vector from its first edge) | upgrade (edges → wire → face → solid, one stage a call) | downgrade | join (Draft wires sharing end points) | fillet (two single edges that meet: radius, chamfer) | split (a Draft wire on segment edge n, from 1, at point at or its middle) | stretch (the points inside box [[min], [max]] moved by) | extend (length mm at end start | end; negative trims) | to_bspline | to_wire; copy: true leaves the originals (move, rotate, scale, offset); delete: false keeps upgrade / downgrade inputs. Reply: op, each result's object, type, length, area, box. guide_read draft has each op's rules.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "op": {
+      "type": "string"
+     },
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "by": {
+      "type": "array",
+      "items": {}
+     },
+     "angle": {
+      "type": "number"
+     },
+     "center": {
+      "type": "array",
+      "items": {}
+     },
+     "axis": {
+      "type": "array",
+      "items": {}
+     },
+     "factor": {},
+     "from": {
+      "type": "array",
+      "items": {}
+     },
+     "to": {
+      "type": "array",
+      "items": {}
+     },
+     "radius": {
+      "type": "number"
+     },
+     "chamfer": {
+      "type": "boolean"
+     },
+     "copy": {
+      "type": "boolean"
+     },
+     "delete": {
+      "type": "boolean"
+     },
+     "at": {
+      "type": "array",
+      "items": {}
+     },
+     "edge": {
+      "type": "integer"
+     },
+     "box": {
+      "type": "array",
+      "items": {}
+     },
+     "length": {
+      "type": "number"
+     },
+     "end": {
+      "type": "string",
+      "enum": [
+       "start",
+       "end"
+      ]
+     }
+    },
+    "required": [
+     "op",
+     "objects"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/draft_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=active()"},
+    {"let": {"op": "=a.op", "objs": "=objs_of(a.objects)", "copy": "=bool(a.copy)"}},
+    {"let": {"n0": "=len(doc().Objects)", "labels": "=', '.join(o.Label for o in objs)"}},
+    {"choose": "='grade' if op in ('upgrade', 'downgrade') else 'points' if op in ('split', 'stretch', 'extend', 'to_bspline', 'to_wire') else op", "of": {"move": [{"make": "Draft.move", "call": ["=objs", "=vec(a.by, 'by')"], "kw": {"copy": "=copy"}, "as": "r"}], "rotate": [{"make": "Draft.rotate", "call": ["=objs", "=num(a.get('angle', 90), 'angle')", "=vec(a.center, 'center', (0, 0, 0))", "=direction(a.axis, 'axis', (0, 0, 1))"], "kw": {"copy": "=copy"}, "as": "r"}], "scale": [{"let": {"f": "=a.get('factor', 2)"}}, {"let": {"f": "=[f, f, f] if is_num(f) else f"}}, {"refuse": "factor: a number, or [sx, sy, sz] — none of them 0 (a negative one mirrors).", "when": "=not (is_list(f) and len(f) == 3 and all(is_num(x) and x != 0 for x in f))"}, {"make": "Draft.scale", "call": ["=objs", "=V(float(f[0]), float(f[1]), float(f[2]))", "=vec(a.center, 'center', (0, 0, 0))"], "kw": {"copy": "=copy"}, "as": "r"}], "mirror": [{"let": {"p1": "=vec(a.get('from'), 'from')", "p2": "=vec(a.to, 'to')"}}, {"refuse": "from, to: two different points of the mirror line (it lies in Draft's working plane, XY unless one was set in the window).", "when": "=p1.isEqual(p2, 1e-9)"}, {"make": "Draft.mirror", "call": ["=objs", "=p1", "=p2"], "as": "r"}], "offset": [{"refuse": "offset: one wire or shape.", "when": "=len(objs) != 1"}, {"let": {"o": "=objs[0]"}}, {"let": {"kind": "=kind_of(o)", "by": "=vec(a.by, 'by')"}}, {"refuse": "by: [x, y, z] from the first edge to where its offset copy goes — its length is the distance, its direction the side.", "when": "=by.Length < 1e-9"}, {"refuse": {"fmt": "offset: {o.Label} is a Draft B-spline, which Draft offsets only in its window — part_offset2d offsets any flat curve."}, "when": "=kind == 'BSpline'"}, {"let": {"delta": "=by"}}, {"when": "=kind == 'Circle'", "then": [{"let": {"delta": "=new_radius(o, by)"}}, {"refuse": "by: moves the circle's first vertex onto its centre — a radius over 0 is needed.", "when": "=delta < 1e-9"}]}, {"try": [{"make": "Draft.offset", "call": ["=o", "=delta"], "kw": {"copy": "=copy"}, "as": "r"}], "on": "failure", "except": [{"refuse": {"fmt": "Draft could not offset {o.Label} by that: {error} — a smaller distance, the other side, or part_offset2d for a shape Draft's offset does not take."}, "code": "failed"}]}, {"refuse": {"fmt": "Draft could not offset {o.Label} — part_offset2d offsets any flat face or wire."}, "code": "failed", "when": "=r is None"}], "grade": [{"let": {"was": "=[(o, get(o, 'Closed')) for o in objs]"}}, {"make": "=maker('Draft.' + op)", "call": ["=objs"], "kw": {"delete": "=bool(a.get('delete', True))"}, "as": "r"}, {"let": {"got": "=list(r[0]) if is_seq(r) and r and is_seq(r[0]) else []"}}, {"let": {"got": "=[o for o, c in was if c is False and alive(o) and get(o, 'Closed') is True]"}, "when": "=not got"}, {"when": "=not got", "then": [{"refuse": {"fmt": "Nothing to upgrade: {labels} are already as far as they go (edges that meet upgrade to a wire, a closed wire to a face, faces that close a volume to a solid)."}, "code": "failed", "when": "=op == 'upgrade'"}, {"refuse": {"fmt": "Nothing to downgrade: {labels} cannot be taken apart further."}, "code": "failed"}]}, {"let": {"r": "=got"}}], "join": [{"refuse": "join: two or more Draft wires whose ends meet.", "when": "=len(objs) < 2"}, {"each": "o", "in": "=objs", "steps": [{"refuse": {"fmt": "join: {o.Label} is not a Draft wire (draft_shape kind wire makes them; op upgrade joins other edges that meet into one wire)."}, "when": "=kind_of(o) != 'Wire'"}]}, {"make": "Draft.join_wires", "call": ["=objs"], "as": "left"}, {"refuse": {"fmt": "Nothing joined: no two of {labels} share an end point (within Draft's tolerance). Nothing was changed."}, "code": "failed", "when": "=left is None or len(left) >= len(objs)"}, {"let": {"r": "=list(left)"}}], "fillet": [{"refuse": "fillet: two lines or wires that meet.", "when": "=len(objs) != 2"}, {"let": {"rad": "=num(a.get('radius', 5), 'radius')"}}, {"refuse": "radius: mm, over 0.", "when": "=rad <= 0"}, {"make": "Draft.make_fillet", "call": ["=objs", "=rad"], "kw": {"chamfer": "=bool(a.chamfer)", "delete": "=bool(a.delete)"}, "as": "r"}, {"let": {"what": "='chamfer' if a.chamfer else 'fillet'"}}, {"refuse": {"fmt": "No {what} of {rad:g} mm fits between {labels}: they must be two single edges (lines or arcs) that share an end point, and the radius must fit on both. Nothing was changed."}, "code": "failed", "when": "=r is None"}], "points": [{"let": {"r": "=edit_points(op, objs, a)"}}]}, "else": [{"refuse": "op: move (by), rotate (angle, center, axis), scale (factor, center), mirror (from, to: a line in the plane), offset (by: a vector to the first vertex's side), upgrade, downgrade, join, fillet (radius, chamfer), split (at a point, edge n), stretch (box [[min], [max]], by), extend (length mm, end start | end; negative trims), to_bspline, to_wire."}]},
+    {"refuse": {"fmt": "Draft could not {op} {labels}: an object whose placement is locked, or (scale) one with no shape. Nothing was changed."}, "code": "failed", "when": "=r is None and op in ('move', 'rotate', 'scale', 'mirror')"},
+    {"let": {"res": "=results(op, r, objs, n0)"}},
+    {"let": {"extra": {"op": "=op"}}},
+    {"when": "=op == 'upgrade' and len(res) >= 2", "then": [{"let": {"near": "=near_ends(res)"}}, {"put": {"note": {"fmt": "{near[1]} and {near[2]} end {near[0]:.2g} mm apart and were not joined: FreeCAD joins ends that meet within 1e-7 mm. Give their points with every decimal (or move one end onto the other), then upgrade again."}}, "into": "extra", "when": "=near and 1e-7 < near[0] <= 0.01"}]}
+   ],
+   "answer": {"via": "finish", "with": ["=res or [o for o in objs if alive(o)]", "$tool", "=extra"]}
+  },
+  "cam_job": {
+   "group": "cam",
+   "description": "Start a CAM job for a body (FreeCAD works on a clone of it, model): stock { margin mm each side (2), top (1), bottom (0) } round the part; tool { diameter mm, feed and plunge mm/min (600, 200), rpm (12000), number }, the job's first end mill (ask the person; the defaults are gentle). The stock's top is stock.max[2]. Then cam_op.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "tool": {
+      "type": "object"
+     },
+     "stock": {
+      "type": "object"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "tool"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=doc()"},
+    {"let": {"o": "=body(a.body)"}},
+    {"let": {"mill": "=a.tool or {}"}},
+    {"refuse": "tool: { diameter (mm), feed and plunge (mm/min), rpm } — the end mill the person will use; ask if not said.", "when": "=not is_dict(mill) or mill.get('diameter') is None"},
+    {"let": {"st": "=a.stock or {}"}},
+    {"refuse": "stock: { margin, top, bottom } in mm, each 0 or more.", "when": "=not is_dict(st)"},
+    {"let": {"margin": "=num(st.get('margin', 2.0), 'stock.margin')"}},
+    {"refuse": "stock.margin: mm of stock round the part on each side, 0 or more.", "when": "=margin < 0"},
+    {"let": {"top": "=num(st.get('top', 1.0), 'stock.top')"}},
+    {"refuse": "stock.top: mm of stock over the part, 0 or more.", "when": "=top < 0"},
+    {"let": {"bottom": "=num(st.get('bottom', 0.0), 'stock.bottom')"}},
+    {"refuse": "stock.bottom: mm of stock under the part, 0 or more.", "when": "=bottom < 0"},
+    {"make": "Path.Main.Job.Create", "call": ["=a.name or 'Job'", "=[o]", null], "as": "job"},
+    {"set": {"job.Label": "=a.name"}, "when": "=a.name"},
+    {"let": {"note": null}},
+    {
+     "when": "=not has(job.Stock, 'ExtXneg')",
+     "then": [
+      {"let": {"PathStock": "=path_module('Path.Main.Stock')"}},
+      {
+       "try": [{"let": {"old": "=job.Stock"}}, {"set": {"job.Stock": "=PathStock.CreateFromBase(job)"}}, {"do": "=doc().removeObject(old.Name)"}],
+       "on": "error",
+       "except": [{"let": {"note": {"fmt": "The stock is the default from FreeCAD's CAM preferences, not one round the part (margin, top and bottom were not applied: {error})."}}}]
+      }
+     ]
+    },
+    {
+     "set": {"job.Stock.ExtXneg": "=margin", "job.Stock.ExtXpos": "=margin", "job.Stock.ExtYneg": "=margin", "job.Stock.ExtYpos": "=margin", "job.Stock.ExtZpos": "=top", "job.Stock.ExtZneg": "=bottom"},
+     "when": "=has(job.Stock, 'ExtXneg')"
+    },
+    {"let": {"tc": "=tc_of(job)"}},
+    {"when": "=tc is None", "then": [{"make": "Path.Tool.Controller.Create", "as": "tc"}, {"do": "=job.Proxy.addToolController(tc)"}]},
+    {"do": "=set_tool(tc, merged({'feed': 600, 'plunge': 200, 'rpm': 12000}, mill))"},
+    {"do": "=doc().recompute()"}
+   ],
+   "answer": {
+    "fields": {
+     "job": "=job.Label",
+     "body": "=o.Label",
+     "model": "=job.Model.Group[0].Label if job.Model.Group else None",
+     "stock": "=stock_out(job)",
+     "tool": "=tool_out(tc)",
+     "note": {"when": "=note", "value": "=note"},
+     "next": "cam_op { kind: profile | pocket | adaptive | face | drill } — each computed as it is added; then cam_sim and cam_post."
+    }
+   }
+  },
+  "cam_op": {
+   "group": "cam",
+   "description": "Add an operation to the job and compute it. kind: profile (the outline or the faces given; side outside | inside) | pocket (down to the faces given: a pocket's floor) | adaptive (side inside | outside; finish: true a profiling pass) | face | drill (every hole the tool fits when faces are left out) | helix | engrave, vcarve (follow base: letters, a sketch) | slot | deburr | thread | surface, waterline (need OpenCamLib) | pocket3d, tapping, probe, custom (props.Gcode); mill_facing, flute where this FreeCAD has them. faces: [\"Face6\"] or shape_query filters. tool: one of the job's by label. stepDown mm, stepOver %, finalDepth mm (a Z height, not a depth), stockToLeave mm; props { Property: value } for any other (object_get lists them). Answers cutMm, minutes, cutZ [low, high], cutBox, depths, and a warning when it cuts under the stock; refused with nothing kept when it makes no cutting moves. A big adaptive or 3D op can take a minute.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "type": "string",
+      "description": "The job's label; may be left out when there is one."
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "profile",
+       "pocket",
+       "adaptive",
+       "face",
+       "drill",
+       "engrave",
+       "helix",
+       "slot",
+       "deburr",
+       "vcarve",
+       "thread",
+       "surface",
+       "waterline",
+       "pocket3d",
+       "tapping",
+       "mill_facing",
+       "probe",
+       "custom",
+       "flute"
+      ]
+     },
+     "faces": {
+      "description": "The faces to work: [\"Face6\"] or queries [{ normal: [0,0,1], z: 12 }] as shape_query takes; left out, the whole part (profile: its outline; drill: every hole)."
+     },
+     "tool": {
+      "type": "string"
+     },
+     "base": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "props": {
+      "type": "object"
+     },
+     "body": {
+      "type": "string"
+     },
+     "side": {
+      "type": "string",
+      "enum": [
+       "outside",
+       "inside"
+      ]
+     },
+     "finish": {
+      "type": "boolean"
+     },
+     "stepDown": {
+      "type": "number"
+     },
+     "stepOver": {
+      "type": "number"
+     },
+     "finalDepth": {
+      "type": "number"
+     },
+     "stockToLeave": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=doc()"},
+    {"let": {"before": "={o.Name for o in doc().Objects}"}},
+    {
+     "try": [
+      {"let": {"job": "=job_of(a.job)", "kind": "=str(a.get('kind', '')).lower()"}},
+      {"refuse": {"fmt": "kind: one of {', '.join(OPS)}."}, "when": "=kind not in OPS"},
+      {"refuse": "side: outside | inside (profile: which side of the outline the cutter runs; adaptive: where it clears).", "when": "=a.side is not None and a.side not in ('outside', 'inside')"},
+      {"refuse": "stepOver: percent of the tool's diameter, above 0 up to 100.", "when": "=a.stepOver is not None and not 0 < num(a.stepOver, 'stepOver') <= 100"},
+      {"refuse": "stepDown: mm per pass, above 0.", "when": "=a.stepDown is not None and num(a.stepDown, 'stepDown') <= 0"},
+      {"refuse": {"fmt": "{job.Label} has lost its model or its tool: cam_job makes a whole one."}, "code": "invalid_state", "when": "=not job.Model.Group or not job.Tools.Group"},
+      {
+       "try": [{"let": {"mod": "=path_module(OPS[kind])"}}],
+       "on": ["ImportError"],
+       "except": [
+        {"let": {"why": "=': 3D surface and waterline need OpenCamLib (ocl) installed.' if kind in ('surface', 'waterline') else '.'"}},
+        {"refuse": {"fmt": "{kind} is not in this FreeCAD's CAM ({error}){why}"}, "code": "unavailable"}
+       ]
+      },
+      {"let": {"model": "=job.Model.Group[0]", "src": "=body(a.body) if a.body else None", "want_tc": null}},
+      {"let": {"src": "=src or model"}},
+      {
+       "when": "=a.tool",
+       "then": [
+        {"let": {"want_tc": "=first([x for x in job.Tools.Group if a.tool in (x.Label, x.Name, get(get(x, 'Tool'), 'Label'))])"}},
+        {"refuse": {"fmt": "tool {a.tool!r}: the job's tools are {', '.join(x.Label for x in job.Tools.Group)} (cam_tool_add adds one)."}, "code": "not_found", "when": "=want_tc is None"}
+       ]
+      },
+      {"let": {"chosen": "=want_tc or job.Tools.Group[0]"}},
+      {"let": {"op": "=with_tool(chosen, lambda: make_op(mod, kind, a.name, job))"}},
+      {"set": {"op.Label": "=a.name"}, "when": "=a.name"},
+      {"set": {"op.ToolController": "=want_tc"}, "when": "=want_tc is not None"},
+      {
+       "when": "=a.base",
+       "then": [
+        {"let": {"objs": "=[find(r, 'base') for r in ref_list(a.base)]"}},
+        {"let": {"empty": "=[x.Label for x in objs if get(x, 'Shape') is None or x.Shape.isNull() or not x.Shape.Edges]"}},
+        {"refuse": {"fmt": "base: {', '.join(empty)} has no edges to follow (letters from draft_text, a sketch or a wire)."}, "when": "=empty"},
+        {
+         "when": "=kind == 'engrave' and has(op, 'BaseShapes')",
+         "then": [{"set": {"op.BaseShapes": "=objs"}}],
+         "else": [{"set": {"op.Base": "=[(x, ['Face' + str(i + 1) for i in range(len(x.Shape.Faces))] or ['Edge' + str(i + 1) for i in range(len(x.Shape.Edges))]) for x in objs]"}}]
+        }
+       ]
+      },
+      {
+       "when": "=a.faces is not None",
+       "then": [
+        {"let": {"names": []}},
+        {
+         "each": "q",
+         "in": "=a.faces if is_list(a.faces) else [a.faces]",
+         "steps": [
+          {"let": {"hits": "=face_names(src, q)"}},
+          {"refuse": {"fmt": "faces: no face of {src.Label} matches {q} — shape_query {{ body, kind: \"face\" }} lists them with their normals and heights."}, "code": "not_found", "when": "=not hits"},
+          {"let": {"names": "=names + hits"}}
+         ]
+        },
+        {"set": {"op.Base": "=[(model, names)]"}}
+       ]
+      },
+      {
+       "each": "k, v",
+       "in": "=list((a.props or {}).items())",
+       "steps": [
+        {"refuse": {"fmt": "props.{k}: {op.Label} has no such property (object_get lists them)."}, "when": "=k not in op.PropertiesList"},
+        {
+         "try": [{"do": "=setprop(op, k, v)"}],
+         "on": "error",
+         "except": [
+          {"let": {"allowed": "=enum_of(op, k)"}},
+          {
+           "let": {
+            "why": "=(' — one of ' + ', '.join([str(x) for x in allowed]) + '.') if allowed else (' (it is a ' + op.getTypeIdOfProperty(k).split('::')[-1] + '; lengths take a number in mm or \"5 mm\").')"
+           }
+          },
+          {"refuse": {"fmt": "props.{k} = {v!r}: {error}{why}"}}
+         ]
+        }
+       ]
+      },
+      {"set": {"op.Side": "='Inside' if a.side == 'inside' else 'Outside'"}, "when": "=kind == 'profile'"},
+      {"set": {"op.Side": "='Inside' if a.get('side', 'inside') == 'inside' else 'Outside'", "op.OperationType": "='Profiling' if a.finish else 'Clearing'"}, "when": "=kind == 'adaptive'"},
+      {
+       "when": "=kind in ('drill', 'helix', 'thread', 'tapping') and a.faces is None",
+       "then": [
+        {"do": "=op.Proxy.findAllHoles(op)"},
+        {
+         "refuse": {
+          "fmt": "No holes the tool ({qty(op.ToolController.Tool.Diameter, 'mm')} mm) fits, upright (along Z), in {model.Label}: give faces (the holes' walls), or a smaller tool (cam_tool, or cam_tool_add and tool). Nothing was kept."
+         },
+         "code": "failed",
+         "when": "=not op.Base"
+        }
+       ]
+      },
+      {"set": {"op.StepDown": {"fmt": "{num(a.stepDown, 'stepDown')} mm"}}, "when": "=a.stepDown is not None and has(op, 'StepDown')"},
+      {
+       "when": "=a.stepOver is not None and has(op, 'StepOver')",
+       "then": [{"let": {"so": "=num(a.stepOver, 'stepOver')"}}, {"try": [{"set": {"op.StepOver": "=so"}}], "on": ["TypeError"], "except": [{"set": {"op.StepOver": "=int(round(so))"}}]}]
+      },
+      {"when": "=a.finalDepth is not None", "then": [{"do": "=op.setExpression('FinalDepth', None)"}, {"set": {"op.FinalDepth": {"fmt": "{num(a.finalDepth, 'finalDepth')} mm"}}}]},
+      {"set": {"op.StockToLeave": {"fmt": "{num(a.stockToLeave, 'stockToLeave')} mm"}}, "when": "=a.stockToLeave is not None and has(op, 'StockToLeave')"},
+      {"do": "=doc().recompute()"},
+      {"let": {"cmds": "=commands(op)"}},
+      {"let": {"moves": "=[c for c in cmds if c.Name.upper() in CUTS]"}},
+      {
+       "when": "=kind in ('probe', 'custom')",
+       "then": [
+        {"let": {"hint": "='props.Gcode — its lines.' if kind == 'custom' else 'props PointCountX / PointCountY / OutputFileName.'"}},
+        {"refuse": {"fmt": "The {kind} made no G-code: {hint} Nothing was kept."}, "code": "failed", "when": "=not cmds"},
+        {"answer": {"fields": {"op": "=op.Label", "kind": "=kind", "job": "=job.Label", "commands": "=len(cmds)", "first": "=[c.toGCode() for c in cmds[:8]]"}}}
+       ]
+      },
+      {"let": {"why": "='the faces are not ones it can cut' if a.faces is not None else 'nothing found to cut — give faces'"}},
+      {
+       "refuse": {
+        "fmt": "The {kind} made no cutting moves: {why}; or the tool ({qty(op.ToolController.Tool.Diameter, 'mm')} mm) is too big for them; or finalDepth is not below the start ({qty(op.StartDepth, 'mm')} → {qty(op.FinalDepth, 'mm')}). report_read has FreeCAD's own reason. Nothing was kept."
+       },
+       "code": "failed",
+       "when": "=not moves"
+      },
+      {"let": {"stats": "=path_stats(cmds, op.ToolController)", "bb": "=job.Stock.Shape.BoundBox"}},
+      {
+       "answer": {
+        "fields": {
+         "op": "=op.Label",
+         "kind": "=kind",
+         "job": "=job.Label",
+         "...": "=stats",
+         "tool": "=op.ToolController.Label if get(op, 'ToolController') is not None else None",
+         "depths": {"start": "=qty(op.StartDepth, 'mm')", "final": "=qty(op.FinalDepth, 'mm')", "stepDown": "=qty(op.StepDown, 'mm') if has(op, 'StepDown') else None"},
+         "faces": {"when": "=a.faces is not None", "value": "=op.Base[0][1] if op.Base else []"},
+         "warning": {
+          "when": "='cutBox' in stats and stats['cutBox']['min'][2] < bb.ZMin - 1e-6",
+          "value": {"fmt": "It cuts down to z {stats['cutBox']['min'][2]}, below the stock's bottom ({round(bb.ZMin, 3)}): into the fixture — set finalDepth."}
+         }
+        }
+       }
+      }
+     ],
+     "on": "failure",
+     "except": [
+      {"let": {"failure": "=where(error)", "job": "=job_of(a.job)"}},
+      {
+       "each": "o",
+       "in": "=[o for o in doc().Objects if o.Name not in before]",
+       "steps": [{"do": "=job.Operations.removeObject(o)", "when": "=o in job.Operations.Group"}, {"do": "=doc().removeObject(o.Name)"}]
+      },
+      {"do": "=doc().recompute()"},
+      {"let": {"kind": "=str(a.get('kind', '')).lower()"}},
+      {"let": {"hint": "=(' — ' + HINTS[kind] + '.') if kind in HINTS else '.'"}},
+      {"refuse": {"fmt": "The {kind} would not compute: {failure}{hint} Nothing was kept."}, "code": "failed"}
+     ]
+    }
+   ]
+  },
+  "cam_list": {
+   "group": "cam",
+   "description": "The job: stock, tool (its first), ops in running order with type, active, cutMm, minutes, cutZ, and the total minutes (rapids at 3000 mm/min). Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "type": "string",
+      "description": "The job's label; may be left out when there is one."
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/cam.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"job": "=job_of(a.job)"}},
+    {"let": {"ops": "=[merged({'op': op.Label, 'type': op_type(op), 'active': bool(get(op, 'Active', True))}, path_stats(commands(op), tc_for(op))) for op in job.Operations.Group]"}}
+   ],
+   "answer": {"fields": {"job": "=job.Label", "stock": "=stock_out(job)", "tool": "=tool_out(tc_of(job))", "ops": "=ops", "minutes": "=round(sum(o['minutes'] for o in ops), 2)"}}
+  },
+  "cam_tool": {
+   "group": "cam",
+   "description": "Change the job's first tool: diameter mm, feed, plunge mm/min, rpm, number. Every operation is computed again. A tool from cam_tool_add is changed with object_set.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "type": "string",
+      "description": "The job's label; may be left out when there is one."
+     },
+     "diameter": {
+      "type": "number"
+     },
+     "feed": {
+      "type": "number"
+     },
+     "plunge": {
+      "type": "number"
+     },
+     "rpm": {
+      "type": "number"
+     },
+     "number": {
+      "type": "integer"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"job": "=job_of(a.job)"}},
+    {"let": {"tc": "=tc_of(job)"}},
+    {"do": "=set_tool(tc, a)"},
+    {"do": "=doc().recompute()"}
+   ],
+   "answer": {"fields": {"job": "=job.Label", "tool": "=tool_out(tc)", "note": "Every operation was computed again with the tool as it is now: cam_list for their paths."}}
+  },
+  "cam_tool_add": {
+   "group": "cam",
+   "description": "Add a tool to the job: shape endmill | ballend | bullnose | v-bit | chamfer | drill | thread-mill | radius | dovetail | reamer | tap | slittingsaw | taperedballnose, diameter mm, angle (v-bit, chamfer, a drill's tip), tipDiameter, cornerRadius, length, cuttingLength, flutes, feed, plunge, rpm, number, name. Ask the person which tools they have. Answers tool (its name is what cam_op { tool } takes) and skipped (sizes this shape does not have).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "type": "string",
+      "description": "The job's label; may be left out when there is one."
+     },
+     "shape": {
+      "type": "string"
+     },
+     "diameter": {
+      "type": "number"
+     },
+     "angle": {
+      "type": "number"
+     },
+     "tipDiameter": {
+      "type": "number"
+     },
+     "cornerRadius": {
+      "type": "number"
+     },
+     "flutes": {
+      "type": "integer"
+     },
+     "length": {
+      "type": "number"
+     },
+     "cuttingLength": {
+      "type": "number"
+     },
+     "feed": {
+      "type": "number"
+     },
+     "plunge": {
+      "type": "number"
+     },
+     "rpm": {
+      "type": "number"
+     },
+     "number": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "diameter"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=doc()"},
+    {"let": {"job": "=job_of(a.job)"}},
+    {"let": {"shape": "=a.get('shape', 'endmill')"}},
+    {"refuse": {"fmt": "shape: one of {', '.join(SHAPES)}."}, "when": "=shape not in SHAPES"},
+    {"refuse": "diameter: the tool's, mm — ask the person which tool.", "when": "=a.diameter is None"},
+    {"let": {"name": "=a.name"}},
+    {"let": {"name": {"fmt": "{shape} {a.diameter} mm"}}, "when": "=not name"},
+    {"let": {"dia": "=num(a.diameter, 'diameter')"}},
+    {"refuse": "diameter: the tool's, mm, over 0.", "when": "=dia <= 0"},
+    {"let": {"factory": "=bit_factory()"}},
+    {
+     "when": "=factory is not None",
+     "then": [
+      {"let": {"file": "=shape_file(shape)"}},
+      {"refuse": {"fmt": "No {shape} shape in this FreeCAD's CAM tool shapes."}, "code": "not_found", "when": "=file is None"},
+      {"let": {"bit": "=factory.Create(name, file)"}}
+     ],
+     "else": [
+      {
+       "try": [{"let": {"bit": "=toolbit(shape, name)"}}],
+       "on": "error",
+       "except": [{"refuse": {"fmt": "This FreeCAD's tool bits could not be made here ({error}): cam_tool changes the job's first tool instead."}, "code": "unavailable"}]
+      }
+     ]
+    },
+    {"set": {"bit.Diameter": {"fmt": "{dia} mm"}}},
+    {"let": {"skipped": []}},
+    {
+     "each": "k",
+     "in": ["angle", "length", "cuttingLength", "tipDiameter", "cornerRadius"],
+     "steps": [
+      {
+       "when": "=a.get(k) is not None",
+       "then": [
+        {"let": {"prop": "=first([pn for pn in BIT_PROPS[k][0] if pn in bit.PropertiesList])"}},
+        {"when": "=prop is None", "then": [{"push": {"skipped": "=k"}}], "else": [{"do": "=setprop(bit, prop, str(float(a.get(k))) + ' ' + BIT_PROPS[k][1])"}]}
+       ]
+      }
+     ]
+    },
+    {"when": "=a.flutes is not None", "then": [{"when": "='Flutes' in bit.PropertiesList", "then": [{"set": {"bit.Flutes": "=int(a.flutes)"}}], "else": [{"push": {"skipped": "flutes"}}]}]},
+    {"make": "Path.Tool.Controller.Create", "call": ["=name", "=bit"], "as": "tc"},
+    {"do": "=job.Proxy.addToolController(tc)"},
+    {"try": [{"set": {"bit.Label": "=unique(name + ' bit', bit)"}, "when": "=get(bit, 'Label') == name and bit is not tc"}], "on": "error", "except": []},
+    {"set": {"tc.Label": "=unique(name, tc)"}},
+    {"do": "=set_tool(tc, merged({'feed': 600, 'plunge': 200, 'rpm': 12000, 'number': len(job.Tools.Group)}, {k: a.get(k) for k in ('feed', 'plunge', 'rpm', 'number') if a.get(k) is not None}))"},
+    {"do": "=doc().recompute()"}
+   ],
+   "answer": {
+    "fields": {
+     "job": "=job.Label",
+     "tool": "=tool_out(tc)",
+     "shape": "=shape",
+     "tools": "=[x.Label for x in job.Tools.Group]",
+     "skipped": {"when": "=skipped", "value": "=skipped"},
+     "skippedWhy": {"when": "=skipped", "value": {"fmt": "a {shape} has no such size in this FreeCAD; object_get {{ object: \"{bit.Label}\" }} lists what it has"}},
+     "next": {"fmt": "cam_op {{ …, tool: \"{tc.Label}\" }} uses it."}
+    }
+   }
+  },
+  "cam_library": {
+   "group": "cam",
+   "description": "The person's tool set as a JSON file (Agent Link's own, not FreeCAD's .fctl): action export (the job's tools to path; cam-tools.json by default) | import (path's tools into the job; one already there by name is skipped unless replace: true).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "type": "string",
+      "description": "The job's label; may be left out when there is one."
+     },
+     "action": {
+      "type": "string",
+      "enum": [
+       "export",
+       "import"
+      ]
+     },
+     "path": {
+      "type": "string"
+     },
+     "replace": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "reads": {
+    "action": [
+     null,
+     "export"
+    ]
+   },
+   "source": "Agent Link (was agentlink/families/cam.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=doc()"},
+    {"let": {"job": "=job_of(a.job)"}},
+    {"let": {"act": "=a.get('action', 'export')", "p": "=a.path or 'cam-tools.json'"}},
+    {"let": {"p": "=out_path(p if isabs(p) else in_out(p))"}},
+    {
+     "choose": "=act",
+     "of": {
+      "export": [{"let": {"recs": "=[bit_of(tc) for tc in job.Tools.Group]"}}, {"do": "=write_tools(p, recs)"}, {"answer": {"fields": {"job": "=job.Label", "path": "=p", "tools": "=recs"}}}],
+      "import": [
+       {"let": {"data, err": "=read_tools(p)"}},
+       {"refuse": {"fmt": "path: {p} is not a tool file ({err}); action export writes one from a job (a relative path is in the session's output folder)."}, "when": "=err is not None"},
+       {"let": {"recs": "=data.get('tools') if is_dict(data) else data"}},
+       {"refuse": "path: a file of tools — { tools: [{ name, shape, diameter, feed, plunge, rpm, number … }] }.", "when": "=not is_list(recs) or not recs"},
+       {"let": {"have": "={x.Label for x in job.Tools.Group}", "added": [], "skipped": [], "unknown": []}},
+       {
+        "each": "r",
+        "in": "=recs",
+        "steps": [
+         {"refuse": "path: each tool is { name, shape, diameter, feed, plunge, rpm, number … }.", "when": "=not is_dict(r)"},
+         {
+          "when": "=r.get('name') in have and not a.replace",
+          "then": [{"push": {"skipped": "=r.get('name')"}}],
+          "else": [
+           {
+            "let": {
+             "args": "={k: v for k, v in r.items() if k in ('shape', 'diameter', 'angle', 'tipDiameter', 'cornerRadius', 'length', 'cuttingLength', 'flutes', 'feed', 'plunge', 'rpm', 'number', 'name') and v is not None}"
+            }
+           },
+           {
+            "when": "=args.get('shape', 'endmill') not in SHAPES or args.get('diameter') is None",
+            "then": [{"push": {"unknown": "=r.get('name') or str(r.get('shape'))"}}],
+            "else": [{"push": {"added": "=one_tool(merged(args, {'job': job.Label}))['tool']"}}]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "answer": {
+         "fields": {
+          "job": "=job.Label",
+          "path": "=p",
+          "added": "=added",
+          "skipped": {"when": "=skipped", "value": "=skipped"},
+          "note": {"when": "=skipped", "value": "Already in the job by name: replace: true adds them again."},
+          "notAdded": {"when": "=unknown", "value": "=unknown"},
+          "notAddedWhy": {"when": "=unknown", "value": {"fmt": "no diameter, or a shape cam_tool_add does not make ({', '.join(SHAPES)})"}}
+         }
+        }
+       }
+      ]
+     },
+     "else": [{"refuse": "action: export (the job's tools to path) | import (path's tools into the job)."}]
+    }
+   ]
+  },
+  "cam_dressup": {
+   "group": "cam",
+   "description": "Dress an operation's path (op; the dressup goes outermost and takes its place in the job). kind: tags (holding tabs on a profile: count, width, height, angle) | dogbone (inside corners: style) | boundary (moves kept inside the stock, or margin mm round the part) | array | ramp, leadinout (where FreeCAD has them without its window). props for the dressup's own. Answers before and after { cutMm, minutes }, tags; refused when it leaves no cutting.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "type": "string",
+      "description": "The job's label; may be left out when there is one."
+     },
+     "op": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "count": {
+      "type": "integer"
+     },
+     "width": {
+      "type": "number"
+     },
+     "height": {
+      "type": "number"
+     },
+     "angle": {
+      "type": "number"
+     },
+     "style": {
+      "type": "string"
+     },
+     "margin": {
+      "type": "number"
+     },
+     "props": {
+      "type": "object"
+     }
+    },
+    "required": [
+     "op",
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=doc()"},
+    {"let": {"job": "=job_of(a.job)"}},
+    {"let": {"want": "=a.op"}},
+    {"let": {"op": "=first([x for x in job.Operations.Group if any(want in (c.Label, c.Name) for c in stack_of(x, False))])"}},
+    {"refuse": {"fmt": "op {want!r}: the job's operations are {', '.join(x.Label for x in job.Operations.Group) or 'none (cam_op adds one)'}."}, "code": "not_found", "when": "=op is None"},
+    {"let": {"kind": "=a.kind"}},
+    {
+     "refuse": {
+      "fmt": "kind: {', '.join(DRESSUPS)} — tags (holding tabs: count, width, height), dogbone (inside corners cleared), boundary (moves kept inside the stock), array (copies), ramp (entry instead of plunging), leadinout."
+     },
+     "when": "=kind not in DRESSUPS"
+    },
+    {
+     "try": [{"let": {"mod": "=path_module(DRESSUPS[kind])"}}],
+     "on": ["ImportError"],
+     "except": [{"refuse": {"fmt": "The {kind} dressup lives in FreeCAD's GUI and is not there headless ({error}) — add it in the CAM workbench (adaptive ops enter helically anyway)."}, "code": "unavailable"}]
+    },
+    {"let": {"before": "=path_stats(list(op.Path.Commands), tc_for(op))"}},
+    {"try": [{"let": {"dr": "=dress(mod, op, job, kind)"}}], "on": "error", "except": [{"refuse": {"fmt": "The {kind} dressup would not go on {op.Label}: {error}"}, "code": "failed"}]},
+    {"let": {"why": "=': tags go on a profile\\'s path.' if kind == 'tags' else ': it is not a path this dressup takes (report_read has FreeCAD\\'s reason).'"}},
+    {"refuse": {"fmt": "FreeCAD made no {kind} dressup on {op.Label}{why}"}, "code": "failed", "when": "=dr is None"},
+    {"when": "=dr not in job.Operations.Group", "then": [{"try": [{"do": "=job.Proxy.addOperation(dr, op, True)"}], "on": ["TypeError"], "except": [{"do": "=job.Proxy.addOperation(dr, op)"}]}]},
+    {"do": "=job.Operations.removeObject(op)", "when": "=op in job.Operations.Group"},
+    {
+     "when": "=kind == 'tags'",
+     "then": [
+      {
+       "each": "k, prop, unit",
+       "in": [["width", "Width", "mm"], ["height", "Height", "mm"], ["angle", "Angle", "°"]],
+       "steps": [{"do": "=setprop(dr, prop, str(float(a.get(k))) + ' ' + unit)", "when": "=a.get(k) is not None and prop in dr.PropertiesList"}]
+      },
+      {
+       "when": "=a.count is not None",
+       "then": [{"let": {"n": "=int(a.count)"}}, {"refuse": "count: 1 or more tags.", "when": "=n < 1"}, {"do": "=dr.Proxy.generateTags(dr, n)", "when": "=has(dr.Proxy, 'generateTags')"}]
+      }
+     ]
+    },
+    {
+     "when": "=kind == 'boundary' and get(dr, 'Stock') is not None",
+     "then": [
+      {"let": {"js": "=job.Stock", "m": "=a.margin"}},
+      {
+       "each": "k",
+       "in": ["ExtXneg", "ExtXpos", "ExtYneg", "ExtYpos", "ExtZneg", "ExtZpos"],
+       "steps": [{"do": "=setprop(dr.Stock, k, (float(m) if m is not None else (float(get(js, k)) if has(js, k) else 0.0)) + (1.0 if k == 'ExtZpos' else 0.0))", "when": "=has(dr.Stock, k)"}]
+      }
+     ]
+    },
+    {"set": {"dr.Style": "=a.style"}, "when": "=kind == 'dogbone' and a.style and 'Style' in dr.PropertiesList"},
+    {
+     "each": "k, v",
+     "in": "=list((a.props or {}).items())",
+     "steps": [
+      {"refuse": {"fmt": "props.{k}: the {kind} dressup has no such property (object_get {{ object: \"{dr.Label}\" }} lists them)."}, "when": "=k not in dr.PropertiesList"},
+      {"try": [{"do": "=setprop(dr, k, v)"}], "on": "error", "except": [{"refuse": {"fmt": "props.{k} = {v!r}: {error}"}}]}
+     ]
+    },
+    {"do": "=doc().recompute()"},
+    {"let": {"cmds": "=commands(dr)"}},
+    {"let": {"after": "=path_stats(cmds, tc_for(dr))"}},
+    {"refuse": {"fmt": "The {kind} dressup made no path from {op.Label}. Nothing was kept."}, "code": "failed", "first": [{"do": "=undress(job, dr, op)"}], "when": "=not cmds"},
+    {
+     "let": {
+      "tail": "=' — every move is outside its boundary (the stock): the path runs past the stock\\'s edge; give the stock more margin (cam_job stock.margin) or a boundary of your own (props).' if kind == 'boundary' else '.'"
+     }
+    },
+    {
+     "refuse": {"fmt": "The {kind} dressup left no cutting at all on {op.Label}{tail} Nothing was kept."},
+     "code": "failed",
+     "first": [{"do": "=undress(job, dr, op)"}],
+     "when": "=before['cutMm'] > 0 and after['cutMm'] <= 0"
+    }
+   ],
+   "answer": {
+    "fields": {
+     "dressup": "=dr.Label",
+     "kind": "=kind",
+     "on": "=op.Label",
+     "before": "={k: before[k] for k in ('cutMm', 'minutes')}",
+     "after": "={k: after[k] for k in ('cutMm', 'minutes')}",
+     "tags": {"when": "=kind == 'tags' and has(dr, 'Positions')", "value": "=len(dr.Positions)"},
+     "note": "cam_post writes the dressed path; cam_sim checks it."
+    }
+   }
+  },
+  "cam_setup": {
+   "group": "cam",
+   "description": "The job's setup, any of: fixtures [\"G54\" …] (work offsets: the job is posted once in each), coolant none | flood | mist, safeHeight and clearance (mm above the stock's top), order [every op's label once].",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "type": "string",
+      "description": "The job's label; may be left out when there is one."
+     },
+     "fixtures": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "coolant": {
+      "type": "string"
+     },
+     "safeHeight": {
+      "type": "number"
+     },
+     "clearance": {
+      "type": "number"
+     },
+     "order": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=doc()"},
+    {"let": {"job": "=job_of(a.job)"}},
+    {"let": {"out": {"job": "=job.Label"}}},
+    {
+     "refuse": "Nothing to set: fixtures [\"G54\" …], coolant none | flood | mist, safeHeight, clearance (mm over the stock's top) or order [op labels].",
+     "when": "=not any(a.get(k) is not None for k in ('fixtures', 'coolant', 'safeHeight', 'clearance', 'order'))"
+    },
+    {
+     "when": "=a.fixtures",
+     "then": [
+      {"let": {"fx": "=[str(x).upper() for x in a.fixtures]"}},
+      {"refuse": "fixtures: work offsets G54 … G59 (each one runs the job again in that offset).", "when": "=not all(x in ('G54', 'G55', 'G56', 'G57', 'G58', 'G59') for x in fx)"},
+      {"set": {"job.Fixtures": "=fx"}},
+      {"put": {"fixtures": "=fx"}}
+     ]
+    },
+    {
+     "when": "=a.coolant",
+     "then": [
+      {"let": {"mode": "={'none': 'None', 'flood': 'Flood', 'mist': 'Mist'}.get(a.coolant)"}},
+      {"refuse": "coolant: none, flood or mist.", "when": "=mode is None"},
+      {"let": {"n": 0}},
+      {
+       "each": "top",
+       "in": "=job.Operations.Group",
+       "steps": [{"let": {"op": "=base_op(top)"}}, {"when": "='CoolantMode' in op.PropertiesList", "then": [{"set": {"op.CoolantMode": "=mode"}}, {"let": {"n": "=n + 1"}}]}]
+      },
+      {"put": {"coolant": {"mode": "=mode", "ops": "=n"}}}
+     ]
+    },
+    {"let": {"sh": "=get(job, 'SetupSheet')"}},
+    {
+     "when": "=sh is not None",
+     "then": [
+      {
+       "when": "=a.safeHeight is not None and 'SafeHeightOffset' in sh.PropertiesList",
+       "then": [
+        {"let": {"v": "=num(a.safeHeight, 'safeHeight')"}},
+        {"refuse": "safeHeight: mm above the stock's top, 0 or more.", "when": "=v < 0"},
+        {"set": {"sh.SafeHeightOffset": {"fmt": "{v} mm"}}},
+        {"put": {"safeHeightOffset": "=a.safeHeight"}}
+       ]
+      },
+      {
+       "when": "=a.clearance is not None and 'ClearanceHeightOffset' in sh.PropertiesList",
+       "then": [
+        {"let": {"v": "=num(a.clearance, 'clearance')"}},
+        {"refuse": "clearance: mm above the stock's top, 0 or more.", "when": "=v < 0"},
+        {"set": {"sh.ClearanceHeightOffset": {"fmt": "{v} mm"}}},
+        {"put": {"clearanceOffset": "=a.clearance"}}
+       ]
+      },
+      {
+       "put": {
+        "note": "Every operation whose SafeHeight / ClearanceHeight follows the setup sheet (the default: the stock's top plus this offset) was computed again with it; one given its own height in props keeps it."
+       },
+       "when": "='safeHeightOffset' in out or 'clearanceOffset' in out"
+      }
+     ]
+    },
+    {
+     "when": "=a.order",
+     "then": [
+      {"let": {"ops": "=list(job.Operations.Group)"}},
+      {"let": {"byname": "={o.Label: o for o in ops}"}},
+      {"let": {"want": "=[byname[n] for n in a.order if n in byname]"}},
+      {"refuse": {"fmt": "order: every op once — {', '.join(byname)}."}, "when": "=len(want) != len(ops) or len(set(a.order)) != len(ops)"},
+      {"set": {"job.Operations.Group": "=want"}},
+      {"put": {"order": "=[o.Label for o in want]"}}
+     ]
+    },
+    {"do": "=doc().recompute()"}
+   ],
+   "answer": {"fields": {"...": "=out"}}
+  },
+  "cam_edit": {
+   "group": "cam",
+   "description": "Edit the job's operations. action: active { op, on } (off leaves it out of the G-code) | copy { op, props, name } | comment { text, after } | stop { text, optional, after } (M0, or M1 when optional) | start { op, at [x, y, z] } (left out clears it). Answers op and ops (the running order).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "type": "string",
+      "description": "The job's label; may be left out when there is one."
+     },
+     "action": {
+      "type": "string",
+      "enum": [
+       "active",
+       "copy",
+       "comment",
+       "stop",
+       "start"
+      ]
+     },
+     "op": {
+      "type": "string"
+     },
+     "on": {
+      "type": "boolean"
+     },
+     "props": {
+      "type": "object"
+     },
+     "text": {
+      "type": "string"
+     },
+     "optional": {
+      "type": "boolean"
+     },
+     "after": {
+      "type": "string"
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=doc()"},
+    {"let": {"job": "=job_of(a.job)"}},
+    {"let": {"action": "=a.action", "ops": "=list(job.Operations.Group)"}},
+    {"let": {"ref": "=a.get('op') if action in ('active', 'copy', 'start') else a.after"}},
+    {
+     "when": "=action in ('active', 'copy', 'start') or (action in ('comment', 'stop') and bool(a.after))",
+     "then": [
+      {"let": {"hit": "=first([o for o in ops if ref in (o.Label, o.Name)])"}},
+      {"refuse": {"fmt": "op {ref!r}: cam_list lists them — {', '.join(o.Label for o in ops)}."}, "code": "not_found", "when": "=hit is None"}
+     ],
+     "else": [{"let": {"hit": null}}]
+    },
+    {
+     "choose": "=action",
+     "of": {
+      "active": [{"set": {"hit.Active": "=bool(a.get('on', True))"}}, {"let": {"out": {"op": "=hit.Label", "active": "=bool(hit.Active)"}}}],
+      "copy": [
+       {"let": {"c": "=doc().copyObject(hit, False)"}},
+       {"do": "=job.Operations.addObject(c)", "when": "=c not in job.Operations.Group"},
+       {"set": {"c.Label": "=unique(a.name or hit.Label + ' copy', c)"}},
+       {"each": "k, v", "in": "=list((a.props or {}).items())", "steps": [{"do": "=setprop(c, k, v)", "when": "=k in c.PropertiesList"}]},
+       {"do": "=place(job, c, hit)"},
+       {"let": {"out": {"op": "=c.Label", "from": "=hit.Label"}}}
+      ],
+      "comment": [
+       {"let": {"text": "=str(a.get('text', '')).replace('(', '[').replace(')', ']')"}},
+       {"refuse": "text: the comment.", "when": "=not text"},
+       {"let": {"label": "=a.name or 'Comment'", "lines": "=['(' + text + ')']"}}
+      ],
+      "stop": [
+       {"let": {"lines": "=(['(' + str(a.text).replace('(', '[').replace(')', ']') + ')'] if a.text else []) + ['M1' if a.optional else 'M0']"}},
+       {"let": {"label": "=a.name or ('Optional stop' if a.optional else 'Stop')"}}
+      ],
+      "start": [
+       {"refuse": {"fmt": "{hit.Label} takes no start point."}, "when": "='StartPoint' not in hit.PropertiesList"},
+       {
+        "when": "=a.at is None",
+        "then": [{"set": {"hit.UseStartPoint": false}}, {"let": {"out": {"op": "=hit.Label", "startPoint": null}}}],
+        "else": [{"set": {"hit.StartPoint": "=vector([float(c) for c in a.at])", "hit.UseStartPoint": true}}, {"let": {"out": {"op": "=hit.Label", "startPoint": "=[float(c) for c in a.at]"}}}]
+       }
+      ]
+     },
+     "else": [{"refuse": "action: active (op, on) | copy (op, props) | comment (text, after) | stop (text, optional: M1, after) | start (op, at [x,y,z] or none)."}]
+    },
+    {
+     "when": "=action in ('comment', 'stop')",
+     "then": [
+      {"let": {"Custom": "=custom_module()"}},
+      {"refuse": "This FreeCAD's CAM has no custom G-code operation.", "code": "unavailable", "when": "=Custom is None"},
+      {"let": {"now": "=list(job.Operations.Group)"}},
+      {"let": {"lead": "=hit if hit is not None else (now[-1] if now else None)"}},
+      {"let": {"tc0": "=(tc_for(lead) if lead is not None else None) or first(job.Tools.Group)"}},
+      {"let": {"o": "=with_tool(tc0, lambda: custom_create(Custom, label, job))"}},
+      {"set": {"o.ToolController": "=tc0"}, "when": "=tc0 is not None and 'ToolController' in o.PropertiesList"},
+      {"do": "=job.Operations.addObject(o)", "when": "=o not in job.Operations.Group"},
+      {"set": {"o.Gcode": "=lines", "o.Label": "=unique(label, o)"}},
+      {"do": "=place(job, o, hit)", "when": "=hit is not None"},
+      {"let": {"out": {"op": "=o.Label", "gcode": "=list(o.Gcode)"}}}
+     ]
+    },
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]},
+    {"put": {"ops": "=[x.Label + ('' if get(x, 'Active', True) else ' (off)') for x in job.Operations.Group]"}}
+   ],
+   "answer": {"fields": {"...": "=out"}}
+  },
+  "cam_remove": {
+   "group": "cam",
+   "description": "Remove an operation (op) from the job with every dressup stacked on it; naming a dressup removes the whole stack too.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "type": "string",
+      "description": "The job's label; may be left out when there is one."
+     },
+     "op": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "op"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/cam.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=doc()"},
+    {"let": {"job": "=job_of(a.job)"}},
+    {"let": {"hit": "=first([top for top in job.Operations.Group if any(a.get('op') in (c.Label, c.Name) for c in stack_of(top, True))])"}},
+    {"refuse": {"fmt": "op {a.get('op')!r}: the job's operations are {', '.join(op.Label for op in job.Operations.Group) or 'none'}."}, "code": "not_found", "when": "=hit is None"},
+    {"let": {"chain": "=stack_of(hit, True)"}},
+    {"do": "=job.Operations.removeObject(hit)"},
+    {"let": {"gone": "=[c.Label for c in chain]"}},
+    {
+     "each": "c",
+     "in": "=chain",
+     "steps": [
+      {"let": {"extra": "=get(c, 'Stock') if c is not chain[-1] else None"}},
+      {"do": "=doc().removeObject(c.Name)"},
+      {"do": "=doc().removeObject(extra.Name)", "when": "=extra is not None and get(extra, 'Name') and doc().getObject(extra.Name) is not None"}
+     ]
+    },
+    {"do": "=doc().recompute()"}
+   ],
+   "answer": {"fields": {"job": "=job.Label", "removed": "=gone", "ops": "=[op.Label for op in job.Operations.Group]"}}
+  },
+  "cam_sim": {
+   "group": "cam",
+   "description": "Simulate the job's active operations on the stock (Agent Link's own 3-axis height map from above, not FreeCAD's simulator): rapids through stock (crashes), cuts into the part (gouges) or under the stock, and what is left over the part. Answers verdict fix | clear, findings, ops, part { gouge, left }, picture (a PNG from above: blue gouged, green right, red left over). resolution mm per cell (a sixth of the smallest tool, about 250000 cells at most by default; finer costs time by its square). Undercuts cannot be seen. Before cam_post.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "type": "string",
+      "description": "The job's label; may be left out when there is one."
+     },
+     "resolution": {
+      "type": "number"
+     },
+     "inline": {
+      "type": "boolean"
+     },
+     "path": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/cam.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"job": "=job_of(a.job)"}},
+    {"let": {"ops": "=[op for op in job.Operations.Group if get(op, 'Active', True) and get(op, 'Path') is not None]"}},
+    {"refuse": {"fmt": "{job.Label} has no operations: cam_op first."}, "code": "invalid_state", "when": "=not ops"},
+    {"let": {"sb": "=job.Stock.Shape.BoundBox", "cutters": "=[sim_tool(op, job) for op in ops]", "res": "=a.resolution"}},
+    {"let": {"res": "=max(min([t[1] for t in cutters]) / 6.0, sqrt(sb.XLength * sb.YLength / 250000.0), 0.05)"}, "when": "=res is None"},
+    {"let": {"res": "=float(res)"}},
+    {"refuse": "resolution: mm per cell, over 0.", "when": "=res <= 0"},
+    {"let": {"run": "=sim_run(job, cutters, res)"}},
+    {
+     "let": {
+      "out": {"job": "=job.Label", "resolution": "=round(res, 3)", "ops": "=run.per", "removedMm3": "=round(run.removed, 1)", "part": "=run.part"},
+      "cmp": "=run.part",
+      "crashes": "=run.crashes",
+      "findings": []
+     }
+    },
+    {
+     "when": "=crashes",
+     "then": [
+      {"put": {"crashes": "=crashes[:5]"}},
+      {
+       "push": {"findings": {"fmt": "{len(crashes)} rapid move(s) go through stock — a crash on the machine: the first in {crashes[0]['op']} at {crashes[0]['at']}. Raise the clearance or safe height."}}
+      }
+     ]
+    },
+    {
+     "when": "='gouge' in cmp",
+     "then": [
+      {"let": {"g": "=cmp['gouge']"}},
+      {"push": {"findings": {"fmt": "It cuts into the part: {g['deepest']} mm deep at {g['at'][:2]}, over {g['areaMm2']} mm². Check that operation's faces, side and depths."}}}
+     ]
+    },
+    {"push": {"findings": {"fmt": "It cuts {round(sb.ZMin - run.low, 2)} mm under the stock's bottom: into the spoilboard or vise — set finalDepth."}}, "when": "=run.low < sb.ZMin - 0.05"},
+    {
+     "when": "='left' in cmp and cmp['left']['share'] > 0.02",
+     "then": [
+      {"let": {"l": "=cmp['left']"}},
+      {
+       "put": {
+        "note": {
+         "fmt": "Material is left over the part on {round(100 * l['share'])}% of it, up to {l['most']} mm (at {l['at'][:2]}): a face op for a stock top, a finishing pass or a smaller tool for corners — or none, if that is meant."
+        }
+       }
+      }
+     ]
+    },
+    {"put": {"verdict": "='fix' if findings else 'clear'", "findings": "=findings"}},
+    {"let": {"data": "=sim_picture(run, sb)"}},
+    {"let": {"path": "=out_path(a.path or in_out(job.Label + '_sim.png'), None if a.path else 'shot')"}},
+    {"do": "=write_bytes(path, data)"},
+    {"put": {"picture": "=path"}},
+    {"put": {"_png": "=data"}, "when": "=a.get('inline', True)"}
+   ],
+   "answer": {"fields": {"...": "=out"}}
+  },
+  "cam_post": {
+   "group": "cam",
+   "description": "Write the job's G-code with FreeCAD's post-processor: post grbl (default) | linuxcnc | mach3_mach4 | marlin | smoothie | centroid | generic, to path (<job>.nc in the output folder). Posted as FreeCAD's Post command does: each work offset, a tool change at each new tool (a comment for grbl and marlin), active ops in order; mm (G21), feeds per minute. Answers path, lines, units, tools, fixtures, minutes, warnings (cuts under or far outside the stock). Running it is the person's.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "type": "string",
+      "description": "The job's label; may be left out when there is one."
+     },
+     "post": {
+      "type": "string",
+      "enum": [
+       "grbl",
+       "linuxcnc",
+       "mach3_mach4",
+       "marlin",
+       "smoothie",
+       "centroid",
+       "generic"
+      ]
+     },
+     "path": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/cam.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=doc()"},
+    {"let": {"job": "=job_of(a.job)"}},
+    {"let": {"name": "=a.get('post', 'grbl')"}},
+    {"refuse": {"fmt": "post: one of {', '.join(POSTS)} — the person's machine's controller."}, "when": "=name not in POSTS"},
+    {"let": {"ops": "=[op for op in job.Operations.Group if get(op, 'Active', True)]"}},
+    {"refuse": "No operations in the job: cam_op first.", "code": "invalid_state", "when": "=not ops"},
+    {"let": {"path": "=post_path(a.path or in_out(job.Label.replace(' ', '_') + '.nc'))"}},
+    {"let": {"factory": "=post_factory()", "how": "job"}},
+    {
+     "try": [
+      {"let": {"gcode": "=by_job(job, name, factory) if factory is not None and has(job, 'PostProcessorArgs') and get(job, 'Fixtures') else ''"}},
+      {
+       "when": "=not is_str(gcode) or not gcode.strip()",
+       "then": [
+        {"let": {"how": "script", "post": "=post_script(name)"}},
+        {"refuse": {"fmt": "FreeCAD here has no {name} post-processor: post is one of {', '.join(POSTS)}."}, "code": "unavailable", "when": "=post is None"},
+        {"refuse": {"fmt": "The {name} post-processor made no G-code for this job (report_read has FreeCAD's reason)."}, "code": "failed", "when": "=not has(post, 'export')"},
+        {"let": {"gcode": "=post.export(postables(ops), '-', '--no-show-editor')"}}
+       ]
+      }
+     ],
+     "on": "failure",
+     "except": [
+      {
+       "refuse": {"fmt": "The {name} post-processor stopped: {error}. cam_list shows each operation's path; an operation with no moves, or one whose tool was removed, stops a post."},
+       "code": "failed"
+      }
+     ]
+    },
+    {"let": {"last_tc": "=first([tc_for(op) for op in reversed(ops) if tc_for(op) is not None])"}},
+    {
+     "refuse": {"fmt": "The {name} post-processor wrote nothing: every operation's path is empty (cam_list), or all are switched off (cam_edit {{ action: \"active\" }})."},
+     "code": "failed",
+     "when": "=not is_str(gcode) or not gcode.strip()"
+    },
+    {"do": "=write_text(path, gcode)"},
+    {"let": {"stats": "=path_stats([c for op in ops for c in op.Path.Commands], last_tc)", "bb": "=job.Stock.Shape.BoundBox", "tcs": [], "warnings": []}},
+    {
+     "each": "op",
+     "in": "=ops",
+     "steps": [{"let": {"tc": "=tc_for(op)"}}, {"push": {"tcs": {"name": "=tc.Label", "number": "=tc.ToolNumber"}}, "when": "=tc is not None and tc.Label not in [t['name'] for t in tcs]"}]
+    },
+    {
+     "when": "='cutBox' in stats",
+     "then": [
+      {"let": {"lo": "=stats['cutBox']['min']", "hi": "=stats['cutBox']['max']", "r": "=qty(last_tc.Tool.Diameter, 'mm') / 2 if last_tc is not None else 0"}},
+      {"push": {"warnings": {"fmt": "Cuts below the stock's bottom (z {lo[2]} < {round(bb.ZMin, 3)}): into the fixture or the spoil board."}}, "when": "=lo[2] < bb.ZMin - 1e-6"},
+      {
+       "push": {"warnings": "Cuts reach far outside the stock: check the operations."},
+       "when": "=lo[0] - r < bb.XMin - 25 or hi[0] + r > bb.XMax + 25 or lo[1] - r < bb.YMin - 25 or hi[1] + r > bb.YMax + 25"
+      }
+     ]
+    }
+   ],
+   "answer": {
+    "fields": {
+     "job": "=job.Label",
+     "post": "=name",
+     "path": "=path",
+     "lines": "=len(gcode.splitlines())",
+     "bytes": "=len(gcode.encode())",
+     "...units": "={'units': 'inch (G20)'} if 'G20' in gcode.split() else {'units': 'mm (G21)'} if 'G21' in gcode.split() else {}",
+     "...via": "={'via': how}",
+     "...stats": "=stats",
+     "ops": "=[o.Label for o in ops]",
+     "tools": "=tcs",
+     "fixtures": "=list(get(job, 'Fixtures', []) or []) if how == 'job' else []",
+     "stock": "=stock_out(job)",
+     "warnings": {"when": "=warnings", "value": "=warnings"},
+     "note": "Check it in a simulator or the controller's preview before running; zero the machine on the stock as the job sets it (cam_list stock). Running it is the person's."
+    }
+   }
+  },
+  "points_structure": {
+   "group": "std_more",
+   "description": "A structured copy of a point cloud (Points::Structured: the points in their order laid out as a grid): points, width (per row), height (rows; count / width when left out). width × height must equal the count, so it suits a cloud still in scan order. The original stays.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "points": {
+      "type": "string"
+     },
+     "width": {
+      "type": "integer"
+     },
+     "height": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "points",
+     "width"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/std_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=find(a.points, 'points')"}},
+    {"refuse": {"fmt": "points: {o.Label} is not a point cloud (points_import or points_sample makes one)."}, "when": "=not o.isDerivedFrom('Points::Feature')"},
+    {"let": {"n": "=o.Points.CountPoints", "w": "=int(a.width or 0)"}},
+    {"let": {"h": "=int(a.height or (n // w if w else 0))"}},
+    {
+     "when": "=w <= 0 or w * h != n",
+     "then": [
+      {"let": {"fits": "=[k for k in range(2, min(n, 5000) + 1) if n % k == 0][:12]"}},
+      {"let": {"tail": "=(' Widths that divide it: ' + ', '.join([str(k) for k in fits]) + ' …') if fits else ' This count has no such grid: only a cloud that kept its scan order has one.'"}},
+      {"refuse": {"fmt": "width × height must equal the point count ({n}), as a scanner's columns × rows; {w} × {h} is {w * h}.{tail}"}}
+     ]
+    },
+    {"add": "Points::Structured", "name": "Structured", "as": "st"},
+    {"set": {"st.Points": "=o.Points", "st.Width": "=w", "st.Height": "=h", "st.Label": "=unique(a.name or o.Label + ' structured', st)"}}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"points": "=st.Label", "width": "=w", "height": "=h"}}
   }
  }
 }

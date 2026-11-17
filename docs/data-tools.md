@@ -14,6 +14,16 @@ the FreeCAD Mesh calls are named helpers (`plane_sides`, `own_boolean`, `edge_lo
 `in_box`, `fitted`, `curve_through`, `grid_mesh`), the checks, the order and the answer are the entries.
 TechDraw (`families/techdraw.py`) is data for 27 of its 32 tools; `td_list`, `td_export`, `td_cosmetic`,
 `td_view_more` and `td_lines` are still handlers there, beside the entries (`tests/test_datatd_data.py` is its proof).
+CAM's twelve tools in `families/cam.py` are data (`tests/test_datacam_data.py`): the path's reading (`path_stats`), the height-map
+simulation (`sim_run`, `sim_picture`), the two ways of posting (`by_job`, `post_script`) and what differs between FreeCAD's releases
+(`make_op`, `bit_factory`, `toolbit`, `dress`) are named helpers; `cam_more.py` is still handlers.
+
+The Part workbench's modelling tools are data as well: the 11 of `families/model.py`, the 10 of
+`families/model_more.py` (part_wire, part_split, part_compound, part_refine, part_attach, part_face, part_ruled,
+part_project, part_slices, part_from_mesh) and the 6 of `families/part_more.py` (part_section, part_offset2d,
+part_extract, part_defeature, part_fix, part_datum). The three files share the group `model`; the entries of the
+last two say `"family": "model_more"` or `"family": "part_more"`, and each file asks for its own
+(`tests/test_datapart_data.py` and `tests/test_datapart2_data.py` are their proof, on a stand-in).
 
 So are Part Design and Sketcher: the 19 feature tools (`families/feature.py`), the 8 sketch tools
 (`families/sketch.py`) and `std_more.py`'s pd_move_feature, pd_reorder, pd_tip and pd_shaft. What is left in
