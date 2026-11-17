@@ -954,16 +954,30 @@ _caption_no = [0]
 CAPTION_MARGIN, CAPTION_MAX, SLIDE_ROOM = 14, 420, 300
 
 
-def caption_box(view_w, view_h, cap_w, cap_h):
+def caption_box(view_w, view_h, cap_w, cap_h, page=False):
     """(max width, x, y) of the caption in a 3D view this big: bottom right,
     clear of the left edge where the panel slides out (SLIDE_ROOM) and of
-    the corners' view cube and axes above it; as wide as fits."""
+    the corners' view cube and axes above it; as wide as fits. page: a
+    TechDraw page in front — the caption goes top left: bottom right is
+    where a drawing's title block is (ISO 7200, ASME Y14.1), and the
+    caption covered its sheet and scale cells (r8hub-10, 13, 14)."""
     m = CAPTION_MARGIN
     most = max(160, min(CAPTION_MAX, view_w - SLIDE_ROOM - 2 * m))
     w = min(cap_w, most)
+    if page:
+        return most, m, m
     x = max(m, view_w - w - m)
     y = max(m, view_h - cap_h - m)
     return most, x, y
+
+
+def is_page_view(w):
+    """Whether a window's view is a TechDraw page (its widget's class,
+    TechDrawGui::MDIViewPage). Never raises."""
+    try:
+        return "MDIViewPage" in str(w.metaObject().className())
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def caption(text, ms=HOLD_MS):
@@ -991,10 +1005,11 @@ def caption(text, ms=HOLD_MS):
         _caption.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
     _caption.setText("✦ Agent: " + text)
     _caption.setWordWrap(True)
-    most, _x, _y = caption_box(host.width(), host.height(), host.width(), 0)
+    page = is_page_view(host)
+    most, _x, _y = caption_box(host.width(), host.height(), host.width(), 0, page)
     _caption.setMaximumWidth(most)
     _caption.adjustSize()
-    _most, x, y = caption_box(host.width(), host.height(), _caption.width(), _caption.height())
+    _most, x, y = caption_box(host.width(), host.height(), _caption.width(), _caption.height(), page)
     _caption.move(x, y)
     _caption.show()
     _caption.raise_()
@@ -2520,15 +2535,55 @@ def see_through(doc, name, body, made):
         return None
 
 
+MESH_INFO_TITLES = ("Mesh Info", "Mesh Info Box")
+
+
+def mesh_info_widgets(mw=None):
+    """The Mesh workbench's own "Mesh Info" box in the Tasks panel: the
+    TaskBox FreeCAD wraps round its QGroupBox (src/Mod/Mesh/Gui/
+    Workbench.cpp MeshInfoWatcher: a group box titled "Mesh Info Box",
+    window title "Mesh Info", eight labels in a grid). Found by its title,
+    else by its eight labels in a 4 x 2 grid. The TaskBoxes, or []. Never
+    raises."""
+    try:
+        import FreeCADGui
+
+        _QtCore, _QtGui, QtW = _qt()
+        mw = mw or FreeCADGui.getMainWindow()
+        out = []
+        for g in mw.findChildren(QtW.QGroupBox):
+            try:
+                lay = g.layout()
+                titled = str(g.title()) in MESH_INFO_TITLES or str(g.windowTitle()) in MESH_INFO_TITLES
+                grid = lay is not None and type(lay).__name__ == "QGridLayout" and lay.rowCount() == 4 and lay.columnCount() == 2 \
+                    and len(g.findChildren(QtW.QLabel)) == 8
+                if not (titled or grid):
+                    continue
+                box = g.parentWidget()
+                while box is not None and "TaskBox" not in box.metaObject().className():
+                    box = box.parentWidget()
+                if box is not None and box not in out:
+                    out.append(box)
+            except RuntimeError:
+                continue
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def mesh_info_box():
     """The Mesh workbench's own "Mesh Info" box (src/Mod/Mesh/Gui/
     Workbench.cpp: MeshInfoWatcher, a task watcher shown whenever no task
-    is open) put away when no mesh is selected: it stood empty after
-    meshobj_unwrap of a body's face (round 8, 00-174, 00-191). With a mesh
-    selected it shows that mesh's points, facets and bounds, and is kept.
-    FreeCAD's own Control.clearTaskWatcher() takes it away; the workbench
-    adds it again when it is next brought up. "kept (a mesh selected)",
-    "put away", or None. Never raises."""
+    is open): hidden when no mesh is selected (it stood empty after
+    meshobj_unwrap of a body's face, round 8, 00-174, 00-191); shown with a
+    mesh selected (its points, facets and bounds). Round 8 put it away with
+    FreeCAD's Control.clearTaskWatcher(), which deletes the watcher until
+    the workbench is next brought up: the next unwrap of a mesh (r8hub-5,
+    the Cap) then had no box at all. Now only its widget is hidden: FreeCAD
+    shows it again itself at the next selection change (TaskView::
+    updateWatcher shows every watcher's content). "kept (a mesh selected:
+    …)", "hidden", "not there" (none found: put away by an older Agent Link
+    until the Mesh workbench is brought up again), or None. Never raises."""
     try:
         import FreeCADGui
 
@@ -2536,13 +2591,37 @@ def mesh_info_box():
             return None
         if FreeCADGui.Control.activeDialog():
             return None
-        if any(getattr(o, "TypeId", "") == "Mesh::Feature" for o in FreeCADGui.Selection.getSelection()):
-            return "kept (a mesh selected: it shows its values)"
-        FreeCADGui.Control.clearTaskWatcher()
-        return "put away"
+        boxes = mesh_info_widgets()
+        mesh = any(getattr(o, "TypeId", "") == "Mesh::Feature" for o in FreeCADGui.Selection.getSelection())
+        if not boxes:
+            return "not there (the Mesh workbench brings it back when it is next brought up)" if mesh else None
+        for b in boxes:
+            try:
+                b.setVisible(mesh)
+            except RuntimeError:
+                continue
+        return "kept (a mesh selected: it shows its values)" if mesh else "hidden"
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (mesh info box): {e}\n")
         return None
+
+
+def edges_off(objs):
+    """Of what was made see-through over a piece, the Part shapes' own
+    edges put out for the call (DisplayMode Shaded, as view state put back
+    at the next change: set_view_prop): a see-through sphere's seam edge
+    drew a black line across the unwrapped cap (r8hub-5). The labels.
+    Never raises."""
+    done = []
+    for o in objs or ():
+        try:
+            vo = getattr(o, "ViewObject", None)
+            modes = list(vo.listDisplayModes() or ()) if vo is not None else []
+            if str(getattr(vo, "DisplayMode", "")) == "Flat Lines" and "Shaded" in modes and set_view_prop(o, "DisplayMode", "Shaded"):
+                done.append(o.Label)
+        except Exception:  # noqa: BLE001
+            continue
+    return done
 
 
 def unwrap_shown(doc, args, body, made, animate=True):
@@ -2588,6 +2667,9 @@ def unwrap_shown(doc, args, body, made, animate=True):
             got = uncover(doc, src)
             if got:
                 out["uncovered"] = got
+                off = edges_off([o for o in _objects(doc, got)])
+                if off:
+                    out["edgesOff"] = off
         info = mesh_info_box()
         if info:
             out["meshInfo"] = info
@@ -3071,6 +3153,51 @@ def to_fire(rows):
     timers, the indexes to run now: the followers' pending single-shot ones.
     Plain Python."""
     return [i for i, (cls, active, single) in enumerate(rows) if cls in FOLLOWERS and active and single]
+
+
+RESELECT_MOST = 24
+
+
+def reselect():
+    """The selection the call's echo made, sent once more as its last step
+    (cleared and added again, the same entries, unresolved: "Body",
+    "Pad.Face1"), so the 3D view lights it after every other view change of
+    the call. Round 8: FreeCAD held Foot.Face6 (its status bar read "Area:
+    4.00 cm^2", r8hub-2), Post.Face1 (r8hub-3) and the channel's trace
+    (r8hub-8) as selected while the 3D view drew none of them lit, after
+    the call's later view changes (things made see-through, display
+    modes, the Mesh workbench's task box) — a Part view provider's face
+    lighting goes when its drawing is rebuilt (ViewProviderPartExt::
+    updateVisual clears it, src/Mod/Part/Gui/ViewProviderExt.cpp 1492-1496)
+    and the selection itself is not told. The entries sent again, as
+    "Object.Sub", or None (nothing selected, or more than RESELECT_MOST).
+    Never raises."""
+    try:
+        import FreeCADGui
+
+        rows = []
+        for x in FreeCADGui.Selection.getSelectionEx("", 0) or ():
+            subs = [str(n) for n in (getattr(x, "SubElementNames", None) or ()) if n]
+            for sub in subs or [""]:
+                rows.append((x.DocumentName, x.ObjectName, sub))
+        if not rows or len(rows) > RESELECT_MOST:
+            return None
+        _selected[0] += 1
+        FreeCADGui.Selection.clearSelection()
+        done = []
+        for d, o, sub in rows:
+            try:
+                if sub:
+                    FreeCADGui.Selection.addSelection(d, o, sub)
+                else:
+                    FreeCADGui.Selection.addSelection(d, o)
+                done.append(f"{o}.{sub}" if sub else o)
+            except Exception:  # noqa: BLE001
+                continue
+        return done or None
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (reselect): {e}\n")
+        return None
 
 
 def views_follow():
@@ -5121,7 +5248,14 @@ class Echo:
                 what, result = own, ""
             _note({"time": datetime.datetime.now().strftime("%H:%M:%S"), "tool": name, "ok": ok, "what": _tag(self.s) + what,
                    "result": result, "call": call, "ms": int((time.time() - (self.t0 or time.time())) * 1000)})
-        if name == "batch" or tool is None:
+        if name == "batch":
+            # The batch's own words at its end (p8-batch: the caption kept
+            # its last call's, "Made a cylinder Peg"), its row in the
+            # Activity list, and the last call's lit button put out.
+            if ok and not getattr(self.s, "batch_now", None):
+                self._batch_end(args, body)
+            return
+        if tool is None:
             return
         if skipped(name) or watching(name):
             # A look (a picture, the session, a guide): its own words with a
@@ -5143,6 +5277,26 @@ class Echo:
         except Exception as e:  # noqa: BLE001  (never into the call)
             tr["afterError"] = f"{type(e).__name__}: {e}"
             _plog(f"Agent Link echo (after {name}): {e}\n")
+
+    def _batch_end(self, args, body):
+        """A batch's end said: "Ran 6 calls in one batch: 6 ok" (with its
+        title when given), noted as an Activity row and as session.echo_look,
+        and the rings put out (a batch's last button stayed lit through the
+        reads after it, p8). Never raises."""
+        try:
+            from . import activity
+
+            words = activity.batch_words(args, body)
+            if not words:
+                return
+            _note({"time": datetime.datetime.now().strftime("%H:%M:%S"), "tool": "batch", "ok": True, "what": _tag(self.s) + words,
+                   "result": "", "call": activity.raw_call("batch", {k: v for k, v in (args or {}).items() if k != "calls"}), "ms": 0})
+            if _on() and self.live():
+                rings_off()
+                say(words, HOLD_MS, self._where())
+                self.s.echo_look = {"tool": "batch", "words": words}
+        except Exception as e:  # noqa: BLE001
+            _plog(f"Agent Link echo (batch end): {e}\n")
 
     def _look_words(self, name, ok, what, result):
         """A look's words in the caption and the status bar (say()), noted as
@@ -5342,6 +5496,13 @@ class Echo:
             FreeCADGui.Selection.clearSelection()
             tr["selectionCleared"] = "the new colours show only with nothing selected"
         self._step(tr, "modelTab", _model_tab_back)
+        if sketch is None:
+            # The call's selection lit again after every other change of
+            # the view (round 8: r8hub-2, 3, 8 — held, not drawn lit).
+            if self._step(tr, "reselected", reselect):
+                # A selection change shows the Mesh Info box again (FreeCAD's
+                # TaskView::updateWatcher): hidden again with no mesh selected.
+                self._step(tr, "meshInfo", mesh_info_box)
         self._step(tr, "viewsFollow", views_follow)
         # What was done, said again now that it is done (and naming what it
         # made, with the answer's key value): held until the next changing
@@ -5426,6 +5587,21 @@ class Echo:
             _read_sel[0] = True
             views_follow()
             return [f"{o.Label}.{sub}" for o, sub in picked]
+        if own and objs:
+            # What the add-on says its read is about (SELECTS_FOR: the board
+            # a PCB order packed) selected, framed and uncovered: the board
+            # sat inside its enclosure, out of the view (r8hub-9).
+            _select(objs)
+            _read_sel[0] = True
+            got = {"selected": [o.Label for o in objs]}
+            if FreeCAD.ParamGet(PREFS).GetBool("Follow", True):
+                got["framed"] = "the read's object" if fit(animate=True, selection=True) == "selection" else "not framed"
+            off = uncover(doc, objs)
+            if off:
+                got["uncovered"] = off
+            got["reselected"] = reselect()
+            views_follow()
+            return got
         if now == [o.Name for o in objs]:
             return None
         _select(objs)

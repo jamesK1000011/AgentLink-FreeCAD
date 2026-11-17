@@ -37,6 +37,8 @@ DESCRIPTIONS = {
         "notes says what was skipped; stacked names dimensions whose texts lie on one spot (td_dim_align or object_set X, Y moves one)."),
     'td_hatch': ('Drawn by td_export, not in the window;',
         "Drawn by td_export, and in the window as FreeCAD's own hatch (TechDraw::DrawHatch, its default pattern) on the view's face that shows each (window says which, or why none);"),
+    'td_table': ('an empty sheet is refused.',
+        "an empty sheet is refused. size: the text's height on the paper, mm (3.5): the table's scale is set for it (reply: scale)."),
     'td_weld': ('page), drawn by td_export (the window shows the leader only',
         "page), drawn by td_export, and in the window as FreeCAD's own weld symbol on the leader (TechDraw::DrawWeldSymbol, with FreeCAD's own symbol for fillet, square, v, plug and surfacing; the other kinds show their words only, and window says which"),
 }

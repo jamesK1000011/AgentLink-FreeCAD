@@ -160,6 +160,7 @@
   "td_detail": {"did": ["Drew a detail view"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "td_dim": {"did": ["Dimensioned the drawing"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "td_export": {"did": ["Exported {page}: {wrote}", "Exported {page} as {format}", "Exported {page}", "Exported the drawing"], "source": "Agent Link's own wording", "date": "2026-11-15"},
+  "td_centermarks": {"did": ["Took the centre marks off the drawing if {on=false}", "Drew centre marks on the drawing's holes"], "source": "Agent Link's own wording", "date": "2026-11-17"},
   "td_list": {"did": ["Read the drawing"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "td_title": {"did": ["Filled in the title block"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "td_balloon": {"did": ["Added a balloon to {page}", "Added a balloon"], "source": "Agent Link's own wording", "date": "2026-11-15"},
