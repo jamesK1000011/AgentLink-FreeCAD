@@ -225,8 +225,9 @@
  },
  "batch": {
   "headless": true,
-  "model": "run-alone 1-5 (17 Nov)",
-  "note": "17 Nov: run-alone 1-5 sent as they are: a batch in a batch, undo in a rolling-back batch and an unknown tool refused whole; to and $from chain; job_start answers and an id, job_status by reference and the list, pd_pad and session_state refused as jobs with why"
+  "live": true,
+  "model": "p8",
+  "note": "17 Nov live answers and pictures; fault: captions give the last inner step or the tool name (round 9)"
  },
  "bim_building": {
   "description": true,
@@ -528,7 +529,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)"
+  "live": true,
+  "model": "r8hub",
+  "note": "17 Nov r8 pictures reviewed; open: selection not shown on some (round 9)"
  },
  "bim_rewire": {
   "description": true,
@@ -859,8 +862,9 @@
  },
  "collab": {
   "headless": true,
-  "model": "collab state (17 Nov)",
-  "note": "17 Nov: collab state answered mode live, allowed live, levels, proposalCalls 0; refused inside a batch with why"
+  "live": true,
+  "model": "p8",
+  "note": "17 Nov live answers and pictures; fault: captions give the last inner step or the tool name (round 9)"
  },
  "compound_explode": {
   "description": true,
@@ -1280,7 +1284,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Documents model, run 2, answers read (the body is the object Body, labelled Tut, 53 x 26 x 26): manual with two steps and a BOM of two items, explode 51.9, route Workshop own shapes outside an Assembly (one empty undo step), the twice-added body and the direction refused; draft written with numeral 10 and one figure, an empty title refused"
+  "live": true,
+  "model": "r8hub",
+  "note": "17 Nov r8 pictures reviewed; open: selection not shown on some (round 9)"
  },
  "drawing_make": {
   "description": true,
@@ -1446,7 +1452,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+  "live": true,
+  "model": "r8fem",
+  "note": "17 Nov r8 pictures reviewed: maps with own scales, captions with values"
  },
  "fea_clear": {
   "description": true,
@@ -1478,8 +1486,9 @@
   "description": true,
   "headless": true,
   "health": true,
-  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
-  "note": "docs: body not read line by line in the FEM pass"
+  "live": true,
+  "model": "r8-heat3",
+  "note": "17 Nov: live answer hottest 100 C at Face1, coolest 20 C at Face2, solveCheck C3D10 (after the key=T.get fix)"
  },
  "fea_hold": {
   "description": true,
@@ -1508,8 +1517,9 @@
  "fea_native": {
   "description": true,
   "headless": true,
-  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
-  "note": "docs: Elmer half not checked"
+  "live": true,
+  "model": "r8fem",
+  "note": "17 Nov r8 pictures reviewed: maps with own scales, captions with values"
  },
  "fea_parts": {
   "description": true,
@@ -1523,8 +1533,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)",
-  "note": "nearest-node readings"
+  "live": true,
+  "model": "r8fem",
+  "note": "17 Nov r8 pictures reviewed: maps with own scales, captions with values"
  },
  "fea_refine": {
   "description": true,
@@ -1612,7 +1623,9 @@
   "description": true,
   "docs": true,
   "headless": true,
-  "model": "FemTutorial: FEM CalculiX Cantilever 3D (88.25 mm for the wiki's 86.93; 18.97 for 18.95) + tour (43 calls)"
+  "live": true,
+  "model": "r8fem",
+  "note": "17 Nov live answer membrane -1.17, bending 224 MPa; fault: no STRESS XX map in the window (round 9)"
  },
  "fem_mesh": {
   "description": true,
@@ -1673,7 +1686,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "live": true,
+  "model": "r8sr",
+  "note": "17 Nov live answers: sheet flat-test.png, 2 objects, CALIBRATED 5 px/mm; fault: ScanRuler panel keys squashed (round 9)"
  },
  "flat_curvature": {
   "description": true,
@@ -1752,14 +1767,18 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "live": true,
+  "model": "r8sr",
+  "note": "17 Nov live answers: sheet flat-test.png, 2 objects, CALIBRATED 5 px/mm; fault: ScanRuler panel keys squashed (round 9)"
  },
  "flat_open_image": {
   "description": true,
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "ScanRuler 2D model, run 2, answers read: on the section after densifying \u2014 bore r 4.9975, lines at y 15 and -15, picks moved 0, corner [-20,15], arc sweep 1.549; 30.000, 20.000, 90.00 deg, 25.000; aligned report (corner 0, 30; bore centre 20, 15); DXF, SVG, PNG 600 x 450 \u2014 and on the image: 6 chains, objects 201.08 and 60.0 mm2, disc r 7.998, 6.000 uncalibrated then 12.000 at 5 px/mm, the note carried to [8,52], object numbers cleared"
+  "live": true,
+  "model": "r8sr",
+  "note": "17 Nov live answers: sheet flat-test.png, 2 objects, CALIBRATED 5 px/mm; fault: ScanRuler panel keys squashed (round 9)"
  },
  "flat_profile": {
   "description": true,
@@ -1809,8 +1828,9 @@
  "gcode_read": {
   "headless": true,
   "health": true,
-  "model": "OrcaModel",
-  "note": "17 Nov: orca-model calls through the hub bridge on the Mac's OrcaSlicer 2.5.0 with its own H2D system presets, link 7575e54: 15 answers read against their expectations (H2D start G-code, 220 C, 25 layers)"
+  "live": true,
+  "model": "r8hub",
+  "note": "17 Nov r8 pictures reviewed; open: selection not shown on some (round 9)"
  },
  "gen_make": {
   "description": true,
@@ -1950,8 +1970,8 @@
   "headless": true,
   "health": true,
   "live": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
-  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
+  "model": "r8judge",
+  "note": "17 Nov judge faults proven live"
  },
  "ifc_find": {
   "description": true,
@@ -1959,8 +1979,8 @@
   "headless": true,
   "health": true,
   "live": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
-  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
+  "model": "r8judge",
+  "note": "17 Nov judge faults proven live"
  },
  "ifc_open": {
   "description": true,
@@ -1968,8 +1988,8 @@
   "headless": true,
   "health": true,
   "live": true,
-  "model": "window pass 5 (17 Nov), win5 models",
-  "note": "17 Nov: window pass 5 after round 7 fixes: the picture after the first accepted call reviewed GOOD or MINOR (live/w5 reviews)"
+  "model": "r8judge",
+  "note": "17 Nov judge faults proven live"
  },
  "ifc_remove": {
   "description": true,
@@ -1986,8 +2006,8 @@
   "headless": true,
   "health": true,
   "live": true,
-  "model": "ArchHouse: Arch tutorial's house by its stated sizes + tour (69 calls; IFC chain from the re-run)",
-  "note": "17 Nov: window round 4: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
+  "model": "r8judge",
+  "note": "17 Nov judge faults proven live"
  },
  "import_file": {
   "description": true,
@@ -2051,7 +2071,9 @@
  },
  "job_start": {
   "headless": true,
-  "note": "17 Nov: re-run after the hub fixes"
+  "live": true,
+  "model": "p8",
+  "note": "17 Nov live answers and pictures; fault: captions give the last inner step or the tool name (round 9)"
  },
  "job_status": {
   "headless": true,
@@ -2642,8 +2664,9 @@
  },
  "meshobj_unwrap": {
   "headless": true,
-  "model": "probe-b (17 Nov)",
-  "note": "17 Nov: unwrap of a trimmed sphere-cap mesh answered area3d 313.6, areaFlat 314.7, stretch mean 1.0 % max 3.8 %, 1 outline; helper: ran in freecadcmd (the bundle python stops, code -11, at import flatmesh)"
+  "live": true,
+  "model": "r8hub",
+  "note": "17 Nov r8 pictures reviewed; open: selection not shown on some (round 9)"
  },
  "mill_check": {
   "description": true,
@@ -3203,7 +3226,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Electronics model, run 2, answers read: board 50 x 30 x 1.6, 2 copper layers, holes 3.2, 3.2 and 2.2, J1 and C1 tall, R1 and U1 with no height, moved [-125,115]; enclosure 56 x 36 x 21.6 with M3 standoffs and the J1 opening; a Part::Box refused with the plain-copy call, the channel 46.14 mm open both ends, 138.67 mm3 out, 4,406 ohm of filament, awg 22 fits, awg 99 refused before any cut, a path outside refused; order zips with 3 gerbers, drill, BOM, CPL, DRC not run (no kicad-cli)"
+  "live": true,
+  "model": "r8hub",
+  "note": "17 Nov r8 pictures reviewed; open: selection not shown on some (round 9)"
  },
  "pd_binder": {
   "description": true,
@@ -3549,8 +3574,9 @@
  },
  "pref_import": {
   "headless": true,
-  "model": "probe-b (17 Nov)",
-  "note": "17 Nov: merged this morning's own settings snapshot back: groups listed, backup written, a guarded setting kept"
+  "live": true,
+  "model": "p8",
+  "note": "17 Nov live answers and pictures; fault: captions give the last inner step or the tool name (round 9)"
  },
  "pref_pack": {
   "description": true,
@@ -3589,7 +3615,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "Workshop Electronics model, run 2, answers read: board 50 x 30 x 1.6, 2 copper layers, holes 3.2, 3.2 and 2.2, J1 and C1 tall, R1 and U1 with no height, moved [-125,115]; enclosure 56 x 36 x 21.6 with M3 standoffs and the J1 opening; a Part::Box refused with the plain-copy call, the channel 46.14 mm open both ends, 138.67 mm3 out, 4,406 ohm of filament, awg 22 fits, awg 99 refused before any cut, a path outside refused; order zips with 3 gerbers, drill, BOM, CPL, DRC not run (no kicad-cli)"
+  "live": true,
+  "model": "r8hub",
+  "note": "17 Nov r8 pictures reviewed; open: selection not shown on some (round 9)"
  },
  "printer_add": {
   "headless": true,
@@ -4768,8 +4796,8 @@
   "headless": true,
   "health": true,
   "live": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)",
-  "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
+  "model": "r8judge",
+  "note": "17 Nov judge faults proven live"
  },
  "td_dimset": {
   "description": true,
@@ -4846,8 +4874,8 @@
   "headless": true,
   "health": true,
   "live": true,
-  "model": "Probe 17:37 after the fixes (cold views computed; tool point read; lettering box)",
-  "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
+  "model": "r8judge",
+  "note": "17 Nov judge faults proven live"
  },
  "td_note": {
   "description": true,
@@ -4872,7 +4900,9 @@
   "docs": true,
   "headless": true,
   "health": true,
-  "model": "TechDrawTutorial: Basic TechDraw Tutorial + tour (66 calls)"
+  "live": true,
+  "model": "r8proj",
+  "note": "17 Nov live answer: ProjGroup Front, Top, Right on a box (the tutorial file's Body has no solid on FreeCAD 1.1.3: a fixture fault)"
  },
  "td_section": {
   "description": true,
