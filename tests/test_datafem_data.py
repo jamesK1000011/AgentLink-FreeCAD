@@ -141,6 +141,13 @@ class FemData(unittest.TestCase):
                 self.assertNotIn("kept", c["old"]["result"][1], c["case"])
                 self.assertIn("no FEM objects in the document's tree", res[1]["kept"], c["case"])
                 c = {**c, "new": {**c["new"], "result": [res[0], {k: v for k, v in res[1].items() if k != "kept"}] + list(res[2:])}}
+            # Meant difference (round 4): fea_hold and fea_load say that the window draws no symbol
+            # for them (their holds and loads are Agent Link's data, with no FreeCAD constraint).
+            res = c["new"]["result"]
+            if c["tool"] in ("fea_hold", "fea_load") and res[0] == "ok" and isinstance(res[1], dict) and "window" in res[1]:
+                self.assertNotIn("window", c["old"]["result"][1], c["case"])
+                self.assertIn("the window draws no symbol", res[1]["window"], c["case"])
+                c = {**c, "new": {**c["new"], "result": [res[0], {k: v for k, v in res[1].items() if k != "window"}] + list(res[2:])}}
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
         self.assertGreaterEqual(placed, 1)

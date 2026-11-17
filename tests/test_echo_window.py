@@ -163,26 +163,69 @@ class Buttons(unittest.TestCase):
         self.assertEqual(cleared, [1])
 
     def test_a_button_behind_the_overflow_lights_the_overflow(self):
+        """Round 4: only a button Qt moved into its shown toolbar's "»"
+        list lights the "»" (in_overflow): not one on a toolbar the person
+        hid, nor a hidden button with a shown one after it."""
+        class Act:
+            def __init__(self, shown=True):
+                self.shown = shown
+
+            def isVisible(self):
+                return self.shown
+
+            def isSeparator(self):
+                return False
+
         class ToolBar:
-            pass
+            def __init__(self, shown=True):
+                self.shown, self.rows = shown, []
+
+            def isVisible(self):
+                return self.shown
+
+            def actions(self):
+                return [a for a, _w in self.rows]
+
+            def widgetForAction(self, a):
+                return next(w for x, w in self.rows if x is a)
 
         class ToolButton:
-            def __init__(self, parent=None):
-                self.parent = parent
+            def __init__(self, parent=None, shown=True):
+                self.parent, self.shown = parent, shown
 
             def parentWidget(self):
                 return self.parent
 
-        bar = ToolBar()
-        ext = ToolButton(bar)
-        bar.findChild = lambda cls, name: ext if name == "qt_toolbar_ext_button" else None
-        hidden = ToolButton(bar)
+            def isVisible(self):
+                return self.shown
+
+        def bar_with(shown_bar, *shown_buttons):
+            bar = ToolBar(shown_bar)
+            ext = ToolButton(bar)
+            bar.findChild = lambda cls, name: ext if name == "qt_toolbar_ext_button" else None
+            buttons = [ToolButton(bar, sh) for sh in shown_buttons]
+            bar.rows = [(Act(), b) for b in buttons]
+            return bar, ext, buttons
+
         lit = []
         painter = types.SimpleNamespace(flash=lambda w, ms: lit.append(w) or True)
         QtW = types.SimpleNamespace(QToolBar=ToolBar, QToolButton=ToolButton)
+        _bar, ext, (shown, hidden) = bar_with(True, True, False)
         self.assertTrue(echo.overflow_flash([hidden], painter, 900, QtW))
         self.assertEqual(lit, [ext])
         self.assertFalse(echo.overflow_flash([ToolButton(None)], painter, 900, QtW))
+        _bar, _ext, (gone,) = bar_with(False, False)  # a toolbar the person hid
+        self.assertFalse(echo.overflow_flash([gone], painter, 900, QtW))
+        _bar, _ext, (mid, after) = bar_with(True, False, True)  # hidden for another reason
+        self.assertFalse(echo.overflow_flash([mid], painter, 900, QtW))
+        self.assertEqual(lit, [ext])
+
+    def test_in_overflow_rule(self):
+        self.assertTrue(echo.in_overflow([(True, True), (True, False), (True, False)], 1))
+        self.assertFalse(echo.in_overflow([(True, False), (True, True)], 0))
+        self.assertFalse(echo.in_overflow([(True, True), (False, False)], 1))  # its action hidden
+        self.assertFalse(echo.in_overflow([(True, True)], 0))
+        self.assertFalse(echo.in_overflow([], 0))
 
 
 # ---- P3: the Model tab ------------------------------------------------------------------
