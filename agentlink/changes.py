@@ -108,6 +108,13 @@ class _Gui:
 
     def slotChangedObject(self, vp, prop):
         try:
+            # A view provider still being built (its first properties are
+            # set before it is given its object) has no object: reading
+            # .Object then crashes FreeCAD (a null pointer in its getter),
+            # while .Document raises "View provider detached", so that is
+            # asked first.
+            if getattr(vp, "Document", None) is None:
+                return
             o = vp.Object
             if o is None or o.Document is None:
                 return
