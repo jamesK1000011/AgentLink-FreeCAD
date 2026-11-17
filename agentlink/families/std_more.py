@@ -32,6 +32,65 @@ COLOR_PROP = "AgentLinkColor"
 FACE_PROP = "AgentLinkFaceColors"
 
 
+def solid_feature(o):
+    """What a body's tip may be: a feature with a solid of its own — not
+    a sketch, a datum or a binder (Body::execute refuses those: "Linked
+    object is not a PartDesign feature"), nor a MultiTransform's step."""
+    if not o.isDerivedFrom("PartDesign::Feature"):
+        return False
+    return not any(x.TypeId == "PartDesign::MultiTransform" and o in x.Transformations for x in o.InList)
+
+
+def after_tip(b):
+    """The solid features past the tip: kept, but not in the body's shape
+    ({ afterTip: [labels] }, or nothing)."""
+    g = list(b.Group)
+    if b.Tip is None or b.Tip not in g:
+        return {}
+    left = [o.Label for o in g[g.index(b.Tip) + 1:] if solid_feature(o)]
+    return {"afterTip": left} if left else {}
+
+
+def profile_sketch(f):
+    """The sketch a feature is built on: its Profile, which FreeCAD keeps as
+    the sketch or as (sketch, [sub-elements]). None when it has none."""
+    prof = getattr(f, "Profile", None)
+    return prof[0] if isinstance(prof, tuple) else prof
+
+
+def reattach(o, src, to):
+    """A sketch moved from body src to body to, put on the same origin plane
+    of its new body: origin planes are per body. Anything else (a sketch on
+    a face, a feature) is left as it is."""
+    sp = pdc.support_prop(o)
+    sup = getattr(o, sp, None)
+    if o.TypeId == "Sketcher::SketchObject" and src is not None and sup:
+        ref = sup[0][0] if isinstance(sup, list) else None
+        if ref is not None and src.Origin.hasObject(ref):
+            role = ref.Role if hasattr(ref, "Role") else ref.Label
+            new = next((x for x in to.Origin.OriginFeatures if getattr(x, "Role", x.Label) == role), None)
+            if new is not None:
+                setattr(o, sp, [(new, "")])
+
+
+def shaft_solid(pts, axis="x"):
+    """A stepped shaft's solid from its half outline (points [x, radius, 0]
+    along x, the first and last on the axis): the outline closed, points
+    that repeat dropped, turned once about x, and laid along y or z when
+    asked."""
+    clean = [pts[0]]
+    for p in pts[1:]:
+        if (p - clean[-1]).Length > 1e-9:
+            clean.append(p)
+    clean.append(pts[0])
+    face = Part.Face(Part.makePolygon(clean))
+    solid = face.revolve(V(0, 0, 0), V(1, 0, 0), 360)
+    solid = Part.Solid(Part.Shell(solid.Faces)) if solid.ShapeType != "Solid" else solid
+    if axis != "x":
+        solid.rotate(V(0, 0, 0), V(0, 1, 0), -90) if axis == "z" else solid.rotate(V(0, 0, 0), V(0, 0, 1), 90)
+    return solid
+
+
 def tools(s):
     def d():
         if s.doc is None:
@@ -129,18 +188,6 @@ def tools(s):
             d().recompute()
             return done("link_edit", {"copy": o.Label, "from": src.Label, "volume": round(sh.Volume, 3) if sh.Solids else None, **({"repointed": moved} if moved else {})})
         raise bad("action: replace { link, to } | unlink { link } | import { links } | import_all — object_group { action: \"list\" } names the links.")
-
-    def part_container(a):
-        p = d().addObject("App::Part", "Part")
-        p.Label = s.unique(a.get("name") or "Part", p)
-        members = objs(a["objects"]) if a.get("objects") else []
-        for m in members:
-            for g in [x for x in m.InList if x.TypeId == "App::Part"]:
-                g.removeObject(m)
-            p.addObject(m)
-        if picks.placed(a):
-            p.Placement = picks.placement(a)
-        return done("part_container", {"part": p.Label, "objects": [m.Label for m in members], "note": "An App::Part moves everything in it together, by its placement."})
 
     def object_duplicate(a):
         out = []
@@ -311,280 +358,7 @@ def tools(s):
         d().recompute()
         return {"set": out, **({"note": "No window here: the colours are kept on the objects and show when the file opens in FreeCAD."} if not any(x["shown"] for x in out) else {})}
 
-    # ---- Part: compounds, joins, curve networks ------------------------------------------
-
-    def compound_explode(a):
-        import CompoundTools.Explode as X
-
-        o = picks.shaped(d(), a.get("compound"), "compound")
-        if len(o.Shape.childShapes()) < 2:
-            raise ToolError("invalid_state", f"compound: {o.Label} is one {o.Shape.ShapeType.lower()}, nothing to explode — a compound of several pieces is (part_compound makes one; a part_split result is one).")
-        g, children = X.explodeCompound(o)
-        if hasattr(o, "Visibility"):
-            # As Part's Explode compound command: the pieces stand in for it.
-            o.Visibility = False
-        d().recompute()
-        s.snapshot("compound_explode")
-        return {"group": g.Label, "pieces": [{"name": c.Label, "volume": round(c.Shape.Volume, 3) if c.Shape.Solids else None} for c in children]}
-
-    def compound_filter(a):
-        import CompoundTools.CompoundFilter as CF
-
-        o = picks.shaped(d(), a.get("compound"), "compound")
-        n = len(o.Shape.childShapes())
-        how = a.get("keep", "items")
-        # FreeCAD's FilterType: bypass, specific items, collision-pass,
-        # window-volume, window-area, window-length, window-distance.
-        # collision-fail is collision-pass with Invert; window-distribution
-        # was this tool's old word for window-distance.
-        kinds = {"collision-pass": ("collision-pass", False), "collision-fail": ("collision-pass", True), "window-volume": ("window-volume", False),
-                 "window-area": ("window-area", False), "window-length": ("window-length", False), "window-distance": ("window-distance", False),
-                 "window-distribution": ("window-distance", False)}
-        if how != "items" and how not in kinds:
-            raise bad("keep: items { items: [0, 2] } | collision-pass / collision-fail { stencil } | window-volume / window-area / window-length { from, to } | window-distance { stencil, from, to }.")
-        stencil = picks.shaped(d(), a["stencil"], "stencil") if a.get("stencil") else None
-        if how != "items" and kinds[how][0] in ("collision-pass", "window-distance") and stencil is None:
-            raise bad(f"stencil: {how} needs one — the object the pieces are tested against (touching it, or their distance from it).")
-        items = a.get("items")
-        if how == "items":
-            items = [0] if items is None else items
-            wrong = [i for i in items if isinstance(i, bool) or not isinstance(i, int) or not 0 <= i < n]
-            if wrong or not items:
-                raise bad(f"items: the pieces to keep by number from 0 — {o.Label} has {n} (0 … {n - 1})" + (f"; {wrong[0]!r} is not one of them." if wrong else "."))
-        # In the session's document (makeCompoundFilter alone adds to FreeCAD.ActiveDocument).
-        f = CF.makeCompoundFilter("CompoundFilter", d())
-        f.Label = s.unique(a.get("name") or f"{o.Label} filtered", f)
-        f.Base = o
-        if how == "items":
-            f.FilterType = "specific items"
-            f.items = ";".join(str(i) for i in items)
-        else:
-            f.FilterType, f.Invert = kinds[how]
-            if stencil is not None:
-                f.Stencil = stencil
-            if a.get("from") is not None:
-                f.WindowFrom = float(a["from"])
-            if a.get("to") is not None:
-                f.WindowTo = float(a["to"])
-        d().recompute()
-        if f.Shape.isNull() or "Invalid" in (getattr(f, "State", None) or []):
-            why = "no piece touches the stencil" if how == "collision-pass" else "every piece touches the stencil" if how == "collision-fail" else \
-                f"no piece lies within {f.WindowFrom:g} … {f.WindowTo:g}% of the largest (or of the stencil's)" if how.startswith("window") else "nothing passed"
-            raise ToolError("failed", f"The filter keeps nothing of {o.Label} ({how}): {why} — nothing was made.")
-        if getattr(o, "ViewObject", None) is not None:
-            o.ViewObject.Visibility = False
-        s.snapshot("compound_filter")
-        return {"filter": f.Label, "kept": len(f.Shape.childShapes()) if f.Shape.ShapeType == "Compound" else 1}
-
-    def part_join(a):
-        import BOPTools.JoinFeatures as J
-
-        kind = a.get("kind")
-
-        def feature(proxy, view, default):
-            # In the session's document: BOPTools' make* add to
-            # FreeCAD.ActiveDocument, which is not always this one.
-            j = d().addObject("Part::FeaturePython", default)
-            proxy(j)
-            if FreeCAD.GuiUp and getattr(j, "ViewObject", None) is not None:
-                view(j.ViewObject)
-            j.Label = s.unique(a.get("name") or default, j)
-            return j
-
-        if kind == "connect":
-            members = [picks.shaped(d(), r, "objects") for r in picks.ref_list(a.get("objects"), "objects: two or more walled objects (pipes, shells) by name.")]
-            if len(members) < 2:
-                raise bad("objects: two or more walled objects (pipes, shells) by name.")
-            j = feature(J.FeatureConnect, J.ViewProviderConnect, "Connect")
-            j.Objects = members
-        elif kind in ("embed", "cutout"):
-            base, tool = picks.shaped(d(), a.get("base"), "base"), picks.shaped(d(), a.get("tool"), "tool")
-            if base is tool:
-                raise bad("base and tool: two different objects.")
-            j = feature(J.FeatureEmbed, J.ViewProviderEmbed, "Embed") if kind == "embed" else feature(J.FeatureCutout, J.ViewProviderCutout, "Cutout")
-            j.Base, j.Tool = base, tool
-            members = [base, tool]
-        else:
-            raise bad("kind: connect { objects } (walls fused, insides kept) | embed { base, tool } (tool's wall set into base) | cutout { base, tool } (base cut to fit tool's wall).")
-        d().recompute()
-        sh = j.Shape
-        if sh.isNull() or "Invalid" in (getattr(j, "State", None) or []):
-            raise ToolError("failed", f"The {kind} failed: {j.getStatusString()} — nothing was made. The objects' walls must cross one another (part_section {{ body, with }} shows whether they meet).")
-        for m in members:
-            # As Part's join commands: the inputs are hidden under the result.
-            if hasattr(m, "Visibility"):
-                m.Visibility = False
-        s.snapshot("part_join")
-        return {"join": j.Label, "kind": kind, "valid": sh.isValid(), "solids": len(sh.Solids), "volume": round(sh.Volume, 3) if sh.Solids else None}
-
-    def part_import_curves(a):
-        if not isinstance(a.get("path"), str) or not a["path"].strip():
-            raise bad("path: a STEP, IGES or BREP file with curves (a relative path is in the session's folder).")
-        # As every other reader: a relative path is in the session's folder.
-        p = paths.in_file(s, "part_import_curves", a["path"])
-        if not os.path.isfile(p):
-            raise ToolError("not_found", f"path {p!r}: no such file — a STEP, IGES or BREP with curves; a relative path is looked for in the session's folder.")
-        try:
-            sh = Part.read(p)
-        except Exception as e:
-            raise ToolError("failed", f"FreeCAD could not read {os.path.basename(p)} ({e}): a .step / .stp, .iges / .igs or .brep file. Nothing was added.")
-        edges = sh.Edges
-        if not edges:
-            raise ToolError("invalid_input", f"{os.path.basename(p)} has no curves: nothing was added.")
-        o = d().addObject("Part::Feature", "CurveNet")
-        o.Shape = Part.Compound(edges)
-        o.Label = s.unique(a.get("name") or os.path.splitext(os.path.basename(p))[0], o)
-        return done("part_import_curves", {"curves": o.Label, "edges": len(edges), "note": "Edges only (faces are left out): surface_fill or surface_sections builds faces from them."})
-
     # ---- PartDesign ------------------------------------------------------------------------
-
-    def pd_move_feature(a):
-        f = picks.find(d(), a.get("feature"), "feature")
-        if not f.TypeId.startswith(("PartDesign::", "Sketcher::", "Part::Part2DObject")) or f.TypeId == "PartDesign::Body":
-            raise bad(f"feature: {f.Label} is a {f.TypeId.split('::')[-1]}, not a PartDesign feature or sketch — a whole solid goes into a body with pd_clone.")
-        src = pdc.body_of(f)
-        to = pdc.pd_body(d(), a.get("to"))
-        if src is to:
-            raise bad(f"{f.Label} is in {to.Label} already: to takes another body (pd_reorder moves it within this one).")
-        broken0 = {x["object"] for x in pdc.broken(d())}
-        moved = [f]
-        # A sketch's feature takes its sketch along, as the GUI's Move does.
-        prof = getattr(f, "Profile", None)
-        sk = prof[0] if isinstance(prof, tuple) else prof
-        if sk is not None and sk.TypeId == "Sketcher::SketchObject" and src is not None and src.hasObject(sk):
-            moved.insert(0, sk)
-        for o in moved:
-            if src is not None:
-                src.removeObject(o)
-            to.addObject(o)
-            sp = pdc.support_prop(o)
-            sup = getattr(o, sp, None)
-            if o.TypeId == "Sketcher::SketchObject" and src is not None and sup:
-                # Origin planes are per body: re-attach to the same plane of the new body.
-                ref = sup[0][0] if isinstance(sup, list) else None
-                if ref is not None and src.Origin.hasObject(ref):
-                    role = ref.Role if hasattr(ref, "Role") else ref.Label
-                    new = next((x for x in to.Origin.OriginFeatures if getattr(x, "Role", x.Label) == role), None)
-                    if new is not None:
-                        setattr(o, sp, [(new, "")])
-        d().recompute()
-        new_broken = [x["object"] for x in pdc.broken(d()) if x["object"] not in broken0]
-        if new_broken:
-            # Raised inside the tool's transaction: the move is taken back.
-            raise ToolError("invalid_state", f"Moving {f.Label} to {to.Label} breaks {', '.join(map(str, new_broken))} — nothing was moved. A pocket, hole or fillet needs the solid it works on: move the features before it first (the first pad first), or rebuild it in {to.Label}.")
-        s.snapshot("pd_move_feature")
-        return {"moved": [o.Label for o in moved], "from": src.Label if src else None, "to": to.Label, "tip": to.Tip.Label if to.Tip else None}
-
-    def pd_reorder(a):
-        f = picks.find(d(), a.get("feature"), "feature")
-        b = pdc.body_of(f)
-        if b is None:
-            raise ToolError("invalid_state", f"{f.Label} is not in a PartDesign body: pd_reorder moves a body's own features and sketches (feature_list names them).")
-        if a.get("after") and a.get("before"):
-            raise bad("after or before, one of them: the feature to put it next to.")
-        where = "after" if a.get("after") else "before"
-        target = pdc.in_body(b, a.get(where), what=where) if a.get(where) else None
-        if target is None:
-            raise bad("after or before: the feature of the same body to put it next to (feature_list gives the order).")
-        if target is f:
-            raise bad(f"{where}: another feature than {f.Label} itself.")
-        broken0 = {x["object"] for x in pdc.broken(d())}
-        tip_was = b.Tip
-        b.removeObject(f)
-        b.insertObject(f, target, where == "after")
-        # Put after the tip, a feature would drop out of the body's shape
-        # with nothing said: the tip goes with it, as in the window.
-        moved_tip = False
-        if where == "after" and tip_was is target:
-            b.Tip = f
-            moved_tip = True
-        elif tip_was is f:
-            b.Tip = f
-        d().recompute()
-        new_broken = [x["object"] for x in pdc.broken(d()) if x["object"] not in broken0]
-        if new_broken:
-            raise ToolError("invalid_state", f"{f.Label} {where} {target.Label} breaks {', '.join(map(str, new_broken))} — nothing was moved: a feature may only use what comes before it (its sketch, the faces and edges it names).")
-        s.snapshot("pd_reorder")
-        order = [o.Label for o in b.Group if not o.TypeId.startswith("App::Origin")]
-        return {"body": b.Label, "order": order, "tip": b.Tip.Label if b.Tip else None, **({"tipMoved": True} if moved_tip else {}), **after_tip(b),
-                "volume": round(b.Shape.Volume, 3) if not b.Shape.isNull() and b.Shape.Solids else None}
-
-    def solid_feature(o):
-        """What a body's tip may be: a feature with a solid of its own — not
-        a sketch, a datum or a binder (Body::execute refuses those: "Linked
-        object is not a PartDesign feature"), nor a MultiTransform's step."""
-        if not o.isDerivedFrom("PartDesign::Feature"):
-            return False
-        return not any(x.TypeId == "PartDesign::MultiTransform" and o in x.Transformations for x in o.InList)
-
-    def after_tip(b):
-        """The solid features past the tip: kept, but not in the body's shape."""
-        g = list(b.Group)
-        if b.Tip is None or b.Tip not in g:
-            return {}
-        left = [o.Label for o in g[g.index(b.Tip) + 1:] if solid_feature(o)]
-        return {"afterTip": left} if left else {}
-
-    def pd_tip(a):
-        b = pdc.pd_body(d(), a.get("body"))
-        out = {}
-        if a.get("feature"):
-            f = pdc.in_body(b, a["feature"])
-            was = b.Tip
-            if not solid_feature(f):
-                # As the window's Set tip does for a sketch or a datum: the
-                # solid feature before it.
-                g = list(b.Group)
-                prev = next((o for o in reversed(g[:g.index(f)]) if solid_feature(o)), None)
-                if prev is None:
-                    raise bad(f"feature: {f.Label} is a {f.TypeId.split('::')[-1]} with no solid feature before it — the tip is a pad, pocket or other solid feature: "
-                              f"{', '.join(o.Label for o in g if solid_feature(o)) or 'none yet'}.")
-                out["note"] = f"{f.Label} is not a solid feature: the tip went to {prev.Label}, the one before it."
-                f = prev
-            broken0 = {x["object"] for x in pdc.broken(d())}
-            b.Tip = f
-            d().recompute()
-            new_broken = [x["object"] for x in pdc.broken(d()) if x["object"] not in broken0]
-            if new_broken:
-                # Raised inside the tool's transaction: the tip goes back.
-                raise ToolError("failed", f"With the tip at {f.Label}, {', '.join(map(str, new_broken))} failed — the tip stays at {was.Label if was else 'none'}.")
-            s.snapshot("pd_tip")
-            out["tipWas"] = was.Label if was else None
-        return {"body": b.Label, "tip": b.Tip.Label if b.Tip else None, "volume": round(b.Shape.Volume, 3) if not b.Shape.isNull() and b.Shape.Solids else None, **after_tip(b), **out,
-                "use": "The body's shape stops at the tip and new features go in right after it; features past it (afterTip) are kept but left out until the tip moves past them."}
-
-    def pd_shaft(a):
-        segs = a.get("segments") or []
-        if not segs:
-            raise bad("segments: [{ length, diameter }, …] in mm, from one end; a segment may also give diameterEnd for a taper.")
-        pts, x = [V(0, 0, 0)], 0.0
-        for i, sg in enumerate(segs):
-            if not isinstance(sg, dict):
-                raise bad(f"segment {i + 1}: {{ length, diameter }} in mm (diameterEnd for a taper).")
-            L, D = float(sg.get("length", 0)), float(sg.get("diameter", 0))
-            D2 = float(sg.get("diameterEnd", D))
-            if L <= 0 or D <= 0 or D2 <= 0:
-                raise bad(f"segment {i + 1}: length and diameter (and diameterEnd) in mm, over 0.")
-            pts += [V(x, D / 2, 0), V(x + L, D2 / 2, 0)]
-            x += L
-        pts.append(V(x, 0, 0))
-        clean = [pts[0]]
-        for p in pts[1:]:
-            if (p - clean[-1]).Length > 1e-9:
-                clean.append(p)
-        clean.append(pts[0])
-        face = Part.Face(Part.makePolygon(clean))
-        solid = face.revolve(V(0, 0, 0), V(1, 0, 0), 360)
-        solid = Part.Solid(Part.Shell(solid.Faces)) if solid.ShapeType != "Solid" else solid
-        if a.get("axis", "x") != "x":
-            solid.rotate(V(0, 0, 0), V(0, 1, 0), -90) if a["axis"] == "z" else solid.rotate(V(0, 0, 0), V(0, 0, 1), 90)
-        o = d().addObject("Part::Feature", "Shaft")
-        o.Shape = solid.removeSplitter()
-        o.Label = s.unique(a.get("name") or "Shaft", o)
-        if picks.placed(a):
-            o.Placement = picks.placement(a)
-        return done("pd_shaft", {"shaft": o.Label, "length": round(x, 3), "segments": len(segs), "volume": round(o.Shape.Volume, 3),
-                                 "note": "A plain Part solid, not in a PartDesign body: part_fillet or part_chamfer its sharp shoulders; pd_clone brings it into a body for pd_ features."})
 
     # ---- other workbenches' leftovers ---------------------------------------------------
 
@@ -701,59 +475,6 @@ def tools(s):
         st_.Width, st_.Height = w, h
         st_.Label = s.unique(a.get("name") or f"{o.Label} structured", st_)
         return done("points_structure", {"points": st_.Label, "width": w, "height": h})
-
-    def surface_polynomial(a):
-        import numpy as np
-
-        o = picks.find(d(), a.get("from"), "from")
-        if hasattr(o, "Mesh"):
-            P = np.array([[p.x, p.y, p.z] for p in o.Mesh.Points])
-        elif o.isDerivedFrom("Points::Feature"):
-            P = np.array([[p.x, p.y, p.z] for p in o.Points.Points])
-        else:
-            raise bad(f"from: {o.Label} is not a mesh or a point cloud ({o.TypeId}) — meshobj_from_shape meshes a body; surface_points fits a grid of given points.")
-        if len(P) < 9:
-            raise bad(f"from: {o.Label} has {len(P)} points; a quadric needs 9 or more, spread over an area.")
-        # As Reen's Polynomial Surface: a quadric z(u, v) over the points'
-        # best plane, made a 3×3 Bézier patch over their box.
-        c = P.mean(0)
-        _, _, vt = np.linalg.svd(P - c)
-        ex, ey, ez = vt[0], vt[1], vt[2]
-        L = (P - c) @ np.array([ex, ey, ez]).T
-        u, v, z = L[:, 0], L[:, 1], L[:, 2]
-        A = np.c_[np.ones_like(u), u, v, u * u, u * v, v * v]
-        k, *_ = np.linalg.lstsq(A, z, rcond=None)
-        u0, u1, v0, v1 = u.min(), u.max(), v.min(), v.max()
-        f = lambda x, y: k[0] + k[1] * x + k[2] * y + k[3] * x * x + k[4] * x * y + k[5] * y * y  # noqa: E731
-        # A quadric over a box is a degree-2 Bézier patch: its 9 poles by least squares on a grid.
-        B = lambda t: np.array([(1 - t) ** 2, 2 * t * (1 - t), t * t])  # noqa: E731
-        ts = np.linspace(0, 1, 7)
-        rows, rhs = [], []
-        for tu in ts:
-            for tv in ts:
-                bu, bv = B(tu), B(tv)
-                rows.append(np.outer(bu, bv).ravel())
-                rhs.append(f(u0 + (u1 - u0) * tu, v0 + (v1 - v0) * tv))
-        zp, *_ = np.linalg.lstsq(np.array(rows), np.array(rhs), rcond=None)
-        poles = []
-        for i in range(3):
-            row = []
-            for j in range(3):
-                uu = u0 + (u1 - u0) * i / 2
-                vv = v0 + (v1 - v0) * j / 2
-                w = c + ex * uu + ey * vv + ez * zp[i * 3 + j]
-                row.append(V(*w))
-            poles.append(row)
-        bz = Part.BezierSurface()
-        bz.increase(2, 2)
-        for i in range(3):
-            for j in range(3):
-                bz.setPole(i + 1, j + 1, poles[i][j])
-        sp = d().addObject("Part::Spline", "Bezier")
-        sp.Shape = bz.toShape()
-        sp.Label = s.unique(a.get("name") or f"{o.Label} polynomial", sp)
-        res = z - f(u, v)
-        return done("surface_polynomial", {"surface": sp.Label, "points": len(P), "rms": round(float(np.sqrt((res ** 2).mean())), 4), "max": round(float(np.abs(res).max()), 4)})
 
     def robot_tool(a):
         r = picks.find(d(), a.get("robot"), "robot")
@@ -940,14 +661,104 @@ def tools(s):
             out["note"] = "Moved only: three or more pairs (not in a line) set its turn too."
         return done("object_align", out)
 
+    # ---- what the Part, compound and Surface entries call by name ---------------------------
+    # (their tools are data: agentlink/data/tools.json, docs/data-tools.md)
+
+    def join_feature(proxy, view, default, name):
+        """A BOPTools join feature (Connect, Embed, Cutout) made in the
+        session's document: BOPTools' own make* add to FreeCAD.ActiveDocument,
+        which is not always this one. Its view provider only in the window."""
+        j = d().addObject("Part::FeaturePython", default)
+        proxy(j)
+        if FreeCAD.GuiUp and getattr(j, "ViewObject", None) is not None:
+            view(j.ViewObject)
+        j.Label = s.unique(name or default, j)
+        return j
+
+    def cloud_points(o):
+        """A mesh's or a point cloud's points as an n × 3 array; None for any other object."""
+        import numpy as np
+
+        if hasattr(o, "Mesh"):
+            return np.array([[p.x, p.y, p.z] for p in o.Mesh.Points])
+        if o.isDerivedFrom("Points::Feature"):
+            return np.array([[p.x, p.y, p.z] for p in o.Points.Points])
+        return None
+
+    def quadric_patch(P):
+        """A quadric fitted to points by least squares, as Reen's Polynomial
+        Surface: z(u, v) over the points' best plane, made a 3 × 3 Bézier
+        patch over their box. One algorithm: (the patch's shape, the rms and
+        the largest miss of the points along the plane's normal)."""
+        import numpy as np
+
+        c = P.mean(0)
+        _, _, vt = np.linalg.svd(P - c)
+        ex, ey, ez = vt[0], vt[1], vt[2]
+        L = (P - c) @ np.array([ex, ey, ez]).T
+        u, v, z = L[:, 0], L[:, 1], L[:, 2]
+        A = np.c_[np.ones_like(u), u, v, u * u, u * v, v * v]
+        k, *_ = np.linalg.lstsq(A, z, rcond=None)
+        u0, u1, v0, v1 = u.min(), u.max(), v.min(), v.max()
+        f = lambda x, y: k[0] + k[1] * x + k[2] * y + k[3] * x * x + k[4] * x * y + k[5] * y * y  # noqa: E731
+        # A quadric over a box is a degree-2 Bézier patch: its 9 poles by least squares on a grid.
+        B = lambda t: np.array([(1 - t) ** 2, 2 * t * (1 - t), t * t])  # noqa: E731
+        ts = np.linspace(0, 1, 7)
+        rows, rhs = [], []
+        for tu in ts:
+            for tv in ts:
+                bu, bv = B(tu), B(tv)
+                rows.append(np.outer(bu, bv).ravel())
+                rhs.append(f(u0 + (u1 - u0) * tu, v0 + (v1 - v0) * tv))
+        zp, *_ = np.linalg.lstsq(np.array(rows), np.array(rhs), rcond=None)
+        poles = []
+        for i in range(3):
+            row = []
+            for j in range(3):
+                uu = u0 + (u1 - u0) * i / 2
+                vv = v0 + (v1 - v0) * j / 2
+                w = c + ex * uu + ey * vv + ez * zp[i * 3 + j]
+                row.append(V(*w))
+            poles.append(row)
+        bz = Part.BezierSurface()
+        bz.increase(2, 2)
+        for i in range(3):
+            for j in range(3):
+                bz.setPole(i + 1, j + 1, poles[i][j])
+        res = z - f(u, v)
+        return bz.toShape(), round(float(np.sqrt((res ** 2).mean())), 4), round(float(np.abs(res).max()), 4)
+
+    def tool_module(name):
+        """One of FreeCAD's Python modules by name (CompoundTools.Explode), loaded when the tool runs."""
+        import importlib
+
+        return importlib.import_module(name)
+
+    # FreeCAD's CompoundFilter FilterType for each way of keeping, and
+    # whether it is inverted: collision-fail is collision-pass with Invert;
+    # window-distribution was compound_filter's old word for window-distance.
+    FILTER_KINDS = {"collision-pass": ("collision-pass", False), "collision-fail": ("collision-pass", True), "window-volume": ("window-volume", False),
+                    "window-area": ("window-area", False), "window-length": ("window-length", False), "window-distance": ("window-distance", False),
+                    "window-distribution": ("window-distance", False)}
+    part_helpers = {"objs": objs, "find": lambda ref, what="object": picks.find(d(), ref, what), "ref_list": picks.ref_list, "snapshot": lambda tool: s.snapshot(tool),
+                    "tool_module": tool_module, "FILTER_KINDS": FILTER_KINDS, "join_feature": join_feature,
+                    "in_file": lambda tool, path: paths.in_file(s, tool, path), "isfile": os.path.isfile, "basename": os.path.basename,
+                    "stem": lambda p: os.path.splitext(os.path.basename(p))[0], "read_shape": lambda *a, **k: Part.read(*a, **k), "compound": lambda *a, **k: Part.Compound(*a, **k),
+                    "cloud_points": cloud_points, "quadric_patch": quadric_patch}
+
     # The wrappers kept as data (agentlink/data/tools.json) run on these.
     helpers = {"doc": d, "done": done, "unique": s.unique, "placed": picks.placed, "placement": picks.placement,
-               "shaped": lambda ref, what: picks.shaped(d(), ref, what)}
+               "shaped": lambda ref, what: picks.shaped(d(), ref, what),
+               "find": lambda ref, what="object": picks.find(d(), ref, what), "snapshot": lambda tool: s.snapshot(tool), "V": V,
+               # PartDesign: bodies, their features and their tip
+               "pd_body": lambda ref: pdc.pd_body(d(), ref), "body_of": pdc.body_of, "in_body": pdc.in_body, "broken": lambda: pdc.broken(d()),
+               "solid_feature": solid_feature, "after_tip": after_tip, "profile_sketch": profile_sketch, "reattach": reattach, "shaft_solid": shaft_solid}
 
     st = {"type": "string"}
     arr = {"type": "array", "items": {"type": "string"}}
     num = {"type": "number"}
     v3 = {"type": "array", "items": num}
+    helpers.update(part_helpers)
     return runners.tools(GROUP, s, helpers) + [
         Tool("doc_graph", "What is built from what in the document (Std Dependency graph): roots (objects nothing uses), uses { label: [its inputs] }, counts; path writes a GraphViz .dot (svg: true also draws it when GraphViz's dot is on this computer; the note says when it is not). Changes nothing.",
              obj({"path": st, "svg": {"type": "boolean"}}), doc_graph),
@@ -961,8 +772,6 @@ def tools(s):
              obj({"to": st, "kind": {"type": "string", "enum": ["link", "group"]}, "objects": arr, "at": v3, "axis": v3, "angle": num, "count": {"type": "integer"}, "name": st}), link_make, changes=True),
         Tool("link_edit", "Change links: action replace { link, to } (point it at another object) | unlink { link, name } (a plain shape copy in its place, same placement; what used the link now uses the copy) | import { links } / import_all (objects linked from another document copied into this one). object_group { action: \"list\" } names the links.",
              obj({"action": {"type": "string", "enum": ["replace", "unlink", "import", "import_all"]}, "link": st, "links": arr, "to": st, "name": st}, ["action"]), link_edit, changes=True),
-        Tool("part_container", "An App::Part container holding objects, moved together by its placement (Std Part): objects [names], at, axis + angle. Not a solid: booleans take the bodies inside it.",
-             obj({"objects": arr, "at": v3, "axis": v3, "angle": num, "name": st}), part_container, changes=True),
         Tool("object_duplicate", "Copy objects in the document (Std Duplicate): each copy is independent but still built from the same inputs (a copied Pad uses the original's sketch); dependencies: true copies what each is built from too; simple: true copies the shape alone as a plain Part::Feature (no history, placement baked in). name: the copy's label (\"<label> copy\" by default). Reply: duplicated [{ from, copy }].",
              obj({"objects": arr, "dependencies": {"type": "boolean"}, "simple": {"type": "boolean"}, "name": st}, ["objects"]), object_duplicate, changes=True),
         Tool("doc_merge", "Bring every object of another .FCStd into this document (File > Merge document): path (relative: the session's folder). Internal names that clash get a number (labels too, unless FreeCAD's duplicate-labels preference is on). Recomputes. Reply: count, objects, errors. import_file is for STEP, STL and other formats.", obj({"path": st}, ["path"]), doc_merge, changes=True),
@@ -974,25 +783,9 @@ def tools(s):
              obj({"name": st, "text": st, "append": {"type": "boolean"}}), text_document, changes=True),
         Tool("object_appearance", "Colour objects: color \"#rrggbb\" or [r,g,b] 0–1 (or random: true), transparency 0 (solid) – 100, faces { \"Face3\": \"#ff0000\" } a colour per face (the rest keep the object's colour; face numbers change after a modelling step: shape_query again). Shown at once in the window; headless they are kept on the object (AgentLinkColor …) and exports read them. Reply: set [{ object, color, transparency, faces, shown }].",
              obj({"objects": arr, "color": {}, "random": {"type": "boolean"}, "transparency": {"type": "integer"}, "faces": {"type": "object"}}, ["objects"]), object_appearance, changes=True),
-        Tool("compound_explode", "Split a compound into its pieces (Part Explode compound): each a filter object that follows the compound, in a group; the compound is hidden. part_compound { explode } gives plain bodies instead.", obj({"compound": st}, ["compound"]), compound_explode, changes=True),
-        Tool("compound_filter", "Keep some pieces of a compound (Part Compound filter): keep items { items: [0, 2], from 0 } | collision-pass / collision-fail { stencil: touching it or not } | window-volume / -area / -length { from, to as percents of the largest piece } | window-distance { stencil, from, to }. Refused when nothing passes; the compound is hidden. Reply: filter, kept.",
-             obj({"compound": st, "keep": st, "items": {"type": "array", "items": {"type": "integer"}}, "stencil": st, "from": num, "to": num, "name": st}, ["compound"]), compound_filter, changes=True),
-        Tool("part_join", "Join walled objects (Part join features; inputs hidden): kind connect { objects } fuses walls keeping the insides; embed { base, tool } sets tool into base; cutout { base, tool } cuts base to fit tool's wall. Pipes and tanks. Reply: valid, solids, volume.",
-             obj({"kind": {"type": "string", "enum": ["connect", "embed", "cutout"]}, "objects": arr, "base": st, "tool": st, "name": st}, ["kind"]), part_join, changes=True),
-        Tool("part_import_curves", "Import a curve network (the edges of a STEP, IGES or BREP; faces left out) as one object, for surface_fill or surface_sections: path (relative: in the session's folder).", obj({"path": st, "name": st}, ["path"]), part_import_curves, changes=True),
-        Tool("pd_move_feature", "Move a PartDesign feature (with its sketch, re-attached to the same origin plane) to another body: feature, to. It goes after that body's tip. Refused, with nothing moved, when it or what is left behind then fails (a pocket needs a solid to cut). Reply: moved, from, to, tip.",
-             obj({"feature": st, "to": st}, ["feature", "to"]), pd_move_feature, changes=True),
-        Tool("pd_reorder", "Move a feature or sketch in its body's history: after or before another one of the same body. Refused, with nothing moved, when something would then use what comes after it. Put after the tip, it becomes the tip. Reply: order, tip, afterTip (solid features past the tip, left out of the shape), volume.",
-             obj({"feature": st, "after": st, "before": st}, ["feature"]), pd_reorder, changes=True),
-        Tool("pd_tip", "Read (no feature) or set a body's tip: the solid feature its shape stops at, and after which new features go in. A sketch or datum given: the solid feature before it. Features past the tip are kept but left out (afterTip) — set it back to the last one when done. Reply: tip, tipWas, afterTip, volume.",
-             obj({"body": st, "feature": st}), pd_tip, changes=True),
         Tool("scad_tidy", "OpenSCAD workbench's tree tools on objects: action color_code (all shapes when no objects: coloured by validity and kind — the reply's key; as FreeCAD's own Color Shapes it recomputes nothing and leaves no object touched that was not before) | explode (a top-level Part::Fuse / MultiFuse / Compound deleted, its inputs kept, shown and moved by its placement) | expand_placements (placements pushed down to the leaves) | tolerance { vertex, edge, face mm } (a copy with tolerances raised to at least these, never lowered; the original hidden) | remove_subtree (objects and everything under them that nothing else uses — deleted for good) | replace { parent, old, new } (parent uses new where it used old). Reply by action: coloured, exploded, expanded, made, removed, replaced.",
              obj({"action": {"type": "string", "enum": ["color_code", "explode", "expand_placements", "tolerance", "remove_subtree", "replace"]}, "objects": arr, "vertex": num, "edge": num, "face": num, "parent": st, "old": st, "new": st}, ["action"]), scad_tidy, changes=True),
         Tool("points_structure", "A structured copy of a point cloud (Points::Structured: the points in their order laid out as a grid): points, width (per row), height (rows; count / width when left out). width × height must equal the count, so it suits a cloud still in scan order. The original stays.", obj({"points": st, "width": {"type": "integer"}, "height": {"type": "integer"}, "name": st}, ["points", "width"]), points_structure, changes=True),
-        Tool("surface_polynomial", "A polynomial (quadric) surface fitted by least squares to a mesh's or point cloud's points, as a 3 × 3 Bézier patch over their extent (as Reverse Engineering's Polynomial Surface): from, name. For a patch that is one smooth bowl or saddle; split a scan with meshobj_segments or meshobj_trim first. Reply: surface, points, rms and max mm off the points (along the fit plane's normal).",
-             obj({"from": st, "name": st}, ["from"]), surface_polynomial, changes=True),
         Tool("robot_tool", "Draw a tool shape on a robot's flange (Robot's Add tool shape): robot, tool (an object with a shape), at / axis + angle where on the shape the flange sits (ToolBase). Shown in the window only; it does not change the kinematics or the tool point (robot_new tool does).", obj({"robot": st, "tool": st, "at": v3, "axis": v3, "angle": num}, ["robot", "tool"]), robot_tool, changes=True),
         Tool("sheet_cells", "Merge spreadsheet cells (merge \"A1:C1\": the top-left cell stays, the others are cleared with their aliases) or split a merged one (split \"A1\", any of its cells). sheet_format { merge } does the same and first checks for aliases in use.", obj({"sheet": st, "merge": st, "split": st}, ["sheet"]), sheet_cells, changes=True),
-        Tool("pd_shaft", "A stepped shaft (the shaft wizard's geometry) as one plain Part solid, not in a PartDesign body: segments [{ length, diameter, diameterEnd (a taper) }] mm, from one end along axis x (or y, z); at, name. Reply: shaft, length, volume. part_fillet its shoulders; pd_clone brings it into a body.",
-             obj({"segments": {"type": "array", "items": {"type": "object"}}, "axis": {"type": "string", "enum": ["x", "y", "z"]}, "at": v3, "name": st}, ["segments"]), pd_shaft, changes=True),
     ]

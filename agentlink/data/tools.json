@@ -5362,6 +5362,3520 @@
     {"try": [{"let": {"back": "=read_file(p)"}}, {"put": {"readBack": "=int(len(back))"}}, {"when": "=len(back) == len(P)", "then": [{"put": {"maxError": "=round(float(abs(back - P).max()), 6)"}}], "else": [{"put": {"warning": {"fmt": "The file reads back as {len(back)} points, not {len(P)}."}}}]}], "except": [{"put": {"warning": {"fmt": "The file could not be read back: {error}"}}}]}
    ],
    "answer": {"fields": {"...": "=out"}}
+  },
+  "part_primitive": {
+   "group": "model",
+   "description": "Add a FreeCAD Part primitive as a body (mm, degrees). kind: box { size [x,y,z] }: a corner at at. cylinder { radius, height }, cone { radius (base), radius2 (top); either may be 0 }, prism { sides, radius (centre to corner), height }, tube { radius, radius2 (bore), height }: base centred at at, axis +z or along direction. sphere { radius }, torus { radius (ring), radius2 (tube) }: centred at at. wedge { wedge: { xmin, ymin, zmin, x2min, z2min, xmax, ymax, zmax, x2max, z2max } }: front face at ymin, rear face (x2, z2) at ymax. rotate { axis, angle } turns it about at. Parametric until a boolean, fillet or other part_ step bakes it to a plain shape: till then object_set changes Length / Width / Height (box x, y, z), Radius, Radius1 / Radius2 (cone base / top; torus ring / tube), Polygon / Circumradius, Xmin … Z2max, OuterRadius / InnerRadius. Reply: body, volume, area, faces, solids, box, sound, type, placement.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "box",
+       "cylinder",
+       "sphere",
+       "cone",
+       "torus",
+       "wedge",
+       "prism",
+       "tube"
+      ]
+     },
+     "size": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "radius": {
+      "type": "number"
+     },
+     "radius2": {
+      "type": "number"
+     },
+     "height": {
+      "type": "number"
+     },
+     "sides": {
+      "type": "integer"
+     },
+     "wedge": {
+      "type": "object"
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "rotate": {
+      "type": "object",
+      "description": "{ axis: [x,y,z], angle: degrees } about at"
+     },
+     "direction": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      },
+      "description": "[x,y,z]: where a cylinder's, cone's, prism's or tube's axis points from at (+z when left out); rotate turns it further."
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "kind: one of box, cylinder, sphere, cone, torus, wedge, prism, tube.", "when": "=a.kind not in PRIMS"},
+    {"let": {"kind": "=a.kind", "pl": "=placed(a)"}},
+    {"when": "=a.direction is not None", "then": [{"refuse": {"fmt": "direction: for cylinder, cone, prism, tube (their axis); a {kind} turns with rotate."}, "when": "=kind not in AXIAL"}, {"let": {"aim": "=rotation(V(0, 0, 1), direction(a.direction, 'direction'))"}}, {"let": {"pl": "=placement(pl.Base, pl.Rotation.multiply(aim))"}}]},
+    {"let": {"label": "=unique(a.name or kind.capitalize())"}},
+    {"choose": "=kind", "of": {"box": [{"let": {"size": "=a.get('size', [10, 10, 10])"}}, {"refuse": "size: [x, y, z], each above 0 mm.", "when": "=not (is_list(size) and len(size) == 3 and all(is_number(x) and x > 0 for x in size))"}, {"add": "Part::Box", "name": "Box"}, {"let": {"size": "=[float(x) for x in size]"}}, {"set": {"o.Length": "=size[0]", "o.Width": "=size[1]", "o.Height": "=size[2]"}}], "cylinder": [{"add": "Part::Cylinder", "name": "Cylinder"}, {"let": {"r": "=positive(a, 'radius', 5)", "h": "=positive(a, 'height', 10)"}}, {"set": {"o.Radius": "=r", "o.Height": "=h"}}], "sphere": [{"add": "Part::Sphere", "name": "Sphere"}, {"set": {"o.Radius": "=positive(a, 'radius', 5)"}}], "cone": [{"let": {"r1": "=num(a.get('radius', 5), 'radius')"}}, {"refuse": "radius: the base radius, 0 (a point) or more, mm.", "when": "=r1 < 0"}, {"let": {"r2": "=num(a.get('radius2', 0), 'radius2')"}}, {"refuse": "radius2: the top radius, 0 (a point) or more and not equal to radius — equal radii are kind: \"cylinder\".", "when": "=r2 < 0 or abs(r1 - r2) < 1e-9"}, {"add": "Part::Cone", "name": "Cone"}, {"let": {"h": "=positive(a, 'height', 10)"}}, {"set": {"o.Radius1": "=r1", "o.Radius2": "=r2", "o.Height": "=h"}}], "torus": [{"let": {"r1": "=positive(a, 'radius', 10)", "r2": "=positive(a, 'radius2', 2)"}}, {"refuse": {"fmt": "radius2: the tube's radius ({r2:g}), under radius, the ring's ({r1:g}) — else the torus cuts through itself."}, "when": "=r2 >= r1"}, {"add": "Part::Torus", "name": "Torus"}, {"set": {"o.Radius1": "=r1", "o.Radius2": "=r2"}}], "wedge": [{"let": {"w": "=dict(WEDGE)", "unknown": "=[k for k in (a.wedge or {}) if k not in WEDGE]"}}, {"refuse": {"fmt": "wedge.{unknown[0]}: the keys are xmin, ymin, zmin, x2min, z2min, xmax, ymax, zmax, x2max, z2max."}, "when": "=unknown"}, {"do": "=w.update({k: num(v, 'wedge.' + k) for k, v in (a.wedge or {}).items()})"}, {"refuse": "wedge: xmax above xmin, ymax above ymin, zmax above zmin; x2max not under x2min and z2max not under z2min (equal: a ridge or a point). Front face xmin…xmax by zmin…zmax at ymin, rear face x2min…x2max by z2min…z2max at ymax.", "when": "=not (w['xmax'] > w['xmin'] and w['ymax'] > w['ymin'] and w['zmax'] > w['zmin'] and w['x2max'] >= w['x2min'] and w['z2max'] >= w['z2min'])"}, {"add": "Part::Wedge", "name": "Wedge"}, {"each": "k, v", "in": "=w.items()", "steps": [{"do": {"set": ["=o", "=k[0].upper() + k[1:]", "=v"]}}]}], "prism": [{"let": {"n": "=int(a.get('sides', 6))"}}, {"refuse": "sides: 3 or more (a prism's polygon).", "when": "=n < 3"}, {"add": "Part::Prism", "name": "Prism"}, {"let": {"r": "=positive(a, 'radius', 5)", "h": "=positive(a, 'height', 10)"}}, {"set": {"o.Polygon": "=n", "o.Circumradius": "=r", "o.Height": "=h"}}], "tube": [{"let": {"ro": "=positive(a, 'radius', 5)", "ri": "=num(a.get('radius2', 2), 'radius2')", "h": "=positive(a, 'height', 10)"}}, {"refuse": "radius2: the bore's radius, above 0 and under radius.", "when": "=not 0 < ri < ro"}, {"let": {"o": "=tube(ro, ri, h)"}}]}},
+    {"set": {"o.Label": "=label", "o.Placement": "=pl"}},
+    {"do": "=doc().recompute()"},
+    {"when": "=o.Shape.isNull() or not o.Shape.Solids", "then": [{"let": {"why": "=status_said(o)"}}, {"refuse": {"fmt": "The {kind} came out empty{why} — check its sizes; nothing was added."}, "code": "failed"}]}
+   ],
+   "answer": {"via": "report", "with": ["=o", "=tool", "$fields"], "fields": {"kind": "=kind", "type": "=o.TypeId", "placement": "=placement_json(o.Placement)"}}
+  },
+  "part_boolean": {
+   "group": "model",
+   "description": "fuse, cut or common base with tools (solid bodies by name; base is the one kept, and must be named when more than one body is shown). common with several tools keeps what base shares with any of them. Done on the shapes, not as a Part::Cut feature: the result keeps base's label (name: a new one) as a plain shape with coplanar faces merged; the tools are removed (keep: true hides them; a hidden body is still a body to other tools). A PartDesign Body base gives a new Body on the result and the old one is hidden. Trap: faces and edges are renumbered; shape_query again. Refused, with the tools kept, when nothing would change (apart, or inside for fuse), common has no overlap, a tool is not a sound solid (invalid, open, inside out), or OCC drops a tool or makes an invalid result. Heavy with many faces (meshes made solids): past an estimated minute the first call answers with the time and runs nothing, the same call again runs it, and the window is frozen meanwhile. Reply: body, volume, box, sound (problems when not), op, volumeChange, removed or kept, hidden + hiddenNote (object_delete of the result shows the inputs again).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "op": {
+      "type": "string",
+      "enum": [
+       "fuse",
+       "cut",
+       "common"
+      ]
+     },
+     "base": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "tools": {
+      "description": "A body or a list of them."
+     },
+     "keep": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "op",
+     "tools"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "op: fuse, cut or common.", "when": "=a.op not in ('fuse', 'cut', 'common')"},
+    {"let": {"op": "=a.op", "base": "=solid_body(a.base)", "names": "=ref_list(a.tools)"}},
+    {"refuse": "tools: the bodies to fuse, cut away or keep in common with base.", "when": "=not names"},
+    {"let": {"tl": "=[solid_body(n) for n in names]"}},
+    {"refuse": {"fmt": "tools: base ({base.Label}) is among them — a body with itself changes nothing. tools: the other bodies; base: the one that is kept."}, "when": "=any(t is base for t in tl)"},
+    {"let": {"bs": "=base.Shape", "shapes": "=[t.Shape for t in tl]"}},
+    {"each": "t", "in": "=tl", "steps": [{"let": {"why": "=unsound_tool(t.Shape)"}}, {"refuse": {"fmt": "{op}: the tool {t.Label} is not a sound solid ({why}), so OCC would drop it and leave {base.Label} as it was. Nothing was changed; {t.Label} is kept. body_check {t.Label} says more; part_fix or part_refine {{ fix: true }} may repair it, else rebuild it."}, "code": "failed", "when": "=why"}]},
+    {"let": {"res": "=clean(boolean(bs, op, shapes))"}},
+    {"refuse": {"fmt": "{op}: OCC made an invalid result from {base.Label} and {', '.join(t.Label for t in tl)}. Nothing was changed; the tools are kept. Overlap the pieces clearly (not face on face), or fewer faces first (part_refine)."}, "code": "failed", "when": "=not res.isNull() and res.Solids and not res.isValid()"},
+    {"when": "=op == 'fuse'", "then": [{"let": {"lost": "=fuse_dropped(bs, tl, res)"}}, {"refuse": {"fmt": "fuse: nothing of {', '.join(lost)} was added to {base.Label} although it reaches outside {base.Label}'s box (volume change {res.Volume - bs.Volume:.2f} mm³): OCC dropped the tool. Nothing was changed; the tools are kept. Check each with body_check, overlap the pieces clearly (not face on face), or fewer faces first (part_refine)."}, "code": "failed", "when": "=lost"}]},
+    {"refuse": {"fmt": "common: {base.Label} and {', '.join(t.Label for t in tl)} do not overlap (least distance {bs.distToShape(shapes[0])[0]:.3f} mm) — nothing would be left."}, "code": "failed", "when": "=op == 'common' and res.Volume < 1e-6"},
+    {"when": "=not changed(bs, res)", "then": [{"let": {"dist": "=min(bs.distToShape(x)[0] for x in shapes)"}}, {"let": {"why": "='they do not touch' if dist > 1e-6 else ('the tools lie inside it' if op == 'fuse' else 'they only touch it')"}}, {"refuse": {"fmt": "{op} changed nothing in {base.Label}: {why} (least distance {dist:.3f} mm). Move a tool into the base (part_transform), then again."}, "code": "failed"}]},
+    {"let": {"o, hid": "=baked(base, res, a.name, consumed=tl, keep=bool(a.keep))"}}
+   ],
+   "answer": {"via": "report", "with": ["=o", "=tool", "$fields"], "fields": {"op": "=op", "volumeChange": "=round(o.Shape.Volume - bs.Volume, 2)", "kept": {"when": "=a.keep", "value": "=[t.Label for t in tl]"}, "removed": {"when": "=not a.keep", "value": "=[t.Label for t in tl]"}, "hidden": {"when": "=hid", "value": "=hid"}, "hiddenNote": {"when": "=hid", "value": {"fmt": "Hidden so the result is seen alone: {', '.join(hid)} — still bodies to other tools, not drawn by view_render. object_delete {o.Label} takes the result back and shows them again; object_set {{ Visibility: true }} shows one."}}, "note": {"when": "=len(o.Shape.Solids) > 1", "value": {"fmt": "{len(o.Shape.Solids)} separate solids: pieces that do not touch."}}}}
+  },
+  "part_transform": {
+   "group": "model",
+   "description": "Move or copy a solid body. move { by [dx,dy,dz] } and rotate { axis, angle degrees, about [x,y,z] (default: its box centre) } change its Placement in place (a primitive stays parametric); copy: true makes a new body instead. mirror { normal, about (box centre) } and scale { factor or [fx,fy,fz], about (origin) } make a new body and keep the original (mirror fuse: true joins both into the original). linear { count, step [dx,dy,dz] } and polar { count, axis, about (origin), angle (360 shares out evenly, less runs end to end) } array the body into itself, count with the original, fused (fuse: false keeps the copies apart in one body, quicker for many). Trap: all but move and rotate bake a plain shape and renumber faces and edges; shape_query again. Reply: body, volume, box, sound, op, and placement, from or count.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "op": {
+      "type": "string",
+      "enum": [
+       "move",
+       "rotate",
+       "mirror",
+       "scale",
+       "linear",
+       "polar"
+      ]
+     },
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "by": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "axis": {},
+     "angle": {
+      "type": "number"
+     },
+     "about": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "normal": {},
+     "factor": {},
+     "count": {
+      "type": "integer"
+     },
+     "step": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "copy": {
+      "type": "boolean"
+     },
+     "fuse": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "op"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=solid_body(a.body)", "op": "=a.op"}},
+    {"let": {"sh": "=o.Shape", "about": "=vec3(a.about, 'about', (0, 0, 0)) if a.about is not None else None"}},
+    {"when": "=op in ('move', 'rotate')", "then": [{"when": "=op == 'move'", "then": [{"let": {"pl": "=placement(vec3(a.by, 'by'), rotation())"}}], "else": [{"let": {"c": "=about if about is not None else sh.BoundBox.Center"}}, {"let": {"pl": "=placement(V(), rotation(direction(a.axis, 'axis', (0, 0, 1)), num(a.angle, 'angle')), c)"}}]}, {"when": "=a.copy", "then": [{"let": {"new": "=sh.copy()"}}, {"set": {"new.Placement": "=pl.multiply(new.Placement)"}}, {"add": "Part::Feature", "name": "Body", "as": "n"}, {"set": {"n.Label": "=unique(a.name or o.Label)", "n.Shape": "=new"}}, {"do": "=doc().recompute()"}, {"answer": {"via": "report", "with": ["=n", "=tool", "$fields"], "fields": {"op": "=op", "from": "=o.Label"}}}]}, {"set": {"o.Placement": "=pl.multiply(o.Placement)"}}, {"do": "=doc().recompute()"}, {"answer": {"via": "report", "with": ["=o", "=tool", "$fields"], "fields": {"op": "=op", "placement": "=placement_json(o.Placement)"}}}]},
+    {"choose": "=op", "of": {"mirror": [{"let": {"c": "=about if about is not None else sh.BoundBox.Center"}}, {"let": {"new": "=sh.mirror(c, direction(a.normal, 'normal', (1, 0, 0)))"}}, {"when": "=a.fuse", "then": [{"let": {"res": "=sh.fuse(new)"}}, {"answer": {"via": "report", "with": ["=bake(o, res, a.name)", "=tool", "$fields"], "fields": {"op": "mirror", "fused": true}}}]}], "scale": [{"let": {"f": "=a.factor", "c": "=about if about is not None else V(0, 0, 0)"}}, {"when": "=is_list(f)", "then": [{"let": {"fx, fy, fz": "=[num(x, 'factor') for x in (f + [1, 1, 1])[:3]]"}}, {"refuse": "factor: each above 0.", "when": "=min(fx, fy, fz) <= 0"}, {"let": {"new": "=scaled_each(sh, c, fx, fy, fz)"}}], "else": [{"let": {"fac": "=num(f, 'factor')"}}, {"refuse": "factor: above 0 — a number, or [fx, fy, fz] for each axis.", "when": "=fac <= 0"}, {"let": {"new": "=sh.copy()"}}, {"do": "=new.scale(fac, c)"}]}], "linear": [{"let": {"n": "=int(a.get('count', 2))"}}, {"refuse": "count: 2 or more, the original counted.", "when": "=n < 2"}, {"let": {"copies": "=[sh]", "step": "=vec3(a.step, 'step')"}}, {"each": "i", "in": "=range(1, n)", "steps": [{"let": {"c2": "=sh.copy()"}}, {"do": "=c2.translate(step * i)"}, {"push": {"copies": "=c2"}}]}], "polar": [{"let": {"n": "=int(a.get('count', 2))"}}, {"refuse": "count: 2 or more, the original counted.", "when": "=n < 2"}, {"let": {"copies": "=[sh]", "axis": "=direction(a.axis, 'axis', (0, 0, 1))", "c": "=about if about is not None else V(0, 0, 0)", "total": "=num(a.get('angle', 360), 'angle')"}}, {"let": {"turn": "=total / n if abs(abs(total) - 360) < 1e-9 else total / (n - 1)"}}, {"each": "i", "in": "=range(1, n)", "steps": [{"let": {"c2": "=sh.copy()"}}, {"do": "=c2.rotate(c, axis, turn * i)"}, {"push": {"copies": "=c2"}}]}]}, "else": [{"refuse": "op: move { by }, rotate { axis, angle, about }, mirror { normal, about, fuse }, scale { factor, about }, linear { count, step }, polar { count, axis, about, angle }."}]},
+    {"when": "=op in ('linear', 'polar')", "then": [{"let": {"res": "=copies[0].fuse(copies[1:]) if a.get('fuse', True) else compound(copies)"}}, {"let": {"o2": "=bake(o, res, a.name)"}}, {"answer": {"via": "report", "with": ["=o2", "=tool", "$fields"], "fields": {"op": "=op", "count": "=n", "note": {"when": "=len(o2.Shape.Solids) > 1", "value": {"fmt": "{len(o2.Shape.Solids)} separate solids: the copies do not touch — one body holding them."}}}}}]},
+    {"add": "Part::Feature", "name": "Body", "as": "n"},
+    {"set": {"n.Label": "=unique(a.name or o.Label + ' ' + op)", "n.Shape": "=clean(new)"}},
+    {"do": "=doc().recompute()"}
+   ],
+   "answer": {"via": "report", "with": ["=n", "=tool", "$fields"], "fields": {"op": "=op", "from": "=o.Label"}}
+  },
+  "part_fillet": {
+   "group": "model",
+   "description": "Round edges of a solid body by radius mm. edges: [\"Edge3\", \"Face6\" (all its edges) …], numbered from 1 as shape_query lists them, or \"all\"; and/or query { type, axis, radius, near, inside, of: \"Face6\" … } as shape_query takes for edges. Done on the shape, not as a Part::Fillet feature: the body becomes a plain shape. Traps: every modelling step renumbers edges, so query again rather than reuse numbers; fillet last. Refused, nothing changed, when OCC fails or leaves a broken shape (a radius larger than a face beside the edge allows). Reply: body, volume, box, sound, edges (how many), volumeChange.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "radius": {
+      "type": "number"
+     },
+     "edges": {},
+     "query": {
+      "type": "object"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "radius"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=solid_body(a.body)", "size": "=positive(a, 'radius', 1)"}},
+    {"let": {"edges": "=pick_edges(o, a)", "sh": "=o.Shape"}},
+    {"try": [{"let": {"res": "=sh.makeFillet(size, edges)"}}], "on": "error", "except": [{"refuse": {"fmt": "The fillet of {size} mm on {len(edges)} edges failed ({error}): try a smaller size, fewer edges at once, or the edges of one face. Nothing was changed."}, "code": "failed"}]},
+    {"refuse": {"fmt": "The fillet of {size} mm on {len(edges)} edges left a broken shape: likely more than a face beside an edge can take — smaller, or fewer edges (shape_query {{ kind: \"edge\" }} gives their lengths). Nothing was changed."}, "code": "failed", "when": "=res.isNull() or not res.isValid() or not res.Solids"},
+    {"let": {"o2": "=bake(o, res, a.name)"}}
+   ],
+   "answer": {"via": "report", "with": ["=o2", "=tool", "$fields"], "fields": {"edges": "=len(edges)", "volumeChange": "=round(o2.Shape.Volume - sh.Volume, 2)"}}
+  },
+  "part_chamfer": {
+   "group": "model",
+   "description": "Bevel edges of a solid body by size mm (the same on both faces). Edges are picked, numbered and refused as part_fillet's (edges refs from 1, \"all\", or query); reply as part_fillet.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "size": {
+      "type": "number"
+     },
+     "edges": {},
+     "query": {
+      "type": "object"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "size"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=solid_body(a.body)", "size": "=positive(a, 'size', 1)"}},
+    {"let": {"edges": "=pick_edges(o, a)", "sh": "=o.Shape"}},
+    {"try": [{"let": {"res": "=sh.makeChamfer(size, edges)"}}], "on": "error", "except": [{"refuse": {"fmt": "The chamfer of {size} mm on {len(edges)} edges failed ({error}): try a smaller size, fewer edges at once, or the edges of one face. Nothing was changed."}, "code": "failed"}]},
+    {"refuse": {"fmt": "The chamfer of {size} mm on {len(edges)} edges left a broken shape: likely more than a face beside an edge can take — smaller, or fewer edges (shape_query {{ kind: \"edge\" }} gives their lengths). Nothing was changed."}, "code": "failed", "when": "=res.isNull() or not res.isValid() or not res.Solids"},
+    {"let": {"o2": "=bake(o, res, a.name)"}}
+   ],
+   "answer": {"via": "report", "with": ["=o2", "=tool", "$fields"], "fields": {"edges": "=len(edges)", "volumeChange": "=round(o2.Shape.Volume - sh.Volume, 2)"}}
+  },
+  "part_offset": {
+   "group": "model",
+   "description": "Grow (+) or shrink (-) a solid by distance mm all round (OCC's 3D offset, skin mode); join arc (rounded corners, default) or intersection (sharp). The body becomes a plain shape and its faces are renumbered. Refused, nothing changed, when OCC fails or no solid is left: shrunk past half the thinnest part or past a concave fillet's radius. Reply: body, volume, box, sound, distance.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "distance": {
+      "type": "number"
+     },
+     "join": {
+      "type": "string",
+      "enum": [
+       "arc",
+       "intersection"
+      ]
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "distance"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=solid_body(a.body)", "d": "=num(a.distance, 'distance')"}},
+    {"refuse": "distance: not 0 — out (+) or in (-), mm.", "when": "=abs(d) < 1e-6"},
+    {"let": {"join": "={'arc': 0, 'intersection': 2}.get(a.get('join', 'arc'))"}},
+    {"refuse": "join: arc (rounded corners) or intersection (sharp).", "when": "=join is None"},
+    {"try": [{"let": {"res": "=o.Shape.makeOffsetShape(d, 1e-6, join=join, fill=False)"}}], "on": "error", "except": [{"refuse": {"fmt": "The offset of {d} mm failed ({error}): a smaller distance, or join: arc. Inward, it cannot pass a concave fillet's radius or half the thinnest wall. Nothing was changed."}, "code": "failed"}]},
+    {"when": "=not res.Solids", "then": [{"try": [{"let": {"res": "=as_solid(as_shell(res.Faces)) if res.Faces else res"}}], "on": "error", "except": []}]},
+    {"refuse": {"fmt": "The offset of {d} mm left no solid: inward past half the thinnest wall, or a fillet smaller than it."}, "code": "failed", "when": "=res.isNull() or not res.Solids"},
+    {"let": {"o2": "=bake(o, res, a.name)"}}
+   ],
+   "answer": {"via": "report", "with": ["=o2", "=tool", "$fields"], "fields": {"distance": "=d"}}
+  },
+  "part_thickness": {
+   "group": "model",
+   "description": "Shell one solid: open the faces named (open [\"Face6\"], numbered from 1, and/or query { normal: \"+z\", sort: \"-z\", limit: 1 }) and leave walls of thickness mm (above 0.002), inward by default (inward: false grows outward). join intersection (sharp, default) or arc. A body of several solids is refused (part_compound { explode } first). Traps: concave fillets smaller than the wall break an inward shell, so shell first and fillet after; faces are renumbered. Reply: body, volume, box, sound, thickness, inward, opened, volumeChange.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "thickness": {
+      "type": "number"
+     },
+     "open": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "query": {
+      "type": "object"
+     },
+     "inward": {
+      "type": "boolean"
+     },
+     "join": {
+      "type": "string",
+      "enum": [
+       "arc",
+       "intersection"
+      ]
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "thickness"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"o": "=solid_body(a.body)", "t": "=positive(a, 'thickness', 1)"}},
+    {"let": {"sh": "=o.Shape"}},
+    {"refuse": {"fmt": "{o.Label} holds {len(sh.Solids)} solids: a shell is made of one solid at a time (as FreeCAD's Part Thickness). part_compound {{ explode: \"{o.Label}\" }} makes each a body, then shell the one meant."}, "code": "invalid_state", "when": "=len(sh.Solids) != 1"},
+    {"refuse": {"fmt": "thickness: {t:g} mm is under what OCC shells (above 0.002 mm) — a wall in mm, such as 1.5."}, "when": "=t <= 2e-3"},
+    {"let": {"faces": "=[]"}},
+    {"each": "ref", "in": "=a.open or []", "steps": [{"let": {"head, sub": "=split_ref(ref)"}}, {"refuse": {"fmt": "open: {ref!r} is not a face — the faces to remove, as \"Face6\" (shape_query {{ kind: \"face\" }} lists them)."}, "when": "=not sub or not sub.startswith('Face')"}, {"refuse": {"fmt": "open: {ref} is on another body than {o.Label}."}, "when": "=head and find(head) is not o"}, {"push": {"faces": "=element(sh, sub, o.Label)"}}]},
+    {"do": "=faces.extend(queried(o, a.query, 'face'))", "when": "=a.query"},
+    {"refuse": "open: the faces to remove, at least one (\"Face6\"), or query { normal: \"+z\", sort: \"-z\", limit: 1 }.", "when": "=not faces"},
+    {"let": {"inward": "=a.get('inward', True)"}},
+    {"try": [{"let": {"res": "=sh.makeThickness(faces, -t if inward else t, 1e-3, False, False, 0, {'arc': 0, 'intersection': 2}.get(a.get('join', 'intersection'), 2))"}}], "on": "error", "except": [{"refuse": {"fmt": "The shell failed ({error}): a thinner wall, or join: arc, or fewer faces opened. Fillets smaller than the wall break an inward shell: shell first, fillet after. Nothing was changed."}, "code": "failed"}]},
+    {"refuse": {"fmt": "The shell of {t} mm left no solid: thinner than half the part's smallest size."}, "code": "failed", "when": "=res.isNull() or not res.Solids or res.Volume < 1e-6"},
+    {"refuse": {"fmt": "The shell of {t} mm is not valid: a thinner wall, or fillets larger than {t} mm first."}, "code": "failed", "when": "=not res.isValid()"},
+    {"let": {"o2": "=bake(o, res, a.name)"}}
+   ],
+   "answer": {"via": "report", "with": ["=o2", "=tool", "$fields"], "fields": {"thickness": "=t", "inward": "=bool(inward)", "opened": "=len(faces)", "volumeChange": "=round(o2.Shape.Volume - sh.Volume, 2)"}}
+  },
+  "part_extrude": {
+   "group": "model",
+   "description": "Extrude a profile into a solid: length mm along its normal (a face's outward one; a flat outline's plane normal, +z in XY; negative goes the other way), or direction [x,y,z] (its own length, or length given); symmetric: half each way. op new (default without into) | fuse (default with into) | cut | common with into: a boss or a pocket in one call, refused when it misses into. solid: false gives a surface from an open profile. Done on the shape, not as a Part::Extrusion feature (no taper). A sketch used as profile is hidden; into's faces are renumbered. Reply: body, volume, area, faces, box, sound; with into also op, volumeChange. A surface (solid: false) answers as one instead: body, surface: true, faces, area, box, valid, openEdges (edges on its border) and closed — no volume, sound or solids, and it is not among session_state's bodies.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "profile": {
+      "description": "A sketch or wire's name, a face or edge (\"Box.Face6\"), { points: [[x,y,z] …], closed: true, smooth }, { points_file: \"<file>.json\"|\".csv\", key } (points read from a file in the session's folder, not sent in the call) or { circle: { center, radius, normal } }."
+     },
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "length": {
+      "type": "number"
+     },
+     "direction": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "symmetric": {
+      "type": "boolean"
+     },
+     "solid": {
+      "type": "boolean"
+     },
+     "into": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "op": {
+      "type": "string",
+      "enum": [
+       "new",
+       "fuse",
+       "cut",
+       "common"
+      ]
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "profile"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"sh, src": "=profile(a.profile, a.body)", "solid": "=a.get('solid', True)"}},
+    {"let": {"base": "=as_face(sh) if solid else sh"}},
+    {"when": "=a.direction is not None", "then": [{"let": {"along": "=vec3(a.direction, 'direction')"}}, {"let": {"along": "=direction(a.direction, 'direction') * num(a.length, 'length')"}, "when": "=a.length is not None"}], "else": [{"let": {"along": "=profile_normal(sh) * num(a.get('length', 10), 'length')"}}]},
+    {"refuse": "length: not 0 — mm along the profile's normal (negative: the other way), or direction [x, y, z].", "when": "=along.Length < 1e-9"},
+    {"when": "=a.symmetric", "then": [{"let": {"base": "=base.copy()"}}, {"do": "=base.translate(along * -0.5)"}]},
+    {"try": [{"let": {"res": "=base.extrude(along)"}}], "on": "error", "except": [{"refuse": {"fmt": "The extrusion failed ({error}): direction must not lie in the profile's own plane. Nothing was added."}, "code": "failed"}]},
+    {"refuse": "The extrusion made no solid: the profile must be a closed, flat outline (solid: false for a surface from an open one) and direction must leave its plane. Nothing was added.", "code": "failed", "when": "=solid and not res.Solids"}
+   ],
+   "answer": {"via": "finish", "with": ["=res", "=a", "=tool", "=[src]"]}
+  },
+  "part_revolve": {
+   "group": "model",
+   "description": "Revolve a profile about an axis: axis [x,y,z] (default +z) through at [x,y,z] (default the origin), angle degrees (default 360; within -360 … 360, not 0). The profile must lie to one side of the axis (touching it is fine). solid: false gives a surface. profile, op / into and the reply as part_extrude (a surface's too: surface, faces, area, openEdges).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "profile": {
+      "description": "A sketch or wire's name, a face or edge (\"Box.Face6\"), { points: [[x,y,z] …], closed: true, smooth }, { points_file: \"<file>.json\"|\".csv\", key } (points read from a file in the session's folder, not sent in the call) or { circle: { center, radius, normal } }."
+     },
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "axis": {},
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "angle": {
+      "type": "number"
+     },
+     "solid": {
+      "type": "boolean"
+     },
+     "into": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "op": {
+      "type": "string",
+      "enum": [
+       "new",
+       "fuse",
+       "cut",
+       "common"
+      ]
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "profile"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"sh, src": "=profile(a.profile, a.body)", "solid": "=a.get('solid', True)"}},
+    {"let": {"base": "=as_face(sh) if solid else sh", "ang": "=num(a.get('angle', 360), 'angle')"}},
+    {"refuse": {"fmt": "angle: {ang:g} — degrees, not 0 and within -360 … 360 (360: all the way round)."}, "when": "=abs(ang) < 1e-9 or abs(ang) > 360"},
+    {"let": {"at": "=vec3(a.at, 'at', (0, 0, 0))", "axis": "=direction(a.axis, 'axis', (0, 0, 1))"}},
+    {"try": [{"let": {"res": "=base.revolve(at, axis, ang)"}}], "on": "error", "except": [{"refuse": {"fmt": "The revolve failed ({error}): the profile must lie to one side of the axis (touching it is fine, crossing is not); axis [x,y,z] through at [x,y,z] places the axis. Nothing was added."}, "code": "failed"}]},
+    {"when": "=solid and not res.Solids", "then": [{"try": [{"let": {"res": "=as_solid(as_shell(res.Faces))"}}], "on": "error", "except": [{"refuse": "The revolve made no solid: the profile must be closed and lie to one side of the axis (axis through at) — or solid: false for a surface. Nothing was added.", "code": "failed"}]}]},
+    {"do": "=res.reverse()", "when": "=solid and res.Volume < 0"}
+   ],
+   "answer": {"via": "finish", "with": ["=res", "=a", "=tool", "=[src]"]}
+  },
+  "part_loft": {
+   "group": "model",
+   "description": "A solid (solid: false: a surface) through two or more profiles in order: each a sketch, wire, face, { points, closed, smooth } (smooth: a B-spline through them), { points_file, key } or { circle }; or all from profiles_file (many sections read from a file, not sent in the call). All closed or all open. They are lined up first (same way round, seams nearest: aligned says what changed). ruled: true is straight between profiles, each made a polygon of samples points, so it always pairs up. Smooth (default): when OCC refuses or the loft bulges over 15% beyond the profiles it tries again itself (matching B-splines, maxDegree 3 then 2; maxDegree 1–8, default 5), then span by span with the bulging spans ruled (segments: false: off); route says what was done, a refusal names the spans. closed: back to the first profile. Refused, nothing added, when invalid, open or inside out. Heavy: time grows about as the cube of its faces (91 profiles of 36 points ruled 10 s; of 80 points over 2 min); past an estimated minute the first call answers with the estimate and runs nothing, the same call again runs it; a loft kept late says unchecked (run body_check). Reply: body, volume, box, sound, aligned, route, maxDegree, strays (how far it lies from the given points); a surface (solid: false) answers surface: true, faces, area, box, valid, openEdges and closed in place of volume and sound. op / into as part_extrude. More: guide_read { topic: \"model\" }.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "profiles": {
+      "type": "array",
+      "items": {},
+      "description": "Each a sketch or wire's name, a face (\"Box.Face6\"), { points: [[x,y,z] …], closed, smooth }, { points_file: \"<file>.json\"|\".csv\", key, closed, smooth } or { circle }."
+     },
+     "profiles_file": {
+      "type": "string",
+      "description": "A .json (a list of [[x,y,z] …] lists, or an object of them) or .csv (x,y,z rows; outlines apart by blank lines or named in a first column) holding every profile, in order. A relative path is in the session's folder."
+     },
+     "key": {
+      "description": "With profiles_file: the name (or number from 0) of the list in the file that holds the profiles."
+     },
+     "smooth": {
+      "type": "boolean",
+      "description": "With profiles_file: B-splines through the points (else polygons)."
+     },
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "ruled": {
+      "type": "boolean"
+     },
+     "closed": {
+      "type": "boolean"
+     },
+     "solid": {
+      "type": "boolean"
+     },
+     "maxDegree": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+     },
+     "samples": {
+      "type": "integer",
+      "minimum": 8,
+      "maximum": 512
+     },
+     "segments": {
+      "type": "boolean",
+      "description": "false: no span-by-span loft when a smooth one bulges."
+     },
+     "into": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "op": {
+      "type": "string",
+      "enum": [
+       "new",
+       "fuse",
+       "cut",
+       "common"
+      ]
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"specs": "=a.profiles or []"}},
+    {"when": "=a.profiles_file is not None", "then": [{"refuse": "profiles or profiles_file, not both.", "when": "=specs"}, {"let": {"f": "=a.profiles_file"}}, {"refuse": "profiles_file: a file's path (.json or .csv) holding every profile's points.", "when": "=not is_str(f) or not f.strip()"}, {"let": {"found": "=outline_file(f, a.key)"}}, {"let": {"specs": "=[{'points': x[1], 'closed': True, 'smooth': bool(a.get('smooth', False))} for x in found]"}}]},
+    {"refuse": "profiles: two or more, in order (or profiles_file with two or more outlines).", "when": "=not is_list(specs) or len(specs) < 2"},
+    {"let": {"wires": "=[]", "srcs": "=[]", "given": "=[]"}},
+    {"each": "p", "in": "=specs", "index": "i", "steps": [{"let": {"sh, src": "=profile(p, a.body, 'profiles.' + str(i))"}}, {"when": "=sh.ShapeType == 'Face'", "then": [{"let": {"sh": "=sh.OuterWire"}}], "else": [{"when": "=sh.ShapeType != 'Wire'", "then": [{"refuse": {"fmt": "profiles.{i}: one wire each — {len(sh.Wires)} here."}, "when": "=len(sh.Wires) != 1"}, {"let": {"sh": "=sh.Wires[0]"}}]}]}, {"push": {"wires": "=sh", "srcs": "=src"}}, {"let": {"raw": "=spec_points(p, 'profiles.' + str(i)) if is_dict(p) else None"}}, {"push": {"given": "=[vec3(q, 'points') for q in raw] if raw is not None else points_along(sh, 48)"}}]},
+    {"let": {"solid": "=bool(a.get('solid', True))", "open_": "=[i for i, w in enumerate(wires) if not w.isClosed()]"}},
+    {"refuse": {"fmt": "not closed: profiles.{open_[0]} is an open edge or wire, so the loft has no inside. Close it (part_wire {{ kind: \"bspline\", closed: true }}), or solid: false for a surface."}, "when": "=solid and open_"},
+    {"refuse": {"fmt": "profiles: each closed or each open — profiles.{open_[0]} is open, the others closed."}, "when": "=open_ and len(open_) != len(wires)"},
+    {"let": {"deg": "=a.get('maxDegree', 5)"}},
+    {"refuse": "maxDegree: a whole number 1 to 8 (5 by default, FreeCAD's): the most the loft may bend along its way; lower is stiffer and overshoots less.", "when": "=not is_int(deg) or not 1 <= deg <= 8"},
+    {"let": {"samples": "=a.samples"}},
+    {"refuse": "samples: how many points each profile is rebuilt with when it must be, 8 to 512.", "when": "=samples is not None and (not is_int(samples) or not 8 <= samples <= 512)"},
+    {"let": {"segments": "=a.segments", "loop": "=bool(a.get('closed', False))"}},
+    {"refuse": "segments: not with closed: true (a loft back to its first profile).", "when": "=segments and loop"},
+    {"let": {"wires, aligned": "=align_profiles(wires)", "ruled": "=bool(a.get('ruled', False))"}},
+    {"let": {"clock": "=loft_clock()"}},
+    {"let": {"res, why, spans, route, used_deg, n": "=loft_route(clock, wires, solid, loop, ruled, deg, samples, segments)"}},
+    {"when": "=res is None or why", "then": [{"when": "=why and why.startswith('profiles twist')", "then": [{"let": {"hint": ""}}, {"let": {"hint": {"fmt": " Where: {spans_said(spans)}."}}, "when": "=spans"}, {"let": {"hint": "=hint + (' Tried maxDegree ' + ', '.join(str(d) for d in [deg] + [d for d in (3, 2) if d < deg]) + ' and the profiles rebuilt alike.' if not ruled else '')"}}, {"let": {"hint": "=hint + (' Lofted span by span with those spans ruled, it was not sound either.' if segments is not False and spans and not ruled and not loop and len(wires) >= 3 else '')"}}, {"let": {"hint": "=hint + ' ruled: true for straight runs; more profiles where the shape turns quickly; or loft the bulging span\\'s neighbours apart and part_boolean fuse.'"}}], "else": [{"when": "=why and why.startswith('out of time')", "then": [{"let": {"k": "=max(2, len(wires) // 2 + 1)", "fewer": "=max(8, int(n * 0.7))"}}, {"let": {"hint": {"fmt": " Lighter: split it into lofts of about {k} profiles (each run starting on the profile the last ended on) and part_boolean fuse them; or fewer points a profile (samples: {fewer}); or fewer profiles where the shape changes slowly."}}}], "else": [{"let": {"hint": " Each profile closed (or each open), in order along the loft, none crossing another."}}]}]}, {"refuse": {"fmt": "The loft is not kept: {why}.{hint} Nothing was added."}, "code": "failed"}]},
+    {"let": {"st": "=None if clock.late() else strays(res, given)"}},
+    {"when": "=st", "then": [{"when": "=st.get('profile') is None", "then": [{"do": "=st.pop('profile', None)"}], "else": [{"put": {"profile": {"fmt": "profiles.{st['profile']}"}}, "into": "st"}]}]}
+   ],
+   "answer": {"via": "finish", "with": ["=res", "=a", "=tool", "=srcs", "=clock.late"], "then": [{"put": {"aligned": "=aligned if len(aligned) <= 4 else aligned[:3] + ['… and ' + str(len(aligned) - 3) + ' more profiles lined up alike (' + str(len(aligned)) + ' in all)']"}, "when": "=aligned"}, {"put": {"route": "=route"}, "when": "=route"}, {"put": {"maxDegree": "=used_deg"}, "when": "=not ruled"}, {"put": {"strays": "=st"}, "when": "=st"}]}
+  },
+  "part_sweep": {
+   "group": "model",
+   "description": "Sweep one closed profile (a face gives its outer outline) along a path: a wire or sketch, an edge \"Box.Edge3\", a helix from part_wire, or { points } (open by default). frenet: true keeps the profile from twisting along a helix; corners at sharp turns: right (default), round or none (FreeCAD's Transition Right corner, Round corner, Transformed). solid: false gives a surface, and then the profile may be open. Trap: the profile must already sit at the path's start, across it; it is not moved there. profile, op / into and the reply as part_extrude (a surface's too: surface: true, faces, area, box, valid, openEdges, closed — not a solid's sound and problems).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "profile": {
+      "description": "A sketch or wire's name, a face or edge (\"Box.Face6\"), { points: [[x,y,z] …], closed: true, smooth }, { points_file: \"<file>.json\"|\".csv\", key } (points read from a file in the session's folder, not sent in the call) or { circle: { center, radius, normal } }."
+     },
+     "path": {
+      "description": "A sketch or wire's name, a face or edge (\"Box.Face6\"), { points: [[x,y,z] …], closed: true, smooth }, { points_file: \"<file>.json\"|\".csv\", key } (points read from a file in the session's folder, not sent in the call) or { circle: { center, radius, normal } }."
+     },
+     "body": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "frenet": {
+      "type": "boolean"
+     },
+     "corners": {
+      "type": "string",
+      "enum": [
+       "right",
+       "round",
+       "none"
+      ]
+     },
+     "solid": {
+      "type": "boolean"
+     },
+     "into": {
+      "type": "string",
+      "description": "A body's name or label; may be left out when there is one."
+     },
+     "op": {
+      "type": "string",
+      "enum": [
+       "new",
+       "fuse",
+       "cut",
+       "common"
+      ]
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "profile",
+     "path"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/model.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"sh, src": "=profile(a.profile, a.body)"}},
+    {"when": "=sh.ShapeType == 'Face'", "then": [{"let": {"sh": "=sh.OuterWire"}}], "else": [{"refuse": {"fmt": "profile: one outline — {len(sh.Wires)} wires here. Name one wire or face (\"Sketch.Edge1\" is one edge; part_face makes a face whose outer outline is swept)."}, "when": "=sh.ShapeType != 'Wire'"}]},
+    {"let": {"solid": "=bool(a.get('solid', True))"}},
+    {"refuse": "profile: open, so the sweep has no inside — close it (part_wire { closed: true }), or solid: false for a surface.", "when": "=solid and not sh.isClosed()"},
+    {"let": {"path_spec": "=a.path"}},
+    {"let": {"path_spec": "=dict(path_spec, closed=path_spec.get('closed', False))"}, "when": "=is_dict(path_spec) and 'points' in path_spec"},
+    {"let": {"path, psrc": "=profile(path_spec, a.body, 'path', closed_default=False)"}},
+    {"let": {"path": "=path.OuterWire"}, "when": "=path.ShapeType == 'Face'"},
+    {"let": {"path": "=as_wire(sorted_edges(path.Edges))"}, "when": "=path.ShapeType != 'Wire'"},
+    {"try": [{"let": {"res": "=path.makePipeShell([sh], solid, bool(a.get('frenet', False)), {'none': 0, 'right': 1, 'round': 2}.get(a.get('corners', 'right'), 1))"}}], "on": "error", "except": [{"refuse": {"fmt": "The sweep failed ({error}): put the profile at the path's start, across it (part_transform moves it); no turn of the path tighter than the profile is wide; a helix wants frenet: true. Nothing was added."}, "code": "failed"}]},
+    {"refuse": "The sweep made no solid: the profile must be closed (part_wire { closed: true }) — or solid: false for a surface. Nothing was added.", "code": "failed", "when": "=solid and not res.Solids"}
+   ],
+   "answer": {"via": "finish", "with": ["=res", "=a", "=tool", "=[src, psrc]"]}
+  },
+  "part_container": {
+   "group": "std_more",
+   "description": "An App::Part container holding objects, moved together by its placement (Std Part): objects [names], at, axis + angle. Not a solid: booleans take the bodies inside it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "axis": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "angle": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/std_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"add": "App::Part", "name": "Part", "as": "p"},
+    {"set": {"p.Label": "=unique(a.name or 'Part', p)"}},
+    {"let": {"members": "=objs(a.objects) if a.objects else []"}},
+    {"each": "m", "in": "=members", "steps": [{"each": "g", "in": "=[x for x in m.InList if x.TypeId == 'App::Part']", "steps": [{"do": "=g.removeObject(m)"}]}, {"do": "=p.addObject(m)"}]},
+    {"set": {"p.Placement": "=placement(a)"}, "when": "=placed(a)"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"part": "=p.Label", "objects": "=[m.Label for m in members]", "note": "An App::Part moves everything in it together, by its placement."}}
+  },
+  "compound_explode": {
+   "group": "std_more",
+   "description": "Split a compound into its pieces (Part Explode compound): each a filter object that follows the compound, in a group; the compound is hidden. part_compound { explode } gives plain bodies instead.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "compound": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "compound"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/std_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"X": "=tool_module('CompoundTools.Explode')"}},
+    {"let": {"o": "=shaped(a.compound, 'compound')"}},
+    {"refuse": {"fmt": "compound: {o.Label} is one {o.Shape.ShapeType.lower()}, nothing to explode — a compound of several pieces is (part_compound makes one; a part_split result is one)."}, "code": "invalid_state", "when": "=len(o.Shape.childShapes()) < 2"},
+    {"let": {"g, children": "=X.explodeCompound(o)"}},
+    {"set": {"o.Visibility": false}, "when": "=has(o, 'Visibility')"},
+    {"do": ["=doc().recompute()", "=snapshot(tool)"]}
+   ],
+   "answer": {"fields": {"group": "=g.Label", "pieces": "=[{'name': c.Label, 'volume': round(c.Shape.Volume, 3) if c.Shape.Solids else None} for c in children]"}}
+  },
+  "compound_filter": {
+   "group": "std_more",
+   "description": "Keep some pieces of a compound (Part Compound filter): keep items { items: [0, 2], from 0 } | collision-pass / collision-fail { stencil: touching it or not } | window-volume / -area / -length { from, to as percents of the largest piece } | window-distance { stencil, from, to }. Refused when nothing passes; the compound is hidden. Reply: filter, kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "compound": {
+      "type": "string"
+     },
+     "keep": {
+      "type": "string"
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     },
+     "stencil": {
+      "type": "string"
+     },
+     "from": {
+      "type": "number"
+     },
+     "to": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "compound"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/std_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"CF": "=tool_module('CompoundTools.CompoundFilter')"}},
+    {"let": {"o": "=shaped(a.compound, 'compound')"}},
+    {"let": {"n": "=len(o.Shape.childShapes())", "how": "=a.get('keep', 'items')"}},
+    {"refuse": "keep: items { items: [0, 2] } | collision-pass / collision-fail { stencil } | window-volume / window-area / window-length { from, to } | window-distance { stencil, from, to }.", "when": "=how != 'items' and how not in FILTER_KINDS"},
+    {"let": {"stencil": "=shaped(a.stencil, 'stencil') if a.stencil else None"}},
+    {"refuse": {"fmt": "stencil: {how} needs one — the object the pieces are tested against (touching it, or their distance from it)."}, "when": "=how != 'items' and FILTER_KINDS[how][0] in ('collision-pass', 'window-distance') and stencil is None"},
+    {"let": {"items": "=a.items"}},
+    {"when": "=how == 'items'", "then": [{"let": {"items": "=[0] if items is None else items"}}, {"let": {"wrong": "=[i for i in items if not is_int(i) or not 0 <= i < n]"}}, {"refuse": {"fmt": "items: the pieces to keep by number from 0 — {o.Label} has {n} (0 … {n - 1}); {wrong[0]!r} is not one of them."}, "when": "=wrong"}, {"refuse": {"fmt": "items: the pieces to keep by number from 0 — {o.Label} has {n} (0 … {n - 1})."}, "when": "=not items"}]},
+    {"let": {"f": "=CF.makeCompoundFilter('CompoundFilter', doc())"}},
+    {"set": {"f.Label": "=unique(a.name or o.Label + ' filtered', f)", "f.Base": "=o"}},
+    {"when": "=how == 'items'", "then": [{"set": {"f.FilterType": "specific items", "f.items": "=';'.join(str(i) for i in items)"}}], "else": [{"set": {"f.FilterType": "=FILTER_KINDS[how][0]", "f.Invert": "=FILTER_KINDS[how][1]"}}, {"set": {"f.Stencil": "=stencil"}, "when": "=stencil is not None"}, {"set": {"f.WindowFrom": "=float(a.get('from'))"}, "when": "=a.get('from') is not None"}, {"set": {"f.WindowTo": "=float(a.to)"}, "when": "=a.to is not None"}]},
+    {"do": "=doc().recompute()"},
+    {"when": "=f.Shape.isNull() or 'Invalid' in (get(f, 'State', None) or [])", "then": [{"let": {"why": "nothing passed"}}, {"let": {"why": {"fmt": "no piece lies within {f.WindowFrom:g} … {f.WindowTo:g}% of the largest (or of the stencil's)"}}, "when": "=how.startswith('window')"}, {"let": {"why": "every piece touches the stencil"}, "when": "=how == 'collision-fail'"}, {"let": {"why": "no piece touches the stencil"}, "when": "=how == 'collision-pass'"}, {"refuse": {"fmt": "The filter keeps nothing of {o.Label} ({how}): {why} — nothing was made."}, "code": "failed"}]},
+    {"set": {"o.ViewObject.Visibility": false}, "when": "=get(o, 'ViewObject', None) is not None"},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"filter": "=f.Label", "kept": "=len(f.Shape.childShapes()) if f.Shape.ShapeType == 'Compound' else 1"}}
+  },
+  "part_join": {
+   "group": "std_more",
+   "description": "Join walled objects (Part join features; inputs hidden): kind connect { objects } fuses walls keeping the insides; embed { base, tool } sets tool into base; cutout { base, tool } cuts base to fit tool's wall. Pipes and tanks. Reply: valid, solids, volume.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "connect",
+       "embed",
+       "cutout"
+      ]
+     },
+     "objects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "base": {
+      "type": "string"
+     },
+     "tool": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/std_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"J": "=tool_module('BOPTools.JoinFeatures')"}},
+    {"let": {"kind": "=a.kind"}},
+    {"choose": "=kind", "of": {"connect": [{"let": {"refs": "=ref_list(a.objects)"}}, {"refuse": "objects: two or more walled objects (pipes, shells) by name.", "when": "=not refs"}, {"let": {"members": "=[shaped(r, 'objects') for r in refs]"}}, {"refuse": "objects: two or more walled objects (pipes, shells) by name.", "when": "=len(members) < 2"}, {"let": {"j": "=join_feature(J.FeatureConnect, J.ViewProviderConnect, 'Connect', a.name)"}}, {"set": {"j.Objects": "=members"}}], "embed": [{"let": {"base": "=shaped(a.base, 'base')"}}, {"let": {"cutter": "=shaped(a.get('tool'), 'tool')"}}, {"refuse": "base and tool: two different objects.", "when": "=base is cutter"}, {"let": {"j": "=join_feature(J.FeatureEmbed, J.ViewProviderEmbed, 'Embed', a.name)"}}, {"set": {"j.Base": "=base", "j.Tool": "=cutter"}}, {"let": {"members": "=[base, cutter]"}}], "cutout": [{"let": {"base": "=shaped(a.base, 'base')"}}, {"let": {"cutter": "=shaped(a.get('tool'), 'tool')"}}, {"refuse": "base and tool: two different objects.", "when": "=base is cutter"}, {"let": {"j": "=join_feature(J.FeatureCutout, J.ViewProviderCutout, 'Cutout', a.name)"}}, {"set": {"j.Base": "=base", "j.Tool": "=cutter"}}, {"let": {"members": "=[base, cutter]"}}]}, "else": [{"refuse": "kind: connect { objects } (walls fused, insides kept) | embed { base, tool } (tool's wall set into base) | cutout { base, tool } (base cut to fit tool's wall)."}]},
+    {"do": "=doc().recompute()"},
+    {"let": {"sh": "=j.Shape"}},
+    {"refuse": {"fmt": "The {kind} failed: {j.getStatusString()} — nothing was made. The objects' walls must cross one another (part_section {{ body, with }} shows whether they meet)."}, "code": "failed", "when": "=sh.isNull() or 'Invalid' in (get(j, 'State', None) or [])"},
+    {"each": "m", "in": "=members", "steps": [{"set": {"m.Visibility": false}, "when": "=has(m, 'Visibility')"}]},
+    {"do": "=snapshot(tool)"}
+   ],
+   "answer": {"fields": {"join": "=j.Label", "kind": "=kind", "valid": "=sh.isValid()", "solids": "=len(sh.Solids)", "volume": "=round(sh.Volume, 3) if sh.Solids else None"}}
+  },
+  "part_import_curves": {
+   "group": "std_more",
+   "description": "Import a curve network (the edges of a STEP, IGES or BREP; faces left out) as one object, for surface_fill or surface_sections: path (relative: in the session's folder).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/std_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"refuse": "path: a STEP, IGES or BREP file with curves (a relative path is in the session's folder).", "when": "=not is_str(a.path) or not a.path.strip()"},
+    {"let": {"p": "=in_file(tool, a.path)"}},
+    {"refuse": {"fmt": "path {p!r}: no such file — a STEP, IGES or BREP with curves; a relative path is looked for in the session's folder."}, "code": "not_found", "when": "=not isfile(p)"},
+    {"try": [{"let": {"sh": "=read_shape(p)"}}], "on": "error", "except": [{"refuse": {"fmt": "FreeCAD could not read {basename(p)} ({error}): a .step / .stp, .iges / .igs or .brep file. Nothing was added."}, "code": "failed"}]},
+    {"let": {"edges": "=sh.Edges"}},
+    {"refuse": {"fmt": "{basename(p)} has no curves: nothing was added."}, "when": "=not edges"},
+    {"add": "Part::Feature", "name": "CurveNet"},
+    {"set": {"o.Shape": "=compound(edges)", "o.Label": "=unique(a.name or stem(p), o)"}}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"curves": "=o.Label", "edges": "=len(edges)", "note": "Edges only (faces are left out): surface_fill or surface_sections builds faces from them."}}
+  },
+  "surface_polynomial": {
+   "group": "std_more",
+   "description": "A polynomial (quadric) surface fitted by least squares to a mesh's or point cloud's points, as a 3 × 3 Bézier patch over their extent (as Reverse Engineering's Polynomial Surface): from, name. For a patch that is one smooth bowl or saddle; split a scan with meshobj_segments or meshobj_trim first. Reply: surface, points, rms and max mm off the points (along the fit plane's normal).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "from": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "from"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/std_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"do": "=tool_module('numpy')"},
+    {"let": {"o": "=find(a.get('from'), 'from')"}},
+    {"let": {"P": "=cloud_points(o)"}},
+    {"refuse": {"fmt": "from: {o.Label} is not a mesh or a point cloud ({o.TypeId}) — meshobj_from_shape meshes a body; surface_points fits a grid of given points."}, "when": "=P is None"},
+    {"refuse": {"fmt": "from: {o.Label} has {len(P)} points; a quadric needs 9 or more, spread over an area."}, "when": "=len(P) < 9"},
+    {"let": {"patch, rms, worst": "=quadric_patch(P)"}},
+    {"add": "Part::Spline", "name": "Bezier", "as": "sp"},
+    {"set": {"sp.Shape": "=patch", "sp.Label": "=unique(a.name or o.Label + ' polynomial', sp)"}}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"surface": "=sp.Label", "points": "=len(P)", "rms": "=rms", "max": "=worst"}}
+  },
+  "surface_sections": {
+   "group": "surface",
+   "description": "A surface through curves in order (Surface Sections, parametric: it follows them): sections [\"Body.Edge3\" | a wire or sketch's name …], two or more, each one open curve, all running the same way; every edge of a named wire is a section of its own. Reply: object, sections, faces, area, closed.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "sections": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "sections"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/surface.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"refs": "=a.sections or []"}},
+    {"let": {"links": "=[edge_ref(r, 'sections') for r in refs] if is_list(refs) else []"}},
+    {"let": {"n": "=sum(len(x[1]) for x in links)"}},
+    {"refuse": "sections: two or more curves in the order the surface passes through them — each \"Body.Edge3\", or the name of a wire or sketch (every edge of it is a section of its own).", "when": "=n < 2"},
+    {"let": {"o": "=new('Surface::Sections', a.name or 'Sections')"}},
+    {"set": {"o.NSections": "=links"}}
+   ],
+   "answer": {"via": "done", "with": ["=o", "=tool", "$fields", "Each section must be one open curve, all running the same way (a twisted surface means one runs backwards), none crossing the next."], "fields": {"sections": "=n"}}
+  },
+  "surface_boundary": {
+   "group": "surface",
+   "description": "A surface bounded by 2–4 curves meeting end to end, given going round (Surface GeomFillSurface, parametric): edges, fill stretched (default, flattest) | coons | curved (rounder). Lines and arcs are taken as B-splines. When coons or curved is refused for curves that do not match, a Surface Filling through the same edges is made instead (reply: note). Reply: object, fill, sides, area.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "edges": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "fill": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "edges"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/surface.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"refs": "=a.edges or []", "ft": "={'stretched': 'Stretched', 'coons': 'Coons', 'curved': 'Curved'}.get(a.get('fill', 'stretched'))"}},
+    {"refuse": "fill: stretched (flattest), coons (smooth across), curved (round).", "when": "=ft is None"},
+    {"let": {"bl": "=[edge_ref(r, 'edges') for r in refs] if is_list(refs) else []"}},
+    {"let": {"edges": "=[ob.Shape.getElement(sub) for ob, subs in bl for sub in subs]"}},
+    {"refuse": {"fmt": "edges: two to four boundary curves in all that meet end to end, going round — these are {len(edges)}. More sides: surface_fill takes any closed boundary."}, "when": "=not 2 <= len(edges) <= 4"},
+    {"let": {"flags, apart": "=chained(edges, len(edges) > 2)"}},
+    {"refuse": "edges: the last does not come back to where the first starts — the boundary must close.", "when": "=apart == 'open'"},
+    {"refuse": "edges: two curves must share an end (a corner); the surface spans between them.", "when": "=apart == 'corner'"},
+    {"refuse": {"fmt": "edges: they do not meet end to end in the order given ({', '.join(str(r) for r in refs)}) — list them going round the boundary."}, "when": "=apart == 'order'"},
+    {"let": {"o": "=new('Surface::GeomFillSurface', a.name or 'Boundary surface')"}},
+    {"set": {"o.BoundaryList": "=bl", "o.ReversedList": "=flags", "o.FillType": "=ft"}},
+    {"let": {"out": null}},
+    {"try": [{"let": {"out": "=done(o, tool, {'fill': ft.lower(), 'sides': len(edges)}, 'The curves must meet at their ends within FreeCAD\\'s tolerance; fill stretched is the most forgiving, and surface_fill takes any closed boundary.')"}}], "on": "refusal", "except": [{"refuse": "=error.message", "code": "failed", "when": "=ft == 'Stretched' or 'disjoint' not in str(error) or len(edges) < 3"}, {"let": {"why": "=error.message"}}]},
+    {"answer": {"fields": {"...": "=out"}}, "when": "=out is not None"},
+    {"let": {"f": "=new('Surface::Filling', a.name or 'Boundary surface')"}},
+    {"set": {"f.BoundaryEdges": "=[(ob, sub) for ob, subs in bl for sub in subs]", "f.BoundaryOrder": "=[0] * len(edges)"}},
+    {"try": [{"let": {"out": "=done(f, tool)"}}], "on": "refusal", "except": [{"refuse": {"fmt": "{why} — and a filling through the edges failed too; fill: stretched joins them."}, "code": "failed"}]}
+   ],
+   "answer": {"fields": {"...": "=out", "note": {"fmt": "Made as Surface Filling (smooth through the edges): FreeCAD's {ft.lower()} fill refused these curves."}}}
+  },
+  "surface_extend": {
+   "group": "surface",
+   "description": "Run a face on past its edges (Surface Extend, parametric): face \"Body.Face2\"; u and v, how far past each pair of opposite edges as a share of its size that way (0.05 = 5% at each end; -0.5 … 10). The result is a new four-sided B-spline surface within 0.1 mm of the face; holes and a trimmed outline are not kept. Reply: object, area.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "face": {
+      "type": "string"
+     },
+     "u": {
+      "type": "number"
+     },
+     "v": {
+      "type": "number"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "face"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/surface.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"ref": "=a.face"}},
+    {"let": {"label, sub, el": "=resolve(ref) if is_str(ref) else (None, None, None)"}},
+    {"refuse": "face: \"Body.Face2\".", "when": "=not sub or not sub.startswith('Face')"},
+    {"let": {"u": "=num(a.get('u', 0.05), 'u')", "v": "=num(a.get('v', 0.05), 'v')"}},
+    {"refuse": "u, v: how far past each pair of opposite edges, as a share of the face's size that way: -0.5 (shrunk to nothing) … 10 (0.05 = 5% at each end).", "when": "=not (-0.5 <= u <= 10 and -0.5 <= v <= 10)"},
+    {"let": {"o": "=new('Surface::Extend', a.name or 'Extended')"}},
+    {"set": {"o.Face": "=(find(label), [sub])", "o.ExtendUSymetric": true, "o.ExtendVSymetric": true, "o.ExtendUNeg": "=u", "o.ExtendVNeg": "=v"}}
+   ],
+   "answer": {"via": "done", "with": ["=o", "=tool", "$fields"], "fields": {"u": "=u", "v": "=v", "note": "A new four-sided B-spline surface over the face's whole u and v range, run on by u and v of that range at each end and fitted to within 0.1 mm of the face (property Tolerance): holes and a trimmed outline are not kept."}}
+  },
+  "surface_sew": {
+   "group": "surface",
+   "description": "Sew surfaces into one shell (Surface Sewing, parametric): faces [surface objects (all their faces), or \"Body.Face3\"], two or more whose edges meet within tolerance mm (0.01). solid: true also makes a closed shell a solid body (a plain copy). Reply: faces, shells, closed, area; solid { body, volume }, or why not (the shell is open); warning when nothing joined.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "faces": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "solid": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "faces"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/surface.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"refs": "=a.faces or []", "links": "={}"}},
+    {"each": "r", "in": "=refs", "steps": [{"refuse": "faces: surfaces' names, or faces as \"Body.Face3\".", "when": "=not is_str(r)"}, {"let": {"label, sub, el": "=resolve(r)"}}, {"let": {"x": "=find(label)"}}, {"let": {"subs": "=[sub] if sub else ['Face' + str(i + 1) for i in range(len(x.Shape.Faces))]"}}, {"refuse": {"fmt": "faces: {x.Label} has no faces."}, "when": "=not subs"}, {"do": "=links.setdefault(x, []).extend(subs)"}]},
+    {"refuse": "faces: two or more faces (surfaces, or \"Body.Face3\") whose edges meet.", "when": "=sum(len(v) for v in links.values()) < 2"},
+    {"let": {"tol": "=num(a.get('tolerance', 0.01), 'tolerance')"}},
+    {"refuse": "tolerance: mm, over 0 — edges closer than this are joined (0.01).", "when": "=tol <= 0"},
+    {"let": {"o": "=new('Surface::Sewing', a.name or 'Sewn')"}},
+    {"set": {"o.ShapeList": "=list(links.items())", "o.Tolerance": "=tol"}}
+   ],
+   "answer": {"via": "done", "with": ["=o", "=tool"], "then": [{"put": {"warning": "No face was joined to another (no shell): their edges are further apart than tolerance, or do not match along their length."}, "when": "=not out.get('shells')"}, {"when": "=a.solid", "then": [{"let": {"sh": "=o.Shape"}}, {"when": "=not (sh.Shells and sh.Shells[0].isClosed())", "then": [{"let": {"free": "=free_edges(sh)"}}, {"let": {"sides": ""}}, {"let": {"sides": {"fmt": " ({len(free)} edge(s) with a face on one side only)"}}, "when": "=free"}, {"put": {"solid": "='not made: the shell is open — a gap wider than tolerance, or a face missing' + sides"}}], "else": [{"add": "Part::Feature", "name": "Body", "as": "sol"}, {"set": {"sol.Label": "=unique(a.name and a.name + ' solid' or o.Label + ' solid')", "sol.Shape": "=clean(make_solid(sh.Shells[0]))"}}, {"do": "=doc().recompute()"}, {"put": {"solid": "={'body': sol.Label, 'volume': round(sol.Shape.Volume, 3)}"}}]}]}]}
+  },
+  "surface_cut": {
+   "group": "surface",
+   "description": "Cut a surface by another object (Surface Cut, a boolean cut that follows both): surface, by. By a solid: what lies inside it is removed. By a surface: nothing is removed, the surface comes back split along where they cross (reply: note; part_extract takes a piece). Reply: object, of, by, faces, area.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "surface": {
+      "type": "string"
+     },
+     "by": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "surface",
+     "by"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/surface.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"x": "=shaped(a.surface, 'surface')"}},
+    {"let": {"y": "=shaped(a.by, 'by')"}},
+    {"refuse": "surface, by: two different objects.", "when": "=x is y"},
+    {"let": {"before": "=(len(x.Shape.Faces), x.Shape.Area)"}},
+    {"let": {"o": "=new('Surface::Cut', a.name or 'Surface cut')"}},
+    {"set": {"o.ShapeList": "=[x, y]"}}
+   ],
+   "answer": {"via": "done", "with": ["=o", "=tool", "$fields"], "fields": {"of": "=x.Label", "by": "=y.Label"}, "then": [{"when": "=out.get('faces') == before[0] and abs(out.get('area', 0) - before[1]) < 1e-6 * max(1.0, before[1])", "then": [{"put": {"note": {"fmt": "Nothing was cut: {y.Label} does not cross {x.Label}."}}}], "else": [{"put": {"note": {"fmt": "{y.Label} is a surface, not a solid: nothing was removed, {x.Label} came back split along where they cross. part_extract takes the piece to keep."}}, "when": "=abs(out.get('area', 0) - before[1]) < 1e-6 * max(1.0, before[1])"}]}]}
+  },
+  "surface_blend": {
+   "group": "surface",
+   "description": "A blend curve joining two edges smoothly (Surface BlendCurve, parametric): start / end { edge \"Body.Edge3\", at 0…1 along it (default: start 0, end 1), continuity 0…4 (1 tangent, 2 curvature, default), size (1; the tangent there is size × the distance between the two points, so 5 swings wide; negative leaves against the edge's direction) }. Reply: object, edges 1, length. Use it as a boundary for the next surface.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "start": {
+      "type": "object"
+     },
+     "end": {
+      "type": "object"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "start",
+     "end"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/surface.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"ends": "={}"}},
+    {"each": "side", "in": "=('start', 'end')", "steps": [{"let": {"e": "=a.get(side)"}}, {"refuse": {"fmt": "{side}: {{ edge: \"Body.Edge3\", at: 0 … 1, continuity: 0 … 4, size }}."}, "when": "=not is_dict(e)"}, {"let": {"ob, subs": "=edge_ref(e.get('edge'), side + '.edge')"}}, {"let": {"c": "=e.get('continuity', 2)"}}, {"refuse": {"fmt": "{side}.continuity: 0 (touching) … 4; 1 tangent, 2 curvature."}, "when": "=not is_int(c) or not 0 <= c <= 4"}, {"let": {"at": "=num(e.get('at', 0 if side == 'start' else 1), side + '.at')"}}, {"refuse": {"fmt": "{side}.at: 0 (the edge's start) … 1 (its end)."}, "when": "=not 0 <= at <= 1"}, {"let": {"size": "=num(e.get('size', 1), side + '.size')"}}, {"refuse": {"fmt": "{side}.size: -100 … 100, not 0 — how strongly the blend follows the edge's direction there; negative leaves against the edge's direction."}, "when": "=not -100 <= size <= 100 or size == 0"}, {"do": "=ends.update({side: ((ob, [subs[0]]), c, at, size)})"}]},
+    {"let": {"o": "=new('Surface::FeatureBlendCurve', a.name or 'Blend curve')"}},
+    {"set": {"o.StartEdge": "=ends['start'][0]", "o.EndEdge": "=ends['end'][0]"}},
+    {"each": "side, end", "in": "=ends.items()", "steps": [{"do": [{"set": ["=o", "=side.capitalize() + 'Continuity'", "=end[1]"]}, {"set": ["=o", "=side.capitalize() + 'Parameter'", "=end[2]"]}, {"set": ["=o", "=side.capitalize() + 'Size'", "=end[3]"]}]}]}
+   ],
+   "answer": {"via": "done", "with": ["=o", "=tool", "$fields"], "fields": {"note": "at: where on each edge, 0 (its start) … 1 (its end); size: how far the blend follows each edge's direction (negative: against it — the usual fix for a blend that loops back)."}}
+  },
+  "pd_pad": {
+   "group": "feature",
+   "description": "Pad a closed sketch into the body, along its normal: type length (length mm) | up_to_last | up_to_first | up_to_face (upToFace { at, normal } or \"Face8\"); sides one | two (length2 the other way) | symmetric; reversed; taper deg. The first pad takes a length. An open sketch (sketch_state first) or a pad inside the body is refused. Faces and edges are renumbered: query again. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "sketch": {
+      "type": "string",
+      "description": "The sketch, in the body."
+     },
+     "type": {
+      "type": "string"
+     },
+     "length": {
+      "type": "number"
+     },
+     "length2": {
+      "type": "number"
+     },
+     "sides": {
+      "type": "string",
+      "enum": [
+       "one",
+       "two",
+       "symmetric"
+      ]
+     },
+     "reversed": {
+      "type": "boolean"
+     },
+     "upToFace": {
+      "description": "The face to go up to: { at, normal }, \"Face8\", or shape_query's filters."
+     },
+     "taper": {
+      "type": "number"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.sketch, b)"}},
+    {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
+    {"let": {"before": "=volume(b)", "tip": "=solid_tip(b)"}},
+    {"let": {"types": "={'length': 'Length', 'up_to_face': 'UpToFace', 'up_to_first': 'UpToFirst', 'up_to_last': 'UpToLast'}", "typ": "=a.type or ('up_to_face' if a.upToFace is not None else 'length')", "why": "=\" — a pad has no through_all: up_to_last goes to the body's far side.\" if typ == 'through_all' else '.'"}},
+    {"refuse": {"fmt": "type {typ!r}: one of length, up_to_face, up_to_first, up_to_last{why}"}, "when": "=typ not in types"},
+    {"let": {"side": "=a.sides or 'one'"}},
+    {"refuse": {"fmt": "sides {side!r}: one, two (with length2) or symmetric."}, "when": "=side not in ('one', 'two', 'symmetric')"},
+    {"refuse": {"fmt": "type {typ}: {b.Label} has no solid to go up to yet — the first pad takes type length."}, "code": "invalid_state", "when": "=typ != 'length' and tip is None"},
+    {"let": {"L": "=a.length"}},
+    {"refuse": "length: mm, over 0 — or type up_to_face | up_to_first | up_to_last.", "when": "=typ == 'length' and (not is_num(L) or L <= 0)"},
+    {"let": {"L2": "=a.length2"}},
+    {"refuse": "sides two: give length2, the mm on the other side of the sketch (length is this side's) — or sides symmetric to share length both ways.", "when": "=side == 'two' and typ == 'length' and (not is_num(L2) or L2 <= 0)"},
+    {"let": {"taper": "=a.taper"}},
+    {"refuse": "taper: degrees, under 90 (positive widens it away from the sketch; type length only).", "when": "=taper and (not is_number(taper) or abs(taper) >= 90)"},
+    {"let": {"up_face": null}},
+    {
+     "when": "=typ == 'up_to_face'",
+     "then": [
+      {"refuse": "type up_to_face: give upToFace — { at: [x,y,z], normal: [x,y,z] } on the body, or \"Face8\" as shape_query names it.", "when": "=a.upToFace is None"},
+      {"let": {"up_face": "=find_faces(ref_shape(b, tip.Shape), [a.upToFace], ref_names(b, tip))[0]"}}
+     ]
+    },
+    {"let": {"f": "=new(b, 'PartDesign::Pad', 'Pad')"}},
+    {"set": {"f.Profile": "=sk"}},
+    {
+     "choose": "=typ",
+     "of": {
+      "up_to_face": [
+       {"set": {"f.Type": "UpToFace", "f.UpToFace": "=(tip, [up_face])"}}
+      ],
+      "length": [
+       {"set": {"f.Length": "=float(L)"}}
+      ]
+     },
+     "else": [
+      {"set": {"f.Type": "=types[typ]"}}
+     ]
+    },
+    {"let": {"sided": "=set_sides(f, side, L2 if typ == 'length' else None)"}},
+    {"refuse": {"fmt": "sides two with type {f.Type}: this FreeCAD ({version()}) has two sides for type length only — sides symmetric, or two features."}, "code": "unavailable", "when": "=not sided"},
+    {"set": {"f.Reversed": true}, "when": "=a.reversed"},
+    {"set": {"f.TaperAngle": "=float(taper)"}, "when": "=taper and has_prop(f, 'TaperAngle')"}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "=tool", "=before", "add", "Check the sketch with sketch_state (closed wires, no open vertices); reversed: true goes the other way."],
+    "then": [
+     {"put": {"sketchDof": "=sk.DoF"}, "when": "=get(sk, 'DoF')"}
+    ]
+   }
+  },
+  "pd_pocket": {
+   "group": "feature",
+   "description": "Pocket a closed sketch out of the body: type length | through_all | up_to_first | up_to_face (upToFace); sides one | two (length2) | symmetric; reversed; taper. It cuts against the sketch's normal: one that cuts nothing is refused — reversed: true, or sketch on the face it enters. A cut that splits the body leaves 2 solids (allowed by its AllowCompound; health says so). Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "sketch": {
+      "type": "string",
+      "description": "The sketch, in the body."
+     },
+     "type": {
+      "type": "string"
+     },
+     "length": {
+      "type": "number"
+     },
+     "length2": {
+      "type": "number"
+     },
+     "sides": {
+      "type": "string",
+      "enum": [
+       "one",
+       "two",
+       "symmetric"
+      ]
+     },
+     "reversed": {
+      "type": "boolean"
+     },
+     "upToFace": {
+      "description": "The face to go up to: { at, normal }, \"Face8\", or shape_query's filters."
+     },
+     "taper": {
+      "type": "number"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.sketch, b)"}},
+    {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
+    {"let": {"before": "=volume(b)", "tip": "=solid_tip(b)"}},
+    {"refuse": {"fmt": "{b.Label} has no solid to pocket: pd_pad (or pd_primitive) first."}, "code": "invalid_state", "when": "=tip is None"},
+    {"let": {"types": "={'length': 'Length', 'up_to_face': 'UpToFace', 'up_to_first': 'UpToFirst', 'through_all': 'ThroughAll'}", "typ": "=a.type or ('up_to_face' if a.upToFace is not None else 'length')", "why": "=' — a pocket has no up_to_last: through_all.' if typ == 'up_to_last' else '.'"}},
+    {"refuse": {"fmt": "type {typ!r}: one of length, up_to_face, up_to_first, through_all{why}"}, "when": "=typ not in types"},
+    {"let": {"side": "=a.sides or 'one'"}},
+    {"refuse": {"fmt": "sides {side!r}: one, two (with length2) or symmetric."}, "when": "=side not in ('one', 'two', 'symmetric')"},
+    {"let": {"L": "=a.length"}},
+    {"refuse": "length: mm, over 0 — or type up_to_face | up_to_first | through_all.", "when": "=typ == 'length' and (not is_num(L) or L <= 0)"},
+    {"let": {"L2": "=a.length2"}},
+    {"refuse": "sides two: give length2, the mm on the other side of the sketch (length is this side's) — or sides symmetric to share length both ways.", "when": "=side == 'two' and typ == 'length' and (not is_num(L2) or L2 <= 0)"},
+    {"let": {"taper": "=a.taper"}},
+    {"refuse": "taper: degrees, under 90 (positive widens it away from the sketch; type length only).", "when": "=taper and (not is_number(taper) or abs(taper) >= 90)"},
+    {"let": {"up_face": null}},
+    {
+     "when": "=typ == 'up_to_face'",
+     "then": [
+      {"refuse": "type up_to_face: give upToFace — { at: [x,y,z], normal: [x,y,z] } on the body, or \"Face8\" as shape_query names it.", "when": "=a.upToFace is None"},
+      {"let": {"up_face": "=find_faces(ref_shape(b, tip.Shape), [a.upToFace], ref_names(b, tip))[0]"}}
+     ]
+    },
+    {"let": {"f": "=new(b, 'PartDesign::Pocket', 'Pocket')"}},
+    {"set": {"f.Profile": "=sk"}},
+    {
+     "choose": "=typ",
+     "of": {
+      "up_to_face": [
+       {"set": {"f.Type": "UpToFace", "f.UpToFace": "=(tip, [up_face])"}}
+      ],
+      "length": [
+       {"set": {"f.Length": "=float(L)"}}
+      ]
+     },
+     "else": [
+      {"set": {"f.Type": "=types[typ]"}}
+     ]
+    },
+    {"let": {"sided": "=set_sides(f, side, L2 if typ == 'length' else None)"}},
+    {"refuse": {"fmt": "sides two with type {f.Type}: this FreeCAD ({version()}) has two sides for type length only — sides symmetric, or two features."}, "code": "unavailable", "when": "=not sided"},
+    {"set": {"f.Reversed": true}, "when": "=a.reversed"},
+    {"set": {"f.TaperAngle": "=float(taper)"}, "when": "=taper and has_prop(f, 'TaperAngle')"}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "=tool", "=before", "cut", "Check the sketch with sketch_state (closed wires, no open vertices); reversed: true goes the other way into the body."],
+    "then": [
+     {"put": {"sketchDof": "=sk.DoF"}, "when": "=get(sk, 'DoF')"}
+    ]
+   }
+  },
+  "pd_revolution": {
+   "group": "feature",
+   "description": "Revolve a closed sketch about an axis: axis V_Axis (default) | H_Axis (the sketch's) | x | y | z (the body's) | a datum line | a line's geometry id (from 0); angle deg (360); sides one | symmetric; reversed. The profile must not cross the axis. Two angles: feature_edit { Type: \"TwoAngles\", Angle2 }. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "sketch": {
+      "type": "string",
+      "description": "The sketch, in the body."
+     },
+     "axis": {
+      "type": [
+       "string",
+       "integer"
+      ]
+     },
+     "angle": {
+      "type": "number"
+     },
+     "sides": {
+      "type": "string"
+     },
+     "reversed": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.sketch, b)"}},
+    {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
+    {"let": {"before": "=volume(b)"}},
+    {"let": {"angle": "=a.get('angle', 360)"}},
+    {"refuse": "angle: degrees, over 0 up to 360.", "when": "=not is_num(angle) or not (0 < angle <= 360)"},
+    {"let": {"side": "=a.sides or 'one'"}},
+    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit {{ feature, set: {{ Type: \"TwoAngles\", Angle2: … }} }}."}, "when": "=side not in ('one', 'symmetric')"},
+    {"let": {"f": "=new(b, 'PartDesign::Revolution', 'Revolution')"}},
+    {"set": {"f.Profile": "=sk", "f.ReferenceAxis": "=axis_ref(b, a.get('axis', 'V_Axis'), sk)[0]", "f.Angle": "=float(angle)"}},
+    {"set": {"f.Midplane": true}, "when": "=side == 'symmetric'"},
+    {"set": {"f.Reversed": true}, "when": "=a.reversed"}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "=tool", "=before", "add", "The profile must be closed and lie wholly on one side of the axis (sketch_state)."],
+    "then": [
+     {"put": {"sketchDof": "=sk.DoF"}, "when": "=get(sk, 'DoF')"}
+    ]
+   }
+  },
+  "pd_groove": {
+   "group": "feature",
+   "description": "Cut by revolving a closed sketch about an axis (inputs as pd_revolution). A groove that cuts nothing is refused. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "sketch": {
+      "type": "string",
+      "description": "The sketch, in the body."
+     },
+     "axis": {
+      "type": [
+       "string",
+       "integer"
+      ]
+     },
+     "angle": {
+      "type": "number"
+     },
+     "sides": {
+      "type": "string"
+     },
+     "reversed": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.sketch, b)"}},
+    {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
+    {"let": {"before": "=volume(b)"}},
+    {"refuse": {"fmt": "{b.Label} has no solid to groove: pd_pad or pd_revolution first."}, "code": "invalid_state", "when": "=before <= 0"},
+    {"let": {"angle": "=a.get('angle', 360)"}},
+    {"refuse": "angle: degrees, over 0 up to 360.", "when": "=not is_num(angle) or not (0 < angle <= 360)"},
+    {"let": {"side": "=a.sides or 'one'"}},
+    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit {{ feature, set: {{ Type: \"TwoAngles\", Angle2: … }} }}."}, "when": "=side not in ('one', 'symmetric')"},
+    {"let": {"f": "=new(b, 'PartDesign::Groove', 'Groove')"}},
+    {"set": {"f.Profile": "=sk", "f.ReferenceAxis": "=axis_ref(b, a.get('axis', 'V_Axis'), sk)[0]", "f.Angle": "=float(angle)"}},
+    {"set": {"f.Midplane": true}, "when": "=side == 'symmetric'"},
+    {"set": {"f.Reversed": true}, "when": "=a.reversed"}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "=tool", "=before", "cut", "The profile must be closed and lie wholly on one side of the axis (sketch_state): reversed: true turns a part-turn groove the other way."],
+    "then": [
+     {"put": {"sketchDof": "=sk.DoF"}, "when": "=get(sk, 'DoF')"}
+    ]
+   }
+  },
+  "pd_hole": {
+   "group": "feature",
+   "description": "Holes at the centre of every circle of a sketch (FreeCAD 1.1: at its points too; not construction geometry) on the face they enter, drilled against its normal: diameter mm, or thread \"M5\" (ISO coarse; \"M8x1\" fine) — threaded (default true: tap-drill size, cosmetic unless modelThread) or a clearance hole (threaded: false, fit close|normal|loose); depth mm | \"through\"; drillPoint flat|angled; cut counterbore|countersink|counterdrill with cutDiameter, cutDepth, countersinkAngle (a thread size gives standard ones). Reply adds holes, diameter, thread, cut. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "sketch": {
+      "type": "string",
+      "description": "The sketch, in the body."
+     },
+     "diameter": {
+      "type": "number"
+     },
+     "thread": {
+      "type": "string"
+     },
+     "threaded": {
+      "type": "boolean"
+     },
+     "modelThread": {
+      "type": "boolean"
+     },
+     "fit": {
+      "type": "string"
+     },
+     "depth": {
+      "type": [
+       "number",
+       "string"
+      ]
+     },
+     "drillPoint": {
+      "type": "string"
+     },
+     "cut": {
+      "type": "string"
+     },
+     "cutDiameter": {
+      "type": "number"
+     },
+     "cutDepth": {
+      "type": "number"
+     },
+     "countersinkAngle": {
+      "type": "number"
+     },
+     "reversed": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.sketch, b)"}},
+    {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
+    {"do": "=tip_shape(b)"},
+    {"let": {"before": "=volume(b)", "thread": "=a.thread", "d": "=a.diameter"}},
+    {"refuse": "diameter: mm, over 0 — or thread: \"M5\" for a standard size.", "when": "=not thread and (not is_num(d) or d <= 0)"},
+    {"let": {"depth": "=a.get('depth', 'through')"}},
+    {"refuse": "depth: mm, over 0, or \"through\".", "when": "=depth != 'through' and (not is_num(depth) or depth <= 0)"},
+    {"let": {"point": "=a.get('drillPoint', 'flat')"}},
+    {"refuse": "drillPoint: flat or angled (118°).", "when": "=point not in ('flat', 'angled')"},
+    {"let": {"fit": "=a.fit", "fit_names": "={'close': ('Fine', 'Close'), 'normal': ('Medium', 'Normal'), 'loose': ('Coarse', 'Loose', 'Wide')}"}},
+    {"refuse": "fit: close, normal or loose (a clearance hole's: with thread and threaded: false).", "when": "=fit is not None and fit not in fit_names"},
+    {"let": {"f": "=new(b, 'PartDesign::Hole', 'Hole')"}},
+    {"set": {"f.Profile": "=sk"}},
+    {"let": {"spots, points": "=hole_spots(sk, f)"}},
+    {"refuse": {"fmt": "{sk.Label} has no circles{' or points' if points else ''}: a hole is drilled at each circle's centre{' and at each point' if points else ''} — sketch_add them (not as construction) on the face the holes enter."}, "when": "=not spots"},
+    {
+     "when": "=thread",
+     "then": [
+      {"set": {"f.ThreadType": "ISOMetricProfile"}},
+      {"let": {"sizes": "=list(f.getEnumerationsOfProperty('ThreadSize'))", "pick": "=thread_pick(sizes, thread, True)"}},
+      {
+       "when": "=pick is None",
+       "then": [
+        {"set": {"f.ThreadType": "ISOMetricFineProfile"}},
+        {"let": {"fine": "=list(f.getEnumerationsOfProperty('ThreadSize'))", "pick": "=thread_pick(fine, thread, False)"}},
+        {
+         "when": "=pick is None",
+         "then": [
+          {"let": {"key": "=thread_key(thread)", "same": "=[z for z in fine if key and (thread_key(z) or (None,))[0] == key[0]]"}},
+          {"refuse": {"fmt": "thread {thread!r}: not an ISO metric size FreeCAD has — coarse by diameter (\"M5\"): {', '.join(sizes[6:16])} …; fine pitches for M{key[0]:g}: {', '.join(same)}. Other standards (UNC, UNF, BSP …): make the hole by diameter, then feature_edit its ThreadType and ThreadSize."}, "when": "=same"},
+          {"refuse": {"fmt": "thread {thread!r}: not an ISO metric size FreeCAD has — coarse by diameter (\"M5\"): {', '.join(sizes[6:16])} …; fine with its pitch: {', '.join(fine[10:14])} … Other standards (UNC, UNF, BSP …): make the hole by diameter, then feature_edit its ThreadType and ThreadSize."}}
+         ]
+        }
+       ]
+      },
+      {"set": {"f.ThreadSize": "=pick", "f.Threaded": "=bool(a.get('threaded', True))"}},
+      {"set": {"f.ModelThread": "=bool(a.get('modelThread', False))"}, "when": "=f.Threaded and has_prop(f, 'ModelThread')"},
+      {
+       "when": "=not f.Threaded and fit and has_prop(f, 'ThreadFit')",
+       "then": [
+        {"let": {"fits": "=list(f.getEnumerationsOfProperty('ThreadFit'))", "got": "=first([x for x in fit_names[fit] if x in fits])"}},
+        {"set": {"f.ThreadFit": "=got"}, "when": "=got"}
+       ]
+      }
+     ],
+     "else": [
+      {"set": {"f.Diameter": "=float(d)"}}
+     ]
+    },
+    {
+     "when": "=depth == 'through'",
+     "then": [
+      {"set": {"f.DepthType": "ThroughAll"}}
+     ],
+     "else": [
+      {"set": {"f.DepthType": "Dimension", "f.Depth": "=float(depth)"}}
+     ]
+    },
+    {"set": {"f.DrillPoint": "='Angled' if point == 'angled' else 'Flat'"}},
+    {"let": {"cut": "=a.cut"}},
+    {
+     "when": "=cut",
+     "then": [
+      {"let": {"opts": "=list(f.getEnumerationsOfProperty('HoleCutType'))", "want": "=first([o for o in opts if o.lower() == str(cut).lower() and o != 'None'])", "cuts": "=', '.join([o if ' ' in o else o.lower() for o in opts if o != 'None'])", "end": "='.' if thread else ' (a thread size adds the screw standards FreeCAD has).'"}},
+      {"refuse": {"fmt": "cut {cut!r}: one of {cuts}{end}"}, "when": "=want is None"},
+      {"set": {"f.HoleCutType": "=want"}},
+      {
+       "when": "=any(k in a for k in ('cutDiameter', 'cutDepth', 'countersinkAngle')) or not thread",
+       "then": [
+        {"set": {"f.HoleCutCustomValues": true}, "when": "=has_prop(f, 'HoleCutCustomValues')"},
+        {"set": {"f.HoleCutDiameter": "=float(a.cutDiameter)"}, "when": "='cutDiameter' in a"},
+        {"refuse": "cutDiameter: mm — needed for a counterbore or countersink on a plain diameter (a thread size gives its own).", "when": "='cutDiameter' not in a and not thread"},
+        {"set": {"f.HoleCutDepth": "=float(a.cutDepth)"}, "when": "='cutDepth' in a"},
+        {"set": {"f.HoleCutCountersinkAngle": "=float(a.countersinkAngle)"}, "when": "='countersinkAngle' in a"}
+       ]
+      }
+     ]
+    },
+    {"set": {"f.Reversed": true}, "when": "=a.reversed"}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "pd_hole", "=before", "cut", "The hole goes against the sketch's normal: put the sketch on the face it enters, or reversed: true."],
+    "then": [
+     {"put": {"holes": "=spots", "diameter": "=num_json(f.Diameter)"}},
+     {"put": {"thread": "=f.ThreadSize + (' (cosmetic)' if f.Threaded and not get(f, 'ModelThread', False) else '' if f.Threaded else ' clearance')"}, "when": "=thread"},
+     {"put": {"cut": "={'type': f.HoleCutType, 'diameter': num_json(f.HoleCutDiameter), 'depth': num_json(f.HoleCutDepth)}"}, "when": "=cut"}
+    ]
+   }
+  },
+  "pd_fillet": {
+   "group": "feature",
+   "description": "Round edges of the body: edges [{ near: [x,y,z] } the edge nearest a point | { face: { at, normal } } every edge of a face | { all: true }, kind: line|circle to filter], or what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items) or its filters ({ type: circle, radius: 3 } every such edge; with near, the nearest); radius mm (default 1). References are good until the next change: query again after one. Smooth (tangent) edges are skipped. An inside corner gains material, an outside one loses it: both are right. Reply adds on (the edges). Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "edges": {
+      "description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, … })"
+     },
+     "radius": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "edges"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)"}},
+    {"let": {"tip, shape": "=tip_shape(b)", "before": "=volume(b)"}},
+    {"let": {"v": "=a.get('radius', 1)"}},
+    {"refuse": "radius: mm, over 0.", "when": "=not is_num(v) or v <= 0"},
+    {"let": {"subs": "=find_edges(ref_shape(b, shape), a.edges, ref_names(b, tip))"}},
+    {"let": {"f": "=new(b, 'PartDesign::Fillet', 'Fillet')"}},
+    {"set": {"f.Base": "=(tip, subs)", "f.Radius": "=float(v)"}}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "pd_fillet", "=before", "changed", "A radius larger than a face beside the edge fails, and edges that are already smooth (tangent) cannot be rounded: try smaller, or fewer edges."],
+    "then": [
+     {"put": {"on": "=subs"}}
+    ]
+   }
+  },
+  "pd_chamfer": {
+   "group": "feature",
+   "description": "Bevel edges of the body: edges as pd_fillet; size mm (default 1); size2 for two distances or angle deg for distance and angle (one of them). On an inside corner it adds material, on an outside one it removes it: only a chamfer that changes nothing is refused. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "edges": {
+      "description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, … })"
+     },
+     "size": {
+      "type": "number"
+     },
+     "size2": {
+      "type": "number"
+     },
+     "angle": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "edges"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)"}},
+    {"let": {"tip, shape": "=tip_shape(b)", "before": "=volume(b)"}},
+    {"let": {"v": "=a.get('size', 1)"}},
+    {"refuse": "size: mm, over 0.", "when": "=not is_num(v) or v <= 0"},
+    {"refuse": "size2 or angle, not both: size2 is the second distance (two distances), angle goes with size (distance and angle).", "when": "='size2' in a and 'angle' in a"},
+    {"let": {"subs": "=find_edges(ref_shape(b, shape), a.edges, ref_names(b, tip))"}},
+    {"let": {"f": "=new(b, 'PartDesign::Chamfer', 'Chamfer')"}},
+    {"set": {"f.Base": "=(tip, subs)", "f.Size": "=float(v)"}},
+    {"set": {"f.ChamferType": "Two distances", "f.Size2": "=float(a.size2)"}, "when": "='size2' in a"},
+    {"set": {"f.ChamferType": "Distance and Angle", "f.Angle": "=float(a.angle)"}, "when": "='size2' not in a and 'angle' in a"}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "pd_chamfer", "=before", "changed", "A chamfer wider than a face beside the edge fails: try smaller."],
+    "then": [
+     {"put": {"on": "=subs"}}
+    ]
+   }
+  },
+  "pd_draft": {
+   "group": "feature",
+   "description": "Taper faces for moulding: faces [{ at, normal }] (or shape_query's references or filters), angle deg (1.5), neutral plane the faces pivot on (XY default, a datum plane, or a face; they must meet it), pull direction x|y|z (z) or a datum line, reversed. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "faces": {
+      "description": "faces: [{ at, normal }] by where they are, a reference shape_query gives (\"Face8\", \"Body.Face8\") or a list of them, or shape_query's filters ({ type, normal, near, x, y, z, … })"
+     },
+     "angle": {
+      "type": "number"
+     },
+     "neutral": {
+      "description": "XY | XZ | YZ, a datum plane's name, or a face { at, normal }"
+     },
+     "pull": {
+      "type": "string"
+     },
+     "reversed": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "faces"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)"}},
+    {"let": {"tip, shape": "=tip_shape(b)", "before": "=volume(b)"}},
+    {"let": {"v": "=a.get('angle', 1.5)"}},
+    {"refuse": "angle: degrees, between 0 and 90 (reversed: true tilts the other way).", "when": "=not is_num(v) or not (0 < abs(v) < 90)"},
+    {"let": {"subs": "=find_faces(ref_shape(b, shape), a.faces, ref_names(b, tip))"}},
+    {"let": {"neutral": "=plane_ref(b, a.get('neutral', 'XY'), 'neutral')[0]", "pull": "=axis_ref(b, a.get('pull', 'z'), None, 'pull')[0]"}},
+    {"let": {"f": "=new(b, 'PartDesign::Draft', 'Draft')"}},
+    {"set": {"f.Base": "=(tip, subs)", "f.Angle": "=float(v)", "f.NeutralPlane": "=neutral", "f.PullDirection": "=pull"}},
+    {"set": {"f.Reversed": true}, "when": "=a.reversed"}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "pd_draft", "=before", null, "Draft takes flat or cylindrical faces that meet the neutral plane and stand along the pull direction; reversed: true tilts them the other way."],
+    "then": [
+     {"put": {"on": "=subs"}}
+    ]
+   }
+  },
+  "pd_thickness": {
+   "group": "feature",
+   "description": "Shell the body: faces [{ at, normal }] (or shape_query's references or filters) to open (removed), thickness mm of the wall (1), inward unless outward: true; join arc|intersection. A wall thicker than an inside fillet fails: shell before filleting. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "faces": {
+      "description": "faces: [{ at, normal }] by where they are, a reference shape_query gives (\"Face8\", \"Body.Face8\") or a list of them, or shape_query's filters ({ type, normal, near, x, y, z, … })"
+     },
+     "thickness": {
+      "type": "number"
+     },
+     "outward": {
+      "type": "boolean"
+     },
+     "join": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "faces"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)"}},
+    {"let": {"tip, shape": "=tip_shape(b)", "before": "=volume(b)"}},
+    {"let": {"v": "=a.get('thickness', 1)"}},
+    {"refuse": "thickness: mm, over 0.", "when": "=not is_num(v) or v <= 0"},
+    {"refuse": "join: arc (rounded outside corners) or intersection (sharp).", "when": "=a.join not in (None, 'arc', 'intersection')"},
+    {"let": {"subs": "=find_faces(ref_shape(b, shape), a.faces, ref_names(b, tip))"}},
+    {"let": {"f": "=new(b, 'PartDesign::Thickness', 'Thickness')"}},
+    {"set": {"f.Base": "=(tip, subs)", "f.Value": "=float(v)", "f.Reversed": "=not a.get('outward', False)", "f.Join": "='Intersection' if a.join == 'intersection' else 'Arc'"}}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "pd_thickness", "=before", "=None if a.outward else 'cut'", "A wall thicker than an inside fillet's radius or than a thin feature fails: thinner, or join: intersection; shell before filleting."],
+    "then": [
+     {"put": {"on": "=subs"}}
+    ]
+   }
+  },
+  "pd_mirrored": {
+   "group": "feature",
+   "description": "Mirror features (by name) across a plane: XY | XZ | YZ (default), a datum plane, or a face query; features: \"all\" mirrors the whole body (FreeCAD 1.1's TransformMode \"Whole shape\", else every pad and pocket up to the tip). A copy that misses the body makes a second solid (health says so). Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "features": {
+      "description": "[feature names], or \"all\": the whole body (every feature up to the tip)",
+      "anyOf": [
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "string",
+        "enum": [
+         "all"
+        ]
+       }
+      ]
+     },
+     "plane": {
+      "description": "XY | XZ | YZ, a datum plane's name, or a face { at, normal }"
+     }
+    },
+    "required": [
+     "features"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)"}},
+    {"do": "=tip_shape(b)"},
+    {"let": {"before": "=volume(b)", "refs": "=a.features", "whole": "=is_str(a.features) and a.features.strip().lower() in ('all', 'body', 'whole body')"}},
+    {"let": {"refs": "=[refs]"}, "when": "=is_str(refs) and not whole"},
+    {"refuse": "features: [names] — the features to repeat (feature_list names them) — or \"all\" for the whole body.", "when": "=not whole and (not is_list(refs) or not refs or not all(is_str(r) for r in refs))"},
+    {"let": {"orig": "=None if whole else [in_body(b, r, ['PartDesign::']) for r in refs]", "prior": "=b.Tip", "ref": "=plane_ref(b, a.get('plane', 'YZ'), 'plane')[0]"}},
+    {"let": {"f": "=new(b, 'PartDesign::Mirrored', 'Mirrored')"}},
+    {
+     "when": "=whole",
+     "then": [
+      {"let": {"took": "=whole_body(f, b, prior)"}},
+      {"refuse": {"fmt": "{b.Label} has no pad, pocket or other additive or subtractive feature to repeat."}, "code": "invalid_state", "when": "=took is None"}
+     ],
+     "else": [
+      {"set": {"f.Originals": "=orig"}}
+     ]
+    },
+    {"set": {"f.MirrorPlane": "=ref"}}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "pd_mirrored", "=before", null, "A copy of a pocket or hole must land on material; a copy of a pad that does not touch the body makes a second solid."],
+    "then": [
+     {"put": {"repeated": "=took"}, "when": "=whole"}
+    ]
+   }
+  },
+  "pd_linear_pattern": {
+   "group": "feature",
+   "description": "Repeat features in a line: direction x|y|z (x) or a datum line, occurrences (2 or more, the original counted), spacing mm between copies or length mm first to last, reversed; features: \"all\" repeats the whole body. A grid: pd_multitransform. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "features": {
+      "description": "[feature names], or \"all\": the whole body (every feature up to the tip)",
+      "anyOf": [
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "string",
+        "enum": [
+         "all"
+        ]
+       }
+      ]
+     },
+     "direction": {
+      "type": "string"
+     },
+     "occurrences": {
+      "type": "integer"
+     },
+     "spacing": {
+      "type": "number"
+     },
+     "length": {
+      "type": "number"
+     },
+     "reversed": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "features"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)"}},
+    {"do": "=tip_shape(b)"},
+    {"let": {"before": "=volume(b)", "refs": "=a.features", "whole": "=is_str(a.features) and a.features.strip().lower() in ('all', 'body', 'whole body')"}},
+    {"let": {"refs": "=[refs]"}, "when": "=is_str(refs) and not whole"},
+    {"refuse": "features: [names] — the features to repeat (feature_list names them) — or \"all\" for the whole body.", "when": "=not whole and (not is_list(refs) or not refs or not all(is_str(r) for r in refs))"},
+    {"let": {"orig": "=None if whole else [in_body(b, r, ['PartDesign::']) for r in refs]", "prior": "=b.Tip", "ref": "=axis_ref(b, a.get('direction', 'x'), None, 'direction')[0]"}},
+    {"let": {"f": "=new(b, 'PartDesign::LinearPattern', 'LinearPattern')"}},
+    {
+     "when": "=whole",
+     "then": [
+      {"let": {"took": "=whole_body(f, b, prior)"}},
+      {"refuse": {"fmt": "{b.Label} has no pad, pocket or other additive or subtractive feature to repeat."}, "code": "invalid_state", "when": "=took is None"}
+     ],
+     "else": [
+      {"set": {"f.Originals": "=orig"}}
+     ]
+    },
+    {"let": {"n": "=a.get('occurrences', 2)"}},
+    {"let": {"n": "=int(n)"}, "when": "=is_float(n) and n.is_integer()"},
+    {"refuse": "occurrences: a whole number, 2 or more, the original counted.", "when": "=not is_int(n) or n < 2"},
+    {"set": {"f.Occurrences": "=n"}},
+    {"set": {"f.Direction": "=ref"}},
+    {"let": {"step": "=a.get('spacing', a.get('length'))"}},
+    {"refuse": "spacing (mm between copies) or length (mm, first to last): one of them, over 0 — reversed: true goes the other way.", "when": "=not is_num(step) or step <= 0"},
+    {"set": {"f.Length": "=float(step) * (n - 1) if 'spacing' in a else float(step)"}},
+    {"set": {"f.Reversed": true}, "when": "=a.reversed"}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "pd_linear_pattern", "=before", null, "A copy of a pocket or hole must land on material; a copy of a pad that does not touch the body makes a second solid."],
+    "then": [
+     {"put": {"repeated": "=took"}, "when": "=whole"}
+    ]
+   }
+  },
+  "pd_polar_pattern": {
+   "group": "feature",
+   "description": "Repeat features around an axis: axis x|y|z (the body's; z) or a datum line (pd_datum), occurrences (the original counted), angle deg (360 spreads them evenly round; less is first to last), reversed; features: \"all\" repeats the whole body. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "features": {
+      "description": "[feature names], or \"all\": the whole body (every feature up to the tip)",
+      "anyOf": [
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "string",
+        "enum": [
+         "all"
+        ]
+       }
+      ]
+     },
+     "axis": {
+      "type": "string"
+     },
+     "occurrences": {
+      "type": "integer"
+     },
+     "angle": {
+      "type": "number"
+     },
+     "reversed": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "features"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)"}},
+    {"do": "=tip_shape(b)"},
+    {"let": {"before": "=volume(b)", "refs": "=a.features", "whole": "=is_str(a.features) and a.features.strip().lower() in ('all', 'body', 'whole body')"}},
+    {"let": {"refs": "=[refs]"}, "when": "=is_str(refs) and not whole"},
+    {"refuse": "features: [names] — the features to repeat (feature_list names them) — or \"all\" for the whole body.", "when": "=not whole and (not is_list(refs) or not refs or not all(is_str(r) for r in refs))"},
+    {"let": {"orig": "=None if whole else [in_body(b, r, ['PartDesign::']) for r in refs]", "prior": "=b.Tip", "ref": "=axis_ref(b, a.get('axis', 'z'), None, 'axis')[0]"}},
+    {"let": {"f": "=new(b, 'PartDesign::PolarPattern', 'PolarPattern')"}},
+    {
+     "when": "=whole",
+     "then": [
+      {"let": {"took": "=whole_body(f, b, prior)"}},
+      {"refuse": {"fmt": "{b.Label} has no pad, pocket or other additive or subtractive feature to repeat."}, "code": "invalid_state", "when": "=took is None"}
+     ],
+     "else": [
+      {"set": {"f.Originals": "=orig"}}
+     ]
+    },
+    {"let": {"n": "=a.get('occurrences', 2)"}},
+    {"let": {"n": "=int(n)"}, "when": "=is_float(n) and n.is_integer()"},
+    {"refuse": "occurrences: a whole number, 2 or more, the original counted.", "when": "=not is_int(n) or n < 2"},
+    {"set": {"f.Occurrences": "=n"}},
+    {"set": {"f.Axis": "=ref"}},
+    {"let": {"ang": "=a.get('angle', 360)"}},
+    {"refuse": "angle: degrees, over 0 up to 360 (360 spaces the copies evenly all round; less is first to last; reversed: true turns the other way).", "when": "=not is_num(ang) or not (0 < ang <= 360)"},
+    {"set": {"f.Angle": "=float(ang)"}},
+    {"set": {"f.Reversed": true}, "when": "=a.reversed"}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "pd_polar_pattern", "=before", null, "A copy of a pocket or hole must land on material; a copy of a pad that does not touch the body makes a second solid."],
+    "then": [
+     {"put": {"repeated": "=took"}, "when": "=whole"}
+    ]
+   }
+  },
+  "pd_loft": {
+   "group": "feature",
+   "description": "Loft through closed sketches: profile (the first), sections [the rest, in order, each on its own plane], ruled, closed; subtractive: true cuts it. Sketches should have the same edge count and matching start corners, or it twists. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "profile": {
+      "type": "string",
+      "description": "The sketch, in the body."
+     },
+     "sections": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "ruled": {
+      "type": "boolean"
+     },
+     "closed": {
+      "type": "boolean"
+     },
+     "subtractive": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "profile",
+     "sections"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.profile, b)"}},
+    {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
+    {"let": {"before": "=volume(b)", "sub": "=bool(a.subtractive)"}},
+    {"refuse": {"fmt": "{b.Label} has no solid to cut: pd_pad something first."}, "code": "invalid_state", "when": "=sub and before <= 0"},
+    {"let": {"f": "=new(b, 'PartDesign::' + ('Subtractive' if sub else 'Additive') + 'Loft', 'Loft')"}},
+    {"set": {"f.Profile": "=sk"}},
+    {"let": {"secs": "=[sketch_of(r, b) for r in (a.sections or [])]"}},
+    {"refuse": "sections: [sketch names] — the profiles after the first (profile), in order; each on its own plane (pd_datum_plane, or sketch_new with offset).", "when": "=not secs or sk in secs"},
+    {"set": {"f.Sections": "=secs", "f.Ruled": "=bool(a.get('ruled', False))", "f.Closed": "=bool(a.get('closed', False))"}}
+   ],
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_loft", "=before", "='cut' if sub else 'add'", "Sections must each be one closed wire and should have the same number of edges, started at matching corners; ruled: true for straight sides."]}
+  },
+  "pd_pipe": {
+   "group": "feature",
+   "description": "Sweep a closed profile sketch along a path sketch (all its edges, joined end to end); subtractive: true cuts it. The profile should sit across the path's start. Orientation, corners: feature_edit { Mode: \"Frenet\", Transition: \"Round corner\" }. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "profile": {
+      "type": "string",
+      "description": "The sketch, in the body."
+     },
+     "path": {
+      "type": "string",
+      "description": "The sketch, in the body."
+     },
+     "subtractive": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "profile",
+     "path"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.profile, b)"}},
+    {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
+    {"let": {"before": "=volume(b)", "sub": "=bool(a.subtractive)"}},
+    {"refuse": {"fmt": "{b.Label} has no solid to cut: pd_pad something first."}, "code": "invalid_state", "when": "=sub and before <= 0"},
+    {"let": {"path": "=sketch_of(a.path, b)"}},
+    {"refuse": "path: another sketch than the profile — the profile is swept along the path's edges.", "when": "=path is sk"},
+    {"refuse": {"fmt": "path: {path.Label} has no edges (construction geometry does not count): sketch_add a line, arc or polyline."}, "when": "=not path.Shape.Edges"},
+    {"let": {"f": "=new(b, 'PartDesign::' + ('Subtractive' if sub else 'Additive') + 'Pipe', 'Pipe')"}},
+    {"set": {"f.Profile": "=sk"}},
+    {"set": {"f.Spine": "=(path, ['Edge' + str(i + 1) for i in range(len(path.Shape.Edges))])"}}
+   ],
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_pipe", "=before", "='cut' if sub else 'add'", "The profile should sit at the path's start, square to it; the path's edges must join end to end; a path that turns tighter than the profile fails."]}
+  },
+  "pd_datum_plane": {
+   "group": "feature",
+   "description": "A datum plane in the body, on XY | XZ | YZ | a flat face query, offset mm along its normal, rotate { axis [x,y,z] (its own), angle deg }, name: for sketches off the body's planes (sketch_new { plane: its name }). Reply: plane, origin, normal.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "on": {
+      "description": "XY | XZ | YZ, a datum plane's name, or a face { at, normal }"
+     },
+     "offset": {
+      "type": "number"
+     },
+     "rotate": {
+      "type": "object"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)"}},
+    {"let": {"base, what": "=plane_ref(b, a.get('on', 'XY'), 'on')", "f": "=new(b, 'PartDesign::Plane', a.name or 'DatumPlane')"}},
+    {"do": "=setprop(f, support_prop(f), [(base[0], base[1][0])])"},
+    {"set": {"f.MapMode": "FlatFace"}},
+    {"let": {"rot": "=rotation()"}},
+    {
+     "when": "=a.rotate",
+     "then": [
+      {"refuse": "rotate: { axis: [x, y, z] in the plane's own frame (x, y in it, z its normal), angle: degrees }.", "when": "=not is_dict(a.rotate)"},
+      {"let": {"ax": "=vec3(a.rotate.get('axis', [1, 0, 0]), 'rotate.axis')"}},
+      {"let": {"rot": "=rotation(ax, float(a.rotate.get('angle', 0)))"}}
+     ]
+    },
+    {"set": {"f.AttachmentOffset": "=placement(V(0, 0, float(a.get('offset', 0))), rot)"}},
+    {"do": "=doc().recompute()"},
+    {"refuse": {"fmt": "The datum plane would not attach to {what}: {f.getStatusString()} — nothing was kept. on takes a flat face or XY | XZ | YZ."}, "code": "failed", "when": "=not f.isValid()"},
+    {"do": "=snapshot('pd_datum_plane')"},
+    {"let": {"pl": "=f.Placement"}}
+   ],
+   "answer": {"fields": {"plane": "=f.Label", "on": "=what", "origin": "=xyz(pl.Base)", "normal": "=xyz(pl.Rotation.multVec(V(0, 0, 1)))", "next": {"fmt": "sketch_new {{ plane: \"{f.Label}\" }}"}, "step": "=steps()"}}
+  },
+  "feature_list": {
+   "group": "feature",
+   "description": "The body's features in order: type, key values (lengths mm, angles deg, FreeCAD's type strings), what each is bound to, valid or not with FreeCAD's error, the tip, a MultiTransform's steps (stepOf); sketches with their dof. Changes nothing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)"}},
+    {"let": {"out": "=[]", "stepof": "=multi_steps(b)"}},
+    {
+     "each": "o",
+     "in": "=[o for o in b.Group if not o.TypeId.startswith('App::Origin')]",
+     "steps": [
+      {"let": {"ok": "=o.isValid()"}},
+      {"let": {"e": "={'name': o.Label, 'type': short(o), 'valid': ok}"}},
+      {"put": {"stepOf": "=stepof[o.Name]"}, "into": "e", "when": "=o.Name in stepof"},
+      {"put": {"error": "=o.getStatusString()"}, "into": "e", "when": "=not ok"},
+      {
+       "when": "=o.TypeId == 'Sketcher::SketchObject'",
+       "then": [
+        {"put": {"dof": "=get(o, 'DoF')", "geometry": "=len(o.Geometry)"}, "into": "e"}
+       ],
+       "else": [
+        {"do": "=e.update(key_values(o))"}
+       ]
+      },
+      {"put": {"tip": true}, "into": "e", "when": "=o == b.Tip"},
+      {"push": {"out": "=e"}}
+     ]
+    }
+   ],
+   "answer": {"fields": {"body": "=b.Label", "features": "=out", "tip": "=b.Tip.Label if b.Tip else None", "...": "=body_reading(b)"}}
+  },
+  "feature_edit": {
+   "group": "feature",
+   "description": "Change a feature's properties by FreeCAD's names: set { Length: 20, Type: \"ThroughAll\", Reversed: true, Radius: 2, Occurrences: 4, Refine: true, … } (feature_list shows them; a wrong enumeration value lists the right ones); recomputes. Links (sketch, edges, axis) are not edited: remove and remake. A change that breaks it or a later feature is refused and undone; fillets whose edges it renumbered are found again (refsFound). A property bound to a parameter is changed with param_set.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "feature": {
+      "type": "string"
+     },
+     "set": {
+      "type": "object"
+     }
+    },
+    "required": [
+     "feature",
+     "set"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)", "f": "=in_body(b, a.feature, ['PartDesign::'])", "changes": "=a.set"}},
+    {"refuse": {"fmt": "set: {{ Property: value }} by FreeCAD's property names — {f.Label}'s: {own_keys(f)}."}, "when": "=not is_dict(changes) or not changes"},
+    {"let": {"before": "=volume(b)", "refs": "=ref_snapshot(b)", "bound": "={p.lstrip('.'): e for p, e in get(f, 'ExpressionEngine', [])}", "done": "={}"}},
+    {
+     "each": "k, v",
+     "in": "=list(changes.items())",
+     "steps": [
+      {"refuse": {"fmt": "{k}: not a property of {f.Label} ({short(f)}); FreeCAD's names, capitals and all — it has {own_keys(f)}."}, "when": "=not has_prop(f, k)"},
+      {"refuse": {"fmt": "{f.Label}.{k} is bound to {bound[k]!r}: param_set the parameter, or param_bind {{ target: \"{f.Label}.{k}\", expression: null }} first."}, "code": "invalid_state", "when": "=k in bound"},
+      {"refuse": {"fmt": "{k}: a link (a sketch, edges, an axis) is not edited here — feature_remove {f.Label} and make it again with the pd_ tool."}, "when": "=k in ('Profile', 'Placement', 'BaseFeature', 'Originals', 'Base') or f.getTypeIdOfProperty(k).startswith('App::PropertyLink')"},
+      {
+       "try": [
+        {"let": {"enums": "=f.getEnumerationsOfProperty(k)"}}
+       ],
+       "except": [
+        {"let": {"enums": null}}
+       ]
+      },
+      {
+       "when": "=enums and (v not in enums or str(v).startswith('?'))",
+       "then": [
+        {"let": {"allowed": "=', '.join([e for e in enums if not e.startswith('?')])"}},
+        {"refuse": {"fmt": "{k} = {v!r}: one of {allowed}."}}
+       ]
+      },
+      {
+       "try": [
+        {"do": "=setprop(f, k, v)"}
+       ],
+       "except": [
+        {"refuse": {"fmt": "{k} = {v!r}: FreeCAD did not take it ({error}) — a number (mm, degrees), true or false, as feature_list shows it."}}
+       ]
+      },
+      {"do": "=done.update({k: num_json(get(f, k))})"}
+     ]
+    },
+    {"do": "=doc().recompute()"},
+    {"let": {"repaired": "=repair_refs(doc(), refs) if broken(doc()) and refs else None"}}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "feature_edit", "=before"],
+    "then": [
+     {"put": {"set": "=done"}},
+     {"put": {"refsFound": "=repaired", "note": "The change renamed edges or faces later features use: each was found again by what it is (kind, size, place, direction). Check them with view_render."}, "when": "=repaired"}
+    ]
+   }
+  },
+  "feature_remove": {
+   "group": "feature",
+   "description": "Remove a feature (and its sketch unless keepSketch, when nothing else uses it; a MultiTransform's steps too). One that others use (a sketch on its face, a fillet of its edges, a pattern of it) is refused unless force. Later features that break are refused and nothing kept. Reply: removed, tip.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "feature": {
+      "type": "string"
+     },
+     "keepSketch": {
+      "type": "boolean"
+     },
+     "force": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "feature"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)", "f": "=in_body(b, a.feature, ['PartDesign::', 'Sketcher::'])"}},
+    {"let": {"users": "=users_of(f, b)"}},
+    {"refuse": {"fmt": "{f.Label} is used by {', '.join(users)}: feature_remove those first (the last made first). force: true removes it anyway, and is refused with nothing kept if one of them then fails."}, "code": "invalid_state", "when": "=users and not a.force"},
+    {"let": {"sk": "=profile_sketch(f)", "parts": "=list(get(f, 'Transformations') or []) if f.TypeId == 'PartDesign::MultiTransform' else []", "before": "=volume(b)", "label": "=f.Label"}},
+    {"do": ["=b.removeObject(f)", "=doc().removeObject(f.Name)"]},
+    {"let": {"removed": "=[label]"}},
+    {
+     "each": "t",
+     "in": "=parts",
+     "steps": [
+      {"let": {"l2": "=t.Label"}},
+      {"do": "=b.removeObject(t)", "when": "=b.hasObject(t)"},
+      {"do": "=doc().removeObject(t.Name)"},
+      {"push": {"removed": "=l2"}}
+     ]
+    },
+    {
+     "when": "=sk is not None and not a.keepSketch and sk.TypeId == 'Sketcher::SketchObject' and not [o for o in sk.InList if o != b]",
+     "then": [
+      {"let": {"l2": "=sk.Label"}},
+      {"do": ["=b.removeObject(sk)", "=doc().removeObject(sk.Name)"]},
+      {"push": {"removed": "=l2"}}
+     ]
+    }
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", null, "feature_remove", "=before", null, "A later feature was built on what this one made: feature_remove that one first, or feature_suppress this one instead."],
+    "then": [
+     {"put": {"removed": "=removed", "tip": "=b.Tip.Label if b.Tip else None"}}
+    ]
+   }
+  },
+  "feature_suppress": {
+   "group": "feature",
+   "description": "Suppress a feature (suppressed: false brings it back): the body is computed as if it were not there, and it stays in the history. Refused when a later feature needs its faces or edges.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body; may be left out when there is one."
+     },
+     "feature": {
+      "type": "string"
+     },
+     "suppressed": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "feature"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/feature.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)", "f": "=in_body(b, a.feature, ['PartDesign::'])"}},
+    {"refuse": {"fmt": "{f.Label} ({short(f)}) has no Suppressed property in this FreeCAD ({version()}; solid features have it from 1.0): feature_remove it, and history_undo brings it back."}, "code": "unavailable", "when": "=not has_prop(f, 'Suppressed')"},
+    {"let": {"before": "=volume(b)"}},
+    {"set": {"f.Suppressed": "=bool(a.get('suppressed', True))"}}
+   ],
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "feature_suppress", "=before", null, "A later feature needs what this one makes (its faces or edges): suppress or remove that one first."],
+    "then": [
+     {"put": {"suppressed": "=bool(f.Suppressed)"}}
+    ]
+   }
+  },
+  "pd_move_feature": {
+   "group": "std_more",
+   "description": "Move a PartDesign feature (with its sketch, re-attached to the same origin plane) to another body: feature, to. It goes after that body's tip. Refused, with nothing moved, when it or what is left behind then fails (a pocket needs a solid to cut). Reply: moved, from, to, tip.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "feature": {
+      "type": "string"
+     },
+     "to": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "feature",
+     "to"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/std_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"f": "=find(a.feature, 'feature')"}},
+    {"let": {"kind": "=f.TypeId.split('::')[-1]"}},
+    {"refuse": {"fmt": "feature: {f.Label} is a {kind}, not a PartDesign feature or sketch — a whole solid goes into a body with pd_clone."}, "when": "=not f.TypeId.startswith(('PartDesign::', 'Sketcher::', 'Part::Part2DObject')) or f.TypeId == 'PartDesign::Body'"},
+    {"let": {"src": "=body_of(f)", "to": "=pd_body(a.to)"}},
+    {"refuse": {"fmt": "{f.Label} is in {to.Label} already: to takes another body (pd_reorder moves it within this one)."}, "when": "=src is to"},
+    {"let": {"broken0": "={x['object'] for x in broken()}"}},
+    {"let": {"moved": "=[f]", "sk": "=profile_sketch(f)"}},
+    {"do": "=moved.insert(0, sk)", "when": "=sk is not None and sk.TypeId == 'Sketcher::SketchObject' and src is not None and src.hasObject(sk)"},
+    {
+     "each": "o",
+     "in": "=moved",
+     "steps": [
+      {"do": "=src.removeObject(o)", "when": "=src is not None"},
+      {"do": ["=to.addObject(o)", "=reattach(o, src, to)"]}
+     ]
+    },
+    {"do": "=doc().recompute()"},
+    {"let": {"new_broken": "=[x['object'] for x in broken() if x['object'] not in broken0]"}},
+    {"refuse": {"fmt": "Moving {f.Label} to {to.Label} breaks {', '.join([str(x) for x in new_broken])} — nothing was moved. A pocket, hole or fillet needs the solid it works on: move the features before it first (the first pad first), or rebuild it in {to.Label}."}, "code": "invalid_state", "when": "=new_broken"},
+    {"do": "=snapshot('pd_move_feature')"}
+   ],
+   "answer": {"fields": {"moved": "=[o.Label for o in moved]", "from": "=src.Label if src else None", "to": "=to.Label", "tip": "=to.Tip.Label if to.Tip else None"}}
+  },
+  "pd_reorder": {
+   "group": "std_more",
+   "description": "Move a feature or sketch in its body's history: after or before another one of the same body. Refused, with nothing moved, when something would then use what comes after it. Put after the tip, it becomes the tip. Reply: order, tip, afterTip (solid features past the tip, left out of the shape), volume.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "feature": {
+      "type": "string"
+     },
+     "after": {
+      "type": "string"
+     },
+     "before": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "feature"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/std_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"f": "=find(a.feature, 'feature')"}},
+    {"let": {"b": "=body_of(f)"}},
+    {"refuse": {"fmt": "{f.Label} is not in a PartDesign body: pd_reorder moves a body's own features and sketches (feature_list names them)."}, "code": "invalid_state", "when": "=b is None"},
+    {"refuse": "after or before, one of them: the feature to put it next to.", "when": "=a.after and a.before"},
+    {"let": {"where": "='after' if a.after else 'before'"}},
+    {"let": {"target": "=in_body(b, a.get(where), None, where) if a.get(where) else None"}},
+    {"refuse": "after or before: the feature of the same body to put it next to (feature_list gives the order).", "when": "=target is None"},
+    {"refuse": {"fmt": "{where}: another feature than {f.Label} itself."}, "when": "=target is f"},
+    {"let": {"broken0": "={x['object'] for x in broken()}"}},
+    {"let": {"tip_was": "=b.Tip"}},
+    {"do": ["=b.removeObject(f)", "=b.insertObject(f, target, where == 'after')"]},
+    {"let": {"moved_tip": "=where == 'after' and tip_was is target"}},
+    {"set": {"b.Tip": "=f"}, "when": "=moved_tip or tip_was is f"},
+    {"do": "=doc().recompute()"},
+    {"let": {"new_broken": "=[x['object'] for x in broken() if x['object'] not in broken0]"}},
+    {"refuse": {"fmt": "{f.Label} {where} {target.Label} breaks {', '.join([str(x) for x in new_broken])} — nothing was moved: a feature may only use what comes before it (its sketch, the faces and edges it names)."}, "code": "invalid_state", "when": "=new_broken"},
+    {"do": "=snapshot('pd_reorder')"}
+   ],
+   "answer": {"fields": {"body": "=b.Label", "order": "=[o.Label for o in b.Group if not o.TypeId.startswith('App::Origin')]", "tip": "=b.Tip.Label if b.Tip else None", "tipMoved": {"when": "=moved_tip", "value": true}, "...": "=after_tip(b)", "volume": "=round(b.Shape.Volume, 3) if not b.Shape.isNull() and b.Shape.Solids else None"}}
+  },
+  "pd_tip": {
+   "group": "std_more",
+   "description": "Read (no feature) or set a body's tip: the solid feature its shape stops at, and after which new features go in. A sketch or datum given: the solid feature before it. Features past the tip are kept but left out (afterTip) — set it back to the last one when done. Reply: tip, tipWas, afterTip, volume.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "feature": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/std_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=pd_body(a.body)", "note": "={}"}},
+    {
+     "when": "=a.feature",
+     "then": [
+      {"let": {"f": "=in_body(b, a.feature)", "was": "=b.Tip"}},
+      {
+       "when": "=not solid_feature(f)",
+       "then": [
+        {"let": {"g": "=list(b.Group)"}},
+        {"let": {"prev": "=first([o for o in reversed(g[:g.index(f)]) if solid_feature(o)])", "kind": "=f.TypeId.split('::')[-1]", "solids": "=', '.join([o.Label for o in g if solid_feature(o)]) or 'none yet'"}},
+        {"refuse": {"fmt": "feature: {f.Label} is a {kind} with no solid feature before it — the tip is a pad, pocket or other solid feature: {solids}."}, "when": "=prev is None"},
+        {"put": {"note": {"fmt": "{f.Label} is not a solid feature: the tip went to {prev.Label}, the one before it."}}, "into": "note"},
+        {"let": {"f": "=prev"}}
+       ]
+      },
+      {"let": {"broken0": "={x['object'] for x in broken()}"}},
+      {"set": {"b.Tip": "=f"}},
+      {"do": "=doc().recompute()"},
+      {"let": {"new_broken": "=[x['object'] for x in broken() if x['object'] not in broken0]"}},
+      {"refuse": {"fmt": "With the tip at {f.Label}, {', '.join([str(x) for x in new_broken])} failed — the tip stays at {was.Label if was else 'none'}."}, "code": "failed", "when": "=new_broken"},
+      {"do": "=snapshot('pd_tip')"},
+      {"put": {"tipWas": "=was.Label if was else None"}, "into": "note"}
+     ]
+    }
+   ],
+   "answer": {"fields": {"body": "=b.Label", "tip": "=b.Tip.Label if b.Tip else None", "volume": "=round(b.Shape.Volume, 3) if not b.Shape.isNull() and b.Shape.Solids else None", "...afterTip": "=after_tip(b)", "...": "=note", "use": "The body's shape stops at the tip and new features go in right after it; features past it (afterTip) are kept but left out until the tip moves past them."}}
+  },
+  "pd_shaft": {
+   "group": "std_more",
+   "description": "A stepped shaft (the shaft wizard's geometry) as one plain Part solid, not in a PartDesign body: segments [{ length, diameter, diameterEnd (a taper) }] mm, from one end along axis x (or y, z); at, name. Reply: shaft, length, volume. part_fillet its shoulders; pd_clone brings it into a body.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "segments": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     },
+     "axis": {
+      "type": "string",
+      "enum": [
+       "x",
+       "y",
+       "z"
+      ]
+     },
+     "at": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "segments"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/std_more.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"segs": "=a.segments or []"}},
+    {"refuse": "segments: [{ length, diameter }, …] in mm, from one end; a segment may also give diameterEnd for a taper.", "when": "=not segs"},
+    {"let": {"pts": "=[V(0, 0, 0)]", "x": "=0.0"}},
+    {
+     "each": "sg",
+     "in": "=segs",
+     "index": "i",
+     "steps": [
+      {"refuse": {"fmt": "segment {i + 1}: {{ length, diameter }} in mm (diameterEnd for a taper)."}, "when": "=not is_dict(sg)"},
+      {"let": {"L": "=float(sg.get('length', 0))", "D": "=float(sg.get('diameter', 0))"}},
+      {"let": {"D2": "=float(sg.get('diameterEnd', D))"}},
+      {"refuse": {"fmt": "segment {i + 1}: length and diameter (and diameterEnd) in mm, over 0."}, "when": "=L <= 0 or D <= 0 or D2 <= 0"},
+      {"do": "=pts.extend([V(x, D / 2, 0), V(x + L, D2 / 2, 0)])"},
+      {"let": {"x": "=x + L"}}
+     ]
+    },
+    {"do": "=pts.append(V(x, 0, 0))"},
+    {"let": {"solid": "=shaft_solid(pts, a.get('axis', 'x'))"}},
+    {"add": "Part::Feature", "name": "Shaft"},
+    {"set": {"o.Shape": "=solid.removeSplitter()", "o.Label": "=unique(a.name or 'Shaft', o)"}},
+    {"set": {"o.Placement": "=placement(a)"}, "when": "=placed(a)"}
+   ],
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"shaft": "=o.Label", "length": "=round(x, 3)", "segments": "=len(segs)", "volume": "=round(o.Shape.Volume, 3)", "note": "A plain Part solid, not in a PartDesign body: part_fillet or part_chamfer its sharp shoulders; pd_clone brings it into a body for pd_ features."}}
+  },
+  "pd_body_new": {
+   "group": "sketch",
+   "description": "Make an empty PartDesign body: the container a parametric part's features go in, with its own XY/XZ/YZ planes and x/y/z axes. Answers body: its label (name, made unique) to pass on. Next: sketch_new on one of its planes.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/sketch.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"label": "=unique(a.name or 'Body')"}},
+    {"add": "PartDesign::Body", "name": "Body", "as": "b"},
+    {"set": {"b.Label": "=label"}}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"body": "=b.Label", "planes": ["XY", "XZ", "YZ"], "axes": ["x", "y", "z"], "next": "sketch_new { body, plane: \"XY\" }"}}
+  },
+  "sketch_new": {
+   "group": "sketch",
+   "description": "A new sketch in a body, on plane XY | XZ | YZ | a datum plane's name | \"Pad.Face3\", or on a face of the solid found by face { at: a point on it, normal: its outward normal } — never by face index, which changes after edits. One of plane or face. offset mm along the normal; flip reverses it. A face sketch is lined up with the world: its x along the world axis that lies most in the face. Answers sketch (its label) and frame: where sketch x/y and its origin lie in the world.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string",
+      "description": "The PartDesign body's name; may be left out when there is one."
+     },
+     "plane": {
+      "type": "string"
+     },
+     "face": {
+      "type": "object",
+      "description": "{ at: [x,y,z] a point on the face, normal: [x,y,z] its outward normal }",
+      "properties": {
+       "at": {
+        "type": "array",
+        "items": {
+         "type": "number"
+        }
+       },
+       "normal": {
+        "type": "array",
+        "items": {
+         "type": "number"
+        }
+       },
+       "tol": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "at"
+      ],
+      "additionalProperties": false
+     },
+     "offset": {
+      "type": "number"
+     },
+     "flip": {
+      "type": "boolean"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/sketch.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"b": "=body(a.body)"}},
+    {"refuse": "Give plane (XY, XZ, YZ, a datum plane's name or \"Pad.Face3\") or face ({ at: [x,y,z], normal: [x,y,z] } on the body's solid), one of them, not both.", "when": "=('plane' in a) == ('face' in a)"},
+    {"let": {"label": "=unique(a.name or 'Sketch')", "sk": "=b.newObject('Sketcher::SketchObject', 'Sketch')"}},
+    {"set": {"sk.Label": "=label"}},
+    {"let": {"sup": "=support_prop(sk)", "link, what": "=plane_ref(b, a.plane if 'plane' in a else a.face, 'plane')"}},
+    {"do": "=setprop(sk, sup, [(link[0], link[1][0])])"},
+    {"set": {"sk.MapMode": "FlatFace"}},
+    {"set": {"sk.MapReversed": true}, "when": "=a.flip"},
+    {"let": {"off": "=float(a.get('offset', 0))"}},
+    {"do": "=doc().recompute()"},
+    {
+     "when": "='face' in a",
+     "then": [
+      {"set": {"sk.AttachmentOffset": "=face_frame(sk.Placement)"}},
+      {"do": "=doc().recompute()"}
+     ]
+    },
+    {
+     "when": "=off",
+     "then": [
+      {"let": {"ao": "=sk.AttachmentOffset"}},
+      {"set": {"sk.AttachmentOffset": "=placement(ao.Base + ao.Rotation.multVec(V(0, 0, off)), ao.Rotation)"}},
+      {"do": "=doc().recompute()"}
+     ]
+    },
+    {"refuse": {"fmt": "The sketch would not attach to {what}: {sk.getStatusString()} — nothing was made. A sketch needs a flat face or a plane: pick another face, or plane XY | XZ | YZ with offset."}, "code": "failed", "when": "=not sk.isValid()"}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"sketch": "=sk.Label", "body": "=b.Label", "on": "=what", "offset": {"when": "=off", "value": "=off"}, "frame": "=frame(sk.Placement)", "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}}
+  },
+  "sketch_add": {
+   "group": "sketch",
+   "description": "Add geometry to a sketch, in its own x/y (mm; angles deg, counter-clockwise from +x): items [{ kind, …, construction, dims, name }]. kinds: line {from, to}; polyline {points, closed}; arc {center, radius, start, end} (always ccw from start to end); arc3 {points: start, through, end}; circle {center, radius|diameter}; circle3 {points: three on it}; ellipse {center, major, minor (full sizes), rotation}; parabola {vertex, focal, rotation, from, to}; hyperbola {center, major, minor (semi-axes), rotation, from, to}; bspline {points it passes through, closed — or interpolate: false, points its poles, degree}; rectangle {center|corner, size [w,h]}; rounded_rectangle {…, radius}; polygon {center, radius (to corners), sides, rotation}; slot {from, to (end centres), radius}; arc_slot {center, radius (its middle), width, start, end}; point {at}. A shape comes with its own coincident/horizontal/vertical/tangent/equal constraints; separate items are not joined to each other (sketch_constrain coincident or tangent does that). dims: true adds its sizes as constraints (named <name>_width, _height, _d, _r, _length when named — what param_bind binds). Answers added [{ ids: geometry ids from 0 in the order made (a polygon's last is its construction circle), constraints: [first, last] ids, dims }] and state (dof, closedWires, openVertices, readyForFeature). Vertices: 1 start, 2 end, 3 centre.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "sketch": {
+      "type": "string",
+      "description": "The sketch's name; may be left out when there is one."
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     }
+    },
+    "required": [
+     "items"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/sketch.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"sk": "=sketch_of(a.sketch)", "items": "=a.items"}},
+    {"refuse": "items: a list, [{ kind: \"rectangle\", center: [0, 0], size: [40, 20] }, …] — the kinds are in sketch_add's description.", "when": "=not is_list(items) or not items"},
+    {"let": {"out": "=[]"}},
+    {
+     "each": "it",
+     "in": "=items",
+     "index": "n",
+     "steps": [
+      {"refuse": {"fmt": "items[{n}]: an object {{ kind, … }}."}, "when": "=not is_dict(it)"},
+      {"let": {"G, C, D": "=build(it)", "cons": "=bool(it.get('construction'))", "ids": "=[]", "cids": "=[]", "dims": "={}"}},
+      {
+       "each": "g",
+       "in": "=G",
+       "steps": [
+        {"push": {"ids": "=sk.addGeometry(g[1], True) if is_tuple(g) else sk.addGeometry(g, cons)"}}
+       ]
+      },
+      {
+       "each": "t",
+       "in": "=C",
+       "steps": [
+        {"push": {"cids": "=sk.addConstraint(constraint(remap(t, ids)))"}}
+       ]
+      },
+      {
+       "when": "=it.get('dims')",
+       "then": [
+        {
+         "each": "name, t",
+         "in": "=D",
+         "steps": [
+          {"let": {"ci": "=sk.addConstraint(constraint(remap(t, ids)))"}},
+          {"do": "=sk.renameConstraint(ci, str(it.name) + '_' + name)", "when": "=it.get('name')"},
+          {"do": "=dims.update({name: ci})"}
+         ]
+        }
+       ]
+      },
+      {"let": {"r": "={'kind': it.get('kind'), 'ids': ids}"}},
+      {"put": {"constraints": "=[cids[0], cids[-1]] if len(cids) > 2 else cids"}, "into": "r", "when": "=cids"},
+      {"put": {"dims": "={(str(it.name) + '_' + k if it.get('name') else k): v for k, v in dims.items()}"}, "into": "r", "when": "=dims"},
+      {"push": {"out": "=r"}}
+     ]
+    },
+    {"do": "=doc().recompute()"},
+    {"let": {"st": "=state_of(sk)"}}
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"sketch": "=sk.Label", "added": "=out", "state": "=st"}}
+  },
+  "sketch_offset": {
+   "group": "sketch",
+   "description": "Offset a sketch's profile by distance mm (out; negative in): its geometry ids (all but construction when left out), joined end to end; join arc (round corners, the default), tangent or intersection (sharp). Answers added: the new geometry's ids. The offset is plain geometry with no constraints: it does not follow later edits unless constrained (sketch_constrain; sketch_validate fix joins its pieces).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "sketch": {
+      "type": "string",
+      "description": "The sketch's name; may be left out when there is one."
+     },
+     "distance": {
+      "type": "number"
+     },
+     "geometry": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     },
+     "join": {
+      "type": "string",
+      "enum": [
+       "arc",
+       "tangent",
+       "intersection"
+      ]
+     },
+     "construction": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "distance"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/sketch.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"sk": "=sketch_of(a.sketch)", "d": "=a.distance"}},
+    {"refuse": "distance: a number of mm other than 0, out from the profile (negative: in).", "when": "=not is_num(d) or abs(d) < 1e-9"},
+    {"do": "=doc().recompute()"},
+    {"let": {"geos": "=sk.Geometry", "ids": "=a.geometry"}},
+    {"let": {"ids": "=[i for i, g in enumerate(geos) if not sk.getConstruction(i)]"}, "when": "=ids is None"},
+    {"let": {"edges": "=[]"}},
+    {
+     "each": "i",
+     "in": "=ids",
+     "steps": [
+      {"refuse": {"fmt": "geometry: {i!r} is not an id in {sk.Label} — 0 to {len(geos) - 1} (sketch_state lists them); leave geometry out for every non-construction one."}, "when": "=not (is_number(i) and not is_float(i)) or not 0 <= i < len(geos)"},
+      {"push": {"edges": "=geos[i].toShape()"}}
+     ]
+    },
+    {
+     "try": [
+      {"let": {"wires": "=[wire(w) for w in sort_edges(edges)]"}}
+     ],
+     "except": [
+      {"refuse": {"fmt": "The geometry does not join into profiles ({error}): offset a closed profile or a chain."}}
+     ]
+    },
+    {"let": {"d": "=float(d)", "join": "={'arc': 0, 'tangent': 1, 'intersection': 2}.get(a.get('join', 'arc'))"}},
+    {"refuse": "join: arc (round corners, the default), tangent or intersection (sharp).", "when": "=join is None"},
+    {"let": {"added": "=[]"}},
+    {
+     "each": "w",
+     "in": "=wires",
+     "steps": [
+      {
+       "try": [
+        {"let": {"off": "=offset_out(w, d, join)"}}
+       ],
+       "on": "failure",
+       "except": [
+        {"refuse": {"fmt": "The offset of {d:g} mm failed ({error}): a distance inward bigger than the profile allows, or a profile crossing itself."}, "code": "failed"}
+       ]
+      },
+      {
+       "each": "e",
+       "in": "=off.Edges",
+       "steps": [
+        {"push": {"added": "=sk.addGeometry(geo_of_edge(e), bool(a.construction))"}}
+       ]
+      }
+     ]
+    },
+    {"do": ["=doc().recompute()", "=snapshot('sketch_offset')"]}
+   ],
+   "answer": {"fields": {"sketch": "=sk.Label", "from": "=ids", "distance": "=d", "added": "=added", "state": "=state_of(sk)", "step": "=steps()", "note": "The offset is geometry, not tied to the profile: constrain it (sketch_constrain distance) if it must follow edits."}}
+  },
+  "sketch_external": {
+   "group": "sketch",
+   "description": "Bring edges of the body's solid (its tip) into a sketch as outside geometry to constrain to: edges [\"Edge7\" or a query { type: circle|line, radius, axis, near, inside } as shape_query takes — safer: edge numbers change with edits]. Answers ids (negative, -3 down, in order) for sketch_constrain's refs; a constraint to them follows the part. Refused when the tip is built from this sketch. From a datum, binder or other sketch: sketch_project.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "sketch": {
+      "type": "string",
+      "description": "The sketch's name; may be left out when there is one."
+     },
+     "edges": {
+      "type": "array",
+      "items": {}
+     }
+    },
+    "required": [
+     "edges"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/sketch.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"sk": "=sketch_of(a.sketch)"}},
+    {"let": {"body": "=body_of(sk)"}},
+    {"refuse": {"fmt": "{sk.Label} is in no body: outside geometry comes from the body's own features."}, "code": "invalid_state", "when": "=body is None"},
+    {"let": {"tip": "=body.Tip"}},
+    {"refuse": {"fmt": "{body.Label} has no solid yet to take edges from: pd_pad a sketch first, or sketch_project from a datum or another sketch."}, "code": "invalid_state", "when": "=tip is None or tip.Shape.isNull()"},
+    {"refuse": {"fmt": "{tip.Label}, the body's tip, is built from {sk.Label}: a sketch cannot take edges from a solid made after it. Make a new sketch for what follows the solid (sketch_new {{ face: {{ at, normal }} }}), and bring the edges into that."}, "code": "invalid_state", "when": "=sk in tip.OutListRecursive"},
+    {"let": {"qs": "=a.edges"}},
+    {"refuse": "edges: [\"Edge7\" or a query { type, radius, axis, near, inside } on the body], the edges to bring in.", "when": "=not is_list(qs) or not qs"},
+    {"let": {"names": "=[]"}},
+    {
+     "each": "q",
+     "in": "=qs",
+     "steps": [
+      {
+       "when": "=is_str(q)",
+       "then": [
+        {"push": {"names": "=q.split('.')[-1]"}}
+       ],
+       "else": [
+        {"let": {"hits": "=edge_refs(body, q)"}},
+        {"refuse": {"fmt": "edges: nothing on {body.Label} matches {q} — shape_query lists them."}, "code": "not_found", "when": "=not hits"},
+        {"do": "=names.extend(hits)"}
+       ]
+      }
+     ]
+    },
+    {"let": {"before": "=ext_count(sk)"}},
+    {
+     "each": "n",
+     "in": "=names",
+     "steps": [
+      {
+       "try": [
+        {"do": "=sk.addExternal(tip.Name, n)"}
+       ],
+       "except": [
+        {"refuse": {"fmt": "{tip.Label}.{n} could not be brought in: {error} — nothing was added. An edge already in the sketch is refused (sketch_state shows the ids in use); shape_query lists {body.Label}'s edges."}, "code": "failed"}
+       ]
+      }
+     ]
+    },
+    {"do": "=doc().recompute()"},
+    {"let": {"ext_ids": "=[-3 - k for k in range(before, ext_count(sk))]"}},
+    {"do": "=snapshot('sketch_external')"}
+   ],
+   "answer": {"fields": {"sketch": "=sk.Label", "from": "=str(tip.Label)", "edges": "=names", "ids": "=ext_ids", "state": "=state_of(sk)", "step": "=steps()", "note": "Outside geometry is referred to by these negative ids in sketch_constrain (-1 and -2 are the sketch's axes), in the order brought in; an edge seen end-on comes in as a point. A constraint to it follows the edge when the part changes."}}
+  },
+  "sketch_constrain": {
+   "group": "sketch",
+   "description": "Constrain a sketch: constraints [{ type, refs, value, name }]. A ref is FreeCAD's: a geometry id g, a point p = [g, vertex] (1 start, 2 end, 3 centre) or \"origin\"; -1 the horizontal axis, -2 the vertical, -3 down outside edges. types and their refs: coincident [p, p]; point_on_object [p, g]; horizontal | vertical [g] or [p, p]; parallel | perpendicular | equal [g, g]; tangent [g, g] or end points [p, p]; symmetric [p, p, g] (about a line) or [p, p, p]; distance [g] (length), [p, p] or [p, g]; distance_x | distance_y [g], [p] (from the origin) or [p, p] (second minus first); radius | diameter [g], all mm; angle [g] (from +x) or [g, g] (first to second, ccw), deg; fix [p] (a point held where it is) or [g] (blocked: add it last). name it to bind it to a parameter later. All or nothing: one that conflicts or is redundant is refused, naming what clashes, and nothing added. Answers added (constraint ids from 0) and state.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "sketch": {
+      "type": "string",
+      "description": "The sketch's name; may be left out when there is one."
+     },
+     "constraints": {
+      "type": "array",
+      "items": {
+       "type": "object"
+      }
+     }
+    },
+    "required": [
+     "constraints"
+    ],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/sketch.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"sk": "=sketch_of(a.sketch)", "cs": "=a.constraints"}},
+    {"refuse": "constraints: a list, [{ type: \"distance\", refs: [[0, 1], [0, 2]], value: 30, name: \"len\" }, …] — the types and their refs are in sketch_constrain's description.", "when": "=not is_list(cs) or not cs"},
+    {"let": {"before": "=len(sk.Constraints)", "ng": "=len(sk.Geometry)", "ne": "=ext_count(sk)", "added": "=[]"}},
+    {
+     "try": [
+      {
+       "each": "c",
+       "in": "=cs",
+       "index": "i",
+       "steps": [
+        {"refuse": {"fmt": "constraints[{i}]: an object {{ type, refs, value, name }}."}, "when": "=not is_dict(c)"},
+        {"let": {"refs": "=[ref(r, 'constraints[' + str(i) + '].refs') for r in c.get('refs') or []]", "outside": "='; outside edges -3 to ' + str(-2 - ne) if ne else '; it has no outside edges (sketch_external brings them in)'"}},
+        {
+         "each": "g, p",
+         "in": "=refs",
+         "steps": [
+          {"refuse": {"fmt": "constraints[{i}]: geometry {g} is not in {sk.Label} — its own are 0 to {ng - 1}; -1 and -2 are the axes{outside}. sketch_state lists them."}, "when": "=g >= ng or g < -2 - ne"}
+         ]
+        },
+        {
+         "try": [
+          {"let": {"ts": "=make_constraint(sk, c)"}}
+         ],
+         "on": "refusal",
+         "except": [
+          {"refuse": {"fmt": "constraints[{i}] {error.message}"}}
+         ]
+        },
+        {
+         "each": "t",
+         "in": "=ts",
+         "index": "j",
+         "steps": [
+          {
+           "try": [
+            {"let": {"ci": "=sk.addConstraint(constraint(t))"}}
+           ],
+           "except": [
+            {"refuse": {"fmt": "constraints[{i}] ({c.get('type')}): FreeCAD would not take it ({error}) — nothing was added. Check each ref's geometry kind and vertex against sketch_state (a line has vertices 1 and 2, a circle only 3)."}}
+           ]
+          },
+          {"push": {"added": "=ci"}},
+          {"do": "=sk.renameConstraint(ci, c.name if len(ts) == 1 else str(c.name) + '_' + 'xy'[j])", "when": "=c.get('name')"}
+         ]
+        }
+       ]
+      },
+      {"let": {"st": "=state_of(sk)"}},
+      {"let": {"bad": "=[x for x in st.get('conflicting', []) + st.get('redundant', []) + st.get('malformed', []) if x >= before]"}},
+      {
+       "when": "=bad or st['solver'] != 'solved'",
+       "then": [
+        {"let": {"who": "=clashing(sk)"}},
+        {
+         "when": "=who",
+         "then": [
+          {"let": {"new_": "='; '.join([con_words(sk, i) for i in who if i >= before]) or 'none'", "old_": "='; '.join([con_words(sk, i) for i in who if i < before]) or 'none'"}},
+          {"refuse": {"fmt": "These constraints over-constrain {sk.Label} ({st['solver']}), and any one of them dropped clears it — new: {new_}; existing: {old_}. Nothing was added: leave out a new one, or sketch_edit deleteConstraints an existing one first."}, "code": "invalid_state"}
+         ]
+        },
+        {"let": {"clash": "=sorted(set(st.get('conflicting', []) + st.get('redundant', [])) - set(bad))"}},
+        {"let": {"news": "=[con_words(sk, i) for i in (bad or added)]", "olds": "=[con_words(sk, i) for i in clash] or '—'"}},
+        {"refuse": {"fmt": "These constraints over-constrain {sk.Label} ({st['solver']}): new {news}, against existing {olds}. Nothing was added — drop one, or sketch_edit deleteConstraints the old one first."}, "code": "invalid_state"}
+       ]
+      }
+     ],
+     "reraise": true,
+     "except": [
+      {
+       "each": "ci",
+       "in": "=sorted(range(before, len(sk.Constraints)), reverse=True)",
+       "steps": [
+        {"do": "=sk.delConstraint(ci)"}
+       ]
+      },
+      {"do": "=sk.solve()"}
+     ]
+    }
+   ],
+   "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"sketch": "=sk.Label", "added": "=added", "state": "=st"}}
+  },
+  "sketch_state": {
+   "group": "sketch",
+   "description": "The solver's reading of a sketch — check it before a feature: dof (0 is fully constrained), conflicting / redundant / malformed constraint ids, closed wires and open vertices, readyForFeature with todo when not; its frame in the world; detail (default true) lists geometry and constraints with ids, values (mm; deg for angles) and refs [g, vertex]. Ids count from 0 in every sketch tool. A pad on a sketch with dof > 0 works but moves when edited.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "sketch": {
+      "type": "string",
+      "description": "The sketch's name; may be left out when there is one."
+     },
+     "detail": {
+      "type": "boolean"
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": false,
+   "source": "Agent Link (was agentlink/families/sketch.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"sk": "=sketch_of(a.sketch)"}},
+    {"let": {"st": "=state_of(sk)"}},
+    {"put": {"frame": "=frame(sk.Placement)"}, "into": "st"},
+    {"put": {"geometry": "=[describe_geo(sk, i) for i in range(len(sk.Geometry))]", "constraints": "=[describe_con(sk, i) for i in range(len(sk.Constraints))]"}, "into": "st", "when": "=a.get('detail', True)"},
+    {"put": {"error": "=sk.getStatusString()"}, "into": "st", "when": "=not sk.isValid()"}
+   ],
+   "answer": {"fields": {"...": "=st"}}
+  },
+  "sketch_edit": {
+   "group": "sketch",
+   "description": "Edit a sketch; several keys may go in one call, done in this order: move { geo, vertex (0 the whole curve, 1/2/3), to [x,y] } (drags it as far as its constraints let it), set [{ constraint: id|name, value mm|deg }], construction { geo, on }, rename { constraint, name }, deleteConstraints [id|name], delete [geometry ids — their constraints go too], fillet { at: [g, v] a corner, or geos [g1, g2] near [[x,y],[x,y]]; radius; chamfer: true cuts it straight } (the curves trimmed to it), trim { geo, at [x,y] } (cuts off the piece there, between crossings), split { geo, at }, mirror { geos, about: \"x\" | \"y\" | \"origin\" | a line id } (free mirrored copies: no symmetric constraints are added), group [geos] (held as one, FreeCAD 1.2), text { text, at, height, font, construction } (letters as geometry), exposeInternal [geos] (an ellipse's axes or a B-spline's poles back as construction geometry), removeAxesAlignment [geos]. delete, fillet, trim and split renumber geometry: read sketch_state before using ids again. Answers done, state, geometryCount, and bodyAfter when features are built on it; an edit that breaks one is refused with FreeCAD's error and nothing kept.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "sketch": {
+      "type": "string",
+      "description": "The sketch's name; may be left out when there is one."
+     },
+     "move": {
+      "type": "object"
+     },
+     "set": {},
+     "construction": {
+      "type": "object"
+     },
+     "rename": {
+      "type": "object"
+     },
+     "deleteConstraints": {
+      "type": "array",
+      "items": {}
+     },
+     "delete": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     },
+     "fillet": {
+      "type": "object"
+     },
+     "trim": {
+      "type": "object"
+     },
+     "split": {
+      "type": "object"
+     },
+     "mirror": {
+      "type": "object"
+     },
+     "group": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     },
+     "text": {
+      "type": "object"
+     },
+     "exposeInternal": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     },
+     "removeAxesAlignment": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     }
+    },
+    "required": [],
+    "additionalProperties": false
+   },
+   "changes": true,
+   "source": "Agent Link (was agentlink/families/sketch.py)",
+   "date": "2026-11-16",
+   "runner": "steps",
+   "steps": [
+    {"let": {"sk": "=sketch_of(a.sketch)", "done": "=[]"}},
+    {"let": {"ng": "=len(sk.Geometry)"}},
+    {
+     "when": "='move' in a",
+     "then": [
+      {"let": {"m": "=a.move"}},
+      {"let": {"g": "=gid(sk, m.get('geo'))"}},
+      {"let": {"k": "=geo_kind(sk.Geometry[g])"}},
+      {"let": {"p": "=m.get('vertex', 0 if k == 'Line' else 1 if k == 'Point' else 3)"}},
+      {"refuse": "move.vertex: 0 the whole curve, 1 its start, 2 its end, 3 its centre.", "when": "=p not in (0, 1, 2, 3) or is_bool(p)"},
+      {"let": {"to": "=vec2(m.get('to'), 'move.to')"}},
+      {
+       "try": [
+        {"do": "=sk.moveGeometry(g, p, to, False)"}
+       ],
+       "except": [
+        {"refuse": {"fmt": "Geometry {g} vertex {p} would not move to {[to.x, to.y]}: {error} — its constraints hold it (sketch_state lists them; set changes a dimension, deleteConstraints frees it), or it has no such vertex."}, "code": "failed"}
+       ]
+      },
+      {"push": {"done": {"fmt": "moved {g}.{p}"}}}
+     ]
+    },
+    {
+     "when": "='set' in a",
+     "then": [
+      {
+       "each": "x",
+       "in": "=a.set if is_list(a.set) else [a.set]",
+       "steps": [
+        {"let": {"ci": "=con_index(sk, x.get('constraint'))"}},
+        {"let": {"c": "=sk.Constraints[ci]", "v": "=x.get('value')"}},
+        {"refuse": "set.value: a number, mm (degrees for an angle).", "when": "=not is_number(v)"},
+        {"refuse": {"fmt": "constraint {ci} is {c.Type}: it has no value to set — only distance, distance_x, distance_y, radius, diameter and angle constraints do (sketch_state lists them with their values)."}, "when": "=c.Type not in ('Distance', 'DistanceX', 'DistanceY', 'Radius', 'Diameter', 'Angle')"},
+        {"let": {"must": "='over 0' if c.Type != 'Distance' else 'other than 0 (coincident joins two points)'"}},
+        {"refuse": {"fmt": "set: constraint {ci} is a {c.Type.lower()}: its value must be {must}."}, "when": "=(c.Type in ('Radius', 'Diameter') and v <= 0) or (c.Type == 'Distance' and v == 0)"},
+        {"let": {"paths": "=['Constraints[' + str(ci) + ']', '.Constraints[' + str(ci) + ']', 'Constraints.' + str(c.Name), '.Constraints.' + str(c.Name)]"}},
+        {"refuse": {"fmt": "constraint {ci} is bound to an expression: param_set its parameter, or param_bind it to null first."}, "code": "invalid_state", "when": "=[p for p, e in sk.ExpressionEngine if p in paths]"},
+        {
+         "try": [
+          {"do": "=sk.setDatum(ci, quantity(str(v) + (' deg' if c.Type == 'Angle' else ' mm')))"}
+         ],
+         "except": [
+          {"refuse": {"fmt": "Constraint {ci} would not take {v}: {error} — the sketch does not solve with that value, so it was left as it was. Another constraint holds the same size (sketch_state lists them), or the value does not fit the shape."}, "code": "failed"}
+         ]
+        },
+        {"push": {"done": {"fmt": "set {ci} = {v}"}}}
+       ]
+      }
+     ]
+    },
+    {
+     "when": "='construction' in a",
+     "then": [
+      {"let": {"x": "=a.construction"}},
+      {"let": {"g": "=gid(sk, x.get('geo'))"}},
+      {"do": "=sk.setConstruction(g, bool(x.get('on', True)))"},
+      {"push": {"done": {"fmt": "construction {g} {bool(x.get('on', True))}"}}}
+     ]
+    },
+    {
+     "when": "='rename' in a",
+     "then": [
+      {"let": {"x": "=a.rename"}},
+      {"let": {"ci": "=con_index(sk, x.get('constraint'))"}},
+      {"do": "=sk.renameConstraint(ci, str(x.get('name', '')))"},
+      {"push": {"done": {"fmt": "renamed {ci}"}}}
+     ]
+    },
+    {
+     "when": "='deleteConstraints' in a",
+     "then": [
+      {"let": {"ids": "=sorted({con_index(sk, c) for c in a.deleteConstraints}, reverse=True)"}},
+      {
+       "each": "ci",
+       "in": "=ids",
+       "steps": [
+        {"do": "=sk.delConstraint(ci)"}
+       ]
+      },
+      {"push": {"done": {"fmt": "deleted constraints {sorted(ids)}"}}}
+     ]
+    },
+    {
+     "when": "='delete' in a",
+     "then": [
+      {"let": {"ids": "=sorted({gid(sk, g) for g in a.delete})"}},
+      {"do": "=sk.delGeometries(ids)"},
+      {"push": {"done": {"fmt": "deleted geometry {ids} with its constraints (later ids shift down by the count before them: {len(sk.Geometry)} left, 0 to {len(sk.Geometry) - 1})"}}}
+     ]
+    },
+    {
+     "when": "='fillet' in a",
+     "then": [
+      {"let": {"x": "=a.fillet"}},
+      {"let": {"r": "=float(x.get('radius', 0))"}},
+      {"refuse": "fillet.radius: mm, over 0.", "when": "=r <= 0"},
+      {"let": {"n0": "=len(sk.Geometry)"}},
+      {
+       "try": [
+        {
+         "try": [
+          {
+           "when": "=x.get('at') is not None",
+           "then": [
+            {"let": {"g, v": "=x.at"}},
+            {"do": "=fillet(sk, x.get('chamfer'), gid(sk, g), int(v), r)"}
+           ],
+           "else": [
+            {"let": {"g1, g2": "=x.get('geos') or []", "q1, q2": "=x.get('near') or []"}},
+            {"let": {"g1": "=gid(sk, g1)"}},
+            {"let": {"g2": "=gid(sk, g2)"}},
+            {"let": {"p1": "=vec2(q1, 'fillet.near')"}},
+            {"let": {"p2": "=vec2(q2, 'fillet.near')"}},
+            {"do": "=fillet(sk, x.get('chamfer'), g1, g2, p1, p2, r)"}
+           ]
+          }
+         ],
+         "on": ["ValueError", "TypeError"],
+         "except": [
+          {"refuse": {"fmt": "No fillet of {r:g} mm fits there: {error} — a smaller radius, or a corner where exactly two curves meet (lines and arcs)."}, "code": "failed", "when": "='Not able to fillet' in str(error)"},
+          {"refuse": "fillet: at [geo, vertex] (a corner where two curves meet), or geos [g1, g2] with near [[x, y], [x, y]] (a point on each, on the side to keep), and radius."}
+         ]
+        }
+       ],
+       "on": "failure",
+       "except": [
+        {"refuse": {"fmt": "No fillet of {r:g} mm fits there: {error} — a smaller radius, or a corner where exactly two curves meet (lines and arcs)."}, "code": "failed"}
+       ]
+      },
+      {"refuse": {"fmt": "No fillet of {r:g} mm fits there — a smaller radius, or a corner where two curves meet."}, "code": "failed", "when": "=len(sk.Geometry) == n0"},
+      {"push": {"done": {"fmt": "{'chamfer' if x.get('chamfer') else 'fillet r'}{r:g}: {'line' if x.get('chamfer') else 'arc'} {len(sk.Geometry) - 1}"}}}
+     ]
+    },
+    {
+     "when": "='trim' in a",
+     "then": [
+      {"let": {"x": "=a.trim"}},
+      {"let": {"g": "=gid(sk, x.get('geo'))"}},
+      {"let": {"at": "=vec2(x.get('at'), 'trim.at')", "n0": "=len(sk.Geometry)"}},
+      {
+       "try": [
+        {"do": "=sk.trim(g, V(at[0], at[1], 0))"}
+       ],
+       "except": [
+        {"refuse": {"fmt": "Geometry {g} could not be trimmed at {[at.x, at.y]}: {error} — at is a point on the piece to cut off, which must lie between (or beyond) where other curves cross it; a curve nothing crosses is deleted with delete."}, "code": "failed"}
+       ]
+      },
+      {"push": {"done": {"fmt": "trimmed {g} at {list(at)} ({len(sk.Geometry) - n0:+d} geometry)"}}}
+     ]
+    },
+    {
+     "when": "='split' in a",
+     "then": [
+      {"let": {"x": "=a.split"}},
+      {"let": {"g": "=gid(sk, x.get('geo'))"}},
+      {"let": {"at": "=vec2(x.get('at'), 'split.at')"}},
+      {
+       "try": [
+        {"do": "=sk.split(g, V(at[0], at[1], 0))"}
+       ],
+       "except": [
+        {"refuse": {"fmt": "Geometry {g} could not be split at {[at.x, at.y]}: {error} — at is a point on the curve, away from its ends; lines, arcs, circles and B-splines split."}, "code": "failed"}
+       ]
+      },
+      {"push": {"done": {"fmt": "split {g} at {list(at)}: its second part is {len(sk.Geometry) - 1}"}}}
+     ]
+    },
+    {
+     "when": "='mirror' in a",
+     "then": [
+      {"let": {"x": "=a.mirror"}},
+      {"let": {"geos": "=[gid(sk, g) for g in x.get('geos') or []]"}},
+      {"refuse": "mirror.geos: the geometry ids to mirror.", "when": "=not geos"},
+      {"let": {"about": "=x.get('about', 'y')"}},
+      {"let": {"ref": "={'x': (-1, None), 'y': (-2, None), 'origin': (-1, 1)}.get(about) if is_str(about) else (gid(sk, about), None)"}},
+      {"refuse": "mirror.about: \"x\" (the horizontal axis), \"y\" (the vertical), \"origin\", or a line's id.", "when": "=ref is None"},
+      {"let": {"n0": "=len(sk.Geometry)"}},
+      {
+       "try": [
+        {"do": "=sk.addSymmetric(geos, ref[0]) if ref[1] is None else sk.addSymmetric(geos, ref[0], ref[1])"}
+       ],
+       "except": [
+        {"refuse": {"fmt": "The geometry could not be mirrored: {error} — about takes \"x\", \"y\", \"origin\" or the id of a line in the sketch."}, "code": "failed"}
+       ]
+      },
+      {"push": {"done": {"fmt": "mirrored {geos} about {about}: new {list(range(n0, len(sk.Geometry)))} (free copies: no symmetric constraint ties them to the originals)"}}}
+     ]
+    },
+    {
+     "when": "='group' in a",
+     "then": [
+      {"let": {"geos": "=sorted({gid(sk, g) for g in a.group})"}},
+      {"refuse": "group: two or more geometry ids.", "when": "=len(geos) < 2"},
+      {"let": {"bb": "=bounds(sk, geos)"}},
+      {"do": "=sk.addGeometry(line(V(bb.XMin, bb.YMin, 0), V(bb.XMin, bb.YMax, 0)), True)"},
+      {"let": {"fr": "=len(sk.Geometry) - 1"}},
+      {
+       "try": [
+        {"do": "=sk.addConstraint(constraint(('Group', [fr, 0] + [x for g in geos for x in (g, 0)])))"}
+       ],
+       "except": [
+        {"do": "=sk.delGeometries([fr])"},
+        {"refuse": {"fmt": "Group constraints came in FreeCAD 1.2; this is {version()}. To hold geometry still here: sketch_constrain {{ type: \"fix\", refs: [g] }} blocks one geometry where it is."}, "code": "unavailable"}
+       ]
+      },
+      {"push": {"done": {"fmt": "grouped {geos}: frame line {fr}"}}}
+     ]
+    },
+    {
+     "when": "='text' in a",
+     "then": [
+      {"let": {"x": "=a.text"}},
+      {"let": {"words": "=str(x.get('text') or '')"}},
+      {"refuse": "text.text: the words.", "when": "=not words"},
+      {"let": {"at": "=vec2(x.get('at', [0, 0]), 'text.at')", "hgt": "=float(x.get('height', 5))"}},
+      {"refuse": "text.height: mm, over 0.", "when": "=hgt <= 0"},
+      {"let": {"font": "=font_file(x.get('font'))", "n0": "=len(sk.Geometry)"}},
+      {
+       "try": [
+        {"do": "=sk.addGeometry(line(V(at[0], at[1], 0), V(at[0], at[1] + hgt, 0)), True)"},
+        {"let": {"h": "=len(sk.Geometry) - 1"}},
+        {"do": ["=sk.addConstraint(constraint(('Text', [h, 0], words, font, True)))", "=sk.setTextAndFont(len(sk.Constraints) - 1, words, font, True, bool(x.get('construction')))"]},
+        {"let": {"how": "text constraint"}}
+       ],
+       "except": [
+        {"do": "=sk.delGeometries(list(range(n0, len(sk.Geometry))))", "when": "=len(sk.Geometry) > n0"},
+        {"do": "=text_outlines(sk, words, font, hgt, at, bool(x.get('construction')))"},
+        {"let": {"how": "outlines"}}
+       ]
+      },
+      {"push": {"done": {"fmt": "text {words!r} ({how}): geometry {n0}…{len(sk.Geometry) - 1}"}}}
+     ]
+    },
+    {
+     "when": "='exposeInternal' in a",
+     "then": [
+      {
+       "each": "g",
+       "in": "=a.exposeInternal",
+       "steps": [
+        {"let": {"n0": "=len(sk.Geometry)"}},
+        {
+         "try": [
+          {"do": "=sk.exposeInternalGeometry(gid(sk, g))"}
+         ],
+         "on": "failure",
+         "except": [
+          {"refuse": {"fmt": "exposeInternal: geometry {g} is a {geo_kind(sk.Geometry[g]).lower()}, which has no internal geometry — ellipses, their arcs, parabola and hyperbola arcs and B-splines do."}}
+         ]
+        },
+        {"push": {"done": {"fmt": "internal geometry of {g} restored ({len(sk.Geometry) - n0} added: {list(range(n0, len(sk.Geometry)))})"}}}
+       ]
+      }
+     ]
+    },
+    {
+     "when": "='removeAxesAlignment' in a",
+     "then": [
+      {"let": {"geos": "=[gid(sk, g) for g in a.removeAxesAlignment]"}},
+      {
+       "try": [
+        {"do": "=sk.removeAxesAlignment(geos)"}
+       ],
+       "except": [
+        {"refuse": {"fmt": "removeAxesAlignment: FreeCAD could not rewrite the constraints of {geos} ({error}) — nothing was changed."}, "code": "failed"}
+       ]
+      },
+      {"push": {"done": {"fmt": "axes alignment of {geos} taken off: horizontal/vertical became parallel/perpendicular"}}}
+     ]
+    },
+    {"refuse": "Give one or more of: group [geos], text { text, at, height, font }, exposeInternal [geos], removeAxesAlignment [geos], move { geo, vertex, to }, set [{ constraint, value }], construction { geo, on }, rename { constraint, name }, deleteConstraints [ids|names], delete [geometry ids], fillet { at [g, v] | geos, near; radius }, trim { geo, at }, split { geo, at }, mirror { geos, about }.", "when": "=not done"},
+    {"do": "=doc().recompute()"},
+    {"let": {"st": "=state_of(sk)", "b": "=body_of(sk)", "bad": "=broken(doc())"}},
+    {"refuse": {"fmt": "After the edit {bad[0]['object']} fails: {bad[0]['error']} — nothing was kept. A feature built on this sketch needs its profile closed and its referenced edges still there: make the edit another way, or change that feature first."}, "code": "failed", "when": "=bad"},
+    {"do": "=snapshot('sketch_edit')"}
+   ],
+   "answer": {"fields": {"sketch": "=sk.Label", "done": "=done", "state": "=st", "geometryCount": "=len(sk.Geometry)", "step": "=steps()", "bodyAfter": {"when": "=b is not None and ng and not b.Shape.isNull()", "value": "=body_reading(b)"}}}
   }
  }
 }

@@ -250,6 +250,12 @@ tests/_bim_standin.py
 tests/_datamesh_before.py
 tests/_datamesh_cases.py
 tests/_datamesh_standin.py
+tests/_datapart_before.py
+tests/_datapart_cases.py
+tests/_datapart_standin.py
+tests/_datapd_before.py
+tests/_datapd_cases.py
+tests/_datapd_standin.py
 tests/_fc.py
 tests/_pd_base.py
 tests/test_activity_words.py
@@ -274,6 +280,8 @@ tests/test_core_guards_fc.py
 tests/test_core_readers.py
 tests/test_crash_logs.py
 tests/test_datamesh_data.py
+tests/test_datapart_data.py
+tests/test_datapd_data.py
 tests/test_declared.py
 tests/test_doc.py
 tests/test_draft.py

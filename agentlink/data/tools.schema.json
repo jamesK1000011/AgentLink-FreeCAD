@@ -29,8 +29,9 @@
     {"required": ["push"], "properties": {"push": {"type": "object", "description": "A list's name and one more for it."}}},
     {"required": ["each", "in", "steps"], "properties": {"each": {"type": "string"}, "in": {}, "index": {"type": "string"}, "steps": {"$ref": "#/$defs/steps"}}},
     {"required": ["choose", "of"], "properties": {"choose": {}, "of": {"type": "object", "additionalProperties": {"$ref": "#/$defs/steps"}}, "else": {"$ref": "#/$defs/steps"}}},
-    {"required": ["try"], "properties": {"try": {"$ref": "#/$defs/steps"}, "on": {"description": "error (any), refusal (a tool's own), or a list of Python error names."},
-                                        "except": {"$ref": "#/$defs/steps"}}},
+    {"required": ["try"], "properties": {"try": {"$ref": "#/$defs/steps"}, "on": {"description": "error (any), refusal (a tool's own), failure (any error but a tool's own refusal), or a list of Python error names."},
+                                        "except": {"$ref": "#/$defs/steps"},
+                                        "reraise": {"type": "boolean", "description": "After the except steps (what to undo), the error goes on as it was."}}},
     {"required": ["then", "when"], "properties": {"then": {"$ref": "#/$defs/steps"}, "else": {"$ref": "#/$defs/steps"}}},
     {"required": ["answer"], "properties": {"answer": {"$ref": "#/$defs/answer", "description": "Ends the run with this answer."}}}
    ]

@@ -78,8 +78,9 @@ handlers and needs none of this.
     each     a name (or "k, v"), in, index, steps: a loop
     then     with when and else: one branch or the other
     choose   an expression, of {"value": [steps]}, else: a branch by value
-    try      steps, on (error | refusal | ["ValueError", …]), except
-             (steps; "error" there is what was caught)
+    try      steps, on (error | refusal | failure | ["ValueError", …]),
+             except (steps; "error" there is what was caught); failure: any
+             error but a refusal; reraise: after except, the error goes on
     answer   {"via", "with", "fields", "late", "then"}: ends the run with
              this answer. via: the family helper that finishes (recompute,
              snapshot, step); fields: the answer's own fields in order

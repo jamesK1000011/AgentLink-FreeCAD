@@ -64,8 +64,13 @@ it only when e is truthy):
   {"each": "x", "in": e, "index": "i", "steps": [steps]}
   {"when": e, "then": [steps], "else": [steps]}
   {"choose": e, "of": {"value": [steps], …}, "else": [steps]}
-  {"try": [steps], "on": "error" | "refusal" | ["ValueError", …],
-   "except": [steps]}            "error" there is what was caught
+  {"try": [steps], "on": "error" | "refusal" | "failure" | ["ValueError", …],
+   "except": [steps], "reraise": true}
+                                 "error" there is what was caught; failure:
+                                 any error but a tool's own refusal, which
+                                 passes through (except ToolError: raise);
+                                 reraise: the except steps undo, and the
+                                 error then goes on as it was
   {"answer": {"via": helper, "with": [e, …], "fields": {…}, "late": true,
               "then": [steps]}}  ends the run with this answer; late: the
                                  helper reads the fields itself, after its
@@ -425,7 +430,7 @@ def run_read(name, e, a, helpers):
 
 ACTIONS = ("let", "refuse", "make", "add", "set", "do", "put", "push", "each", "choose", "try", "then", "answer")
 EXTRA = {"let": (), "refuse": ("code", "first"), "make": ("call", "kw", "as", "headless"), "add": ("name", "as"), "set": (), "do": (),
-         "put": ("into",), "push": (), "each": ("in", "index", "steps"), "choose": ("of", "else"), "try": ("on", "except"),
+         "put": ("into",), "push": (), "each": ("in", "index", "steps"), "choose": ("of", "else"), "try": ("on", "except", "reraise"),
          "then": ("else",), "answer": ()}
 
 
@@ -500,8 +505,12 @@ def _step(st, env, helpers):
         try:
             _steps(st["try"], env, helpers)
         except _caught(st.get("on", "error")) as e:
+            if st.get("on") == "failure" and isinstance(e, ToolError):
+                raise  # a refusal made inside is the tool's own answer
             env["error"] = e
             _steps(st.get("except", []), env, helpers)
+            if st.get("reraise"):
+                raise  # the except steps undid what was done; the error goes on as it was
     elif "then" in st:
         _steps(st["then"], env, helpers)
     elif "answer" in st:
@@ -510,13 +519,14 @@ def _step(st, env, helpers):
         raise ValueError(f"step {sorted(st)}: not a step the runner takes")
 
 
-ERRORS = {"error": Exception, "refusal": ToolError, "TypeError": TypeError, "ValueError": ValueError, "KeyError": KeyError,
+ERRORS = {"error": Exception, "refusal": ToolError, "failure": Exception, "TypeError": TypeError, "ValueError": ValueError, "KeyError": KeyError,
           "AttributeError": AttributeError, "ImportError": ImportError}
 
 
 def _caught(on):
-    """What a try step catches: "error" (any), "refusal" (a tool's own), or
-    a list of Python's error names."""
+    """What a try step catches: "error" (any), "refusal" (a tool's own),
+    "failure" (any but a tool's own refusal), or a list of Python's error
+    names."""
     return tuple(ERRORS[k] for k in on) if isinstance(on, list) else ERRORS[on]
 
 
@@ -641,7 +651,9 @@ def _check_steps(steps, where):
         if act == "choose" and not isinstance(st.get("of"), dict):
             out.append(f"{at}.of: an object of steps by value")
         if act == "try" and not all(isinstance(k, str) and k in ERRORS for k in (st["on"] if isinstance(st.get("on"), list) else [st.get("on", "error")])):
-            out.append(f"{at}.on: error | refusal | a list of {', '.join(sorted(set(ERRORS) - {'error', 'refusal'}))}")
+            out.append(f"{at}.on: error | refusal | failure | a list of {', '.join(sorted(set(ERRORS) - {'error', 'refusal', 'failure'}))}")
+        if act == "try" and not isinstance(st.get("reraise", False), bool):
+            out.append(f"{at}.reraise: true or false")
         if act == "answer":
             out += _check_answer(f"{at}.answer", st["answer"])
         for key in ("first", "steps", "else", "except", "then", "try"):

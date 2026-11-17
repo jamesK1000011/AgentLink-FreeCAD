@@ -262,6 +262,40 @@ class Runners(unittest.TestCase):
             self.steps([{"try": [{"do": "=1 / 0"}], "on": ["ValueError"], "except": []}], {}, ans)
         self.assertEqual(self.steps([{"try": [{"answer": {"fields": {"early": True}}}], "except": [{"refuse": "never"}]}, {"refuse": "nor this"}]), {"early": True})
 
+    def test_try_lets_a_refusal_through_and_undoes_before_an_error_goes_on(self):
+        def fail():
+            raise ToolError("not_found", "geometry 9: not in Sketch")
+
+        self.helpers["fail"] = fail
+        ans = {"fields": {"log": "=log"}}
+        # on "failure": any error but a refusal made inside, which stays the tool's own answer.
+        wrapped = [{"let": {"log": []}},
+                   {"try": [{"do": "=fail()" }], "on": "failure", "except": [{"refuse": "FreeCAD would not take it."}]}]
+        with self.assertRaises(ToolError) as c:
+            self.steps(wrapped, {}, ans)
+        self.assertEqual((c.exception.code, c.exception.message), ("not_found", "geometry 9: not in Sketch"))
+        crash = [{"let": {"log": []}},
+                 {"try": [{"do": "=1 / 0"}], "on": "failure", "except": [{"refuse": {"fmt": "FreeCAD would not take it ({error})."}, "code": "failed"}]}]
+        with self.assertRaises(ToolError) as c:
+            self.steps(crash, {}, ans)
+        self.assertEqual((c.exception.code, c.exception.message), ("failed", "FreeCAD would not take it (division by zero)."))
+        # reraise: the except steps undo what was done, and the error (a refusal or a crash) goes on as it was.
+        made = []
+        self.helpers["made"] = made
+        for bad, kind in (("=fail()", ToolError), ("=1 / 0", ZeroDivisionError)):
+            del made[:]
+            undo = [{"do": "=made.append('a')"},
+                    {"try": [{"do": "=made.append('b')"}, {"do": bad}, {"do": "=made.append('never')"}], "reraise": True,
+                     "except": [{"each": "x", "in": "=list(made)", "steps": [{"do": "=made.remove(x)"}]}]}]
+            with self.assertRaises(kind):
+                self.steps(undo, {}, {"fields": {}})
+            self.assertEqual(made, [])
+        # With nothing wrong, neither changes the run; and an entry that misuses them is refused when loaded.
+        self.assertEqual(self.steps([{"let": {"log": []}}, {"try": [{"push": {"log": "done"}}], "on": "failure", "reraise": True, "except": [{"push": {"log": "undone"}}]}], {}, ans),
+                         {"log": ["done"]})
+        doc = {"dataVersion": "1.0.0", "entries": {"t": {**ENTRY, "runner": "steps", "steps": [{"try": [], "reraise": "yes"}]}}}
+        self.assertEqual(tooldata.check(doc), ["t.steps[0].reraise: true or false"])
+
     def test_steps_answers_early_late_and_after(self):
         order = []
 
