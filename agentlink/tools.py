@@ -1278,6 +1278,7 @@ def make_tools(session):
 # ---- groups, guides, batches, undo: the server as a whole ---------------------------------
 
 GROUP_OF = {
+    "tool_find": "find",
     "session_state": "core", "body_check": "core", "export_file": "core", "history_diff": "core",
     "app_force_restart": "core", "dialog_answer": "core", "report_read": "core", "crash_collect": "core",
     # export (every format) is core's; export_file stays an alias of it.
@@ -1292,6 +1293,7 @@ GROUP_OF = {
 ALIASES = {"export_file": "export"}
 GROUP_INFO = {
     "core": "The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed.",
+    "find": "tool_find: any tool by plain words, its card, the groups. Listed in the static base (ToolListMode static).",
 }
 # Listed by default (lean): core, the groups a part's make-check-verdict loop
 # needs, and the pictures to check it by.
@@ -1451,6 +1453,14 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
     server.on_call = session.record_call
     server.session = session
     session.server = server
+    # The lean default, and the static minimal list when asked for (agentlink/staticbase.py).
+    server.lean_groups = set(server.groups) if server.groups is not None else set(lean_groups)
+    try:
+        from . import staticbase
+
+        staticbase.apply(server)
+    except Exception:
+        pass
     try:
         from .heavy import Gate
 
@@ -2440,10 +2450,53 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
 
         return run
 
+    def tool_find(a):
+        if a.get("listing"):
+            # What the client is shown now: count, tokens, names; to: the whole listing as tools/list sends it.
+            from . import staticbase
+
+            staticbase.apply(server)
+            listed = server.listed()
+            entries = staticbase.listing(server, listed)
+            got = {"mode": staticbase.mode(), "style": staticbase.style(), "count": len(entries),
+                   "tokens": int(round(len(json.dumps(entries, ensure_ascii=False, separators=(",", ":"))) / 3.5)), "names": [e["name"] for e in entries]}
+            if a.get("to"):
+                p = a["to"] if os.path.isabs(a["to"]) else os.path.join(session.out_dir, a["to"])
+                if not p.endswith(".json"):
+                    raise ToolError("invalid_input", "to: a .json file for the listing.")
+                with open(p, "w", encoding="utf-8") as f:
+                    json.dump({"mode": got["mode"], "style": got["style"], "tokens": got["tokens"], "tools": entries}, f, ensure_ascii=False)
+                got.pop("names")
+                got["written"] = p
+            return got
+        if a.get("groups"):
+            return tool_groups({})
+        if a.get("tool"):
+            return tool_groups({"tool": a["tool"]})
+        qs = a.get("queries")
+        if qs is None and a.get("words") is not None:
+            qs = [a.get("words")]
+        if not isinstance(qs, list) or not qs or not all(isinstance(q, str) and q.strip() for q in qs) or len(qs) > 6:
+            raise ToolError("invalid_input", "words: what the tool does, in plain words (\"fillet edge\"); or queries: up to 6 of them; or tool: a name; or groups: true.")
+        limit = int(a.get("limit") or 8)
+        out = []
+        for q in qs:
+            got = tool_groups({"find": q, "limit": limit, **({"group": a["group"]} if a.get("group") else {})})
+            for h in got.get("tools") or ():
+                h["listed"] = server.is_listed(h.get("tool"))
+            out.append({"find": q, "tools": got.get("tools") or [], **({"note": got["note"]} if not got.get("tools") else {})})
+        res = out[0] if len(out) == 1 else {"results": out}
+        res["note"] = "Callable by name, listed or not; tool_find { tool: name } gives its whole description and inputs."
+        return res
+
     core = [
         Tool("usage_report", "What working through Agent Link has cost the agent, estimated on this side: calls, tokens (text at ~3.5 characters a token, pictures by size) and the tool list each session loads up front — per day over days (7), per session, the costliest tools, and tips to cut it. session: true gives this session alone. Not Claude's own count: the plan's usage page has that. Changes nothing. appliesNow: this session's meter of the applies-now filter (notThenAnswered must stay near zero).",
              obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}}), usage_report),
         Tool("tool_groups", "The tool groups, which are listed and what each holds (count, about); enable / disable: [group …] lists or hides them (core stays); group: g answers with that group alone (its whole about and its tools, each with one line of what it does); detail: true gives every group's whole about. The cheap way to a tool that is not listed is find, card, call: find: \"words\" searches every tool (best first; group narrows it, limit 1-40, 10 by default) by its name, FreeCAD's own names for its commands and workbench (\"PartDesign_Fillet\", \"techdraw\", \"drawing\"), search words and description — tools matching every word come before those matching some — and answers name, group and what it does; tool: name (or up to 20 names) answers that tool's whole description and inputSchema (and said: words its answers gave once and now leave out, named in saidBefore); then call it by name. now: true (alone or with find) answers the tools that fit the present state, best first, each with fits (why): first the likely next step by the document's own state, the same ranking as session_state's next (next [{ tool, why }], at most three; fits then starts \"likely next: …\"), then the active workbench, a sketch open in edit, the selection, and whether the tool's FreeCAD command reports itself active — without a window it goes by the document's objects only and says so. With no arguments the answer also names installed add-ons that brought no tools (addonsWithoutTools [{ extension, error }] and warning), when there are any. None of these lists anything, so a group's other descriptions are not loaded: enable a group only when a task uses most of it. Every tool is callable by name either way. Changes nothing but which tools are listed. needs: tool reads that tool's own leading checks against the document now, never run — { applies: true | false | null (not checked), wouldRefuse [{ code, words }], notChecked }; arguments: {…} reads that call's checks too; advice only. find's hits that would refuse now come last, with applies: false; now: true carries appliesNow, the full form of the health's appliesNow line.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}, "needs": {"type": "string"}, "arguments": {"type": "object"}}), tool_groups),
+        Tool("tool_find", "Find a tool by plain words (what it does, FreeCAD's own command or workbench name): up to limit (8) tools, best first, each with its group, one line of what it does and listed (whether the client was shown it). queries: up to 6 searches in one call. tool: a name or a list of names answers each one's whole description and inputs (its card); groups: true the tool groups and what each holds; group narrows a search. "
+             "Every tool is callable by name, listed or not (where the client sends only listed tools: batch { calls: [{ tool, arguments }] }). listing: true answers what the client is shown now (mode, style, count, tokens, names); to: a .json file gets the whole listing. Changes nothing.",
+             obj({"words": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+                  "groups": {"type": "boolean"}, "group": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}, "listing": {"type": "boolean"}, "to": {"type": "string"}}), tool_find, group="find"),
         Tool("guide_read", "How to do a task with these tools: the workflow and the traps the tools' own descriptions do not carry. No topic: the index — per guide its sections and what the guide and each section cost to read (tokens; sectionTokens: each section's name, in the guide's order, with its cost — approximate, characters / 4), start (its \"Start here\" section, where it has one: a short map of what to read first; named first in sectionTokens) and later (sections meant for one moment of a task, each with when, its cost in sectionTokens; firstReadTokens is the guide without them). "
              "topic: a guide whole; section: one of its ## sections by the start of its name, or a list of them in one answer (section: [\"Start here\", \"traps\"]). The cheap way through a long guide: its Start here section, then the sections it names, the later ones when their moment comes. "
              "topic as a list reads several guides in order in one call (with section: that section of each guide that has it; missing names the rest), up to about 55 000 characters — the answer is read [{ topic, text }], with next: the topics not reached; guide_read { topic: next } reads on. Changes nothing.",
