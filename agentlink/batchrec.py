@@ -117,7 +117,17 @@ def brief_verdicts(verdicts):
     return out, cut
 
 
-def to_reply(got, first, path, size):
+# A health verdict with nothing to act on: such a line is left out of a
+# lines: "refused" reply.
+CLEAN = re.compile(r"^(nothing red|as before|([^;]*: )?(\d+ parts? )?valid, closed, \d+ solids?( \(AllowCompound\))?|[^;]*: assembly solved|[^;]*: empty)$")
+
+
+def clean_verdict(v):
+    """Whether every part of a health verdict says all is well."""
+    return v is None or all(CLEAN.match(p.strip()) for p in str(v).split("; "))
+
+
+def to_reply(got, first, path, size, lines="all"):
     """A batch's answer as batch { to } gives it back once the whole of it
     is in the file at path: a line per call (ok, a refusal's words, the
     health verdict, a call's own file) and every other key of the answer
@@ -125,7 +135,7 @@ def to_reply(got, first, path, size):
     before a heavy read or out of time says in its note how to go on
     (next, notRun, heavy): that note stays as note, and the file's is
     toNote beside it; with no note of the batch's own, note is the file's."""
-    lines = []
+    only, lines = lines, []
     for i, r in enumerate(got.get("results") or []):
         row = {"i": first + i, "tool": r.get("tool"), "ok": bool(r.get("ok"))}
         if r.get("undone"):
@@ -147,8 +157,14 @@ def to_reply(got, first, path, size):
     for row, v in zip(lines, brief):
         if v is not None:
             row["health"] = v
+    counts = None
+    if only == "refused":
+        counts = {"ok": sum(1 for r in lines if r["ok"]), "refused": sum(1 for r in lines if not r["ok"])}
+        lines = [r for r in lines if not r["ok"] or not clean_verdict(r.get("health"))]
     short = {k: v for k, v in got.items() if k != "results"}
     short.update({"results": lines, "written": {"path": path, "bytes": size}})
+    if counts is not None:
+        short["counts"] = counts
     if cut:
         short["healthNote"] = STANDING_NOTE
     if isinstance(got.get("note"), str) and got["note"].strip():
