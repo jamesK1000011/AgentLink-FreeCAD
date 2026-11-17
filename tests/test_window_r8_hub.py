@@ -118,7 +118,10 @@ class UnwrapShown(WithStandIns):
             b = o._box
             return types.SimpleNamespace(XMin=b[0], YMin=b[1], ZMin=b[2], XMax=b[3], YMax=b[4], ZMax=b[5])
 
-        for target, fn in (("_add_sel", add), ("_box", box), ("fit", lambda animate=True, selection=False: "selection"),
+        self.boxes = [types.SimpleNamespace(shown=True)]
+        for b in self.boxes:
+            b.setVisible = lambda on, b=b: setattr(b, "shown", on)
+        for target, fn in (("mesh_info_widgets", lambda mw=None: self.boxes), ("_add_sel", add), ("_box", box), ("fit", lambda animate=True, selection=False: "selection"),
                            ("uncover", lambda doc, made, *a: ["Sphere"] if made and made[0].TypeId == "Mesh::Feature" else [])):
             p = mock.patch.object(echo, target, fn)
             p.start()
@@ -131,8 +134,11 @@ class UnwrapShown(WithStandIns):
         self.assertEqual(self.sel, [(foot, "Face6")])
         self.assertEqual(got["framed"], "the piece")
         self.assertEqual(got["size"], [20.0, 20.0, 10.0])  # the piece's box, not the 9.6 m wall's
-        self.assertEqual(got["meshInfo"], "put away")
-        self.assertEqual(self.cleared, [1])
+        # Round 9: hidden, never deleted (clearTaskWatcher took it away for
+        # good: the Cap's unwrap later had no box, r8hub-5).
+        self.assertEqual(got["meshInfo"], "hidden")
+        self.assertFalse(self.boxes[0].shown)
+        self.assertEqual(self.cleared, [])
 
     def test_a_mesh_and_its_pattern(self):
         cap = _Obj("Cap", "Mesh::Feature", (0, 0, 8, 10, 10, 10))
@@ -141,6 +147,7 @@ class UnwrapShown(WithStandIns):
         self.assertEqual(got["selected"], ["Cap", "Cap flat"])
         self.assertEqual(got["uncovered"], ["Sphere"])
         self.assertTrue(got["meshInfo"].startswith("kept"))  # a mesh selected: the box shows its values
+        self.assertTrue(self.boxes[0].shown)
         self.assertEqual(self.cleared, [])
 
     def test_nothing_named(self):

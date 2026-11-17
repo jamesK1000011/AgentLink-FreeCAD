@@ -315,8 +315,32 @@ def bench_text(name):
     return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", s) or "a workbench"
 
 
+def _job_words(a, b):
+    """job_start in plain words (p8: "Job start: 6000 mm³"): what the job
+    runs, in that tool's own words, and its state — done within the call,
+    started and running, or queued. Plain Python."""
+    tool = a.get("tool")
+    if not isinstance(tool, str) or not tool or tool == "job_start":
+        return None
+    inner_args = a.get("arguments") if isinstance(a.get("arguments"), dict) else {}
+    st = b.get("status") if isinstance(b.get("status"), str) else None
+    if "error" in b:
+        return "Ran " + _lower(did(tool, inner_args, {})) + " as a job"
+    if st in ("running", "queued"):
+        inner = did(tool, inner_args, {})
+        return f"Started a job: {_lower(inner)}"
+    inner = did(tool, inner_args, {k: v for k, v in b.items() if k not in ("job", "status", "note")})
+    return f"Ran a job, done: {_lower(inner)}"
+
+
 def _special(name, args, body):
     a, b = args or {}, body or {}
+    if name == "job_start":
+        return _job_words(a, b)
+    if name == "pref_import":
+        src = a.get("path") or b.get("from")
+        f = _file_name(os.path.basename(src)) if isinstance(src, str) and src else None
+        return "Brought in settings" + (f" from {f}" if f else "")
     if name == "gui_input":
         return gui_steps(a.get("steps"))
     if name == "dialog_answer":
@@ -487,6 +511,10 @@ KEY_TEXTS = ("refined", "verdict", "state", "solve")
 KEY_LISTS = ("materials", "inspections", "fonts", "views", "axes", "pieces", "cleared", "merged", "inserted", "removed",
              "modes", "rows", "parts", "ops", "added", "changed")
 KEY_FILES = ("file", "path", "template", "files")
+# KEY_LISTS' words for one ("1 view", not "1 views": r8hub-13); a word not
+# here reads the same for one ("1 cleared").
+ONE = {"materials": "material", "inspections": "inspection", "fonts": "font", "views": "view", "axes": "axis",
+       "pieces": "piece", "modes": "mode", "rows": "row", "parts": "part", "ops": "op"}
 
 
 def _short_num(v):
@@ -659,7 +687,7 @@ def key_value(body):
     for k in KEY_LISTS:
         v = b.get(k)
         if isinstance(v, list) and v:
-            return f"{len(v)} {k}"
+            return _count(len(v), ONE.get(k, k), k)
     for k in KEY_FILES:
         v = b.get(k)
         if isinstance(v, list):
@@ -744,6 +772,10 @@ def _report_value(b):
     bits = []
     if isinstance(p, int):
         bits.append(_count(p, "problem"))
+        first = b.get("first")
+        if p and isinstance(first, str) and first.strip():
+            # The first one named, short (r8hub-1: "1 problem" said nothing).
+            bits[-1] += f" (first: {_cap(plain(first.strip()), 60)})"
     if isinstance(n, int):
         bits.append(_count(n, "line"))
     return ", ".join(bits)
@@ -905,10 +937,61 @@ def _native_value(b):
     return out + ", not solved"
 
 
-READ_VALUES = {"session_state": _session_value, "guide_read": _guide_value, "tool_groups": _groups_value, "usage_report": _usage_value,
+def _prefs_value(b):
+    """pref_import (p8: the caption ran out in its note, no count): how many
+    settings came in, in how many groups."""
+    n, g = b.get("settings"), b.get("groups")
+    g = len(g) if isinstance(g, list) else g if _isnum(g) else None
+    if not _isnum(n) and g is None:
+        return None
+    bits = [_count(int(n), "setting")] if _isnum(n) else []
+    if g is not None:
+        bits.append(_count(int(g), "group"))
+    return " in ".join(bits)
+
+
+def _marks_value(b):
+    """td_centermarks (r8hub-13: "1 views"): the circles marked and on how
+    many views; "taken off" when its extend is 0."""
+    rows = [r for r in b.get("views") or () if isinstance(r, dict)]
+    if not rows:
+        return None
+    n = sum(int(r["circles"]) for r in rows if _isnum(r.get("circles")))
+    if _isnum(b.get("extend")) and not b["extend"]:
+        return _count(len(rows), "view")
+    return f"{_count(n, 'circle')} on {_count(len(rows), 'view')}"
+
+
+def batch_words(args, body):
+    """A batch's own words at its end (p8-batch): "Ran 6 calls in one
+    batch: 6 ok", the refused and not run counted, its title first when
+    given ("Peg plate — ran 6 calls …"). None for an answer with no rows.
+    Plain Python."""
+    a = args if isinstance(args, dict) else {}
+    b = body if isinstance(body, dict) else {}
+    rows = b.get("results") if isinstance(b.get("results"), list) else b.get("lines") if isinstance(b.get("lines"), list) else None
+    ran = b.get("ran") if _isnum(b.get("ran")) else len(rows) if rows is not None else None
+    if not ran:
+        return None  # an empty batch says nothing
+    ok = sum(1 for r in rows or () if isinstance(r, dict) and r.get("ok"))
+    out = f"ran {_count(int(ran), 'call')} in one batch: {ok} ok"
+    bad = int(ran) - ok
+    if rows is not None and bad > 0:
+        out += f", {bad} refused"
+    if _isnum(b.get("notRun")) and b["notRun"]:
+        out += f", {int(b['notRun'])} not run"
+    if b.get("undone"):
+        out += ", taken back"
+    title = a.get("title") or b.get("title")
+    if isinstance(title, str) and title.strip():
+        return _cap(plain(f"{title.strip()} — {out}"))
+    return _cap(out[:1].upper() + out[1:])
+
+
+READ_VALUES = {"pref_import": _prefs_value, "td_centermarks": _marks_value, "session_state": _session_value, "guide_read": _guide_value, "tool_groups": _groups_value, "usage_report": _usage_value,
                "report_read": _report_value, "view_render": _picture_value, "view_snapshot": _picture_value, "window_snapshot": _picture_value,
                "view_maps": _maps_value, "snapshot_list": _shots_value, "note_list": _notes_value, "steps_list": _steps_value,
-               "job_start": _job_value, "job_status": _job_value, "crash_collect": _crash_value, "pref_get": _pref_value,
+               "job_start": lambda b: _job_value({k: v for k, v in b.items() if k != "tool"}), "job_status": _job_value, "crash_collect": _crash_value, "pref_get": _pref_value,
                "ifc_open": _ifc_value, "app_extensions": _extensions_value,
                "fea_probe": _probe_value, "fea_chart": _chart_value, "fem_linearize": _linearize_value, "fea_native": _native_value}
 

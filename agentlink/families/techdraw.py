@@ -2828,6 +2828,32 @@ def tools(session):
         except Exception:
             return None
 
+    def table_fit(t, ss, corners, size):
+        """A table's text the asked size on the paper (round 8, r8hub-14: the
+        table at the top right read as empty: tiny marks). FreeCAD 1.1.3's
+        DrawViewSpreadsheet (src/Mod/TechDraw/App/DrawViewSpreadsheet.cpp
+        getSheetImage) draws each cell the sheet's column width by row
+        height (100 by 30 by default: the sheet's own pixels, taken as mm)
+        and its text TextSize high, then the whole at the view's scale: the
+        page's scale left the 3.5 mm text under 1 mm on the paper. Here the
+        scale is set (ScaleType Custom) so a row is 1.7 x size high on the
+        paper, and TextSize so the text is size high there. The scale, or
+        None when the sheet's row height cannot be read (left as it was)."""
+        try:
+            (r0, _c0), (r1, _c1) = corners
+            rows = [float(ss.getRowHeight(str(r))) for r in range(min(r0, r1), max(r0, r1) + 1)]
+            row = max(1.0, sum(rows) / len(rows)) if rows else 30.0
+        except Exception:
+            return None
+        sc = round(min(1.0, max(0.02, 1.7 * float(size) / row)), 4)
+        try:
+            t.ScaleType = "Custom"
+            t.Scale = sc
+            t.TextSize = round(float(size) / sc, 3)
+        except Exception:
+            return None
+        return sc
+
     def range_corners(rng):
         """A range's two corners ((row, column), (row, column)) and None; or None and what is wrong with it."""
         from .. import cells as C
@@ -2854,7 +2880,7 @@ def tools(session):
                "paper_of3d": paper_of3d, "dims_of": dims_of, "resolve": lambda ref: picks.resolve(s, ref), "area_text": area_text,
                "without_prefix": without_prefix, "with_decimals": with_decimals, "more_decimals": more_decimals, "prefixed": prefixed,
                "anchor_at": anchor_at, "one_dim": one_dim, "sheet_find": sheet_find, "filled_bounds": filled_bounds, "range_corners": range_corners,
-               "cell_name": cell_name, "range_text": range_text, "apply_tol": apply_tol, "dim_reading": dim_reading, "stacked_dims": stacked_dims, "table_cells": table_cells, "symbol": symbol,
+               "cell_name": cell_name, "range_text": range_text, "apply_tol": apply_tol, "dim_reading": dim_reading, "stacked_dims": stacked_dims, "table_cells": table_cells, "table_fit": table_fit, "symbol": symbol,
                "next_letter": lambda kind: next_letter(doc(), kind), "resolve_ref": lambda v, r, kind="any": resolve_ref(v, r, frames, kind),
                "gscale": lambda v: gscale(v, frames), "V": V, "vec": vec, "num": num, "view_scale": view_scale, "vertices_of": vertices_of,
                "edge_info": edge_info, "arc_turn": arc_turn, "whole_circles": whole_circles, "describe": gdt.describe, "DIM_TYPES": DIM_TYPES,

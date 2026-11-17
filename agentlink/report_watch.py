@@ -136,6 +136,14 @@ def _report_text():
         return None
 
 
+def first_problem(probs):
+    """The first problem line, short: its time ("15:00:05 ") cut off, at
+    most 120 characters. Plain Python."""
+    line = str(probs[0] if probs else "").strip()
+    line = re.sub(r"^\d{1,2}:\d{2}:\d{2}(\.\d+)?\s+", "", line)
+    return line[:120]
+
+
 def read(last=40, problems_only=False):
     """The Report view's last lines (for report_read): what is there, whether
     it could be found at all, and the problem lines among them."""
@@ -158,6 +166,10 @@ def read(last=40, problems_only=False):
     said = [f"{k} (× {v})" for k, v in known.items()]
     pick = said + (probs if problems_only else lines)
     out = {"found": True, "count": count, "problems": len(probs), "lines": pick[-max(1, min(int(last), 200)):]}
+    if probs:
+        # The first problem named, its time cut off, for the window's words
+        # (r8hub-1: "1 problem" named none).
+        out["first"] = first_problem(probs)
     if known:
         out["known"] = [{"what": k, "times": v} for k, v in known.items()]
     return out

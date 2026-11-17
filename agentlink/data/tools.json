@@ -9929,7 +9929,7 @@
   },
   "td_table": {
    "group": "techdraw",
-   "description": "A spreadsheet's cells as a table on the page (a parts list from asm_bom, a revision table): sheet, range (default its used cells), size, at. It follows the sheet; an empty sheet is refused.",
+   "description": "A spreadsheet's cells as a table on the page (a parts list from asm_bom, a revision table): sheet, range (default its used cells), size, at. It follows the sheet; an empty sheet is refused. size: the text's height on the paper, mm (3.5): the table's scale is set for it (reply: scale).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -9966,14 +9966,15 @@
     {"refuse": {"fmt": "range: {wrong}."}, "when": "=wrong is not None"},
     {"do": "=ss.recompute()"},
     {"add": "TechDraw::DrawViewSpreadsheet", "name": "Table", "as": "t"},
-    {"do": "=page.addView(t)"},
     {"set": {"t.Source": "=ss", "t.CellStart": "=cell_name(corners[0])", "t.CellEnd": "=cell_name(corners[1])", "t.TextSize": "=float(a.size or 3.5)"}},
+    {"let": {"tscale": "=table_fit(t, ss, corners, float(a.size or 3.5))"}},
+    {"do": "=page.addView(t)"},
     {"let": {"W, H": "=paper_size(page)"}},
     {"let": {"px, py": "=place_xy(page, a.at, (W * 0.75, H * 0.75))"}},
     {"set": {"t.X": "=px", "t.Y": "=py"}},
     {"do": "=recompute()"}
    ],
-   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"table": "=t.Name", "sheet": "=ss.Label", "range": "=range_text(corners[0], corners[1])", "at": ["=num(t.X, 2)", "=num(t.Y, 2)"], "shown": "=table_cells(t, ss)", "note": "It follows the sheet: change cells with sheet_set."}}
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "fields": {"table": "=t.Name", "sheet": "=ss.Label", "range": "=range_text(corners[0], corners[1])", "at": ["=num(t.X, 2)", "=num(t.Y, 2)"], "scale": "=tscale", "shown": "=table_cells(t, ss)", "note": "It follows the sheet: change cells with sheet_set."}}
   },
   "td_section_position": {
    "group": "techdraw",
