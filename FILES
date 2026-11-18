@@ -426,6 +426,7 @@ tests/test_ccx.py
 tests/test_cells.py
 tests/test_chain.py
 tests/test_charts.py
+tests/test_cmd_run_body_1118.py
 tests/test_cookbook_v2.py
 tests/test_core_check.py
 tests/test_core_guards.py

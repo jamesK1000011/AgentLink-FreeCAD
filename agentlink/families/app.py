@@ -646,6 +646,33 @@ def selected(gui):
         return []
 
 
+def body_for(gui, name):
+    """Before a Part Design command with no active body: the body of the
+    selected objects made active, as a person's double-click on it does,
+    and its label; None when there is nothing to do. Live 101: after a
+    restart no body was active, and PartDesign_Pad opened the modal "Active
+    Body Required" with the sketch of a body selected."""
+    if not str(name).startswith("PartDesign_") or name == "PartDesign_Body":
+        return None
+    try:
+        view = gui.ActiveDocument.ActiveView if gui.ActiveDocument else None
+        if view is None or view.getActiveObject("pdbody") is not None:
+            return None
+        bodies = []
+        for x in gui.Selection.getSelectionEx("*"):
+            o = x.Object
+            b = o if getattr(o, "TypeId", "") == "PartDesign::Body" else next(
+                (p for p in (getattr(o, "InList", None) or ()) if getattr(p, "TypeId", "") == "PartDesign::Body"), None)
+            if b is not None and b not in bodies:
+                bodies.append(b)
+        if len(bodies) != 1:
+            return None
+        view.setActiveObject("pdbody", bodies[0])
+        return bodies[0].Label
+    except Exception:  # noqa: BLE001 - FreeCAD asks the person as before
+        return None
+
+
 def bare(text):
     """A menu's title as the person reads it: without the & that marks its
     shortcut letter."""
@@ -710,7 +737,7 @@ def tools(session):
         "window": _gui, "doc": lambda: s.doc, "front": lambda: FreeCAD.ActiveDocument, "working": working,
         "group": _group, "contents": _contents, "subgroups": subgroups, "stored": stored, "set_value": _set, "removed": removed, "guarded": guarded,
         "changing": _settings_changing, "changed": _settings_changed, "packs": packs, "apply_cfg": apply_cfg,
-        "refused": refused, "cmd_matches": cmd_matches, "cmd_row": cmd_row, "is_active": is_active, "in_edit": in_edit, "selected": selected,
+        "refused": refused, "cmd_matches": cmd_matches, "cmd_row": cmd_row, "is_active": is_active, "body_for": body_for, "in_edit": in_edit, "selected": selected,
         "menubar": _menubar, "bare": bare, "walk": _actions, "find_action": _find_action, "bench_ready": bench_ready,
         "named_objects": named_objects, "dock_panels": dock_panels, "grab": grab, "local": lambda p: paths.local(s, p),
         "out_file": lambda name: os.path.join(s.out_dir, name), "read_bytes": read_bytes, "isfile": os.path.isfile, "shots": shots,
