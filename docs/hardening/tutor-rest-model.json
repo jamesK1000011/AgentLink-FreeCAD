@@ -1,5 +1,5 @@
 {
- "tutorial": "No tutorial: tutor_point and tutor_watch, the two Tutor tools no model had proven (the tutor tool itself was proven by the bike-stem-1 lesson). tutor_point is called on a plain box first (face, edge, tree, command, view), then inside a running bike-stem-1 lesson in demo mode (toolbar button of another workbench, tree row, workbench selector, task panel button, dock).",
+ "tutorial": "No tutorial: tutor_point and tutor_watch, the two Tutor tools no model had proven (the tutor tool itself was proven by a lesson run). tutor_point is called on a plain box first (face, edge, tree, command, view), then inside a running film-hinge-sketch lesson (the wiki's Sketcher example) in demo mode (toolbar button of another workbench, tree row, workbench selector, task panel button, dock).",
  "reference": null,
  "conventions": {
   "run": "Agent Link for FreeCAD's batch or one call at a time, in order, with FreeCAD's window open (tutor_point only draws; without a window every target comes back in missing). REFUSED in expect means an error with that code.",
@@ -7,10 +7,10 @@
   "watch mode": "tutor_watch is run with watch mode off, as its description asks (the person turns it on). withWatchOn lists the calls to add when the person says to turn watch on."
  },
  "expected": {
-  "lesson": "agentlink_tutor.course.bike-stem-1",
-  "steps": 18,
-  "firstStep": "sketch",
-  "secondStep": "circle",
+  "lesson": "agentlink_tutor.wiki.film-hinge-sketch",
+  "steps": 8,
+  "firstStep": "arc",
+  "secondStep": "line",
   "topFaceOfPartBox": "Face6"
  },
  "calls": [
@@ -159,27 +159,27 @@
    "tool": "tutor",
    "arguments": {
     "action": "start",
-    "lesson": "bike-stem-1",
+    "lesson": "film-hinge-sketch",
     "mode": "demo"
    },
-   "expect": "lesson 'agentlink_tutor.course.bike-stem-1', mode 'demo', step '1/18', id 'sketch', say beginning 'Push New Sketch', document 'a new document BikeStem: TutorRest holds other work' (BikeStem_2 … when that name is in use), targets, check pending or fail"
+   "expect": "lesson 'agentlink_tutor.wiki.film-hinge-sketch', mode 'demo', step '1/8', id 'arc', say beginning 'Double-click Basic_sketch', document 'a new document FilmHinge: TutorRest holds other work' (FilmHinge_2 … when that name is in use), credit 'Adapted from Sketcher Examples (Film hinge, basic sketch) (FreeCAD wiki contributors, CC-BY-3.0)', targets, check pending or fail"
   },
   {
    "tool": "tutor",
    "arguments": {
     "action": "next"
    },
-   "expect": "demo does step 1 with the lesson's own call (sketch_new on XZ): did names it, check pass for 'sketch', and step '2/18' (id 'circle') is in front now or after the next status; prepared says what it made ready (the workbench, a tab)"
+   "expect": "demo does step 1 with the lesson's own call (sketch_add of an arc in Basic_sketch): did names it, check pass for 'arc', and step '2/8' (id 'line') is in front now or after the next status; prepared says what it made ready (the workbench, a tab)"
   },
   {
    "tool": "tutor_point",
    "arguments": {
     "targets": [
      {
-      "cmd": "Sketcher_CreateCircle"
+      "cmd": "Sketcher_CreateLine"
      },
      {
-      "tree": "Sketch"
+      "tree": "Basic_sketch"
      },
      {
       "wb": "SketcherWorkbench"
@@ -193,9 +193,9 @@
       "dock": "Report view"
      }
     ],
-    "say": "Create circle is here."
+    "say": "Create line is here."
    },
-   "expect": "shown and missing together hold n 1 to 5 with kinds cmd, tree, wb, task, dock in that order: 'Sketcher_CreateCircle button' (shown when the Sketcher toolbar is up; a ▾ or » ringed in its place is said in note), 'tree Sketch' (shown, or missing with 'the Model tab is not in front'-like why while the sketch's Tasks tab is in front), 'workbench Sketcher', the task panel's Close button (shown while the sketch is open in edit, else missing with why), 'panel Report view' (shown, or missing 'Report view is closed'). Read missing: those are not on screen. It replaces the lesson step's own rings until the next tutor call"
+   "expect": "shown and missing together hold n 1 to 5 with kinds cmd, tree, wb, task, dock in that order: 'Sketcher_CreateLine button' (shown when the Sketcher toolbar is up; a ▾ or » ringed in its place is said in note), 'tree Basic_sketch' (shown, or missing with 'the Model tab is not in front'-like why while the sketch's Tasks tab is in front), 'workbench Sketcher', the task panel's Close button (shown while the sketch is open in edit, else missing with why), 'panel Report view' (shown, or missing 'Report view is closed'). Read missing: those are not on screen. It replaces the lesson step's own rings until the next tutor call"
   },
   {
    "tool": "tutor_point",
@@ -227,7 +227,7 @@
    "arguments": {
     "action": "stop"
    },
-   "expect": "the lesson is stopped (state 'stopped'); a status after it answers no lesson running. The BikeStem document stays open with its one sketch"
+   "expect": "the lesson is stopped (state 'stopped'); a status after it answers no lesson running. The FilmHinge document stays open with its body and Basic_sketch (one arc)"
   }
  ],
  "withWatchOn": {

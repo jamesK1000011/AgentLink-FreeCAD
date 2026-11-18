@@ -78,15 +78,16 @@ notCovered (the model file has the same list with the calls to run):
 ## 2. Tutor (2 tools) — `tutor-rest-model.json`
 
 Read first: `agentlink_tutor/point.py`, `targets.py`, `lessons.py` (target kinds), `tool.py` (watch), `live.py`,
-`engine.py` (the lesson's document), `data/tools.json`, `lessons/bike-stem-1.lesson.json`.
+`engine.py` (the lesson's document), `data/tools.json`, `lessons/wiki-film-hinge-sketch.lesson.json`.
 
 | Tool | Calls | What the answer must show |
 |---|---|---|
 | tutor_point | 2, 3, 7, 8, 11, 12 accepted; 4, 5, 6 refused | 2: `shown` + `missing` hold n 1 to 4 (face `Face6 of PointBox`, tree, cmd, view); `until "the next tutor_point"`; `callout`. 3: `until "3000 ms"`, an edge. 7: `shown []`, `missing[0].why "no command No_Such_Command in this FreeCAD"`, the note. 8, 12: `{ cleared: true }`. 11 (inside the lesson, after `tutor next`): n 1 to 5, kinds cmd, tree, wb, task, dock. 4: REFUSED (`of` missing). 5: REFUSED (ms 100). 6: REFUSED (7 targets) |
 | tutor_watch | 13 accepted (off); 14, 15 refused | 13: `{ watching: false, say }` and no `events`. 14: REFUSED invalid_input "wait: 0 to 25 seconds". 15: REFUSED invalid_input (until enum) |
 
-The lesson: call 9 starts `bike-stem-1` in demo mode (expect `step "1/18"`, `id "sketch"`, `document "a new document
-BikeStem: TutorRest holds other work"`), call 10 does step 1, call 16 stops it.
+The lesson: call 9 starts `film-hinge-sketch` in demo mode (expect `step "1/8"`, `id "arc"`, `document "a new document
+FilmHinge: TutorRest holds other work"`), call 10 does step 1, call 16 stops it. (The bike-stem course this used
+before was retired on 18 Nov 2026.)
 
 Where a target lands (shown or missing) depends on the window, so `expect` says what each entry holds and that every n
 is in one of the two lists. A target in neither list is a fault.
