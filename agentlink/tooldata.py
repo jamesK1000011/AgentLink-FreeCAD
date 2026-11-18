@@ -215,10 +215,22 @@ def build(folder, group, handlers, who="this add-on"):
     missing, extra = set(mine) - set(handlers), set(handlers) - set(mine)
     if missing or extra:
         raise FormatError(f"{who}'s {group} tools: no handler for {sorted(missing)}, no definition for {sorted(extra)}")
-    keep.declare_heavy(k for k, v in mine.items() if v.get("heavy"))
+    # An add-on's entry with the name of one of Agent Link's own tools is
+    # left out by the server (an extension never hides a hub tool); what it
+    # declares is left out here too, so it never turns off the hub tool's
+    # path check (pathIsCurve) or moves its place in tool_find (red team,
+    # 2026-11-18).
+    try:
+        from . import runners
+
+        hub = set(runners.entries())
+    except Exception:  # noqa: BLE001
+        hub = set()
+    mine_only = {k: v for k, v in mine.items() if k not in hub}
+    keep.declare_heavy(k for k, v in mine_only.items() if v.get("heavy"))
     from . import toolindex
 
-    for k, v in mine.items():
+    for k, v in mine_only.items():
         toolindex.declare(k, v)
         if v.get("writes"):
             paths.WRITERS.add(k)

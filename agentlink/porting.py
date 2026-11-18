@@ -305,6 +305,20 @@ def hub_tool_names():
 
 # ---- drafting ------------------------------------------------------------------------------
 
+_REFUSED_LIKE = re.compile(r"^(Std_Dlg|Std_Macro|Std_RecentMacros|Std_AddonMgr|Std_Quit|Std_ToggleBreakpoint)")
+
+
+def refused_command(cmd):
+    """Why cmd_run refuses cmd, or None (its list where FreeCAD is; else its
+    patterns: this file also runs on its own, with no FreeCAD)."""
+    try:
+        from agentlink.families.app import refused
+
+        return refused(cmd)
+    except Exception:  # noqa: BLE001
+        return "it runs a macro or opens a dialog of the person's" if _REFUSED_LIKE.match(str(cmd)) else None
+
+
 def plan(info, group=None, taken=()):
     """The draft tools: [{ tool, command, description }]."""
     group = group or plain_name(info["name"]).split("_")[0][:20] or "addon"
@@ -312,6 +326,11 @@ def plan(info, group=None, taken=()):
         group = "addon"
     taken, out, used = set(taken), [], set()
     for c in info["commands"]:
+        # A command cmd_run refuses (a macro, a modal dialog, quit) gets no
+        # drafted tool: the draft calls runCommand itself (red team, 2026-11-18).
+        if refused_command(c["command"]):
+            info.setdefault("unread", []).append(f"{c['command']}: not drafted — cmd_run refuses it ({refused_command(c['command'])})")
+            continue
         prefix, _, rest = c["command"].partition("_")
         t = f"{group}_{snake(rest)}" if rest and plain_name(prefix) == group else f"{group}_{snake(c['command'])}"
         t = t[:48]

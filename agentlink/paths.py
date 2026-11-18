@@ -12,7 +12,9 @@ import os
 from .protocol import ToolError
 
 # Fields that hold a file path (or a list of them).
-PATH_KEYS = {"path", "file", "files", "kinematics", "template", "font", "export", "import", "pattern", "image"}
+PATH_KEYS = {"path", "file", "files", "kinematics", "template", "font", "export", "import", "pattern", "image",
+             # red team, 2026-11-18: files and folders read by other names
+             "points_file", "profiles_file", "folder"}
 # Fields that are files only for some tools
 PATH_KEYS_FOR = {"ifc_diff": {"a", "b"}}
 # Tools where "path" is a curve in the model, not a file.
@@ -25,7 +27,12 @@ SECRET_PARTS = {".ssh", ".aws", ".gnupg", ".kube", ".docker", ".config", ".netrc
                 ".zshrc", ".bashrc", ".profile", ".bash_profile", ".zprofile", ".env"}
 NEVER_WRITE_EXT = {".sh", ".bash", ".zsh", ".command", ".tool", ".py", ".pyc", ".pyw", ".js", ".mjs", ".cjs", ".ts", ".rb", ".pl", ".php",
                    ".app", ".plist", ".dylib", ".so", ".dll", ".exe", ".bat", ".cmd", ".ps1", ".vbs", ".scpt", ".applescript", ".workflow",
-                   ".service", ".desktop", ".kext", ".pkg", ".dmg", ".jar", ".FCMacro", ".fcmacro"}
+                   ".service", ".desktop", ".kext", ".pkg", ".dmg", ".jar", ".FCMacro", ".fcmacro",
+                   # red team, 2026-11-18: what Python loads as code beside .py
+                   ".pth", ".pyz", ".pyd", ".whl", ".egg"}
+
+
+_SECRET_FOLDED = {x.casefold() for x in SECRET_PARTS}
 
 
 def _real(p):
@@ -44,7 +51,9 @@ def check(tool, key, value, out_dir, write):
     p = raw if os.path.isabs(os.path.expanduser(raw)) else os.path.join(out_dir or os.getcwd(), raw)
     real = _real(p)
     parts = _parts(real)
-    secret = [x for x in parts if x in SECRET_PARTS]
+    # macOS disks ignore case: ~/.SSH is ~/.ssh, ~/agentlink is ~/AgentLink
+    # (red team, 2026-11-18). Every refusal below compares without case.
+    secret = [x for x in parts if x.casefold() in _SECRET_FOLDED]
     if secret:
         raise ToolError("invalid_input", f"{key}: {raw} is in {secret[0]} — credentials and shell settings are off limits to the agent.")
     if write:
@@ -52,8 +61,10 @@ def check(tool, key, value, out_dir, write):
         # cookbooks: no tool writes there, so no write can forge an OK.
         from . import cookbook
 
+        rf = real.casefold()
         for root in cookbook.protected():
-            if real == root or real.startswith((root.rstrip("/") + "/", root + ".")):
+            r = root.casefold()
+            if rf == r or rf.startswith((r.rstrip("/") + "/", r + ".")):
                 raise ToolError("invalid_input", f"{key}: {raw} is Agent Link's own store of the person's approvals and cookbooks. No tool writes there; write somewhere else.")
         home = _real("~")
         # A session folder at the disk's root (a server started from / with
@@ -69,8 +80,10 @@ def check(tool, key, value, out_dir, write):
             raise ToolError("invalid_input", f"{key}: {raw} is in a hidden folder ({hidden[0]}) — write it somewhere visible.")
         in_out = bool(out_real and (real == out_real or real.startswith(out_real.rstrip("/") + "/")))
         top = _parts(rel)[:1]
-        if top == ["Library"] and not in_out:
+        if [x.casefold() for x in top] == ["library"] and not in_out:
             raise ToolError("invalid_input", f"{key}: {raw} is in ~/Library, where apps keep their settings — write it somewhere you'd look for it.")
+        if os.path.basename(raw) != os.path.basename(raw).rstrip(". "):
+            raise ToolError("invalid_input", f"{key}: {raw} ends in a dot or a space — give the file its own extension.")
         ext = os.path.splitext(real)[1]
         if ext.lower() == ".fcstd" and os.path.exists(real) and tool != "doc_save":
             raise ToolError("invalid_input", f"{key}: {raw} is a FreeCAD document already there — {tool} would write over it. Another name, or doc_save for the document itself.")

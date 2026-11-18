@@ -185,6 +185,12 @@ def declared(fams):
         if tools is not None:
             tools.NOT_IN_MACROS.update(x for x in (getattr(f, "NOT_IN_MACROS", ()) or ()) if isinstance(x, str))
         paths.WRITERS.update(getattr(f, "WRITERS", ()) or ())
+        if getattr(f, "EXTERNAL", False):
+            # An add-on's GEOMETRIC (no path check) and PINNED_FREE count
+            # only for its own tools: owned() adds them once its tools are
+            # made (red team, 2026-11-18: an add-on that said "export" was
+            # GEOMETRIC turned off the path check of the hub's export).
+            continue
         paths.GEOMETRIC.update(getattr(f, "GEOMETRIC", ()) or ())
         PINNED_FREE.update(x for x in (getattr(f, "PINNED_FREE", ()) or ()) if isinstance(x, str) and x)
         echo.declare(f)
@@ -197,3 +203,19 @@ def declared(fams):
 
             for words in nexthint.declare(nxt, str(getattr(f, "GROUP", None) or "an add-on")):
                 sys.stderr.write(f"Agent Link: {words} — left out\n")
+
+
+def owned(fam, names):
+    """An add-on family's GEOMETRIC and PINNED_FREE, for the tools it made
+    and that loaded (names); a name of another's tool is left out, said."""
+    from .. import paths
+
+    names = set(names)
+    for attr, into in (("GEOMETRIC", paths.GEOMETRIC), ("PINNED_FREE", PINNED_FREE)):
+        for x in getattr(fam, attr, ()) or ():
+            if not isinstance(x, str) or not x:
+                continue
+            if x in names:
+                into.add(x)
+            else:
+                sys.stderr.write(f"Agent Link: {getattr(fam, 'EXTENSION', '?')} declares {x} in {attr}, but {x} is not its tool — left out\n")

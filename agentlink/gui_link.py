@@ -682,6 +682,8 @@ def fill(d, text=None, item=None):
     there is no single field to take it."""
     w = d["widget"]
     done = {}
+    if _persons(d):
+        raise ValueError("this is the person's OK dialog: only the person reads and presses it")
     if hasattr(w, "setTextValue") and hasattr(w, "textValue"):
         if item is not None:
             items = list(w.comboBoxItems()) if hasattr(w, "comboBoxItems") else []
@@ -721,10 +723,23 @@ def fill(d, text=None, item=None):
     return done
 
 
+def _persons(d):
+    """True for the person's OK dialog (agentlink/person_ok.py): no tool
+    presses it or types in it."""
+    try:
+        from . import person_ok
+
+        return person_ok.is_person_ok_widget((d or {}).get("widget"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def press(d, label):
     """Press a dialog's button by its text (never by where it is). Cancel,
     Close or Escape on a dialog with no such button (a file picker, which on
     macOS is the system's own panel with no Qt buttons) rejects it."""
+    if _persons(d):
+        return False
     try:
         QtGui, QtWidgets = _qt()
         want = label.lower().replace("&", "")
@@ -756,7 +771,7 @@ def press_hard(d, label, tries):
     if tries < 2:
         return press(d, label)
     w = d.get("widget")
-    if w is None:
+    if w is None or _persons(d):
         return False
     try:
         if tries == 2 and hasattr(w, "done"):

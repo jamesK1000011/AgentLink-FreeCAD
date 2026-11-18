@@ -151,7 +151,7 @@ class Runners(unittest.TestCase):
                 ("has(o, 'Size') and not has(o, 'Nope') and has(a, 'n')", True), ("get(o, 'Nope', 7)", 7),
                 ("[is_list(words), is_str('s'), is_num(True), is_number(True), is_int(1), is_float(1), is_bool(False), is_dict(a)]", [True, True, False, True, True, False, True, True]),
                 ("ceil(2.1) + floor(2.9) + chr(65)", None), ("round(tan(radians(45)) + pi, 2)", 4.14), ("maker('os.path.basename')('/a/b')", None),
-                ("maker('no_such_module.fn') is None and maker('os.nothing') is None", True)):
+                ("maker('no_such_module.fn') is None", True)):
             if want is None and text.startswith(("sorted(words", "ceil", "maker('os.path")):
                 continue  # below: they need names the evaluator does not have
             self.assertEqual(expr.evaluate(text, env, h), want, text)
@@ -207,12 +207,16 @@ class Runners(unittest.TestCase):
             return Thing(kind, Size=size, Placement=Thing("pl", Base=0))
 
         self.helpers.update({"build": make, "headless_call": lambda fn, *a, **kw: ("headless", fn(*a, **kw)), "double": lambda x: x * 2})
+        # A stand-in workbench module: a maker is never of the standard library (red team, 2026-11-18).
+        import types as _types
+        sys.modules["StandinBench"] = _types.SimpleNamespace(join=os.path.join, basename=os.path.basename)
+        self.addCleanup(sys.modules.pop, "StandinBench", None)
         out = self.steps([
             {"let": {"w": "=a.get('width', 200)", "name": "=a.name or 'Thing'"}},
             {"let": {"lo, hi": "=[w / 2, w * 2]"}},
             {"let": {"o": "=build('box', size=hi)"}},
-            {"make": "os.path.join", "call": ["=name", "x"], "as": "path"},
-            {"make": "os.path.basename", "headless": True, "call": ["=path"], "as": "wrapped"},
+            {"make": "StandinBench.join", "call": ["=name", "x"], "as": "path"},
+            {"make": "StandinBench.basename", "headless": True, "call": ["=path"], "as": "wrapped"},
             {"make": "=double", "call": ["=lo"], "as": "twice"},
             {"add": "X::Thing", "name": "Extra", "as": "extra"},
             {"set": {"o.Label": "=name", "o.Placement.Base": "=lo", "extra.Size": "=o.Size + 1"}},

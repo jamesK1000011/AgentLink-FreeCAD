@@ -323,9 +323,6 @@ BEFORE = json.loads(r'''
     },
     "branch": {
      "type": "string"
-    },
-    "confirm": {
-     "type": "string"
     }
    },
    "required": [],

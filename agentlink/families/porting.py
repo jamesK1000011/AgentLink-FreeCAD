@@ -99,7 +99,7 @@ def tools(session):
         "cookbook_of": _refusing(lambda name: cookbook.show(name, names())),
         "import_cookbook": _refusing(importing),
         "export_cookbook": _refusing(export),
-        "approve_cookbook": _refusing(lambda name, confirm, sha=None: cookbook.approve(name, confirm, sha, names())),
+        "approve_cookbook": _refusing(lambda name, sha=None: cookbook.approve(name, sha, names())),
         "unapprove_cookbook": _refusing(lambda name: cookbook.unapprove(name)),
         "run_entry": _refusing(run_entry),
     }

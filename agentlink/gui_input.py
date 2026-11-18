@@ -469,6 +469,58 @@ def _has_class(w, name):
     return w is not None and any(c == name or c.endswith("::" + name) for c in _classes(w))
 
 
+# ---- what no step reaches (red team, 2026-11-18) ---------------------------------------
+# FreeCAD's Python console and macro editor run the text typed in them as
+# code; the dialogs below change what code FreeCAD runs (macros, settings,
+# add-ons); the person's OK dialog (agentlink/person_ok.py) is the person's
+# alone. A step's event to any of them, or to a widget inside one, is
+# refused before it is sent.
+CODE_CLASSES = ("PythonConsole", "PythonEditor", "PythonEditorView", "EditorView", "DlgMacroExecuteImp", "DlgMacroRecordImp",
+                "DlgParameterImp", "DlgPreferencesImp", "DlgCustomizeImp", "AddonManager", "AddonManagerDialog")
+CODE_NAMES = ("Python console", "AgentLinkPersonOK")
+
+
+def forbidden_widget(w, most=64):
+    """Why an input step may not reach w (w or a widget that holds it), or None."""
+    from . import person_ok
+
+    seen = 0
+    while w is not None and seen < most:
+        try:
+            name = w.objectName() if hasattr(w, "objectName") else ""
+        except Exception:
+            name = ""
+        if name == person_ok.OBJECT_NAME:
+            return "the person's OK dialog: only the person presses it"
+        if name in CODE_NAMES:
+            return f"{name}: what is typed there runs as code"
+        for c in _classes(w):
+            short = c.split("::")[-1]
+            if short in CODE_CLASSES:
+                return f"{short}: it runs code or changes what code FreeCAD runs"
+        try:
+            up = getattr(w, "parentWidget", None) or getattr(w, "parent", None)
+            w = up() if callable(up) else up
+        except Exception:
+            w = None
+        seen += 1
+    return None
+
+
+def refused_command(name):
+    """Why the command of a menu item, tool button or shortcut is not run
+    from a step (the same list as cmd_run's), or None."""
+    if not name:
+        return None
+    try:
+        from .families.app import refused
+    except Exception:  # noqa: BLE001 — no FreeCAD (tests): the list's patterns
+        import re as _re
+
+        return "it runs a macro or opens a dialog of the person's" if _re.match(r"^(Std_Dlg|Std_Macro|Std_RecentMacros|Std_AddonMgr|Std_Quit)", name) else None
+    return refused(name)
+
+
 def menu_items(menu, most=30):
     """The texts of a menu's visible items, separators left out."""
     out = []
@@ -764,7 +816,31 @@ class Run:
         app = self.app()
         return app.activePopupWidget() or app.activeModalWidget()
 
+    def _guard(self, w, ev):
+        """Refuse an event to a widget that no step reaches, or one that
+        would run a refused command (a menu item, a tool button)."""
+        why = forbidden_widget(w)
+        cmd = None
+        if why is None:
+            try:
+                if _has_class(w, "QMenu"):
+                    # A click picks the item under it; a key (Return) the active one.
+                    Qt = self.qt.QtCore.Qt
+                    picks = tuple(getattr(Qt, k, None) for k in ("Key_Return", "Key_Enter", "Key_Space"))
+                    act = w.actionAt(ev.pos()) if hasattr(ev, "pos") else w.activeAction() if hasattr(ev, "key") and ev.key() in picks else None
+                    cmd = act.objectName() if act is not None else None
+                elif _has_class(w, "QToolButton") and w.defaultAction() is not None:
+                    cmd = w.defaultAction().objectName()
+            except Exception:  # noqa: BLE001
+                cmd = None
+            r = refused_command(cmd)
+            if r:
+                why = f"{cmd}: {r}"
+        if why:
+            raise ToolError("refused", f"gui_input does not send input there — {why}. This step was not run.")
+
     def _send(self, w, ev):
+        self._guard(w, ev)
         fr = self.frames[-1] if self.frames else None
         if fr is not None:
             fr["sending"] += 1
@@ -1854,6 +1930,9 @@ class Run:
         if len(shown) > 1:
             raise ToolError("invalid_state", f"shortcut: {text} belongs to more than one command ({', '.join(sorted(shown))}): Qt runs none of them. Use cmd_run.")
         name, (a, _s) = next(iter(shown.items()))
+        why = refused_command(name)
+        if why:
+            raise ToolError("refused", f"shortcut: {text} runs {name} — {why}. This step was not run.")
         out["hit"] = {"shortcut": text, "command": name, "text": (a.text() or "").replace("&", "")[:60]}
         fr = self.frames[-1] if self.frames else None
         if fr is not None:

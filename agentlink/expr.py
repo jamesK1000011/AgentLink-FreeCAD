@@ -48,12 +48,31 @@ class ExprError(ValueError):
     """An expression the evaluator does not read (found when the entry is checked)."""
 
 
+# Red team, 2026-11-18: what no expression reaches, even through a string
+# (get(x, "__class__"), maker("os.system"), "$o.__dict__", {"do": [o,
+# "doCommand", …]}): private names, the methods that run Python text, and
+# makers outside FreeCAD's own workbench modules.
+NEVER_CALLED = {"doCommand", "doCommandGui", "doCommandEval", "doCommandSkip", "runScript", "exec", "eval", "system", "popen",
+                "spawn", "execfile", "loadMacro", "runMacro", "runCommandByName"}
+MAKER_BLOCKED = {"FreeCADGui", "Gui", "agentlink", "PySide", "PySide2", "PySide6", "shiboken2", "shiboken6", "pip", "setuptools",
+                 "pkg_resources", "IPython", "__main__", "builtins"}
+
+
+def safe_name(name, what="name"):
+    """name, or ExprError when it is private (_ in front) or runs code."""
+    if not isinstance(name, str) or name.startswith("_") or name in NEVER_CALLED:
+        raise ExprError(f"{what} {str(name)[:40]!r}: not reached from tool data (private, or it runs code)")
+    return name
+
+
 def _has(o, name):
     return name in o if isinstance(o, dict) else hasattr(o, name)
 
 
 def _get(o, name, default=None):
-    return o.get(name, default) if isinstance(o, dict) else getattr(o, name, default)
+    if isinstance(o, dict):
+        return o.get(name, default)
+    return getattr(o, safe_name(name, "attribute"), default)
 
 
 def _tally(xs):
@@ -72,8 +91,14 @@ def _maker(dotted):
     """A module's function by its dotted name ("Arch.makeFence"), or None
     when this FreeCAD has no such module or function."""
     import importlib
+    import sys
 
-    mod, _, fn = dotted.rpartition(".")
+    mod, _, fn = str(dotted).rpartition(".")
+    parts = mod.split(".") if mod else []
+    std = set(getattr(sys, "stdlib_module_names", ())) | set(sys.builtin_module_names)
+    if not parts or parts[0] in MAKER_BLOCKED or parts[0] in std or any(p.startswith("_") for p in parts):
+        raise ExprError(f"maker {str(dotted)[:60]!r}: a maker is a function of a FreeCAD workbench module (Arch.makeWall), never of the standard library, the window or Agent Link")
+    safe_name(fn, "maker")
     try:
         return getattr(importlib.import_module(mod), fn, None)
     except ImportError:
@@ -243,7 +268,7 @@ def _ev(n, env, h):
             x = _ev(f.value, env, h)
             if GUARD in env:
                 env[GUARD](x, f.attr)  # a dry reading (agentlink/needs.py): which methods it takes on which values
-            fn = getattr(x, f.attr)  # a value's own method (never a dict's item)
+            fn = getattr(x, safe_name(f.attr, "method"))  # a value's own method (never a dict's item)
         return fn(*[_ev(x, env, h) for x in n.args], **{k.arg: _ev(k.value, env, h) for k in n.keywords})
     if t is ast.Lambda:
         names = [x.arg for x in n.args.args]
@@ -282,6 +307,7 @@ def _plain(path, env):
         raise NameError(f"{parts[0]}: not a value in this run")
     x = env[parts[0]]
     for k in parts[1:]:
+        safe_name(k.rstrip("?"), "attribute")
         if k.endswith("?"):
             x = getattr(x, k[:-1], None)
         else:

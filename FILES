@@ -163,6 +163,7 @@ agentlink/overlay.py
 agentlink/panel.py
 agentlink/panel_tabs.py
 agentlink/paths.py
+agentlink/person_ok.py
 agentlink/pointfiles.py
 agentlink/porting.py
 agentlink/protocol.py
@@ -317,6 +318,7 @@ docs/hardening/workshop-rest-model.json
 docs/hooks.md
 docs/packaging.md
 docs/records.md
+docs/security/red-team-2026-11-18.md
 package.xml
 pyproject.toml
 scripts/hardening_status.py
@@ -535,6 +537,7 @@ tests/test_pref_import.py
 tests/test_protocol.py
 tests/test_quiet_reads.py
 tests/test_quit_guard.py
+tests/test_red_team.py
 tests/test_release.py
 tests/test_release_tools.py
 tests/test_render_sizing.py
