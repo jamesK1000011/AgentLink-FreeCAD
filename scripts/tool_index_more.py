@@ -17,6 +17,7 @@ out when it is not in that list.
 SOURCE = "FreeCAD 1.1.0 source; Agent Link"
 DATE = "2026-11-16"
 DATES = {t: "2026-11-18" for t in ("port_scaffold", "cookbook_list", "cookbook_show", "cookbook_import", "cookbook_export", "cookbook_approve", "cookbook_unapprove", "cookbook_run", "cookbook_probe")}
+DATES.update({t: "2026-11-18" for t in ("approve_file", "approve_code")})
 
 # Tool or prefix → workbench, where the echo's WORKBENCH table says nothing
 # (the echo brings no bench up for these; the index still files them).
@@ -155,6 +156,8 @@ TOOLS = {
     "compound_explode": (["Part_ExplodeCompound"], "split pieces separate"),
     "compound_filter": (["Part_CompoundFilter"], "pieces pick keep"),
     "crash_collect": ([], "crash recovery logs report"),
+    "approve_file": ([], "approval permission person save over recovered file dialog consent"),
+    "approve_code": ([], "approval permission person install addon macro cookbook extension consent trust"),
     "dialog_answer": ([], "modal popup button message box"),
     "doc_close": (["Std_CloseActiveWindow"], ""),
     "doc_graph": (["Std_DependencyGraph"], "dependency dependencies tree parents"),

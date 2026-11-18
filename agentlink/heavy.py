@@ -4,10 +4,11 @@
 # facets, cloud points). The times are logged data only: no estimate stops
 # or delays a call (no prejudging, 18 Nov: an export estimated at 2 min took
 # 0.48 s, a loft estimated at 3 min took 6.4 s). Every call starts at once;
-# one past about 60 s moves to the background (agentlink/sup_jobs.py). Over
-# the memory ceiling (half this Mac's
-# memory unless the person set Mod/AgentLink MemoryCeilingGB), it is refused
-# before it starts. Holding back for heat, memory pressure or the person
+# one past about 60 s moves to the background (agentlink/sup_jobs.py). No
+# memory estimate refuses a job before it starts (the owner, 18 Nov): real
+# memory pressure is watched while it runs, and at CRITICAL that job alone
+# is stopped (agentlink/memguard.py, the critical-pressure guard, Mod/AgentLink
+# CriticalPressureGuard). Holding back for heat, memory pressure or the person
 # working in the window is the supervisor's (supervise.py), which sees every
 # call whichever FreeCAD runs it.
 
@@ -416,6 +417,22 @@ def sized_size(session, tool, args):
         return None
 
 
+def stopped_copy(session, tool_name):
+    """A copy of the document as it is after a memory stop (the stopped
+    change was undone), when no checkpoint was made before: its path, or
+    None."""
+    try:
+        d = session.doc
+        p = keep.path("stopped", f"{d.Label}-{keep.stamp()}.FCStd")
+        import os
+
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        d.saveCopy(p)
+        return p
+    except Exception:
+        return None
+
+
 def _fmt(sec):
     return f"{int(round(sec))} s" if sec < 90 else f"{sec / 60:.0f} min"
 
@@ -426,6 +443,17 @@ class Gate:
         self.offers = {}
         self.start = None
         self.sized = None
+        self.checkpoint = None
+        self.watched = None
+        # The person's guard setting, kept where the supervisor (no FreeCAD)
+        # reads it (agentlink/memguard.py).
+        if self.live():
+            try:
+                from . import memguard
+
+                keep._save(keep.path("settings.json"), {**(keep._load(keep.path("settings.json"), {}) or {}), "criticalPressureGuard": memguard.on()})
+            except Exception:
+                pass
 
     @staticmethod
     def live():
@@ -456,28 +484,36 @@ class Gate:
         if not self.live():
             self.start = (time.time(), size_of(self.s), _maxrss_mb())
             return
-        q = keep.queue_state()
         size = size_of(self.s)
-        m = keep.preset(self._overrides())
-        ceiling = float(m.get("memoryCeilingGB") or 0)
-        mem = memory_estimate(q, tool.name, size)
-        if ceiling and mem and mem / 1024.0 > ceiling:
-            raise ToolError("invalid_state", f"{tool.name} at this size would need about {mem / 1024.0:.1f} GB (from its past runs here), over this Mac's {ceiling:g} GB ceiling for one job: a coarser pass (fewer elements or points) first. The person can raise the ceiling (Mod/AgentLink MemoryCeilingGB).")
         now = time.time()
-        # No estimate refuses or holds the call (no prejudging): it runs,
-        # and its time is logged after it (after()).
+        # No estimate refuses or holds the call (no prejudging), memory
+        # neither: it runs, real memory pressure is watched while it runs
+        # (agentlink/memguard.py), and its time is logged after it (after()).
         # A saved copy before a heavy change (an add-on's "checkpoints"
-        # service): a crash or a hang in it loses nothing done before.
+        # service): a crash, a hang or a memory stop in it loses nothing.
+        self.checkpoint = None
         if tool.changes:
             from . import hooks
 
             cps = hooks.service("checkpoints")
             if cps is not None:
                 try:
-                    cps.take(self.s, f"before {tool.name}", auto=True)
+                    got = cps.take(self.s, f"before {tool.name}", auto=True)
+                    e = got[0] if isinstance(got, tuple) else got
+                    self.checkpoint = e.get("id") if isinstance(e, dict) else None
                 except Exception:
                     pass
         self.start = (now, size, _maxrss_mb())
+        self.watched = None
+        if not getattr(self, "as_job", False):
+            # A job (jobs.start) watches its own thread.
+            try:
+                from . import memguard
+
+                if memguard.on():
+                    self.watched = (memguard.started(tool.name, now=now), now)
+            except Exception:
+                pass
 
     # ---- tools heavy only at some sizes (keep.SIZED): a Part boolean of faceted solids ----
 
@@ -542,8 +578,12 @@ class Gate:
                 pass
 
     def after(self, tool, args, ok):
+        stop = self._memory_stop(tool)
         if getattr(self, "sized", None) is not None:
             self._sized_after(tool, ok)
+        if stop is not None:
+            self.start = None
+            raise ToolError("stopped", stop)
         if not keep.is_heavy(tool.name) or self.start is None:
             return
         t0, size, (a0, b0) = self.start
@@ -576,12 +616,32 @@ class Gate:
         except Exception:
             pass
 
+    def _memory_stop(self, tool):
+        """The words when the critical-pressure guard stopped this call
+        (agentlink/memguard.py), else None. Never raises."""
+        got, self.watched = getattr(self, "watched", None), None
+        if got is None:
+            return None
+        try:
+            from . import memguard
+
+            memguard.finished(got[0])
+            mark = memguard.take_mark(tool.name, got[1])
+            if mark is None:
+                return None
+            copy = None
+            if tool.changes and not self.checkpoint:
+                copy = stopped_copy(self.s, tool.name)
+            return memguard.words(tool.name, mark, self.checkpoint, copy, bool(tool.changes))
+        except Exception:
+            return None
+
     @staticmethod
     def _overrides():
         try:
             import FreeCAD
 
             g = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/AgentLink")
-            return {"heavySlots": g.GetInt("HeavySlots", 0), "memoryCeilingGB": g.GetFloat("MemoryCeilingGB", 0.0)}
+            return {"heavySlots": g.GetInt("HeavySlots", 0), "criticalPressureGuard": g.GetBool("CriticalPressureGuard", True)}
         except Exception:
             return {}

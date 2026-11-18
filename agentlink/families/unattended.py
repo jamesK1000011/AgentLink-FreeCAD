@@ -164,16 +164,20 @@ def tools(s):
         q["notice"] = None
         keep.save_queue(q)
 
-    def person_ok_for(action, name, url, why):
-        """The person's press in the window for one install, update or
-        removal (agentlink/person_ok.py): {"ok": True} once pressed, else
-        the pending answer. A typed confirm is not taken."""
-        from .. import person_ok
+    def file_dialog_approval(d, btn):
+        """None for a press that needs no approval; else {"ok": True} once
+        the person approved this press (approve_file), or the pending answer
+        with its arguments (agentlink/approvals.py)."""
+        got = gl("file_dialog_press")(d, btn)
+        if got is None:
+            return None
+        from .. import approvals
 
-        lines = [f"Action: {action}", f"Add-on: {name}", f"From: {url or 'the catalog or where it was installed from'}", f"Why it needs you: {why}."]
+        title, text, button = got
         try:
-            return person_ok.ask("addon-" + action, name, f"{action.capitalize()} the add-on {name}?", lines, url or None)
-        except person_ok.Refused as e:
+            return approvals.ask("dialog", title or "a file dialog", f"Press {button} on the FreeCAD dialog \"{title}\"", [text],
+                                 approvals.identity("dialog", title, text, button), shown={"document": title, "file": text, "button": button})
+        except approvals.Refused as e:
             raise ToolError(e.code, e.message)
 
     helpers = {
@@ -181,11 +185,11 @@ def tools(s):
         "fill": lambda d, text, item: gl("fill")(d, text, item), "back_out": lambda: gl("BACK_OUT"), "log_watchdog": lambda row: keep.log_watchdog(row),
         "crash_kept": crash_kept,
         "close_press_refusal": lambda d, btn: gl("unsafe_close_press")(d, btn, gl("calls_in_hand")()),
+        "file_dialog_approval": file_dialog_approval,
         "current": lambda: s.doc, "docs": lambda: list(FreeCAD.listDocuments().values()), "open_row": lambda d: {"name": d.Name, "label": d.Label, "file": d.FileName or None, **_modified(d)},
         "doc_by": doc_by, "doc_names": doc_names, "moved_to": moved_to, "gui_up": lambda: bool(getattr(FreeCAD, "GuiUp", False)), "bring_front": _bring_front,
         "bodies": lambda: s.bodies(),
         "queue_state": lambda: keep.queue_state(), "lifted": lifted, "preset": lambda: keep.preset(),
-        "person_ok": person_ok_for,
     }
 
     # ---- the Addon Manager, headless (I) ---------------------------------------------------
@@ -346,11 +350,97 @@ def tools(s):
         if kept:
             shutil.move(kept, where)
 
+    # ---- the person's approval of an install, update or removal (agentlink/approvals.py) ----
+
+    def _git_out(args, timeout=20):
+        import subprocess
+
+        try:
+            r = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return r.stdout.strip() if r.returncode == 0 else None
+
+    def _package_facts(folder):
+        """(version, author) from the add-on's package.xml; None for each
+        that is not there."""
+        try:
+            with open(os.path.join(folder, "package.xml"), encoding="utf-8", errors="replace") as f:
+                x = f.read(200000)
+        except OSError:
+            return None, None
+        v = re.search(r"<version>([^<]+)</version>", x)
+        who = re.findall(r"<(?:maintainer|author)\b[^>]*>([^<]+)</(?:maintainer|author)>", x)
+        return (" ".join(v.group(1).split()) if v else None), (", ".join(dict.fromkeys(" ".join(w.split()) for w in who))[:120] or None)
+
+    def _owner(url):
+        m = re.search(r"[:/]([^/:]+)/[^/]+?(?:\.git)?/?$", str(url or ""))
+        return m.group(1) if m else None
+
+    def addon_approval(action, name, where, url, branch, ad):
+        """The person's approval of one install, update or removal: the
+        answer to give back (pending, with the approve_code arguments), or
+        {"ok": True, "commit", "fingerprint"} once approved. The version is
+        a commit (git, catalog) or a fingerprint of the folder's files (a
+        folder, a removal): a new version needs a new approval."""
+        from .. import approvals, ext
+
+        commit = None
+        if action == "remove":
+            fp = approvals.folder_fingerprint(where) or approvals.identity("gone", where)
+            ver, author = _package_facts(where)
+            src = (keep._load(keep.path("addon-sources.json"), {}) or {}).get(name) or {}
+            shown = {"source": src.get("url") or f"the Mod folder ({name})", "version": f"{ver or 'no version'}; files {fp}", "author": author or "not given"}
+            title, why = f"Remove the add-on {name}", "It takes the add-on away."
+        else:
+            folder = os.path.expanduser(url) if url else None
+            br = branch or getattr(ad, "branch", None) or ""
+            if folder and os.path.isdir(folder):
+                fp = approvals.folder_fingerprint(folder)
+                ver, author = _package_facts(folder)
+                shown = {"source": os.path.abspath(folder), "version": f"{ver or 'no version'}; files {fp}", "author": author or "not given"}
+            else:
+                src = url or getattr(ad, "url", None)
+                git = ext._git()
+                got = _git_out([git, "ls-remote", src, br or "HEAD"]) if (git and src) else None
+                commit = (got or "").split()[0] if got else None
+                if not commit:
+                    raise ToolError("unavailable", f"The commit of {name} at {src or 'the catalog'} ({br or 'its default branch'}) could not be read (git ls-remote). "
+                                                   "The approval names the exact version, so nothing was changed. Check the network and the address, then call again.")
+                fp = "commit:" + commit
+                ver, _a = _package_facts(where) if action == "update" else (None, None)
+                shown = {"source": src, "version": f"commit {commit}" + (f" (branch {br})" if br else ""), "author": _owner(src) or "not given"}
+            title, why = f"{action.capitalize()} the add-on {name}", "FreeCAD runs an add-on as code, with the full reach of this computer."
+        try:
+            got = approvals.ask("addon-" + action, name, title, [f"Action: {action}", f"Add-on: {name}", *(f"{k}: {v}" for k, v in shown.items()), why], fp, shown=shown)
+        except approvals.Refused as e:
+            raise ToolError(e.code, e.message)
+        if got.get("ok"):
+            return {"ok": True, "commit": commit, "fingerprint": fp}
+        return got
+
+    def version_moved(where, appr):
+        """After an install from git: the words when the installed commit is
+        not the approved one (a new version came between), else None. An
+        install with no .git (a zip) is not checked here."""
+        commit = (appr or {}).get("commit")
+        if not commit or not os.path.isdir(os.path.join(where, ".git")):
+            return None
+        from .. import ext
+
+        git = ext._git()
+        head = _git_out([git, "-C", where, "rev-parse", "HEAD"]) if git else None
+        if not head or head == commit:
+            return None
+        return (f"{os.path.basename(where)} came in at commit {head[:12]}, not the approved {commit[:12]}: a new version came between the approval and the install. "
+                "A new version needs a new approval. It was taken out again: call addon again.")
+
     helpers.update({
         "manager": _am, "in_mod": _installed, "catalog": catalog, "well_named": well_named, "OURS": OURS,
         "join": os.path.join, "isdir": os.path.isdir, "expanduser": os.path.expanduser,
         "addon_at": addon_at, "uninstalled": uninstalled, "record": lambda before, after, why: keep.record_versions(before, after, why),
         "kept_file": lambda name: keep.path(name), "loaded": lambda file: keep._load(file, {}) or {}, "saved": lambda file, data: keep._save(file, data),
         "set_aside": set_aside, "installer_run": installer_run, "put_back": put_back, "smoke_here": _smoke_here,
+        "addon_approval": addon_approval, "version_moved": version_moved,
     })
     return runners.tools(GROUP, s, helpers)

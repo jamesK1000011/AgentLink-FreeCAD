@@ -4,8 +4,10 @@ the A/B/C test won; classic stays one switch away).
 
 ToolListMode (preference, Mod/AgentLink, text) or AGENTLINK_TOOLLIST:
     classic            the lean list, as before.
-    static (default)   only BASE is listed: session_state, batch, guide_read
-                       and tool_find. Every other tool is found with
+    static (default)   only BASE is listed: session_state, batch, guide_read,
+                       tool_find, approve_file and approve_code (the person sets
+                       the two approval tools in the client's permissions, so
+                       the client must list them). Every other tool is found with
                        tool_find and called by name (in a batch where the
                        client sends only listed tools). The list never
                        changes by itself: no tools/list_changed, so every
@@ -23,7 +25,7 @@ runs takes effect when the client next lists the tools.
 import json
 import os
 
-BASE = ("session_state", "batch", "guide_read", "tool_find")
+BASE = ("session_state", "batch", "guide_read", "tool_find", "approve_file", "approve_code")
 PREFS = "User parameter:BaseApp/Preferences/Mod/AgentLink"
 _STE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "ste.json")
 _cache = {}

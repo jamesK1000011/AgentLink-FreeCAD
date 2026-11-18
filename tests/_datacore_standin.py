@@ -381,7 +381,7 @@ def install():
     keep.log_watchdog = lambda row: log("log_watchdog", row)
     keep.queue_state = lambda: (log("queue_state"), dict(flag("queue", {})))[1]
     keep.save_queue = lambda q: log("save_queue", q)
-    keep.preset = lambda: {"heavySlots": 2, "memoryCeilingGB": 12, "fan": "quiet", "other": 1}
+    keep.preset = lambda: {"heavySlots": 2, "criticalPressureGuard": True, "fan": "quiet", "other": 1}
     keep.path = lambda *parts: (log("keep.path", *parts), "/".join(("<keep>",) + parts))[1]
     keep.stamp = lambda: "20261116-120000"
 

@@ -433,10 +433,12 @@ def read_machine():
 
 def preset(overrides=None):
     """The kept preset (read once), with the person's own settings on top:
-    { heavySlots, memoryCeilingGB } from Mod/AgentLink."""
+    { heavySlots, criticalPressureGuard } from Mod/AgentLink."""
     m = machine() or read_machine()
+    m.pop("memoryCeilingGB", None)  # gone (18 Nov): the critical-pressure guard watches real memory instead
+    m.setdefault("criticalPressureGuard", True)
     for k, v in (overrides or {}).items():
-        if v:
+        if v or v is False:
             m[k] = v
     return m
 
@@ -478,7 +480,7 @@ def mac_pressure():
 
 def machine_from(sysctl):
     """The preset from sysctl's answers: { chip, cores, perfCores, memoryGB,
-    model, fan, heavySlots, memoryCeilingGB }."""
+    model, fan, heavySlots, criticalPressureGuard }."""
     def num(k, d=0):
         try:
             return int(str(sysctl.get(k, d)).strip())
@@ -498,7 +500,7 @@ def machine_from(sysctl):
         "model": model,
         "fan": fan,
         "heavySlots": slots,
-        "memoryCeilingGB": round(0.5 * mem / 1024 ** 3, 1) if mem else None,
+        "criticalPressureGuard": True,
     }
 
 

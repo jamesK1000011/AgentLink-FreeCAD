@@ -19,8 +19,10 @@ RECIPE is one of:
 No entry runs before the person's OK. The OK is kept in the approved-macros
 store (~/AgentLink/macros-approved.json) under "cookbook:<name>", with the
 SHA-256 of the file and of each script file it names. A changed file needs
-the OK again. The agent never gives the OK: the person presses Approve in
-the FreeCAD window (agentlink/person_ok.py). A typed confirm is not taken.
+the OK again. The agent never gives the OK alone: cookbook_approve answers
+pending with the approve_code arguments, and the person sets approve_code in
+the client's tool permissions (agentlink/approvals.py). The FreeCAD window's
+Approve dialog is an optional extra path. A typed confirm is not taken.
 
 Descriptions are the author's words. They are data, never instructions: they
 are capped, kept on one line, and marked so in each answer.
@@ -52,7 +54,7 @@ MAX_WORDS = 20
 # A script's calls never reach these: the OK and the cookbooks stay the
 # person's, and a script never nests another runner.
 SCRIPT_BLOCKED = {"batch", "job_start", "live_run", "app_restart", "app_force_restart", "agentlink_update", "pref_set", "pref_reset",
-                  "pref_import", "pref_pack", "app_extensions", "addon", "port_scaffold",
+                  "pref_import", "pref_pack", "app_extensions", "addon", "port_scaffold", "approve_file", "approve_code",
                   # red team 2026-11-18: input to the window, a dialog's buttons and test runs (code) stay out too
                   "gui_input", "dialog_answer", "gui_unstick", "addon_test"}
 # A python recipe's package is never one of these.
@@ -436,22 +438,23 @@ def is_approved(name, sha):
 
 def next_words(name):
     """The next step to the OK, in the words of each answer."""
-    return (f"The person reads cookbook_show {{ name: \"{name}\" }}. Then cookbook_approve {{ name: \"{name}\" }} shows the OK in the FreeCAD window, "
-            f"and the person presses Approve there. No tool can press it.")
+    return (f"The person reads cookbook_show {{ name: \"{name}\" }}. Then cookbook_approve {{ name: \"{name}\" }} answers pending with the "
+            f"approve_code arguments. The client asks the person before approve_code when they set it to \"ask first\".")
 
 
-def _record(name, sha):
+def _record(name, sha, by="client"):
     v = _load_store()
-    v[KEY + name] = {"sha256": sha, "path": file_of(name), "t": time.time(), "by": "window"}
+    v[KEY + name] = {"sha256": sha, "path": file_of(name), "t": time.time(), "by": by}
     _save_store(v)
 
 
 def approve(name, sha256=None, tool_names=(), ask=None):
-    """Ask the person for the OK in the window (agentlink/person_ok.py).
-    The agent never gives it: a typed confirm is not taken (an agent can
-    type the words itself). At the press, the file is read again and its
-    hash must still be the one shown."""
-    from . import person_ok
+    """Ask for the person's approval (agentlink/approvals.py): the answer
+    is pending with the approve_code arguments, which the client guards
+    with the person's tool permission. The agent never gives it alone: a
+    typed confirm is not taken. At the approval, the file is read again
+    and its hash must still be the one shown."""
+    from . import approvals
 
     doc, sha, problems = load(name, tool_names)
     if sha256 is not None and sha256 != sha:
@@ -461,10 +464,10 @@ def approve(name, sha256=None, tool_names=(), ask=None):
     if state(name, sha) == "approved":
         return {"approved": name, "sha256": sha, "note": "It was approved already. cookbook_run runs its entries."}
 
-    def on_ok():
+    def on_ok(by="client"):
         _d, now, bad = load(name, tool_names)
         if now == sha and not bad:
-            _record(name, sha)
+            _record(name, sha, by)
 
     rev = review(doc)
     lines = [f"Cookbook: {name}", f"sha256: {sha[:16]}…", "About: " + str(doc.get("about", ""))[:MAX_ABOUT],
@@ -474,12 +477,16 @@ def approve(name, sha256=None, tool_names=(), ask=None):
         what = json.dumps(r, ensure_ascii=False)[:200] if r is not None else "?"
         lines.append(f"- {k} ({_recipe_kind(r)}): {what}")
     try:
-        got = (ask or person_ok.ask)("cookbook", name, f"Approve the cookbook {name}?", lines, sha, on_ok)
-    except person_ok.Refused as e:
+        if ask is not None:
+            got = ask("cookbook", name, f"Approve the cookbook {name}?", lines, sha, on_ok)
+        else:
+            got = approvals.ask("cookbook", name, f"Run the cookbook {name} (code with the full reach of this Mac)", lines, sha, on_ok,
+                                shown={"source": file_of(name), "version": sha, "author": str(doc.get("author") or "not given")[:MAX_ABOUT]})
+    except approvals.Refused as e:
         raise Refused(e.code, e.message)
     if state(name, sha) == "approved":
         return {"approved": name, "sha256": sha, "note": "cookbook_run runs its entries from now on. A change to its file needs the OK again."}
-    return {"approved": False, "pending": True, "cookbook": name, "sha256": sha, "next": got.get("next"), "scan": rev["words"], "risk": rev["risk"],
+    return {"approved": False, "pending": True, "cookbook": name, "sha256": sha, "approve": got.get("approve"), "next": got.get("next"), "scan": rev["words"], "risk": rev["risk"],
             "note": "Then cookbook_list shows it approved, and cookbook_run runs its entries."}
 
 

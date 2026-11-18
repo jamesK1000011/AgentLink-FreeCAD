@@ -561,7 +561,18 @@ class Server:
             elif method == "resources/read" and self.resources:
                 result = {"contents": [self.resources.read((msg.get("params") or {}).get("uri", ""))]}
             elif method == "tools/call":
-                result = self.call(msg.get("params") or {})
+                params = msg.get("params") or {}
+                from . import approvals
+
+                if params.get("name") in approvals.CLIENT_ONLY:
+                    # approve_file / approve_code: this call came from the
+                    # client, which asked the person when they set "ask
+                    # first". Nested calls (batch, jobs, cookbooks, lessons)
+                    # go through call() only and are refused there.
+                    with approvals.client_call(params.get("name"), params.get("arguments")):
+                        result = self.call(params)
+                else:
+                    result = self.call(params)
             elif mid is None:
                 return None  # notifications/initialized and the like
             else:
