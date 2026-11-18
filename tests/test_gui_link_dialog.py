@@ -71,6 +71,24 @@ class GuiInputInFront(unittest.TestCase):
         self.assertTrue(gui_link._dialog_call(call("batch", {"calls": [{"tool": "gui_input"}, {"tool": "dialog_answer"}]})))
         self.assertFalse(gui_link._dialog_call(call("batch", {"calls": [{"tool": "gui_input"}, {"tool": "doc_new"}]})))
 
+    def test_batch_with_its_calls_as_a_string_of_json(self):
+        """Live 56: a 4-tool client reaches gui_input only through batch; its
+        batch (calls sent as a string of JSON) was refused behind the dialog
+        that gui_input { as: person } had opened."""
+        steps = {"steps": [{"type": "5 mm"}], "as": "person"}
+        self.assertTrue(gui_link._dialog_call(call("batch", {"calls": json.dumps([{"tool": "gui_input", "arguments": steps}])})))
+        self.assertTrue(gui_link._dialog_call(call("batch", {"calls": [json.dumps({"tool": "gui_input", "arguments": steps})]})))
+        self.assertTrue(gui_link._dialog_call(call("batch", json.dumps({"calls": [{"tool": "gui_input"}]}))))
+        # A picture of the window beside it; never on its own, never with another tool.
+        self.assertTrue(gui_link._dialog_call(call("batch", {"calls": [{"tool": "gui_input"}, {"tool": "window_snapshot"}]})))
+        self.assertFalse(gui_link._dialog_call(call("batch", {"calls": [{"tool": "window_snapshot"}]})))
+        self.assertFalse(gui_link._dialog_call(call("batch", {"calls": json.dumps([{"tool": "gui_input"}, {"tool": "doc_new"}])})))
+        self.assertFalse(gui_link._dialog_call(call("batch", {"calls": "not json"})))
+        self.assertFalse(gui_link._dialog_call(call("batch", {"file": "x.json"})))
+        from agentlink import supervise
+
+        self.assertTrue(supervise._answers_dialog({"tool": "batch", "args": {"calls": json.dumps([{"tool": "gui_input", "arguments": {}}])}}))
+
     def link(self):
         import io
 

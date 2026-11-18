@@ -73,6 +73,56 @@ class ToolError(Exception):
         self.message = message
 
 
+# What runs while a dialog or menu holds the window: the calls that act on
+# it (they take only targets inside it), and a picture of the window.
+FRONT_CALLS = ("dialog_answer", "gui_input", "gui_unstick")
+FRONT_READS = ("window_snapshot",)
+
+
+def _as_json(v):
+    """v, or the value of v when it came as a string of its JSON (some
+    clients send a large value so: batch's calls, a call, its arguments)."""
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except ValueError:
+            return None
+    return v
+
+
+def batch_tools(args):
+    """The tool names of a batch's calls, read as batch reads them (calls,
+    a call or the arguments as a string of JSON); None when they cannot be
+    read, or for a batch from a file."""
+    args = _as_json(args)
+    if not isinstance(args, dict) or args.get("file") is not None:
+        return None
+    calls = _as_json(args.get("calls"))
+    if isinstance(calls, dict):
+        calls = calls.get("calls")
+    if not isinstance(calls, list):
+        return None
+    out = []
+    for c in calls:
+        c = _as_json(c)
+        if not isinstance(c, dict) or not isinstance(c.get("tool"), str):
+            return None
+        out.append(c["tool"])
+    return out
+
+
+def front_call(name, args):
+    """True for a call that runs while a dialog or menu holds the window: a
+    FRONT_CALLS tool, or a batch of only those and FRONT_READS with at least
+    one FRONT_CALLS tool (a lean client reaches gui_input through batch)."""
+    if name in FRONT_CALLS:
+        return True
+    if name != "batch":
+        return False
+    tools = batch_tools(args)
+    return bool(tools) and all(t in FRONT_CALLS + FRONT_READS for t in tools) and any(t in FRONT_CALLS for t in tools)
+
+
 def bad(msg):
     """The usual refusal: invalid_input with msg."""
     return ToolError("invalid_input", msg)

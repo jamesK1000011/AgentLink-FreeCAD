@@ -444,6 +444,79 @@ class Delivery(unittest.TestCase):
             i = order.index(a_)
             self.assertEqual(order[i + 1], b_)
 
+    def arrow_button(self, mode=1, opens=True):
+        st = self.state
+
+        class Act:
+            def __init__(self, t):
+                self.t = t
+
+            def text(self):
+                return self.t
+
+            def isSeparator(self):
+                return False
+
+            def isVisible(self):
+                return True
+
+        class Menu(Widget):
+            def actions(self):
+                return [Act("Vertical Length Dimension"), Act("Horizontal Length Dimension")]
+
+            def popup(self, p):
+                self.at = (p.x(), p.y())
+                if opens:
+                    st["popup"] = self
+
+        menu = Menu("dims", 0, 0, 200, 60, cls="QMenu")
+        b = Widget("dim", 500, 60, 40, 30, parent=self.mw, cls="QToolButton")
+        b.popupMode = lambda: mode
+        b.menu = lambda: menu
+        b.defaultAction = lambda: None
+        b.text = lambda: "Dimension"
+        return b, menu
+
+    def test_click_on_a_split_buttons_arrow_opens_its_menu(self):
+        """Live 48: a press and release on the arrow part of TechDraw's
+        Dimension button opened no menu; the menu is opened (popup, no wait)
+        and the answer says so, so menu_item works after it."""
+        b, menu = self.arrow_button()
+        out = self.run.run(gi.parse_steps([{"click": {"widget": {"objectName": "dim"}, "at": [35, 15]}}]))
+        st = out["steps"][0]
+        self.assertEqual(st["hit"]["part"], "menu arrow")
+        self.assertTrue(st["hit"]["menu"].startswith("opened"))
+        self.assertEqual(st["menu"], ["Vertical Length Dimension", "Horizontal Length Dimension"])
+        self.assertEqual(menu.at, (500.0, 90.0))  # under the button
+        self.assertEqual(self.run.find_menu_item("Vertical Length")[2], "Vertical Length Dimension")
+
+    def test_click_on_a_split_buttons_main_part_opens_nothing(self):
+        b, menu = self.arrow_button()
+        out = self.run.run(gi.parse_steps([{"click": {"widget": {"objectName": "dim"}, "at": [10, 15]}}]))
+        self.assertNotIn("menu", out["steps"][0]["hit"])
+        self.assertIsNone(self.state["popup"])
+
+    def test_menu_that_does_not_come_up_is_said(self):
+        b, menu = self.arrow_button(mode=2, opens=False)
+        out = self.run.run(gi.parse_steps([{"click": {"widget": {"objectName": "dim"}, "at": [10, 15]}}]))
+        self.assertTrue(out["steps"][0]["hit"]["menu"].startswith("not opened"))
+
+    def test_window_point_on_the_dialog_goes_into_it(self):
+        """Live 55: a window point where the shot draws the dialog (over: 1)
+        is a point in the dialog, not the main window's widget under it."""
+        dlg = Widget("Insert Radius", 300, 300, 200, 100, cls="QDialog")
+        self.state["modal"] = dlg
+        self.state["app"].topLevelWidgets = lambda: [self.mw, dlg]
+        out = self.run.run(gi.parse_steps([{"click": {"window": [250, 280]}}]))
+        self.assertNotIn("error", out["steps"][0])
+        self.assertEqual(out["steps"][0]["hit"]["global"], [350, 330])
+        self.assertTrue(all(w == "Insert Radius" for w, _e in self.sent))
+        press = next(e for _w, e in self.sent if e.t == "MouseButtonPress")
+        self.assertEqual((press.lp.x(), press.lp.y()), (50.0, 30.0))
+        # Off the dialog: the main window's widget there, still refused.
+        out = self.run.run(gi.parse_steps([{"click": {"window": [10, 10]}}]))
+        self.assertIn("holds the window", out["steps"][0]["error"])
+
     def test_typing_into_the_dialog_in_front(self):
         dlg = Widget("Note", 300, 300, 200, 100, cls="QInputDialog")
         field = Widget("field", 310, 330, 180, 20, parent=dlg, cls="QLineEdit", focus=2)

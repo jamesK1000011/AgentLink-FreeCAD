@@ -489,10 +489,13 @@ def _answers_dialog(c):
     each such call was answered "waiting behind it" before it could run
     (GUI pass, FreeCAD's Preferences opened by a command). gui_input too:
     the window takes it only aimed inside the dialog."""
-    if c.get("tool") in ("dialog_answer", "gui_input", "gui_unstick"):
-        return True
-    calls = (c.get("args") or {}).get("calls") if c.get("tool") == "batch" else None
-    return bool(calls) and all(isinstance(x, dict) and x.get("tool") in ("dialog_answer", "gui_input", "gui_unstick") for x in calls)
+    try:
+        from .protocol import front_call
+    except ImportError:  # run apart from its package: the plain reading
+        front = ("dialog_answer", "gui_input", "gui_unstick")
+        calls = (c.get("args") or {}).get("calls") if c.get("tool") == "batch" and isinstance(c.get("args"), dict) else None
+        return c.get("tool") in front or (isinstance(calls, list) and bool(calls) and all(isinstance(x, dict) and x.get("tool") in front for x in calls))
+    return front_call(c.get("tool"), c.get("args"))
 
 
 class Window:
