@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 # PrintLoop install for the OrcaSlicer server (18 Nov 2026)
 
 ## Aim

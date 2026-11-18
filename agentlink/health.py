@@ -713,9 +713,17 @@ def _in_container(o, kinds=("Assembly::AssemblyObject",)):
 
 
 def _visible(o):
+    """Shown in the window, or, headless (no view), not hidden by its own
+    Visibility property: a fuse's hidden base was counted as a body there
+    (live 18 Nov, 90: "CubeOverhang interferes with Cube")."""
     try:
         v = o.ViewObject
-        return True if v is None else bool(v.Visibility)
+        if v is not None:
+            return bool(v.Visibility)
+    except Exception:
+        pass
+    try:
+        return bool(getattr(o, "Visibility", True))
     except Exception:
         return True
 

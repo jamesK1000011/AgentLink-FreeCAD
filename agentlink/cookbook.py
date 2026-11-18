@@ -103,7 +103,7 @@ def protected():
 
 def scans_folder():
     """The static scans of add-ons, kept by each folder's fingerprint (live
-    96: a scan on every cookbook_show took 49 s on Texturizer)."""
+    96: a scan on every cookbook_show took 49 s on a real add-on)."""
     return os.path.join(home(), "cookbook-scans")
 
 
@@ -279,7 +279,7 @@ def check(doc, tool_names=()):
             out.append("addon.package: the add-on's top package name (not the standard library, FreeCAD or Agent Link)")
             package = None
         if "workbench" in addon and not (isinstance(addon["workbench"], str) and COMMAND_RE.match(addon["workbench"])):
-            out.append("addon.workbench: the add-on's workbench class name (TexturizerWorkbench)")
+            out.append("addon.workbench: the add-on's workbench class name (for example MyAddonWorkbench)")
         for k in ("name", "credit", "licence", "license"):
             if k in addon:
                 out += _one_line(addon[k], 200, f"addon.{k}")
@@ -422,8 +422,8 @@ def state(name, sha):
 
 
 def canon(name):
-    """A cookbook name as written either way: "texturizer-v2" and
-    "Texturizer_V2" are texturizer_v2, the name port_scaffold gives."""
+    """A cookbook name as written either way: "my-addon-v2" and
+    "My_Addon_V2" are my_addon_v2, the name port_scaffold gives."""
     if not isinstance(name, str):
         return name
     t = re.sub(r"[-\s.]+", "_", name.strip()).lower()
@@ -804,7 +804,7 @@ def run(name, entry, args, runners, tool_names=()):
         wb = (doc.get("addon") or {}).get("workbench") if isinstance(doc.get("addon"), dict) else None
         if "workbench" in runners:
             # An add-on's commands exist only after its workbench loaded
-            # (live 88: "No command 'Texturizer_Check'" until then).
+            # (live 88: "No command 'X_Check'" until then).
             said = runners["workbench"](wb, r["command"])
             if said:
                 out["workbench"] = said
