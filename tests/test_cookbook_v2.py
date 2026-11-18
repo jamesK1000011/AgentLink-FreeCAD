@@ -66,6 +66,26 @@ def untyped(a, b):
 
 def _private(x: int = 1):
     return x
+
+
+def get(doc, name: str = "a"):
+    """Plumbing: a getter of the add-on's own state."""
+    return doc.getObject(name)
+
+
+def on_gui_thread(fn):
+    """Plumbing: run fn on the window's thread."""
+    return fn()
+
+
+def bake(doc, widget, depth: float = 1.0):
+    """Bake into a widget (a window argument)."""
+    return doc.recompute()
+
+
+def scale(factor: float = 2.0) -> float:
+    """Pure math: no work on document objects."""
+    return factor * 2
 '''
 
 NET_PY = '''
@@ -573,8 +593,14 @@ class ScaffoldV2(Base):
         self.assertEqual(e["fancy_thickness"]["inputs"]["gap_mm"], {"type": "length", "unit": "mm", "default": 0.5})
         for gone in ("fancy_approve_all", "fancy_untyped", "fancy_private", "fancy_helper"):
             self.assertNotIn(gone, e)
-        self.assertTrue(any("untyped not drafted" in u for u in r["unread"]))
-        self.assertTrue(any("panel.py: imports the window toolkit" in u for u in r["unread"]))
+        # live 95: plumbing, window code and math are internal, not entries
+        for gone in ("fancy_get", "fancy_on_gui_thread", "fancy_bake", "fancy_scale"):
+            self.assertNotIn(gone, e)
+        internal = r["internal"]["functions"]
+        for want in ("fancy.api.untyped:", "fancy.api.get: a plumbing name", "fancy.api.on_gui_thread: a plumbing name", "fancy.api.bake: widget",
+                     "fancy.api.scale: no work on document objects", "fancy.panel.helper: a glue or window module"):
+            self.assertTrue(any(x.startswith(want) for x in internal), (want, internal))
+        self.assertEqual(r["internal"]["count"], len(internal))
         self.assertTrue(any("bomb.ui: not read" in u for u in r["unread"]))
         # level 5 with the exact blocker
         rec = next(v for v in e.values() if v["level"] == 5 and "Std_DlgMacroRecord" in v["blocker"])
@@ -585,6 +611,13 @@ class ScaffoldV2(Base):
         # measured bars in the header and the answer
         self.assertEqual(book["coverage"]["declared"]["data"], sum(1 for v in e.values() if v["level"] == 1))
         self.assertTrue(r["coverage"][0].startswith("data"))
+
+    def test_either_spelling_of_the_name(self):
+        r = porting.scaffold(self.addon, name="fancy-v2", date="2026-11-18")
+        self.assertEqual(r["port"], "fancy_v2")
+        self.assertEqual(cookbook.canon("fancy-v2"), "fancy_v2")
+        self.assertEqual(cookbook.canon("Fancy V2"), "fancy_v2")
+        self.assertEqual(cookbook.canon("../x"), "../x")  # not made valid: refused later
 
     def test_scaffold_runs_as_a_file(self):
         import subprocess
@@ -733,6 +766,45 @@ class RunV2(Tools):
         self.approve()
         self.refused("cookbook_run", "unavailable", name="fancy", entry="fancy_f", args={"depth": 1})
         self.assertEqual(self.srv.calls, [])
+
+
+class Live96(Tools):
+    def test_show_reads_the_cached_scan(self):
+        calls = []
+        orig = addon_scan.scan_source
+        addon_scan._MEMO.clear()
+        addon_scan.scan_source = lambda src, rel="<file>": calls.append(rel) or orig(src, rel)
+        self.addCleanup(setattr, addon_scan, "scan_source", orig)
+        self.install()
+        n = len(calls)
+        self.assertGreater(n, 0)  # scanned at import
+        self.call("cookbook_show", name="fancy")
+        self.call("cookbook_list")
+        self.assertEqual(len(calls), n)  # show and list read the cache
+        addon_scan._MEMO.clear()
+        self.call("cookbook_show", name="fancy")
+        self.assertEqual(len(calls), n)  # from the disk cache
+        with open(os.path.join(self.addon, "fancy", "api.py"), "a") as f:
+            f.write("\nimport socket\n")
+        os.utime(os.path.join(self.addon, "fancy", "api.py"), ns=(1, 1))
+        self.call("cookbook_show", name="fancy")
+        self.assertGreater(len(calls), n)  # a changed add-on is scanned again
+
+    def test_the_scan_cache_is_protected(self):
+        from agentlink import paths
+
+        with self.assertRaises(ToolError):
+            paths.check("export", "path", os.path.join(self.home, "cookbook-scans", "x.json"), self.home, True)
+
+    def test_either_spelling_in_import_and_show(self):
+        port = os.path.join(self.home, "ports", "fancy_v2")
+        os.makedirs(port)
+        doc = v2book(name="fancy_v2")
+        with open(os.path.join(port, "cookbook.json"), "w") as f:
+            json.dump(doc, f)
+        r = self.call("cookbook_import", path=os.path.join(self.home, "ports", "fancy-v2", "cookbook.json"))
+        self.assertEqual(r["installed"], "fancy_v2")
+        self.assertEqual(self.call("cookbook_show", name="fancy-v2")["cookbook"], "fancy_v2")
 
 
 class Probe(Tools):

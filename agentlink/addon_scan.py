@@ -233,28 +233,127 @@ def py_files(folder):
     return out
 
 
-def scan(folder):
+def scan(folder, cache_dir=None):
     """{ files, flags [{kind, file, line, what}], counts {kind: n}, words
-    [one line for each kind found], unread [why] } of an add-on folder."""
-    folder = os.path.realpath(folder)
-    flags, unread, n = [], [], 0
+    [one line for each kind found], unread [why], risk } of an add-on
+    folder. From the index (cached by the folder's fingerprint)."""
+    ix = index(folder, cache_dir)
+    flags = [f for row in ix["files"].values() for f in row["flags"]]
+    return summary(flags, len(ix["files"]), ix["unread"])
+
+
+# ---- the index: one read of the add-on, kept by its fingerprint (live 96) -------------------
+
+_MEMO = {}
+CMD_LIKE = re.compile(r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$")
+
+
+def fingerprint(folder):
+    """SHA-256 of each .py file's path, size and change time, and the
+    package.xml bytes: a stat walk, no file read but package.xml."""
+    import hashlib
+
+    h = hashlib.sha256()
     for p in py_files(folder):
+        try:
+            st = os.stat(p)
+        except OSError:
+            continue
+        h.update(f"{os.path.relpath(p, folder)}\0{st.st_size}\0{st.st_mtime_ns}\n".encode())
+    try:
+        with open(os.path.join(folder, "package.xml"), "rb") as f:
+            h.update(f.read(512 * 1024))
+    except OSError:
+        pass
+    return h.hexdigest()
+
+
+def _module_of(rel):
+    m = rel[:-3].replace(os.sep, ".")
+    return m[:-9] if m.endswith(".__init__") else m
+
+
+def index(folder, cache_dir=None):
+    """{ fingerprint, files {rel: {module, flags, imports}}, modules {module:
+    rel}, commands {name: rel}, unread }. Kept in memory and, with
+    cache_dir, on disk; read again only when the fingerprint changes."""
+    import hashlib
+    import json
+
+    folder = os.path.realpath(folder)
+    fp = fingerprint(folder)
+    got = _MEMO.get(folder)
+    if got and got["fingerprint"] == fp:
+        return got
+    disk = os.path.join(cache_dir, hashlib.sha256(folder.encode()).hexdigest()[:32] + ".json") if cache_dir else None
+    if disk:
+        try:
+            with open(disk, encoding="utf-8") as f:
+                got = json.load(f)
+            if isinstance(got, dict) and got.get("fingerprint") == fp and got.get("folder") == folder and got.get("v") == 1:
+                _MEMO[folder] = got
+                return got
+        except (OSError, ValueError):
+            pass
+    files, modules, commands, unread = {}, {}, {}, []
+    base = os.path.basename(folder)
+    paths = py_files(folder)
+    for p in paths:
         rel = os.path.relpath(p, folder)
         try:
             if os.path.getsize(p) > MAX_FILE_BYTES:
                 unread.append(f"{rel}: larger than 1 MB, not read")
-                flags.append({"kind": "obfuscation", "file": rel, "line": 0, "what": "a file larger than 1 MB"})
+                files[rel] = {"module": _module_of(rel), "flags": [{"kind": "obfuscation", "file": rel, "line": 0, "what": "a file larger than 1 MB"}],
+                              "imports": []}
                 continue
             with open(p, encoding="utf-8", errors="replace") as f:
                 src = f.read()
         except OSError as e:
             unread.append(f"{rel}: cannot read it ({e.strerror or e})")
             continue
-        n += 1
-        flags += scan_source(src, rel)
-    if len(py_files(folder)) >= MAX_FILES:
+        mod = _module_of(rel)
+        files[rel] = {"module": mod, "flags": scan_source(src, rel), "imports": sorted(_imports_src(src, mod, rel.endswith("__init__.py")))}
+        modules.setdefault(mod, rel)
+        modules.setdefault(f"{base}.{mod}", rel)
+        if "addCommand" in src:
+            for c in set(re.findall(r"['\"]([A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+)['\"]", src)):
+                commands.setdefault(c, rel)
+    if len(paths) >= MAX_FILES:
         unread.append(f"more than {MAX_FILES} files: the rest is not read")
-    return summary(flags, n, unread)
+    got = {"v": 1, "folder": folder, "fingerprint": fp, "files": files, "modules": modules, "commands": commands, "unread": unread}
+    _MEMO[folder] = got
+    if disk:
+        try:
+            os.makedirs(cache_dir, exist_ok=True)
+            tmp = disk + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(got, f)
+            os.replace(tmp, disk)
+        except OSError:
+            pass
+    return got
+
+
+def _imports_src(src, module, is_init):
+    try:
+        tree = ast.parse(src)
+    except (SyntaxError, ValueError):
+        return set()
+    out = set()
+    pkg_parts = module.split(".") if is_init else module.split(".")[:-1]
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            out |= {a.name for a in n.names}
+        elif isinstance(n, ast.ImportFrom):
+            if n.level:
+                base = pkg_parts[:len(pkg_parts) - n.level + 1] if n.level > 1 else pkg_parts
+                mod = ".".join(base + ([n.module] if n.module else []))
+            else:
+                mod = n.module or ""
+            if mod:
+                out.add(mod)
+                out |= {f"{mod}.{a.name}" for a in n.names}
+    return out
 
 
 def summary(flags, files=0, unread=()):
@@ -277,70 +376,29 @@ def risk(counts_or_flags):
 
 # ---- the modules a call can reach ------------------------------------------------------------
 
-def module_file(folder, module):
-    """The file of a dotted module inside the add-on folder, or None. The
-    package is the folder's child folder (folder/pkg/sub.py), or the
-    folder itself when module's top part is the folder's name."""
-    parts = module.split(".")
-    for base in (folder, os.path.dirname(folder)):
-        p = os.path.join(base, *parts)
-        for cand in (p + ".py", os.path.join(p, "__init__.py")):
-            if os.path.isfile(cand) and _inside(cand, folder):
-                return cand
-    return None
-
-
-def _inside(path, root):
-    p, r = os.path.realpath(path), os.path.realpath(root)
-    return p == r or p.startswith(r.rstrip(os.sep) + os.sep)
-
-
-def _imports_of(path, package, module):
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            tree = ast.parse(f.read())
-    except (OSError, SyntaxError, ValueError):
-        return set()
-    out = set()
-    pkg_parts = module.split(".")
-    if not path.endswith("__init__.py"):
-        pkg_parts = pkg_parts[:-1]
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Import):
-            out |= {a.name for a in n.names}
-        elif isinstance(n, ast.ImportFrom):
-            if n.level:
-                base = pkg_parts[:len(pkg_parts) - n.level + 1] if n.level > 1 else pkg_parts
-                mod = ".".join(base + ([n.module] if n.module else []))
-            else:
-                mod = n.module or ""
-            if mod:
-                out.add(mod)
-                out |= {f"{mod}.{a.name}" for a in n.names}
-    return {m for m in out if m == package or m.startswith(package + ".")}
-
-
-def reach(folder, package, module, limit=200):
+def reach(folder, package, module, limit=200, cache_dir=None):
     """The flags of module and of each module of the package it imports, on
-    and on (the add-on's own import closure). A module not found inside the
-    folder gives a dynamic_code flag: what cannot be read counts as code."""
-    folder = os.path.realpath(folder)
+    and on (the add-on's own import closure), from the index. A module not
+    found in the folder gives a dynamic_code flag: what cannot be read
+    counts as code."""
+    ix = index(folder, cache_dir)
     seen, todo, flags = set(), [module], []
     while todo and len(seen) < limit:
         m = todo.pop()
         if m in seen:
             continue
         seen.add(m)
-        p = module_file(folder, m)
-        if p is None:
+        rel = ix["modules"].get(m)
+        if rel is None:
             if m == module:
                 flags.append({"kind": "dynamic_code", "file": m, "line": 0, "what": "the module is not in the add-on folder, so it was not read"})
             continue
-        try:
-            with open(p, encoding="utf-8", errors="replace") as f:
-                src = f.read(MAX_FILE_BYTES + 1)
-        except OSError:
-            continue
-        flags += scan_source(src, os.path.relpath(p, folder))
-        todo += sorted(_imports_of(p, package, m) - seen)
+        row = ix["files"][rel]
+        flags += row["flags"]
+        todo += sorted(i for i in row["imports"] if (i == package or i.startswith(package + ".")) and i not in seen)
     return flags
+
+
+def command_file(folder, cmd, cache_dir=None):
+    """The file (rel) that names cmd where it registers commands, or None."""
+    return index(folder, cache_dir)["commands"].get(cmd)

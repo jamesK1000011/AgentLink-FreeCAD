@@ -588,19 +588,51 @@ def _input(arg, default):
     return spec, None
 
 
-def read_functions(folder, package, group, unread):
-    """Level 1 drafts: public top-level functions with a docstring or type
-    hints, in modules that do not import the window toolkit at the top."""
+# Modules that are glue or window code, not an API (live 95): by name.
+GLUE_MODULE = re.compile(r"(^|\.)(__init__|agentlink_families|fam_[a-z0-9_]+|commands?|workbench|init_?gui|gui[a-z0-9_]*|[a-z0-9_]*gui|panels?|"
+                         r"sidebar|layout|window|theme|qt|controls?|docks?|[a-z0-9_]*view|views?|preview|dialogs?|widgets?|timing|guithread|"
+                         r"icons?|refusal|handlers|hooks?|live|overlay|runners?|sync|followers?|gizmo[a-z0-9_]*|turntable|quicklook[a-z0-9_]*|tests?|setup|_[a-z0-9_]*)$")
+# Names of plumbing, not of work a person asks for (live 95).
+PLUMBING = re.compile(r"^(get|set|list|app|freecad|gui|shared|own|runner|caller|lend|placer|cache_dir|bind_doc|in_front|reset|about|about_html|"
+                      r"commands|register|unregister|setup|init|initialize|load|reload|main|log|debug|version|tools|candidates|valid|"
+                      r"tooltip|reveal|attach|verb|split|join|find|marks|put_back|frame|one_ring|reconcile|sync|refresh)$|"
+                      r"^(follow|session|watch|listen|schedule|queue)_|"
+                      r"^(on|is|has|show|hide|toggle|open|close|draw|paint|refresh|update_ui|connect|disconnect|emit|_)_|"
+                      r"(gui|thread|callback|sidebar|panel|widget|dialog|signal|dock|menu|toolbar|cursor|_html|_icon|_cache|_doc)$|"
+                      r"^document_(closed|opened|changed|saved|created|deleted)")
+CALLBACK_ARGS = re.compile(r"^(widget|w|mw|parent|thread|callback|cb|fn|func|slot|signal|event|ev|progress|on_progress|should_abort|abort|"
+                           r"hooks?|session|params|later|run|post|doc_fn|qt|QtWidgets|QtGui|view)$")
+DOC_WORK = re.compile(r"\b(addObject|removeObject|getObject|recompute|newObject|openTransaction|commitTransaction)\b|\.Shape\b|\.Mesh\b|"
+                      r"\bPart\.|\bMesh\.|\.Objects\b|\bmake[A-Z][A-Za-z]+\(")
+DOC_TYPES = re.compile(r"^\s*:?(param\s+)?(?P<t>float|int|bool|str)\s+(?P<n>[A-Za-z_][A-Za-z0-9_]*)\s*:|"
+                       r"^\s*(?P<n2>[A-Za-z_][A-Za-z0-9_]*)\s*\((?P<t2>float|int|bool|str)\)\s*:", re.M)
+
+
+def _doc_types(doc):
+    """Argument types a docstring documents: name (float): … or :param float name:."""
+    out = {}
+    for m in DOC_TYPES.finditer(doc or ""):
+        n, t = m.group("n") or m.group("n2"), m.group("t") or m.group("t2")
+        out[n] = t
+    return out
+
+
+def read_functions(folder, package, group, unread, internal=None):
+    """Level 1 drafts: functions that look like an API (live 95). Each has
+    a docstring, typed or documented arguments, no window, thread or
+    callback arguments, does work on document objects (a doc argument, a
+    pick, or calls such as addObject, recompute, .Shape), and sits in a
+    module the add-on exposes (not glue, not window code, not plumbing
+    names). Every other public function goes to internal, with why."""
     out = []
+    internal = [] if internal is None else internal
     if not package:
         return out
     root = os.path.join(folder, package)
     for p in py_files(root):
         rel = os.path.relpath(p, folder)
         mod = rel[:-3].replace(os.sep, ".")
-        if mod.endswith(".__init__"):
-            mod = mod[:-9]
-        if any(x.startswith("_") for x in mod.split(".")) or os.path.getsize(p) > MAX_FILE_BYTES:
+        if os.path.getsize(p) > MAX_FILE_BYTES:
             continue
         with open(p, encoding="utf-8", errors="replace") as f:
             src = f.read()
@@ -611,38 +643,54 @@ def read_functions(folder, package, group, unread):
         defs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and not n.name.startswith("_")]
         if not defs:
             continue
-        if _gui_module(tree):
-            unread.append(f"{rel}: imports the window toolkit at the top, so its {len(defs)} functions are not headless (level 1)")
+        if mod.endswith(".__init__"):
+            mod = mod[:-9]
+            glue = "the package's __init__ (glue)"
+        elif GLUE_MODULE.search(mod) or any(x.startswith("_") for x in mod.split(".")):
+            glue = "a glue or window module"
+        elif _gui_module(tree):
+            glue = "its module imports the window toolkit at the top"
+        else:
+            glue = None
+        if glue:
+            internal += [f"{mod}.{fn.name}: {glue}" for fn in defs]
             continue
         for fn in defs:
             if len(out) >= MAX_FUNCTIONS:
                 unread.append(f"more than {MAX_FUNCTIONS} functions: the rest are not drafted")
                 return out
-            doc = ast.get_docstring(fn) or ""
-            hinted = any(a.annotation is not None for a in fn.args.args + fn.args.kwonlyargs) or fn.returns is not None
-            if not doc and not hinted or OK_LIKE.search(fn.name) or not re.match(r"^[A-Za-z][A-Za-z0-9_]{0,63}$", fn.name):
+            why = _api_why(fn, src)
+            if why:
+                internal.append(f"{mod}.{fn.name}: {why}")
                 continue
-            args = fn.args.posonlyargs + fn.args.args
+            doc = ast.get_docstring(fn) or ""
+            documented = _doc_types(doc)
+            args = fn.args.args
             defaults = [None] * (len(args) - len(fn.args.defaults)) + list(fn.args.defaults)
             pairs = list(zip(args, defaults)) + list(zip(fn.args.kwonlyargs, fn.args.kw_defaults))
-            if fn.args.posonlyargs:
-                unread.append(f"{rel}:{fn.lineno}: {fn.name} has positional-only arguments; not drafted")
-                continue
-            inputs, document, why = {}, None, []
+            inputs, document, bad = {}, None, []
             for a, d in pairs:
-                if a.arg in ("self", "cls"):
-                    why.append("a method")
-                    break
                 if a.arg in ("doc", "document") and _annot(a.annotation) in (None, "Document"):
                     document = a.arg
                     continue
-                spec, bad = _input(a, d)
-                if bad:
-                    why.append(bad)
+                if CALLBACK_ARGS.match(a.arg):
+                    if d is None:
+                        bad.append(f"{a.arg}: a window, thread or callback argument")
+                    continue  # optional: the function keeps its default
+                if a.annotation is None and a.arg in documented:
+                    a = ast.arg(arg=a.arg, annotation=ast.Name(id=documented[a.arg]))
+                spec, no = _input(a, d)
+                if no and isinstance(d, ast.Constant) and d.value is None:
+                    continue  # optional with no type: left to the function's default
+                if no:
+                    bad.append(no)
                 else:
                     inputs[a.arg] = spec
-            if why:
-                unread.append(f"{rel}:{fn.lineno}: {fn.name} not drafted ({'; '.join(why[:3])})")
+            if bad:
+                internal.append(f"{mod}.{fn.name}: {'; '.join(bad[:2])}")
+                continue
+            if not inputs and not document:
+                internal.append(f"{mod}.{fn.name}: no inputs (nothing to give it as data)")
                 continue
             first = sentences(clean(doc, 300))[:1]
             desc = f"Call {fn.name} of the add-on module {mod}, headless, with typed inputs."
@@ -672,6 +720,33 @@ def read_functions(folder, package, group, unread):
                 e["result"] = {"check": check}
             out.append({"entry": f"{group}_{snake(fn.name)}"[:48], "cookbook": e})
     return out
+
+
+def _api_why(fn, src):
+    """Why a public function is not an API function, or None."""
+    if OK_LIKE.search(fn.name) or not re.match(r"^[A-Za-z][A-Za-z0-9_]{0,63}$", fn.name):
+        return "an OK-like or odd name"
+    if PLUMBING.search(fn.name) or len(fn.name) <= 3:
+        return "a plumbing name"
+    if fn.args.posonlyargs or fn.args.vararg or fn.args.kwarg:
+        return "positional-only, *args or **kwargs arguments"
+    if any(a.arg in ("self", "cls") for a in fn.args.args):
+        return "a method"
+    doc = ast.get_docstring(fn) or ""
+    if len(doc.strip()) < 12:
+        return "no docstring"
+    names = [a.arg for a in fn.args.args + fn.args.kwonlyargs]
+    typed = [a for a in fn.args.args + fn.args.kwonlyargs if a.annotation is not None or a.arg in _doc_types(doc)]
+    if names and not typed and not any(n in ("doc", "document") for n in names):
+        # untyped arguments are taken only when each has a plain default
+        defaults = fn.args.defaults
+        if len(defaults) < len(fn.args.args) or not all(isinstance(d, ast.Constant) for d in defaults):
+            return "arguments with no type hints and no documented types"
+    seg = ast.get_source_segment(src, fn) or ""
+    picks = any(_annot(a.annotation) in PICK_OF for a in fn.args.args + fn.args.kwonlyargs)
+    if not ("doc" in names or "document" in names or picks or DOC_WORK.search(seg) or _annot(fn.returns) in ("Shape", "Mesh", "DocumentObject", "Feature")):
+        return "no work on document objects (no doc argument, pick, addObject, recompute or .Shape)"
+    return None
 
 
 # ---- task panel .ui files -> level 2 ---------------------------------------------------------
@@ -1055,7 +1130,8 @@ def scaffold(addon_folder, name=None, out_root=None, overwrite=False, taken=None
                                    "Read the porting guide and write the tool data by hand.")
     date = date or datetime.date.today().isoformat()
     group, tools = plan(info, taken=hub_tool_names() | set(taken or ()))
-    functions = read_functions(info["folder"], info.get("package"), group, info["unread"])
+    internal = []
+    functions = read_functions(info["folder"], info.get("package"), group, info["unread"], internal)
     forms = read_forms(info["folder"], info, group, info["unread"])
     book = cookbook_json(info, port, tools, date, functions, forms)
     commands = {t["tool"]: t["command"] for t in tools}
@@ -1086,6 +1162,8 @@ def scaffold(addon_folder, name=None, out_root=None, overwrite=False, taken=None
     return {"port": port, "folder": _tilde(out), "addon": clean(info["name"], 80), "group": group, "package": info["package"],
             "workbench": info["workbench"], "tools": [{"tool": t["tool"], "command": t["command"]} for t in tools],
             "entries": {k: e["level"] for k, e in book["entries"].items()}, "coverage": book["coverage"]["bars"],
+            "internal": {"count": len(internal), "functions": internal[:40],
+                         "note": "Public functions that do not look like an API (glue, window code, plumbing, no document work). Not entries."},
             "unread": info["unread"][:20], "files": sorted(f.replace(os.sep, "/") for f in files),
             "next": "Read README.md there, then guide_read { topic: \"porting\" }. Edit the drafts, then run the lint and the tests."}
 

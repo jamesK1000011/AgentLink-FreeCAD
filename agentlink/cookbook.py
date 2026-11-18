@@ -96,7 +96,13 @@ def store_path():
 
 def protected():
     """Paths no tool writes to: the OK store and the cookbooks folder."""
-    return [os.path.realpath(store_path()), os.path.realpath(folder()), os.path.realpath(probes_folder())]
+    return [os.path.realpath(store_path()), os.path.realpath(folder()), os.path.realpath(probes_folder()), os.path.realpath(scans_folder())]
+
+
+def scans_folder():
+    """The static scans of add-ons, kept by each folder's fingerprint (live
+    96: a scan on every cookbook_show took 49 s on Texturizer)."""
+    return os.path.join(home(), "cookbook-scans")
 
 
 def probes_folder():
@@ -413,6 +419,15 @@ def state(name, sha):
     return "approved" if e["sha256"] == sha else "changed"
 
 
+def canon(name):
+    """A cookbook name as written either way: "texturizer-v2" and
+    "Texturizer_V2" are texturizer_v2, the name port_scaffold gives."""
+    if not isinstance(name, str):
+        return name
+    t = re.sub(r"[-\s.]+", "_", name.strip()).lower()
+    return t if NAME_RE.match(t) else name
+
+
 def is_approved(name, sha):
     """True when the person's OK holds for this cookbook content (sha256).
     Every runner asks this one helper; the approval layer stays behind it."""
@@ -577,6 +592,10 @@ def import_file(src, overwrite=False, tool_names=()):
         fh.write(raw)
     os.replace(tmp, dest)
     sha = digest(name, raw, doc)
+    try:
+        review(doc)  # the scan now, kept by the add-on's fingerprint: show and list read it (live 96)
+    except Exception:  # noqa: BLE001 - a scan fault never blocks the install
+        pass
     return {"installed": name, "file": dest, "entries": len(doc["entries"]), "scripts": sorted(copies), "state": state(name, sha), "sha256": sha,
             "next": "It runs nothing yet. " + next_words(name)}
 
@@ -832,7 +851,7 @@ def review(doc):
     if pkg:
         f = addon_folder(pkg)
         if f:
-            got = addon_scan.scan(f)
+            got = addon_scan.scan(f, scans_folder())
             words, flags, risk, scanned = list(got["words"]), got["flags"], got["risk"], got["files"]
             if not words:
                 words = [f"No calls past the document were found in {got['files']} files of the add-on."]
@@ -855,19 +874,6 @@ def review(doc):
     return {"words": words[:14], "flags": flags[:60], "risk": risk, "files": scanned, "injection": inj[:20]}
 
 
-def _command_file(folder, cmd):
-    """The add-on file that registers cmd (its name as a string), or None."""
-    pat = re.compile(r"['\"]" + re.escape(cmd) + r"['\"]")
-    for p in addon_scan.py_files(folder):
-        try:
-            with open(p, encoding="utf-8", errors="replace") as f:
-                if "addCommand" in (t := f.read(addon_scan.MAX_FILE_BYTES)) and pat.search(t):
-                    return p
-        except OSError:
-            continue
-    return None
-
-
 def entry_risk(doc, e, cache=None):
     """none | file | code: worked out by Agent Link from the call and the
     add-on's code (the file's own "risk" is never trusted). A level 3 or
@@ -888,25 +894,19 @@ def entry_risk(doc, e, cache=None):
     if "function" in call:
         k = ("reach", call["function"].get("module"))
         if k not in cache:
-            cache[k] = addon_scan.reach(folder, pkg, call["function"].get("module"))
+            cache[k] = addon_scan.reach(folder, pkg, call["function"].get("module"), cache_dir=scans_folder())
         flags = cache[k]
     else:
         cmd = call.get("command") or (call.get("form") or {}).get("command")
         k = ("cmd", cmd)
         if k not in cache:
-            f = _command_file(folder, cmd)
-            if f is None:
+            rel = addon_scan.command_file(folder, cmd, scans_folder())
+            if rel is None:
                 cache[k] = [{"kind": "dynamic_code", "file": cmd, "line": 0, "what": "no file registers this command by name"}]
             else:
-                rel = os.path.relpath(f, folder)
-                mod = rel[:-3].replace(os.sep, ".")
-                mod = mod[:-9] if mod.endswith(".__init__") else mod
-                pkg_mod = mod if mod.split(".")[0] == pkg else None
-                if pkg_mod:
-                    cache[k] = addon_scan.reach(folder, pkg, pkg_mod)
-                else:
-                    with open(f, encoding="utf-8", errors="replace") as fh:
-                        cache[k] = addon_scan.scan_source(fh.read(addon_scan.MAX_FILE_BYTES), rel)
+                ix = addon_scan.index(folder, scans_folder())
+                mod = ix["files"][rel]["module"]
+                cache[k] = addon_scan.reach(folder, pkg, mod, cache_dir=scans_folder()) if mod.split(".")[0] == pkg else ix["files"][rel]["flags"]
         flags = cache[k]
     r = addon_scan.risk(flags)
     return r, sorted({addon_scan.WORDS[f["kind"]] for f in flags})[:6]
