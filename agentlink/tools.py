@@ -987,6 +987,12 @@ def _report_read(a):
     return report_watch.read(a.get("last", 40), bool(a.get("problems")))
 
 
+def _open_here(_a):
+    """Reached only with no supervisor in front (FreeCAD run by hand): this
+    FreeCAD is already running."""
+    raise ToolError("invalid_state", "This FreeCAD answered, so it is already running. (app_open is run by Agent Link's supervisor, outside FreeCAD, when the window is closed.)")
+
+
 def _force_restart_here(_a):
     """Reached only with no supervisor in front (FreeCAD run by hand): the
     window that answered is not stuck."""
@@ -1278,6 +1284,9 @@ def make_tools(session):
                               "can load, and its log's last lines. Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
         Tool("app_force_restart", "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang). Agent Link runs this outside FreeCAD. The "
                                   "documents come back from their newest saved copies, as after a crash. Use it for a stuck window; app_restart quits a working window cleanly.", obj({}), _force_restart_here),
+        Tool("app_open", "Open the FreeCAD window when it is closed. Agent Link starts it in the background: it does not come to the front and takes no focus. "
+                         "Then calls go to the window, not to the hidden FreeCAD. Use it when session_state says where: hidden and the work needs the window. "
+                         "It waits up to 90 s for the window's link. Answer: opened, already (it was open), seconds, note.", obj({}), _open_here),
         Tool("report_read", "Read FreeCAD's Report view in the window. last: its last lines (40 by default). problems: true gives only warnings and errors. Each answer also brings "
                             "back new problem lines as \"report\". FreeCAD's own known faults are counted once (\"known\"). When there are problems, first: the first problem line without its time. Window only.", obj({"last": {"type": "integer"}, "problems": {"type": "boolean"}}), _report_read),
         Tool("body_check", "Check if a body is sound: FreeCAD's own Check Geometry, then closed, one solid, no very short edges. Also no sliver faces (less than 0.01 mm wide). It "
@@ -1311,7 +1320,7 @@ def make_tools(session):
 GROUP_OF = {
     "tool_find": "find",
     "session_state": "core", "body_check": "core", "export_file": "core", "history_diff": "core",
-    "app_force_restart": "core", "dialog_answer": "core", "report_read": "core", "crash_collect": "core",
+    "app_force_restart": "core", "app_open": "app", "dialog_answer": "core", "report_read": "core", "crash_collect": "core",
     # export (every format) is core's; export_file stays an alias of it.
     "export": "core",
     # Tools that sat in another family's module: listed with their own group,

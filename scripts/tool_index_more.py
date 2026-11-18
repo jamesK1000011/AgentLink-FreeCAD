@@ -64,6 +64,7 @@ TOOLS = {
     "addon_test": ([], "tests unit run addons"),
     "app_extensions": (["Std_AddonMgr"], "addons extensions install update"),
     "app_force_restart": ([], "kill hang stuck frozen relaunch"),
+    "app_open": ([], "open start launch window closed background"),
     "app_install": ([], "download release version upgrade"),
     "app_restart": ([], "quit relaunch reopen"),
     "asm_add": (["Assembly_Insert"], "insert component part"),

@@ -9,6 +9,7 @@
   "app_extensions": {"workbench": null, "commands": ["Std_AddonMgr"], "words": ["addons", "install", "update"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "app_force_restart": {"workbench": null, "commands": [], "words": ["kill", "hang", "stuck", "frozen", "relaunch"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "app_install": {"workbench": null, "commands": [], "words": ["download", "release", "version", "upgrade"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
+  "app_open": {"workbench": null, "commands": [], "words": ["start", "launch", "window", "closed", "background"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "app_restart": {"workbench": null, "commands": [], "words": ["quit", "relaunch", "reopen"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "asm_add": {"workbench": "AssemblyWorkbench", "commands": ["Assembly_InsertLink", "Assembly_Insert"], "words": ["assembly", "insert", "component", "part"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "asm_bom": {"workbench": "AssemblyWorkbench", "commands": ["Assembly_CreateBom"], "words": ["assembly", "bill", "materials", "parts", "list", "quantity"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},

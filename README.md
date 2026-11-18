@@ -153,13 +153,14 @@ licence.
 ## What the agent can do
 
 <!-- tools:begin (scripts/tool_summary.py) -->
-Agent Link itself declares 413 tools in 32 groups; a FreeCAD build without a workbench (FEM, CAM …)
+Agent Link itself declares 414 tools in 32 groups; a FreeCAD build without a workbench (FEM, CAM …)
 serves fewer, and each installed add-on adds its own groups.
 Groups marked *lean* are listed from the start; the agent turns on the rest with `tool_groups`.
 
 | Group | Tools | What it holds |
 |---|---:|---|
 | `core` *lean* | 17 | The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed. |
+| `app` | 18 |  |
 | `find` | 1 | tool_find: any tool by plain words, its card, the groups. Listed in the static base (ToolListMode static). |
 | `doc` | 12 | The document: new, open, save; objects listed, read, set, renamed, deleted; recompute; import and export files. |
 | `model` | 27 | Part modelling: primitives, booleans, move/rotate/mirror/scale/arrays, fillets and chamfers, offset and shell, extrude, revolve, loft, sweep. |
@@ -174,7 +175,6 @@ Groups marked *lean* are listed from the start; the agent turns on the rest with
 | `inspection` | 6 | FreeCAD's Inspection: an actual (mesh, points, body or scan file) against nominals, point by point, with tolerance, statistics, worst spots, a colour map and a report. |
 | `view` *lean* | 3 | Pictures: the parts drawn from any view, cut open, zoomed, with maps (wall, stress, a scan's deviation) — headless; the FreeCAD window's own view. |
 | `notes` | 7 | Notes pinned to the parts between the person and the agent; the build played back step by step, a picture a step (inspired by Stefan Hermann's ScanRuler, CNC Kitchen). |
-| `app` | 17 | FreeCAD itself: settings (any parameter, preference packs), commands and menus run by name in the window, workbenches. |
 | `mesh` | 21 | FreeCAD's Mesh workbench on document meshes: mesh a body, evaluate and repair, decimate, refine, smooth, offset, trim, transform, booleans, cross-sections, split, planar and curvature segments, curvature, projection onto a mesh. |
 | `assembly` | 18 | Assemblies (FreeCAD's Assembly workbench): parts put together, one grounded, joints between faces and edges solved; positions, freedom left and overlaps checked. |
 | `cam` | 12 | Toolpaths (FreeCAD's CAM workbench): a job with stock and end mill, profile, pocket, adaptive, facing and drilling operations, G-code posted and checked. |
