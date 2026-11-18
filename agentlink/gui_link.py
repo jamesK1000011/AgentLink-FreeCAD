@@ -16,7 +16,8 @@ import time
 
 import FreeCAD
 
-from .protocol import compact
+from .protocol import FRONT_CALLS as _FRONT_CALLS
+from .protocol import compact, front_call
 from .tools import Session, build_server
 
 PORT = 7318
@@ -98,28 +99,24 @@ def _tool_name(line):
 
 
 def _dialog_call(line):
-    """True for dialog_answer, or a batch of nothing but dialog_answer calls:
-    the one thing that runs while a modal dialog holds the window. A client
-    that lists only the lean groups reaches dialog_answer through batch, and
-    a refused batch left a harmless OK box blocking every call (GUI pass)."""
+    """True for a call that runs while a modal dialog or a menu holds the
+    window (protocol.front_call): dialog_answer, gui_input, gui_unstick, or
+    a batch of only those (window_snapshot beside them). A client that lists
+    only the lean groups reaches them through batch, and a refused batch
+    left a dialog that the person-input path opened a dead end (live 56:
+    a batch whose calls came as a string of JSON was not read)."""
     name = _tool_name(line)
-    # gui_input runs too, and refuses any target outside what is in front;
-    # gui_unstick closes what is in front.
-    if name in FRONT_CALLS:
-        return True
-    if name != "batch":
+    if name is None:
         return False
     try:
-        calls = ((json.loads(line).get("params") or {}).get("arguments") or {}).get("calls") or []
+        args = (json.loads(line).get("params") or {}).get("arguments")
     except (ValueError, AttributeError):
         return False
-    # gui_input in a batch too (a lean client reaches it through batch): it
-    # still takes only targets inside the dialog in front.
-    return bool(calls) and all(isinstance(c, dict) and c.get("tool") in FRONT_CALLS for c in calls)
+    return front_call(name, args)
 
 
 # What runs while a dialog or menu holds the window: it answers it.
-FRONT_CALLS = ("dialog_answer", "gui_input", "gui_unstick")
+FRONT_CALLS = _FRONT_CALLS
 
 
 # batch arguments the socket thread's light batch does not do.
@@ -620,7 +617,14 @@ def fill(d, text=None, item=None):
     fields = [f for cls in (QtWidgets.QLineEdit, QtWidgets.QPlainTextEdit) for f in w.findChildren(cls)
               if f.isVisible() and f.isEnabled() and not (hasattr(f, "isReadOnly") and f.isReadOnly())]
     if len(fields) != 1:
-        raise ValueError(f"text: the dialog has {len(fields) or 'no'} text fields — text fills a dialog with one; gui_input types into one of several.")
+        title = ""
+        try:
+            title = w.windowTitle()
+        except Exception:
+            pass
+        how = (f" gui_input {{ steps: [{{ click: {{ widget: {{ class: \"QLineEdit\", under: \"{title}\" }} }} }}, {{ type: \"…\" }}] }} (add at, or an objectName, for the second field),"
+               " alone or in a batch of gui_input and dialog_answer only: it runs while the dialog is up.") if fields else ""
+        raise ValueError(f"text: the dialog has {len(fields) or 'no'} text fields — text fills a dialog with one; gui_input types into one of several.{how}")
     f = fields[0]
     if hasattr(f, "setPlainText") and not hasattr(f, "setText"):
         f.setPlainText(text)

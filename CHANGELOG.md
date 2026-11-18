@@ -30,6 +30,8 @@ All notable changes to Agent Link for FreeCAD. The format follows
 
 ### Fixed
 
+- Live 55, 56 (Tutor agent-to-agent test): a batch of only gui_input, dialog_answer and gui_unstick (window_snapshot beside them) runs while a dialog is up also when its calls come as a string of JSON (protocol.front_call, used by the window's link and the supervisor): a 4-tool client reaches gui_input only through batch, and the dialog that gui_input { as: person } opened was a dead end. A gui_input window point on a dialog or menu over the window (where the shot draws it) is a point in that dialog. dialog_answer's refusal for a dialog of several fields says how gui_input types into one.
+- Live 48: a gui_input click on a dropdown's arrow (a MenuButtonPopup tool button's arrow part, an InstantPopup button) that opened no menu opens it (QMenu.popup under the button, no wait); the hit says menu: opened and the answer lists its items, so a {menu_item} step works after it.
 - `batch { to }`: the compact reply keeps the batch's own `note` (where it stopped and how to go on); the file's note is `toNote` beside it.
 - `background: true` is refused by what the call is: a read that writes a file inside a batch is told to leave `background` out (it runs in the batch's order, the file there for the next call), a change is told it is never a job.
 - `scad_tidy { action: "color_code" }` leaves no object touched that was not before, as FreeCAD's own Color Shapes (it sets a view colour only).

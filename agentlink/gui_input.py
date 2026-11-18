@@ -44,6 +44,9 @@ ITEM_KEYS = ("text", "under", "column")
 # logical pixels (Qt's styles draw the indicator a few pixels in, about a
 # line's height wide).
 CHECK_INSET = 3
+# The width of a MenuButtonPopup tool button's arrow part, from its right
+# edge, in logical pixels (Qt's PM_MenuButtonIndicator plus a margin).
+ARROW_W = 14
 SHOT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 KEY_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,23}")
 # Keys by the names people use, to Qt's Key_ names.
@@ -1096,6 +1099,14 @@ class Run:
         mw = self.mw()
         x, y = v
         pt = QtCore.QPoint(int(x), int(y))
+        over = self._over_at(mw.mapToGlobal(pt))
+        if over is not None:
+            # A dialog or menu drawn over the window there (as a shot paints
+            # it, live 55): the point is in that window, not under it.
+            g = mw.mapToGlobal(pt)
+            lp = over.mapFromGlobal(g)
+            w, lx, ly = self._deepest(over, lp.x() + (x - int(x)), lp.y() + (y - int(y)))
+            return w, lx, ly
         w = mw.childAt(pt)
         if w is None:
             w = self.qt.QtWidgets.QApplication.widgetAt(mw.mapToGlobal(pt))
@@ -1250,12 +1261,55 @@ class Run:
         if b is not None:
             out["hit"] = self._arrow_hit(b, (gx, gy))
 
+    def _arrow_menu(self, w, x):
+        """(tool button, its menu) when a click at x in w is on a dropdown's
+        arrow: an InstantPopup button anywhere, a MenuButtonPopup button's
+        arrow part (its right ARROW_W px, or a child arrow widget inside
+        it); else (None, None)."""
+        for b in (w, w.parentWidget() if hasattr(w, "parentWidget") else None):
+            try:
+                if b is None or not _has_class(b, "QToolButton"):
+                    continue
+                menu = b.menu() if callable(getattr(b, "menu", None)) else None
+                if menu is None and hasattr(b, "defaultAction") and b.defaultAction() is not None:
+                    menu = b.defaultAction().menu()
+                if menu is None:
+                    continue
+                mode = _int(b.popupMode())
+                if mode == 2 or (mode == 1 and (b is not w or x >= b.width() - ARROW_W)):
+                    return b, menu
+            except Exception:
+                continue
+        return None, None
+
+    def _open_arrow_menu(self, w, x, out):
+        """A click on a dropdown's arrow that opened no menu (sent events on
+        macOS, live 48: TechDraw's Dimension button): its menu opened as the
+        press would (QMenu.popup under the button, which does not wait), so
+        a {menu_item} step after it works. Said in the hit as menu: opened."""
+        b, menu = self._arrow_menu(w, x)
+        if menu is None or self.blocker() is not None:
+            return
+        try:
+            menu.popup(b.mapToGlobal(self.qt.QtCore.QPoint(0, b.height())))
+        except Exception as e:
+            out.setdefault("hit", {})["menu"] = f"not opened ({type(e).__name__}: {e})"[:120]
+            return
+        self.pump(MOVE_GAP_MS)
+        hit = out.setdefault("hit", {})
+        if self.app().activePopupWidget() is menu:
+            hit["menu"] = "opened (popup: the click alone opened none)"
+            out["menu"] = menu_items(menu, 20)
+            self._tell(self.open_info())
+        else:
+            hit["menu"] = "not opened: no menu came to the front"
+
     def _arrow_part(self, w, x):
         """True when x falls on a MenuButtonPopup tool button's own arrow."""
         try:
             if not _has_class(w, "QToolButton") or _int(w.popupMode()) != 1:
                 return False
-            return x >= w.width() - 14
+            return x >= w.width() - ARROW_W
         except Exception:
             return False
 
@@ -1486,6 +1540,8 @@ class Run:
                     self._mouse("MouseButtonRelease", gw, gx, gy, st["button"], st["mods"])
                 if not self._detached():
                     self.pump(MOVE_GAP_MS)
+                    if st["button"] == "left" and not st["double"]:
+                        self._open_arrow_menu(w, x, out)
                     sel = self.selected()
                     if sel is not None:
                         out["selected"] = sel
@@ -1552,6 +1608,18 @@ class Run:
         if p is not None and p is not mw and self._shown(p) and p not in out:
             out.append(p)
         return out
+
+    def _over_at(self, g):
+        """The window over the main window (a dialog, a menu) whose rect
+        holds the global point g, the front one first, or None."""
+        for w in reversed(self._over()):
+            try:
+                o = w.mapToGlobal(self.qt.QtCore.QPoint(0, 0))
+                if o.x() <= g.x() < o.x() + w.width() and o.y() <= g.y() < o.y() + w.height():
+                    return w
+            except Exception:
+                continue
+        return None
 
     def _paint_over(self, pix, ws):
         """Each window in ws painted over the main window's picture where it
