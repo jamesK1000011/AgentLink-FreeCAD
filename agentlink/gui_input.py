@@ -1612,6 +1612,33 @@ class Run:
                 return
             p = p.parentWidget()
 
+    def _key_owner(self, w):
+        """Who takes keys meant for w, as Qt gives a person's keys: a spin
+        box's own line edit is the spin box's (QAbstractSpinBox reads each
+        key first and passes the text on), and a widget with a focus proxy
+        gives its keys to the proxy. Live 98: "=" sent to the line edit of a
+        Gui::QuantitySpinBox went in as text; FreeCAD's spin box opens its
+        expression line on "=" only when the key reaches it."""
+        seen = 0
+        while w is not None and seen < 8:
+            seen += 1
+            try:
+                px = w.focusProxy() if hasattr(w, "focusProxy") else None
+            except Exception:
+                px = None
+            if px is not None and px is not w and _alive(px):
+                w = px
+                continue
+            try:
+                par = w.parentWidget() if hasattr(w, "parentWidget") else None
+            except Exception:
+                par = None
+            if par is not None and _alive(par) and "QLineEdit" in self._props(w)["classes"] and \
+                    any(c in ("QAbstractSpinBox", "QSpinBox", "QDoubleSpinBox") or c.endswith("SpinBox") for c in self._props(par)["classes"]):
+                return par
+            break
+        return w
+
     def _focus_now(self):
         """The widget that has the keyboard focus now, or None."""
         try:
@@ -1979,7 +2006,7 @@ class Run:
             lx, ly = local_point(self.qt, w, b.x(), b.y())
             self._mouse("MouseButtonRelease", w, lx, ly, st["button"], st["mods"])
         elif do in ("key", "type"):
-            w = self._focus_widget(st.get("target"))
+            w = self._key_owner(self._focus_widget(st.get("target")))
             out["hit"] = {"class": self._props(w)["classes"][0], **({"name": w.objectName()} if w.objectName() else {})}
             evs = key_events(self.qt, st["key"], st["mods"]) if do == "key" else text_events(self.qt, st["text"])
             before = None
@@ -1996,6 +2023,7 @@ class Run:
                 if do == "type" and i % 2 == 1 and i + 1 < len(evs):
                     self.pump(0)
                     f = self._focus_now()
+                    f = self._key_owner(f) if f is not None else None
                     if f is not None and f is not before and f is not w and _alive(f) and self._really_shown(f):
                         w = f
                         out.setdefault("followed", []).append({"class": self._props(w)["classes"][0], **({"name": w.objectName()} if w.objectName() else {})})
