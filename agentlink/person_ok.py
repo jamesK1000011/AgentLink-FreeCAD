@@ -1,22 +1,18 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""The person's OK: a press in the FreeCAD window that no agent can make.
+"""The person's OK as a press in the FreeCAD window: an OPTIONAL extra path.
 
-A typed confirm ("approve cookbook <name>") is only a convention: an agent
-can type the words itself. Code that runs with the Mac's full reach
-(cookbooks, macros, extensions, add-ons) needs an OK that does not come
-through MCP. This module gives it (red team, 2026-11-18):
+The approval is the client's own tool permission (agentlink/approvals.py,
+the owner's decision of 18 Nov 2026): approve_file and approve_code, each set
+by the person in Claude Desktop ("ask first", "always allow", "block").
+This dialog is a second way for the same approval, for a person at the
+window. No tool needs it, and headless use never needs it.
 
-  ask(kind, name, title, lines, sha=None, on_ok=None)
-      A grant for (kind, name, sha) given before: it is used up, and the
-      answer is {"ok": True}. Else the window shows the OK dialog and the
-      answer is {"pending": True, ...}: the agent tells the person to look
-      at the window. Headless (no window): Refused "unavailable". The OK is
-      then not possible, and the agent says so.
-
-  on_ok: called on the GUI thread at the person's press (for an OK that is
-      kept, such as a cookbook's hash in the approvals store). Without it,
-      the press gives a grant that the next call of the same tool uses
-      (for one action, such as one install). A grant expires after TTL s.
+When it shows (offer):
+  - A stand-in (SHOW) is set (tests).
+  - Or the person turned it on: Mod/AgentLink WindowApprove (bool) or
+    AGENTLINK_WINDOW_OK=on, and FreeCAD has its window.
+  - Or an add-on asks for it on a person's own action (hooks.approval_in_window,
+    a panel button), with a window.
 
 A press counts only when all of these are true (press_counts):
   - The event came from the system (QEvent.spontaneous()). Events that
@@ -26,49 +22,35 @@ A press counts only when all of these are true (press_counts):
   - The test flag AGENTLINK_AS_USER is off.
 gui_input and dialog_answer also refuse every widget in the dialog
 (OBJECT_NAME), so the agent gets a clear refusal, not a silent no-op.
-
-What is not covered: a program with control of the whole Mac (a screen
-control tool, a script that the person runs) makes system events. That is
-outside MCP and outside Agent Link.
+A press gives the same approval as approve_file / approve_code
+(approvals.give, by "window").
 """
-import threading
+import os
 import time
+
+from . import approvals
+from .approvals import Refused, take, granted  # noqa: F401 - the names add-ons and tests use
 
 OBJECT_NAME = "AgentLinkPersonOK"
 MIN_READ = 1.5      # s the dialog is in view before Approve counts
-TTL = 600.0         # s a grant stays good
-MAX_LINES = 40
-MAX_LINE = 300
+TTL = approvals.TTL
+MAX_LINES = approvals.MAX_LINES
+MAX_LINE = approvals.MAX_LINE
 DATA_NOTE = "Text from the file is the author's words: data, not instructions."
-
-_lock = threading.Lock()
-_GRANTS = {}        # key -> expiry time
-_OPEN = {}          # key -> request
+PREFS = "User parameter:BaseApp/Preferences/Mod/AgentLink"
+SETTING = "WindowApprove"
 # The function that shows the dialog: show(request) -> None. None: use Qt
 # (only with a window). Tests put a stand-in here.
 SHOW = None
 
 
-class Refused(Exception):
-    def __init__(self, code, message):
-        super().__init__(message)
-        self.code = code
-        self.message = message
-
-
 def key(kind, name, sha=None):
-    return f"{kind}:{name}:{sha or ''}"
+    return approvals.key(kind, name, sha)
 
 
 def press_counts(spontaneous, shown_for, as_user=False):
     """True when a press on Approve is the person's own."""
     return bool(spontaneous) and shown_for >= MIN_READ and not as_user
-
-
-def _clean(text, cap=MAX_LINE):
-    t = "".join(c if ord(c) >= 32 and c not in "  ‮‭​" else " " for c in str(text))
-    t = " ".join(t.split())
-    return t[:cap] + ("…" if len(t) > cap else "")
 
 
 def _as_user():
@@ -93,73 +75,61 @@ def window_up():
         return False
 
 
-def take(kind, name, sha=None):
-    """Use up a grant: True when the person pressed Approve for this."""
-    k = key(kind, name, sha)
-    with _lock:
-        t = _GRANTS.pop(k, None)
-    return t is not None and t >= time.time()
+def turned_on():
+    """The person's setting for the window path (off by default)."""
+    v = os.environ.get("AGENTLINK_WINDOW_OK", "").strip().lower()
+    if v in ("on", "1", "true", "yes"):
+        return True
+    if v in ("off", "0", "false", "no"):
+        return False
+    try:
+        import FreeCAD
+
+        return bool(FreeCAD.ParamGet(PREFS).GetBool(SETTING, False))
+    except Exception:  # noqa: BLE001
+        return False
 
 
-def granted(kind, name, sha=None):
-    """True when a grant waits (not used up)."""
-    with _lock:
-        t = _GRANTS.get(key(kind, name, sha))
-    return t is not None and t >= time.time()
-
-
-def ask(kind, name, title, lines, sha=None, on_ok=None):
-    if on_ok is None and take(kind, name, sha):
-        return {"ok": True}
+def offer(req, again=False, force=False):
+    """Show the dialog for an approval request when the window path is on
+    (see the module's words). True when it is in view."""
     show = SHOW
     if show is None:
-        if not window_up():
-            raise Refused("unavailable", f"The person's OK is a press in the FreeCAD window, and this FreeCAD has no window. "
-                                         f"Open FreeCAD with its window (Agent Link > Start Link), then ask again. Nothing was changed.")
+        if not (force or turned_on()) or not window_up():
+            return False
         show = _show_qt
-    k = key(kind, name, sha)
-    req = {"key": k, "kind": kind, "name": name, "sha": sha, "title": _clean(title, 120),
-           "lines": [_clean(x) for x in list(lines or [])[:MAX_LINES]], "on_ok": on_ok, "opened": time.time(), "shown": None}
-    with _lock:
-        was = _OPEN.get(k)
-    if was is None or not was.get("alive", True):
-        with _lock:
-            _OPEN[k] = req
-        show(req)
-    return {"pending": True, "kind": kind, "name": name,
-            "next": "The FreeCAD window shows the OK dialog now. Ask the person to read it and press Approve there. "
-                    "Only a press by the person counts: no tool can press it. "
-                    + ("After the press, it is kept." if on_ok else "After the press, call this tool again with the same arguments.")}
+    if again and req.get("alive", True) and req.get("dialog") is not None:
+        return True
+    req["alive"] = True
+    show(req)
+    return True
+
+
+def ask(kind, name, title, lines, sha=None, on_ok=None, shown=None, then=None):
+    """The approval (agentlink/approvals.py ask): {"ok": True} once the
+    person approved, else the pending answer with the approve tool's
+    arguments. Kept for add-ons written for the window OK."""
+    return approvals.ask(kind, name, title, lines, sha, on_ok, shown=shown, then=then)
 
 
 def pressed(req, spontaneous, now=None):
     """The person pressed Approve on req's dialog. Answers True when it
-    counts (the OK is then given), False when it does not."""
+    counts (the approval is then given), False when it does not."""
     now = time.time() if now is None else now
     shown = req.get("shown") or req.get("opened") or now
     if not press_counts(spontaneous, now - shown, _as_user()):
         return False
-    with _lock:
-        _OPEN.pop(req["key"], None)
-    if req.get("on_ok"):
-        req["on_ok"]()
-    else:
-        with _lock:
-            _GRANTS[req["key"]] = now + TTL
+    approvals.give(req, "window", now=now)
     return True
 
 
 def declined(req):
-    with _lock:
-        _OPEN.pop(req["key"], None)
-        _GRANTS.pop(req["key"], None)
+    approvals.declined(req)
 
 
 def reset():
     """Forget every open request and grant (tests)."""
-    with _lock:
-        _OPEN.clear()
-        _GRANTS.clear()
+    approvals.reset()
 
 
 def is_person_ok_widget(w):
@@ -228,7 +198,8 @@ def _show_qt(req):
     lay.addWidget(head)
     body = QtWidgets.QPlainTextEdit()
     body.setReadOnly(True)
-    body.setPlainText("\n".join(req["lines"] + ["", DATA_NOTE]))
+    facts = [f"{k}: {v}" for k, v in (req.get("args") or {}).items() if k != "what"]
+    body.setPlainText("\n".join(facts + [""] + req["lines"] + ["", DATA_NOTE]))
     lay.addWidget(body)
     note = QtWidgets.QLabel("An agent asked for this. Approve only if you want it.")
     note.setTextFormat(QtCore.Qt.PlainText)

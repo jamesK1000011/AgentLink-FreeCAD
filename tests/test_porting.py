@@ -392,7 +392,7 @@ class Cookbooks(Home):
         row = self.call("cookbook_list")["cookbooks"][0]
         self.assertEqual((row["cookbook"], row["state"]), ("mine", "no"))
         self.assertEqual(row["entries"][0]["entry"], "mine_do")
-        self.assertIn("presses Approve", row["next"])
+        self.assertIn("approve_code", row["next"])
         msg = self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_do")
         self.assertIn("cookbook_approve", msg)
         self.assertIn("Nothing was run", msg)
@@ -421,12 +421,24 @@ class Cookbooks(Home):
         self.assertEqual(r["ran"], "command")
         self.assertEqual(self.srv.calls, [{"name": "cmd_run", "arguments": {"name": "Mine_Do"}}])
 
-    def test_headless_the_ok_is_refused(self):
-        from agentlink import person_ok
+    def test_headless_the_approval_is_the_clients(self):
+        # The owner, 18 Nov 2026: the approval is approve_code, guarded by the
+        # client's tool permission; no window is needed.
+        from agentlink import approvals, person_ok
 
         self.install()
         person_ok.SHOW = None  # no stand-in, and no FreeCAD window here
-        self.refused("cookbook_approve", "unavailable", name="mine")
+        r = self.call("cookbook_approve", name="mine")
+        self.assertTrue(r["pending"])
+        args = r["approve"]["arguments"]
+        self.assertEqual((r["approve"]["tool"], args["kind"], args["id"]), ("approve_code", "cookbook", "mine"))
+        self.assertEqual(args["fingerprint"], self.call("cookbook_show", name="mine")["sha256"])
+        # Not from the client (a batch, a script): refused.
+        with self.assertRaises(approvals.Refused):
+            approvals.approve("approve_code", args)
+        with approvals.client_call("approve_code", args):
+            approvals.approve("approve_code", args)
+        self.assertEqual(self.call("cookbook_approve", name="mine")["approved"], "mine")
 
     def test_a_file_changed_before_the_press_is_not_approved(self):
         self.install()

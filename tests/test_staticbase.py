@@ -23,7 +23,7 @@ def _boom(a):
 class Static(unittest.TestCase):
     def setUp(self):
         names = [("session_state", "core"), ("guide_read", "core"), ("tool_groups", "core"), ("history_undo", "core"),
-                 ("view_snapshot", "view"), ("tool_find", "find"), ("pd_pad", "feature")]
+                 ("view_snapshot", "view"), ("tool_find", "find"), ("pd_pad", "feature"), ("approve_file", "core"), ("approve_code", "core")]
         self.server = Server("t", "0", [_tool(n, g) for n, g in names] + [_tool("batch", "core", _boom)], groups={"core", "view"})
         self.server.lean_groups = {"core", "view"}
 
@@ -37,7 +37,8 @@ class Static(unittest.TestCase):
 
     def test_default_is_static(self):
         got, _ = self.names()
-        self.assertEqual(sorted(got), sorted(["session_state", "batch", "guide_read", "tool_find"]))
+        # The two approval tools are always listed: the person sets them in the client's tool permissions.
+        self.assertEqual(sorted(got), sorted(["session_state", "batch", "guide_read", "tool_find", "approve_file", "approve_code"]))
 
     def test_classic_unchanged(self):
         os.environ["AGENTLINK_TOOLLIST"] = "classic"

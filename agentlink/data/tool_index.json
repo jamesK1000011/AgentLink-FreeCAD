@@ -11,6 +11,8 @@
   "app_install": {"workbench": null, "commands": [], "words": ["download", "release", "version", "upgrade"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "app_open": {"workbench": null, "commands": [], "words": ["start", "launch", "window", "closed", "background"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "app_restart": {"workbench": null, "commands": [], "words": ["quit", "relaunch", "reopen"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
+  "approve_code": {"workbench": null, "commands": [], "words": ["approval", "permission", "person", "install", "addon", "macro", "cookbook", "extension", "consent", "trust"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-18"},
+  "approve_file": {"workbench": null, "commands": [], "words": ["approval", "permission", "person", "save", "over", "recovered", "dialog", "consent"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-18"},
   "asm_add": {"workbench": "AssemblyWorkbench", "commands": ["Assembly_InsertLink", "Assembly_Insert"], "words": ["assembly", "insert", "component", "part"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "asm_bom": {"workbench": "AssemblyWorkbench", "commands": ["Assembly_CreateBom"], "words": ["assembly", "bill", "materials", "parts", "list", "quantity"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "asm_check": {"workbench": "AssemblyWorkbench", "commands": ["Assembly_SolveAssembly"], "words": ["assembly", "solve", "interference", "collisions", "clash", "dof"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},

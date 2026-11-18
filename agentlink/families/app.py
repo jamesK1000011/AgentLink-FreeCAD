@@ -724,6 +724,31 @@ def tools(session):
         import subprocess
         import sys
 
+        # What is saved (unattended use, L): by default only the documents
+        # this session changed, each checkpointed first. Anything else that
+        # changed is copied and reopens beside its file from the copy — never
+        # saved over the person's file without their say-so. save: all needs
+        # the person's approval (approve_file, agentlink/approvals.py), asked
+        # before anything else is done.
+        rule = a.get("save", "agent")
+        if rule not in ("agent", "none", "all"):
+            raise ToolError("invalid_input", "save: agent (the documents this session changed; the default) | none | all (needs the person's approval: approve_file).")
+        if rule == "all":
+            from .. import approvals
+            from ..store import is_changed
+
+            docs = sorted((d.Label, d.FileName or "", bool(is_changed(d))) for d in FreeCAD.listDocuments().values())
+            changed_docs = [x for x in docs if x[2]]
+            try:
+                got = approvals.ask("save-all", "restart", "Save every changed document over its file at the restart",
+                                    [f"{lb}: {fn or 'never saved'}" for lb, fn, _c in changed_docs] or ["No document is changed now."],
+                                    approvals.identity("save-all", changed_docs),
+                                    shown={"document": ", ".join(lb for lb, _f, _c in changed_docs) or "none changed", "file": ", ".join(fn or "never saved" for _l, fn, _c in changed_docs) or "none"})
+            except approvals.Refused as e:
+                raise ToolError(e.code, e.message)
+            if not got.get("ok"):
+                return {**got, "restarting": False, "changed": False}
+
         target = a.get("app")
         if target:
             target = _freecad_bundle(target)
@@ -759,15 +784,6 @@ def tools(session):
 
             return is_changed(d)
 
-        # What is saved (unattended use, L): by default only the documents
-        # this session changed, each checkpointed first. Anything else that
-        # changed is copied and reopens beside its file from the copy — never
-        # saved over the person's file without their say-so.
-        rule = a.get("save", "agent")
-        if rule not in ("agent", "none", "all"):
-            raise ToolError("invalid_input", "save: agent (the documents this session changed; the default) | none | all (needs confirm: \"save all\" typed by the person).")
-        if rule == "all" and (a.get("confirm") or "").strip() != "save all":
-            raise ToolError("not_allowed", "save: all saves documents the person may not want saved: confirm: \"save all\", typed by them. Nothing was changed.")
         s.restart_save = rule
         from .. import hooks
 
@@ -783,7 +799,7 @@ def tools(session):
         plan = restart_plan(list(FreeCAD.listDocuments().values()), changed, rule, mine, bool(a.get("discard")))
         lost = [d.Label for d, how in plan if how == "copy"]
         if lost and reopener is None:
-            raise ToolError("invalid_state", f"{', '.join(lost)}: changed and not being saved, and nothing here keeps a copy to reopen them from (that needs an add-on that keeps checkpoints). doc_save them first, save: all (with the person's confirm), or discard: true for never-saved ones. Nothing was changed.")
+            raise ToolError("invalid_state", f"{', '.join(lost)}: changed and not being saved, and nothing here keeps a copy to reopen them from (that needs an add-on that keeps checkpoints). doc_save them first, save: all (with the person's approval, approve_file), or discard: true for never-saved ones. Nothing was changed.")
         saved, dropped, kept = [], [], []
         for d, how in plan:
             if how == "keep":
@@ -975,8 +991,9 @@ def tools(session):
                             "only. The call answers first. Then FreeCAD quits about 0.3 s later, and is back in a few seconds with its link on automatically. Each call made during "
                             "that time waits for it, up to 45 s. Then the call fails with a clear message, and it never goes to the hidden FreeCAD. The agent "
                             "works in its document of before again. session_state tells the status. save tells what happens to documents. save agent (the default): saves the "
-                            "documents that this session changed, each checkpointed first. save none: saves nothing. save all: saves every changed document. It needs confirm: "
-                            "\"save all\", typed by the person, because it writes over files that the agent did not change. In every case, nothing of the person's is lost or written "
+                            "documents that this session changed, each checkpointed first. save none: saves nothing. save all: saves every changed document. It writes over files "
+                            "that the agent did not change. So it needs the person's approval. The first call answers pending with the approve_file arguments. Call "
+                            "approve_file with them, then call again. In every case, nothing of the person's is lost or written "
                             "over. The tool keeps the agent's never-saved documents once in ~/AgentLink/unsaved, and opens them again from there. Any other changed document opens "
                             "again from a copy next to its file. The add-on that keeps checkpoints makes that copy. Without that add-on, the tool refuses, changes nothing, and "
                             "tells you to use doc_save on them first. discard: true drops the never-saved documents instead. A task panel or sketch left open is not carried over. "
@@ -985,5 +1002,5 @@ def tools(session):
                             "restarting true, saved (documents written), reopens (what will open again), keptInPlace, fromCopies, discarded, app and settings (with app), note. Use "
                             "it only when a restart is necessary. After it, every open task panel, the undo history and the selection are gone. For a window that no longer answers "
                             "at all, use app_force_restart, not this tool.",
-             obj({"discard": {"type": "boolean"}, "app": {"type": "string"}, "save": {"type": "string", "enum": ["agent", "none", "all"]}, "confirm": {"type": "string"}}), app_restart),
+             obj({"discard": {"type": "boolean"}, "app": {"type": "string"}, "save": {"type": "string", "enum": ["agent", "none", "all"]}}), app_restart),
     ] + runners.tools(GROUP, s, helpers)

@@ -53,11 +53,12 @@ class PersonOk(unittest.TestCase):
         person_ok.pressed(req, True, now=req["opened"] + 2 - person_ok.TTL - 10)
         self.assertFalse(person_ok.take("addon-install", "Mine", "url"))
 
-    def test_headless_is_refused(self):
+    def test_headless_answers_with_the_client_approval(self):
+        # The owner, 18 Nov 2026: no window is needed; the approval is approve_code.
         person_ok.SHOW = None
-        with self.assertRaises(person_ok.Refused) as e:
-            person_ok.ask("cookbook", "mine", "x", [])
-        self.assertEqual(e.exception.code, "unavailable")
+        r = person_ok.ask("cookbook", "mine", "x", [], "sha")
+        self.assertTrue(r["pending"])
+        self.assertEqual(r["approve"]["tool"], "approve_code")
 
     def test_dialog_text_is_one_line_each_and_capped(self):
         person_ok.ask("cookbook", "mine", "T\nitle", ["a‮b\nc" + "x" * 900] * 100)

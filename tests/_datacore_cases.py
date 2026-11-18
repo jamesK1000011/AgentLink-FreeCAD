@@ -36,7 +36,7 @@ EXPECT = {
     ("gui_unstick", "all"): {"closed": ["a menu"], "open": None},
     ("addon_test", "a run with everything given"): {"job": "t1", "addon": "Workshop", "state": "running"},
     ("addon_test", "timeout too long"): ["refused", "invalid_input", "timeout: seconds, over 0 and at most 1800 (600 by default)."],
-    ("queue_go", "held, one running"): {"go": True, "wasHeld": True, "running": ["fea_solve"], "machine": {"heavySlots": 2, "memoryCeilingGB": 12, "fan": "quiet"}},
+    ("queue_go", "held, one running"): {"go": True, "wasHeld": True, "running": ["fea_solve"], "machine": {"heavySlots": 2, "criticalPressureGuard": True, "fan": "quiet"}},
     ("crash_collect", "nothing"): {"note": "No recovery files from another FreeCAD and no new crash reports."},
     ("dialog_answer", "a dialog's button"): {"pressed": "Yes", "dialog": {"title": "Save?", "text": "Save changes?", "buttons": ["Yes", "No"], "class": "QMessageBox"}},
     ("dialog_answer", "recovery's cleanup, nothing to keep"): {"pressed": "Cleanup", "kept": {"note": "No recovery files or crash reports were found to keep."}},

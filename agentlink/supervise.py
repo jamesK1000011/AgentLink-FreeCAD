@@ -593,6 +593,20 @@ def stop_pid(pid, grace=10.0):
         pass
 
 
+def _memory_job(q, window, state):
+    """The heavy job in hand for the critical-pressure guard: {tool, start,
+    pid (its FreeCAD)}, or None."""
+    run = [r for r in (q or {}).get("running") or [] if isinstance(r, dict) and r.get("tool")]
+    if not run:
+        return None
+    r = run[0]
+    pid = r.get("pid")
+    if not pid or pid == os.getpid():
+        hb = heartbeat() or {}
+        pid = hb.get("pid") if getattr(window, "inflight", None) else getattr((state or {}).get("child"), "pid", None)
+    return {"tool": r.get("tool"), "start": float(r.get("start") or r.get("t") or time.time()), "pid": pid}
+
+
 def heartbeat():
     if keep is None:
         return None
@@ -1331,6 +1345,14 @@ def run(script, argv):
     window = Window(write)
     progress = Progress()
 
+    try:
+        from . import memguard
+
+        memwatch = memguard.Supervisor(stop=lambda p: threading.Thread(target=stop_pid, args=(p,), daemon=True).start(),
+                                       log=keep.log_watchdog if keep is not None else None)
+    except ImportError:
+        memwatch = None
+
     def watchdog():
         """Every 2 s: a call stuck behind a dialog is answered; a FreeCAD
         past its call's deadline with no heartbeat for a minute is stopped
@@ -1354,6 +1376,11 @@ def run(script, argv):
                         keep.log_watchdog({"event": "held", "tool": got["held"]})
                     if got and got.get("dropped"):
                         keep.log_watchdog({"event": "stale", "tools": got["dropped"]})
+                # The critical-pressure guard (agentlink/memguard.py): real
+                # memory read every few seconds while a heavy job runs; at
+                # CRITICAL that job alone is stopped, and its answer says why.
+                if memwatch is not None:
+                    memwatch.turn(_memory_job(q, window, state))
                 c = window.inflight
                 if c:
                     hb = heartbeat()

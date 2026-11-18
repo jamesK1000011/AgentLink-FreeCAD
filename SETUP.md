@@ -68,6 +68,18 @@ client is a GUI app. Small local model: keep the lean list (do not set
 The person restarts the client. Done when the client lists the
 `agentlink-freecad` server with tools such as `session_state`.
 
+The person sets the two approval tools in the client's tool permissions
+(Claude Desktop: the server's tools, each "Always allow", "Ask first" or
+"Block"):
+
+- `approve_code` (run or install code: macros, cookbooks, add-ons,
+  extensions): "Ask first" is the safe setting.
+- `approve_file` (a file dialog, a recovered copy, save all at a restart):
+  "Ask first" is the safe setting.
+
+"Always allow" lets the agent approve alone (headless use). It is the
+person's choice. Never change these settings for the person.
+
 ## 6. Prove it
 
 Call `session_state`: it answers with what the document holds and where

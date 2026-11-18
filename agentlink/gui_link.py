@@ -267,6 +267,30 @@ def unsafe_close_press(d, button, in_hand):
             "closes it without a dialog, or doc_save first keeps the changes.")
 
 
+FILE_PRESS = ("save", "don't save", "dont save", "discard", "save all", "discard all", "yes", "yes to all", "replace", "overwrite", "ok")
+
+
+def file_dialog_press(d, button):
+    """A press on a file-level dialog that needs the person's approval
+    (approve_file, agentlink/approvals.py): FreeCAD's close confirm (Save,
+    Don't Save: one writes over the file, the other loses the changes) or
+    a "replace the file" box. (title, text, button) for the approval, or
+    None for any other press (Cancel always passes)."""
+    if not isinstance(d, dict):
+        return None
+    b = str(button or "").lower().replace("&", "").strip()
+    if b in BACK_OUT or b in ("cancel", "no", "no to all"):
+        return None
+    text = str(d.get("text") or "")
+    low = text.lower()
+    replace_box = ("already exists" in low or "exists already" in low) and ("replace" in low or "overwrite" in low)
+    if not (is_close_confirm(d) or replace_box):
+        return None
+    if b not in FILE_PRESS:
+        return None
+    return str(d.get("title") or ""), " ".join(text.split())[:300], str(button)
+
+
 def calls_in_hand():
     """The tool names of the calls in hand in the window's link, outermost
     first. Never raises."""

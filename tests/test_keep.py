@@ -89,7 +89,8 @@ class Machine(Home):
 
     def test_preset(self):
         m = keep.machine_from(self.AIR)
-        self.assertEqual((m["fan"], m["heavySlots"], m["memoryGB"], m["memoryCeilingGB"]), (False, 1, 16.0, 8.0))
+        self.assertEqual((m["fan"], m["heavySlots"], m["memoryGB"], m["criticalPressureGuard"]), (False, 1, 16.0, True))
+        self.assertNotIn("memoryCeilingGB", m)  # no ceiling before a job (18 Nov): the guard watches real pressure
         pro = dict(self.AIR, **{"hw.model": "Mac16,5", "hw.perflevel0.physicalcpu": "12"})
         self.assertEqual(keep.machine_from(pro)["heavySlots"], 2)
 
@@ -104,7 +105,8 @@ class Machine(Home):
         m = keep.read_machine()
         self.assertGreaterEqual(m["heavySlots"], 1)
         self.assertTrue(os.path.isfile(os.path.join(self.tmp.name, "machine.json")))
-        self.assertEqual(keep.preset({"memoryCeilingGB": 2.5})["memoryCeilingGB"], 2.5)
+        self.assertIs(keep.preset({"criticalPressureGuard": False})["criticalPressureGuard"], False)
+        self.assertIs(keep.preset({})["criticalPressureGuard"], True)
         self.assertIn("fea_solve", keep.HEAVY)
 
     def test_queue(self):

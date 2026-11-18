@@ -186,6 +186,7 @@ def declared(fams):
             tools.NOT_IN_MACROS.update(x for x in (getattr(f, "NOT_IN_MACROS", ()) or ()) if isinstance(x, str))
         paths.WRITERS.update(getattr(f, "WRITERS", ()) or ())
         if getattr(f, "EXTERNAL", False):
+            refuse_hiding(f)
             # An add-on's GEOMETRIC (no path check) and PINNED_FREE count
             # only for its own tools: owned() adds them once its tools are
             # made (red team, 2026-11-18: an add-on that said "export" was
@@ -219,3 +220,28 @@ def owned(fam, names):
                 into.add(x)
             else:
                 sys.stderr.write(f"Agent Link: {getattr(fam, 'EXTENSION', '?')} declares {x} in {attr}, but {x} is not its tool — left out\n")
+
+
+# What an add-on may never say of the hub's tools and groups (the owner, 18 Nov
+# 2026): it never hides or replaces a hub tool or group. Its tools sit
+# beside the hub's. (REPLACES once left a hub group out of the listing.)
+HIDING = ("REPLACES", "HIDES", "HIDE", "REPLACE")
+
+
+def refuse_hiding(fam):
+    """An add-on family that says REPLACES or HIDES: refused at load, said
+    in the log, and the attribute taken off. Its own tools still load.
+    The attributes refused."""
+    out = []
+    for attr in HIDING:
+        v = getattr(fam, attr, None)
+        if not v:
+            continue
+        out.append(attr)
+        sys.stderr.write(f"Agent Link: {getattr(fam, 'EXTENSION', None) or getattr(fam, 'GROUP', '?')} declares {attr} {sorted(map(str, v)) if not isinstance(v, str) else v!r} — "
+                         f"refused: an add-on never hides or replaces a hub tool or group; its tools sit beside them\n")
+        try:
+            setattr(fam, attr, ())
+        except Exception:  # noqa: BLE001
+            pass
+    return out

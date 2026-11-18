@@ -69,6 +69,14 @@
       "description": "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang): run by Agent Link outside FreeCAD; the documents come back from their newest saved copies, as after a crash."
     },
     {
+      "name": "approve_code",
+      "description": "Approve code that a tool asked to run or install."
+    },
+    {
+      "name": "approve_file",
+      "description": "Approve one file-level step that a tool asked for."
+    },
+    {
       "name": "batch",
       "description": "Run several tools in one call, in order: calls [{ tool, arguments }], or file: a .json file holding that list (or { calls, rollback, stopOnError }), read on this side so a long run of calls (many profiles' points) is not sent through the conversation; a relative path is in the session's folder, and files are read where other tools may read."
     },

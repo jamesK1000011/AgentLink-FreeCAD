@@ -203,15 +203,19 @@ def tools(session):
                 raise ToolError("invalid_input", "repo: owner/repo, with @branch if not main.")
             if act == "add":
                 # An extension is code FreeCAD runs at start: whose to add is
-                # the person's call, typed by them, never the agent's alone.
-                # The OK is a press in the window (agentlink/person_ok.py):
-                # a typed confirm is not taken, as an agent can type it.
-                from . import person_ok
+                # the person's call. The approval is approve_code, which the
+                # person sets in the client's tool permissions
+                # (agentlink/approvals.py). A typed confirm is not taken.
+                from . import approvals
 
+                repo, _, branch = r.partition("@")
+                owner = repo.split("://")[-1].split("/")[-2] if repo.count("/") >= 1 else repo
                 try:
-                    ok = person_ok.ask("extension", r, f"Add the extension {r}?", [f"Repository: {r}", "An extension is code that FreeCAD runs at each start.",
-                                                                                     "Approve only a repository that you know and trust."])
-                except person_ok.Refused as e:
+                    ok = approvals.ask("extension", r, f"Add the extension {r} (code that FreeCAD runs at each start)",
+                                       [f"Repository: {r}", "An extension is code that FreeCAD runs at each start.", "Approve only a repository that you know and trust."],
+                                       shown={"source": repo if "://" in repo else f"https://github.com/{repo}", "version": f"branch {branch or 'main'}; sync takes its newest commit",
+                                              "author": owner})
+                except approvals.Refused as e:
                     raise ToolError(e.code, e.message)
                 if not ok.get("ok"):
                     return {**ok, "changed": False, "repos": repos()}
@@ -230,6 +234,6 @@ def tools(session):
         raise ToolError("invalid_input", "action: list, add, remove, sync.")
 
     return [Tool("app_extensions",
-                 "Extensions to Agent Link kept in git repositories: list (set and loaded), add { repo: owner/repo[@branch] } — an extension is code FreeCAD runs, so adding one is the person's call: the first call shows the OK in the FreeCAD window and answers pending; the person presses Approve there (no tool can press it); then call again / remove { repo }, sync (the listed ones fetched with this computer's own git sign-in and installed beside Agent Link; then app_restart). The list is a local setting only the person adds to.",
+                 "Extensions to Agent Link kept in git repositories: list (set and loaded), add { repo: owner/repo[@branch] } — an extension is code FreeCAD runs, so adding one is the person's call: the first call answers pending with the approve_code arguments; call approve_code with them (the client asks the person first when they set it to \"ask first\"); then call again / remove { repo }, sync (the listed ones fetched with this computer's own git sign-in and installed beside Agent Link; then app_restart). The list is a local setting only the person adds to.",
                  {"type": "object", "properties": {"action": {"type": "string", "enum": ["list", "add", "remove", "sync"]}, "repo": {"type": "string"}}, "required": [], "additionalProperties": False},
                  app_extensions, group="core")]

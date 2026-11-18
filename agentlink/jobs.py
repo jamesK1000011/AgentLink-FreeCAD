@@ -365,6 +365,10 @@ def start(tool, args, session, fn=None):
     watch = hang_trace(getattr(session, "out_dir", None), tool.name, "job")
 
     def work():
+        # The critical-pressure guard watches this thread (agentlink/memguard.py).
+        from . import memguard
+
+        tid = memguard.started(tool.name, now=job["started"]) if keep.is_heavy(tool.name) and memguard.on() else None
         try:
             with watch:
                 out = call()
@@ -373,12 +377,19 @@ def start(tool, args, session, fn=None):
         except ToolError as e:
             job["error"] = {"code": e.code, "message": e.message}
             job["status"] = "failed"
-        except Exception as e:  # noqa: BLE001 — the job's answer says it
+        except (Exception, memguard.MemoryStop) as e:  # noqa: BLE001 — the job's answer says it
             from .protocol import failed_words
 
             job["error"] = {"code": "failed", "message": failed_words(tool.name, e)}
             job["status"] = "failed"
         finally:
+            if tid is not None:
+                memguard.finished(tid)
+                mark = memguard.take_mark(tool.name, job["started"])
+                if mark is not None:
+                    job.pop("result", None)
+                    job["error"] = {"code": "stopped", "message": memguard.words(tool.name, mark, changes=False)}
+                    job["status"] = "failed"
             job["finished"] = time.time()
             secs = job["finished"] - job["started"]
             if job["status"] == "done" and secs >= 1.0:

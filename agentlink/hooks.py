@@ -436,7 +436,7 @@ _EXTENSIONS = {}
 # An add-on keeps one of its own tools out of reach with keep_unextended().
 NOT_EXTENDED = {"cookbook_approve", "cookbook_unapprove", "cookbook_import", "cookbook_run", "app_extensions", "addon",
                 "pref_set", "pref_reset", "pref_import", "pref_pack", "agentlink_update", "batch",
-                "gui_input", "dialog_answer", "cmd_run", "menu_run"}
+                "gui_input", "dialog_answer", "cmd_run", "menu_run", "app_restart"}
 
 
 def keep_unextended(name):
@@ -463,14 +463,39 @@ def extend_tool(name, properties=None, before=None, after=None, describe=None):
     return extendable(name)
 
 
-def person_ok(kind, name, title, lines, sha=None, on_ok=None):
-    """The person's OK as a press in the FreeCAD window, for an add-on's own
-    approvals (a macro): agentlink/person_ok.py ask(). Answers {"ok": True}
-    or {"pending": True, "next": ...}; raises person_ok.Refused (code,
-    message) with no window. A typed confirm is never an OK."""
-    from . import person_ok as _p
+def person_ok(kind, name, title, lines, sha=None, on_ok=None, shown=None):
+    """The person's approval for an add-on's own approvals (a macro, a
+    recovered copy): agentlink/approvals.py ask(). Answers {"ok": True}, or
+    {"pending": True, "approve": {"tool", "arguments"}, "next"}: the agent
+    calls approve_file or approve_code with those arguments, which the
+    person sets in the client's tool permissions. kind "dialog", "recover"
+    or "save-all" is approve_file's; every other kind is approve_code's.
+    shown: the facts the client shows the person (source, version, author;
+    document, file, button). A typed confirm is never an approval."""
+    from . import approvals
 
-    return _p.ask(kind, name, title, lines, sha, on_ok)
+    return approvals.ask(kind, name, title, lines, sha, on_ok, shown=shown)
+
+
+approval = person_ok
+
+
+def approval_in_window(answer, then=None):
+    """For a person's own action in an add-on's panel (a button): show
+    Agent Link's Approve dialog in the FreeCAD window for a pending answer
+    of person_ok. Only a system press by the person there counts
+    (agentlink/person_ok.py); then() runs after it, on the window's thread.
+    False when there is no window or nothing waits."""
+    from . import approvals, person_ok as _p
+
+    args = ((answer or {}).get("approve") or {}).get("arguments") or {}
+    k = approvals.key(args.get("kind"), args.get("id"), args.get("fingerprint"))
+    with approvals._lock:
+        req = approvals._OPEN.get(k)
+    if req is None:
+        return False
+    req["then"] = then
+    return _p.offer(req, force=True)
 
 
 def apply_extensions(tools, session):
