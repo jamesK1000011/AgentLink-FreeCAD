@@ -603,6 +603,28 @@ class Delivery(unittest.TestCase):
         out = self.run.run(gi.parse_steps([{"type": "2"}, {"key": "Return"}]))
         self.assertTrue(all(w == "editor" for w, _e in self.sent), self.sent)
 
+    def test_text_follows_the_focus_a_key_moved(self):
+        """Live 98: "=" in a quantity field opens FreeCAD's expression line,
+        which takes the focus; "2*3" goes there, as a person's keys do."""
+        spin = Widget("spin", 20, 60, 120, 24, parent=self.mw, cls="QuantitySpinBox", focus=2)
+        spin.focused = True
+        self.state["app"].focusWidget = lambda: self.mw.focusWidget()
+        made = {}
+        send = self.run._send
+
+        def send_and_open(w, ev):
+            r = send(w, ev)
+            if ev.text == "=" and ev.t == "KeyRelease" and "line" not in made:
+                spin.focused = False
+                made["line"] = Widget("expr", 20, 90, 200, 24, parent=self.mw, cls="ExpressionLineEdit", focus=2)
+                made["line"].focused = True
+            return r
+
+        self.run._send = send_and_open
+        out = self.run.run(gi.parse_steps([{"type": "=2*3"}]))
+        self.assertEqual([(w, e.text) for w, e in self.sent if e.t == "KeyPress"], [("spin", "="), ("expr", "2"), ("expr", "*"), ("expr", "3")])
+        self.assertEqual(out["steps"][0]["followed"][0]["name"], "expr")
+
     def shortcut_actions(self, *specs):
         class Seq:
             def __init__(self, t):
