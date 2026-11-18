@@ -1612,6 +1612,13 @@ class Run:
                 return
             p = p.parentWidget()
 
+    def _focus_now(self):
+        """The widget that has the keyboard focus now, or None."""
+        try:
+            return self.app().focusWidget()
+        except Exception:
+            return None
+
     def _focus_widget(self, target):
         if target is not None:
             w, _x, _y = self.resolve(target)
@@ -1975,10 +1982,23 @@ class Run:
             w = self._focus_widget(st.get("target"))
             out["hit"] = {"class": self._props(w)["classes"][0], **({"name": w.objectName()} if w.objectName() else {})}
             evs = key_events(self.qt, st["key"], st["mods"]) if do == "key" else text_events(self.qt, st["text"])
-            for ev in evs:
+            before = None
+            for i, ev in enumerate(evs):
+                if do == "type" and i % 2 == 0:
+                    before = self._focus_now()
                 self._send(w, ev)
                 if self._detached():
                     return out
+                # A key that moves the focus sends the rest of the text to
+                # the new focus, as a person's keys go: "=" in a quantity
+                # field opens FreeCAD's expression line, and "2*3" belongs
+                # there (live 98: the rest went to the spin box).
+                if do == "type" and i % 2 == 1 and i + 1 < len(evs):
+                    self.pump(0)
+                    f = self._focus_now()
+                    if f is not None and f is not before and f is not w and _alive(f) and self._really_shown(f):
+                        w = f
+                        out.setdefault("followed", []).append({"class": self._props(w)["classes"][0], **({"name": w.objectName()} if w.objectName() else {})})
         elif do == "shortcut":
             self._shortcut(st["keys"], out)
         elif do == "wait":
