@@ -586,6 +586,15 @@ class Server:
         except Exception as e:
             traceback.print_exc(file=sys.stderr)
             result = self.refusal("failed", f"{name} failed: {e}", _test_trace())
+        if getattr(self, "meter", None) is not None:
+            # In the usage log too: every tools/call passes the meter, also a socket-thread one.
+            try:
+                from .usage import err_code
+
+                text = "".join(c.get("text", "") for c in result.get("content") or [] if c.get("type") == "text")
+                self.meter.call(str(name), compact(args), text, None, err_code(result), (time.time() - t0) * 1000, args=args, group=getattr(tool, "group", None))
+            except Exception:
+                pass
         return None if mid is None else {"jsonrpc": "2.0", "id": mid, "result": result}
 
     def _done(self, params, result, before):

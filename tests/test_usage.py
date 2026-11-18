@@ -162,6 +162,46 @@ class Log(unittest.TestCase):
         self.assertEqual(r["modes"], {"headless": 1})
         json.dumps(r)
 
+    def test_a_retry_after_a_batch_row(self):
+        """Live 73: a refused call in one batch, the same tool again in the
+        next batch with changed arguments: a retry (the batch's own row
+        between them does not count)."""
+        m = self.srv.meter
+        m.call("object_get", "{}", '{"error":{"code":"not_found","message":"Box001: no such object"}}', error="not_found", args={"object": "Box001"})
+        m.call("batch", "{}", "{}", args={"calls": [{"tool": "object_get"}]})
+        m.call("object_get", "{}", "{}", args={"object": "Box"})
+        r = usage.log_report(1, self.where)
+        self.assertEqual((r["retries"]["count"], r["retries"]["afterError"]), (1, 1))
+        self.assertEqual(r["errorsByTool"][0]["reasons"], [{"why": "Box001: no such object", "count": 1}])
+
+    def test_addons_in_the_mod_folder(self):
+        """Live 71: every add-on beside this one in Mod, with its version
+        and commit, not only those the ext loader imported."""
+        mod = tempfile.mkdtemp()
+        for name, ver in (("AgentLink", "0.3.0"), ("Tutor", "0.2.1"), ("ScanRulerFC", "1.0.0")):
+            os.makedirs(os.path.join(mod, name))
+            with open(os.path.join(mod, name, "package.xml"), "w", encoding="utf-8") as f:
+                f.write(f"<package><name>{name}</name><version>{ver}</version><date>2026-11-18</date></package>")
+        os.makedirs(os.path.join(mod, "Tutor", ".git", "refs", "heads"))
+        with open(os.path.join(mod, "Tutor", ".git", "HEAD"), "w") as f:
+            f.write("ref: refs/heads/main\n")
+        with open(os.path.join(mod, "Tutor", ".git", "refs", "heads", "main"), "w") as f:
+            f.write("c79b40d0123456789\n")
+        os.makedirs(os.path.join(mod, "NotAnAddon"))
+        here, usage._here = usage._here, lambda: os.path.join(mod, "AgentLink")
+        usage._ADDONS.clear()
+        try:
+            got = usage._addons()
+        finally:
+            usage._here = here
+            usage._ADDONS.clear()
+        self.assertEqual(got, {"AgentLink": {"version": "0.3.0", "date": "2026-11-18"}, "ScanRulerFC": {"version": "1.0.0", "date": "2026-11-18"},
+                               "Tutor": {"version": "0.2.1", "date": "2026-11-18", "commit": "c79b40d"}})
+
+    def test_a_socket_thread_call_is_logged(self):
+        self.srv.handle_light({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "make_box", "arguments": {}}})
+        self.assertEqual([r["tool"] for r in self.rows() if r["kind"] == "call"], ["make_box"])
+
     def test_a_pause_starts_a_new_job(self):
         m = self.srv.meter
         self.call("make_box")
