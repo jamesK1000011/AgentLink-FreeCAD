@@ -2038,6 +2038,12 @@ class Run:
                 if do == "type" and i % 2 == 0:
                     before = self._focus_now()
                     pop_before = self._popup_now()
+                if i and not _alive(w):
+                    # The key closed what held its widget (Return or Escape
+                    # in a task panel): the rest has nowhere to go (live
+                    # 98d: "Internal C++ object already deleted").
+                    out["closed"] = True
+                    break
                 self._send(w, ev)
                 if self._detached():
                     return out
