@@ -258,7 +258,7 @@ def tools(session):
     def importing(path, overwrite=False):
         p = paths.local(s, path)
         if not os.path.exists(p):
-            # A port folder named either way (texturizer-v2 / texturizer_v2): the scaffold's spelling.
+            # A port folder named either way (my-addon-v2 / my_addon_v2): the scaffold's spelling.
             d, f = os.path.split(p)
             alt = os.path.join(os.path.dirname(d), cookbook.canon(os.path.basename(d)), f)
             if alt != p and os.path.exists(alt):
