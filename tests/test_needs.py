@@ -637,6 +637,7 @@ def _walk(x):
 # usage_report { log, jobs } (usage log, 18 Nov): coded 9203 -> 9268, lean listing 7447 -> 7512, usage_report's card 194 -> 259.
 COSTS = {"dataTools": 383, "dataToolsTokens": 83787, "codedTools": 22, "codedToolsTokens": 9268, "leanTools": 20, "leanListingTokens": 7512,
          "oneCardMedian": 190, "oneCardLargest": 878, "toolGroupsCard": 729, "usageReportCard": 259}
+# Jobs and restart (18 Nov, no prejudging): job_start/job_status shorter, estimate words gone (data -> 83841, coded -64, lean -72).
 
 
 try:

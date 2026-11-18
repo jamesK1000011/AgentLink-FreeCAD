@@ -28,7 +28,7 @@ from .protocol import ToolError
 
 # Seconds a call waits for its job before answering with the job's id: under
 # a client's 80 s, with room for the reply.
-JOB_WAIT = 45.0
+JOB_WAIT = 55.0
 # A read whose past runs here took longer than this goes to a job.
 SLOW_READ = 20.0
 # A finished job's answer is kept this long for job_status.
@@ -218,7 +218,7 @@ def background_refusal(tool, args, in_batch, session=None):
     if in_batch and eligible(tool, args, session):
         if writes_file(tool, args):
             return (f"background: not inside a batch, which is one answer. {name} writes a file: leave background out and it runs here in its place, "
-                    f"the file written before the next call starts. (On its own, {name} with background: true runs as a job: it answers with a job id past 45 s, "
+                    f"the file written before the next call starts. (On its own, {name} with background: true runs as a job: it answers with a job id past 55 s, "
                     "and the file is whole only once job_status says done.)")
         return (f"background: not inside a batch, which is one answer — call {name} on its own with background: true "
                 "(or job_start { tool, arguments }), or leave background out here.")
@@ -264,22 +264,12 @@ def wanted(tool, args, session, asked=False):
         return False
     if asked:
         return True
-    if keep.is_heavy(tool.name):
-        return True
-    # A read the watchdog stopped FreeCAD in before (it never answered, so
-    # its time was never logged): a job from then on.
-    if keep.stopped_before(tool.name) is not None:
-        return True
-    from . import heavy
-
-    # A sized read (keep.SIZED: export's meshing) estimated past SLOW_READ
-    # at its input size: a job, so the window is not frozen meanwhile
-    # (live, 18 Nov: an STL export of a smooth loft held it past 123 s).
-    if tool.name in keep.SIZED:
-        est = sized_estimate(tool.name, args, session)
-        if est is not None and est > SLOW_READ:
-            return True
-    return past_slow(tool.name, heavy.size_of(session))
+    # By its kind only (a heavy read: keep.HEAVY, an add-on's declared
+    # heavy tools). No estimate, past time or earlier stop decides it (no
+    # prejudging, 18 Nov: an export put at 2 min took 0.48 s). Any call
+    # with no answer after about 60 s moves to the background by itself in
+    # the supervisor (agentlink/sup_jobs.py).
+    return bool(keep.is_heavy(tool.name))
 
 
 def sized_estimate(name, args, session, size=None):

@@ -189,16 +189,16 @@ class Jobs(_Home):
         self.assertEqual(st["status"], "failed")
         self.assertIn("ray cast failed", st["error"]["message"])
 
-    def test_slow_before_goes_to_a_job_on_its_own(self):
+    def test_slow_before_is_not_prejudged(self):
+        # No prejudging (18 Nov): a slow run before is logged data only; the
+        # call runs and answers as ever.
         from agentlink import heavy
 
         q = self.keep.queue_state()
         self.keep.log_timing(q, "thickness_measure", heavy.size_of(self.session), 95.0)
         self.keep.save_queue(q)
         err, out = self.call("thickness_measure")
-        self.assertFalse(err, out)
-        self.assertEqual(out["status"], "running")
-        self.assertIn("expected", out)
+        self.assertNotEqual(out.get("status"), "running", out)
 
     def test_slow_read_is_logged(self):
         # A name of this test's own: note_slow leaves a HEAVY tool alone, and

@@ -2255,27 +2255,10 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 heavy_read = bool(_t is not None and _keep.is_heavy(c["tool"]) and _jobs.eligible(_t, c.get("arguments") or {}, s))
             except Exception:
                 heavy_read = False
-            if i and not heavy_read:
-                # Not started with less of the budget left than the call
-                # typically takes here (jobs.typical: its last times in this
-                # FreeCAD): one slow call took a 55 s batch to 75 s, past
-                # what a client waits. The first call always runs.
-                left = mine.get("budget", BATCH_BUDGET) - (time.time() - mine["t0"])
-                try:
-                    from . import jobs as _jobs
-
-                    usual = _jobs.typical(c["tool"], s, c.get("arguments") or {})
-                except Exception:
-                    usual = None
-                if usual is not None and usual > left:
-                    nxt = first + i
-                    how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else f"batch again with the calls from index {nxt} on (calls.{i} of this list)"
-                    if hold is not None:
-                        hold.build("end: out of time")
-                    return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": nxt,
-                                  "note": f"Stopped before calls.{nxt} ({c['tool']}) after {time.time() - mine['t0']:.0f} s: it typically takes about {usual:.0f} s here "
-                                          f"and {max(left, 0):.0f} s of the budget ({mine.get('budget', BATCH_BUDGET):g} s) was left; a client waits about 80 s for an answer, so a long batch is answered in parts. "
-                                          f"The {len(results)} calls above ran and stay; {len(calls) - i} were not started: {how}."})
+            # No call is held back on a guess of its time (no prejudging, 18
+            # Nov: a loft put at 766 s took 7 s). A batch past about 60 s
+            # moves to the background in the supervisor (sup_jobs), so the
+            # client never loses its answer.
             if heavy_read:
                 # It runs as a job on a worker thread, as it would alone, and
                 # the batch waits for it while its budget lasts: done in
@@ -2563,14 +2546,13 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                            "section: that section of each guide that has it; missing names the others. It reads up to about 55 000 characters. The answer is read [{ topic, text "
                            "}], with next: the topics not reached; guide_read { topic: next } reads on. Changes nothing.",
              obj({"topic": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "section": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}}), guide_read),
-        Tool("job_status", "Read the status of a long read that runs as a job. job: its id. Answer: running (seconds so far, the time expected from past runs here). Or done, with "
-                           "the tool's own answer or its error. wait: seconds (up to 30) to wait for it first. No job: every job kept (for an hour after it ends). It answers "
-                           "immediately, also while FreeCAD is busy. Changes nothing.",
+        Tool("job_status", "Read the state of a job. job: its id (call-N, or job-… for a heavy read). Answer: running (seconds so far), or done with the tool's answer or "
+                           "error. wait: seconds (up to 30) to wait first. No job: all jobs (kept for an hour). The server answers at once, also while FreeCAD "
+                           "is busy. Changes nothing.",
              obj({"job": {"type": "string"}, "wait": {"type": "number"}}), job_status),
-        Tool("job_start", "Run a read as a job: tool and its arguments. If it ends within 45 s, the answer is the tool's own answer. Else a job id for job_status (wait: false "
-                          "gives the id immediately). Reads that are heavy or were slow here (more than 20 s) go to a job automatically. Any read takes background: true for the "
-                          "same. A client drops a call after about 80 s, so a long read's answer would be lost. Only reads that do not touch the window and the 3D view (not "
-                          "changes, pictures or window tools). While one runs, changes to its document wait (refused, with the name of the job).",
+        Tool("job_start", "Run a call as a job: tool and its arguments. If it ends within 60 s, the answer is the tool's own. Else a job id (call-N) for "
+                          "job_status. wait: false gives the id at once. A client drops a call after about 80 s. So the server does this for any call past about 60 s. Not "
+                          "for job_ and app_ tools. No estimate refuses a call.",
              obj({"tool": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["tool"]), job_start),
         Tool("batch", "Run several tools in one call, in order. calls: [{ tool, arguments }]. Or file: a .json file that holds that list, or { calls, rollback, stopOnError "
                       "}. The file is read on this side: a long run of calls stays out of the conversation. A relative path is in the session's folder; files are read where "

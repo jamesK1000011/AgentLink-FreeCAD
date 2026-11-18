@@ -1127,24 +1127,70 @@ def add_report(reply, lines):
         pass
 
 
+_NOT_JSON = object()
+
+
 def serve_lines(server, readline, write):
-    """Read a message a line until the input ends; write each reply a line."""
+    """Read a message a line until the input ends; write each reply a line.
+    A socket-thread tool (hooks.THREAD_TOOLS: job_status) is answered at
+    once on a thread of its own, beside the call in hand (finding 41: it
+    waited behind the job's own call); every other call in order."""
+    import queue as _queue
+
+    lock = threading.Lock()
+
+    def out(text):
+        with lock:
+            write(text)
+
     if getattr(server, "notify", None) is None:
-        server.notify = lambda m: write(compact(m) + "\n")  # a progress notification, written at once
-    while True:
-        line = readline()
-        if not line:
-            return
-        line = line.strip()
-        if not line:
-            continue
+        server.notify = lambda m: out(compact(m) + "\n")  # a progress notification, written at once
+
+    def light(msg):
         try:
-            msg = json.loads(line)
-        except ValueError:
-            write(compact({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}) + "\n")
+            from . import hooks
+
+            name = (msg.get("params") or {}).get("name")
+            return msg.get("method") == "tools/call" and name in hooks.THREAD_TOOLS and hasattr(server, "handle_light")
+        except Exception:  # noqa: BLE001
+            return False
+
+    def side(msg):
+        reply = server.handle_light(msg)
+        if reply is not None:
+            out(compact(reply) + "\n")
+
+    inbox = _queue.Queue()
+
+    def reader():
+        while True:
+            line = readline()
+            if not line:
+                inbox.put(None)
+                return
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                inbox.put(_NOT_JSON)  # answered in its turn, after the lines before it
+                continue
+            if isinstance(msg, dict) and light(msg):
+                threading.Thread(target=side, args=(msg,), daemon=True).start()
+                continue
+            inbox.put(msg)
+
+    threading.Thread(target=reader, name="agentlink-stdin", daemon=True).start()
+    while True:
+        msg = inbox.get()
+        if msg is None:
+            return
+        if msg is _NOT_JSON:
+            out(compact({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}) + "\n")
             continue
         reply = server.handle(msg)
         if reply is not None:
-            write(compact(reply) + "\n")
+            out(compact(reply) + "\n")
         while server.outbox:
-            write(compact(server.outbox.pop(0)) + "\n")
+            out(compact(server.outbox.pop(0)) + "\n")

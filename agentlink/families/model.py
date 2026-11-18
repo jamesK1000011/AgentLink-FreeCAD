@@ -643,6 +643,31 @@ def tools(session):
         """shape fused with, cut by or common with the tools' shapes: one of them as itself, several as a list (OCC takes both)."""
         return {"fuse": shape.fuse, "cut": shape.cut, "common": shape.common}[op](tools_ if len(tools_) > 1 else tools_[0])
 
+    def fuzzy_retry(shape, op, tools_, res):
+        """Finding 66: OCC made an invalid result (two smooth lofts that
+        overlap about 2 mm). Tried again once with a fuzzy value, 1e-4 and
+        then 1e-3 of the base's box diagonal (TopoShape fuse/cut/common
+        with a tolerance: OCC's SetFuzzyValue). (result, fuzzy or None,
+        tried [mm]): the first valid result, else the first one as it was."""
+        tried = []
+        if res.isNull() or not res.Solids or res.isValid():
+            return res, None, tried
+        try:
+            diag = float(shape.BoundBox.DiagonalLength)
+        except Exception:
+            return res, None, tried
+        for k in (1e-4, 1e-3):
+            fz = diag * k
+            tried.append(round(fz, 6))
+            try:
+                fn = {"fuse": shape.fuse, "cut": shape.cut, "common": shape.common}[op]
+                got = geo.clean(fn(list(tools_), fz))
+            except Exception:
+                continue
+            if not got.isNull() and got.Solids and got.isValid():
+                return got, round(fz, 6), tried
+        return res, None, tried
+
     def baked(base, shape, name=None, consumed=(), keep=False):
         """picks.bake, and the labels of the inputs it hid (never silent: a hidden body is not drawn by view_render)."""
         s.last_hidden = []
@@ -890,7 +915,7 @@ def tools(session):
                "V": V, "placement": FreeCAD.Placement, "rotation": FreeCAD.Rotation, "compound": Part.Compound, "as_shell": Part.Shell,
                "as_solid": Part.Solid, "as_wire": Part.Wire, "sorted_edges": lambda e: Part.__sortEdges__(e),
                # the family's
-               "PRIMS": PRIMS, "AXIAL": AXIAL, "WEDGE": WEDGE, "tube": tube, "status_said": status_said, "boolean": boolean, "changed": changed,
+               "PRIMS": PRIMS, "AXIAL": AXIAL, "WEDGE": WEDGE, "tube": tube, "status_said": status_said, "boolean": boolean, "fuzzy_retry": fuzzy_retry, "changed": changed,
                "unsound_tool": unsound_tool, "fuse_dropped": fuse_dropped, "scaled_each": scaled_each, "pick_edges": pick_edges, "queried": queried,
                "profile": lambda spec, body=None, what="profile", closed_default=True: profile(s, spec, body, what, closed_default),
                "spec_points": lambda spec, what="profile": spec_points(s, spec, what), "as_face": as_face, "profile_normal": profile_normal,

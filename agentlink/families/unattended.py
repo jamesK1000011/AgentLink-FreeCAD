@@ -168,6 +168,7 @@ def tools(s):
         "modal": modal, "task_panel": task_panel, "press": lambda d, btn: gl("press")(d, btn), "press_task": lambda task, btn: gl("press_task")(task, btn),
         "fill": lambda d, text, item: gl("fill")(d, text, item), "back_out": lambda: gl("BACK_OUT"), "log_watchdog": lambda row: keep.log_watchdog(row),
         "crash_kept": crash_kept,
+        "close_press_refusal": lambda d, btn: gl("unsafe_close_press")(d, btn, gl("calls_in_hand")()),
         "current": lambda: s.doc, "docs": lambda: list(FreeCAD.listDocuments().values()), "open_row": lambda d: {"name": d.Name, "label": d.Label, "file": d.FileName or None, **_modified(d)},
         "doc_by": doc_by, "doc_names": doc_names, "moved_to": moved_to, "gui_up": lambda: bool(getattr(FreeCAD, "GuiUp", False)), "bring_front": _bring_front,
         "bodies": lambda: s.bodies(),

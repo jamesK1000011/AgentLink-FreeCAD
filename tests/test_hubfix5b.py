@@ -291,8 +291,8 @@ print(json.dumps(out))
 
 
 class BatchTypical(unittest.TestCase):
-    """A batch starts no call (after the first) whose typical time here is
-    more than its budget left: one slow call took a 55 s batch to 75 s."""
+    """jobs.typical stays as logged data; a batch no longer holds a call back
+    on it (no prejudging, 18 Nov: a loft put at 766 s took 7 s)."""
 
     def test_typical_is_the_middle_of_the_last_times(self):
         sys.path.insert(0, HERE)
@@ -322,7 +322,7 @@ class BatchTypical(unittest.TestCase):
         self.assertEqual(len(jobs._RECENT["t_tool"]), 5)
         jobs._RECENT.pop("t_tool", None)
 
-    def test_a_call_too_long_for_the_rest_of_the_budget_is_not_started(self):
+    def test_a_call_typically_long_is_still_started(self):
         sys.path.insert(0, TESTS)
         from test_hubfix2 import in_a_process
         from test_hubfix4 import SETUP
@@ -348,10 +348,9 @@ class BatchTypical(unittest.TestCase):
         self.assertNotIn("notRun", plain)
         err, slow = got["slow"]
         self.assertFalse(err, slow)
-        self.assertEqual((slow["ran"], slow["notRun"], slow["next"]), (1, 2, 1), slow)
-        self.assertIn("Stopped before calls.1 (session_state)", slow["note"])
-        self.assertIn("it typically takes about 80 s here", slow["note"])
-        self.assertIn("from index 1 on", slow["note"])
+        self.assertNotIn("notRun", slow)
+        self.assertNotIn("typically takes", json.dumps(slow))
+        self.assertEqual(slow["results"][1]["tool"], "session_state")  # it was started
         # the first call of a batch always runs
         self.assertNotIn("notRun", got["first"][1])
         # its time recorded by the call itself (the stand-in's is short): the middle stays 80 s, under a 100 s budget

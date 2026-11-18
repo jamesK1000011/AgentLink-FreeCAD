@@ -24,13 +24,17 @@ import threading
 import time
 
 try:
-    from . import restart_mark
-except ImportError:  # an update without it: no waiting for a restarting window
-    restart_mark = None
-try:
     from . import keep
 except ImportError:
     keep = None
+try:
+    from . import window_watch
+except ImportError:  # an update without it: no waiting for a restarting window
+    window_watch = None
+try:
+    from . import sup_jobs
+except ImportError:
+    sup_jobs = None
 
 FLAG = "AGENTLINK_SUPERVISED"
 WINDOW_PORT = int(os.environ.get("AGENTLINK_WINDOW_PORT", "7318"))
@@ -127,6 +131,10 @@ def _answer(mid, code, message):
     return json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
 
 
+def _answer_body(mid, body):
+    return json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": json.dumps(body)}], "isError": True}})
+
+
 def _result(mid, body):
     return json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": json.dumps(body)}]}})
 
@@ -168,19 +176,134 @@ def _call_info(line):
 
 
 def deadline_for(tool, args=None, started=None):
-    """Seconds the call in hand may run before a FreeCAD with no heartbeat is
-    stopped. A call that marked itself heavy while it runs (a big Part
-    boolean: keep.mark_heavy_call) gets its estimate times three."""
+    """Seconds the call in hand runs before the watchdog looks at it for a
+    hang at all: a change's 120 s, or the call's own timeout and a minute.
+    No estimate is read here (no prejudging): a FreeCAD past this is
+    stopped only when it is truly hung (stalled: no heartbeat and no CPU
+    work), never because it is slow."""
     if keep is None:
         return NO_ESTIMATE
-    marked = keep.heavy_call_limit(started, time.time()) if started is not None else None
     if os.environ.get("AGENTLINK_DEADLINE"):
-        base = float(os.environ["AGENTLINK_DEADLINE"])
-        return max(base, marked) if marked else base
-    limit = _deadline(tool)
-    own = keep.call_deadline(tool, args) if keep.is_heavy(tool) else None
-    limit = max(limit, own) if own else limit
-    return max(limit, marked) if marked else limit
+        return float(os.environ["AGENTLINK_DEADLINE"])
+    limit = keep.deadline("change")
+    own = keep.call_deadline(tool, args)
+    return max(limit, own) if own else limit
+
+
+# ---- a true hang: no heartbeat and no CPU work ----------------------------------------------
+
+# Seconds with no CPU work (FreeCAD and the processes it started) before a
+# call with no heartbeat is taken for hung. A long OCC call keeps the CPU
+# busy and is never stopped; a deadlock or a wait on nothing is.
+STALL = float(os.environ.get("AGENTLINK_STALL", "60"))
+# CPU seconds of progress over STALL that count as work.
+STALL_CPU = 0.5
+# A FreeCAD with no heartbeat this long is stopped even while its CPU is
+# busy (a loop that never ends). The person can app_force_restart sooner.
+HANG_CEILING = float(os.environ.get("AGENTLINK_HANG_CEILING", "7200"))
+
+
+def _clock_secs(text):
+    """ps's cputime ("[[dd-]hh:]mm:ss[.xx]") in seconds, or None."""
+    t = str(text or "").strip()
+    if not t:
+        return None
+    days = 0
+    if "-" in t:
+        d, t = t.split("-", 1)
+        try:
+            days = int(d)
+        except ValueError:
+            return None
+    try:
+        parts = [float(x) for x in t.split(":")]
+    except ValueError:
+        return None
+    secs = 0.0
+    for p in parts:
+        secs = secs * 60 + p
+    return days * 86400 + secs
+
+
+def cpu_tree(pid, table):
+    """CPU seconds of pid and every process under it, from ps rows
+    [(pid, ppid, secs)] (FreeCAD's solver children count: a CalculiX run
+    is FreeCAD's work)."""
+    kids = {}
+    own = {}
+    for p, pp, secs in table:
+        kids.setdefault(pp, []).append(p)
+        own[p] = secs
+    if pid not in own:
+        return None
+    total, stack, seen = 0.0, [pid], set()
+    while stack:
+        p = stack.pop()
+        if p in seen:
+            continue
+        seen.add(p)
+        total += own.get(p) or 0.0
+        stack.extend(kids.get(p, ()))
+    return total
+
+
+def ps_table():
+    """[(pid, ppid, cpu secs)] of every process, or None when ps fails."""
+    try:
+        out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,time="], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    rows = []
+    for line in out.splitlines():
+        bits = line.split()
+        if len(bits) < 3:
+            continue
+        try:
+            secs = _clock_secs(bits[2])
+            if secs is not None:
+                rows.append((int(bits[0]), int(bits[1]), secs))
+        except ValueError:
+            continue
+    return rows
+
+
+class Progress:
+    """CPU work of a process over time, for the hang rule. table(): the
+    ps rows (a stand-in in the tests)."""
+
+    def __init__(self, table=ps_table, clock=time.time):
+        self.table = table
+        self.clock = clock
+        self.seen = {}  # pid -> (t of last progress, cpu then)
+
+    def idle_for(self, pid, now=None):
+        """Seconds since pid (with its children) last did CPU work, or None
+        when its CPU cannot be read."""
+        now = self.clock() if now is None else now
+        rows = self.table()
+        cpu = cpu_tree(int(pid), rows) if rows else None
+        if cpu is None:
+            return None
+        got = self.seen.get(pid)
+        if got is None or cpu - got[1] >= STALL_CPU:
+            self.seen[pid] = (now, cpu)
+            return 0.0
+        return now - got[0]
+
+    def forget(self, pid):
+        self.seen.pop(pid, None)
+
+
+def stalled(now, started, last_beat, limit, idle):
+    """A true hang: past the call's limit, no heartbeat for keep.GRACE, and
+    no CPU work for STALL (idle; None when it cannot be read: then only
+    HANG_CEILING with no heartbeat). Or no heartbeat for HANG_CEILING."""
+    grace = keep.GRACE if keep is not None else 60.0
+    if now - started <= limit or now - last_beat <= grace:
+        return False
+    if now - last_beat > HANG_CEILING:
+        return True
+    return idle is not None and idle >= STALL
 
 
 def _deadline(tool):
@@ -462,6 +585,11 @@ def heartbeat():
     return hb if isinstance(hb, dict) else None
 
 
+def heartbeat_any():
+    """The heartbeat for window_watch (a test may set keep to None)."""
+    return heartbeat()
+
+
 def relaunch(app, why):
     """The window started again in the background (never in front). The
     command can be set (AGENTLINK_RELAUNCH, a JSON argv with {app}) for
@@ -514,6 +642,16 @@ class Window:
         self.hang = None  # set by the watchdog before it stops the window
         self.last_hb = None
         self.lock = threading.Lock()
+        self.last_reply = None  # the window's last answer line (app_restart's "restarting")
+        # The window going down and back (finding 52): no mark file, no
+        # fixed wait (agentlink/window_watch.py).
+        self.watch = window_watch.Watch(heartbeat_any) if window_watch is not None else None
+        if self.watch is not None:
+            r = window_watch.restart_from_env()
+            if r:
+                # agentlink_update restarted the window before this
+                # supervisor started: the launcher says so.
+                self.watch.expect(r.get("pid"), pinned=r.get("pinned"), t=r.get("t"), why="agentlink_update")
 
     def _open(self):
         import socket
@@ -571,10 +709,76 @@ class Window:
         self.sock = None
 
     def _ready(self):
-        """Connected to the window, waiting for it while it restarts
-        (app_restart, agentlink_update leave a mark) rather than let the
-        hidden FreeCAD answer for the document on screen."""
-        return self._open() or bool(restart_mark and restart_mark.wait_until(self._open))
+        """Connected to the window: True. While a restart is in hand
+        (window_watch: app_restart answered, the launcher's word after
+        agentlink_update, macOS saw FreeCAD start), the call waits for the
+        first heartbeat of the new pid that pairs, up to window_watch.WAIT:
+        True once it is back, else the words of the call's clear refusal.
+        False: no window and no restart (the hidden FreeCAD answers)."""
+        if self.watch is not None and self.watch.pending():
+            if self.watch.back() is None:
+                self._drop()  # the old window's connection: never used again
+            got = self.watch.wait(self._open)
+            if got is True:
+                self._back_from_restart()
+                return True
+            if isinstance(got, str):
+                return got
+        if self._open():
+            if self.watch is not None and self.watch.restart is not None:
+                self._back_from_restart()
+            return True
+        if self.watch is not None:
+            lost = self.watch.take_lost()
+            if lost:
+                return window_watch.Watch.lost_words(lost)
+        return False
+
+    def _back_from_restart(self):
+        """The new window paired after a restart: the agent's pinned
+        document of before made the session's document again (finding
+        40: after a restart the front document was another one, and a
+        call went to the wrong document). Never raises."""
+        r = self.watch.done() if self.watch is not None else None
+        pinned = (r or {}).get("pinned")
+        if not pinned:
+            return None
+        try:
+            hb = heartbeat_any() or {}
+            # The window reopens its documents after it pairs: a few
+            # seconds for the pinned one to be open.
+            t0 = time.time()
+            target = window_watch.pin_target(pinned, hb.get("docs"))
+            while target is None and time.time() - t0 < 20:
+                time.sleep(0.5)
+                hb = heartbeat_any() or {}
+                target = window_watch.pin_target(pinned, hb.get("docs"))
+            if target is None:
+                if keep is not None:
+                    keep.log_watchdog({"event": "pin", "document": pinned.get("label") or pinned.get("name"), "found": False})
+                return None
+            if hb.get("pinned") == target:
+                return target
+            got = self.ask("doc_switch", {"document": target}, timeout=30)
+            if keep is not None:
+                keep.log_watchdog({"event": "pin", "document": target, "switched": got is not None})
+            return target
+        except Exception as e:  # noqa: BLE001 — a nicety on the way back
+            sys.stderr.write(f"Agent Link: pinned document not restored ({e})\n")
+            return None
+
+    def _note_restart(self, tool, hb):
+        """app_restart answered "restarting": the window goes down and a
+        new one comes; calls wait for it (window_watch)."""
+        if self.watch is None or tool not in ("app_restart",) or not self.last_reply:
+            return
+        try:
+            r = json.loads(self.last_reply).get("result") or {}
+            body = json.loads(r["content"][0]["text"]) if not r.get("isError") else {}
+        except (ValueError, KeyError, IndexError, TypeError):
+            body = {}
+        if isinstance(body, dict) and body.get("restarting") and hb and hb.get("pid"):
+            self.watch.expect(hb.get("pid"), pinned=window_watch.pinned_of(hb), why="app_restart")
 
     def _send(self, line, forward=True):
         """One go at the window: its answer (True, or the reply line when not
@@ -598,6 +802,7 @@ class Window:
                     self.write(got)
                 if gid == mid:
                     self.seen = True
+                    self.last_reply = got
                     return True if forward else got
         except (OSError, AttributeError):
             self.f = None
@@ -750,6 +955,7 @@ class Window:
             return ("FreeCAD was started again in the background but its link did not come up within 2 minutes" +
                     (f" (newest crash report: {reports[0]})" if reports else "") + ". The hidden FreeCAD takes the next calls: app_recover lists the saved copies.")
         settled = self.settle_dialog(hb.get("pid"), t0)
+        pinned = window_watch.pinned_of(hb) if window_watch is not None else None
         reopen, rec_docs, old_copies = restart_split(docs)
         if reopen:
             newer = newer_copies(self.ask("app_recover", {"action": "list"}, timeout=30), hb.get("t"))
@@ -784,6 +990,12 @@ class Window:
             parts.append("closed again as they were not open before the restart: " + ", ".join(shut))
         if left:
             parts.append("not open before the restart but left open as they have changes: " + ", ".join(left))
+        if pinned and self.watch is not None:
+            # The agent's document of before, the session's again (finding 40).
+            self.watch.restart = {"old": hb.get("pid"), "t": t0, "pinned": pinned, "why": why, "quit": True, "launched": None}
+            got_pin = self._back_from_restart()
+            if got_pin:
+                parts.append(f"the agent works in {got_pin} again, as before the restart")
         unsaved = [lab for lab, why in kept if why == "unsaved"]
         if unsaved:
             parts.append("kept open, as copies of work never saved to a file: " + ", ".join(unsaved) +
@@ -830,24 +1042,38 @@ class Window:
         started again in the background and its documents recovered."""
         if self.off:
             return False
-        if not self._ready():
+        ready = self._ready()
+        if isinstance(ready, str):
+            # Between the quit and the pairing: said, never served headless.
+            return self._refuse(line, ready, code="unavailable")
+        if not ready:
             if self.seen:
                 self.seen = False
                 return self._refuse(line, "The FreeCAD window this session was working in has gone (closed or crashed): this call was not run. What was open there is not in the hidden FreeCAD, which has an empty document of its own. Ask the person to open FreeCAD again (its link starts with it), or carry on headless: the next call runs there.")
             return False
         mid, tool, args = _call_info(line)
+        hb0 = heartbeat_any() if tool == "app_restart" else None
         with self.lock:
             self.inflight = {"id": mid, "tool": tool, "args": args, "start": time.time()}
             self.hang = None
         try:
             if self._send(line):
+                self._note_restart(tool, hb0)
                 return True
             c = self.inflight or {}
             if c.get("abandoned"):
                 return True
-            restarting = restart_mark is not None and restart_mark.read() is not None
+            # The window dropped the connection: a restart under way
+            # (app_restart answered, or calls it never started) is waited
+            # for and the call sent once more.
+            if tool == "app_restart" and self.watch is not None and hb0 and hb0.get("pid") and self.watch.restart is None:
+                self.watch.expect(hb0.get("pid"), pinned=window_watch.pinned_of(hb0), why="app_restart")
+            restarting = self.watch is not None and self.watch.pending()
             if restarting:
-                return self._ready() and self._send(line)
+                again = self._ready()
+                if isinstance(again, str):
+                    return self._refuse(line, again, code="unavailable")
+                return bool(again) and self._send(line)
             self.seen = False
             hang = self.hang
             t_crash = time.time()
@@ -885,10 +1111,16 @@ def run(script, argv):
     state = {"child": None, "ending": False, "hang": None, "recover": None, "restarting": False}
     env = {**os.environ, FLAG: "1"}
 
-    def write(line):
+    def write_out(line):
         with lock:
             out.write(line + "\n")
             out.flush()
+
+    # Calls past DETACH_AFTER move to the background (agentlink/sup_jobs.py):
+    # every reply goes through jobs.write, which keeps a moved call's answer.
+    jobs = sup_jobs.Jobs(write_out) if sup_jobs is not None else None
+    write = jobs.write if jobs is not None else write_out
+    child_lock = threading.Lock()
 
     def start():
         child = subprocess.Popen([sys.executable, script, *argv], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env, text=True, encoding="utf-8", bufsize=1)
@@ -930,8 +1162,9 @@ def run(script, argv):
         return child
 
     def send_child(line):
-        state["child"].stdin.write(line if line.endswith("\n") else line + "\n")
-        state["child"].stdin.flush()
+        with child_lock:  # the reader thread sends job_status beside the main loop
+            state["child"].stdin.write(line if line.endswith("\n") else line + "\n")
+            state["child"].stdin.flush()
 
     def ask_child(name, arguments, child, timeout=60):
         """One call of the supervisor's own to the fresh child, its answer
@@ -1057,6 +1290,7 @@ def run(script, argv):
             write(line)
 
     window = Window(write)
+    progress = Progress()
 
     def watchdog():
         """Every 2 s: a call stuck behind a dialog is answered; a FreeCAD
@@ -1124,8 +1358,9 @@ def run(script, argv):
                             continue
                     last = float((hb or {}).get("t") or c["start"])
                     limit = deadline_for(c["tool"], c.get("args"), c["start"])
-                    if keep.hung(now, c["start"], max(last, c["start"]), limit) and not keep.saving():
-                        pid = (hb or {}).get("pid")
+                    pid = (hb or {}).get("pid")
+                    idle = progress.idle_for(pid, now) if pid and now - max(last, c["start"]) > keep.GRACE else 0.0
+                    if stalled(now, c["start"], max(last, c["start"]), limit, idle) and not keep.saving():
                         if pid:
                             window.hang = {"pid": pid, "after": now - c["start"], "tool": c["tool"]}
                             keep.log_watchdog({"event": "hang", "where": "window", "tool": c["tool"], "after": now - c["start"], "pid": pid})
@@ -1158,7 +1393,11 @@ def run(script, argv):
                 for mid, h in [first] if first else []:
                     began = max(h["start"], state.get("last_reply") or 0)
                     limit = deadline_for(h["tool"], h.get("args"), began)
-                    if (keep.hung(now, began, began + limit, limit) and not keep.saving() and state["hang"] is None
+                    # The hidden FreeCAD writes no heartbeat: its CPU work
+                    # (and its children's) alone says whether it is hung.
+                    cpid = getattr(state.get("child"), "pid", None)
+                    idle = progress.idle_for(cpid, now) if cpid and now - began > limit else 0.0
+                    if (stalled(now, began, began, limit, idle) and not keep.saving() and state["hang"] is None
                             and not state.get("restarting")):
                         child = state["child"]
                         state["hang"] = {"id": mid, "tool": h["tool"], "after": now - began}
@@ -1173,17 +1412,79 @@ def run(script, argv):
     start()
     if keep is not None:
         threading.Thread(target=watchdog, daemon=True).start()
+    def ticker():
+        """Every second: calls past their time answered (sup_jobs.tick)."""
+        while not state["ending"]:
+            time.sleep(1.0)
+            try:
+                jobs.tick(words=lambda c: f"{c['tool']}: FreeCAD did not answer within {int(c['after'])} s (a call holds its Python). Nothing was changed. Call it again in a moment.")
+            except Exception as e:  # noqa: BLE001
+                sys.stderr.write(f"Agent Link jobs: {e}\n")
+
+    if jobs is not None:
+        threading.Thread(target=ticker, name="agentlink-jobs", daemon=True).start()
+
+    def window_up():
+        hb = heartbeat() or {}
+        return not window.off and bool(hb.get("pairing")) and time.time() - float(hb.get("t") or 0) < 10
+
+    def job_status_now(msg):
+        """job_status, answered here at once (finding 41): a call-N job
+        from this table; a job of FreeCAD's own (job-…) asked of the window
+        on a connection of its own, or sent to the hidden FreeCAD beside
+        the call in hand, with a time limit. True when taken here."""
+        mid = msg.get("id")
+        args = ((msg.get("params") or {}).get("arguments") or {})
+        jid = args.get("job")
+        if jid and jobs.mine(jid) or not jid:
+            def answer():
+                body, err = jobs.status(args)
+                if not jid and window_up():
+                    got = window.side_call("job_status", {}, timeout=3.0)
+                    if isinstance(got, dict) and got.get("jobs"):
+                        body["jobs"] = (got.get("jobs") or []) + body.get("jobs", [])
+                if not body.get("jobs") and not jid and not err:
+                    body["note"] = "No jobs. A call with no answer after about 60 s moves to the background as a job; job_start starts one."
+                write_out(_answer_body(mid, body) if err else _result(mid, body))
+            threading.Thread(target=answer, daemon=True).start()
+            return True
+        try:
+            w = float(args.get("wait") or 0)
+        except (TypeError, ValueError):
+            w = 0.0
+        limit = min(max(w, 0.0), 30.0) + 10.0
+        if window_up():
+            def ask():
+                got = window.side_call("job_status", args, timeout=limit)
+                if got is None:
+                    write_out(_answer(mid, "busy", f"job_status: the FreeCAD window did not answer within {int(limit)} s (its job holds FreeCAD's Python). Nothing was changed. Call job_status again in a moment."))
+                else:
+                    write_out(_result(mid, got))
+            threading.Thread(target=ask, daemon=True).start()
+            return True
+        # The hidden FreeCAD answers job_status on a thread of its own
+        # (protocol.serve_lines); the reply is dropped if it comes too late.
+        jobs.came(mid, "job_status", after=limit, mode="drop")
+        try:
+            send_child(json.dumps(msg))
+        except OSError:
+            jobs.forget(mid)
+            write_out(_answer(mid, "unavailable", "job_status: the hidden FreeCAD is starting again; its jobs are gone."))
+        return True
+
     def urgent(line):
-        """app_force_restart and gui_unstick (alone or as a batch of
-        nothing else): answered at once, on threads of their own, even while
-        a call the window holds is in hand — the reader takes them off stdin
-        before they queue behind it."""
+        """app_force_restart, gui_unstick (alone or as a batch of nothing
+        else) and job_status: answered at once, on threads of their own,
+        even while a call the window holds is in hand — the reader takes
+        them off stdin before they queue behind it."""
         try:
             msg = json.loads(line)
         except ValueError:
             return False
         if not isinstance(msg, dict):
             return False
+        if jobs is not None and msg.get("method") == "tools/call" and (msg.get("params") or {}).get("name") == "job_status":
+            return job_status_now(msg)
         if msg and msg.get("method") == "tools/call" and _is_force_restart(line):
             # Answered here, never inside FreeCAD: the window may be the thing stuck.
             fid = msg.get("id")
@@ -1224,11 +1525,39 @@ def run(script, argv):
 
     lines_in = queue.Queue()
 
+    def came(line):
+        """A call is timed from when it came in; job_start { tool,
+        arguments } becomes the call it starts (sup_jobs.job_start_inner):
+        it runs as any call does, where calls run, and its answer moves to
+        the background at once (wait: false) or after DETACH_AFTER. The
+        line to queue."""
+        if jobs is None:
+            return line
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            return line
+        if not isinstance(msg, dict) or msg.get("method") != "tools/call" or msg.get("id") is None:
+            return line
+        p = msg.get("params") or {}
+        after = None
+        if p.get("name") == "job_start":
+            inner = sup_jobs.job_start_inner(p.get("arguments"))
+            if inner is not None:
+                tool, iargs, after = inner
+                msg["params"] = {"name": tool, "arguments": iargs}
+                line = json.dumps(msg)
+        jobs.came(msg["id"], (msg.get("params") or {}).get("name"), after=after)
+        if after == 0:
+            jobs.tick()
+        return line
+
     def reader():
         for line in sys.stdin:
             try:
                 if urgent(line):
                     continue
+                line = came(line)
             except Exception as e:  # noqa: BLE001
                 sys.stderr.write(f"Agent Link: {e}\n")
             lines_in.put(line)

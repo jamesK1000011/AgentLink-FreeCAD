@@ -35,11 +35,10 @@ FAKE_HIDDEN = textwrap.dedent('''
         if name == "crash":
             os._exit(3)
         if name == "heavy_slow":
-            # A big Part boolean: marked heavy while OCC holds it, past the deadline.
-            mark = os.path.join(home, "heavy-call.json")
-            json.dump({"tool": "part_boolean", "estimate": 5, "size": 1, "pid": os.getpid(), "t": time.time()}, open(mark, "w"))
-            time.sleep(4)
-            os.remove(mark)
+            # A big Part boolean: OCC works (the CPU is busy) past the deadline.
+            end = time.time() + 4
+            while time.time() < end:
+                sum(range(2000))
         if name == "settings_restart":
             json.dump({"why": "settings"}, open(os.path.join(home, ".hidden-restart"), "w"))
             sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": m["id"], "result": {"content": [{"type": "text", "text": json.dumps({"rolledBackTo": "x"})}]}}) + "\\n")
@@ -117,12 +116,11 @@ FAKE_WINDOW = textwrap.dedent('''
                 # Answered by live_run's guard, which gave up on the loop.
                 state["held"]["stuck"] = {"t": time.time(), "why": "guard"}
             if name == "heavy_slow":
-                # OCC holds the GUI thread: no heartbeat, past the deadline, but marked heavy.
-                mark = os.path.join(home, "heavy-call.json")
-                json.dump({"tool": "part_boolean", "estimate": 5, "size": 1, "pid": os.getpid(), "t": time.time()}, open(mark, "w"))
+                # OCC holds the GUI thread: no heartbeat, past the deadline, but the CPU works.
                 state["beat"] = False
-                time.sleep(4)
-                os.remove(mark)
+                end = time.time() + 4
+                while time.time() < end:
+                    sum(range(2000))
                 state["beat"] = True
             if name == "doc_open":
                 path = (m.get("params") or {}).get("arguments", {}).get("path")
@@ -187,7 +185,7 @@ class Sup(unittest.TestCase):
         hidden = os.path.join(self.tmp, "fake_hidden.py")
         open(hidden, "w").write(FAKE_HIDDEN)
         self.port = free_port()
-        self.env = {**os.environ, "AGENTLINK_HOME": self.home, "AGENTLINK_DEADLINE": "1", "AGENTLINK_GRACE": "1",
+        self.env = {**os.environ, "AGENTLINK_HOME": self.home, "AGENTLINK_DEADLINE": "1", "AGENTLINK_GRACE": "1", "AGENTLINK_STALL": "1",
                     "AGENTLINK_WINDOW": "1" if self.window else "0", "AGENTLINK_WINDOW_PORT": str(self.port),
                     "AGENTLINK_RESTART_MARK": os.path.join(self.home, ".restarting"),
                     "AGENTLINK_TOKEN_FILE": os.path.join(self.home, "link-token"), "AGENTLINK_DIR": AL,
@@ -469,10 +467,11 @@ class WindowMenu(Sup):
 
 # Live test drive, 16 Nov 2026: a fuse of three faceted solids held the
 # window's GUI thread inside OCC for over 80 s; the watchdog stopped FreeCAD
-# at its 120 s deadline. A call marked heavy (heavy-call.json) gets its
-# estimate times three instead.
+# at its 120 s deadline. Now (18 Nov, no prejudging) a call whose FreeCAD
+# does CPU work is never taken for hung; a call with no heartbeat and no
+# CPU work is (supervise.stalled).
 class HeavyMarkHidden(Sup):
-    def test_marked_heavy_call_is_not_stopped(self):
+    def test_working_call_is_not_stopped(self):
         first = self.call("ping")
         err, out = self.call("heavy_slow", timeout=30)
         self.assertFalse(err, out)
@@ -485,19 +484,60 @@ class HeavyMarkHidden(Sup):
 class HeavyMarkWindow(Sup):
     window = True
 
-    def test_marked_heavy_call_is_not_stopped(self):
+    def test_working_call_is_not_stopped(self):
         first = self.call("ping")[1]["pid"]
         err, out = self.call("heavy_slow", timeout=30)
         self.assertFalse(err, out)
         self.assertEqual(out["ok"], "heavy_slow")
         self.assertEqual(self.call("ping")[1]["pid"], first)
 
-    def test_unmarked_hang_is_still_stopped(self):
+    def test_idle_hang_is_still_stopped(self):
         first = self.call("ping")[1]["pid"]
         err, out = self.call("hang", timeout=90)
         self.assertTrue(err)
         self.assertIn("stopped responding during hang", out["error"]["message"])
         self.assertNotEqual(self.call("ping")[1]["pid"], first)
+
+
+# 18 Nov, no prejudging: a call with no answer after DETACH_AFTER moves to
+# the background with a job id; job_status answers at once, from the
+# supervisor, while FreeCAD still works (findings 41, 45).
+class DetachHidden(Sup):
+    extra_env = {"AGENTLINK_DETACH_AFTER": "1.5"}
+
+    def test_slow_call_moves_to_the_background(self):
+        t0 = time.time()
+        err, out = self.call("heavy_slow", timeout=10)
+        self.assertFalse(err, out)
+        self.assertEqual(out["job"], "call-1")
+        self.assertEqual(out["status"], "running")
+        self.assertLess(time.time() - t0, 3.5)
+        t1 = time.time()
+        err, st = self.call_args("job_status", {"job": "call-1"}, timeout=5)
+        self.assertLess(time.time() - t1, 2.0)  # answered at once, FreeCAD still busy
+        self.assertEqual(st["status"], "running")
+        err, st = self.call_args("job_status", {"job": "call-1", "wait": 10}, timeout=15)
+        self.assertEqual(st["status"], "done", st)
+        self.assertEqual(st["result"], {"ok": "heavy_slow"})
+
+    def test_job_start_wait_false_answers_at_once(self):
+        t0 = time.time()
+        err, out = self.call_args("job_start", {"tool": "heavy_slow", "arguments": {}, "wait": False}, timeout=5)
+        self.assertLess(time.time() - t0, 2.5)
+        self.assertEqual(out["tool"], "heavy_slow")
+        err, st = self.call_args("job_status", {"job": out["job"], "wait": 10}, timeout=15)
+        self.assertEqual(st["result"]["ok"], "heavy_slow")
+
+
+class DetachWindow(DetachHidden):
+    window = True
+
+    def test_slow_call_moves_to_the_background(self):
+        err, out = self.call("heavy_slow", timeout=10)
+        self.assertEqual(out["job"], "call-1")
+        err, st = self.call_args("job_status", {"job": "call-1", "wait": 10}, timeout=15)
+        self.assertEqual(st["status"], "done", st)
+        self.assertEqual(st["result"]["ok"], "heavy_slow")
 
 
 # The same drive: after a watchdog restart the window opened old recovered

@@ -27,18 +27,14 @@ belongs to ("MeshWorkbench"), the FreeCAD commands it does the work of
 "simplify"]). All optional; Agent Link keeps nothing of an add-on's tools
 itself, so these travel with the add-on.
 
-Long reads, for add-on authors: a client drops a call after about 80 s, and
-the watchdog stops a FreeCAD that holds a call past its deadline. A read
-("changes": false) that may run long should say "heavy": true (or be in its
-family module's HEAVY): it then runs as a job from the first call (the call
-answers with a job id past 45 s; job_status gives the answer) and is timed
-and given a heavy job's deadline. A read not declared heavy is still sent
-to a job on its own once a past run here took over 20 s (jobs.SLOW_READ,
-logged against the document's size; a scan add-on's wall-thickness read
-is handled so), or once the watchdog stopped FreeCAD in it — but that first
-long run is not, so declare what you know is slow. A tool that changes the
-document cannot run as a job: if it can be long, declare it heavy so it is
-estimated, queued and given a deadline of three times its estimate.
+Long reads, for add-on authors: a client drops a call after about 80 s. The
+supervisor answers any call with no answer after about 60 s with a job id
+(job_status gives the answer later; agentlink/sup_jobs.py), for reads and
+changes alike. No estimate holds a call back. A read ("changes": false)
+that leaves the window alone may say "heavy": true (or be in its family
+module's HEAVY): it then runs on a worker thread and is queued and timed.
+The watchdog stops FreeCAD only when it is truly hung: no heartbeat and no
+CPU work for a minute (supervise.stalled), never for being slow.
 
 Agent Link's own tools (agentlink/data/tools.json) carry no handler: the
 entry is the whole tool, run by agentlink/runners.py (docs/data-tools.md
