@@ -582,7 +582,7 @@ ScanRuler               ██████████████████�
 | tool | docs | health | description | headless | live | model | note |
 |---|---|---|---|---|---|---|---|
 | `addon_test` | – | – | – | yes | yes | window pass 3 (17 Nov), win3 models | 17 Nov: window pass 3, the picture after the tool's first accepted call reviewed GOOD or MINOR (live/w3/review0-3) |
-| `gui_input` | – | – | – | – | yes | alone-8 | 17 Nov: live_run reset passed 3 of 3; gui_input clicked the Notes tab and Pin a Note and opened the Note dialog; app_force_restart recovered the window held by that dialog and reopened 11 documents |
+| `gui_input` | – | – | – | – | yes | alone-8 | live 18 Nov: dialogs (55, 56b, 69, 70), combo keys (47), shortcuts (49), menu items, person input in the film-hinge ladder |
 | `gui_unstick` | – | – | – | yes | yes | window pass 3 (17 Nov), win3 models | 17 Nov: window pass 3, the picture after the tool's first accepted call reviewed GOOD or MINOR (live/w3/review0-3) |
 | `live_run` | – | – | – | – | yes | alone-8 | 17 Nov: live_run reset passed 3 of 3; gui_input clicked the Notes tab and Pin a Note and opened the Note dialog; app_force_restart recovered the window held by that dialog and reopened 11 documents |
 
