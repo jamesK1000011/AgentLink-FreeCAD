@@ -710,10 +710,13 @@ class Session:
             import Mesh
             import MeshPart
 
-            m = MeshPart.meshFromShape(Shape=o.Shape, LinearDeflection=float(tol), AngularDeflection=0.0873, Relative=False)
+            from . import geometry as _geo
+
+            m = MeshPart.meshFromShape(Shape=o.Shape, LinearDeflection=float(tol), AngularDeflection=_geo.EXPORT_ANGULAR, Relative=False)
+            m = _geo.welded_mesh(m, o.Shape)
             m.write(path)
             back = Mesh.Mesh(path)
-            verify = {"triangles": back.CountFacets, "volume": round(back.Volume, 1), "closed": back.isSolid()}
+            verify = {"triangles": back.CountFacets, "volume": round(back.Volume, 1), **_geo.mesh_closed(back)}
         return {"body": o.Label, "format": fmt, "path": path, "bytes": os.path.getsize(path), "verify": verify}
 
     def _export_mesh(self, o, a):

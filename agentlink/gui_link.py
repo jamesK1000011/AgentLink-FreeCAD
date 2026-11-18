@@ -31,6 +31,13 @@ FRONT_TOOLS = {"cmd_run", "menu_run", "view_snapshot"}
 # window (or past the call in hand's own time) is answered "busy" from the
 # socket thread, not left waiting for ever.
 BUSY_AFTER = 10.0
+# A call answered early whose menu or dialog closed: calls wait this long for
+# the rest of it before they are answered busy.
+ENDING_WAIT = 30.0
+# A call that answers the dialog in front (dialog_answer, gui_input, a batch
+# of them: front_call) waits this long for the dialog's loop to take it
+# before it is answered busy: it is the way out of the dialog.
+FRONT_WAIT = 60.0
 # Calls answered after the person closed the document the agent worked in:
 # Agent Link's own, and those add-ons declare (a family's PINNED_FREE,
 # families.PINNED_FREE). The recovery tool's name stays here only until its
@@ -98,13 +105,15 @@ def _tool_name(line):
         return None
 
 
-def _dialog_call(line):
+def _dialog_call(line, read_ok=None):
     """True for a call that runs while a modal dialog or a menu holds the
     window (protocol.front_call): dialog_answer, gui_input, gui_unstick, or
-    a batch of only those (window_snapshot beside them). A client that lists
-    only the lean groups reaches them through batch, and a refused batch
-    left a dialog that the person-input path opened a dead end (live 56:
-    a batch whose calls came as a string of JSON was not read)."""
+    a batch of those with reads beside them (window_snapshot, and the
+    dialog reads: sketch_state, session_state and the like, live 56b). A
+    client that lists only the lean groups reaches them through batch, and
+    a refused batch left a dialog that the person-input path opened a dead
+    end (live 56: a batch whose calls came as a string of JSON was not
+    read). read_ok(tool, arguments): the window's check of each read."""
     name = _tool_name(line)
     if name is None:
         return False
@@ -112,7 +121,7 @@ def _dialog_call(line):
         args = (json.loads(line).get("params") or {}).get("arguments")
     except (ValueError, AttributeError):
         return False
-    return front_call(name, args)
+    return front_call(name, args, read_ok)
 
 
 # What runs while a dialog or menu holds the window: it answers it.
@@ -506,16 +515,38 @@ def loop_level():
 
 
 def wake():
-    """The GUI thread's event loop woken: a nested loop whose dialog closed
-    while calls ran inside it sees that it is done and ends."""
+    """The GUI thread's event loop interrupted and woken: a nested loop
+    whose dialog closed while calls ran inside it sees that it is done and
+    ends. A dialog's exec() ends only when its loop's processEvents returns,
+    and on macOS that one keeps waiting in the modal session when a deeper
+    processEvents (a gui_input step's pump) took the interrupt that the
+    dialog's close sent (live 70: the window stayed busy for 20-50 s after
+    gui_input pressed OK). Safe from any thread (Qt's interrupt and wakeUp
+    are), and harmless to a loop that goes on: it only runs its check again."""
     try:
         from PySide import QtCore
 
-        d = QtCore.QAbstractEventDispatcher.instance()
+        app = QtCore.QCoreApplication.instance()
+        th = app.thread() if app is not None else None
+        d = QtCore.QAbstractEventDispatcher.instance(th) if th is not None else QtCore.QAbstractEventDispatcher.instance()
         if d is not None:
+            d.interrupt()
             d.wakeUp()
     except Exception:
         pass
+
+
+def _closed_since(d):
+    """True when the dialog or menu d (modal_info, popup_info) is no longer
+    the one in front."""
+    try:
+        now = modal_info() or popup_info()
+    except Exception:  # noqa: BLE001
+        return False
+    if now is None:
+        return True
+    w = d.get("widget")
+    return w is not None and now.get("widget") is not w
 
 
 def until(t):
@@ -898,6 +929,7 @@ class Link:
                     self._press = None
                     keep.log_watchdog({"event": "dialog", "title": pr[0][1], "gone": True, "tries": pr[2]})
             _meter_dialog(self, d)
+            self._wake_ended_loop(d)
             # A menu or drop-down list in front (a popup, which no modal
             # check sees): in the heartbeat too, with how long it has been
             # open, so the supervisor can tell a call held by it.
@@ -947,6 +979,23 @@ class Link:
                 "popup": pop,
             })
         except Exception:
+            pass
+
+    def _wake_ended_loop(self, d):
+        """From the heartbeat: a call answered early (its step's dialog held
+        it) is still in hand, nothing is in front any more, and the GUI
+        thread is still inside a nested event loop: that loop's dialog
+        closed, and the loop missed the word (wake). It is woken, so the
+        call in hand returns and the calls that wait are served."""
+        try:
+            if d is not None or not any(c.get("answered") for c in list(getattr(self, "calls", []) or [])):
+                return
+            if popup_info() is not None:
+                return
+            n = loop_level()
+            if n is not None and n >= 2:
+                wake()
+        except Exception:  # noqa: BLE001
             pass
 
     def _press_and_verify(self, d, key, label):
@@ -1156,7 +1205,24 @@ class Link:
             # A progress dialog (a job's own, closing by itself) holds
             # nothing: waited for, never answered busy for.
             front = None
-        if front or any(c.get("answered") for c in calls):
+        answered = any(c.get("answered") for c in calls)
+        if not front and answered and not getattr(self, "stuck", None):
+            # The call in hand was answered early and what held it is closed:
+            # its own loop is ending (woken here, from this thread too) and
+            # the rest of the call returns. Calls wait for it, as for any
+            # call in hand, for ENDING_WAIT s (live 70: they were answered
+            # "a menu or dialog is open" with nothing open).
+            now = time.time()
+            t = getattr(self, "_ending_since", None)
+            if t is None:
+                t = self._ending_since = now
+            wake()
+            if now - t < ENDING_WAIT:
+                return None
+            return ("no menu or dialog is open, but the call answered early is still inside a nested event loop that did not end ("
+                    + f"{now - t:.0f} s)")
+        self._ending_since = None
+        if front or answered:
             return gi.front_words(front)
         if getattr(self, "stuck", None):
             return "a nested event loop that did not end (" + str(self.stuck.get("why") or "")[:160] + ")"
@@ -1222,6 +1288,7 @@ class Link:
         if mid is None:
             return None
         after = BUSY_AFTER if after is None else after
+        answers = _dialog_call(line)
 
         def watch():
             t0 = time.time()
@@ -1230,6 +1297,11 @@ class Link:
                 if line.ticket["state"] != "queued" or getattr(self, "going", False):
                     return
                 if time.time() - t0 < after:
+                    continue
+                front = getattr(self, "front", None)
+                if answers and isinstance(front, dict) and front.get("kind") == "dialog" and time.time() - t0 < max(after, FRONT_WAIT):
+                    # Only a dialog is up, and this call answers it: the
+                    # dialog's own loop takes it (live 70).
                     continue
                 why = self._stuck()
                 if why is not None and self._claim(line, "busy"):
@@ -1439,6 +1511,21 @@ class Link:
         bn["answered"] = True
         return out
 
+    def _read_ok(self, tool, args):
+        """A read that may run inside a dialog's loop beside gui_input: a
+        tool of this server that changes nothing with these arguments and
+        is not a heavy read (that one goes to a job and waits)."""
+        srv = getattr(self, "server", None)
+        t = getattr(srv, "tools", {}).get(tool) if srv is not None else None
+        if t is None or t.changes_for(args):
+            return False
+        try:
+            from . import keep
+
+            return not keep.is_heavy(tool)
+        except Exception:  # noqa: BLE001
+            return True
+
     def _blocked(self, line, f, d):
         """A call that came while a modal dialog holds the window: answered
         at once, not run inside the dialog's loop."""
@@ -1510,7 +1597,7 @@ class Link:
             wait = []
             for it in items:
                 name = _tool_name(it[0])
-                if d is not None and _dialog_call(it[0]):
+                if d is not None and _dialog_call(it[0], self._read_ok):
                     self._run_one(*it)
                 elif d is not None and name is not None:
                     self._blocked(it[0], it[1], d)
@@ -1520,6 +1607,11 @@ class Link:
                     wait.append(it)
             for it in wait:
                 self.inbox.put(it)
+            if d is not None and _closed_since(d):
+                # A call run inside the dialog's (or menu's) loop closed it:
+                # the loop is woken so it ends now, not at some later event
+                # (live 70: the window stayed busy for 20-50 s after OK).
+                wake()
             return
         while True:
             try:

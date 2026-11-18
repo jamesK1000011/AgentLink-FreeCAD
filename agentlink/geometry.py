@@ -226,3 +226,75 @@ def soundness(shape, solids_intended=False):
     }
 
 
+
+
+# ---- meshes written for export --------------------------------------------------------------
+
+# The angle (radians) MeshPart may turn between two triangles of an exported
+# mesh, beside its chord error (LinearDeflection). 0.5 is about FreeCAD's own
+# default for a mesh export (28.5 degrees). At 0.0873 (5 degrees) one smooth
+# loft face of 87 profiles made 3.77 M triangles and 188 MB at a chord error
+# of 0.05 mm (live 65): the chord error alone keeps the surface accurate.
+EXPORT_ANGULAR = 0.5
+
+
+def weld_arrays(V, F, eps):
+    """Points closer than about eps merged into one (a grid of eps), the
+    triangles that then have a repeated corner dropped. V: (n, 3) floats;
+    F: (m, 3) ints. Returns (V, F, merged count). No FreeCAD needed."""
+    import numpy as np
+
+    V = np.asarray(V, float).reshape(-1, 3)
+    F = np.asarray(F, int).reshape(-1, 3)
+    if not len(V):
+        return V, F, 0
+    key = np.round(V / eps).astype(np.int64)
+    _u, first, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
+    inv = np.asarray(inv).reshape(-1)
+    V2 = V[first]
+    F2 = inv[F]
+    keep = (F2[:, 0] != F2[:, 1]) & (F2[:, 1] != F2[:, 2]) & (F2[:, 0] != F2[:, 2])
+    return V2, F2[keep], int(len(V) - len(V2))
+
+
+def welded_mesh(m, shape=None):
+    """A mesh made from a shape, with its coincident points merged when it
+    is not closed: the seam of a periodic face (a loft, a revolve) is
+    meshed on both of its sides with points that differ in the last digits,
+    so the mesh had open edges along it and an export of a valid closed
+    solid read back closed: false (live 65). m when it is closed already,
+    or when the merge does not help."""
+    try:
+        if m.isSolid():
+            return m
+        import Mesh
+
+        pts, fs = m.Topology
+        if not fs:
+            return m
+        diag = shape.BoundBox.DiagonalLength if shape is not None else 0.0
+        eps = max(1e-9, 1e-7 * max(1.0, float(diag)))
+        V, F, merged = weld_arrays([tuple(p) for p in pts], fs, eps)
+        if not merged:
+            return m
+        out = Mesh.Mesh(([FreeCAD.Vector(*map(float, v)) for v in V], [tuple(int(i) for i in f) for f in F]))
+        return out if out.CountFacets else m
+    except Exception:  # noqa: BLE001 - the mesh as MeshPart made it
+        return m
+
+
+def mesh_closed(back):
+    """{closed} of a mesh read back from its file. When it is open, its
+    duplicate points are removed and it is checked once more: closed then,
+    closedAfterMerge says so."""
+    closed = bool(back.isSolid())
+    out = {"closed": closed}
+    if closed:
+        return out
+    try:
+        back.removeDuplicatedPoints()
+        if back.isSolid():
+            out = {"closed": True, "closedAfterMerge": True}
+    except Exception:  # noqa: BLE001
+        pass
+    return out

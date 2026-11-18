@@ -77,6 +77,21 @@ class ToolError(Exception):
 # it (they take only targets inside it), and a picture of the window.
 FRONT_CALLS = ("dialog_answer", "gui_input", "gui_unstick")
 FRONT_READS = ("window_snapshot",)
+# Reads that may share a batch with a FRONT_CALLS tool while a dialog holds
+# the window (live 56b: a batch of gui_input and sketch_state was refused
+# "Blocked by a dialog"). They change nothing and need no event loop of
+# their own: they run inside the dialog's loop, after the gui_input steps
+# before them (so they read what those steps did, the dialog closed or
+# not). A tool by name, or any tool whose name ends in one of
+# DIALOG_READ_ENDS. Changes stay refused while a dialog is up.
+DIALOG_READS = ("session_state", "tool_find", "tool_groups", "job_status", "usage_report")
+DIALOG_READ_ENDS = ("_state", "_list", "_get", "_read")
+
+
+def dialog_read(name):
+    """True for a read that may run in a batch beside FRONT_CALLS while a
+    dialog holds the window (DIALOG_READS, DIALOG_READ_ENDS)."""
+    return isinstance(name, str) and name != "batch" and (name in FRONT_READS or name in DIALOG_READS or name.endswith(DIALOG_READ_ENDS))
 
 
 def _as_json(v):
@@ -90,10 +105,10 @@ def _as_json(v):
     return v
 
 
-def batch_tools(args):
-    """The tool names of a batch's calls, read as batch reads them (calls,
-    a call or the arguments as a string of JSON); None when they cannot be
-    read, or for a batch from a file."""
+def batch_calls(args):
+    """The (tool, arguments) of a batch's calls, read as batch reads them
+    (calls, a call or the arguments as a string of JSON); None when they
+    cannot be read, or for a batch from a file."""
     args = _as_json(args)
     if not isinstance(args, dict) or args.get("file") is not None:
         return None
@@ -107,20 +122,43 @@ def batch_tools(args):
         c = _as_json(c)
         if not isinstance(c, dict) or not isinstance(c.get("tool"), str):
             return None
-        out.append(c["tool"])
+        a = _as_json(c.get("arguments"))
+        out.append((c["tool"], a if isinstance(a, dict) else {}))
     return out
 
 
-def front_call(name, args):
+def batch_tools(args):
+    """The tool names of a batch's calls (batch_calls), or None."""
+    calls = batch_calls(args)
+    return None if calls is None else [t for t, _a in calls]
+
+
+def front_call(name, args, read_ok=None):
     """True for a call that runs while a dialog or menu holds the window: a
-    FRONT_CALLS tool, or a batch of only those and FRONT_READS with at least
-    one FRONT_CALLS tool (a lean client reaches gui_input through batch)."""
+    FRONT_CALLS tool, or a batch with at least one FRONT_CALLS tool whose
+    other calls are FRONT_READS or dialog reads (dialog_read; a lean client
+    reaches gui_input through batch). read_ok(tool, arguments), when given,
+    must also pass for each dialog read (the window checks there that the
+    call changes nothing and is not a heavy read)."""
     if name in FRONT_CALLS:
         return True
     if name != "batch":
         return False
-    tools = batch_tools(args)
-    return bool(tools) and all(t in FRONT_CALLS + FRONT_READS for t in tools) and any(t in FRONT_CALLS for t in tools)
+    calls = batch_calls(args)
+    if not calls or not any(t in FRONT_CALLS for t, _a in calls):
+        return False
+    for t, a in calls:
+        if t in FRONT_CALLS or t in FRONT_READS:
+            continue
+        if not dialog_read(t):
+            return False
+        if read_ok is not None:
+            try:
+                if not read_ok(t, a):
+                    return False
+            except Exception:  # noqa: BLE001 - not known: not let through
+                return False
+    return True
 
 
 def bad(msg):

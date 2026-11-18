@@ -942,10 +942,12 @@ def tools(session):
         return Mesh, MeshPart
 
     def tessellated(sh, tol):
-        """A shape as a mesh at a chord error of tol mm (MeshPart)."""
+        """A shape as a mesh at a chord error of tol mm (MeshPart), its
+        coincident points merged (geometry.welded_mesh)."""
         import MeshPart
 
-        return MeshPart.meshFromShape(Shape=sh, LinearDeflection=tol, AngularDeflection=0.0873, Relative=False)
+        m = MeshPart.meshFromShape(Shape=sh, LinearDeflection=tol, AngularDeflection=geo.EXPORT_ANGULAR, Relative=False)
+        return geo.welded_mesh(m, sh)
 
     def placed_mesh(o, tol):
         """An object's mesh for writing: a mesh object's own, where it
@@ -1014,7 +1016,7 @@ def tools(session):
         m.write(p)
         try:
             back = read_back(p, fmt)
-            return {"triangles": back.CountFacets, "volume": round(back.Volume, 2), "volumeDiff": round(abs(back.Volume - vol), 2), "closed": back.isSolid()}
+            return {"triangles": back.CountFacets, "volume": round(back.Volume, 2), "volumeDiff": round(abs(back.Volume - vol), 2), **geo.mesh_closed(back)}
         except Exception:
             return {"triangles": m.CountFacets, "readBack": f"written; FreeCAD does not read {fmt.upper()} back to check it"}
 

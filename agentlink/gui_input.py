@@ -1468,7 +1468,7 @@ class Run:
         if b is not None:
             if self.app().activePopupWidget() is b:
                 return b
-            return b.focusWidget() or b
+            return self._dialog_focus(b)
         app = self.app()
         f = app.focusWidget() or self.mw().focusWidget()
         # A focus widget that is no longer shown (the list of a drop-down
@@ -1492,6 +1492,53 @@ class Run:
         if p is not None and (f is None or f is self.focus_at_press):
             return p
         return f or self.mw()
+
+    def _dialog_focus(self, b):
+        """Where a key or text with no target goes while the dialog b is in
+        front, as a person's typing goes: the application's focus widget
+        when it is inside b, else b's own focus widget, else b's first shown
+        and enabled field (a line edit, spin box, editable combo box, text
+        edit), else b. Live 69: keys went to the QDialog of Sketcher's
+        Insert Radius, not to its value field (Gui::QuantitySpinBox), with
+        the window in the background (Qt then keeps no focus widget)."""
+        def inside(w):
+            try:
+                return w is not None and w is not b and _alive(w) and b.isAncestorOf(w) and self._really_shown(w)
+            except Exception:
+                return False
+
+        try:
+            f = self.app().focusWidget()
+        except Exception:
+            f = None
+        if inside(f):
+            return f
+        try:
+            f = b.focusWidget()
+        except Exception:
+            f = None
+        if inside(f):
+            return f
+        try:
+            kids = b.findChildren(self.qt.QtWidgets.QWidget)
+        except Exception:
+            kids = []
+        for k in kids:
+            if not any(_has_class(k, c) for c in EDITORS) or not inside(k):
+                continue
+            try:
+                if not k.isEnabled() or (hasattr(k, "isReadOnly") and k.isReadOnly()):
+                    continue
+                if _has_class(k, "QComboBox") and hasattr(k, "isEditable") and not k.isEditable():
+                    continue
+            except Exception:
+                continue
+            try:
+                k.setFocus(_enum(self.qt.QtCore.Qt, "FocusReason", "OtherFocusReason"))
+            except Exception:
+                pass
+            return k
+        return b
 
     def _really_shown(self, w):
         """w and the window it is in are shown."""
@@ -1916,6 +1963,21 @@ class Run:
         self.done.append(out)
         self._tell(self.open_info())
         self._go()
+        if self.blocker() is not b:
+            # The steps run here closed what the stuck step opened: its
+            # loop is woken so it ends now (live 70).
+            self._wake()
+
+    def _wake(self):
+        """The GUI thread's event loop interrupted and woken (gui_link.wake)."""
+        try:
+            QtCore = self.qt.QtCore
+            app = QtCore.QCoreApplication.instance()
+            d = QtCore.QAbstractEventDispatcher.instance(app.thread())
+            d.interrupt()
+            d.wakeUp()
+        except Exception:  # noqa: BLE001 - no dispatcher: nothing to wake
+            pass
 
     def _tell(self, info):
         if self.seen is not None:
