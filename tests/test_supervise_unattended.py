@@ -185,7 +185,7 @@ class Sup(unittest.TestCase):
         hidden = os.path.join(self.tmp, "fake_hidden.py")
         open(hidden, "w").write(FAKE_HIDDEN)
         self.port = free_port()
-        self.env = {**os.environ, "AGENTLINK_HOME": self.home, "AGENTLINK_DEADLINE": "1", "AGENTLINK_GRACE": "1", "AGENTLINK_STALL": "1",
+        self.env = {**os.environ, "AGENTLINK_HOME": self.home, "AGENTLINK_DEADLINE": "1", "AGENTLINK_GRACE": "1", "AGENTLINK_STALL": "1", "AGENTLINK_STALL_CPU": "0.05",
                     "AGENTLINK_WINDOW": "1" if self.window else "0", "AGENTLINK_WINDOW_PORT": str(self.port),
                     "AGENTLINK_RESTART_MARK": os.path.join(self.home, ".restarting"),
                     "AGENTLINK_TOKEN_FILE": os.path.join(self.home, "link-token"), "AGENTLINK_DIR": AL,

@@ -197,7 +197,7 @@ def deadline_for(tool, args=None, started=None):
 # busy and is never stopped; a deadlock or a wait on nothing is.
 STALL = float(os.environ.get("AGENTLINK_STALL", "60"))
 # CPU seconds of progress over STALL that count as work.
-STALL_CPU = 0.5
+STALL_CPU = float(os.environ.get("AGENTLINK_STALL_CPU", "0.5"))
 # A FreeCAD with no heartbeat this long is stopped even while its CPU is
 # busy (a loop that never ends). The person can app_force_restart sooner.
 HANG_CEILING = float(os.environ.get("AGENTLINK_HANG_CEILING", "7200"))
