@@ -2046,7 +2046,9 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         # t0: when the outermost batch started — the watchdog times the call
         # from then, so a heavy step late in it (view_render) knows how long
         # it has left.
-        t_out = (prev.get("t0") if isinstance(prev, dict) else None) or time.time()
+        from . import batchrec as _batchrec
+
+        t_out = _batchrec.clock_start(prev)  # an answered batch's dialog life is not this one's (live 84)
         # What ran, kept in a file as it runs (BatchRecord): an answer lost to
         # a dropped call or a forced restart is read from there.
         record = BatchRecord(s.out_dir, total, first)

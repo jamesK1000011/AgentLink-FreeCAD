@@ -112,7 +112,7 @@ import re
 
 ACCEPTS_MAJOR = 1
 REQUIRED = {"group": str, "description": str, "inputSchema": dict, "changes": bool, "source": str, "date": str}
-OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "reads": dict, "activity": str,
+OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "reads": dict, "frontReads": dict, "activity": str,
             "workbench": str, "commands": list, "words": list}
 # Agent Link's own tools only (agentlink/data/tools.json): a tool that wraps
 # one FreeCAD command, or a list of steps, run by one of agentlink/runners.py's
@@ -237,5 +237,5 @@ def build(folder, group, handlers, who="this add-on"):
         if v.get("pathIsCurve"):
             paths.GEOMETRIC.add(k)
     return [Tool(k, v["description"], v["inputSchema"], refusing(handlers[k]), changes=v["changes"], group=group, reads=v.get("reads"),
-                 activity=v.get("activity"))
+                 activity=v.get("activity"), front_reads=v.get("frontReads"))
             for k, v in mine.items()]

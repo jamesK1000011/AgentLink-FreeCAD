@@ -133,14 +133,17 @@ def batch_tools(args):
     return None if calls is None else [t for t, _a in calls]
 
 
-def front_call(name, args, read_ok=None):
+def front_call(name, args, read_ok=None, declared=None):
     """True for a call that runs while a dialog or menu holds the window: a
-    FRONT_CALLS tool, or a batch with at least one FRONT_CALLS tool whose
-    other calls are FRONT_READS or dialog reads (dialog_read; a lean client
-    reaches gui_input through batch). read_ok(tool, arguments), when given,
-    must also pass for each dialog read (the window checks there that the
-    call changes nothing and is not a heavy read)."""
-    if name in FRONT_CALLS:
+    FRONT_CALLS tool, FRONT_READS alone (window_snapshot draws the menu or
+    dialog over the window), or a batch with at least one FRONT_CALLS tool
+    whose other calls are FRONT_READS or dialog reads (dialog_read; a lean
+    client reaches gui_input through batch). declared(tool, arguments),
+    when given, lets through a call that its tool's data declares a front
+    read (frontReads: an add-on tool's status action, live 56c). read_ok(tool,
+    arguments), when given, must also pass for each read (the window checks
+    there that the call changes nothing and is not a heavy read)."""
+    if name in FRONT_CALLS or name in FRONT_READS:
         return True
     if name != "batch":
         return False
@@ -151,7 +154,11 @@ def front_call(name, args, read_ok=None):
         if t in FRONT_CALLS or t in FRONT_READS:
             continue
         if not dialog_read(t):
-            return False
+            try:
+                if declared is None or not declared(t, a):
+                    return False
+            except Exception:  # noqa: BLE001 - not known: not let through
+                return False
         if read_ok is not None:
             try:
                 if not read_ok(t, a):
@@ -167,8 +174,12 @@ def bad(msg):
 
 
 class Tool:
-    def __init__(self, name, description, schema, fn, changes=False, group="core", reads=None, activity=None):
+    def __init__(self, name, description, schema, fn, changes=False, group="core", reads=None, activity=None, front_reads=None):
         self.name = name
+        # The calls that may run beside gui_input while a dialog or menu
+        # holds the window (front_call): {argument: [values]}, {} for every
+        # call; None for none. Declared in the tool's data (frontReads).
+        self.front_reads = None if front_reads is None else dict(front_reads)
         self.description = description
         self.schema = schema
         self.fn = fn
@@ -186,6 +197,18 @@ class Tool:
         # of them ("Sliced {object}"; agentlink/activity.py), or None for
         # the shared table's.
         self.activity = activity
+
+    def front_read(self, args):
+        """Whether this call is a front read its data declares (frontReads):
+        it changes nothing and may run inside a dialog's or menu's loop."""
+        if self.front_reads is None or self.changes_for(args):
+            return False
+        a = args if isinstance(args, dict) else {}
+        for k, values in self.front_reads.items():
+            v = a.get(k, ((self.schema or {}).get("properties") or {}).get(k, {}).get("default"))
+            if v not in values:
+                return False
+        return True
 
     def changes_for(self, args):
         """Whether this call changes the document."""

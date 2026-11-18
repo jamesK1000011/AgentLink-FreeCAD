@@ -237,13 +237,15 @@ def check(doc, tool_names=()):
     out += _one_line(doc.get("about"), MAX_ABOUT, "about")
     addon = doc.get("addon", {})
     package = None
-    if not isinstance(addon, dict) or set(addon) - {"package", "name", "credit", "licence", "license"}:
-        out.append("addon: {package, name, credit, licence}")
+    if not isinstance(addon, dict) or set(addon) - {"package", "name", "credit", "licence", "license", "workbench"}:
+        out.append("addon: {package, name, credit, licence, workbench}")
     else:
         package = addon.get("package")
         if package is not None and (not isinstance(package, str) or not MODULE_RE.match(package) or "." in package or blocked_package(package)):
             out.append("addon.package: the add-on's top package name (not the standard library, FreeCAD or Agent Link)")
             package = None
+        if "workbench" in addon and not (isinstance(addon["workbench"], str) and COMMAND_RE.match(addon["workbench"])):
+            out.append("addon.workbench: the add-on's workbench class name (TexturizerWorkbench)")
         for k in ("name", "credit", "licence", "license"):
             if k in addon:
                 out += _one_line(addon[k], 200, f"addon.{k}")
@@ -626,7 +628,8 @@ def call_python(p, args, document=None):
 
 def run(name, entry, args, runners, tool_names=()):
     """Run one entry, after the OK. runners: {"command": fn(name, index),
-    "python": fn(p, args), "script": fn(calls)}."""
+    "python": fn(p, args), "script": fn(calls), "workbench"?: fn(addon's
+    workbench or None, command) -> words or None, run before a command}."""
     _name_ok(name, "cookbook")
     kept = {}
     doc, sha, problems = load(name, tool_names, kept)
@@ -645,7 +648,16 @@ def run(name, entry, args, runners, tool_names=()):
     if "command" in r:
         if args:
             raise Refused("invalid_input", f"{entry} runs the command {r['command']} and takes no args.")
-        return {"cookbook": name, "entry": entry, "ran": "command", "result": runners["command"](r["command"], int(r.get("index", 0)))}
+        out = {"cookbook": name, "entry": entry, "ran": "command"}
+        wb = (doc.get("addon") or {}).get("workbench") if isinstance(doc.get("addon"), dict) else None
+        if "workbench" in runners:
+            # An add-on's commands exist only after its workbench loaded
+            # (live 88: "No command 'Texturizer_Check'" until then).
+            said = runners["workbench"](wb, r["command"])
+            if said:
+                out["workbench"] = said
+        out["result"] = runners["command"](r["command"], int(r.get("index", 0)))
+        return out
     if "python" in r:
         p = r["python"]
         a = check_args(p.get("args", {"type": "object", "properties": {}}), args or {})

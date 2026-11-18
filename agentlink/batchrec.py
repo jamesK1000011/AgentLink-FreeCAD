@@ -94,6 +94,19 @@ STANDING_NOTE = ("A line's health leaves out the part \"… still failing from b
 # Said once a conversation, not on every reply (agentlink/once.py).
 from . import once as _once  # noqa: E402
 
+
+def clock_start(prev, now=None):
+    """When a batch's budget starts: the outer batch's start for a batch run
+    inside a call of it (prev: the session's batch_now), else now. A batch
+    that was answered already (its gui_input step's dialog held it, and
+    this batch is the client's next call, run inside that dialog's loop) is
+    no outer batch: this one has its own clock (live 84: "Stopped after
+    80 s (budget 55 s)" for a call of 1 s, the dialog's whole life counted)."""
+    now = time.time() if now is None else now
+    if isinstance(prev, dict) and not prev.get("answered") and prev.get("t0"):
+        return prev["t0"]
+    return now
+
 _once.register("batch", "toNote", TO_NOTE)
 _once.register("batch", "note", TO_NOTE)
 _once.register("batch", "healthNote", STANDING_NOTE)

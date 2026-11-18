@@ -98,6 +98,16 @@ def declare(name, e):
         EXTRA[name] = got
 
 
+def bench_for_command(cmd):
+    """The workbench a declared tool runs the FreeCAD command cmd in (an
+    add-on's tools.json: commands and workbench), or None."""
+    for src in (EXTRA, load()):
+        for e in src.values():
+            if isinstance(e, dict) and e.get("workbench") and cmd in (e.get("commands") or ()):
+                return e["workbench"]
+    return None
+
+
 def entry(name, fallback=None):
     """A tool's entry: the index's, else what its add-on declared, with
     fallback(name) -> (workbench, command) (the echo's declarations) filling

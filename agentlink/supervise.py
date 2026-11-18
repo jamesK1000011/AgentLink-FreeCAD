@@ -335,11 +335,16 @@ def nested_hang(hb, now, limit=None, fresh=10.0):
         return None
     try:
         since, t = float(hb.get("busySince") or 0), float(hb.get("t") or 0)
+        front_at = float(hb.get("frontAt") or 0)
     except (TypeError, ValueError):
         return None
     if not since or now - t > fresh:
         return None  # no heartbeat: the hang rule by pings sees that one
-    after = now - since
+    # A dialog or menu held the call (the person's time, not the call's):
+    # the nested loop is timed from when it was last seen in front (live 87:
+    # OK in a dialog that lived 112 s, the loop still ending, was taken for
+    # a hang and FreeCAD was force-restarted).
+    after = now - max(since, front_at)
     loops = hb.get("loops")
     nested = loops is None or (isinstance(loops, (int, float)) and loops > 1)
     out = {"tool": hb["busy"], "after": after}

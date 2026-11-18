@@ -105,7 +105,7 @@ def _tool_name(line):
         return None
 
 
-def _dialog_call(line, read_ok=None):
+def _dialog_call(line, read_ok=None, declared=None):
     """True for a call that runs while a modal dialog or a menu holds the
     window (protocol.front_call): dialog_answer, gui_input, gui_unstick, or
     a batch of those with reads beside them (window_snapshot, and the
@@ -113,7 +113,9 @@ def _dialog_call(line, read_ok=None):
     client that lists only the lean groups reaches them through batch, and
     a refused batch left a dialog that the person-input path opened a dead
     end (live 56: a batch whose calls came as a string of JSON was not
-    read). read_ok(tool, arguments): the window's check of each read."""
+    read). read_ok(tool, arguments): the window's check of each read;
+    declared(tool, arguments): a read its tool's data declares (frontReads,
+    live 56c: an add-on tool's status action)."""
     name = _tool_name(line)
     if name is None:
         return False
@@ -121,7 +123,7 @@ def _dialog_call(line, read_ok=None):
         args = (json.loads(line).get("params") or {}).get("arguments")
     except (ValueError, AttributeError):
         return False
-    return front_call(name, args, read_ok)
+    return front_call(name, args, read_ok, declared)
 
 
 # What runs while a dialog or menu holds the window: it answers it.
@@ -173,6 +175,25 @@ def _qt():
     return QtGui, QtWidgets
 
 
+def shown_in(d, x):
+    """True when the widget x, a child of the dialog d, shows now: visible,
+    with a size, in d's own window or in a window of its own that shows
+    (an expression editor open on one of d's fields). A popup that closed
+    (FreeCAD keeps the expression editors it hid) lists nothing (live 85:
+    two editors' Result and OK, Reset where one showed)."""
+    try:
+        if not x.isVisible():
+            return False
+        if hasattr(x, "width") and (x.width() <= 0 or x.height() <= 0):
+            return False
+        win = x.window() if hasattr(x, "window") else d
+        if win is d or win is None:
+            return True
+        return bool(win.isVisible()) and not (hasattr(win, "isHidden") and win.isHidden())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def modal_info():
     """The modal dialog in front, if any: { class, title, text, buttons,
     widget }. Qt keeps timers running inside a dialog's own loop, so this is
@@ -196,14 +217,14 @@ def modal_info():
     if not parts:
         try:
             for lab in w.findChildren(QtWidgets.QLabel):
-                if lab.isVisible() and lab.text():
+                if shown_in(w, lab) and lab.text():
                     parts.append(lab.text())
         except Exception:
             pass
     buttons = []
     try:
         for b in w.findChildren(QtWidgets.QAbstractButton):
-            if b.isVisible() and b.isEnabled() and b.text() and not b.isCheckable():
+            if shown_in(w, b) and b.isEnabled() and b.text() and not b.isCheckable():
                 buttons.append(b.text().replace("&", ""))
     except Exception:
         pass
@@ -704,7 +725,7 @@ def fill(d, text=None, item=None):
         return done
     QtGui, QtWidgets = _qt()
     fields = [f for cls in (QtWidgets.QLineEdit, QtWidgets.QPlainTextEdit) for f in w.findChildren(cls)
-              if f.isVisible() and f.isEnabled() and not (hasattr(f, "isReadOnly") and f.isReadOnly())]
+              if shown_in(w, f) and f.isEnabled() and not (hasattr(f, "isReadOnly") and f.isReadOnly())]
     if len(fields) != 1:
         title = ""
         try:
@@ -743,10 +764,14 @@ def press(d, label):
     try:
         QtGui, QtWidgets = _qt()
         want = label.lower().replace("&", "")
-        for b in d["widget"].findChildren(QtWidgets.QAbstractButton):
-            if b.isVisible() and b.isEnabled() and b.text().lower().replace("&", "") == want:
-                b.click()
-                return True
+        dw = d["widget"]
+        hits = [b for b in dw.findChildren(QtWidgets.QAbstractButton)
+                if shown_in(dw, b) and b.isEnabled() and b.text().lower().replace("&", "") == want]
+        # The dialog's own button before one of an editor open over it (live 85).
+        hits.sort(key=lambda b: 0 if not hasattr(b, "window") or b.window() is dw else 1)
+        if hits:
+            hits[0].click()
+            return True
         if want in BACK_OUT:
             w = d["widget"]
             if hasattr(w, "reject"):
@@ -1012,6 +1037,11 @@ class Link:
                 self._popup = (pkey, time.time())
             if pop:
                 pop["since"] = self._popup[1]
+            if d is not None or pop is not None:
+                # The last beat that saw a dialog or menu in front: the
+                # supervisor times a nested loop from there, not from the
+                # call's start (live 87: a forced restart after OK).
+                self._front_at = time.time()
             # A heavy job held for the person's go (N): said in the status bar
             # while a heavy job runs (keep.status_line); with none running the
             # line is not said again and goes after its 3 s (round 7: it
@@ -1100,10 +1130,15 @@ class Link:
         the main one; more, a nested one such as a dialog's), the time the
         call said it would be done by (until) and a call's guard that gave
         up on a nested loop (stuck). The watchdog takes a call held past its
-        deadline inside a nested loop, with nothing open, as a hang."""
+        deadline inside a nested loop, with nothing open, as a hang. frontAt:
+        the last beat that saw a dialog or menu in front during the call (the
+        watchdog times the nested loop from there)."""
         if not self.busy:
             return {}
         out = {"busySince": getattr(self, "busy_since", None), "loops": loop_level()}
+        fa = getattr(self, "_front_at", None)
+        if fa is not None and out["busySince"] is not None and fa > out["busySince"]:
+            out["frontAt"] = fa
         if getattr(self, "until", None):
             out["until"] = self.until
         if getattr(self, "stuck", None):
@@ -1571,6 +1606,13 @@ class Link:
         bn["answered"] = True
         return out
 
+    def _declared_read(self, tool, args):
+        """A call its tool's data declares a front read (frontReads): it may
+        share a batch with gui_input while a dialog or menu is open."""
+        srv = getattr(self, "server", None)
+        t = getattr(srv, "tools", {}).get(tool) if srv is not None else None
+        return bool(t is not None and hasattr(t, "front_read") and t.front_read(args))
+
     def _read_ok(self, tool, args):
         """A read that may run inside a dialog's loop beside gui_input: a
         tool of this server that changes nothing with these arguments and
@@ -1657,7 +1699,7 @@ class Link:
             wait = []
             for it in items:
                 name = _tool_name(it[0])
-                if d is not None and _dialog_call(it[0], self._read_ok):
+                if d is not None and _dialog_call(it[0], self._read_ok, self._declared_read):
                     self._run_one(*it)
                 elif d is not None and name is not None:
                     self._blocked(it[0], it[1], d)

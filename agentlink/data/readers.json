@@ -576,6 +576,7 @@
    "changers": [
     "back_to",
     "close_doc",
+    "front_tab",
     "image_plane",
     "new_doc",
     "open_doc",

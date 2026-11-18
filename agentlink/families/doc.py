@@ -591,6 +591,35 @@ def went_from(session, doc):
     del trail[:-20]
 
 
+def front_tab(d):
+    """In the window: d's 3D view made the active tab (FreeCAD's own
+    setActiveDocument can leave another document's tab in front). True when
+    it is in front; False headless or when it could not be done. A new
+    document goes to the front, so gui_input acts on it (live 79: the front
+    tab was the person's own model after a restart)."""
+    if not getattr(FreeCAD, "GuiUp", False):
+        return False
+    try:
+        import FreeCADGui
+
+        FreeCAD.setActiveDocument(d.Name)
+        FreeCADGui.setActiveDocument(d.Name)
+    except Exception:  # noqa: BLE001
+        return False
+    try:
+        from PySide import QtGui
+
+        QtW = getattr(__import__("PySide", fromlist=["QtWidgets"]), "QtWidgets", QtGui)
+        area = FreeCADGui.getMainWindow().findChild(QtW.QMdiArea)
+        want = d.Label + " : "
+        sub = next((w for w in area.subWindowList() if w.windowTitle().replace("[*]", "").startswith(want)), None)
+        if sub is not None and area.activeSubWindow() is not sub:
+            area.setActiveSubWindow(sub)
+    except Exception:  # noqa: BLE001
+        pass
+    return True
+
+
 def tools(session):
     s = session
 
@@ -1082,7 +1111,7 @@ def tools(session):
 
     helpers = {
         # the session and the document
-        "doc": lambda: s.doc, "current": lambda: s.doc, "switch": switch, "where": where, "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: s.steps,
+        "doc": lambda: s.doc, "current": lambda: s.doc, "switch": switch, "front_tab": front_tab, "where": where, "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: s.steps,
         "unique": lambda label, own=None: s.unique(label, own) if own is not None else s.unique(label), "bodies": lambda: s.bodies(), "body": lambda ref: s.body(ref),
         "finish": lambda tool, read: picks.finish(s, tool, read), "errors": errors, "find": lambda ref, what="object": picks.find(s.doc, ref, what),
         "ref_list": picks.ref_list, "num": picks.num, "vec3": picks.vec3, "json_safe": lambda v: picks.json_safe(v),

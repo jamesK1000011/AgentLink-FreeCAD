@@ -77,6 +77,31 @@ def tools(s):
         "unstick": unstick,
     }
 
+    def front_doc_check(steps):
+        """The window's front document against the session's (live 79: after
+        a restart the person's model was in front, and gui_input clicked in
+        it). 3D view targets are refused; other input is done with a
+        warning (the words), None when the two agree."""
+        from .. import gui_input as gi
+
+        try:
+            import FreeCADGui
+
+            gd = FreeCADGui.ActiveDocument
+            front = gd.Document if gd is not None else None
+        except Exception:  # noqa: BLE001
+            front = None
+        mine = getattr(s, "doc", None)
+        if front is None or mine is None or front.Name == mine.Name:
+            return None
+        kinds = gi.target_kinds(steps)
+        how = f"doc_switch {{ document: \"{mine.Label}\", front: true }} brings the agent's document to the front (the person's view moves), or ask them."
+        if kinds & {"view", "view_world"}:
+            raise ToolError("invalid_state", f"gui_input: the window has {front.Label} in front, and the agent works in {mine.Label}. A 3D view target would act on {front.Label}. {how} Nothing was done.")
+        if gi.acts(steps):
+            return f"The window has {front.Label} in front, not the agent's {mine.Label}: the input went to what is in front. {how}"
+        return None
+
     def gui_input(a):
         from .. import gui_input as gi
 
@@ -91,6 +116,7 @@ def tools(s):
         from .. import gui_link, report_watch
         from ..grab import grab_window
 
+        warn = front_doc_check(steps)
         QtGui, QtWidgets = gui_link._qt()
         from PySide import QtCore
 
@@ -126,6 +152,8 @@ def tools(s):
             # Done on its own: its deadline no longer stands over a batch
             # (or a live_run) that goes on after it.
             gui_link.expect_done("gui_input")
+        if warn and isinstance(out, dict):
+            out["warning"] = warn
         if run.shots and a.get("inline", True) and not run.answered:
             try:
                 with open(run.shots[-1], "rb") as f:
@@ -258,7 +286,8 @@ def tools(s):
              "y]}: logical pixels from the top-left of the active 3D view. {view_world: [x, y, z]}: a model point projected there. {widget: {objectName?, text?, "
              "toolTip?, class?, under?: dock or dialog title}, at?: [dx, dy]}: the first visible match. at is from its top-left (centre by default). {tab: {text, "
              "under?}}. {item: {text, under?, column?}, check?: true}: a row of a list, tree or table (check: its box). {menu_item: \"text\"}: an item of the open "
-             "menu. {window: [x, y]}: main-window pixels. While a dialog or menu is in front, the tool takes only targets inside it. For each step, the answer gives "
+             "menu. {window: [x, y]}: main-window pixels. A click on an open menu's item runs that item. While a dialog or menu is in front, the tool takes only targets inside it. "
+             "When another document than the agent's is in front, view targets are refused and other input gives a warning. For each step, the answer gives "
              "what it hit (class, name, text, where). It also gives a dialog or menu that it opened; later steps run inside it. open: what still "
              "holds the window at the end. Close it with Escape, dialog_answer or gui_unstick. Also new Report problems. {shortcut: \"Shift+V\"}: runs "
              "the enabled command with that shortcut ({key} does not). The proof that a step worked is what the tools read back after it, not the shot. Use session_state, selection { clear: false }, object_get. "

@@ -70,4 +70,63 @@ def grab_window(target=None):
             painter.end()
     except Exception as e:
         FreeCAD.Console.PrintLog(f"Agent Link window_snapshot: 3D view not painted in ({e})\n")
+    if target is gui.getMainWindow():
+        paint_front(pix, target)
     return pix
+
+
+def front_windows(mw):
+    """The windows over the main window that a person sees: the modal
+    dialog, then the open popups (a menu, its submenus, a drop-down list),
+    the active popup last (as gui_input's shot paints them)."""
+    try:
+        from PySide import QtCore
+
+        QtW = getattr(__import__("PySide", fromlist=["QtWidgets"]), "QtWidgets", None)
+        app = QtW.QApplication.instance()
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    try:
+        m = app.activeModalWidget()
+        if m is not None and m is not mw and m.isVisible():
+            out.append(m)
+        p = app.activePopupWidget()
+        popup = int(QtCore.Qt.WindowType.Popup)
+        mask = int(QtCore.Qt.WindowType.WindowType_Mask)
+        for t in app.topLevelWidgets():
+            if t is not p and t is not mw and t not in out and t.isVisible() and int(t.windowType()) & mask == popup:
+                out.append(t)
+        if p is not None and p is not mw and p.isVisible() and p not in out:
+            out.append(p)
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def paint_front(pix, mw):
+    """Each window over the main window painted into its picture where it
+    is on the screen: a widget grab leaves out the menus and dialogs, which
+    are windows of their own (live 81: window_snapshot while a menu is
+    open). The count painted."""
+    ws = front_windows(mw)
+    if not ws:
+        return 0
+    n = 0
+    try:
+        from PySide import QtCore, QtGui
+
+        painter = QtGui.QPainter(pix)
+        try:
+            for w in ws:
+                try:
+                    o = mw.mapFromGlobal(w.mapToGlobal(QtCore.QPoint(0, 0)))
+                    painter.drawPixmap(QtCore.QPoint(int(o.x()), int(o.y())), w.grab())
+                    n += 1
+                except Exception:  # noqa: BLE001
+                    continue
+        finally:
+            painter.end()
+    except Exception:  # noqa: BLE001
+        pass
+    return n

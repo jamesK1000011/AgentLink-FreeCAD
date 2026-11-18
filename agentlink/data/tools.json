@@ -21131,7 +21131,7 @@
   },
   "doc_new": {
    "group": "doc",
-   "description": "Start a new, empty FreeCAD document, and work in it from now on. name: becomes its label. FreeCAD makes the internal name from it. Spaces and odd characters become _, and FreeCAD adds a number when the name is in use. document in the answer is that internal name; label is the label. The previous document stays open, with its unsaved changes (doc_switch goes back to it). You cannot undo this. A batch's rollback does not include it.",
+   "description": "Start a new, empty FreeCAD document, and work in it from now on. name: becomes its label. FreeCAD makes the internal name from it. Spaces and odd characters become _, and FreeCAD adds a number when the name is in use. document in the answer is that internal name; label is the label. The previous document stays open, with its unsaved changes (doc_switch goes back to it). In the window, the new document comes to the front (front: true in the answer). You cannot undo this. A batch's rollback does not include it.",
    "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/doc.py)",
@@ -21142,9 +21142,10 @@
     {"let": {"d": "=new_doc(name.replace(' ', '_'))"}},
     {"set": {"d.Label": "=name"}},
     {"let": {"old": "=current().Name"}},
-    {"do": "=switch(d)"}
+    {"do": "=switch(d)"},
+    {"let": {"front": "=front_tab(d)"}}
    ],
-   "answer": {"fields": {"document": "=d.Name", "label": "=d.Label", "previous": "=old", "note": "The previous document stays open: doc_switch { document } returns to it (doc_open { path } when it was saved and closed)."}}
+   "answer": {"fields": {"document": "=d.Name", "label": "=d.Label", "previous": "=old", "front": {"when": "=front", "value": true}, "note": "The previous document stays open: doc_switch { document } returns to it (doc_open { path } when it was saved and closed)."}}
   },
   "doc_close": {
    "group": "doc",
@@ -21588,7 +21589,7 @@
   },
   "window_snapshot": {
    "group": "app",
-   "description": "Take a picture of the FreeCAD window as the person sees it: toolbars, tree, panels, 3D view. part: one dock panel by its title (\"Report view\", \"Model\", \"Agent Link\"). A wrong title lists them. Qt draws it in the background: no screen recording, and the window need not be in front. path: a .png (window.png in the session's folder). inline: false leaves the picture out of the answer. Answer: path, width, height. Use it to see how something looks, never as proof that a step worked: read state for that. Window only.",
+   "description": "Take a picture of the FreeCAD window as the person sees it: toolbars, tree, panels, 3D view. part: one dock panel by its title (\"Report view\", \"Model\", \"Agent Link\"). A wrong title lists them. Qt draws it in the background: no screen recording, and the window need not be in front. An open menu or dialog is drawn where it is. It works while a menu or dialog holds the window. path: a .png (window.png in the session's folder). inline: false leaves the picture out of the answer. Answer: path, width, height. Use it to see how something looks, never as proof that a step worked: read state for that. Window only.",
    "inputSchema": {"type": "object", "properties": {"part": {"type": "string"}, "path": {"type": "string"}, "inline": {"type": "boolean"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/app.py)",
@@ -21694,6 +21695,6 @@
   "cookbook_export": {"group": "porting", "description": "Write one installed cookbook to a .json file, with its script files put in the file as calls. name: the cookbook. path: the file to write. A person who imports it gives their own OK. Changes nothing in the document.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "path": {"type": "string"}}, "required": ["name", "path"], "additionalProperties": false}, "changes": false, "source": "Agent Link (porting design, 2026-11-18)", "date": "2026-11-18", "runner": "steps", "steps": [], "answer": {"fields": {"...": "=export_cookbook(a.name, a.path)"}}},
   "cookbook_approve": {"group": "porting", "description": "Ask the person for the OK to run a cookbook. name: the cookbook. A cookbook runs code with the full reach of the Mac. Show cookbook_show to the person first. The tool shows the OK dialog in the FreeCAD window. Only a press on Approve by the person counts. The agent never gives the OK: no tool can press Approve, and a typed confirm is not taken. Answer: pending, with the next step. After the press, cookbook_list shows the cookbook approved. sha256: the hash that cookbook_show gave. A file that changed since then is refused. The OK holds until the file or one of its script files changes. Headless, the tool refuses.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "sha256": {"type": "string"}}, "required": ["name"], "additionalProperties": false}, "changes": false, "source": "Agent Link (porting design, 2026-11-18)", "date": "2026-11-18", "runner": "steps", "steps": [], "answer": {"fields": {"...": "=approve_cookbook(a.name, a.sha256)"}}},
   "cookbook_unapprove": {"group": "porting", "description": "Take a cookbook off the approved list. cookbook_run then refuses its entries until the person approves it again.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"], "additionalProperties": false}, "changes": false, "source": "Agent Link (porting design, 2026-11-18)", "date": "2026-11-18", "runner": "steps", "steps": [], "answer": {"fields": {"...": "=unapprove_cookbook(a.name)"}}},
-  "cookbook_run": {"group": "porting", "description": "Run one entry of an approved cookbook. cookbook: its name. entry: the entry's name. A command entry runs through cmd_run, with all of its refusals. A python entry calls its function with args, checked against its args schema. A script entry runs its calls through batch, with rollback. The tool refuses an entry of a cookbook that is not approved or that changed, and gives the next step. Answer: cookbook, entry, ran, result.", "inputSchema": {"type": "object", "properties": {"cookbook": {"type": "string"}, "entry": {"type": "string"}, "args": {"type": "object"}}, "required": ["cookbook", "entry"], "additionalProperties": false}, "changes": true, "source": "Agent Link (porting design, 2026-11-18)", "date": "2026-11-18", "runner": "steps", "steps": [], "answer": {"fields": {"...": "=run_entry(a.cookbook, a.entry, a.get('args'))"}}}
+  "cookbook_run": {"group": "porting", "description": "Run one entry of an approved cookbook. cookbook: its name. entry: the entry's name. A command entry runs through cmd_run, with all of its refusals. If the command is not loaded, the add-on's workbench is activated first, and workbench in the answer says so. A python entry calls its function with args, checked against its args schema. A script entry runs its calls through batch, with rollback. The tool refuses an entry of a cookbook that is not approved or that changed, and gives the next step. Answer: cookbook, entry, ran, workbench, result.", "inputSchema": {"type": "object", "properties": {"cookbook": {"type": "string"}, "entry": {"type": "string"}, "args": {"type": "object"}}, "required": ["cookbook", "entry"], "additionalProperties": false}, "changes": true, "source": "Agent Link (porting design, 2026-11-18)", "date": "2026-11-18", "runner": "steps", "steps": [], "answer": {"fields": {"...": "=run_entry(a.cookbook, a.entry, a.get('args'))"}}}
  }
 }

@@ -362,6 +362,8 @@ def cookbook_json(info, name, tools, date):
            "source": "drafted by port_scaffold", "date": date, "entries": ents}
     if info.get("package"):
         doc["addon"] = {"package": info["package"], "name": clean(info["name"], 80)}
+        if info.get("workbench"):
+            doc["addon"]["workbench"] = info["workbench"]  # activated before a command runs
     return doc
 
 
