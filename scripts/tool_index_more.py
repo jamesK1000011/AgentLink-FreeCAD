@@ -16,7 +16,7 @@ out when it is not in that list.
 # FreeCAD, DATE unless DATES says otherwise for a tool.
 SOURCE = "FreeCAD 1.1.0 source; Agent Link"
 DATE = "2026-11-16"
-DATES = {}
+DATES = {t: "2026-11-18" for t in ("port_scaffold", "cookbook_list", "cookbook_show", "cookbook_import", "cookbook_export", "cookbook_approve", "cookbook_unapprove", "cookbook_run")}
 
 # Tool or prefix → workbench, where the echo's WORKBENCH table says nothing
 # (the echo brings no bench up for these; the index still files them).
@@ -50,6 +50,7 @@ PREFIX_WORDS = {
     "pref_": ["preferences"],
     "doc_": ["document"],
     "varset_": ["parameter"],
+    "cookbook_": ["recipes", "addon", "port"],
 }
 
 # Tools whose button depends on kind: the kinds the echo's command_for is asked for.
@@ -465,4 +466,13 @@ TOOLS = {
     "view_snapshot": (["Std_ViewScreenShot"], "picture image screenshot 3d window"),
     "window_snapshot": (["Std_ViewScreenShot"], "screenshot picture gui panel"),
     "workbench": (["Std_Workbench"], "switch activate workbenches"),
+    # Porting (docs/design/porting-2026-11-18.md).
+    "port_scaffold": ([], "port addon workbench draft hook tools commands scaffold template"),
+    "cookbook_list": ([], "recipes installed entries"),
+    "cookbook_show": ([], "recipes read review before approve"),
+    "cookbook_import": ([], "recipes install load file"),
+    "cookbook_export": ([], "recipes share save file"),
+    "cookbook_approve": ([], "recipes allow trust ok confirm"),
+    "cookbook_unapprove": ([], "recipes revoke withdraw"),
+    "cookbook_run": ([], "recipes run command function script"),
 }
