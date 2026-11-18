@@ -448,7 +448,7 @@ class Session:
         for o in bs:
             if o.Label == ref or o.Name == ref or o.Label.lower() == str(ref).lower():
                 return o
-        ms = [o.Label for o in self.doc.Objects if hasattr(o, "Mesh") and getattr(o, "Shape", None) is None]
+        ms = [o.Label for o in self.doc.Objects if geo.mesh_of(o) is not None and getattr(o, "Shape", None) is None]
         meshes = f" Meshes (meshobj_* tools, export writes them): {', '.join(ms[:20])}." if ms else ""
         raise ToolError("not_found", f"body {ref!r}: not here — the bodies: {', '.join(o.Label for o in bs)}.{meshes}")
 
@@ -672,7 +672,7 @@ class Session:
         if not isinstance(ref, str) or not ref:
             return None
         for o in self.doc.Objects:
-            if hasattr(o, "Mesh") and getattr(o, "Shape", None) is None and (o.Name == ref or o.Label == ref or o.Label.lower() == ref.lower()):
+            if geo.mesh_of(o) is not None and getattr(o, "Shape", None) is None and (o.Name == ref or o.Label == ref or o.Label.lower() == ref.lower()):
                 return o
         return None
 

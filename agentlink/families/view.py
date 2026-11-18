@@ -12,6 +12,7 @@ import numpy as np
 
 from .. import render
 from .. import paths
+from .. import geometry as _geo
 from .. import runners
 from ..protocol import Tool, ToolError
 from ..tools import obj
@@ -397,7 +398,7 @@ def shown_box(s):
             sh = getattr(o, "Shape", None)
             if sh is not None and not sh.isNull():
                 bb = sh.BoundBox
-            elif getattr(o, "Mesh", None) is not None and o.Mesh.CountFacets:
+            elif _geo.mesh_of(o) is not None and o.Mesh.CountFacets:
                 bb = o.Mesh.BoundBox
             elif getattr(o, "Points", None) is not None and o.Points.CountPoints:
                 bb = o.Points.BoundBox

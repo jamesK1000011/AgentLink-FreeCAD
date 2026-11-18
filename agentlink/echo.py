@@ -2349,7 +2349,7 @@ def _stamp(o):
         if sh is not None:
             return ("s", sh.hashCode())
         m = getattr(o, "Mesh", None)
-        if m is not None:
+        if m is not None and hasattr(m, "CountFacets"):
             return ("m", m.CountPoints, m.CountFacets)
         p = getattr(o, "Points", None)
         if p is not None:
