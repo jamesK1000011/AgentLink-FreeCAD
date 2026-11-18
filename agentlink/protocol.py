@@ -379,6 +379,8 @@ class Server:
         self.meter = None
         # Told of each call that went through: on_call(tool, args).
         self.on_call = None
+        # Writes a notification at once, while a call runs (progress); None: not sent.
+        self.notify = None
         # The session the calls act on (tools.build_server sets it): whose
         # call it is (session.by) and its undo count, for call_done.
         self.session = None
@@ -471,6 +473,12 @@ class Server:
                     from . import once
 
                     once.reset(self.session)
+                if self.meter is not None:
+                    # A new conversation: a new job in the usage log.
+                    try:
+                        self.meter.new_job("initialize")
+                    except Exception:
+                        pass
                 result = {
                     "protocolVersion": PROTOCOL,
                     "capabilities": {"tools": {"listChanged": True}, **({"resources": {}} if self.resources else {})},
@@ -515,7 +523,7 @@ class Server:
         before = (getattr(s, "tx", None), getattr(s, "doc", None)) if s is not None else None
         from . import around
 
-        with _as_user(s), _acting(s), _hang_trace(s, params.get("name")):
+        with _as_user(s), _acting(s), _hang_trace(s, params.get("name")), _progress_for(self, params):
             result = self._call(params)
             with around.part("callDone"):  # the add-ons' call_done handlers
                 self._done(params, result, before)
@@ -527,14 +535,16 @@ class Server:
             try:
                 content = result.get("content") or []
                 text = "".join(c.get("text", "") for c in content if c.get("type") == "text")
-                img = next((c for c in content if c.get("type") == "image"), None)
                 import base64
 
-                data = base64.b64decode(img["data"][:64]) if img else None
+                # Every picture: its first bytes (the PNG's size in its header) and its size in bytes.
+                pics = [(base64.b64decode(c["data"][:64]), len(c["data"]) * 3 // 4) for c in content if c.get("type") == "image" and c.get("data")]
                 from .usage import err_code
 
                 err = err_code(result)
-                self.meter.call(str(params.get("name")), compact(params.get("arguments") or {}), text, data, err, (time.time() - t0) * 1000)
+                tool = self.tools.get(params.get("name"))
+                self.meter.call(str(params.get("name")), compact(params.get("arguments") or {}), text, None, err, (time.time() - t0) * 1000,
+                                args=params.get("arguments") or {}, group=getattr(tool, "group", None), images=pics)
             except Exception:
                 pass
             around.add("meter", time.time() - tm)
@@ -775,6 +785,55 @@ class Server:
         if trace:
             err["trace"] = trace
         return {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}
+
+
+# ---- progress notifications --------------------------------------------------
+#
+# The echo's step text (echo.say: the status bar's words) goes to the client
+# as notifications/progress too, when the call's request gave a
+# progressToken (params._meta.progressToken). A notification is a message of
+# its own: it adds nothing to the answer. server.notify writes one at once
+# (serve_lines and the window's link set it); without it nothing is sent.
+
+_PROGRESS = []  # the calls in hand, innermost last: {server, token, n}
+
+
+class _progress_for:
+    def __init__(self, server, params):
+        meta = (params or {}).get("_meta") if isinstance(params, dict) else None
+        tok = meta.get("progressToken") if isinstance(meta, dict) else None
+        self.entry = {"server": server, "token": tok, "n": 0} if isinstance(tok, (str, int)) and not isinstance(tok, bool) else None
+
+    def __enter__(self):
+        if self.entry is not None:
+            self.entry["notify"] = getattr(self.entry["server"], "notify", None)  # this call's own writer, as it is now
+            _PROGRESS.append(self.entry)
+        return self
+
+    def __exit__(self, *exc):
+        if self.entry is not None and self.entry in _PROGRESS:
+            _PROGRESS.remove(self.entry)
+        return False
+
+
+def progress(message):
+    """Send message as a notifications/progress of the call in hand, if its
+    request gave a progressToken and the server can write at once. True when
+    sent. Never raises."""
+    if not _PROGRESS:
+        return False
+    e = _PROGRESS[-1]
+    notify = e.get("notify")
+    if notify is None:
+        return False
+    e["n"] += 1
+    msg = {"jsonrpc": "2.0", "method": "notifications/progress",
+           "params": {"progressToken": e["token"], "progress": e["n"], "message": str(message)[:300]}}
+    try:
+        notify(msg)
+        return True
+    except Exception:
+        return False
 
 
 def _test_trace():
@@ -1023,6 +1082,8 @@ def add_report(reply, lines):
 
 def serve_lines(server, readline, write):
     """Read a message a line until the input ends; write each reply a line."""
+    if getattr(server, "notify", None) is None:
+        server.notify = lambda m: write(compact(m) + "\n")  # a progress notification, written at once
     while True:
         line = readline()
         if not line:

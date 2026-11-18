@@ -392,6 +392,17 @@ def unstick(all_=False, wait=3.0):
     return box["out"]
 
 
+def _meter_dialog(link, d):
+    """The usage log's dialog record (usage.Meter.dialog_seen): told each
+    heartbeat which dialog is in front, or None. Never raises."""
+    try:
+        m = getattr(getattr(link, "server", None), "meter", None)
+        if m is not None:
+            m.dialog_seen(d)
+    except Exception:  # noqa: BLE001 - the log only
+        pass
+
+
 class _Line(str):
     """A line read off a connection, with its ticket: queued, taken (by the
     GUI thread) or busy (answered from the socket thread instead)."""
@@ -886,6 +897,7 @@ class Link:
                     # Verified: the dialog it pressed is gone.
                     self._press = None
                     keep.log_watchdog({"event": "dialog", "title": pr[0][1], "gone": True, "tries": pr[2]})
+            _meter_dialog(self, d)
             # A menu or drop-down list in front (a popup, which no modal
             # check sees): in the heartbeat too, with how long it has been
             # open, so the supervisor can tell a call held by it.
@@ -959,6 +971,10 @@ class Link:
             pr = (key, now, tries)
             if ok:
                 keep.log_watchdog({"event": "dialog", "title": d["title"], "pressed": label, **({"try": tries} if tries > 1 else {})})
+                m = getattr(getattr(self, "server", None), "meter", None)
+                if m is not None:
+                    m.dialog_seen(d)
+                    m.dialog_pressed("agentlink")
         self._press = pr
         if tries < PRESS_TRIES or now - pr[1] < PRESS_RETRY:
             d["pressed"] = label
@@ -1436,6 +1452,8 @@ class Link:
         text = compact({"error": {"code": "invalid_state", "message": msg}})
         reply = {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}}
         self._write(f, reply)
+        if d and d.get("kind") != "menu" and d.get("title"):
+            _meter_dialog(self, d)  # before the heartbeat sees it: the call it blocked is counted to it
         self._meter_refused(line, reply)
 
     def _drain_nested(self):
@@ -1564,6 +1582,8 @@ class Link:
             msg = json.loads(line)
             call = {"id": msg.get("id") if isinstance(msg, dict) else None, "name": name, "f": f, "answered": False}
             self.calls.append(call)
+            # Progress notifications (protocol.progress) for this call go to its own connection, until it is answered.
+            self.server.notify = lambda m, f=f, call=call: None if call["answered"] else self._write(f, m)
             try:
                 reply = self.server.handle(msg)
             finally:
