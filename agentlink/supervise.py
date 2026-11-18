@@ -1391,7 +1391,10 @@ def run(script, argv):
                     # dialog's age), but not for ever: a window that never
                     # answers it must not hold every call behind it.
                     waited = now - (c["start"] if _answers_dialog(c) else float(dlg.get("since") or now)) if dlg else 0
-                    if dlg and not dlg.get("pressed") and waited > (ANSWER_WAIT if _answers_dialog(c) else DIALOG_WAIT):
+                    # working: a batch runs its calls inside this dialog's or
+                    # menu's loop (a gui_input of it opened it, fault 81b):
+                    # not a call held behind it, so never abandoned for that.
+                    if dlg and not dlg.get("pressed") and not dlg.get("working") and waited > (ANSWER_WAIT if _answers_dialog(c) else DIALOG_WAIT):
                         window.abandon(f"Blocked by a dialog in the FreeCAD window: \"{dlg.get('title')}\" — {str(dlg.get('text'))[:300]} (buttons: {', '.join(dlg.get('buttons') or []) or 'none'}). "
                                        f"{c['tool']} is waiting behind it. dialog_answer {{ button }} presses one of its buttons: read it and press what the job needs (Cancel backs out); app_force_restart if the window is stuck.")
                         continue
@@ -1399,7 +1402,7 @@ def run(script, argv):
                     held = now - max(c["start"], float(pop.get("since") or now)) if pop else 0
                     # gui_input (or a batch of it) works inside a menu it
                     # opened: its own waits' while first, as for a dialog.
-                    if pop and held > (ANSWER_WAIT if _answers_dialog(c) else POPUP_WAIT) and not c.get("abandoned"):
+                    if pop and not pop.get("working") and held > (ANSWER_WAIT if _answers_dialog(c) else POPUP_WAIT) and not c.get("abandoned"):
                         # A menu holds the call (its own event loop; the
                         # heartbeat goes on, so no hang is seen): closed
                         # through the window's socket thread, the call

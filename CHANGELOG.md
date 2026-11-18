@@ -7,6 +7,7 @@ All notable changes to Agent Link for FreeCAD. The format follows
 
 ## [Unreleased]
 
+- batch (fault 81b): a `gui_input` whose step opens a menu or dialog no longer ends its batch. Before, the batch was answered from inside the menu's loop with what ran so far, and the calls after the `gui_input` never ran. Now those calls run inside that loop, in order, each only while the menu or dialog is still open, and the batch is answered once with all results (`nested` in the answer). If it closes before a call (a `key: "Escape"` or `menu_item` call closed it), the loop is woken and the rest runs at the batch's own level after it. When the `gui_input` returns later, nothing runs again and no second answer goes out. Inside the loop a refused call stops the batch but undoes nothing (`rollbackNote`: a dialog's command can hold an open transaction); after the loop closed, rollback is as before. The budget and the batch record hold as before; `gui_input`'s own deadline is lifted while the batch works there, and the heartbeat marks the menu or dialog `working`, so the supervisor's watchdog does not close it as one that holds the call. live_run keeps its own replay (`gui_link.CONTINUE`).
 - app_open (live 93): with the FreeCAD window closed by the person, nothing could open it again; the supervisor now starts it in the background (`open -g`: not in front, no focus) and waits up to 90 s for its link.
 
 ### Added

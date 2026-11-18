@@ -2106,6 +2106,30 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                               "budget": float(budget), "first": first, "total": total, "file": a.get("file"), "record": record,
                               "hold": _batch_hold() if build_mode == "end" else None}
         got = None
+
+        def finish(got):
+            """The batch's answer from what _batch_run gave: its title, the
+            record's last write, the lines asked for. Also called from inside
+            a menu's or dialog's loop when the batch is answered there (cont)."""
+            if isinstance(got, dict):
+                if isinstance(a.get("title"), str) and a["title"].strip():
+                    got.setdefault("title", a["title"].strip()[:120])  # kept in its record, for a person reading it later
+                record.write(got, final=True)
+                if record.ok and record.path:
+                    got["record"] = record.path
+            lines = a.get("lines")
+            if lines == "full" or a.get("to"):
+                return _batch_to(a.get("to"), got, first, "all" if lines in (None, "full") else lines, full=lines == "full")
+            # A batch from a file (a long run, kept out of the conversation by
+            # design) or one that asks for lines answers like batch { to } from
+            # its record, which holds every call's whole answer: a plain file
+            # batch's reply repeated every answer (10-35 k characters, live).
+            # lines: "full" gives the whole answer here instead.
+            from . import batchrec
+
+            return batchrec.record_reply(got, first, record.path if record.ok else None, a.get("file") is not None, lines)
+
+        mine["finish"] = finish
         try:
             got = _batch_run(calls, start, made, results, limit, rollback, stop, undo_count, mine)
         finally:
@@ -2116,23 +2140,11 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 h.build("end: the batch stopped early")
                 if isinstance(got, dict):
                     got["builds"] = h.builds
-        if isinstance(got, dict):
-            if isinstance(a.get("title"), str) and a["title"].strip():
-                got.setdefault("title", a["title"].strip()[:120])  # kept in its record, for a person reading it later
-            record.write(got, final=True)
-            if record.ok and record.path:
-                got["record"] = record.path
-        lines = a.get("lines")
-        if lines == "full" or a.get("to"):
-            return _batch_to(a.get("to"), got, first, "all" if lines in (None, "full") else lines, full=lines == "full")
-        # A batch from a file (a long run, kept out of the conversation by
-        # design) or one that asks for lines answers like batch { to } from
-        # its record, which holds every call's whole answer: a plain file
-        # batch's reply repeated every answer (10-35 k characters, live).
-        # lines: "full" gives the whole answer here instead.
-        from . import batchrec
-
-        return batchrec.record_reply(got, first, record.path if record.ok else None, a.get("file") is not None, lines)
+        if mine.get("reply") is not None:
+            # Answered whole from inside a menu's or dialog's loop (cont):
+            # nothing more ran, and the record holds that answer already.
+            return mine["reply"]
+        return finish(got)
 
     def _batch_read(a):
         """batch { read, at }: a part of a batch's record or of a to file,
@@ -2222,12 +2234,20 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             failing): rolled back whole when it rolls back."""
             nonlocal start
             if hold is not None and hold.active:
-                if rollback and start is not None:
+                if rollback and start is not None and not mine.get("depth"):
                     hold.release()  # undone below, and recomputed there
                 else:
                     hold.build("end: the batch stopped at a refusal, and what ran stays")
             if rollback and start is not None and undo_count(start) is None:
                 start = None
+            if rollback and mine.get("depth"):
+                # Stopped inside the loop of a menu or dialog that a gui_input
+                # step opened: no undo there (a dialog's command can hold an
+                # open transaction). What ran stays.
+                out["undone"] = 0
+                out["rollbackNote"] = ("Not rolled back: a menu or dialog that a gui_input of this batch opened was still open, and the batch does not undo inside its loop. "
+                                       "What ran stays. Close it, then history_undo takes back what you do not want.")
+                return ended(out)
             if rollback and start is None:
                 out["undone"] = 0
                 out["warning"] = "The document the batch started in was closed during it: nothing to take back there."
@@ -2267,218 +2287,294 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                                     + ("the batch was rolled back whole. " if rollback else "what ran stays. ")
                                     + "Run the calls with build left out to see which call breaks it: each then builds and refuses by itself."})
 
-        for i, c in enumerate(calls):
-            if i and time.time() - mine["t0"] > mine.get("budget", BATCH_BUDGET):
-                # Out of time: what ran stays (this is no failure, so nothing
-                # is rolled back), the rest is named with how to run it.
-                nxt = first + i
-                how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else f"batch again with the calls from index {nxt} on (calls.{i} of this list)"
-                if hold is not None:
-                    hold.build("end: out of time")
-                return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": nxt,
-                              "note": f"Stopped after {time.time() - mine['t0']:.0f} s (budget {mine.get('budget', BATCH_BUDGET):g} s): a client waits about 80 s for an answer, so a long batch is answered in parts. "
-                                      f"The {len(results)} calls above ran and stay; {len(calls) - i} were not started: {how}."})
-            # A heavy read is not run inside a batch: alone it goes to a job
-            # and answers with an id, here it would hold FreeCAD for its whole
-            # length (a wall-thickness read in a 20-call batch ran past the
-            # watchdog's 120 s, FreeCAD was started again and the batch's
-            # later calls never ran). The batch stops before it and says how
-            # to go on.
-            try:
-                from . import jobs as _jobs, keep as _keep
+        taken = mine.setdefault("taken", set())
+        mine.setdefault("resume", 0)
 
-                _t = server.tools.get(c["tool"])
-                heavy_read = bool(_t is not None and _keep.is_heavy(c["tool"]) and _jobs.eligible(_t, c.get("arguments") or {}, s))
-            except Exception:
-                heavy_read = False
-            # No call is held back on a guess of its time (no prejudging, 18
-            # Nov: a loft put at 766 s took 7 s). A batch past about 60 s
-            # moves to the background in the supervisor (sup_jobs), so the
-            # client never loses its answer.
-            if heavy_read:
-                # It runs as a job on a worker thread, as it would alone, and
-                # the batch waits for it while its budget lasts: done in
-                # time, its answer takes its place among the results; not
-                # done, the batch stops with the job's id and where to go on.
-                left = mine.get("budget", BATCH_BUDGET) - (time.time() - mine["t0"])
-                hargs, hmiss = c.get("arguments") or {}, None
-                if _chain.has_refs(hargs):
+        def order(at):
+            """The calls from at on, in order. A call run inside a menu's or
+            dialog's loop (cont) moves resume on: those are not run again."""
+            i = at
+            while i < len(calls):
+                yield i, calls[i]
+                i = max(i + 1, mine.get("resume", 0))
+
+        def walk(at, nested):
+            """Run the calls from at on. nested: inside the event loop of a
+            menu or dialog that a gui_input step opened (cont); each call
+            starts only while it is still open. None: it closed first, and
+            the rest runs at the batch's own level after the loop ends."""
+            nonlocal start, made
+            for i, c in order(at):
+                if nested:
+                    from . import gui_link as _gl
+
+                    if not _gl.front_open():
+                        mine["resume"] = i
+                        return None
+                    mine["resume"] = max(mine.get("resume", 0), i + 1)
+                if i and time.time() - mine["t0"] > mine.get("budget", BATCH_BUDGET):
+                    # Out of time: what ran stays (this is no failure, so nothing
+                    # is rolled back), the rest is named with how to run it.
+                    nxt = first + i
+                    how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else f"batch again with the calls from index {nxt} on (calls.{i} of this list)"
+                    if hold is not None:
+                        hold.build("end: out of time")
+                    return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": nxt,
+                                  "note": f"Stopped after {time.time() - mine['t0']:.0f} s (budget {mine.get('budget', BATCH_BUDGET):g} s): a client waits about 80 s for an answer, so a long batch is answered in parts. "
+                                          f"The {len(results)} calls above ran and stay; {len(calls) - i} were not started: {how}."})
+                # A heavy read is not run inside a batch: alone it goes to a job
+                # and answers with an id, here it would hold FreeCAD for its whole
+                # length (a wall-thickness read in a 20-call batch ran past the
+                # watchdog's 120 s, FreeCAD was started again and the batch's
+                # later calls never ran). The batch stops before it and says how
+                # to go on.
+                try:
+                    from . import jobs as _jobs, keep as _keep
+
+                    _t = server.tools.get(c["tool"])
+                    heavy_read = bool(_t is not None and _keep.is_heavy(c["tool"]) and _jobs.eligible(_t, c.get("arguments") or {}, s))
+                except Exception:
+                    heavy_read = False
+                # No call is held back on a guess of its time (no prejudging, 18
+                # Nov: a loft put at 766 s took 7 s). A batch past about 60 s
+                # moves to the background in the supervisor (sup_jobs), so the
+                # client never loses its answer.
+                if heavy_read:
+                    # It runs as a job on a worker thread, as it would alone, and
+                    # the batch waits for it while its budget lasts: done in
+                    # time, its answer takes its place among the results; not
+                    # done, the batch stops with the job's id and where to go on.
+                    left = mine.get("budget", BATCH_BUDGET) - (time.time() - mine["t0"])
+                    hargs, hmiss = c.get("arguments") or {}, None
+                    if _chain.has_refs(hargs):
+                        try:
+                            hargs = _chain.resolve(hargs, read_file, answers, first + i, first)
+                        except _chain.Miss as e:
+                            hmiss = {"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."}
+                    nxt = first + i + 1
+                    how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else f"batch again with the calls from index {nxt} on"
+                    if hold is not None:
+                        hold.build("before a heavy read")
+                    job = None
+                    tt = None
+                    if hmiss is None and left >= 5:
+                        try:
+                            from .protocol import check_input as _check
+
+                            tt = _t.for_call(dict(hargs))
+                            _check(tt.schema, dict(hargs))
+                            # The window shows it as any call of the batch: its
+                            # words before (the last call's words stayed over its
+                            # whole run: an add-on's checks and slicing, fea_shell, round 4).
+                            _echo_job(tt, hargs, None)
+                            job = _jobs.start(tt, dict(hargs), s)
+                        except ToolError as e:
+                            hmiss = {"code": e.code, "message": e.message}
+                    if hmiss is None and job is None:
+                        return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": first + i,
+                                      "note": f"Stopped before calls.{first + i} ({c['tool']}), a heavy read, with {max(left, 0):.0f} s of the budget left: "
+                                              + (f"batch {{ file: \"{mine['file']}\", from: {first + i} }}" if mine.get("file") else f"batch again with the calls from index {first + i} on") + " runs it first."})
+                    if hmiss is None:
+                        # The GUI thread stands still here while the job's thread
+                        # works: where both are, should the wait reach a minute
+                        # (the job's own watch says the same from its side).
+                        from .protocol import hang_trace as _hang
+
+                        with _hang(s, c["tool"], "batch wait"):
+                            hdone = _jobs.wait_for(job, max(left, 1))
+                    if hmiss is None and not hdone:
+                        return ended({"results": results, "ran": len(results), "notRun": len(calls) - i - 1, "next": nxt,
+                                      "heavy": {"index": first + i, "tool": c["tool"], "job": job["job"]},
+                                      "note": f"calls.{first + i} ({c['tool']}) is a heavy read still running as job {job['job']} when the budget ran out: "
+                                              f"job_status {{ job: \"{job['job']}\", wait: 25 }} gives its answer (changes to its document wait for it), then {how}."})
+                    if hmiss is None and job["status"] == "failed":
+                        hmiss = job["error"]
+                    hok = hmiss is None
+                    hbody = job["result"] if hok else {"error": hmiss}
+                    if hok and isinstance(hbody, dict):
+                        hbody = dict(hbody)
+                        hbody.setdefault("job", job["job"])
+                    if job is not None:
+                        # Its answer is here, in the batch: the window shows it now
+                        # (words, what it read selected), never again at its end.
+                        _jobs.answered(job)
+                        _echo_job(tt, hargs, {"isError": not hok, "body": hbody if hok else {"error": hmiss}})
+                    answers[first + i] = {"ok": hok, "tool": c["tool"], "size": 0, **({"answer": hbody} if hok else {"error": (hmiss or {}).get("message")})}
+                    row = {"tool": c["tool"], "ok": hok, **({"result": hbody} if hok else {"error": hmiss})}
+                    if hok and c.get("to"):
+                        try:
+                            row = _chain.written_row(c["tool"], hbody, _chain.write_answer(c["to"], hbody))
+                        except Exception as e:
+                            row["toError"] = f"to: not written ({e}). The answer is here in full instead."
+                    results.append(row)
+                    if mine.get("record") is not None:
+                        mine["record"].write({"running": True, "ran": len(results), "results": results})
+                    if not hok and stop:
+                        return stopped({"results": results, "stopped": i})
+                    continue
+                doc = s.doc
+                mine.update(i=i, tool=c["tool"])
+                s.batch_now = mine
+                # References in the arguments ($file, $from) read now, as the
+                # call is about to run: an earlier call's answer or file is there.
+                args, miss = c["arguments"], None
+                if _chain.has_refs(args):
                     try:
-                        hargs = _chain.resolve(hargs, read_file, answers, first + i, first)
+                        args = _chain.resolve(args, read_file, answers, first + i, first)
                     except _chain.Miss as e:
-                        hmiss = {"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."}
-                nxt = first + i + 1
-                how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else f"batch again with the calls from index {nxt} on"
-                if hold is not None:
-                    hold.build("before a heavy read")
-                job = None
-                tt = None
-                if hmiss is None and left >= 5:
+                        miss = {"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."}
+                held = False
+                if hold is not None and miss is None:
+                    t = server.tools.get(c["tool"])
                     try:
-                        from .protocol import check_input as _check
+                        changing = bool(t.changes_for(args))
+                    except Exception:
+                        changing = bool(getattr(t, "changes", False))
+                    plan = hold.plan(c["tool"], changing)
+                    if hold.active and (plan == "build" or s.doc is not hold.doc):
+                        entry = hold.build(f"before call {first + i} ({c['tool']})")
+                        if _hold.build_failed(entry) and stop:
+                            return build_broke(entry)
+                    if plan == "hold":
+                        held = hold.active or hold.begin(s.doc)
+                u0 = undo_count(doc) or 0
+                from . import around as _around
 
-                        tt = _t.for_call(dict(hargs))
-                        _check(tt.schema, dict(hargs))
-                        # The window shows it as any call of the batch: its
-                        # words before (the last call's words stayed over its
-                        # whole run: an add-on's checks and slicing, fea_shell, round 4).
-                        _echo_job(tt, hargs, None)
-                        job = _jobs.start(tt, dict(hargs), s)
-                    except ToolError as e:
-                        hmiss = {"code": e.code, "message": e.message}
-                if hmiss is None and job is None:
-                    return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": first + i,
-                                  "note": f"Stopped before calls.{first + i} ({c['tool']}), a heavy read, with {max(left, 0):.0f} s of the budget left: "
-                                          + (f"batch {{ file: \"{mine['file']}\", from: {first + i} }}" if mine.get("file") else f"batch again with the calls from index {first + i} on") + " runs it first."})
-                if hmiss is None:
-                    # The GUI thread stands still here while the job's thread
-                    # works: where both are, should the wait reach a minute
-                    # (the job's own watch says the same from its side).
-                    from .protocol import hang_trace as _hang
+                t_call = time.time()
+                _around.start()
+                if miss is None:
+                    _t_sc = time.time()
+                    _prof = None
+                    if c.get("profile"):
+                        # calls[i].profile: true — where this one call's time
+                        # went, by function (for finding what is slow round a tool).
+                        import cProfile
 
-                    with _hang(s, c["tool"], "batch wait"):
-                        hdone = _jobs.wait_for(job, max(left, 1))
-                if hmiss is None and not hdone:
-                    return ended({"results": results, "ran": len(results), "notRun": len(calls) - i - 1, "next": nxt,
-                                  "heavy": {"index": first + i, "tool": c["tool"], "job": job["job"]},
-                                  "note": f"calls.{first + i} ({c['tool']}) is a heavy read still running as job {job['job']} when the budget ran out: "
-                                          f"job_status {{ job: \"{job['job']}\", wait: 25 }} gives its answer (changes to its document wait for it), then {how}."})
-                if hmiss is None and job["status"] == "failed":
-                    hmiss = job["error"]
-                hok = hmiss is None
-                hbody = job["result"] if hok else {"error": hmiss}
-                if hok and isinstance(hbody, dict):
-                    hbody = dict(hbody)
-                    hbody.setdefault("job", job["job"])
-                if job is not None:
-                    # Its answer is here, in the batch: the window shows it now
-                    # (words, what it read selected), never again at its end.
-                    _jobs.answered(job)
-                    _echo_job(tt, hargs, {"isError": not hok, "body": hbody if hok else {"error": hmiss}})
-                answers[first + i] = {"ok": hok, "tool": c["tool"], "size": 0, **({"answer": hbody} if hok else {"error": (hmiss or {}).get("message")})}
-                row = {"tool": c["tool"], "ok": hok, **({"result": hbody} if hok else {"error": hmiss})}
-                if hok and c.get("to"):
+                        _prof = cProfile.Profile()
+                        _prof.enable()
+                    r = server.call({"name": c["tool"], "arguments": args})
+                    if _prof is not None:
+                        _prof.disable()
+                        import io
+                        import pstats
+
+                        _buf = io.StringIO()
+                        pstats.Stats(_prof, stream=_buf).sort_stats("cumulative").print_stats(45)
+                        mine["profile"] = [ln.strip()[:170] for ln in _buf.getvalue().splitlines() if ln.strip()][4:52]
+                    mine["serverCallMs"] = int((time.time() - _t_sc) * 1000)
+                    if mine.get("answered"):
+                        # Answered already, from inside this call: the batch stops here.
+                        if hold is not None:
+                            hold.build("end: answered from inside a call")
+                        return ended({"results": results, "answered_early": True})
+                    if i in taken:
+                        # Its answer and the calls after it ran inside the
+                        # loop of what it opened (cont), until that closed:
+                        # the batch goes on after them, at its own level.
+                        continue
+                    text = r["content"][0]["text"]
+                    body = _json.loads(text)
+                    ok = not r.get("isError")
+                else:
+                    text, body, ok = "", {"error": miss}, False
+                u1 = undo_count(start)
+                if u1 is None:
+                    start = None
+                if ok and start is not None and doc is start and s.doc is start:
+                    d = u1 - u0
+                    made += d if d > 0 else (1 if u0 >= limit and getattr(server.tools.get(c["tool"]), "changes", False) else 0)
+                if held and ok:
+                    hold.note(first + i, c["tool"])
+                    body = _hold.held_answer(c["tool"], body)
+                answers[first + i] = {"ok": ok, "tool": c["tool"], "size": len(text), **({"answer": body} if ok else {"error": (body.get("error") or {}).get("message")})}
+                row = {"tool": c.get("tool"), "ok": ok, **({"result": body} if ok else {"error": body.get("error")})}
+                if ok and c.get("to"):
+                    # The answer to its own file; the reply keeps where and its shape.
                     try:
-                        row = _chain.written_row(c["tool"], hbody, _chain.write_answer(c["to"], hbody))
+                        row = _chain.written_row(c["tool"], body, _chain.write_answer(c["to"], body))
                     except Exception as e:
                         row["toError"] = f"to: not written ({e}). The answer is here in full instead."
+                if mine.get("profile") is not None:
+                    row["profile"] = mine.pop("profile")
+                    if getattr(s, "echo_trace", None) is not None:
+                        row["echo"] = s.echo_trace  # what the window echo saw and did for this call
+                    look = getattr(s, "echo_look", None)
+                    if isinstance(look, dict) and look.get("tool") == c.get("tool"):
+                        row["echoLook"] = look  # a look's own words (its trace above is the last change's)
+                        s.echo_look = None
                 results.append(row)
                 if mine.get("record") is not None:
-                    mine["record"].write({"running": True, "ran": len(results), "results": results})
-                if not hok and stop:
-                    return stopped({"results": results, "stopped": i})
-                continue
-            doc = s.doc
-            mine.update(i=i, tool=c["tool"])
-            s.batch_now = mine
-            # References in the arguments ($file, $from) read now, as the
-            # call is about to run: an earlier call's answer or file is there.
-            args, miss = c["arguments"], None
-            if _chain.has_refs(args):
+                    with _around.part("record"):
+                        mine["record"].write({"running": True, "ran": len(results), "results": results})
+                # Where the time went when what runs round the tool took long
+                # (the echo and its view fit, the health check, the add-ons'
+                # hooks, this record): agentlink/around.py.
                 try:
-                    args = _chain.resolve(args, read_file, answers, first + i, first)
-                except _chain.Miss as e:
-                    miss = {"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."}
-            held = False
-            if hold is not None and miss is None:
-                t = server.tools.get(c["tool"])
-                try:
-                    changing = bool(t.changes_for(args))
+                    split = _around.split((time.time() - t_call) * 1000, body.get("ms") if isinstance(body, dict) else 0, _around.take())
+                    if split is not None:
+                        if mine.get("serverCallMs") is not None:
+                            split["serverCall"] = mine.pop("serverCallMs")
+                        row["around"] = split
                 except Exception:
-                    changing = bool(getattr(t, "changes", False))
-                plan = hold.plan(c["tool"], changing)
-                if hold.active and (plan == "build" or s.doc is not hold.doc):
-                    entry = hold.build(f"before call {first + i} ({c['tool']})")
-                    if _hold.build_failed(entry) and stop:
+                    pass
+                if hold is not None and hold.active and s.doc is not hold.doc:
+                    entry = hold.build(f"after call {first + i} ({c['tool']}): it moved to another document")
+                    if _hold.build_failed(entry) and stop and ok:
                         return build_broke(entry)
-                if plan == "hold":
-                    held = hold.active or hold.begin(s.doc)
-            u0 = undo_count(doc) or 0
-            from . import around as _around
-
-            t_call = time.time()
-            _around.start()
-            if miss is None:
-                _t_sc = time.time()
-                _prof = None
-                if c.get("profile"):
-                    # calls[i].profile: true — where this one call's time
-                    # went, by function (for finding what is slow round a tool).
-                    import cProfile
-
-                    _prof = cProfile.Profile()
-                    _prof.enable()
-                r = server.call({"name": c["tool"], "arguments": args})
-                if _prof is not None:
-                    _prof.disable()
-                    import io
-                    import pstats
-
-                    _buf = io.StringIO()
-                    pstats.Stats(_prof, stream=_buf).sort_stats("cumulative").print_stats(45)
-                    mine["profile"] = [ln.strip()[:170] for ln in _buf.getvalue().splitlines() if ln.strip()][4:52]
-                mine["serverCallMs"] = int((time.time() - _t_sc) * 1000)
-                if mine.get("answered"):
-                    # Answered already, from inside this call: the batch stops here.
-                    if hold is not None:
-                        hold.build("end: answered from inside a call")
-                    return ended({"results": results, "answered_early": True})
-                text = r["content"][0]["text"]
-                body = _json.loads(text)
-                ok = not r.get("isError")
-            else:
-                text, body, ok = "", {"error": miss}, False
-            u1 = undo_count(start)
-            if u1 is None:
-                start = None
-            if ok and start is not None and doc is start and s.doc is start:
-                d = u1 - u0
-                made += d if d > 0 else (1 if u0 >= limit and getattr(server.tools.get(c["tool"]), "changes", False) else 0)
-            if held and ok:
-                hold.note(first + i, c["tool"])
-                body = _hold.held_answer(c["tool"], body)
-            answers[first + i] = {"ok": ok, "tool": c["tool"], "size": len(text), **({"answer": body} if ok else {"error": (body.get("error") or {}).get("message")})}
-            row = {"tool": c.get("tool"), "ok": ok, **({"result": body} if ok else {"error": body.get("error")})}
-            if ok and c.get("to"):
-                # The answer to its own file; the reply keeps where and its shape.
-                try:
-                    row = _chain.written_row(c["tool"], body, _chain.write_answer(c["to"], body))
-                except Exception as e:
-                    row["toError"] = f"to: not written ({e}). The answer is here in full instead."
-            if mine.get("profile") is not None:
-                row["profile"] = mine.pop("profile")
-                if getattr(s, "echo_trace", None) is not None:
-                    row["echo"] = s.echo_trace  # what the window echo saw and did for this call
-                look = getattr(s, "echo_look", None)
-                if isinstance(look, dict) and look.get("tool") == c.get("tool"):
-                    row["echoLook"] = look  # a look's own words (its trace above is the last change's)
-                    s.echo_look = None
-            results.append(row)
-            if mine.get("record") is not None:
-                with _around.part("record"):
-                    mine["record"].write({"running": True, "ran": len(results), "results": results})
-            # Where the time went when what runs round the tool took long
-            # (the echo and its view fit, the health check, the add-ons'
-            # hooks, this record): agentlink/around.py.
-            try:
-                split = _around.split((time.time() - t_call) * 1000, body.get("ms") if isinstance(body, dict) else 0, _around.take())
-                if split is not None:
-                    if mine.get("serverCallMs") is not None:
-                        split["serverCall"] = mine.pop("serverCallMs")
-                    row["around"] = split
-            except Exception:
-                pass
-            if hold is not None and hold.active and s.doc is not hold.doc:
-                entry = hold.build(f"after call {first + i} ({c['tool']}): it moved to another document")
-                if _hold.build_failed(entry) and stop and ok:
+                if not ok and stop:
+                    return stopped({"results": results, "stopped": i})
+            if hold is not None and hold.active:
+                entry = hold.build("end")
+                if _hold.build_failed(entry) and stop:
                     return build_broke(entry)
-            if not ok and stop:
-                return stopped({"results": results, "stopped": i})
-        if hold is not None and hold.active:
-            entry = hold.build("end")
-            if _hold.build_failed(entry) and stop:
-                return build_broke(entry)
-        return ended({"results": results, "ran": len(results)})
+            return ended({"results": results, "ran": len(results)})
+
+        def cont(tool, body):
+            """A gui_input of this batch opened a menu or dialog that holds
+            its call (gui_link.Link.answer_now, from inside that loop). Its
+            answer goes into the results, and the calls after it run here,
+            inside the loop, in order. All done (or stopped): the finished
+            answer of the whole batch (mine["finish"]). True: a deeper
+            gui_input answered the batch already. None: it closed between
+            calls, or nothing is open; the call returns by itself and the
+            rest runs at the batch's own level."""
+            from . import gui_link as _gl
+
+            g = mine.get("i")
+            if mine.get("answered") or mine.get("tool") != tool or g is None or g in taken or not _gl.front_open():
+                return None
+            _gl.expect_done(tool)  # the batch's budget counts now, not gui_input's own time
+            taken.add(g)
+            answers[first + g] = {"ok": True, "tool": tool, "size": 0, "answer": body}
+            results.append({"tool": tool, "ok": True, "result": body})
+            if mine.get("record") is not None:
+                mine["record"].write({"running": True, "ran": len(results), "results": results})
+            mine["resume"] = max(mine.get("resume", 0), g + 1)
+            mine["depth"] = mine.get("depth", 0) + 1
+            _gl.nested_work(True)
+            try:
+                got = walk(g + 1, True)
+            finally:
+                mine["depth"] -= 1
+                if not mine["depth"]:
+                    _gl.nested_work(False)
+                s.batch_now = mine
+            if mine.get("answered"):
+                return True
+            if got is None:
+                _gl.wake()  # closed: its loop ends now, and the rest runs after it
+                return None
+            got["nested"] = (f"calls.{first + g} ({tool}) opened a menu or dialog. The calls after it ran inside its loop, in order. "
+                             "This is the one answer of the batch.")
+            finish = mine.get("finish")
+            reply = finish(got) if finish is not None else got
+            mine["reply"] = reply
+            mine["answered"] = True
+            _gl.wake()
+            return reply
+
+        mine["cont"] = cont
+        return walk(0, False)
 
     def history(action):
         def run(a):
@@ -2639,7 +2735,10 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                       "way also without to, from its record. written names it; a line for each call unless lines says otherwise. So does a batch of calls given lines. lines: "
                       "\"full\" gives the whole answer of every call in the answer instead (with to, also written there). read: a .json file (a batch record or a to file), "
                       "with at: a dotted path in it (\"results.3.result\"). results count from the first call of that part. It answers that part ({ read, at, value }) and runs "
-                      "nothing: the way back to any answer that an answer left out. title: a few words for the person; the record keeps it.",
+                      "nothing: the way back to any answer that an answer left out. title: a few words for the person; the record keeps it. A gui_input that "
+                      "opens a menu or dialog does not end the batch. The calls after it run inside that menu or dialog, in order. The batch then answers once, "
+                      "with nested in the answer. If it closes before a call, the rest runs after it. A call refused inside it stops the batch, but nothing is "
+                      "undone there (rollbackNote): what ran stays.",
              obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}, "lines": {"type": "string", "enum": ["all", "refused", "counts", "full"]}, "build": {"type": "string", "enum": ["end", "each"]}, "read": {"type": "string"}, "at": {"type": "string"}, "title": {"type": "string"}}), batch),
         Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded). That is shots past the last 50 and 3 days, and "
                               "solver and job runs past 14 days. Also FreeCAD backups past 7; exports are only listed. Files go to the Trash. It is a dry run unless dry_run: false. "

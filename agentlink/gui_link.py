@@ -593,6 +593,29 @@ def answer_now(tool, body):
     return bool(link is not None and link.answer_now(tool, body))
 
 
+def front_open():
+    """A dialog or menu is open in front (not a progress dialog): a batch's
+    calls after a gui_input that opened it run inside its loop only while
+    this holds (tools.py batch, cont)."""
+    try:
+        d = modal_info() or popup_info()
+    except Exception:  # noqa: BLE001
+        return False
+    return d is not None and d.get("kind") != "progress" and d.get("class") != "TaskPanel"
+
+
+def nested_work(on):
+    """A batch runs its calls inside the loop of a menu or dialog that its
+    gui_input opened (on), or no longer (off). Said in the heartbeat
+    (working), so the supervisor's watchdog does not close that menu or
+    dialog as one that holds the call."""
+    import agentlink_state
+
+    link = getattr(agentlink_state, "link", None)
+    if link is not None:
+        link.nested_since = time.time() if on else None
+
+
 def loop_level():
     """How many event loops the GUI thread is inside (1: the main loop
     alone; more: a dialog's or menu's own, nested), or None when not known."""
@@ -1085,12 +1108,16 @@ class Link:
                     FreeCADGui.getMainWindow().statusBar().showMessage(line, 3000)
                 except Exception:
                     pass
+            # A batch runs its calls inside this menu's or dialog's loop
+            # (nested_work): the watchdog must not close it as one that holds
+            # the call.
+            work = {"working": self.nested_since} if self.busy and getattr(self, "nested_since", None) else {}
             docs = [{"name": x.Name, "label": x.Label, "file": x.FileName or "", **({"modified": True} if _modified(x) else {})} for x in FreeCAD.listDocuments().values()]
             keep._save(keep.path("heartbeat.json"), {
                 "pid": os.getpid(), "t": time.time(), "pairing": 1, "app": _bundle(), "freecad": ".".join(FreeCAD.Version()[:3]), "port": self.port,
                 "docs": docs, "busy": self.busy, **self._busy_beat(), "pinned": getattr(self.session, "doc", None).Name if self.session and getattr(self.session, "doc", None) else None,
-                "dialog": {k: v for k, v in d.items() if k != "widget"} if d else None,
-                "popup": pop,
+                "dialog": {**{k: v for k, v in d.items() if k != "widget"}, **work} if d else None,
+                "popup": {**pop, **work} if pop else None,
             })
         except Exception:
             pass
@@ -1589,10 +1616,21 @@ class Link:
         if call is None or call["answered"]:
             return False
         if call["name"] != tool:
-            # Inside a batch (a lean client's way to gui_input): the batch is
-            # answered with what ran so far and this call's answer, and stops
-            # there (the calls after it are not run).
-            body = self._batch_body(call, tool, body)
+            # Inside a batch (a lean client's way to gui_input): the calls
+            # after it run here, inside the loop of what it opened, and the
+            # batch is answered once with all of them (fault 81b; tools.py
+            # batch, cont). A batch with no such hook is answered with what
+            # ran so far, and the calls after it are not run.
+            cont = self._batch_cont(call, tool)
+            if cont is not None:
+                got = cont(tool, body)
+                if got is True:
+                    return True  # a deeper gui_input of the batch answered it
+                if not isinstance(got, dict):
+                    return False  # closed meanwhile: the batch goes on by itself
+                body = got
+            else:
+                body = self._batch_body(call, tool, body)
             if body is None:
                 return False
         reply = {"jsonrpc": "2.0", "id": call["id"], "result": {"content": [{"type": "text", "text": compact(body)}]}}
@@ -1613,6 +1651,17 @@ class Link:
                 return False
             call["answered"] = True
         return True
+
+    def _batch_cont(self, call, tool):
+        """The client's batch in hand runs its later calls inside the loop
+        of what tool opened: its hook (session.batch_now's cont), or None."""
+        s = getattr(self, "session", None)
+        bn = getattr(s, "batch_now", None)
+        if getattr(s, "live_now", None) or call["name"] != "batch" or not isinstance(bn, dict):
+            return None
+        if bn.get("answered") or bn.get("tool") != tool or not callable(bn.get("cont")):
+            return None
+        return bn["cont"]
 
     def _batch_body(self, call, tool, body):
         """A batch's early answer, from the batch in hand (session.batch_now:
@@ -1808,7 +1857,7 @@ class Link:
                 call["finished"] = True
                 self.busy, self.in_call, self.busy_since = prev
                 if not self.busy:
-                    self.until = self.stuck = None
+                    self.until = self.stuck = self.nested_since = None
                 self.calls = [c for c in self.calls if c is not call]
             if call["answered"]:
                 if not ((reply or {}).get("result") or {}).get("isError"):
