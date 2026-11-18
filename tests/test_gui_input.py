@@ -625,6 +625,15 @@ class Delivery(unittest.TestCase):
         self.assertEqual([(w, e.text) for w, e in self.sent if e.t == "KeyPress"], [("spin", "="), ("expr", "2"), ("expr", "*"), ("expr", "3")])
         self.assertEqual(out["steps"][0]["followed"][0]["name"], "expr")
 
+    def test_keys_for_a_spin_box_line_edit_go_to_the_spin_box(self):
+        """Live 98: the click hits the spin box's own line edit; "=" must
+        reach the Gui::QuantitySpinBox, which opens its expression line."""
+        spin = Widget("spin", 20, 60, 120, 24, parent=self.mw, cls="Gui::QuantitySpinBox", focus=2)
+        edit = Widget("qt_spinbox_lineedit", 22, 62, 100, 20, parent=spin, cls="QLineEdit", focus=2)
+        edit.focused = True
+        self.run.run(gi.parse_steps([{"type": "=2"}, {"key": "Return"}]))
+        self.assertTrue(all(w == "spin" for w, _e in self.sent), self.sent)
+
     def shortcut_actions(self, *specs):
         class Seq:
             def __init__(self, t):
