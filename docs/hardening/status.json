@@ -2135,8 +2135,9 @@
  },
  "macro_approve": {
   "headless": true,
-  "model": "WorkshopRest",
-  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+  "live": true,
+  "model": "macro",
+  "note": "18 Nov: the owner typed the approval; macro_run with LENGTH 50 made Probe box 50 x 20 x 10 (volume 10000), checkpoint cp1"
  },
  "macro_list": {
   "headless": true,
@@ -2146,8 +2147,9 @@
  },
  "macro_run": {
   "headless": true,
-  "model": "WorkshopRest",
-  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+  "live": true,
+  "model": "macro",
+  "note": "18 Nov: the owner typed the approval; macro_run with LENGTH 50 made Probe box 50 x 20 x 10 (volume 10000), checkpoint cp1"
  },
  "macro_save": {
   "headless": true,
