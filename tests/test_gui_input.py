@@ -634,6 +634,31 @@ class Delivery(unittest.TestCase):
         self.run.run(gi.parse_steps([{"type": "=2"}, {"key": "Return"}]))
         self.assertTrue(all(w == "spin" for w, _e in self.sent), self.sent)
 
+    def test_text_goes_into_a_popup_the_key_opened(self):
+        """Live 98c: "=" in the Pad's Length opened FreeCAD's expression
+        line as a popup, with the window in the background (no focus
+        widget): "2*3" and Return go into the popup's line edit."""
+        spin = Widget("spin", 20, 60, 120, 24, parent=self.mw, cls="Gui::QuantitySpinBox", focus=2)
+        spin.focused = True
+        made = {}
+        send = self.run._send
+        self.qt.QtWidgets.QLineEdit = None
+
+        def send_and_open(w, ev):
+            r = send(w, ev)
+            if ev.text == "=" and ev.t == "KeyRelease" and "pop" not in made:
+                spin.focused = False
+                pop = Widget("DlgExpressionInput", 20, 90, 200, 40, cls="QDialog")
+                line = Widget("expression", 22, 92, 190, 20, parent=pop, cls="QLineEdit", focus=2)
+                pop.focusWidget = lambda: line
+                made["pop"] = pop
+                self.state["popup"] = pop
+            return r
+
+        self.run._send = send_and_open
+        self.run.run(gi.parse_steps([{"type": "=2*3"}, {"key": "Return"}]))
+        self.assertEqual([w for w, e in self.sent if e.t == "KeyPress"], ["spin", "expression", "expression", "expression", "expression"])
+
     def shortcut_actions(self, *specs):
         class Seq:
             def __init__(self, t):

@@ -1639,6 +1639,30 @@ class Run:
             break
         return w
 
+    def _popup_now(self):
+        """The popup in front (a menu, FreeCAD's expression line), or None."""
+        try:
+            return self.app().activePopupWidget()
+        except Exception:
+            return None
+
+    def _popup_field(self, pop):
+        """Where typing goes in the popup pop: its focus widget, else its
+        first shown line edit, else None."""
+        try:
+            f = pop.focusWidget()
+            if f is not None and _alive(f) and self._really_shown(f):
+                return f
+        except Exception:
+            pass
+        try:
+            for c in pop.findChildren(self.qt.QtWidgets.QLineEdit):
+                if _alive(c) and self._really_shown(c):
+                    return c
+        except Exception:
+            pass
+        return None
+
     def _focus_now(self):
         """The widget that has the keyboard focus now, or None."""
         try:
@@ -1658,7 +1682,7 @@ class Run:
         b = self.blocker()
         if b is not None:
             if self.app().activePopupWidget() is b:
-                return b
+                return self._popup_field(b) or b
             return self._dialog_focus(b)
         app = self.app()
         f = app.focusWidget() or self.mw().focusWidget()
@@ -2013,6 +2037,7 @@ class Run:
             for i, ev in enumerate(evs):
                 if do == "type" and i % 2 == 0:
                     before = self._focus_now()
+                    pop_before = self._popup_now()
                 self._send(w, ev)
                 if self._detached():
                     return out
@@ -2023,6 +2048,12 @@ class Run:
                 if do == "type" and i % 2 == 1 and i + 1 < len(evs):
                     self.pump(0)
                     f = self._focus_now()
+                    # A popup the key opened (FreeCAD's expression line is
+                    # one): its own focus field, also with the window in the
+                    # background, where Qt keeps no focus widget.
+                    pop = self._popup_now()
+                    if pop is not None and pop is not pop_before:
+                        f = self._popup_field(pop) or f
                     f = self._key_owner(f) if f is not None else None
                     if f is not None and f is not before and f is not w and _alive(f) and self._really_shown(f):
                         w = f
