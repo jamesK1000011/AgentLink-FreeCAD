@@ -447,6 +447,7 @@ tests/test_echo_rings.py
 tests/test_echo_round6.py
 tests/test_echo_window.py
 tests/test_exploded_view.py
+tests/test_export_mesh_1118.py
 tests/test_ext.py
 tests/test_ext_root_addon.py
 tests/test_extstate.py
@@ -494,6 +495,7 @@ tests/test_layout.py
 tests/test_layout_placer.py
 tests/test_licence_boundary.py
 tests/test_link_token.py
+tests/test_live_dialog_1118.py
 tests/test_live_findings.py
 tests/test_live_run.py
 tests/test_loft_findings.py

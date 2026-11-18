@@ -197,7 +197,19 @@ function checkSources(list) {
     if (s.pin && !/^(packaging\/pins|scripts\/bakeoff)\/[A-Za-z0-9._-]+$/.test(s.pin)) return null
   }
   if (!list.some((s) => s.dest === 'AgentLink')) return null
-  return list.map((s) => ({ repo: s.repo, branch: s.branch, folder: s.folder || '', dest: s.dest, pin: s.pin }))
+  for (const s of list) if (s.stdio !== undefined && !checkStdio(s.stdio)) return null
+  return list.map((s) => ({ repo: s.repo, branch: s.branch, folder: s.folder || '', dest: s.dest, pin: s.pin, ...(s.stdio ? { stdio: checkStdio(s.stdio) } : {}) }))
+}
+
+/** A source's stdio server (an MCP server of its own that another Claude
+ *  extension runs from a cache of versions: { name, cache, entry }),
+ *  checked; null if it is not one this launcher takes. */
+function checkStdio(x) {
+  if (!x || !SAFE_NAME.test(x.name || '') || !SAFE_NAME.test(x.entry || '')) return null
+  // A folder under the home folder; a hidden one (~/.config/…) too.
+  const parts = /^~\/./.test(x.cache || '') ? String(x.cache).slice(2).split('/') : []
+  if (!parts.length || parts.some((p) => !/^[A-Za-z0-9._-]+$/.test(p) || p === '.' || p === '..')) return null
+  return { name: x.name, cache: x.cache, entry: x.entry }
 }
 
 /** The add-on folders a set holds. In FreeCAD's Mod folder, those written
@@ -411,6 +423,8 @@ async function update(check) {
     checkLauncher(launcher) // parses, or throws
     fs.writeFileSync(path.join(stage, '.launcher.js'), launcher)
     fs.writeFileSync(path.join(stage, '.sources.json'), JSON.stringify(sources))
+    // Each add-on's commit by its Mod folder, for the stdio servers (publishStdio).
+    fs.writeFileSync(path.join(stage, '.shas.json'), JSON.stringify(Object.fromEntries(sources.map((s, i) => [s.dest, shas[i]]))))
     const verdict = check ? check(stage) : { ok: true }
     if (!verdict.ok) {
       writeState({ ...readState(), bad: [...(readState().bad || []), version].slice(-10) })
@@ -660,6 +674,7 @@ async function main() {
       log('install failed:', e.message)
     }
     retired = lastRetired
+    for (const r of publishStdio(modDir, src.dir)) log(`stdio server ${r.name}: ${r.from} -> ${r.to}${r.note ? ` (${r.note})` : ''}${r.error ? ` failed: ${r.error}` : ''}`)
   }
 
   // With a FreeCAD Python to hand, the server runs headless and sends each
@@ -811,6 +826,68 @@ function updateCompanions() {
           fs.writeFileSync(stateFile, JSON.stringify(state))
         } catch {}
       }
+    } catch (e) {
+      row.error = String(e.message || e)
+    }
+    out.push(row)
+  }
+  return out
+}
+
+// Stdio servers: an add-on that is also an MCP server of its own, run by
+// another Claude extension from a cache of versions (its source's stdio in
+// addons.json: name, cache, entry; Agent Link for OrcaSlicer's launcher keeps
+// ~/.config/orcaslicer-agentlink/app-<commit> and state.json's current). The
+// add-on's copy just installed in the Mod folder goes there too, as that
+// launcher's own update would put it, and becomes current: the running
+// server takes it up at its next call (orcalink/reload.py), so it never runs
+// older code than FreeCAD's copy until Claude starts again (live 68). Done
+// once a commit (state.json's hubPinned): the other launcher's own newer
+// fetch is not undone at each update. Only where that extension has run
+// (its state.json is there). A row for each, for agentlink_update's answer.
+function publishStdio(modDir, setDir, home = os.homedir()) {
+  const out = []
+  if (!modDir || !setDir) return out
+  let sources = null
+  let shas = {}
+  try {
+    sources = checkSources(JSON.parse(fs.readFileSync(path.join(setDir, '.sources.json'), 'utf8')))
+    shas = JSON.parse(fs.readFileSync(path.join(setDir, '.shas.json'), 'utf8')) || {}
+  } catch {
+    return out
+  }
+  for (const s of sources || []) {
+    if (!s.stdio) continue
+    const sha = shas[s.dest]
+    const cache = path.join(home, String(s.stdio.cache).slice(2))
+    const stateFile = path.join(cache, 'state.json')
+    if (!/^[0-9a-f]{40}$/.test(sha || '') || !fs.existsSync(stateFile)) continue
+    const row = { name: s.stdio.name }
+    try {
+      const st = JSON.parse(fs.readFileSync(stateFile, 'utf8')) || {}
+      const before = typeof st.current === 'string' ? st.current : null
+      Object.assign(row, { from: before ? before.slice(0, 7) : 'bundled', to: before ? before.slice(0, 7) : 'bundled' })
+      if (st.hubPinned === sha) {
+        row.note = 'unchanged since the last update'
+        out.push(row)
+        continue
+      }
+      const dir = path.join(cache, `app-${sha}`)
+      if (before !== sha) {
+        const src = path.join(modDir, s.dest)
+        if (!fs.existsSync(path.join(src, s.stdio.entry))) throw new Error(`no ${s.stdio.entry} in ${s.dest}`)
+        const fresh = `${dir}.new-${process.pid}`
+        fs.rmSync(fresh, { recursive: true, force: true })
+        fs.cpSync(src, fresh, { recursive: true, filter: (f) => !/(^|\/)__pycache__(\/|$)/.test(f) })
+        fs.rmSync(dir, { recursive: true, force: true })
+        fs.renameSync(fresh, dir)
+      }
+      const now = JSON.parse(fs.readFileSync(stateFile, 'utf8')) || {}
+      const next = before !== sha ? { ...now, current: sha, previous: before, hubPinned: sha, at: new Date().toISOString() } : { ...now, hubPinned: sha }
+      fs.writeFileSync(stateFile + '.tmp', JSON.stringify(next))
+      fs.renameSync(stateFile + '.tmp', stateFile)
+      row.to = sha.slice(0, 7)
+      if (before !== sha) row.note = 'its running server takes the new code at its next call'
     } catch (e) {
       row.error = String(e.message || e)
     }
@@ -1066,7 +1143,7 @@ function headless(exe, args, e, inst = {}) {
       // new, by its sweep): said in the answer.
       const retired = lastRetired
       version = got.version
-      const comp = updateCompanions()
+      const comp = [...updateCompanions(), ...publishStdio(inst.modDir, got.dir)]
       if (comp.some((c) => c.from && c.to && c.from !== c.to)) recordVersions({ companions: comp.map((c) => `${c.name}@${c.from}`) }, { companions: comp.map((c) => `${c.name}@${c.to}`) }, 'companions moved')
       if (got.version === before && !retired.length) {
         reply(id, { before, after: version, restarted: false, ...(comp.length ? { companions: comp } : {}), ...warn('Already the newest: nothing to do.') })
@@ -1338,7 +1415,7 @@ function startHandedOver({ stdin, stdout, state = {} }) {
   log(`took over from the launcher in this process (add-ons ${state.version || '?'})`)
   return main()
 }
-module.exports = { startHandedOver, resolveChannel, checkSources, CHANNELS, companions, bundledManifest, windowHeld, extensionRecord, extensionReport }
+module.exports = { startHandedOver, resolveChannel, checkSources, CHANNELS, companions, bundledManifest, windowHeld, extensionRecord, extensionReport, publishStdio }
 
 /** No FreeCAD: still a server, so Claude shows why instead of a dead entry. */
 function serveError(message) {

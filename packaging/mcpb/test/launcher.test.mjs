@@ -95,6 +95,60 @@ process.stdout.write(JSON.stringify({
   assert.equal(out.idle, null)
   assert.equal(out.none, null)
 }
+// A stdio server (addons.json's stdio: Agent Link for OrcaSlicer, run by its
+// own Claude extension from a cache of versions): the installed copy goes
+// into that cache and becomes current, once a commit, with its commit before
+// and after for agentlink_update's answer; nothing where that extension has
+// not run (live 68).
+{
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agentlink-stdio-'))
+  const sha = 'c'.repeat(40)
+  const old = 'a'.repeat(40)
+  const mod = path.join(home, 'Mod')
+  fs.mkdirSync(path.join(mod, 'OrcaLink', 'orcalink', '__pycache__'), { recursive: true })
+  fs.writeFileSync(path.join(mod, 'OrcaLink', 'orcalink_server.py'), '# server\n')
+  fs.writeFileSync(path.join(mod, 'OrcaLink', 'orcalink', '__pycache__', 'x.pyc'), '')
+  const set = path.join(home, 'set')
+  fs.mkdirSync(set)
+  const stdio = { name: 'orcaslicer-agentlink', cache: '~/.config/orcaslicer-agentlink', entry: 'orcalink_server.py' }
+  fs.writeFileSync(path.join(set, '.sources.json'), JSON.stringify([{ repo: 'AgentLink-FreeCAD', branch: 'main', folder: '', dest: 'AgentLink' }, { repo: 'AgentLink-OrcaSlicer', branch: 'main', folder: '', dest: 'OrcaLink', stdio }]))
+  fs.writeFileSync(path.join(set, '.shas.json'), JSON.stringify({ AgentLink: 'd'.repeat(40), OrcaLink: sha }))
+  const script = `
+global.__agentlinkHandover = true
+const L = require(${JSON.stringify(path.join(here, '..', 'server', 'index.js'))})
+global.__agentlinkHandover = false
+const [mod, set, home] = JSON.parse(process.env.T)
+const fs = require('fs')
+const path = require('path')
+const out = { none: L.publishStdio(mod, set, home) }
+const cache = path.join(home, '.config', 'orcaslicer-agentlink')
+fs.mkdirSync(cache, { recursive: true })
+fs.writeFileSync(path.join(cache, 'state.json'), JSON.stringify({ current: ${JSON.stringify(old)}, bad: [] }))
+out.first = L.publishStdio(mod, set, home)
+out.state = JSON.parse(fs.readFileSync(path.join(cache, 'state.json'), 'utf8'))
+out.copied = fs.existsSync(path.join(cache, 'app-${sha}', 'orcalink_server.py'))
+out.noCache = fs.existsSync(path.join(cache, 'app-${sha}', 'orcalink', '__pycache__'))
+// The other launcher fetched a newer head since: not undone.
+fs.writeFileSync(path.join(cache, 'state.json'), JSON.stringify({ ...out.state, current: ${JSON.stringify('e'.repeat(40))} }))
+out.again = L.publishStdio(mod, set, home)
+out.after = JSON.parse(fs.readFileSync(path.join(cache, 'state.json'), 'utf8')).current
+out.badStdio = L.checkSources([{ repo: 'AgentLink-FreeCAD', branch: 'main', dest: 'AgentLink' }, { repo: 'X', branch: 'main', dest: 'X', stdio: { name: 'x', cache: '/etc', entry: 'a.py' } }])
+out.kept = L.checkSources(JSON.parse(fs.readFileSync(path.join(set, '.sources.json'), 'utf8')))[1].stdio
+process.stdout.write(JSON.stringify(out))
+`
+  const out = JSON.parse(execFileSync(process.execPath, ['-e', script], { env: { ...process.env, HOME: home, AGENTLINK_UPDATE: 'false', T: JSON.stringify([mod, set, home]) }, encoding: 'utf8' }))
+  assert.deepEqual(out.none, [], 'that extension never ran here: nothing done, nothing said')
+  assert.deepEqual(out.first, [{ name: 'orcaslicer-agentlink', from: 'aaaaaaa', to: 'ccccccc', note: 'its running server takes the new code at its next call' }])
+  assert.equal(out.state.current, sha)
+  assert.equal(out.state.previous, 'a'.repeat(40))
+  assert.equal(out.state.hubPinned, sha)
+  assert.ok(out.copied, 'the installed copy is in the cache')
+  assert.ok(!out.noCache, 'no __pycache__ copied')
+  assert.deepEqual(out.again, [{ name: 'orcaslicer-agentlink', from: 'eeeeeee', to: 'eeeeeee', note: 'unchanged since the last update' }])
+  assert.equal(out.after, 'e'.repeat(40))
+  assert.equal(out.badStdio, null, 'a cache outside the home folder is refused')
+  assert.deepEqual(out.kept, stdio)
+}
 // An update's words on add-ons left out: none, nothing said; one, named
 // with its error, the groups gone compared with before, and a warning.
 {
