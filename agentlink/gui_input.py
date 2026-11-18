@@ -44,10 +44,13 @@ ITEM_KEYS = ("text", "under", "column")
 # logical pixels (Qt's styles draw the indicator a few pixels in, about a
 # line's height wide).
 CHECK_INSET = 3
+# What an item view opens to edit a value (Qt's and FreeCAD's subclasses).
+EDITORS = ("QLineEdit", "QAbstractSpinBox", "QComboBox", "QTextEdit", "QPlainTextEdit")
 # The width of a MenuButtonPopup tool button's arrow part, from its right
 # edge, in logical pixels (Qt's PM_MenuButtonIndicator plus a margin).
 ARROW_W = 14
 SHOT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+SHORTCUT = re.compile(r"[A-Za-z0-9+,. \-=/\\';\[\]`]{1,40}")
 KEY_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,23}")
 # Keys by the names people use, to Qt's Key_ names.
 KEY_ALIASES = {
@@ -70,6 +73,7 @@ KINDS = {
     "type": ("target",),
     "wait": (),
     "shot": (),
+    "shortcut": (),
 }
 DRAG_KEYS = ("from", "to", "steps", "button", "modifiers")
 
@@ -229,6 +233,10 @@ def parse_step(st, i):
             raise bad(f"{where}.type: the text, 1 to {MAX_TEXT} characters.")
         out["text"] = v
         out["target"] = parse_target(st["target"], f"{where}.target") if st.get("target") is not None else None
+    elif kind == "shortcut":
+        if not isinstance(v, str) or not SHORTCUT.fullmatch(v.strip()):
+            raise bad(f"{where}.shortcut: a key sequence as FreeCAD shows it, such as \"Shift+V\", \"Ctrl+Shift+S\" or \"V, D\".")
+        out["keys"] = v.strip()
     elif kind == "wait":
         if isinstance(v, bool) or not _num(v) or not 0 <= v <= MAX_WAIT:
             raise bad(f"{where}.wait: milliseconds, 0 to {MAX_WAIT} — for longer, split it into several waits.")
@@ -243,13 +251,41 @@ def parse_step(st, i):
 
 def parse_steps(steps):
     if not isinstance(steps, list) or not steps:
-        raise bad("steps: a list of steps, run in order — click, press, move, release, drag, scroll, key, type, wait, shot.")
+        raise bad("steps: a list of steps, run in order — click, press, move, release, drag, scroll, key, type, wait, shot, shortcut.")
     if len(steps) > MAX_STEPS:
         raise bad(f"steps: at most {MAX_STEPS} in one call.")
     out = [parse_step(s, i) for i, s in enumerate(steps)]
     if sum(s.get("ms", 0) for s in out) > MAX_TOTAL_WAIT:
         raise bad(f"steps: the waits come to over {MAX_TOTAL_WAIT} ms in one call — split it in two calls.")
     return out
+
+
+def leave_edit(gui, name):
+    """Before a document closes: its edit left (a sketch open in edit) and
+    the task panel of that edit closed, as a person's Close does. Closing
+    four documents, one with a sketch in edit, hung FreeCAD for over 60 s
+    (live 59). gui: FreeCADGui. Answers what was done ([] for nothing)."""
+    did = []
+    try:
+        gd = gui.getDocument(name)
+    except Exception:
+        return did
+    if gd is None:
+        return did
+    try:
+        if gd.getInEdit() is not None:
+            gd.resetEdit()
+            did.append("edit left")
+    except Exception:
+        pass
+    try:
+        ctl = getattr(gui, "Control", None)
+        if ctl is not None and ctl.activeDialog() and getattr(gui, "ActiveDocument", None) is gd:
+            ctl.closeDialog()
+            did.append("task panel closed")
+    except Exception:
+        pass
+    return did
 
 
 # ---- the maths (no Qt) ---------------------------------------------------------------------
@@ -1385,11 +1421,74 @@ class Run:
             return b.focusWidget() or b
         app = self.app()
         f = app.focusWidget() or self.mw().focusWidget()
+        # A focus widget that is no longer shown (the list of a drop-down
+        # that closed, live 47) takes no keys: the nearest shown widget it
+        # sits in does (the combo box).
+        if f is not None and not self._really_shown(f):
+            f = self._shown_ancestor(f)
+            if f is self.focus_at_press:
+                f = None
+        p = self.pressed if self.pressed is not None and _alive(self.pressed) else None
+        if p is not None and not self._really_shown(p):
+            p = self._shown_ancestor(p)
+        # An editor the press opened in a list, tree or table (a Property
+        # view value double-clicked, live 60) takes the typing, as a
+        # person's double-click puts focus there.
+        ed = self._open_editor(p) if p is not None else None
+        if ed is not None:
+            return ed
         # The press's widget, unless focus moved on since (a field the
         # press opened and focused takes the typing).
-        if self.pressed is not None and _alive(self.pressed) and self.pressed.isVisible() and (f is None or f is self.focus_at_press):
-            return self.pressed
+        if p is not None and (f is None or f is self.focus_at_press):
+            return p
         return f or self.mw()
+
+    def _really_shown(self, w):
+        """w and the window it is in are shown."""
+        try:
+            return bool(w.isVisible()) and (not hasattr(w, "window") or w.window() is None or w.window().isVisible())
+        except Exception:
+            return False
+
+    def _shown_ancestor(self, w):
+        """The nearest shown widget w sits in (parents, across a popup's own
+        window), or None."""
+        try:
+            p = w.parentWidget()
+        except Exception:
+            return None
+        n = 0
+        while p is not None and n < 40:
+            if self._really_shown(p):
+                return p
+            try:
+                p = p.parentWidget()
+            except Exception:
+                return None
+            n += 1
+        return None
+
+    def _open_editor(self, w):
+        """The shown editor (a line edit, spin box, combo box or text edit,
+        their FreeCAD subclasses too) inside the item view w is in or is,
+        or None."""
+        view, n = w, 0
+        while view is not None and n < 6 and not _has_class(view, "QAbstractItemView"):
+            try:
+                view = view.parentWidget()
+            except Exception:
+                return None
+            n += 1
+        if view is None or not _has_class(view, "QAbstractItemView"):
+            return None
+        try:
+            kids = view.findChildren(self.qt.QtWidgets.QWidget)
+        except Exception:
+            return None
+        for k in kids:
+            if any(_has_class(k, c) for c in EDITORS) and self._really_shown(k):
+                return k
+        return None
 
     # -- mouse --
 
@@ -1581,11 +1680,76 @@ class Run:
                 self._send(w, ev)
                 if self._detached():
                     return out
+        elif do == "shortcut":
+            self._shortcut(st["keys"], out)
         elif do == "wait":
             self.pump(st["ms"])
         elif do == "shot":
             out.update(self.shot(st["name"]))
         return out
+
+    def _actions(self):
+        QtGui, QtW = self.qt.QtGui, self.qt.QtWidgets
+        cls = getattr(QtGui, "QAction", None) or getattr(QtW, "QAction", None)
+        try:
+            return list(self.mw().findChildren(cls)) if cls is not None else []
+        except Exception:
+            return []
+
+    @staticmethod
+    def _in_sight(a):
+        """An action shown in the window now: on a shown toolbar button or
+        in a menu (FreeCAD's active workbench puts its commands there)."""
+        try:
+            objs = a.associatedObjects() if hasattr(a, "associatedObjects") else a.associatedWidgets()
+        except Exception:
+            return False
+        for o in objs or ():
+            try:
+                if _has_class(o, "QMenu") or (hasattr(o, "isVisible") and o.isVisible()):
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def _shortcut(self, keys, out):
+        """The opt-in shortcut step (live 49): the enabled action whose
+        shortcut is keys triggered, as the key press would, and the command
+        that ran named. Sent key events never reach Qt's shortcut map."""
+        QtGui = self.qt.QtGui
+        b = self.blocker()
+        if b is not None:
+            raise ToolError("invalid_state", "shortcut: a dialog or menu is in front and takes the keys: close it first (Escape, dialog_answer, gui_unstick). This step was not run.")
+        want = QtGui.QKeySequence(keys)
+        text = want.toString()
+        if not text:
+            raise ToolError("invalid_input", f"shortcut: {keys!r} is not a key sequence Qt reads (\"Shift+V\", \"V, D\").")
+        found = {}
+        for a in self._actions():
+            try:
+                if not a.isEnabled() or not any(sq.toString() == text for sq in (a.shortcuts() or [])):
+                    continue
+                name = a.objectName() or a.text().replace("&", "")
+            except Exception:
+                continue
+            found.setdefault(name, (a, self._in_sight(a)))
+        shown = {n: v for n, v in found.items() if v[1]} or found
+        if not shown:
+            raise ToolError("not_found", f"shortcut: no enabled command has {text} in this workbench. cmd_run runs a command by its name.")
+        if len(shown) > 1:
+            raise ToolError("invalid_state", f"shortcut: {text} belongs to more than one command ({', '.join(sorted(shown))}): Qt runs none of them. Use cmd_run.")
+        name, (a, _s) = next(iter(shown.items()))
+        out["hit"] = {"shortcut": text, "command": name, "text": (a.text() or "").replace("&", "")[:60]}
+        fr = self.frames[-1] if self.frames else None
+        if fr is not None:
+            fr["sending"] += 1  # a dialog the command opens is seen by the watch
+        try:
+            a.trigger()
+        finally:
+            if fr is not None:
+                fr["sending"] -= 1
+        if not self._detached():
+            self.pump(MOVE_GAP_MS)
 
     def _over(self):
         """The windows that float over the main window in front, bottom

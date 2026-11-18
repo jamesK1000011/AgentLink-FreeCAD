@@ -1051,6 +1051,16 @@ def tools(session):
             verify = {"triangles": m.CountFacets, "readBack": f"written; FreeCAD does not read {fmt.upper()} back to check it"}
         return verify
 
+    def close_doc(name):
+        """FreeCAD.closeDocument, an edit in that document left first
+        (gui_input.leave_edit, live 59)."""
+        if getattr(FreeCAD, "GuiUp", False):
+            from .. import gui_input
+            import FreeCADGui
+
+            gui_input.leave_edit(FreeCADGui, name)
+        FreeCAD.closeDocument(name)
+
     helpers = {
         # the session and the document
         "doc": lambda: s.doc, "current": lambda: s.doc, "switch": switch, "where": where, "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: s.steps,
@@ -1059,7 +1069,7 @@ def tools(session):
         "ref_list": picks.ref_list, "num": picks.num, "vec3": picks.vec3, "json_safe": lambda v: picks.json_safe(v),
         "recompute_scoped": lambda objs: picks.recompute_scoped(s.doc, objs),
         # documents
-        "new_doc": lambda name: FreeCAD.newDocument(name), "open_doc": lambda p: FreeCAD.openDocument(p), "close_doc": lambda name: FreeCAD.closeDocument(name),
+        "new_doc": lambda name: FreeCAD.newDocument(name), "open_doc": lambda p: FreeCAD.openDocument(p), "close_doc": close_doc,
         "listed_docs": lambda: FreeCAD.listDocuments(), "doc_hits": doc_hits, "own_doc": own_doc, "doc_names": doc_names, "open_labels": open_labels,
         "unsaved": unsaved, "touched_marks": touched_marks, "current_name": current_name, "back_to": back_to, "recent_files": recent_files, "open_at": open_at,
         "is_changed": is_changed, "unchanged": unchanged, "free_name": free_name, "saved": saved, "modified_state": modified_state,
