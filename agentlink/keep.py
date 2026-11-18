@@ -278,9 +278,23 @@ SIZED = {
     # Inspection of a free-form body: its tessellation and FreeCAD's
     # Inspection on it grow with the B-spline poles (a lofted solid of 3
     # faces ran past 120 s against a 140k-triangle scan; a 3242-face
-    # ruled one took under 1 s). Size: heavy.insp_size. Marked for the
-    # watchdog, not asked (a read the person wants).
-    "insp_run": {"per_second": 50.0, "ask": False},
+    # ruled one took under 1 s), and each measured point against a solid
+    # nominal is an OCC distance and a classifier (points x nominal
+    # faces). Size: heavy.insp_size. Asked first like a boolean (live, 18
+    # Nov: it froze the window >160 s with no word first).
+    "insp_run": {"per_second": 50.0, "ask": True},
+    # A mesh made a solid: a face per triangle, sewn, and refine (the
+    # default) about doubles it (live, 18 Nov: 36k triangles 78 s, 35k
+    # with refine past 123 s, the watchdog stopped FreeCAD). Size:
+    # triangles, x2 with refine (heavy.from_mesh_size).
+    "part_from_mesh": {"per_second": 500.0, "ask": True},
+    # An export that tessellates (STL, OBJ, 3MF, glTF ...): OCC meshes
+    # each face to the tolerance, slow on a B-spline face of many poles
+    # (live, 18 Nov: a smooth 3-face loft to STL at 0.05 held the window
+    # past 123 s). Size: heavy.tess_size, the same units as insp_run's.
+    # A read: past jobs.SLOW_READ it runs as a job; in a batch it is
+    # asked first.
+    "export": {"per_second": 50.0, "ask": True},
     "body_check": {"per_second": 100.0, "ask": False},
     "history_undo": {"per_second": 100.0, "ask": False},
     "history_redo": {"per_second": 100.0, "ask": False},
@@ -297,12 +311,29 @@ def boolean_size(base_faces, tool_faces):
     return max(1, int(base_faces or 0)) * max(1, sum(int(n or 0) for n in tool_faces or ()))
 
 
+# A boolean's own work for each face of its inputs (building the result,
+# merging coplanar faces), in face pairs: a common of a 36k-face solid
+# with a 6-face box took 29 s (live, 18 Nov), though few face pairs meet.
+BOOLEAN_FACE_WORK = 24
+
+
+def boolean_work(pairs, faces):
+    """A boolean's size from the face pairs whose boxes meet (OCC only
+    intersects those) and its faces in all."""
+    return max(1, int(pairs or 0)) + BOOLEAN_FACE_WORK * max(0, int(faces or 0))
+
+
+# Sized tools whose size measure changed: timed under a key of their own,
+# so runs logged against the old measure are not read against the new.
+SIZED_KEYS = {"part_boolean": "part_boolean boxes", "export": "export tess"}
+
+
 def sized_key(tool, args):
     """The timing key a sized call is logged and estimated under: a ruled
     loft apart from a smooth one (their times differ)."""
     if tool == "part_loft" and isinstance(args, dict) and args.get("ruled"):
         return "part_loft ruled"
-    return tool
+    return SIZED_KEYS.get(tool, tool)
 
 
 def sized_estimate(q, tool, size, key=None):

@@ -376,8 +376,15 @@ class SizedGate(unittest.TestCase):
         ruled = self.heavy.sized_size(s, "insp_run", {"actual": "Ruled", "nominals": ["Scan"]})
         self.assertGreater(self.keep.sized_estimate({}, "insp_run", smooth), 60)
         self.assertLess(self.keep.sized_estimate({}, "insp_run", ruled), 2)
-        # marked for the watchdog, never asked (a read the person wants)
+        # asked first with the time (live, 18 Nov: it froze the window with
+        # no word), then marked for the watchdog on the same call again
+        from agentlink.protocol import ToolError
+
         g = self.heavy.Gate(s)
+        with self.assertRaises(ToolError) as cm:
+            g.before(Tool("insp_run"), {"actual": "Smooth", "nominals": ["Scan"]})
+        self.assertIn("larger spacing", cm.exception.message)
+        self.assertIn("Nothing was run", cm.exception.message)
         started = time.time()
         g.before(Tool("insp_run"), {"actual": "Smooth", "nominals": ["Scan"]})
         self.assertGreater(self.keep.heavy_call_limit(started, time.time()), 120)
@@ -404,6 +411,8 @@ class SizedGate(unittest.TestCase):
         # the sized gate never estimates under what stopped it either
         self.keep.note_stopped("insp_run", 130.0)
         g = self.heavy.Gate(Sess(Doc([Obj("Grip", 10)])))
+        with self.assertRaises(ToolError):
+            g.before(Tool("insp_run"), {"actual": "Grip", "nominals": []})  # asked first
         started = time.time()
         g.before(Tool("insp_run"), {"actual": "Grip", "nominals": []})
         self.assertGreaterEqual(self.keep.heavy_call_limit(started, time.time()), 3 * 1.5 * 130.0 - 0.01)

@@ -272,7 +272,32 @@ def wanted(tool, args, session, asked=False):
         return True
     from . import heavy
 
+    # A sized read (keep.SIZED: export's meshing) estimated past SLOW_READ
+    # at its input size: a job, so the window is not frozen meanwhile
+    # (live, 18 Nov: an STL export of a smooth loft held it past 123 s).
+    if tool.name in keep.SIZED:
+        est = sized_estimate(tool.name, args, session)
+        if est is not None and est > SLOW_READ:
+            return True
     return past_slow(tool.name, heavy.size_of(session))
+
+
+def sized_estimate(name, args, session, size=None):
+    """Seconds a sized tool (keep.SIZED) should take for these arguments
+    (its input size), or None when the size cannot be read."""
+    from . import heavy
+
+    try:
+        if size is None:
+            size = heavy.sized_size(session, name, args or {})
+        if not size:
+            return None
+        q = keep.queue_state()
+        est = keep.sized_estimate(q, name, size, keep.sized_key(name, args or {}))
+        after = keep.stopped_before(name, q=q)
+        return max(est, 1.5 * after) if est is not None and after is not None else est
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def running(doc=None):
@@ -443,30 +468,62 @@ _recent_lock = threading.Lock()
 TYPICAL_MAX = 300.0  # s: a logged estimate above this is not trusted for a batch budget
 
 
-def note_time(name, secs):
-    """One call of tool name took secs (kept in memory, the last few)."""
+def note_time(name, secs, size=None):
+    """One call of tool name took secs (kept in memory, the last few), with
+    its input size when it has one (a sized tool: keep.SIZED)."""
     try:
         secs = float(secs)
     except (TypeError, ValueError):
         return
     if secs < 0:
         return
+    try:
+        size = float(size) if size else None
+    except (TypeError, ValueError):
+        size = None
     with _recent_lock:
         t = _RECENT.setdefault(name, [])
-        t.append(secs)
+        # A plain time, or (time, size) for a sized call.
+        t.append((secs, size) if size else secs)
         del t[:-RECENT_KEEP]
 
 
-def typical(name, session=None):
+def _middle(xs):
+    xs = sorted(xs)
+    return xs[len(xs) // 2]
+
+
+def typical(name, session=None, args=None):
     """Seconds a call of tool name typically takes here, or None when not
     known: the middle of its last times in this FreeCAD, and, where a slow
     read of it was logged (note_slow), its typical time at the open
-    document's size — the larger of the two."""
+    document's size — the larger of the two. A sized tool (keep.SIZED) has
+    its times scaled by its input size (this call's against theirs): a
+    part_from_mesh of 36k triangles took 78 s, and one of 3.6k was not
+    started on that 78 s (live, 18 Nov). With no size to scale by: None,
+    so the call starts."""
     with _recent_lock:
-        t = sorted(_RECENT.get(name) or [])
+        t = [x if isinstance(x, tuple) else (x, None) for x in (_RECENT.get(name) or [])]
+    sized = name in keep.SIZED
+    if t and sized:
+        if args is None or session is None:
+            return None
+        from . import heavy
+
+        try:
+            cur = heavy.sized_size(session, name, args)
+        except Exception:  # noqa: BLE001
+            cur = None
+        scaled = [secs * float(cur) / size for secs, size in t if size] if cur else []
+        return _middle(scaled) if scaled else None
     if t:
         # Measured here, now: the middle of the last times.
-        return t[len(t) // 2]
+        return _middle(secs for secs, _size in t)
+    if sized:
+        # Not timed in this FreeCAD: its sized estimate at this call's size,
+        # when sane (the same bound as below).
+        est = sized_estimate(name, args, session) if args is not None and session is not None else None
+        return est if est is not None and 0 < est <= TYPICAL_MAX else None
     try:
         q = keep.queue_state()
         if (q.get("timings") or {}).get(name):
@@ -487,7 +544,15 @@ def note_slow(tool, args, session, secs):
     logged, so the next call of its size goes to a job at once (a read past
     a client's 80 s never got its answer back). Every call's time is also
     kept in memory (note_time), for a batch's budget."""
-    note_time(getattr(tool, "name", None), secs)
+    name = getattr(tool, "name", None)
+    got = getattr(session, "sized_now", None)
+    size = got[1] if isinstance(got, tuple) and len(got) == 2 and got[0] == name else None
+    if got is not None:
+        try:
+            session.sized_now = None
+        except Exception:  # noqa: BLE001
+            pass
+    note_time(name, secs, size)
     if secs <= SLOW_READ or keep.is_heavy(tool.name) or not eligible(tool, args, session):
         return
     try:

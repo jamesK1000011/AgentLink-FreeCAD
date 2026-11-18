@@ -2256,7 +2256,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 try:
                     from . import jobs as _jobs
 
-                    usual = _jobs.typical(c["tool"], s)
+                    usual = _jobs.typical(c["tool"], s, c.get("arguments") or {})
                 except Exception:
                     usual = None
                 if usual is not None and usual > left:
