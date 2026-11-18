@@ -95,12 +95,100 @@ def _versions(server_version=None):
         out["freecad"] = ".".join(str(x) for x in FreeCAD.Version()[:3])
     except Exception:  # noqa: BLE001
         out["freecad"] = None
+    out["addons"] = _addons()
     try:
         from . import ext
 
-        out["addons"] = {k: str(v) for k, v in sorted(ext.loaded.items())}
+        if ext.loaded:
+            out["extensions"] = {k: str(v) for k, v in sorted(ext.loaded.items())}
     except Exception:  # noqa: BLE001
-        out["addons"] = {}
+        pass
+    try:
+        from . import extstate
+
+        out["loaded"] = sorted(extstate.short_name(r["extension"]) for r in extstate.state().get("loaded", []))
+    except Exception:  # noqa: BLE001
+        pass
+    bundle = os.path.basename(os.path.dirname(_here()))
+    if bundle.startswith("addons-"):
+        out["bundle"] = bundle[7:]  # the launcher's install: each add-on's pinned commit, 7 characters each
+    return out
+
+
+def _here():
+    """This add-on's folder (Mod/AgentLink, or the launcher's copy)."""
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _git_commit(folder):
+    """The short commit of a git checkout at folder, read from .git (no git
+    run), or None."""
+    g = os.path.join(folder, ".git")
+    try:
+        if os.path.isfile(g):
+            with open(g, encoding="utf-8") as f:
+                line = f.read().strip()
+            if not line.startswith("gitdir:"):
+                return None
+            g = os.path.join(folder, line[7:].strip())
+        if not os.path.isdir(g):
+            return None
+        with open(os.path.join(g, "HEAD"), encoding="utf-8") as f:
+            head = f.read().strip()
+        if not head.startswith("ref:"):
+            return head[:7]
+        ref = head[4:].strip()
+        p = os.path.join(g, ref)
+        if os.path.isfile(p):
+            with open(p, encoding="utf-8") as f:
+                return f.read().strip()[:7]
+        with open(os.path.join(g, "packed-refs"), encoding="utf-8") as f:
+            for line in f:
+                if line.rstrip().endswith(" " + ref):
+                    return line[:7]
+    except OSError:
+        return None
+    return None
+
+
+_ADDONS = {}
+
+
+def _addons():
+    """Every add-on beside this one in the Mod folder that has a
+    package.xml: {folder: {version, date, commit}}. Read once a process."""
+    if "v" in _ADDONS:
+        return _ADDONS["v"]
+    import re
+
+    out = {}
+    mod = os.path.dirname(_here())
+    try:
+        names = sorted(os.listdir(mod))
+    except OSError:
+        names = []
+    for n in names:
+        p = os.path.join(mod, n)
+        x = os.path.join(p, "package.xml")
+        if not os.path.isfile(x):
+            continue
+        try:
+            with open(x, encoding="utf-8") as f:
+                text = f.read(20000)
+        except OSError:
+            continue
+        row = {}
+        for k in ("version", "date"):
+            m = re.search(rf"<{k}>([^<]+)</{k}>", text)
+            if m:
+                row[k] = m.group(1).strip()[:40]
+        c = _git_commit(p)
+        if c:
+            row["commit"] = c
+        out[n[:60]] = row
+        if len(out) >= 40:
+            break
+    _ADDONS["v"] = out
     return out
 
 
@@ -183,6 +271,7 @@ class Meter:
         self.step = 0
         self.batch_n = 0
         self.last = None  # (end time, tool, arg hash)
+        self.prev = None  # the same, for the last call that is not a batch's own row (retries)
         self.dialog = None  # the dialog up now: {key, title, text, buttons, since, blocked, by}
         if write:
             prune(self.where)
@@ -247,7 +336,11 @@ class Meter:
                 why = _error_of(reply_text)
                 if why:
                     row["why"] = why
-            if last is not None and last[1] == tool and sig is not None and last[2] != sig and start - last[0] <= RETRY_S:
+            # A retry: the same tool as the call before, with changed arguments, soon. A batch's own row does not
+            # count as the call before: its calls are rows of their own, written before it (live 73: object_get
+            # refused in one batch, then object_get again in the next was not marked).
+            prev = self.prev
+            if prev is not None and prev[1] == tool and sig is not None and prev[2] != sig and start - prev[0] <= RETRY_S:
                 row["retry"] = True
             try:
                 m = marks(tool, args or {}, reply_text, error)
@@ -260,6 +353,8 @@ class Meter:
             if tool == "dialog_answer" and not error and self.dialog is not None:
                 self.dialog["by"] = "agent"
             self.last = (now, tool, sig)
+            if tool != "batch":
+                self.prev = (now, tool, sig)
             self.calls.append(row)
             del self.calls[:-5000]
         self._append(row)
@@ -616,7 +711,7 @@ def log_report(days=7, where=None, jobs=8, watchdog=True):
         names = []
         for r in rs:
             names.append(r["tool"] if not r.get("steps") else f"{r['tool']}[{', '.join(_runs(r['steps'], 8))}]")
-        jl.append({"job": job, "mode": j.get("mode"), "why": j.get("why"), "versions": {k: j.get(k) for k in ("agentlink", "freecad", "addons") if j.get(k) is not None},
+        jl.append({"job": job, "mode": j.get("mode"), "why": j.get("why"), "versions": {k: j.get(k) for k in ("agentlink", "freecad", "addons", "bundle", "loaded") if j.get(k) is not None},
                    "steps": len(rs) + sum(len(r.get("steps") or ()) for r in rs), "calls": len(rs), "errors": len([r for r in rs if r.get("err")]),
                    "retries": len([r for r in rs if r.get("retry")]), "secs": round(rs[-1]["t"] - rs[0]["t"] + rs[0].get("ms", 0) / 1000, 1),
                    "tokens": sum(tokens_of(r) for r in rs), "sequence": _runs(names)})
@@ -637,6 +732,7 @@ def log_report(days=7, where=None, jobs=8, watchdog=True):
         out["modes"][j.get("mode") or "?"] = out["modes"].get(j.get("mode") or "?", 0) + 1
     # A retry after an error: the call before it (same job, same tool) erred.
     for rs in by_job.values():
+        rs = [r for r in rs if r["tool"] != "batch"]
         for a, b in zip(rs, rs[1:]):
             if b.get("retry") and a.get("err"):
                 out["retries"]["afterError"] += 1
