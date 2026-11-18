@@ -26,6 +26,7 @@ agentlink/chain.py
 agentlink/changes.py
 agentlink/charts.py
 agentlink/commands.py
+agentlink/cookbook.py
 agentlink/crash_logs.py
 agentlink/data/activity.json
 agentlink/data/activity.schema.json
@@ -83,6 +84,7 @@ agentlink/families/part_more.py
 agentlink/families/pd_common.py
 agentlink/families/picks.py
 agentlink/families/points.py
+agentlink/families/porting.py
 agentlink/families/refs.py
 agentlink/families/robot.py
 agentlink/families/sheet.py
@@ -117,6 +119,7 @@ agentlink/guides/mesh.md
 agentlink/guides/model.md
 agentlink/guides/param.md
 agentlink/guides/points.md
+agentlink/guides/porting.md
 agentlink/guides/sheet.md
 agentlink/guides/sketch.md
 agentlink/guides/start.md
@@ -161,6 +164,7 @@ agentlink/panel.py
 agentlink/panel_tabs.py
 agentlink/paths.py
 agentlink/pointfiles.py
+agentlink/porting.py
 agentlink/protocol.py
 agentlink/quit_guard.py
 agentlink/refusal.py
@@ -197,6 +201,7 @@ docs/clients/lm-studio.md
 docs/clients/opencode-ollama.md
 docs/clients/vscode.md
 docs/data-tools.md
+docs/design/porting-2026-11-18.md
 docs/design/usage-log-2026-11-18.md
 docs/hardening/STATUS.md
 docs/hardening/addons-findings.md
@@ -518,6 +523,7 @@ tests/test_panel_tabs.py
 tests/test_param.py
 tests/test_part_hardening.py
 tests/test_paths.py
+tests/test_porting.py
 tests/test_pref_import.py
 tests/test_protocol.py
 tests/test_quiet_reads.py

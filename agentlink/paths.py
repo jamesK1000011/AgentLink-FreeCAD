@@ -48,6 +48,13 @@ def check(tool, key, value, out_dir, write):
     if secret:
         raise ToolError("invalid_input", f"{key}: {raw} is in {secret[0]} — credentials and shell settings are off limits to the agent.")
     if write:
+        # The person's OKs (approved macros and cookbooks) and the installed
+        # cookbooks: no tool writes there, so no write can forge an OK.
+        from . import cookbook
+
+        for root in cookbook.protected():
+            if real == root or real.startswith((root.rstrip("/") + "/", root + ".")):
+                raise ToolError("invalid_input", f"{key}: {raw} is Agent Link's own store of the person's approvals and cookbooks. No tool writes there; write somewhere else.")
         home = _real("~")
         # A session folder at the disk's root (a server started from / with
         # no --out) is not taken as leave to write anywhere.
