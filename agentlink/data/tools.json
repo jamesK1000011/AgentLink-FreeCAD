@@ -11328,7 +11328,7 @@
   },
   "part_from_mesh": {
    "group": "model",
-   "description": "Make a mesh into a solid, with every triangle a face. mesh: an object. Or file: STL, OBJ …. tolerance: sews it. refine (default): merges flat triangles. Use it for a closed mesh of modest size. The tool refuses more than maxFacets (60000); first use meshobj_decimate. Thousands of faces already make it slow, and every later boolean slow. The window is frozen during that time. Of several pieces, only the largest becomes the solid (note says so).",
+   "description": "Make a mesh into a solid, with every triangle a face. mesh: an object. Or file: STL, OBJ …. tolerance: sews it. refine (default): merges flat triangles. Use it for a closed mesh of modest size. The tool refuses more than maxFacets (60000); first use meshobj_decimate. Thousands of faces make it and every later boolean slow; the window is frozen. refine doubles the time. An estimate over a minute: the first call only tells the time. The same call again runs it. Of several pieces, only the largest becomes the solid (note says so).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -11375,7 +11375,8 @@
     {"let": {"o": "=new_obj('Part::Feature', a.name or label + ' solid')"}},
     {"set": {"o.Shape": "=sol"}},
     {"let": {"snd": "=soundness(sol)"}},
-    {"let": {"note": "Flat triangles merged where they lie in one plane (refine); curved areas stay faceted — for a clean model, fit features instead."}},
+    {"let": {"note": "Not refined (refine: false): every triangle stays a face — part_refine merges the flat ones later; for a clean model, fit features instead."}},
+    {"let": {"note": "Flat triangles merged where they lie in one plane (refine); curved areas stay faceted — for a clean model, fit features instead."}, "when": "=a.get('refine', True)"},
     {"let": {"note": {"fmt": "The mesh sewed into {len(shells)} separate shells: only the largest ({len(shells[0].Faces)} of {len(sh.Faces)} triangles) was made the solid — split the mesh first (meshobj_split) and convert each piece. {note}"}}, "when": "=len(shells) > 1"}
    ],
    "answer": {"via": "added", "with": ["=o", "=tool", "$fields"], "fields": {"triangles": "=m.CountFacets", "sound": "=snd['ok']", "problems": {"when": "=not snd['ok']", "value": "=snd['problems']"}, "note": "=note"}}
@@ -16655,7 +16656,7 @@
   },
   "insp_run": {
    "group": "inspection",
-   "description": "Inspect with FreeCAD's own Inspection feature, which stays in the document. actual: a mesh, points or a body. Or file: a scan (stl, obj, ply, off, 3mf, amf, asc, pcd, xyz). nominals: [bodies, meshes, points] to compare with. The tool aligns nothing: first put the actual where the nominal is (object_align). search_radius: mm (1; FreeCAD's own default is 0.05). A point further than that from every nominal is out of reach. So search_radius must be larger than the tolerance. tolerance: ±t or [low, high] mm; it gives the verdict. Distances have a sign: + outside a solid nominal (material added), − inside. The tool measures a mesh or scan at its vertices. It first meshes a body and measures that hidden mesh (how tells this). deflection: 0.1 mm. spacing: mm between points, default 1% of its size. cap: at most 60000 points. The tool stores thickness, but FreeCAD 1.1 does not use it. Time increases with points × nominal faces. A free-form body against a big scan takes minutes: first increase spacing. Answer: points, measured, outOfReach, min, max, mean, rms, stdDev, inTolerancePercent, verdict, worst [{ at, distance }], health. verdict is pass only when all points are in tolerance and none is out of reach.",
+   "description": "Inspect with FreeCAD's own Inspection feature, which stays in the document. actual: a mesh, points or a body. Or file: a scan (stl, obj, ply, off, 3mf, amf, asc, pcd, xyz). nominals: [bodies, meshes, points] to compare with. The tool aligns nothing: first put the actual where the nominal is (object_align). search_radius: mm (1; FreeCAD's own default is 0.05). A point further than that from every nominal is out of reach. So search_radius must be larger than the tolerance. tolerance: ±t or [low, high] mm; it gives the verdict. Distances have a sign: + outside a solid nominal (material added), − inside. The tool measures a mesh or scan at its vertices. It first meshes a body and measures that hidden mesh (how tells this). deflection: 0.1 mm. spacing: mm between points, default 1% of its size. cap: at most 60000 points. The tool stores thickness, but FreeCAD 1.1 does not use it. Time increases with points × nominal faces. A free-form body against a big scan takes minutes: first increase spacing. An estimate over a minute: the first call only tells the time. The same call again runs it. Answer: points, measured, outOfReach, min, max, mean, rms, stdDev, inTolerancePercent, verdict, worst [{ at, distance }], health. verdict is pass only when all points are in tolerance and none is out of reach.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21368,7 +21369,7 @@
   },
   "export": {
    "group": "doc",
-   "description": "Write objects to a file and read it back (verify). objects: the one body when omitted; several go as one compound. Meshes (Mesh::Feature) go as they are to the mesh and scene formats (STL by default). Solids: STEP, IGES, BREP. One mesh: STL, OBJ, 3MF, PLY, OFF, VRML (wrl), X3D. A scene, a mesh for each object, colors {label: \"#rrggbb\"}: glTF (glb, gltf), Collada (dae); metres, Y up. 2D: DXF (R12) or SVG of a view (top | bottom | front | back | right | left | iso). hidden: true adds hidden lines on their own layer. section: a section at z mm instead. 2D keeps circles and arcs, for laser and plasma cutting. format: or from path's extension. tolerance: the chord error, 0.01 mm.",
+   "description": "Write objects to a file, read back (verify). objects: the one body when omitted; several go as one compound. Meshes (Mesh::Feature) go as they are to mesh and scene formats (STL by default). Solids: STEP, IGES, BREP. One mesh: STL, OBJ, 3MF, PLY, OFF, VRML (wrl), X3D. A scene, a mesh for each object, colors {label: \"#rrggbb\"}: glTF (glb, gltf), Collada (dae); metres, Y up. 2D: DXF (R12) or SVG of a view (top | bottom | front | back | right | left | iso). hidden: true adds hidden lines on their own layer. section: a section at z mm instead. 2D keeps arcs for laser and plasma cutting. format: or from path's extension. tolerance: the chord error, 0.01 mm. Over 20 s estimated: a job (job_status). In a batch, over a minute: the time first.",
    "inputSchema": {"type": "object", "properties": {"objects": {}, "format": {"type": "string", "enum": ["step", "iges", "brep", "stl", "obj", "3mf", "ply", "off", "wrl", "x3d", "glb", "gltf", "dae", "dxf", "svg"]}, "path": {"type": "string"}, "tolerance": {"type": "number"}, "colors": {"type": "object"}, "view": {"type": "string", "enum": ["top", "bottom", "front", "back", "right", "left", "iso"]}, "hidden": {"type": "boolean"}, "section": {"type": "number"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/doc.py)",

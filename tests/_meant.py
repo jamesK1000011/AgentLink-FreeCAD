@@ -41,6 +41,13 @@ DESCRIPTIONS = {
         "an empty sheet is refused. size: the text's height on the paper, mm (3.5): the table's scale is set for it (reply: scale)."),
     'td_weld': ('page), drawn by td_export (the window shows the leader only',
         "page), drawn by td_export, and in the window as FreeCAD's own weld symbol on the leader (TechDraw::DrawWeldSymbol, with FreeCAD's own symbol for fillet, square, v, plug and surfacing; the other kinds show their words only, and window says which"),
+    # M18 live build, 18 Nov: heavy changes estimated first, a big export a job.
+    'part_from_mesh': ('omes the solid (note says so).',
+        'omes the solid (note says so). refine about doubles the time; an estimate over a minute: the first call answers with the time and runs nothing, the same call again runs it.'),
+    'insp_run': ('st [{ at, distance }], health.',
+        'st [{ at, distance }], health. An estimate over a minute: the first call answers with the time and runs nothing, the same call again runs it.'),
+    'export': ('nce: the chord error, 0.01 mm.',
+        'nce: the chord error, 0.01 mm. Meshing B-spline faces can be slow: an estimate over 20 s runs as a job (job_status); in a batch an estimate over a minute answers with the time first, the same call again runs it.'),
 }
 
 

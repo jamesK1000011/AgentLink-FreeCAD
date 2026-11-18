@@ -627,7 +627,7 @@ def _walk(x):
 # file batch's record reply (+168), tool_groups' said (+22), guide_read's index wording (+26).
 # Every description in ASD-STE100 (merged 17 Nov; was explore/full-ste): data 79008 -> 83635, coded 9037 -> 9166, lean listing 7406 -> 7409,
 # one card's median 178 -> 190 and largest 824 -> 878, tool_groups' card 734 -> 729, usage_report's 178 -> 194.
-COSTS = {"dataTools": 383, "dataToolsTokens": 83719, "codedTools": 22, "codedToolsTokens": 9197, "leanTools": 20, "leanListingTokens": 7430,
+COSTS = {"dataTools": 383, "dataToolsTokens": 83787, "codedTools": 22, "codedToolsTokens": 9197, "leanTools": 20, "leanListingTokens": 7447,
          "oneCardMedian": 190, "oneCardLargest": 878, "toolGroupsCard": 729, "usageReportCard": 194}
 
 

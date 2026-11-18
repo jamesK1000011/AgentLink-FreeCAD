@@ -129,32 +129,248 @@ def loft_counts(session, args):
     return len(counts), max(2, n)
 
 
+def _poles(face):
+    """A face's B-spline or Bezier poles (U x V), or None for another kind."""
+    try:
+        srf = face.Surface
+    except Exception:
+        return None
+    up, vp = getattr(srf, "NbUPoles", None), getattr(srf, "NbVPoles", None)
+    try:
+        return float(up * vp) if up and vp else None
+    except TypeError:
+        return None
+
+
+def tess_size(shape, tol=0.1):
+    """The work of meshing a shape to a chord error of tol mm, in insp_run's
+    units: each B-spline or Bezier face its poles, each other face a
+    hundredth, times sqrt(0.1 / tol) (a finer tolerance, more triangles)."""
+    n = 0.0
+    try:
+        for f in shape.Faces:
+            p = _poles(f)
+            n += p if p else 0.01
+    except Exception:
+        return 0.0
+    try:
+        k = (0.1 / float(tol)) ** 0.5 if tol and float(tol) > 0 else 1.0
+    except (TypeError, ValueError):
+        k = 1.0
+    return n * k
+
+
+# insp_run, a solid nominal: each measured point is an OCC distance to it and
+# a classifier (FreeCAD's InspectNominalShape), its time about points x the
+# nominal's faces (a B-spline face more, by its poles). In tess_size's units.
+INSP_POINT_WORK = 1.0 / 700.0
+
+
+def _measured_points(o, args):
+    """The points insp_run measures on its actual: a mesh's or a cloud's
+    own, a body's as meshed at spacing (its area / spacing squared, at most
+    cap)."""
+    m = getattr(o, "Mesh", None)
+    if m is not None and hasattr(m, "CountPoints"):
+        return int(m.CountPoints)
+    p = getattr(o, "Points", None)
+    if p is not None and hasattr(p, "CountPoints"):
+        return int(p.CountPoints)
+    sh = getattr(o, "Shape", None)
+    try:
+        area = float(sh.Area)
+        diag = float(sh.BoundBox.DiagonalLength)
+    except Exception:
+        return 0
+    sp = args.get("spacing")
+    sp = float(sp) if isinstance(sp, (int, float)) and not isinstance(sp, bool) and sp > 0 else max(diag / 100.0, 0.2)
+    cap = args.get("cap", 60000)
+    cap = max(1000, min(int(cap) if isinstance(cap, int) and not isinstance(cap, bool) else 60000, 400000))
+    return int(min(cap, area / (sp * sp)))
+
+
+def _nominal_work(o):
+    """A solid nominal's work for each measured point: its faces, a B-spline
+    face 1 + poles / 100. A mesh or a cloud nominal: none worth counting (a
+    grid lookup)."""
+    if getattr(o, "Mesh", None) is not None or getattr(o, "Points", None) is not None:
+        return 0.0
+    sh = getattr(o, "Shape", None)
+    n = 0.0
+    try:
+        for f in sh.Faces:
+            p = _poles(f)
+            n += 1.0 + (p / 100.0 if p else 0.0)
+    except Exception:
+        return 0.0
+    return n
+
+
 def insp_size(session, args):
-    """insp_run's size: the actual body's B-spline poles (a free-form face
-    is what tessellates and inspects slowly), a hundredth for each other
-    face, and mesh points / 20000 on both sides. None for a file (read
-    in the call)."""
+    """insp_run's size: the actual body's tessellation (tess_size at
+    deflection: its B-spline poles, a hundredth for each other face), mesh
+    points / 20000 on both sides, and the measured points x each solid
+    nominal's faces (INSP_POINT_WORK). None for a file (read in the call)."""
     doc = session.doc
     n = 0.0
     act = _obj(doc, args.get("actual"))
     if act is None:
         return None
-    for o in [act] + [_obj(doc, x) for x in (args.get("nominals") or []) if isinstance(x, str)]:
+    defl = args.get("deflection", 0.1)
+    defl = float(defl) if isinstance(defl, (int, float)) and not isinstance(defl, bool) and defl > 0 else 0.1
+    noms = [_obj(doc, x) for x in (args.get("nominals") or []) if isinstance(x, str)]
+    for o in [act] + noms:
         if o is None:
             continue
         sh = getattr(o, "Shape", None)
         if o is act and sh is not None and not getattr(o, "Mesh", None):
-            try:
-                for f in sh.Faces:
-                    srf = f.Surface
-                    up, vp = getattr(srf, "NbUPoles", None), getattr(srf, "NbVPoles", None)
-                    n += float(up * vp) if up and vp else 0.01
-            except Exception:
-                pass
+            n += tess_size(sh, defl)
         m = getattr(o, "Mesh", None)
         if m is not None and hasattr(m, "CountPoints"):
             n += int(m.CountPoints) / 20000.0
+    work = sum(_nominal_work(o) for o in noms if o is not None and o is not act)
+    if work:
+        n += _measured_points(act, args) * work * INSP_POINT_WORK
     return max(1e-3, n)
+
+
+# Tessellating formats of export (a solid written as triangles).
+TESS_FORMATS = {"stl", "obj", "3mf", "ply", "off", "wrl", "x3d", "glb", "gltf", "dae"}
+
+
+def export_size(session, args):
+    """export's size: the tessellation of the shapes it writes as triangles
+    (tess_size at its tolerance, 0.01 mm by default); 0 for a format that
+    does not tessellate (STEP, IGES, BREP, DXF, SVG) or meshes written as
+    they are. None when it cannot be read."""
+    import os
+
+    doc = session.doc
+    fmt = str(args.get("format") or "").lower()
+    if not fmt and isinstance(args.get("path"), str):
+        fmt = os.path.splitext(args["path"])[1].lstrip(".").lower()
+    names = args.get("objects")
+    names = names if isinstance(names, list) else ([names] if isinstance(names, str) and names else [])
+    objs = [_obj(doc, n) for n in names]
+    if not names:
+        bodies = [o for o in doc.Objects if getattr(o, "Shape", None) is not None and _faces(o) and not getattr(o, "InList", [])]
+        objs = bodies[:1]
+    objs = [o for o in objs if o is not None and getattr(o, "Mesh", None) is None]
+    if not objs:
+        return 0.0
+    if not fmt:
+        fmt = "step"
+    if fmt not in TESS_FORMATS:
+        return 0.0
+    tol = args.get("tolerance", 0.01)
+    tol = float(tol) if isinstance(tol, (int, float)) and not isinstance(tol, bool) and tol > 0 else 0.01
+    return sum(tess_size(o.Shape, tol) for o in objs)
+
+
+def _stl_facets(path):
+    """Triangles in a binary STL by its header, else None."""
+    import os
+    import struct
+
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as f:
+            head = f.read(84)
+        n = struct.unpack("<I", head[80:84])[0]
+        return n if 84 + 50 * n == size else None
+    except Exception:
+        return None
+
+
+def from_mesh_size(session, args):
+    """part_from_mesh's size: the mesh's triangles, twice that with refine
+    (the default). None when they cannot be read before the call."""
+    n = None
+    if args.get("mesh"):
+        m = getattr(_obj(session.doc, args.get("mesh")), "Mesh", None)
+        if m is not None and hasattr(m, "CountFacets"):
+            n = int(m.CountFacets)
+    elif isinstance(args.get("file"), str):
+        import os
+
+        n = _stl_facets(os.path.expanduser(args["file"]))
+    if not n:
+        return None
+    return float(n) * (2.0 if args.get("refine", True) else 1.0)
+
+
+def _boxes(shape):
+    """Each face's bounding box as rows of [xmin, ymin, zmin, xmax, ymax,
+    zmax] (numpy), or None when the faces have none (stand-ins)."""
+    import numpy as np
+
+    rows = []
+    for f in shape.Faces:
+        b = getattr(f, "BoundBox", None)
+        if b is None:
+            return None
+        rows.append((b.XMin, b.YMin, b.ZMin, b.XMax, b.YMax, b.ZMax))
+    return np.array(rows, dtype=float).reshape(-1, 6)
+
+
+# At most this many tool faces are tested against every base face; past it,
+# an even sample of them, and the count scaled up (an estimate's count).
+PAIR_SAMPLE = 400
+
+
+def overlap_pairs(base_shape, tool_shapes, gap=1e-3):
+    """Face pairs (a base face, a tool face) whose bounding boxes meet: the
+    pairs OCC's boolean intersects (it filters by boxes first). Of many tool
+    faces, an even sample of PAIR_SAMPLE, scaled up. None when they cannot
+    be read (no numpy, faces with no box)."""
+    try:
+        import numpy as np
+
+        B = _boxes(base_shape)
+        if B is None:
+            return None
+        Ts = []
+        for sh in tool_shapes:
+            T = _boxes(sh)
+            if T is None:
+                return None
+            Ts.append(T)
+        T = np.concatenate(Ts) if Ts else np.zeros((0, 6))
+        if not len(T) or not len(B):
+            return 0
+        # Only the base faces inside the tools' whole box can meet any.
+        lo, hi = T[:, :3].min(axis=0) - gap, T[:, 3:].max(axis=0) + gap
+        B = B[np.all((B[:, :3] <= hi) & (B[:, 3:] >= lo), axis=1)]
+        step = max(1, -(-len(T) // PAIR_SAMPLE))
+        n = 0
+        for t in T[::step]:
+            n += int(np.count_nonzero((B[:, 0] <= t[3] + gap) & (B[:, 3] >= t[0] - gap) & (B[:, 1] <= t[4] + gap) & (B[:, 4] >= t[1] - gap)
+                                      & (B[:, 2] <= t[5] + gap) & (B[:, 5] >= t[2] - gap)))
+        return int(round(n * len(T) / len(T[::step])))
+    except Exception:
+        return None
+
+
+def boolean_parts(session, args):
+    """A part_boolean call's size and its parts: {size, pairs (face pairs
+    whose boxes meet, or None), base, tools (faces)}, or None when its
+    bodies cannot be read."""
+    doc = session.doc
+    names = args.get("tools")
+    names = names if isinstance(names, list) else [names]
+    tools = [_obj(doc, n) for n in names]
+    tf = [_faces(t) for t in tools if t is not None]
+    base = _obj(doc, args.get("base"))
+    if base is None:
+        # base left out: the one other solid body there is.
+        rest = [o for o in doc.Objects if o not in tools and getattr(o, "Shape", None) is not None and _faces(o) and not o.InList]
+        base = max(rest, key=_faces) if rest else None
+    if base is None or not tf:
+        return None
+    nb, nt = _faces(base), sum(tf)
+    pairs = overlap_pairs(base.Shape, [t.Shape for t in tools if t is not None])
+    size = keep.boolean_size(nb, tf) if pairs is None else keep.boolean_work(pairs, nb + nt)
+    return {"size": size, "pairs": pairs, "base": nb, "tools": nt}
 
 
 def loft_faces(profiles, points, loop=False):
@@ -182,25 +398,20 @@ def loft_split(profiles, points, loop, est, target=40.0):
 
 def sized_size(session, tool, args):
     """The size a sized tool (keep.SIZED) works at: a boolean's face pairs
-    (base faces x tool faces), else the document's faces. None when it
-    cannot be read (the tool's own refusal then says why)."""
+    whose boxes meet and its faces (boolean_parts), insp_run's and export's
+    tessellation, part_from_mesh's triangles, a loft's faces cubed, else the
+    document's faces. None when it cannot be read (the tool's own refusal
+    then says why)."""
     try:
-        doc = session.doc
         if tool == "part_boolean":
-            names = args.get("tools")
-            names = names if isinstance(names, list) else [names]
-            tools = [_obj(doc, n) for n in names]
-            tf = [_faces(t) for t in tools if t is not None]
-            base = _obj(doc, args.get("base"))
-            if base is None:
-                # base left out: the one other solid body there is.
-                rest = [o for o in doc.Objects if o not in tools and getattr(o, "Shape", None) is not None and _faces(o) and not o.InList]
-                base = max(rest, key=_faces) if rest else None
-            if base is None or not tf:
-                return None
-            return keep.boolean_size(_faces(base), tf)
+            got = boolean_parts(session, args)
+            return got["size"] if got else None
         if tool == "insp_run":
             return insp_size(session, args)
+        if tool == "part_from_mesh":
+            return from_mesh_size(session, args)
+        if tool == "export":
+            return export_size(session, args)
         if tool == "part_loft":
             c = loft_counts(session, args)
             if c is None:
@@ -292,7 +503,18 @@ class Gate:
 
     def _sized_before(self, tool, args):
         self.sized = None
+        if getattr(self, "as_job", False):
+            # A read sent to a job (jobs.wanted: its estimate is past
+            # jobs.SLOW_READ) runs on a worker thread: the window is not
+            # frozen, so nothing to ask and no deadline to stretch.
+            return
         size = sized_size(self.s, tool.name, args)
+        try:
+            # For a batch's start-time guess (jobs.typical): the input size
+            # of the call that runs now, kept with its time.
+            self.s.sized_now = (tool.name, size)
+        except Exception:
+            pass
         if not size:
             return
         try:
@@ -369,7 +591,31 @@ class Gate:
                     f"split it into {runs} lofts of about {per_run} profiles each (each run starting on the profile the last ended on), then part_boolean fuse them; "
                     f"or fewer points a profile (samples: {pts}, the profiles rebuilt alike); or fewer profiles where the shape changes slowly. "
                     "The same call again runs it as asked; the watchdog then waits its estimate times three. Nothing was run.")
-        return (f"{tool} here is heavy: about {_fmt(est)} at this size ({int(size):,} face pairs; from {src}), "
+        again = "The same call again runs it as asked; the watchdog then waits its estimate times three. Nothing was run."
+        if tool == "part_from_mesh":
+            refine = args.get("refine", True)
+            n = int(size / (2.0 if refine else 1.0))
+            return (f"part_from_mesh here is heavy: about {_fmt(est)} for {n:,} triangles" + (" with refine (about twice as long)" if refine else "") + f" (from {src}), "
+                    "and FreeCAD's window is frozen until OCC finishes — past its deadline the window is taken for hung and stopped. Lighter: "
+                    "fewer triangles first (meshobj_decimate), " + ("or refine: false (each triangle stays a face; part_refine later), " if refine else "")
+                    + "or keep it a mesh (meshobj_ tools). " + again)
+        if tool == "insp_run":
+            return (f"insp_run here is heavy: about {_fmt(est)} at this size (from {src}): a free-form body meshes slowly, and each point against a solid nominal is an OCC distance. "
+                    "FreeCAD's window is frozen until it finishes. Lighter: a larger spacing or a smaller cap (fewer points), a mesh of the nominal "
+                    "(export it to STL and import_file it; a mesh nominal is fast), or a larger deflection. " + again)
+        if tool == "export":
+            return (f"export here is heavy: about {_fmt(est)} to mesh its B-spline faces at tolerance {args.get('tolerance', 0.01)} mm (from {src}), "
+                    "and FreeCAD's window is frozen while OCC meshes them. Lighter: a larger tolerance (0.05 to 0.1 mm prints the same), "
+                    "STEP (no meshing), or the call on its own (not in a batch), where it runs as a job and the window stays free. " + again)
+        if tool == "part_boolean":
+            got = boolean_parts(self.s, args) or {}
+            if got.get("pairs") is not None:
+                what = f"{got['pairs']:,} face pairs whose boxes meet, {got['base'] + got['tools']:,} faces in all"
+            else:
+                what = f"{int(size):,} face pairs"
+        else:
+            what = f"size {size:,.0f}"
+        return (f"{tool} here is heavy: about {_fmt(est)} at this size ({what}; from {src}), "
                 "and FreeCAD's window is frozen until OCC finishes. Lighter first: fewer faces (part_refine merges coplanar facets; a coarser mesh before part_from_mesh), "
                 "or meshobj_boolean on the meshes. The same call again runs it as asked; the watchdog waits for it. Nothing was run.")
 

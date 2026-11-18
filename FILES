@@ -492,6 +492,7 @@ tests/test_live_findings.py
 tests/test_live_run.py
 tests/test_loft_findings.py
 tests/test_loft_spans.py
+tests/test_m18_heavy_findings.py
 tests/test_material.py
 tests/test_mcp_contract.py
 tests/test_measure.py

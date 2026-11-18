@@ -1316,7 +1316,7 @@
    "kind": "data"
   },
   "export": {
-   "description": "Write objects (the one body when left out; several go as one compound) and read it back (verify). Meshes (Mesh::Feature) go as they are to the mesh and scene formats (STL by default). Solids: STEP, IGES, BREP. One mesh: STL, OBJ, 3MF, PLY, OFF, VRML (wrl), X3D. A scene, a mesh per object with colors {label: \"#rrggbb\"}: glTF (glb, gltf), Collada (dae) — metres, Y up. 2D: DXF (R12) or SVG of a view (top | bottom | front | back | right | left | iso; hidden: true adds hidden lines on their own layer) or of a section at z mm (section) — circles and arcs kept as such, for laser and plasma cutting. format, or from path's extension; tolerance: the chord error, 0.01 mm.",
+   "description": "Write objects (the one body when left out; several go as one compound) and read it back (verify). Meshes (Mesh::Feature) go as they are to the mesh and scene formats (STL by default). Solids: STEP, IGES, BREP. One mesh: STL, OBJ, 3MF, PLY, OFF, VRML (wrl), X3D. A scene, a mesh per object with colors {label: \"#rrggbb\"}: glTF (glb, gltf), Collada (dae) — metres, Y up. 2D: DXF (R12) or SVG of a view (top | bottom | front | back | right | left | iso; hidden: true adds hidden lines on their own layer) or of a section at z mm (section) — circles and arcs kept as such, for laser and plasma cutting. format, or from path's extension; tolerance: the chord error, 0.01 mm. Meshing B-spline faces can be slow: an estimate over 20 s runs as a job (job_status); in a batch an estimate over a minute answers with the time first, the same call again runs it.",
    "inputs": [
     "colors",
     "format",
@@ -1715,7 +1715,7 @@
    "kind": "data"
   },
   "insp_run": {
-   "description": "Inspect with FreeCAD's own Inspection feature (left in the document): actual — a mesh, points or a body — or file (a scan: stl, obj, ply, off, 3mf, amf, asc, pcd, xyz) against nominals [bodies, meshes, points]. Nothing is aligned: put the actual where the nominal is first (object_align). search_radius mm (1; FreeCAD's own default is 0.05): a point further than that from every nominal reads out of reach, so it must reach past the tolerance. tolerance ±t or [low, high] mm gives the verdict. Distances are signed: + outside a solid nominal (material added), − inside. A mesh or scan is measured at its vertices; a body is meshed first (deflection 0.1 mm, points every spacing mm, default 1% of its size, at most cap 60000) and that hidden mesh measured (how says so). thickness is stored but FreeCAD 1.1 does not use it. Cost grows with points × nominal faces: a free-form body against a big scan takes minutes — raise spacing first. Reply: points, measured, outOfReach, min, max, mean, rms, stdDev, inTolerancePercent, verdict (pass only when all are in tolerance and none out of reach), worst [{ at, distance }], health.",
+   "description": "Inspect with FreeCAD's own Inspection feature (left in the document): actual — a mesh, points or a body — or file (a scan: stl, obj, ply, off, 3mf, amf, asc, pcd, xyz) against nominals [bodies, meshes, points]. Nothing is aligned: put the actual where the nominal is first (object_align). search_radius mm (1; FreeCAD's own default is 0.05): a point further than that from every nominal reads out of reach, so it must reach past the tolerance. tolerance ±t or [low, high] mm gives the verdict. Distances are signed: + outside a solid nominal (material added), − inside. A mesh or scan is measured at its vertices; a body is meshed first (deflection 0.1 mm, points every spacing mm, default 1% of its size, at most cap 60000) and that hidden mesh measured (how says so). thickness is stored but FreeCAD 1.1 does not use it. Cost grows with points × nominal faces: a free-form body against a big scan takes minutes — raise spacing first. Reply: points, measured, outOfReach, min, max, mean, rms, stdDev, inTolerancePercent, verdict (pass only when all are in tolerance and none out of reach), worst [{ at, distance }], health. An estimate over a minute: the first call answers with the time and runs nothing, the same call again runs it.",
    "inputs": [
     "actual",
     "cap",
@@ -2384,7 +2384,7 @@
    "kind": "data"
   },
   "part_from_mesh": {
-   "description": "A mesh made a solid, every triangle a face: mesh (an object) or file (STL, OBJ …); tolerance sews it, refine (default) merges flat triangles. For a closed, modest mesh: over maxFacets (60000) refused (meshobj_decimate first); thousands of faces already make it and every later boolean slow, the window frozen meanwhile. Of several pieces only the largest becomes the solid (note says so).",
+   "description": "A mesh made a solid, every triangle a face: mesh (an object) or file (STL, OBJ …); tolerance sews it, refine (default) merges flat triangles. For a closed, modest mesh: over maxFacets (60000) refused (meshobj_decimate first); thousands of faces already make it and every later boolean slow, the window frozen meanwhile. Of several pieces only the largest becomes the solid (note says so). refine about doubles the time; an estimate over a minute: the first call answers with the time and runs nothing, the same call again runs it.",
    "inputs": [
     "file",
     "maxFacets",

@@ -54,7 +54,7 @@ FAKE_WINDOW = textwrap.dedent('''
     import json, os, socket, sys, threading, time
     home, port = os.environ["AGENTLINK_HOME"], int(os.environ["AGENTLINK_WINDOW_PORT"])
     state = {"beat": True, "dialog": None, "popup": None, "docs": [{"name": "Plate", "label": "Plate", "file": "/tmp/Plate.FCStd", "modified": True}]}
-    if os.environ.get("FAKE_DOCS") and "--stray" not in sys.argv and not os.path.exists(os.path.join(home, "first-window")):
+    if os.environ.get("FAKE_DOCS") and not any(a.startswith("--") for a in sys.argv[1:]) and not os.path.exists(os.path.join(home, "first-window")):
         state["docs"] = json.loads(os.environ["FAKE_DOCS"])
         open(os.path.join(home, "first-window"), "w").write("1")
     elif os.environ.get("FAKE_DOCS"):
@@ -66,6 +66,18 @@ FAKE_WINDOW = textwrap.dedent('''
         tmp = tempfile.gettempdir()
         state["docs"] = [{"name": "Plate_recovered", "label": "Plate (recovered 10:00)", "file": os.path.join(tmp, "agentlink-recovered-new", "Plate_recovered.FCStd")},
                          {"name": "Old_recovered", "label": "Old (recovered 00:17)", "file": os.path.join(tmp, "agentlink-recovered-old", "Old_recovered.FCStd")}]
+    if "--unsaved" in sys.argv:
+        # Started again after a hang (M18, 18 Nov): FreeCAD's own copy of a
+        # document never saved, named otherwise than app_recover's answer,
+        # and an old recovered copy from a temporary folder.
+        import tempfile
+        tmp = tempfile.gettempdir()
+        state["docs"] = [{"name": "M18Build001", "label": "M18Build (recovered)", "file": os.path.join(tmp, "fc_recovery_files", "M18Build", "Document.xml")},
+                         {"name": "Old_recovered", "label": "Old (recovered 00:17)", "file": os.path.join(tmp, "agentlink-recovered-old", "Old_recovered.FCStd")}]
+    if "--recovery-stuck" in sys.argv:
+        # Document Recovery the link pressed (Cancel) that stayed up.
+        state["dialog"] = {"class": "Gui::Dialog::DocumentRecovery", "title": "Document Recovery", "text": "Press 'Start Recovery' to recover",
+                           "buttons": ["Start Recovery", "Cleanup..."], "since": time.time() - 30, "pressed": "Cancel", "pressTries": 1}
     def beat():
         while True:
             if state["beat"]:
@@ -545,6 +557,51 @@ class RestartSavedReopened(Sup):
         for e in rec:
             self.assertEqual(len(e["docs"]), len(set(e["docs"])), e)
         self.assertEqual(rec[-1]["docs"].count("StemV2"), 1)
+
+
+# Live, M18 (18 Nov): after the watchdog stopped FreeCAD, the restart
+# recovered "M18Build (recovered)" and then closed it as a stray; the
+# document was never saved, so its work was lost. A copy of a document
+# never saved is kept open, and the answer says so.
+class RestartKeepsUnsavedCopy(Sup):
+    window = True
+    relaunch_args = ["--unsaved"]
+    extra_env = {"FAKE_DOCS": json.dumps([{"name": "M18Build", "label": "M18Build", "file": "", "modified": True}])}
+
+    def test_unsaved_copy_kept_old_copy_closed(self):
+        self.call("ping")
+        err, out = self.call("hang", timeout=90)
+        self.assertTrue(err)
+        msg = out["error"]["message"]
+        self.assertIn("kept open, as copies of work never saved to a file: M18Build (recovered)", msg)
+        self.assertIn("doc_save", msg)
+        self.assertIn("closed again as they were not open before the restart: Old (recovered 00:17)", msg)
+        time.sleep(1.0)
+        hb = json.load(open(os.path.join(self.home, "heartbeat.json")))
+        self.assertEqual([d["name"] for d in hb["docs"]], ["M18Build001"])
+        log = [json.loads(ln) for ln in open(os.path.join(self.home, "watchdog.log")) if ln.strip()]
+        ev = [e for e in log if e.get("event") == "strays"]
+        self.assertEqual(ev[-1]["kept"], [{"document": "M18Build (recovered)", "why": "unsaved"}])
+        self.assertEqual(ev[-1]["closed"], ["Old (recovered 00:17)"])
+
+
+# Live, M18 (18 Nov): the watchdog log said pressed: cancel, yet Document
+# Recovery stayed up about 5 min; a dialog_answer { button: Cancel } then
+# freed the window. The supervisor verifies it and answers it again.
+class RestartRecoveryDialogStuck(Sup):
+    window = True
+    relaunch_args = ["--recovery-stuck"]
+
+    def test_recovery_dialog_answered_again(self):
+        self.call("ping")
+        err, out = self.call("hang", timeout=120)
+        self.assertTrue(err)
+        msg = out["error"]["message"]
+        self.assertIn("Document Recovery stayed up after the link's press: answered Cancel again (1 time)", msg)
+        log = [json.loads(ln) for ln in open(os.path.join(self.home, "watchdog.log")) if ln.strip()]
+        self.assertTrue(any(e.get("by") == "supervisor" and e.get("pressed") == "Cancel" and e.get("answered") for e in log), log)
+        hb = json.load(open(os.path.join(self.home, "heartbeat.json")))
+        self.assertIsNone(hb["dialog"])
 
 
 class RestartHelpers(unittest.TestCase):

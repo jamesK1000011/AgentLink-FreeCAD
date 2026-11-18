@@ -34,7 +34,46 @@ BUSY_AFTER = 10.0
 # Agent Link's own, and those add-ons declare (a family's PINNED_FREE,
 # families.PINNED_FREE). The recovery tool's name stays here only until its
 # add-on declares it.
-PINNED_FREE = {"doc_open", "doc_new", "doc_switch", "session_state", "tool_groups", "guide_read", "app_recover", "dialog_answer", "usage_report", "doc_close", "report_read"}
+PINNED_FREE = {"doc_open", "doc_new", "doc_switch", "session_state", "tool_groups", "guide_read", "app_recover", "dialog_answer", "usage_report", "doc_close", "report_read",
+               "tool_find", "job_status", "crash_collect", "app_extensions", "queue_go"}
+# Of those, the reads of the catalogue, the guides and the session that need
+# no document at all (live, 18 Nov: tool_find was refused "AgentLink was
+# closed"): they leave the word that the document was closed for the next
+# call that works on one.
+CATALOGUE_READS = {"tool_find", "tool_groups", "guide_read", "usage_report", "report_read", "job_status", "crash_collect", "app_extensions"}
+
+
+def _batch_calls(line):
+    """The tool names of a batch call's calls, or None for another call."""
+    try:
+        m = json.loads(line)
+        p = m.get("params") or {}
+        if p.get("name") != "batch":
+            return None
+        calls = (p.get("arguments") or {}).get("calls")
+        if not isinstance(calls, list) or not calls:
+            return None
+        return [c.get("tool") if isinstance(c, dict) else None for c in calls]
+    except (ValueError, AttributeError):
+        return None
+
+
+def pinned_free_call(line, name):
+    """True when this call is answered without the pinned document: a
+    pinned-free tool, or a batch of nothing else."""
+    if name is None or pinned_free(name):
+        return True
+    names = _batch_calls(line) if name == "batch" else None
+    return bool(names) and all(isinstance(n, str) and pinned_free(n) for n in names)
+
+
+def catalogue_call(line, name):
+    """A read of the catalogue, a guide or the session (or a batch of
+    nothing else): it leaves the closed document's word for the next call."""
+    if name in CATALOGUE_READS:
+        return True
+    names = _batch_calls(line) if name == "batch" else None
+    return bool(names) and all(n in CATALOGUE_READS for n in names)
 
 
 def pinned_free(name):
@@ -614,6 +653,31 @@ def press(d, label):
     return False
 
 
+# A dialog pressed by its set answer and still in front this long is pressed
+# again (gui_link _press_and_verify), at most PRESS_TRIES times in all.
+PRESS_RETRY = 4.0
+PRESS_TRIES = 4
+
+
+def press_hard(d, label, tries):
+    """press, harder at each try: the button or reject (tries 0 and 1),
+    then QDialog.done(Rejected), then hide and close."""
+    if tries < 2:
+        return press(d, label)
+    w = d.get("widget")
+    if w is None:
+        return False
+    try:
+        if tries == 2 and hasattr(w, "done"):
+            w.done(0)
+        else:
+            w.hide()
+            w.close()
+        return True
+    except Exception:
+        return False
+
+
 def task_info():
     """The task panel open in the window (Combo View's Tasks), if any:
     { title, buttons, widget } — FreeCAD's task dialogs are not modal, so
@@ -809,11 +873,15 @@ class Link:
                 # app_restart (launch mark), or a restart still reopening.
                 act = keep.dialog_answer_for(d, ours=keep.launched_by_us() or restarting, restarting=restarting,
                                              save_rule=getattr(s, "restart_save", "agent") if s else "agent", agent_docs=sorted(getattr(s, "agent_docs", ()) or ()) if s else [])
-                if act[0] == "press" and press(d, act[1]):
-                    d["pressed"] = act[1]
-                    keep.log_watchdog({"event": "dialog", "title": d["title"], "pressed": act[1]})
+                if act[0] == "press":
+                    self._press_and_verify(d, key, act[1])
             else:
                 self._dialog = None
+                pr = getattr(self, "_press", None)
+                if pr is not None:
+                    # Verified: the dialog it pressed is gone.
+                    self._press = None
+                    keep.log_watchdog({"event": "dialog", "title": pr[0][1], "gone": True, "tries": pr[2]})
             # A menu or drop-down list in front (a popup, which no modal
             # check sees): in the heartbeat too, with how long it has been
             # open, so the supervisor can tell a call held by it.
@@ -864,6 +932,38 @@ class Link:
             })
         except Exception:
             pass
+
+    def _press_and_verify(self, d, key, label):
+        """Press a dialog's set answer, and verify it on the next beats: the
+        same dialog still in front PRESS_RETRY s after a press is pressed
+        again, harder each time (press_hard), up to PRESS_TRIES. The
+        heartbeat says "pressed" only while a press may still work; after
+        the last try it says pressFailed, so the supervisor answers the call
+        "blocked" rather than wait on a press that did not take (live, 18
+        Nov: the log said pressed: cancel and Document Recovery stayed up
+        about 5 min)."""
+        from . import keep
+
+        now = time.time()
+        pr = getattr(self, "_press", None)
+        if pr is None or pr[0] != key:
+            pr = (key, 0.0, 0)
+        tries = pr[2]
+        if tries < PRESS_TRIES and (tries == 0 or now - pr[1] >= PRESS_RETRY):
+            ok = press_hard(d, label, tries)
+            tries += 1
+            pr = (key, now, tries)
+            if ok:
+                keep.log_watchdog({"event": "dialog", "title": d["title"], "pressed": label, **({"try": tries} if tries > 1 else {})})
+        self._press = pr
+        if tries < PRESS_TRIES or now - pr[1] < PRESS_RETRY:
+            d["pressed"] = label
+            d["pressTries"] = tries
+        else:
+            d["pressFailed"] = tries
+            if not getattr(self, "_press_failed_said", None) == key:
+                self._press_failed_said = key
+                keep.log_watchdog({"event": "dialog", "title": d["title"], "pressFailed": tries})
 
     def _busy_beat(self):
         """For the heartbeat, while a call is in hand: since when (busySince),
@@ -1427,7 +1527,7 @@ class Link:
             self._ready()
             name = _tool_name(line)
             gone = getattr(self.session, "closed_doc", None) if self.session else None
-            if gone and name is not None and not pinned_free(name):
+            if gone and not pinned_free_call(line, name):
                 self.session.closed_doc = None
                 try:
                     mid = json.loads(line).get("id")
@@ -1438,7 +1538,7 @@ class Link:
                 self._write(f, reply)
                 self._meter_refused(line, reply)
                 return
-            if self.session:
+            if self.session and not catalogue_call(line, name):
                 self.session.closed_doc = None
             if name in FRONT_TOOLS and self.session is not None:
                 front = FreeCAD.ActiveDocument

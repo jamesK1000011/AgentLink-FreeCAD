@@ -376,13 +376,25 @@ def newer_copies(listing, since):
     return out
 
 
-def strays(before, recovered, now_docs):
+def base_label(label):
+    """A label without its "(recovered …)" mark: the document it is a copy of."""
+    return RECOVERED_LABEL.sub("", str(label or "")).strip()
+
+
+def _copy_candidates(before, recovered, now_docs):
     """Documents open in the FreeCAD just started that were not open when it
-    stopped: copies opened again from temporary folders (old recovered
-    copies). Not the copies just recovered, and not a file that was open."""
+    stopped and are copies (from a temporary folder, or "(recovered …)"),
+    each with whether it must be kept: (doc, why kept or None)."""
     files = {os.path.abspath(d["file"]) for d in before or [] if isinstance(d, dict) and d.get("file")}
     fresh = {r.get("document") for r in recovered or [] if isinstance(r, dict) and r.get("document")}
     fresh |= {r.get("as") for r in recovered or [] if isinstance(r, dict) and r.get("as")}
+    # The documents open at the stop that were never saved to a file of
+    # their own (no file, or one in a temporary folder), by label: a copy
+    # of one of them may be the only copy of its work, never a stray (live,
+    # 18 Nov: "M18Build (recovered)", of a document never saved, was closed
+    # as one and all its work was lost).
+    unsaved = {base_label(d.get("label") or d.get("name")) for d in before or []
+               if isinstance(d, dict) and (d.get("label") or d.get("name")) and (not d.get("file") or temp_copy(d.get("file")))}
     out = []
     for d in now_docs or []:
         if not isinstance(d, dict) or not d.get("name"):
@@ -396,8 +408,30 @@ def strays(before, recovered, now_docs):
         # reopened from wherever it was kept, not open at the stop.
         if not temp_copy(f) and not RECOVERED_LABEL.search(str(d.get("label") or "")):
             continue
-        out.append(d)
+        if base_label(d.get("label") or d.get("name")) in unsaved:
+            out.append((d, "unsaved"))
+        elif d.get("modified"):
+            out.append((d, "changed"))
+        else:
+            out.append((d, None))
     return out
+
+
+def strays(before, recovered, now_docs):
+    """Documents open in the FreeCAD just started that were not open when it
+    stopped: copies opened again from temporary folders (old recovered
+    copies). Not the copies just recovered, not a file that was open, not a
+    copy of a document never saved that was open at the stop (kept_copies:
+    it may be the only copy of its work), and not a copy with changes of
+    its own."""
+    return [d for d, why in _copy_candidates(before, recovered, now_docs) if why is None]
+
+
+def kept_copies(before, recovered, now_docs):
+    """The copies strays leaves open: [(doc, why)], why "unsaved" (a copy
+    of a document open at the stop and never saved: maybe its only copy)
+    or "changed" (changes of its own)."""
+    return [(d, why) for d, why in _copy_candidates(before, recovered, now_docs) if why is not None]
 
 
 def stop_pid(pid, grace=10.0):
@@ -605,11 +639,57 @@ class Window:
         """gui_unstick on a connection of its own (the one in use waits on
         the call a menu holds): what it closed, or None when the window did
         not answer."""
+        return self.side_call("gui_unstick", {"all": True} if all_ else {}, timeout)
+
+    def settle_dialog(self, old_pid, t0, wait=45.0, tries=3):
+        """After a restart, FreeCAD's Document Recovery the link pressed but
+        that stayed up (live, 18 Nov: the log said pressed: cancel, the
+        dialog stayed about 5 min and the heartbeat went stale; a
+        dialog_answer { button: Cancel } then freed the window): verified
+        here from the new window's heartbeat, and answered again through a
+        connection of its own (dialog_answer Cancel) while it stays. Ends at
+        once when the new window beats with nothing in front. The tries it
+        took (0: none needed)."""
+        start = time.time()
+        done, end, seen = 0, start + wait, None
+        while time.time() < end:
+            hb = heartbeat()
+            if not (hb and hb.get("pid") != old_pid and float(hb.get("t") or 0) > t0):
+                if time.time() - start > 15.0:
+                    return done  # no heartbeat of the new window: nothing to verify by
+                time.sleep(0.5)
+                continue
+            now = time.time()
+            fresh = now - float(hb.get("t") or 0) < 8.0
+            dlg = hb.get("dialog")
+            if fresh and not dlg:
+                return done
+            if dlg and keep is not None and keep.dialog_answer_for(dlg, ours=True)[0] == "press" and "recover" in (str(dlg.get("title")) + str(dlg.get("text"))).lower():
+                seen = dlg
+            if seen is None and not fresh:
+                return done  # held by something other than Document Recovery: the watchdog's own rules
+            stuck = seen is not None and (not fresh or dlg.get("pressFailed") or (dlg.get("pressed") and now - float(dlg.get("since") or now) > 8.0))
+            if stuck and done < tries:
+                got = self.side_call("dialog_answer", {"button": "Cancel"}, timeout=10.0)
+                done += 1
+                if keep is not None:
+                    keep.log_watchdog({"event": "dialog", "by": "supervisor", "title": seen.get("title"), "pressed": "Cancel", "try": done, "answered": got is not None})
+                time.sleep(4.0)
+                continue
+            if stuck:
+                return done
+            time.sleep(1.0)
+        return done
+
+    def side_call(self, tool, args, timeout=6.0):
+        """One call on a connection of its own, beside the one in use: its
+        answer (the tool's JSON), or None when the window did not answer or
+        refused it."""
         tmp = Window(lambda line: None)
         tmp.off = False
         if not tmp._open():
             return None
-        line = json.dumps({"jsonrpc": "2.0", "id": f"__unstick{time.time()}", "method": "tools/call", "params": {"name": "gui_unstick", "arguments": {"all": True} if all_ else {}}})
+        line = json.dumps({"jsonrpc": "2.0", "id": f"__side{time.time()}", "method": "tools/call", "params": {"name": tool, "arguments": args or {}}})
         try:
             tmp.sock.settimeout(timeout)
             got = tmp._send(line, forward=False)
@@ -666,6 +746,7 @@ class Window:
             reports = keep.crash_reports() if keep else []
             return ("FreeCAD was started again in the background but its link did not come up within 2 minutes" +
                     (f" (newest crash report: {reports[0]})" if reports else "") + ". The hidden FreeCAD takes the next calls: app_recover lists the saved copies.")
+        settled = self.settle_dialog(hb.get("pid"), t0)
         reopen, rec_docs, old_copies = restart_split(docs)
         if reopen:
             newer = newer_copies(self.ask("app_recover", {"action": "list"}, timeout=30), hb.get("t"))
@@ -684,6 +765,8 @@ class Window:
         if not got:
             return "FreeCAD is back (started in the background); recovering its documents did not answer — app_recover lists the saved copies."
         parts = []
+        if settled:
+            parts.append(f"FreeCAD's Document Recovery stayed up after the link's press: answered Cancel again ({settled} time{'s' if settled > 1 else ''})")
         reopened = once(reopened + reopened_by_recover(got))
         if reopened:
             parts.append("opened again from their own files (saved, unchanged): " + ", ".join(reopened))
@@ -693,18 +776,23 @@ class Window:
             parts.append(f"{r.get('label')}: no copy opened ({r.get('why')})")
         if old_copies:
             parts.append("not recovered again (earlier recovered copies nobody changed): " + ", ".join(d.get("label") or d.get("name") for d in old_copies))
-        shut, left = self.close_strays(docs, got.get("recovered") or [], hb.get("pid"), t0)
+        shut, left, kept = self.close_strays(docs, got.get("recovered") or [], hb.get("pid"), t0)
         if shut:
             parts.append("closed again as they were not open before the restart: " + ", ".join(shut))
         if left:
             parts.append("not open before the restart but left open as they have changes: " + ", ".join(left))
+        unsaved = [lab for lab, why in kept if why == "unsaved"]
+        if unsaved:
+            parts.append("kept open, as copies of work never saved to a file: " + ", ".join(unsaved) +
+                         " (doc_save each to a file of its own, with the person's OK; closed unsaved, its work is lost)")
         return "FreeCAD is back (started in the background). " + ("; ".join(parts) + ". " if parts else "No documents to recover. ") + \
             "Recovered copies open beside the files as \"(recovered …)\"; the person's own files are untouched — app_recover { accept } saves one over its file, with their OK."
 
     def close_strays(self, before, recovered, old_pid, t0, wait=8.0):
         """After a restart, old recovered copies the new window opened from
         temporary folders (not open at the restart) closed again; one with
-        changes of its own is left. (closed labels, left labels)"""
+        changes of its own is left, and a copy of a document never saved is
+        kept (kept_copies). (closed labels, left labels, kept [(label, why)])"""
         hb, end = None, time.time() + wait
         while time.time() < end:
             hb = heartbeat()
@@ -713,14 +801,19 @@ class Window:
             hb = None
             time.sleep(0.5)
         if not hb:
-            return [], []
-        shut, left = [], []
-        for d in strays(before, recovered, hb.get("docs") or []):
+            return [], [], []
+        shut = []
+        now_docs = hb.get("docs") or []
+        kept = [(d.get("label") or d["name"], why) for d, why in kept_copies(before, recovered, now_docs)]
+        # A copy with changes of its own is said with those doc_close left.
+        left = [lab for lab, why in kept if why == "changed"]
+        kept = [(lab, why) for lab, why in kept if why != "changed"]
+        for d in strays(before, recovered, now_docs):
             got = self.ask("doc_close", {"documents": [d["name"]]}, timeout=20)
             (shut if got is not None else left).append(d.get("label") or d["name"])
-        if (shut or left) and keep is not None:
-            keep.log_watchdog({"event": "strays", "closed": shut, "left": left})
-        return shut, left
+        if (shut or left or kept) and keep is not None:
+            keep.log_watchdog({"event": "strays", "closed": shut, "left": left, "kept": [{"document": lab, "why": why} for lab, why in kept]})
+        return shut, left, kept
 
     def call(self, line):
         """Send one call to the window and pass its answer on. False when the
