@@ -44,6 +44,7 @@ WORKBENCHES = {"mine_": "MineWorkbench"}  # tool or prefix → the workbench bro
 COMMANDS = {"mine_do": "Mine_Do"}    # tool or prefix → the command whose button (and menu item) lights for them
 NO_BUTTON = {"mine_do_quiet"}        # tools or prefixes that light no button, even where a COMMANDS prefix matches
 NO_ECHO = ("mine_point",)            # tools or prefixes never shown as they run (no bench, button, caption, selection; still in Activity)
+CAPTIONS = {"mine_share": ["Shared {document} with {to}", "Shared the work"]}  # tool or prefix → the caption over the 3D view (see below)
 PAGES = ("mine_page_",)              # prefixes of tools working on a drawing page (opened, view not reframed)
 # def command_for(name, args): ...   # optional: the command for a call by its arguments, or None
 
@@ -56,6 +57,19 @@ def tools(session):
 ```
 
 - **The live echo.** When the agent runs one of your tools, the bench from `WORKBENCHES` comes up (use your own workbench where the tool has a button there; a drawing-page tool goes to `TechDrawWorkbench`; safety and settings tools declare none) and the button from `COMMANDS` lights, unless the tool is in `NO_BUTTON` (an exact name or a prefix), which always wins. A bench not loaded in this window is left alone and logged once, never an error. Neither is needed for a tool to work.
+- **Your captions.** `CAPTIONS` gives the words the window shows over the 3D
+  view and in the status bar for your tools: a template, a list of
+  templates (the same rules as `PHRASES`: `{fields}` from the call's
+  arguments or its answer, the first that fits wins), or a callable
+  `fn(name, args, body) -> words or None` (`body` is `None` while the call
+  runs). The key is a tool's name or a prefix; the longest match wins. The
+  words are said when the call starts (arguments only), and again when it
+  ends, after any tools it ran inside it, so the last inner step's words
+  never stand for your call; a tool in `NO_ECHO` still gets its caption at
+  the end. When nothing fits, Agent Link says neutral words ("Working on
+  it", "Done", "That step: refused (…)"), never the tool's name. The
+  Activity row keeps `PHRASES`. Agent Link has no words of its own for an
+  add-on's tools: declare them here.
 - **Keep your core free of Agent Link.** Put the work in your own API (plain
   functions on FreeCAD) and keep the family a thin layer over it. Raise
   `ToolError(code, message)` with a message that says what to do instead.

@@ -449,6 +449,7 @@ tests/test_failure_trace.py
 tests/test_famfix.py
 tests/test_feature.py
 tests/test_feature_more.py
+tests/test_fem_faults_1118.py
 tests/test_fem_more.py
 tests/test_fem_route.py
 tests/test_files.py
