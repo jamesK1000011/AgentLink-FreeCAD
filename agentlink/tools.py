@@ -1441,11 +1441,14 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             pass
         else:
             info[fam.GROUP] = fam.INFO + (f" — {fam.CREDIT}" if external and getattr(fam, "CREDIT", None) and fam.CREDIT not in fam.INFO else "")
-        # A family says itself that it belongs in the default list.
-        if getattr(fam, "LEAN", False):
+        # A family says itself that it belongs in the default list. An
+        # add-on does so only for a group of its own: a hub group's place
+        # (dev, porting …) is the hub's (red team, 2026-11-18).
+        if getattr(fam, "LEAN", False) and not (external and fam.GROUP in GROUP_INFO):
             lean_groups.add(fam.GROUP)
         replaced.update(g for g in (getattr(fam, "REPLACES", ()) or ()) if isinstance(g, str) and g != "core")
         added = 0
+        own = []
         for t in made:
             t.group = fam.GROUP if external else GROUP_OF.get(t.name, fam.GROUP)
             if t.name in seen:
@@ -1457,7 +1460,9 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             seen[t.name] = t.group
             tools.append(t)
             added += 1
+            own.append(t.name)
         if external:
+            families.owned(fam, own)
             extstate.loaded(getattr(fam, "EXTENSION", None) or getattr(fam, "__name__", "?"), fam.GROUP, added)
     try:
         window = bool(FreeCAD.GuiUp)

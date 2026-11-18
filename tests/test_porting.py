@@ -280,6 +280,21 @@ class Cookbooks(Home):
         self.session = types.SimpleNamespace(out_dir=os.path.join(self.tmp, "out"), server=self.srv, doc="DOC")
         os.makedirs(self.session.out_dir)
         self.tools = {t.name: t for t in fam.tools(self.session)}
+        # The window's OK dialog, stood in: the requests it was shown.
+        from agentlink import person_ok
+
+        person_ok.reset()
+        self.shown = []
+        person_ok.SHOW = self.shown.append
+        self.addCleanup(setattr, person_ok, "SHOW", None)
+        self.addCleanup(person_ok.reset)
+
+    def press(self, spontaneous=True, after=2.0):
+        """The person presses Approve on the newest dialog shown."""
+        from agentlink import person_ok
+
+        req = self.shown[-1]
+        return person_ok.pressed(req, spontaneous, now=req["opened"] + after)
 
     def call(self, _tool, **a):
         return self.tools[_tool].fn(a)
@@ -302,7 +317,10 @@ class Cookbooks(Home):
         return r
 
     def approve(self, name="mine"):
-        return self.call("cookbook_approve", name=name, confirm=f"approve cookbook {name}")
+        r = self.call("cookbook_approve", name=name)
+        self.assertTrue(r.get("pending"), r)
+        self.assertTrue(self.press())
+        return self.call("cookbook_approve", name=name)
 
     # the format
 
@@ -374,24 +392,52 @@ class Cookbooks(Home):
         row = self.call("cookbook_list")["cookbooks"][0]
         self.assertEqual((row["cookbook"], row["state"]), ("mine", "no"))
         self.assertEqual(row["entries"][0]["entry"], "mine_do")
-        self.assertIn("approve cookbook mine", row["next"])
+        self.assertIn("presses Approve", row["next"])
         msg = self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_do")
         self.assertIn("cookbook_approve", msg)
         self.assertIn("Nothing was run", msg)
         self.assertEqual(self.srv.calls, [])
 
-    def test_the_ok_needs_the_typed_words(self):
+    def test_the_ok_is_a_press_in_the_window(self):
         self.install()
-        for c in ("approve mine", "yes", "approve cookbook other", ""):
-            self.refused("cookbook_approve", "not_allowed", name="mine", confirm=c)
+        # A typed confirm is not an argument any more: the words an agent can type count for nothing.
+        r = self.call("cookbook_approve", name="mine")
+        self.assertTrue(r["pending"])
+        self.assertIn("Approve", r["next"])
+        self.assertEqual(self.call("cookbook_list")["cookbooks"][0]["state"], "no")
+        self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_do")
+        # A press that Agent Link sends (not spontaneous) or one too fast does not count.
+        self.assertFalse(self.press(spontaneous=False))
+        self.assertFalse(self.press(after=0.2))
         self.assertEqual(self.call("cookbook_list")["cookbooks"][0]["state"], "no")
         sha = self.call("cookbook_show", name="mine")["sha256"]
-        self.refused("cookbook_approve", "invalid_state", name="mine", confirm="approve cookbook mine", sha256="0" * 64)
-        r = self.call("cookbook_approve", name="mine", confirm="approve cookbook mine", sha256=sha)
+        self.refused("cookbook_approve", "invalid_state", name="mine", sha256="0" * 64)
+        self.call("cookbook_approve", name="mine", sha256=sha)
+        self.assertTrue(self.press())
+        r = self.call("cookbook_approve", name="mine", sha256=sha)
+        self.assertEqual(r["approved"], "mine")
         self.assertEqual(r["sha256"], sha)
         r = self.call("cookbook_run", cookbook="mine", entry="mine_do")
         self.assertEqual(r["ran"], "command")
         self.assertEqual(self.srv.calls, [{"name": "cmd_run", "arguments": {"name": "Mine_Do"}}])
+
+    def test_headless_the_ok_is_refused(self):
+        from agentlink import person_ok
+
+        self.install()
+        person_ok.SHOW = None  # no stand-in, and no FreeCAD window here
+        self.refused("cookbook_approve", "unavailable", name="mine")
+
+    def test_a_file_changed_before_the_press_is_not_approved(self):
+        self.install()
+        self.call("cookbook_approve", name="mine")
+        p = cookbook.file_of("mine")
+        doc = json.load(open(p))
+        doc["entries"]["mine_do"]["recipe"]["command"] = "Mine_Other"
+        with open(p, "w") as f:
+            json.dump(doc, f)
+        self.press()
+        self.assertEqual(self.call("cookbook_list")["cookbooks"][0]["state"], "no")
 
     def test_the_ok_shares_the_macro_store(self):
         os.makedirs(self.home)
@@ -443,11 +489,11 @@ class Cookbooks(Home):
         p = cookbook.file_of("mine")
         doc = json.load(open(p))
         doc["entries"]["mine_s"] = {"description": "Run the steps of the mine add-on.",
-                                    "recipe": {"script": {"calls": [{"tool": "cookbook_approve", "arguments": {"name": "x", "confirm": "approve cookbook x"}}]}}}
+                                    "recipe": {"script": {"calls": [{"tool": "cookbook_approve", "arguments": {"name": "x"}}]}}}
         with open(p, "w") as f:
             json.dump(doc, f)
         self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_s")
-        self.refused("cookbook_approve", "invalid_input", name="mine", confirm="approve cookbook mine")
+        self.refused("cookbook_approve", "invalid_input", name="mine")
         self.assertEqual(self.srv.calls, [])
 
     def test_tools_cannot_write_the_store_or_the_cookbooks(self):
@@ -483,7 +529,7 @@ class Cookbooks(Home):
         # A file whose name says another cookbook is refused at the OK.
         with open(cookbook.file_of("other"), "w") as f:
             json.dump(book(), f)
-        self.refused("cookbook_approve", "invalid_input", name="other", confirm="approve cookbook other")
+        self.refused("cookbook_approve", "invalid_input", name="other")
 
     def test_python_recipe(self):
         pkgdir = os.path.join(self.tmp, "pkgs", "minepkg")
@@ -493,6 +539,8 @@ class Cookbooks(Home):
         with open(os.path.join(pkgdir, "api.py"), "w") as f:
             f.write("def fit(doc, gap, deep=False):\n    return {'doc': doc, 'gap': gap, 'deep': deep}\n")
         sys.path.insert(0, os.path.dirname(pkgdir))
+        cookbook.ADDON_ROOTS = [os.path.dirname(pkgdir)]  # the stand-in Mod folder
+        self.addCleanup(setattr, cookbook, "ADDON_ROOTS", None)
         try:
             doc = book(mine_fit={"description": "Fit the part with a gap in mm.", "recipe": {"python": {
                 "module": "minepkg.api", "function": "fit", "document": True,

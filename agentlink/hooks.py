@@ -430,10 +430,47 @@ def emit(event, *args, **kw):
 _EXTENSIONS = {}
 
 
+# Tools no add-on extends (red team, 2026-11-18): a before hook could put
+# its own words in their arguments, so the person's OK and the settings
+# that guard code stay Agent Link's own.
+# An add-on keeps one of its own tools out of reach with keep_unextended().
+NOT_EXTENDED = {"cookbook_approve", "cookbook_unapprove", "cookbook_import", "cookbook_run", "app_extensions", "addon",
+                "pref_set", "pref_reset", "pref_import", "pref_pack", "agentlink_update", "batch",
+                "gui_input", "dialog_answer", "cmd_run", "menu_run"}
+
+
+def keep_unextended(name):
+    """No add-on extends this tool (an add-on's own OK, such as approving
+    a macro). Checked when the extensions are put on, so the order in
+    which add-ons load does not matter."""
+    NOT_EXTENDED.add(str(name))
+
+
+def extendable(name):
+    return name not in NOT_EXTENDED and "approve" not in str(name)
+DESCRIBE_MAX = 300
+
+
 def extend_tool(name, properties=None, before=None, after=None, describe=None):
     """describe: a sentence added to the tool's description, saying what the
-    extension's arguments and answers are."""
-    _EXTENSIONS.setdefault(name, []).append({"properties": dict(properties or {}), "before": before, "after": after, "describe": describe})
+    extension's arguments and answers are (one line, DESCRIBE_MAX characters
+    or fewer). A tool in NOT_EXTENDED, or with "approve" in its name, is
+    not extended: apply_extensions logs it and leaves it out."""
+    if describe is not None:
+        describe = " ".join(str(describe).split())[:DESCRIBE_MAX]
+    props = {k: v for k, v in dict(properties or {}).items() if isinstance(k, str) and k.isidentifier() and not k.startswith("_")}
+    _EXTENSIONS.setdefault(name, []).append({"properties": props, "before": before, "after": after, "describe": describe})
+    return extendable(name)
+
+
+def person_ok(kind, name, title, lines, sha=None, on_ok=None):
+    """The person's OK as a press in the FreeCAD window, for an add-on's own
+    approvals (a macro): agentlink/person_ok.py ask(). Answers {"ok": True}
+    or {"pending": True, "next": ...}; raises person_ok.Refused (code,
+    message) with no window. A typed confirm is never an OK."""
+    from . import person_ok as _p
+
+    return _p.ask(kind, name, title, lines, sha, on_ok)
 
 
 def apply_extensions(tools, session):
@@ -442,6 +479,9 @@ def apply_extensions(tools, session):
     for name, exts in _EXTENSIONS.items():
         t = by.get(name)
         if t is None:
+            continue
+        if not extendable(name):
+            _log(f"extend_tool({name!r}) ignored", ValueError("this tool holds the person's OK or guards code; no add-on extends it"))
             continue
         props = t.schema.setdefault("properties", {})
         for x in exts:

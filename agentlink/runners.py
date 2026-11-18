@@ -128,6 +128,7 @@ def _path(env, p):
 
 def _attrs(x, names):
     for k in names:
+        expr.safe_name(k.rstrip("?"), "attribute")
         if k.endswith("?"):
             x = getattr(x, k[:-1], None)
         elif isinstance(x, dict):
@@ -160,11 +161,11 @@ def value(e, env, helpers):
                 return value(t, env, helpers) if value(c, env, helpers) else value(f, env, helpers)
             if op == "set":
                 o, prop, v = (value(x, env, helpers) for x in arg)
-                setattr(o, prop, v)
+                setattr(o, expr.safe_name(prop, "property"), v)
                 return v
             if op == "do":
                 o, meth, *rest = arg
-                return getattr(value(o, env, helpers), meth)(*[value(x, env, helpers) for x in rest])
+                return getattr(value(o, env, helpers), expr.safe_name(meth, "method"))(*[value(x, env, helpers) for x in rest])
             if op == "not":
                 return not value(arg, env, helpers)
             if op == "vec":
@@ -385,10 +386,10 @@ def run_apply(name, e, a, helpers):
     o = env[t.get("on", "o")]
     env["o"] = o
     if t.get("copy"):
-        env["m"] = getattr(o, t["copy"]).copy()
+        env["m"] = getattr(o, expr.safe_name(t["copy"], "attribute")).copy()
     _finish_rules(rules, env, helpers)
     on = env["m"] if t.get("copy") else o
-    res = getattr(on, t["method"])(*[value(x, env, helpers) for x in t.get("call", [])])
+    res = getattr(on, expr.safe_name(t["method"], "method"))(*[value(x, env, helpers) for x in t.get("call", [])])
     env["result"] = res
     return _answer(e, env, helpers)
 
@@ -494,8 +495,8 @@ def _step(st, env, helpers):
             head, *mid, last = path.split(".")
             o = env[head]
             for k in mid:
-                o = getattr(o, k)
-            setattr(o, last, v)
+                o = getattr(o, expr.safe_name(k, "attribute"))
+            setattr(o, expr.safe_name(last, "property"), v)
     elif "do" in st:
         value(st["do"], env, helpers)
     elif "put" in st:

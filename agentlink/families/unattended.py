@@ -164,6 +164,18 @@ def tools(s):
         q["notice"] = None
         keep.save_queue(q)
 
+    def person_ok_for(action, name, url, why):
+        """The person's press in the window for one install, update or
+        removal (agentlink/person_ok.py): {"ok": True} once pressed, else
+        the pending answer. A typed confirm is not taken."""
+        from .. import person_ok
+
+        lines = [f"Action: {action}", f"Add-on: {name}", f"From: {url or 'the catalog or where it was installed from'}", f"Why it needs you: {why}."]
+        try:
+            return person_ok.ask("addon-" + action, name, f"{action.capitalize()} the add-on {name}?", lines, url or None)
+        except person_ok.Refused as e:
+            raise ToolError(e.code, e.message)
+
     helpers = {
         "modal": modal, "task_panel": task_panel, "press": lambda d, btn: gl("press")(d, btn), "press_task": lambda task, btn: gl("press_task")(task, btn),
         "fill": lambda d, text, item: gl("fill")(d, text, item), "back_out": lambda: gl("BACK_OUT"), "log_watchdog": lambda row: keep.log_watchdog(row),
@@ -173,6 +185,7 @@ def tools(s):
         "doc_by": doc_by, "doc_names": doc_names, "moved_to": moved_to, "gui_up": lambda: bool(getattr(FreeCAD, "GuiUp", False)), "bring_front": _bring_front,
         "bodies": lambda: s.bodies(),
         "queue_state": lambda: keep.queue_state(), "lifted": lifted, "preset": lambda: keep.preset(),
+        "person_ok": person_ok_for,
     }
 
     # ---- the Addon Manager, headless (I) ---------------------------------------------------
