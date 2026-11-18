@@ -659,6 +659,29 @@ class Delivery(unittest.TestCase):
         self.run.run(gi.parse_steps([{"type": "=2*3"}, {"key": "Return"}]))
         self.assertEqual([w for w, e in self.sent if e.t == "KeyPress"], ["spin", "expression", "expression", "expression", "expression"])
 
+    def test_a_key_that_deletes_its_widget_stops_there(self):
+        """Live 98d: Escape closed the task panel and deleted its spin box;
+        the key's release must not go to the deleted widget."""
+        self.edit.focused = True
+        send = self.run._send
+        dead = {}
+
+        def send_and_close(w, ev):
+            r = send(w, ev)
+            dead["yes"] = True
+            return r
+
+        self.run._send = send_and_close
+        alive = gi._alive
+        gi._alive = lambda w: not dead.get("yes") if w is self.edit else alive(w)
+        try:
+            out = self.run.run(gi.parse_steps([{"key": "Escape"}]))
+        finally:
+            gi._alive = alive
+        self.assertNotIn("error", out["steps"][0])
+        self.assertTrue(out["steps"][0]["closed"])
+        self.assertEqual(len(self.sent), 1)
+
     def shortcut_actions(self, *specs):
         class Seq:
             def __init__(self, t):
