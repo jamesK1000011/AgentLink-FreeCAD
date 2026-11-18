@@ -212,6 +212,28 @@ function checkStdio(x) {
   return { name: x.name, cache: x.cache, entry: x.entry }
 }
 
+/** A manifest's serverAddons: add-ons of a stdio server, not of FreeCAD
+ *  (addons.json's serverAddons; PrintLoop for OrcaSlicer's server). Each is
+ *  a repository of OWNER's at a pin, like a source, with server: the name of
+ *  a source's stdio server. They are fetched into the set's .server-addons
+ *  folder, never into FreeCAD's Mod folder, and publishStdio puts them in
+ *  that server's own app folder (app-<commit>/addons). [] when there are
+ *  none; null if one is not a list this launcher takes. */
+function checkServerAddons(list, sources) {
+  if (list === undefined || list === null) return []
+  if (!Array.isArray(list)) return null
+  const servers = new Set((sources || []).filter((s) => s.stdio).map((s) => s.stdio.name))
+  const out = []
+  for (const a of list) {
+    if (!a || !SAFE_NAME.test(a.repo || '') || !SAFE_NAME.test(a.dest || '') || !SAFE_NAME.test(a.branch || '') || !servers.has(a.server)) return null
+    if (a.folder && !safeRel(a.folder)) return null
+    if (a.pin && !/^(packaging\/pins|scripts\/bakeoff)\/[A-Za-z0-9._-]+$/.test(a.pin)) return null
+    if (out.some((x) => x.server === a.server && x.dest === a.dest)) return null
+    out.push({ repo: a.repo, branch: a.branch, folder: a.folder || '', dest: a.dest, pin: a.pin, server: a.server })
+  }
+  return out
+}
+
 /** The add-on folders a set holds. In FreeCAD's Mod folder, those written
  *  down at install (the person's other add-ons are not ours), else the
  *  built-in list; in a set of our own (fetched, bundled, a folder given),
@@ -234,6 +256,8 @@ function pythonPath(dir, lib) {
   return [...namesIn(dir).map((n) => path.join(dir, n)), lib].filter(Boolean).join(':')
 }
 const CACHE = path.join(HOME, '.config', 'freecad-agentlink')
+// The folder of a set that holds the stdio servers' add-ons.
+const SERVER_ADDONS = '.server-addons'
 
 async function getJson(url) {
   const r = await fetch(url, { headers: { 'User-Agent': 'freecad-agentlink', Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15000) })
@@ -348,14 +372,18 @@ async function resolveChannel(io = { headSha, getFile }, channels = CHANNELS) {
       const manifest = JSON.parse((await io.getFile(raw(c.manifest))).toString('utf8'))
       const sources = checkSources(manifest.sources)
       if (!sources) throw new Error(`${c.manifest} is not a list this launcher takes`)
-      const shas = await Promise.all(sources.map(async (s) => {
+      const serverAddons = checkServerAddons(manifest.serverAddons, sources)
+      if (!serverAddons) throw new Error(`${c.manifest}'s serverAddons is not a list this launcher takes`)
+      const pinOf = async (s) => {
         if (!s.pin) return io.headSha(s.repo, s.branch)
         const pinned = (await io.getFile(raw(s.pin))).toString('utf8').trim()
         if (!/^[0-9a-f]{40}$/.test(pinned)) throw new Error(`${s.pin} holds no commit`)
         return pinned
-      }))
+      }
+      const shas = await Promise.all(sources.map(pinOf))
+      const addonShas = await Promise.all(serverAddons.map(pinOf))
       if (c !== channels[0]) log(`update channel ${channels[0].repo}/${channels[0].branch} could not be read (${failed.join('; ')}): ${c.repo}/${c.branch} serves`)
-      return { channel: c, sha, sources, shas, companions: manifest.companions }
+      return { channel: c, sha, sources, shas, companions: manifest.companions, serverAddons, addonShas }
     } catch (e) {
       failed.push(`${c.repo}: ${e.message}`)
     }
@@ -389,11 +417,12 @@ async function update(check) {
     return { dir: from, version: v }
   }
   fs.mkdirSync(CACHE, { recursive: true })
-  const { channel: ch, sha: channel, sources, shas, companions } = await resolveChannel()
+  const { channel: ch, sha: channel, sources, shas, companions, serverAddons = [], addonShas = [] } = await resolveChannel()
   keepCompanions(companions)
   // '+t': fetched with the add-ons' tests; a copy fetched before, without
   // them, has another version and is fetched again.
-  const version = 'github+' + shas.map((x) => x.slice(0, 7)).join('+') + '+' + channel.slice(0, 7) + '+t'
+  // A server add-on's pin is in it too: a new pin is a new set, published again.
+  const version = 'github+' + [...shas, ...addonShas].map((x) => x.slice(0, 7)).join('+') + '+' + channel.slice(0, 7) + '+t'
   const st = readState()
   if (st.current === version && fs.existsSync(path.join(verDir(version), 'AgentLink'))) return { dir: verDir(version), version }
   if ((st.bad || []).includes(version)) {
@@ -402,17 +431,24 @@ async function update(check) {
   }
   const stage = fs.mkdtempSync(path.join(CACHE, 'stage-'))
   try {
-    for (const [i, s] of sources.entries()) {
+    // FreeCAD's add-ons at the set's top; a server's add-ons under
+    // .server-addons/<server>/ (a hidden folder: never a Mod folder, never
+    // on FreeCAD's path).
+    const fetches = [
+      ...sources.map((s, i) => [s, shas[i], path.resolve(stage, s.dest)]),
+      ...serverAddons.map((a, i) => [a, addonShas[i], path.resolve(stage, SERVER_ADDONS, a.server, a.dest)]),
+    ]
+    for (const [s, sha, into] of fetches) {
       // tests/ comes too: Agent Link's addon_test runs an add-on's own tests
       // in FreeCAD on this computer.
-      const listed = (await addonFiles(s, shas[i])).filter((p) => !/(^|\/)__pycache__\//.test(p))
+      const listed = (await addonFiles(s, sha)).filter((p) => !/(^|\/)__pycache__\//.test(p))
       const bad = listed.filter((p) => !safeRel(p))
       if (bad.length) throw new Error(`${s.repo}'s FILES names paths that are not plain file names inside it: ${bad.slice(0, 3).join(', ')}`)
       for (let k = 0; k < listed.length; k += 8) {
         await Promise.all(listed.slice(k, k + 8).map(async (f) => {
-          const url = `https://raw.githubusercontent.com/${OWNER}/${s.repo}/${shas[i]}/${inRepo(s.folder, f).split('/').map(encodeURIComponent).join('/')}`
-          const p = path.resolve(stage, s.dest, f)
-          if (!p.startsWith(path.resolve(stage, s.dest) + path.sep)) throw new Error(`${f}: outside ${s.dest}`)
+          const url = `https://raw.githubusercontent.com/${OWNER}/${s.repo}/${sha}/${inRepo(s.folder, f).split('/').map(encodeURIComponent).join('/')}`
+          const p = path.resolve(into, f)
+          if (!p.startsWith(into + path.sep)) throw new Error(`${f}: outside ${s.dest}`)
           const data = await getFile(url)
           fs.mkdirSync(path.dirname(p), { recursive: true })
           fs.writeFileSync(p, data)
@@ -425,6 +461,8 @@ async function update(check) {
     fs.writeFileSync(path.join(stage, '.sources.json'), JSON.stringify(sources))
     // Each add-on's commit by its Mod folder, for the stdio servers (publishStdio).
     fs.writeFileSync(path.join(stage, '.shas.json'), JSON.stringify(Object.fromEntries(sources.map((s, i) => [s.dest, shas[i]]))))
+    // The servers' add-ons with their commits, for publishStdio.
+    fs.writeFileSync(path.join(stage, SERVER_ADDONS + '.json'), JSON.stringify(serverAddons.map((a, i) => ({ ...a, sha: addonShas[i] }))))
     const verdict = check ? check(stage) : { ok: true }
     if (!verdict.ok) {
       writeState({ ...readState(), bad: [...(readState().bad || []), version].slice(-10) })
@@ -856,38 +894,76 @@ function publishStdio(modDir, setDir, home = os.homedir()) {
   } catch {
     return out
   }
+  // The servers' add-ons (addons.json's serverAddons) fetched with the set:
+  // none in a set from before them.
+  let extras = []
+  try {
+    const listed = JSON.parse(fs.readFileSync(path.join(setDir, SERVER_ADDONS + '.json'), 'utf8'))
+    const ok = checkServerAddons(listed, sources)
+    if (ok) extras = ok.map((a, i) => ({ ...a, sha: listed[i].sha })).filter((a) => /^[0-9a-f]{40}$/.test(a.sha || ''))
+  } catch {}
   for (const s of sources || []) {
     if (!s.stdio) continue
     const sha = shas[s.dest]
     const cache = path.join(home, String(s.stdio.cache).slice(2))
     const stateFile = path.join(cache, 'state.json')
     if (!/^[0-9a-f]{40}$/.test(sha || '') || !fs.existsSync(stateFile)) continue
+    const mine = extras.filter((a) => a.server === s.stdio.name)
+    // What was published: the server's commit, and each add-on's. A new pin
+    // of either publishes again.
+    const key = [sha, ...mine.map((a) => `${a.dest}@${a.sha}`)].join('+')
     const row = { name: s.stdio.name }
     try {
       const st = JSON.parse(fs.readFileSync(stateFile, 'utf8')) || {}
       const before = typeof st.current === 'string' ? st.current : null
       Object.assign(row, { from: before ? before.slice(0, 7) : 'bundled', to: before ? before.slice(0, 7) : 'bundled' })
-      if (st.hubPinned === sha) {
+      if (st.hubPinned === key) {
         row.note = 'unchanged since the last update'
         out.push(row)
         continue
       }
       const dir = path.join(cache, `app-${sha}`)
-      if (before !== sha) {
+      const fresh = `${dir}.new-${process.pid}`
+      const isNew = before !== sha || !fs.existsSync(path.join(dir, s.stdio.entry))
+      if (isNew) {
         const src = path.join(modDir, s.dest)
         if (!fs.existsSync(path.join(src, s.stdio.entry))) throw new Error(`no ${s.stdio.entry} in ${s.dest}`)
-        const fresh = `${dir}.new-${process.pid}`
         fs.rmSync(fresh, { recursive: true, force: true })
         fs.cpSync(src, fresh, { recursive: true, filter: (f) => !/(^|\/)__pycache__(\/|$)/.test(f) })
+      }
+      // The add-ons go in the app folder's own addons folder (orcalink/addons.py
+      // finds them from its own place), never in a folder the agent writes.
+      // A copy of the add-ons that came with the app is not kept: this
+      // folder holds only the pinned ones.
+      const appDir = isNew ? fresh : dir
+      const addons = path.join(appDir, 'addons')
+      const next = `${addons}.new-${process.pid}`
+      fs.rmSync(next, { recursive: true, force: true })
+      if (mine.length) {
+        for (const a of mine) {
+          const from = path.join(setDir, SERVER_ADDONS, a.server, a.dest)
+          if (!fs.existsSync(from)) throw new Error(`no ${a.dest} in the set fetched`)
+          fs.cpSync(from, path.join(next, a.dest), { recursive: true, filter: (f) => !/(^|\/)__pycache__(\/|$)/.test(f) })
+        }
+        // What the folder holds, so the running server sees a change of
+        // add-ons at the same commit (orcalink/reload.py).
+        fs.writeFileSync(path.join(next, '.id'), key + '\n')
+      }
+      const gone = `${addons}.old-${process.pid}`
+      if (fs.existsSync(addons)) fs.renameSync(addons, gone)
+      if (mine.length) fs.renameSync(next, addons)
+      fs.rmSync(gone, { recursive: true, force: true })
+      if (isNew) {
         fs.rmSync(dir, { recursive: true, force: true })
         fs.renameSync(fresh, dir)
       }
       const now = JSON.parse(fs.readFileSync(stateFile, 'utf8')) || {}
-      const next = before !== sha ? { ...now, current: sha, previous: before, hubPinned: sha, at: new Date().toISOString() } : { ...now, hubPinned: sha }
-      fs.writeFileSync(stateFile + '.tmp', JSON.stringify(next))
+      const st2 = before !== sha ? { ...now, current: sha, previous: before, hubPinned: key, at: new Date().toISOString() } : { ...now, hubPinned: key }
+      fs.writeFileSync(stateFile + '.tmp', JSON.stringify(st2))
       fs.renameSync(stateFile + '.tmp', stateFile)
       row.to = sha.slice(0, 7)
-      if (before !== sha) row.note = 'its running server takes the new code at its next call'
+      if (mine.length) row.addons = mine.map((a) => `${a.dest}@${a.sha.slice(0, 7)}`)
+      if (before !== sha || mine.length || st.hubPinned) row.note = 'its running server takes the new code at its next call'
     } catch (e) {
       row.error = String(e.message || e)
     }
@@ -1442,7 +1518,7 @@ function startHandedOver({ stdin, stdout, state = {} }) {
   log(`took over from the launcher in this process (add-ons ${state.version || '?'})`)
   return main()
 }
-module.exports = { startHandedOver, resolveChannel, checkSources, CHANNELS, companions, bundledManifest, windowHeld, restartWord, extensionRecord, extensionReport, publishStdio }
+module.exports = { startHandedOver, resolveChannel, checkSources, checkServerAddons, CHANNELS, companions, bundledManifest, windowHeld, restartWord, extensionRecord, extensionReport, publishStdio }
 
 /** No FreeCAD: still a server, so Claude shows why instead of a dead entry. */
 function serveError(message) {

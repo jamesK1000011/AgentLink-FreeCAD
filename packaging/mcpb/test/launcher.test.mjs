@@ -153,6 +153,88 @@ process.stdout.write(JSON.stringify(out))
   assert.equal(out.badStdio, null, 'a cache outside the home folder is refused')
   assert.deepEqual(out.kept, stdio)
 }
+// A stdio server's add-ons (addons.json's serverAddons: PrintLoop for the
+// OrcaSlicer server): fetched with the set into its hidden .server-addons
+// folder, then put in the server's own app folder (app-<commit>/addons), with
+// an .id the running server compares. A new add-on pin at the same server
+// commit publishes again; the same pins do not. Never in the Mod folder,
+// never under ~/AgentLink. An add-on of a server that is not listed, or with
+// a name that is not plain, is refused.
+{
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agentlink-srvaddons-'))
+  const sha = 'c'.repeat(40)
+  const pl1 = '1'.repeat(40)
+  const pl2 = '2'.repeat(40)
+  const mod = path.join(home, 'Mod')
+  fs.mkdirSync(path.join(mod, 'OrcaLink', 'orcalink'), { recursive: true })
+  fs.writeFileSync(path.join(mod, 'OrcaLink', 'orcalink_server.py'), '# server\n')
+  const set = path.join(home, 'set')
+  const pkg = path.join(set, '.server-addons', 'orcaslicer-agentlink', 'PrintLoop-OrcaSlicer', 'printloop')
+  fs.mkdirSync(path.join(pkg, '__pycache__'), { recursive: true })
+  fs.writeFileSync(path.join(pkg, '__init__.py'), '')
+  fs.writeFileSync(path.join(pkg, 'orcalink_addon.py'), 'def tools(ctx):\n    return []\n')
+  fs.writeFileSync(path.join(pkg, '__pycache__', 'x.pyc'), '')
+  const stdio = { name: 'orcaslicer-agentlink', cache: '~/.config/orcaslicer-agentlink', entry: 'orcalink_server.py' }
+  const sources = [{ repo: 'AgentLink-FreeCAD', branch: 'main', folder: '', dest: 'AgentLink' }, { repo: 'AgentLink-OrcaSlicer', branch: 'main', folder: '', dest: 'OrcaLink', stdio }]
+  const pl = { repo: 'PrintLoop-OrcaSlicer', branch: 'main', folder: '', dest: 'PrintLoop-OrcaSlicer', pin: 'packaging/pins/printloop-ref', server: 'orcaslicer-agentlink' }
+  fs.writeFileSync(path.join(set, '.sources.json'), JSON.stringify(sources))
+  fs.writeFileSync(path.join(set, '.shas.json'), JSON.stringify({ AgentLink: 'd'.repeat(40), OrcaLink: sha }))
+  fs.writeFileSync(path.join(set, '.server-addons.json'), JSON.stringify([{ ...pl, sha: pl1 }]))
+  const script = `
+global.__agentlinkHandover = true
+const L = require(${JSON.stringify(path.join(here, '..', 'server', 'index.js'))})
+global.__agentlinkHandover = false
+const [mod, set, home, pl, sources, pl2] = JSON.parse(process.env.T)
+const fs = require('fs')
+const path = require('path')
+const cache = path.join(home, '.config', 'orcaslicer-agentlink')
+fs.mkdirSync(cache, { recursive: true })
+fs.writeFileSync(path.join(cache, 'state.json'), JSON.stringify({ current: 'a'.repeat(40) }))
+const app = path.join(cache, 'app-' + 'c'.repeat(40))
+const out = { first: L.publishStdio(mod, set, home) }
+out.state = JSON.parse(fs.readFileSync(path.join(cache, 'state.json'), 'utf8'))
+out.addon = fs.existsSync(path.join(app, 'addons', 'PrintLoop-OrcaSlicer', 'printloop', 'orcalink_addon.py'))
+out.noCache = fs.existsSync(path.join(app, 'addons', 'PrintLoop-OrcaSlicer', 'printloop', '__pycache__'))
+out.id = fs.readFileSync(path.join(app, 'addons', '.id'), 'utf8').trim()
+out.inMod = fs.readdirSync(mod)
+out.same = L.publishStdio(mod, set, home)
+fs.writeFileSync(path.join(set, '.server-addons.json'), JSON.stringify([{ ...pl, sha: pl2 }]))
+out.moved = L.publishStdio(mod, set, home)
+out.state2 = JSON.parse(fs.readFileSync(path.join(cache, 'state.json'), 'utf8'))
+out.id2 = fs.readFileSync(path.join(app, 'addons', '.id'), 'utf8').trim()
+fs.writeFileSync(path.join(set, '.server-addons.json'), JSON.stringify([]))
+out.dropped = L.publishStdio(mod, set, home)
+out.left = fs.existsSync(path.join(app, 'addons'))
+out.noServer = L.checkServerAddons([{ ...pl, server: 'nobody' }], sources)
+out.badDest = L.checkServerAddons([{ ...pl, dest: '../x' }], sources)
+out.twice = L.checkServerAddons([pl, pl], sources)
+out.none = L.checkServerAddons(undefined, sources)
+process.stdout.write(JSON.stringify(out))
+`
+  const out = JSON.parse(execFileSync(process.execPath, ['-e', script], { env: { ...process.env, HOME: home, AGENTLINK_UPDATE: 'false', T: JSON.stringify([mod, set, home, pl, sources, pl2]) }, encoding: 'utf8' }))
+  try {
+    assert.deepEqual(out.first, [{ name: 'orcaslicer-agentlink', from: 'aaaaaaa', to: 'ccccccc', addons: ['PrintLoop-OrcaSlicer@1111111'], note: 'its running server takes the new code at its next call' }])
+    assert.equal(out.state.current, sha)
+    assert.equal(out.state.hubPinned, `${sha}+PrintLoop-OrcaSlicer@${pl1}`)
+    assert.ok(out.addon, 'the add-on is in the app folder\'s addons folder')
+    assert.ok(!out.noCache, 'no __pycache__ copied')
+    assert.equal(out.id, out.state.hubPinned)
+    assert.deepEqual(out.inMod, ['OrcaLink'], 'nothing goes into the Mod folder')
+    assert.equal(out.same[0].note, 'unchanged since the last update')
+    assert.deepEqual(out.moved[0].addons, ['PrintLoop-OrcaSlicer@2222222'], 'a new add-on pin at the same server commit publishes again')
+    assert.equal(out.state2.current, sha)
+    assert.equal(out.id2, `${sha}+PrintLoop-OrcaSlicer@${pl2}`)
+    assert.equal(out.dropped[0].error, undefined)
+    assert.ok(!out.left, 'an add-on taken off the list goes from the app folder')
+    assert.equal(out.noServer, null, 'an add-on of a server that is not listed is refused')
+    assert.equal(out.badDest, null)
+    assert.equal(out.twice, null)
+    assert.deepEqual(out.none, [])
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+  console.log('launcher server add-ons: pinned, put in the server\'s own app folder, published again on a new pin, never in the Mod folder')
+}
 // An update's words on add-ons left out: none, nothing said; one, named
 // with its error, the groups gone compared with before, and a warning.
 {
@@ -185,7 +267,8 @@ process.stdout.write(JSON.stringify({
 // Every pin the manifest names is a file here holding one commit.
 {
   const repo = path.join(here, '..', '..', '..')
-  for (const s of JSON.parse(fs.readFileSync(path.join(here, '..', '..', 'addons.json'), 'utf8')).sources) {
+  const m = JSON.parse(fs.readFileSync(path.join(here, '..', '..', 'addons.json'), 'utf8'))
+  for (const s of [...m.sources, ...(m.serverAddons || [])]) {
     assert.match(s.pin, /^packaging\/pins\/[a-z]+-ref$/, `${s.repo}'s pin is under packaging/pins`)
     assert.match(fs.readFileSync(path.join(repo, s.pin), 'utf8').trim(), /^[0-9a-f]{40}$/, `${s.pin} holds a commit`)
   }
@@ -200,7 +283,7 @@ process.stdout.write(JSON.stringify({
   const manifest = fs.readFileSync(path.join(here, '..', '..', 'addons.json'), 'utf8')
   const oldManifest = manifest.replace(/packaging\/pins\//g, 'scripts/bakeoff/')
   const pins = {}
-  for (const s of JSON.parse(manifest).sources) pins[s.pin] = fs.readFileSync(path.join(repo, s.pin), 'utf8')
+  for (const s of [...JSON.parse(manifest).sources, ...(JSON.parse(manifest).serverAddons || [])]) pins[s.pin] = fs.readFileSync(path.join(repo, s.pin), 'utf8')
   const script = `
 const run = async () => {
   global.__agentlinkHandover = true
@@ -227,7 +310,7 @@ const run = async () => {
     },
   })
   const out = {}
-  const pick = (r) => ({ repo: r.channel.repo, launcher: r.channel.launcher, sha: r.sha, pins: r.sources.map((s) => s.pin), shas: r.shas, companions: !!r.companions })
+  const pick = (r) => ({ repo: r.channel.repo, launcher: r.channel.launcher, sha: r.sha, pins: r.sources.map((s) => s.pin), shas: r.shas, companions: !!r.companions, addons: r.serverAddons.map((a) => [a.dest, a.server]), addonShas: r.addonShas })
   out.ok = pick(await L.resolveChannel(io([])))
   out.noManifest = pick(await L.resolveChannel(io(['AgentLink-FreeCAD/' + NEW + '/packaging/addons.json'])))
   out.noPin = pick(await L.resolveChannel(io(['AgentLink-FreeCAD/' + NEW + '/packaging/pins/tutor-ref'])))
@@ -251,6 +334,9 @@ run().catch((e) => { process.stderr.write(e.stack); process.exit(1) })
     assert.deepEqual(out.ok.pins, want.map((s) => s.pin))
     assert.deepEqual(out.ok.shas, want.map((s) => pins[s.pin].trim()), 'the pins of the new channel')
     assert.ok(out.ok.companions, 'its companions come with it')
+    const extra = JSON.parse(manifest).serverAddons || []
+    assert.deepEqual(out.ok.addons, extra.map((a) => [a.dest, a.server]), 'the server add-ons come with it')
+    assert.deepEqual(out.ok.addonShas, extra.map((a) => pins[a.pin].trim()), 'each at its pin')
     for (const k of ['noManifest', 'noPin', 'noHead']) {
       assert.equal(out[k].repo, 'ScanRuler', `${k}: falls back to ScanRuler`)
       assert.equal(out[k].launcher, 'scripts/freecad/mcpb/server/index.js')

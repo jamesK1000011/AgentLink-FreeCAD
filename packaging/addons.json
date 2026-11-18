@@ -1,5 +1,5 @@
 {
-  "about": "The add-ons the Claude extension's launcher installs into FreeCAD's Mod folder, each at the commit pinned in its file under packaging/pins (bumped only once the bake-off, .github/workflows/bakeoff.yml, is green). repo: a repository of jamesK1000011's; folder: the add-on's folder in it ('' for the root); dest: its folder in Mod. stdio (optional): the add-on is also an MCP server that another Claude extension runs from a cache of versions (name; cache, its folder under the home folder; entry, its server file): each update puts the installed copy there too, and the running server takes it up at its next call. companions: other local MCP servers the launcher keeps as git clones and brings up to their branch on each update (name; dir under the home folder; url, a repository of jamesK1000011's; branch; process, the path a running copy is found by); ~/AgentLink/companions.json on the Mac wins over it.",
+  "about": "The add-ons the Claude extension's launcher installs into FreeCAD's Mod folder, each at the commit pinned in its file under packaging/pins (bumped only once the bake-off, .github/workflows/bakeoff.yml, is green). repo: a repository of jamesK1000011's; folder: the add-on's folder in it ('' for the root); dest: its folder in Mod. stdio (optional): the add-on is also an MCP server that another Claude extension runs from a cache of versions (name; cache, its folder under the home folder; entry, its server file): each update puts the installed copy there too, and the running server takes it up at its next call. companions: other local MCP servers the launcher keeps as git clones and brings up to their branch on each update (name; dir under the home folder; url, a repository of jamesK1000011's; branch; process, the path a running copy is found by); ~/AgentLink/companions.json on the Mac wins over it. serverAddons: add-ons of a stdio server, not of FreeCAD (repo, branch, folder, dest and pin as a source; server, the stdio name of a source): each update fetches them at their pins into the set's hidden .server-addons folder, never into the Mod folder or a folder the agent writes, and puts them in that server's own app folder (app-<commit>/addons/<dest>), where the server finds them. Only repositories of jamesK1000011's go here: a third-party add-on goes through approve_code.",
   "sources": [
     {
       "repo": "AgentLink-FreeCAD",
@@ -47,6 +47,16 @@
       "folder": "",
       "dest": "Tutor",
       "pin": "packaging/pins/tutor-ref"
+    }
+  ],
+  "serverAddons": [
+    {
+      "repo": "PrintLoop-OrcaSlicer",
+      "branch": "main",
+      "folder": "",
+      "dest": "PrintLoop-OrcaSlicer",
+      "pin": "packaging/pins/printloop-ref",
+      "server": "orcaslicer-agentlink"
     }
   ],
   "companions": [
