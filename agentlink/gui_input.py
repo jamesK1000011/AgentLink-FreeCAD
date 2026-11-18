@@ -28,6 +28,7 @@ BUSY_AFTER = 10.0    # s past a call's own waits: the link answers it "busy" fro
 DRAG_STEPS = 12
 MAX_DRAG_STEPS = 200
 MOVE_GAP_MS = 8      # between the moves of a drag
+SHOT_SETTLE_MS = 40  # a shot with a dialog or menu up: its layout and paint events run first
 MAX_NOTCHES = 50
 MAX_TEXT = 2000
 ANSWER_MAX = 3000    # characters of the answer's text
@@ -276,6 +277,22 @@ def unmark_modified(gui, name):
         return True
     except Exception:  # noqa: BLE001
         return False
+
+
+def target_kinds(steps):
+    """The kinds of the targets parsed steps aim at (view, window, item …)."""
+    out = set()
+    for st in steps or ():
+        for k in ("target", "from", "to"):
+            t = st.get(k)
+            if isinstance(t, dict) and t.get("kind"):
+                out.add(t["kind"])
+    return out
+
+
+def acts(steps):
+    """True when parsed steps send input (anything but shots and waits)."""
+    return any(st.get("do") not in ("shot", "wait") for st in steps or ())
 
 
 def leave_edit(gui, name):
@@ -783,6 +800,7 @@ class Run:
         self.final = None
         # A menu item's (menu, action), for the click's fallback.
         self.menu_pick = None
+        self.menu_fired, self.menu_watch = None, None
         # What a tab or item target adds to its hit, by (widget, x, y).
         self.extra = {}
         # An item's check box clicked: (view, index, state before) until the
@@ -982,16 +1000,35 @@ class Run:
                         return w, i, w.tabText(i).replace("&", "")
         raise ToolError("not_found", f"No visible tab {json.dumps(spec, ensure_ascii=False)}: window_snapshot shows what is there.")
 
+    def _count(self, model, what, parent=None):
+        """A model's rowCount or columnCount under parent (the root when
+        None). A list model (QAbstractListModel) takes only the form with
+        a parent, a tree model takes both (live 80: "columnCount() takes
+        exactly one argument"). 1 column when the model does not say."""
+        fn = getattr(model, what, None)
+        if fn is None:
+            return 1 if what == "columnCount" else 0
+        if parent is not None:
+            return int(fn(parent))
+        try:
+            return int(fn(self.qt.QtCore.QModelIndex()))
+        except Exception:  # noqa: BLE001 - a model that takes no parent
+            pass
+        try:
+            return int(fn())
+        except Exception:  # noqa: BLE001
+            return 1 if what == "columnCount" else 0
+
     def _rows(self, model, parent, depth=0):
         """Every index of a model's column-0 rows, depth first (a tree's
         children after their parent)."""
-        n = model.rowCount(parent) if parent is not None else model.rowCount()
+        n = self._count(model, "rowCount", parent)
         for r in range(n):
             ix = model.index(r, 0, parent) if parent is not None else model.index(r, 0)
             yield ix
             if depth < 12:
                 try:
-                    if model.rowCount(ix) > 0:
+                    if self._count(model, "rowCount", ix) > 0:
                         yield from self._rows(model, ix, depth + 1)
                 except Exception:
                     pass
@@ -1044,7 +1081,7 @@ class Run:
                 m = v.model()
                 if m is None:
                     continue
-                ncol = m.columnCount() if hasattr(m, "columnCount") else 1
+                ncol = self._count(m, "columnCount")
                 cols = [col] if col is not None else range(max(1, ncol))
                 for ix in self._rows(m, None):
                     for c in cols:
@@ -1155,7 +1192,9 @@ class Run:
         that opens a submenu is left as it is."""
         menu, act = self.menu_pick
         self.menu_pick = None
+        fired = getattr(self, "menu_fired", None)  # None: not known
         hit = out.setdefault("hit", {})
+        hit.setdefault("menu_item", _plain(act.text()) if hasattr(act, "text") else None)
         try:
             sub = act.menu() if hasattr(act, "menu") else None
         except Exception:
@@ -1163,15 +1202,39 @@ class Run:
         if sub is not None:
             hit["menu"] = "submenu opened"
             return
-        if self.app().activePopupWidget() is not menu or not menu.isVisible():
+        if fired:
             hit["menu"] = "clicked"
             return
-        menu.setActiveAction(act)
-        for ev in key_events(self.qt, ("name", "Return"), []):
-            self._send(menu, ev)
-            if self._detached():
+        if self.app().activePopupWidget() is menu and menu.isVisible():
+            menu.setActiveAction(act)
+            for ev in key_events(self.qt, ("name", "Return"), []):
+                self._send(menu, ev)
+                if self._detached():
+                    return
+            if getattr(self, "menu_fired", None) is False:
+                self._trigger(menu, act)
+            hit["menu"] = "picked with Return (the click did not take)"
+            return
+        if fired is False:
+            # The click closed the menu and ran nothing: the item is run
+            # as the menu runs it (live 82).
+            if self._trigger(menu, act):
+                hit["menu"] = "item run (the click closed the menu and did not run it)"
                 return
-        hit["menu"] = "picked with Return (the click did not take)"
+        hit["menu"] = "clicked"
+
+    def _trigger(self, menu, act):
+        """The item run as a menu runs it: the menu closed, then the action
+        triggered. False when it is greyed out."""
+        try:
+            if not act.isEnabled():
+                return False
+            if menu.isVisible():
+                menu.hide()
+            act.trigger()
+            return True
+        except Exception:  # noqa: BLE001
+            return False
 
     def _check_state(self, v, ix):
         Qt = self.qt.QtCore.Qt
@@ -1267,7 +1330,7 @@ class Run:
             menu, act, text = self.find_menu_item(v)
             r = menu.actionGeometry(act)
             x, y = r.x() + r.width() / 2.0, r.y() + r.height() / 2.0
-            self.menu_pick = (menu, act)
+            self._pick_menu(menu, act)
             self.extra[(id(menu), x, y)] = {"class": "QMenu", "menu_item": text}
             return menu, x, y
         if kind == "widget":
@@ -1757,8 +1820,49 @@ class Run:
 
     def _target(self, t):
         w, x, y = self.resolve(t)
+        if self.menu_pick is None and t.get("kind") != "menu_item":
+            self._menu_under(w, x, y)
         self._check_front(w)
         return w, x, y
+
+    def _pick_menu(self, menu, act):
+        """The menu item a click aims at: kept for the click's fallback, and
+        its triggered signal watched, so the fallback knows whether the
+        click ran it."""
+        self.menu_pick = (menu, act)
+        self.menu_fired = None
+        try:
+            def fired(*_a):
+                self.menu_fired = True
+
+            act.triggered.connect(fired)
+            self.menu_fired = False
+            self.menu_watch = (act, fired)
+        except Exception:  # noqa: BLE001 - not known: the fallback reads the menu
+            self.menu_watch = None
+
+    def _unwatch_menu(self):
+        w, self.menu_watch = getattr(self, "menu_watch", None), None
+        if w is not None:
+            try:
+                w[0].triggered.disconnect(w[1])
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _menu_under(self, w, x, y):
+        """A point target (window, global, widget) that lands on an open
+        menu's item: that item is picked as a menu_item target picks it,
+        so the click runs it reliably (live 82: a window-point click on an
+        item sometimes closed the menu and ran nothing)."""
+        try:
+            if not _has_class(w, "QMenu") or not w.isVisible():
+                return
+            act = w.actionAt(self.qt.QtCore.QPoint(int(x), int(y)))
+            if act is None or (hasattr(act, "isSeparator") and act.isSeparator()) or not act.isVisible():
+                return
+        except Exception:  # noqa: BLE001
+            return
+        self._pick_menu(w, act)
 
     def step(self, st, out=None):
         do = st["do"]
@@ -1774,6 +1878,8 @@ class Run:
                 self._menu_fallback(out)
             return out
         finally:
+            self._unwatch_menu()
+            self.menu_pick = None
             self.checking = None
             if self.last_point is not None:
                 out["point"] = self.last_point
@@ -1830,7 +1936,9 @@ class Run:
                     self._mouse("MouseButtonRelease", gw, gx, gy, st["button"], st["mods"])
                 if not self._detached():
                     self.pump(MOVE_GAP_MS)
-                    if st["button"] == "left" and not st["double"]:
+                    if st["button"] == "left" and not st["double"] and self.menu_pick is None and not _has_class(w, "QMenu"):
+                        # Not on a menu's item: a menu that closed is not
+                        # its tool button's arrow to open again (live 82).
                         self._open_arrow_menu(w, x, out)
                     sel = self.selected()
                     if sel is not None:
@@ -2000,11 +2108,27 @@ class Run:
             painter.end()
         return n
 
+    def _settle(self, ws):
+        """Before a shot: each window over the main one laid out and its
+        pending events run, so a dialog that just came up is drawn whole
+        (live 86: a shot of a new dialog had no OK and Cancel at the
+        bottom; the next shot had them)."""
+        for w in ws:
+            try:
+                lay = w.layout() if hasattr(w, "layout") else None
+                if lay is not None:
+                    lay.activate()
+            except Exception:  # noqa: BLE001
+                pass
+        if ws and not self._detached():
+            self.pump(SHOT_SETTLE_MS)
+
     def shot(self, name):
         import os
 
         os.makedirs(self.shot_dir, exist_ok=True)
         path = os.path.join(self.shot_dir, name + ".png")
+        self._settle(self._over())
         pix = self.grab(self.mw())
         over = self._over()
         painted = self._paint_over(pix, over) if over else 0

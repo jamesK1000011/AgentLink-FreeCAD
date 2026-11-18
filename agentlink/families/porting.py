@@ -65,6 +65,30 @@ def tools(session):
         args = {"name": cmd, **({"index": index} if index else {})}
         return _answer(s.server.call({"name": "cmd_run", "arguments": args}))
 
+    def run_bench(wb, cmd):
+        """Before a command recipe: the add-on's workbench activated when the
+        command is not there yet (its workbench never loaded). The cookbook's
+        addon.workbench, else the one an add-on's tool data names for the
+        command. Words for the answer, or None."""
+        try:
+            import FreeCADGui
+
+            if cmd in FreeCADGui.listCommands():
+                return None
+        except Exception:  # noqa: BLE001 - headless: cmd_run says why
+            return None
+        if not wb:
+            from .. import toolindex
+
+            wb = toolindex.bench_for_command(cmd)
+        if not wb:
+            return None
+        try:
+            _answer(s.server.call({"name": "workbench", "arguments": {"activate": wb}}))
+        except ToolError as e:
+            return f"{wb} could not be activated ({e.message[:120]}); the command may be missing"
+        return f"activated {wb} first: {cmd} comes with it"
+
     def run_python(p, args):
         return cookbook.plain(cookbook.call_python(p, args, getattr(s, "doc", None)))
 
@@ -72,7 +96,7 @@ def tools(session):
         return _answer(s.server.call({"name": "batch", "arguments": {"calls": calls, "rollback": True}}))
 
     def run_entry(name, entry, args):
-        return cookbook.run(name, entry, args or {}, {"command": run_command, "python": run_python, "script": run_script}, names())
+        return cookbook.run(name, entry, args or {}, {"command": run_command, "python": run_python, "script": run_script, "workbench": run_bench}, names())
 
     def export(name, path):
         doc, sha = cookbook.export_doc(name, names())
