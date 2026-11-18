@@ -997,12 +997,62 @@ class Run:
                 have = _norm(a.text())
                 if have and (want in have if loose else want == have):
                     try:
-                        if not a.isEnabled():
-                            raise ToolError("invalid_state", f"menu_item: \"{a.text().replace('&', '')}\" is greyed out in this menu.")
+                        if not a.isEnabled() and not self._enabled_now(a):
+                            raise ToolError("invalid_state", f"menu_item: \"{a.text().replace('&', '')}\" is greyed out in this menu"
+                                            + self._why_greyed(a) + ". A click on a greyed item does nothing: no command runs, the menu stays open.")
                     except AttributeError:
                         pass
                     return p, a, a.text().replace("&", "")
         raise ToolError("not_found", f"menu_item: no item {text!r} in the open menu — its items: {', '.join(menu_items(p)) or 'none'}.")
+
+    @staticmethod
+    def _command_of(a):
+        """The FreeCAD command a menu's action runs, or None: a group's item
+        carries it as its CommandName property, a command's own action as its
+        objectName."""
+        try:
+            v = a.property("CommandName") if hasattr(a, "property") else None
+            name = bytes(v).decode() if isinstance(v, (bytes, bytearray)) else (str(v) if v else "")
+            if not name and hasattr(v, "data"):
+                name = bytes(v.data()).decode()
+        except Exception:
+            name = ""
+        if not name:
+            try:
+                name = a.objectName() or ""
+            except Exception:
+                name = ""
+        return name or None
+
+    def _enabled_now(self, a):
+        """A greyed item read again after FreeCAD's commands are tested now
+        (Gui.Command.update: the window's own timer refreshes them later,
+        live 61: a TechDraw dimension in the Dimension drop-down read greyed
+        with a view's edge selected)."""
+        cmd = getattr(self.gui, "Command", None)
+        upd = getattr(cmd, "update", None)
+        if not callable(upd):
+            return False
+        try:
+            upd()
+            self.pump(MOVE_GAP_MS)
+            return bool(a.isEnabled())
+        except Exception:
+            return False
+
+    def _why_greyed(self, a):
+        """What FreeCAD says of the item's command: (the command, isActive)."""
+        name = self._command_of(a)
+        cmd = getattr(self.gui, "Command", None)
+        if not name or cmd is None or not hasattr(cmd, "get"):
+            return ""
+        try:
+            c = cmd.get(name)
+            if c is None:
+                return f" ({name})"
+            return f" ({name}: FreeCAD's isActive is {bool(c.isActive())} now)"
+        except Exception:
+            return f" ({name})"
 
     def _menu_fallback(self, out):
         """After a click on a menu item: a menu that is still open on the

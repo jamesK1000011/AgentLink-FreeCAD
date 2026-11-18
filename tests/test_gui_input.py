@@ -490,6 +490,43 @@ class Delivery(unittest.TestCase):
         self.assertEqual(menu.at, (500.0, 90.0))  # under the button
         self.assertEqual(self.run.find_menu_item("Vertical Length")[2], "Vertical Length Dimension")
 
+    def test_greyed_item_read_again_after_freecad_tests_its_commands(self):
+        """Live 61: Vertical Length Dimension read greyed with a view's edge
+        selected; FreeCAD's commands are tested now (Command.update) and the
+        item read again; still greyed, the answer says what FreeCAD says."""
+        class Act:
+            def __init__(self):
+                self.on = False
+
+            def text(self):
+                return "Vertical Length Dimension"
+
+            def isSeparator(self):
+                return False
+
+            def isVisible(self):
+                return True
+
+            def isEnabled(self):
+                return self.on
+
+            def property(self, k):
+                return b"TechDraw_VerticalDimension" if k == "CommandName" else None
+
+        act = Act()
+        menu = Widget("dims", 0, 0, 200, 60, cls="QMenu")
+        menu.actions = lambda: [act]
+        self.state["popup"] = menu
+        active = {"v": True}
+        self.run.gui.Command = types.SimpleNamespace(update=lambda: setattr(act, "on", active["v"]),
+                                                     get=lambda n: types.SimpleNamespace(isActive=lambda: active["v"]))
+        self.assertIs(self.run.find_menu_item("Vertical Length Dimension")[1], act)
+        act.on, active["v"] = False, False
+        with self.assertRaises(ToolError) as e:
+            self.run.find_menu_item("Vertical Length Dimension")
+        self.assertIn("TechDraw_VerticalDimension: FreeCAD's isActive is False now", e.exception.message)
+        self.assertIn("A click on a greyed item does nothing", e.exception.message)
+
     def test_click_on_a_split_buttons_main_part_opens_nothing(self):
         b, menu = self.arrow_button()
         out = self.run.run(gi.parse_steps([{"click": {"widget": {"objectName": "dim"}, "at": [10, 15]}}]))
