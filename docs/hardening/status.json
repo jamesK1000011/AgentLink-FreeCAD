@@ -64,6 +64,11 @@
   "model": "alone-8",
   "note": "17 Nov: live_run reset passed 3 of 3; gui_input clicked the Notes tab and Pin a Note and opened the Note dialog; app_force_restart recovered the window held by that dialog and reopened 11 documents"
  },
+ "app_install": {
+  "live": true,
+  "model": "six",
+  "note": "17 Nov: status read live (1.1.3 installed, SHA-256 checked); no new install run"
+ },
  "app_recover": {
   "headless": true,
   "live": true,
@@ -3618,8 +3623,9 @@
  },
  "pref_rollback": {
   "headless": true,
-  "model": "WorkshopRest",
-  "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+  "live": true,
+  "model": "six",
+  "note": "17 Nov: on the owner's word; rolled back to change 320 (the snapshot just before the update), FreeCAD restarted and answered"
  },
  "pref_set": {
   "description": true,
@@ -3673,6 +3679,11 @@
   "headless": true,
   "model": "WorkshopRest",
   "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
+ },
+ "queue_go": {
+  "live": true,
+  "model": "six",
+  "note": "17 Nov: on the owner's word in chat; go true, wasHeld false"
  },
  "recompute": {
   "description": true,
@@ -5167,6 +5178,11 @@
   "live": true,
   "model": "TutorRest",
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
+ },
+ "tutor_watch": {
+  "live": true,
+  "model": "six",
+  "note": "17 Nov: live answer with watch mode off (watching false, say); watch on needs the person's click"
  },
  "units_convert": {
   "description": true,
