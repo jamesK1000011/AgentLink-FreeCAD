@@ -305,8 +305,10 @@ def tools(s):
         """A mesh's or a point cloud's points as an n × 3 array; None for any other object."""
         import numpy as np
 
-        if hasattr(o, "Mesh"):
-            return np.array([[p.x, p.y, p.z] for p in o.Mesh.Points])
+        m = getattr(o, "Mesh", None)
+        # A FEM result's Mesh links its FEM mesh object, which has no Points (live 77).
+        if m is not None and hasattr(m, "Points"):
+            return np.array([[p.x, p.y, p.z] for p in m.Points])
         if o.isDerivedFrom("Points::Feature"):
             return np.array([[p.x, p.y, p.z] for p in o.Points.Points])
         return None

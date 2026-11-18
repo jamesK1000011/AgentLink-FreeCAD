@@ -88,3 +88,23 @@ def description(name, old):
     if name in s["now"] and s["orig"].get(name, {}).get("description") == text:
         return s["now"][name]
     return text
+
+
+# Meant changes to what a converted tool does on the stand-in FreeCAD since
+# its handler (the trace line at BASE, the line now, why). The data tests put
+# the new line in place of the old one before they compare the traces.
+TRACES = [
+    (", 0.0873, False)", ", 0.5, False)",
+     "Live 65: an exported mesh is made with an angular deflection of 0.5 rad (geometry.EXPORT_ANGULAR), not 0.0873: one loft face made 3.77 M triangles."),
+]
+
+
+def trace_as_meant(lines):
+    """A trace from BASE with the meant changes (TRACES) made."""
+    out = []
+    for ln in lines:
+        if isinstance(ln, str):
+            for old, new, _why in TRACES:
+                ln = ln.replace(old, new)
+        out.append(ln)
+    return out

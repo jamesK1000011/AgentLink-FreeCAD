@@ -228,6 +228,33 @@ def soundness(shape, solids_intended=False):
 
 
 
+# ---- mesh objects ----------------------------------------------------------------------------
+
+def mesh_of(o):
+    """o's mesh (a Mesh kernel: CountFacets, isSolid) when o is a mesh object
+    (Mesh::Feature and kin), else None. A FEM result or mesh object
+    (FeaturePython) also has a property named Mesh, but it links another
+    object (live 77: object_list failed "'FeaturePython' object has no
+    attribute 'CountFacets'" in a FEM document)."""
+    m = getattr(o, "Mesh", None)
+    if m is None or not hasattr(m, "CountFacets") or not hasattr(m, "isSolid"):
+        return None
+    try:
+        if hasattr(o, "isDerivedFrom") and str(getattr(o, "TypeId", "")).startswith("Fem::") and not o.isDerivedFrom("Mesh::Feature"):
+            return None
+    except Exception:  # noqa: BLE001
+        pass
+    return m
+
+
+def mesh_row(o):
+    """A mesh object in a listing: {triangles, closed}; None for any other object."""
+    m = mesh_of(o)
+    if m is None:
+        return None
+    return {"triangles": int(m.CountFacets), "closed": bool(m.isSolid())}
+
+
 # ---- meshes written for export --------------------------------------------------------------
 
 # The angle (radians) MeshPart may turn between two triangles of an exported

@@ -33,8 +33,8 @@ CORE_READERS = {"gltf": ("Import", "FreeCAD's glTF reader (Import)"), "dae": ("i
 
 
 def is_mesh(o):
-    """A mesh object (Mesh::Feature and kin): a Mesh, no Shape."""
-    return hasattr(o, "Mesh") and getattr(o, "Shape", None) is None
+    """A mesh object (Mesh::Feature and kin): a real Mesh (geometry.mesh_of), no Shape."""
+    return geo.mesh_of(o) is not None and getattr(o, "Shape", None) is None
 
 
 def core_scene(d, p, fmt, before):
@@ -907,8 +907,8 @@ def tools(session):
             if fmt in MESH_FORMATS:
                 e["closed"] = bool(sh.Solids)
                 e["note"] = "Made of the mesh's triangles: measure and boolean work; fillets and face queries do not see round faces."
-        elif hasattr(o, "Mesh"):
-            e["mesh"] = {"triangles": o.Mesh.CountFacets, "closed": o.Mesh.isSolid()}
+        elif geo.mesh_of(o) is not None:
+            e["mesh"] = geo.mesh_row(o)
             e["note"] = "A mesh (Mesh::Feature), not a body: mesh files come in as meshes unless solid: true is asked. import_file { solid: true } makes a body of it (up to 200000 triangles); meshobj_* tools work on it as it is."
         return e
 
@@ -1096,7 +1096,7 @@ def tools(session):
         "isfile": os.path.isfile, "exists": os.path.exists, "abspath": os.path.abspath, "basename": os.path.basename, "dirname": os.path.dirname,
         "makedirs": lambda p: os.makedirs(p, exist_ok=True), "filesize": os.path.getsize, "stem": lambda p: os.path.splitext(os.path.basename(p))[0],
         # objects
-        "is_shape": is_shape, "shape_row": shape_row, "once": lambda xs: list(dict.fromkeys(xs)), "SKIP_PROPS": SKIP_PROPS, "prop_entry": prop_entry,
+        "is_shape": is_shape, "shape_row": shape_row, "mesh_row": geo.mesh_row, "once": lambda xs: list(dict.fromkeys(xs)), "SKIP_PROPS": SKIP_PROPS, "prop_entry": prop_entry,
         "readonly": readonly, "near": lambda p, names: difflib.get_close_matches(p, names, 3), "read": lambda o, p: getattr(o, p),
         "set_value": lambda o, p, v: setattr(o, p, to_value(o, p, v)), "built_from": built_from, "along": along, "removed": removed, "shown_again": shown_again,
         "meta_moved": meta_moved, "is_group": is_group, "group_row": group_row,

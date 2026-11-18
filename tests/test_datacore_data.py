@@ -130,7 +130,7 @@ class CoreData(unittest.TestCase):
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
-            self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
+            self.assertEqual(c["new"], {**c["old"], "trace": _meant.trace_as_meant(c["old"].get("trace") or [])}, f"{c['tool']} {c['case']}")
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")
         # Each tool: a case that answers.
         for name in CONVERTED:
