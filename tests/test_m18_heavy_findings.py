@@ -130,29 +130,18 @@ class FromMesh(Home):
             f.write(b"\0" * 80 + (3).to_bytes(4, "little") + b"\0" * 150)
         self.assertEqual(self.heavy.sized_size(Sess(Doc([])), "part_from_mesh", {"file": p}), 6.0)
 
-    def test_big_mesh_is_asked_then_runs_with_the_long_deadline(self):
-        from agentlink.protocol import ToolError
-
+    def test_big_mesh_runs_at_once(self):
+        # No prejudging (18 Nov): no question first, no mark.
         g = self.heavy.Gate(Sess(Doc([Obj("Scan", mesh=Mesh(35000))])))
         t, a = Tool("part_from_mesh"), {"mesh": "Scan"}
-        with self.assertRaises(ToolError) as cm:
-            g.before(t, a)
-        m = cm.exception.message
-        for w in ("35,000 triangles", "refine", "meshobj_decimate", "refine: false", "Nothing was run"):
-            self.assertIn(w, m)
-        started = time.time()
-        g.before(t, a)  # the same call again runs it
-        self.assertGreater(self.keep.heavy_call_limit(started, time.time()), 300)
-        g.after(t, a, True)
+        g.before(t, a)
         self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
-
-    def test_small_mesh_runs_at_once_and_is_marked(self):
+        g.after(t, a, True)
+    def test_small_mesh_runs_at_once(self):
         g = self.heavy.Gate(Sess(Doc([Obj("Small", mesh=Mesh(3600))])))
-        started = time.time()
         g.before(Tool("part_from_mesh"), {"mesh": "Small"})
-        self.assertIsNotNone(self.keep.heavy_call_limit(started, time.time()))
+        self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
         g.after(Tool("part_from_mesh"), {}, True)
-
     def test_note_follows_refine(self):
         with open(os.path.join(os.path.dirname(HERE), "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             steps = json.load(f)["entries"]["part_from_mesh"]["steps"]
@@ -179,13 +168,10 @@ class Insp(Home):
         light = self.heavy.sized_size(s2, "insp_run", {"actual": "Scan", "nominals": ["Box"]})
         self.assertLess(self.keep.sized_estimate({}, "insp_run", light), 30)
 
-    def test_asked_first_with_the_lighter_ways(self):
-        from agentlink.protocol import ToolError
-
+    def test_runs_at_once(self):
         g = self.heavy.Gate(Sess(Doc([Obj("Scan", mesh=Mesh(140000)), smooth_loft()])))
-        with self.assertRaises(ToolError) as cm:
-            g.before(Tool("insp_run"), {"actual": "Scan", "nominals": ["Body032"]})
-        self.assertIn("larger spacing", cm.exception.message)
+        g.before(Tool("insp_run"), {"actual": "Scan", "nominals": ["Body032"]})
+        g.after(Tool("insp_run"), {}, True)
 
 
 # ---- 34: export that tessellates a smooth loft ---------------------------------------------------
@@ -204,30 +190,22 @@ class Export(Home):
         coarse = self.heavy.sized_size(s, "export", {"objects": ["Body032"], "format": "stl", "tolerance": 0.2})
         self.assertLess(coarse, stl)
 
-    def test_on_its_own_it_goes_to_a_job(self):
+    def test_on_its_own_it_is_not_prejudged(self):
+        # Live, 18 Nov: an STL export put at 2 min took 0.48 s. No estimate
+        # sends it to a job; the supervisor moves any call past ~60 s.
         t = Tool("export", changes=False)
         s = self.sess()
-        self.assertTrue(self.jobs.wanted(t, {"objects": ["Body032"], "format": "stl", "tolerance": 0.05}, s))
-        self.assertFalse(self.jobs.wanted(t, {"objects": ["Body032"], "format": "step"}, s))
-        # a job is not asked nor marked: the window is free
-        g = self.heavy.Gate(s)
-        g.as_job = True
-        g.before(t, {"objects": ["Body032"], "format": "stl", "tolerance": 0.05})
-        self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
-        g.as_job = False
-
-    def test_in_a_batch_it_is_asked_first(self):
-        from agentlink.protocol import ToolError
-
+        self.assertFalse(self.jobs.wanted(t, {"objects": ["Body032"], "format": "stl", "tolerance": 0.05}, s))
+        self.assertTrue(self.jobs.wanted(t, {"objects": ["Body032"], "format": "stl"}, s, asked=True))
+    def test_in_a_batch_it_runs(self):
         s = self.sess()
         s.batch_now = {"i": 0}
         t = Tool("export", changes=False)
         a = {"objects": ["Body032"], "format": "stl", "tolerance": 0.05}
         self.assertFalse(self.jobs.wanted(t, a, s))
         g = self.heavy.Gate(s)
-        with self.assertRaises(ToolError) as cm:
-            g.before(t, a)
-        self.assertIn("larger tolerance", cm.exception.message)
+        g.before(t, a)
+        g.after(t, a, True)
 
 
 # ---- the part_boolean estimate: face pairs whose boxes meet ------------------------------------
@@ -253,15 +231,12 @@ class BooleanPairs(Home):
         self.assertLess(est_cut, 5 * 60)
         self.assertEqual(self.keep.sized_key("part_boolean", {}), "part_boolean boxes")
 
-    def test_words_name_the_pairs(self):
-        from agentlink.protocol import ToolError
-
+    def test_big_boolean_runs_at_once(self):
         base = Obj("Base", Shape(self.grid(60000)))
         tool = Obj("Tool", Shape(self.grid(60000)))
         g = self.heavy.Gate(Sess(Doc([base, tool])))
-        with self.assertRaises(ToolError) as cm:
-            g.before(Tool("part_boolean"), {"op": "fuse", "base": "Base", "tools": ["Tool"]})
-        self.assertIn("face pairs whose boxes meet", cm.exception.message)
+        g.before(Tool("part_boolean"), {"op": "fuse", "base": "Base", "tools": ["Tool"]})
+        self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
 
 
 # ---- 37: a batch's start-time guess scaled by input size ---------------------------------------

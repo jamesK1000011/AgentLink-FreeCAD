@@ -1055,12 +1055,29 @@ def tools(session):
 
     def close_doc(name):
         """FreeCAD.closeDocument, an edit in that document left first
-        (gui_input.leave_edit, live 59)."""
+        (gui_input.leave_edit, live 59). doc_close's steps have decided by
+        now: the document is unchanged, or discard: true. So the window's
+        own "modified" mark is taken away first: FreeCAD's close confirm
+        ("Save all changes to document … before closing?",
+        Gui::Document::canClose) then has nothing to ask, whatever path
+        closes a view (finding 62: a discard on a lesson document raised
+        it, and Don't Save inside the call crashed FreeCAD)."""
+        # An add-on that holds this document (a lesson running on it, its
+        # rings and timers) lets go first (live, 18 Nov: the same discard
+        # worked once the lesson was stopped). Never stops the close.
+        try:
+            from .. import hooks
+
+            hooks.emit("document_closing", s, name)
+        except Exception:  # noqa: BLE001
+            pass
         if getattr(FreeCAD, "GuiUp", False):
             from .. import gui_input
             import FreeCADGui
 
+            gui_input.unmark_modified(FreeCADGui, name)
             gui_input.leave_edit(FreeCADGui, name)
+            gui_input.unmark_modified(FreeCADGui, name)  # leaving an edit can mark it again
         FreeCAD.closeDocument(name)
 
     helpers = {

@@ -113,139 +113,113 @@ class WindowRoute(unittest.TestCase):
         finally:
             os.environ.pop("AGENTLINK_RESTART_MARK", None)
 
+    def _watch(self, w, beat, alive=lambda p: False):
+        from agentlink import window_watch
+
+        w.watch = window_watch.Watch(lambda: dict(beat["v"]), alive=alive)
+        return w.watch
+
     def test_restarting_window_is_waited_for(self):
-        """A restart mark standing: the call waits for the window to listen
-        again instead of going to the hidden FreeCAD."""
-        import tempfile
+        """A restart in hand (no mark file, finding 52): the call waits for
+        the first heartbeat of a new pid that pairs, instead of going to the
+        hidden FreeCAD."""
         import time
 
-        from agentlink import restart_mark
+        port = _free_port()
+        supervise.WINDOW_PORT = port
+        beat = {"v": {"pid": 111, "t": time.time(), "pairing": 1}}
 
-        mark = os.path.join(tempfile.mkdtemp(), "mark")
-        os.environ["AGENTLINK_RESTART_MARK"] = mark
-        try:
-            restart_mark.write(["/nowhere/a.FCStd"])
-            port = _free_port()
-            supervise.WINDOW_PORT = port
-
-            def late():
-                time.sleep(1.2)
-                srv = socket.socket()
-                srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                srv.bind(("127.0.0.1", port))
-                srv.listen(1)
-                conn, _ = srv.accept()
-                f = conn.makefile("rw", encoding="utf-8", newline="\n")
-                _pair(f)
-                for line in f:
-                    f.write(json.dumps({"jsonrpc": "2.0", "id": json.loads(line)["id"], "result": {"where": "window"}}) + "\n")
-                    f.flush()
-                    try:
-                        os.remove(mark)  # its own, by path (see clear_own above)
-                    except OSError:
-                        pass
-
-            threading.Thread(target=late, daemon=True).start()
-            got = []
-            t0 = time.time()
-            seen = []
-            real_read = restart_mark.read
-
-            def read():
-                m = real_read()
-                seen.append((round(time.time() - t0, 2), m is not None, os.path.exists(mark)))
-                return m
-
-            restart_mark.read = read
-            try:
-                w = supervise.Window(got.append)
-                ok = w.call(json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/call"}))
-            finally:
-                restart_mark.read = real_read
-            self.assertTrue(ok, f"after {time.time() - t0:.2f} s; got {got}; reads {seen[-6:]}; mark there {os.path.exists(mark)}; env {os.environ.get('AGENTLINK_RESTART_MARK') == mark}; f {w.f is not None}")
-            self.assertGreater(time.time() - t0, 1.0)
-            self.assertEqual(json.loads(got[0])["result"]["where"], "window")
-        finally:
-            restart_mark.clear()
-            os.environ.pop("AGENTLINK_RESTART_MARK", None)
-
-    def test_stale_mark_is_ignored(self):
-        import tempfile
-
-        from agentlink import restart_mark
-
-        mark = os.path.join(tempfile.mkdtemp(), "mark")
-        os.environ["AGENTLINK_RESTART_MARK"] = mark
-        try:
-            with open(mark, "w") as f:
-                json.dump({"t": 0, "reopens": []}, f)
-            supervise.WINDOW_PORT = _free_port()
-            self.assertFalse(supervise.Window(lambda line: None).call(json.dumps({"jsonrpc": "2.0", "id": 4, "method": "tools/call"})))
-            self.assertFalse(os.path.exists(mark))
-        finally:
-            os.environ.pop("AGENTLINK_RESTART_MARK", None)
-
-    def test_dropped_connection_waits_for_the_restart(self):
-        """The window quits under a kept connection (app_restart): the call
-        is sent again to the window once it is back, not to the hidden one."""
-        import tempfile
-        import time
-
-        from agentlink import restart_mark
-
-        mark = os.path.join(tempfile.mkdtemp(), "mark")
-        os.environ["AGENTLINK_RESTART_MARK"] = mark
-
-        def clear_own():
-            # This test's mark by its own path: the env may name the next
-            # test's by the time this thread gets here.
-            try:
-                os.remove(mark)
-            except OSError:
-                pass
-
-        try:
+        def late():
+            time.sleep(1.2)
             srv = socket.socket()
             srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            srv.bind(("127.0.0.1", 0))
+            srv.bind(("127.0.0.1", port))
             srv.listen(1)
-            port = srv.getsockname()[1]
-            supervise.WINDOW_PORT = port
-
-            def first():
-                conn, _ = srv.accept()
-                f = conn.makefile("rw", encoding="utf-8", newline="\n")
-                line = _call(f)
-                f.write(json.dumps({"jsonrpc": "2.0", "id": json.loads(line)["id"], "result": {"restarting": True}}) + "\n")
+            beat["v"] = {"pid": 222, "t": time.time(), "pairing": 1}
+            conn, _ = srv.accept()
+            f = conn.makefile("rw", encoding="utf-8", newline="\n")
+            _pair(f)
+            for line in f:
+                f.write(json.dumps({"jsonrpc": "2.0", "id": json.loads(line)["id"], "result": {"where": "window"}}) + "\n")
                 f.flush()
-                restart_mark.write(["/nowhere/a.FCStd"])
-                srv.close()
-                time.sleep(0.3)
-                f.close()
-                conn.close()
-                time.sleep(1.0)
-                again = socket.socket()
-                again.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                again.bind(("127.0.0.1", port))
-                again.listen(1)
-                c2, _ = again.accept()
-                g = c2.makefile("rw", encoding="utf-8", newline="\n")
-                _pair(g)
-                for ln in g:
-                    g.write(json.dumps({"jsonrpc": "2.0", "id": json.loads(ln)["id"], "result": {"where": "window"}}) + "\n")
-                    g.flush()
-                    clear_own()
 
-            threading.Thread(target=first, daemon=True).start()
-            got = []
-            w = supervise.Window(got.append)
-            self.assertTrue(w.call(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call"})))
-            time.sleep(0.6)
-            self.assertTrue(w.call(json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call"})))
-            self.assertEqual(json.loads(got[-1])["result"]["where"], "window")
+        threading.Thread(target=late, daemon=True).start()
+        got = []
+        t0 = time.time()
+        w = supervise.Window(got.append)
+        self._watch(w, beat).expect(111, why="agentlink_update")
+        ok = w.call(json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/call"}))
+        self.assertTrue(ok, got)
+        self.assertGreater(time.time() - t0, 1.0)
+        self.assertEqual(json.loads(got[0])["result"]["where"], "window")
+        self.assertFalse(w.watch.pending())
+
+    def test_restart_given_up_is_said_once(self):
+        from agentlink import window_watch
+
+        supervise.WINDOW_PORT = _free_port()
+        got = []
+        w = supervise.Window(got.append)
+        beat = {"v": {"pid": 111, "t": 0, "pairing": 1}}
+        self._watch(w, beat).expect(111, t=0.0)  # long ago: past GIVE_UP
+        self.assertTrue(w.call(json.dumps({"jsonrpc": "2.0", "id": 4, "method": "tools/call"})))
+        self.assertIn("did not come back", got[-1])
+        # Said once: the hidden FreeCAD takes the next call.
+        self.assertFalse(w.call(json.dumps({"jsonrpc": "2.0", "id": 5, "method": "tools/call"})))
+        self.assertGreater(window_watch.GIVE_UP, 60)
+
+    def test_dropped_connection_waits_for_the_restart(self):
+        """The window answers app_restart "restarting" and quits under a
+        kept connection: the next call waits for the new pid and goes to the
+        window once it is back, not to the hidden one."""
+        import time
+
+        srv = socket.socket()
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        port = srv.getsockname()[1]
+        supervise.WINDOW_PORT = port
+        beat = {"v": {"pid": 111, "t": time.time(), "pairing": 1}}
+
+        def first():
+            conn, _ = srv.accept()
+            f = conn.makefile("rw", encoding="utf-8", newline="\n")
+            line = _call(f)
+            body = json.dumps({"restarting": True})
+            f.write(json.dumps({"jsonrpc": "2.0", "id": json.loads(line)["id"], "result": {"content": [{"type": "text", "text": body}]}}) + "\n")
+            f.flush()
+            srv.close()
+            time.sleep(0.3)
+            f.close()
+            conn.close()
+            time.sleep(1.0)
+            again = socket.socket()
+            again.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            again.bind(("127.0.0.1", port))
+            again.listen(1)
+            beat["v"] = {"pid": 222, "t": time.time(), "pairing": 1}
+            c2, _ = again.accept()
+            g = c2.makefile("rw", encoding="utf-8", newline="\n")
+            _pair(g)
+            for ln in g:
+                g.write(json.dumps({"jsonrpc": "2.0", "id": json.loads(ln)["id"], "result": {"where": "window"}}) + "\n")
+                g.flush()
+
+        threading.Thread(target=first, daemon=True).start()
+        got = []
+        w = supervise.Window(got.append)
+        self._watch(w, beat)
+        real = supervise.heartbeat_any
+        supervise.heartbeat_any = lambda: dict(beat["v"])
+        try:
+            self.assertTrue(w.call(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "app_restart", "arguments": {}}})))
         finally:
-            restart_mark.clear()
-            os.environ.pop("AGENTLINK_RESTART_MARK", None)
+            supervise.heartbeat_any = real
+        self.assertTrue(w.watch.pending())
+        time.sleep(0.6)
+        self.assertTrue(w.call(json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call"})))
+        self.assertEqual(json.loads(got[-1])["result"]["where"], "window")
 
 
 _USED = set()

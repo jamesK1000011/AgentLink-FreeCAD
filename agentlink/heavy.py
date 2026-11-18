@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Heavy jobs on this Mac (unattended use, N): each heavy tool's time and peak
 # memory are logged against a size measure (the faces of the parts, mesh
-# facets, cloud points), so the next one can be estimated. Over 2 minutes,
-# the first call is answered with the estimate and a rough pass offered —
-# the same call again runs it. Over the memory ceiling (half this Mac's
+# facets, cloud points). The times are logged data only: no estimate stops
+# or delays a call (no prejudging, 18 Nov: an export estimated at 2 min took
+# 0.48 s, a loft estimated at 3 min took 6.4 s). Every call starts at once;
+# one past about 60 s moves to the background (agentlink/sup_jobs.py). Over
+# the memory ceiling (half this Mac's
 # memory unless the person set Mod/AgentLink MemoryCeilingGB), it is refused
 # before it starts. Holding back for heat, memory pressure or the person
 # working in the window is the supervisor's (supervise.py), which sees every
@@ -16,14 +18,6 @@ import time
 from . import keep
 from .protocol import ToolError
 
-OFFER_OVER = 120.0
-OFFER_KEEP = 600.0
-# Heavy tools never refused on an estimate: a picture is the job itself (no
-# rougher pass to offer), and its time follows its views and pixels, not the
-# document's faces the estimate is read against — a 17 s render was put at
-# 6 min from an earlier slow run, and every render took two calls. They are
-# still queued, timed and given a heavy call's deadline.
-NO_OFFER = {"view_render", "steps_render"}
 # A heavy tool may say during its call what its work really was
 # (session.heavy_work = (timing key, size)): a render its triangles times
 # views, not the document's faces. Its time is then logged against that,
@@ -469,23 +463,9 @@ class Gate:
         mem = memory_estimate(q, tool.name, size)
         if ceiling and mem and mem / 1024.0 > ceiling:
             raise ToolError("invalid_state", f"{tool.name} at this size would need about {mem / 1024.0:.1f} GB (from its past runs here), over this Mac's {ceiling:g} GB ceiling for one job: a coarser pass (fewer elements or points) first. The person can raise the ceiling (Mod/AgentLink MemoryCeilingGB).")
-        est = keep.estimate(q, tool.name, size)
-        key = keep.call_key(tool.name, args)
         now = time.time()
-        self.offers = {k: t for k, t in self.offers.items() if now - t < OFFER_KEEP}
-        # Inside a batch the batch is the plan: a heavy call in it runs as
-        # asked (a refused estimate stopped the batch and rolled back the
-        # good steps before it).
-        in_batch = bool(getattr(self.s, "batch_now", None))
-        # A read sent to a job (agentlink/jobs.py) runs: its answer waits
-        # for it, the call does not.
-        as_job = bool(getattr(self, "as_job", False))
-        if est and est > OFFER_OVER and key not in self.offers and tool.name not in NO_OFFER and not in_batch and not as_job:
-            self.offers[key] = now
-            rough = keep.estimate(q, tool.name, max(1, size / 4.0)) or est / 4.0
-            rng = keep.estimate_range(q, tool.name, size)
-            span = f" ({_fmt(rng[0])} to {_fmt(rng[2])} over its runs)" if rng and _fmt(rng[0]) != _fmt(rng[2]) else ""
-            raise ToolError("invalid_state", f"{tool.name} takes about {_fmt(est)}{span} here at this size (from its past runs on this Mac); a rough pass (a coarser mesh, fewer points) takes about {_fmt(rough)} — run that first? The same call again runs it as asked. Nothing was run.")
+        # No estimate refuses or holds the call (no prejudging): it runs,
+        # and its time is logged after it (after()).
         # A saved copy before a heavy change (an add-on's "checkpoints"
         # service): a crash or a hang in it loses nothing done before.
         if tool.changes:
@@ -525,28 +505,9 @@ class Gate:
         est = keep.sized_estimate(q, tool.name, size, tkey)
         if est is None:
             return
-        after = keep.stopped_before(tool.name, q=q)
-        if after is not None:
-            # It stopped FreeCAD before: never estimated under what it ran then.
-            est = max(est, 1.5 * after)
-        now = time.time()
-        if keep.SIZED[tool.name]["ask"] and est > keep.SIZED_ASK_OVER and self.live():
-            key = keep.call_key(tool.name, args)
-            self.offers = {k: t for k, t in self.offers.items() if now - t < OFFER_KEEP}
-            if key not in self.offers:
-                self.offers[key] = now
-                src = "its past runs on this Mac" if len((q.get("timings") or {}).get(tkey) or []) >= 2 else "a rough rule"
-                raise ToolError("invalid_state", self._sized_words(tool.name, args, size, est, src))
-        self.sized = (now, size, est, tkey)
-        if est > keep.SIZED_MARK_OVER:
-            try:
-                keep.mark_heavy_call(tool.name, est, size, t=now)
-                # The tool's own time budget (part_loft stops its tries and
-                # checks past it): twice the estimate, inside the watchdog's
-                # three times.
-                self.s.call_budget = 2.0 * est
-            except Exception:
-                pass
+        # Logged data only (no prejudging): the call runs whatever the
+        # estimate says; its real time is logged against its size after it.
+        self.sized = (time.time(), size, est, tkey)
 
     def _stopped_before(self, tool, args):
         """A change the watchdog stopped FreeCAD in before (it ran past its
@@ -557,82 +518,18 @@ class Gate:
             changes = tool.changes_for(args or {})
         except Exception:
             changes = getattr(tool, "changes", True)
-        if not changes or keep.is_heavy(tool.name) or getattr(self, "as_job", False):
-            return
-        after = keep.stopped_before(tool.name)
-        if after is None:
-            return
-        est = max(keep.SIZED_MARK_OVER + 1.0, 1.5 * after)
-        now = time.time()
-        if self.live() and not getattr(self.s, "batch_now", None):
-            key = keep.call_key(tool.name, args)
-            self.offers = {k: t for k, t in self.offers.items() if now - t < OFFER_KEEP}
-            if key not in self.offers:
-                self.offers[key] = now
-                raise ToolError("invalid_state", f"{tool.name} stopped FreeCAD before: a call of it ran {_fmt(after)} without answering and the watchdog took the window for hung. "
-                                f"A lighter call first (fewer points, a coarser mesh or deflection, a smaller part), or the same call again runs it with up to {_fmt(keep.deadline('heavy', est))} before the watchdog steps in. Nothing was run.")
-        self.sized = (now, None, est, None)
-        try:
-            keep.mark_heavy_call(tool.name, est, 0, t=now)
-            self.s.call_budget = 2.0 * est
-        except Exception:
-            pass
-
-    def _sized_words(self, tool, args, size, est, src):
-        """The refusal of a sized call estimated past SIZED_ASK_OVER: its
-        estimate, what it is from, and the lighter way."""
-        if tool == "part_loft":
-            loop = bool(args.get("closed"))
-            c = loft_counts(self.s, args) or (2, 48)
-            per_run, runs, pts = loft_split(c[0], c[1], loop, est)
-            how = "ruled" if args.get("ruled") else "smooth"
-            return (f"part_loft here is heavy: about {_fmt(est)} for {c[0]} profiles of {c[1]} points {how} ({loft_faces(c[0], c[1], loop):,} faces along the way; from {src}), "
-                    "and FreeCAD's window is frozen until OCC finishes — past its deadline the window is taken for hung and stopped. Lighter: "
-                    f"split it into {runs} lofts of about {per_run} profiles each (each run starting on the profile the last ended on), then part_boolean fuse them; "
-                    f"or fewer points a profile (samples: {pts}, the profiles rebuilt alike); or fewer profiles where the shape changes slowly. "
-                    "The same call again runs it as asked; the watchdog then waits its estimate times three. Nothing was run.")
-        again = "The same call again runs it as asked; the watchdog then waits its estimate times three. Nothing was run."
-        if tool == "part_from_mesh":
-            refine = args.get("refine", True)
-            n = int(size / (2.0 if refine else 1.0))
-            return (f"part_from_mesh here is heavy: about {_fmt(est)} for {n:,} triangles" + (" with refine (about twice as long)" if refine else "") + f" (from {src}), "
-                    "and FreeCAD's window is frozen until OCC finishes — past its deadline the window is taken for hung and stopped. Lighter: "
-                    "fewer triangles first (meshobj_decimate), " + ("or refine: false (each triangle stays a face; part_refine later), " if refine else "")
-                    + "or keep it a mesh (meshobj_ tools). " + again)
-        if tool == "insp_run":
-            return (f"insp_run here is heavy: about {_fmt(est)} at this size (from {src}): a free-form body meshes slowly, and each point against a solid nominal is an OCC distance. "
-                    "FreeCAD's window is frozen until it finishes. Lighter: a larger spacing or a smaller cap (fewer points), a mesh of the nominal "
-                    "(export it to STL and import_file it; a mesh nominal is fast), or a larger deflection. " + again)
-        if tool == "export":
-            return (f"export here is heavy: about {_fmt(est)} to mesh its B-spline faces at tolerance {args.get('tolerance', 0.01)} mm (from {src}), "
-                    "and FreeCAD's window is frozen while OCC meshes them. Lighter: a larger tolerance (0.05 to 0.1 mm prints the same), "
-                    "STEP (no meshing), or the call on its own (not in a batch), where it runs as a job and the window stays free. " + again)
-        if tool == "part_boolean":
-            got = boolean_parts(self.s, args) or {}
-            if got.get("pairs") is not None:
-                what = f"{got['pairs']:,} face pairs whose boxes meet, {got['base'] + got['tools']:,} faces in all"
-            else:
-                what = f"{int(size):,} face pairs"
-        else:
-            what = f"size {size:,.0f}"
-        return (f"{tool} here is heavy: about {_fmt(est)} at this size ({what}; from {src}), "
-                "and FreeCAD's window is frozen until OCC finishes. Lighter first: fewer faces (part_refine merges coplanar facets; a coarser mesh before part_from_mesh), "
-                "or meshobj_boolean on the meshes. The same call again runs it as asked; the watchdog waits for it. Nothing was run.")
+        # A stop before is logged data only now (no prejudging): the call
+        # runs as asked, and the watchdog stops FreeCAD only when it is
+        # truly hung (supervise.stalled), never for being slow.
+        return
 
     def _sized_after(self, tool, ok):
         got, self.sized = getattr(self, "sized", None), None
         if got is None:
             return
         t0, size, est, tkey = got
-        if tkey is None:  # a call stopped before (_stopped_before): not timed by size
-            keep.clear_heavy_call()
+        if tkey is None:  # not timed by size
             ok = False
-        if est > keep.SIZED_MARK_OVER:
-            keep.clear_heavy_call()
-            try:
-                self.s.call_budget = 0
-            except Exception:
-                pass
         secs = time.time() - t0
         # Timed where it says something: a run of a second or more.
         if ok and secs >= 1.0:

@@ -1042,6 +1042,23 @@ function windowHeld(hb, now = Date.now() / 1000) {
   return { pid: hb.pid, busy: hb.busy, since: hb.busySince || null }
 }
 
+/** The window's restart, for the supervisor that starts next (finding 52):
+ *  { pid, t, pinned } from the heartbeat read just before the restart. The
+ *  supervisor then waits for the first heartbeat of a NEW pid that pairs,
+ *  instead of letting the hidden FreeCAD answer meanwhile. No mark file. */
+function restartWord(hb, now = Date.now() / 1000) {
+  if (!hb || typeof hb !== 'object' || !hb.pid) return null
+  let pinned = null
+  if (hb.pinned) {
+    const d = (hb.docs || []).find((x) => x && x.name === hb.pinned) || {}
+    pinned = { name: hb.pinned, label: d.label || null, file: d.file || '' }
+  }
+  return { pid: hb.pid, t: now, pinned }
+}
+
+// Set when this launcher restarted the window; taken by the next start().
+let PENDING_RESTART = null
+
 function readHeartbeat() {
   try {
     return JSON.parse(fs.readFileSync(path.join(AL_HOME, 'heartbeat.json'), 'utf8'))
@@ -1153,7 +1170,9 @@ function headless(exe, args, e, inst = {}) {
         // The newest already, but old add-on folders were set aside: FreeCAD
         // starts again without them.
         updating = true
+        const hbBefore = readHeartbeat()
         const windowed = await restartWindow()
+        if (windowed && !windowed.refused) PENDING_RESTART = restartWord(hbBefore)
         const old = child
         child.kill()
         const forced = windowed && windowed.hung ? await forceWindow(old, windowed.hung) : null
@@ -1161,7 +1180,9 @@ function headless(exe, args, e, inst = {}) {
         return
       }
       updating = true
+      const hbBefore = readHeartbeat()
       const windowed = await restartWindow()
+      if (windowed && !windowed.refused) PENDING_RESTART = restartWord(hbBefore)
       const next = newerLauncher() ? loadNewer() : null
       if (next) {
         // A newer launcher came with these add-ons: it takes over this
@@ -1170,7 +1191,8 @@ function headless(exe, args, e, inst = {}) {
         // Python side (its own process, still running).
         const forced = windowed && windowed.hung ? await forceWindow(null, windowed.hung) : null
         reply(id, { before, after: version, restarted: true, ...(forced ? { window: forced } : {}), ...(retired.length ? { retired } : {}), launcher: 'updated: the new launcher serves from now on', ...(snapshot ? { settingsSnapshot: snapshot } : {}), ...(comp.length ? { companions: comp } : {}), ...warn('FreeCAD started again on the new add-ons, under the new launcher. New tools are listed.') })
-        handover(next)
+        handover(next, PENDING_RESTART)
+        PENDING_RESTART = null
         return
       }
       const old = child
@@ -1179,7 +1201,7 @@ function headless(exe, args, e, inst = {}) {
       reply(id, { before, after: version, restarted: true, ...(retired.length ? { retired } : {}), ...(snapshot ? { settingsSnapshot: snapshot } : {}), ...(comp.length ? { companions: comp } : {}), ...(next === false ? { launcher: 'kept: the updated launcher did not load, so this one keeps serving (launcher.log says why)' } : {}), ...(forced ? { window: forced } : {}), ...warn(windowed && windowed.refused
         ? `The hidden FreeCAD runs the new add-ons, but the window did not restart and keeps the old ones: ${windowed.refused} Then app_restart.`
         : windowed
-          ? 'FreeCAD started again on the new add-ons: the window reopens its documents (calls wait for it, up to 90 s), the one in front back in front. New tools are listed.'
+          ? 'FreeCAD started again on the new add-ons: the window reopens its documents (each call waits for it up to 45 s and is never sent to the hidden FreeCAD meanwhile), and the agent works in its document of before. New tools are listed.'
           : 'FreeCAD started again on the new add-ons: the document is fresh (session_state). New tools are listed.') })
     } catch (err) {
       reply(id, { error: { code: 'unavailable', message: `No update: ${err.message}. The add-ons in place keep serving.` } }, true)
@@ -1213,7 +1235,11 @@ function headless(exe, args, e, inst = {}) {
   }
   const start = () => {
     // The add-ons' folders as installed now: an update may have brought one.
-    const env3 = inst.base ? { ...e, PYTHONPATH: pythonPath(inst.base, e.FREECAD_LIB) } : e
+    const env3 = inst.base ? { ...e, PYTHONPATH: pythonPath(inst.base, e.FREECAD_LIB) } : { ...e }
+    if (PENDING_RESTART) {
+      env3.AGENTLINK_WINDOW_RESTART = JSON.stringify(PENDING_RESTART)
+      PENDING_RESTART = null
+    }
     child = spawn(exe, args, { env: env3, cwd: OUT, stdio: ['pipe', 'pipe', 'pipe'] })
     readline.createInterface({ input: child.stdout }).on('line', (line) => {
       if (!line.startsWith('{')) {
@@ -1296,7 +1322,7 @@ function headless(exe, args, e, inst = {}) {
   // restarted the extension. The new one is told the session has begun; the
   // client is told the tool list changed.
   let relay = null
-  function handover(next) {
+  function handover(next, windowRestart = null) {
     const input = new PassThrough()
     let buf = ''
     const output = new Writable({
@@ -1320,7 +1346,7 @@ function headless(exe, args, e, inst = {}) {
     if (child) child.kill()
     log('handed over to the updated launcher in this process', LAUNCHER, process.versions.electron ? `(electron ${process.versions.electron})` : `(node ${process.version})`)
     Promise.resolve()
-      .then(() => next.startHandedOver({ stdin: input, stdout: output, state: { bundle: HERE, version } }))
+      .then(() => next.startHandedOver({ stdin: input, stdout: output, state: { bundle: HERE, version, windowRestart } }))
       .catch((err) => {
         // It failed to start: this one serves again, on a fresh FreeCAD.
         log(`the updated launcher did not start (${err && err.message}); this one keeps serving`)
@@ -1412,10 +1438,11 @@ let HANDED_OVER = false
 function startHandedOver({ stdin, stdout, state = {} }) {
   IO = { stdin, stdout }
   HANDED_OVER = true
+  if (state.windowRestart) PENDING_RESTART = state.windowRestart
   log(`took over from the launcher in this process (add-ons ${state.version || '?'})`)
   return main()
 }
-module.exports = { startHandedOver, resolveChannel, checkSources, CHANNELS, companions, bundledManifest, windowHeld, extensionRecord, extensionReport, publishStdio }
+module.exports = { startHandedOver, resolveChannel, checkSources, CHANNELS, companions, bundledManifest, windowHeld, restartWord, extensionRecord, extensionReport, publishStdio }
 
 /** No FreeCAD: still a server, so Claude shows why instead of a dead entry. */
 function serveError(message) {

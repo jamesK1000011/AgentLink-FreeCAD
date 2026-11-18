@@ -260,6 +260,24 @@ def parse_steps(steps):
     return out
 
 
+def unmark_modified(gui, name):
+    """The window's Gui::Document marked unmodified (its Python Modified,
+    which FreeCAD's canClose reads): a close then asks nothing. True when
+    done. Never raises."""
+    try:
+        gd = gui.getDocument(name)
+    except Exception:  # noqa: BLE001
+        return False
+    if gd is None:
+        return False
+    try:
+        if getattr(gd, "Modified", False):
+            gd.Modified = False
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def leave_edit(gui, name):
     """Before a document closes: its edit left (a sketch open in edit) and
     the task panel of that edit closed, as a person's Close does. Closing

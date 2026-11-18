@@ -179,6 +179,7 @@ agentlink/shots.py
 agentlink/smoke.py
 agentlink/staticbase.py
 agentlink/store.py
+agentlink/sup_jobs.py
 agentlink/supervise.py
 agentlink/targets.py
 agentlink/td_wait.py
@@ -188,6 +189,7 @@ agentlink/tooldata.py
 agentlink/toolindex.py
 agentlink/tools.py
 agentlink/usage.py
+agentlink/window_watch.py
 agentlink/workbench.py
 agentlink_headless.py
 agentlink_state.py
@@ -201,6 +203,7 @@ docs/clients/lm-studio.md
 docs/clients/opencode-ollama.md
 docs/clients/vscode.md
 docs/data-tools.md
+docs/design/jobs-and-restart-2026-11-18.md
 docs/design/porting-2026-11-18.md
 docs/design/usage-log-2026-11-18.md
 docs/hardening/STATUS.md
@@ -489,6 +492,7 @@ tests/test_hull3d.py
 tests/test_inspection.py
 tests/test_installed_names.py
 tests/test_iso286.py
+tests/test_jobs_and_restart.py
 tests/test_judge_r8.py
 tests/test_keep.py
 tests/test_layout.py

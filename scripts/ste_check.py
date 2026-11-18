@@ -43,6 +43,8 @@ GUARDS = {"copy": r"\bcop(?:y|ies|ied)\b", "undo": r"\bundo", "refuse": r"\brefu
 
 # (tool, token): reason. Keep it short: a token is waived only when it truly does not belong.
 WAIVERS = {
+    ("export", "20"): "the 20 s estimate that sent an export to a job is gone (no prejudging, 18 Nov); a call past about 60 s moves to the background",
+    ("export", "batch"): "the batch-only estimate question is gone with the estimates (18 Nov)",
 }
 
 

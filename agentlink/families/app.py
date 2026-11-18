@@ -856,7 +856,7 @@ def tools(session):
 
             app = QtWidgets.QApplication.instance()
         QtCore.QTimer.singleShot(300, app.quit)
-        return {"restarting": True, "saved": saved, "reopens": reopen, **({"keptInPlace": kept} if kept else {}), **({"fromCopies": [c["label"] for c in copied]} if copied else {}), **({"discarded": dropped} if dropped else {}), **({"app": bundle, "settings": migrated} if target else {}), "note": "FreeCAD quits and opens again in a few seconds with these documents, its link on by itself; calls meanwhile wait for it (up to 90 s)."}
+        return {"restarting": True, "saved": saved, "reopens": reopen, **({"keptInPlace": kept} if kept else {}), **({"fromCopies": [c["label"] for c in copied]} if copied else {}), **({"discarded": dropped} if dropped else {}), **({"app": bundle, "settings": migrated} if target else {}), "note": "FreeCAD quits and opens again in a few seconds with these documents, its link on by itself. Each call meanwhile waits for it, up to 45 s, and never goes to the hidden FreeCAD. The agent works in its document of before."}
 
     def app_install(a):
         """Install another FreeCAD release beside this one (a Mac): started
@@ -972,8 +972,9 @@ def tools(session):
                             "(theme, toolbars) show after app_restart.",
              obj({"path": {"type": "string"}, "macros": {"type": "boolean"}}), pref_import),
         Tool("app_restart", "Quit this FreeCAD window and open it again, with the same documents. Use it for new add-on code, a theme, or a setting that needs a restart. Window "
-                            "only. The call answers first. Then FreeCAD quits about 0.3 s later, and is back in a few seconds with its link on automatically. Calls made during "
-                            "that time wait for it, up to 90 s. Then session_state tells the status. save tells what happens to documents. save agent (the default): saves the "
+                            "only. The call answers first. Then FreeCAD quits about 0.3 s later, and is back in a few seconds with its link on automatically. Each call made during "
+                            "that time waits for it, up to 45 s. Then the call fails with a clear message, and it never goes to the hidden FreeCAD. The agent "
+                            "works in its document of before again. session_state tells the status. save tells what happens to documents. save agent (the default): saves the "
                             "documents that this session changed, each checkpointed first. save none: saves nothing. save all: saves every changed document. It needs confirm: "
                             "\"save all\", typed by the person, because it writes over files that the agent did not change. In every case, nothing of the person's is lost or written "
                             "over. The tool keeps the agent's never-saved documents once in ~/AgentLink/unsaved, and opens them again from there. Any other changed document opens "

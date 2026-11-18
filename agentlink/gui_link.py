@@ -210,7 +210,52 @@ def modal_info():
     import re as _re
 
     text = _re.sub(r"<[^>]+>", " ", " ".join(parts))
-    return {"class": w.metaObject().className(), "title": w.windowTitle(), "text": " ".join(text.split())[:600], "buttons": buttons, "widget": w}
+    try:
+        oname = str(w.objectName() or "")
+    except Exception:
+        oname = ""
+    return {"class": w.metaObject().className(), "title": w.windowTitle(), "text": " ".join(text.split())[:600], "buttons": buttons, "widget": w,
+            **({"name": oname} if oname else {})}
+
+
+def is_close_confirm(d):
+    """FreeCAD's "Unsaved Document" box (MainWindow::confirmSave, object
+    name confirmSave): "Save all changes to document … before closing?"."""
+    if not isinstance(d, dict):
+        return False
+    text = str(d.get("text") or "").lower()
+    return d.get("name") == "confirmSave" or (str(d.get("title") or "") == "Unsaved Document") or ("before closing" in text and "save" in text)
+
+
+def unsafe_close_press(d, button, in_hand):
+    """Finding 62: Save or Don't Save pressed on FreeCAD's close confirm
+    while a call (in_hand: its tool names) closes the document under it.
+    The close then goes on inside the box's own loop under the call's
+    feet, and FreeCAD crashed (live, 18 Nov). The refusal's words, or None
+    when the press is safe (Cancel, or the box came with no call in hand)."""
+    if not is_close_confirm(d):
+        return None
+    b = str(button or "").lower().replace("&", "")
+    if b in BACK_OUT or b in ("cancel", "escape"):
+        return None
+    under = [t for t in in_hand or () if t not in ("dialog_answer", "batch", "gui_unstick")]
+    if not under:
+        return None
+    return (f"button: {button} is not pressed here. FreeCAD asks this while {under[0]} closes the document, and a Save or Don't Save "
+            "inside that close crashed FreeCAD before. Press Cancel (dialog_answer { button: \"Cancel\" }). Then doc_close { documents, discard: true } "
+            "closes it without a dialog, or doc_save first keeps the changes.")
+
+
+def calls_in_hand():
+    """The tool names of the calls in hand in the window's link, outermost
+    first. Never raises."""
+    try:
+        import agentlink_state
+
+        link = getattr(agentlink_state, "link", None)
+        return [c.get("name") for c in list(getattr(link, "calls", []) or []) if isinstance(c, dict)]
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def popup_info():

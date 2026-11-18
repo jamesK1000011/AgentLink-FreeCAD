@@ -143,16 +143,15 @@ class EstimateGate(unittest.TestCase):
         g.before(_Tool("view_render"), {"views": ["iso"]})  # not refused
         g.after(_Tool("view_render"), {}, True)
 
-    def test_other_heavy_tools_still_ask_but_not_inside_a_batch(self):
-        from agentlink.protocol import ToolError
-
+    def test_other_heavy_tools_run_at_once_in_and_out_of_a_batch(self):
+        # No prejudging (18 Nov): no estimate asks first, alone or in a batch.
         g = self.heavy.Gate(_Sess())
-        with self.assertRaises(ToolError):
-            g.before(_Tool("fea_solve"), {"a": 1})
+        g.before(_Tool("fea_solve"), {"a": 1})
+        g.after(_Tool("fea_solve"), {}, True)
         s = _Sess()
         s.batch_now = {"i": 0}
         g2 = self.heavy.Gate(s)
-        g2.before(_Tool("fea_solve"), {"a": 2})  # the batch is the plan: it runs
+        g2.before(_Tool("fea_solve"), {"a": 2})
         g2.after(_Tool("fea_solve"), {}, True)
 
 

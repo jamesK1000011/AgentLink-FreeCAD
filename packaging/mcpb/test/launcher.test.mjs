@@ -85,6 +85,8 @@ process.stdout.write(JSON.stringify({
   stale: L.windowHeld({ pid: 42, t: 900, busy: 'batch' }, now),
   idle: L.windowHeld({ pid: 42, t: 999, busy: null }, now),
   none: L.windowHeld(null, now),
+  word: L.restartWord({ pid: 42, t: 999, pinned: 'Lesson', docs: [{ name: 'Lesson', label: 'bike-stem-1', file: '/x/l.FCStd' }] }, now),
+  noWord: L.restartWord(null, now),
 }))
 `
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agentlink-held-'))
@@ -94,6 +96,8 @@ process.stdout.write(JSON.stringify({
   assert.equal(out.stale, null, 'a stale heartbeat: no window to judge')
   assert.equal(out.idle, null)
   assert.equal(out.none, null)
+  assert.deepEqual(out.word, { pid: 42, t: 1000, pinned: { name: 'Lesson', label: 'bike-stem-1', file: '/x/l.FCStd' } }, 'the restart word for the next supervisor (finding 52)')
+  assert.equal(out.noWord, null)
 }
 // A stdio server (addons.json's stdio: Agent Link for OrcaSlicer, run by its
 // own Claude extension from a cache of versions): the installed copy goes

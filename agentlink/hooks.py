@@ -32,7 +32,11 @@ Echo                          a family's NO_ECHO (names or prefixes): its
                               tools are never shown as they run
 Events                        on(event, fn); off(event, fn); emit(event, *args);
                               call_done(session, tool, ok, changed) after
-                              every call through the server
+                              every call through the server;
+                              document_closing(session, name) before
+                              doc_close closes a document: an add-on
+                              that holds it (rings, timers, a task
+                              panel) lets go of it first
 Rider line                    register_rider(owner, fn): fn(tool) -> a short
                               line while the add-on has something in hand,
                               else None; every active line joins each

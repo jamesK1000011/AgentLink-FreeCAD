@@ -250,25 +250,18 @@ class SizedGate(unittest.TestCase):
         self.assertEqual(self.heavy.sized_size(self.gate.s, "part_boolean", {"tools": "Peg"}), 2119 * 6)
         self.assertIsNone(self.heavy.sized_size(self.gate.s, "part_boolean", {"base": "Grip", "tools": ["Nope"]}))
 
-    def test_heavy_fuse_is_asked_then_marked_then_cleared(self):
-        from agentlink.protocol import ToolError
-
+    def test_heavy_fuse_runs_at_once_and_is_timed(self):
+        # No prejudging (18 Nov): a big estimate neither refuses nor marks.
         args = {"op": "fuse", "base": "Grip", "tools": ["Guard", "Pin"]}
         t = Tool("part_boolean")
-        with self.assertRaises(ToolError) as cm:
-            self.gate.before(t, args)
-        self.assertIn("frozen", cm.exception.message)
-        self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
-        started = time.time()
-        self.gate.before(t, args)  # the same call again runs it
-        lim = self.keep.heavy_call_limit(started, time.time())
         est = self.keep.sized_estimate({}, "part_boolean", 2119 * 1336)
         self.assertGreater(est, 60)
-        self.assertAlmostEqual(lim, max(self.keep.DEADLINES["change"], 3 * est), delta=0.01)
-        # A mark from before the call in hand started is not this call's.
-        self.assertIsNone(self.keep.heavy_call_limit(started + 5, time.time()))
-        self.gate.after(t, args, True)
+        self.gate.before(t, args)  # the first call runs
         self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
+        self.gate.sized = (time.time() - 2.0,) + tuple(self.gate.sized[1:])
+        self.gate.after(t, args, True)
+        # its real time is logged data
+        self.assertIn("part_boolean boxes", self.keep.queue_state().get("timings") or {})
 
     def test_small_boolean_is_left_alone(self):
         self.gate.before(Tool("part_boolean"), {"op": "cut", "base": "Peg", "tools": ["Pin"]})
@@ -280,17 +273,13 @@ class SizedGate(unittest.TestCase):
         self.assertAlmostEqual(self.keep.sized_estimate(q, "part_boolean", 4000), 4.0, delta=0.01)
         self.assertIsNone(self.keep.sized_estimate(q, "part_fillet", 4000))
 
-    def test_undo_is_marked_not_asked(self):
+    def test_undo_is_neither_marked_nor_asked(self):
         big = Doc([Obj("Grip", 6000)])
         g = self.heavy.Gate(Sess(big))
-        started = time.time()
         g.before(Tool("history_undo"), {})
-        self.assertIsNotNone(self.keep.heavy_call_limit(started, time.time()))
-        g.after(Tool("history_undo"), {}, True)
         self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
+        g.after(Tool("history_undo"), {}, True)
 
-    # Live: part_loft { profiles_file: 91 x 80 points, ruled } ran past 120 s and
-    # the watchdog stopped FreeCAD; 91 x 36 took 9.7 s.
     def loft_args(self, n_prof, n_pts, **kw):
         prof = [{"points": [[float(i), float(j), 0.0] for i in range(n_pts)]} for j in range(n_prof)]
         return {"profiles": prof, **kw}
@@ -307,24 +296,14 @@ class SizedGate(unittest.TestCase):
         self.assertEqual(self.keep.sized_key("part_loft", {"ruled": True}), "part_loft ruled")
         self.assertEqual(self.keep.sized_key("part_loft", {}), "part_loft")
 
-    def test_big_loft_is_refused_once_with_the_split_then_runs_with_a_deadline(self):
-        from agentlink.protocol import ToolError
-
+    def test_big_loft_runs_at_once_and_is_timed(self):
+        # Live, 18 Nov: 44 profiles estimated 3 min took 6.4 s. Nothing is refused.
         args = self.loft_args(91, 80, ruled=True)
         t = Tool("part_loft")
-        with self.assertRaises(ToolError) as cm:
-            self.gate.before(t, args)
-        m = cm.exception.message
-        for w in ("91 profiles of 80 points ruled", "part_boolean fuse", "samples:", "Nothing was run", "7,200 faces"):
-            self.assertIn(w, m)
-        started = time.time()
         self.gate.before(t, args)
-        self.assertGreater(self.keep.heavy_call_limit(started, time.time()), 120)
-        self.assertGreater(self.gate.s.call_budget, 60)
+        self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
         self.gate.sized = (time.time() - 5.0,) + tuple(self.gate.sized[1:])  # it ran 5 s
         self.gate.after(t, args, True)
-        self.assertEqual(self.gate.s.call_budget, 0)
-        self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
         # timed under its own key, ruled apart from smooth
         self.assertIn("part_loft ruled", self.keep.queue_state().get("timings") or {})
 
@@ -376,49 +355,21 @@ class SizedGate(unittest.TestCase):
         ruled = self.heavy.sized_size(s, "insp_run", {"actual": "Ruled", "nominals": ["Scan"]})
         self.assertGreater(self.keep.sized_estimate({}, "insp_run", smooth), 60)
         self.assertLess(self.keep.sized_estimate({}, "insp_run", ruled), 2)
-        # asked first with the time (live, 18 Nov: it froze the window with
-        # no word), then marked for the watchdog on the same call again
-        from agentlink.protocol import ToolError
-
+        # runs at once (no prejudging), nothing marked
         g = self.heavy.Gate(s)
-        with self.assertRaises(ToolError) as cm:
-            g.before(Tool("insp_run"), {"actual": "Smooth", "nominals": ["Scan"]})
-        self.assertIn("larger spacing", cm.exception.message)
-        self.assertIn("Nothing was run", cm.exception.message)
-        started = time.time()
         g.before(Tool("insp_run"), {"actual": "Smooth", "nominals": ["Scan"]})
-        self.assertGreater(self.keep.heavy_call_limit(started, time.time()), 120)
-        g.after(Tool("insp_run"), {}, True)
         self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
+        g.after(Tool("insp_run"), {}, True)
 
-    def test_a_change_the_watchdog_stopped_is_asked_then_given_longer(self):
-        from agentlink.protocol import ToolError
-
+    def test_a_change_the_watchdog_stopped_runs_as_asked(self):
         t = Tool("part_sweep")
-        self.gate.before(t, {"a": 1})  # never stopped: runs as ever, no mark
-        self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
-        self.gate.after(t, {"a": 1}, True)
         self.keep.note_stopped("part_sweep", 125.0)
-        self.assertEqual(self.keep.stopped_before("part_sweep"), 125.0)
-        with self.assertRaises(ToolError) as cm:
-            self.gate.before(t, {"a": 1})
-        self.assertIn("stopped FreeCAD before", cm.exception.message)
-        started = time.time()
-        self.gate.before(t, {"a": 1})
-        self.assertGreaterEqual(self.keep.heavy_call_limit(started, time.time()), 3 * 1.5 * 125.0 - 0.01)
-        self.gate.after(t, {"a": 1}, True)
+        self.assertEqual(self.keep.stopped_before("part_sweep"), 125.0)  # logged data
+        self.gate.before(t, {"a": 1})  # not asked, not marked
         self.assertFalse(os.path.exists(self.keep.heavy_call_mark()))
-        # the sized gate never estimates under what stopped it either
-        self.keep.note_stopped("insp_run", 130.0)
-        g = self.heavy.Gate(Sess(Doc([Obj("Grip", 10)])))
-        with self.assertRaises(ToolError):
-            g.before(Tool("insp_run"), {"actual": "Grip", "nominals": []})  # asked first
-        started = time.time()
-        g.before(Tool("insp_run"), {"actual": "Grip", "nominals": []})
-        self.assertGreaterEqual(self.keep.heavy_call_limit(started, time.time()), 3 * 1.5 * 130.0 - 0.01)
-        g.after(Tool("insp_run"), {}, True)
+        self.gate.after(t, {"a": 1}, True)
 
-    def test_a_read_the_watchdog_stopped_goes_to_a_job(self):
+    def test_a_read_the_watchdog_stopped_is_not_prejudged(self):
         from agentlink import jobs
 
         class R:
@@ -430,7 +381,9 @@ class SizedGate(unittest.TestCase):
         s = Sess(Doc([]))
         self.assertFalse(jobs.wanted(R(), {}, s))
         self.keep.note_stopped("insp_faces", 121.0)
-        self.assertTrue(jobs.wanted(R(), {}, s))
+        self.assertFalse(jobs.wanted(R(), {}, s))
+        self.assertTrue(jobs.wanted(R(), {}, s, asked=True))
+
 
 
 if __name__ == "__main__":
