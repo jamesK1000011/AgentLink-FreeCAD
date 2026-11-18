@@ -393,7 +393,7 @@ class Cookbooks(Home):
         self.assertEqual((row["cookbook"], row["state"]), ("mine", "no"))
         self.assertEqual(row["entries"][0]["entry"], "mine_do")
         self.assertIn("presses Approve", row["next"])
-        msg = self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_do")
+        msg = self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_do")
         self.assertIn("cookbook_approve", msg)
         self.assertIn("Nothing was run", msg)
         self.assertEqual(self.srv.calls, [])
@@ -405,7 +405,7 @@ class Cookbooks(Home):
         self.assertTrue(r["pending"])
         self.assertIn("Approve", r["next"])
         self.assertEqual(self.call("cookbook_list")["cookbooks"][0]["state"], "no")
-        self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_do")
+        self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_do")
         # A press that Agent Link sends (not spontaneous) or one too fast does not count.
         self.assertFalse(self.press(spontaneous=False))
         self.assertFalse(self.press(after=0.2))
@@ -417,7 +417,7 @@ class Cookbooks(Home):
         r = self.call("cookbook_approve", name="mine", sha256=sha)
         self.assertEqual(r["approved"], "mine")
         self.assertEqual(r["sha256"], sha)
-        r = self.call("cookbook_run", cookbook="mine", entry="mine_do")
+        r = self.call("cookbook_run", name="mine", entry="mine_do")
         self.assertEqual(r["ran"], "command")
         self.assertEqual(self.srv.calls, [{"name": "cmd_run", "arguments": {"name": "Mine_Do"}}])
 
@@ -453,7 +453,7 @@ class Cookbooks(Home):
         with open(os.path.join(self.home, "macros-approved.json")) as f:
             store = json.load(f)
         self.assertEqual(list(store), ["Box"])
-        self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_do")
+        self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_do")
 
     def test_a_changed_file_needs_the_ok_again(self):
         self.install()
@@ -464,7 +464,7 @@ class Cookbooks(Home):
         with open(p, "w") as f:
             json.dump(doc, f)
         self.assertEqual(self.call("cookbook_list")["cookbooks"][0]["state"], "changed")
-        msg = self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_do")
+        msg = self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_do")
         self.assertIn("changed after the OK", msg)
         self.assertEqual(self.srv.calls, [])
 
@@ -475,11 +475,11 @@ class Cookbooks(Home):
         r = self.install(doc)
         self.assertEqual(r["scripts"], ["steps.json"])
         self.approve()
-        r = self.call("cookbook_run", cookbook="mine", entry="mine_s")
+        r = self.call("cookbook_run", name="mine", entry="mine_s")
         self.assertEqual(self.srv.calls[-1], {"name": "batch", "arguments": {"calls": [{"tool": "session_state", "arguments": {}}], "rollback": True}})
         with open(os.path.join(cookbook.own_folder("mine"), "steps.json"), "w") as f:
             json.dump([{"tool": "doc_new", "arguments": {}}], f)
-        self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_s")
+        self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_s")
         self.assertEqual(len(self.srv.calls), 1)
 
     def test_an_approved_script_still_cannot_reach_the_ok(self):
@@ -492,7 +492,7 @@ class Cookbooks(Home):
                                     "recipe": {"script": {"calls": [{"tool": "cookbook_approve", "arguments": {"name": "x"}}]}}}
         with open(p, "w") as f:
             json.dump(doc, f)
-        self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_s")
+        self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_s")
         self.refused("cookbook_approve", "invalid_input", name="mine")
         self.assertEqual(self.srv.calls, [])
 
@@ -511,7 +511,7 @@ class Cookbooks(Home):
         self.install()
         self.approve()
         self.srv.tools["mine_do"] = None
-        msg = self.refused("cookbook_run", "refused", cookbook="mine", entry="mine_do")
+        msg = self.refused("cookbook_run", "refused", name="mine", entry="mine_do")
         self.assertIn("Call the tool mine_do itself", msg)
         self.assertEqual(self.call("cookbook_list")["cookbooks"][0]["entries"][0]["refused"], "a tool has this name")
 
@@ -523,9 +523,9 @@ class Cookbooks(Home):
         doc["about"] = "Mine's commands, changed."
         r = self.call("cookbook_import", path=self.write(doc), overwrite=True)
         self.assertEqual(r["state"], "changed")
-        self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_do")
+        self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_do")
         self.refused("cookbook_show", "invalid_input", name="../mine")
-        self.refused("cookbook_run", "not_found", cookbook="nothing", entry="x")
+        self.refused("cookbook_run", "not_found", name="nothing", entry="x")
         # A file whose name says another cookbook is refused at the OK.
         with open(cookbook.file_of("other"), "w") as f:
             json.dump(book(), f)
@@ -546,15 +546,15 @@ class Cookbooks(Home):
                 "module": "minepkg.api", "function": "fit", "document": True,
                 "args": {"type": "object", "properties": {"gap": {"type": "number"}, "deep": {"type": "boolean"}}, "required": ["gap"]}}}})
             self.install(doc)
-            self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_fit", args={"gap": 1})
+            self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_fit", args={"gap": 1})
             self.assertNotIn("minepkg.api", sys.modules)  # nothing imported before the OK
             self.approve()
-            r = self.call("cookbook_run", cookbook="mine", entry="mine_fit", args={"gap": 0.2})
+            r = self.call("cookbook_run", name="mine", entry="mine_fit", args={"gap": 0.2})
             self.assertEqual(r["result"], {"doc": "DOC", "gap": 0.2, "deep": False})
-            self.refused("cookbook_run", "invalid_input", cookbook="mine", entry="mine_fit", args={"gap": "wide"})
-            self.refused("cookbook_run", "invalid_input", cookbook="mine", entry="mine_fit", args={"gap": True})
-            self.refused("cookbook_run", "invalid_input", cookbook="mine", entry="mine_fit", args={})
-            self.refused("cookbook_run", "invalid_input", cookbook="mine", entry="mine_fit", args={"gap": 1, "__class__": 1})
+            self.refused("cookbook_run", "invalid_input", name="mine", entry="mine_fit", args={"gap": "wide"})
+            self.refused("cookbook_run", "invalid_input", name="mine", entry="mine_fit", args={"gap": True})
+            self.refused("cookbook_run", "invalid_input", name="mine", entry="mine_fit", args={})
+            self.refused("cookbook_run", "invalid_input", name="mine", entry="mine_fit", args={"gap": 1, "__class__": 1})
         finally:
             sys.path.remove(os.path.dirname(pkgdir))
             for m in ("minepkg.api", "minepkg"):
@@ -577,7 +577,7 @@ class Cookbooks(Home):
         os.environ["AGENTLINK_HOME"] = os.path.join(self.tmp, "Other")
         r = self.call("cookbook_import", path=out)
         self.assertEqual(r["state"], "no")
-        self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_s")
+        self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_s")
 
     def test_no_cookbook_costs_nothing(self):
         r = self.call("cookbook_list")
@@ -597,7 +597,7 @@ class Listing(unittest.TestCase):
             ents = json.load(f)["entries"]
         mine = [k for k, v in ents.items() if v["group"] == "porting"]
         self.assertEqual(sorted(mine), sorted(["port_scaffold", "cookbook_list", "cookbook_show", "cookbook_import", "cookbook_export",
-                                               "cookbook_approve", "cookbook_unapprove", "cookbook_run"]))
+                                               "cookbook_approve", "cookbook_unapprove", "cookbook_run", "cookbook_probe"]))
         self.assertFalse(set(mine) & set(staticbase.BASE))
 
 
