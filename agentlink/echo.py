@@ -816,6 +816,19 @@ def declare(fam):
     fn = getattr(fam, "WORDS", None)
     if callable(fn) and fn not in WORDS_FNS:
         WORDS_FNS.append(fn)
+    # Fault 17 Nov: an add-on's caption words are its own (CAPTIONS); the
+    # hub names no add-on's tool and says no words of its own for them.
+    for k, v in dict(getattr(fam, "CAPTIONS", None) or {}).items():
+        if not isinstance(k, str) or not k:
+            continue
+        if isinstance(v, str):
+            v = [v]
+        elif isinstance(v, (list, tuple)):
+            v = [x for x in v if isinstance(x, str)]
+        elif not callable(v):
+            continue
+        if v:
+            CAPTIONS.setdefault(k, v)
     fn = getattr(fam, "SELECTS_FOR", None)
     if callable(fn) and fn not in SELECT_FNS:
         SELECT_FNS.append(fn)
@@ -830,10 +843,62 @@ def declare(fam):
 SELECTS = {}
 WORDS_FNS = []
 SELECT_FNS = []
+# Declared by add-ons (declare, CAPTIONS): {tool or prefix: template,
+# templates or fn(name, args, body) -> words or None}, the words over the 3D
+# view and in the status bar for their tools; the longest match wins.
+CAPTIONS = {}
+# A declared tool's words when none of its own fit: never its name.
+CAPTION_DONE = "Done"            # after a call that went through
+CAPTION_BEFORE = "Working on it"  # while it runs
+CAPTION_REFUSED = "That step"    # before ": refused (…)"
 # Declared by add-ons (declare, round 8): {tool: answer key} naming the body
 # whose result is inside it (an add-on's channel cut through a solid block
 # was not seen, 03-015).
 SEE_THROUGH = {}
+
+
+def captioned(name):
+    """The CAPTIONS entry an add-on declared for this tool (the longest key
+    that is its name or a prefix of it), or None. Plain Python."""
+    if not isinstance(name, str):
+        return None
+    best = None
+    for k in CAPTIONS:
+        if name == k or (name.startswith(k) and (k.endswith("_") or name[len(k):len(k) + 1] == "_")):
+            if best is None or len(k) > len(best):
+                best = k
+    return CAPTIONS[best] if best is not None else None
+
+
+def declared_caption(name, args, body, stage="after"):
+    """An add-on's own caption for this call (CAPTIONS), or None when it
+    declares none for the tool. stage: "before" (the call runs: arguments
+    only), "after" (it went through: arguments and answer) or "refused".
+    A template list is tried in order, the first whose fields are all
+    given wins (activity's rules); a callable is asked (name, args, body)
+    and its words are taken unless empty or raw. When nothing fits, neutral
+    words (CAPTION_DONE, CAPTION_BEFORE, CAPTION_REFUSED), never the tool's
+    name. Never raises."""
+    got = captioned(name)
+    if got is None:
+        return None
+    a = args if isinstance(args, dict) else {}
+    b = body if isinstance(body, dict) and stage == "after" else {}
+    words = None
+    try:
+        if callable(got):
+            w = got(name, a, b if stage == "after" else None)
+            words = w.strip() if isinstance(w, str) and w.strip() and not raw_words(w) else None
+        else:
+            from . import activity
+
+            filled = activity._first(got, a, b)
+            words = activity._cap(activity.plain(filled)) if filled else None
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (caption of {name}): {e}\n")
+    if words:
+        return words
+    return {"before": CAPTION_BEFORE, "refused": CAPTION_REFUSED}.get(stage, CAPTION_DONE)
 
 
 def declared_words(name, args, body):
@@ -927,6 +992,9 @@ def _describe(name, args, body=None, template=None):
     template: the tool's own words (its "activity")."""
     from . import activity
 
+    own = declared_caption(name, args, body, "after" if body is not None else "before")
+    if own:
+        return own
     try:
         return activity.did(name, args, body, template)
     except Exception:
@@ -1744,6 +1812,7 @@ def scene_clear():
                     had = True
         except Exception:  # noqa: BLE001
             continue
+    touched = set()
     while _hid_for_scene:
         doc_name, name = _hid_for_scene.pop()
         try:
@@ -1751,10 +1820,42 @@ def scene_clear():
                 o = FreeCAD.getDocument(doc_name).getObject(name)
                 if o is not None and getattr(o, "ViewObject", None) is not None:
                     o.ViewObject.Visibility = True
+                    touched.add(doc_name)
                     had = True
         except Exception:  # noqa: BLE001
             continue
+    for doc_name in touched:
+        try:
+            fem_eyes_synced(FreeCAD.getDocument(doc_name))
+        except Exception:  # noqa: BLE001
+            continue
     return had
+
+
+def fem_eyes_synced(doc):
+    """Each FEM result's row in the tree shown or hidden as its mesh (its
+    map) is: FreeCAD's importer hides the result's mesh and leaves the
+    result's row shown (importCcxFrdResults.py 102-108), so the tree had an
+    open eye on a map that was not drawn (fault 17 Nov). The row's view
+    follows the mesh; hiding the row hides nothing more, showing it shows
+    the mesh that is already shown (view_result_mechanical.py onChanged).
+    The labels changed. Never raises."""
+    done = []
+    for r in list(getattr(doc, "Objects", None) or ()):
+        try:
+            if not str(getattr(r, "TypeId", "")).startswith("Fem::FemResultObject"):
+                continue
+            mesh = getattr(r, "Mesh", None)
+            mv, rv = getattr(mesh, "ViewObject", None), getattr(r, "ViewObject", None)
+            if mv is None or rv is None:
+                continue
+            want = bool(mv.Visibility)
+            if bool(rv.Visibility) != want:
+                rv.Visibility = want
+                done.append(r.Label)
+        except Exception:  # noqa: BLE001
+            continue
+    return done
 
 
 # Objects hidden while a colour map of the scene is drawn on them (document,
@@ -1792,6 +1893,24 @@ def map_stops(cmap="jet", n=9):
 # FreeCAD's own result colours for a value from 0 to its largest
 # (ViewProviderFemMeshPyImp.cpp calcColor: green at 0, yellow at half, red).
 FEM_STOPS = [(0.0, (0.0, 1.0, 0.0)), (0.5, (1.0, 1.0, 0.0)), (1.0, (1.0, 0.0, 0.0))]
+
+
+# FEM reads: with no map and nothing of their own to select, the selection
+# is cleared after them (fem_read_unselected).
+FEM_READS = ("fea_", "fem_")
+
+
+def fem_read_unselected():
+    """After a FEM read that drew no map and selected nothing of its own
+    (fea_buckle, fea_modes, fea_results): the old selection cleared, as a
+    FEM map clears it (fault 17 Nov: the last call's selection stayed after
+    fea_buckle). A later read that names nothing puts the last change's
+    selection back (_read_sel). How many were selected, or None. Never
+    raises."""
+    n = selection_cleared()
+    if n:
+        _read_sel[0] = True
+    return n
 
 
 def selection_cleared():
@@ -1864,7 +1983,10 @@ def framed_on_points(points):
 
 def hide_for_scene(objs):
     """objs hidden (view state) while the scene's colours stand for them;
-    their labels. Never raises."""
+    their labels. A FEM result whose mesh is hidden here is hidden with it
+    (result_owners), so the tree's eye on the result row closes too (fault
+    17 Nov: a hidden result map kept an open eye); it is noted after its
+    mesh, so scene_clear shows it again first. Never raises."""
     done = []
     for o in objs or ():
         try:
@@ -1872,9 +1994,31 @@ def hide_for_scene(objs):
                 o.ViewObject.Visibility = False
                 _hid_for_scene.append((o.Document.Name, o.Name))
                 done.append(o.Label)
+                for r in result_owners(o):
+                    if _seen(r):
+                        r.ViewObject.Visibility = False
+                        _hid_for_scene.append((r.Document.Name, r.Name))
         except Exception:  # noqa: BLE001
             continue
     return done
+
+
+def result_owners(mesh):
+    """The FEM results whose mesh is mesh: FreeCAD's result row holds its
+    mesh as its child in the tree (femviewprovider/view_result_mechanical.py
+    claimChildren) and its eye stands for the map. [] for anything else.
+    Never raises."""
+    try:
+        name = getattr(mesh, "Name", None)
+        if not name:
+            return []
+        near = getattr(mesh, "InList", None)
+        if near is None:
+            near = getattr(getattr(mesh, "Document", None), "Objects", None) or ()
+        return [r for r in near if str(getattr(r, "TypeId", "")).startswith("Fem::FemResultObject")
+                and getattr(getattr(r, "Mesh", None), "Name", None) == name]
+    except Exception:  # noqa: BLE001
+        return []
 
 
 # Robot objects that hold waypoints (a trajectory, a compound of them, a
@@ -3193,6 +3337,7 @@ def isolation_off(objs):
 # (pd 034-111, BIM 018-051) and the tree an earlier row (asm 031, points 0008).
 FOLLOWERS = ("Gui::PropertyView", "Gui::TreeWidget")
 _follow = []
+_status_back = []  # (the tree's status timer, its interval) while it is run now
 
 
 def to_fire(rows):
@@ -3200,6 +3345,76 @@ def to_fire(rows):
     timers, the indexes to run now: the followers' pending single-shot ones.
     Plain Python."""
     return [i for i, (cls, active, single) in enumerate(rows) if cls in FOLLOWERS and active and single]
+
+
+def status_to_fire(rows):
+    """Of the same rows, the tree's pending status timer (src/Gui/Tree.cpp
+    statusTimer: not single shot; onUpdateStatus stops it): it redraws the
+    rows' eyes after a Visibility change (fault 17 Nov: a hidden result map
+    still showed an open eye in the picture, taken before it ran). Plain
+    Python."""
+    return [i for i, (cls, active, single) in enumerate(rows) if cls == "Gui::TreeWidget" and active and not single]
+
+
+# The Model tree's document rows (src/Gui/Tree.cpp TreeWidget::DocumentType).
+TREE_DOCUMENT_TYPE = 1000
+
+
+def docs_to_unlight(rows, active):
+    """Of rows [(item type, text, selected, current)] of the Model tree, the
+    indexes of document rows that are lit (selected or current) but are not
+    the active document (its label: active; None when there is none).
+    Plain Python."""
+    return [i for i, (kind, text, selected, current) in enumerate(rows)
+            if kind == TREE_DOCUMENT_TYPE and (selected or current) and text != active]
+
+
+def tree_docs_unlit():
+    """In FreeCAD's Model tree, the rows of documents that are not the
+    active one put out (not selected, not current): the tree keeps a
+    document row lit after a click or a switch, and the active document
+    changes without the tree being told (TreeWidget::slotActiveDocument
+    only sets the bold font). The tree's own signals are held, so FreeCAD's
+    selection is not changed. The labels put out, or None. Never raises."""
+    try:
+        import FreeCADGui
+
+        _QtCore, _QtGui, QtW = _qt()
+        gd = FreeCADGui.ActiveDocument
+        active = str(gd.Document.Label) if gd is not None else None
+        done = []
+        for t in FreeCADGui.getMainWindow().findChildren(QtW.QTreeWidget):
+            try:
+                if t.metaObject().className() != "Gui::TreeWidget":
+                    continue
+                items = []
+                for k in range(t.topLevelItemCount()):
+                    top = t.topLevelItem(k)
+                    items.append(top)
+                    items += [top.child(j) for j in range(top.childCount())]
+                cur = t.currentItem()
+                rows = [(it.type(), str(it.text(0)), bool(it.isSelected()), it is cur) for it in items]
+                lit = docs_to_unlight(rows, active)
+                if not lit:
+                    continue
+                held = t.blockSignals(True)
+                try:
+                    for i in lit:
+                        items[i].setSelected(False)
+                        if items[i] is cur:
+                            sm = t.selectionModel()
+                            if sm is not None:
+                                sm.clearCurrentIndex()
+                        done.append(rows[i][1])
+                finally:
+                    t.blockSignals(held)
+                t.viewport().update()
+            except RuntimeError:
+                continue
+        return done or None
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (tree documents): {e}\n")
+        return None
 
 
 RESELECT_MOST = 24
@@ -3280,10 +3495,24 @@ def views_follow():
         fire = to_fire(rows)
         for i in fire:
             _follow[i].start(0)
+        for i in status_to_fire(rows):
+            # The tree's status timer run now (its eyes); its own interval
+            # back after, should it start itself again.
+            was = _follow[i].interval()
+            _follow[i].start(0)
+            fire.append(i)
+            _status_back.append((_follow[i], was))
         if fire:
             flags = _paint_flags(QtCore)
             for _ in range(2):
                 QtCore.QCoreApplication.processEvents(flags)
+        while _status_back:
+            t, was = _status_back.pop()
+            try:
+                if t.isActive() and t.interval() == 0:
+                    t.start(max(1, int(was)))
+            except RuntimeError:
+                continue
         return len(fire)
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (views follow): {e}\n")
@@ -4453,7 +4682,7 @@ def _surface_nodes(res, solid, P, vals):
         fm = res.Mesh.FemMesh
         faces = list(getattr(getattr(solid, "Shape", None), "Faces", None) or ())
         if not faces or len(faces) > SURFACE_FACES_MOST or not hasattr(fm, "getNodesByFace"):
-            return P, vals, False
+            return _outer_nodes(res, fm, P, vals)
         ids = set()
         for f in faces:
             ids.update(int(n) for n in fm.getNodesByFace(f) or ())
@@ -4463,6 +4692,35 @@ def _surface_nodes(res, solid, P, vals):
         return [P[i] for i in keep], [vals[i] for i in keep], True
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (FEM surface nodes): {e}\n")
+        return P, vals, False
+
+
+OUTER_VOLUMES_MOST = 200000  # volumes read one by one (FemMesh.getElementNodes) for the mesh's outer nodes
+
+
+def _outer_nodes(res, fm, P, vals):
+    """The result's nodes on its mesh's outside, found from its volumes
+    (render.surface_nodes: a face only one tetrahedron has), for a solid
+    with too many faces to ask each: (points, values, True). Every node
+    (P, vals, False) when FreeCAD cannot say. Never raises."""
+    try:
+        from . import render
+
+        vols = list(getattr(fm, "Volumes", None) or ())
+        if not vols or len(vols) > OUTER_VOLUMES_MOST or not hasattr(fm, "getElementNodes"):
+            return P, vals, False
+        at = {int(n): i for i, n in enumerate(res.NodeNumbers)}
+        elems = []
+        for v in vols:
+            ns = [at.get(int(n)) for n in fm.getElementNodes(v) or ()]
+            if ns and None not in ns:
+                elems.append(ns)
+        keep = render.surface_nodes(elems)
+        if len(keep) < 3:
+            return P, vals, False
+        return [P[i] for i in keep], [vals[i] for i in keep], True
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (FEM outer nodes): {e}\n")
         return P, vals, False
 
 
@@ -4491,13 +4749,15 @@ def fem_result_scene_map(doc, res, vals, label, unit, hide, session=None):
         from . import render
 
         SP, SV, on = _surface_nodes(res, solid, P, vals)
-        sv = render.nearest_values(layer["V"], SP, SV)
+        # Blended from the nearest nodes (fault 17 Nov: each point took its
+        # nearest node's value, and the map read in patches).
+        sv = render.smooth_values(layer["V"], SP, SV)
         got = _scene_map(session, layer, sv, vals, label, unit, list(hide) + [solid])
         if got is None:
             return None
         got["map"] = f"{label} on {getattr(res.Mesh, 'Label', 'the result mesh')}"
-        got["colouredBy"] = ("scene: each surface point its nearest surface node's value" if on
-                             else "scene: each surface point its nearest node's value")
+        got["colouredBy"] = ("scene: each surface point blended from its nearest surface nodes" if on
+                             else "scene: each surface point blended from its nearest nodes")
         return got
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (FEM result scene map): {e}\n")
@@ -4516,6 +4776,12 @@ def fem_node_colours(mesh, ids, vals):
             return f"{getattr(mesh, 'Label', 'the mesh')}'s view ({type(vo).__name__}) cannot colour nodes"
         fn(list(ids), list(vals))
         vo.Visibility = True
+        # The result's own row shown with it: its eye in the tree says
+        # what the 3D view shows (fault 17 Nov).
+        for r in result_owners(mesh):
+            rv = getattr(r, "ViewObject", None)
+            if rv is not None and not rv.Visibility:
+                rv.Visibility = True
         return None
     except Exception as e:  # noqa: BLE001
         return f"{type(e).__name__}: {e}"
@@ -4961,7 +5227,11 @@ def fem_read_map(doc, name, args, body, session):
         if field == "displacement":
             P = np.asarray(f["points"], dtype=float)
             U = np.linalg.norm(np.asarray(f["displacement"], dtype=float).reshape(-1, 3), axis=1)
-            vals, node_vals = render.nearest_values(layer["V"], P, U), U
+            SP, SU = P, U
+            surf = render.surface_nodes(f.get("elements") or ())
+            if len(surf) >= 3 and max(surf) < len(P):
+                SP, SU = P[surf], U[surf]
+            vals, node_vals = render.smooth_values(layer["V"], SP, SU), U
         else:
             vals, node_vals = layer["values"], f.get("vonMises") or layer["values"]
         label, unit = FEM_LABELS["displacement" if field == "displacement" else "vonMises"]
@@ -5414,6 +5684,14 @@ class Echo:
                 what, result = own, ""
             _note({"time": datetime.datetime.now().strftime("%H:%M:%S"), "tool": name, "ok": ok, "what": _tag(self.s) + what,
                    "result": result, "call": call, "ms": int((time.time() - (self.t0 or time.time())) * 1000)})
+            # The caption an add-on declares for its tool (CAPTIONS): said in
+            # place of the echo's own, after the call's inner steps (fault
+            # 17 Nov: the caption gave the last inner step or the tool name).
+            cap = declared_caption(name, args, body, "after" if ok else "refused") if not own else None
+            if cap:
+                what = cap
+                if ok:
+                    result, self._own_words = "", True
         if name == "batch":
             # The batch's own words at its end (p8-batch: the caption kept
             # its last call's, "Made a cylinder Peg"), its row in the
@@ -5438,7 +5716,7 @@ class Echo:
             # Words only — the ring, the selection, the view and the last
             # change's trace stay as they are — for the hub's SKIP reads and
             # every WATCH (an add-on's NO_ECHO draws in the window itself).
-            if (name in LOOK_WORDS or watching(name)) and _on() and self.live():
+            if (name in LOOK_WORDS or watching(name) or captioned(name) is not None) and _on() and self.live():
                 self._look_words(name, ok, what or did_name(name), result)
             return
         if not _on() or not self.live():
@@ -5451,6 +5729,9 @@ class Echo:
         except Exception as e:  # noqa: BLE001  (never into the call)
             tr["afterError"] = f"{type(e).__name__}: {e}"
             _plog(f"Agent Link echo (after {name}): {e}\n")
+        # Only the active document's row may stay lit in the Model tree
+        # (fault 17 Nov: another document's row kept its blue highlight).
+        self._step(tr, "treeDocsUnlit", tree_docs_unlit)
 
     def _batch_end(self, args, body):
         """A batch's end said: "Ran 6 calls in one batch: 6 ok" (with its
@@ -5535,6 +5816,13 @@ class Echo:
                     # A FEM read with no map (fea_buckle, r9fem-5): one surface
                     # per solid as after a change (round 10).
                     self._step(tr, "femOneSurface", fem_one_surface, self.s.doc)
+                    if not tr.get("readShown"):
+                        # Nothing of its own selected: the old selection
+                        # cleared, as a FEM map clears it (fault 17 Nov:
+                        # after fea_buckle the last call's selection stayed).
+                        self._step(tr, "selectionCleared", fem_read_unselected)
+                # The tree's eyes on the results as their maps are (fault 17 Nov).
+                self._step(tr, "femEyes", fem_eyes_synced, self.s.doc)
             return
         import FreeCADGui
 
@@ -5648,6 +5936,8 @@ class Echo:
                 # (round 9, r8fem-6/7: yellow z-fighting patches). A map hides
                 # both itself.
                 self._step(tr, "femOneSurface", fem_one_surface, doc, named)
+            # The tree's eyes on the results as their maps are (fault 17 Nov).
+            self._step(tr, "femEyes", fem_eyes_synced, doc)
         if name == "fea_hold":
             self._step(tr, "holdMarked", hold_marked, doc, body)
             self._step(tr, "holdFramed", hold_framed, doc, body)
@@ -5743,7 +6033,9 @@ class Echo:
         import FreeCADGui
 
         if not objs and not picked:
-            back = _last_change_sel if _read_sel[0] else None
+            # A FEM read puts back no older selection: it clears it
+            # (fem_read_unselected, fault 17 Nov).
+            back = _last_change_sel if _read_sel[0] and not name.startswith(FEM_READS) else None
             if back:
                 _read_sel[0] = False
                 keep = [o for o in _objects(doc, back)]

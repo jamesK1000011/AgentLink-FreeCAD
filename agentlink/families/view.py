@@ -481,7 +481,14 @@ def _stress(s, a):
     L = render.body_layer(o, 0, tol=float(a.get("tolerance", 0.05)))
     cap = int(a.get("detail", 30000))
     V, F = render.subdivide(L["V"], L["F"], render.even_length(L["V"], L["F"], cap), cap=cap)
-    vals = render.nearest_values(V, P, vm)
+    # Blended from the nodes on the mesh's outside (fault 17 Nov: each
+    # point took its nearest node's value, and the map read in patches; an
+    # inner node, lower in bending, coloured the surface near it).
+    SP, SV = P, vm
+    surf = render.surface_nodes(f.get("elements") or ())
+    if len(surf) >= 3 and max(surf) < len(P):
+        SP, SV = P[surf], vm[surf]
+    vals = render.smooth_values(V, SP, SV)
     warp = None
     if a.get("deform") not in (None, False, 0):
         # The deformed shape (FEM's warp filter, headless): each spot moved by
@@ -504,7 +511,7 @@ def _stress(s, a):
             warp = round(k, 3)
     y = (r["result"].get("material") or {}).get("yield")
     out = {"layers": [{"name": o.Label, "V": V, "F": F, "values": vals, "creases": True}], "unit": "MPa", "cmap": "jet", "worst": "max", "label": "VON MISES",
-           "note": "Von Mises stress from the last solve, at the nearest mesh node." + (f" Yield {y:g} MPa." if y else "")}
+           "note": "Von Mises stress from the last solve, blended smoothly from the nearest surface nodes." + (f" Yield {y:g} MPa." if y else "")}
     if warp is not None:
         out["note"] += f" Drawn deformed: displacements × {warp:g}."
         out["deform"] = warp
@@ -526,8 +533,8 @@ def _heat(s, a):
     L = render.body_layer(o, 0, tol=float(a.get("tolerance", 0.05)))
     cap = int(a.get("detail", 30000))
     V, F = render.subdivide(L["V"], L["F"], render.even_length(L["V"], L["F"], cap), cap=cap)
-    out = {"layers": [{"name": o.Label, "V": V, "F": F, "values": render.nearest_values(V, P, T), "creases": True}], "unit": "C", "cmap": "jet", "worst": "max", "label": "TEMPERATURE",
-           "note": "Steady temperature from the last fea_heat, at the nearest mesh node."}
+    out = {"layers": [{"name": o.Label, "V": V, "F": F, "values": render.smooth_values(V, P, T), "creases": True}], "unit": "C", "cmap": "jet", "worst": "max", "label": "TEMPERATURE",
+           "note": "Steady temperature from the last fea_heat, blended smoothly from the nearest mesh nodes."}
     if geo.stats(o.Shape) != r["stats"]:
         out["note"] += " The body changed since: stale — fea_heat again."
         out["stale"] = True

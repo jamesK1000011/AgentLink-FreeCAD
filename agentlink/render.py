@@ -474,6 +474,107 @@ def nearest_values(points, src_points, src_values, chunk=None):
     return out
 
 
+# Nodes blended for each point of a smooth map (smooth_values). Fault 17
+# Nov: a map that took its nearest node's value read in patches, one flat
+# colour round each node of a coarse mesh.
+SMOOTH_K = 8
+
+
+def _k_nearest(P, S, k, chunk=None):
+    """(distances, indexes), each (len(P), k), of the k nearest sources: a
+    k-d tree when scipy is here, else brute force in passes of
+    NEAREST_CELLS cells (the sources sampled evenly to NEAREST_SOURCES)."""
+    try:
+        from scipy.spatial import cKDTree
+
+        d, idx = cKDTree(S).query(P, k=k)
+        return np.asarray(d, dtype=float).reshape(len(P), k), np.asarray(idx, dtype=np.int64).reshape(len(P), k), None
+    except Exception:
+        pass
+    pick = None
+    if len(S) > NEAREST_SOURCES:
+        pick = np.linspace(0, len(S) - 1, NEAREST_SOURCES).astype(np.int64)
+        S = S[pick]
+    k = min(k, len(S))
+    D = np.empty((len(P), k))
+    I = np.empty((len(P), k), dtype=np.int64)
+    step = int(chunk) if chunk else max(1, NEAREST_CELLS // len(S))
+    for i in range(0, len(P), step):
+        d2 = ((P[i:i + step, None, :] - S[None, :, :]) ** 2).sum(-1)
+        part = np.argpartition(d2, k - 1, axis=1)[:, :k] if k < len(S) else np.tile(np.arange(len(S)), (len(d2), 1))
+        dd = np.take_along_axis(d2, part, 1)
+        order = np.argsort(dd, axis=1)
+        I[i:i + step] = np.take_along_axis(part, order, 1)
+        D[i:i + step] = np.sqrt(np.take_along_axis(dd, order, 1))
+    return D, I, pick
+
+
+def smooth_values(points, src_points, src_values, k=SMOOTH_K, chunk=None):
+    """Each point's value blended from its k nearest source points (a
+    modified Shepard weight, ((R - d) / (R d))², R just past the k-th
+    distance): a colour map that runs smoothly between the nodes of a
+    coarse mesh, never past the least or largest node value, and a point
+    on a node takes that node's value. nan where there is no source."""
+    P = np.asarray(points, dtype=float).reshape(-1, 3)
+    S = np.asarray(src_points, dtype=float).reshape(-1, 3)
+    vals = np.asarray(src_values, dtype=float)
+    out = np.full(len(P), np.nan)
+    if not len(P) or not len(S):
+        return out
+    k = max(1, min(int(k), len(S)))
+    if k == 1:
+        return nearest_values(P, S, vals, chunk)
+    D, I, pick = _k_nearest(P, S, k, chunk)
+    if pick is not None:
+        vals = vals[pick]
+    V = vals[I]
+    size = float(np.linalg.norm(np.ptp(S, axis=0))) or 1.0
+    on = D[:, 0] <= 1e-9 * size
+    R = D[:, -1:] * 1.0001 + 1e-12 * size
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        W = ((R - D) / (R * np.maximum(D, 1e-12 * size))) ** 2
+    W[~np.isfinite(W)] = 0.0
+    W = np.where(np.isfinite(V), W, 0.0)
+    total = W.sum(1)
+    with np.errstate(invalid="ignore"):
+        out = np.where(total > 0, (W * np.nan_to_num(V)).sum(1) / np.where(total > 0, total, 1.0), V[:, 0])
+    out[on] = V[on, 0]
+    return out
+
+
+# The faces of a tetrahedron (4 or 10 nodes, CalculiX's and FreeCAD's SMESH
+# order: 4 corners, then the mid-side nodes 01 12 20 03 13 23): its three
+# corners and their mid-side nodes.
+_TET_FACES = (((0, 1, 2), (4, 5, 6)), ((0, 3, 1), (7, 8, 4)), ((1, 3, 2), (8, 9, 5)), ((2, 3, 0), (9, 7, 6)))
+
+
+def surface_nodes(elements):
+    """The indexes of the nodes on a tetrahedral mesh's outside: those of
+    each face that only one element has. elements: [node indexes] of 4 or
+    10 (others are left out). A sorted list, empty when none is found.
+    Plain Python and numpy."""
+    seen = {}
+    for e in elements or ():
+        try:
+            e = [int(n) for n in e]
+        except Exception:
+            continue
+        if len(e) not in (4, 10):
+            continue
+        for corners, mids in _TET_FACES:
+            key = tuple(sorted(e[c] for c in corners))
+            nodes = [e[c] for c in corners] + ([e[m] for m in mids] if len(e) == 10 else [])
+            if key in seen:
+                seen[key] = None
+            else:
+                seen[key] = nodes
+    out = set()
+    for nodes in seen.values():
+        if nodes:
+            out.update(nodes)
+    return sorted(out)
+
+
 def thin(layer, cap):
     """A layer drawn on at most about cap triangles: its vertices merged in
     an even grid (each cell one vertex, at their mean; a map's value their
