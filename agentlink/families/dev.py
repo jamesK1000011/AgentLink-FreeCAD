@@ -259,9 +259,9 @@ def tools(s):
              "toolTip?, class?, under?: dock or dialog title}, at?: [dx, dy]}: the first visible match. at is from its top-left (centre by default). {tab: {text, "
              "under?}}. {item: {text, under?, column?}, check?: true}: a row of a list, tree or table (check: its box). {menu_item: \"text\"}: an item of the open "
              "menu. {window: [x, y]}: main-window pixels. While a dialog or menu is in front, the tool takes only targets inside it. For each step, the answer gives "
-             "what it hit (class, name, text, where). It also gives a dialog or menu that it opened. Later steps run inside that dialog or menu. open: what still "
-             "holds the window at the end. Close it with Escape, dialog_answer or gui_unstick. Also new Report problems. The tool does not trigger shortcuts "
-             "(cmd_run). The proof that a step worked is what the tools read back after it, not the shot. Use session_state, selection { clear: false }, object_get. "
+             "what it hit (class, name, text, where). It also gives a dialog or menu that it opened; later steps run inside it. open: what still "
+             "holds the window at the end. Close it with Escape, dialog_answer or gui_unstick. Also new Report problems. {shortcut: \"Shift+V\"}: runs "
+             "the enabled command with that shortcut ({key} does not). The proof that a step worked is what the tools read back after it, not the shot. Use session_state, selection { clear: false }, object_get. "
              "Face and edge names change with the model. Aim view_world at a point on the face, after cmd_run Std_ViewIsometric and Std_ViewFitAll.",
              obj({"steps": {"type": "array", "items": {"type": "object"}}, "inline": {"type": "boolean"},
                   "as": {"type": "string", "enum": ["person"],

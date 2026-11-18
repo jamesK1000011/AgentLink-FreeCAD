@@ -540,6 +540,93 @@ class Delivery(unittest.TestCase):
         self.assertEqual(int(evs[0].m), 0x02000000)
         self.assertEqual((evs[4].key, evs[4].text, int(evs[4].m)), (0x01000004, "\r", 0x02000000))
 
+    def test_keys_after_a_closed_drop_down_go_to_the_combo(self):
+        """Live 47: after an item of a drop-down list was clicked, focus
+        stayed on the closed list; keys go to the combo box it belongs to."""
+        combo = Widget("wb", 20, 60, 120, 24, parent=self.mw, cls="QComboBox", focus=2)
+        box = Widget("container", 20, 84, 120, 200, parent=combo, cls="QComboBoxPrivateContainer")
+        lst = Widget("list", 20, 84, 120, 200, parent=box, cls="QComboBoxListView", focus=2)
+        box.isVisible = lambda: False
+        lst.isVisible = lambda: False
+        self.state["app"].focusWidget = lambda: lst
+        self.run.pressed = lst
+        out = self.run.run(gi.parse_steps([{"key": "Return"}, {"type": "Tech"}]))
+        self.assertTrue(all(w == "wb" for w, _e in self.sent), self.sent)
+        self.assertEqual(out["steps"][0]["hit"]["name"], "wb")
+
+    def test_keys_after_a_double_click_go_into_the_opened_editor(self):
+        """Live 60: a double-click on a Property view value opened its
+        editor; the keys after it go into that editor."""
+        view = Widget("props", 600, 300, 300, 300, parent=self.mw, cls="QAbstractItemView")
+        port = Widget("port", 600, 320, 300, 280, parent=view, cls="QWidget", focus=2)
+        out = self.run.run(gi.parse_steps([{"click": {"widget": {"objectName": "port"}}, "double": True}]))
+        self.assertNotIn("error", out["steps"][0])
+        Widget("editor", 700, 340, 100, 20, parent=port, cls="QAbstractSpinBox", focus=2)  # opened by the double-click
+        self.sent.clear()
+        out = self.run.run(gi.parse_steps([{"type": "2"}, {"key": "Return"}]))
+        self.assertTrue(all(w == "editor" for w, _e in self.sent), self.sent)
+
+    def shortcut_actions(self, *specs):
+        class Seq:
+            def __init__(self, t):
+                self.t = t
+
+            def toString(self):
+                return self.t.replace("shift", "Shift")
+
+        self.qt.QtGui.QKeySequence = Seq
+        ran = []
+
+        class Act:
+            def __init__(self, name, keys, enabled=True, shown=True):
+                self.name, self.keys, self.enabled, self.shown = name, keys, enabled, shown
+
+            def isEnabled(self):
+                return self.enabled
+
+            def shortcuts(self):
+                return [Seq(k) for k in self.keys]
+
+            def objectName(self):
+                return self.name
+
+            def text(self):
+                return "&" + self.name.split("_")[-1]
+
+            def associatedObjects(self):
+                return [types.SimpleNamespace(isVisible=lambda: self.shown, metaObject=lambda: Meta("QToolButton"))]
+
+            def trigger(self):
+                ran.append(self.name)
+
+        acts = [Act(*sp) for sp in specs]
+        self.run._actions = lambda: acts
+        return ran
+
+    def test_shortcut_runs_the_command_with_those_keys(self):
+        """Live 49: an opt-in step for as: person tests; key events never
+        reach Qt's shortcut map, the step triggers the action."""
+        ran = self.shortcut_actions(("TechDraw_VerticalDimension", ["Shift+V"]), ("Std_ViewFront", ["1"]),
+                                    ("Sketcher_Other", ["Shift+V"], True, False), ("Off_Cmd", ["Shift+V"], False))
+        out = self.run.run(gi.parse_steps([{"shortcut": "shift+V"}]))
+        self.assertEqual(ran, ["TechDraw_VerticalDimension"])  # the one in sight; a greyed one never
+        self.assertEqual(out["steps"][0]["hit"], {"shortcut": "Shift+V", "command": "TechDraw_VerticalDimension", "text": "VerticalDimension"})
+
+    def test_shortcut_refusals(self):
+        ran = self.shortcut_actions(("A_One", ["Shift+V"]), ("B_Two", ["Shift+V"]))
+        out = self.run.run(gi.parse_steps([{"shortcut": "Shift+V"}]))
+        self.assertIn("more than one command", out["steps"][0]["error"])
+        out = self.run.run(gi.parse_steps([{"shortcut": "Shift+Q"}]))
+        self.assertIn("no enabled command has Shift+Q", out["steps"][0]["error"])
+        self.state["modal"] = Widget("Dlg", 300, 300, 100, 100, cls="QDialog")
+        out = self.run.run(gi.parse_steps([{"shortcut": "Shift+V"}]))
+        self.assertIn("in front", out["steps"][0]["error"])
+        self.assertEqual(ran, [])
+        with self.assertRaises(ToolError):
+            gi.parse_steps([{"shortcut": "Shift+V!"}])
+        with self.assertRaises(ToolError):
+            gi.parse_steps([{"shortcut": ""}])
+
     def test_unknown_key_named(self):
         out = self.run.run(gi.parse_steps([{"key": "Hyper"}]))
         self.assertIn("not a key Qt knows", out["steps"][0]["error"])
@@ -826,6 +913,28 @@ class Targets(unittest.TestCase):
         hit = out["steps"][0]["hit"]
         self.assertEqual(hit["check"], "clicked")
         self.assertFalse(hit["checked"])
+
+
+class LeaveEdit(unittest.TestCase):
+    """Live 59: doc_close with a sketch open in edit hung FreeCAD."""
+
+    def gui(self, editing, dialog, front=True):
+        log = []
+        gd = types.SimpleNamespace(getInEdit=lambda: object() if editing else None, resetEdit=lambda: log.append("reset"))
+        ctl = types.SimpleNamespace(activeDialog=lambda: dialog, closeDialog=lambda: log.append("close"))
+        g = types.SimpleNamespace(getDocument=lambda n: gd if n == "Doc" else None, Control=ctl, ActiveDocument=gd if front else object())
+        return g, log
+
+    def test_edit_left_and_panel_closed(self):
+        g, log = self.gui(True, True)
+        self.assertEqual(gi.leave_edit(g, "Doc"), ["edit left", "task panel closed"])
+        self.assertEqual(log, ["reset", "close"])
+
+    def test_nothing_open_or_another_document(self):
+        g, log = self.gui(False, True, front=False)
+        self.assertEqual(gi.leave_edit(g, "Doc"), [])
+        self.assertEqual(gi.leave_edit(g, "Other"), [])
+        self.assertEqual(log, [])
 
 
 if __name__ == "__main__":
