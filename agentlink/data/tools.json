@@ -12318,7 +12318,7 @@
   },
   "draft_modify": {
    "group": "draft",
-   "description": "Use Draft's modify tools on objects. op move: by. op rotate: angle, center, axis. op scale: factor, center. op mirror: from, to, the mirror line in XY; a new Mirror object. op offset: one object; by is a vector from its first edge. op upgrade: edges → wire → face → solid, one stage for each call. op downgrade. op join: Draft wires that share end points. op fillet: two single edges that meet; radius, chamfer. op split: a Draft wire on segment edge n (from 1), at point at or its middle. op stretch: moves the points inside box [[min], [max]] by by. op extend: length mm at end start | end; negative trims. op to_bspline | to_wire. copy: true keeps the originals (move, rotate, scale, offset). delete: false keeps the upgrade / downgrade inputs. Answer: op, and for each result its object, type, length, area, box. guide_read draft has the rules of each op.",
+   "description": "Use Draft's modify tools on objects. op move: by. op rotate: angle, center, axis. op scale: factor, center. op mirror: from, to, the mirror line in XY; a new Mirror object. op offset: one object; by is a vector from its first edge. op upgrade: edges → wire → face → solid, one stage for each call. op downgrade. op join: Draft wires that share end points. op fillet: two single edges that meet; radius, chamfer. op split: a Draft wire on segment edge n (from 1), at point at or its middle. op stretch: moves the points inside box [[min], [max]] by by. op extend: length mm at end start | end; negative trims. op to_bspline | to_wire. copy: true keeps the originals (move, rotate, scale, offset). delete: false keeps the upgrade / downgrade inputs. Answer: op, and for each result its object, type, length, area, box. plain: the results that are plain shapes, not Draft objects. They are not parametric (upgrade of edges to a wire makes one). guide_read draft has the rules of each op.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -12407,6 +12407,7 @@
     {"refuse": {"fmt": "Draft could not {op} {labels}: an object whose placement is locked, or (scale) one with no shape. Nothing was changed."}, "code": "failed", "when": "=r is None and op in ('move', 'rotate', 'scale', 'mirror')"},
     {"let": {"res": "=results(op, r, objs, n0)"}},
     {"let": {"extra": {"op": "=op"}}},
+    {"when": "=op in ('upgrade', 'downgrade')", "then": [{"let": {"plain": "=[o.Label for o in res if not kind_of(o)]"}}, {"put": {"plain": "=plain"}, "into": "extra", "when": "=plain"}]},
     {"when": "=op == 'upgrade' and len(res) >= 2", "then": [{"let": {"near": "=near_ends(res)"}}, {"put": {"note": {"fmt": "{near[1]} and {near[2]} end {near[0]:.2g} mm apart and were not joined: FreeCAD joins ends that meet within 1e-7 mm. Give their points with every decimal (or move one end onto the other), then upgrade again."}}, "into": "extra", "when": "=near and 1e-7 < near[0] <= 0.01"}]}
    ],
    "answer": {"via": "finish", "with": ["=res or [o for o in objs if alive(o)]", "$tool", "=extra"]}

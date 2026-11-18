@@ -208,6 +208,14 @@ class DraftHardening(unittest.TestCase):
         self.assertIn("sides", self.refused("draft_shape", {"kind": "polygon", "sides": 2, "radius": 5}))
         self.assertIn("radius", self.refused("draft_shape", {"kind": "circle", "radius": 0}))
         self.assertIn("start, end", self.refused("draft_shape", {"kind": "arc", "radius": 5, "start": 10, "end": 370}))
+        # Finding 78: each is Draft's own parametric object (FreeCAD 1.1's draftmake), not a plain shape.
+        for label, type_id, kind in (("Arc30", "Part::Part2DObjectPython", "Circle"), ("Hub", "Part::Part2DObjectPython", "Circle"),
+                                     ("Frame", "Part::Part2DObjectPython", "Rectangle"), ("Hex", "Part::Part2DObjectPython", "Polygon"),
+                                     ("TieR", "Part::FeaturePython", "Wire"), ("Tri", "Part::FeaturePython", "Wire")):
+            o = self.obj(label)
+            self.assertEqual((o.TypeId, getattr(getattr(o, "Proxy", None), "Type", "")), (type_id, kind), label)
+        self.assertEqual((self.obj("Arc30").FirstAngle.Value, self.obj("Arc30").LastAngle.Value), (60, 120))
+        self.assertEqual(self.obj("Hex").FacesNumber, 6)
 
     def test_2_upgrade_array_dimensions(self):
         import math
@@ -215,11 +223,23 @@ class DraftHardening(unittest.TestCase):
         up = self.ok("draft_modify", {"op": "upgrade", "objects": ["Arc30", "Arc25", "TieR", "TieL"]})
         wire = (up.get("objects") or [up])[0]
         self.assertAlmostEqual(wire["length"], 55 * math.pi / 3 + 10, places=3)
+        # As the wiki and Draft 1.1's upgrade (makeWires) have it: one closed wire of four edges, a plain
+        # Part::Feature (no longer parametric); the four Draft objects are gone.
+        self.assertNotIn("objects", up)
+        w = self.obj(wire["object"])
+        self.assertEqual(w.TypeId, "Part::Feature")
+        self.assertEqual(getattr(getattr(w, "Proxy", None), "Type", ""), "")
+        self.assertEqual((len(w.Shape.Wires), len(w.Shape.Edges), w.Shape.Wires[0].isClosed()), (1, 4, True))
+        self.assertEqual(up["plain"], [wire["object"]])
+        self.assertFalse([o for o in self.session.doc.Objects if o.Label in ("Arc30", "Arc25", "TieR", "TieL")])
         arr = self.ok("draft_link_array", {"object": wire["object"], "kind": "polar", "count": 4, "angle": 360, "name": "Ring"})
         self.assertEqual(arr["count"], 4)
         self.assertEqual(arr["of"], wire["object"])
+        ring = self.obj("Ring")
+        self.assertEqual((ring.TypeId, ring.Proxy.Type, ring.ArrayType, ring.NumberPolar), ("Part::FeaturePython", "Array", "polar", 4))
         d = self.ok("draft_dimension", {"kind": "linear", "from": [0, 0, 0], "to": [0, 50 * math.sin(math.radians(60)), 0], "at": [100, 20, 0], "name": "ToHexTop"})
         self.assertAlmostEqual(d["measures"], 43.3013, places=3)
+        self.assertEqual(self.obj("ToHexTop").Proxy.Type, "LinearDimension")
         self.assertEqual(d["unit"], "mm")
         dia = self.ok("draft_dimension", {"kind": "diameter", "object": "Hub", "edge": 1, "at": [20, 20, 0]})
         self.assertAlmostEqual(dia["measures"], 30, places=4)
