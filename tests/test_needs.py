@@ -367,7 +367,7 @@ class Census(unittest.TestCase):
             self.assertGreaterEqual(needs.later_refusals(e), 0, name)
 
 
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 772, "noArgument": 38, "blocked": 112, "needsArguments": 194, "complete": 72, "noCheck": 63}
+TOTAL = {"tools": 392, "steps": 379, "leadingRefusals": 772, "noArgument": 38, "blocked": 112, "needsArguments": 194, "complete": 73, "noCheck": 64}
 
 
 class Agreement(unittest.TestCase):

@@ -16,6 +16,7 @@ Studio Light/Studio Light.cfg
 Studio Light/parameters/Studio Light.yaml
 agentlink/__init__.py
 agentlink/activity.py
+agentlink/addon_scan.py
 agentlink/annotate.py
 agentlink/appliesnow.py
 agentlink/around.py
@@ -27,6 +28,8 @@ agentlink/changes.py
 agentlink/charts.py
 agentlink/commands.py
 agentlink/cookbook.py
+agentlink/cookbook2.py
+agentlink/cookbook_fc.py
 agentlink/crash_logs.py
 agentlink/data/activity.json
 agentlink/data/activity.schema.json
@@ -417,6 +420,7 @@ tests/test_ccx.py
 tests/test_cells.py
 tests/test_chain.py
 tests/test_charts.py
+tests/test_cookbook_v2.py
 tests/test_core_check.py
 tests/test_core_guards.py
 tests/test_core_guards_fc.py
