@@ -11,6 +11,7 @@
 # listing is the same as before.
 
 import json
+import os
 
 from .. import cookbook, porting, runners
 from .. import paths
@@ -256,18 +257,24 @@ def tools(session):
 
     def importing(path, overwrite=False):
         p = paths.local(s, path)
+        if not os.path.exists(p):
+            # A port folder named either way (texturizer-v2 / texturizer_v2): the scaffold's spelling.
+            d, f = os.path.split(p)
+            alt = os.path.join(os.path.dirname(d), cookbook.canon(os.path.basename(d)), f)
+            if alt != p and os.path.exists(alt):
+                p = alt
         return cookbook.import_file(p, bool(overwrite), names())
 
     # What the tools' entries (agentlink/data/tools.json, group "porting") call by name.
     helpers = {
         "scaffold": _refusing(scaffold),
         "cookbooks": _refusing(lambda: cookbook.listing(names())),
-        "cookbook_of": _refusing(lambda name: cookbook.show(name, names())),
+        "cookbook_of": _refusing(lambda name: cookbook.show(cookbook.canon(name), names())),
         "import_cookbook": _refusing(importing),
-        "export_cookbook": _refusing(export),
-        "approve_cookbook": _refusing(lambda name, sha=None: cookbook.approve(name, sha, names())),
-        "unapprove_cookbook": _refusing(lambda name: cookbook.unapprove(name)),
-        "run_entry": _refusing(run_entry),
-        "probe_cookbook": _refusing(probe),
+        "export_cookbook": _refusing(lambda name, path: export(cookbook.canon(name), path)),
+        "approve_cookbook": _refusing(lambda name, sha=None: cookbook.approve(cookbook.canon(name), sha, names())),
+        "unapprove_cookbook": _refusing(lambda name: cookbook.unapprove(cookbook.canon(name))),
+        "run_entry": _refusing(lambda name, entry, args: run_entry(cookbook.canon(name), entry, args)),
+        "probe_cookbook": _refusing(lambda name, entry=None: probe(cookbook.canon(name), entry)),
     }
     return runners.tools(GROUP, s, helpers)
