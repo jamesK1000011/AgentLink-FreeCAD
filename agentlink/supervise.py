@@ -153,6 +153,16 @@ def _is_force_restart(line):
     return bool(calls) and all(isinstance(c, dict) and c.get("tool") == "app_force_restart" for c in calls)
 
 
+def _is_app_open(line):
+    """app_open, alone or as a batch of nothing else: answered by the
+    supervisor, which can start the window (the hidden FreeCAD cannot)."""
+    _mid, tool, args = _call_info(line)
+    if tool == "app_open":
+        return True
+    calls = (args or {}).get("calls") if tool == "batch" else None
+    return bool(calls) and all(isinstance(c, dict) and c.get("tool") == "app_open" for c in calls)
+
+
 def _unstick_call(line):
     """gui_unstick alone or as a batch of nothing else: ("alone" | "batch",
     all), else None. Answered here on a connection of its own, never behind
@@ -916,6 +926,30 @@ class Window:
         except (ValueError, KeyError, TypeError):
             return None
 
+    def open_window(self, wait=90.0):
+        """app_open: the FreeCAD window started in the background (open -g:
+        never in front, no focus taken) when it is closed, and paired. The
+        words for the answer, and whether a window answers now."""
+        if self.off:
+            return {"opened": False, "note": "The window link is off here (AGENTLINK_WINDOW=0): calls go to the hidden FreeCAD."}
+        if self._open():
+            return {"opened": False, "already": True, "note": "The FreeCAD window is open and linked."}
+        hb = heartbeat() or self.last_hb or {}
+        app = hb.get("app") or (FREECAD_APP if os.path.isdir(FREECAD_APP) else None)
+        if not relaunch(app, "app_open"):
+            return {"opened": False, "note": "FreeCAD could not be started from here (no FreeCAD.app found). The hidden FreeCAD takes the calls."}
+        self.f = None
+        t0 = time.time()
+        while time.time() - t0 < wait and not self._open():
+            time.sleep(1)
+        if self.f is None:
+            return {"opened": False, "started": True, "note": f"FreeCAD was started in the background, but its link did not come up within {int(wait)} s. "
+                    "Call session_state in a moment: calls go to the window when it pairs."}
+        if keep is not None:
+            keep.log_watchdog({"event": "app_open", "app": app, "s": round(time.time() - t0, 1)})
+        return {"opened": True, "seconds": round(time.time() - t0, 1), "app": app,
+                "note": "The FreeCAD window is open in the background (not in front) and linked. Its documents are the ones it reopens; session_state tells which."}
+
     def force_restart(self):
         """app_force_restart, run here outside FreeCAD so it works whatever
         holds the window (a dialog, a hang, a crash half-way): the window's
@@ -1490,6 +1524,20 @@ def run(script, argv):
             return False
         if jobs is not None and msg.get("method") == "tools/call" and (msg.get("params") or {}).get("name") == "job_status":
             return job_status_now(msg)
+        if msg and msg.get("method") == "tools/call" and _is_app_open(line):
+            oid = msg.get("id")
+            pending.pop(oid, None)
+            batched = (msg.get("params") or {}).get("name") == "batch"
+
+            def _open_it(oid=oid, batched=batched):
+                try:
+                    got = window.open_window()
+                    write(_result(oid, {"results": [{"tool": "app_open", "ok": True, "result": got}], "ran": 1} if batched else got))
+                except Exception as e:  # noqa: BLE001
+                    write(_answer(oid, "failed", f"app_open failed: {e}"))
+
+            threading.Thread(target=_open_it, daemon=True).start()
+            return True
         if msg and msg.get("method") == "tools/call" and _is_force_restart(line):
             # Answered here, never inside FreeCAD: the window may be the thing stuck.
             fid = msg.get("id")

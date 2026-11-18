@@ -404,6 +404,7 @@ tests/_pd_base.py
 tests/test_activity_words.py
 tests/test_addon_test.py
 tests/test_app_install.py
+tests/test_app_open_1118.py
 tests/test_as_person.py
 tests/test_assembly.py
 tests/test_assembly_more.py
