@@ -126,6 +126,14 @@ def main(argv=None):
                 pass
             os._exit(0)
 
+    def notify(msg):
+        # A progress notification (protocol.progress): written at once, with none of a reply's after-work.
+        from .protocol import compact
+
+        out.write(compact(msg) + "\n")
+        out.flush()
+
+    server.notify = notify
     serve_lines(server, sys.stdin.readline, write)
     return 0
 

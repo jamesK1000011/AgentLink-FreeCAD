@@ -1170,6 +1170,13 @@ def say(words, ms=HOLD_MS, where=""):
     except Exception as e:  # noqa: BLE001
         _plog(f"Agent Link echo (caption): {e}\n")
     FreeCADGui.getMainWindow().statusBar().showMessage(STATUS_HEAD + where + ": " + words, ms + 1400)
+    try:
+        # The same words to the client, as a progress notification of the call in hand (when it asked for them).
+        from .protocol import progress
+
+        progress(STATUS_HEAD + where + ": " + words)
+    except Exception as e:  # noqa: BLE001
+        _plog(f"Agent Link echo (progress): {e}\n")
     return words
 
 

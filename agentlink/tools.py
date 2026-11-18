@@ -1498,10 +1498,15 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
     from . import usage
 
     if os.environ.get("AGENTLINK_USAGE", "on") != "off":
-        server.meter = usage.Meter()
+        server.meter = usage.Meter(version=version)
     s = session
 
     def usage_report(a):
+        if a.get("log"):
+            # The usage log, summed (agentlink/usage.py log_report): only on request, never in other answers.
+            if server.meter is None:
+                raise ToolError("unavailable", "Usage is not kept here (AGENTLINK_USAGE=off).")
+            return usage.log_report(int(a.get("days", 7)), server.meter.where, jobs=int(a.get("jobs", 8)))
         if a.get("session"):
             if server.meter is None:
                 raise ToolError("unavailable", "Usage is not kept here (AGENTLINK_USAGE=off).")
@@ -2521,8 +2526,10 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         Tool("usage_report", "Estimate on this side what work through Agent Link cost the agent. That is calls, tokens and the tool list that each session loads at the start. "
                              "Tokens: text at ~3.5 characters a token, pictures by size. It gives them for each day over days (7) and each session. Also the costliest tools, and "
                              "tips to cut the cost. session: true gives this session alone. This is not Claude's own count: the plan's usage page has that. Changes nothing. "
-                             "appliesNow: this session's meter of the applies-now filter (notThenAnswered must stay near zero).",
-             obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}}), usage_report),
+                             "appliesNow: this session's meter of the applies-now filter (notThenAnswered must stay near zero). "
+                             "log: true gives the usage log summary: jobs and their steps, errors with reasons, retries, searches, dialogs and more. jobs: recent jobs (8).",
+             obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}, "log": {"type": "boolean"},
+                  "jobs": {"type": "integer", "minimum": 1, "maximum": 50}}), usage_report),
         Tool("tool_groups", "List the tool groups: which are listed, and what each holds (count, about). enable / disable: [group …] lists or hides them; core stays. group: g "
                             "answers with that group alone: its whole about, and its tools with one line each. detail: true gives every group's whole about. The cheap way to a "
                             "tool that is not listed is find, card, call. find: \"words\" searches every tool, best first (group narrows it; limit 1-40, 10 by default). It searches "

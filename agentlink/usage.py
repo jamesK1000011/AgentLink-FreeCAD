@@ -45,16 +45,147 @@ def folder():
     return os.path.join(os.path.expanduser("~"), "AgentLink", "usage")
 
 
+# ---- the usage log (docs/design/usage-log-2026-11-18.md) ---------------------
+#
+# Each call's row also holds: the job it is in (job, step n), the gap since
+# the call before, its group, the answer's bytes and estimated tokens, the
+# pictures (count, bytes), a refusal's or error's reason, and marks: a retry,
+# a tool search and its hits, a group switch, an undo or a rollback, a
+# background handoff. A job row starts each job (versions, window or
+# headless). A dialog row ends each dialog. Never the arguments' values,
+# never file contents or geometry: words pass clean() first.
+
+JOB_GAP = 600.0  # s: a call after a pause this long starts a new job
+RETRY_S = 120.0  # s: the same tool again within this, with changed arguments, is a retry
+WORDS_MAX = 160
+UNDO_KINDS = ("undo", "redo", "restore")  # history_<kind>: the hub's undo and redo, and an add-on's checkpoint restore
+FIND_TOOLS = ("tool_find", "tool_groups")
+MAX_DAY_BYTES = 20 * 1024 * 1024  # a day's file stops growing past this (a run gone wild)
+
+_HOME = os.path.expanduser("~")
+
+
+def clean(text, n=WORDS_MAX):
+    """Words safe for the log: a path under the user folder shortened to ~,
+    any other absolute path replaced by <path>, cut to n characters."""
+    import re
+
+    t = str(text or "")
+    if _HOME and len(_HOME) > 1:
+        t = t.replace(_HOME, "~")
+    t = re.sub(r"(?<![~\w.])(/[^\s\"'`,;:)\]}]+){2,}", "<path>", t)
+    t = re.sub(r"\b[A-Za-z]:\\[^\s\"']+", "<path>", t)
+    return t[:n]
+
+
+def _arg_sig(args):
+    """A hash of the arguments, kept in memory only: it tells a retry with
+    changed arguments. Never written."""
+    try:
+        return hash(json.dumps(args, sort_keys=True, default=str))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _versions(server_version=None):
+    out = {"agentlink": server_version}
+    try:
+        import FreeCAD
+
+        out["freecad"] = ".".join(str(x) for x in FreeCAD.Version()[:3])
+    except Exception:  # noqa: BLE001
+        out["freecad"] = None
+    try:
+        from . import ext
+
+        out["addons"] = {k: str(v) for k, v in sorted(ext.loaded.items())}
+    except Exception:  # noqa: BLE001
+        out["addons"] = {}
+    return out
+
+
+def _mode():
+    try:
+        import FreeCAD
+
+        return "window" if getattr(FreeCAD, "GuiUp", False) else "headless"
+    except Exception:  # noqa: BLE001
+        return "headless"
+
+
+def _json_of(text):
+    try:
+        v = json.loads(text)
+        return v if isinstance(v, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _error_of(text):
+    d = _json_of(text)
+    e = d.get("error") if d else None
+    return clean(e.get("message")) if isinstance(e, dict) else None
+
+
+def marks(tool, args, reply_text, error):
+    """The marks of one call, read from its name, its arguments' keys and
+    flags, and its answer: {find, groups, undo, rollback, background, batch
+    steps}. Argument values are never kept, but a search's words (cleaned)
+    and tool names."""
+    out = {}
+    args = args if isinstance(args, dict) else {}
+    if tool in FIND_TOOLS:
+        q = args.get("find") if tool == "tool_groups" else (args.get("queries") or args.get("words"))
+        if q:
+            got = _json_of(reply_text) or {}
+            hits = []
+            for part in (got.get("results") or [got]):
+                hits += [h.get("tool") for h in (part.get("tools") or []) if isinstance(h, dict) and h.get("tool")]
+            words = q if isinstance(q, list) else [q]
+            out["find"] = {"words": [clean(w, 60) for w in words[:6]], "hits": hits[:20]}
+        sw = {k: [str(g) for g in args[k]][:20] for k in ("enable", "disable") if tool == "tool_groups" and isinstance(args.get(k), list)}
+        if sw:
+            out["groups"] = sw
+    if tool.startswith("history_") and tool[8:] in UNDO_KINDS and not error:
+        out["undo"] = tool[8:]
+    if tool == "batch":
+        calls = args.get("calls") if isinstance(args.get("calls"), list) else []
+        out["steps"] = [str(c.get("tool")) for c in calls[:40] if isinstance(c, dict)]
+        if len(calls) > 40:
+            out["moreSteps"] = len(calls) - 40
+        got = _json_of(reply_text) or {}
+        if "undone" in got:
+            out["rollback"] = got.get("undone")
+    got = None
+    if not error and ('"job"' in reply_text[:400]):
+        got = _json_of(reply_text) or {}
+        if got.get("job") and got.get("status") in ("running", "queued"):
+            out["background"] = str(got["job"])[:40]
+    if args.get("background") in (True, "true") and "background" not in out:
+        out["background"] = True
+    return out
+
+
 class Meter:
     """Counts a server's calls and lists, this session and on disk."""
 
-    def __init__(self, where=None, session_id=None, write=True):
+    def __init__(self, where=None, session_id=None, write=True, version=None):
         self.where = where or folder()
         self.session_id = session_id or time.strftime("%Y%m%d-%H%M%S") + f"-{os.getpid()}"
         self.write = write
         self.lock = threading.Lock()
         self.calls = []
         self.listed = None
+        self.version = version
+        # The job now: its id, number, steps so far; the last call's end, tool and argument hash.
+        self.job = None
+        self.job_n = 0
+        self.step = 0
+        self.batch_n = 0
+        self.last = None  # (end time, tool, arg hash)
+        self.dialog = None  # the dialog up now: {key, title, text, buttons, since, blocked, by}
+        if write:
+            prune(self.where)
 
     def _append(self, row):
         if not self.write:
@@ -62,6 +193,8 @@ class Meter:
         try:
             os.makedirs(self.where, exist_ok=True)
             p = os.path.join(self.where, time.strftime("%Y-%m-%d") + ".jsonl")
+            if os.path.exists(p) and os.path.getsize(p) > MAX_DAY_BYTES:
+                return
             with open(p, "a", encoding="utf-8") as f:
                 f.write(json.dumps(row, separators=(",", ":")) + "\n")
         except OSError:
@@ -73,19 +206,106 @@ class Meter:
         self.listed = {"tools": len(tools), "chars": chars, "tokens": est_tokens(chars)}
         self._append({"t": round(time.time(), 1), "s": self.session_id, "kind": "list", **self.listed})
 
-    def call(self, tool, args_text, reply_text, image=None, error=None, ms=0):
-        img = png_tokens(image) if image else 0
-        row = {"t": round(time.time(), 1), "s": self.session_id, "kind": "call", "tool": tool, "in": len(args_text), "out": len(reply_text),
-               "img": img, "ms": int(ms), **({"err": error} if error else {})}
+    def new_job(self, why="start", now=None):
+        """Start a job: at the session's start, on initialize (a new
+        conversation), or on the first call after a pause of JOB_GAP s.
+        Writes a job row with the versions and window or headless."""
+        now = time.time() if now is None else now
         with self.lock:
+            self.job_n += 1
+            self.job = f"{self.session_id}-j{self.job_n}"
+            self.step = 0
+            self.batch_n = 0
+        self._append({"t": round(now, 1), "s": self.session_id, "kind": "job", "job": self.job, "why": why, "mode": _mode(), **_versions(self.version)})
+        return self.job
+
+    def call(self, tool, args_text, reply_text, image=None, error=None, ms=0, args=None, group=None, images=None):
+        now = time.time()
+        start = now - (ms or 0) / 1000.0
+        last = self.last
+        if self.job is None:
+            self.new_job("start", start)
+        elif last is not None and start - last[0] > JOB_GAP:
+            self.new_job("pause", start)
+        # images: [(the picture's first bytes, its size in bytes)], every picture of the answer.
+        pics = list(images) if images else ([(image, len(image))] if image else [])
+        img = sum(png_tokens(h) for h, _n in pics if h)
+        sig = _arg_sig(args) if args is not None else None
+        with self.lock:
+            self.step += 1
+            row = {"t": round(now, 1), "s": self.session_id, "kind": "call", "tool": tool, "job": self.job, "n": self.step, "in": len(args_text), "out": len(reply_text),
+                   "bytes": len(reply_text.encode("utf-8", "replace")), "tok": est_tokens(len(reply_text)), "img": img, "ms": int(ms)}
+            if group:
+                row["grp"] = group
+            if pics:
+                row["imgs"] = len(pics)
+                row["imgBytes"] = sum(int(n or 0) for _h, n in pics)
+            if last is not None:
+                row["gap"] = int(max(0.0, start - last[0]) * 1000)
+            if error:
+                row["err"] = error
+                why = _error_of(reply_text)
+                if why:
+                    row["why"] = why
+            if last is not None and last[1] == tool and sig is not None and last[2] != sig and start - last[0] <= RETRY_S:
+                row["retry"] = True
+            try:
+                m = marks(tool, args or {}, reply_text, error)
+            except Exception:  # noqa: BLE001 - the marks only
+                m = {}
+            if m.get("steps") is not None:
+                self.batch_n += 1
+                m["batch"] = f"{self.job}-b{self.batch_n}"
+            row.update(m)
+            if tool == "dialog_answer" and not error and self.dialog is not None:
+                self.dialog["by"] = "agent"
+            self.last = (now, tool, sig)
             self.calls.append(row)
             del self.calls[:-5000]
+        self._append(row)
+
+    # ---- dialogs (the window's heartbeat tells each one) ----
+
+    def dialog_seen(self, d, now=None):
+        """The heartbeat's dialog in front (gui_link.modal_info), or None
+        when none is. A dialog that goes is written as a dialog row: title,
+        text and buttons (cleaned), who answered (agentlink, agent or
+        person), the seconds it held the window, and the calls it blocked."""
+        now = time.time() if now is None else now
+        if d:
+            key = (d.get("class"), d.get("title"), d.get("text"))
+            if self.dialog is not None and self.dialog["key"] == key:
+                return
+            self._dialog_end(now)
+            self.dialog = {"key": key, "title": clean(d.get("title"), 80), "text": clean(d.get("text")), "buttons": [clean(b, 30) for b in (d.get("buttons") or [])][:8],
+                           "since": float(d.get("since") or now), "blocked": 0, "by": None}
+        else:
+            self._dialog_end(now)
+
+    def dialog_pressed(self, by="agentlink"):
+        """Agent Link (its dialog rule) or the supervisor pressed a button of the dialog up now."""
+        if self.dialog is not None and self.dialog["by"] is None:
+            self.dialog["by"] = by
+
+    def _dialog_end(self, now):
+        d, self.dialog = self.dialog, None
+        if d is None:
+            return
+        if d["by"] is None and _supervisor_pressed(d["key"][1], d["since"]):
+            d["by"] = "agentlink"
+        row = {"t": round(now, 1), "s": self.session_id, "kind": "dialog", "job": self.job, "title": d["title"], "text": d["text"], "buttons": d["buttons"],
+               "by": d["by"] or "person", "secs": round(max(0.0, now - d["since"]), 1), "blocked": d["blocked"]}
+        with self.lock:
+            self.calls.append(row)
         self._append(row)
 
     def refused(self, tool, args_text, reply_text, code=None):
         """A call the window answered with a refusal of its own, before the
         call ran (a dialog holding the window, the agent's document closed
-        or not in front): counted as a call that erred, as the agent saw it."""
+        or not in front): counted as a call that erred, as the agent saw it.
+        A refusal while a dialog is up counts as a call that dialog blocked."""
+        if self.dialog is not None:
+            self.dialog["blocked"] += 1
         self.call(tool, args_text, reply_text, None, code or "error", 0)
 
     def amend(self, tool, code="busy"):
@@ -98,6 +318,8 @@ class Meter:
             if row is None or row.get("err"):
                 return False
             row["err"] = code
+            if self.dialog is not None:
+                self.dialog["blocked"] += 1
         self._append({"t": round(time.time(), 1), "s": self.session_id, "kind": "amend", "tool": tool, "err": code})
         return True
 
@@ -123,6 +345,51 @@ def err_code(result):
         return str(code) if code else "error"
     except Exception:  # noqa: BLE001 - an error all the same
         return "error"
+
+
+def _supervisor_pressed(title, since):
+    """Whether the supervisor (another process) logged a press on a dialog
+    of this title since it came up: read from the end of watchdog.log."""
+    try:
+        from . import keep
+
+        p = keep.path("watchdog.log")
+        with open(p, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 16384))
+            tail = f.read().decode("utf-8", "replace").splitlines()
+    except Exception:  # noqa: BLE001
+        return False
+    for line in tail:
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if e.get("event") == "dialog" and e.get("by") == "supervisor" and e.get("pressed") and e.get("title") == title and float(e.get("t", 0)) >= since - 1:
+            return True
+    return False
+
+
+def prune(where=None):
+    """Rotation: a day's file older than DAYS_KEPT days is removed."""
+    where = where or folder()
+    now = time.time()
+    try:
+        names = os.listdir(where)
+    except OSError:
+        return
+    for n in names:
+        if not n.endswith(".jsonl"):
+            continue
+        try:
+            day = time.mktime(time.strptime(n[:-6], "%Y-%m-%d"))
+        except ValueError:
+            continue
+        if now - day > DAYS_KEPT * 86400:
+            try:
+                os.remove(os.path.join(where, n))
+            except OSError:
+                pass
 
 
 def tokens_of(row):
@@ -218,6 +485,163 @@ def report(days=7, where=None, top=12):
         tips.append("Large answers: " + ", ".join(f"{b['tool']} (~{b['tokens'] // b['calls']} a call)" for b in big[:4]) + " — ask for less (detail: false, a filter, a range).")
     if tips:
         out["tips"] = tips
+    return out
+
+
+# ---- the usage log's report (usage_report { log: true }) --------------------
+
+def _watchdog_counts(days):
+    """Events of the supervisor's watchdog log (keep.path("watchdog.log"))
+    over the days, counted by event: hangs, force restarts, dialogs
+    pressed and the like. Read only."""
+    out = {}
+    try:
+        from . import keep
+
+        p = keep.path("watchdog.log")
+        if not os.path.isfile(p):
+            return out
+        since = time.time() - days * 86400
+        with open(p, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                try:
+                    e = json.loads(line)
+                except ValueError:
+                    continue
+                if float(e.get("t", 0)) >= since:
+                    k = str(e.get("event"))
+                    out[k] = out.get(k, 0) + 1
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _runs(names, cap=30):
+    """['a', 'a', 'b'] -> ['a×2', 'b'], at most cap items."""
+    out = []
+    for n in names:
+        if out and out[-1][0] == n:
+            out[-1][1] += 1
+        else:
+            out.append([n, 1])
+    words = [f"{n}×{k}" if k > 1 else n for n, k in out]
+    return words[:cap] + ([f"… {len(words) - cap} more"] if len(words) > cap else [])
+
+
+def _pct(xs, q):
+    if not xs:
+        return None
+    xs = sorted(xs)
+    return xs[min(len(xs) - 1, int(q * len(xs)))]
+
+
+def log_report(days=7, where=None, jobs=8, watchdog=True):
+    """The usage log, summed for the agent on request: jobs and their steps,
+    refusals and errors per tool with their reasons, retries, tool searches
+    and whether a hit was used, group switches, undos and rollbacks,
+    background handoffs, watchdog events, dialogs, gaps between calls,
+    answer sizes and pictures. Never file contents or arguments."""
+    rows = read_days(days, where)
+    calls = [r for r in rows if r.get("kind") == "call"]
+    job_rows = {r["job"]: r for r in rows if r.get("kind") == "job" and r.get("job")}
+    by_job = {}
+    for r in calls:
+        by_job.setdefault(r.get("job") or r.get("s"), []).append(r)
+    # Refusals and errors per tool, with their reasons.
+    errs = {}
+    for r in calls:
+        if r.get("err"):
+            e = errs.setdefault(r["tool"], {"tool": r["tool"], "count": 0, "codes": {}, "reasons": {}})
+            e["count"] += 1
+            e["codes"][r["err"]] = e["codes"].get(r["err"], 0) + 1
+            if r.get("why"):
+                w = r["why"][:100]
+                e["reasons"][w] = e["reasons"].get(w, 0) + 1
+    for e in errs.values():
+        e["reasons"] = [{"why": w, "count": n} for w, n in sorted(e["reasons"].items(), key=lambda x: -x[1])[:3]]
+    # Retries.
+    retries = [r for r in calls if r.get("retry")]
+    # Tool searches, and whether a hit was then called in the same job (alone or in a batch).
+    finds = {"searches": 0, "used": 0, "unused": []}
+    for job, rs in by_job.items():
+        for i, r in enumerate(rs):
+            f = r.get("find")
+            if not f:
+                continue
+            finds["searches"] += 1
+            hits = set(f.get("hits") or ())
+            later = set()
+            for x in rs[i + 1:]:
+                later.add(x["tool"])
+                later.update(x.get("steps") or ())
+            if hits & later:
+                finds["used"] += 1
+            elif len(finds["unused"]) < 5:
+                finds["unused"].append({"words": f.get("words"), "hits": (f.get("hits") or [])[:3]})
+    if finds["searches"]:
+        finds["usedRate"] = round(finds["used"] / finds["searches"], 2)
+    # Group switches: tool_groups enable / disable, and a call in another group than the call before.
+    switches = {"enableDisable": len([r for r in calls if r.get("groups")]), "groupChanges": 0}
+    for rs in by_job.values():
+        g = [r.get("grp") for r in rs if r.get("grp")]
+        switches["groupChanges"] += sum(1 for a, b in zip(g, g[1:]) if a != b)
+    undos = {}
+    for r in calls:
+        if r.get("undo"):
+            undos[r["undo"]] = undos.get(r["undo"], 0) + 1
+    rollbacks = [r for r in calls if "rollback" in r]
+    bg = {}
+    for r in calls:
+        if r.get("background"):
+            bg[r["tool"]] = bg.get(r["tool"], 0) + 1
+    dialogs = [r for r in rows if r.get("kind") == "dialog"]
+    dsum = {"count": len(dialogs)}
+    if dialogs:
+        by = {}
+        for d in dialogs:
+            by[d.get("by", "person")] = by.get(d.get("by", "person"), 0) + 1
+        dsum.update({"answeredBy": by, "secsBlocked": round(sum(d.get("secs", 0) for d in dialogs), 1), "longestSecs": max(d.get("secs", 0) for d in dialogs),
+                     "callsBlocked": sum(d.get("blocked", 0) for d in dialogs),
+                     "last": [{k: d.get(k) for k in ("title", "text", "buttons", "by", "secs", "blocked")} for d in dialogs[-3:]]})
+    gaps = [r["gap"] for r in calls if r.get("gap") is not None]
+    pics = [r for r in calls if r.get("imgs")]
+    big = {}
+    for r in calls:
+        b = big.setdefault(r["tool"], 0)
+        big[r["tool"]] = max(b, r.get("bytes", r.get("out", 0)))
+    jl = []
+    for job in list(by_job)[-jobs:]:
+        rs = by_job[job]
+        j = job_rows.get(job, {})
+        names = []
+        for r in rs:
+            names.append(r["tool"] if not r.get("steps") else f"{r['tool']}[{', '.join(_runs(r['steps'], 8))}]")
+        jl.append({"job": job, "mode": j.get("mode"), "why": j.get("why"), "versions": {k: j.get(k) for k in ("agentlink", "freecad", "addons") if j.get(k) is not None},
+                   "steps": len(rs) + sum(len(r.get("steps") or ()) for r in rs), "calls": len(rs), "errors": len([r for r in rs if r.get("err")]),
+                   "retries": len([r for r in rs if r.get("retry")]), "secs": round(rs[-1]["t"] - rs[0]["t"] + rs[0].get("ms", 0) / 1000, 1),
+                   "tokens": sum(tokens_of(r) for r in rs), "sequence": _runs(names)})
+    out = {"days": days, "calls": len(calls), "jobs": len(by_job), "modes": {}, "versions": sorted({json.dumps({k: j.get(k) for k in ("agentlink", "freecad", "addons")}, sort_keys=True) for j in job_rows.values()})[-3:],
+           "errorsByTool": sorted(errs.values(), key=lambda e: -e["count"])[:10],
+           "retries": {"count": len(retries), "afterError": 0, "tools": sorted({r["tool"] for r in retries})[:10]},
+           "toolFind": finds, "groupSwitches": switches, "undos": undos,
+           "rollbacks": {"count": len(rollbacks), "stepsUndone": sum(int(r.get("rollback") or 0) for r in rollbacks)},
+           "background": {"handoffs": sum(bg.values()), "tools": bg}, "dialogs": dsum,
+           "gapMs": {"median": _pct(gaps, 0.5), "p90": _pct(gaps, 0.9), "max": max(gaps) if gaps else None},
+           "answers": {"bytes": sum(r.get("bytes", r.get("out", 0)) for r in calls), "tokens": sum(r.get("tok", est_tokens(r.get("out", 0))) for r in calls),
+                       "largestByTool": dict(sorted(big.items(), key=lambda x: -x[1])[:5])},
+           "pictures": {"count": sum(r["imgs"] for r in pics), "bytes": sum(r.get("imgBytes", 0) for r in pics), "tokens": sum(r.get("img", 0) for r in pics)},
+           "lastJobs": jl,
+           "note": "From the usage log on this side (~/AgentLink/usage). No file contents, arguments or geometry are kept. Tokens are estimates."}
+    out["versions"] = [json.loads(v) for v in out["versions"]]
+    for j in job_rows.values():
+        out["modes"][j.get("mode") or "?"] = out["modes"].get(j.get("mode") or "?", 0) + 1
+    # A retry after an error: the call before it (same job, same tool) erred.
+    for rs in by_job.values():
+        for a, b in zip(rs, rs[1:]):
+            if b.get("retry") and a.get("err"):
+                out["retries"]["afterError"] += 1
+    if watchdog:
+        out["watchdog"] = _watchdog_counts(days)
     return out
 
 
