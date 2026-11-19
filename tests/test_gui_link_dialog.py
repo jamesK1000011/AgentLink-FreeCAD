@@ -226,3 +226,90 @@ class PinHint(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# Live 98 / 102 (19 Nov): FreeCAD's Expression Editor over a task panel has
+# its own OK. "OK" pressed the first OK found; now the editor's buttons are
+# apart, and OK accepts the expression first, then the task.
+class _Meta:
+    def __init__(self, name):
+        self.name = name
+
+    def className(self):
+        return self.name
+
+
+class _W:
+    def __init__(self, cls="QWidget", parent=None, text=""):
+        self.cls, self.parent, self._text, self.kids, self.clicks = cls, parent, text, [], []
+        if parent is not None:
+            parent.kids.append(self)
+
+    def metaObject(self):
+        return _Meta(self.cls)
+
+    def parentWidget(self):
+        return self.parent
+
+    def findChildren(self, _kind):
+        out = []
+        for k in self.kids:
+            out.append(k)
+            out += k.findChildren(_kind)
+        return [k for k in out if k.cls == "QPushButton"]
+
+    def isVisible(self):
+        return True
+
+    def isEnabled(self):
+        return True
+
+    def text(self):
+        return self._text
+
+    def click(self):
+        PRESSED.append((self.parent.cls, self._text))
+
+
+PRESSED = []
+
+
+class ExpressionEditor(unittest.TestCase):
+    def setUp(self):
+        import types
+
+        del PRESSED[:]
+        app = types.SimpleNamespace(processEvents=lambda: None)
+        widgets = types.SimpleNamespace(QAbstractButton=object, QApplication=app)
+        self.qt = gui_link._qt
+        gui_link._qt = lambda: (None, widgets)
+        self.view = _W("Gui::TaskView::TaskView")
+        box = _W("QDialogButtonBox", self.view)
+        _W("QPushButton", box, "OK")
+        _W("QPushButton", box, "Cancel")
+        self.ed = _W(gui_link.EXPRESSION_CLASS, self.view)
+        _W("QPushButton", self.ed, "OK")
+
+    def tearDown(self):
+        gui_link._qt = self.qt
+
+    def test_ok_accepts_the_expression_then_the_task(self):
+        d = {"widget": self.view, "expressionWidget": self.ed}
+        self.assertTrue(gui_link.press_task(d, "OK"))
+        self.assertEqual(PRESSED, [(gui_link.EXPRESSION_CLASS, "OK"), ("QDialogButtonBox", "OK")])
+
+    def test_expression_ok_accepts_only_the_expression(self):
+        d = {"widget": self.view, "expressionWidget": self.ed}
+        self.assertTrue(gui_link.press_task(d, "Expression OK"))
+        self.assertEqual(PRESSED, [(gui_link.EXPRESSION_CLASS, "OK")])
+
+    def test_without_the_editor_ok_is_the_tasks(self):
+        d = {"widget": self.view}
+        self.assertTrue(gui_link.press_task(d, "OK"))
+        self.assertEqual(PRESSED, [("QDialogButtonBox", "OK")])
+        self.assertFalse(gui_link.press_task(d, "Expression OK"))
+
+    def test_buttons_in_the_editor_are_known(self):
+        b = self.ed.kids[0]
+        self.assertTrue(gui_link._in_expression(b, self.view))
+        self.assertFalse(gui_link._in_expression(self.view.kids[0].kids[0], self.view))
