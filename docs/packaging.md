@@ -92,13 +92,17 @@ for OrcaSlicer. Each keeps its own licence; the launcher, manifest and build
 script are LGPL-2.1-or-later. `packaging/` is not in `FILES`, so the add-on
 copy the launcher installs does not carry it.
 
-**Updates.** The installed launcher updates itself and the add-ons
-(`agentlink_update`, and at each start) from this repository's `main`: the
-manifest, the pins and the launcher of one commit. If that cannot be read
-(manifest or a pin missing), it reads the channel used before 16 Nov 2026,
-ScanRuler's `freecad-spike` (`scripts/freecad/addons.json`,
-`scripts/bakeoff/*-ref`), which is kept in step until every installed copy
-has moved.
+**Updates.** The installed launcher updates the add-ons (`agentlink_update`,
+and at each start) from this repository's `main`: the manifest and the pins
+of one commit. The launcher itself comes from the hub's pinned commit
+(`packaging/pins/addon-ref`), not from the head of `main`. If the channel
+cannot be read (manifest or a pin missing), the installed copy keeps
+serving. The channel used before 16 Nov 2026 (ScanRuler's `freecad-spike`)
+is not read any more (red team 4, R4-6). The launcher writes the channel
+commit, the launcher commit and each add-on's commit in
+`~/.config/freecad-agentlink/state.json` and in the set's `.fetched.json`.
+No signature is checked yet: a signed manifest needs a public key that the
+person installs with the extension.
 
 **Pins.** A pin moves only once `.github/workflows/bakeoff.yml` is green:
 every add-on at its pin, their tests together, the launcher test, the

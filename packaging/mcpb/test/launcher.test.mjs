@@ -49,8 +49,23 @@ out.kept = names(L.companions(bundle, kept, local))
 fs.writeFileSync(kept, JSON.stringify([{ name: 'bad', dir: '/etc', url: 'https://example.com/x.git', branch: 'b' }]))
 out.badKept = names(L.companions(bundle, kept, local))
 fs.writeFileSync(local, JSON.stringify([{ name: 'mine', dir: '~/src/m', url: 'x', branch: 'dev' }]))
+out.badLocal = names(L.companions(bundle, kept, local))
+// Red team 4, R4-9: the exact attack, an option in place of the URL.
+fs.writeFileSync(local, JSON.stringify([{ name: 'mine', dir: '~/src/m', url: '--upload-pack=touch /tmp/owned', branch: '.' }]))
+out.attack = names(L.companions(bundle, kept, local))
+fs.writeFileSync(local, JSON.stringify([{ name: 'mine', dir: '~/src/m', url: 'https://github.com/jamesK1000011/m.git', branch: 'dev' }]))
 out.local = names(L.companions(bundle, kept, local))
 out.dirExpanded = L.companions(bundle, kept, local)[0].dir.startsWith(require('os').homedir())
+const ok = { name: 'n', dir: '~/src/n', url: 'https://github.com/jamesK1000011/n.git', branch: 'main', process: 'mcp/' }
+out.refused = [
+  { ...ok, url: 'https://github.com/someone/n.git' }, { ...ok, url: 'file:///tmp/n.git' }, { ...ok, url: '--upload-pack=x' },
+  { ...ok, branch: '-x' }, { ...ok, branch: 'a..b' }, { ...ok, branch: 'x.lock' }, { ...ok, branch: '.' },
+  { ...ok, dir: '/etc' }, { ...ok, dir: '~/../x' }, { ...ok, dir: '~/-x' }, { ...ok, process: '../../bin/' }, { ...ok, process: '-f' }, { ...ok, name: '-n' },
+].map((c) => L.checkCompanions([c]))
+out.taken = L.checkCompanions([ok, { ...ok, branch: 'feat/x-1', process: 'mcp/server.js' }])
+const ps = ['  11 node /h/src/n/mcp/server.js', '  12 node /h/src/n/mcpx/server.js', '  13 node /h/src/nn/mcp/server.js', '  14 bash -c echo /h/src/n/mcp/', '  15 node /h/src/n/mcp/a.js --x', '  16 grep /h/src/n/mcp.server'].join('\\n')
+out.pidsFolder = L.companionPids(ps, '/h/src/n/mcp/', 0)
+out.pidsFile = L.companionPids(ps, '/h/src/n/mcp/server.js', 0)
 process.stdout.write(JSON.stringify(out))
 `
   try {
@@ -62,12 +77,18 @@ process.stdout.write(JSON.stringify(out))
     assert.deepEqual(out.none, [], 'no addons.json: no companions')
     assert.deepEqual(out.kept, ['keptone@b'], 'the list the last update kept wins over the bundled one')
     assert.deepEqual(out.badKept, ['standin@main'], 'a kept list this launcher does not take is passed over')
+    assert.deepEqual(out.badLocal, ['standin@main'], 'a local list this launcher does not take is not used')
+    assert.deepEqual(out.attack, ['standin@main'], 'R4-9: an option in place of the URL is refused')
     assert.deepEqual(out.local, ['mine@dev'], 'the local setting wins over both')
+    out.refused.forEach((r, i) => assert.equal(r, null, `R4-9: companion ${i} is refused`))
+    assert.equal(out.taken.length, 2, 'a branch with a slash and a program file are taken')
+    assert.deepEqual(out.pidsFolder, [11, 15], 'R4-9: only processes that run a program in the folder, as one word')
+    assert.deepEqual(out.pidsFile, [11], 'R4-9: a program path matches as itself, not as a pattern')
     assert.ok(out.dirExpanded, '~ is the home folder')
   } finally {
     fs.rmSync(home, { recursive: true, force: true })
   }
-  console.log('launcher companions: from addons.json (bundled, then kept by the last update), the local setting over both')
+  console.log('launcher companions: from addons.json (bundled, then kept by the last update), the local setting over both when it passes the same checks; stops only exact program paths')
 }
 // agentlink_update's window restart: a fresh heartbeat naming another call
 // in hand means the app_restart was queued behind it (a window held by a
@@ -294,10 +315,11 @@ process.stdout.write(JSON.stringify({
     assert.match(fs.readFileSync(path.join(repo, s.pin), 'utf8').trim(), /^[0-9a-f]{40}$/, `${s.pin} holds a commit`)
   }
 }
-// The update channel: AgentLink-FreeCAD's main, with its manifest and pins;
-// ScanRuler's freecad-spike (scripts/freecad/addons.json, scripts/bakeoff
-// pins) only when the new one's head, manifest or a pin cannot be read;
-// an error, not a mix, when neither can. GitHub is a table here.
+// The update channel: AgentLink-FreeCAD's main, with its manifest and pins,
+// and nothing else: ScanRuler's freecad-spike is never read (red team 4,
+// R4-6), so a head, manifest or pin that cannot be read is an error and
+// what is installed keeps serving. The launcher comes from the hub's pin,
+// not the head. GitHub is a table here.
 {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agentlink-channel-'))
   const repo = path.join(here, '..', '..', '..')
@@ -333,10 +355,12 @@ const run = async () => {
   const out = {}
   const pick = (r) => ({ repo: r.channel.repo, launcher: r.channel.launcher, sha: r.sha, pins: r.sources.map((s) => s.pin), shas: r.shas, companions: !!r.companions, addons: r.serverAddons.map((a) => [a.dest, a.server]), addonShas: r.addonShas })
   out.ok = pick(await L.resolveChannel(io([])))
-  out.noManifest = pick(await L.resolveChannel(io(['AgentLink-FreeCAD/' + NEW + '/packaging/addons.json'])))
-  out.noPin = pick(await L.resolveChannel(io(['AgentLink-FreeCAD/' + NEW + '/packaging/pins/tutor-ref'])))
-  out.noHead = pick(await L.resolveChannel(io(['head:AgentLink-FreeCAD'])))
-  try { await L.resolveChannel(io(['head:AgentLink-FreeCAD', 'ScanRuler/' + OLD + '/scripts/freecad/addons.json'])); out.none = 'resolved' } catch (e) { out.none = e.message }
+  for (const [k, drop] of [['noManifest', ['AgentLink-FreeCAD/' + NEW + '/packaging/addons.json']], ['noPin', ['AgentLink-FreeCAD/' + NEW + '/packaging/pins/tutor-ref']], ['noHead', ['head:AgentLink-FreeCAD']]]) {
+    try { await L.resolveChannel(io(drop)); out[k] = 'resolved' } catch (e) { out[k] = e.message }
+  }
+  const r = await L.resolveChannel(io([]))
+  out.launcherAt = L.launcherRef(r.channel, r.sources, r.shas)
+  out.noHubPin = L.launcherRef(r.channel, r.sources.map((s) => ({ ...s, pin: undefined })), r.shas)
   out.channels = L.CHANNELS
   process.stdout.write(JSON.stringify(out))
 }
@@ -346,8 +370,7 @@ run().catch((e) => { process.stderr.write(e.stack); process.exit(1) })
     const out = JSON.parse(execFileSync(process.execPath, ['-e', script], { env: { ...process.env, HOME: home, AGENTLINK_UPDATE: 'false', T: JSON.stringify({ manifest, oldManifest, pins }) }, encoding: 'utf8' }))
     assert.deepEqual(out.channels.map((c) => [c.repo, c.branch, c.launcher, c.manifest]), [
       ['AgentLink-FreeCAD', 'main', 'packaging/mcpb/server/index.js', 'packaging/addons.json'],
-      ['ScanRuler', 'freecad-spike', 'scripts/freecad/mcpb/server/index.js', 'scripts/freecad/addons.json'],
-    ])
+    ], 'R4-6: one channel, no old fallback')
     const want = JSON.parse(manifest).sources
     assert.equal(out.ok.repo, 'AgentLink-FreeCAD')
     assert.equal(out.ok.launcher, 'packaging/mcpb/server/index.js')
@@ -358,18 +381,15 @@ run().catch((e) => { process.stderr.write(e.stack); process.exit(1) })
     const extra = JSON.parse(manifest).serverAddons || []
     assert.deepEqual(out.ok.addons, extra.map((a) => [a.dest, a.server]), 'the server add-ons come with it')
     assert.deepEqual(out.ok.addonShas, extra.map((a) => pins[a.pin].trim()), 'each at its pin')
-    for (const k of ['noManifest', 'noPin', 'noHead']) {
-      assert.equal(out[k].repo, 'ScanRuler', `${k}: falls back to ScanRuler`)
-      assert.equal(out[k].launcher, 'scripts/freecad/mcpb/server/index.js')
-      assert.equal(out[k].sha, 'b'.repeat(40))
-      assert.deepEqual(out[k].pins, want.map((s) => s.pin.replace('packaging/pins/', 'scripts/bakeoff/')))
-      assert.deepEqual(out[k].shas, want.map((s) => pins[s.pin].trim().replace(/^./, 'd')), `${k}: the old channel's own pins, not a mix`)
-    }
-    assert.match(out.none, /^no update channel could be read: AgentLink-FreeCAD: unreachable; ScanRuler: .*HTTP 404/)
+    for (const k of ['noManifest', 'noPin', 'noHead']) assert.match(out[k], /^no update channel could be read: AgentLink-FreeCAD: /, `${k}: an error, no fallback to older pins`)
+    const hub = want.findIndex((s) => s.dest === 'AgentLink')
+    assert.equal(out.launcherAt, pins[want[hub].pin].trim(), 'R4-6: the launcher comes from the hub\'s pinned commit, not the head')
+    assert.notEqual(out.launcherAt, 'a'.repeat(40))
+    assert.equal(out.noHubPin, null, 'R4-6: no hub pin, no launcher update')
   } finally {
     fs.rmSync(home, { recursive: true, force: true })
   }
-  console.log('launcher channel: AgentLink-FreeCAD main with its pins; ScanRuler freecad-spike only when that cannot be read; an error when neither can')
+  console.log('launcher channel: AgentLink-FreeCAD main with its pins, no old fallback; the launcher from the hub\'s pin')
 }
 async function launch(nodeArgs = () => [], again = null) {
   // again: a root from an earlier launch, started once more as it was left.
