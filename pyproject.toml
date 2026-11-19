@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentlink-freecad"
-version = "0.3.0"
+version = "1.0.0"
 description = "Agent Link for FreeCAD: drive FreeCAD from an agent over the Model Context Protocol."
 readme = "README.md"
 requires-python = ">=3.8"

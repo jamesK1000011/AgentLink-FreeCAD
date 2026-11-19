@@ -8,13 +8,13 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/jamesK1000011/AgentLink-FreeCAD#readme",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "agentlink-freecad",
-      "version": "0.3.0",
+      "version": "1.0.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

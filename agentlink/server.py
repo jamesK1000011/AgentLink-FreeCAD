@@ -19,7 +19,7 @@ import socket
 import sys
 import threading
 
-VERSION = "0.3.0"
+VERSION = "1.0.0"
 
 
 def _protocol_stdout():

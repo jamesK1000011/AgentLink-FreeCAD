@@ -320,6 +320,7 @@ docs/hardening/window-skasm-findings.md
 docs/hardening/window-td-cam-findings.md
 docs/hardening/workshop-rest-model.json
 docs/hooks.md
+docs/listing.md
 docs/packaging.md
 docs/records.md
 docs/security/red-team-2026-11-18.md

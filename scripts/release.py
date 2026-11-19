@@ -228,8 +228,6 @@ def problems(tag=None):
     want = vs["package.xml"]
     if not re.fullmatch(SEMVER, want or ""):
         bad.append("package.xml version %r is not X.Y.Z" % want)
-    elif int(want.split(".")[0]) >= 1:
-        bad.append("package.xml version %s: Agent Link is not at 1.0 yet" % want)
     for where, v in vs.items():
         if v != want:
             bad.append("%s says %s, package.xml %s" % (where, v, want))
@@ -258,6 +256,13 @@ def _subsections(body):
     return lead, subs
 
 
+def _entries(lead):
+    """The list entries ("- …" and their wrapped lines) of a section's lead
+    text, from the first one on; "" when it has none."""
+    m = re.search(r"(?m)^- ", lead)
+    return lead[m.start():].strip("\n") if m else ""
+
+
 def _merge(subs):
     order, merged = [], {}
     for t, text in subs:
@@ -282,13 +287,17 @@ def fold_text(text, version, date):
         o_body = text[old[3]:old[4]].split("\n", 1)[1]
         o_lead, o_subs = _subsections(o_body)
         subs = _merge(u_subs + o_subs)
+        lead = (_entries(u_lead) + "\n" + _entries(o_lead)).strip("\n")
         tail = text[old[4]:]
         between = text[ue:old[3]]
     else:
         subs = _merge(u_subs)
+        lead = _entries(u_lead)
         tail = text[ue:]
         between = ""
-    body = "".join("### %s\n\n%s\n\n" % (t, s) for t, s in subs)
+    # Entries above the first ### heading stay, at the top of the section
+    # (a note such as "Being prepared." does not).
+    body = (lead + "\n\n" if lead else "") + "".join("### %s\n\n%s\n\n" % (t, s) for t, s in subs)
     new = "## [Unreleased]\n\n## [%s] - %s\n\n%s" % (version, date, body)
     return text[:us] + new + between + tail.lstrip("\n") if tail.strip() else text[:us] + new.rstrip("\n") + "\n"
 
