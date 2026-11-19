@@ -304,6 +304,39 @@ class PressureGuard(unittest.TestCase):
         self.assertEqual(got["children"], [102, 103])
         self.assertIsNone(memguard.take_mark("fea_solve", job["start"]))
 
+    def test_the_supervisor_names_the_job_and_stops_only_its_recorded_children(self):
+        # FreeCAD 100; an import helper 104 started after the job (not its
+        # own); the job's recorded solver 102 and its child 103.
+        rows = [(100, 1, 5000, 900000), (102, 100, 20, 3000000), (103, 102, 10, 50000), (104, 100, 5, 10)]
+        stopped = []
+        jobs = {"pid": 100, "jobs": [{"tool": "fea_solve", "tid": 7, "token": "ab" * 16, "t": time.time() - 25, "children": [102, 999]}]}
+        sup = memguard.Supervisor(watch=memguard.Watch(read=lambda: "critical", every=0, need=1), rows=lambda: rows, stop=stopped.append,
+                                  guard=lambda: True, jobs=lambda: jobs)
+        m = sup.turn({"tool": "fea_solve", "start": time.time() - 25, "pid": 100})
+        self.assertEqual(stopped, [102])
+        self.assertEqual((m["tid"], m["token"], m["how"]), (7, "ab" * 16, "children"))
+        self.assertIsNone(memguard.take_mark("fea_solve", time.time() - 25, token="cd" * 16))
+        self.assertIsNotNone(memguard.take_mark("fea_solve", time.time() - 25, token="ab" * 16))
+
+    def test_run_records_the_child_for_the_job(self):
+        tid = memguard.started("fea_solve")
+        seen = []
+        try:
+            real_add = memguard.add_child
+
+            def add(pid, tid=None):
+                seen.append(pid)
+                return real_add(pid, tid)
+
+            with mock.patch.object(memguard, "add_child", add):
+                r = memguard.run([sys.executable, "-c", "print('hi')"], capture_output=True, text=True, timeout=30)
+            self.assertEqual((r.returncode, r.stdout.strip()), (0, "hi"))
+            self.assertEqual(len(seen), 1)
+            self.assertEqual([j["children"] for j in memguard.read_jobs()["jobs"] if j["tid"] == tid], [[]])
+        finally:
+            with mock.patch.object(memguard, "_raise_in", lambda t, e: 0):
+                memguard.finished(tid)
+
     def test_no_job_or_guard_off_reads_nothing(self):
         reads = []
         sup = memguard.Supervisor(watch=memguard.Watch(read=lambda: reads.append(1) or "critical", every=0), rows=lambda: [], guard=lambda: False)
@@ -319,7 +352,14 @@ class PressureGuard(unittest.TestCase):
         tid = memguard.started("mesh_map", tid=11, now=time.time() - 5)
         memguard.started("other_job", tid=12, now=time.time() - 5)
         try:
-            m = memguard.write_mark("mesh_map", os.getpid(), [])
+            rec = {r["tid"]: r for r in memguard.read_jobs()["jobs"]}[11]
+            # A mark without the job's thread id and token stops nothing (R2-14).
+            for forged in (memguard.write_mark("mesh_map", os.getpid(), []),
+                           memguard.write_mark("mesh_map", os.getpid(), [], tid=11, token="0" * 32),
+                           memguard.write_mark("mesh_map", os.getpid(), [], tid=12, token=rec["token"])):
+                self.assertEqual(memguard.check_once(read=lambda: dict(forged), raise_in=lambda t, e: stopped.append((t, e))), [])
+            self.assertEqual(stopped, [])
+            m = memguard.write_mark("mesh_map", os.getpid(), [], tid=11, token=rec["token"])
             self.assertEqual(memguard.check_once(read=lambda: dict(m), raise_in=lambda t, e: stopped.append((t, e))), ["mesh_map"])
             self.assertEqual(stopped, [(11, memguard.MemoryStop)])
         finally:
@@ -340,7 +380,8 @@ class PressureGuard(unittest.TestCase):
         t0 = time.time() - 3
         with mock.patch.object(memguard, "_raise_in", lambda t, e: 0):
             g.watched = (memguard.started("fea_solve", now=t0), t0)
-            memguard.write_mark("fea_solve", 1, [55])
+            rec = {r["tid"]: r for r in memguard.read_jobs()["jobs"]}[g.watched[0]]
+            memguard.write_mark("fea_solve", 1, [55], tid=rec["tid"], token=rec["token"])
             with self.assertRaises(ToolError) as e:
                 g.after(T(), {}, False)
         self.assertEqual(e.exception.code, "stopped")

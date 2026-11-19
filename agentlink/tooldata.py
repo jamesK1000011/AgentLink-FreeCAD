@@ -204,6 +204,34 @@ def refusing(fn):
     return run
 
 
+# The names of every tool already in the server: build_server sets it to its
+# own table before the families' tools are made (agentlink/tools.py).
+SERVER_NAMES = None
+
+
+def hub_names():
+    """Every hub tool's name: the tools already in the server (code tools and
+    data tools), Agent Link's data tools and its tool index (every tool it
+    defines, code or data). Red team 2, R2-4: the data tools alone left out
+    export_file, batch, approve_code and the rest made in code."""
+    hub = set()
+    try:
+        from . import runners
+
+        hub.update(runners.entries())
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from . import toolindex
+
+        hub.update(k for k in toolindex.load() if isinstance(k, str))
+    except Exception:  # noqa: BLE001
+        pass
+    if SERVER_NAMES is not None:
+        hub.update(SERVER_NAMES)
+    return hub
+
+
 def build(folder, group, handlers, who="this add-on"):
     """Tools for one group, in the file's order: every tool of the group
     needs a handler and every handler a tool. Its heavy, writes and
@@ -220,12 +248,7 @@ def build(folder, group, handlers, who="this add-on"):
     # declares is left out here too, so it never turns off the hub tool's
     # path check (pathIsCurve) or moves its place in tool_find (red team,
     # 2026-11-18).
-    try:
-        from . import runners
-
-        hub = set(runners.entries())
-    except Exception:  # noqa: BLE001
-        hub = set()
+    hub = hub_names()
     mine_only = {k: v for k, v in mine.items() if k not in hub}
     keep.declare_heavy(k for k, v in mine_only.items() if v.get("heavy"))
     from . import toolindex

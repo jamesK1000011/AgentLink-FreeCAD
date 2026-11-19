@@ -43,6 +43,54 @@ def _parts(p):
     return [x for x in p.replace("\\", "/").split("/") if x]
 
 
+# Agent Link's own state in its home (~/AgentLink, or AGENTLINK_HOME): the
+# settings, the memory stop mark, the add-on sources, the hidden FreeCAD's
+# mark, the launch mark, the extension state, the approvals log and the
+# rest (red team 2, R2-13). No tool writes them. The home is the default
+# output folder too, so there only these are refused: files of these kinds
+# at its top level, and these folders. ports/ is open (port drafts). With
+# an output folder outside the home, all of the home but ports/ is refused.
+STATE_EXT = {".json", ".jsonl", ".log", ".lock", ".cfg", ".tmp", ".pid"}
+STATE_DIRS = {"cookbooks", "cookbook-probes", "cookbook-scans", "usage", "crash", "addons-previous", "stopped", "unsaved",
+              "tests", "install", "addonmanager", "extensionrepos"}
+OPEN_DIRS = {"ports"}
+# State no tool reads either: the running jobs' tokens (agentlink/memguard.py).
+NEVER_READ = {"memory-jobs.json"}
+
+
+def _homes():
+    out = []
+    for h in (os.environ.get("AGENTLINK_HOME"), "~/AgentLink"):
+        if h:
+            r = _real(h)
+            if r != "/" and r not in out:
+                out.append(r)
+    return out
+
+
+def agentlink_state(real, out_dir=None):
+    """What of Agent Link's own state the real path is, or None."""
+    rf = real.casefold()
+    out_real = _real(out_dir).casefold() if out_dir else None
+    for home in _homes():
+        h = home.casefold()
+        if not (rf == h or rf.startswith(h.rstrip("/") + "/")):
+            continue
+        rel = [x.casefold() for x in _parts(rf[len(h):])]
+        if not rel:
+            return "its home folder"
+        if rel[0] in OPEN_DIRS:
+            continue
+        if rel[0] in STATE_DIRS:
+            return f"the {rel[0]} folder"
+        if len(rel) == 1 and os.path.splitext(rel[0])[1] in STATE_EXT:
+            return rel[0]
+        in_out = bool(out_real and (rf == out_real or rf.startswith(out_real.rstrip("/") + "/")))
+        if not in_out:
+            return "its home folder, not the output folder"
+    return None
+
+
 def check(tool, key, value, out_dir, write):
     """Refuse a path the agent should not touch; answers the path as given."""
     if not isinstance(value, str) or not value.strip():
@@ -56,6 +104,9 @@ def check(tool, key, value, out_dir, write):
     secret = [x for x in parts if x.casefold() in _SECRET_FOLDED]
     if secret:
         raise ToolError("invalid_input", f"{key}: {raw} is in {secret[0]} — credentials and shell settings are off limits to the agent.")
+    for h in _homes():
+        if os.path.dirname(real).casefold() == h.casefold() and os.path.basename(real).casefold() in NEVER_READ:
+            raise ToolError("invalid_input", f"{key}: {raw} is Agent Link's own state. No tool reads or writes it.")
     if write:
         # The person's OKs (approved macros and cookbooks) and the installed
         # cookbooks: no tool writes there, so no write can forge an OK.
@@ -66,6 +117,9 @@ def check(tool, key, value, out_dir, write):
             r = root.casefold()
             if rf == r or rf.startswith((r.rstrip("/") + "/", r + ".")):
                 raise ToolError("invalid_input", f"{key}: {raw} is Agent Link's own store of the person's approvals and cookbooks. No tool writes there; write somewhere else.")
+        state = agentlink_state(real, out_dir)
+        if state:
+            raise ToolError("invalid_input", f"{key}: {raw} is Agent Link's own state ({state}). No tool writes there; write somewhere else.")
         home = _real("~")
         # A session folder at the disk's root (a server started from / with
         # no --out) is not taken as leave to write anywhere.

@@ -625,8 +625,8 @@ class Gate:
         try:
             from . import memguard
 
-            memguard.finished(got[0])
-            mark = memguard.take_mark(tool.name, got[1])
+            rec = memguard.finished(got[0])
+            mark = memguard.take_mark(tool.name, got[1], token=(rec or {}).get("token"))
             if mark is None:
                 return None
             copy = None

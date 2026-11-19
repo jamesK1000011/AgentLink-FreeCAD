@@ -83,3 +83,38 @@ class TildeAlways(unittest.TestCase):
         got = paths.local(s, "~/AgentLink/x.ifc", expand=False)
         self.assertEqual(got, os.path.expanduser("~/AgentLink/x.ifc"))
         self.assertEqual(paths.local(s, "x.ifc", expand=False), "/tmp/out/x.ifc")
+
+
+class AgentLinkState(unittest.TestCase):
+    """Red team 2, R2-13: no tool writes Agent Link's own state files in its
+    home; port drafts and the output folder stay open."""
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self._env = os.environ.get("AGENTLINK_HOME")
+        os.environ["AGENTLINK_HOME"] = self.home
+
+    def tearDown(self):
+        if self._env is None:
+            os.environ.pop("AGENTLINK_HOME", None)
+        else:
+            os.environ["AGENTLINK_HOME"] = self._env
+
+    def test_a_json_writer_cannot_write_the_state(self):
+        for out in (self.home, tempfile.mkdtemp()):
+            for name in ("settings.json", "approvals.log", "memory-stop.json", "addon-sources.json", "hidden.json",
+                         "launch.json", "extensions.json", "SETTINGS.JSON", "usage/x.jsonl", "cookbooks/a.json"):
+                with self.assertRaises(ToolError, msg=(out, name)):
+                    paths.guard(T("sheet_export"), {"path": os.path.join(self.home, name)}, out)
+                with self.assertRaises(ToolError, msg=(out, name)):
+                    paths.guard(T("td_title"), {"export": os.path.join(self.home, name)}, out)
+
+    def test_ports_and_the_output_folder_stay_open(self):
+        paths.guard(T("export"), {"path": os.path.join(self.home, "part.step")}, self.home)
+        paths.guard(T("export"), {"path": os.path.join(self.home, "sub", "data.json")}, self.home)
+        paths.guard(T("export"), {"path": os.path.join(self.home, "ports", "x", "cookbook.json")}, tempfile.mkdtemp())
+        # An output folder elsewhere: the rest of the home is closed.
+        with self.assertRaises(ToolError):
+            paths.guard(T("export"), {"path": os.path.join(self.home, "part.step")}, tempfile.mkdtemp())
+        # Reading the state stays open.
+        paths.guard(T("import_file"), {"path": os.path.join(self.home, "settings.json")}, self.home)

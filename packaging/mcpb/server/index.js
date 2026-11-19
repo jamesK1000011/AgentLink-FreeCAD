@@ -879,7 +879,11 @@ function updateCompanions() {
 // add-on's copy just installed in the Mod folder goes there too, as that
 // launcher's own update would put it, and becomes current: the running
 // server takes it up at its next call (orcalink/reload.py), so it never runs
-// older code than FreeCAD's copy until Claude starts again (live 68). Done
+// older code than FreeCAD's copy until Claude starts again (live 68). The
+// copy comes from the set fetched (setDir), the code the set's commits name,
+// never from the Mod folder, which the agent can change (red team 2, R2-16).
+// A server add-on list that is there but refused keeps the add-ons in place
+// and writes no hubPinned, so the next update tries again. Done
 // once a commit (state.json's hubPinned): the other launcher's own newer
 // fetch is not undone at each update. Only where that extension has run
 // (its state.json is there). A row for each, for agentlink_update's answer.
@@ -897,11 +901,18 @@ function publishStdio(modDir, setDir, home = os.homedir()) {
   // The servers' add-ons (addons.json's serverAddons) fetched with the set:
   // none in a set from before them.
   let extras = []
-  try {
-    const listed = JSON.parse(fs.readFileSync(path.join(setDir, SERVER_ADDONS + '.json'), 'utf8'))
-    const ok = checkServerAddons(listed, sources)
-    if (ok) extras = ok.map((a, i) => ({ ...a, sha: listed[i].sha })).filter((a) => /^[0-9a-f]{40}$/.test(a.sha || ''))
-  } catch {}
+  let refused = false
+  const listFile = path.join(setDir, SERVER_ADDONS + '.json')
+  if (fs.existsSync(listFile)) {
+    try {
+      const listed = JSON.parse(fs.readFileSync(listFile, 'utf8'))
+      const ok = checkServerAddons(listed, sources)
+      if (ok && ok.every((a, i) => /^[0-9a-f]{40}$/.test(listed[i].sha || ''))) extras = ok.map((a, i) => ({ ...a, sha: listed[i].sha }))
+      else refused = true
+    } catch {
+      refused = true
+    }
+  }
   for (const s of sources || []) {
     if (!s.stdio) continue
     const sha = shas[s.dest]
@@ -917,7 +928,7 @@ function publishStdio(modDir, setDir, home = os.homedir()) {
       const st = JSON.parse(fs.readFileSync(stateFile, 'utf8')) || {}
       const before = typeof st.current === 'string' ? st.current : null
       Object.assign(row, { from: before ? before.slice(0, 7) : 'bundled', to: before ? before.slice(0, 7) : 'bundled' })
-      if (st.hubPinned === key) {
+      if (st.hubPinned === key && !refused) {
         row.note = 'unchanged since the last update'
         out.push(row)
         continue
@@ -926,8 +937,8 @@ function publishStdio(modDir, setDir, home = os.homedir()) {
       const fresh = `${dir}.new-${process.pid}`
       const isNew = before !== sha || !fs.existsSync(path.join(dir, s.stdio.entry))
       if (isNew) {
-        const src = path.join(modDir, s.dest)
-        if (!fs.existsSync(path.join(src, s.stdio.entry))) throw new Error(`no ${s.stdio.entry} in ${s.dest}`)
+        const src = path.join(setDir, s.dest)
+        if (!fs.existsSync(path.join(src, s.stdio.entry))) throw new Error(`no ${s.stdio.entry} in ${s.dest} of the set fetched`)
         fs.rmSync(fresh, { recursive: true, force: true })
         fs.cpSync(src, fresh, { recursive: true, filter: (f) => !/(^|\/)__pycache__(\/|$)/.test(f) })
       }
@@ -939,7 +950,12 @@ function publishStdio(modDir, setDir, home = os.homedir()) {
       const addons = path.join(appDir, 'addons')
       const next = `${addons}.new-${process.pid}`
       fs.rmSync(next, { recursive: true, force: true })
-      if (mine.length) {
+      if (refused) {
+        // The list was refused: the add-ons in place stay (copied into a new
+        // app folder from the one in use).
+        const inUse = path.join(cache, `app-${before}`, 'addons')
+        if (isNew && before && fs.existsSync(inUse)) fs.cpSync(inUse, addons, { recursive: true })
+      } else if (mine.length) {
         for (const a of mine) {
           const from = path.join(setDir, SERVER_ADDONS, a.server, a.dest)
           if (!fs.existsSync(from)) throw new Error(`no ${a.dest} in the set fetched`)
@@ -949,21 +965,25 @@ function publishStdio(modDir, setDir, home = os.homedir()) {
         // add-ons at the same commit (orcalink/reload.py).
         fs.writeFileSync(path.join(next, '.id'), key + '\n')
       }
-      const gone = `${addons}.old-${process.pid}`
-      if (fs.existsSync(addons)) fs.renameSync(addons, gone)
-      if (mine.length) fs.renameSync(next, addons)
-      fs.rmSync(gone, { recursive: true, force: true })
+      if (!refused) {
+        const gone = `${addons}.old-${process.pid}`
+        if (fs.existsSync(addons)) fs.renameSync(addons, gone)
+        if (mine.length) fs.renameSync(next, addons)
+        fs.rmSync(gone, { recursive: true, force: true })
+      }
       if (isNew) {
         fs.rmSync(dir, { recursive: true, force: true })
         fs.renameSync(fresh, dir)
       }
       const now = JSON.parse(fs.readFileSync(stateFile, 'utf8')) || {}
-      const st2 = before !== sha ? { ...now, current: sha, previous: before, hubPinned: key, at: new Date().toISOString() } : { ...now, hubPinned: key }
+      const pin = refused ? {} : { hubPinned: key }
+      const st2 = before !== sha ? { ...now, current: sha, previous: before, ...pin, at: new Date().toISOString() } : { ...now, ...pin }
       fs.writeFileSync(stateFile + '.tmp', JSON.stringify(st2))
       fs.renameSync(stateFile + '.tmp', stateFile)
       row.to = sha.slice(0, 7)
       if (mine.length) row.addons = mine.map((a) => `${a.dest}@${a.sha.slice(0, 7)}`)
       if (before !== sha || mine.length || st.hubPinned) row.note = 'its running server takes the new code at its next call'
+      if (refused) row.note = `${row.note ? row.note + '; ' : ''}its add-on list was refused: the add-ons in place are kept`
     } catch (e) {
       row.error = String(e.message || e)
     }
