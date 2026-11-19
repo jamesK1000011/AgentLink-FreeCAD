@@ -79,11 +79,6 @@ jobs:
           echo "PYTHONPATH=$p/AgentLink-FreeCAD:$p/Texturizer-FreeCAD:$p/Tutor-FreeCAD:$p/ScanRuler-FreeCAD:$p/Workshop-FreeCAD:$p/AgentLink-OrcaSlicer" >> "$GITHUB_ENV"
           echo "AGENTLINK_ORCALINK=$p/AgentLink-OrcaSlicer" >> "$GITHUB_ENV"
           python -c "import sys; sys.path.append('$CONDA_PREFIX/lib'); import FreeCAD, Part, MeshPart; print('FreeCAD', FreeCAD.Version()[:3])"
-      - name: PrusaSlicer, for the slice tool
-        # The apt mirror sometimes hangs: the slice tests skip without it.
-        timeout-minutes: 6
-        continue-on-error: true
-        run: sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update -qq && sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 install -y -qq --no-install-recommends prusa-slicer xvfb libopengl0 libegl1 libgl1 > /dev/null
       - name: OrcaSlicer, for the slice tool
         # The latest release's Linux AppImage, unpacked (no FUSE on the
         # runner); the Orca slice tests skip without it.
@@ -95,16 +90,21 @@ jobs:
           name=$(gh api repos/OrcaSlicer/OrcaSlicer/releases/latest -q '[.assets[].name | select(endswith(".AppImage"))] | map(select(test("aarch64") | not)) | (map(select(test("2404"))) + .)[0]')
           gh release download --repo OrcaSlicer/OrcaSlicer --pattern "$name" --dir "$RUNNER_TEMP/orca"
           cd "$RUNNER_TEMP/orca" && chmod +x "$name" && "./$name" --appimage-extract > /dev/null
-          # OpenGL too: the PrusaSlicer step that also installs it may time out.
+          # This step runs before the PrusaSlicer one: its tests fail without
+          # these libraries, the PrusaSlicer ones only skip. A step that timed
+          # out leaves apt-get with the dpkg lock, so each apt step waits for it.
           # The AppImage needs WebKitGTK 4.1 from the host (it stopped with
           # "missing host WebKitGTK 4.1 runtime libraries" when the install
           # was skipped): refresh the lists here too, and say a failure.
-          # A PrusaSlicer step that timed out can leave apt-get with the dpkg
-          # lock ("Could not get lock"): wait for the lock, do not fail at once.
           sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update -qq || true
           sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 install -y -qq --no-install-recommends libwebkit2gtk-4.1-0 libjavascriptcoregtk-4.1-0 libgstreamer-plugins-base1.0-0 libopengl0 libegl1 libgl1 > /dev/null \
             || echo "::warning::the OrcaSlicer libraries did not install; its tests will fail"
           echo "AGENTLINK_ORCASLICER=$RUNNER_TEMP/orca/squashfs-root/AppRun" >> "$GITHUB_ENV"
+      - name: PrusaSlicer, for the slice tool
+        # The apt mirror sometimes hangs: the slice tests skip without it.
+        timeout-minutes: 12
+        continue-on-error: true
+        run: sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update -qq && sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 -o Acquire::http::Timeout=20 install -y -qq --no-install-recommends prusa-slicer xvfb libopengl0 libegl1 libgl1 > /dev/null
       - name: The add-ons' own tests, all installed together
         # A hung test stops here, not at 45 minutes.
         timeout-minutes: 20
