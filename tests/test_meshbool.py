@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # meshbool, meshobj_boolean's own kernel (numpy only): a dense noisy
-# scan-like mesh (139,968 triangles, the size of the M18 scan whose cut
+# scan-like mesh (139,968 triangles, the size of a large scan whose cut
 # FreeCAD's Mesh.difference left open) cut by a solid with large faces and a
 # bore through it; the triangles away from the cut kept exactly; boxes with
 # faces on the mesh's own planes; and an open mesh refused, never cut.

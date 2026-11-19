@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Found rebuilding a scanned pistol as clean B-rep by lofting closed
+# Found rebuilding a scanned hand-held shell as clean B-rep by lofting closed
 # cross-sections (live test drive, 16 Nov 2026): a closed B-spline came out
 # a bare open edge; a loft through such sections twisted into a solid far
 # bigger than its sections, inside out, yet "sound"; a fuse with it changed

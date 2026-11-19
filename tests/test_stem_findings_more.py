@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# More from the bike stem and M18 test drives (16 Nov 2026), held here with
+# More from the bike stem and shell test drives (16 Nov 2026), held here with
 # stand-ins where FreeCAD is not importable: a render's time read against
 # what it drew; a Body of two solids (AllowCompound) kept as a part and
 # checked solid by solid; a BOP-only finding on a valid shape a warning; a
