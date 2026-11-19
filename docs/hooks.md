@@ -33,6 +33,8 @@ LEAN = False                         # True: listed by default (keep it small)
 HEAVY = {"mine_solve"}               # optional: queued, timed, given a deadline
 WRITERS = {"mine_export"}            # optional: their "path" is written, not read
 GEOMETRIC = set()                    # optional: their "path" is a curve, not a file
+PATH_KEYS = {"mine_paint": ["texture.file", "profiles.*"]}  # optional: other fields that hold a file the tool reads (see "Path fields")
+WRITE_KEYS = {"mine_export": ["report.to"]}  # optional: other fields that hold a file the tool writes
 NOT_IN_MACROS = set()                # optional: changing calls a saved macro does not replay
 PINNED_FREE = set()                  # optional: answered after the person closed the document the agent worked in (a recovery tool)
 NEXT = {"mine-after-pad": {"when": {"body": "features", "lastFeature": "pad"}, "suggest": [{"tool": "mine_check", "why": "check the new solid"}], "weight": 49, "source": "mine", "date": "2026-11-16"}}  # optional: rules for the "next" hint (agentlink/data/nexthint.json says the facts and the shape)
@@ -92,6 +94,8 @@ format is Agent Link's (`agentlink/tooldata.py`, `agentlink/data/tools.schema.js
    "activity": "Did it to {body}"}}}
 ```
 
+`pathKeys` and `writeKeys` are optional; see "Path fields" below.
+
 `activity` is optional: what a call did, in the panel's Activity tab — a
 short plain sentence whose `{fields}` come from the call's arguments or its
 answer (a path shows as its file name). Without it the tab says the tool's
@@ -129,6 +133,35 @@ conversion, family helper, property, or step once the object is made),
 `answer` (its fields and the family helper that finishes it). They are
 accepted in an add-on's file only as part of a valid runner entry, and an
 add-on's tools are still bound to its handlers; leave them out.
+
+## Path fields
+
+Agent Link checks every file path an agent gives before your handler runs
+(`agentlink/paths.py`). No tool reads or writes credentials, shell settings
+or Agent Link's own state. A tool writes only in the person's home, the
+output folder or the temporary folder, and never a script or a program.
+The check finds these fields by itself:
+
+- Top-level `path`, `file`, `files`, `folder`, `image`, `template`, `font`,
+  `import`, `pattern`, `points_file`, `profiles_file`, `kinematics`: read.
+- `path` and `file` of a tool that writes (`writes: true`, or `WRITERS` in
+  code): written.
+- `export` and `saveAs`, for any tool: written.
+
+Declare every other field that holds a file, nested ones too. Use a dotted
+key: `"kicadPcb"`, `"texture.file"`, `"profiles.*"`. `*` is every value of
+an object or every item of a list. A key on a list of objects is the key in
+each item (`"parts.file"`). A value that is a list of paths is checked item
+by item.
+
+- In tools.json: `"pathKeys": [...]` for files the tool reads,
+  `"writeKeys": [...]` for files it writes, on the tool's entry.
+- In code: `PATH_KEYS` and `WRITE_KEYS` on the family, each
+  `{tool: [keys]}`.
+
+A declaration counts only for your own tools. A key that is not a dotted
+field name is left out, and the log says so. A field you do not declare is
+not checked: then call `paths.in_file` or `paths.out_file` in your handler.
 
 ## Hooks (`agentlink.hooks`)
 

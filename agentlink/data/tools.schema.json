@@ -109,6 +109,16 @@
       "type": "boolean",
       "description": "Its path is a curve in the model, not a file."
      },
+     "pathKeys": {
+      "type": "array",
+      "description": "Its other fields that hold a file it reads, nested ones too: \"kicadPcb\", \"texture.file\", \"profiles.*\" (* is every value of an object or item of a list). Agent Link checks them as it checks path.",
+      "items": {"type": "string", "pattern": "^([A-Za-z0-9_-]+|\\*)(\\.([A-Za-z0-9_-]+|\\*))*$"}
+     },
+     "writeKeys": {
+      "type": "array",
+      "description": "Its other fields that hold a file it writes, in the pathKeys form. Agent Link checks them as it checks the path of a tool that writes.",
+      "items": {"type": "string", "pattern": "^([A-Za-z0-9_-]+|\\*)(\\.([A-Za-z0-9_-]+|\\*))*$"}
+     },
      "reads": {
       "type": "object",
       "description": "For a changing tool, the calls that only read: an argument and the values that make a call a read, e.g. {\"action\": [\"list\"]}. Such a call is no undo step, marks nothing changed and is not shown as a change.",

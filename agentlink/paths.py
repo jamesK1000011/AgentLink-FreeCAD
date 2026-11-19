@@ -12,11 +12,19 @@ import os
 from .protocol import ToolError
 
 # Fields that hold a file path (or a list of them).
-PATH_KEYS = {"path", "file", "files", "kinematics", "template", "font", "export", "import", "pattern", "image",
+PATH_KEYS = {"path", "saveAs", "file", "files", "kinematics", "template", "font", "export", "import", "pattern", "image",
              # red team, 2026-11-18: files and folders read by other names
              "points_file", "profiles_file", "folder"}
 # Fields that are files only for some tools
 PATH_KEYS_FOR = {"ifc_diff": {"a", "b"}}
+# Fields that are always a file the call writes, for any tool ("export": a
+# file to export to; "saveAs": a copy saved under another name).
+WRITE_KEYS = {"export", "saveAs"}
+# An add-on's own path fields, nested ones too (red team 3, R3-10): for each
+# of its tools, {"read": [...], "write": [...]}, each a dotted key such as
+# "kicadPcb", "texture.file" or "profiles.*" ("*": every value of an object,
+# every item of a list). declare_keys() adds them; guard() checks them.
+DECLARED_KEYS = {}
 # Tools where "path" is a curve in the model, not a file.
 GEOMETRIC = {"part_sweep", "pd_pipe", "draft_link_array", "draft_array", "bim_frame", "bim_fence", "bim_truss"}
 # Tools that write their path (the rest read theirs).
@@ -214,6 +222,58 @@ def out_file(session, tool, p, ext=None, key="path", expand=True, kind=None):
     return p
 
 
+def valid_key(k):
+    """A declared path key: dotted names, "*" for every value or item."""
+    return isinstance(k, str) and bool(k) and all(x == "*" or (x and x.replace("_", "a").replace("-", "a").isalnum()) for x in k.split("."))
+
+
+def declare_keys(tool, read=(), write=()):
+    """An add-on tool's own path fields (dotted keys, valid_key()); answers
+    the keys left out as not valid."""
+    bad = []
+    d = DECLARED_KEYS.setdefault(tool, {"read": set(), "write": set()})
+    for kind, keys in (("read", read), ("write", write)):
+        for k in keys or ():
+            if valid_key(k):
+                d[kind].add(k)
+            else:
+                bad.append(k)
+    return bad
+
+
+def values_at(args, key):
+    """(where, value) for each value at a dotted key in the arguments."""
+    out = [("", args)]
+    for part in key.split("."):
+        nxt = []
+        for where, v in out:
+            pre = where + "." if where else ""
+            if part == "*":
+                if isinstance(v, dict):
+                    nxt += [(pre + str(k), x) for k, x in v.items()]
+                elif isinstance(v, list):
+                    nxt += [(pre + str(i), x) for i, x in enumerate(v)]
+            elif isinstance(v, dict) and part in v:
+                nxt.append((pre + part, v[part]))
+            elif isinstance(v, list):
+                # a list of objects: the key in each item
+                nxt += [(f"{pre}{i}.{part}", x[part]) for i, x in enumerate(v) if isinstance(x, dict) and part in x]
+        out = nxt
+    return out
+
+
+def _check_declared(name, args, out_dir):
+    d = DECLARED_KEYS.get(name)
+    if not d or not isinstance(args, dict):
+        return
+    for kind in ("read", "write"):
+        for key in sorted(d[kind]):
+            for where, v in values_at(args, key):
+                for x in (v if isinstance(v, list) else [v]):
+                    if isinstance(x, str):
+                        check(name, where, x, out_dir, kind == "write")
+
+
 def guard(tool, args, out_dir):
     """Every path-like field of a call checked; raises on the first refusal."""
     name = tool.name
@@ -226,9 +286,10 @@ def guard(tool, args, out_dir):
     for k, v in (args or {}).items():
         if (k not in PATH_KEYS and k not in PATH_KEYS_FOR.get(name, ())) or (k == "path" and name in GEOMETRIC):
             continue
-        write = (writes and k in ("path", "file")) or k == "export"
+        write = (writes and k in ("path", "file")) or k in WRITE_KEYS
         if isinstance(v, list):
             for x in v:
                 check(name, k, x, out_dir, write)
         else:
             check(name, k, v, out_dir, write)
+    _check_declared(name, args, out_dir)

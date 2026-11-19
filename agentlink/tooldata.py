@@ -15,6 +15,9 @@ module does).
 
 heavy: a long job (queued, timed, given a deadline); writes: its "path" is a
 file it writes, not reads; pathIsCurve: its "path" is a curve in the model;
+pathKeys and writeKeys: its other fields that hold a file it reads (pathKeys)
+or writes (writeKeys), nested ones too ("kicadPcb", "texture.file",
+"profiles.*"), checked as the top-level path fields are (agentlink/paths.py);
 reads: for a changing tool, the calls that only read, {"action": ["list"]}
 (no undo step, nothing marked changed, not shown as a change); activity:
 what a call did in the Activity tab's words, a template whose {fields} come
@@ -112,7 +115,7 @@ import re
 
 ACCEPTS_MAJOR = 1
 REQUIRED = {"group": str, "description": str, "inputSchema": dict, "changes": bool, "source": str, "date": str}
-OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "reads": dict, "frontReads": dict, "activity": str,
+OPTIONAL = {"title": str, "heavy": bool, "writes": bool, "pathIsCurve": bool, "pathKeys": list, "writeKeys": list, "reads": dict, "frontReads": dict, "activity": str,
             "workbench": str, "commands": list, "words": list}
 # Agent Link's own tools only (agentlink/data/tools.json): a tool that wraps
 # one FreeCAD command, or a list of steps, run by one of agentlink/runners.py's
@@ -172,6 +175,13 @@ def check(doc):
         for k in ("commands", "words"):
             if isinstance(e.get(k), list) and not all(isinstance(x, str) and x for x in e[k]):
                 out.append(f"{name}.{k}: a list of words")
+        for k in ("pathKeys", "writeKeys"):
+            if isinstance(e.get(k), list):
+                from . import paths
+
+                bad = [x for x in e[k] if not paths.valid_key(x)]
+                if bad:
+                    out.append(f"{name}.{k}: dotted field names such as \"texture.file\" or \"profiles.*\", not {bad[:3]}")
         extra = set(e) - set(REQUIRED) - set(OPTIONAL) - set(RUNNER)
         if extra:
             out.append(f"{name}: unknown fields {sorted(extra)}")
@@ -259,6 +269,8 @@ def build(folder, group, handlers, who="this add-on"):
             paths.WRITERS.add(k)
         if v.get("pathIsCurve"):
             paths.GEOMETRIC.add(k)
+        if v.get("pathKeys") or v.get("writeKeys"):
+            paths.declare_keys(k, v.get("pathKeys"), v.get("writeKeys"))
     return [Tool(k, v["description"], v["inputSchema"], refusing(handlers[k]), changes=v["changes"], group=group, reads=v.get("reads"),
                  activity=v.get("activity"), front_reads=v.get("frontReads"))
             for k, v in mine.items()]
