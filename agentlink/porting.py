@@ -15,12 +15,7 @@ never in the add-on and never in Agent Link:
     hook/data/tools.json       one draft entry for each command
     tests/test_port.py         format, handlers, import and lint checks
     scripts/ste_lint.py        the lint, plain Python
-    cookbook.json              a draft cookbook of format 2 (agentlink/cookbook2.py):
-                               level 1 for each public typed function of a
-                               headless module, level 2 for each command that
-                               opens a .ui task panel, level 4 for the other
-                               commands, level 5 with the blocker for the rest.
-                               Preconditions come from each command's IsActive.
+    cookbook.json              a draft cookbook: one command recipe a command
 
 Plain Python, no FreeCAD and no other Agent Link module:
 
@@ -33,11 +28,6 @@ import json
 import os
 import re
 import sys
-
-try:  # in the package, or run as a file (python3 agentlink/porting.py): plain Python both ways
-    from . import cookbook2
-except ImportError:
-    import cookbook2
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 HUB = os.path.dirname(HERE)
@@ -217,7 +207,7 @@ def read_addon(folder):
         raise Refused("not_found", f"folder: no such folder ({_tilde(folder)}). Give an add-on's folder, for example one in FreeCAD's Mod folder.")
     if not any(os.path.isfile(os.path.join(folder, f)) for f in ("InitGui.py", "Init.py", "package.xml")):
         raise Refused("invalid_input", f"folder: {_tilde(folder)} has no InitGui.py, Init.py or package.xml. Give the add-on's top folder.")
-    name, licence, version, author = os.path.basename(folder), None, None, None
+    name, licence = os.path.basename(folder), None
     pkg_xml = os.path.join(folder, "package.xml")
     if os.path.isfile(pkg_xml) and os.path.getsize(pkg_xml) < MAX_FILE_BYTES:
         with open(pkg_xml, encoding="utf-8", errors="replace") as f:
@@ -228,14 +218,7 @@ def read_addon(folder):
         m = re.search(r"<license[^>]*>\s*([^<]{1,60}?)\s*</license>", text)
         if m:
             licence = clean(m.group(1), 60)
-        m = re.search(r"<version>\s*([0-9A-Za-z.+-]{1,40})\s*</version>", text)
-        if m:
-            version = m.group(1)
-        m = re.search(r"<author[^>]*>\s*([^<]{1,80}?)\s*</author>", text) or re.search(r"<maintainer[^>]*>\s*([^<]{1,80}?)\s*</maintainer>", text)
-        if m:
-            author = clean(m.group(1), 80)
     classes, cmds, unread, workbench = {}, [], [], None
-    nodes = {}  # class name: (file, ClassDef), for IsActive and Activated
     trees = []
     for p in py_files(folder):
         rel = os.path.relpath(p, folder)
@@ -262,7 +245,6 @@ def read_addon(folder):
                 res = _resources(n, consts)
                 if res is not None:
                     classes.setdefault(n.name, res)
-                    nodes.setdefault(n.name, (rel, n))
                 if workbench is None and _is_workbench(n):
                     workbench = n.name
         trees.append((rel, tree, consts))
@@ -298,7 +280,7 @@ def read_addon(folder):
                 continue
             seen.add(cmd)
             cmds.append({"command": cmd, "menu": clean(res.get("MenuText", ""), 80), "tip": clean(res.get("ToolTip", ""), 300), "file": rel,
-                         "class": cls, **({"node": nodes[cls][1]} if cls in nodes else {})})
+                         "class": cls})
             if not res:
                 unread.append(f"{rel}:{n.lineno}: {cmd}: no GetResources found for {cls}; its words are left empty")
     package = None
@@ -307,8 +289,7 @@ def read_addon(folder):
         if os.path.isfile(os.path.join(p, "__init__.py")) and d.isidentifier() and not d.startswith("_") and d not in SKIP_DIRS:
             if any(c["file"].startswith(d + os.sep) for c in cmds) or package is None:
                 package = d
-    return {"folder": folder, "name": name, "package": package, "licence": licence, "workbench": workbench, "commands": cmds, "unread": unread,
-            "version": version, "author": author}
+    return {"folder": folder, "name": name, "package": package, "licence": licence, "workbench": workbench, "commands": cmds, "unread": unread}
 
 
 def hub_tool_names():
@@ -348,9 +329,7 @@ def plan(info, group=None, taken=()):
         # A command cmd_run refuses (a macro, a modal dialog, quit) gets no
         # drafted tool: the draft calls runCommand itself (red team, 2026-11-18).
         if refused_command(c["command"]):
-            why = refused_command(c["command"])
-            info.setdefault("unread", []).append(f"{c['command']}: no tool drafted — cmd_run refuses it ({why}); level 5 in the cookbook")
-            info.setdefault("refused", []).append({"command": c["command"], "why": why, "tool": f"{group}_{snake(c['command'])}"[:48]})
+            info.setdefault("unread", []).append(f"{c['command']}: not drafted — cmd_run refuses it ({refused_command(c['command'])})")
             continue
         prefix, _, rest = c["command"].partition("_")
         t = f"{group}_{snake(rest)}" if rest and plain_name(prefix) == group else f"{group}_{snake(c['command'])}"
@@ -377,517 +356,15 @@ def tools_json(info, group, tools, date):
             "entries": ents}
 
 
-def cookbook_json(info, name, tools, date, functions=(), forms=None):
-    """The draft cookbook, format 2 (agentlink/cookbook2.py). tools: the
-    command tools of plan(); functions: level 1 drafts of read_functions();
-    forms: {command: form draft} of read_forms(). Refused commands and
-    unlinked forms become level 5 entries with the blocker."""
-    forms = forms or {}
-    ents = {}
-    for t in tools:
-        c = next((x for x in info.get("commands", []) if x["command"] == t["command"]), {})
-        pre, notes = is_active(c.get("node"))
-        if info.get("workbench"):
-            pre["workbench"] = info["workbench"]
-        f = forms.get(t["command"])
-        if f:
-            e = {"level": 2, "description": f"Fill the task panel of {t['command']} from data, then press OK.",
-                 "call": {"form": {"command": t["command"], "fields": f["fields"], "accept": "OK", "ui": f["ui"]}}, "inputs": f["inputs"]}
-        else:
-            e = {"level": 4, "description": t["description"], "call": {"command": t["command"]}}
-        if pre:
-            e["preconditions"] = pre
-        if notes:
-            e["notes"] = notes
-        e["source"] = {"from": "code", "checked": False}
-        ents[t["tool"]] = e
-    for x in info.get("refused", []):
-        ents[_free(ents, x["tool"])] = {"level": 5, "description": f"The FreeCAD command {x['command']}. Agent Link does not run it.",
-                                        "blocker": f"cmd_run refuses {x['command']}: {x['why']}"[:300], "source": {"from": "code", "checked": False}}
-    for fn in functions:
-        ents[_free(ents, fn["entry"])] = fn["cookbook"]
-    for ui in (forms or {}).get(None, []):
-        ents[_free(ents, ui["entry"])] = {"level": 5, "description": f"The task panel in {ui['ui']}. A form entry needs the command that opens it.",
-                                          "blocker": f"port_scaffold found no command that opens {ui['ui']}. Name it in call.form.command, then set level 2.",
-                                          "source": {"from": "code", "checked": False}}
-    addon = {}
+def cookbook_json(info, name, tools, date):
+    ents = {t["tool"]: {"description": t["description"], "recipe": {"command": t["command"]}} for t in tools}
+    doc = {"cookbookVersion": "1.0.0", "name": name, "about": f"Commands of {clean(info['name'], 80)}, run by cmd_run (a draft by port_scaffold).",
+           "source": "drafted by port_scaffold", "date": date, "entries": ents}
     if info.get("package"):
-        addon["package"] = info["package"]
-    addon["name"] = clean(info.get("name"), 80) or name
-    if info.get("version"):
-        addon["version"] = info["version"]
-    if info.get("workbench"):
-        addon["workbench"] = info["workbench"]  # activated before a command runs
-    if info.get("licence"):
-        addon["licence"] = info["licence"]
-    if info.get("author"):
-        addon["credit"] = f"{clean(info.get('name'), 80)} by {info['author']}"
-    doc = {"cookbookVersion": "2.0.0", "name": name, "about": f"{clean(info.get('name'), 80)} as data: its functions, forms and commands (a draft by port_scaffold).",
-           "source": "drafted by port_scaffold", "date": date, "addon": addon, "entries": ents}
-    if not info.get("package"):
-        # No package: no function entries; the commands still run.
-        doc["addon"].pop("package", None)
-    doc["coverage"] = cookbook2.coverage(doc, {}, info.get("version"))
+        doc["addon"] = {"package": info["package"], "name": clean(info["name"], 80)}
+        if info.get("workbench"):
+            doc["addon"]["workbench"] = info["workbench"]  # activated before a command runs
     return doc
-
-
-def _free(ents, name):
-    base, i, n = name[:44], 2, name
-    while n in ents:
-        n = f"{base}_{i}"
-        i += 1
-    return n
-
-
-# ---- IsActive -> preconditions ---------------------------------------------------------------
-
-_SEL_CALLS = ("getSelection", "getSelectionEx", "getCompleteSelection")
-
-
-def is_active(cls):
-    """Draft preconditions from a command class's IsActive (ast): an open
-    document, a selection count and kind, an object type. Notes for what
-    it does not read. Rough by design: the probe and the person check it."""
-    if cls is None:
-        return {}, []
-    fn = next((n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "IsActive"), None)
-    if fn is None:
-        return {}, []
-    pre, notes, sel = {}, [], {}
-    sel_names = set()
-    for n in ast.walk(fn):
-        if isinstance(n, ast.Assign) and isinstance(n.value, ast.Call) and _call_name(n.value) in _SEL_CALLS:
-            sel_names |= {t.id for t in n.targets if isinstance(t, ast.Name)}
-    for n in ast.walk(fn):
-        if isinstance(n, ast.Attribute) and n.attr == "ActiveDocument":
-            pre["document"] = "open"
-        elif isinstance(n, ast.Call) and _call_name(n) in _SEL_CALLS:
-            sel.setdefault("min", 1)
-        elif isinstance(n, ast.Compare) and len(n.ops) == 1 and isinstance(n.left, ast.Call) and _call_name(n.left) == "len" and n.left.args:
-            a = n.left.args[0]
-            is_sel = isinstance(a, ast.Call) and _call_name(a) in _SEL_CALLS or isinstance(a, ast.Name) and a.id in sel_names
-            v = n.comparators[0]
-            if is_sel and isinstance(v, ast.Constant) and isinstance(v.value, int):
-                k, op = v.value, type(n.ops[0])
-                if op is ast.Eq:
-                    sel["min"], sel["max"] = k, k
-                elif op is ast.GtE:
-                    sel["min"] = k
-                elif op is ast.Gt:
-                    sel["min"] = k + 1
-                elif op is ast.LtE:
-                    sel["max"] = k
-                elif op is ast.Lt:
-                    sel["max"] = max(0, k - 1)
-                elif op is ast.NotEq and k == 0:
-                    sel["min"] = max(sel.get("min", 1), 1)
-        elif isinstance(n, ast.Constant) and isinstance(n.value, str):
-            if n.value in ("Face", "Edge", "Vertex") or re.match(r"^(Face|Edge|Vertex)$", n.value):
-                sel["kind"] = n.value.lower()
-            elif re.match(r"^[A-Za-z]+::[A-Za-z0-9]+$", n.value):
-                if n.value == "PartDesign::Body":
-                    sel.setdefault("kind", "body")
-                else:
-                    pre["objects"] = {"type": n.value, "min": 1}
-        elif isinstance(n, ast.Attribute) and n.attr in ("Face", "Edge", "Vertex") and isinstance(n.value, ast.Name) and n.value.id == "Part":
-            sel["kind"] = n.attr.lower()
-    if sel:
-        if sel.get("min", 0) > sel.get("max", cookbook2.MAX_LIST):
-            sel["max"] = sel["min"]
-        pre["selection"] = sel
-    other = sorted({_call_name(n) for n in ast.walk(fn) if isinstance(n, ast.Call)} - set(_SEL_CALLS) - {"len", "bool", "isinstance", "hasattr", "getattr",
-                                                                                                          "isDerivedFrom", "startswith", "any", "all"})
-    if other:
-        notes.append("IsActive also calls " + ", ".join(x for x in other[:5] if x) + ": read it by hand.")
-    return pre, notes
-
-
-def _call_name(c):
-    f = c.func
-    return f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
-
-
-# ---- public functions -> level 1 -------------------------------------------------------------
-
-GUI_MODULES = ("FreeCADGui", "PySide", "PySide2", "PySide6", "Gui", "pivy", "shiboken2", "shiboken6")
-LENGTH_WORDS = re.compile(r"(^|_)(length|width|height|depth|thickness|radius|diameter|offset|gap|size|distance|clearance|pitch|spacing|mm)($|_)")
-ANGLE_WORDS = re.compile(r"(^|_)(angle|deg|degrees|draft|taper)($|_)")
-TYPE_OF = {"float": "number", "int": "integer", "bool": "boolean", "str": "string"}
-PICK_OF = {"Face": ("face", "shape"), "Edge": ("edge", "shape"), "Vertex": ("vertex", "shape"), "DocumentObject": ("object", "object"),
-           "Feature": ("object", "object"), "Body": ("body", "object")}
-OK_LIKE = re.compile(r"approv|grant|person_ok|confirm|consent", re.I)
-MAX_FUNCTIONS = 100
-
-
-def _annot(a):
-    if a is None:
-        return None
-    if isinstance(a, ast.Constant) and isinstance(a.value, str):
-        return a.value.split(".")[-1].split("[")[0]
-    if isinstance(a, ast.Name):
-        return a.id
-    if isinstance(a, ast.Attribute):
-        return a.attr
-    if isinstance(a, ast.Subscript):
-        return "?"
-    return "?"
-
-
-def _gui_module(tree):
-    for n in tree.body:
-        mods = []
-        if isinstance(n, ast.Import):
-            mods = [a.name for a in n.names]
-        elif isinstance(n, ast.ImportFrom) and not n.level:
-            mods = [n.module or ""]
-        if any(m.split(".")[0] in GUI_MODULES for m in mods):
-            return True
-    return False
-
-
-def _input(arg, default):
-    """(spec, why-not) of one argument."""
-    name = arg.arg
-    t = _annot(arg.annotation)
-    spec = {}
-    if t in PICK_OF:
-        kind, as_ = PICK_OF[t]
-        return {"type": kind, "as": as_, **({"required": False} if isinstance(default, ast.Constant) and default.value is None else {})}, None
-    if t in TYPE_OF:
-        spec["type"] = TYPE_OF[t]
-    elif t is None and default is not None:
-        if isinstance(default, ast.Constant) and isinstance(default.value, bool):
-            spec["type"] = "boolean"
-        elif isinstance(default, ast.Constant) and isinstance(default.value, int):
-            spec["type"] = "integer"
-        elif isinstance(default, ast.Constant) and isinstance(default.value, float):
-            spec["type"] = "number"
-        elif isinstance(default, ast.Constant) and isinstance(default.value, str):
-            spec["type"] = "string"
-        elif isinstance(default, ast.Constant) and default.value is None:
-            return None, f"{name}: no type hint and a None default"
-        else:
-            return None, f"{name}: no type hint"
-    else:
-        return None, f"{name}: type {t or 'not given'} is not a plain input"
-    if spec["type"] == "number" and LENGTH_WORDS.search(name.lower()):
-        spec = {"type": "length", "unit": "mm"}
-    elif spec["type"] == "number" and ANGLE_WORDS.search(name.lower()):
-        spec = {"type": "angle", "unit": "deg"}
-    if isinstance(default, ast.Constant):
-        if default.value is None:
-            spec["required"] = False
-        elif spec["type"] in ("length", "angle", "number") and isinstance(default.value, (int, float)) and not isinstance(default.value, bool):
-            spec["default"] = default.value
-        elif spec["type"] == "integer" and isinstance(default.value, int) and not isinstance(default.value, bool):
-            spec["default"] = default.value
-        elif spec["type"] == "boolean" and isinstance(default.value, bool):
-            spec["default"] = default.value
-        elif spec["type"] == "string" and isinstance(default.value, str) and len(default.value) <= 200:
-            spec["default"] = default.value
-    return spec, None
-
-
-# Modules that are glue or window code, not an API (live 95): by name.
-GLUE_MODULE = re.compile(r"(^|\.)(__init__|agentlink_families|fam_[a-z0-9_]+|commands?|workbench|init_?gui|gui[a-z0-9_]*|[a-z0-9_]*gui|panels?|"
-                         r"sidebar|layout|window|theme|qt|controls?|docks?|[a-z0-9_]*view|views?|preview|dialogs?|widgets?|timing|guithread|"
-                         r"icons?|refusal|handlers|hooks?|live|overlay|runners?|sync|followers?|gizmo[a-z0-9_]*|turntable|quicklook[a-z0-9_]*|tests?|setup|_[a-z0-9_]*)$")
-# Names of plumbing, not of work a person asks for (live 95).
-PLUMBING = re.compile(r"^(get|set|list|app|freecad|gui|shared|own|runner|caller|lend|placer|cache_dir|bind_doc|in_front|reset|about|about_html|"
-                      r"commands|register|unregister|setup|init|initialize|load|reload|main|log|debug|version|tools|candidates|valid|"
-                      r"tooltip|reveal|attach|verb|split|join|find|marks|put_back|frame|one_ring|reconcile|sync|refresh)$|"
-                      r"^(follow|session|watch|listen|schedule|queue)_|"
-                      r"^(on|is|has|show|hide|toggle|open|close|draw|paint|refresh|update_ui|connect|disconnect|emit|_)_|"
-                      r"(gui|thread|callback|sidebar|panel|widget|dialog|signal|dock|menu|toolbar|cursor|_html|_icon|_cache|_doc)$|"
-                      r"^document_(closed|opened|changed|saved|created|deleted)")
-CALLBACK_ARGS = re.compile(r"^(widget|w|mw|parent|thread|callback|cb|fn|func|slot|signal|event|ev|progress|on_progress|should_abort|abort|"
-                           r"hooks?|session|params|later|run|post|doc_fn|qt|QtWidgets|QtGui|view)$")
-DOC_WORK = re.compile(r"\b(addObject|removeObject|getObject|recompute|newObject|openTransaction|commitTransaction)\b|\.Shape\b|\.Mesh\b|"
-                      r"\bPart\.|\bMesh\.|\.Objects\b|\bmake[A-Z][A-Za-z]+\(")
-DOC_TYPES = re.compile(r"^\s*:?(param\s+)?(?P<t>float|int|bool|str)\s+(?P<n>[A-Za-z_][A-Za-z0-9_]*)\s*:|"
-                       r"^\s*(?P<n2>[A-Za-z_][A-Za-z0-9_]*)\s*\((?P<t2>float|int|bool|str)\)\s*:", re.M)
-
-
-def _doc_types(doc):
-    """Argument types a docstring documents: name (float): … or :param float name:."""
-    out = {}
-    for m in DOC_TYPES.finditer(doc or ""):
-        n, t = m.group("n") or m.group("n2"), m.group("t") or m.group("t2")
-        out[n] = t
-    return out
-
-
-def read_functions(folder, package, group, unread, internal=None):
-    """Level 1 drafts: functions that look like an API (live 95). Each has
-    a docstring, typed or documented arguments, no window, thread or
-    callback arguments, does work on document objects (a doc argument, a
-    pick, or calls such as addObject, recompute, .Shape), and sits in a
-    module the add-on exposes (not glue, not window code, not plumbing
-    names). Every other public function goes to internal, with why."""
-    out = []
-    internal = [] if internal is None else internal
-    if not package:
-        return out
-    root = os.path.join(folder, package)
-    for p in py_files(root):
-        rel = os.path.relpath(p, folder)
-        mod = rel[:-3].replace(os.sep, ".")
-        if os.path.getsize(p) > MAX_FILE_BYTES:
-            continue
-        with open(p, encoding="utf-8", errors="replace") as f:
-            src = f.read()
-        try:
-            tree = ast.parse(src)
-        except SyntaxError:
-            continue
-        defs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and not n.name.startswith("_")]
-        if not defs:
-            continue
-        if mod.endswith(".__init__"):
-            mod = mod[:-9]
-            glue = "the package's __init__ (glue)"
-        elif GLUE_MODULE.search(mod) or any(x.startswith("_") for x in mod.split(".")):
-            glue = "a glue or window module"
-        elif _gui_module(tree):
-            glue = "its module imports the window toolkit at the top"
-        else:
-            glue = None
-        if glue:
-            internal += [f"{mod}.{fn.name}: {glue}" for fn in defs]
-            continue
-        for fn in defs:
-            if len(out) >= MAX_FUNCTIONS:
-                unread.append(f"more than {MAX_FUNCTIONS} functions: the rest are not drafted")
-                return out
-            why = _api_why(fn, src)
-            if why:
-                internal.append(f"{mod}.{fn.name}: {why}")
-                continue
-            doc = ast.get_docstring(fn) or ""
-            documented = _doc_types(doc)
-            args = fn.args.args
-            defaults = [None] * (len(args) - len(fn.args.defaults)) + list(fn.args.defaults)
-            pairs = list(zip(args, defaults)) + list(zip(fn.args.kwonlyargs, fn.args.kw_defaults))
-            inputs, document, bad = {}, None, []
-            for a, d in pairs:
-                if a.arg in ("doc", "document") and _annot(a.annotation) in (None, "Document"):
-                    document = a.arg
-                    continue
-                if CALLBACK_ARGS.match(a.arg):
-                    if d is None:
-                        bad.append(f"{a.arg}: a window, thread or callback argument")
-                    continue  # optional: the function keeps its default
-                if a.annotation is None and a.arg in documented:
-                    a = ast.arg(arg=a.arg, annotation=ast.Name(id=documented[a.arg]))
-                spec, no = _input(a, d)
-                if no and isinstance(d, ast.Constant) and d.value is None:
-                    continue  # optional with no type: left to the function's default
-                if no:
-                    bad.append(no)
-                else:
-                    inputs[a.arg] = spec
-            if bad:
-                internal.append(f"{mod}.{fn.name}: {'; '.join(bad[:2])}")
-                continue
-            if not inputs and not document:
-                internal.append(f"{mod}.{fn.name}: no inputs (nothing to give it as data)")
-                continue
-            first = sentences(clean(doc, 300))[:1]
-            desc = f"Call {fn.name} of the add-on module {mod}, headless, with typed inputs."
-            if words(desc) > MAX_WORDS:
-                desc = f"Call the add-on function {fn.name}, headless, with typed inputs."
-            if first and words(first[0]) <= MAX_WORDS and len(first[0]) <= 200:
-                desc += " " + (first[0] if first[0].endswith((".", "!", "?")) else first[0] + ".")
-            call = {"module": mod, "name": fn.name, **({"document": document} if document else {})}
-            e = {"level": 1, "description": desc, "call": {"function": call}, "inputs": inputs, "source": {"from": "code", "checked": False}}
-            if document:
-                e["preconditions"] = {"document": "open"}
-            r = _annot(fn.returns)
-            check = {}
-            if r in ("float", "int"):
-                check["returns"] = "number"
-            elif r == "bool":
-                check["returns"] = "boolean"
-            elif r == "str":
-                check["returns"] = "string"
-            elif r in ("list", "List"):
-                check["returns"] = "list"
-            elif r in ("dict", "Dict"):
-                check["returns"] = "dict"
-            if document and re.match(r"^(make|create|add|build|new)", fn.name, re.I):
-                check["newObjects"] = {"min": 1}
-            if check:
-                e["result"] = {"check": check}
-            out.append({"entry": f"{group}_{snake(fn.name)}"[:48], "cookbook": e})
-    return out
-
-
-def _api_why(fn, src):
-    """Why a public function is not an API function, or None."""
-    if OK_LIKE.search(fn.name) or not re.match(r"^[A-Za-z][A-Za-z0-9_]{0,63}$", fn.name):
-        return "an OK-like or odd name"
-    if PLUMBING.search(fn.name) or len(fn.name) <= 3:
-        return "a plumbing name"
-    if fn.args.posonlyargs or fn.args.vararg or fn.args.kwarg:
-        return "positional-only, *args or **kwargs arguments"
-    if any(a.arg in ("self", "cls") for a in fn.args.args):
-        return "a method"
-    doc = ast.get_docstring(fn) or ""
-    if len(doc.strip()) < 12:
-        return "no docstring"
-    names = [a.arg for a in fn.args.args + fn.args.kwonlyargs]
-    typed = [a for a in fn.args.args + fn.args.kwonlyargs if a.annotation is not None or a.arg in _doc_types(doc)]
-    if names and not typed and not any(n in ("doc", "document") for n in names):
-        # untyped arguments are taken only when each has a plain default
-        defaults = fn.args.defaults
-        if len(defaults) < len(fn.args.args) or not all(isinstance(d, ast.Constant) for d in defaults):
-            return "arguments with no type hints and no documented types"
-    seg = ast.get_source_segment(src, fn) or ""
-    picks = any(_annot(a.annotation) in PICK_OF for a in fn.args.args + fn.args.kwonlyargs)
-    if not ("doc" in names or "document" in names or picks or DOC_WORK.search(seg) or _annot(fn.returns) in ("Shape", "Mesh", "DocumentObject", "Feature")):
-        return "no work on document objects (no doc argument, pick, addObject, recompute or .Shape)"
-    return None
-
-
-# ---- task panel .ui files -> level 2 ---------------------------------------------------------
-
-UI_INPUTS = {"QDoubleSpinBox": "number", "Gui::QuantitySpinBox": "number", "Gui::InputField": "number", "Gui::DoubleSpinBox": "number",
-             "Gui::PrefQuantitySpinBox": "number", "Gui::PrefDoubleSpinBox": "number", "QSpinBox": "integer", "Gui::IntSpinBox": "integer",
-             "Gui::UIntSpinBox": "integer", "Gui::PrefSpinBox": "integer", "QCheckBox": "boolean", "Gui::PrefCheckBox": "boolean",
-             "QRadioButton": "boolean", "QLineEdit": "string", "Gui::PrefLineEdit": "string", "QComboBox": "choice", "Gui::PrefComboBox": "choice"}
-MAX_UI_BYTES = 512 * 1024
-
-
-def ui_fields(path):
-    """{objectName: input spec} of a .ui file's input widgets, or None and
-    the reason. A file with a DOCTYPE or ENTITY is not parsed."""
-    import xml.etree.ElementTree as ET
-
-    try:
-        if os.path.getsize(path) > MAX_UI_BYTES:
-            return None, "larger than 512 KB"
-        with open(path, "rb") as f:
-            raw = f.read()
-    except OSError as e:
-        return None, str(e.strerror or e)
-    if b"<!DOCTYPE" in raw or b"<!ENTITY" in raw:
-        return None, "it has a DOCTYPE or ENTITY; not parsed"
-    try:
-        root = ET.fromstring(raw)
-    except ET.ParseError as e:
-        return None, f"not XML ({e})"
-    out = {}
-    for w in root.iter("widget"):
-        cls, name = w.get("class"), w.get("name")
-        t = UI_INPUTS.get(cls)
-        if not t or not name or not re.match(r"^[A-Za-z_][A-Za-z0-9_]{0,79}$", name):
-            continue
-        props = {}
-        for pr in w.findall("property"):
-            v = next(iter(pr), None)
-            if v is not None:
-                props[pr.get("name")] = (v.tag, (v.text or "").strip() if v.tag != "string" else (v.text or ""))
-        spec = {"type": t}
-        if t == "number":
-            unit = (props.get("unit", (None, ""))[1] or props.get("suffix", (None, ""))[1]).strip()
-            if unit in ("mm",):
-                spec = {"type": "length", "unit": "mm"}
-            elif unit in ("°", "deg"):
-                spec = {"type": "angle", "unit": "deg"}
-        for k in ("minimum", "maximum"):
-            if k in props and t in ("number", "integer"):
-                try:
-                    spec["min" if k == "minimum" else "max"] = float(props[k][1]) if t == "number" else int(float(props[k][1]))
-                except ValueError:
-                    pass
-        if t == "choice":
-            items = [it.find("property/string") for it in w.findall("item")]
-            items = [i.text for i in items if i is not None and i.text]
-            if not items:
-                continue
-            spec["choices"] = [clean(i, 80) for i in items[:64]]
-            spec["default"] = spec["choices"][0]
-        elif "value" in props and t in ("number", "integer"):
-            try:
-                v = float(props["value"][1])
-                if (spec.get("min") is None or v >= spec["min"]) and (spec.get("max") is None or v <= spec["max"]):
-                    spec["default"] = int(v) if t == "integer" else v
-            except ValueError:
-                pass
-        elif "checked" in props and t == "boolean":
-            spec["default"] = props["checked"][1] == "true"
-        if t == "string":
-            spec["required"] = False
-        if "default" not in spec and t != "string":
-            spec["required"] = False
-        out[name] = spec
-    return out, None
-
-
-def read_forms(folder, info, group, unread):
-    """{command: {ui, fields, inputs}} for each .ui file a command opens;
-    None: [{entry, ui}] for the .ui files no command was found for. The
-    link: a file names the .ui file, and a command is registered in that
-    file, or its class's Activated names a class or the module of it."""
-    uis = []
-    for root, dirs, files in os.walk(folder):
-        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
-        uis += [os.path.join(root, f) for f in sorted(files) if f.endswith(".ui") and not os.path.islink(os.path.join(root, f))]
-        if len(uis) > 60:
-            break
-    if not uis:
-        return {}
-    texts = {}
-    for p in py_files(folder):
-        try:
-            if os.path.getsize(p) <= MAX_FILE_BYTES:
-                with open(p, encoding="utf-8", errors="replace") as f:
-                    texts[os.path.relpath(p, folder)] = f.read()
-        except OSError:
-            continue
-    out, lost = {}, []
-    for u in uis[:60]:
-        rel = os.path.relpath(u, folder).replace(os.sep, "/")
-        base = os.path.basename(u)
-        fields, why = ui_fields(u)
-        if fields is None:
-            unread.append(f"{rel}: not read ({why})")
-            continue
-        if not fields:
-            continue
-        holders = [r for r, t in texts.items() if base in t or re.search(r"['\"]" + re.escape(base[:-3]) + r"['\"]", t)]
-        cmd = None
-        for h in holders:
-            here = [c for c in info["commands"] if c["file"] == h]
-            if here:
-                cmd = here[0]["command"]
-                break
-            hmod = os.path.splitext(os.path.basename(h))[0]
-            try:
-                hclasses = {n.name for n in ast.walk(ast.parse(texts[h])) if isinstance(n, ast.ClassDef)}
-            except SyntaxError:
-                hclasses = set()
-            for c in info["commands"]:
-                node = c.get("node")
-                act = next((n for n in node.body if isinstance(n, ast.FunctionDef) and n.name == "Activated"), None) if node is not None else None
-                if act is None:
-                    continue
-                named = {n.id for n in ast.walk(act) if isinstance(n, ast.Name)} | {n.attr for n in ast.walk(act) if isinstance(n, ast.Attribute)}
-                if named & hclasses or hmod in named:
-                    cmd = c["command"]
-                    break
-            if cmd:
-                break
-        inputs = {snake(k) or f"field_{i}": v for i, (k, v) in enumerate(fields.items())}
-        names = dict(zip(fields, inputs))
-        draft = {"ui": rel, "fields": {w: {"input": names[w]} for w in fields}, "inputs": {names[w]: fields[w] for w in fields}}
-        if cmd and cmd not in out:
-            out[cmd] = draft
-        else:
-            lost.append({"entry": f"{group}_{snake(base[:-3])}_form"[:48], "ui": rel})
-    if lost:
-        out[None] = lost
-    return out
 
 
 HOOK = '''# SPDX-License-Identifier: {licence}
@@ -1130,10 +607,6 @@ def scaffold(addon_folder, name=None, out_root=None, overwrite=False, taken=None
                                    "Read the porting guide and write the tool data by hand.")
     date = date or datetime.date.today().isoformat()
     group, tools = plan(info, taken=hub_tool_names() | set(taken or ()))
-    internal = []
-    functions = read_functions(info["folder"], info.get("package"), group, info["unread"], internal)
-    forms = read_forms(info["folder"], info, group, info["unread"])
-    book = cookbook_json(info, port, tools, date, functions, forms)
     commands = {t["tool"]: t["command"] for t in tools}
     lic = info.get("licence") or "LGPL-2.1-or-later"
     if not re.match(r"^[A-Za-z0-9.+ ()-]{1,60}$", lic):
@@ -1150,7 +623,7 @@ def scaffold(addon_folder, name=None, out_root=None, overwrite=False, taken=None
         os.path.join("hook", "data", "tools.json"): json.dumps(tools_json(info, group, tools, date), indent=1, ensure_ascii=False) + "\n",
         os.path.join("tests", "test_port.py"): TEST.format(licence=lic),
         os.path.join("scripts", "ste_lint.py"): LINT.format(licence=lic),
-        "cookbook.json": json.dumps(book, indent=1, ensure_ascii=False) + "\n",
+        "cookbook.json": json.dumps(cookbook_json(info, port, tools, date), indent=1, ensure_ascii=False) + "\n",
     }
     for rel, text in files.items():
         p = os.path.join(out, rel)
@@ -1161,9 +634,6 @@ def scaffold(addon_folder, name=None, out_root=None, overwrite=False, taken=None
             f.write(text)
     return {"port": port, "folder": _tilde(out), "addon": clean(info["name"], 80), "group": group, "package": info["package"],
             "workbench": info["workbench"], "tools": [{"tool": t["tool"], "command": t["command"]} for t in tools],
-            "entries": {k: e["level"] for k, e in book["entries"].items()}, "coverage": book["coverage"]["bars"],
-            "internal": {"count": len(internal), "functions": internal[:40],
-                         "note": "Public functions that do not look like an API (glue, window code, plumbing, no document work). Not entries."},
             "unread": info["unread"][:20], "files": sorted(f.replace(os.sep, "/") for f in files),
             "next": "Read README.md there, then guide_read { topic: \"porting\" }. Edit the drafts, then run the lint and the tests."}
 

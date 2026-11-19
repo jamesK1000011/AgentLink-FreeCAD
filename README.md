@@ -153,7 +153,7 @@ licence.
 ## What the agent can do
 
 <!-- tools:begin (scripts/tool_summary.py) -->
-Agent Link itself declares 416 tools in 32 groups; a FreeCAD build without a workbench (FEM, CAM …)
+Agent Link itself declares 415 tools in 32 groups; a FreeCAD build without a workbench (FEM, CAM …)
 serves fewer, and each installed add-on adds its own groups.
 Groups marked *lean* are listed from the start; the agent turns on the rest with `tool_groups`.
 
@@ -190,7 +190,7 @@ Groups marked *lean* are listed from the start; the agent turns on the rest with
 | `fem_more` | 3 | FEM: every boundary condition, material, element, equation, solver and mesh refinement by kind; Netgen meshes, FEM mesh to mesh, mesh groups cleared; stress linearization. |
 | `unattended` | 3 | Unattended use: the pinned document, the heavy-job queue, the Addon Manager (dialog_answer and app_force_restart are in core). |
 | `dev` | 4 | For add-on developers: an installed add-on's own test suite run in a separate FreeCAD process (addon_test); live window scripts replayed and checked (live_run); mouse and keyboard input to the window's own widgets for GUI checks (gui_input), and closing a menu or dialog that holds the window (gui_unstick). |
-| `porting` | 9 | Port an add-on to Agent Link: a draft port from its commands (port_scaffold), and cookbooks of its commands, functions and call lists, run after the person's OK. |
+| `porting` | 8 | Port an add-on to Agent Link: a draft port from its commands (port_scaffold), and cookbooks of its commands, functions and call lists, run after the person's OK. |
 <!-- tools:end -->
 
 Each group has a guide the agent reads (`guide_read`). Any tool runs by name

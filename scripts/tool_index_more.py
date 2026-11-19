@@ -16,7 +16,7 @@ out when it is not in that list.
 # FreeCAD, DATE unless DATES says otherwise for a tool.
 SOURCE = "FreeCAD 1.1.0 source; Agent Link"
 DATE = "2026-11-16"
-DATES = {t: "2026-11-18" for t in ("port_scaffold", "cookbook_list", "cookbook_show", "cookbook_import", "cookbook_export", "cookbook_approve", "cookbook_unapprove", "cookbook_run", "cookbook_probe")}
+DATES = {t: "2026-11-18" for t in ("port_scaffold", "cookbook_list", "cookbook_show", "cookbook_import", "cookbook_export", "cookbook_approve", "cookbook_unapprove", "cookbook_run")}
 DATES.update({t: "2026-11-18" for t in ("approve_file", "approve_code")})
 
 # Tool or prefix → workbench, where the echo's WORKBENCH table says nothing
@@ -479,5 +479,4 @@ TOOLS = {
     "cookbook_approve": ([], "recipes allow trust ok confirm"),
     "cookbook_unapprove": ([], "recipes revoke withdraw"),
     "cookbook_run": ([], "recipes run command function script form level"),
-    "cookbook_probe": ([], "recipes test check coverage scratch measure"),
 }

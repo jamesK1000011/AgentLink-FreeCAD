@@ -49,16 +49,7 @@
       "pin": "packaging/pins/tutor-ref"
     }
   ],
-  "serverAddons": [
-    {
-      "repo": "PrintLoop-OrcaSlicer",
-      "branch": "main",
-      "folder": "",
-      "dest": "PrintLoop-OrcaSlicer",
-      "pin": "packaging/pins/printloop-ref",
-      "server": "orcaslicer-agentlink"
-    }
-  ],
+  "serverAddons": [],
   "companions": [
     {
       "name": "bumpmesh",
