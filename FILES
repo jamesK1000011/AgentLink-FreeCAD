@@ -326,6 +326,12 @@ docs/security/red-team-2026-11-18.md
 docs/stats/STATS.md
 docs/stats/addons.json
 docs/stats/stats.json
+docs/workflow/README.md
+docs/workflow/addons.md
+docs/workflow/approvals.md
+docs/workflow/batch.md
+docs/workflow/call-flow.md
+docs/workflow/reading-freecad.md
 package.xml
 pyproject.toml
 scripts/hardening_status.py
