@@ -93,8 +93,8 @@ The source is `docs/stats/addons.json`: each add-on's own tool data (its `data/t
 | AgentLink-OrcaSlicer | `3e65eab` | 5 | 5 | 1 | `guide_read`, `orca_status` |
 | ScanRuler-FreeCAD | `3da936d` | 133 | 133 | 19 | – |
 | Texturizer-FreeCAD | `dc560c7` | 11 | 11 | 1 | – |
-| Tutor-FreeCAD | `415b7e6` | 3 | 3 | 1 | – |
-| Workshop-FreeCAD | `8c62453` | 60 | 60 | 17 | – |
+| Tutor-FreeCAD | `dbf53e1` | 3 | 3 | 1 | – |
+| Workshop-FreeCAD | `5fc0102` | 60 | 60 | 17 | – |
 
 With all these add-ons installed, Agent Link has 627 tools: 415 of the hub and 212 of the add-ons.
 

@@ -771,7 +771,7 @@
    }
   },
   "Tutor-FreeCAD": {
-   "commit": "415b7e6",
+   "commit": "dbf53e1",
    "leanGroups": [],
    "ownServerOnly": [],
    "tools": {
@@ -793,7 +793,7 @@
    }
   },
   "Workshop-FreeCAD": {
-   "commit": "8c62453",
+   "commit": "5fc0102",
    "leanGroups": [
     "fits",
     "make",

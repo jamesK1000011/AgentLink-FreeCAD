@@ -442,7 +442,7 @@
    },
    {
     "addon": "Tutor-FreeCAD",
-    "commit": "415b7e6",
+    "commit": "dbf53e1",
     "declared": 3,
     "loaded": 3,
     "hubNamesLeftOut": [],
@@ -457,7 +457,7 @@
    },
    {
     "addon": "Workshop-FreeCAD",
-    "commit": "8c62453",
+    "commit": "5fc0102",
     "declared": 60,
     "loaded": 60,
     "hubNamesLeftOut": [],
