@@ -4,7 +4,7 @@
 import json
 import unittest
 
-from _fc import BEFORE_1_1, HAVE, add_body, caller, server
+from _fc import BEFORE_1_1, HAVE, WHY_1_0, add_body, caller, server
 
 try:
     import Path.Main.Job  # noqa: F401
@@ -169,10 +169,10 @@ class CamHardening(unittest.TestCase):
         self.assertIn("side", self.refused("cam_op", {"kind": "profile", "side": "left"}))
         self.assertIn("stepOver", self.refused("cam_op", {"kind": "pocket", "faces": floor, "stepOver": 150}))
 
+    @unittest.skipIf(BEFORE_1_1, WHY_1_0 + " (its bullnose bit has no corner radius: cam_tool_add says it skipped it)")
     def test_3_tools_keep_their_shape_and_sizes(self):
         t = self.ok("cam_tool_add", {"shape": "bullnose", "diameter": 6, "cornerRadius": 1, "name": "HBull"})
-        # FreeCAD 1.0's bullnose bit has no corner radius: the answer says it was skipped.
-        self.assertEqual(t.get("skipped"), ["cornerRadius"] if BEFORE_1_1 else None, t)
+        self.assertNotIn("skipped", t)
         v = self.ok("cam_tool_add", {"shape": "v-bit", "diameter": 6, "angle": 60, "cornerRadius": 1, "name": "HVee"})
         self.assertEqual(v.get("skipped"), ["cornerRadius"])
         self.assertEqual(v["tool"]["number"], 3)

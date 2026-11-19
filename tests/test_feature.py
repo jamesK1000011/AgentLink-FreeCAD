@@ -122,6 +122,7 @@ class FeatureTools(Base):
         self.assertIn("is used by", e["message"])
         self.assertIn(d["feature"], e["message"])
 
+    @unittest.skipIf(BEFORE_1_1, WHY_1_0 + " (needs test_9a's body)")
     def test_9b_through_all_both_ways(self):
         self.ok("sketch_new", {"body": "Hard", "plane": "XY", "name": "HCut"})
         self.ok("sketch_add", {"sketch": "HCut", "items": [{"kind": "circle", "center": [0, 0], "radius": 2}]})
@@ -133,6 +134,7 @@ class FeatureTools(Base):
         self.assertAlmostEqual(c["volumeChange"], -math.pi * 4 * 10, delta=0.5)
         type(self).hard_cut = c["feature"]
 
+    @unittest.skipIf(BEFORE_1_1, WHY_1_0 + " (needs test_9a's body)")
     def test_9c_fine_thread_and_holes_at_points(self):
         self.ok("sketch_new", {"body": "Hard", "face": {"at": [10, 5, 6], "normal": [0, 0, 1]}, "name": "HHoles"})
         self.ok("sketch_add", {"sketch": "HHoles", "items": [{"kind": "circle", "center": [10, 5], "radius": 1}, {"kind": "point", "at": [-10, 5]},

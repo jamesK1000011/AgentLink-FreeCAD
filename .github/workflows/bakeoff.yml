@@ -110,6 +110,12 @@ jobs:
           python -X faulthandler -m unittest discover -s $p/AgentLink-OrcaSlicer/tests -p test_freecad_bridge.py >> "$RUNNER_TEMP/addons.log" 2>&1 || code=$?
           python -X faulthandler -m unittest discover -s $p/ScanRuler-FreeCAD/tests >> "$RUNNER_TEMP/addons.log" 2>&1 || code=$?
           grep -E '^(Ran|OK|FAILED|ERROR:|FAIL:)' "$RUNNER_TEMP/addons.log" | tail -n 60
+          # Each failure with its traceback, and where a crash was (faulthandler).
+          if [ "$code" -ne 0 ]; then
+            echo "---- the failures"
+            sed -n '/^=\{20,\}$/,/^Ran /p' "$RUNNER_TEMP/addons.log" | grep -v 'ResourceWarning' | tail -n 400
+            grep -B2 -A30 'Fatal Python error' "$RUNNER_TEMP/addons.log" | tail -n 80 || true
+          fi
           test "$code" -eq 0
       - name: The Claude extension's launcher, against a fake FreeCAD
         # Runs after a red step too, so one run shows every part of the gate.

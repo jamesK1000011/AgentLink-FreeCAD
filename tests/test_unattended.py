@@ -127,17 +127,26 @@ class Unattended(Base):
         r = self.call("addon", {"action": "list"})
         if r[0] and r[1]["error"]["code"] == "unavailable":
             self.skipTest(r[1]["error"]["message"])
-        self.assertEqual(self.refused("addon", {"action": "install", "name": "AgentLinkTestAddon", "url": src})["code"], "not_allowed")
-        got = self.ok("addon", {"action": "install", "name": "AgentLinkTestAddon", "url": src, "confirm": "install AgentLinkTestAddon"})
+        def approved(args):
+            # The person's OK is approve_code, which the client asks for
+            # (agentlink/approvals.py): the first call is pending and
+            # changes nothing.
+            p = self.ok("addon", args)
+            self.assertTrue(p.get("pending"), p)
+            self.assertIs(p.get("changed"), False, p)
+            self.assertEqual(p["approve"]["tool"], "approve_code", p)
+            self.ok("approve_code", p["approve"]["arguments"])
+            return self.ok("addon", args)
+
+        got = approved({"action": "install", "name": "AgentLinkTestAddon", "url": src})
         self.assertEqual(got["smoke"], "passed")
         names = [x["name"] for x in self.ok("addon", {"action": "list"})["installed"]]
         self.assertIn("AgentLinkTestAddon", names)
-        self.assertEqual(self.refused("addon", {"action": "update", "name": "AgentLinkTestAddon"})["code"], "not_allowed")
-        self.refused("addon", {"action": "update", "name": "AgentLinkTestAddon", "url": "https://example.com/other.git", "confirm": "update AgentLinkTestAddon"})
-        up = self.ok("addon", {"action": "update", "name": "AgentLinkTestAddon", "confirm": "update AgentLinkTestAddon"})
+        self.refused("addon", {"action": "update", "name": "AgentLinkTestAddon", "url": "https://example.com/other.git"})
+        up = approved({"action": "update", "name": "AgentLinkTestAddon"})
         self.assertTrue(os.path.isdir(up["previous"]))
         self.assertIn("agentlink_update", self.refused("addon", {"action": "update", "name": "AgentLink"})["message"])
-        self.ok("addon", {"action": "remove", "name": "AgentLinkTestAddon", "confirm": "remove AgentLinkTestAddon"})
+        approved({"action": "remove", "name": "AgentLinkTestAddon"})
         self.assertNotIn("AgentLinkTestAddon", [x["name"] for x in self.ok("addon", {"action": "list"})["installed"]])
 
     def test_13_machine_queue_and_estimates(self):
