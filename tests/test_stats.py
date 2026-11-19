@@ -40,6 +40,48 @@ class Stats(unittest.TestCase):
         with open(stats.STATS_MD, encoding="utf-8") as f:
             self.assertEqual(f.read(), stats.render_md(s))
 
+    def test_inventory_and_the_real_tools_are_in_step(self):
+        # inventory.json holds the V1 tools: the hub's (tool_summary) and the add-ons' (addons.json snapshot),
+        # each under the repository that has its code. A tool that is gone from the tool data fails here:
+        # drop it from the inventory, or move it under notInV1 with the reason.
+        inv = hardening_status.load_inventory()
+        groups, status = hardening_status.load()
+        real = {n: "AgentLink-FreeCAD" for v in tool_summary.groups().values() for n in v["tools"]}
+        for repo, a in (stats.load_json(stats.ADDONS_JSON, {}) or {}).get("addons", {}).items():
+            for n in a["tools"]:
+                real.setdefault(n, repo)
+        listed = {t: d["repo"] for d in groups.values() for t in d["tools"]}
+        unlisted = set(inv.get("unlisted", {}))
+        not_v1 = set(inv.get("notInV1", {}).get("tools", {}))
+        self.assertEqual(sorted(set(listed) - set(real)), [], "in the inventory, but no such tool in the hub or the add-on data")
+        self.assertEqual(sorted(set(real) - set(listed) - unlisted), [], "a real tool that the inventory does not have")
+        self.assertEqual(sorted(t for t, r in listed.items() if real[t] != r), [], "inventory repo is not the repo with the code")
+        self.assertEqual(sorted(not_v1 & set(real)), [], "a notInV1 tool is in the V1 tool data")
+        self.assertEqual(sorted(unlisted - set(real)), [])
+        self.assertEqual(sorted(set(status) - set(listed) - unlisted - not_v1), [], "status.json has a tool that is in no list")
+        self.assertEqual({r for r, _t in hardening_status.SECTIONS}, set(listed.values()))
+
+    def test_sections_add_up(self):
+        cov = self.s["coverage"]
+        for k in ("total", "proven", "headless", "live", "docs", "health", "description"):
+            self.assertEqual(sum(x[k] for x in cov["sections"]), cov[k], k)
+        self.assertEqual(cov["sections"][0]["title"], "Agent Link (core)")
+        self.assertEqual(cov["sections"][0]["total"], self.s["hubTools"]["total"])
+        for x in cov["sections"]:
+            self.assertEqual(sum(p["total"] for p in x["parts"]), x["total"], x["title"])
+
+    def test_every_gap_has_a_reason(self):
+        groups, status = hardening_status.load()
+        short = {t for d in groups.values() for t in d["tools"]
+                 if not (status.get(t, {}).get("headless") and status.get(t, {}).get("live"))}
+        self.assertEqual({g["tool"] for g in self.s["coverage"]["gaps"]}, short)
+        for g in self.s["coverage"]["gaps"]:
+            self.assertTrue(g["why"].strip(), g["tool"])
+        # A proof on cookbook format 2 (V2) is not a V1 proof.
+        for t, st in status.items():
+            if st.get("liveFormat2"):
+                self.assertNotIn("live", st, t)
+
     def test_four_listing_combinations(self):
         combos = {(c["mode"], c["style"]): c for c in self.s["tokens"]["combos"]}
         self.assertEqual(set(combos), {("static", "ste"), ("static", "full"), ("classic", "ste"), ("classic", "full")})

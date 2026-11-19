@@ -7,6 +7,8 @@ All notable changes to Agent Link for FreeCAD. The format follows
 
 ## [Unreleased]
 
+- Release statistics (`scripts/stats.py`, `docs/stats/STATS.md`, the README block): Agent Link (core) first, then each add-on in its own section, with totals for each section and for all of V1. Only V1 counts: the Home-FreeCAD tools and `collab` (private add-ons) move to `notInV1` in `docs/hardening/inventory.json`, and a live proof on cookbook format 2 (V2) does not count (`liveFormat2`). The new section "What is not covered, and why" gives each short tool and its reason (`gap` in `status.json`). `tool_summary.py` reads `agentlink/ext.py`, so `app_extensions` counts (416 hub tools). A test keeps the inventory in step with the hub's tool data and the add-on snapshot.
+
 ## [1.0.0] - 2026-11-19
 
 The first release (V1). With Agent Link, an agent uses FreeCAD through the Model Context Protocol (MCP).

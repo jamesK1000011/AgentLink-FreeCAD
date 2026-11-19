@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """The README's "What the agent can do" table, generated from the source:
-each group Agent Link itself brings (agentlink/tools.py, the families in
-agentlink/families, the data tools in agentlink/data/tools.json), what it
+each group Agent Link itself brings (agentlink/tools.py, agentlink/ext.py,
+the families in agentlink/families, the data tools in agentlink/data/tools.json), what it
 holds, how many tools and whether the lean list shows it. Read with ast,
 so it runs in plain Python without FreeCAD. Add-ons' groups are not
 counted: they come when the add-on is installed.
@@ -56,6 +56,14 @@ def groups():
     # A tool of tools.py that GROUP_OF puts in its own group (tool_find: "find") is not core's.
     core_names = _tool_names(core_tree)
     out = {"core": {"info": info.get("core", ""), "tools": [n for n in core_names if group_of.get(n, "core") == "core"]}}
+    # agentlink/ext.py's tools (app_extensions): tools.py adds them to every server, in the group their Tool(...) names.
+    for node in ast.walk(_parse(os.path.join(PKG, "ext.py"))):
+        f = getattr(node, "func", None)
+        if isinstance(node, ast.Call) and (getattr(f, "id", None) == "Tool" or getattr(f, "attr", None) == "Tool") \
+                and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+            kw = {k.arg: k.value.value for k in node.keywords if isinstance(k.value, ast.Constant)}
+            grp = group_of.get(node.args[0].value, kw.get("group", "core"))
+            out.setdefault(grp, {"info": info.get(grp, ""), "tools": []})["tools"].append(node.args[0].value)
     for n in core_names:
         if group_of.get(n, "core") != "core":
             out.setdefault(group_of[n], {"info": info.get(group_of[n], ""), "tools": []})["tools"].append(n)

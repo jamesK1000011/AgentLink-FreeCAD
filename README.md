@@ -306,13 +306,13 @@ How it works inside: [docs/workflow/approvals.md](https://github.com/jamesK10000
 ## What the agent can do
 
 <!-- tools:begin (scripts/tool_summary.py) -->
-Agent Link itself declares 415 tools in 32 groups; a FreeCAD build without a workbench (FEM, CAM …)
+Agent Link itself declares 416 tools in 32 groups; a FreeCAD build without a workbench (FEM, CAM …)
 serves fewer, and each installed add-on adds its own groups.
 Groups marked *lean* are listed from the start; the agent turns on the rest with `tool_groups`.
 
 | Group | Tools | What it holds |
 |---|---:|---|
-| `core` *lean* | 19 | The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed. |
+| `core` *lean* | 20 | The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed. |
 | `app` | 18 |  |
 | `find` | 1 | tool_find: any tool by plain words, its card, the groups. Listed in the static base (ToolListMode static). |
 | `doc` | 12 | The document: new, open, save; objects listed, read, set, renamed, deleted; recompute; import and export files. |
@@ -354,25 +354,48 @@ The table is generated: `python3 scripts/tool_summary.py` writes it again, and
 `--check` (run by the tests) fails when it is out of date.
 
 <!-- stats:begin (scripts/stats.py) -->
-Release statistics, made by `scripts/stats.py` from the data (all of them: [docs/stats/STATS.md](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md)).
+Release statistics for V1, made by `scripts/stats.py` from the data (all of them: [docs/stats/STATS.md](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md)).
 
 ```
-proven on a test model  ███████████████████░ 617/637
-  headless              ███████████████████░ 606/637
-  live in the window    ███████████████████░ 612/637
-docs checked            █████████████████░░░ 554/637
-health check seen       ███████████████░░░░░ 483/637
-description rewritten   ██████████████████░░ 568/637
+Per-tool status, all of V1 (measured: counted from docs/hardening/status.json)
+proven on a test model    ████████████████████ 613/627
+  headless                ███████████████████░ 605/627
+  live in the window      ███████████████████░ 608/627
+docs checked              ██████████████████░░ 554/627
+health check seen         ███████████████░░░░░ 483/627
+description rewritten     ██████████████████░░ 568/627
+
+By section (tools proven / total)
+Agent Link (core)         ███████████████████░ 403/416
+Workshop                  ████████████████████  59/59
+ScanRuler for FreeCAD     ████████████████████ 132/133
+Texturizer                ████████████████████  11/11
+Tutor                     ████████████████████   3/3
+Agent Link for OrcaSlicer ████████████████████   5/5
 ```
 
-Tools: 415 in Agent Link, 627 with all add-ons installed.
+| Section | Tools | Proven | Headless | Live |
+|---|---:|---:|---:|---:|
+| Agent Link (core) | 416 | 403 | 396 | 403 |
+| Workshop | 59 | 59 | 59 | 54 |
+| ScanRuler for FreeCAD | 133 | 132 | 132 | 132 |
+| Texturizer | 11 | 11 | 11 | 11 |
+| Tutor | 3 | 3 | 2 | 3 |
+| Agent Link for OrcaSlicer | 5 | 5 | 5 | 5 |
+| **All of V1** | **627** | **613** | **605** | **608** |
 
-| Tool list | Tools listed | Tokens (est.) |
+Known gaps: 14 tools are not proven, 8 more are proven live only and 5 more headless only. The main reasons: a program, a FreeCAD version or a printer that the test Mac does not have; a step that needs the person (a restart, an install, a go); proof only on cookbook format 2, which is V2; or not tested yet. Each tool and its reason: [What is not covered, and why](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md#what-is-not-covered-and-why). Not in V1 and not counted: 10 tools of private add-ons (Home-FreeCAD, agentlink-collab), cookbook format 2 and PrintLoop.
+
+Tools: 416 in Agent Link (core), 628 with all add-ons installed (`library_pack` in this count is callable but not listed).
+
+Each token number is the estimated size of the `tools/list` answer: the tool names, descriptions and input schemas that the client loads into the agent's context at the start of a session. The server instructions, the guides and the tool answers are not in it. Estimate: 3.5 characters for each token.
+
+| Tool list | Tools listed | Tokens (est.) of the `tools/list` answer |
 |---|---:|---:|
 | static (default), ste | 6 | 1,583 |
 | static, full | 6 | 4,087 |
-| classic, ste | 22 | 5,937 |
-| classic, full | 22 | 8,354 |
+| classic, ste | 23 | 6,174 |
+| classic, full | 23 | 8,591 |
 <!-- stats:end -->
 
 ## Add-ons

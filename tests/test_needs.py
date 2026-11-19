@@ -553,7 +553,7 @@ class Tokens(unittest.TestCase):
 
         out = {}
         pkg = os.path.join(ROOT, "agentlink")
-        for path in [os.path.join(pkg, "tools.py")] + sorted(os.path.join(pkg, "families", n) for n in os.listdir(os.path.join(pkg, "families")) if n.endswith(".py")):
+        for path in [os.path.join(pkg, "tools.py"), os.path.join(pkg, "ext.py")] + sorted(os.path.join(pkg, "families", n) for n in os.listdir(os.path.join(pkg, "families")) if n.endswith(".py")):
             with open(path, encoding="utf-8") as f:
                 tree = ast.parse(f.read())
             for n in ast.walk(tree):

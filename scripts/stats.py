@@ -57,8 +57,7 @@ CARD_EXTRA = 40  # ste_check.card_tokens: the JSON keys and quotes of a card who
 ADDONS = (("AgentLink-OrcaSlicer", "agentlink-orcaslicer"), ("ScanRuler-FreeCAD", "scanruler-freecad"),
           ("Texturizer-FreeCAD", "texturizer-freecad"), ("Workshop-FreeCAD", "workshop-freecad"), ("Tutor-FreeCAD", "tutor-freecad"))
 SKIP_DIRS = ("tests", "scripts", "tools", "docs", "packaging", "mcpb", ".git", "__pycache__", "node_modules")
-COVER_ROWS = (("proven", "proven on a test model"), ("headless", "  headless"), ("live", "  live in the window"), ("docs", "docs checked"),
-              ("health", "health check seen"), ("description", "description rewritten"))
+COVER_ROWS = hardening_status.ROWS
 
 
 def est(chars):
@@ -84,31 +83,67 @@ def list_chars(cards):
 
 # ---- 1. coverage ---------------------------------------------------------------------------------
 
+def _short(st):
+    out = []
+    if not hardening_status.proven(st):
+        return ["not proven"]
+    if not st.get("headless"):
+        out.append("not headless")
+    if not st.get("live"):
+        out.append("not live")
+    return out
+
+
 def coverage():
     groups, status = hardening_status.load()
-    total, c, tools = hardening_status.counts(groups, status)
-    order = []
-    for _t, _g, w in tools:
-        if w not in order:
-            order.append(w)
-    wb = []
-    for w in order:
-        mine = [t for t, _g, ww in tools if ww == w]
-        n = sum(1 for t in mine if status.get(t, {}).get("headless") or status.get(t, {}).get("live"))
-        wb.append({"workbench": w, "proven": n, "total": len(mine)})
-    return {"total": total, **{k: c[k] for k, _l in COVER_ROWS}, "byWorkbench": wb}
+    inv = hardening_status.load_inventory()
+    total, c, _tools = hardening_status.counts(groups, status)
+    secs = hardening_status.sections(groups, status)
+    gaps = []
+    for sec in secs:
+        for g, d in groups.items():
+            if d["repo"] != sec["repo"]:
+                continue
+            part = d["workbench"] if sec["repo"] == "AgentLink-FreeCAD" else d.get("listedIn", g)
+            for t in d["tools"]:
+                st = status.get(t, {})
+                short = _short(st)
+                if short:
+                    gaps.append({"tool": t, "section": sec["title"], "part": part, "short": short, "why": st.get("gap") or "Not tested yet.",
+                                 "format2Only": bool(st.get("liveFormat2"))})
+    nv = inv.get("notInV1", {})
+    return {"total": total, **{k: c[k] for k, _l in COVER_ROWS},
+            "sections": [{"repo": x["repo"], "title": x["title"], **x["counts"], "parts": x["parts"]} for x in secs],
+            "gaps": gaps,
+            "notInV1": {"tools": [{"tool": t, **e} for t, e in nv.get("tools", {}).items()], "features": nv.get("features", [])},
+            "unlisted": [{"tool": t, "why": w} for t, w in inv.get("unlisted", {}).items()]}
+
+
+def _row(label, n, total):
+    return f"{label:<{hardening_status.W}}{hardening_status.bar(n, total)} {n:>3}/{total}"
+
+
+def total_lines(cov):
+    """The V1 totals and the sections: the first lines of hardening_status.py bars."""
+    lines = ["Per-tool status, all of V1 (measured: counted from docs/hardening/status.json)"]
+    lines += [_row(label, cov[key], cov["total"]) for key, label in COVER_ROWS]
+    lines += ["", "By section (tools proven / total)"]
+    lines += [_row(x["title"], x["proven"], x["total"]) for x in cov["sections"]]
+    return lines
+
+
+def section_lines(sec):
+    hub = sec["repo"] == "AgentLink-FreeCAD"
+    lines = [_row(label, sec[key], sec["total"]) for key, label in COVER_ROWS]
+    lines += ["", f"{sec['title']} by {'workbench' if hub else 'group'} (tools proven / total)"]
+    lines += [_row(p["name"], p["proven"], p["total"]) for p in sec["parts"]]
+    return lines
 
 
 def coverage_lines(cov):
     """The same lines as hardening_status.py bars, from stats.json's numbers."""
-    bar, total = hardening_status.bar, cov["total"]
-    lines = ["Per-tool status (measured: counted from docs/hardening/status.json)"]
-    for key, label in COVER_ROWS:
-        lines.append(f"{label:<24}{bar(cov[key], total)} {cov[key]:>3}/{total}")
-    lines += ["", "By workbench (tools proven / total)"]
-    for w in cov["byWorkbench"]:
-        lines.append(f"{w['workbench']:<24}{bar(w['proven'], w['total'])} {w['proven']:>3}/{w['total']}")
-    return lines
+    hub = cov["sections"][0]
+    return total_lines(cov) + ["", f"{hub['title']} by workbench (tools proven / total)"] + [_row(p["name"], p["proven"], p["total"]) for p in hub["parts"]]
 
 
 # ---- reading tools ---------------------------------------------------------------------------------
@@ -167,7 +202,7 @@ def hub_cards():
             out[name] = {"desc": e["description"], "schema": e["inputSchema"], "schemaChars": None}
     ste_check.PKG = PKG
     env = ste_check._env()
-    for path in ste_check.coded_files():
+    for path in ste_check.coded_files() + [os.path.join(PKG, "ext.py")]:  # ext.py: app_extensions, added by tools.py
         with open(path, encoding="utf-8") as f:
             tree = ast.parse(f.read())
         for n in _tool_calls(tree):
@@ -383,18 +418,79 @@ def _fmt(n):
     return f"{n:,}"
 
 
+SECTION_NOTE = {
+    "AgentLink-FreeCAD": "What you get with the hub alone: the FreeCAD workbenches that Agent Link covers with no add-on installed.",
+    "Workshop-FreeCAD": "Make, Parts, Documents, Electronics and the safety tools. Its groups `core` and `strength` add tools to the hub's groups of the same name.",
+    "ScanRuler-FreeCAD": "Scans, meshes, reverse engineering and the panels. The features come from ScanRuler by Stefan Hermann (CNC Kitchen), under AGPL.",
+    "Texturizer-FreeCAD": "Surface textures on a model.",
+    "Tutor-FreeCAD": "Lessons that point at the window.",
+    "AgentLink-OrcaSlicer": "OrcaSlicer through Agent Link. Its own MCP server also has tools that Agent Link does not list (section 2).",
+}
+TOKEN_WHAT = ("Each token number is the estimated size of the `tools/list` answer: the tool names, descriptions and input schemas that the client "
+              "loads into the agent's context at the start of a session. The server instructions, the guides and the tool answers are not in it.")
+
+
+def _sec_table(cov):
+    L = ["| Section | Tools | Proven | Headless | Live | Docs checked | Health check seen | Description rewritten |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
+    for x in cov["sections"]:
+        L.append(f"| {x['title']} | {x['total']} | {x['proven']} | {x['headless']} | {x['live']} | {x['docs']} | {x['health']} | {x['description']} |")
+    L.append(f"| **All of V1** | **{cov['total']}** | **{cov['proven']}** | **{cov['headless']}** | **{cov['live']}** | **{cov['docs']}** | **{cov['health']}** | **{cov['description']}** |")
+    return L
+
+
+def gap_lines(cov):
+    L = ["Each line is one tool: the section, the workbench or group, what is short, and why. "
+         "The reason comes from the tool's `gap` in `docs/hardening/status.json`, which cites the findings file in `docs/hardening/` that records it. "
+         "A tool with no recorded reason says \"Not tested yet.\"", ""]
+    for sec in cov["sections"]:
+        mine = [g for g in cov["gaps"] if g["section"] == sec["title"]]
+        L += [f"### {sec['title']}", ""]
+        if not mine:
+            L += ["Every tool is proven headless and live.", ""]
+            continue
+        part_short = [p for p in sec["parts"] if p["proven"] < p["total"]]
+        if part_short:
+            L += ["Rows under 100%: " + ", ".join(f"{p['name']} {p['proven']}/{p['total']}" for p in part_short) + ".", ""]
+        L += [f"- `{g['tool']}` ({g['part']}): {', '.join(g['short'])}. {g['why']}" for g in mine]
+        L.append("")
+    n = cov["total"]
+    L += ["### Review steps not done yet", "",
+          f"These rows are under 100% too: docs checked {cov['docs']}/{n}, health check seen {cov['health']}/{n}, description rewritten {cov['description']}/{n}. "
+          "They are review steps of the hardening pass, not proofs. The per-tool list is in `docs/hardening/STATUS.md`.", "",
+          "### Not in V1 (not counted)", "",
+          "These are not in the numbers above.", ""]
+    by = {}
+    for t in cov["notInV1"]["tools"]:
+        by.setdefault((t["repo"], t["why"]), []).append(t["tool"])
+    L += [f"- {', '.join('`' + n + '`' for n in names)} ({repo}, {len(names)} {'tool' if len(names) == 1 else 'tools'}): {why}" for (repo, why), names in by.items()]
+    L += [f"- {f['name']}: {f['why']}" for f in cov["notInV1"]["features"]]
+    L += [f"- `{u['tool']}` is counted in Workshop's declared tools (section 2) but not here. {u['why']}" for u in cov["unlisted"]]
+    f2 = [g["tool"] for g in cov["gaps"] if g["format2Only"]]
+    if f2:
+        L.append(f"- The live proof of {', '.join('`' + t + '`' for t in f2)} was on a cookbook format 2 draft. Format 2 is V2, so that proof does not count. "
+                 "The porting tools are V1 (cookbook format 1) and stay in the counts.")
+    return L
+
+
 def render_md(s):
     cov, hub, tok, tim = s["coverage"], s["hubTools"], s["tokens"], s["timings"]
     L = ["<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->", "# Agent Link release statistics", "",
          "The script `scripts/stats.py` makes this file from `stats.json`. Do not edit this file by hand.",
          "Each number comes from the data in this repository. To make the file again, run `python3 scripts/stats.py`.", "",
          "## 1. FreeCAD coverage, headless through MCP", "",
-         "The source is `docs/hardening/status.json` and `inventory.json`. The bars are the same as `python3 scripts/hardening_status.py bars`.", "",
-         "```", *coverage_lines(cov), "```", "",
-         "## 2. Tools", "",
-         f"Agent Link itself declares {hub['total']} tools in {len(hub['groups'])} groups. The source is `scripts/tool_summary.py`. "
-         "A lean group is in the classic list from the start.", "",
-         "| Group | Tools | Lean |", "|---|---:|---|"]
+         "The source is `docs/hardening/status.json` and `inventory.json`. Only V1 counts: the hub and the add-ons of the V1 bundle (`packaging/addons.json`). "
+         "A tool that is not in V1 is not in these numbers (see [What is not covered, and why](#what-is-not-covered-and-why)). "
+         "Proven: the tool worked on a test model, headless through the MCP tools or live in the FreeCAD window.", "",
+         *_sec_table(cov), ""]
+    for sec in cov["sections"]:
+        L += [f"### {sec['title']}", "", f"{SECTION_NOTE.get(sec['repo'], '')} {sec['total']} tools.", "", "```", *section_lines(sec), "```", ""]
+    L += ["### All of V1 together", "",
+          "The same lines as the start of `python3 scripts/hardening_status.py bars`.", "",
+          "```", *total_lines(cov), "```", "",
+          "## 2. Tools", "",
+          f"Agent Link (core) declares {hub['total']} tools in {len(hub['groups'])} groups. The source is `scripts/tool_summary.py`. "
+          "A lean group is in the classic list from the start.", "",
+          "| Group | Tools | Lean |", "|---|---:|---|"]
     L += [f"| `{g['group']}` | {g['tools']} | {'yes' if g['lean'] else '–'} |" for g in hub["groups"]]
     L += ["", "### Add-ons", "",
           "The source is `docs/stats/addons.json`: each add-on's own tool data (its `data/tools.json` files and the `Tool(...)` calls of its family modules), at the commit shown. "
@@ -403,20 +499,24 @@ def render_md(s):
     for a in tok["addons"]:
         own = ", ".join(f"`{n}`" for n in a["ownServerOnly"]) or "–"
         L.append(f"| {a['addon']} | `{a['commit'] or '?'}` | {a['declared']} | {a['loaded']} | {a['groups']} | {own} |")
-    L += ["", f"With all these add-ons installed, Agent Link has {tok['totalAllInstalled']} tools: {hub['total']} of the hub and {tok['addonToolsLoaded']} of the add-ons.", "",
-          "## 3. Token cost of the tool list", "",
-          "This is the cost of the `tools/list` answer. The estimate is the estimate of the repository: 3.5 characters for each token "
-          "(`scripts/ste_check.py`, `agentlink/usage.py`). It is not the count of the provider. The server instructions are not in these numbers.", "",
-          "| Mode | Style | Tools listed | Characters | Tokens (est.) |", "|---|---|---:|---:|---:|"]
+    L += ["", f"With all these add-ons installed, Agent Link has {tok['totalAllInstalled']} tools: {hub['total']} of the hub and {tok['addonToolsLoaded']} of the add-ons."]
+    L += [f"`{u['tool']}` is in this count. {u['why']}" for u in cov["unlisted"]]
+    L += ["", "## 3. Token cost of the tool list", "",
+          TOKEN_WHAT + " The estimate is the estimate of the repository: 3.5 characters for each token "
+          "(`scripts/ste_check.py`, `agentlink/usage.py`). It is not the count of the provider.", "",
+          "| Mode | Style | Tools listed | Characters | Tokens (est.) of the `tools/list` answer |", "|---|---|---:|---:|---:|"]
     for c in tok["combos"]:
         mark = " (default)" if c["default"] else ""
         L.append(f"| {c['mode']}{mark} | {c['style']} | {c['tools']} | {_fmt(c['chars'])} | {_fmt(c['tokens'])} |")
     ah = tok["allHubListed"]
-    L += ["", f"With every hub group turned on, the list has {ah['tools']} tools, {_fmt(ah['chars'])} characters and about {_fmt(ah['tokens'])} tokens (style full).", "",
+    d = tok["combos"][0]
+    L += ["", f"So with the default (static, ste), the tool list costs about {_fmt(d['tokens'])} tokens for {d['tools']} tools. "
+          f"With every hub group turned on, the list has {ah['tools']} tools, {_fmt(ah['chars'])} characters and about {_fmt(ah['tokens'])} tokens (style full).", "",
           f"- static: only the base is listed ({', '.join('`' + n + '`' for n in tok['base'])}). The agent finds the other tools with `tool_find`.",
           f"- classic: the lean groups are listed ({', '.join('`' + g + '`' for g in tok['leanGroups'])}).",
           f"- ste: the descriptions in `agentlink/data/ste.json` replace the full text for {', '.join('`' + n + '`' for n in tok['steEntries'])}. The other tools keep their full text.", "",
           "### Extra tokens for each add-on", "",
+          "The extra tokens that an add-on adds to the `tools/list` answer. "
           "An add-on that is not installed adds 0 tokens. This is a rule of the project: Agent Link lists no tool of an add-on that is not installed. "
           "In static mode an installed add-on also adds 0 tokens, until the agent turns on one of its groups with `tool_groups`. "
           "The style has no effect on add-on tools: `ste.json` holds hub tools only.", "",
@@ -440,20 +540,34 @@ def render_md(s):
         L += [f"{tim['note'][0].upper()}{tim['note'][1:]}. The findings files give times in prose only, and the script does not read prose.", "",
               "To add timings, run `python3 scripts/stats.py --timings <file>`. The file is one day of the Agent Link usage log (`~/AgentLink/usage/<day>.jsonl`) "
               "or the heavy-job queue (`queue.json`). The script keeps the tool names and the times only. It writes `docs/stats/timings.json`, and this section shows the median for each tool family."]
+    L += ["", "## What is not covered, and why", "", *gap_lines(cov)]
+    while L and L[-1] == "":
+        L.pop()
     return "\n".join(L) + "\n"
 
 
 def readme_block(s):
     cov, hub, tok = s["coverage"], s["hubTools"], s["tokens"]
-    total = cov["total"]
-    bar = hardening_status.bar
-    L = ["Release statistics, made by `scripts/stats.py` from the data (all of them: [docs/stats/STATS.md](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md)).", "",
-         "```"]
-    for key, label in COVER_ROWS:
-        L.append(f"{label:<24}{bar(cov[key], total)} {cov[key]:>3}/{total}")
-    L += ["```", "",
-          f"Tools: {hub['total']} in Agent Link, {tok['totalAllInstalled']} with all add-ons installed.", "",
-          "| Tool list | Tools listed | Tokens (est.) |", "|---|---:|---:|"]
+    md = "https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md"
+    L = [f"Release statistics for V1, made by `scripts/stats.py` from the data (all of them: [docs/stats/STATS.md]({md})).", "",
+         "```", *total_lines(cov), "```", "",
+         "| Section | Tools | Proven | Headless | Live |", "|---|---:|---:|---:|---:|"]
+    L += [f"| {x['title']} | {x['total']} | {x['proven']} | {x['headless']} | {x['live']} |" for x in cov["sections"]]
+    L += [f"| **All of V1** | **{cov['total']}** | **{cov['proven']}** | **{cov['headless']}** | **{cov['live']}** |", ""]
+    gaps = cov["gaps"]
+    np_ = [g for g in gaps if g["short"] == ["not proven"]]
+    nh = [g for g in gaps if "not headless" in g["short"]]
+    nl = [g for g in gaps if "not live" in g["short"]]
+    nv = len(cov["notInV1"]["tools"])
+    L += [f"Known gaps: {len(np_)} tools are not proven, {len(nh)} more are proven live only and {len(nl)} more headless only. "
+          "The main reasons: a program, a FreeCAD version or a printer that the test Mac does not have; a step that needs the person (a restart, an install, a go); "
+          "proof only on cookbook format 2, which is V2; or not tested yet. "
+          f"Each tool and its reason: [What is not covered, and why]({md}#what-is-not-covered-and-why). "
+          f"Not in V1 and not counted: {nv} tools of private add-ons (Home-FreeCAD, agentlink-collab), cookbook format 2 and PrintLoop.", "",
+          f"Tools: {hub['total']} in Agent Link (core), {tok['totalAllInstalled']} with all add-ons installed"
+          + (f" ({', '.join('`' + u['tool'] + '`' for u in cov['unlisted'])} in this count is callable but not listed)." if cov["unlisted"] else "."), "",
+          TOKEN_WHAT + " Estimate: 3.5 characters for each token.", "",
+          "| Tool list | Tools listed | Tokens (est.) of the `tools/list` answer |", "|---|---:|---:|"]
     for c in tok["combos"]:
         L.append(f"| {c['mode']}{' (default)' if c['default'] else ''}, {c['style']} | {c['tools']} | {_fmt(c['tokens'])} |")
     return "\n".join(L)
@@ -476,7 +590,7 @@ def outputs():
 
 def headline(s):
     t = s["tokens"]
-    out = coverage_lines(s["coverage"])[:7]
+    out = total_lines(s["coverage"])
     out.append(f"tools: hub {s['hubTools']['total']}, add-ons {t['addonToolsLoaded']}, all installed {t['totalAllInstalled']}")
     out += [f"tool list {c['mode']}/{c['style']}: {c['tools']} tools, ~{c['tokens']} tokens" for c in t["combos"]]
     out.append("timings: " + (f"{s['timings']['calls']} calls" if "calls" in s["timings"] else s["timings"]["note"]))
