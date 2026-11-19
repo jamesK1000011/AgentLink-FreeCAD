@@ -282,16 +282,23 @@ How it works inside: [docs/workflow/approvals.md](https://github.com/jamesK10000
 
 ## Screenshots
 
-<!-- screenshots: no screenshots are in the repository yet. Take these and add them under docs/images/:
-- the FreeCAD window on a Mac, the Agent Link panel open beside the model tree, a part being made
-- the Agent Link toolbar and menu
-- the panel's tabs (Notes, Steps, Review, Activity) and the usage strip
-- a Tutor lesson in the panel
-- a render with a colour map (wall thickness or stress) from view_render
-- a sliced plate from Agent Link for OrcaSlicer
-- Claude Desktop's extension settings for Agent Link for FreeCAD
-- the Addon Manager preferences with the custom repository added
--->
+<!-- screenshots: still to take: Claude Desktop extension settings (not taken: it shows the account); the Addon Manager preferences with the custom repository -->
+
+![The Agent Link workbench toolbar](https://github.com/jamesK1000011/AgentLink-FreeCAD/raw/main/docs/images/toolbar-agentlink.png)
+
+*The Agent Link workbench and its toolbar.*
+
+![The Activity tab of the Agent Link panel, listing each agent step and its result](https://github.com/jamesK1000011/AgentLink-FreeCAD/raw/main/docs/images/panel-activity.png)
+
+*The Activity tab: each step the agent took, with its result, as it happens.*
+
+![A tray coloured by wall thickness](https://github.com/jamesK1000011/AgentLink-FreeCAD/raw/main/docs/images/wall-map.png)
+
+*A wall-thickness map from view_render (red is thin). It works headless too.*
+
+![One layer of the sliced tray, coloured by feature](https://github.com/jamesK1000011/AgentLink-FreeCAD/raw/main/docs/images/slice-layer.png)
+
+*The same tray sliced by OrcaSlicer through Agent Link, and one layer read back from the G-code.*
 
 ![A project box made by Workshop, with the Agent Link panel beside the model tree](https://github.com/jamesK1000011/AgentLink-FreeCAD/raw/main/docs/images/panel-project-box.png)
 
