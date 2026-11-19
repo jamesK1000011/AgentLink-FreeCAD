@@ -21092,7 +21092,7 @@
   },
   "crash_collect": {
    "group": "unattended",
-   "description": "Copy crash evidence into ~/AgentLink/crash/<time>/: FreeCAD's document-recovery folders (from a FreeCAD that crashed or was stopped). Also its crash.log and the system's new crash reports for FreeCAD. Copies only; never removes. dialog_answer runs it automatically before Document Recovery's Cleanup.",
+   "description": "Copy crash evidence into ~/AgentLink/crash/<time>/: FreeCAD's document-recovery folders (from a FreeCAD that crashed or was stopped). Also its crash.log and the system's new crash reports for FreeCAD. Copies only; never removes. dialog_answer runs it automatically before Document Recovery's Cleanup. The reports show the home folder as ~ and the user name as \"user\". recovery/ holds whole documents. README.txt there says what to share.",
    "inputSchema": {"type": "object", "properties": {}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/unattended.py)",

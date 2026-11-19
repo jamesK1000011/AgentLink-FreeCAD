@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Crash evidence copied (never moved) before Document Recovery's Cleanup.
 import os
+import shutil
 import sys
 import tempfile
 import time
@@ -51,6 +52,31 @@ class Collect(unittest.TestCase):
     def test_nothing_to_keep(self):
         with mock.patch.object(C, "_user_dir", return_value=""):
             self.assertEqual(C.collect(self.out, temp=os.path.join(self.tmp, "none"), home=os.path.join(self.tmp, "nohome"), skip_pid=1), {})
+
+
+class CrashBundle(unittest.TestCase):
+    """R4-14: the reports are cleaned; the bundle says what it holds."""
+
+    def test_reports_are_cleaned_and_the_bundle_says_what_it_holds(self):
+        tmp = tempfile.mkdtemp(prefix="agentlink-r4-crash-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        home = os.path.join(tmp, "Users", "jqpublic")
+        rep = os.path.join(home, "Library", "Logs", "DiagnosticReports")
+        os.makedirs(rep)
+        with open(os.path.join(rep, "FreeCAD-2026-11-19-100000.ips"), "w") as f:
+            f.write('{"procPath":"%s/Applications/FreeCAD.app","user":"jqpublic"}' % home)
+        temp = os.path.join(tmp, "T")
+        os.makedirs(os.path.join(temp, "FreeCAD_Doc_a_1"))
+        with open(os.path.join(temp, "FreeCAD_Doc_a_1", "fc_recovery_file.xml"), "w") as f:
+            f.write("x")
+        with mock.patch.object(C, "_user_dir", return_value=""), mock.patch.object(C.sys, "platform", "darwin"):
+            got = C.collect(os.path.join(tmp, "out"), temp=temp, home=home, skip_pid=999)
+        text = open(got["reports"][0], encoding="utf-8").read()
+        self.assertNotIn("jqpublic", text)
+        self.assertIn("~/Applications/FreeCAD.app", text)
+        self.assertIn('"user":"user"', text)
+        self.assertIn("recovery/", got["holds"])
+        self.assertTrue(os.path.isfile(os.path.join(got["folder"], "README.txt")))
 
 
 if __name__ == "__main__":
