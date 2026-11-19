@@ -524,6 +524,137 @@ def forbidden_widget(w, most=64):
     return None
 
 
+# ---- file dialogs and file-level boxes (red team 4, R4-2 and R4-4) ----------------------
+# A file dialog (Qt's own, or FreeCAD's Gui::FileDialog and FileOptionsDialog)
+# takes a path that no tool checks, and FreeCAD's close confirm ("Save
+# changes … before closing?") or a "replace the file?" box writes over a file
+# or loses changes. In both, a step may only back out: the Escape key, or a
+# click on a button whose role is Reject (Cancel), or No in a replace box.
+FILE_DIALOG_CLASSES = ("QFileDialog", "FileDialog", "FileOptionsDialog")
+FILE_TOOLS = "doc_open { path }, doc_save { path }, import_file { path }, export { path }"
+BACK_OUT_TEXT = ("cancel", "close", "escape", "dismiss")
+# QMessageBox.ButtonRole by number, for a binding whose enums have no name.
+ROLE_NAMES = {-1: "InvalidRole", 0: "AcceptRole", 1: "RejectRole", 2: "DestructiveRole", 3: "ActionRole", 4: "HelpRole", 5: "YesRole", 6: "NoRole", 7: "ResetRole", 8: "ApplyRole"}
+
+
+def _ups(w, most=64):
+    """w and the widgets that hold it, innermost first."""
+    seen = 0
+    while w is not None and seen < most:
+        yield w
+        try:
+            up = getattr(w, "parentWidget", None) or getattr(w, "parent", None)
+            w = up() if callable(up) else up
+        except Exception:  # noqa: BLE001
+            w = None
+        seen += 1
+
+
+def file_dialog_of(w):
+    """The file dialog that holds w (or w itself), or None."""
+    for u in _ups(w):
+        if any(c.split("::")[-1] in FILE_DIALOG_CLASSES for c in _classes(u)):
+            return u
+    return None
+
+
+def _call(w, name):
+    try:
+        f = getattr(w, name, None)
+        v = f() if callable(f) else f
+        return str(v or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def file_level(title, text, name=""):
+    """True for FreeCAD's close confirm (MainWindow::confirmSave) or a
+    "replace the file?" box: a press there saves, discards or writes over a
+    file (gui_link.is_close_confirm and file_dialog_press read the same)."""
+    low = str(text or "").lower()
+    if name == "confirmSave" or str(title or "") == "Unsaved Document" or ("before closing" in low and "save" in low):
+        return "close"
+    if ("already exists" in low or "exists already" in low) and ("replace" in low or "overwrite" in low):
+        return "replace"
+    return None
+
+
+def file_box_of(w):
+    """(the box, "close" or "replace") for a file-level box that holds w, or None."""
+    for u in _ups(w):
+        if not (_has_class(u, "QMessageBox") or _has_class(u, "QDialog")):
+            continue
+        text = " ".join(x for x in (_call(u, "text"), _call(u, "informativeText")) if x)
+        kind = file_level(_call(u, "windowTitle"), text, _call(u, "objectName"))
+        if kind:
+            return u, kind
+    return None
+
+
+def role_name(r):
+    """A button role's name (RejectRole …) from any binding's enum."""
+    n = getattr(r, "name", None)
+    if isinstance(n, bytes):
+        n = n.decode("ascii", "replace")
+    if isinstance(n, str) and n:
+        return n.split(".")[-1]
+    try:
+        return ROLE_NAMES.get(int(r))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def button_role(w):
+    """The role of button w in the message box or button box that holds it, or None."""
+    for u in _ups(w):
+        if u is w:
+            continue
+        if (_has_class(u, "QMessageBox") or _has_class(u, "QDialogButtonBox")) and hasattr(u, "buttonRole"):
+            try:
+                r = u.buttonRole(w)
+            except Exception:  # noqa: BLE001
+                r = None
+            name = role_name(r) if r is not None else None
+            if name and name != "InvalidRole":
+                return name
+    return None
+
+
+def backs_out(w, kind, key=None, escape=None):
+    """True when an event only backs out of the box: the Escape key (key ==
+    escape), or (key None) a click on Cancel (role Reject), or No in a
+    replace box or a file dialog (kind not "close")."""
+    if key is not None:
+        return escape is not None and key == escape
+    if not any(c.split("::")[-1] in ("QAbstractButton", "QPushButton", "QToolButton") for c in _classes(w)):
+        return False
+    role = button_role(w)
+    text = _call(w, "text").replace("&", "").strip().lower()
+    if role == "RejectRole" or (role is None and text in BACK_OUT_TEXT):
+        return True
+    return kind != "close" and (role == "NoRole" or (role is None and text in ("no", "no to all")))
+
+
+def file_refusal(w, key=None, escape=None):
+    """Why an event to w is refused because a file dialog or a file-level box
+    holds it, or None."""
+    fd = file_dialog_of(w)
+    if fd is not None:
+        if backs_out(w, "file", key, escape):
+            return None
+        return (f"a file dialog: a path typed or picked there is not checked. Use a tool that takes a path ({FILE_TOOLS}). "
+                "Here gui_input sends only Escape, or a click on Cancel; dialog_answer { button: \"Cancel\" } closes it")
+    box = file_box_of(w)
+    if box is not None:
+        dlg, kind = box
+        if backs_out(w, kind, key, escape):
+            return None
+        title = _call(dlg, "windowTitle")
+        return (f"FreeCAD's dialog \"{title}\" saves, discards or writes over a file. dialog_answer {{ button }} presses its buttons, "
+                "with the person's approval (approve_file). Here gui_input sends only Escape, or a click on Cancel")
+    return None
+
+
 def refused_command(name):
     """Why the command of a menu item, tool button or shortcut is not run
     from a step (the same list as cmd_run's), or None."""
@@ -854,8 +985,27 @@ class Run:
             r = refused_command(cmd)
             if r:
                 why = f"{cmd}: {r}"
+        if why is None:
+            why = self._file_guard(w, ev)
         if why:
             raise ToolError("refused", f"gui_input does not send input there — {why}. This step was not run.")
+
+    def _file_guard(self, w, ev):
+        """file_refusal for this event: a mouse move passes (it presses
+        nothing); a key passes only as Escape; a click only on Cancel."""
+        QtCore = self.qt.QtCore
+        t = ev.type() if callable(getattr(ev, "type", None)) else getattr(ev, "t", None)
+        types = getattr(QtCore.QEvent, "Type", QtCore.QEvent)
+        if t is not None and t == getattr(types, "MouseMove", object()):
+            return None
+        k = getattr(ev, "key", None)
+        k = k() if callable(k) else k
+        Qt = QtCore.Qt
+        esc = getattr(getattr(Qt, "Key", Qt), "Key_Escape", getattr(Qt, "Key_Escape", None))
+        try:
+            return file_refusal(w, k, esc)
+        except Exception:  # noqa: BLE001 — never let a check error pass an event
+            return "a dialog that could not be read"
 
     def _send(self, w, ev):
         self._guard(w, ev)

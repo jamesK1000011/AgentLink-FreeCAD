@@ -334,8 +334,8 @@ Tools: 415 in Agent Link, 627 with all add-ons installed.
 |---|---:|---:|
 | static (default), ste | 6 | 1,583 |
 | static, full | 6 | 4,087 |
-| classic, ste | 22 | 5,901 |
-| classic, full | 22 | 8,317 |
+| classic, ste | 22 | 5,937 |
+| classic, full | 22 | 8,354 |
 <!-- stats:end -->
 
 ## Add-ons

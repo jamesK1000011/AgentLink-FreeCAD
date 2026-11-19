@@ -185,6 +185,7 @@ def tools(s):
         "fill": lambda d, text, item: gl("fill")(d, text, item), "back_out": lambda: gl("BACK_OUT"), "log_watchdog": lambda row: keep.log_watchdog(row),
         "crash_kept": crash_kept,
         "close_press_refusal": lambda d, btn: gl("unsafe_close_press")(d, btn, gl("calls_in_hand")()),
+        "file_picker_refusal": lambda d, btn: gl("file_picker_press")(d, btn),
         "file_dialog_approval": file_dialog_approval,
         "current": lambda: s.doc, "docs": lambda: list(FreeCAD.listDocuments().values()), "open_row": lambda d: {"name": d.Name, "label": d.Label, "file": d.FileName or None, **_modified(d)},
         "doc_by": doc_by, "doc_names": doc_names, "moved_to": moved_to, "gui_up": lambda: bool(getattr(FreeCAD, "GuiUp", False)), "bring_front": _bring_front,
