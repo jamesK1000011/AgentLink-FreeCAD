@@ -1,0 +1,33 @@
+{
+  "name": "agentlink-freecad",
+  "displayName": "Agent Link for FreeCAD",
+  "version": "1.0.0",
+  "description": "Drive FreeCAD from Claude: model, measure, check, draw and export parts, headless or live in your own FreeCAD window. Not affiliated with or endorsed by the FreeCAD project or the FPA.",
+  "author": {
+    "name": "jamesK1000011",
+    "url": "https://github.com/jamesK1000011"
+  },
+  "homepage": "https://github.com/jamesK1000011/AgentLink-FreeCAD",
+  "repository": "https://github.com/jamesK1000011/AgentLink-FreeCAD",
+  "license": "LGPL-2.1-or-later",
+  "keywords": [
+    "freecad",
+    "cad",
+    "mcp",
+    "3d-printing",
+    "engineering"
+  ],
+  "icon": ".claude-plugin/icon.png",
+  "network": {
+    "hosts": [
+      "pypi.org",
+      "files.pythonhosted.org",
+      "github.com",
+      "api.github.com",
+      "codeload.github.com",
+      "objects.githubusercontent.com",
+      "raw.githubusercontent.com",
+      "addons.freecad.org"
+    ]
+  }
+}

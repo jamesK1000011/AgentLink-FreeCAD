@@ -413,6 +413,7 @@ The tool list starts short. Add-ons that are not installed cost nothing: their t
 Agent Link has no telemetry. It sends nothing anywhere on its own.
 What the agent reads from FreeCAD (answers, pictures) goes to the AI provider of your MCP client, under that provider's terms.
 Agent Link adds no other recipient.
+The full privacy policy: [docs/PRIVACY.md](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/PRIVACY.md).
 
 - **The window link** listens on 127.0.0.1 only and pairs with the server before it takes a call.
   Nothing outside your computer can reach it.

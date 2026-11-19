@@ -28,6 +28,13 @@ SPDX-License-Identifier = "LGPL-2.1-or-later"
 # rendered at 512 px.
 
 [[annotations]]
+path = ["packaging/listing/claude-plugin/.claude-plugin/plugin.json", "packaging/listing/claude-plugin/.claude-plugin/icon.png", "packaging/listing/claude-plugin/.mcp.json"]
+SPDX-FileCopyrightText = "Agent Link contributors"
+SPDX-License-Identifier = "LGPL-2.1-or-later"
+# The draft Claude plugin's manifest, MCP server entry (JSON, no comment)
+# and icon (packaging/mcpb/icon.png, copied).
+
+[[annotations]]
 path = ["agentlink/data/**"]
 SPDX-FileCopyrightText = "Agent Link contributors"
 SPDX-License-Identifier = "CC-BY-4.0"

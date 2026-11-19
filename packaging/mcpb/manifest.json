@@ -63,6 +63,9 @@
   "homepage": "https://github.com/jamesK1000011/AgentLink-FreeCAD",
   "documentation": "https://github.com/jamesK1000011/AgentLink-FreeCAD#readme",
   "support": "https://github.com/jamesK1000011/AgentLink-FreeCAD/issues",
+  "privacy_policies": [
+    "https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/PRIVACY.md"
+  ],
   "tools": [
     {
       "name": "app_force_restart",

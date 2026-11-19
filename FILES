@@ -197,6 +197,7 @@ agentlink/window_watch.py
 agentlink/workbench.py
 agentlink_headless.py
 agentlink_state.py
+docs/PRIVACY.md
 docs/RELEASING.md
 docs/clients/README.md
 docs/clients/claude-code.md
