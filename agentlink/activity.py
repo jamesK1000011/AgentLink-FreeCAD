@@ -165,7 +165,14 @@ def declare(fam):
 
 # ---- what a call did -----------------------------------------------------------------------
 
+# Names that keep their capitals at the start of a joined phrase (live, 19 Nov:
+# "Switched to Part Design: part Design in front").
+TWO_WORD_NAMES = ("Part Design", "Reverse Engineering", "Test Framework", "Agent Link", "Standard Parts")
+
+
 def _lower(s):
+    if s.startswith(TWO_WORD_NAMES):
+        return s   # a workbench's name ("Part Design in front")
     return s[:1].lower() + s[1:] if s[1:2].islower() or s[1:2] == " " else s
 
 

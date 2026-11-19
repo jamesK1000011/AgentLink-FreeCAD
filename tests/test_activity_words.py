@@ -266,3 +266,11 @@ class Columns(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TwoWordNames(unittest.TestCase):
+    # Live, 19 Nov: the toast said "Switched to Part Design: part Design in front".
+    def test_a_workbench_name_keeps_its_capitals(self):
+        from agentlink import activity
+        self.assertEqual(activity._lower("Part Design in front"), "Part Design in front")
+        self.assertEqual(activity._lower("Body is valid"), "body is valid")
