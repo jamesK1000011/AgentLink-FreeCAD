@@ -512,6 +512,12 @@ def apply_extensions(tools, session):
         if not extendable(name):
             _log(f"extend_tool({name!r}) ignored", ValueError("this tool holds the person's OK or guards code; no add-on extends it"))
             continue
+        # A copy: a data tool's schema is its entry's own dict, shared by
+        # every server built in this process (and the entry stays as the
+        # data says).
+        import copy
+
+        t.schema = copy.deepcopy(t.schema or {"type": "object"})
         props = t.schema.setdefault("properties", {})
         for x in exts:
             for k, v in x["properties"].items():

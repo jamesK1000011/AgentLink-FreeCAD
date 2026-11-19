@@ -44,7 +44,10 @@ class ModelMore(unittest.TestCase):
         self.ok("export_file", {"body": "Drum", "path": "drum-t.stl", "tolerance": 0.5})
         m = self.ok("part_from_mesh", {"file": "drum-t.stl"})
         self.assertEqual(m["solids"], 1)
-        self.assertAlmostEqual(m["volume"], 21199, delta=50)
+        # The facets' volume, under the cylinder's own 21,206 mm³: how fine
+        # the STL is depends on the export's deflection, so within 2 %.
+        self.assertAlmostEqual(m["volume"], 3.14159265 * 15 ** 2 * 30, delta=0.02 * 21206)
+        self.assertLess(m["volume"], 21206)
 
 
 if __name__ == "__main__":

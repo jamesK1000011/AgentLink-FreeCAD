@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 # Buildings (BIM / Arch)
 
-All sizes are mm; quantities come back in m, m² and m³ (`volume_m3`, `area_m2`), except the `bim_gaps` tools, which answer `volume` in mm³. Z is up. Every changing tool recomputes and answers `box` (size) and `min` (its lowest corner), so where a thing landed is in the reply; `health` rides along when something went red.
+All sizes are mm; quantities come back in m, m² and m³ (`volume_m3`, `area_m2`), except the bim_gaps tools, which answer `volume` in mm³. Z is up. Every changing tool recomputes and answers `box` (size) and `min` (its lowest corner), so where a thing landed is in the reply; `health` rides along when something went red.
 
 ## workflow
 1. Walls: `bim_wall { points, closed, width, height, align }`, one call for a run of walls or one per wall. Give `z` in the points for an upper storey. A wall along a sketch follows it (`base`).

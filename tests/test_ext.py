@@ -39,9 +39,13 @@ class Ext(unittest.TestCase):
         prefs = FreeCAD.ParamGet(ext.PREFS)
         old = prefs.GetString("ExtensionRepos", "")
         orig_file = ext.__file__
+        orig_parse = ext.parse
         try:
-            prefs.SetString("ExtensionRepos", "file://" + src + "@main")
+            # Only owner/repo on GitHub reaches git (red team 4, R4-13): the
+            # local repository stands in for it here.
+            prefs.SetString("ExtensionRepos", "local/AgentLinkHello@main")
             ext.__file__ = os.path.join(mod, "AgentLink", "agentlink", "ext.py")
+            ext.parse = lambda spec, _src=src: ("local/AgentLinkHello", "main", "file://" + _src)
             out = ext.sync(cache=tempfile.mkdtemp())
             self.assertEqual(out["failed"], [], out)
             self.assertEqual(out["installed"][0]["folders"], ["AgentLinkHello"])
@@ -54,6 +58,7 @@ class Ext(unittest.TestCase):
             self.assertIn("agentlink_hello_ext", lst["loaded"])
         finally:
             ext.__file__ = orig_file
+            ext.parse = orig_parse
             prefs.SetString("ExtensionRepos", old)
         self.assertTrue(here)
 

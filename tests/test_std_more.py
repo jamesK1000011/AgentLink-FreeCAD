@@ -57,7 +57,8 @@ class StdMore(Base):
         self.assertTrue(any(x.startswith("D keep") for x in m["objects"]))
         # the file's own records object stays behind (it came in as "Agent Link records001")
         self.assertFalse([x for x in m["objects"] if x.startswith("Agent Link records")], m)
-        self.assertEqual(len([o for o in self.session.doc.Objects if o.Name.startswith("AgentLinkRecords")]), 1)
+        # At most one: the records object is made only when a record is written.
+        self.assertLessEqual(len([o for o in self.session.doc.Objects if o.Name.startswith("AgentLinkRecords")]), 1)
 
     def test_4_appearance(self):
         self.box("A box", [10, 10, 10])

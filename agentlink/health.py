@@ -734,7 +734,10 @@ def _holds_others(o):
     purpose: no overlap of theirs is a finding (a storey "interfered" with
     the roof it holds, the slab's bars with the house)."""
     try:
-        if getattr(o, "Group", None):
+        # A PartDesign Body has a Group too (its features), but its shape is
+        # its tip's solid: a part like any other (a box laid in it was not
+        # found).
+        if getattr(o, "Group", None) and getattr(o, "TypeId", "") != "PartDesign::Body":
             return True
         return str(getattr(o, "IfcType", "")) in ("Reinforcing Bar", "Reinforcing Mesh", "Building Storey", "Building", "Site")
     except Exception:

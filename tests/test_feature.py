@@ -3,6 +3,7 @@
 import math
 import unittest
 
+from _fc import BEFORE_1_1, WHY_1_0
 from _pd_base import HAVE, Base
 
 
@@ -96,6 +97,7 @@ class FeatureTools(Base):
 
     # ---- the hardening pass (16 Nov 2026): what FreeCAD 1.1's own source says ----
 
+    @unittest.skipIf(BEFORE_1_1, WHY_1_0 + " (PartDesign Draft's pull direction)")
     def test_9a_two_sides_and_a_draft_from_a_face(self):
         self.ok("pd_body_new", {"name": "Hard"})
         self.ok("sketch_new", {"body": "Hard", "plane": "XY", "name": "HBase"})
@@ -146,6 +148,7 @@ class FeatureTools(Base):
         self.assertAlmostEqual(h["volumeChange"], -h["holes"] * math.pi * (h["diameter"] / 2) ** 2 * 3, delta=1.0)
         type(self).hard_hole = h["feature"]
 
+    @unittest.skipIf(BEFORE_1_1, WHY_1_0 + " (needs test_9a's draft)")
     def test_9d_revolution_sides_and_the_tip(self):
         e = self.refused("pd_revolution", {"body": "Ring", "sketch": "RingProfile", "sides": "two"})
         self.assertIn("TwoAngles", e["message"])

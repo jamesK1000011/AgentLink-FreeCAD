@@ -100,7 +100,14 @@ class Measure(unittest.TestCase):
         by_name = self.call("measure_mass", {"body": "Block", "material": "Brass X"})
         self.assertAlmostEqual(by_name["mass"], 6000 * 8.5 / 1000, delta=1e-6)
         self.call("material_clear", {"bodies": ["Ingot"]})
-        self.call("measure_mass", {"body": "Ingot"}, ok=False)
+        # With no material: Agent Link alone refuses; an add-on that owns
+        # mass (Workshop's mass_properties) takes it as PLA and says so.
+        gone = self.call("measure_mass", {"body": "Ingot"}, ok=None)
+        if "error" in gone:
+            self.assertTrue(gone["error"]["message"])
+        else:
+            self.assertIn("assumed", gone["bodies"][0]["material"], gone)
+            self.assertNotIn("Brass X", str(gone))
 
     def test_measure_keep_takes_what_freecad_takes(self):
         # FreeCAD's Measure objects (1.1): a radius is kept of a circular

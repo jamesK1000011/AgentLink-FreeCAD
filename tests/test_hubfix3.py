@@ -685,7 +685,13 @@ class BatchWaitWithFreeCAD(unittest.TestCase):
             keep.HEAVY.discard(name)
         self.assertFalse(err, b)
         self.assertTrue(b["results"][0]["ok"], b)
-        text = open(os.path.join(session.out_dir, "crash", f"hang-job-{name}.txt"), encoding="utf-8").read()
+        # faulthandler has one timer: the job's own watch or the batch's wait
+        # for it (both start at once, either may be due first) writes the
+        # stacks of every thread, the job's among them.
+        found = [os.path.join(session.out_dir, "crash", f"hang-{k}-{name}.txt") for k in ("job", "batch-wait")]
+        found = [p for p in found if os.path.isfile(p)]
+        self.assertTrue(found, os.listdir(os.path.join(session.out_dir, "crash")))
+        text = open(found[0], encoding="utf-8").read()
         self.assertIn("slow_reading", text)
         self.assertIsNone(protocol._hang_trace._armed)
 

@@ -17,6 +17,25 @@ except ImportError:
     HAVE = False
 
 
+def at_least(major, minor):
+    """FreeCAD major.minor or newer (False without FreeCAD). A weekly
+    build's year numbers (26.3) count as newer."""
+    if not HAVE:
+        return False
+    import FreeCAD
+
+    try:
+        return tuple(int(x) for x in FreeCAD.Version()[:2]) >= (major, minor)
+    except (TypeError, ValueError):
+        return True
+
+
+# Agent Link V1 is written against FreeCAD 1.1: where 1.0 does a thing
+# differently (or not at all), a test of 1.1's way is skipped there.
+BEFORE_1_1 = HAVE and not at_least(1, 1)
+WHY_1_0 = "FreeCAD 1.0 does this differently; Agent Link V1 is written against FreeCAD 1.1"
+
+
 def server():
     from agentlink.tools import Session, build_server
 

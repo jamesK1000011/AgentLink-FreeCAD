@@ -57,10 +57,12 @@ jobs:
           git -C scanruler sparse-checkout set scripts/bakeoff
       - uses: mamba-org/setup-micromamba@v2
         with:
-          environment-name: fc
+          # FreeCAD 1.1 (what the Mac runs): conda-forge's plain "freecad"
+          # is a weekly build now (26.3 in Nov 2026), not a release.
+          environment-name: fc-1.1
           create-args: >-
             -c conda-forge
-            freecad
+            freecad=1.1
             python=3.11
             calculix
             gmsh

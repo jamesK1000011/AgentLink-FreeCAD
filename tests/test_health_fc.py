@@ -16,8 +16,13 @@ class Health(Base):
         h = out["health"]
         self.assertTrue(h["ok"], h)
         self.assertIn("Base: ", h["verdict"])
-        self.assertIn("DoF left on", h["verdict"])
-        self.assertIn(f"{self.session.doc.getObjectsByLabel('Base')[0].DoF} DoF left on the start of lines", h["verdict"])
+        dof = self.session.doc.getObjectsByLabel('Base')[0].DoF
+        if not hasattr(self.session.doc.getObjectsByLabel('Base')[0], "getGeometryWithDependentParameters"):
+            # FreeCAD 1.0's Sketcher cannot say which geometry is free: the count only.
+            self.assertIn(f"{dof} DoF left", h["verdict"])
+        else:
+            self.assertIn("DoF left on", h["verdict"])
+            self.assertIn(f"{dof} DoF left on the start of lines", h["verdict"])
         self.assertNotIn("sketches", h)
 
     def test_2_the_verdict_follows_the_solver(self):
