@@ -40,7 +40,7 @@ def every_tool():
 # Arguments of the kinds tools take, paths among them.
 SAMPLE = {"object": "Pad", "body": "Body", "sketch": "Sketch", "feature": "Pad", "page": "Page", "document": "WindowTest",
           "path": "/Users/someone/AgentLink/out/WindowTest.FCStd", "objects": ["Box", "Cylinder"], "name": "Std_ViewIsometric",
-          "topic": "reverse", "values": {"Length": 24}, "steps": [{"click": {"widget": {"text": "Pin a Note"}}}, {"wait": 3000}],
+          "topic": "reverse", "values": {"Length": 24}, "steps": [{"click": {"widget": {"text": "Pin a note"}}}, {"wait": 3000}],
           "kind": "cylinder", "length": 20, "at": [20, 20, 0], "faces": [{"at": [0, 0, 1]}], "calls": [{"tool": "x"}]}
 
 
@@ -90,9 +90,9 @@ class EveryTool(unittest.TestCase):
 
 class Phrases(unittest.TestCase):
     def test_gui_input_steps_summarised(self):
-        args = {"steps": [{"click": {"widget": {"text": "Pin a &Note"}}}, {"wait": 3000}, {"click": {"view_world": [0, 0, 10]}},
+        args = {"steps": [{"click": {"widget": {"text": "Pin a &note"}}}, {"wait": 3000}, {"click": {"view_world": [0, 0, 10]}},
                           {"shot": "after"}]}
-        self.assertEqual(activity.did("gui_input", args), "Clicked Pin a Note, clicked the part, took a picture of the window")
+        self.assertEqual(activity.did("gui_input", args), "Clicked Pin a note, clicked the part, took a picture of the window")
         self.assertEqual(activity.did("gui_input", {"steps": [{"wait": 3000}]}), "Waited")
         self.assertEqual(activity.did("gui_input", {"steps": [{"type": "hi", "target": {"widget": {"class": "QLineEdit"}}},
                                                               {"drag": {"from": {"view": [1, 2]}, "to": {"view": [3, 4]}}}]}),

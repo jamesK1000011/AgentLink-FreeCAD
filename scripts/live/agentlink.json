@@ -27,10 +27,10 @@
       ]
     },
     {
-      "name": "Pin a Note: the hint shows, a click on the part opens the note prompt",
+      "name": "Pin a note: the hint shows, a click on the part opens the note prompt",
       "calls": [
         { "tool": "workbench", "arguments": { "activate": "Agent Link" } },
-        { "tool": "gui_input", "arguments": { "steps": [ { "wait": 800 }, { "click": { "tab": { "text": "Notes" } } }, { "click": { "widget": { "text": "Pin a Note" } } }, { "wait": 500 }, { "shot": "al_pin_hint" }, { "click": { "view_world": [10, 5, 20] } } ] } }
+        { "tool": "gui_input", "arguments": { "steps": [ { "wait": 800 }, { "click": { "tab": { "text": "Notes" } } }, { "click": { "widget": { "text": "Pin a note" } } }, { "wait": 500 }, { "shot": "al_pin_hint" }, { "click": { "view_world": [10, 5, 20] } } ] } }
       ],
       "expect": [],
       "note": "The batch stops at the modal prompt (Blocked by a dialog … \"Note\"): that is the expected end of this step."

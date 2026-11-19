@@ -273,7 +273,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.status.setObjectName("AgentLinkStatus")
         self.status.setWordWrap(True)
         self.link_key = QtWidgets.QPushButton("")
-        self.link_key.setToolTip("Start or stop the agent's link to this window")
+        self.link_key.setToolTip("Start or stop the link between the agent and this window.")
         self.link_key.clicked.connect(self.toggle_link)
         row = QtWidgets.QHBoxLayout()
         row.addWidget(self.status, 1)
@@ -297,7 +297,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.usage.setObjectName("AgentLinkUsage")
         self.usage.setFlat(True)
         self.usage.setStyleSheet("text-align: left; font-size: 10px; padding: 0;")
-        self.usage.setToolTip("Tokens through Agent Link, estimated here; not your bill. Click for where they went.")
+        self.usage.setToolTip("Tokens that went through Agent Link. This is an estimate, not your bill. Click to see where they went.")
         self.usage.clicked.connect(self.usage_breakdown)
         lay.addWidget(self.usage)
         self._usage_seen = 0.0
@@ -426,19 +426,19 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         w = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(w)
         row = QtWidgets.QHBoxLayout()
-        self.pin_key = QtWidgets.QPushButton("Pin a Note")
+        self.pin_key = QtWidgets.QPushButton("Pin a note")
         self.pin_key.setCheckable(True)
-        self.pin_key.setToolTip("Click the part to pin a note there")
+        self.pin_key.setToolTip("Click this button, then click the part where the note goes.")
         self.pin_key.toggled.connect(self.set_placing)
         self.show_pins = QtWidgets.QCheckBox("Pins")
         self.show_pins.setChecked(True)
-        self.show_pins.setToolTip("Show the pins on the part (hide them for a picture)")
+        self.show_pins.setToolTip("Show or hide the note pins on the part. Hide them before you take a picture.")
         self.show_pins.toggled.connect(lambda _: self.refresh(force=True))
         row.addWidget(self.pin_key)
         row.addStretch(1)
         row.addWidget(self.show_pins)
         lay.addLayout(row)
-        # What to do next, while Pin a Note waits for the click.
+        # What to do next, while Pin a note waits for the click.
         self.pin_hint = QtWidgets.QLabel(PIN_HINT)
         self.pin_hint.setWordWrap(True)
         self.pin_hint.setVisible(False)
@@ -456,7 +456,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         # Delete sits at the right at its own size, and only works with a
         # note picked (a full-width button under an empty table, in the GUI pass).
         dele = QtWidgets.QPushButton("Delete")
-        dele.setToolTip("Take the picked note out")
+        dele.setToolTip("Delete the selected note.")
         dele.clicked.connect(self.delete_note)
         dele.setEnabled(False)
         self.note_list.itemSelectionChanged.connect(lambda: dele.setEnabled(bool(self.note_list.selectedItems())))
@@ -489,10 +489,10 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             self._placing_view, self._placing_doc = v, _doc()
 
     def _placing_stale(self):
-        """Pin a Note is on, but for a view that is no longer the one in
+        """Pin a note is on, but for a view that is no longer the one in
         front (its document was closed or another came forward): the click
         it waits for cannot come, and the next press of the button would
-        only switch it off (a live script's Pin a Note did nothing after
+        only switch it off (a live script's Pin a note did nothing after
         the test document was rebuilt)."""
         if not getattr(self, "placing", False):
             return False
@@ -516,7 +516,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         obj = doc.getObject(info.get("Object", "")) if doc else None
         # The click is made: the hint goes before the prompt comes up.
         self.pin_key.setChecked(False)
-        text, ok = QtWidgets.QInputDialog.getText(self, "Note", "What the note says:")
+        text, ok = QtWidgets.QInputDialog.getText(self, "Note", "Type the note:")
         if ok and text.strip():
             # On a PartDesign feature: the note goes on its body, the part as shown.
             nf.add_note(doc, at, text.strip(), "person", nf._body_of(doc, obj.Label) if obj else None, info.get("Component"), obj.Label if obj else None)
@@ -541,7 +541,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
             text, ok = QtWidgets.QInputDialog.getText(self, "Answer", n["text"], text=n.get("answer", ""))
             key = "answer"
         else:
-            text, ok = QtWidgets.QInputDialog.getText(self, "Note", "What the note says:", text=n["text"])
+            text, ok = QtWidgets.QInputDialog.getText(self, "Note", "Type the note:", text=n["text"])
             key = "text"
         if ok:
             n[key] = text.strip()
@@ -642,14 +642,14 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         lay = QtWidgets.QVBoxLayout(w)
         row = QtWidgets.QHBoxLayout()
         self.review_pick = QtWidgets.QComboBox()
-        self.review_pick.setToolTip("The body to review")
+        self.review_pick.setToolTip("Select the body to review.")
         go = QtWidgets.QPushButton("Check")
-        go.setToolTip("The installed reviewer's verdict on the body" if hooks_reviewers() else NO_REVIEWER)
+        go.setToolTip("Get the verdict of the installed reviewer on the body." if hooks_reviewers() else NO_REVIEWER)
         go.setEnabled(hooks_reviewers())
         go.clicked.connect(self.review)
         # With no reviewer installed: the core soundness check.
         self.sound_btn = QtWidgets.QPushButton("Body check")
-        self.sound_btn.setToolTip("FreeCAD's Check Geometry on the body (Part workbench), with Agent Link's sliver and short-edge findings listed here")
+        self.sound_btn.setToolTip("Run FreeCAD's Check Geometry (Part workbench) on the body. Agent Link adds its findings on thin faces and short edges here.")
         self.sound_btn.clicked.connect(self.body_check)
         row.addWidget(self.review_pick, 1)
         row.addWidget(go)
@@ -660,7 +660,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.verdict.setStyleSheet("font-weight: 600; font-size: 14px; padding: 4px;")
         lay.addWidget(self.verdict)
         self.findings = QtWidgets.QTreeWidget()
-        self.findings.setHeaderLabels(["", "Finding", "Do"])
+        self.findings.setHeaderLabels(["", "Finding", "Action"])
         self.findings.setRootIsDecorated(False)
         self.findings.setColumnWidth(0, 28)
         self.findings.itemClicked.connect(self._finding_picked)
@@ -813,11 +813,11 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         row = QtWidgets.QHBoxLayout()
         prefs = FreeCAD.ParamGet(echo.PREFS)
         self.echo_on = QtWidgets.QCheckBox("Agent's steps")
-        self.echo_on.setToolTip("Show the agent's steps: workbench, button, selection and a caption for each thing the agent does")
+        self.echo_on.setToolTip("Show each step of the agent: the workbench, the button, the selection and a caption.")
         self.echo_on.setChecked(prefs.GetBool("Echo", True))
         self.echo_on.toggled.connect(lambda on: prefs.SetBool("Echo", on))
         self.pace = QtWidgets.QComboBox()
-        self.pace.setToolTip("How long each step stays up before the agent goes on")
+        self.pace.setToolTip("Set how long each step stays on the screen before the agent continues.")
         paces = [("Fast", 0), ("Normal", 350), ("Slow", 900)]
         for label, _ms in paces:
             self.pace.addItem(label)
@@ -826,7 +826,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.pace.currentIndexChanged.connect(lambda i: prefs.SetInt("EchoDelay", paces[i][1]))
         row.addWidget(self.echo_on)
         self.follow = QtWidgets.QCheckBox("Follow")
-        self.follow.setToolTip("Frame the part in the view after each change the agent makes")
+        self.follow.setToolTip("Fit the part in the view after each change that the agent makes.")
         self.follow.setChecked(prefs.GetBool("Follow", True))
         self.follow.toggled.connect(lambda on: prefs.SetBool("Follow", on))
         row.addWidget(self.follow)
@@ -859,7 +859,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         w = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(w)
         self.body_pick = QtWidgets.QComboBox()
-        self.body_pick.setToolTip("The PartDesign body to play")
+        self.body_pick.setToolTip("Select the PartDesign body to play back.")
         self.body_pick.currentIndexChanged.connect(lambda _: self.load_steps())
         lay.addWidget(self.body_pick)
         self.steps_empty = self._empty("Steps")
@@ -873,21 +873,21 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.caption.setStyleSheet("font-weight: 600; padding: 4px;")
         lay.addWidget(self.caption)
         keys = FlowRow()
-        for label, tip, fn in (("Play", "Play the build from the top", self.play), ("Pause", "Hold on this step", self.pause),
-                               ("Step", "The next step", self.next_step), ("Stop", "End the playback and show the part again", self.stop)):
+        for label, tip, fn in (("Play", "Play the build from the first feature.", self.play), ("Pause", "Stop the playback on this step.", self.pause),
+                               ("Step", "Go to the next step.", self.next_step), ("Stop", "Stop the playback and show the full part again.", self.stop)):
             b = QtWidgets.QPushButton(label)
             b.setToolTip(tip)
             b.clicked.connect(fn)
             keys.addWidget(b)
         lay.addWidget(keys)
-        save = QtWidgets.QPushButton("Save as Macro…")
-        save.setToolTip("Keep this session's steps as a FreeCAD macro to run again (it runs once you approve it)")
+        save = QtWidgets.QPushButton("Save as macro…")
+        save.setToolTip("Save the steps of this session as a FreeCAD macro. The macro runs only after you approve it.")
         save.clicked.connect(self.save_macro)
         lay.addWidget(save)
         return w
 
     def save_macro(self):
-        name, ok = QtWidgets.QInputDialog.getText(self, "Save as Macro", "Macro name:")
+        name, ok = QtWidgets.QInputDialog.getText(self, "Save as macro", "Macro name:")
         if not ok or not name.strip():
             return
         done, r = self._call("macro_save", {"name": name.strip()})

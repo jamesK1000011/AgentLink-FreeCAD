@@ -144,7 +144,7 @@ def fit_activity(tree):
         tree.setColumnWidth(2, result_width(w))
 
 
-# Shown under Pin a Note while it waits for the click on the part.
+# Shown under Pin a note while it waits for the click on the part.
 PIN_HINT = "Click the part where the note goes. Esc cancels."
 
 

@@ -14,6 +14,9 @@ import os
 import FreeCAD
 
 KEEP = 8
+# The mark tools' tooltips (Card): what each one does, in STE.
+TOOL_TIPS = {"pin": "Put a numbered pin on the screenshot.", "arrow": "Draw an arrow.",
+             "box": "Draw a box.", "circle": "Draw a circle.", "pen": "Draw a free line."}
 COLOURS = {"red": (226, 60, 60), "yellow": (240, 190, 40), "blue": (60, 130, 230), "green": (60, 170, 90), "white": (245, 245, 245)}
 
 
@@ -190,7 +193,7 @@ class Card(QtW.QWidget):
         self.canvas = Canvas(pix, self)
         for key, name in zip("PABCD", Canvas.TOOLS):
             b = QtW.QPushButton(name.capitalize())
-            b.setToolTip(f"{name.capitalize()} ({key})")
+            b.setToolTip(TOOL_TIPS.get(name, name.capitalize()) + f" Key: {key}.")
             b.setCheckable(True)
             b.setChecked(name == "pin")
             b.setShortcut(key)
@@ -199,22 +202,27 @@ class Card(QtW.QWidget):
             setattr(self, "b_" + name, b)
         self.colour = QtW.QComboBox()
         self.colour.addItems(list(COLOURS))
+        self.colour.setToolTip("Select the colour of the next mark.")
         self.colour.currentTextChanged.connect(lambda c: setattr(self.canvas, "colour", c))
         bar.addWidget(self.colour)
         undo = QtW.QPushButton("Undo")
         undo.setShortcut("Ctrl+Z")
+        undo.setToolTip("Remove the last mark. Key: Ctrl+Z.")
         undo.clicked.connect(self.canvas.undo)
         bar.addWidget(undo)
         bar.addStretch(1)
         lay.addLayout(bar)
         lay.addWidget(self.canvas, 1)
         self.note = QtW.QLineEdit()
-        self.note.setPlaceholderText("A note for the agent")
+        self.note.setPlaceholderText("Type a note for the agent")
+        self.note.setToolTip("Type a note for the agent. The agent gets it with the screenshot.")
         lay.addWidget(self.note)
         keys = QtW.QHBoxLayout()
         keys.addStretch(1)
-        for label, fn in (("Discard", self.discard), ("Done", self.done)):
+        for label, tip, fn in (("Discard", "Delete this screenshot. The agent does not get it.", self.discard),
+                               ("Done", "Save the screenshot with its marks and note for the agent.", self.done)):
             b = QtW.QPushButton(label)
+            b.setToolTip(tip)
             b.clicked.connect(fn)
             keys.addWidget(b)
         lay.addLayout(keys)
