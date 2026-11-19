@@ -47,15 +47,40 @@ def _parts(p):
 # settings, the memory stop mark, the add-on sources, the hidden FreeCAD's
 # mark, the launch mark, the extension state, the approvals log and the
 # rest (red team 2, R2-13). No tool writes them. The home is the default
-# output folder too, so there only these are refused: files of these kinds
-# at its top level, and these folders. ports/ is open (port drafts). With
-# an output folder outside the home, all of the home but ports/ is refused.
-STATE_EXT = {".json", ".jsonl", ".log", ".lock", ".cfg", ".tmp", ".pid"}
-STATE_DIRS = {"cookbooks", "cookbook-probes", "cookbook-scans", "usage", "crash", "addons-previous", "stopped", "unsaved",
-              "tests", "install", "addonmanager", "extensionrepos"}
+# output folder too (outDir ~/AgentLink on the Mac), so there only these
+# are refused: the state files by name at its top level (and their ".tmp"
+# and other "<name>." copies), and the state folders. Any other file at the
+# top (an export, a batch "to" file, a report) is ordinary output.
+# ports/ is open (port drafts). With an output folder outside the home,
+# all of the home but ports/ is refused.
+STATE_FILES = {"settings.json", "settings-log.jsonl", "approvals.log", "memory-stop.json", "memory-jobs.json",
+               "addon-sources.json", "addon_catalog.json", "hidden.json", "launch.json", "extensions.json",
+               "heartbeat.json", "heavy-call.json", "heavy-tools.json", "machine.json", "queue.json", "queue.lock",
+               "versions.json", "watchdog.log", "macros-approved.json", "applies_meter.json", "companions.json",
+               ".companions.json", ".hidden-restart", ".saving",
+               # printer settings with API keys (mode 0600, an add-on keeps them)
+               "printers.json",
+               # the output folder's own record (agentlink/outputs.py)
+               "outputs.jsonl", ".outputs-clean.json"}
+STATE_DIRS = {"cookbooks", "cookbook-scans", "usage", "crash", "addons-previous", "stopped", "unsaved",
+              "tests", "install", "addonmanager", "extensionrepos", "settings"}
 OPEN_DIRS = {"ports"}
-# State no tool reads either: the running jobs' tokens (agentlink/memguard.py).
-NEVER_READ = {"memory-jobs.json"}
+# State no tool reads either: the running jobs' tokens (agentlink/memguard.py)
+# and the printers file with its API keys, in the home.
+NEVER_READ = {"memory-jobs.json", "printers.json"}
+# Never read in any folder: the old name of that printers file (API keys).
+NEVER_READ_ANYWHERE = {".agentlink-printers.json"}
+# The output folder's own record: no tool writes it in any output folder.
+OUT_STATE = {"outputs.jsonl", ".outputs-clean.json"}
+
+
+def _state_name(name):
+    """The state file a top-level name is (or a copy of, "<name>.tmp"), or None."""
+    n = name.casefold()
+    for x in STATE_FILES:
+        if n == x or n.startswith(x + "."):
+            return x
+    return None
 
 
 def _homes():
@@ -83,7 +108,7 @@ def agentlink_state(real, out_dir=None):
             continue
         if rel[0] in STATE_DIRS:
             return f"the {rel[0]} folder"
-        if len(rel) == 1 and os.path.splitext(rel[0])[1] in STATE_EXT:
+        if len(rel) == 1 and _state_name(rel[0]):
             return rel[0]
         in_out = bool(out_real and (rf == out_real or rf.startswith(out_real.rstrip("/") + "/")))
         if not in_out:
@@ -104,8 +129,11 @@ def check(tool, key, value, out_dir, write):
     secret = [x for x in parts if x.casefold() in _SECRET_FOLDED]
     if secret:
         raise ToolError("invalid_input", f"{key}: {raw} is in {secret[0]} — credentials and shell settings are off limits to the agent.")
+    base = os.path.basename(real).casefold()
+    if base in NEVER_READ_ANYWHERE:
+        raise ToolError("invalid_input", f"{key}: {raw} holds printer API keys. No tool reads or writes it.")
     for h in _homes():
-        if os.path.dirname(real).casefold() == h.casefold() and os.path.basename(real).casefold() in NEVER_READ:
+        if os.path.dirname(real).casefold() == h.casefold() and base in NEVER_READ:
             raise ToolError("invalid_input", f"{key}: {raw} is Agent Link's own state. No tool reads or writes it.")
     if write:
         # The person's OKs (approved macros and cookbooks) and the installed
@@ -118,6 +146,8 @@ def check(tool, key, value, out_dir, write):
             if rf == r or rf.startswith((r.rstrip("/") + "/", r + ".")):
                 raise ToolError("invalid_input", f"{key}: {raw} is Agent Link's own store of the person's approvals and cookbooks. No tool writes there; write somewhere else.")
         state = agentlink_state(real, out_dir)
+        if not state and out_dir and base in OUT_STATE and os.path.dirname(real).casefold() == _real(out_dir).casefold():
+            state = base
         if state:
             raise ToolError("invalid_input", f"{key}: {raw} is Agent Link's own state ({state}). No tool writes there; write somewhere else.")
         home = _real("~")
