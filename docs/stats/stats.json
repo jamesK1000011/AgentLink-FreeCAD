@@ -1,0 +1,480 @@
+{
+ "about": "Made by scripts/stats.py from the repository's data. Do not edit by hand.",
+ "coverage": {
+  "total": 637,
+  "proven": 617,
+  "headless": 606,
+  "live": 612,
+  "docs": 554,
+  "health": 483,
+  "description": 568,
+  "byWorkbench": [
+   {
+    "workbench": "Sketcher",
+    "proven": 20,
+    "total": 20
+   },
+   {
+    "workbench": "Part Design",
+    "proven": 27,
+    "total": 27
+   },
+   {
+    "workbench": "Part",
+    "proven": 27,
+    "total": 27
+   },
+   {
+    "workbench": "Assembly",
+    "proven": 17,
+    "total": 18
+   },
+   {
+    "workbench": "TechDraw",
+    "proven": 36,
+    "total": 36
+   },
+   {
+    "workbench": "Spreadsheet/VarSet",
+    "proven": 18,
+    "total": 18
+   },
+   {
+    "workbench": "FEM",
+    "proven": 20,
+    "total": 20
+   },
+   {
+    "workbench": "Draft",
+    "proven": 19,
+    "total": 19
+   },
+   {
+    "workbench": "BIM",
+    "proven": 53,
+    "total": 62
+   },
+   {
+    "workbench": "Surface",
+    "proven": 11,
+    "total": 11
+   },
+   {
+    "workbench": "Mesh",
+    "proven": 21,
+    "total": 21
+   },
+   {
+    "workbench": "CAM",
+    "proven": 15,
+    "total": 15
+   },
+   {
+    "workbench": "Points",
+    "proven": 9,
+    "total": 9
+   },
+   {
+    "workbench": "Core",
+    "proven": 65,
+    "total": 67
+   },
+   {
+    "workbench": "Window (GUI)",
+    "proven": 31,
+    "total": 32
+   },
+   {
+    "workbench": "Material",
+    "proven": 4,
+    "total": 4
+   },
+   {
+    "workbench": "Inspection",
+    "proven": 6,
+    "total": 6
+   },
+   {
+    "workbench": "OpenSCAD",
+    "proven": 5,
+    "total": 6
+   },
+   {
+    "workbench": "Robot",
+    "proven": 7,
+    "total": 7
+   },
+   {
+    "workbench": "Workshop",
+    "proven": 52,
+    "total": 52
+   },
+   {
+    "workbench": "OrcaSlicer",
+    "proven": 5,
+    "total": 5
+   },
+   {
+    "workbench": "Texturizer",
+    "proven": 11,
+    "total": 11
+   },
+   {
+    "workbench": "Tutor",
+    "proven": 3,
+    "total": 3
+   },
+   {
+    "workbench": "ScanRuler",
+    "proven": 132,
+    "total": 133
+   },
+   {
+    "workbench": "Porting",
+    "proven": 3,
+    "total": 8
+   }
+  ]
+ },
+ "hubTools": {
+  "total": 415,
+  "groups": [
+   {
+    "group": "core",
+    "tools": 19,
+    "lean": true
+   },
+   {
+    "group": "app",
+    "tools": 18,
+    "lean": false
+   },
+   {
+    "group": "find",
+    "tools": 1,
+    "lean": false
+   },
+   {
+    "group": "doc",
+    "tools": 12,
+    "lean": false
+   },
+   {
+    "group": "model",
+    "tools": 27,
+    "lean": false
+   },
+   {
+    "group": "measure",
+    "tools": 6,
+    "lean": false
+   },
+   {
+    "group": "sketch",
+    "tools": 20,
+    "lean": false
+   },
+   {
+    "group": "feature",
+    "tools": 27,
+    "lean": false
+   },
+   {
+    "group": "param",
+    "tools": 6,
+    "lean": false
+   },
+   {
+    "group": "sheet",
+    "tools": 12,
+    "lean": false
+   },
+   {
+    "group": "material",
+    "tools": 4,
+    "lean": false
+   },
+   {
+    "group": "strength",
+    "tools": 16,
+    "lean": false
+   },
+   {
+    "group": "techdraw",
+    "tools": 32,
+    "lean": false
+   },
+   {
+    "group": "inspection",
+    "tools": 6,
+    "lean": false
+   },
+   {
+    "group": "view",
+    "tools": 3,
+    "lean": true
+   },
+   {
+    "group": "notes",
+    "tools": 7,
+    "lean": false
+   },
+   {
+    "group": "mesh",
+    "tools": 21,
+    "lean": false
+   },
+   {
+    "group": "assembly",
+    "tools": 18,
+    "lean": false
+   },
+   {
+    "group": "cam",
+    "tools": 12,
+    "lean": false
+   },
+   {
+    "group": "draft",
+    "tools": 19,
+    "lean": false
+   },
+   {
+    "group": "surface",
+    "tools": 11,
+    "lean": false
+   },
+   {
+    "group": "points",
+    "tools": 9,
+    "lean": false
+   },
+   {
+    "group": "bim",
+    "tools": 37,
+    "lean": false
+   },
+   {
+    "group": "openscad",
+    "tools": 6,
+    "lean": false
+   },
+   {
+    "group": "robot",
+    "tools": 7,
+    "lean": false
+   },
+   {
+    "group": "std_more",
+    "tools": 22,
+    "lean": false
+   },
+   {
+    "group": "cam_more",
+    "tools": 3,
+    "lean": false
+   },
+   {
+    "group": "bim_gaps",
+    "tools": 16,
+    "lean": false
+   },
+   {
+    "group": "fem_more",
+    "tools": 3,
+    "lean": false
+   },
+   {
+    "group": "unattended",
+    "tools": 3,
+    "lean": false
+   },
+   {
+    "group": "dev",
+    "tools": 4,
+    "lean": false
+   },
+   {
+    "group": "porting",
+    "tools": 8,
+    "lean": false
+   }
+  ]
+ },
+ "tokens": {
+  "combos": [
+   {
+    "mode": "static",
+    "style": "ste",
+    "default": true,
+    "tools": 6,
+    "chars": 5542,
+    "tokens": 1583,
+    "estimatedCards": 6
+   },
+   {
+    "mode": "static",
+    "style": "full",
+    "default": false,
+    "tools": 6,
+    "chars": 14259,
+    "tokens": 4074,
+    "estimatedCards": 6
+   },
+   {
+    "mode": "classic",
+    "style": "ste",
+    "default": false,
+    "tools": 22,
+    "chars": 20100,
+    "tokens": 5743,
+    "estimatedCards": 17
+   },
+   {
+    "mode": "classic",
+    "style": "full",
+    "default": false,
+    "tools": 22,
+    "chars": 28558,
+    "tokens": 8159,
+    "estimatedCards": 17
+   }
+  ],
+  "allHubListed": {
+   "tools": 415,
+   "chars": 334226,
+   "estimatedCards": 24,
+   "tokens": 95493
+  },
+  "base": [
+   "session_state",
+   "batch",
+   "guide_read",
+   "tool_find",
+   "approve_file",
+   "approve_code"
+  ],
+  "leanGroups": [
+   "core",
+   "view"
+  ],
+  "steEntries": [
+   "batch",
+   "guide_read",
+   "session_state",
+   "tool_find"
+  ],
+  "estimatedHubCards": [
+   "app_force_restart",
+   "app_install",
+   "app_open",
+   "app_restart",
+   "approve_code",
+   "approve_file",
+   "batch",
+   "body_check",
+   "export_file",
+   "gui_input",
+   "guide_read",
+   "history_diff",
+   "history_redo",
+   "history_undo",
+   "job_start",
+   "job_status",
+   "live_run",
+   "outputs_clean",
+   "pref_import",
+   "report_read",
+   "session_state",
+   "tool_find",
+   "tool_groups",
+   "usage_report",
+   "view_render"
+  ],
+  "addons": [
+   {
+    "addon": "AgentLink-OrcaSlicer",
+    "commit": "0ef467d",
+    "declared": 5,
+    "loaded": 5,
+    "hubNamesLeftOut": [],
+    "groups": 1,
+    "ownServerOnly": [
+     "guide_read",
+     "orca_status"
+    ],
+    "estimatedCards": 5,
+    "notInstalledTokens": 0,
+    "staticTokens": 0,
+    "classicTools": 0,
+    "classicTokens": 0,
+    "allGroupsOnTokens": 6513
+   },
+   {
+    "addon": "ScanRuler-FreeCAD",
+    "commit": "3da936d",
+    "declared": 133,
+    "loaded": 133,
+    "hubNamesLeftOut": [],
+    "groups": 19,
+    "ownServerOnly": [],
+    "estimatedCards": 0,
+    "notInstalledTokens": 0,
+    "staticTokens": 0,
+    "classicTools": 0,
+    "classicTokens": 0,
+    "allGroupsOnTokens": 67288
+   },
+   {
+    "addon": "Texturizer-FreeCAD",
+    "commit": "dc560c7",
+    "declared": 11,
+    "loaded": 11,
+    "hubNamesLeftOut": [],
+    "groups": 1,
+    "ownServerOnly": [],
+    "estimatedCards": 0,
+    "notInstalledTokens": 0,
+    "staticTokens": 0,
+    "classicTools": 0,
+    "classicTokens": 0,
+    "allGroupsOnTokens": 11092
+   },
+   {
+    "addon": "Tutor-FreeCAD",
+    "commit": "1610e3b",
+    "declared": 3,
+    "loaded": 3,
+    "hubNamesLeftOut": [],
+    "groups": 1,
+    "ownServerOnly": [],
+    "estimatedCards": 0,
+    "notInstalledTokens": 0,
+    "staticTokens": 0,
+    "classicTools": 0,
+    "classicTokens": 0,
+    "allGroupsOnTokens": 3442
+   },
+   {
+    "addon": "Workshop-FreeCAD",
+    "commit": "0865236",
+    "declared": 60,
+    "loaded": 60,
+    "hubNamesLeftOut": [],
+    "groups": 17,
+    "ownServerOnly": [],
+    "estimatedCards": 13,
+    "notInstalledTokens": 0,
+    "staticTokens": 0,
+    "classicTools": 11,
+    "classicTokens": 4689,
+    "allGroupsOnTokens": 29959
+   }
+  ],
+  "addonToolsLoaded": 212,
+  "totalAllInstalled": 627
+ },
+ "timings": {
+  "note": "no timing data in the repo yet"
+ }
+}

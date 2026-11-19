@@ -35,7 +35,7 @@ SPDX-License-Identifier = "CC-BY-4.0"
 # work name their source in their own "source" field.
 
 [[annotations]]
-path = ["FILES", "package.xml", "scripts/live/*.json", "scripts/live/README.md", "scripts/live/ROLES.md", "docs/hardening/**", "server.json", ".gitignore", "Studio Dark/Studio Dark.cfg", "Studio Light/Studio Light.cfg", ".github/privacy/**"]
+path = ["FILES", "package.xml", "scripts/live/*.json", "scripts/live/README.md", "scripts/live/ROLES.md", "docs/hardening/**", "docs/stats/*.json", "server.json", ".gitignore", "Studio Dark/Studio Dark.cfg", "Studio Light/Studio Light.cfg", ".github/privacy/**"]
 SPDX-FileCopyrightText = "Agent Link contributors"
 SPDX-License-Identifier = "LGPL-2.1-or-later"
 # Files that cannot carry a comment (or whose format is read as a whole):

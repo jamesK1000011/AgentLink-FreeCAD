@@ -1,0 +1,1107 @@
+{
+ "about": "Each add-on's tools as its own tool data declares them (scripts/stats.py --addons). chars: the tools/list entry's characters; exact false: the entry is estimated (a schema or description written in code that cannot be read as data).",
+ "addons": {
+  "AgentLink-OrcaSlicer": {
+   "commit": "0ef467d",
+   "leanGroups": [],
+   "ownServerOnly": [
+    "guide_read",
+    "orca_status"
+   ],
+   "tools": {
+    "gcode_read": {
+     "chars": 3618,
+     "exact": false,
+     "group": "orca"
+    },
+    "orca_calibrate": {
+     "chars": 2295,
+     "exact": false,
+     "group": "orca"
+    },
+    "orca_paint": {
+     "chars": 3384,
+     "exact": false,
+     "group": "orca"
+    },
+    "orca_project": {
+     "chars": 10072,
+     "exact": false,
+     "group": "orca"
+    },
+    "orca_slice": {
+     "chars": 3423,
+     "exact": false,
+     "group": "orca"
+    }
+   }
+  },
+  "ScanRuler-FreeCAD": {
+   "commit": "3da936d",
+   "leanGroups": [],
+   "ownServerOnly": [],
+   "tools": {
+    "align_auto": {
+     "chars": 2322,
+     "exact": true,
+     "group": "align"
+    },
+    "align_clear": {
+     "chars": 1111,
+     "exact": true,
+     "group": "align"
+    },
+    "align_datum": {
+     "chars": 5065,
+     "exact": true,
+     "group": "align"
+    },
+    "align_symmetry": {
+     "chars": 2263,
+     "exact": true,
+     "group": "align"
+    },
+    "catalog_links": {
+     "chars": 932,
+     "exact": true,
+     "group": "catalog"
+    },
+    "catalog_part": {
+     "chars": 1708,
+     "exact": true,
+     "group": "catalog"
+    },
+    "catalog_provenance": {
+     "chars": 1040,
+     "exact": true,
+     "group": "catalog"
+    },
+    "deviation_align": {
+     "chars": 3391,
+     "exact": true,
+     "group": "deviation"
+    },
+    "deviation_export": {
+     "chars": 1805,
+     "exact": true,
+     "group": "deviation"
+    },
+    "deviation_hotspots": {
+     "chars": 2561,
+     "exact": true,
+     "group": "deviation"
+    },
+    "deviation_measure": {
+     "chars": 1317,
+     "exact": true,
+     "group": "deviation"
+    },
+    "deviation_open_reference": {
+     "chars": 1680,
+     "exact": true,
+     "group": "deviation"
+    },
+    "deviation_set_target": {
+     "chars": 1929,
+     "exact": true,
+     "group": "deviation"
+    },
+    "deviation_settings": {
+     "chars": 1795,
+     "exact": true,
+     "group": "deviation"
+    },
+    "deviation_volume": {
+     "chars": 2440,
+     "exact": true,
+     "group": "deviation"
+    },
+    "dimension_add": {
+     "chars": 3531,
+     "exact": true,
+     "group": "dimensions"
+    },
+    "dimension_remove": {
+     "chars": 598,
+     "exact": true,
+     "group": "dimensions"
+    },
+    "dimension_set_basic": {
+     "chars": 949,
+     "exact": true,
+     "group": "dimensions"
+    },
+    "dimension_set_limit": {
+     "chars": 1743,
+     "exact": true,
+     "group": "dimensions"
+    },
+    "element_construct": {
+     "chars": 3698,
+     "exact": true,
+     "group": "elements"
+    },
+    "element_fit": {
+     "chars": 4943,
+     "exact": true,
+     "group": "elements"
+    },
+    "element_fit_marked": {
+     "chars": 2954,
+     "exact": true,
+     "group": "elements"
+    },
+    "element_list": {
+     "chars": 656,
+     "exact": true,
+     "group": "elements"
+    },
+    "element_remove": {
+     "chars": 1003,
+     "exact": true,
+     "group": "elements"
+    },
+    "element_rename": {
+     "chars": 763,
+     "exact": true,
+     "group": "elements"
+    },
+    "element_set_visible": {
+     "chars": 819,
+     "exact": true,
+     "group": "elements"
+    },
+    "element_to_document": {
+     "chars": 2041,
+     "exact": true,
+     "group": "scan-cad"
+    },
+    "element_unlink": {
+     "chars": 867,
+     "exact": true,
+     "group": "elements"
+    },
+    "export_csv": {
+     "chars": 798,
+     "exact": true,
+     "group": "dimensions"
+    },
+    "fit_scan_export": {
+     "chars": 1356,
+     "exact": true,
+     "group": "fit-scan"
+    },
+    "fit_scan_features": {
+     "chars": 1141,
+     "exact": true,
+     "group": "fit-scan"
+    },
+    "fit_scan_measure": {
+     "chars": 1968,
+     "exact": true,
+     "group": "fit-scan"
+    },
+    "fit_scan_setup": {
+     "chars": 1672,
+     "exact": true,
+     "group": "fit-scan"
+    },
+    "flat_calibrate": {
+     "chars": 1481,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_curvature": {
+     "chars": 3073,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_detect_edges": {
+     "chars": 909,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_dimension_add": {
+     "chars": 1812,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_edges": {
+     "chars": 1158,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_edit": {
+     "chars": 1298,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_export": {
+     "chars": 1320,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_fit": {
+     "chars": 2913,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_note_add": {
+     "chars": 879,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_objects": {
+     "chars": 1924,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_open_image": {
+     "chars": 2154,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_profile": {
+     "chars": 2008,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_remove": {
+     "chars": 1051,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_render": {
+     "chars": 1609,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_report": {
+     "chars": 1090,
+     "exact": true,
+     "group": "flat"
+    },
+    "flat_set_alignment": {
+     "chars": 1133,
+     "exact": true,
+     "group": "flat"
+    },
+    "manual_check": {
+     "chars": 1624,
+     "exact": true,
+     "group": "manual"
+    },
+    "manual_plan": {
+     "chars": 4289,
+     "exact": true,
+     "group": "manual"
+    },
+    "manual_render": {
+     "chars": 1365,
+     "exact": true,
+     "group": "manual"
+    },
+    "mesh_apply_reduced": {
+     "chars": 1172,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_apply_wrap": {
+     "chars": 803,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_boolean": {
+     "chars": 2380,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_cut": {
+     "chars": 2320,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_cut_preview": {
+     "chars": 1060,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_delete_marked": {
+     "chars": 1684,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_densify": {
+     "chars": 1656,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_discard": {
+     "chars": 464,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_discard_edited": {
+     "chars": 560,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_export": {
+     "chars": 1466,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_fill_holes": {
+     "chars": 1752,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_flip_normals": {
+     "chars": 1213,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_inspect": {
+     "chars": 1461,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_mirror": {
+     "chars": 1866,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_offset": {
+     "chars": 1711,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_parts": {
+     "chars": 791,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_reduce": {
+     "chars": 4563,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_remove_islands": {
+     "chars": 1141,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_shell": {
+     "chars": 2407,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_smooth": {
+     "chars": 2194,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_trim": {
+     "chars": 2694,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_undo": {
+     "chars": 890,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_use_edited": {
+     "chars": 723,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "mesh_wrap": {
+     "chars": 2905,
+     "exact": true,
+     "group": "meshtools"
+    },
+    "pack_plan": {
+     "chars": 833,
+     "exact": true,
+     "group": "pack"
+    },
+    "pack_setup": {
+     "chars": 1596,
+     "exact": true,
+     "group": "pack"
+    },
+    "pack_write": {
+     "chars": 1332,
+     "exact": true,
+     "group": "pack"
+    },
+    "report_get": {
+     "chars": 1103,
+     "exact": true,
+     "group": "dimensions"
+    },
+    "reverse_body_check": {
+     "chars": 932,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_body_clearance": {
+     "chars": 928,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_body_describe": {
+     "chars": 1591,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_body_names": {
+     "chars": 1331,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_body_set": {
+     "chars": 1123,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_build": {
+     "chars": 972,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_build_stop": {
+     "chars": 637,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_feature_add": {
+     "chars": 4594,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_feature_clear": {
+     "chars": 515,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_feature_list": {
+     "chars": 986,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_feature_move": {
+     "chars": 921,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_feature_remove": {
+     "chars": 812,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_feature_rollback": {
+     "chars": 1065,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_feature_schema": {
+     "chars": 1267,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_feature_suppress": {
+     "chars": 746,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_feature_update": {
+     "chars": 1762,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_import_step": {
+     "chars": 1754,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_parameter_add": {
+     "chars": 1377,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_parameter_list": {
+     "chars": 558,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_parameter_remove": {
+     "chars": 599,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_parameter_rename": {
+     "chars": 637,
+     "exact": true,
+     "group": "reverse"
+    },
+    "reverse_parameter_set": {
+     "chars": 913,
+     "exact": true,
+     "group": "reverse"
+    },
+    "scan_cloud": {
+     "chars": 879,
+     "exact": true,
+     "group": "scan"
+    },
+    "scan_draft": {
+     "chars": 2866,
+     "exact": true,
+     "group": "scan"
+    },
+    "scan_fit_surface": {
+     "chars": 2349,
+     "exact": true,
+     "group": "scan"
+    },
+    "scan_heightmap": {
+     "chars": 4983,
+     "exact": true,
+     "group": "scan"
+    },
+    "scan_info": {
+     "chars": 1124,
+     "exact": true,
+     "group": "scan"
+    },
+    "scan_nearest": {
+     "chars": 1484,
+     "exact": true,
+     "group": "scan"
+    },
+    "scan_noise": {
+     "chars": 1251,
+     "exact": true,
+     "group": "scan-noise"
+    },
+    "scan_open": {
+     "chars": 1917,
+     "exact": true,
+     "group": "scan"
+    },
+    "scan_outline": {
+     "chars": 3488,
+     "exact": true,
+     "group": "scan"
+    },
+    "scan_pattern": {
+     "chars": 2597,
+     "exact": true,
+     "group": "scan"
+    },
+    "scan_qa": {
+     "chars": 2165,
+     "exact": true,
+     "group": "scan"
+    },
+    "scan_query": {
+     "chars": 2701,
+     "exact": true,
+     "group": "scan"
+    },
+    "scan_scale": {
+     "chars": 3945,
+     "exact": true,
+     "group": "align"
+    },
+    "scan_segment": {
+     "chars": 3589,
+     "exact": true,
+     "group": "scan"
+    },
+    "scan_snapshot_latest": {
+     "chars": 1125,
+     "exact": true,
+     "group": "snapshot"
+    },
+    "scan_snapshot_list": {
+     "chars": 785,
+     "exact": true,
+     "group": "snapshot"
+    },
+    "scan_snapshot_wait": {
+     "chars": 1393,
+     "exact": true,
+     "group": "snapshot"
+    },
+    "scan_thread": {
+     "chars": 3303,
+     "exact": true,
+     "group": "scan-thread"
+    },
+    "scanner": {
+     "chars": 1894,
+     "exact": true,
+     "group": "scan-noise"
+    },
+    "section_cut": {
+     "chars": 2638,
+     "exact": true,
+     "group": "sections"
+    },
+    "section_fit": {
+     "chars": 3043,
+     "exact": true,
+     "group": "sections"
+    },
+    "section_get": {
+     "chars": 1320,
+     "exact": true,
+     "group": "sections"
+    },
+    "section_list": {
+     "chars": 455,
+     "exact": true,
+     "group": "sections"
+    },
+    "section_remove": {
+     "chars": 593,
+     "exact": true,
+     "group": "sections"
+    },
+    "section_to_sketch": {
+     "chars": 3217,
+     "exact": true,
+     "group": "sections"
+    },
+    "thickness_measure": {
+     "chars": 3578,
+     "exact": true,
+     "group": "thickness"
+    },
+    "thickness_settings": {
+     "chars": 1870,
+     "exact": true,
+     "group": "thickness"
+    },
+    "wear_diff": {
+     "chars": 1496,
+     "exact": true,
+     "group": "wear"
+    },
+    "wear_prewarp": {
+     "chars": 2270,
+     "exact": true,
+     "group": "wear"
+    },
+    "wear_rebuild": {
+     "chars": 1414,
+     "exact": true,
+     "group": "wear"
+    },
+    "wear_setup": {
+     "chars": 2934,
+     "exact": true,
+     "group": "wear"
+    }
+   }
+  },
+  "Texturizer-FreeCAD": {
+   "commit": "dc560c7",
+   "leanGroups": [],
+   "ownServerOnly": [],
+   "tools": {
+    "texture_apply": {
+     "chars": 8691,
+     "exact": true,
+     "group": "texture"
+    },
+    "texture_check": {
+     "chars": 3013,
+     "exact": true,
+     "group": "texture"
+    },
+    "texture_draft": {
+     "chars": 3110,
+     "exact": true,
+     "group": "texture"
+    },
+    "texture_export": {
+     "chars": 2835,
+     "exact": true,
+     "group": "texture"
+    },
+    "texture_layer": {
+     "chars": 1836,
+     "exact": true,
+     "group": "texture"
+    },
+    "texture_list": {
+     "chars": 1071,
+     "exact": true,
+     "group": "texture"
+    },
+    "texture_mask": {
+     "chars": 5371,
+     "exact": true,
+     "group": "texture"
+    },
+    "texture_prepare": {
+     "chars": 2147,
+     "exact": true,
+     "group": "texture"
+    },
+    "texture_preview": {
+     "chars": 4386,
+     "exact": true,
+     "group": "texture"
+    },
+    "texture_set": {
+     "chars": 4021,
+     "exact": true,
+     "group": "texture"
+    },
+    "texture_settings": {
+     "chars": 2330,
+     "exact": true,
+     "group": "texture"
+    }
+   }
+  },
+  "Tutor-FreeCAD": {
+   "commit": "1610e3b",
+   "leanGroups": [],
+   "ownServerOnly": [],
+   "tools": {
+    "tutor": {
+     "chars": 5495,
+     "exact": true,
+     "group": "tutor"
+    },
+    "tutor_point": {
+     "chars": 4250,
+     "exact": true,
+     "group": "tutor"
+    },
+    "tutor_watch": {
+     "chars": 2300,
+     "exact": true,
+     "group": "tutor"
+    }
+   }
+  },
+  "Workshop-FreeCAD": {
+   "commit": "0865236",
+   "leanGroups": [
+    "fits",
+    "make",
+    "parts"
+   ],
+   "ownServerOnly": [],
+   "tools": {
+    "app_recover": {
+     "chars": 1806,
+     "exact": false,
+     "group": "safety"
+    },
+    "board_enclosure": {
+     "chars": 2451,
+     "exact": true,
+     "group": "electronics"
+    },
+    "cut_check": {
+     "chars": 2147,
+     "exact": true,
+     "group": "cut"
+    },
+    "cut_export": {
+     "chars": 2139,
+     "exact": true,
+     "group": "cut"
+    },
+    "dfm_check": {
+     "chars": 2021,
+     "exact": true,
+     "group": "make"
+    },
+    "drawing_exploded": {
+     "chars": 2829,
+     "exact": true,
+     "group": "drawing"
+    },
+    "drawing_make": {
+     "chars": 13175,
+     "exact": true,
+     "group": "drawing"
+    },
+    "fastener_add": {
+     "chars": 3731,
+     "exact": true,
+     "group": "fasteners"
+    },
+    "fastener_list": {
+     "chars": 1719,
+     "exact": true,
+     "group": "fasteners"
+    },
+    "fastener_print": {
+     "chars": 1311,
+     "exact": true,
+     "group": "fasteners"
+    },
+    "fastener_set": {
+     "chars": 2747,
+     "exact": true,
+     "group": "fasteners"
+    },
+    "fastener_types": {
+     "chars": 1404,
+     "exact": true,
+     "group": "fasteners"
+    },
+    "fea_frame": {
+     "chars": 2918,
+     "exact": true,
+     "group": "strength"
+    },
+    "fit": {
+     "chars": 1827,
+     "exact": true,
+     "group": "fits"
+    },
+    "gen_make": {
+     "chars": 253,
+     "exact": false,
+     "group": "parts"
+    },
+    "gen_part": {
+     "chars": 314,
+     "exact": false,
+     "group": "parts"
+    },
+    "history_checkpoint": {
+     "chars": 441,
+     "exact": false,
+     "group": "core"
+    },
+    "history_restore": {
+     "chars": 358,
+     "exact": false,
+     "group": "core"
+    },
+    "hw_embed": {
+     "chars": 2526,
+     "exact": true,
+     "group": "embed"
+    },
+    "hw_embed_list": {
+     "chars": 688,
+     "exact": true,
+     "group": "embed"
+    },
+    "hw_hole": {
+     "chars": 3579,
+     "exact": true,
+     "group": "fits"
+    },
+    "hw_pauses": {
+     "chars": 832,
+     "exact": true,
+     "group": "embed"
+    },
+    "hw_unembed": {
+     "chars": 869,
+     "exact": true,
+     "group": "embed"
+    },
+    "kicad_import": {
+     "chars": 2147,
+     "exact": true,
+     "group": "electronics"
+    },
+    "library_pack": {
+     "chars": 2493,
+     "exact": true,
+     "group": "share"
+    },
+    "macro_approve": {
+     "chars": 647,
+     "exact": false,
+     "group": "safety"
+    },
+    "macro_list": {
+     "chars": 247,
+     "exact": false,
+     "group": "safety"
+    },
+    "macro_run": {
+     "chars": 351,
+     "exact": false,
+     "group": "safety"
+    },
+    "macro_save": {
+     "chars": 605,
+     "exact": false,
+     "group": "safety"
+    },
+    "macro_show": {
+     "chars": 191,
+     "exact": false,
+     "group": "safety"
+    },
+    "macro_unapprove": {
+     "chars": 117,
+     "exact": false,
+     "group": "safety"
+    },
+    "mass_ballast": {
+     "chars": 2486,
+     "exact": true,
+     "group": "mass"
+    },
+    "mass_calibrate": {
+     "chars": 1043,
+     "exact": true,
+     "group": "mass"
+    },
+    "mass_properties": {
+     "chars": 1065,
+     "exact": true,
+     "group": "mass"
+    },
+    "mass_target": {
+     "chars": 1055,
+     "exact": true,
+     "group": "mass"
+    },
+    "mill_check": {
+     "chars": 2214,
+     "exact": true,
+     "group": "mill"
+    },
+    "mill_export": {
+     "chars": 2565,
+     "exact": true,
+     "group": "mill"
+    },
+    "part_review": {
+     "chars": 1955,
+     "exact": true,
+     "group": "make"
+    },
+    "part_spec": {
+     "chars": 1296,
+     "exact": true,
+     "group": "make"
+    },
+    "patent_draft": {
+     "chars": 1208,
+     "exact": true,
+     "group": "drawing"
+    },
+    "patent_figures": {
+     "chars": 3438,
+     "exact": true,
+     "group": "drawing"
+    },
+    "pcb_order_package": {
+     "chars": 1899,
+     "exact": true,
+     "group": "electronics"
+    },
+    "pref_history": {
+     "chars": 281,
+     "exact": false,
+     "group": "safety"
+    },
+    "pref_rollback": {
+     "chars": 478,
+     "exact": false,
+     "group": "safety"
+    },
+    "printed_channel": {
+     "chars": 2602,
+     "exact": true,
+     "group": "electronics"
+    },
+    "printer_add": {
+     "chars": 1292,
+     "exact": true,
+     "group": "printer"
+    },
+    "printer_list": {
+     "chars": 441,
+     "exact": true,
+     "group": "printer"
+    },
+    "printer_pause": {
+     "chars": 602,
+     "exact": true,
+     "group": "printer"
+    },
+    "printer_send": {
+     "chars": 1137,
+     "exact": true,
+     "group": "printer"
+    },
+    "printer_status": {
+     "chars": 765,
+     "exact": true,
+     "group": "printer"
+    },
+    "printer_stop": {
+     "chars": 657,
+     "exact": true,
+     "group": "printer"
+    },
+    "setup": {
+     "chars": 2074,
+     "exact": true,
+     "group": "make"
+    },
+    "slice": {
+     "chars": 2284,
+     "exact": true,
+     "group": "make"
+    },
+    "slice_open": {
+     "chars": 713,
+     "exact": true,
+     "group": "slice"
+    },
+    "slice_read": {
+     "chars": 1105,
+     "exact": true,
+     "group": "slice"
+    },
+    "slice_with": {
+     "chars": 2796,
+     "exact": true,
+     "group": "slice"
+    },
+    "slicer_presets": {
+     "chars": 2809,
+     "exact": true,
+     "group": "slice"
+    },
+    "thread_cut": {
+     "chars": 2635,
+     "exact": true,
+     "group": "thread"
+    },
+    "thread_identify": {
+     "chars": 1647,
+     "exact": true,
+     "group": "thread"
+    },
+    "thread_lookup": {
+     "chars": 1371,
+     "exact": true,
+     "group": "thread"
+    }
+   }
+  }
+ }
+}
