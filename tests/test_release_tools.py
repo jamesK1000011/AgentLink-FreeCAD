@@ -25,7 +25,7 @@ class Versions(unittest.TestCase):
     def test_every_place_agrees(self):
         vs = release.versions()
         want = vs["package.xml"]
-        self.assertRegex(want, r"^0\.\d+\.\d+$")
+        self.assertRegex(want, r"^\d+\.\d+\.\d+$")
         self.assertEqual({k: v for k, v in vs.items() if v != want}, {})
 
     def test_check_passes(self):
@@ -109,6 +109,12 @@ class Fold(unittest.TestCase):
         self.assertIn("## [Unreleased]\n\n## [0.3.0] - 2026-11-17\n\n### Fixed\n\n- e\n- b\n- d\n\n### Changed\n\n- f\n\n### Added\n\n- a\n", out)
         self.assertEqual(out.count("## [0.3.0]"), 1)
         self.assertIn("## [0.2.0] - 2026-01-01\n\n### Added\n\n- old\n", out)
+
+    def test_fold_keeps_entries_above_the_first_heading(self):
+        text = self.TEXT.replace("Being prepared.\n", "Being prepared.\n\n- loose one\n  wrapped\n- loose two\n")
+        out = release.fold_text(text, "0.3.0", "2026-11-16")
+        self.assertIn("## [0.3.0] - 2026-11-16\n\n- loose one\n  wrapped\n- loose two\n\n### Added\n\n- a\n", out)
+        self.assertNotIn("Being prepared.", out)
 
     def test_unreleased_empty_after_fold(self):
         secs = release.changelog_sections(_read("CHANGELOG.md"))

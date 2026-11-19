@@ -113,6 +113,6 @@ and holds a commit.
 
 ## Releasing
 
-Tagging is the one step left: the version is `0.3.0` in `package.xml`,
+Tagging is the one step left: the version is `1.0.0` in `package.xml`,
 `pyproject.toml` and `agentlink/server.py` (the tests check they agree), and
-`CHANGELOG.md`'s Unreleased section becomes `## [0.3.0] - <date>`.
+`CHANGELOG.md` has its `## [1.0.0] - <date>` section.
