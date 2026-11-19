@@ -34,8 +34,14 @@ import re
 
 MAX_FILES = 400
 MAX_FILE_BYTES = 1024 * 1024
+MAX_WALK = 50000
 LONG_STRING = 4000
-SKIP_DIRS = {".git", "__pycache__", "node_modules", ".github", "build", "dist"}
+# Only Python's own cache is left out. Every other folder is read, hidden
+# ones and build, dist or node_modules too: Python can import from each
+# (red team 2, R2-11).
+SKIP_DIRS = {"__pycache__"}
+# Compiled code: it can be imported, and the scan cannot read it.
+COMPILED = (".so", ".pyd", ".dylib", ".pyc", ".pyo")
 
 CODE_KINDS = ("network", "subprocess", "dynamic_code", "obfuscation", "credentials", "environment", "sys_path")
 FILE_KINDS = ("file_write", "file_write_out", "other_documents", "settings")
@@ -218,27 +224,47 @@ def _module_flag(mod, node, flag):
         flag("dynamic_code", node, f"import {mod}")
 
 
-def py_files(folder):
-    out = []
-    for root, dirs, files in os.walk(folder):
-        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
+def walk(folder):
+    """(py files, compiled files, more): every .py file under the folder,
+    hidden folders and linked files and folders too (each real folder once),
+    and the compiled code files. more: True when the walk stopped at a cap."""
+    py, compiled, seen, n = [], [], set(), 0
+    for root, dirs, files in os.walk(folder, followlinks=True):
+        real = os.path.realpath(root)
+        if real in seen:
+            dirs[:] = []
+            continue
+        seen.add(real)
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS)
         for f in sorted(files):
+            n += 1
+            if n > MAX_WALK:
+                return py, compiled, True
             if f.endswith(".py"):
-                p = os.path.join(root, f)
-                if os.path.islink(p):
-                    continue
-                out.append(p)
-                if len(out) >= MAX_FILES:
-                    return out
-    return out
+                py.append(os.path.join(root, f))
+            elif f.endswith(COMPILED):
+                compiled.append(os.path.join(root, f))
+    return py, compiled, False
 
 
-def scan(folder, cache_dir=None):
+def py_files(folder):
+    return walk(folder)[0][:MAX_FILES]
+
+
+def scan(folder, cache_dir=None, package=None):
     """{ files, flags [{kind, file, line, what}], counts {kind: n}, words
     [one line for each kind found], unread [why], risk } of an add-on
-    folder. From the index (cached by the folder's fingerprint)."""
+    folder. From the index (cached by the bytes of its code files). What is
+    not read counts as code: a file not read, compiled code, and a module of
+    the package that a file imports but that is not in the folder."""
     ix = index(folder, cache_dir)
-    flags = [f for row in ix["files"].values() for f in row["flags"]]
+    flags = [f for row in ix["files"].values() for f in row["flags"]] + list(ix.get("blind") or [])
+    if package:
+        mods = ix["modules"]
+        for rel, row in ix["files"].items():
+            for i in row["imports"]:
+                if i.startswith(package + ".") and i not in mods and i.rsplit(".", 1)[0] not in mods:
+                    flags.append({"kind": "dynamic_code", "file": rel, "line": 0, "what": f"imports {i[:80]}, which is not in the add-on folder, so it was not read"})
     return summary(flags, len(ix["files"]), ix["unread"])
 
 
@@ -249,17 +275,23 @@ CMD_LIKE = re.compile(r"^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+$")
 
 
 def fingerprint(folder):
-    """SHA-256 of each .py file's path, size and change time, and the
-    package.xml bytes: a stat walk, no file read but package.xml."""
+    """SHA-256 of each code file's path and bytes (.py and compiled), and
+    the package.xml bytes. A change of the bytes is a new scan, whatever
+    the size or the time say (R2-11)."""
     import hashlib
 
     h = hashlib.sha256()
-    for p in py_files(folder):
+    py, compiled, more = walk(folder)
+    for p in py[:MAX_FILES] + compiled[:MAX_FILES]:
+        h.update(os.path.relpath(p, folder).encode("utf-8", "replace") + b"\0")
         try:
-            st = os.stat(p)
+            with open(p, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
         except OSError:
-            continue
-        h.update(f"{os.path.relpath(p, folder)}\0{st.st_size}\0{st.st_mtime_ns}\n".encode())
+            h.update(b"unreadable")
+        h.update(b"\n")
+    h.update(f"{len(py)}:{len(compiled)}:{more}".encode())
     try:
         with open(os.path.join(folder, "package.xml"), "rb") as f:
             h.update(f.read(512 * 1024))
@@ -290,14 +322,20 @@ def index(folder, cache_dir=None):
         try:
             with open(disk, encoding="utf-8") as f:
                 got = json.load(f)
-            if isinstance(got, dict) and got.get("fingerprint") == fp and got.get("folder") == folder and got.get("v") == 1:
+            if isinstance(got, dict) and got.get("fingerprint") == fp and got.get("folder") == folder and got.get("v") == 2:
                 _MEMO[folder] = got
                 return got
         except (OSError, ValueError):
             pass
-    files, modules, commands, unread = {}, {}, {}, []
+    files, modules, commands, unread, blind = {}, {}, {}, [], []
     base = os.path.basename(folder)
-    paths = py_files(folder)
+    allpy, compiled, more = walk(folder)
+    paths = allpy[:MAX_FILES]
+    for p in compiled[:40]:
+        rel = os.path.relpath(p, folder)
+        blind.append({"kind": "dynamic_code", "file": rel, "line": 0, "what": "compiled code: the scan cannot read it"})
+    if len(compiled) > 40:
+        blind.append({"kind": "dynamic_code", "file": "", "line": 0, "what": f"{len(compiled) - 40} more compiled files"})
     for p in paths:
         rel = os.path.relpath(p, folder)
         try:
@@ -310,6 +348,7 @@ def index(folder, cache_dir=None):
                 src = f.read()
         except OSError as e:
             unread.append(f"{rel}: cannot read it ({e.strerror or e})")
+            blind.append({"kind": "dynamic_code", "file": rel, "line": 0, "what": "the file cannot be read, so it was not scanned"})
             continue
         mod = _module_of(rel)
         files[rel] = {"module": mod, "flags": scan_source(src, rel), "imports": sorted(_imports_src(src, mod, rel.endswith("__init__.py")))}
@@ -318,9 +357,10 @@ def index(folder, cache_dir=None):
         if "addCommand" in src:
             for c in set(re.findall(r"['\"]([A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+)['\"]", src)):
                 commands.setdefault(c, rel)
-    if len(paths) >= MAX_FILES:
-        unread.append(f"more than {MAX_FILES} files: the rest is not read")
-    got = {"v": 1, "folder": folder, "fingerprint": fp, "files": files, "modules": modules, "commands": commands, "unread": unread}
+    if len(allpy) > MAX_FILES or more:
+        unread.append(f"more than {MAX_FILES} Python files or {MAX_WALK} files: the rest is not read")
+        blind.append({"kind": "dynamic_code", "file": "", "line": 0, "what": "the add-on has more files than the scan reads"})
+    got = {"v": 2, "folder": folder, "fingerprint": fp, "files": files, "modules": modules, "commands": commands, "unread": unread, "blind": blind}
     _MEMO[folder] = got
     if disk:
         try:

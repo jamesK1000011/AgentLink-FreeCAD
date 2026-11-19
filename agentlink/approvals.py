@@ -50,12 +50,17 @@ import json
 import os
 import threading
 import time
+import unicodedata
+from urllib.parse import urlsplit
 
 FILE_TOOL = "approve_file"
 CODE_TOOL = "approve_code"
 CLIENT_ONLY = (FILE_TOOL, CODE_TOOL)
 # Kinds approved with approve_file; every other kind is approve_code's.
 FILE_KINDS = {"dialog", "recover", "save-all"}
+# The kinds of approval: every other kind is refused (red team 2, R2-9).
+CODE_KINDS = {"cookbook", "macro", "extension", "addon-install", "addon-update", "addon-remove", "addon-uninstall"}
+KINDS = FILE_KINDS | CODE_KINDS
 # The facts each tool shows the person, beside kind, id, fingerprint, what.
 # approve_code also shows the risk and the first words of the scan of the
 # code (a cookbook's add-on), and the fingerprint of the add-on's folder
@@ -68,6 +73,7 @@ OPEN_FOR = 3600.0    # s a pending request waits for its approval
 MAX_LINES = 40
 MAX_LINE = 300
 MAX_FIELD = 200
+MAX_ID = 120
 
 _lock = threading.Lock()
 _OPEN = {}           # key -> request
@@ -87,14 +93,63 @@ def tool_for(kind):
 
 
 def key(kind, name, fingerprint):
-    return f"{kind}:{name}:{fingerprint or ''}"
+    return f"{kind}:{ident(name)}:{fingerprint or ''}"
+
+
+def invisible(c):
+    """True for a character that a person cannot see or that turns the
+    text: Unicode category Cf (format: zero widths, joiners, direction
+    marks), the tag block U+E0000-E007F, and U+202A-202E, U+2066-2069
+    (red team 2, R2-7)."""
+    o = ord(c)
+    return 0xE0000 <= o <= 0xE007F or 0x202A <= o <= 0x202E or 0x2066 <= o <= 0x2069 or unicodedata.category(c) == "Cf"
 
 
 def clean(text, cap=MAX_LINE):
-    """One line of plain text: no control or direction marks, capped."""
-    t = "".join(c if ord(c) >= 32 and c not in "  ‮‭‪‫‬​⁦⁧⁨⁩" else " " for c in str(text))
+    """One line of plain text: no control, invisible or direction
+    characters (they are removed), capped."""
+    t = "".join("" if invisible(c) else (" " if ord(c) < 32 or 0x7F <= ord(c) < 0xA0 or c in "\u2028\u2029" else c) for c in str(text))
     t = " ".join(t.split())
     return t[:cap] + ("…" if len(t) > cap else "")
+
+
+def ident(name):
+    """An approval's id: cleaned and capped (R2-9). A dialog's title or an
+    add-on's name can be long or hold marks."""
+    return clean(name, MAX_ID)
+
+
+def tilde(text):
+    """The home folder written as ~ (R2-17)."""
+    t = str(text)
+    h = os.path.expanduser("~")
+    if h and h not in ("/", "~"):
+        t = t.replace(h, "~")
+    return t
+
+
+def source_field(v):
+    """The source as the client shows it: home as ~, a URL with its host
+    first ("host: x, path: y"). Refused when it is longer than the cap:
+    a cut would hide the tail (R2-10)."""
+    t = clean(tilde(v), 10 * MAX_FIELD)
+    u = None
+    try:
+        u = urlsplit(t) if "://" in t else None
+    except ValueError:
+        u = None
+    if u is not None and u.netloc:
+        host = u.hostname or u.netloc
+        t = f"host: {host}, path: {u.path or '/'}" + (f", query: {u.query}" if u.query else "") + (f", scheme: {u.scheme}" if u.scheme not in ("https", "http") else "")
+        if "@" in u.netloc or (u.port and u.port not in (80, 443)):
+            t += f", address: {u.netloc}"
+    elif ":" in t and "@" in t.split(":", 1)[0] and "/" not in t.split(":", 1)[0]:  # git@host:path
+        h, _, path = t.partition(":")
+        t = f"host: {h.split('@', 1)[1]}, path: {path}"
+    if len(t) > MAX_FIELD:
+        raise Refused("invalid_input", f"source: {len(t)} characters; the client shows {MAX_FIELD} or fewer, and a cut would hide the end. "
+                                       "Use a shorter source. Nothing was asked.")
+    return t
 
 
 def identity(*parts):
@@ -206,12 +261,14 @@ def _prune(now):
 def arguments(kind, name, fingerprint, title, shown=None):
     """The approve tool's arguments for a request: what the client shows
     the person."""
+    if kind not in KINDS:
+        raise Refused("invalid_input", f"kind {clean(kind, 40)!r}: not a kind of approval ({', '.join(sorted(KINDS))}). Nothing was asked.")
     tool = tool_for(kind)
-    args = {"kind": kind, "id": str(name), "fingerprint": str(fingerprint), "what": clean(title, MAX_FIELD)}
+    args = {"kind": kind, "id": ident(name), "fingerprint": clean(fingerprint, MAX_FIELD), "what": clean(title, MAX_FIELD)}
     for f in SHOWN[tool]:
         v = (shown or {}).get(f)
         if v not in (None, ""):
-            args[f] = clean(v, FIELD_CAP.get(f, MAX_FIELD))
+            args[f] = source_field(v) if f == "source" else clean(v, FIELD_CAP.get(f, MAX_FIELD))
     return args
 
 
@@ -221,12 +278,13 @@ def ask(kind, name, title, lines=(), fingerprint=None, on_ok=None, shown=None, t
     now = time.time()
     _prune(now)
     fp = fingerprint or identity(kind, name, shown or {})
+    args = arguments(kind, name, fp, title, shown)
+    name, fp = args["id"], args["fingerprint"]
     k = key(kind, name, fp)
     if on_ok is None and take(kind, name, fp):
         return {"ok": True}
     tool = tool_for(kind)
-    args = arguments(kind, name, fp, title, shown)
-    req = {"key": k, "kind": kind, "name": str(name), "sha": fp, "tool": tool, "args": args, "title": clean(title, 120),
+    req = {"key": k, "kind": kind, "name": name, "sha": fp, "tool": tool, "args": args, "title": clean(title, 120),
            "lines": [clean(x) for x in list(lines or [])[:MAX_LINES]], "on_ok": on_ok, "then": then, "opened": now, "shown": None}
     with _lock:
         was = _OPEN.get(k)
@@ -257,7 +315,7 @@ def _record(req, by):
         p = keep.path("approvals.log")
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "a", encoding="utf-8") as f:
-            f.write(json.dumps({"t": round(time.time(), 1), "by": by, **req["args"]}, ensure_ascii=False) + "\n")
+            f.write(json.dumps({"t": round(time.time(), 1), "by": by, **{k: tilde(v) for k, v in req["args"].items()}}, ensure_ascii=False) + "\n")
     except Exception:  # noqa: BLE001 - a record only
         pass
 
@@ -311,6 +369,11 @@ def approve(tool, args):
     for f, v in (("kind", kind), ("id", name), ("fingerprint", fp)):
         if not isinstance(v, str) or not v:
             raise Refused("invalid_input", f"{f}: copy it from the pending answer (approve.arguments). Nothing was approved.")
+    if kind not in KINDS:
+        raise Refused("invalid_input", "kind: not a kind of approval. Copy it from the pending answer (approve.arguments). Nothing was approved.")
+    for f, v in args.items():
+        if isinstance(v, str) and (len(v) > 2000 or any(invisible(c) or ord(c) < 32 for c in v)):
+            raise Refused("invalid_input", f"{f}: it has invisible or control characters, or it is too long. Use exactly the pending answer's arguments. Nothing was approved.")
     _prune(time.time())
     with _lock:
         req = _OPEN.get(key(kind, name, fp))

@@ -82,7 +82,7 @@ class ClientApproval(unittest.TestCase):
         a = r["approve"]["arguments"]
         self.assertEqual(r["approve"]["tool"], "approve_code")
         self.assertEqual((a["kind"], a["id"], a["fingerprint"], a["source"], a["version"], a["author"]),
-                         ("addon-install", "Gears", "commit:abc", "https://example.org/Gears.git", "commit abc", "someone"))
+                         ("addon-install", "Gears", "commit:abc", "host: example.org, path: /Gears.git", "commit abc", "someone"))
         self.assertIn("approve_code", r["next"])
         self.assertEqual(approvals.ask("recover", "Doc", "Save over", [], "fp")["approve"]["tool"], "approve_file")
         self.assertEqual(approvals.ask("save-all", "restart", "Save all", [], "fp")["approve"]["tool"], "approve_file")
@@ -191,6 +191,60 @@ class ClientApproval(unittest.TestCase):
             self.assertNotIn("\n", a[k])
             self.assertNotIn("‮", a[k])
             self.assertLessEqual(len(a[k]), approvals.MAX_FIELD + 1)
+
+    def test_invisible_characters_never_reach_the_fields(self):
+        # Red team 2, R2-7: format characters, tags and direction marks.
+        r = approvals.ask("macro", "m\U000E0041x", "Run\u2060 it", [], "fp", shown={"source": "a\u2060b", "author": "x\U000E0041y\u202e"})
+        a = r["approve"]["arguments"]
+        for k in ("id", "what", "source", "author"):
+            self.assertFalse([c for c in a[k] if approvals.invisible(c)], k)
+        self.assertEqual((a["id"], a["source"], a["author"]), ("mx", "ab", "xy"))
+        for bad in ({**a, "author": "x\u2060y"}, {**a, "what": a["what"] + "\U000E0041"}):
+            with approvals.client_call("approve_code", bad):
+                with self.assertRaises(approvals.Refused):
+                    approvals.approve("approve_code", bad)
+        with approvals.client_call("approve_code", a):
+            self.assertTrue(approvals.approve("approve_code", a)["approved"])
+
+    def test_the_id_is_cleaned_and_capped_and_the_kind_is_known(self):
+        # Red team 2, R2-9: a dialog's title is the id.
+        r = approvals.ask("dialog", "Save?\n" + "x" * 400, "Press Save", [], "fp", shown={"button": "Save"})
+        a = r["approve"]["arguments"]
+        self.assertNotIn("\n", a["id"])
+        self.assertLessEqual(len(a["id"]), approvals.MAX_ID + 1)
+        with approvals.client_call("approve_file", a):
+            self.assertTrue(approvals.approve("approve_file", a)["approved"])
+        with self.assertRaises(approvals.Refused):
+            approvals.ask("anything", "x", "Do it", [], "fp")
+        bad = {**a, "kind": "anything"}
+        with approvals.client_call("approve_file", bad):
+            with self.assertRaises(approvals.Refused):
+                approvals.approve("approve_file", bad)
+
+    def test_a_source_is_never_cut(self):
+        # Red team 2, R2-10: the host comes first; a long source is refused.
+        a = approvals.ask("extension", "x", "Add", [], "fp", shown={"source": "https://example.org/a/b.git"})["approve"]["arguments"]
+        self.assertEqual(a["source"], "host: example.org, path: /a/b.git")
+        a = approvals.ask("extension", "y", "Add", [], "fp", shown={"source": "https://evil.example:8443/x.git"})["approve"]["arguments"]
+        self.assertTrue(a["source"].startswith("host: evil.example,"), a["source"])
+        self.assertIn("address: evil.example:8443", a["source"])
+        a = approvals.ask("extension", "z", "Add", [], "fp", shown={"source": "git@example.org:a/b.git"})["approve"]["arguments"]
+        self.assertEqual(a["source"], "host: example.org, path: a/b.git")
+        with self.assertRaises(approvals.Refused):
+            approvals.ask("extension", "w", "Add", [], "fp", shown={"source": "https://example.org/" + "a" * 190 + "/evil.example"})
+
+    def test_the_source_and_the_log_have_no_home_path(self):
+        # Red team 2, R2-17.
+        home = os.path.expanduser("~")
+        a = approvals.ask("macro", "m", "Run", [], "fp", shown={"source": os.path.join(home, "AgentLink", "x.json")})["approve"]["arguments"]
+        self.assertEqual(a["source"], "~/AgentLink/x.json")
+        with mock.patch.dict(os.environ, {"AGENTLINK_HOME": self.home}):
+            with approvals.client_call("approve_code", a):
+                approvals.approve("approve_code", a)
+        log = os.path.join(self.home, "approvals.log")
+        if os.path.exists(log):
+            with open(log) as f:
+                self.assertNotIn(home + os.sep, f.read())
 
     def test_scripts_and_lessons_never_reach_the_approval_tools(self):
         from agentlink import cookbook
