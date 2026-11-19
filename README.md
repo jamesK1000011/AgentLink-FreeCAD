@@ -25,6 +25,8 @@ in your own FreeCAD window. Every change is one FreeCAD undo step.
 
 For an agent setting this up: follow [SETUP.md](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/SETUP.md).
 
+How it works inside, with diagrams: [docs/workflow/](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/workflow/README.md).
+
 ## What you need
 
 Check at any time with the setup check, which says what is missing and how to
