@@ -1663,6 +1663,32 @@ class Run:
             pass
         return None
 
+    def _expression_field(self):
+        """The field of FreeCAD's Expression Editor when it is open, else
+        None. "=" in a quantity field opens it in a task panel. It is not a
+        Qt popup or a modal dialog, and with the window in the background Qt
+        gives it no focus. So keys and text with no target went to the spin
+        box, and its OK bound nothing (live 98, 19 Nov)."""
+        try:
+            tops = [self.mw()] + [t for t in self.app().topLevelWidgets() if t is not self.mw()]
+        except Exception:
+            return None
+        for top in tops:
+            try:
+                kids = top.findChildren(self.qt.QtWidgets.QWidget)
+            except Exception:
+                continue
+            for d in [top] + list(kids):
+                try:
+                    if not _has_class(d, "Gui::Dialog::DlgExpressionInput") or not _alive(d) or not d.isVisible():
+                        continue
+                    f = d.findChild(self.qt.QtWidgets.QWidget, "expression")
+                    if f is not None and _alive(f):
+                        return f
+                except Exception:
+                    continue
+        return None
+
     def _focus_now(self):
         """The widget that has the keyboard focus now, or None."""
         try:
@@ -1684,6 +1710,9 @@ class Run:
             if self.app().activePopupWidget() is b:
                 return self._popup_field(b) or b
             return self._dialog_focus(b)
+        ex = self._expression_field()
+        if ex is not None:
+            return ex
         app = self.app()
         f = app.focusWidget() or self.mw().focusWidget()
         # A focus widget that is no longer shown (the list of a drop-down
@@ -1994,6 +2023,11 @@ class Run:
                     self._mouse("MouseButtonRelease", gw, gx, gy, st["button"], st["mods"])
                 if not self._detached():
                     self.pump(MOVE_GAP_MS)
+                    if not _alive(w):
+                        # The click closed what held the widget (the
+                        # Expression Editor's OK): nothing more to read.
+                        out["closed"] = True
+                        return out
                     if st["button"] == "left" and not st["double"] and self.menu_pick is None and not _has_class(w, "QMenu"):
                         # Not on a menu's item: a menu that closed is not
                         # its tool button's arrow to open again (live 82).
@@ -2060,6 +2094,8 @@ class Run:
                     pop = self._popup_now()
                     if pop is not None and pop is not pop_before:
                         f = self._popup_field(pop) or f
+                    elif pop is None:
+                        f = self._expression_field() or f
                     f = self._key_owner(f) if f is not None else None
                     if f is not None and f is not before and f is not w and _alive(f) and self._really_shown(f):
                         w = f

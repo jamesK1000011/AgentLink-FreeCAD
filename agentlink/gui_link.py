@@ -856,10 +856,48 @@ def press_hard(d, label, tries):
         return False
 
 
+EXPRESSION_CLASS = "Gui::Dialog::DlgExpressionInput"
+
+
+def _in_expression(w, stop=None):
+    """True when w sits in FreeCAD's Expression Editor (or is it)."""
+    n = 0
+    while w is not None and w is not stop and n < 40:
+        n += 1
+        try:
+            if w.metaObject().className() == EXPRESSION_CLASS:
+                return True
+            w = w.parentWidget()
+        except Exception:
+            return False
+    return False
+
+
+def _expression_editor(view):
+    """FreeCAD's Expression Editor open over the task panel, or None. "=" in
+    a quantity field opens it; its own OK binds the expression (live 98, 102)."""
+    try:
+        QtGui, QtWidgets = _qt()
+        import FreeCADGui
+
+        for w in FreeCADGui.getMainWindow().findChildren(QtWidgets.QWidget):
+            if w.metaObject().className() == EXPRESSION_CLASS and w.isVisible():
+                return w
+        if view is not None:
+            for w in QtWidgets.QApplication.topLevelWidgets():
+                if w.metaObject().className() == EXPRESSION_CLASS and w.isVisible():
+                    return w
+    except Exception:
+        pass
+    return None
+
+
 def task_info():
     """The task panel open in the window (Combo View's Tasks), if any:
     { title, buttons, widget } — FreeCAD's task dialogs are not modal, so
-    modal_info does not see them."""
+    modal_info does not see them. When the Expression Editor is open over
+    it, its buttons are apart: expression { buttons } (live 102: two OK
+    buttons, and OK pressed the first)."""
     try:
         import FreeCADGui
 
@@ -875,28 +913,61 @@ def task_info():
         buttons, titles = [], []
         if view is not None:
             for b in view.findChildren(QtWidgets.QAbstractButton):
-                if b.isVisible() and b.isEnabled() and b.text() and not b.isCheckable():
+                if b.isVisible() and b.isEnabled() and b.text() and not b.isCheckable() and not _in_expression(b, view):
                     buttons.append(b.text().replace("&", ""))
             for g in view.findChildren(QtWidgets.QWidget):
                 t = g.windowTitle() if hasattr(g, "windowTitle") else ""
-                if t and g.isVisible() and t not in titles:
+                if t and g.isVisible() and t not in titles and not _in_expression(g, view):
                     titles.append(t)
-        return {"class": "TaskPanel", "title": titles[0] if titles else "Task", "text": ", ".join(titles[:6]), "buttons": buttons or ["OK", "Cancel"], "widget": view}
+        out = {"class": "TaskPanel", "title": titles[0] if titles else "Task", "text": ", ".join(titles[:6]), "buttons": buttons or ["OK", "Cancel"], "widget": view}
+        ed = _expression_editor(view)
+        if ed is not None:
+            eb = [b.text().replace("&", "") for b in ed.findChildren(QtWidgets.QAbstractButton) if b.isVisible() and b.isEnabled() and b.text()]
+            out["expression"] = {"buttons": ["Expression " + t for t in eb],
+                                 "note": "The Expression Editor is open. OK accepts its expression first, then presses the task's OK. "
+                                         "\"Expression OK\" accepts the expression only; Cancel closes the editor and the task."}
+            out["expressionWidget"] = ed
+        return out
     except Exception:
         return None
 
 
+def _press_in(w, want, skip_expression=None):
+    QtGui, QtWidgets = _qt()
+    for b in w.findChildren(QtWidgets.QAbstractButton):
+        if not (b.isVisible() and b.isEnabled() and b.text().lower().replace("&", "") == want):
+            continue
+        if skip_expression is not None and _in_expression(b, skip_expression):
+            continue
+        b.click()
+        return True
+    return False
+
+
 def press_task(d, label):
     """A task panel's button by its text; Cancel/Close with none found
-    closes the task as FreeCAD's Cancel does."""
-    want = label.lower().replace("&", "")
+    closes the task as FreeCAD's Cancel does. With the Expression Editor
+    open: "Expression <button>" presses the editor's own button; OK (or
+    Apply) accepts the expression first, then presses the task's button."""
+    want = label.lower().replace("&", "").strip()
     try:
-        QtGui, QtWidgets = _qt()
-        if d.get("widget") is not None:
-            for b in d["widget"].findChildren(QtWidgets.QAbstractButton):
-                if b.isVisible() and b.isEnabled() and b.text().lower().replace("&", "") == want:
-                    b.click()
-                    return True
+        ed = d.get("expressionWidget")
+        if ed is not None:
+            try:
+                ed.metaObject()
+            except Exception:
+                ed = None
+        if want.startswith("expression "):
+            return ed is not None and _press_in(ed, want[len("expression "):])
+        if ed is not None and want in ("ok", "apply"):
+            _press_in(ed, "ok")
+            try:
+                QtGui, QtWidgets = _qt()
+                QtWidgets.QApplication.processEvents()
+            except Exception:
+                pass
+        if d.get("widget") is not None and _press_in(d["widget"], want, skip_expression=d["widget"]):
+            return True
         if want in BACK_OUT:
             import FreeCADGui
 
