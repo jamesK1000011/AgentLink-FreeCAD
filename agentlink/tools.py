@@ -2687,8 +2687,10 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
              obj({"topic": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "section": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}}), guide_read),
         Tool("job_status", "Read the state of a job. job: its id (call-N, or job-… for a heavy read). Answer: running (seconds so far), or done with the tool's answer or "
                            "error. wait: seconds (up to 30) to wait first. No job: all jobs (kept for an hour). The server answers at once, also while FreeCAD "
-                           "is busy. Changes nothing.",
-             obj({"job": {"type": "string"}, "wait": {"type": "number"}}), job_status),
+                           "is busy. stop: true stops a job-… job. The stop occurs at the next Python step of the job. A long step in FreeCAD's own code ends first. "
+                           "Then the job fails with the code stopped. A job-… job is a read, so the document does not change. A call-N job runs on FreeCAD's "
+                           "own thread and cannot stop in the middle. For it, the answer gives the next steps: wait, or app_force_restart. Without stop, it changes nothing.",
+             obj({"job": {"type": "string"}, "wait": {"type": "number"}, "stop": {"type": "boolean"}}), job_status),
         Tool("job_start", "Run a call as a job: tool and its arguments. If it ends within 60 s, the answer is the tool's own. Else a job id (call-N) for "
                           "job_status. wait: false gives the id at once. A client drops a call after about 80 s. So the server does this for any call past about 60 s. Not "
                           "for job_ and app_ tools. No estimate refuses a call.",

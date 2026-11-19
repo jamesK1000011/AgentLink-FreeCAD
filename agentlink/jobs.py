@@ -21,6 +21,7 @@
 import os
 import threading
 import time
+import types
 import uuid
 
 from . import keep
@@ -48,6 +49,19 @@ _queue_lock = threading.Lock()
 # window's echo: agentlink/echo.py job_listener, which hands it to the GUI
 # thread). A listener never stops a job.
 LISTENERS = []
+
+
+class JobStop(BaseException):
+    """Raised in a job's thread by job_status { job, stop: true } (fault 89).
+    A BaseException, so a tool's own "except Exception" does not swallow it.
+    It lands at the job's next Python step: a long step in FreeCAD's C++
+    code finishes first."""
+
+
+def _raise_in(tid, exc):
+    from . import memguard
+
+    return memguard._raise_in(tid, exc)
 
 
 def listen(fn):
@@ -295,7 +309,7 @@ def sized_estimate(name, args, session, size=None):
 def running(doc=None):
     """The jobs still running (on doc's session when given)."""
     with _lock:
-        return [j for j in JOBS.values() if j["status"] == "running" and (doc is None or j.get("doc") == doc)]
+        return [j for j in JOBS.values() if j["status"] in ("running", "stopping") and (doc is None or j.get("doc") == doc)]
 
 
 def _queue(add=None, drop=None):
@@ -330,7 +344,7 @@ def _queue(add=None, drop=None):
 def _prune():
     now = time.time()
     with _lock:
-        for k in [k for k, j in JOBS.items() if j["status"] != "running" and now - (j.get("finished") or now) > KEEP_DONE]:
+        for k in [k for k, j in JOBS.items() if j["status"] not in ("running", "stopping") and now - (j.get("finished") or now) > KEEP_DONE]:
             JOBS.pop(k, None)
 
 
@@ -347,7 +361,7 @@ def start(tool, args, session, fn=None):
     jid = "job-" + uuid.uuid4().hex[:8]
     doc = getattr(getattr(session, "doc", None), "Name", None)
     job = {"job": jid, "tool": tool.name, "status": "running", "started": time.time(), "size": size, "doc": doc,
-           "estimate": keep.said_range(r) if r else None, "done": threading.Event(),
+           "estimate": keep.said_range(r) if r else None, "done": threading.Event(), "tid": None, "in_call": False, "lock": threading.Lock(),
            # Its arguments, for the window's words when it ends (never in an answer: summary leaves them).
            "args": dict(args or {}) if isinstance(args, dict) else {}}
     with _lock:
@@ -368,10 +382,27 @@ def start(tool, args, session, fn=None):
 
         tid = memguard.started(tool.name, now=job["started"]) if keep.is_heavy(tool.name) and memguard.on() else None
         try:
-            with watch:
-                out = call()
+            try:
+                with job["lock"]:
+                    job["tid"] = threading.get_ident()
+                    job["in_call"] = True
+                with watch:
+                    out = call()
+            finally:
+                # No stop is delivered once the call is over: one asked for
+                # but not yet landed is taken back.
+                with job["lock"]:
+                    job["in_call"] = False
+                    if job.get("stop_sent"):
+                        try:
+                            _raise_in(job["tid"], None)
+                        except Exception:  # noqa: BLE001
+                            pass
             job["result"] = out
             job["status"] = "done"
+        except JobStop:
+            job["error"] = {"code": "stopped", "message": stopped_words(job)}
+            job["status"] = "failed"
         except ToolError as e:
             job["error"] = {"code": e.code, "message": e.message}
             job["status"] = "failed"
@@ -388,6 +419,9 @@ def start(tool, args, session, fn=None):
                     job.pop("result", None)
                     job["error"] = {"code": "stopped", "message": memguard.words(tool.name, mark, changes=False)}
                     job["status"] = "failed"
+            if job.get("stop_sent") and job["status"] == "done":
+                # Asked to stop, but its last step ended first: its answer stands.
+                job["stopNote"] = "The stop came after its last step: it ended normally, and its answer is below."
             job["finished"] = time.time()
             secs = job["finished"] - job["started"]
             if job["status"] == "done" and secs >= 1.0:
@@ -415,8 +449,11 @@ def summary(job):
     or its result or error."""
     out = {"job": job["job"], "tool": job["tool"], "status": job["status"]}
     now = time.time()
-    if job["status"] == "running":
+    if job["status"] in ("running", "stopping"):
         out["running"] = round(now - job["started"], 1)
+        if job["status"] == "stopping":
+            out["note"] = ("A stop was sent. It lands at the job's next Python step; a long step in FreeCAD's own code ends first. "
+                           "The job then fails with code stopped.")
         if job.get("estimate"):
             out["expected"] = job["estimate"] + " (from past runs here)"
         out["next"] = f"job_status {{ job: \"{job['job']}\", wait: 25 }} waits for it and gives its answer."
@@ -430,7 +467,7 @@ def summary(job):
 
 def wait_for(job, seconds):
     job["done"].wait(max(0.0, float(seconds)))
-    return job["status"] != "running"
+    return job["status"] not in ("running", "stopping")
 
 
 def get(jid):
@@ -570,6 +607,35 @@ def note_slow(tool, args, session, secs):
         pass
 
 
+def stopped_words(job):
+    """The answer of a job that a stop ended."""
+    words = f"{job['tool']} ({job['job']}) was stopped by job_status stop before it ended."
+    # A job is always a read (jobs.eligible): the document is as before.
+    words += " It is a read, so it changed nothing in the document."
+    if writes_file(types.SimpleNamespace(name=job["tool"]), job.get("args")):
+        words += " It writes a file: a file it had begun may be there and not whole. Write it again before you use it."
+    return words
+
+
+def stop_job(j):
+    """Send a stop to a job-… job's thread (fault 89): what was done, in
+    words for the answer."""
+    with j["lock"]:
+        if j["status"] != "running":
+            if j["status"] == "stopping":
+                return "A stop was sent before. It lands at the job's next Python step."
+            return f"Nothing to stop: the job is {j['status']}."
+        if not j.get("in_call") or not j.get("tid"):
+            return "Nothing to stop yet: the job has not started its call. Ask again in a moment."
+        got = _raise_in(j["tid"], JobStop)
+        if not got:
+            return "The stop could not be sent: the job's thread is gone. job_status shows how it ended."
+        j["stop_sent"] = True
+        j["status"] = "stopping"
+    return ("Sent. It lands at the job's next Python step; a long step in FreeCAD's own code ends first. "
+            "The job then fails with code stopped. A job is a read: it changed nothing in the document.")
+
+
 def status(a):
     """job_status: one job (wait up to MAX_POLL_WAIT s for it), or every
     job kept."""
@@ -583,8 +649,17 @@ def status(a):
     w = a.get("wait", 0)
     if isinstance(w, bool) or not isinstance(w, (int, float)) or w < 0:
         raise ToolError("invalid_input", f"wait: seconds to wait for it, 0 to {MAX_POLL_WAIT:.0f}.")
-    wait_for(j, min(float(w), MAX_POLL_WAIT))
+    stop = a.get("stop")
+    if stop is not None and not isinstance(stop, bool):
+        raise ToolError("invalid_input", "stop: true to stop the job, or leave it out.")
+    sent = stop_job(j) if stop else None
+    # A stop lands at the next Python step: a short wait shows it landed.
+    wait_for(j, min(float(w), MAX_POLL_WAIT) if not stop else max(min(float(w), MAX_POLL_WAIT), 2.0))
     out = summary(j)
+    if sent is not None:
+        out["stop"] = sent
+    if j.get("stopNote"):
+        out["note"] = j["stopNote"]
     if j["status"] == "done":
         res = j.get("result")
         if isinstance(res, dict):

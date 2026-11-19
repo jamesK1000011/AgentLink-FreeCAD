@@ -501,6 +501,8 @@ class Gate:
                     got = cps.take(self.s, f"before {tool.name}", auto=True)
                     e = got[0] if isinstance(got, tuple) else got
                     self.checkpoint = e.get("id") if isinstance(e, dict) else None
+                    if self.checkpoint:
+                        keep.mark_call_checkpoint(tool.name, self.checkpoint, t=now)
                 except Exception:
                     pass
         self.start = (now, size, _maxrss_mb())
@@ -578,6 +580,8 @@ class Gate:
                 pass
 
     def after(self, tool, args, ok):
+        if getattr(self, "checkpoint", None):
+            keep.clear_call_checkpoint()
         stop = self._memory_stop(tool)
         if getattr(self, "sized", None) is not None:
             self._sized_after(tool, ok)

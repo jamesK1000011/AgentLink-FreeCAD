@@ -178,14 +178,32 @@ class Jobs:
         w = (args or {}).get("wait", 0)
         if isinstance(w, bool) or not isinstance(w, (int, float)) or w < 0:
             return {"error": {"code": "invalid_input", "message": f"wait: seconds to wait for it, 0 to {MAX_POLL_WAIT:.0f}."}}, True
-        if wait:
+        stop = (args or {}).get("stop")
+        if stop is not None and not isinstance(stop, bool):
+            return {"error": {"code": "invalid_input", "message": "stop: true to stop the job, or leave it out."}}, True
+        if wait and not stop:
             j["done"].wait(min(float(w), MAX_POLL_WAIT))
         out = self.summary(j)
+        if stop:
+            out["stop"] = self.stop_words(j)
         if j["status"] == "done":
             out["result"] = j.get("result")
         elif j["status"] == "failed":
             out["error"] = j.get("error")
         return out, False
+
+    def stop_words(self, j):
+        """job_status { job: "call-N", stop: true } (fault 89). A call-N job
+        runs on FreeCAD's own thread: nothing is injected there, so it cannot
+        stop in the middle. The words say so, and the next steps."""
+        if j["status"] != "running":
+            return f"Nothing to stop: the call is {j['status']}."
+        cp = checkpoint_since(j["started"])
+        lost = (f"The checkpoint {cp} from before the call is kept: tool_find {{ query: \"restore checkpoint\" }} finds the tool that goes back to it."
+                if cp else "Unsaved work in FreeCAD is lost. tool_find { query: \"recover documents\" } finds a tool that lists the copies FreeCAD kept.")
+        return (f"{j['tool']} ({j['job']}) runs on FreeCAD's own thread, so it cannot stop in the middle. Nothing was stopped. "
+                f"Next: wait for it (job_status {{ job: \"{j['job']}\", wait: 25 }}), "
+                f"or app_force_restart, which stops FreeCAD and starts it again. {lost}")
 
     def _prune(self):
         now = self.clock()
@@ -212,3 +230,14 @@ def job_start_inner(args):
     if not isinstance(inner, dict):
         return None
     return tool, dict(inner), (0.0 if a.get("wait") is False else None)
+
+
+def checkpoint_since(t):
+    """The checkpoint an add-on took before the call in hand, when it was
+    taken after t (keep.call_checkpoint), or None."""
+    try:
+        from . import keep
+
+        return keep.call_checkpoint(since=t)
+    except Exception:  # noqa: BLE001
+        return None

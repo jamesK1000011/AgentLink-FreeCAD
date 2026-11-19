@@ -1132,9 +1132,12 @@ const UPDATE_TOOL = {
  *  fresh: the restart was queued behind that call, not taken. A window held
  *  by a nested event loop that never ends kept its old pid through an
  *  update this way (live). { pid, busy } or null. */
-function windowHeld(hb, now = Date.now() / 1000) {
+function windowHeld(hb, now = Date.now() / 1000, answered = false) {
   if (!hb || typeof hb !== 'object' || !hb.pid || !hb.busy || hb.busy === 'app_restart') return null
-  if (!(now - Number(hb.t || 0) < 10)) return null
+  // A stale heartbeat that names a call, from a window that answered the
+  // pairing just now: FreeCAD's own thread is in one long step (fault 89),
+  // so it writes no heartbeat. Held too, not a window that is gone.
+  if (!(now - Number(hb.t || 0) < 10)) return answered ? { pid: hb.pid, busy: hb.busy, since: hb.busySince || null, stale: true } : null
   return { pid: hb.pid, busy: hb.busy, since: hb.busySince || null }
 }
 
@@ -1200,7 +1203,7 @@ function restartWindow() {
       // No answer: taken and saving (true), or queued behind a call that
       // holds the window (hung: the update stops it as app_force_restart
       // does, rather than leave the old FreeCAD running).
-      setTimeout(() => { const held = windowHeld(readHeartbeat()); finish(held ? { hung: held } : true); s.destroy() }, 8000)
+      setTimeout(() => { const held = windowHeld(readHeartbeat(), Date.now() / 1000, true); finish(held ? { hung: held } : true); s.destroy() }, 8000)
     })
   })
 }
@@ -1327,7 +1330,12 @@ function headless(exe, args, e, inst = {}) {
       words = r ? JSON.parse(r.content[0].text).note || null : null
     } catch {}
     log(`window held by ${held.busy} (pid ${held.pid}) at the update: force-restarted${words ? '' : ' (no answer)'}`)
-    return `The window was held by ${held.busy} and did not take the restart: it was stopped and started again as app_force_restart does${words ? ` — ${words}` : ' (it had not answered within 3 minutes; session_state shows how it stands)'}.`
+    const secs = held.since ? Math.max(0, Math.round(Date.now() / 1000 - Number(held.since))) : null
+    return `FreeCAD was busy with a long call (${held.busy}${secs !== null ? `, ${secs} s` : ''}) and did not take the restart. ` +
+      `The update stopped the window and started it again as app_force_restart does: work not saved in it is lost${words ? ` — ${words}` : ' (it did not answer within 3 minutes; session_state shows how it stands)'}. ` +
+      'Before the next update, let a long call end (job_status { job, wait: 25 }), or stop a background job with job_status { job, stop: true }. ' +
+      'A call that holds the window stops only with app_force_restart.'
+
   }
   const start = () => {
     // The add-ons' folders as installed now: an update may have brought one.
