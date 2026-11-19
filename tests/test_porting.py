@@ -572,6 +572,68 @@ class Cookbooks(Home):
             for m in ("minepkg.api", "minepkg"):
                 sys.modules.pop(m, None)
 
+    def addon_pkg(self):
+        """A stand-in add-on in a stand-in user Mod folder: Mod/Mine with
+        package.xml, and its package minepkg."""
+        mod = os.path.join(self.tmp, "Mod")
+        pkgdir = os.path.join(mod, "Mine", "minepkg")
+        os.makedirs(pkgdir)
+        with open(os.path.join(mod, "Mine", "package.xml"), "w") as f:
+            f.write("<package><name>Mine</name><version>1.0.0</version></package>")
+        with open(os.path.join(pkgdir, "__init__.py"), "w") as f:
+            f.write("")
+        with open(os.path.join(pkgdir, "api.py"), "w") as f:
+            f.write("import os\n\n\ndef fit(doc, gap):\n    return {'gap': gap, 'home': os.path.expanduser('~')}\n\n\n"
+                    "def boom(doc):\n    raise RuntimeError('token=sk-' + 'A' * 30 + ' at ' + os.path.expanduser('~/secret'))\n")
+        sys.path.insert(0, os.path.join(mod, "Mine"))
+        cookbook.ADDON_ROOTS = [mod]
+        self.addCleanup(setattr, cookbook, "ADDON_ROOTS", None)
+
+        def gone():
+            sys.path.remove(os.path.join(mod, "Mine"))
+            for m in ("minepkg.api", "minepkg"):
+                sys.modules.pop(m, None)
+
+        self.addCleanup(gone)
+        import importlib
+
+        importlib.invalidate_caches()
+        return pkgdir
+
+    def python_book(self):
+        return book(mine_fit={"description": "Fit the part with a gap in mm.", "recipe": {"python": {
+            "module": "minepkg.api", "function": "fit", "document": True,
+            "args": {"type": "object", "properties": {"gap": {"type": "number"}}, "required": ["gap"]}}}},
+            mine_boom={"description": "Make the add-on raise an error.", "recipe": {"python": {"module": "minepkg.api", "function": "boom", "document": True}}})
+
+    def test_the_approve_arguments_show_the_risk_and_the_scan(self):
+        # Red team 2, R2-1: the client's own prompt shows the tool arguments.
+        self.addon_pkg()
+        self.install(self.python_book())
+        r = self.call("cookbook_approve", name="mine")
+        a = r["approve"]["arguments"]
+        self.assertEqual(a["risk"], r["risk"])
+        self.assertTrue(a["scan"].startswith(f"risk {r['risk']}:"), a["scan"])
+        self.assertIn(r["scan"][0][:40], a["scan"])
+        self.assertIn("2 entries", a["what"])
+        self.assertIn("minepkg", a["what"])
+        self.assertTrue(a["addon"].startswith("sha256:"), a)
+
+    def test_a_changed_addon_needs_the_ok_again(self):
+        # Red team 2, R2-2: the OK binds the add-on folder's fingerprint.
+        pkgdir = self.addon_pkg()
+        self.install(self.python_book())
+        self.approve()
+        self.assertEqual(self.call("cookbook_run", cookbook="mine", entry="mine_fit", args={"gap": 1})["ran"], "python")
+        with open(os.path.join(pkgdir, "api.py"), "a") as f:
+            f.write("\n\ndef more(doc):\n    return 1\n")
+        msg = self.refused("cookbook_run", "not_allowed", cookbook="mine", entry="mine_fit", args={"gap": 1})
+        self.assertIn("add-on's code changed", msg)
+        self.assertIn("cookbook_approve", msg)
+        self.assertEqual(self.call("cookbook_list")["cookbooks"][0]["state"], "addon_changed")
+        self.approve()
+        self.assertEqual(self.call("cookbook_run", cookbook="mine", entry="mine_fit", args={"gap": 1})["ran"], "python")
+
     def test_export_then_import_elsewhere(self):
         with open(os.path.join(self.src, "steps.json"), "w") as f:
             json.dump([{"tool": "session_state", "arguments": {}}], f)
