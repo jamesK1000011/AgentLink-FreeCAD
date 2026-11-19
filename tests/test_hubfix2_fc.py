@@ -107,7 +107,12 @@ class Hubfix2(Base):
             self.skipTest("this FreeCAD takes a pad with no profile: no failing object to stand in")
         made = self.ok("sheet_new", {"name": "Fresh"})
         out = self.ok("sheet_set", {"sheet": made["made"], "cells": {"A1": 12}})
-        self.assertIn("still failing from before this call", out["health"]["verdict"])
+        # Said once in a conversation (agentlink/once.py): the call that saw
+        # it first says it, a later one names it in saidBefore.
+        said = [x["health"] for x in (made, out) if "still failing from before this call" in (x.get("health") or {}).get("verdict", "")]
+        self.assertTrue(said, (made.get("health"), out["health"]))
+        if said[0] is not out["health"]:
+            self.assertIn("failing", out["health"].get("saidBefore", []), out["health"])
         # A change that does break something new is still refused.
         e = self.refused("sheet_set", {"sheet": made["made"], "cells": {"B1": "=A1 +"}})
         self.assertNotIn("BadPad", e["message"])

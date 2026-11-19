@@ -72,9 +72,15 @@ class CoreGuards(unittest.TestCase):
         self.assertTrue(err)
 
     def test_extension_needs_the_person(self):
+        # The person's OK is approve_code, set in the client's tool
+        # permissions (agentlink/approvals.py): the first call is pending
+        # and changes nothing.
         err, e = self.call("app_extensions", {"action": "add", "repo": "someone/AgentLinkX"})
-        self.assertTrue(err)
-        self.assertIn("install someone/AgentLinkX", e["error"]["message"])
+        self.assertFalse(err, e)
+        self.assertTrue(e.get("pending"), e)
+        self.assertIs(e.get("changed"), False, e)
+        self.assertEqual(e["approve"]["tool"], "approve_code", e)
+        self.assertNotIn("someone/AgentLinkX", e.get("repos", []))
 
     def test_export_name_says_the_format(self):
         import Part

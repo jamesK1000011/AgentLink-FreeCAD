@@ -4,7 +4,7 @@ import json
 import os
 import unittest
 
-from _fc import HAVE, add_body, caller, server
+from _fc import BEFORE_1_1, HAVE, WHY_1_0, add_body, caller, server
 
 
 @unittest.skipUnless(HAVE, "FreeCAD is not importable here")
@@ -209,9 +209,11 @@ class DraftHardening(unittest.TestCase):
         self.assertIn("radius", self.refused("draft_shape", {"kind": "circle", "radius": 0}))
         self.assertIn("start, end", self.refused("draft_shape", {"kind": "arc", "radius": 5, "start": 10, "end": 370}))
         # Finding 78: each is Draft's own parametric object (FreeCAD 1.1's draftmake), not a plain shape.
+        # (A wire is a Part2DObjectPython in FreeCAD 1.0's Draft.)
+        wire_type = "Part::Part2DObjectPython" if BEFORE_1_1 else "Part::FeaturePython"
         for label, type_id, kind in (("Arc30", "Part::Part2DObjectPython", "Circle"), ("Hub", "Part::Part2DObjectPython", "Circle"),
                                      ("Frame", "Part::Part2DObjectPython", "Rectangle"), ("Hex", "Part::Part2DObjectPython", "Polygon"),
-                                     ("TieR", "Part::FeaturePython", "Wire"), ("Tri", "Part::FeaturePython", "Wire")):
+                                     ("TieR", wire_type, "Wire"), ("Tri", wire_type, "Wire")):
             o = self.obj(label)
             self.assertEqual((o.TypeId, getattr(getattr(o, "Proxy", None), "Type", "")), (type_id, kind), label)
         self.assertEqual((self.obj("Arc30").FirstAngle.Value, self.obj("Arc30").LastAngle.Value), (60, 120))
@@ -271,9 +273,10 @@ class DraftHardening(unittest.TestCase):
 
         from draftutils import utils
 
-        fixed = utils.repair_annotation_style(js.loads(self.session.doc.Meta["Draft_Style_Shop"]))  # raised ValueError on a name
-        self.assertEqual(fixed["ArrowTypeStart"], 3)
-        self.assertEqual(fixed["FontSize"], 6.0)
+        if hasattr(utils, "repair_annotation_style"):  # FreeCAD 1.1's Draft (1.0 has no such repair)
+            fixed = utils.repair_annotation_style(js.loads(self.session.doc.Meta["Draft_Style_Shop"]))  # raised ValueError on a name
+            self.assertEqual(fixed["ArrowTypeStart"], 3)
+            self.assertEqual(fixed["FontSize"], 6.0)
         self.assertIn("Tick-2", self.refused("draft_style", {"action": "set", "name": "Shop", "values": {"ArrowType": "Arrowhead"}}))
         ap = self.ok("draft_style", {"action": "apply", "name": "Shop", "objects": ["ToHexTop"]})
         self.assertEqual((ap.get("applied") or []) + (ap.get("recorded") or []), ["ToHexTop"])
@@ -281,6 +284,7 @@ class DraftHardening(unittest.TestCase):
             self.assertEqual(ap["applied"], ["ToHexTop"], ap)
         self.assertIn("Shop", self.refused("draft_style", {"action": "apply", "name": "Nope", "objects": ["ToHexTop"]}))
 
+    @unittest.skipIf(BEFORE_1_1, WHY_1_0 + " (Draft's join tolerance)")
     def test_4_modify(self):
         import math
 
@@ -314,6 +318,7 @@ class DraftHardening(unittest.TestCase):
         self.assertAlmostEqual(m["length"], 2 * math.pi * 10, places=2)
         self.assertAlmostEqual(self.obj(m["object"]).Shape.BoundBox.Center.y, -400, places=6)
 
+    @unittest.skipIf(BEFORE_1_1, WHY_1_0 + " (an object put in a second Draft layer stays in the first)")
     def test_5_views_hatch_layers_heal(self):
         import Part
 

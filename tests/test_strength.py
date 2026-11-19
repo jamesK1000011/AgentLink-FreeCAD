@@ -6,7 +6,7 @@ import math
 import shutil
 import unittest
 
-from _fc import HAVE, add_body, caller, server
+from _fc import BEFORE_1_1, HAVE, WHY_1_0, add_body, caller, server
 
 from agentlink import ccx_io
 
@@ -105,6 +105,7 @@ class Strength(unittest.TestCase):
         self.assertTrue(err)
         self.assertEqual(r["error"]["code"], "not_found")
 
+    @unittest.skipIf(BEFORE_1_1, WHY_1_0 + " (its Gmsh mesher makes no volume elements of the beam)")
     def test_2_cantilever(self):
         err, h = self.call("fea_hold", {"faces": {"normal": [-1, 0, 0], "x": 0}})
         self.assertFalse(err, h)
@@ -189,6 +190,7 @@ class Strength(unittest.TestCase):
         err, r = self.call("fea_heat", {"heat": [{"faces": {"normal": [1, 0, 0], "x": 100}, "watts": 1}], "air": False})
         self.assertTrue(err)
 
+    @unittest.skipIf(BEFORE_1_1, WHY_1_0 + " (its Gmsh mesher makes no volume elements of the beam)")
     def test_4_hardening(self):
         # From FreeCAD 1.1's FEM source, 16 Nov 2026: a load that loads nothing is refused;
         # self weight goes to FreeCAD's constraint by its 1.1 properties (GravityAcceleration,

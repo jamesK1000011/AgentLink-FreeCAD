@@ -141,8 +141,11 @@ class Unattended(Base):
         self.assertNotIn("AgentLinkTestAddon", [x["name"] for x in self.ok("addon", {"action": "list"})["installed"]])
 
     def test_13_machine_queue_and_estimates(self):
-        from agentlink import keep
+        from agentlink import keep, once
 
+        # The machine is said once in a conversation (agentlink/once.py):
+        # an earlier test of this class read session_state already.
+        once.reset(self.session)
         st = self.ok("session_state")
         self.assertIn("heavySlots", st["machine"])
         self.assertTrue(self.ok("queue_go")["go"])

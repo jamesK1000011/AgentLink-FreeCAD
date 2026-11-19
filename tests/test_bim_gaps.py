@@ -4,7 +4,7 @@ import json
 import os
 import unittest
 
-from _fc import HAVE, add_body, caller, server
+from _fc import BEFORE_1_1, HAVE, WHY_1_0, add_body, caller, server
 
 try:
     import Arch  # noqa: F401
@@ -270,6 +270,7 @@ class BimHardening(unittest.TestCase):
         self.assertEqual(n["rotations"], [0, 90])
         self.assertIn("not applied", n["margin"])
 
+    @unittest.skipIf(BEFORE_1_1, WHY_1_0 + " (Arch's wall join reaches for the window: Arch.py 'NoneType' has no 'show')")
     def test_11_join_keeps_the_last_wall(self):
         self.ok("bim_wall", {"points": [[60000, 0], [63000, 0], [63000, 2000]], "name": "H join a"})
         self.ok("bim_wall", {"points": [[63000, 2000], [60000, 2000]], "name": "H join b"})

@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Agent Link's own tests, installed with Agent Link for OrcaSlicer only (no
 # ScanRuler for FreeCAD, no Collab: a hidden dependency fails here straight away), on the newest
-# FreeCAD conda-forge has (1.1.x, what the Mac runs) and the newest 1.0, with PrusaSlicer and
+# FreeCAD 1.1 conda-forge has (1.1.x, what the Mac runs; conda-forge's plain "freecad" is now a
+# weekly build, 26.3 in Nov 2026, not a release) and the newest 1.0, with PrusaSlicer and
 # the latest OrcaSlicer for the slicing tests. The coverage audit runs in
 # ScanRuler's CI; the bake-off that gates the Claude extension's pins is
 # bakeoff.yml here, and a push that only touches packaging/ (a pin bump, the
@@ -30,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        series: ['newest', '1.0']
+        series: ['1.1', '1.0']
     name: freecad-${{ matrix.series }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -57,7 +58,7 @@ jobs:
           environment-name: fc-${{ matrix.series }}
           create-args: >-
             -c conda-forge
-            ${{ matrix.series == 'newest' && 'freecad' || format('freecad={0}', matrix.series) }}
+            freecad=${{ matrix.series }}
             python=3.11
             calculix
             gmsh
