@@ -290,7 +290,17 @@ How it works inside: [docs/workflow/approvals.md](https://github.com/jamesK10000
 - the Addon Manager preferences with the custom repository added
 -->
 
-No screenshots yet.
+![A project box made by Workshop, with the Agent Link panel beside the model tree](https://github.com/jamesK1000011/AgentLink-FreeCAD/raw/main/docs/images/panel-project-box.png)
+
+*A project box and lid made in one call (Workshop's `gen_part`). The Agent Link panel shows the link, the notes and the token meter.*
+
+![A Tutor lesson in guided mode: the callout, the ringed Model tab and the Tutor tab](https://github.com/jamesK1000011/AgentLink-FreeCAD/raw/main/docs/images/tutor-guided-step.png)
+
+*A Tutor lesson, guided: the callout says what to do, a numbered ring points at the control, and the step is checked against the document.*
+
+![The project box with knurled walls from Texturizer](https://github.com/jamesK1000011/AgentLink-FreeCAD/raw/main/docs/images/texturizer-knurled-box.png)
+
+*The same box with a knurled texture on its walls (Texturizer: BumpMesh by Stefan Hermann, CNC Kitchen).*
 
 ## What the agent can do
 
