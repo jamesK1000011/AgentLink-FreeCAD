@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # The Activity tab's words: what each call did, as a short plain sentence a
-# person reads at a glance ("Saved WindowTest", "Clicked Pin a Note, clicked
+# person reads at a glance ("Saved WindowTest", "Clicked Pin a note, clicked
 # the part"), and what came of it ("Pad made, 24000 mm³", "Refused: …").
 # Never raw arguments, brackets or a file's folders: a path shows as its file
 # name, and a home folder never shows at all.

@@ -548,6 +548,7 @@ tests/test_once.py
 tests/test_outputs.py
 tests/test_overlay.py
 tests/test_owner_services.py
+tests/test_panel_polish.py
 tests/test_panel_tabs.py
 tests/test_param.py
 tests/test_part_hardening.py

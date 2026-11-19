@@ -986,7 +986,7 @@ def did_name(name):
 
 def _describe(name, args, body=None, template=None):
     """A tool call in words a person reads at a glance, the same as the
-    Activity tab says it ("Padded Sketch by 20 mm", "Clicked Pin a Note"):
+    Activity tab says it ("Padded Sketch by 20 mm", "Clicked Pin a note"):
     agentlink/activity.py, never raw arguments or a folder. body: the
     call's answer, once there is one (the words then name what it made);
     template: the tool's own words (its "activity")."""

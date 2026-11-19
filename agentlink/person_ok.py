@@ -203,7 +203,7 @@ def _show_qt(req):
 
     dlg = Dialog(FreeCADGui.getMainWindow())
     dlg.setObjectName(OBJECT_NAME)
-    dlg.setWindowTitle("Agent Link: your OK")
+    dlg.setWindowTitle("Agent Link: approve or decline")
     dlg.setModal(False)
     dlg.setWindowFlags(dlg.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
     # The dialog opens without focus: keys typed for the window stay there.
@@ -216,6 +216,7 @@ def _show_qt(req):
     lay.addWidget(head)
     body = QtWidgets.QPlainTextEdit()
     body.setReadOnly(True)
+    body.setToolTip("Read what the agent asks for. You cannot change this text.")
     facts = [f"{k}: {v}" for k, v in (req.get("args") or {}).items() if k != "what"]
     body.setPlainText("\n".join(facts + [""] + req["lines"] + ["", DATA_NOTE]))
     lay.addWidget(body)
@@ -226,10 +227,12 @@ def _show_qt(req):
     row = QtWidgets.QHBoxLayout()
     no = QtWidgets.QPushButton("Decline")
     no.setDefault(True)
+    no.setToolTip("Do not let the agent do this.")
     no.setFocusPolicy(QtCore.Qt.NoFocus)
     no.clicked.connect(dlg.reject)
     yes = Approve("Approve")
     yes.setAutoDefault(False)
+    yes.setToolTip("Let the agent do this. Click with the mouse; a key does not approve.")
     yes.setFocusPolicy(QtCore.Qt.NoFocus)
     yes.setEnabled(False)
     row.addWidget(no)
