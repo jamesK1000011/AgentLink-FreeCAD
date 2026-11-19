@@ -498,6 +498,7 @@ tests/test_guideidx.py
 tests/test_guides.py
 tests/test_health.py
 tests/test_health_fc.py
+tests/test_heavy_findings_1118.py
 tests/test_heavy_memory.py
 tests/test_hidden_parts.py
 tests/test_history_diff_fc.py
@@ -528,7 +529,6 @@ tests/test_live_person_1118.py
 tests/test_live_run.py
 tests/test_loft_findings.py
 tests/test_loft_spans.py
-tests/test_m18_heavy_findings.py
 tests/test_material.py
 tests/test_mcp_contract.py
 tests/test_measure.py

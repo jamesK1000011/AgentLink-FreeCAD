@@ -723,6 +723,6 @@
   "meshobj_from_shape method netgen: answers unavailable where FreeCAD was built without Netgen (not known for the Mac's build)",
   "meshobj_repair's other steps (nonmanifolds, selfintersections, folds, degenerate, pointsonedges, islands) on a mesh that has those faults: none can be made through the tools; tests/test_meshobj.py test_5 builds one",
   "meshobj_split's 100-piece guard, meshobj_refine's 2,000,000 guard and the heavy note of meshobj_from_shape: need a mesh too large for a quick model",
-  "Timings on a dense scan (meshobj_info, meshobj_repair, meshobj_boolean, meshobj_segments past 200,000 triangles): not measured anywhere; time them on the M18 scan"
+  "Timings on a dense scan (meshobj_info, meshobj_repair, meshobj_boolean, meshobj_segments past 200,000 triangles): not measured anywhere; time them on a large scan"
  ]
 }

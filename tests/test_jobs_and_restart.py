@@ -136,8 +136,8 @@ class PinTest(unittest.TestCase):
         pin = {"name": "Lesson", "label": "bike-stem-1", "file": "/x/l.FCStd"}
         docs = [{"name": "Other", "label": "Other", "file": "/x/o.FCStd"}, {"name": "Lesson001", "label": "bike-stem-1", "file": "/x/l.FCStd"}]
         self.assertEqual(window_watch.pin_target(pin, docs), "Lesson001")
-        pin2 = {"name": "M", "label": "M18", "file": ""}
-        self.assertEqual(window_watch.pin_target(pin2, [{"name": "M001", "label": "M18 (recovered 12:00)", "file": "/tmp/a"}]), "M001")
+        pin2 = {"name": "M", "label": "Shell", "file": ""}
+        self.assertEqual(window_watch.pin_target(pin2, [{"name": "M001", "label": "Shell (recovered 12:00)", "file": "/tmp/a"}]), "M001")
         self.assertIsNone(window_watch.pin_target(pin2, [{"name": "Z", "label": "Z"}]))
 
 

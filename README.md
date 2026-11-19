@@ -46,6 +46,32 @@ Some words used here:
 - **Headless**: FreeCAD runs with no window. The agent works, but you see nothing on screen.
 - **Add-on**: an extra part for FreeCAD that adds tools. Agent Link is an add-on, and other add-ons add tools to it.
 
+## How it works
+
+```mermaid
+flowchart LR
+  A["Your AI app<br/>(Claude Desktop, Claude Code …)"] -->|MCP| L["Agent Link launcher"]
+  L --> S["Supervisor<br/>(watches FreeCAD, keeps calls safe)"]
+  S -->|window open| W["Your FreeCAD window<br/>(you see each step live)"]
+  S -->|window closed| H["Hidden FreeCAD<br/>(works in the background)"]
+  W --> F["FreeCAD's own workbenches<br/>and installed add-ons"]
+  H --> F
+```
+
+- Your AI app sends each request to Agent Link through MCP (the Model Context Protocol).
+- The supervisor sends it to your FreeCAD window when it is open, or to a hidden FreeCAD when it is not.
+- The tool does the work with FreeCAD's own commands. In the window, you see the workbench change, the button light and the result selected. Your mouse and keyboard stay yours.
+- File actions and code runs stop and ask you first (see [Approvals](#approvals)).
+- The full path of one call, with the parts named: [docs/workflow/call-flow.md](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/workflow/call-flow.md).
+
+### Tested on
+
+- Every lesson that Tutor ships runs to the end in demo mode in a real FreeCAD 1.1.3 window on a Mac.
+- All the add-ons installed together pass their tests on FreeCAD 1.1 and 1.0 (the bake-off in CI).
+- A laser-cut plate with holes: nested on a sheet with FreeCAD's BIM Nest, offset by the kerf, written as DXF and SVG and read back.
+- A STEP export read back with the same volume; an expression typed into a task panel field ("=2*3") kept by the feature.
+- What the tool list costs in tokens, and how much of FreeCAD is covered: see [the numbers](#what-the-agent-can-do) below (made by `scripts/stats.py`, never typed by hand).
+
 ## What you need
 
 - **FreeCAD 1.0 or later.** FreeCAD 1.1 is recommended. Get it from [freecad.org/downloads](https://www.freecad.org/downloads.php).

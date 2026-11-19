@@ -66,7 +66,7 @@ FAKE_WINDOW = textwrap.dedent('''
         state["docs"] = [{"name": "Plate_recovered", "label": "Plate (recovered 10:00)", "file": os.path.join(tmp, "agentlink-recovered-new", "Plate_recovered.FCStd")},
                          {"name": "Old_recovered", "label": "Old (recovered 00:17)", "file": os.path.join(tmp, "agentlink-recovered-old", "Old_recovered.FCStd")}]
     if "--unsaved" in sys.argv:
-        # Started again after a hang (M18, 18 Nov): FreeCAD's own copy of a
+        # Started again after a hang (live build, 18 Nov): FreeCAD's own copy of a
         # document never saved, named otherwise than app_recover's answer,
         # and an old recovered copy from a temporary folder.
         import tempfile
@@ -599,7 +599,7 @@ class RestartSavedReopened(Sup):
         self.assertEqual(rec[-1]["docs"].count("StemV2"), 1)
 
 
-# Live, M18 (18 Nov): after the watchdog stopped FreeCAD, the restart
+# Live (18 Nov): after the watchdog stopped FreeCAD, the restart
 # recovered "M18Build (recovered)" and then closed it as a stray; the
 # document was never saved, so its work was lost. A copy of a document
 # never saved is kept open, and the answer says so.
@@ -625,7 +625,7 @@ class RestartKeepsUnsavedCopy(Sup):
         self.assertEqual(ev[-1]["closed"], ["Old (recovered 00:17)"])
 
 
-# Live, M18 (18 Nov): the watchdog log said pressed: cancel, yet Document
+# Live (18 Nov): the watchdog log said pressed: cancel, yet Document
 # Recovery stayed up about 5 min; a dialog_answer { button: Cancel } then
 # freed the window. The supervisor verifies it and answers it again.
 class RestartRecoveryDialogStuck(Sup):

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Found rebuilding a scanned pistol shell from 26 closed scan sections (live
+# Found rebuilding a scanned hand-held shell from 26 closed scan sections (live
 # test drive, 16 Nov 2026): a loft of two neighbouring B-spline sections
 # failed in OCC, smooth lofts of 5–26 were refused as bulging 16–73%, a
 # ruled loft of the same B-splines failed while polygons of 24 points

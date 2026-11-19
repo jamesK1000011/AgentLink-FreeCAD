@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Findings 33-39 of the M18 live build (18 Nov 2026), without FreeCAD:
+# Findings 33-39 of the 18 Nov live build (18 Nov 2026), without FreeCAD:
 # heavy changes estimated first (insp_run, part_from_mesh, export), a big
 # export sent to a job, a boolean sized by the face pairs whose boxes meet,
 # a batch's start-time guess scaled by input size, part_from_mesh's note
@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 
 class Home(unittest.TestCase):
     def setUp(self):
-        self.home = tempfile.mkdtemp(prefix="agentlink-m18-")
+        self.home = tempfile.mkdtemp(prefix="agentlink-heavy-")
         self.env = {k: os.environ.get(k) for k in ("AGENTLINK_HOME", "AGENTLINK_GATE")}
         os.environ["AGENTLINK_HOME"] = self.home
         os.environ["AGENTLINK_GATE"] = "1"
@@ -110,7 +110,7 @@ class Tool:
 
 
 def smooth_loft():
-    """Body032 of the M18 build: a 3-face smooth loft (one B-spline side of
+    """Body032 of the 18 Nov build: a 3-face smooth loft (one B-spline side of
     many poles, two flat caps)."""
     return Obj("Body032", Shape([Face(BSpline(91, 80)), Face(), Face()], area=20000.0, box=Box((0, 0, 0), (40, 30, 160))))
 
