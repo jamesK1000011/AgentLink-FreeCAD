@@ -118,3 +118,43 @@ class AgentLinkState(unittest.TestCase):
             paths.guard(T("export"), {"path": os.path.join(self.home, "part.step")}, tempfile.mkdtemp())
         # Reading the state stays open.
         paths.guard(T("import_file"), {"path": os.path.join(self.home, "settings.json")}, self.home)
+
+    def test_ordinary_output_at_the_top_of_the_home_is_open(self):
+        # outDir ~/AgentLink (the Mac): exports, batch "to" files, reports
+        # and chained JSON at the top of the output folder are written.
+        out = self.home
+        for name in ("part.step", "part.stl", "plate.3mf", "view.png", "qa-r213-to.json", "report.json",
+                     "chain.json", "notes.log", "data.jsonl", "settings-copy.json", "my-settings.json"):
+            paths.guard(T("export"), {"path": os.path.join(out, name)}, out)
+            paths.check("batch", "calls.1.to", name, out, True)
+            paths.check("batch", "to", os.path.join(out, name), out, True)
+
+    def test_state_names_and_their_copies_are_refused(self):
+        out = self.home
+        for name in ("settings.json.tmp", "queue.lock", "heartbeat.json", "printers.json", "outputs.jsonl",
+                     ".outputs-clean.json", "watchdog.log", "settings/a.json", "Settings-Log.jsonl"):
+            with self.assertRaises(ToolError, msg=name):
+                paths.check("batch", "to", os.path.join(out, name), out, True)
+
+    def test_the_output_record_is_refused_in_any_output_folder(self):
+        out = tempfile.mkdtemp()
+        for name in ("outputs.jsonl", ".outputs-clean.json"):
+            with self.assertRaises(ToolError, msg=name):
+                paths.check("batch", "to", name, out, True)
+        paths.check("batch", "to", os.path.join("sub", "outputs.jsonl"), out, True)
+
+    def test_printer_keys_are_never_read(self):
+        # The printers file (API keys): no tool reads, packs, imports
+        # or exports it; writes are refused too.
+        for args in ({"path": os.path.join(self.home, "printers.json")}, {"file": os.path.join(self.home, "PRINTERS.JSON")},
+                     {"files": [os.path.join(tempfile.mkdtemp(), ".agentlink-printers.json")]},
+                     {"path": "~/.agentlink-printers.json"}):
+            with self.assertRaises(ToolError, msg=args):
+                paths.guard(T("import_file"), args, self.home)
+            with self.assertRaises(ToolError, msg=args):
+                paths.guard(T("export"), args, self.home)
+        # A printers.json elsewhere (an add-on's own data) stays readable.
+        paths.guard(T("import_file"), {"path": os.path.join(tempfile.mkdtemp(), "printers.json")}, self.home)
+
+    def test_cookbook_probes_is_not_a_state_folder(self):
+        self.assertNotIn("cookbook-probes", paths.STATE_DIRS)
