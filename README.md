@@ -63,6 +63,7 @@ flowchart LR
 - The tool does the work with FreeCAD's own commands. In the window, you see the workbench change, the button light and the result selected. Your mouse and keyboard stay yours.
 - File actions and code runs stop and ask you first (see [Approvals](#approvals)).
 - The full path of one call, with the parts named: [docs/workflow/call-flow.md](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/workflow/call-flow.md).
+- What goes over the wire in one session, step by step, with the token cost of each step: [docs/workflow/session.md](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/workflow/session.md).
 
 ### Tested on
 

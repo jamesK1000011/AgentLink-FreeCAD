@@ -336,6 +336,7 @@ docs/workflow/approvals.md
 docs/workflow/batch.md
 docs/workflow/call-flow.md
 docs/workflow/reading-freecad.md
+docs/workflow/session.md
 package.xml
 pyproject.toml
 scripts/hardening_status.py

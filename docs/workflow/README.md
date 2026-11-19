@@ -9,6 +9,7 @@ Each step names its module and its function, so you can find it in the code.
 3. [How a batch runs](batch.md): rollback, stopOnError, the held build, the budget, jobs, chaining, and a menu or dialog inside a batch.
 4. [How add-ons plug in](addons.md): `agentlink_families`, tool data, groups, no cost when not installed, the launcher's pins, third-party add-ons.
 5. [How approvals work](approvals.md): `approve_code` and `approve_file`, what asks, what is shown, what binds, and what cannot approve.
+6. [What goes over the wire in one session](session.md): `initialize`, `tools/list` and the six base tools, `tool_find`, one chained `batch`, the answer, approvals and jobs, with the tokens for each step.
 
 The add-ons have a page of their own each:
 

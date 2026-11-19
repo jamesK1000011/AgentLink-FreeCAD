@@ -3,6 +3,7 @@
 
 This page tells how one tool call goes from the MCP client to FreeCAD and back.
 Each box names its module and its function. The names are from the code at the commit of this page.
+For the messages themselves (`initialize`, `tools/list`, `tool_find`, `batch` and their answers), see [session.md](session.md).
 
 ## The parts
 
