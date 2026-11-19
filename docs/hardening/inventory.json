@@ -68,6 +68,6 @@
 "snapshot": {"workbench": "ScanRuler", "repo": "ScanRuler-FreeCAD", "tools": ["scan_snapshot_latest","scan_snapshot_list","scan_snapshot_wait"]},
 "thickness": {"workbench": "ScanRuler", "repo": "ScanRuler-FreeCAD", "tools": ["thickness_measure","thickness_settings"]},
 "wear": {"workbench": "ScanRuler", "repo": "ScanRuler-FreeCAD", "tools": ["wear_diff","wear_prewarp","wear_rebuild","wear_setup"]},
-"porting": {"workbench": "Porting", "repo": "AgentLink-FreeCAD", "tools": ["cookbook_approve","cookbook_export","cookbook_import","cookbook_list","cookbook_probe","cookbook_run","cookbook_show","cookbook_unapprove","port_scaffold"]}
+"porting": {"workbench": "Porting", "repo": "AgentLink-FreeCAD", "tools": ["cookbook_approve","cookbook_export","cookbook_import","cookbook_list","cookbook_run","cookbook_show","cookbook_unapprove","port_scaffold"]}
 }
 }

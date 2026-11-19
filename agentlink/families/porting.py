@@ -11,7 +11,6 @@
 # listing is the same as before.
 
 import json
-import os
 
 from .. import cookbook, porting, runners
 from .. import paths
@@ -22,9 +21,7 @@ INFO = "Port an add-on to Agent Link: a draft port from its commands (port_scaff
 
 WRITERS = {"cookbook_export"}
 AREAS = {"port_": "Porting", "cookbook_": "Cookbooks"}
-NO_ECHO = ("port_scaffold", "cookbook_list", "cookbook_show", "cookbook_import", "cookbook_export", "cookbook_approve", "cookbook_unapprove",
-           "cookbook_probe")
-MAX_PROBES = 50
+NO_ECHO = ("port_scaffold", "cookbook_list", "cookbook_show", "cookbook_import", "cookbook_export", "cookbook_approve", "cookbook_unapprove")
 
 
 def _refusing(fn):
@@ -98,148 +95,8 @@ def tools(session):
     def run_script(calls):
         return _answer(s.server.call({"name": "batch", "arguments": {"calls": calls, "rollback": True}}))
 
-    # ---- schema v2 (agentlink/cookbook2.py): the FreeCAD side is agentlink/cookbook_fc.py ----
-
-    def _app():
-        try:
-            import FreeCAD
-
-            return FreeCAD
-        except ImportError:
-            return None
-
-    def _gui():
-        App = _app()
-        if App is None or not getattr(App, "GuiUp", False):
-            return None
-        import FreeCADGui
-
-        return FreeCADGui
-
-    def _doc():
-        App = _app()
-        return getattr(App, "ActiveDocument", None) if App is not None else getattr(s, "doc", None)
-
-    def v2_state(picks):
-        from .. import cookbook_fc
-
-        App = _app()
-        if App is None:
-            return {"document": _doc() is not None, "selection": list(picks), "types": {}}
-        return cookbook_fc.state(App, _gui(), picks)
-
-    def v2_snapshot(doc=None):
-        from .. import cookbook_fc
-
-        return cookbook_fc.snapshot(doc if doc is not None else _doc())
-
-    def v2_function(call, values, inputs, doc=None):
-        """The add-on's own function, by import inside its package
-        (cookbook.resolve_function), with checked keyword inputs only."""
-        from .. import cookbook_fc
-
-        fn = cookbook.resolve_function(call["module"], call["name"])
-        d = doc if doc is not None else _doc()
-        try:
-            kw = cookbook_fc.kwargs(d, inputs, values)
-        except cookbook_fc.PickError as e:
-            raise ToolError("invalid_input", f"{e}. Nothing was run.")
-        if call.get("document"):
-            if d is None:
-                raise ToolError("invalid_state", "The entry needs a document: doc_new or doc_open first. Nothing was run.")
-            kw[call["document"]] = d
-        got = fn(**kw)
-        if d is not None and hasattr(d, "recompute"):
-            d.recompute()
-        return got
-
-    def v2_form(form, values, wb):
-        """A task panel's fields filled from data, then its accept button:
-        no clicks of the person's cursor (agentlink/cookbook_fc.py)."""
-        if _gui() is None:
-            raise ToolError("unavailable", "A form entry needs the FreeCAD window (a task panel). Headless, call a level 1 entry. Nothing was run.")
-        from .. import cookbook_fc, gui_link
-
-        said = run_bench(wb, form["command"])
-        run_command(form["command"], 0)
-        info = gui_link.task_info()
-        if not info:
-            raise ToolError("invalid_state", f"{form['command']} opened no task panel. The add-on version may differ. Nothing more was done.")
-        fields = {w: (values.get(f["input"]) if "input" in f else f["value"]) for w, f in form.get("fields", {}).items()
-                  if "value" in f or f.get("input") in values}
-        try:
-            shown = cookbook_fc.fill(info["widget"], fields)
-        except cookbook_fc.FormError as e:
-            gui_link.press_task(info, "Cancel")
-            raise ToolError("invalid_input", f"{e}. The task panel was closed with Cancel.")
-        if not gui_link.press_task(info, form.get("accept", "OK")):
-            raise ToolError("invalid_state", f"The task panel has no {form.get('accept', 'OK')} button. It is still open: dialog_answer reads it.")
-        return {"filled": shown, "pressed": form.get("accept", "OK"), **({"workbench": said} if said else {})}
-
-    def v2_runners():
-        return {"state": v2_state, "snapshot": v2_snapshot, "function": v2_function, "form": v2_form, "command": run_command, "workbench": run_bench,
-                "doc_name": lambda: getattr(_doc(), "Name", None)}
-
     def run_entry(name, entry, args):
-        return cookbook.run(name, entry, args or {}, {"command": run_command, "python": run_python, "script": run_script, "workbench": run_bench,
-                                                      **v2_runners()}, names())
-
-    def probe(name, entry=None):
-        """Each entry once, headless, in a hidden scratch document; the
-        result kept in ~/AgentLink/cookbook-probes/<name>.json (never in the
-        cookbook file, so the OK holds). Levels 2 and 4 need the window:
-        a cookbook_run there records its result too."""
-        from .. import cookbook2, cookbook_fc
-
-        doc, sha, problems = cookbook.load(name, names())
-        if cookbook.major(doc) != cookbook2.VERSION_MAJOR:
-            raise ToolError("invalid_input", f"{name} is a format 1 cookbook. cookbook_probe reads format 2; port_scaffold drafts one.")
-        if not cookbook.is_approved(name, sha):
-            raise ToolError("not_allowed", f"{name} is not probed: a probe runs the add-on's code. {cookbook.next_words(name)} Nothing was run.")
-        if problems:
-            raise ToolError("invalid_input", f"{name} has faults: " + "; ".join(problems[:4]) + ". Nothing was run.")
-        ents = doc["entries"]
-        if entry is not None and entry not in ents:
-            raise ToolError("not_found", f"{name} has no entry {str(entry)[:48]!r}.")
-        pkg = (doc.get("addon") or {}).get("package")
-        version = cookbook.installed_version(pkg) if pkg else None
-        App = _app()
-        rows = []
-        for k in ([entry] if entry else list(ents)[:MAX_PROBES]):
-            e = ents[k]
-            lv = e["level"]
-            if lv == 5:
-                rows.append({"entry": k, "result": "skip", "why": "not supported: " + str(e.get("blocker", ""))[:120]})
-                continue
-            if lv == 3:
-                r = cookbook.record_probe(name, k, "pass", version, "branches read; a tree runs no code")
-            elif lv in (2, 4):
-                r = {"result": "skip", "why": "needs the window: run it once with cookbook_run, which records the result"}
-            elif App is None:
-                r = {"result": "skip", "why": "no FreeCAD here"}
-            else:
-                r = _probe_one(name, k, e, App, version, cookbook_fc, cookbook2)
-            rows.append({"entry": k, **r})
-        cov = cookbook2.coverage(doc, cookbook.probes_of(name), version)
-        return {"cookbook": name, "addonVersion": version, "probes": rows, "coverage": cov["bars"],
-                "note": "Probes ran in a hidden scratch document, closed after. The cookbook file is not changed."}
-
-    def _probe_one(name, k, e, App, version, cookbook_fc, cookbook2):
-        with cookbook_fc.scratch(App) as d:
-            vals, why = cookbook_fc.probe_values(App, d, e.get("inputs"))
-            if vals is None:
-                return {"result": "skip", "why": why}
-            try:
-                values = cookbook2.check_inputs(e.get("inputs"), vals)
-                before = cookbook_fc.snapshot(d)
-                got = v2_function(e["call"]["function"], values, e.get("inputs") or {}, d)
-                faults = cookbook2.result_faults((e.get("result") or {}).get("check"), before, cookbook_fc.snapshot(d), got)
-            except Exception as x:  # noqa: BLE001 - the add-on's fault, or a guard's refusal
-                msg = getattr(x, "message", None) or f"{type(x).__name__}: {x}"
-                return cookbook.record_probe(name, k, "fail", version, cookbook.clean_text(msg, 200))
-            if faults:
-                return cookbook.record_probe(name, k, "fail", version, "; ".join(faults))
-            return cookbook.record_probe(name, k, "pass", version)
+        return cookbook.run(name, entry, args or {}, {"command": run_command, "python": run_python, "script": run_script, "workbench": run_bench}, names())
 
     def export(name, path):
         doc, sha = cookbook.export_doc(name, names())
@@ -257,24 +114,17 @@ def tools(session):
 
     def importing(path, overwrite=False):
         p = paths.local(s, path)
-        if not os.path.exists(p):
-            # A port folder named either way (my-addon-v2 / my_addon_v2): the scaffold's spelling.
-            d, f = os.path.split(p)
-            alt = os.path.join(os.path.dirname(d), cookbook.canon(os.path.basename(d)), f)
-            if alt != p and os.path.exists(alt):
-                p = alt
         return cookbook.import_file(p, bool(overwrite), names())
 
     # What the tools' entries (agentlink/data/tools.json, group "porting") call by name.
     helpers = {
         "scaffold": _refusing(scaffold),
         "cookbooks": _refusing(lambda: cookbook.listing(names())),
-        "cookbook_of": _refusing(lambda name: cookbook.show(cookbook.canon(name), names())),
+        "cookbook_of": _refusing(lambda name: cookbook.show(name, names())),
         "import_cookbook": _refusing(importing),
-        "export_cookbook": _refusing(lambda name, path: export(cookbook.canon(name), path)),
-        "approve_cookbook": _refusing(lambda name, sha=None: cookbook.approve(cookbook.canon(name), sha, names())),
-        "unapprove_cookbook": _refusing(lambda name: cookbook.unapprove(cookbook.canon(name))),
-        "run_entry": _refusing(lambda name, entry, args: run_entry(cookbook.canon(name), entry, args)),
-        "probe_cookbook": _refusing(lambda name, entry=None: probe(cookbook.canon(name), entry)),
+        "export_cookbook": _refusing(export),
+        "approve_cookbook": _refusing(lambda name, sha=None: cookbook.approve(name, sha, names())),
+        "unapprove_cookbook": _refusing(lambda name: cookbook.unapprove(name)),
+        "run_entry": _refusing(run_entry),
     }
     return runners.tools(GROUP, s, helpers)

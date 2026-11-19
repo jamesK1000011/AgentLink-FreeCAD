@@ -80,8 +80,6 @@ def answered(job):
 IN_PLACE = {
     # the person's OK dialog (agentlink/person_ok.py) is a Qt window: made on the GUI thread only
     "cookbook_approve": "shows the person's OK dialog in the window",
-    # cookbook v2 (agentlink/cookbook2.py): the add-on's own code, in a scratch document
-    "cookbook_probe": "makes and closes a hidden scratch document, and runs the add-on's functions in it",
     # poses placed, recomputed and put back (assembly.py sweep_run; assembly_more.py)
     "asm_sweep": "moves the parts through each pose and puts them back",
     "asm_motion": "moves the parts through each frame",
