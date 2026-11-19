@@ -208,8 +208,8 @@ def declared(fams):
 
 
 def owned(fam, names):
-    """An add-on family's GEOMETRIC, PINNED_FREE, HEAVY and NOT_IN_MACROS,
-    for the tools it made and that loaded (names); a name of another's tool
+    """An add-on family's GEOMETRIC, PINNED_FREE, HEAVY, NOT_IN_MACROS,
+    PATH_KEYS and WRITE_KEYS, for the tools it made and that loaded (names); a name of another's tool
     is left out, said."""
     from .. import keep, paths
 
@@ -230,6 +230,22 @@ def owned(fam, names):
                 sys.stderr.write(f"Agent Link: {getattr(fam, 'EXTENSION', '?')} declares {x} in {attr}, but {x} is not its tool — left out\n")
     if heavy:
         keep.declare_heavy(heavy)
+    # PATH_KEYS and WRITE_KEYS: {tool: ["texture.file", "profiles.*", ...]},
+    # its other fields that hold a file it reads or writes (red team 3, R3-10).
+    for attr, kind in (("PATH_KEYS", "read"), ("WRITE_KEYS", "write")):
+        v = getattr(fam, attr, None) or {}
+        if not isinstance(v, dict):
+            sys.stderr.write(f"Agent Link: {getattr(fam, 'EXTENSION', '?')} declares {attr} as {type(v).__name__}, not {{tool: [fields]}} — left out\n")
+            continue
+        for tool, keys in v.items():
+            if tool not in names:
+                sys.stderr.write(f"Agent Link: {getattr(fam, 'EXTENSION', '?')} declares {tool} in {attr}, but {tool} is not its tool — left out\n")
+                continue
+            if isinstance(keys, str):
+                keys = [keys]
+            bad = paths.declare_keys(tool, **{kind: list(keys or ())})
+            if bad:
+                sys.stderr.write(f"Agent Link: {getattr(fam, 'EXTENSION', '?')} declares {bad} in {attr} for {tool}: not field names — left out\n")
 
 
 # What an add-on may never say of the hub's tools and groups (the owner, 18 Nov
