@@ -95,7 +95,8 @@ jobs:
           name=$(gh api repos/OrcaSlicer/OrcaSlicer/releases/latest -q '[.assets[].name | select(endswith(".AppImage"))] | map(select(test("aarch64") | not)) | (map(select(test("2404"))) + .)[0]')
           gh release download --repo OrcaSlicer/OrcaSlicer --pattern "$name" --dir "$RUNNER_TEMP/orca"
           cd "$RUNNER_TEMP/orca" && chmod +x "$name" && "./$name" --appimage-extract > /dev/null
-          sudo apt-get install -y -qq --no-install-recommends libwebkit2gtk-4.1-0 libgstreamer-plugins-base1.0-0 > /dev/null || true
+          # OpenGL too: the PrusaSlicer step that also installs it may time out.
+          sudo apt-get install -y -qq --no-install-recommends libwebkit2gtk-4.1-0 libgstreamer-plugins-base1.0-0 libopengl0 libegl1 libgl1 > /dev/null || true
           echo "AGENTLINK_ORCASLICER=$RUNNER_TEMP/orca/squashfs-root/AppRun" >> "$GITHUB_ENV"
       - name: The add-ons' own tests, all installed together
         # A hung test stops here, not at 45 minutes.
