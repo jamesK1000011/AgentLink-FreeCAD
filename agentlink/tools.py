@@ -1461,6 +1461,11 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         if t.name in seen:
             raise RuntimeError(f"Agent Link: two tools are named {t.name} ({seen[t.name]} and {t.group}) — rename one.")
         seen[t.name] = t.group
+    # An add-on's tools.json entry with the name of a tool already here
+    # declares nothing (agentlink/tooldata.py hub_names; red team 2, R2-4).
+    from . import tooldata
+
+    tooldata.SERVER_NAMES = seen
     for fam in families.load():
         external = getattr(fam, "EXTERNAL", False)
         try:
@@ -1497,6 +1502,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
         if external:
             families.owned(fam, own)
             extstate.loaded(getattr(fam, "EXTENSION", None) or getattr(fam, "__name__", "?"), fam.GROUP, added)
+    tooldata.SERVER_NAMES = None
     try:
         window = bool(FreeCAD.GuiUp)
     except Exception:

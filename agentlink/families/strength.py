@@ -38,6 +38,14 @@ KEY = "fea"
 G = 9810.0  # mm/s²
 
 
+def _job_run(argv, **kw):
+    """subprocess.run for a solver or mesher: its pid is recorded for the
+    critical-pressure guard, which then stops only it (agentlink/memguard.py)."""
+    from .. import memguard
+
+    return memguard.run(argv, **kw)
+
+
 def _study(doc):
     """The strength study kept with the document, or None."""
     return store.read(doc, KEY, None)
@@ -352,7 +360,7 @@ def ccx_said(fea, ccx, timeout):
         return last_lines(text)
     try:
         inp = fea.inp_file_name
-        r = subprocess.run([ccx, "-i", os.path.splitext(os.path.basename(inp))[0]], cwd=os.path.dirname(inp), capture_output=True, text=True, timeout=min(float(timeout), 120.0))
+        r = _job_run([ccx, "-i", os.path.splitext(os.path.basename(inp))[0]], cwd=os.path.dirname(inp), capture_output=True, text=True, timeout=min(float(timeout), 120.0))
         return last_lines((r.stdout or "") + (r.stderr or ""))
     except Exception:  # noqa: BLE001 - no words to add
         return ""
@@ -721,7 +729,7 @@ def tools(session):
         with open(os.path.join(wd, "part.geo"), "w") as f:
             f.write(geo_txt)
         try:
-            r = subprocess.run([gmsh, "-", "part.geo"], cwd=wd, capture_output=True, text=True, timeout=timeout)
+            r = _job_run([gmsh, "-", "part.geo"], cwd=wd, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired:
             raise ToolError("failed", f"Gmsh took over {timeout:g} s: a coarser mesh (fea_setup {{ mesh }}) or a longer timeout.")
         unv = os.path.join(wd, "part.unv")
@@ -1053,7 +1061,7 @@ def tools(session):
         env = dict(os.environ)
         env.setdefault("OMP_NUM_THREADS", str(max(1, min(4, os.cpu_count() or 1))))
         try:
-            r = subprocess.run([ccx, "-i", "job"], cwd=wd, capture_output=True, text=True, timeout=timeout, env=env)
+            r = _job_run([ccx, "-i", "job"], cwd=wd, capture_output=True, text=True, timeout=timeout, env=env)
         except subprocess.TimeoutExpired:
             raise ToolError("failed", f"CalculiX took over {timeout:g} s: a coarser mesh or a longer timeout.")
         frd = os.path.join(wd, "job.frd")
@@ -1085,7 +1093,7 @@ def tools(session):
         env = dict(os.environ)
         env.setdefault("OMP_NUM_THREADS", str(max(1, min(4, os.cpu_count() or 1))))
         try:
-            r = subprocess.run([ccx, "-i", "job"], cwd=wd, capture_output=True, text=True, timeout=timeout, env=env)
+            r = _job_run([ccx, "-i", "job"], cwd=wd, capture_output=True, text=True, timeout=timeout, env=env)
         except subprocess.TimeoutExpired:
             raise ToolError("failed", f"CalculiX took over {timeout:g} s: a coarser mesh or a longer timeout.")
         log = (r.stdout or "") + (r.stderr or "")
@@ -1181,7 +1189,7 @@ def tools(session):
         if not grid:
             out["note"] = "ElmerGrid not found: the case is written (case.sif, mesh.unv); turn the mesh into Elmer's with ElmerGrid 8 2 mesh.unv -out . where Elmer is installed."
             return out
-        r = subprocess.run([grid, "8", "2", unv, "-out", wd, "-autoclean"], cwd=wd, capture_output=True, text=True, timeout=timeout)
+        r = _job_run([grid, "8", "2", unv, "-out", wd, "-autoclean"], cwd=wd, capture_output=True, text=True, timeout=timeout)
         if r.returncode:
             raise ToolError("failed", "ElmerGrid refused the mesh: " + (r.stderr or r.stdout)[-400:])
         if not run:
@@ -1189,7 +1197,7 @@ def tools(session):
         if not elmer:
             out["note"] = "ElmerSolver not found: the case is ready to solve where Elmer is installed (ElmerSolver in the folder)."
             return out
-        r = subprocess.run([elmer, "case.sif"], cwd=wd, capture_output=True, text=True, timeout=timeout)
+        r = _job_run([elmer, "case.sif"], cwd=wd, capture_output=True, text=True, timeout=timeout)
         log = (r.stdout or "") + (r.stderr or "")
         with open(os.path.join(wd, "elmer.log"), "w") as f:
             f.write(log)
@@ -1403,7 +1411,7 @@ def tools(session):
         with open(os.path.join(wd, "shell.geo"), "w") as f:
             f.write("\n".join(['Merge "shell.brep";', f"Mesh.MeshSizeMax = {mesh};", "Mesh.MeshSizeMin = 0;", "Mesh.ElementOrder = 2;", "Mesh.SecondOrderLinear = 0;",
                                "Mesh.Algorithm = 6;", "Mesh 2;", "Mesh.SaveAll = 1;", 'Save "shell.unv";', ""]))
-        r = subprocess.run([gmsh, "-", "shell.geo"], cwd=wd, capture_output=True, text=True, timeout=timeout)
+        r = _job_run([gmsh, "-", "shell.geo"], cwd=wd, capture_output=True, text=True, timeout=timeout)
         return {"wd": wd, "ok": r.returncode == 0 and os.path.isfile(os.path.join(wd, "shell.unv")), "said": " | ".join((r.stderr or r.stdout or "").strip().splitlines()[-2:])}
 
     def shell_elements(m):

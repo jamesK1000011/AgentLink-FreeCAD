@@ -382,8 +382,8 @@ def start(tool, args, session, fn=None):
             job["status"] = "failed"
         finally:
             if tid is not None:
-                memguard.finished(tid)
-                mark = memguard.take_mark(tool.name, job["started"])
+                rec = memguard.finished(tid)
+                mark = memguard.take_mark(tool.name, job["started"], token=(rec or {}).get("token"))
                 if mark is not None:
                     job.pop("result", None)
                     job["error"] = {"code": "stopped", "message": memguard.words(tool.name, mark, changes=False)}

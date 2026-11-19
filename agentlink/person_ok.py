@@ -15,6 +15,10 @@ When it shows (offer):
     a panel button), with a window.
 
 A press counts only when all of these are true (press_counts):
+  - It is a mouse release on Approve. A key press never counts: the
+    dialog opens without focus, and a key typed into the window (an agent's
+    or the person's, meant for another field) never approves (red team 2,
+    R2-18).
   - The event came from the system (QEvent.spontaneous()). Events that
     Agent Link sends (gui_input, dialog_answer) are never spontaneous, and
     QAbstractButton.click() makes no event at all.
@@ -48,9 +52,10 @@ def key(kind, name, sha=None):
     return approvals.key(kind, name, sha)
 
 
-def press_counts(spontaneous, shown_for, as_user=False):
-    """True when a press on Approve is the person's own."""
-    return bool(spontaneous) and shown_for >= MIN_READ and not as_user
+def press_counts(spontaneous, shown_for, as_user=False, how="mouse"):
+    """True when a press on Approve is the person's own: a mouse release
+    (how), from the system, after the time to read."""
+    return how == "mouse" and bool(spontaneous) and shown_for >= MIN_READ and not as_user
 
 
 def _as_user():
@@ -112,12 +117,13 @@ def ask(kind, name, title, lines, sha=None, on_ok=None, shown=None, then=None):
     return approvals.ask(kind, name, title, lines, sha, on_ok, shown=shown, then=then)
 
 
-def pressed(req, spontaneous, now=None):
+def pressed(req, spontaneous, now=None, how="mouse"):
     """The person pressed Approve on req's dialog. Answers True when it
-    counts (the approval is then given), False when it does not."""
+    counts (the approval is then given), False when it does not. how:
+    "mouse" (a mouse release) or "key" (never counts)."""
     now = time.time() if now is None else now
     shown = req.get("shown") or req.get("opened") or now
-    if not press_counts(spontaneous, now - shown, _as_user()):
+    if not press_counts(spontaneous, now - shown, _as_user(), how):
         return False
     approvals.give(req, "window", now=now)
     return True
@@ -161,23 +167,32 @@ def _show_qt(req):
     class Approve(QtWidgets.QPushButton):
         # Never connected to clicked: click() and animateClick() give no
         # event, and sent events are not spontaneous.
+        # Only a mouse release counts: a key press is said, never counted.
         def mouseReleaseEvent(self, ev):
             inside = self.rect().contains(ev.pos()) if hasattr(ev, "pos") else True
+            left = ev.button() == QtCore.Qt.LeftButton if hasattr(ev, "button") else False
             super().mouseReleaseEvent(ev)
-            if inside and self.isEnabled():
-                dlg._decide(ev.spontaneous())
+            if inside and left and self.isEnabled():
+                dlg._decide(ev.spontaneous(), "mouse")
 
         def keyPressEvent(self, ev):
-            if ev.key() in (QtCore.Qt.Key_Space, QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter) and self.isEnabled():
-                dlg._decide(ev.spontaneous())
+            if ev.key() in (QtCore.Qt.Key_Space, QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter, QtCore.Qt.Key_Select):
+                dlg._decide(ev.spontaneous(), "key")
                 return
             super().keyPressEvent(ev)
 
+        def keyReleaseEvent(self, ev):
+            if ev.key() in (QtCore.Qt.Key_Space, QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter, QtCore.Qt.Key_Select):
+                return
+            super().keyReleaseEvent(ev)
+
     class Dialog(QtWidgets.QDialog):
-        def _decide(self, spontaneous):
-            if pressed(req, spontaneous):
+        def _decide(self, spontaneous, how="mouse"):
+            if pressed(req, spontaneous, how=how):
                 req["alive"] = False
                 self.done(1)
+            elif how != "mouse":
+                note.setText("A key does not approve. Read the text, then click Approve with the mouse.")
             else:
                 note.setText("That press did not count. Read the text, then press Approve yourself.")
 
@@ -191,6 +206,9 @@ def _show_qt(req):
     dlg.setWindowTitle("Agent Link: your OK")
     dlg.setModal(False)
     dlg.setWindowFlags(dlg.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
+    # The dialog opens without focus: keys typed for the window stay there.
+    dlg.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
+    dlg.setFocusPolicy(QtCore.Qt.NoFocus)
     lay = QtWidgets.QVBoxLayout(dlg)
     head = QtWidgets.QLabel(req["title"])
     head.setTextFormat(QtCore.Qt.PlainText)
@@ -208,9 +226,11 @@ def _show_qt(req):
     row = QtWidgets.QHBoxLayout()
     no = QtWidgets.QPushButton("Decline")
     no.setDefault(True)
+    no.setFocusPolicy(QtCore.Qt.NoFocus)
     no.clicked.connect(dlg.reject)
     yes = Approve("Approve")
     yes.setAutoDefault(False)
+    yes.setFocusPolicy(QtCore.Qt.NoFocus)
     yes.setEnabled(False)
     row.addWidget(no)
     row.addWidget(yes)

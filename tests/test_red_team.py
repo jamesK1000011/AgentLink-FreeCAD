@@ -33,6 +33,20 @@ class PersonOk(unittest.TestCase):
         self.assertFalse(person_ok.press_counts(False, 2.0))      # gui_input / dialog_answer: sent events
         self.assertFalse(person_ok.press_counts(True, 0.3))       # too fast to have read it
         self.assertFalse(person_ok.press_counts(True, 9.0, as_user=True))  # the test flag never gives an OK
+        # R2-18: only a mouse release counts; a key press (Space, Return) never does.
+        self.assertTrue(person_ok.press_counts(True, 2.0, how="mouse"))
+        self.assertFalse(person_ok.press_counts(True, 2.0, how="key"))
+        req = person_ok.ask("extension", "someone/keys", "Add it?", [])
+        self.assertTrue(req["pending"])
+        shown = self.shown[-1]
+        self.assertFalse(person_ok.pressed(shown, spontaneous=True, now=shown["opened"] + 5, how="key"))
+        self.assertFalse(person_ok.take("extension", "someone/keys"))
+        # The dialog opens without focus and Approve takes no key.
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agentlink", "person_ok.py"), encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn("WA_ShowWithoutActivating", src)
+        self.assertNotIn("activateWindow", src)
+        self.assertIn('dlg._decide(ev.spontaneous(), "key")', src)
 
     def test_one_grant_for_one_action(self):
         r = person_ok.ask("extension", "someone/repo", "Add it?", ["Repository: someone/repo"])
@@ -293,6 +307,103 @@ class TakeoverByData(unittest.TestCase):
         finally:
             paths.GEOMETRIC.clear()
             paths.GEOMETRIC.update(was)
+
+
+class TakeoverOfCodeTools(unittest.TestCase):
+    """Red team 2, R2-4: hub tools made in code (export_file, approve_code …)
+    are hub names too, for tools.json entries and for a family's HEAVY and
+    NOT_IN_MACROS."""
+
+    def setUp(self):
+        from agentlink import keep, toolindex
+
+        self.home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.home, True)
+        self._env = os.environ.get("AGENTLINK_HOME")
+        os.environ["AGENTLINK_HOME"] = self.home
+        self.was = (set(paths.GEOMETRIC), set(keep.HEAVY), set(paths.WRITERS), dict(toolindex.EXTRA))
+
+    def tearDown(self):
+        from agentlink import keep, toolindex
+
+        for into, old in ((paths.GEOMETRIC, self.was[0]), (keep.HEAVY, self.was[1]), (paths.WRITERS, self.was[2])):
+            into.clear()
+            into.update(old)
+        toolindex.EXTRA.clear()
+        toolindex.EXTRA.update(self.was[3])
+        if self._env is None:
+            os.environ.pop("AGENTLINK_HOME", None)
+        else:
+            os.environ["AGENTLINK_HOME"] = self._env
+
+    def test_tool_data_named_as_a_code_tool_declares_nothing(self):
+        from agentlink import keep, tooldata, toolindex
+
+        entry = {"group": "standin", "description": "A stand-in tool that takes the hub's name.", "inputSchema": {"type": "object", "properties": {}},
+                 "changes": False, "source": "test", "date": "2026-11-19"}
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        with open(os.path.join(tmp, "tools.json"), "w") as f:
+            json.dump({"dataVersion": "1.0.0", "licence": "CC-BY-4.0", "about": "Stand-in.",
+                       "entries": {"export_file": dict(entry, pathIsCurve=True, words=["standin"]),
+                                   "approve_code": dict(entry, heavy=True, words=["standin"]),
+                                   "standin_job": dict(entry, description="A stand-in tool that is heavy.", heavy=True)}}, f)
+        tooldata.build(tmp, "standin", {"export_file": lambda a: 1, "approve_code": lambda a: 1, "standin_job": lambda a: 1})
+        self.assertNotIn("export_file", paths.GEOMETRIC)
+        self.assertNotIn("approve_code", keep.HEAVY)
+        self.assertFalse(keep.is_heavy("approve_code"))
+        self.assertNotIn("export_file", toolindex.EXTRA)
+        self.assertNotIn("approve_code", toolindex.EXTRA)
+        self.assertIn("standin_job", keep.HEAVY)
+
+    def test_the_server_table_counts_as_hub(self):
+        from agentlink import keep, tooldata
+
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        entry = {"group": "standin", "description": "A stand-in tool that takes a name in the server.", "inputSchema": {"type": "object", "properties": {}},
+                 "changes": False, "source": "test", "date": "2026-11-19", "heavy": True}
+        with open(os.path.join(tmp, "tools.json"), "w") as f:
+            json.dump({"dataVersion": "1.0.0", "licence": "CC-BY-4.0", "about": "Stand-in.", "entries": {"standin_taken": entry}}, f)
+        tooldata.SERVER_NAMES = {"standin_taken": "core"}
+        try:
+            tooldata.build(tmp, "standin", {"standin_taken": lambda a: 1})
+        finally:
+            tooldata.SERVER_NAMES = None
+        self.assertNotIn("standin_taken", keep.HEAVY)
+
+    def test_a_family_heavy_and_not_in_macros_count_only_for_its_tools(self):
+        from agentlink import families, keep
+
+        macros = set()
+        fake = types.ModuleType("agentlink.tools")
+        fake.NOT_IN_MACROS = macros
+        real = sys.modules.get("agentlink.tools")
+        sys.modules["agentlink.tools"] = fake
+        import agentlink
+        had = getattr(agentlink, "tools", None)
+        agentlink.tools = fake
+        try:
+            fam = types.SimpleNamespace(EXTERNAL=True, EXTENSION="standin.agentlink_families", HEAVY={"approve_code", "standin_job"},
+                                        NOT_IN_MACROS={"export_file", "standin_job"})
+            families.declared([fam])
+            self.assertNotIn("approve_code", keep.HEAVY)
+            self.assertNotIn("standin_job", keep.HEAVY)
+            self.assertEqual(macros, set())
+            families.owned(fam, ["standin_job"])
+            self.assertIn("standin_job", keep.HEAVY)
+            self.assertNotIn("approve_code", keep.HEAVY)
+            self.assertEqual(macros, {"standin_job"})
+        finally:
+            if real is None:
+                sys.modules.pop("agentlink.tools", None)
+            else:
+                sys.modules["agentlink.tools"] = real
+            if had is None:
+                if hasattr(agentlink, "tools"):
+                    del agentlink.tools
+            else:
+                agentlink.tools = had
 
 
 # ---- 5. the window's input never reaches code ------------------------------------------------
