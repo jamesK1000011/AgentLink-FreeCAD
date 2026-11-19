@@ -60,14 +60,19 @@
   "note": "17 Nov: window pass 3, the picture after the tool's first accepted call reviewed GOOD or MINOR (live/w3/review0-3)"
  },
  "app_force_restart": {
+  "gap": "It quits FreeCAD. It needs the person's go, so the test models do not have it (unproven-findings.md).",
   "live": true,
   "model": "alone-8",
   "note": "17 Nov: live_run reset passed 3 of 3; gui_input clicked the Notes tab and Pin a Note and opened the Note dialog; app_force_restart recovered the window held by that dialog and reopened 11 documents"
  },
  "app_install": {
+  "gap": "It installs a FreeCAD release. It needs the person's go, so the test models do not have it (unproven-findings.md). Live: status read only.",
   "live": true,
   "model": "six",
   "note": "17 Nov: status read live (1.1.3 installed, SHA-256 checked); no new install run"
+ },
+ "app_open": {
+  "gap": "Not tested yet."
  },
  "app_recover": {
   "headless": true,
@@ -76,9 +81,16 @@
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "app_restart": {
+  "gap": "It quits FreeCAD. It needs the person's go, so the test models do not have it (unproven-findings.md).",
   "live": true,
   "model": "alone-7",
   "note": "17 Nov: app_restart saved 2 and reopened 14 documents; session_state answered after it"
+ },
+ "approve_code": {
+  "gap": "Not tested yet."
+ },
+ "approve_file": {
+  "gap": "Not tested yet."
  },
  "asm_add": {
   "description": true,
@@ -218,6 +230,7 @@
  "asm_rigid_group": {
   "description": true,
   "docs": true,
+  "gap": "It needs FreeCAD 1.2. The Mac has FreeCAD 1.1.3. Only its refusal is checked.",
   "note": "Class b (rule, 17 Nov): a tool that can only refuse on this Mac because a program, a FreeCAD version or an add-on is missing is not counted as proven. Its refusal is checked headless (the words name what is missing) and it is listed by name in the final report. Here: asm_rigid_group needs FreeCAD 1.2; scad_code needs OpenSCAD."
  },
  "asm_sub": {
@@ -901,17 +914,34 @@
  },
  "cookbook_approve": {
   "description": true,
+  "gap": "Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.",
   "health": true,
-  "live": true,
+  "liveFormat2": true,
   "model": "texturizer_v2 port",
   "note": "Live 18 Nov: v2 draft (2 data, 13 window entries), import, approve answers pending approve_code with name, source, version and scan; tool_find cards and listing"
  },
+ "cookbook_export": {
+  "gap": "Not tested yet."
+ },
  "cookbook_import": {
   "description": true,
+  "gap": "Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.",
   "health": true,
-  "live": true,
+  "liveFormat2": true,
   "model": "texturizer_v2 port",
   "note": "Live 18 Nov: v2 draft (2 data, 13 window entries), import, approve answers pending approve_code with name, source, version and scan; tool_find cards and listing"
+ },
+ "cookbook_list": {
+  "gap": "Not tested yet."
+ },
+ "cookbook_run": {
+  "gap": "Not tested yet."
+ },
+ "cookbook_show": {
+  "gap": "Not tested yet."
+ },
+ "cookbook_unapprove": {
+  "gap": "Not tested yet."
  },
  "crash_collect": {
   "description": true,
@@ -1880,6 +1910,7 @@
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "gui_input": {
+  "gap": "It sends real input into the window, so it needs the window (unproven-findings.md).",
   "live": true,
   "model": "alone-8",
   "note": "live 18 Nov: dialogs (55, 56b, 69, 70), combo keys (47), shortcuts (49), menu items, person input in the film-hinge ladder"
@@ -2143,6 +2174,7 @@
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "live_run": {
+  "gap": "It runs scripts of calls in the window, and its reset makes the window test document again (unproven-findings.md).",
   "live": true,
   "model": "alone-8",
   "note": "17 Nov: live_run reset passed 3 of 3; gui_input clicked the Notes tab and Pin a Note and opened the Note dialog; app_force_restart recovered the window held by that dialog and reopened 11 documents"
@@ -3600,8 +3632,9 @@
  },
  "port_scaffold": {
   "description": true,
+  "gap": "Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.",
   "health": true,
-  "live": true,
+  "liveFormat2": true,
   "model": "texturizer_v2 port",
   "note": "Live 18 Nov: v2 draft (2 data, 13 window entries), import, approve answers pending approve_code with name, source, version and scan; tool_find cards and listing"
  },
@@ -3684,26 +3717,31 @@
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "printer_pause": {
+  "gap": "Live: it needs a real printer or a Moonraker stand-in, and the person's confirm (addons-unproven-findings.md).",
   "headless": true,
   "model": "WorkshopRest",
   "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
  },
  "printer_send": {
+  "gap": "Live: it needs a real printer or a Moonraker stand-in, and the person's confirm (addons-unproven-findings.md).",
   "headless": true,
   "model": "WorkshopRest",
   "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
  },
  "printer_status": {
+  "gap": "Live: it needs a real printer or a Moonraker stand-in, and the person's confirm (addons-unproven-findings.md).",
   "headless": true,
   "model": "WorkshopRest",
   "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
  },
  "printer_stop": {
+  "gap": "Live: it needs a real printer or a Moonraker stand-in, and the person's confirm (addons-unproven-findings.md).",
   "headless": true,
   "model": "WorkshopRest",
   "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
  },
  "queue_go": {
+  "gap": "It is the person's go only, so the test models do not have it (hubrest-findings.md).",
   "live": true,
   "model": "six",
   "note": "17 Nov: on the owner's word in chat; go true, wasHeld false"
@@ -3787,6 +3825,9 @@
   "live": true,
   "model": "ScanRuler reverse model, run 3, answers read: all 48 body boxes exact \u2014 Block [0,0,0]-[40,30,20] with the bore and the fillet too (run 2: z -0.036..20.036), z 0..10 at height 10, Peg [50,0,0]-[60,10,10] and moved [35,0,0]-[45,10,10], gauge [0,50,0]-[8,58,8], Ring [-15,-15,10]-[15,15,15] (run 2: x +-15.109) \u2014 and the volumes as in run 2, rounded (22274.690351, 23845.486678, 1000, 512, 1963.495408); saved at 22 kB, closed, opened with 7 objects and the body labelled Block",
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
+ },
+ "reverse_build_stop": {
+  "gap": "Only its refusal is seen (run3-findings.md). A stop of a running build is not tested yet."
  },
  "reverse_feature_add": {
   "description": true,
@@ -3985,6 +4026,7 @@
  "scad_code": {
   "description": true,
   "docs": true,
+  "gap": "It needs the OpenSCAD program, which is not on the Mac. Only its refusal is checked.",
   "note": "Class b (rule, 17 Nov): a tool that can only refuse on this Mac because a program, a FreeCAD version or an add-on is missing is not counted as proven. Its refusal is checked headless (the words name what is missing) and it is listed by name in the final report. Here: asm_rigid_group needs FreeCAD 1.2; scad_code needs OpenSCAD."
  },
  "scad_export": {
@@ -4596,6 +4638,7 @@
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "slice_open": {
+  "gap": "Live: it opens the OrcaSlicer window in front, so it needs the person at the Mac (addons-unproven-findings.md).",
   "headless": true,
   "model": "WorkshopRest",
   "note": "17 Nov: workshop-rest model, 46 calls, each answer read against its expectation"
@@ -5180,6 +5223,7 @@
  },
  "tool_find": {
   "description": true,
+  "gap": "Headless: not tested yet.",
   "health": true,
   "live": true,
   "model": "texturizer_v2 port",
@@ -5210,6 +5254,7 @@
   "note": "17 Nov: window round 6: the picture after the tool's first accepted call was reviewed (good or minor) and shows the result"
  },
  "tutor_watch": {
+  "gap": "Headless: watch mode on is the person's to turn on. Only the answer with watch mode off is proven, live (addons-unproven-findings.md).",
   "live": true,
   "model": "six",
   "note": "17 Nov: live answer with watch mode off (watching false, say); watch on needs the person's click"

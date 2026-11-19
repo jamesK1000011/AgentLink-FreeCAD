@@ -68,6 +68,10 @@
   ],
   "tools": [
     {
+      "name": "app_extensions",
+      "description": "Extensions to Agent Link kept in git repositories: list (set and loaded), add { repo: owner/repo[@branch] } (or https://github.com/owner/repo; other text is refused) — an extension is code FreeCAD runs, so adding one is the person's call: the first call answers pending with the approve_code arguments; call approve_code with them (the client asks the person first when they set it to \"ask first\"); then call again / remove { repo }, sync (the listed ones fetched with this computer's own git sign-in and installed beside Agent Link; then app_restart)."
+    },
+    {
       "name": "app_force_restart",
       "description": "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang): run by Agent Link outside FreeCAD; the documents come back from their newest saved copies, as after a crash."
     },

@@ -1,5 +1,5 @@
 {
-"about": "Every tool the live server offered on 16 Nov 2026 (FreeCAD 1.1.3, the Mac), by group, read with tool_groups { group }. workbench: the hardening pass's batch. repo: where the tool's code lives. Added 18 Nov 2026: app_open, the approval tools, tool_find and the porting group.",
+"about": "Every tool the live server offered on 16 Nov 2026 (FreeCAD 1.1.3, the Mac), by group, read with tool_groups { group }. workbench: the hardening pass's batch. repo: where the tool's code lives. listedIn: the tool_groups group, when it is not the key. Added 18 Nov 2026: app_open, the approval tools, tool_find and the porting group. 19 Nov 2026 (V1 scope): groups holds only V1 tools, and tests/test_stats.py keeps it in step with the hub's tool data and docs/stats/addons.json. notInV1: tools that are not in the V1 bundle (packaging/addons.json), not counted. notInV1Features: V1 scope cuts that have no tool here. unlisted: tools that are callable but never listed.",
 "groups": {
 "sketch": {"workbench": "Sketcher", "repo": "AgentLink-FreeCAD", "tools": ["pd_body_new","sketch_add","sketch_array","sketch_attach","sketch_bspline","sketch_carbon","sketch_constrain","sketch_copy","sketch_edit","sketch_extend","sketch_external","sketch_join","sketch_merge","sketch_mirror","sketch_new","sketch_offset","sketch_project","sketch_state","sketch_to_bspline","sketch_validate"]},
 "feature": {"workbench": "Part Design", "repo": "AgentLink-FreeCAD", "tools": ["feature_edit","feature_list","feature_remove","feature_suppress","pd_binder","pd_boolean","pd_chamfer","pd_datum","pd_datum_plane","pd_draft","pd_fillet","pd_gear","pd_groove","pd_helix","pd_hole","pd_linear_pattern","pd_loft","pd_mirrored","pd_multitransform","pd_pad","pd_pipe","pd_pocket","pd_polar_pattern","pd_primitive","pd_revolution","pd_shaft","pd_thickness"]},
@@ -9,18 +9,17 @@
 "drawing": {"workbench": "TechDraw", "repo": "Workshop-FreeCAD", "tools": ["drawing_exploded","drawing_make","patent_draft","patent_figures"]},
 "sheet": {"workbench": "Spreadsheet/VarSet", "repo": "AgentLink-FreeCAD", "tools": ["sheet_cells","sheet_chart","sheet_clear","sheet_export","sheet_format","sheet_import","sheet_list","sheet_new","sheet_read","sheet_rows","sheet_set","sheet_table"]},
 "param": {"workbench": "Spreadsheet/VarSet", "repo": "AgentLink-FreeCAD", "tools": ["param_bind","param_list","param_remove","param_set","varset_new","varset_set"]},
-"strength": {"workbench": "FEM", "repo": "AgentLink-FreeCAD", "tools": ["fea_buckle","fea_chart","fea_clear","fea_export","fea_frame","fea_heat","fea_hold","fea_load","fea_modes","fea_native","fea_parts","fea_probe","fea_refine","fea_results","fea_setup","fea_shell","fea_solve"]},
+"strength": {"workbench": "FEM", "repo": "AgentLink-FreeCAD", "tools": ["fea_buckle","fea_chart","fea_clear","fea_export","fea_heat","fea_hold","fea_load","fea_modes","fea_native","fea_parts","fea_probe","fea_refine","fea_results","fea_setup","fea_shell","fea_solve"]},
 "fem_more": {"workbench": "FEM", "repo": "AgentLink-FreeCAD", "tools": ["fem_add","fem_linearize","fem_mesh"]},
 "draft": {"workbench": "Draft", "repo": "AgentLink-FreeCAD", "tools": ["draft_2d_view","draft_array","draft_clone","draft_dimension","draft_facebinder","draft_fix","draft_fonts","draft_from_sketch","draft_hatch","draft_label","draft_layer","draft_link_array","draft_modify","draft_outline","draft_plane","draft_shape","draft_style","draft_text","draft_to_sketch"]},
 "bim": {"workbench": "BIM", "repo": "AgentLink-FreeCAD", "tools": ["bim_building","bim_covering","bim_curtain_wall","bim_edit","bim_equipment","bim_export","bim_fence","bim_frame","bim_grid","bim_ifc","bim_import","bim_layers","bim_level","bim_list","bim_material","bim_member","bim_opening","bim_panel","bim_pipe","bim_preflight","bim_profiles","bim_quantities","bim_rebar","bim_roof","bim_schedule","bim_section","bim_space","bim_stairs","bim_structure","bim_truss","bim_wall","ifc_diff","ifc_edit","ifc_find","ifc_open","ifc_remove","ifc_save"]},
 "bim_gaps": {"workbench": "BIM", "repo": "AgentLink-FreeCAD", "tools": ["bim_component","bim_glue","bim_ifc_brep","bim_image_plane","bim_library","bim_nest","bim_panel_out","bim_pipe_connector","bim_reextrude","bim_reference","bim_remove_shape","bim_reorder","bim_rewire","bim_structural_system","bim_trash","bim_views"]},
-"code": {"workbench": "BIM", "repo": "Home-FreeCAD", "tools": ["code_answer","code_check","code_facts","code_fem","code_missing","code_packet","code_packs","code_project","code_span"]},
 "surface": {"workbench": "Surface", "repo": "AgentLink-FreeCAD", "tools": ["surface_blend","surface_boundary","surface_cut","surface_extend","surface_fill","surface_loft","surface_points","surface_polynomial","surface_sections","surface_sew","surface_thicken"]},
 "mesh": {"workbench": "Mesh", "repo": "AgentLink-FreeCAD", "tools": ["meshobj_boolean","meshobj_boundary","meshobj_curvature","meshobj_decimate","meshobj_edit","meshobj_export","meshobj_from_shape","meshobj_info","meshobj_merge","meshobj_offset","meshobj_primitive","meshobj_project","meshobj_refine","meshobj_repair","meshobj_sections","meshobj_segments","meshobj_smooth","meshobj_split","meshobj_transform","meshobj_trim","meshobj_unwrap"]},
 "cam": {"workbench": "CAM", "repo": "AgentLink-FreeCAD", "tools": ["cam_dressup","cam_edit","cam_job","cam_library","cam_list","cam_op","cam_post","cam_remove","cam_setup","cam_sim","cam_tool","cam_tool_add"]},
 "cam_more": {"workbench": "CAM", "repo": "AgentLink-FreeCAD", "tools": ["cam_path","cam_property_bag","cam_template_export"]},
 "points": {"workbench": "Points", "repo": "AgentLink-FreeCAD", "tools": ["points_crop","points_export","points_fit","points_import","points_info","points_merge","points_mesh","points_sample","points_structure"]},
-"core": {"workbench": "Core", "repo": "AgentLink-FreeCAD", "tools": ["app_extensions","app_force_restart","approve_code","approve_file","batch","body_check","collab","crash_collect","dialog_answer","export","guide_read","history_checkpoint","history_diff","history_redo","history_restore","history_undo","job_start","job_status","outputs_clean","report_read","session_state","tool_find","tool_groups","usage_report"]},
+"core": {"workbench": "Core", "repo": "AgentLink-FreeCAD", "tools": ["app_extensions","app_force_restart","approve_code","approve_file","batch","body_check","crash_collect","dialog_answer","export","guide_read","history_diff","history_redo","history_undo","job_start","job_status","outputs_clean","report_read","session_state","tool_find","tool_groups","usage_report"]},
 "doc": {"workbench": "Core", "repo": "AgentLink-FreeCAD", "tools": ["doc_close","doc_new","doc_open","doc_save","import_file","object_delete","object_get","object_group","object_list","object_rename","object_set","recompute"]},
 "std_more": {"workbench": "Core", "repo": "AgentLink-FreeCAD", "tools": ["compound_explode","compound_filter","doc_graph","doc_info","doc_merge","doc_revert","doc_save_all","link_edit","link_make","object_align","object_appearance","object_duplicate","object_freeze","part_container","part_import_curves","part_join","pd_clone","pd_move_feature","pd_reorder","pd_tip","text_document","units_convert"]},
 "measure": {"workbench": "Core", "repo": "AgentLink-FreeCAD", "tools": ["clearance","measure","measure_keep","measure_mass","section","shape_query"]},
@@ -33,6 +32,7 @@
 "inspection": {"workbench": "Inspection", "repo": "AgentLink-FreeCAD", "tools": ["insp_export","insp_faces","insp_list","insp_read","insp_run","insp_update"]},
 "openscad": {"workbench": "OpenSCAD", "repo": "AgentLink-FreeCAD", "tools": ["scad_code","scad_export","scad_import","scad_op","scad_status","scad_tidy"]},
 "robot": {"workbench": "Robot", "repo": "AgentLink-FreeCAD", "tools": ["robot_export","robot_move","robot_new","robot_path","robot_run","robot_tool","robot_trajectory"]},
+"porting": {"workbench": "Porting", "repo": "AgentLink-FreeCAD", "tools": ["cookbook_approve","cookbook_export","cookbook_import","cookbook_list","cookbook_run","cookbook_show","cookbook_unapprove","port_scaffold"]},
 "fits": {"workbench": "Workshop", "repo": "Workshop-FreeCAD", "tools": ["fit","hw_hole"]},
 "make": {"workbench": "Workshop", "repo": "Workshop-FreeCAD", "tools": ["dfm_check","part_review","part_spec","setup","slice"]},
 "parts": {"workbench": "Workshop", "repo": "Workshop-FreeCAD", "tools": ["gen_make","gen_part"]},
@@ -46,6 +46,8 @@
 "slice": {"workbench": "Workshop", "repo": "Workshop-FreeCAD", "tools": ["slice_open","slice_read","slice_with","slicer_presets"]},
 "printer": {"workbench": "Workshop", "repo": "Workshop-FreeCAD", "tools": ["printer_add","printer_list","printer_pause","printer_send","printer_status","printer_stop"]},
 "safety": {"workbench": "Workshop", "repo": "Workshop-FreeCAD", "tools": ["app_recover","macro_approve","macro_list","macro_run","macro_save","macro_show","macro_unapprove","pref_history","pref_rollback"]},
+"workshop-core": {"workbench": "Workshop", "repo": "Workshop-FreeCAD", "listedIn": "core", "tools": ["history_checkpoint","history_restore"]},
+"workshop-strength": {"workbench": "Workshop", "repo": "Workshop-FreeCAD", "listedIn": "strength", "tools": ["fea_frame"]},
 "orca": {"workbench": "OrcaSlicer", "repo": "AgentLink-OrcaSlicer", "tools": ["gcode_read","orca_calibrate","orca_paint","orca_project","orca_slice"]},
 "texture": {"workbench": "Texturizer", "repo": "Texturizer-FreeCAD", "tools": ["texture_apply","texture_check","texture_draft","texture_export","texture_layer","texture_list","texture_mask","texture_prepare","texture_preview","texture_set","texture_settings"]},
 "tutor": {"workbench": "Tutor", "repo": "Tutor-FreeCAD", "tools": ["tutor","tutor_point","tutor_watch"]},
@@ -67,7 +69,63 @@
 "sections": {"workbench": "ScanRuler", "repo": "ScanRuler-FreeCAD", "tools": ["section_cut","section_fit","section_get","section_list","section_remove","section_to_sketch"]},
 "snapshot": {"workbench": "ScanRuler", "repo": "ScanRuler-FreeCAD", "tools": ["scan_snapshot_latest","scan_snapshot_list","scan_snapshot_wait"]},
 "thickness": {"workbench": "ScanRuler", "repo": "ScanRuler-FreeCAD", "tools": ["thickness_measure","thickness_settings"]},
-"wear": {"workbench": "ScanRuler", "repo": "ScanRuler-FreeCAD", "tools": ["wear_diff","wear_prewarp","wear_rebuild","wear_setup"]},
-"porting": {"workbench": "Porting", "repo": "AgentLink-FreeCAD", "tools": ["cookbook_approve","cookbook_export","cookbook_import","cookbook_list","cookbook_run","cookbook_show","cookbook_unapprove","port_scaffold"]}
+"wear": {"workbench": "ScanRuler", "repo": "ScanRuler-FreeCAD", "tools": ["wear_diff","wear_prewarp","wear_rebuild","wear_setup"]}
+},
+"notInV1": {
+ "tools": {
+  "code_answer": {
+   "repo": "Home-FreeCAD",
+   "why": "Home-FreeCAD is a private add-on (code compliance). It is not in the V1 bundle (packaging/addons.json)."
+  },
+  "code_check": {
+   "repo": "Home-FreeCAD",
+   "why": "Home-FreeCAD is a private add-on (code compliance). It is not in the V1 bundle (packaging/addons.json)."
+  },
+  "code_facts": {
+   "repo": "Home-FreeCAD",
+   "why": "Home-FreeCAD is a private add-on (code compliance). It is not in the V1 bundle (packaging/addons.json)."
+  },
+  "code_fem": {
+   "repo": "Home-FreeCAD",
+   "why": "Home-FreeCAD is a private add-on (code compliance). It is not in the V1 bundle (packaging/addons.json)."
+  },
+  "code_missing": {
+   "repo": "Home-FreeCAD",
+   "why": "Home-FreeCAD is a private add-on (code compliance). It is not in the V1 bundle (packaging/addons.json)."
+  },
+  "code_packet": {
+   "repo": "Home-FreeCAD",
+   "why": "Home-FreeCAD is a private add-on (code compliance). It is not in the V1 bundle (packaging/addons.json)."
+  },
+  "code_packs": {
+   "repo": "Home-FreeCAD",
+   "why": "Home-FreeCAD is a private add-on (code compliance). It is not in the V1 bundle (packaging/addons.json)."
+  },
+  "code_project": {
+   "repo": "Home-FreeCAD",
+   "why": "Home-FreeCAD is a private add-on (code compliance). It is not in the V1 bundle (packaging/addons.json)."
+  },
+  "code_span": {
+   "repo": "Home-FreeCAD",
+   "why": "Home-FreeCAD is a private add-on (code compliance). It is not in the V1 bundle (packaging/addons.json)."
+  },
+  "collab": {
+   "repo": "agentlink-collab",
+   "why": "agentlink-collab is a private add-on. The hub and the V1 bundle have no collab tool."
+  }
+ },
+ "features": [
+  {
+   "name": "Cookbook format 2, its auto-port draft and cookbook_probe",
+   "why": "Off main for V1. They live on the branch cookbook-v2 until V2 (CHANGELOG, docs/design/porting-2026-11-18.md)."
+  },
+  {
+   "name": "PrintLoop for the OrcaSlicer server",
+   "why": "Not fetched in V1: packaging/addons.json serverAddons is empty (CHANGELOG, V1 scope)."
+  }
+ ]
+},
+"unlisted": {
+ "library_pack": "Workshop's library_pack is an alias of ScanRuler-FreeCAD's pack_write when ScanRuler-FreeCAD is installed (the V1 bundle): callable by name, never listed (docs/hardening/addons4-findings.md, item 6)."
 }
 }
