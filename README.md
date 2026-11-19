@@ -201,6 +201,28 @@ start; leave it unset for small local models (see
 The table is generated: `python3 scripts/tool_summary.py` rewrites it, and
 `--check` (run by the tests) fails when it is stale.
 
+<!-- stats:begin (scripts/stats.py) -->
+Release statistics, made by `scripts/stats.py` from the data (all of them: [docs/stats/STATS.md](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md)).
+
+```
+proven on a test model  ███████████████████░ 617/637
+  headless              ███████████████████░ 606/637
+  live in the window    ███████████████████░ 612/637
+docs checked            █████████████████░░░ 554/637
+health check seen       ███████████████░░░░░ 483/637
+description rewritten   ██████████████████░░ 568/637
+```
+
+Tools: 415 in Agent Link, 627 with all add-ons installed.
+
+| Tool list | Tools listed | Tokens (est.) |
+|---|---:|---:|
+| static (default), ste | 6 | 1,583 |
+| static, full | 6 | 4,074 |
+| classic, ste | 22 | 5,743 |
+| classic, full | 22 | 8,159 |
+<!-- stats:end -->
+
 ## Platforms
 
 | | macOS | Linux | Windows |
