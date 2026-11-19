@@ -400,12 +400,29 @@ def _save_store(v):
     os.replace(tmp, p)
 
 
-def state(name, sha):
-    """approved | changed (its content moved since the OK) | no."""
+def state(name, sha, doc=None):
+    """approved | changed (its content moved since the OK) | addon_changed
+    (the add-on's code moved since the OK; with doc only) | no."""
     e = _load_store().get(KEY + name)
     if not isinstance(e, dict) or not e.get("sha256"):
         return "no"
-    return "approved" if e["sha256"] == sha else "changed"
+    if e["sha256"] != sha:
+        return "changed"
+    if doc is not None and e.get("addon") != addon_print(doc):
+        return "addon_changed"
+    return "approved"
+
+
+def addon_print(doc):
+    """The fingerprint of the add-on folder that the cookbook's package is
+    in (approvals.folder_fingerprint: each file's path and bytes), or None
+    when it names no package or the package is not installed. The OK binds
+    it: a changed add-on needs the OK again (red team 2, R2-2)."""
+    from . import approvals
+
+    pkg = (doc.get("addon") or {}).get("package") if isinstance(doc, dict) and isinstance(doc.get("addon"), dict) else None
+    f = addon_folder(pkg) if isinstance(pkg, str) and pkg else None
+    return approvals.folder_fingerprint(f) if f else None
 
 
 def canon(name):
@@ -429,9 +446,9 @@ def next_words(name):
             f"approve_code arguments. The client asks the person before approve_code when they set it to \"ask first\".")
 
 
-def _record(name, sha, by="client"):
+def _record(name, sha, by="client", addon=None):
     v = _load_store()
-    v[KEY + name] = {"sha256": sha, "path": file_of(name), "t": time.time(), "by": by}
+    v[KEY + name] = {"sha256": sha, "addon": addon, "path": file_of(name), "t": time.time(), "by": by}
     _save_store(v)
 
 
@@ -448,33 +465,46 @@ def approve(name, sha256=None, tool_names=(), ask=None):
         raise Refused("invalid_state", f"{name} changed after it was shown (sha256 {sha[:12]}…, not {str(sha256)[:12]}…). Show it again with cookbook_show. Nothing was changed.")
     if problems:
         raise Refused("invalid_input", f"{name} has faults, so it cannot be approved: " + "; ".join(problems[:5]) + ". Correct the file and import it again.")
-    if state(name, sha) == "approved":
+    addon_fp = addon_print(doc)
+    if state(name, sha, doc) == "approved":
         return {"approved": name, "sha256": sha, "note": "It was approved already. cookbook_run runs its entries."}
 
     def on_ok(by="client"):
-        _d, now, bad = load(name, tool_names)
-        if now == sha and not bad:
-            _record(name, sha, by)
+        d, now, bad = load(name, tool_names)
+        if now == sha and not bad and addon_print(d) == addon_fp:
+            _record(name, sha, by, addon_fp)
 
     rev = review(doc)
+    ents = doc.get("entries") or {}
+    pkg = (doc.get("addon") or {}).get("package") if isinstance(doc.get("addon"), dict) else None
     lines = [f"Cookbook: {name}", f"sha256: {sha[:16]}…", "About: " + str(doc.get("about", ""))[:MAX_ABOUT],
-             "It runs code with the full reach of this Mac."] + ["Scan: " + w for w in rev["words"]] + ["Its entries:"]
-    for k, e in list((doc.get("entries") or {}).items())[:30]:
+             "It runs code with the full reach of this Mac.", f"Risk: {rev['risk']}"] + ["Scan: " + w for w in rev["words"]] + ["Its entries:"]
+    for k, e in list(ents.items())[:30]:
         r = e.get("recipe") if isinstance(e, dict) else None
         what = json.dumps(r, ensure_ascii=False)[:200] if r is not None else "?"
         lines.append(f"- {k} ({_recipe_kind(r)}): {what}")
+    shown = {"source": file_of(name), "version": sha, "author": str(doc.get("author") or "not given")[:MAX_ABOUT],
+             "addon": addon_fp or "no add-on folder", "risk": rev["risk"], "scan": scan_line(rev)}
+    what = f"Run the cookbook {name}: {len(ents)} entries, add-on package {pkg or 'none'} (code with the full reach of this Mac)"
     try:
         if ask is not None:
             got = ask("cookbook", name, f"Approve the cookbook {name}?", lines, sha, on_ok)
         else:
-            got = approvals.ask("cookbook", name, f"Run the cookbook {name} (code with the full reach of this Mac)", lines, sha, on_ok,
-                                shown={"source": file_of(name), "version": sha, "author": str(doc.get("author") or "not given")[:MAX_ABOUT]})
+            got = approvals.ask("cookbook", name, what, lines, sha, on_ok, shown=shown)
     except approvals.Refused as e:
         raise Refused(e.code, e.message)
-    if state(name, sha) == "approved":
+    if state(name, sha, doc) == "approved":
         return {"approved": name, "sha256": sha, "note": "cookbook_run runs its entries from now on. A change to its file needs the OK again."}
     return {"approved": False, "pending": True, "cookbook": name, "sha256": sha, "approve": got.get("approve"), "next": got.get("next"), "scan": rev["words"], "risk": rev["risk"],
             "note": "Then cookbook_list shows it approved, and cookbook_run runs its entries."}
+
+
+def scan_line(rev):
+    """The risk word and the first three words of the scan, on one line:
+    the client's own prompt shows it (red team 2, R2-1)."""
+    from . import approvals
+
+    return approvals.clean(f"risk {rev.get('risk', 'code')}: " + " ".join(str(w) for w in list(rev.get("words") or [])[:3]), 400)
 
 
 def unapprove(name):
@@ -511,7 +541,7 @@ def listing(tool_names=()):
         except Refused as e:
             out.append({"cookbook": name, "state": "unreadable", "why": e.message})
             continue
-        st = state(name, sha)
+        st = state(name, sha, doc)
         row = {"cookbook": name, "state": st, "entries": [_entry_view(k, v, tool_names) for k, v in list((doc.get("entries") or {}).items())[:MAX_ENTRIES]]}
         if problems:
             row["faults"] = problems[:5]
@@ -523,7 +553,7 @@ def listing(tool_names=()):
 
 def show(name, tool_names=()):
     doc, sha, problems = load(name, tool_names)
-    return {"cookbook": name, "state": state(name, sha), "sha256": sha, "about": str(doc.get("about", ""))[:MAX_ABOUT], "addon": doc.get("addon", {}),
+    return {"cookbook": name, "state": state(name, sha, doc), "sha256": sha, "about": str(doc.get("about", ""))[:MAX_ABOUT], "addon": doc.get("addon", {}),
             "faults": problems[:10], "entries": {k: v for k, v in list((doc.get("entries") or {}).items())[:MAX_ENTRIES]},
             "scripts": {f: _script_text(name, f) for f in script_files(doc)},
             "next": next_words(name), "note": DATA_NOTE + " Show the person every recipe before the OK."}
@@ -755,6 +785,9 @@ def run(name, entry, args, runners, tool_names=()):
         st = state(name, sha)
         why = "its file changed after the OK" if st == "changed" else "the person has not approved it"
         raise Refused("not_allowed", f"{name}.{entry} is not run: {why}. {next_words(name)} Nothing was run.")
+    if state(name, sha, doc) != "approved":
+        raise Refused("not_allowed", f"{name}.{entry} is not run: the add-on's code changed after the OK (its folder fingerprint is new). "
+                                     f"{next_words(name)} Nothing was run.")
     if entry in set(tool_names):
         raise Refused("refused", f"{entry}: a tool has this name, so the entry is not run. Call the tool {entry} itself, or rename the entry and approve again.")
     if problems:

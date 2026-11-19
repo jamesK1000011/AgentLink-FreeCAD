@@ -267,7 +267,7 @@ class CookbookWorkbench(unittest.TestCase):
         orig = (cookbook.load, cookbook.state)
         cookbook.load = lambda name, tools=(), kept=None: ({"addon": {"package": "texturizer", "workbench": "TexturizerWorkbench"},
                                                             "entries": {"check": {"recipe": {"command": "Texturizer_Check"}}}}, "sha", [])
-        cookbook.state = lambda name, sha: "approved"
+        cookbook.state = lambda name, sha, doc=None: "approved"
         self.addCleanup(lambda: (setattr(cookbook, "load", orig[0]), setattr(cookbook, "state", orig[1])))
         out = cookbook.run("texturizer", "check", {}, {"command": lambda c, i: got.append(("cmd", c)) or {"ran": c},
                                                         "workbench": lambda wb, c: got.append(("wb", wb)) or f"activated {wb} first"})

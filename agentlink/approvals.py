@@ -57,7 +57,12 @@ CLIENT_ONLY = (FILE_TOOL, CODE_TOOL)
 # Kinds approved with approve_file; every other kind is approve_code's.
 FILE_KINDS = {"dialog", "recover", "save-all"}
 # The facts each tool shows the person, beside kind, id, fingerprint, what.
-SHOWN = {CODE_TOOL: ("source", "version", "author"), FILE_TOOL: ("document", "file", "button")}
+# approve_code also shows the risk and the first words of the scan of the
+# code (a cookbook's add-on), and the fingerprint of the add-on's folder
+# that the OK binds (red team 2, R2-1 and R2-2).
+SHOWN = {CODE_TOOL: ("source", "version", "author", "addon", "risk", "scan"), FILE_TOOL: ("document", "file", "button")}
+# The caps of the shown fields (MAX_FIELD for the others).
+FIELD_CAP = {"scan": 400, "addon": 120}
 TTL = 600.0          # s a one-time grant stays good
 OPEN_FOR = 3600.0    # s a pending request waits for its approval
 MAX_LINES = 40
@@ -206,7 +211,7 @@ def arguments(kind, name, fingerprint, title, shown=None):
     for f in SHOWN[tool]:
         v = (shown or {}).get(f)
         if v not in (None, ""):
-            args[f] = clean(v, MAX_FIELD)
+            args[f] = clean(v, FIELD_CAP.get(f, MAX_FIELD))
     return args
 
 
