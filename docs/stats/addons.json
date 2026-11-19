@@ -2,7 +2,7 @@
  "about": "Each add-on's tools as its own tool data declares them (scripts/stats.py --addons). chars: the tools/list entry's characters; exact false: the entry is estimated (a schema or description written in code that cannot be read as data).",
  "addons": {
   "AgentLink-OrcaSlicer": {
-   "commit": "0ef467d",
+   "commit": "3e65eab",
    "leanGroups": [],
    "ownServerOnly": [
     "guide_read",
@@ -15,7 +15,7 @@
      "group": "orca"
     },
     "orca_calibrate": {
-     "chars": 2295,
+     "chars": 2396,
      "exact": false,
      "group": "orca"
     },
@@ -25,12 +25,12 @@
      "group": "orca"
     },
     "orca_project": {
-     "chars": 10072,
+     "chars": 11067,
      "exact": false,
      "group": "orca"
     },
     "orca_slice": {
-     "chars": 3423,
+     "chars": 3603,
      "exact": false,
      "group": "orca"
     }
@@ -771,7 +771,7 @@
    }
   },
   "Tutor-FreeCAD": {
-   "commit": "1610e3b",
+   "commit": "415b7e6",
    "leanGroups": [],
    "ownServerOnly": [],
    "tools": {
@@ -793,7 +793,7 @@
    }
   },
   "Workshop-FreeCAD": {
-   "commit": "0865236",
+   "commit": "8c62453",
    "leanGroups": [
     "fits",
     "make",
@@ -1027,7 +1027,7 @@
      "group": "electronics"
     },
     "printer_add": {
-     "chars": 1292,
+     "chars": 1599,
      "exact": true,
      "group": "printer"
     },
@@ -1037,22 +1037,22 @@
      "group": "printer"
     },
     "printer_pause": {
-     "chars": 602,
+     "chars": 987,
      "exact": true,
      "group": "printer"
     },
     "printer_send": {
-     "chars": 1137,
+     "chars": 2047,
      "exact": true,
      "group": "printer"
     },
     "printer_status": {
-     "chars": 765,
+     "chars": 879,
      "exact": true,
      "group": "printer"
     },
     "printer_stop": {
-     "chars": 657,
+     "chars": 1054,
      "exact": true,
      "group": "printer"
     },
@@ -1062,7 +1062,7 @@
      "group": "make"
     },
     "slice": {
-     "chars": 2284,
+     "chars": 2382,
      "exact": true,
      "group": "make"
     },
@@ -1077,12 +1077,12 @@
      "group": "slice"
     },
     "slice_with": {
-     "chars": 2796,
+     "chars": 2969,
      "exact": true,
      "group": "slice"
     },
     "slicer_presets": {
-     "chars": 2809,
+     "chars": 2876,
      "exact": true,
      "group": "slice"
     },

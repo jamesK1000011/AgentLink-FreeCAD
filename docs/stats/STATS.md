@@ -90,11 +90,11 @@ The source is `docs/stats/addons.json`: each add-on's own tool data (its `data/t
 
 | Add-on | Commit | Declared | Loaded | Groups | Only in its own server |
 |---|---|---:|---:|---:|---|
-| AgentLink-OrcaSlicer | `0ef467d` | 5 | 5 | 1 | `guide_read`, `orca_status` |
+| AgentLink-OrcaSlicer | `3e65eab` | 5 | 5 | 1 | `guide_read`, `orca_status` |
 | ScanRuler-FreeCAD | `3da936d` | 133 | 133 | 19 | – |
 | Texturizer-FreeCAD | `dc560c7` | 11 | 11 | 1 | – |
-| Tutor-FreeCAD | `1610e3b` | 3 | 3 | 1 | – |
-| Workshop-FreeCAD | `0865236` | 60 | 60 | 17 | – |
+| Tutor-FreeCAD | `415b7e6` | 3 | 3 | 1 | – |
+| Workshop-FreeCAD | `8c62453` | 60 | 60 | 17 | – |
 
 With all these add-ons installed, Agent Link has 627 tools: 415 of the hub and 212 of the add-ons.
 
@@ -121,11 +121,11 @@ An add-on that is not installed adds 0 tokens. This is a rule of the project: Ag
 
 | Add-on | Not installed | Static | Classic (lean groups) | All its groups on |
 |---|---:|---:|---:|---:|
-| AgentLink-OrcaSlicer | 0 | 0 | 0 (0 tools) | 6,513 |
+| AgentLink-OrcaSlicer | 0 | 0 | 0 (0 tools) | 6,878 |
 | ScanRuler-FreeCAD | 0 | 0 | 0 (0 tools) | 67,288 |
 | Texturizer-FreeCAD | 0 | 0 | 0 (0 tools) | 11,092 |
 | Tutor-FreeCAD | 0 | 0 | 0 (0 tools) | 3,442 |
-| Workshop-FreeCAD | 0 | 0 | 4,689 (11 tools) | 29,959 |
+| Workshop-FreeCAD | 0 | 0 | 4,717 (11 tools) | 30,659 |
 
 ### What is approximated
 
