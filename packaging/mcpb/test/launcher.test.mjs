@@ -83,6 +83,7 @@ process.stdout.write(JSON.stringify({
   held: L.windowHeld({ pid: 42, t: 999, busy: 'batch', busySince: 200 }, now),
   restarting: L.windowHeld({ pid: 42, t: 999, busy: 'app_restart' }, now),
   stale: L.windowHeld({ pid: 42, t: 900, busy: 'batch' }, now),
+  staleAnswered: L.windowHeld({ pid: 42, t: 900, busy: 'batch', busySince: 850 }, now, true),
   idle: L.windowHeld({ pid: 42, t: 999, busy: null }, now),
   none: L.windowHeld(null, now),
   word: L.restartWord({ pid: 42, t: 999, pinned: 'Lesson', docs: [{ name: 'Lesson', label: 'bike-stem-1', file: '/x/l.FCStd' }] }, now),
@@ -94,6 +95,7 @@ process.stdout.write(JSON.stringify({
   assert.deepEqual(out.held, { pid: 42, busy: 'batch', since: 200 }, 'a window held by another call is hung for the update')
   assert.equal(out.restarting, null, 'app_restart in hand: it was taken')
   assert.equal(out.stale, null, 'a stale heartbeat: no window to judge')
+  assert.deepEqual(out.staleAnswered, { pid: 42, busy: 'batch', since: 850, stale: true }, 'a stale heartbeat from a window that answered: one long step holds it (fault 89)')
   assert.equal(out.idle, null)
   assert.equal(out.none, null)
   assert.deepEqual(out.word, { pid: 42, t: 1000, pinned: { name: 'Lesson', label: 'bike-stem-1', file: '/x/l.FCStd' } }, 'the restart word for the next supervisor (finding 52)')

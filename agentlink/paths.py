@@ -63,7 +63,7 @@ def _parts(p):
 # all of the home but ports/ is refused.
 STATE_FILES = {"settings.json", "settings-log.jsonl", "approvals.log", "memory-stop.json", "memory-jobs.json",
                "addon-sources.json", "addon_catalog.json", "hidden.json", "launch.json", "extensions.json",
-               "heartbeat.json", "heavy-call.json", "heavy-tools.json", "machine.json", "queue.json", "queue.lock",
+               "heartbeat.json", "heavy-call.json", "call-checkpoint.json", "heavy-tools.json", "machine.json", "queue.json", "queue.lock",
                "versions.json", "watchdog.log", "macros-approved.json", "applies_meter.json", "companions.json",
                ".companions.json", ".hidden-restart", ".saving",
                # printer settings with API keys (mode 0600, an add-on keeps them)

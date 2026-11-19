@@ -352,6 +352,37 @@ def sized_estimate(q, tool, size, key=None):
     return float(size) / spec["per_second"]
 
 
+def call_checkpoint_mark():
+    return path("call-checkpoint.json")
+
+
+def mark_call_checkpoint(tool, checkpoint, t=None):
+    """The checkpoint an add-on took before the call in hand (heavy.py): the
+    supervisor names it when that call cannot stop (job_status stop)."""
+    _save(call_checkpoint_mark(), {"tool": tool, "checkpoint": str(checkpoint), "pid": os.getpid(), "t": t if t is not None else time.time()})
+
+
+def clear_call_checkpoint():
+    try:
+        os.remove(call_checkpoint_mark())
+    except OSError:
+        pass
+
+
+def call_checkpoint(since=0.0):
+    """The id of the checkpoint taken before the call in hand, when it was
+    taken at or after since (less a second), else None."""
+    m = _load(call_checkpoint_mark(), None)
+    if not isinstance(m, dict) or not m.get("checkpoint"):
+        return None
+    try:
+        if float(m.get("t") or 0) < float(since or 0) - 1.0:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return m["checkpoint"]
+
+
 def heavy_call_mark():
     return path("heavy-call.json")
 
