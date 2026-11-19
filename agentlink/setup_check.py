@@ -33,7 +33,6 @@ GET_UV = {
     "linux": "curl -LsSf https://astral.sh/uv/install.sh | sh",
     "windows": 'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"',
 }
-GET_NODE = "Node 18 or later from https://nodejs.org (only if you do not use uv)."
 
 # Programs some tool groups drive, each found on PATH, in FreeCAD's own bin
 # folder, or where its installer puts it. None is needed to start.
@@ -194,15 +193,14 @@ def check(ask=True):
             else:
                 row("Agent Link add-on", "optional", f"not in {mod} (needed only to watch the agent in the FreeCAD window)",
                     "Install it: the Claude Desktop extension (Mac), Addon Manager > custom repository, or by hand (README: Install).")
-    uv, node = shutil.which("uv"), shutil.which("node")
+    # Node is not needed: the Claude extension brings its own, and without uv
+    # the server runs on FreeCAD's own Python (README: Without uv).
+    uv = shutil.which("uv")
     if uv:
         row("uv", "ok", uv)
     else:
-        row("uv", "optional" if node else "missing", "not found (preferred: it brings its own Python and runs `uvx agentlink-freecad`)", GET_UV[OS])
-    if node:
-        row("Node", "ok", node)
-    elif not uv:
-        row("Node", "missing", "not found (the backup to uv)", GET_NODE)
+        row("uv", "optional", "not found (preferred: it brings its own Python and runs `uvx agentlink-freecad`;"
+            " without it, run the server with FreeCAD's own Python, README: Without uv)", GET_UV[OS])
     if OS == "mac":
         try:
             from agentlink import launcher_check
