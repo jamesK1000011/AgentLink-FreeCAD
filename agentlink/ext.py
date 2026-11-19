@@ -21,6 +21,7 @@
 #                          to label a checkpoint "My checkpoint"
 
 import os
+import re
 import sys
 
 # Extensions named here or in AGENTLINK_EXTENSIONS, and every package
@@ -118,6 +119,36 @@ def repos():
     return [r.strip() for r in raw.split(",") if r.strip()]
 
 
+# What an extension's text may be (red team 4, R4-13): "owner/repo" or
+# "https://github.com/owner/repo(.git)", then "@branch". Nothing else
+# reaches git: no other scheme or host, no local path, no text that starts
+# with "-" (git would read it as an option).
+_OWNER = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})"
+_REPO = r"[A-Za-z0-9_][A-Za-z0-9._-]{0,99}"
+_SPEC = re.compile(rf"^(?:https://github\.com/)?({_OWNER})/({_REPO}?)(?:\.git)?$")
+_BRANCH = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._/-]{0,199}$")
+
+
+def branch_ok(b):
+    """True for a branch name that git takes as a name only."""
+    return bool(_BRANCH.match(b or "")) and ".." not in b and "//" not in b and not b.endswith(("/", ".", ".lock")) and "@{" not in b
+
+
+def parse(spec):
+    """(owner/repo, branch, https URL) of an extension's text; ValueError
+    with the reason when it is not one."""
+    text = str(spec or "").strip()
+    repo, at, branch = text.partition("@")
+    branch = branch if at else "main"
+    m = _SPEC.match(repo)
+    if not m or m.group(2) in ("", ".", "..") or m.group(2).endswith("."):
+        raise ValueError(f"repo: owner/repo or https://github.com/owner/repo, not {text[:80]!r}")
+    if not branch_ok(branch):
+        raise ValueError(f"branch: a branch name (letters, digits, . _ - /; not first a - or .), not {branch[:80]!r}")
+    name = f"{m.group(1)}/{m.group(2)}"
+    return name, branch, f"https://github.com/{name}.git"
+
+
 def _git():
     import shutil
 
@@ -148,15 +179,18 @@ def sync(cache=None):
         return {**out, "failed": [{"repo": r, "why": "git is not installed on this computer"} for r in repos()]}
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}  # never wait on a password prompt
     for spec in repos():
-        repo, _, branch = spec.partition("@")
-        branch = branch or "main"
-        url = repo if "://" in repo else f"https://github.com/{repo}.git"
+        try:
+            repo, branch, url = parse(spec)
+        except ValueError as e:
+            out["failed"].append({"repo": spec[:120], "why": f"not fetched: {e}"})
+            continue
         dest = os.path.join(cache, repo.replace("/", "__"))
         try:
+            # "--": what follows is a repository, a branch or a folder, never an option.
             if os.path.isdir(os.path.join(dest, ".git")):
-                cmds = [[git, "-C", dest, "fetch", "--depth", "1", "origin", branch], [git, "-C", dest, "reset", "--hard", "FETCH_HEAD"]]
+                cmds = [[git, "-C", dest, "fetch", "--depth", "1", "--", url, branch], [git, "-C", dest, "reset", "--hard", "FETCH_HEAD"]]
             else:
-                cmds = [[git, "clone", "--depth", "1", "-b", branch, url, dest]]
+                cmds = [[git, "clone", "--depth", "1", "-b", branch, "--", url, dest]]
             for c in cmds:
                 r = subprocess.run(c, capture_output=True, text=True, timeout=120, env=env)
                 if r.returncode != 0:
@@ -208,12 +242,15 @@ def tools(session):
                 # (agentlink/approvals.py). A typed confirm is not taken.
                 from . import approvals
 
-                repo, _, branch = r.partition("@")
-                owner = repo.split("://")[-1].split("/")[-2] if repo.count("/") >= 1 else repo
+                try:
+                    repo, branch, _url = parse(r)
+                except ValueError as e:
+                    raise ToolError("invalid_input", f"{e}. Nothing was changed.")
+                owner = repo.split("/")[0]
                 try:
                     ok = approvals.ask("extension", r, f"Add the extension {r} (code that FreeCAD runs at each start)",
                                        [f"Repository: {r}", "An extension is code that FreeCAD runs at each start.", "Approve only a repository that you know and trust."],
-                                       shown={"source": repo if "://" in repo else f"https://github.com/{repo}", "version": f"branch {branch or 'main'}; sync takes its newest commit",
+                                       shown={"source": f"https://github.com/{repo}", "version": f"branch {branch}; sync takes its newest commit",
                                               "author": owner})
                 except approvals.Refused as e:
                     raise ToolError(e.code, e.message)
@@ -234,6 +271,6 @@ def tools(session):
         raise ToolError("invalid_input", "action: list, add, remove, sync.")
 
     return [Tool("app_extensions",
-                 "Extensions to Agent Link kept in git repositories: list (set and loaded), add { repo: owner/repo[@branch] } — an extension is code FreeCAD runs, so adding one is the person's call: the first call answers pending with the approve_code arguments; call approve_code with them (the client asks the person first when they set it to \"ask first\"); then call again / remove { repo }, sync (the listed ones fetched with this computer's own git sign-in and installed beside Agent Link; then app_restart). The list is a local setting only the person adds to.",
+                 "Extensions to Agent Link kept in git repositories: list (set and loaded), add { repo: owner/repo[@branch] } (or https://github.com/owner/repo; other text is refused) — an extension is code FreeCAD runs, so adding one is the person's call: the first call answers pending with the approve_code arguments; call approve_code with them (the client asks the person first when they set it to \"ask first\"); then call again / remove { repo }, sync (the listed ones fetched with this computer's own git sign-in and installed beside Agent Link; then app_restart). The list is a local setting only the person adds to.",
                  {"type": "object", "properties": {"action": {"type": "string", "enum": ["list", "add", "remove", "sync"]}, "repo": {"type": "string"}}, "required": [], "additionalProperties": False},
                  app_extensions, group="core")]

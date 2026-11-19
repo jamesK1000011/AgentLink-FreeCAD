@@ -291,6 +291,36 @@ def file_dialog_press(d, button):
     return str(d.get("title") or ""), " ".join(text.split())[:300], str(button)
 
 
+def is_file_picker(d):
+    """True for a file dialog: Qt's own QFileDialog, or FreeCAD's
+    Gui::FileDialog or FileOptionsDialog (gui_input.FILE_DIALOG_CLASSES)."""
+    from .gui_input import FILE_DIALOG_CLASSES, file_dialog_of
+
+    if not isinstance(d, dict):
+        return False
+    if str(d.get("class") or "").split("::")[-1] in FILE_DIALOG_CLASSES:
+        return True
+    w = d.get("widget")
+    try:
+        return w is not None and file_dialog_of(w) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def file_picker_press(d, button):
+    """Red team 4, R4-2: a press that accepts a file dialog (Save, Open …)
+    takes a path that no tool checked. The refusal's words, or None (Cancel
+    and the other back-out presses pass)."""
+    if not is_file_picker(d):
+        return None
+    b = str(button or "").lower().replace("&", "").strip()
+    if b in BACK_OUT or b in ("no",):
+        return None
+    return (f"button: {button} is not pressed in a file dialog: the path there is not checked. Press Cancel "
+            "(dialog_answer { button: \"Cancel\" }), then use a tool that takes a path: doc_open { path }, doc_save { path }, "
+            "import_file { path }, export { path }. cmd_run names the tool for each command that opens a file dialog.")
+
+
 def calls_in_hand():
     """The tool names of the calls in hand in the window's link, outermost
     first. Never raises."""
@@ -752,6 +782,9 @@ def fill(d, text=None, item=None):
     done = {}
     if _persons(d):
         raise ValueError("this is the person's OK dialog: only the person reads and presses it")
+    if is_file_picker(d):
+        raise ValueError("text and item do not fill a file dialog: the path there is not checked. Press Cancel, then use a tool "
+                         "that takes a path: doc_open { path }, doc_save { path }, import_file { path }, export { path }.")
     if hasattr(w, "setTextValue") and hasattr(w, "textValue"):
         if item is not None:
             items = list(w.comboBoxItems()) if hasattr(w, "comboBoxItems") else []

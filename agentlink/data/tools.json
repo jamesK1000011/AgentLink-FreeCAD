@@ -21105,7 +21105,7 @@
   },
   "dialog_answer": {
    "group": "unattended",
-   "description": "Read the modal dialog in the FreeCAD window, if any: title, text, buttons. button: presses one by its text. Cancel also closes a file picker. Document Recovery's Cleanup first keeps a copy in ~/AgentLink/crash. With no dialog: the open task panel and its buttons (OK, Cancel …). An Expression Editor open over the task (\"=\" in a quantity field) shows as expression with its own buttons. OK then accepts the expression first and then the task. \"Expression OK\" accepts only the expression. Operate FreeCAD as the person does: read it and press what the task needs. Cancel backs out of anything you did not intend to open. Tell what you pressed. text: typed into a text prompt (or the dialog's one text field). item: selected from a prompt's list. Both occur before button. \"Unsaved Document\" during a close: Cancel, then doc_close { discard: true }. Save or Don't Save there need the person's approval. Replace on a \"file exists\" box needs it too. The first call answers pending with the approve_file arguments. Call approve_file with them, then press again. A stuck window: app_force_restart.",
+   "description": "Read the modal dialog in the FreeCAD window, if any: title, text, buttons. button: presses one by its text. Cancel also closes a file picker. Document Recovery's Cleanup first keeps a copy in ~/AgentLink/crash. With no dialog: the open task panel and its buttons (OK, Cancel …). An Expression Editor open over the task (\"=\" in a quantity field) shows as expression with its own buttons. OK then accepts the expression first and then the task. \"Expression OK\" accepts only the expression. Operate FreeCAD as the person does: read it and press what the task needs. Cancel backs out of anything you did not intend to open. Tell what you pressed. text: typed into a text prompt (or the dialog's one text field). item: selected from a prompt's list. Both occur before button. \"Unsaved Document\" during a close: Cancel, then doc_close { discard: true }. Save or Don't Save there need the person's approval. Replace on a \"file exists\" box needs it too. The first call answers pending with the approve_file arguments. Call approve_file with them, then press again. In a file dialog, the tool presses only Cancel and does not type: the path there is not checked. Use a tool that takes a path. A stuck window: app_force_restart.",
    "inputSchema": {"type": "object", "properties": {"button": {"type": "string"}, "text": {"type": "string"}, "item": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/unattended.py)",
@@ -21125,6 +21125,8 @@
     {"let": {"kept": "=crash_kept()"}, "when": "=btn.lower() == 'cleanup' and 'DocumentRecovery' in str(d.get('class'))"},
     {"let": {"unsafe": "=close_press_refusal(d, btn)"}},
     {"refuse": "=unsafe", "code": "invalid_state", "when": "=unsafe"},
+    {"let": {"picker": "=file_picker_refusal(d, btn)"}},
+    {"refuse": "=picker", "code": "refused", "when": "=picker"},
     {"let": {"appr": "=file_dialog_approval(d, btn)"}},
     {"answer": {"fields": {"...": "=appr", "dialog": "=info"}}, "when": "=appr is not None and not appr.get('ok')"},
     {"refuse": {"fmt": "Could not press {btn}."}, "code": "failed", "when": "=not press(d, btn)"},
@@ -21415,7 +21417,7 @@
   },
   "pref_set": {
    "group": "app",
-   "description": "Change FreeCAD's settings. path: the group. Then name + value, or values { name: value }. The type follows the type of the stored setting. For a setting not stored yet, give type, or the tool takes it from the value. type: bool, int, uint, float, string. FreeCAD stores a wrong type next to the correct one and ignores it, so check with pref_get. Answer: set { name: { was, now, type } }, appliesAtNextLaunch. Most settings apply immediately. The theme, stylesheet, language and toolbars apply after app_restart. The tool refuses the person's own settings. These are Agent Link's ExtensionRepos, the switches that add-ons guard, and the Addon Manager's groups. Also the macro folder and program paths (…BinaryPath, …Executable).",
+   "description": "Change FreeCAD's settings. path: the group. Then name + value, or values { name: value }. The type follows the type of the stored setting. For a setting not stored yet, give type, or the tool takes it from the value. type: bool, int, uint, float, string. FreeCAD stores a wrong type next to the correct one and ignores it, so check with pref_get. Answer: set { name: { was, now, type } }, appliesAtNextLaunch. Most settings apply immediately. The theme, stylesheet, language and toolbars apply after app_restart. The tool refuses the person's own settings. These are Agent Link's ExtensionRepos, the switches that add-ons guard, and the Addon Manager's groups. Also the macro folder and program paths (…BinaryPath, …Executable). Also each setting whose name is a program, folder, file or address (…Path, …Dir, …File, …Url, …Converter, …Editor). Also each value that is a path or a URL, and the Macro and Dialog groups.",
    "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}, "name": {"type": "string"}, "value": {}, "values": {"type": "object"}, "type": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/app.py)",
@@ -21426,7 +21428,7 @@
     {"let": {"values": "=dict(a.values or {})"}},
     {"do": "=values.update({a.name: a.value})", "when": "=a.name"},
     {"refuse": "name and value, or values { name: value } (path: the group, \"BaseApp/Preferences/…\"; pref_get { path } lists its settings and types).", "when": "=not values"},
-    {"let": {"hit": "=[k for k in values if guarded(path, k)]"}},
+    {"let": {"hit": "=[k for k in values if guarded(path, k, values[k])]"}},
     {"refuse": {"fmt": "{', '.join(hit)}: the person's to set (Edit > Preferences, or Agent Link's panel) — they decide what an agent may do, what code FreeCAD loads and what programs it runs. Nothing was changed."}, "code": "not_allowed", "when": "=hit"},
     {"do": "=changing('pref_set', path)"},
     {"let": {"done": "={}", "later": "=[]"}},
@@ -21457,7 +21459,7 @@
   },
   "pref_pack": {
    "group": "app",
-   "description": "Use preference packs: themes and their settings (FreeCAD's own, saved packs and add-ons' packs). With nothing: packs lists their names. apply: name sets every value that the pack holds (answer: values, how many). The stylesheet and theme show after app_restart; navigation and colours change immediately. You cannot un-apply a pack. An add-on that keeps a settings history can take it back.",
+   "description": "Use preference packs: themes and their settings (FreeCAD's own, saved packs and add-ons' packs). With nothing: packs lists their names. apply: name sets every value that the pack holds (answer: values, how many). The stylesheet and theme show after app_restart; navigation and colours change immediately. You cannot un-apply a pack. The tool does not set the settings that pref_set refuses (answer: guardedKept). An add-on that keeps a settings history can take it back.",
    "inputSchema": {"type": "object", "properties": {"apply": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/app.py)",
@@ -21468,10 +21470,11 @@
     {"answer": {"fields": {"packs": "=sorted(have)", "next": "pref_pack { apply: name } sets its values; restart FreeCAD for the theme and stylesheet."}}, "when": "=not name"},
     {"refuse": {"fmt": "apply: no preference pack '{name}' — the packs: {', '.join(sorted(have)) or 'none'}."}, "code": "not_found", "when": "=name not in have"},
     {"do": "=changing('pref_pack', 'BaseApp/Preferences')"},
-    {"let": {"n": "=apply_cfg(have[name])"}},
+    {"let": {"skipped": "=[]"}},
+    {"let": {"n": "=apply_cfg(have[name], skipped)"}},
     {"do": "=changed('pref_pack', 'BaseApp/Preferences', 'pack ' + name, None, str(n) + ' values')"}
    ],
-   "answer": {"fields": {"applied": "=name", "values": "=n", "note": "Restart FreeCAD for the stylesheet and theme to take hold; navigation and colours change now."}}
+   "answer": {"fields": {"applied": "=name", "values": "=n", "note": "Restart FreeCAD for the stylesheet and theme to take hold; navigation and colours change now.", "guardedKept": {"when": "=skipped", "value": "=skipped"}}}
   },
   "cmd_list": {
    "group": "app",
@@ -21490,7 +21493,7 @@
   },
   "cmd_run": {
    "group": "app",
-   "description": "Run a FreeCAD command by name (Std_ViewFitAll, Std_ViewIsometric, PartDesign_Pad …), as when the person presses its button. It acts on the current selection of the window (set it with selection). It acts on the document in front (doc_switch { front: true }), in the active workbench. The tool refuses a command that is not active (greyed out), because FreeCAD would silently do nothing. It refuses commands that open a modal dialog, run macros or quit, and names the tool for the task. Many modelling commands open a task panel and wait: dialog_answer presses its OK or Cancel. index: the item of a group command (0). A Part Design command with no active body first makes the body of the selection active, as a double-click does. Answer: ran, wasActive, workbench, document, objectsAdded, activeBody. A command gives no result of its own, so read the model after it (session_state). The headless tools do modelling better; use this for view and window commands. Window only.",
+   "description": "Run a FreeCAD command by name (Std_ViewFitAll, Std_ViewIsometric, PartDesign_Pad …), as when the person presses its button. It acts on the current selection of the window (set it with selection). It acts on the document in front (doc_switch { front: true }), in the active workbench. The tool refuses a command that is not active (greyed out), because FreeCAD would silently do nothing. It refuses commands that open a modal dialog, run macros or quit, and names the tool for the task. It also refuses commands that open a file dialog (Std_SaveCopy, Std_ViewScreenShot, TechDraw_ExportPageSVG …), because the path there is not checked. Many modelling commands open a task panel and wait: dialog_answer presses its OK or Cancel. index: the item of a group command (0). A Part Design command with no active body first makes the body of the selection active, as a double-click does. Answer: ran, wasActive, workbench, document, objectsAdded, activeBody. A command gives no result of its own, so read the model after it (session_state). The headless tools do modelling better; use this for view and window commands. Window only.",
    "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "index": {"type": "integer"}}, "required": ["name"], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/app.py)",

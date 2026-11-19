@@ -87,16 +87,39 @@ def _freecad_bundle(target):
 # add-on's switch for how far an agent goes). Set by the person in
 # Preferences or the panel; an agent that could set them could raise its
 # own rights or have its code run.
-_GUARDED = {("Mod/AgentLink", "ExtensionRepos"), ("Macro", "MacroPath")}
-_GUARDED_WORDS = ("binarypath", "executable", "exepath", "binpath")
+_GUARDED = {("Mod/AgentLink", "ExtensionRepos"), ("Macro", "MacroPath"), ("Mod/AgentLink", "WindowApprove")}
+# Names of programs, converters, editors and code: a name that holds one of
+# these anywhere (case ignored). Red team 4, R4-7: the Draft ODA converter
+# (TeighaFileConverter), external editors, Python paths.
+_GUARDED_WORDS = ("binarypath", "executable", "exepath", "binpath", "converter", "pythonpath", "nativedialog", "nativefiledialog")
+# Names that end in one of these (case ignored): a setting that says where
+# files go or come from, or which program, server or code is used
+# (…Path, …Dir, …Folder, …File, …Url, …Repos, …Editor, …Program, …Macro).
+_GUARDED_ENDS = re.compile(r"(path|paths|dir|dirs|directory|folder|folders|(?<!pro)file|files|url|urls|uri|repo|repos|repositories|"
+                           r"editor|program|binary|python|interpreter|server|proxy|location|macro|macros|script|scripts|command)$", re.I)
 
 
 # Whole groups no agent sets: the Addon Manager's (its catalog address and
-# custom repositories decide what code an update installs).
-_GUARDED_GROUPS = ("Addons", "AddonManager", "Mod/AddonManager")
+# custom repositories decide what code an update installs), the macro
+# settings, and the file dialog settings (Dialog/DontUseNativeDialog turns on
+# Qt's own dialog, where a typed path is not checked: R4-2).
+_GUARDED_GROUPS = ("Addons", "AddonManager", "Mod/AddonManager", "Macro", "Dialog")
 
 
-def guarded(path, name):
+def path_like(value):
+    """True for a value that names a file, a folder or an address: an
+    absolute or home path, a Windows drive, "..", or a URL (R4-7)."""
+    if not isinstance(value, str):
+        return False
+    v = value.strip()
+    return bool(v) and (v.startswith(("/", "~", "\\", "$")) or "://" in v or v.lower().startswith("file:") or bool(re.match(r"^[A-Za-z]:[\\/]", v))
+                        or bool(re.search(r"(^|[\\/])\.\.([\\/]|$)", v)))
+
+
+def guarded(path, name, value=None):
+    """True for a setting that the person sets, not an agent: the groups and
+    names above, the switches that add-ons guard, and (value given) a value
+    that is a path or an address."""
     p = (path or "").strip("/")
     if p.startswith(ROOT):
         p = p[len(ROOT):]
@@ -108,28 +131,40 @@ def guarded(path, name):
         gp = (gp or "").strip("/")
         if name == gn and (p.endswith(gp) or p == gp):
             return True
-    return any(w in (name or "").lower() for w in _GUARDED_WORDS)
+    n = str(name or "")
+    if any(w in n.lower() for w in _GUARDED_WORDS) or _GUARDED_ENDS.search(n):
+        return True
+    return path_like(value)
 
 
-def _guarded_values(path="BaseApp"):
-    """The guarded settings as they stand, the whole tree walked."""
+def _all_values(path="BaseApp"):
+    """Every setting as it stands, the whole tree walked."""
     out = {}
     g = FreeCAD.ParamGet(ROOT + path)
     for row in g.GetContents() or []:
-        if guarded(path, row[1]):
-            out[(path, row[1])] = (row[0], row[2])
+        out[(path, row[1])] = (row[0], row[2])
     for sub in g.GetGroups() or []:
-        out.update(_guarded_values(path + "/" + sub))
+        out.update(_all_values(path + "/" + sub))
     return out
+
+
+def _guarded_values(path="BaseApp"):
+    """Every setting as it stands (the guarded ones are found against it
+    after a merge: a value that became a path counts too)."""
+    return _all_values(path)
 
 
 def _guarded_restore(before):
     """Put the guarded settings back as they were: changed ones reset,
-    new ones taken out. Returns the names put back."""
-    after = _guarded_values()
+    new ones taken out. A setting counts as guarded by its name, or by its
+    value before or after (a path or an address). Returns the names put
+    back."""
+    after = _all_values()
     back = []
     for key, (kind, val) in after.items():
         if before.get(key) == (kind, val):
+            continue
+        if not (guarded(key[0], key[1], val) or (key in before and guarded(key[0], key[1], before[key][1]))):
             continue
         g = FreeCAD.ParamGet(ROOT + key[0])
         rem = {"Boolean": g.RemBool, "Integer": g.RemInt, "Unsigned": g.RemUnsigned, "Float": g.RemFloat, "String": g.RemString}.get(kind)
@@ -182,6 +217,47 @@ def cfg_count(path):
         return sum(1 for e in top.iter() if e.tag in CFG_VALUES) if top is not None else None
     except Exception:  # noqa: BLE001
         return None
+
+
+def version_older(want, running):
+    """True when the release number want ("1.0.2") is older than running
+    (FreeCAD.Version()[:3]); "latest" never is."""
+    if str(want or "").strip() in ("", "latest"):
+        return False
+    try:
+        w = [int(x) for x in str(want).split(".")]
+        r = [int(x) for x in list(running)[:3]]
+    except (TypeError, ValueError):
+        return False
+    n = max(len(w), len(r))
+    return w + [0] * (n - len(w)) < r + [0] * (n - len(r))
+
+
+def install_approval(what, version, app=None, running=()):
+    """approve_code for app_install (red team 4, R4-12): it puts an app in
+    place and runs it. {"ok": True} once the person approved this one
+    action, else the pending answer with the approve_code arguments. A
+    release older than the running one says so in what the person sees."""
+    from .. import approvals
+
+    run = ".".join(str(x) for x in list(running)[:3])
+    older = version_older(version, running)
+    if what == "open":
+        title = f"Open the FreeCAD app {app} with this FreeCAD's settings and add-ons"
+        lines = [f"App: {app}", "The app runs on this computer, with the add-ons copied into it."]
+    else:
+        title = f"Install FreeCAD {version} beside this one ({'OLDER than the running ' + run if older else 'running ' + run})"
+        lines = [f"Release: {version}, from FreeCAD's GitHub release (SHA-256, code signature and team checked).",
+                 "The app is put in /Applications and runs at app_restart { app }."]
+        if older:
+            lines.append(f"This release is older than the running {run}: an older FreeCAD can have file-reader faults that are fixed now.")
+    shown = {"source": app if what == "open" else "https://github.com/FreeCAD/FreeCAD/releases",
+             "version": (version or "") + (f" (older than the running {run})" if older else ""),
+             "risk": "puts an app in place and runs it" if what != "open" else "runs an app"}
+    try:
+        return approvals.ask("addon-install", f"FreeCAD {version or app}", title, lines, approvals.identity("app_install", what, version, app), shown=shown)
+    except approvals.Refused as e:
+        raise ToolError(e.code, e.message)
 
 
 def _alive(pid):
@@ -341,10 +417,56 @@ REFUSED = {
     "Mesh_Import": "import_file { path }",
     "Mesh_Export": "meshobj_export",
     "Std_RecentFiles": "doc_open { path }",
+    "Std_RestartInSafeMode": "app_restart",
 }
+# Commands that open a file dialog to read or write a file (red team 4,
+# R4-2): the path typed there is not checked. Read from FreeCAD 1.1's
+# command list (docs/hardening/freecad-1.1.0-commands.txt); each names the
+# tool that does the job with a checked path.
+FILE_DIALOG_COMMANDS = {
+    "Std_Save": "doc_save (a never-saved document opens a Save As dialog)",
+    "Std_SaveAll": "doc_save_all",
+    "Std_SaveCopy": "doc_save { path }",
+    "Std_MergeProjects": "doc_merge",
+    "Std_ProjectUtil": "doc_open { path } and doc_save { path }",
+    "Std_ViewScreenShot": "view_snapshot or window_snapshot",
+    "Std_ViewSaveCamera": "view (the camera of a view is a read, not a file)",
+    "Std_ViewRestoreCamera": "view",
+    "Std_ViewLoadImage": "the person opens images",
+    "Std_TextureMapping": "the person picks a texture file",
+    "Std_PrintPreview": "the person prints",
+    "Std_ExportDependencyGraph": "it asks where to save in a dialog",
+    "TechDraw_ExportPageSVG": "td_export",
+    "TechDraw_ExportPageDXF": "td_export",
+    "TechDraw_Symbol": "td_view_more",
+    "TechDraw_Image": "td_view_more",
+    "TechDraw_PageTemplate": "td_page { template }",
+    "TechDraw_PrintAll": "the person prints",
+    "Assembly_ExportASMT": "asm_export",
+    "CAM_ExportTemplate": "cam_template_export",
+    "CAM_Post": "cam_post",
+    "CAM_ToolBitLoad": "cam_tool_add",
+    "CAM_ToolBitSave": "cam_library",
+    "CAM_ToolBitSaveAs": "cam_library",
+    "CAM_ToolBitLibraryOpen": "cam_library",
+    "Robot_ExportKukaCompact": "robot_export",
+    "Robot_ExportKukaFull": "robot_export",
+    "IFC_Save": "ifc_save",
+    "IFC_SaveAs": "ifc_save",
+    "BIM_ImagePlane": "bim_image_plane",
+    "BIM_IfcExplorer": "ifc_open",
+    "BIM_ProjectManager": "the person keeps project templates",
+    "Part_ImportCurveNet": "part_import_curves",
+    "Part_ImportStep": "import_file { path }",
+    "Import_ReadBREP": "import_file { path }",
+    "Import_Iges": "import_file { path }",
+    "Sandbox_FileDialog": "it asks for a file in a dialog",
+    "Sandbox_MeshLoad": "import_file { path }",
+}
+REFUSED.update({k: v + " — it asks for a file in a dialog, where the path is not checked" for k, v in FILE_DIALOG_COMMANDS.items()})
 # Families of commands refused by name: macros by number run the person's
 # macros; every other import or export asks for a file in a dialog.
-REFUSED_LIKE = re.compile(r"^(Std_Dlg|Std_Macro_\d|Std_MacroStep|Std_ToggleBreakpoint|.*_(Import|Export)$)")
+REFUSED_LIKE = re.compile(r"^(Std_Dlg|Std_Macro_\d|Std_MacroStep|Std_ToggleBreakpoint|.*_(Import|Export)$|.*_(Import|Export|Save|Open|Load)[A-Z].*$)")
 
 
 def refused(name):
@@ -430,9 +552,11 @@ def _set(g, name, value, kind=None):
 PACK_TYPES = {"FCBool": "bool", "FCInt": "int", "FCUInt": "uint", "FCFloat": "float", "FCText": "string"}
 
 
-def apply_cfg(path):
+def apply_cfg(path, skipped=None):
     """Set every value a preference pack's .cfg holds, group by group (what
-    FreeCAD's own pack manager does, without its dialog)."""
+    FreeCAD's own pack manager does, without its dialog). A guarded setting
+    (guarded: program paths, folders, the macro and dialog groups) is not
+    set: its name goes into skipped (R4-7)."""
     tree = ET.parse(path)
     n = 0
 
@@ -446,6 +570,10 @@ def apply_cfg(path):
                 v = child.text if child.tag == "FCText" else child.get("Value")
                 if child.tag == "FCBool":
                     v = v in ("1", "true", "True")
+                if guarded("/".join(prefix), child.get("Name"), v):
+                    if skipped is not None:
+                        skipped.append("/".join(prefix + [str(child.get("Name"))]))
+                    continue
                 _set(g, child.get("Name"), v, PACK_TYPES[child.tag])
                 n += 1
 
@@ -916,11 +1044,13 @@ def tools(session):
                 cur = json.load(f)
         running = bool(cur and cur.get("state") not in ("installed", "failed") and _alive(cur.get("pid")))
         if a.get("open"):
-            app = os.path.expanduser(a["open"]).rstrip("/")
-            if not (app.endswith(".app") and os.path.isdir(os.path.join(app, "Contents"))):
-                raise ToolError("not_found", "No FreeCAD app at " + app)
+            # Only a FreeCAD bundle in /Applications or ~/Applications (R4-12).
+            app = _freecad_bundle(a["open"])
             if FreeCAD.GuiUp:
                 raise ToolError("invalid_state", "This FreeCAD's window is open: app_restart { app } switches it over.")
+            got = install_approval("open", None, app, FreeCAD.Version()[:3])
+            if not got.get("ok"):
+                return got
             said = _carry_settings(app)
             subprocess.Popen(["/usr/bin/open", "-a", app], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_clean_env())
             return {"opening": app, "settings": said, "note": "Its window opens in a few seconds; its link comes on by itself once Agent Link is among its add-ons."}
@@ -941,6 +1071,12 @@ def tools(session):
         py = _bundle_python()
         if py is None:
             raise ToolError("not_found", "No python3 in this FreeCAD's bundle to run the install with.")
+        if not re.fullmatch(r"latest|\d+\.\d+(\.\d+)?", str(version)):
+            raise ToolError("invalid_input", f"version: \"latest\" or a release number like \"1.1.3\", not {str(version)[:40]!r}.")
+        # It puts an app in place and runs it: the person approves (R4-12).
+        got = install_approval("install", str(version), None, FreeCAD.Version()[:3])
+        if not got.get("ok"):
+            return got
         job = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "install_job.py")
         if os.path.exists(state):
             os.remove(state)
@@ -1007,7 +1143,9 @@ def tools(session):
         Tool("app_install", "Install another FreeCAD release next to this one on a Mac. version: \"1.1.3\", \"latest\", from FreeCAD's GitHub release; the tool checks SHA-256. The "
                             "current FreeCAD.app is kept as \"FreeCAD <version>.app\". It downloads in the background (minutes): the call answers started. A call with no arguments "
                             "reads its state (downloading … installed | failed) and the path of the app. Then app_restart { app } switches the window over. With the window closed, "
-                            "open: an .app carries settings over and opens it. On systems other than macOS, the tool refuses. Ask the person before you install.",
+                            "open: an .app carries settings over and opens it. On systems other than macOS, the tool refuses. Ask the person before you install. "
+                            "An install and open need the person's approval: the first call answers pending with the approve_code arguments. Call approve_code with them, "
+                            "then call again. A release older than the running one is shown as older. open takes only a FreeCAD app in /Applications or ~/Applications.",
              obj({"version": {"type": "string"}, "open": {"type": "string"}}), app_install, changes=False),
         Tool("pref_import", "Bring settings over from another settings file. By default: the user.cfg of the release before this one (after a FreeCAD upgrade). Or path. The tool "
                             "merges them in, and the values of the file win. It first copies this FreeCAD's settings to a backup (answer: backup). The guarded settings stay as "

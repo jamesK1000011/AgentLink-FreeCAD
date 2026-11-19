@@ -291,7 +291,9 @@ def tools(s):
              "what it hit (class, name, text, where). It also gives a dialog or menu that it opened; later steps run inside it. open: what still "
              "holds the window at the end. Close it with Escape, dialog_answer or gui_unstick. Also new Report problems. {shortcut: \"Shift+V\"}: runs "
              "the enabled command with that shortcut ({key} does not). The proof that a step worked is what the tools read back after it, not the shot. Use session_state, selection { clear: false }, object_get. "
-             "Face and edge names change with the model. Aim view_world at a point on the face, after cmd_run Std_ViewIsometric and Std_ViewFitAll.",
+             "Face and edge names change with the model. Aim view_world at a point on the face, after cmd_run Std_ViewIsometric and Std_ViewFitAll. "
+             "In a file dialog, the tool sends only Escape or a click on Cancel: the path there is not checked. Use a tool that takes a path. "
+             "In FreeCAD's \"Unsaved Document\" box or a \"replace the file\" box, it also sends only Escape or Cancel. dialog_answer presses the other buttons, with the person's approval.",
              obj({"steps": {"type": "array", "items": {"type": "object"}}, "inline": {"type": "boolean"},
                   "as": {"type": "string", "enum": ["person"],
                          "description": "Dev, testing an add-on that follows the person: this call's input counts as the person's, not the agent's."}},

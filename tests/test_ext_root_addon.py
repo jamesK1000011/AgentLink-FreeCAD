@@ -31,12 +31,15 @@ class RootAddon(unittest.TestCase):
         subprocess.run(g + ["add", "-A"], check=True)
         subprocess.run(g + ["commit", "-q", "-m", "x"], check=True)
         self.src = src
-        self._file, self._repos = ext.__file__, ext.repos
+        self._file, self._repos, self._parse = ext.__file__, ext.repos, ext.parse
         ext.__file__ = os.path.join(self.here, "agentlink", "ext.py")
-        ext.repos = lambda: ["file://" + src]
+        # sync takes only GitHub repositories (red team 4, R4-13): the
+        # repository's address is the local one here.
+        ext.repos = lambda: ["t/src"]
+        ext.parse = lambda spec: ("t/src", "main", "file://" + src)
 
     def tearDown(self):
-        ext.__file__, ext.repos = self._file, self._repos
+        ext.__file__, ext.repos, ext.parse = self._file, self._repos, self._parse
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_installed_marked_and_on_the_path(self):

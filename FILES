@@ -560,6 +560,7 @@ tests/test_protocol.py
 tests/test_quiet_reads.py
 tests/test_quit_guard.py
 tests/test_red_team.py
+tests/test_red_team4_hub.py
 tests/test_redteam4_hub.py
 tests/test_release.py
 tests/test_release_tools.py

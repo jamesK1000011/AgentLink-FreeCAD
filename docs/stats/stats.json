@@ -326,8 +326,8 @@
     "style": "ste",
     "default": false,
     "tools": 22,
-    "chars": 20653,
-    "tokens": 5901,
+    "chars": 20780,
+    "tokens": 5937,
     "estimatedCards": 17
    },
    {
@@ -335,16 +335,16 @@
     "style": "full",
     "default": false,
     "tools": 22,
-    "chars": 29111,
-    "tokens": 8317,
+    "chars": 29238,
+    "tokens": 8354,
     "estimatedCards": 17
    }
   ],
   "allHubListed": {
    "tools": 415,
-   "chars": 334815,
+   "chars": 335941,
    "estimatedCards": 24,
-   "tokens": 95661
+   "tokens": 95983
   },
   "base": [
    "session_state",
