@@ -134,7 +134,7 @@ class Log(unittest.TestCase):
         self.assertEqual(by[("make_box", 2)]["grp"], "part")
         self.assertEqual(by[("tool_groups", 5)]["groups"], {"enable": ["mesh"]})
         self.assertEqual(by[("fail", 6)]["err"], "not_found")
-        self.assertEqual(by[("fail", 6)]["why"], "No file ~/secret/plan.FCStd and none at <path>")
+        self.assertEqual(by[("fail", 6)]["why"], "No file ~/<path>.FCStd and none at <path>.step")
         self.assertEqual(by[("history_undo", 7)]["undo"], "undo")
         b = by[("batch", 8)]
         self.assertEqual((b["steps"], b["rollback"], b["batch"]), (["make_cyl", "make_box"], 2, jobs[0]["job"] + "-b1"))
@@ -172,7 +172,51 @@ class Log(unittest.TestCase):
         m.call("object_get", "{}", "{}", args={"object": "Box"})
         r = usage.log_report(1, self.where)
         self.assertEqual((r["retries"]["count"], r["retries"]["afterError"]), (1, 1))
-        self.assertEqual(r["errorsByTool"][0]["reasons"], [{"why": "Box001: no such object", "count": 1}])
+        self.assertEqual(r["errorsByTool"][0]["reasons"], [{"why": "<name>: no such object", "count": 1}])
+
+    def test_error_words_keep_no_label_or_file_name(self):
+        """Fault 72: the log keeps the error code and cleaned words: no
+        document label, no file name, home paths as ~."""
+        home = os.path.expanduser("~")
+        cases = {
+            "No file " + home + "/secret/plan.FCStd": "No file ~/<path>.FCStd",
+            "asm_joint failed: 'M8x25-Screw219'": "asm_joint failed: '<name>'",
+            "Pad002 is not a solid in \"Rear bracket\"": "<name> is not a solid in \"<name>\"",
+            "export: lid.stl is there; overwrite: true": "export: <file>.stl is there; overwrite: true",
+            "at /Users/someone/Desktop/a.step": "at ~/<path>.step",
+            "at /opt/freecad/lib/x.so": "at <path>.so",
+            "wait: seconds to wait for it, 0 to 30.": "wait: seconds to wait for it, 0 to 30.",
+            "op: one of fuse, cut, common": "op: one of fuse, cut, common",
+        }
+        for raw, want in cases.items():
+            self.assertEqual(usage.clean_error(raw), want, raw)
+        self.assertEqual(len(usage.clean_error("x" * 999)), usage.WORDS_MAX)
+
+    def test_error_rows_on_disk_and_in_the_report(self):
+        m = self.srv.meter
+        msg = "Body 'Secret lid' and Pad004 in " + os.path.expanduser("~") + "/Clients/acme/lid.FCStd: not a solid"
+        m.call("part_check", "{}", json.dumps({"error": {"code": "invalid_state", "message": msg}}), error="invalid_state", ms=12)
+        with open(os.path.join(self.where, os.listdir(self.where)[0]), encoding="utf-8") as f:
+            text = f.read()
+        for leak in ("Secret lid", "Pad004", "acme", "lid.FCStd", os.path.expanduser("~") + os.sep):
+            self.assertNotIn(leak, text)
+        row = [json.loads(x) for x in text.splitlines() if '"part_check"' in x][-1]
+        self.assertEqual((row["tool"], row["err"], row["ms"]), ("part_check", "invalid_state", 12))
+        self.assertEqual(row["why"], "Body '<name>' and <name> in ~/<path>.FCStd: not a solid")
+        r = usage.log_report(1, self.where)
+        e = [x for x in r["errorsByTool"] if x["tool"] == "part_check"][0]
+        self.assertEqual(e["codes"], {"invalid_state": 1})
+        self.assertEqual(e["reasons"][0]["why"], row["why"])
+
+    def test_old_rows_are_cleaned_in_the_report(self):
+        os.makedirs(self.where, exist_ok=True)
+        day = time.strftime("%Y-%m-%d")
+        with open(os.path.join(self.where, day + ".jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps({"t": time.time(), "s": "x", "kind": "call", "tool": "old_tool", "job": "j", "n": 1, "in": 2, "out": 2, "bytes": 2, "tok": 1,
+                                "img": 0, "ms": 1, "err": "not_found", "why": "Bracket007: no such object in 'Kitchen plan'"}) + "\n")
+        r = usage.log_report(1, self.where)
+        e = [x for x in r["errorsByTool"] if x["tool"] == "old_tool"][0]
+        self.assertEqual(e["reasons"][0]["why"], "<name>: no such object in '<name>'")
 
     def test_addons_in_the_mod_folder(self):
         """Live 71: every add-on beside this one in Mod, with its version
@@ -229,7 +273,7 @@ class Log(unittest.TestCase):
         m.dialog_seen(None, now=T + 310.0)
         ds = [r for r in self.rows() if r["kind"] == "dialog"]
         self.assertEqual([(x["title"], x["by"], x["secs"], x["blocked"]) for x in ds], [("Save?", "agent", 4.0, 1), ("Other", "agentlink", 1.0, 0), ("Third", "person", 10.0, 0)])
-        self.assertEqual(ds[0]["text"], "Save ~/x.FCStd?")
+        self.assertEqual(ds[0]["text"], "Save ~/<path>.FCStd?")
         r = usage.log_report(1, self.where)["dialogs"]
         self.assertEqual((r["count"], r["callsBlocked"], r["answeredBy"]), (3, 1, {"agent": 1, "agentlink": 1, "person": 1}))
 
