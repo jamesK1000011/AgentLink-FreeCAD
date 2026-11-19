@@ -114,7 +114,7 @@ jobs:
           # Each failure with its traceback, and where a crash was (faulthandler).
           if [ "$code" -ne 0 ]; then
             echo "---- the failures"
-            sed -n '/^=\{20,\}$/,/^Ran /p' "$RUNNER_TEMP/addons.log" | grep -v 'ResourceWarning' | tail -n 400
+            sed -n '/^=\{20,\}$/,/^Ran /p' "$RUNNER_TEMP/addons.log" | grep -av 'ResourceWarning' | tail -n 400
             grep -B2 -A30 'Fatal Python error' "$RUNNER_TEMP/addons.log" | tail -n 80 || true
           fi
           test "$code" -eq 0
