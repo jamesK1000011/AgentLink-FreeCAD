@@ -59,7 +59,9 @@ CLIENT_ONLY = (FILE_TOOL, CODE_TOOL)
 # Kinds approved with approve_file; every other kind is approve_code's.
 FILE_KINDS = {"dialog", "recover", "save-all"}
 # The kinds of approval: every other kind is refused (red team 2, R2-9).
-CODE_KINDS = {"cookbook", "macro", "extension", "addon-install", "addon-update", "addon-remove", "addon-uninstall"}
+# "gcode": G-code that an add-on sends to a printer or writes for one
+# (agentlink-orcaslicer asks it before it starts a print).
+CODE_KINDS = {"cookbook", "macro", "extension", "addon-install", "addon-update", "addon-remove", "addon-uninstall", "gcode"}
 KINDS = FILE_KINDS | CODE_KINDS
 # The facts each tool shows the person, beside kind, id, fingerprint, what.
 # approve_code also shows the risk and the first words of the scan of the
@@ -77,8 +79,9 @@ MAX_ID = 120
 
 _lock = threading.Lock()
 _OPEN = {}           # key -> request
-_GRANTS = {}         # key -> expiry time
+_GRANTS = {}         # key -> (expiry time, connection)
 _CLIENT = {}         # tool -> [arguments of calls in hand, from the client]
+_CONN = threading.local()  # .stack: the connections whose calls are in hand on this thread
 
 
 class Refused(Exception):
@@ -96,13 +99,41 @@ def key(kind, name, fingerprint):
     return f"{kind}:{ident(name)}:{fingerprint or ''}"
 
 
+# Characters that show nothing but can carry hidden text (red team 4,
+# R4-8): the variation selectors, the combining grapheme joiner, the Hangul
+# fillers, the Mongolian selectors and the blank Braille pattern.
+HIDING = ((0xFE00, 0xFE0F), (0xE0100, 0xE01EF), (0x034F, 0x034F), (0x115F, 0x1160), (0x3164, 0x3164),
+          (0xFFA0, 0xFFA0), (0x180B, 0x180F), (0x2800, 0x2800))
+
+
 def invisible(c):
     """True for a character that a person cannot see or that turns the
     text: Unicode category Cf (format: zero widths, joiners, direction
     marks), the tag block U+E0000-E007F, and U+202A-202E, U+2066-2069
-    (red team 2, R2-7)."""
+    (red team 2, R2-7); and the HIDING characters (red team 4, R4-8)."""
     o = ord(c)
-    return 0xE0000 <= o <= 0xE007F or 0x202A <= o <= 0x202E or 0x2066 <= o <= 0x2069 or unicodedata.category(c) == "Cf"
+    return (0xE0000 <= o <= 0xE007F or 0x202A <= o <= 0x202E or 0x2066 <= o <= 0x2069 or unicodedata.category(c) == "Cf"
+            or any(a <= o <= b for a, b in HIDING))
+
+
+def hiding(text):
+    """True when the text holds a HIDING character: such an id is refused,
+    not cleaned (red team 4, R4-8). Format characters and direction marks
+    are removed from it, as before (R2-7)."""
+    return any(a <= ord(c) <= b for c in str(text) for a, b in HIDING)
+
+
+def ascii_host(host):
+    """A host as the client shows it: a non-ASCII host (Cyrillic letters
+    that look like Latin ones) as punycode, with the words "non-ASCII
+    host" (red team 4, R4-8). Answers (shown, was it non-ASCII)."""
+    h = str(host)
+    if h.isascii():
+        return h, False
+    try:
+        return h.encode("idna").decode("ascii"), True
+    except (UnicodeError, ValueError):
+        return h.encode("ascii", "backslashreplace").decode("ascii"), True
 
 
 def clean(text, cap=MAX_LINE):
@@ -139,13 +170,14 @@ def source_field(v):
     except ValueError:
         u = None
     if u is not None and u.netloc:
-        host = u.hostname or u.netloc
-        t = f"host: {host}, path: {u.path or '/'}" + (f", query: {u.query}" if u.query else "") + (f", scheme: {u.scheme}" if u.scheme not in ("https", "http") else "")
+        host, idn = ascii_host(u.hostname or u.netloc)
+        t = f"host: {host}{' (non-ASCII host)' if idn else ''}, path: {u.path or '/'}" + (f", query: {u.query}" if u.query else "") + (f", scheme: {u.scheme}" if u.scheme not in ("https", "http") else "")
         if "@" in u.netloc or (u.port and u.port not in (80, 443)):
             t += f", address: {u.netloc}"
     elif ":" in t and "@" in t.split(":", 1)[0] and "/" not in t.split(":", 1)[0]:  # git@host:path
         h, _, path = t.partition(":")
-        t = f"host: {h.split('@', 1)[1]}, path: {path}"
+        host, idn = ascii_host(h.split("@", 1)[1])
+        t = f"host: {host}{' (non-ASCII host)' if idn else ''}, path: {path}"
     if len(t) > MAX_FIELD:
         raise Refused("invalid_input", f"source: {len(t)} characters; the client shows {MAX_FIELD} or fewer, and a cut would hide the end. "
                                        "Use a shorter source. Nothing was asked.")
@@ -226,6 +258,36 @@ class client_call:
         return False
 
 
+class connection_call:
+    """protocol.Server.handle wraps every tools/call with the connection it
+    came on (the window link gives one for each paired connection; stdio
+    has one only, None). A request is bound to the connection that asked,
+    and only that connection approves it or uses its grant (red team 4,
+    R4-11)."""
+
+    def __init__(self, conn):
+        self.conn = conn
+
+    def __enter__(self):
+        st = getattr(_CONN, "stack", None)
+        if st is None:
+            st = _CONN.stack = []
+        st.append(self.conn)
+        return self
+
+    def __exit__(self, *exc):
+        st = getattr(_CONN, "stack", None) or []
+        if st:
+            st.pop()
+        return False
+
+
+def connection():
+    """The connection whose call is in hand on this thread, or None."""
+    st = getattr(_CONN, "stack", None)
+    return st[-1] if st else None
+
+
 def from_client(tool, args):
     """True when a call of tool with these arguments is in hand from the
     client (client_call)."""
@@ -236,25 +298,37 @@ def from_client(tool, args):
 
 # ---- asking ---------------------------------------------------------------------------------
 
+def _mine(bound, conn):
+    """True when a request or grant bound to one connection is for this
+    one: the same connection, or one of the two is not a connection's (a
+    call with no connection: stdio, a job, the window's own press)."""
+    return bound is None or conn is None or bound == conn
+
+
 def take(kind, name, fingerprint=None):
-    """Use up a grant: True when the person approved this."""
+    """Use up a grant: True when the person approved this (on this
+    connection, R4-11)."""
     k = key(kind, name, fingerprint)
+    conn = connection()
     with _lock:
-        t = _GRANTS.pop(k, None)
-    return t is not None and t >= time.time()
+        g = _GRANTS.get(k)
+        if g is None or not _mine(g[1], conn):
+            return False
+        _GRANTS.pop(k, None)
+    return g[0] >= time.time()
 
 
 def granted(kind, name, fingerprint=None):
     with _lock:
-        t = _GRANTS.get(key(kind, name, fingerprint))
-    return t is not None and t >= time.time()
+        g = _GRANTS.get(key(kind, name, fingerprint))
+    return g is not None and g[0] >= time.time() and _mine(g[1], connection())
 
 
 def _prune(now):
     with _lock:
         for k in [k for k, r in _OPEN.items() if now - r["opened"] > OPEN_FOR]:
             _OPEN.pop(k, None)
-        for k in [k for k, t in _GRANTS.items() if t < now]:
+        for k in [k for k, g in _GRANTS.items() if g[0] < now]:
             _GRANTS.pop(k, None)
 
 
@@ -263,6 +337,10 @@ def arguments(kind, name, fingerprint, title, shown=None):
     the person."""
     if kind not in KINDS:
         raise Refused("invalid_input", f"kind {clean(kind, 40)!r}: not a kind of approval ({', '.join(sorted(KINDS))}). Nothing was asked.")
+    if hiding(name):
+        # Refused, not cleaned (red team 4, R4-8): an id with hidden
+        # characters can look like an id that the person knows.
+        raise Refused("invalid_input", f"id {clean(name, 60)!r}: it has invisible characters (variation selectors, fillers). Nothing was asked.")
     tool = tool_for(kind)
     args = {"kind": kind, "id": ident(name), "fingerprint": clean(fingerprint, MAX_FIELD), "what": clean(title, MAX_FIELD)}
     for f in SHOWN[tool]:
@@ -285,7 +363,8 @@ def ask(kind, name, title, lines=(), fingerprint=None, on_ok=None, shown=None, t
         return {"ok": True}
     tool = tool_for(kind)
     req = {"key": k, "kind": kind, "name": name, "sha": fp, "tool": tool, "args": args, "title": clean(title, 120),
-           "lines": [clean(x) for x in list(lines or [])[:MAX_LINES]], "on_ok": on_ok, "then": then, "opened": now, "shown": None}
+           "lines": [clean(x) for x in list(lines or [])[:MAX_LINES]], "on_ok": on_ok, "then": then, "opened": now, "shown": None,
+           "client": connection()}
     with _lock:
         was = _OPEN.get(k)
         if was is not None:
@@ -315,7 +394,9 @@ def _record(req, by):
         p = keep.path("approvals.log")
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "a", encoding="utf-8") as f:
-            f.write(json.dumps({"t": round(time.time(), 1), "by": by, **{k: tilde(v) for k, v in req["args"].items()}}, ensure_ascii=False) + "\n")
+            conn = req.get("client")
+            f.write(json.dumps({"t": round(time.time(), 1), "by": by, **({"connection": str(conn)} if conn is not None else {}),
+                                **{k: tilde(v) for k, v in req["args"].items()}}, ensure_ascii=False) + "\n")
     except Exception:  # noqa: BLE001 - a record only
         pass
 
@@ -334,7 +415,7 @@ def give(req, by, now=None):
             req["on_ok"]()
     else:
         with _lock:
-            _GRANTS[req["key"]] = now + TTL
+            _GRANTS[req["key"]] = (now + TTL, req.get("client"))
     _record(req, by)
     if req.get("then"):
         try:
@@ -350,11 +431,13 @@ def declined(req):
 
 
 def waiting():
-    """The requests that wait for an approval: their approve arguments."""
+    """The requests that wait for an approval (of this connection, when a
+    connection's call is in hand): their approve arguments."""
     now = time.time()
     _prune(now)
+    conn = connection()
     with _lock:
-        return [{"tool": r["tool"], "arguments": dict(r["args"]), "since": round(now - r["opened"])} for r in _OPEN.values()]
+        return [{"tool": r["tool"], "arguments": dict(r["args"]), "since": round(now - r["opened"])} for r in _OPEN.values() if _mine(r.get("client"), conn)]
 
 
 def approve(tool, args):
@@ -385,6 +468,10 @@ def approve(tool, args):
         raise Refused("not_found", f"Nothing waits for an approval of {kind} {name}. Call the tool that needs it first: its pending answer gives the {tool} arguments. Nothing was approved.")
     if req["tool"] != tool:
         raise Refused("invalid_input", f"{kind} is approved with {req['tool']}, not {tool}. Nothing was approved.")
+    if not _mine(req.get("client"), connection()):
+        # Another client asked for it (R4-11): that client's own permission
+        # setting decides, not this one's.
+        raise Refused("not_allowed", f"{kind} {name}: another client connection asked for this approval. Only that connection can approve it. Nothing was approved.")
     want = req["args"]
     extra = sorted(k for k in args if k not in want)
     if extra:

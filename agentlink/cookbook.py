@@ -173,7 +173,7 @@ def _chars_ok(text, what):
     if any(ord(c) < 32 or 0x7f <= ord(c) < 0xa0 or c in "\u2028\u2029" for c in text):
         return [f"{what}: one line, no control characters"]
     if any(invisible(c) for c in text):
-        return [f"{what}: invisible or direction characters (Unicode format characters, tags); remove them"]
+        return [f"{what}: invisible or direction characters (Unicode format characters, tags, variation selectors, fillers); remove them"]
     return []
 
 

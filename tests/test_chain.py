@@ -140,11 +140,11 @@ class Files(unittest.TestCase):
     def test_no_such_file_names_the_files_there(self):
         C.write_answer(os.path.join(self.d, "have.json"), {})
         with self.assertRaises(C.Miss) as e:
-            C.read_json(os.path.join(self.d, "want.json"), "want.json")
+            C.read_json(os.path.join(self.d, "want.json"), "want.json", may_list=lambda f: True)
         self.assertEqual(e.exception.code, "not_found")
         self.assertIn("have.json", e.exception.message)
         with self.assertRaises(C.Miss) as e:
-            C.read_json(os.path.join(self.d, "nofolder", "want.json"), "nofolder/want.json")
+            C.read_json(os.path.join(self.d, "nofolder", "want.json"), "nofolder/want.json", may_list=lambda f: True)
         self.assertIn("no such folder", e.exception.message)
 
     def test_not_json_and_a_folder(self):

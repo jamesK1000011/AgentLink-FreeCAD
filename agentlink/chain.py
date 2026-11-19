@@ -155,18 +155,24 @@ def resolve(value, read_file, answers, index, first=0):
     return value
 
 
-def read_json(path, name, cache=None):
+def read_json(path, name, cache=None, may_list=None):
     """The contents of the JSON file at path (name: as the agent gave it).
     cache: { path: (mtime, size, data) }, so a file many references name is
-    parsed once while it stays the same."""
+    parsed once while it stays the same. may_list(folder): True when a miss
+    may name the .json files of the folder (the read rule lets the agent
+    read there); without it, a miss names none (red team 4, R4-1)."""
     try:
         st = os.stat(path)
     except OSError:
         folder = os.path.dirname(path)
+        near = None
         try:
-            near = sorted(n for n in os.listdir(folder) if n.lower().endswith(".json"))
+            if may_list is not None and may_list(folder):
+                near = sorted(n for n in os.listdir(folder) if n.lower().endswith(".json"))
         except OSError:
             near = None
+        if near is None and os.path.isdir(folder):
+            raise Miss("not_found", f"{FILE}: {name} — no such file (a relative path is in the session's folder). A call writes its answer to one with to: \"file.json\".") from None
         what = "there is no such folder" if near is None else (f"the .json files there: {', '.join(near[:KEYS_SHOWN])}" if near else "there are no .json files there")
         raise Miss("not_found", f"{FILE}: {name} — no such file (a relative path is in the session's folder); {what}. A call writes its answer to one with to: \"file.json\".") from None
     if not os.path.isfile(path):

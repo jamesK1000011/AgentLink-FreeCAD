@@ -333,7 +333,7 @@ Tools: 415 in Agent Link, 627 with all add-ons installed.
 | Tool list | Tools listed | Tokens (est.) |
 |---|---:|---:|
 | static (default), ste | 6 | 1,583 |
-| static, full | 6 | 4,074 |
+| static, full | 6 | 4,087 |
 | classic, ste | 22 | 5,861 |
 | classic, full | 22 | 8,278 |
 <!-- stats:end -->

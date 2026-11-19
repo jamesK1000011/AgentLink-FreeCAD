@@ -3,8 +3,10 @@
 # an agent passes in goes through here before the tool runs: an agent can be
 # talked into things by what it reads (a web page, a document), so the add-on
 # keeps it away from credentials, hidden settings, scripts and the system,
-# whatever it is asked. Reading is open otherwise (the person's own models,
-# scans, fonts); writing stays in the person's home, the session's folder or
+# whatever it is asked. Reading is an allow list (read_refusal): the
+# person's ordinary folders in the home, the session's folder, the
+# temporary folders, FreeCAD's folders and a few system places (apps, other
+# disks, fonts); writing stays in the person's home, the session's folder or
 # the temporary folder, as model, drawing, data or G-code files.
 
 import os
@@ -124,6 +126,83 @@ def agentlink_state(real, out_dir=None):
     return None
 
 
+# Reads are an allow list (red team 4, R4-1). In the home: every folder but
+# the hidden ones (.ssh, .config, .zsh_history, .git-credentials …) and
+# ~/Library, where apps keep their settings and tokens. Of ~/Library only
+# these folders are open: FreeCAD's own, the slicers' presets (OrcaSlicer,
+# Bambu Studio, PrusaSlicer: agentlink-orcaslicer reads them) and the
+# person's fonts.
+LIBRARY_READ = (("application support", "freecad"), ("application support", "orcaslicer"),
+                ("application support", "bambustudio"), ("application support", "prusaslicer"),
+                ("fonts",), ("preferences", "freecad"), ("caches", "freecad"))
+# Outside the home, the places a tool reads: apps (FreeCAD's and the
+# slicers' resources), other disks, the shared folder and the system fonts.
+# The session folder, the temporary folders, FreeCAD's own folders and the
+# add-on's own folder are open too (read_roots).
+OUTSIDE_READ = ("/Applications", "/Volumes", "/Users/Shared", "/Library/Fonts", "/System/Library/Fonts",
+                "/usr/share", "/usr/local/share", "/opt/homebrew/share", "/media", "/mnt")
+# Claude's own settings (other MCP servers' keys): never read or written,
+# in any folder.
+NEVER_ANYWHERE = {"claude_desktop_config.json"}
+
+
+def _under(real, root):
+    r = root.casefold().rstrip("/") or "/"
+    rf = real.casefold()
+    return rf == r or rf.startswith(r + "/")
+
+
+def freecad_dirs():
+    """FreeCAD's own folders (its resources, its install, the person's
+    FreeCAD data and macro folders), when FreeCAD is loaded; and the folder
+    the add-on itself is in."""
+    import sys
+
+    out = [os.path.dirname(os.path.dirname(os.path.abspath(__file__)))]
+    fc = sys.modules.get("FreeCAD")
+    for fn in ("getResourceDir", "getHomePath", "getUserAppDataDir", "getUserMacroDir"):
+        try:
+            d = getattr(fc, fn)() if fc is not None else None
+        except Exception:  # noqa: BLE001 - a stand-in FreeCAD in tests
+            d = None
+        if isinstance(d, str) and d.strip():
+            out.append(d)
+    return [_real(d) for d in out if _real(d) != "/"]
+
+
+def read_roots(out_dir):
+    """The open places outside the home rule: the session folder, the
+    temporary folders, FreeCAD's and the add-on's folders."""
+    roots = [_real(out_dir)] if out_dir else []
+    roots += [_real("/tmp"), _real(os.environ.get("TMPDIR", "/tmp"))] + freecad_dirs()
+    # A root that is the home or holds it (a session folder of ~) opens
+    # nothing of the home: the home rule decides there.
+    home = _real("~")
+    return [r for r in roots if r and r != "/" and not _under(home, r)]
+
+
+def read_refusal(real, out_dir):
+    """Why a read of the real path is refused, in words, or None."""
+    open_roots = read_roots(out_dir)
+    if any(_under(real, r) for r in open_roots):
+        return None
+    home = _real("~")
+    if home != "/" and _under(real, home):
+        rel = _parts(real[len(home):])
+        hidden = [x for x in rel if x.startswith(".")]
+        if hidden:
+            return f"is in a hidden place ({hidden[0]}) — hidden files and folders in the home hold settings, keys and history; the agent does not read them"
+        low = [x.casefold() for x in rel]
+        if low[:1] == ["library"]:
+            if any(low[1:1 + len(t)] == list(t) for t in LIBRARY_READ):
+                return None
+            return "is in ~/Library, where apps keep their settings and tokens — a tool reads only FreeCAD's, the slicers' and the font folders there"
+        return None
+    if any(_under(real, r) for r in OUTSIDE_READ):
+        return None
+    return "is outside the places a tool reads (the home, the session's folder, temporary folders, FreeCAD's folders, /Applications, /Volumes and the font folders)"
+
+
 def check(tool, key, value, out_dir, write):
     """Refuse a path the agent should not touch; answers the path as given."""
     if not isinstance(value, str) or not value.strip():
@@ -140,6 +219,12 @@ def check(tool, key, value, out_dir, write):
     base = os.path.basename(real).casefold()
     if base in NEVER_READ_ANYWHERE:
         raise ToolError("invalid_input", f"{key}: {raw} holds printer API keys. No tool reads or writes it.")
+    if base in NEVER_ANYWHERE:
+        raise ToolError("invalid_input", f"{key}: {raw} is Claude's own settings file (it holds other servers' keys). No tool reads or writes it.")
+    if not write:
+        why = read_refusal(real, out_dir)
+        if why:
+            raise ToolError("invalid_input", f"{key}: {raw} {why}.")
     for h in _homes():
         if os.path.dirname(real).casefold() == h.casefold() and base in NEVER_READ:
             raise ToolError("invalid_input", f"{key}: {raw} is Agent Link's own state. No tool reads or writes it.")

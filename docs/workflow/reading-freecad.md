@@ -87,11 +87,22 @@ The echo pauses so a person can follow (`EchoDelay`, `EchoBatchDelay`; `Echo` of
 `agentlink/paths.py` `guard(tool, args, out_dir)` runs before every call. It checks each top-level field in `PATH_KEYS` (`path`, `saveAs`, `file`, `files`, `folder`, `image`, `points_file` and others) and `PATH_KEYS_FOR`. A `path` of a tool in `GEOMETRIC` is a curve in the model, not a file, so it is not checked.
 Then `_check_declared()` checks the fields that an add-on declares for its own tools (`DECLARED_KEYS`, nested ones too, see [addons.md](addons.md)).
 
-Reads are open, except:
+Reads are an allow list (`read_refusal()`, red team 4, R4-1). A read is open in these places only:
+
+- the session's output folder, the temporary folders, FreeCAD's own folders (`getResourceDir`, `getHomePath`, `getUserAppDataDir`, `getUserMacroDir`) and the add-on's own folder;
+- the home folder, but not a hidden file or folder in it (`.zsh_history`, `.git-credentials`, `.npmrc` and all others), and not `~/Library`. Of `~/Library`, only `LIBRARY_READ` is open: `Application Support/FreeCAD`, `Application Support/OrcaSlicer`, `Application Support/BambuStudio`, `Application Support/PrusaSlicer`, `Fonts`, `Preferences/FreeCAD` and `Caches/FreeCAD`;
+- outside the home, `OUTSIDE_READ`: `/Applications`, `/Volumes`, `/Users/Shared`, the font folders and `/usr/share`.
+
+These are refused in every place, for reads and writes:
 
 - any path through a secret part: `.ssh`, `.aws`, `.gnupg`, `.kube`, `.docker`, `.config`, `.netrc`, `.git`, `.password-store`, keychains, shell settings and `.env` (`SECRET_PARTS`). The check ignores case;
+- `claude_desktop_config.json` (`NEVER_ANYWHERE`: it holds the keys of other MCP servers);
 - `memory-jobs.json` and `printers.json` in Agent Link's home (`NEVER_READ`);
 - `.agentlink-printers.json` in any folder (`NEVER_READ_ANYWHERE`).
+
+A batch `$file` uses the same check. When the file is not there, the answer names the `.json` files of its folder only if the read rule opens that folder.
+A glTF buffer `uri` must be a relative name in the glTF file's own folder (no absolute path, no `..`), or a `data:` URI. A buffer is 512 MB or less (`meshformats.MAX_BUFFER`).
+A socket-thread tool (`hooks.register_thread_tool`) gets the same `guard()` as every other tool (R4-10).
 
 Writes (the `path` or `file` of a tool in `WRITERS` or of a call with `action: "export"`, any `export` or `saveAs` field (`WRITE_KEYS`), or a declared write field) must also:
 

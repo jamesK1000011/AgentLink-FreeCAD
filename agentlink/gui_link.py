@@ -1868,6 +1868,27 @@ class Link:
             if self.going:
                 continue
 
+    def _client_of(self, conn):
+        """A number for each paired connection, the same while it stays
+        open: an approval is bound to the connection that asked (red team
+        4, R4-11)."""
+        import itertools
+        import weakref
+
+        ids = getattr(self, "_client_ids", None)
+        if ids is None:
+            ids = self._client_ids = weakref.WeakKeyDictionary()
+            self._client_next = itertools.count(1)
+        if conn is None:
+            return None
+        try:
+            got = ids.get(conn)
+            if got is None:
+                got = ids[conn] = f"link-{next(self._client_next)}"
+            return got
+        except TypeError:  # an object with no weak reference (a test's stand-in)
+            return f"link-{id(conn)}"
+
     def _run_one(self, line, f, conn):
         if self.going:
             # Quitting (app_restart answered just before): dropped, so the
@@ -1923,7 +1944,7 @@ class Link:
             # Progress notifications (protocol.progress) for this call go to its own connection, until it is answered.
             self.server.notify = lambda m, f=f, call=call: None if call["answered"] else self._write(f, m)
             try:
-                reply = self.server.handle(msg)
+                reply = self.server.handle(msg, client=self._client_of(conn))
             finally:
                 call["finished"] = True
                 self.busy, self.in_call, self.busy_since = prev

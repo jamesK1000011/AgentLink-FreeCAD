@@ -2224,7 +2224,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                 _paths_mod.check("batch", "$file", p, s.out_dir, False)
             except ToolError as e:
                 raise _chain.Miss(e.code, e.message) from None
-            return _chain.read_json(p, name, files)
+            return _chain.read_json(p, name, files, may_list=lambda d: _paths_mod.read_refusal(_paths_mod._real(d), s.out_dir) is None)
 
         def ended(out):
             """What every answer of a batch { build: "end" } carries."""
@@ -2619,9 +2619,16 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
             got = {"mode": staticbase.mode(), "style": staticbase.style(), "count": len(entries),
                    "tokens": int(round(len(json.dumps(entries, ensure_ascii=False, separators=(",", ":"))) / 3.5)), "names": [e["name"] for e in entries]}
             if a.get("to"):
-                p = a["to"] if os.path.isabs(a["to"]) else os.path.join(session.out_dir, a["to"])
-                if not p.endswith(".json"):
+                to = a["to"]
+                if not isinstance(to, str) or not to.strip().lower().endswith(".json"):
                     raise ToolError("invalid_input", "to: a .json file for the listing.")
+                p = os.path.expanduser(to.strip())
+                p = p if os.path.isabs(p) else os.path.join(session.out_dir, p)
+                # The same check as every other write (red team 4, R4-3): not
+                # Agent Link's state, the OK store, ~/Library or a hidden folder.
+                from . import paths as _paths_tf
+
+                _paths_tf.check("tool_find", "to", p, session.out_dir, True)
                 with open(p, "w", encoding="utf-8") as f:
                     json.dump({"mode": got["mode"], "style": got["style"], "tokens": got["tokens"], "tools": entries}, f, ensure_ascii=False)
                 got.pop("names")
@@ -2673,7 +2680,7 @@ def build_server(session, name="freecad-agentlink", version="0.3.0", lean=None):
                           "one line on what it does, and listed (if the client was shown it). queries: up to 6 searches in one call. tool: a name or a list of names answers the "
                           "whole description and inputs of each one (its card). groups: true gives the tool groups and what each holds. group: narrows a search. Every tool is "
                           "callable by name, listed or not. Where the client sends only listed tools, use batch { calls: [{ tool, arguments }] }. listing: true answers what the "
-                          "client is shown now (mode, style, count, tokens, names). to: a .json file gets the whole listing. Changes nothing.",
+                          "client is shown now (mode, style, count, tokens, names). to: a .json file gets the whole listing. The write rule of every tool applies to it. Changes nothing.",
              obj({"words": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
                   "groups": {"type": "boolean"}, "group": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}, "listing": {"type": "boolean"}, "to": {"type": "string"}}), tool_find, group="find"),
         Tool("guide_read", "Read how to do a task: the workflow, and the traps that the tools' own descriptions do not give. No topic: the index. For each guide: its sections, "

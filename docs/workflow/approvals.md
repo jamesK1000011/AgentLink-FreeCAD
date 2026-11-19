@@ -18,12 +18,12 @@ The code is `agentlink/approvals.py`.
 | A recovered copy saved over the person's file (Workshop's SafetyNet) | `app_recover { action: "accept" }` | `recover` | `approve_file` |
 | Every changed document saved at a restart | `app_restart { save: "all" }` (`agentlink/families/app.py`) | `save-all` | `approve_file` |
 | A printer send with commands to look at, a print start, pause or stop (Workshop) | `printer_send`, `printer_pause`, `printer_stop` | `dialog` | `approve_file` |
-| Risky G-code in an OrcaSlicer project (OrcaLink) | `orca_project` and other orca tools | `gcode` | `approve_code` (see the note below) |
+| Risky G-code in an OrcaSlicer project (OrcaLink) | `orca_project` and other orca tools | `gcode` | `approve_code` |
 
 `approvals.tool_for(kind)`: the kinds `dialog`, `recover` and `save-all` are `approve_file`'s (`FILE_KINDS`). Every other kind is `approve_code`'s.
 `approvals.KINDS` lists the kinds that the hub takes. `arguments()` refuses any other kind.
 
-**Note.** OrcaLink asks with kind `gcode` (`orcalink/fam_freecad.py`). At the commit of this page, `gcode` is not in `approvals.KINDS`. So in FreeCAD, that ask is refused with `invalid_input`, and the risky G-code is not written.
+OrcaLink asks with kind `gcode` (`orcalink/fam_freecad.py`). `gcode` is one of the code kinds (`CODE_KINDS`), so `approve_code` approves it. Before 19 Nov 2026 it was not in `approvals.KINDS`, and FreeCAD refused that ask with `invalid_input`.
 
 An add-on asks through `hooks.person_ok()`, which calls `approvals.ask()`.
 A typed `confirm` is never an approval inside Agent Link. An agent can type it.
@@ -81,6 +81,24 @@ Nested calls go through `Server.call()` only, so they never get the mark:
 - a panel button.
 
 Each of these gets `not_allowed`, and nothing is approved.
+
+## One connection approves its own requests
+
+`Server.handle(msg, client)` wraps every `tools/call` in `approvals.connection_call(client)`. The window link gives a name to each paired connection (`gui_link._client_of()`). Stdio has one connection only (`None`).
+
+- `ask()` binds the request to the connection that asked.
+- `approve()` refuses (`not_allowed`) an approval from another connection. So a second client with "always allow" cannot approve a request that the person's own client asked for (red team 4, R4-11).
+- The grant is bound the same way: `take()` on another connection does not use it.
+- `waiting()` lists the requests of the connection whose call is in hand.
+- `approvals.log` records the connection.
+
+A call with no connection (a job, the window's own Approve press) is not bound.
+
+## Hidden characters
+
+`invisible()` takes Unicode format characters (Cf), the tag block, the direction marks, and `HIDING`: the variation selectors U+FE00-FE0F and U+E0100-E01EF, U+034F, the Hangul fillers U+115F, U+1160, U+3164, U+FFA0, the Mongolian selectors U+180B-180F and U+2800 (red team 4, R4-8).
+`ask()` refuses an id with a `HIDING` character (it removes the other invisible characters, as before). A cookbook's text with one is refused. `hooks.extend_tool()` cleans the `describe` text with `clean()`.
+A source host that is not ASCII shows as punycode, with the words "non-ASCII host".
 
 ## Sequence
 
