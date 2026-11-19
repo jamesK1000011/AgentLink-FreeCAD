@@ -26,7 +26,8 @@ uvx --from git+https://github.com/jamesK1000011/AgentLink-FreeCAD agentlink-free
   find `uvx`, put its full path in `command` (`~/.local/bin/uvx` on Mac and
   Linux, `%USERPROFILE%\.local\bin\uvx.exe` on Windows; `which uvx` or
   `where uvx` prints it).
-- `agentlink-freecad --check` says what is still missing.
+- The setup check says what is still missing:
+  `uvx --from git+https://github.com/jamesK1000011/AgentLink-FreeCAD agentlink-freecad --check`.
 
 Optional flags, added after `agentlink-freecad` in `args`:
 
@@ -35,13 +36,15 @@ Optional flags, added after `agentlink-freecad` in `args`:
 | `--out DIR` | where files go (default `~/AgentLink`) |
 | `FREECAD_APP` (env) | the FreeCAD app or install folder, when it is not where the check looks |
 | `FREECAD_LIB` (env) | FreeCAD's `lib` folder, for a FreeCAD the check cannot find |
-| `AGENTLINK_TOOLS=full` (env) | list every tool from the start (not for small models) |
+| `AGENTLINK_TOOLLIST=classic` (env) | the classic tool list: the lean groups from the start, not the six-tool list |
+| `AGENTLINK_TOOLS=full` (env) | with `AGENTLINK_TOOLLIST=classic`: list every tool from the start (not for small models) |
 | `AGENTLINK_USAGE=off` (env) | turn the token-usage meter off |
 
 ### Without uv
 
 Run FreeCAD's own Python on `agentlink_headless.py` in the add-on folder
-(installed by the Addon Manager or by hand):
+(installed by the Addon Manager or by hand). The examples use `Mod/AgentLink`;
+the Addon Manager names the folder `AgentLink-FreeCAD`:
 
 | OS | `command` | `args` |
 |---|---|---|
@@ -54,13 +57,14 @@ program, and Claude Desktop brings the Node it runs on.
 
 ## Small local models
 
-Models under about 30B parameters do best with a short tool list. Agent Link
-starts **lean** by default: only the core and view groups are listed (the
-session, guides, undo, checks, pictures), about a dozen tools. The model asks
-`tool_groups` for the rest and turns on one group at a time
-(`tool_groups` with `enable: ["sketch"]`), as each group's guide says.
+Models under about 30B parameters do best with a short tool list. By
+default Agent Link lists only six tools (`session_state`, `batch`,
+`guide_read`, `tool_find`, `approve_file`, `approve_code`). The model finds
+any other tool with `tool_find` and calls it by name, or turns on one group
+at a time (`tool_groups` with `enable: ["sketch"]`), as each group's guide
+says.
 
-- Do not set `AGENTLINK_TOOLS=full`.
+- Do not set `AGENTLINK_TOOLLIST` or `AGENTLINK_TOOLS`.
 - Install only the add-ons you use: an add-on that isn't installed adds no
   tools and costs no tokens.
 - Prefer one task per chat; the usage strip in the panel shows how much the

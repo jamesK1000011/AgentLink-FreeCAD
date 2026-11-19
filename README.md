@@ -45,6 +45,8 @@ Some words used here:
 - **MCP client**: the app that you talk to the agent in, for example Claude Desktop or Claude Code.
 - **Headless**: FreeCAD runs with no window. The agent works, but you see nothing on screen.
 - **Add-on**: an extra part for FreeCAD that adds tools. Agent Link is an add-on, and other add-ons add tools to it.
+- **Hub**: Agent Link itself. It connects the agent to FreeCAD. The other add-ons ([Add-ons](#add-ons)) give the agent their tools through it.
+  Tutor needs the hub. Workshop, ScanRuler for FreeCAD and Texturizer also work alone in FreeCAD, with no agent.
 
 ## How it works
 
@@ -86,12 +88,13 @@ flowchart LR
 |---|---|---|---|
 | **FreeCAD 1.0 or later** (required; 1.1 recommended) | [freecad.org/downloads](https://www.freecad.org/downloads.php), dragged into Applications | the AppImage, your distribution's package, or conda-forge's `freecad` | the installer from freecad.org |
 | **uv** (preferred: it brings its own Python) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` or `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
-| **Node 18+** (the backup to uv) | Claude Desktop brings its own for the extension; otherwise [nodejs.org](https://nodejs.org) | [nodejs.org](https://nodejs.org) or your package manager | [nodejs.org](https://nodejs.org) |
+| **Node** (not needed) | the Claude Desktop extension uses the Node that comes with Claude Desktop | not used | not used |
 | OrcaSlicer (optional, slicing for 3D printing) | [releases](https://github.com/OrcaSlicer/OrcaSlicer/releases) | AppImage or Flatpak | installer |
 | KiCad (optional, circuit boards) | [kicad.org](https://www.kicad.org/download/) | your package manager | installer |
 | Gmsh, CalculiX (optional, strength checks) | come with FreeCAD | your package manager, or with FreeCAD | come with FreeCAD |
 
 Agent Link runs in FreeCAD's own Python. You do not install Python libraries by hand.
+Without uv, a client can start Agent Link with FreeCAD's own Python ([Without uv](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/README.md#without-uv)).
 
 **The setup check** tells you what is missing and how to get it. It changes nothing. Run it in a terminal:
 
@@ -194,6 +197,8 @@ Use this to install the add-on into FreeCAD when you do not use the Claude Deskt
 4. Restart FreeCAD.
 5. Connect your agent with one of the client parts above.
 
+The Addon Manager puts the add-on in the `Mod` folder as `AgentLink-FreeCAD`.
+
 ### By hand
 
 Put this folder in FreeCAD's `Mod` folder as `AgentLink`.
@@ -218,14 +223,11 @@ uvx --from git+https://github.com/jamesK1000011/AgentLink-FreeCAD agentlink-free
 It finds FreeCAD, runs in FreeCAD's own Python, and writes files to `~/AgentLink`.
 Add `--out DIR` for another folder.
 
-**To watch the agent work:**
-
-1. Open FreeCAD.
-2. Pick the **Agent Link** workbench from the workbench list.
-3. Press **Start Link**.
-
+**To watch the agent work:** open FreeCAD (with the add-on installed).
+The link starts by itself when the window opens.
 The calls then go to the document open in your window.
 When the link is off, the calls run headless.
+To turn the link on or off, pick the **Agent Link** workbench and press **Start Link** or **Stop Link**.
 The link listens on 127.0.0.1 only (your own computer). It pairs with the server before it takes a call.
 
 ## First steps
@@ -308,12 +310,13 @@ How it works inside: [docs/workflow/approvals.md](https://github.com/jamesK10000
 <!-- tools:begin (scripts/tool_summary.py) -->
 Agent Link itself declares 416 tools in 32 groups; a FreeCAD build without a workbench (FEM, CAM …)
 serves fewer, and each installed add-on adds its own groups.
-Groups marked *lean* are listed from the start; the agent turns on the rest with `tool_groups`.
+By default the client lists only six tools; the agent finds any other tool with `tool_find` and calls it by name.
+With `AGENTLINK_TOOLLIST=classic`, groups marked *lean* are listed from the start, and the agent turns on the rest with `tool_groups`.
 
 | Group | Tools | What it holds |
 |---|---:|---|
-| `core` *lean* | 20 | The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed. |
-| `app` | 18 |  |
+| `core` *lean* | 20 | The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed in the classic tool list. |
+| `app` | 18 | FreeCAD itself: settings (any parameter, preference packs), commands and menus run by name in the window, workbenches. |
 | `find` | 1 | tool_find: any tool by plain words, its card, the groups. Listed in the static base (ToolListMode static). |
 | `doc` | 12 | The document: new, open, save; objects listed, read, set, renamed, deleted; recompute; import and export files. |
 | `model` | 27 | Part modelling: primitives, booleans, move/rotate/mirror/scale/arrays, fillets and chamfers, offset and shell, extrude, revolve, loft, sweep. |
@@ -347,7 +350,8 @@ Groups marked *lean* are listed from the start; the agent turns on the rest with
 <!-- tools:end -->
 
 Each group has a guide the agent reads (`guide_read`). Any tool runs by name, also when it is not listed.
-`AGENTLINK_TOOLS=full` lists every tool from the start. Leave it unset for small local models
+To list every tool from the start, set `AGENTLINK_TOOLLIST=classic` and `AGENTLINK_TOOLS=full` (each alone does not do it).
+Leave them unset for small local models
 (see [docs/clients/](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/README.md#small-local-models)).
 
 The table is generated: `python3 scripts/tool_summary.py` writes it again, and
@@ -451,7 +455,20 @@ The full privacy policy: [docs/PRIVACY.md](https://github.com/jamesK1000011/Agen
 
 ## Troubleshooting
 
-First, run the setup check (`agentlink-freecad --check`). It names what is missing and how to get it.
+### If it does not work
+
+1. Run the setup check. It names what is missing and how to get it, and changes nothing:
+   `uvx --from git+https://github.com/jamesK1000011/AgentLink-FreeCAD agentlink-freecad --check`
+   (with the Claude extension on a Mac: **Agent Link > Setup Check** in FreeCAD).
+2. Read the log. The last lines tell why the server stopped ([Logs](#logs) below).
+3. Ask the agent to call `session_state`. It tells where the calls go (window or hidden FreeCAD) and which add-ons did not load.
+4. Restart your MCP client and start a new chat.
+
+Common faults: FreeCAD not found, FreeCAD never opened once, `uvx` not on the client's PATH, FreeCAD older than 1.0.
+Each is below.
+
+### Faults one by one
+
 You can ask the agent to do the steps below. The tool names are for the agent.
 
 **The FreeCAD window is closed.**
@@ -459,10 +476,10 @@ The agent then works in a hidden FreeCAD, and you see nothing.
 `session_state` tells the agent where the calls go.
 Ask the agent to open the window: it uses `app_open`.
 FreeCAD opens in the background. It does not come to the front and takes no focus.
-(`app_open` needs the Claude extension on a Mac. On other set-ups, open FreeCAD and press *Start Link*.)
+(`app_open` needs the Claude extension on a Mac. On other set-ups, open FreeCAD yourself: the link starts by itself.)
 
 **The window shows nothing.**
-Pick the Agent Link workbench and press *Start Link*. When the link is off, the calls go headless.
+The link may be off. Pick the Agent Link workbench and press *Start Link*. When the link is off, the calls go headless.
 
 **FreeCAD is busy.**
 A call that takes more than about 60 s gives a job number (`call-N`). It continues in FreeCAD.
@@ -504,7 +521,8 @@ Open FreeCAD, close it, and try again.
 **The Claude extension cannot load** (Mac).
 In FreeCAD, **Agent Link > Setup Check** reports the launcher. It offers *Mend* when it can fix it.
 
-**Logs.**
+#### Logs
+
 - Claude Desktop: `~/Library/Logs/Claude/mcp-server-*.log` (Mac),
   `%APPDATA%\Claude\logs\mcp-server-*.log` (Windows).
 - The Claude extension's launcher (Mac): `~/Library/Logs/FreeCAD Agent Link/launcher.log`.
@@ -525,7 +543,7 @@ Read a file before you share it in a bug report. Remove what you do not want to 
 - **Claude Desktop extension**: Settings > Extensions > Agent Link for FreeCAD > Uninstall.
   Then remove the add-on as below.
 - **Addon Manager**: Tools > Addon manager > Agent Link > Uninstall.
-- **By hand**: delete `<FreeCAD user folder>/Mod/AgentLink`.
+- **By hand**: delete `<FreeCAD user folder>/Mod/AgentLink` (or `Mod/AgentLink-FreeCAD`).
 - **The client config**: remove the `agentlink-freecad` entry from your client's MCP settings.
   `uv cache clean agentlink-freecad` removes uv's copy.
 - **Your files**: `~/AgentLink` (exports, pictures, usage) and

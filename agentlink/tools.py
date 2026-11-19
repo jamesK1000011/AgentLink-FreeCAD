@@ -1361,7 +1361,7 @@ GROUP_OF = {
 # Old names still callable but not listed (the listing carries one tool a job).
 ALIASES = {"export_file": "export"}
 GROUP_INFO = {
-    "core": "The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed.",
+    "core": "The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed in the classic tool list.",
     "find": "tool_find: any tool by plain words, its card, the groups. Listed in the static base (ToolListMode static).",
 }
 # Listed by default (lean): core, the groups a part's make-check-verdict loop
