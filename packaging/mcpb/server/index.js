@@ -30,8 +30,10 @@ const LAUNCHER = path.join(HOME, '.config', 'freecad-agentlink', 'launcher', 'in
 // every launcher change (17 Nov 2026: a newer launcher takes over in this
 // process, not as a spawned Node, which Claude's built-in Node refuses;
 // 18 Nov 2026: its channel is AgentLink-FreeCAD's main, ScanRuler's
-// freecad-spike only the fallback).
-const LAUNCHER_STAMP = 20261118
+// freecad-spike only the fallback; 19 Nov 2026: the launcher comes from the
+// hub's pinned commit, not the head of main, the old channel is gone, and
+// the companions list and its git and process calls are checked).
+const LAUNCHER_STAMP = 20261119
 const stampOf = (file) => {
   try {
     const m = /const LAUNCHER_STAMP = (\d+)/.exec(fs.readFileSync(file, 'utf8'))
@@ -156,12 +158,21 @@ const SOURCES = [
 // green), and this launcher from the same commit.
 const CHANNEL = { repo: 'AgentLink-FreeCAD', branch: 'main', launcher: 'packaging/mcpb/server/index.js' }
 const MANIFEST = 'packaging/addons.json'
-// The channel before 16 Nov 2026, read only when the one above cannot be
-// (its manifest or a pin missing or unreadable): ScanRuler's freecad-spike
-// kept its manifest, pins and a copy of this launcher in step through the
-// move.
-const OLD_CHANNEL = { repo: 'ScanRuler', branch: 'freecad-spike', launcher: 'scripts/freecad/mcpb/server/index.js', manifest: 'scripts/freecad/addons.json' }
-const CHANNELS = [{ ...CHANNEL, manifest: MANIFEST }, OLD_CHANNEL]
+// One channel only (red team 4, R4-6). The channel before 16 Nov 2026
+// (ScanRuler's freecad-spike) is not read any more: it served older pins
+// when main could not be read. When the channel cannot be read, what is
+// installed keeps serving.
+const CHANNELS = [{ ...CHANNEL, manifest: MANIFEST }]
+
+/** The commit the launcher's own update comes from: the hub's pinned commit
+ *  (its pin file in packaging/pins, which CI checked), never the head of a
+ *  branch (red team 4, R4-6). null when the channel's hub has no pin: then
+ *  the launcher is not updated. */
+function launcherRef(ch, sources, shas) {
+  const i = (sources || []).findIndex((s) => s.dest === 'AgentLink' && s.repo === ch.repo && s.pin)
+  const sha = i >= 0 ? (shas || [])[i] : null
+  return /^[0-9a-f]{40}$/.test(sha || '') ? sha : null
+}
 /** The Mod folders of ours when none were written down at install: the
  *  list the current add-ons came with, else the built-in one. */
 function knownNames() {
@@ -419,6 +430,7 @@ async function update(check) {
   fs.mkdirSync(CACHE, { recursive: true })
   const { channel: ch, sha: channel, sources, shas, companions, serverAddons = [], addonShas = [] } = await resolveChannel()
   keepCompanions(companions)
+  const launcherAt = launcherRef(ch, sources, shas)
   // '+t': fetched with the add-ons' tests; a copy fetched before, without
   // them, has another version and is fetched again.
   // A server add-on's pin is in it too: a new pin is a new set, published again.
@@ -455,9 +467,16 @@ async function update(check) {
         }))
       }
     }
-    const launcher = await getFile(`https://raw.githubusercontent.com/${OWNER}/${ch.repo}/${channel}/${ch.launcher}`)
-    checkLauncher(launcher) // parses, or throws
-    fs.writeFileSync(path.join(stage, '.launcher.js'), launcher)
+    // The launcher of the hub's pinned commit, not of the channel's head.
+    if (launcherAt) {
+      const launcher = await getFile(`https://raw.githubusercontent.com/${OWNER}/${ch.repo}/${launcherAt}/${ch.launcher}`)
+      checkLauncher(launcher) // parses, or throws
+      fs.writeFileSync(path.join(stage, '.launcher.js'), launcher)
+    } else {
+      log(`${ch.repo}'s hub has no pinned commit in ${MANIFEST}: the launcher is not updated`)
+    }
+    // Where this set came from, for the record (state.json too).
+    fs.writeFileSync(path.join(stage, '.fetched.json'), JSON.stringify({ channel: ch.repo, channelCommit: channel, launcherCommit: launcherAt, at: new Date().toISOString() }))
     fs.writeFileSync(path.join(stage, '.sources.json'), JSON.stringify(sources))
     // Each add-on's commit by its Mod folder, for the stdio servers (publishStdio).
     fs.writeFileSync(path.join(stage, '.shas.json'), JSON.stringify(Object.fromEntries(sources.map((s, i) => [s.dest, shas[i]]))))
@@ -474,21 +493,21 @@ async function update(check) {
     fs.rmSync(stage, { recursive: true, force: true })
     throw e
   }
-  const text = fs.readFileSync(path.join(verDir(version), '.launcher.js'))
-  if (stampOf(path.join(verDir(version), '.launcher.js')) >= LAUNCHER_STAMP) {
+  const fetchedLauncher = path.join(verDir(version), '.launcher.js')
+  if (fs.existsSync(fetchedLauncher) && stampOf(fetchedLauncher) >= LAUNCHER_STAMP) {
     fs.mkdirSync(path.dirname(LAUNCHER), { recursive: true })
-    fs.writeFileSync(LAUNCHER, text)
+    fs.writeFileSync(LAUNCHER, fs.readFileSync(fetchedLauncher))
     // CommonJS whatever a package.json further up says, or require fails.
     fs.writeFileSync(path.join(path.dirname(LAUNCHER), 'package.json'), '{"type": "commonjs"}\n')
   }
   const before = readState()
-  writeState({ ...before, current: version, previous: before.current || null, version, at: new Date().toISOString() })
+  writeState({ ...before, current: version, previous: before.current || null, version, at: new Date().toISOString(), channel: ch.repo, channelCommit: channel, launcherCommit: launcherAt, commits: Object.fromEntries(sources.map((s, i) => [s.dest, shas[i]])) })
   // Older versions go; the one before stays to go back to.
   for (const n of fs.readdirSync(CACHE)) {
     if (n.startsWith('addons-') && n !== path.basename(verDir(version)) && n !== path.basename(verDir(before.current || '-'))) fs.rmSync(path.join(CACHE, n), { recursive: true, force: true })
   }
   fs.rmSync(path.join(CACHE, 'addons'), { recursive: true, force: true })
-  log(`fetched the add-ons from GitHub (${version}), smoke test passed`)
+  log(`fetched the add-ons from GitHub (${version}; channel ${ch.repo} at ${channel}, launcher at ${launcherAt || 'not updated'}), smoke test passed`)
   return { dir: verDir(version), version }
 }
 
@@ -787,10 +806,13 @@ const COMPANIONS_KEPT = path.join(CACHE, 'companions.json')
 function checkCompanions(list) {
   if (!Array.isArray(list)) return null
   for (const c of list) {
-    if (!c || !SAFE_NAME.test(c.name || '') || !SAFE_NAME.test(c.branch || '')) return null
+    if (!c || typeof c !== 'object') return null
+    // Text only: no value is an option (no "-" first), no ".." anywhere.
+    for (const k of ['name', 'dir', 'url', 'branch', 'process']) if (c[k] !== undefined && (typeof c[k] !== 'string' || c[k].startsWith('-'))) return null
+    if (!SAFE_NAME.test(c.name || '') || !refName(c.branch)) return null
     if (!/^~\/./.test(c.dir || '') || !safeRel(String(c.dir).slice(2))) return null
-    if (!new RegExp(`^https://github\\.com/${OWNER}/[A-Za-z0-9._-]+\\.git$`).test(c.url || '')) return null
-    if (c.process && !/^[A-Za-z0-9_][A-Za-z0-9._\-/]*$/.test(c.process)) return null
+    if (!new RegExp(`^https://github\\.com/${OWNER}/[A-Za-z0-9_][A-Za-z0-9._-]*\\.git$`).test(c.url || '') || c.url.includes('..')) return null
+    if (c.process && !safeRel(c.process.replace(/\/$/, ''))) return null
   }
   return list.map((c) => ({ name: c.name, dir: c.dir, url: c.url, branch: c.branch, ...(c.process ? { process: c.process } : {}) }))
 }
@@ -816,10 +838,37 @@ function companions(here = HERE, kept = COMPANIONS_KEPT, local = path.join(os.ho
   try {
     list = checkCompanions(JSON.parse(fs.readFileSync(kept, 'utf8'))) || list
   } catch {}
+  // The local setting is checked as the manifest's list is (red team 4,
+  // R4-9): it is in the agent's output folder, so a tool could write it.
+  let mine = null
   try {
-    list = JSON.parse(fs.readFileSync(local, 'utf8'))
+    mine = JSON.parse(fs.readFileSync(local, 'utf8'))
   } catch {}
+  if (mine !== null) {
+    const ok = checkCompanions(mine)
+    if (ok) list = ok
+    else log(`${local} is not a list this launcher takes (a name, a folder under ~, https://github.com/${OWNER}/<repo>.git, a branch, a process path in the folder): not used`)
+  }
   return (Array.isArray(list) ? list : []).map((c) => ({ ...c, dir: String(c.dir || '').replace(/^~(?=$|\/)/, os.homedir()) }))
+}
+
+/** A branch name git takes as a name, never as an option or a range. */
+function refName(b) {
+  return typeof b === 'string' && /^[A-Za-z0-9_][A-Za-z0-9._\/-]{0,199}$/.test(b) && !b.includes('..') && !b.includes('//') && !b.endsWith('/') && !b.endsWith('.') && !b.endsWith('.lock')
+}
+
+/** The process ids whose command line holds the companion's program as one
+ *  word: the exact path, or a path in its folder when it ends with "/".
+ *  ps: the text of `ps -axo pid=,command=`. Never a pattern (red team 4, R4-9). */
+function companionPids(ps, full, self = process.pid) {
+  const out = []
+  for (const line of String(ps || '').split('\n')) {
+    const m = /^\s*(\d+)\s+(.*)$/.exec(line)
+    if (!m || Number(m[1]) === self) continue
+    const words = m[2].split(/\s+/)
+    if (words.some((w) => (full.endsWith('/') ? w.startsWith(full) && w.length > full.length : w === full))) out.push(Number(m[1]))
+  }
+  return out
 }
 
 function git(dir, args) {
@@ -833,7 +882,8 @@ function updateCompanions() {
     if (!c.dir || !fs.existsSync(path.join(c.dir, '.git'))) continue
     const row = { name: c.name, branch: c.branch }
     try {
-      const f = git(c.dir, ['fetch', '--quiet', c.url, c.branch])
+      // "--": what follows is a repository and a branch, never an option.
+      const f = git(c.dir, ['fetch', '--quiet', '--', c.url, c.branch])
       if (!f.ok) throw new Error(f.err.split('\n').pop() || 'fetch failed')
       const before = git(c.dir, ['rev-parse', '--short', 'HEAD']).out
       if (git(c.dir, ['rev-parse', '--abbrev-ref', 'HEAD']).out !== c.branch) {
@@ -856,9 +906,18 @@ function updateCompanions() {
       } catch {}
       if (c.process && (after !== before || state[c.name] !== after)) {
         // Its running copies stopped: Claude starts it again on the new code.
-        const k = spawnSync('pkill', ['-f', path.join(c.dir, c.process)], { timeout: 10000 })
-        row.restarted = k.status === 0
-        if (k.status !== 0) row.note = 'no running copy found to restart'
+        // Only processes that run the exact program in the companion's folder.
+        const full = path.resolve(c.dir, c.process) + (c.process.endsWith('/') ? '/' : '')
+        const pids = full.startsWith(path.resolve(c.dir) + path.sep) ? companionPids(spawnSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8', timeout: 10000 }).stdout, full) : []
+        let stopped = 0
+        for (const pid of pids) {
+          try {
+            process.kill(pid, 'SIGTERM')
+            stopped++
+          } catch {}
+        }
+        row.restarted = stopped > 0
+        if (!stopped) row.note = 'no running copy found to restart'
         state[c.name] = after
         try {
           fs.writeFileSync(stateFile, JSON.stringify(state))
@@ -1546,7 +1605,7 @@ function startHandedOver({ stdin, stdout, state = {} }) {
   log(`took over from the launcher in this process (add-ons ${state.version || '?'})`)
   return main()
 }
-module.exports = { startHandedOver, resolveChannel, checkSources, checkServerAddons, CHANNELS, companions, bundledManifest, windowHeld, restartWord, extensionRecord, extensionReport, publishStdio }
+module.exports = { startHandedOver, resolveChannel, checkSources, checkServerAddons, CHANNELS, companions, checkCompanions, companionPids, refName, launcherRef, bundledManifest, windowHeld, restartWord, extensionRecord, extensionReport, publishStdio }
 
 /** No FreeCAD: still a server, so Claude shows why instead of a dead entry. */
 function serveError(message) {
