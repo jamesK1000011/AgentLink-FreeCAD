@@ -87,7 +87,7 @@ jobs:
       - name: OrcaSlicer, for the slice tool
         # The latest release's Linux AppImage, unpacked (no FUSE on the
         # runner); the Orca slice tests skip without it.
-        timeout-minutes: 6
+        timeout-minutes: 10
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -99,8 +99,10 @@ jobs:
           # The AppImage needs WebKitGTK 4.1 from the host (it stopped with
           # "missing host WebKitGTK 4.1 runtime libraries" when the install
           # was skipped): refresh the lists here too, and say a failure.
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update -qq || true
-          sudo apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends libwebkit2gtk-4.1-0 libjavascriptcoregtk-4.1-0 libgstreamer-plugins-base1.0-0 libopengl0 libegl1 libgl1 > /dev/null \
+          # A PrusaSlicer step that timed out can leave apt-get with the dpkg
+          # lock ("Could not get lock"): wait for the lock, do not fail at once.
+          sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update -qq || true
+          sudo apt-get -o DPkg::Lock::Timeout=180 -o Acquire::Retries=3 install -y -qq --no-install-recommends libwebkit2gtk-4.1-0 libjavascriptcoregtk-4.1-0 libgstreamer-plugins-base1.0-0 libopengl0 libegl1 libgl1 > /dev/null \
             || echo "::warning::the OrcaSlicer libraries did not install; its tests will fail"
           echo "AGENTLINK_ORCASLICER=$RUNNER_TEMP/orca/squashfs-root/AppRun" >> "$GITHUB_ENV"
       - name: The add-ons' own tests, all installed together
