@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# DRAFT, not active: GitHub runs workflows only from .github/workflows/.
+# PyPI trusted publishing for agentlink-freecad: no token is kept anywhere.
+# To use it (docs/RELEASING.md, section 3.3, option B):
+#   1. On https://pypi.org/manage/account/publishing/ add a pending
+#      publisher: PyPI project name agentlink-freecad, owner jamesK1000011,
+#      repository AgentLink-FreeCAD, workflow pypi-publish.yml,
+#      environment pypi.
+#   2. In the repository: Settings > Environments > New environment "pypi",
+#      with yourself as a required reviewer (each upload then waits for you).
+#   3. git mv packaging/listing/pypi-publish.yml .github/workflows/pypi-publish.yml
+# It runs on an agentlink-v* tag only, so it costs no minutes otherwise.
+# Guide: https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
+name: PyPI release
+
+on:
+  push:
+    tags: ['agentlink-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Versions agree with the tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python3 scripts/release.py check --tag "$TAG"
+      - uses: astral-sh/setup-uv@v6
+      - name: Build
+        run: uv build
+      - name: Privacy and identity check of the built files
+        run: |
+          python3 .github/privacy/check.py dist/
+          mkdir -p sdist && tar -xzf dist/*.tar.gz -C sdist
+          python3 .github/privacy/check.py sdist/
+      - name: Metadata check
+        run: uvx twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/p/agentlink-freecad
+    permissions:
+      id-token: write   # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: python-package-distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

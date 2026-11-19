@@ -14,6 +14,8 @@ and other MCP directories. Written in ASD-STE100. Version 1.0.0.
 - Addon Index name: `AgentLink` (the Mod folder)
 - Repository: https://github.com/jamesK1000011/AgentLink-FreeCAD
 - Licence: LGPL-2.1-or-later; data files CC-BY-4.0
+- Privacy policy: https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/PRIVACY.md
+- Drafts for each submission: `packaging/listing/` (the owner submits)
 
 ## Short text (100 characters or fewer)
 
@@ -79,3 +81,4 @@ automation, 3D printing, parametric, TechDraw, FEM, BIM, CAM
 | Claude extension | `description`, `long_description`, `tools`, `version` | `packaging/mcpb/manifest.json` |
 | Addon Index | `description`, `tag`, `version`, `date` | `package.xml` |
 | PyPI | `description`, `keywords`, `version` | `pyproject.toml` |
+| Anthropic directory (plugin) | `name`, `displayName`, `description`, README | `packaging/listing/claude-plugin/` |

@@ -18,7 +18,7 @@ license-files = ["LICENSE", "LICENSE-DATA", "LICENSES/*"]
 authors = [{ name = "Agent Link contributors" }]
 keywords = ["FreeCAD", "MCP", "CAD", "agent"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Environment :: Console",
   "Intended Audience :: Manufacturing",
   "Intended Audience :: End Users/Desktop",
