@@ -96,7 +96,12 @@ jobs:
           gh release download --repo OrcaSlicer/OrcaSlicer --pattern "$name" --dir "$RUNNER_TEMP/orca"
           cd "$RUNNER_TEMP/orca" && chmod +x "$name" && "./$name" --appimage-extract > /dev/null
           # OpenGL too: the PrusaSlicer step that also installs it may time out.
-          sudo apt-get install -y -qq --no-install-recommends libwebkit2gtk-4.1-0 libgstreamer-plugins-base1.0-0 libopengl0 libegl1 libgl1 > /dev/null || true
+          # The AppImage needs WebKitGTK 4.1 from the host (it stopped with
+          # "missing host WebKitGTK 4.1 runtime libraries" when the install
+          # was skipped): refresh the lists here too, and say a failure.
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update -qq || true
+          sudo apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends libwebkit2gtk-4.1-0 libjavascriptcoregtk-4.1-0 libgstreamer-plugins-base1.0-0 libopengl0 libegl1 libgl1 > /dev/null \
+            || echo "::warning::the OrcaSlicer libraries did not install; its tests will fail"
           echo "AGENTLINK_ORCASLICER=$RUNNER_TEMP/orca/squashfs-root/AppRun" >> "$GITHUB_ENV"
       - name: The add-ons' own tests, all installed together
         # A hung test stops here, not at 45 minutes.
