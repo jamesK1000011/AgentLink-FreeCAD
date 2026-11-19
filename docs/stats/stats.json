@@ -394,7 +394,7 @@
   "addons": [
    {
     "addon": "AgentLink-OrcaSlicer",
-    "commit": "0ef467d",
+    "commit": "3e65eab",
     "declared": 5,
     "loaded": 5,
     "hubNamesLeftOut": [],
@@ -408,7 +408,7 @@
     "staticTokens": 0,
     "classicTools": 0,
     "classicTokens": 0,
-    "allGroupsOnTokens": 6513
+    "allGroupsOnTokens": 6878
    },
    {
     "addon": "ScanRuler-FreeCAD",
@@ -442,7 +442,7 @@
    },
    {
     "addon": "Tutor-FreeCAD",
-    "commit": "1610e3b",
+    "commit": "415b7e6",
     "declared": 3,
     "loaded": 3,
     "hubNamesLeftOut": [],
@@ -457,7 +457,7 @@
    },
    {
     "addon": "Workshop-FreeCAD",
-    "commit": "0865236",
+    "commit": "8c62453",
     "declared": 60,
     "loaded": 60,
     "hubNamesLeftOut": [],
@@ -467,8 +467,8 @@
     "notInstalledTokens": 0,
     "staticTokens": 0,
     "classicTools": 11,
-    "classicTokens": 4689,
-    "allGroupsOnTokens": 29959
+    "classicTokens": 4717,
+    "allGroupsOnTokens": 30659
    }
   ],
   "addonToolsLoaded": 212,
