@@ -90,7 +90,10 @@ def tools(session):
         return f"activated {wb} first: {cmd} comes with it"
 
     def run_python(p, args):
-        return cookbook.plain(cookbook.call_python(p, args, getattr(s, "doc", None)))
+        # Filtered before the agent sees it: ~ for home paths, no keys or
+        # tokens, an object of another document as a mark only (R2-6).
+        doc = getattr(s, "doc", None)
+        return cookbook.clean_result(cookbook.call_python(p, args, doc), doc_name=getattr(doc, "Name", None))
 
     def run_script(calls):
         return _answer(s.server.call({"name": "batch", "arguments": {"calls": calls, "rollback": True}}))

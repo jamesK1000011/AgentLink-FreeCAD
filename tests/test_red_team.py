@@ -175,6 +175,8 @@ class Cookbooks(unittest.TestCase):
             os.makedirs(os.path.join(root, pkg))
             with open(os.path.join(root, pkg, "__init__.py"), "w") as f:
                 f.write("def run(**k):\n    return 'ran'\n")
+            with open(os.path.join(root, pkg, "InitGui.py"), "w") as f:  # an add-on's mark (red team 2, R2-3)
+                f.write("")
             sys.path.insert(0, root)
             self.addCleanup(sys.path.remove, root)
         cookbook.ADDON_ROOTS = [mod]
