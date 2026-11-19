@@ -78,6 +78,45 @@ def clean(text, n=WORDS_MAX):
     return t[:n]
 
 
+_FILE_EXT = r"[A-Za-z][A-Za-z0-9]{0,6}"
+
+
+def clean_error(text, n=WORDS_MAX):
+    """An error's or a dialog's words for the log (fault 72): what the
+    report needs (what went wrong) with no label and no file name of the
+    person's. A path keeps only its extension (~/<file>.step, <path>.so),
+    a file name only its extension (<file>.FCStd), a quoted name is
+    '<name>', and a FreeCAD object name with a number (Body001, Pad002)
+    is <name>. Then cut to n characters."""
+    import re
+
+    t = str(text or "")
+    if _HOME and len(_HOME) > 1:
+        t = t.replace(_HOME, "~")
+    # Another home: /Users/<name>/… or /home/<name>/… is ~ too.
+    t = re.sub(r"(?<![\w.])/(?:Users|home)/[^/\s\"'`]+(?=/|\b)", "~", t)
+
+    def path(m):
+        p = m.group(0)
+        core = p.rstrip("?!.")
+        ext = re.search(r"\.(" + _FILE_EXT + r")$", core)
+        head = "~/<path>" if p.startswith("~") else "<path>"
+        return head + ("." + ext.group(1) if ext else "") + p[len(core):]
+    # Paths: under the home (~/…), absolute (two parts or more), Windows.
+    t = re.sub(r"~/[^\s\"'`,;:)\]}]+", path, t)
+    t = re.sub(r"(?<![~\w.<>])(/[^\s\"'`,;:)\]}]+){2,}", path, t)
+    t = re.sub(r"\b[A-Za-z]:\\[^\s\"']+", path, t)
+    # Quoted words: a label, a file or a value of the person's.
+    t = re.sub(r"'[^'\n]{1,200}'|\"[^\"\n]{1,200}\"|`[^`\n]{1,200}`|\u201c[^\u201d\n]{1,200}\u201d|\u2018[^\u2019\n]{1,200}\u2019",
+               lambda m: m.group(0)[0] + "<name>" + m.group(0)[-1], t)
+    # A file name with its extension, outside a path: <file>.ext.
+    t = re.sub(r"(?<![\w<>/.~-])[\w][\w ()+-]*?\.(FCStd|fcstd|FCMacro|step|stp|STEP|STP|iges|igs|stl|STL|obj|3mf|ply|off|amf|brep|dxf|svg|"
+               r"png|jpe?g|pdf|json|csv|txt|gcode|ifc|kicad_pcb|py|scad|glb|gltf|dae|wrl|x3d|zip)\b", lambda m: "<file>." + m.group(1), t)
+    # FreeCAD object names with a number (Body001, Pad002, Sketch015).
+    t = re.sub(r"\b[A-Z][A-Za-z_]*\d{3,}\b", "<name>", t)
+    return t[:n]
+
+
 def _arg_sig(args):
     """A hash of the arguments, kept in memory only: it tells a retry with
     changed arguments. Never written."""
@@ -212,7 +251,7 @@ def _json_of(text):
 def _error_of(text):
     d = _json_of(text)
     e = d.get("error") if d else None
-    return clean(e.get("message")) if isinstance(e, dict) else None
+    return clean_error(e.get("message")) if isinstance(e, dict) else None
 
 
 def marks(tool, args, reply_text, error):
@@ -372,7 +411,7 @@ class Meter:
             if self.dialog is not None and self.dialog["key"] == key:
                 return
             self._dialog_end(now)
-            self.dialog = {"key": key, "title": clean(d.get("title"), 80), "text": clean(d.get("text")), "buttons": [clean(b, 30) for b in (d.get("buttons") or [])][:8],
+            self.dialog = {"key": key, "title": clean_error(d.get("title"), 80), "text": clean_error(d.get("text")), "buttons": [clean(b, 30) for b in (d.get("buttons") or [])][:8],
                            "since": float(d.get("since") or now), "blocked": 0, "by": None}
         else:
             self._dialog_end(now)
@@ -650,7 +689,8 @@ def log_report(days=7, where=None, jobs=8, watchdog=True):
             e["count"] += 1
             e["codes"][r["err"]] = e["codes"].get(r["err"], 0) + 1
             if r.get("why"):
-                w = r["why"][:100]
+                # Rows written before fault 72 kept names: cleaned again here.
+                w = clean_error(r["why"])[:100]
                 e["reasons"][w] = e["reasons"].get(w, 0) + 1
     for e in errs.values():
         e["reasons"] = [{"why": w, "count": n} for w, n in sorted(e["reasons"].items(), key=lambda x: -x[1])[:3]]
