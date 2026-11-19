@@ -62,8 +62,8 @@ Done when the check shows `Agent Link add-on: ok`.
 Use the page for the person's client in [docs/clients/](docs/clients/README.md).
 Merge the `agentlink-freecad` entry into their existing config; never
 replace the file. Give `uvx`'s full path (`which uvx` / `where uvx`) when the
-client is a GUI app. Small local model: keep the lean list (do not set
-`AGENTLINK_TOOLS=full`).
+client is a GUI app. Small local model: keep the default six-tool list (do
+not set `AGENTLINK_TOOLLIST` or `AGENTLINK_TOOLS`).
 
 The person restarts the client. Done when the client lists the
 `agentlink-freecad` server with tools such as `session_state`.
@@ -84,8 +84,9 @@ person's choice. Never change these settings for the person.
 
 Call `session_state`: it answers with what the document holds and where
 files go. Then `guide_read` with topic `start` for how to work. To watch,
-the person opens FreeCAD, picks the Agent Link workbench and presses
-**Start Link**; the next calls show in their window.
+the person opens FreeCAD: the link starts by itself when the window opens
+(else: the Agent Link workbench, **Start Link**). The next calls show in
+their window.
 
 ## If it fails
 

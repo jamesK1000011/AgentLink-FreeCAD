@@ -73,6 +73,9 @@ def groups():
         t = _parse(os.path.join(PKG, "families", name + ".py"))
         c = _consts(t, {"GROUP", "INFO", "LEAN"})
         g = out.setdefault(c["GROUP"], {"info": c.get("INFO", ""), "tools": []})
+        # A group that GROUP_OF made first (app_open → "app") takes the family's INFO.
+        if not g["info"]:
+            g["info"] = c.get("INFO", "")
         for n in _tool_names(t):
             if group_of.get(n, c["GROUP"]) == c["GROUP"]:
                 g["tools"].append(n)
@@ -101,7 +104,8 @@ def table():
     rows = [
         f"Agent Link itself declares {n} tools in {len(gs)} groups; a FreeCAD build without a workbench (FEM, CAM …)",
         "serves fewer, and each installed add-on adds its own groups.",
-        "Groups marked *lean* are listed from the start; the agent turns on the rest with `tool_groups`.",
+        "By default the client lists only six tools; the agent finds any other tool with `tool_find` and calls it by name.",
+        "With `AGENTLINK_TOOLLIST=classic`, groups marked *lean* are listed from the start, and the agent turns on the rest with `tool_groups`.",
         "",
         "| Group | Tools | What it holds |",
         "|---|---:|---|",

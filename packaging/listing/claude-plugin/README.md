@@ -22,7 +22,8 @@ Project Association (FPA). FreeCAD is the FPA's trademark.
 Ask Claude for a part: "Make a wall bracket for a 20 mm pipe, two M4
 screws, printable without supports." Claude makes it, checks that the
 body is sound, renders it and exports STEP or STL. To watch the work,
-open FreeCAD, pick the Agent Link workbench and press Start Link.
+open FreeCAD: the link starts by itself (else pick the Agent Link
+workbench and press Start Link).
 
 File steps and code runs need your approval (`approve_file`,
 `approve_code`). Strength checks (FEA) show if a design is feasible. They
