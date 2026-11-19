@@ -321,9 +321,13 @@ docs/hardening/window-skasm-findings.md
 docs/hardening/window-td-cam-findings.md
 docs/hardening/workshop-rest-model.json
 docs/hooks.md
+docs/images/panel-activity.png
 docs/images/panel-project-box.png
+docs/images/slice-layer.png
 docs/images/texturizer-knurled-box.png
+docs/images/toolbar-agentlink.png
 docs/images/tutor-guided-step.png
+docs/images/wall-map.png
 docs/listing.md
 docs/packaging.md
 docs/records.md
