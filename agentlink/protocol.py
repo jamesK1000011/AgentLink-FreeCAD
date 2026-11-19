@@ -521,8 +521,10 @@ class Server:
         self.groups = groups
         self.outbox.append({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
 
-    def handle(self, msg):
-        """One message in; the reply, or None for a notification."""
+    def handle(self, msg, client=None):
+        """One message in; the reply, or None for a notification. client:
+        the connection it came on (the window link's paired connection;
+        None for stdio). An approval is bound to it (approvals.py, R4-11)."""
         mid = msg.get("id")
         method = msg.get("method")
         if method is None:
@@ -564,15 +566,16 @@ class Server:
                 params = msg.get("params") or {}
                 from . import approvals
 
-                if params.get("name") in approvals.CLIENT_ONLY:
-                    # approve_file / approve_code: this call came from the
-                    # client, which asked the person when they set "ask
-                    # first". Nested calls (batch, jobs, cookbooks, lessons)
-                    # go through call() only and are refused there.
-                    with approvals.client_call(params.get("name"), params.get("arguments")):
+                with approvals.connection_call(client):
+                    if params.get("name") in approvals.CLIENT_ONLY:
+                        # approve_file / approve_code: this call came from the
+                        # client, which asked the person when they set "ask
+                        # first". Nested calls (batch, jobs, cookbooks, lessons)
+                        # go through call() only and are refused there.
+                        with approvals.client_call(params.get("name"), params.get("arguments")):
+                            result = self.call(params)
+                    else:
                         result = self.call(params)
-                else:
-                    result = self.call(params)
             elif mid is None:
                 return None  # notifications/initialized and the like
             else:
@@ -647,6 +650,11 @@ class Server:
                 result = self.refusal("not_found", f"{name}: no such tool.")
             else:
                 check_input(tool.schema, args)
+                # The same path check as a call through the window's queue
+                # (red team 4, R4-10): a socket-thread tool's file fields too.
+                guard = getattr(self, "guard", None)
+                if guard is not None:
+                    guard(tool, args)
                 out = tool.fn(args)
                 if isinstance(out, dict):
                     out.setdefault("ms", int((time.time() - t0) * 1000))

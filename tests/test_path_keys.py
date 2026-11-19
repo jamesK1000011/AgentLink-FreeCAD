@@ -56,7 +56,7 @@ class Nested(Base):
         self.refused("standin_tex", {"profiles": {"machine": ["ok.json", "~/.ssh/config"]}})
         # Reads stay open elsewhere: ~/Library (an app's presets), a file
         # outside the home.
-        self.fine("standin_tex", {"texture": {"file": "/usr/share/t.png"}, "profiles": {"machine": "~/Library/Application Support/x/m.json"}})
+        self.fine("standin_tex", {"texture": {"file": "/usr/share/t.png"}, "profiles": {"machine": "~/Library/Application Support/OrcaSlicer/user/m.json"}})
         # Other tools are not changed by this declaration.
         self.fine("other_tool", {"texture": {"file": "~/.ssh/id_rsa"}})
 

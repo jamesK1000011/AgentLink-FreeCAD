@@ -59,6 +59,50 @@ def _gltf_node_matrix(n):
     return M
 
 
+# The most that one glTF buffer may hold, and a data: URI's text (red team
+# 4, R4-5): a hostile file cannot fill the memory.
+MAX_BUFFER = 512 * 1024 * 1024
+MAX_DATA_URI = 64 * 1024 * 1024
+
+
+def buffer_path(uri, folder):
+    """The file of a glTF buffer's uri: a relative name in the glTF file's
+    own folder (or below it) only. An absolute path, a "..", a scheme
+    (file:, http:) or a link that leads out of the folder is refused, and
+    the path rule (agentlink/paths.py) must let a tool read it."""
+    from urllib.parse import unquote
+
+    from . import paths
+    from .protocol import ToolError
+
+    name = unquote(str(uri))
+    parts = name.replace("\\", "/").split("/")
+    if (not name.strip() or os.path.isabs(name) or name.startswith("~") or ".." in parts
+            or ":" in parts[0] or "\0" in name):
+        raise FormatError(f"The buffer uri {str(uri)[:80]!r} is not a file name beside the glTF file. "
+                          "A buffer is a relative name in the file's own folder, or a data: URI. Nothing was read.")
+    p = os.path.join(folder, name)
+    real, root = os.path.realpath(p), os.path.realpath(folder)
+    if not (real == root or real.startswith(root.rstrip("/") + "/")):
+        raise FormatError(f"The buffer {str(uri)[:80]!r} leads out of the glTF file's folder. Nothing was read.")
+    try:
+        paths.check("import_file", "buffers.uri", real, folder, False)
+    except ToolError as e:
+        raise FormatError(e.message) from None
+    return p
+
+
+def _buffer_len(b, got):
+    n = b.get("byteLength")
+    if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+        n = got
+    if n > MAX_BUFFER:
+        raise FormatError(f"A buffer of {n / 1048576:.0f} MB: over the {MAX_BUFFER // 1048576} MB a glTF buffer may have. Nothing was read.")
+    if n > got:
+        raise FormatError(f"A buffer says byteLength {n}, but it holds {got} bytes. The file is cut or bad.")
+    return n
+
+
 def _read_gltf(doc, bin_chunk, folder):
     buffers = []
     for b in doc.get("buffers", []):
@@ -66,15 +110,21 @@ def _read_gltf(doc, bin_chunk, folder):
         if uri is None:
             if bin_chunk is None:
                 raise FormatError("A buffer with no uri and no binary chunk.")
-            buffers.append(bin_chunk)
+            buffers.append(bin_chunk[:_buffer_len(b, len(bin_chunk))])
+        elif not isinstance(uri, str):
+            raise FormatError("A buffer uri that is not text.")
         elif uri.startswith("data:"):
-            buffers.append(base64.b64decode(uri.split(",", 1)[1]))
+            if len(uri) > MAX_DATA_URI:
+                raise FormatError(f"A data: buffer of {len(uri) / 1048576:.0f} MB of text: over the {MAX_DATA_URI // 1048576} MB a data: URI may have. Nothing was read.")
+            raw = base64.b64decode(uri.split(",", 1)[1])
+            buffers.append(raw[:_buffer_len(b, len(raw))])
         else:
-            p = os.path.join(folder, uri)
+            p = buffer_path(uri, folder)
             if not os.path.isfile(p):
                 raise FormatError(f"The buffer {uri!r} is not beside the file.")
+            n = _buffer_len(b, min(os.path.getsize(p), MAX_BUFFER + 1))
             with open(p, "rb") as f:
-                buffers.append(f.read())
+                buffers.append(f.read(n))
 
     def accessor(i):
         a = doc["accessors"][i]

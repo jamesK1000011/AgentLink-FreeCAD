@@ -457,7 +457,11 @@ def extend_tool(name, properties=None, before=None, after=None, describe=None):
     or fewer). A tool in NOT_EXTENDED, or with "approve" in its name, is
     not extended: apply_extensions logs it and leaves it out."""
     if describe is not None:
-        describe = " ".join(str(describe).split())[:DESCRIBE_MAX]
+        # One line with no control, invisible or direction characters (red
+        # team 4, R4-8): an add-on's words go into a tool's description.
+        from . import approvals
+
+        describe = approvals.clean(describe, DESCRIBE_MAX).rstrip("…")[:DESCRIBE_MAX]
     props = {k: v for k, v in dict(properties or {}).items() if isinstance(k, str) and k.isidentifier() and not k.startswith("_")}
     _EXTENSIONS.setdefault(name, []).append({"properties": props, "before": before, "after": after, "describe": describe})
     return extendable(name)
