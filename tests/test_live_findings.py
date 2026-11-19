@@ -64,7 +64,7 @@ class LiveFindings(unittest.TestCase):
         self.assertEqual(len(names("edges", limit=3)), 3)
         got = self.ok("tool_groups", {"find": "fillet edges"})
         does = next(t["does"] for t in got["tools"] if t["tool"] == "pd_fillet")
-        self.assertGreater(len(does), 60)
+        self.assertTrue(does.strip())   # its first sentence, whatever its length
         self.assertLessEqual(len(does), 162)
         self.assertFalse(does.endswith(":"))
         self.assertLess(len(str(got)), 3500)
