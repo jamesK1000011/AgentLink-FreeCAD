@@ -115,7 +115,9 @@ class ViewRender(unittest.TestCase):
         at = r["map"]["worst"]["at"]
         # The pocket's floor (x = 1.4) or the inside face behind it (x = 2).
         self.assertLessEqual(at[0], 2.01)
-        self.assertTrue(11 <= at[1] <= 19 and 6 <= at[2] <= 14, at)
+        # Within 0.5 mm of the pocket (y 11-19, z 6-14): the tilted rays of the
+        # wall map (since 421141d) can read the pocket from just beside its rim.
+        self.assertTrue(10.5 <= at[1] <= 19.5 and 5.5 <= at[2] <= 14.5, at)
         err, z = self.call("view_render", {"map": "wall", "view": "left", "zoom": {"at": at, "size": 16}, "inline": False, "path": os.path.join(OUT, "cup_wall_zoom.png")})
         self.assertFalse(err, z)
         self.assertGreaterEqual(z["mmAcross"]["left"], 16.0)
