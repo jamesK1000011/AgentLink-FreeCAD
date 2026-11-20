@@ -55,8 +55,25 @@ DESCRIPTIONS = {
         '— use it, a feature has dozens. Changes nothing. Several words go in one filter with | between them ("Length|Width"): a property that has one of them matches.'),
     'object_set': ('only Placement; Label is set with object_rename.',
         'only Placement; Label is set with object_rename. For one property, property and value also work: { property: "Length", value: 20 }.'),
-    'asm_joint': (': asm_check and asm_sweep show what still moves.',
+    'asm_joint': [
+        # Test drive of 20 Nov (bicycle, findings 4, 3, 5): no flip by itself, keep, chain by teeth.
+        ("gears and belt (radius1, radius2 — read off round edges when left out).",
+         "gears and belt (radius1, radius2 — read off round edges when left out); chain, FreeCAD's belt joint with the ratio teeth1 / teeth2 (50 / 16 = 3.125): "
+         "the teeth given, or read from a PartDesign Sprocket (NumberOfTeeth) in each part, pitch the chain pitch mm (12.7); gears and belt take teeth1, teeth2 too; "
+         "reply ratio and ratioFrom."),
+        ("(false keeps FreeCAD's way; left out, it is turned over when that stops parts overlapping).",
+         "(false keeps FreeCAD's way; left out, no part is turned over by itself: parts that overlap after the solve get a warning naming them, with how to flip; "
+         "autoFlip: true turns the moved part over when that stops the overlap, the old way, and flipWarning says when the flip put a part's centre on the other "
+         "side of the joint's plane). keep: true, for parts already placed: the offset (and the turn about the joint) that holds them where they stand, so nothing "
+         "moves — reply kept { property, at, axis, angle, moved }; not with offset, rotate, gap, reverse or autoFlip."),
+        (': asm_check and asm_sweep show what still moves.',
         ": asm_check and asm_sweep show what still moves. near in a query is in document coordinates (where the part is now); nearLocal is a point in the part's own frame, as modelled. offset's direction depends on which part moves; gap: mm between the two joined faces after the solve, positive apart, negative overlapping — the tool finds the offset for it (gap or offset, not both). Reply also: gap (the result across the joint, mm, negative for overlap) and at (the centre of each element when picked, in document coordinates)."),
+    ],
+    'asm_sweep': ("Each step cuts every pair of parts (a call is dropped after about 80 s): with many parts, fewer steps or a shorter range, not a job.",
+        "Each step cuts every pair of parts (a call is dropped after about 80 s): the sweep stops in time (about 60 s), and then answers the steps done with "
+        "partial: true, stepsDone and continueWith { joint, from, to, steps } for the next call; with many parts, fewer steps or a shorter range, not a job. "
+        "Overlaps there at the first step with the same volume at every step are static (a press fit, parts modelled into each other): staticOverlaps lists "
+        "them with their volume, and verdict, collidesAt and clearFromStart count only the contacts the motion makes."),
     'asm_bom': (' volume }]; a part with no material has no mass.',
         " volume }]; a part with no material has no mass. A part can be in a print setup: then mass is the printed estimate (walls and infill) of an installed add-on that owns mass, massAs tells how and solidMass is the solid mass; without that add-on, massAs marks the mass as solid, not as printed. slice gives the slicer's own figure."),
     'material_set': ('bject_rename does not carry it to the new label.',
@@ -88,9 +105,11 @@ def _ste():
 def _meant_only(name, old):
     if name not in DESCRIPTIONS:
         return old
-    was, now = DESCRIPTIONS[name]
-    assert old.count(was) == 1, (name, was)
-    return old.replace(was, now)
+    pairs = DESCRIPTIONS[name]
+    for was, now in (pairs if isinstance(pairs, list) else [pairs]):
+        assert old.count(was) == 1, (name, was)
+        old = old.replace(was, now)
+    return old
 
 
 def description(name, old):
@@ -126,12 +145,15 @@ def trace_as_meant(lines):
 # Meant changes to a converted tool's inputSchema since its snapshot (test
 # drive of 20 Nov): per tool, new descriptions of inputs, inputs put
 # in after a named one (in that order), and the required list.
-_NEAR = ("{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of "
-         "several. near: document coordinates; nearLocal: the part's own frame.")
+# a: near's frame said, nearLocal (20 Nov); b said as a, so the card holds at 900 tokens (bicycle drive).
+_NEAR_A = "{ part, element }: element \"Face6\" or a shape_query query { kind: face|edge, normal, near, nearLocal, radius, type }; near picks the closest."
 SCHEMAS = {
-    "asm_joint": {"why": "findings 2, 3: gap across the joint; near's frame said, nearLocal",
-                  "describe": {"a": _NEAR, "b": _NEAR},
-                  "after": [("offset", "gap", {"type": "number", "description": "mm between the joined faces after the solve: positive apart, negative overlap. Not with offset."})]},
+    "asm_joint": {"why": "findings 2, 3: gap across the joint; near's frame said, nearLocal. Bicycle 3, 4, 5: keep, autoFlip, chain by teeth",
+                  "describe": {"a": _NEAR_A, "b": "As a."},
+                  "enum_add": {"kind": ["chain"]},
+                  "after": [("offset", "gap", {"type": "number", "description": "mm between the joined faces after the solve: positive apart, negative overlap. Not with offset."}),
+                            ("reverse", "autoFlip", {"type": "boolean"}), ("autoFlip", "keep", {"type": "boolean"}), ("keep", "teeth1", {"type": "integer"}),
+                            ("teeth1", "teeth2", {"type": "integer"})]},
     "object_set": {"why": "finding 12: { property, value } as well as { values }",
                    "after": [("values", "property", {"type": "string", "description": "One property's name, with value: the same as values { property: value }."}),
                              ("property", "value", {})],
@@ -150,6 +172,8 @@ def schema(name, old):
     props = new["properties"]
     for k, text in m.get("describe", {}).items():
         props[k]["description"] = text
+    for k, more in m.get("enum_add", {}).items():
+        props[k]["enum"] = list(props[k]["enum"]) + list(more)
     for at, key, val in m.get("after", []):
         out = {}
         for k, v in props.items():
@@ -168,7 +192,9 @@ def schema(name, old):
 # data tests take them out of the new answer before they compare): per tool,
 # the field names and why.
 RESULTS = {
-    "asm_joint": (("gap", "gapIs", "gapWarning", "offset", "at"), "findings 2, 3: the gap across the joint and where each element was picked"),
+    "asm_joint": (("gap", "gapIs", "gapWarning", "offset", "at", "flipWarning", "crossedPlane", "kept", "keepWarning", "ratio", "ratioFrom", "teeth"),
+                  "findings 2, 3: the gap across the joint and where each element was picked; bicycle 3, 4, 5: keep, the flip's plane, a coupling's ratio"),
+    "asm_sweep": (("staticOverlaps", "staticNote", "partial", "stepsDone", "continueWith", "partialNote"), "bicycle 6, 7: a sweep in time, static overlaps apart"),
     "asm_bom": ((), "finding 11: rows of parts in a print setup carry massAs and solidMass (none in the stand-in's cases)"),
 }
 
