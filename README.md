@@ -369,33 +369,39 @@ Release statistics for V1, made by `scripts/stats.py` from the data (all of them
 
 ```
 Per-tool status, all of V1 (measured: counted from docs/hardening/status.json)
-proven on a test model    ████████████████████ 613/627
-  headless                ███████████████████░ 605/627
-  live in the window      ███████████████████░ 608/627
-docs checked              ██████████████████░░ 554/627
-health check seen         ███████████████░░░░░ 483/627
-description rewritten     ██████████████████░░ 568/627
+proven on a test model    ████████████████████ 613/619
+  headless                ████████████████████ 605/619
+  live in the window      ████████████████████ 608/619
+docs checked              ██████████████████░░ 554/619
+health check seen         ████████████████░░░░ 480/619
+description rewritten     ██████████████████░░ 565/619
 
 By section (tools proven / total)
-Agent Link (core)         ███████████████████░ 403/416
+Agent Link (core)         ████████████████████ 403/408
 Workshop                  ████████████████████  59/59
 ScanRuler for FreeCAD     ████████████████████ 132/133
 Texturizer                ████████████████████  11/11
 Tutor                     ████████████████████   3/3
 Agent Link for OrcaSlicer ████████████████████   5/5
+
+Developer tools (not counted): not in the totals above
+proven on a test model    ░░░░░░░░░░░░░░░░░░░░   0/8
+  headless                ░░░░░░░░░░░░░░░░░░░░   0/8
+  live in the window      ░░░░░░░░░░░░░░░░░░░░   0/8
 ```
 
 | Section | Tools | Proven | Headless | Live |
 |---|---:|---:|---:|---:|
-| Agent Link (core) | 416 | 403 | 396 | 403 |
+| Agent Link (core) | 408 | 403 | 396 | 403 |
 | Workshop | 59 | 59 | 59 | 54 |
 | ScanRuler for FreeCAD | 133 | 132 | 132 | 132 |
 | Texturizer | 11 | 11 | 11 | 11 |
 | Tutor | 3 | 3 | 2 | 3 |
 | Agent Link for OrcaSlicer | 5 | 5 | 5 | 5 |
-| **All of V1** | **627** | **613** | **605** | **608** |
+| **All of V1** | **619** | **613** | **605** | **608** |
+| *Developer tools (not counted)* | *8* | *0* | *0* | *0* |
 
-Known gaps: 14 tools are not proven, 8 more are proven live only and 5 more headless only. The main reasons: a program, a FreeCAD version or a printer that the test Mac does not have; a step that needs the person (a restart, an install, a go); proof only on cookbook format 2, which is V2; or not tested yet. Each tool and its reason: [What is not covered, and why](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md#what-is-not-covered-and-why). Not in V1 and not counted: 10 tools of private add-ons (Home-FreeCAD, agentlink-collab), cookbook format 2 and PrintLoop.
+Known gaps: 6 tools are not proven, 8 more are proven live only and 5 more headless only. The main reasons: a program, a FreeCAD version or a printer that the test Mac does not have; a step that needs the person (a restart, an install, a go); or not tested yet. Each tool and its reason: [What is not covered, and why](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md#what-is-not-covered-and-why). Not in V1 and not counted: 10 tools of private add-ons (Home-FreeCAD, agentlink-collab), cookbook format 2 and PrintLoop. In V1 but not counted: developer tools (8 tools: Porting), not FreeCAD functions.
 
 Tools: 416 in Agent Link (core), 628 with all add-ons installed (`library_pack` in this count is callable but not listed).
 

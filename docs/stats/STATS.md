@@ -10,25 +10,26 @@ The source is `docs/hardening/status.json` and `inventory.json`. Only V1 counts:
 
 | Section | Tools | Proven | Headless | Live | Docs checked | Health check seen | Description rewritten |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Agent Link (core) | 416 | 403 | 396 | 403 | 367 | 291 | 381 |
+| Agent Link (core) | 408 | 403 | 396 | 403 | 367 | 288 | 378 |
 | Workshop | 59 | 59 | 59 | 54 | 43 | 43 | 43 |
 | ScanRuler for FreeCAD | 133 | 132 | 132 | 132 | 132 | 132 | 132 |
 | Texturizer | 11 | 11 | 11 | 11 | 11 | 11 | 11 |
 | Tutor | 3 | 3 | 2 | 3 | 1 | 1 | 1 |
 | Agent Link for OrcaSlicer | 5 | 5 | 5 | 5 | 0 | 5 | 0 |
-| **All of V1** | **627** | **613** | **605** | **608** | **554** | **483** | **568** |
+| **All of V1** | **619** | **613** | **605** | **608** | **554** | **480** | **565** |
+| *Developer tools (not counted)* | *8* | *0* | *0* | *0* | *0* | *3* | *3* |
 
 ### Agent Link (core)
 
-What you get with the hub alone: the FreeCAD workbenches that Agent Link covers with no add-on installed. 416 tools.
+What you get with the hub alone: the FreeCAD workbenches that Agent Link covers with no add-on installed. 408 tools. The developer tools (Porting, 8 tools) are not in this count.
 
 ```
-proven on a test model    ███████████████████░ 403/416
-  headless                ███████████████████░ 396/416
-  live in the window      ███████████████████░ 403/416
-docs checked              ██████████████████░░ 367/416
-health check seen         ██████████████░░░░░░ 291/416
-description rewritten     ██████████████████░░ 381/416
+proven on a test model    ████████████████████ 403/408
+  headless                ███████████████████░ 396/408
+  live in the window      ████████████████████ 403/408
+docs checked              ██████████████████░░ 367/408
+health check seen         ██████████████░░░░░░ 288/408
+description rewritten     ███████████████████░ 378/408
 
 Agent Link (core) by workbench (tools proven / total)
 Sketcher                  ████████████████████  20/20
@@ -50,7 +51,6 @@ Material                  ██████████████████
 Inspection                ████████████████████   6/6
 OpenSCAD                  █████████████████░░░   5/6
 Robot                     ████████████████████   7/7
-Porting                   ░░░░░░░░░░░░░░░░░░░░   0/8
 ```
 
 ### Workshop
@@ -166,26 +166,47 @@ Agent Link for OrcaSlicer by group (tools proven / total)
 orca                      ████████████████████   5/5
 ```
 
+### Developer tools (not counted)
+
+These tools turn a person's own FreeCAD macro or add-on into an Agent Link add-on (port_scaffold, cookbooks). They are a developer tool, not a FreeCAD function that Agent Link covers. The owner's decision, 19 Nov 2026. 8 tools. They are not in the totals of V1.
+
+```
+proven on a test model    ░░░░░░░░░░░░░░░░░░░░   0/8
+  headless                ░░░░░░░░░░░░░░░░░░░░   0/8
+  live in the window      ░░░░░░░░░░░░░░░░░░░░   0/8
+docs checked              ░░░░░░░░░░░░░░░░░░░░   0/8
+health check seen         ████████░░░░░░░░░░░░   3/8
+description rewritten     ████████░░░░░░░░░░░░   3/8
+
+Developer tools (not counted) by workbench (tools proven / total)
+Porting                   ░░░░░░░░░░░░░░░░░░░░   0/8
+```
+
 ### All of V1 together
 
 The same lines as the start of `python3 scripts/hardening_status.py bars`.
 
 ```
 Per-tool status, all of V1 (measured: counted from docs/hardening/status.json)
-proven on a test model    ████████████████████ 613/627
-  headless                ███████████████████░ 605/627
-  live in the window      ███████████████████░ 608/627
-docs checked              ██████████████████░░ 554/627
-health check seen         ███████████████░░░░░ 483/627
-description rewritten     ██████████████████░░ 568/627
+proven on a test model    ████████████████████ 613/619
+  headless                ████████████████████ 605/619
+  live in the window      ████████████████████ 608/619
+docs checked              ██████████████████░░ 554/619
+health check seen         ████████████████░░░░ 480/619
+description rewritten     ██████████████████░░ 565/619
 
 By section (tools proven / total)
-Agent Link (core)         ███████████████████░ 403/416
+Agent Link (core)         ████████████████████ 403/408
 Workshop                  ████████████████████  59/59
 ScanRuler for FreeCAD     ████████████████████ 132/133
 Texturizer                ████████████████████  11/11
 Tutor                     ████████████████████   3/3
 Agent Link for OrcaSlicer ████████████████████   5/5
+
+Developer tools (not counted): not in the totals above
+proven on a test model    ░░░░░░░░░░░░░░░░░░░░   0/8
+  headless                ░░░░░░░░░░░░░░░░░░░░   0/8
+  live in the window      ░░░░░░░░░░░░░░░░░░░░   0/8
 ```
 
 ## 2. Tools
@@ -291,7 +312,7 @@ Each line is one tool: the section, the workbench or group, what is short, and w
 
 ### Agent Link (core)
 
-Rows under 100%: Assembly 17/18, Core 62/64, Window (GUI) 31/32, OpenSCAD 5/6, Porting 0/8.
+Rows under 100%: Assembly 17/18, Core 62/64, Window (GUI) 31/32, OpenSCAD 5/6.
 
 - `asm_rigid_group` (Assembly): not proven. It needs FreeCAD 1.2. The Mac has FreeCAD 1.1.3. Only its refusal is checked.
 - `app_force_restart` (Core): not headless. It quits FreeCAD. It needs the person's go, so the test models do not have it (unproven-findings.md).
@@ -305,14 +326,6 @@ Rows under 100%: Assembly 17/18, Core 62/64, Window (GUI) 31/32, OpenSCAD 5/6, P
 - `live_run` (Window (GUI)): not headless. It runs scripts of calls in the window, and its reset makes the window test document again (unproven-findings.md).
 - `queue_go` (Window (GUI)): not headless. It is the person's go only, so the test models do not have it (hubrest-findings.md).
 - `scad_code` (OpenSCAD): not proven. It needs the OpenSCAD program, which is not on the Mac. Only its refusal is checked.
-- `cookbook_approve` (Porting): not proven. Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.
-- `cookbook_export` (Porting): not proven. Not tested yet.
-- `cookbook_import` (Porting): not proven. Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.
-- `cookbook_list` (Porting): not proven. Not tested yet.
-- `cookbook_run` (Porting): not proven. Not tested yet.
-- `cookbook_show` (Porting): not proven. Not tested yet.
-- `cookbook_unapprove` (Porting): not proven. Not tested yet.
-- `port_scaffold` (Porting): not proven. Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.
 
 ### Workshop
 
@@ -342,7 +355,7 @@ Every tool is proven headless and live.
 
 ### Review steps not done yet
 
-These rows are under 100% too: docs checked 554/627, health check seen 483/627, description rewritten 568/627. They are review steps of the hardening pass, not proofs. The per-tool list is in `docs/hardening/STATUS.md`.
+These rows are under 100% too: docs checked 554/619, health check seen 480/619, description rewritten 565/619. They are review steps of the hardening pass, not proofs. The per-tool list is in `docs/hardening/STATUS.md`.
 
 ### Not in V1 (not counted)
 
@@ -353,4 +366,17 @@ These are not in the numbers above.
 - Cookbook format 2, its auto-port draft and cookbook_probe: Off main for V1. They live on the branch cookbook-v2 until V2 (CHANGELOG, docs/design/porting-2026-11-18.md).
 - PrintLoop for the OrcaSlicer server: Not fetched in V1: packaging/addons.json serverAddons is empty (CHANGELOG, V1 scope).
 - `library_pack` is counted in Workshop's declared tools (section 2) but not here. Workshop's library_pack is an alias of ScanRuler-FreeCAD's pack_write when ScanRuler-FreeCAD is installed (the V1 bundle): callable by name, never listed (docs/hardening/addons4-findings.md, item 6).
-- The live proof of `cookbook_approve`, `cookbook_import`, `port_scaffold` was on a cookbook format 2 draft. Format 2 is V2, so that proof does not count. The porting tools are V1 (cookbook format 1) and stay in the counts.
+
+### Developer tools (not counted)
+
+These tools turn a person's own FreeCAD macro or add-on into an Agent Link add-on (port_scaffold, cookbooks). They are a developer tool, not a FreeCAD function that Agent Link covers. The owner's decision, 19 Nov 2026. They are in V1, but not in the numbers above. Their own numbers: 0/8 proven, 0/8 headless, 0/8 live.
+
+- `cookbook_approve` (Porting): not proven. Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.
+- `cookbook_export` (Porting): not proven. Not tested yet.
+- `cookbook_import` (Porting): not proven. Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.
+- `cookbook_list` (Porting): not proven. Not tested yet.
+- `cookbook_run` (Porting): not proven. Not tested yet.
+- `cookbook_show` (Porting): not proven. Not tested yet.
+- `cookbook_unapprove` (Porting): not proven. Not tested yet.
+- `port_scaffold` (Porting): not proven. Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.
+- The live proof of `cookbook_approve`, `cookbook_import`, `port_scaffold` was on a cookbook format 2 draft. Format 2 is V2, so that proof does not count. These tools are V1 (cookbook format 1).

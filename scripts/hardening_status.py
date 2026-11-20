@@ -16,7 +16,9 @@ proven, headless or live (from the findings, the notes or the code; else
 draft, which is V2, so it does not count.
 
 V1 only: inventory.json's groups hold the V1 tools. Tools that are not in
-V1 are under notInV1 and are not counted.
+V1 are under notInV1 and are not counted. A V1 group with "notCounted" (a
+key of inventory.json's notCounted, for example "developer") is not a
+FreeCAD function: it has its own lines and is not in the totals.
 """
 import json
 import os
@@ -92,29 +94,53 @@ def count(names, status):
     return out
 
 
+def counted(groups):
+    """The groups that count: every V1 group without notCounted."""
+    return {g: d for g, d in groups.items() if not d.get("notCounted")}
+
+
 def counts(groups, status):
-    tools = [(t, g, d["workbench"]) for g, d in groups.items() for t in d["tools"]]
+    tools = [(t, g, d["workbench"]) for g, d in counted(groups).items() for t in d["tools"]]
     c = count([t for t, _g, _w in tools], status)
     return c.pop("total"), c, tools
 
 
+def _parts(mine, status):
+    parts = []
+    for g, d in mine:
+        key = d["workbench"] if d["repo"] == "AgentLink-FreeCAD" else d.get("listedIn", g)
+        p = next((x for x in parts if x["name"] == key), None)
+        if p is None:
+            p = {"name": key, "proven": 0, "total": 0}
+            parts.append(p)
+        p["total"] += len(d["tools"])
+        p["proven"] += sum(1 for t in d["tools"] if proven(status.get(t, {})))
+    return parts
+
+
+def not_counted(groups, status):
+    """[{key, title, why, counts, parts}]: the sections that are not in the
+    totals (inventory.json notCounted), with their own numbers."""
+    meta = load_inventory().get("notCounted", {})
+    out = []
+    for key in dict.fromkeys(d["notCounted"] for d in groups.values() if d.get("notCounted")):
+        mine = [(g, d) for g, d in groups.items() if d.get("notCounted") == key]
+        m = meta.get(key, {})
+        out.append({"key": key, "title": m.get("title", f"{key} (not counted)"), "why": m.get("why", ""),
+                    "counts": count([t for _g, d in mine for t in d["tools"]], status), "parts": _parts(mine, status)})
+    return out
+
+
 def sections(groups, status):
     """[{repo, title, counts, parts: [{name, proven, total}]}]: the hub's parts
-    are its workbenches, an add-on's parts are its groups."""
+    are its workbenches, an add-on's parts are its groups. Only the groups
+    that count (counted)."""
     out = []
+    groups = counted(groups)
     for repo, title in SECTIONS:
         mine = [(g, d) for g, d in groups.items() if d["repo"] == repo]
         names = [t for _g, d in mine for t in d["tools"]]
-        parts = []
-        for g, d in mine:
-            key = d["workbench"] if repo == "AgentLink-FreeCAD" else d.get("listedIn", g)
-            p = next((x for x in parts if x["name"] == key), None)
-            if p is None:
-                p = {"name": key, "proven": 0, "total": 0}
-                parts.append(p)
-            p["total"] += len(d["tools"])
-            p["proven"] += sum(1 for t in d["tools"] if proven(status.get(t, {})))
-        out.append({"repo": repo, "title": title, "counts": count(names, status), "parts": parts})
+        out.append({"repo": repo, "title": title, "counts": count(names, status), "parts": _parts(mine, status)})
     return out
 
 
@@ -129,6 +155,9 @@ def bars(groups, status):
     secs = sections(groups, status)
     lines += ["", "By section (tools proven / total)"]
     lines += [row(s["title"], s["counts"]["proven"], s["counts"]["total"]) for s in secs]
+    for n in not_counted(groups, status):
+        lines += ["", f"{n['title']}: not in the totals above"]
+        lines += [row(label, n["counts"][key], n["counts"]["total"]) for key, label in ROWS[:3]]
     lines += ["", f"{secs[0]['title']} by workbench (tools proven / total)"]
     lines += [row(p["name"], p["proven"], p["total"]) for p in secs[0]["parts"]]
     return "\n".join(lines)
@@ -143,7 +172,10 @@ def render(groups, status):
     for g, d in groups.items():
         if d["workbench"] != last:
             last = d["workbench"]
-            out += [f"## {last}", ""]
+            nc = load_inventory().get("notCounted", {}).get(d.get("notCounted"), {})
+            out += [f"## {last}" + (f": {nc.get('title', 'not counted').replace(' (not counted)', '').lower()}, not counted" if d.get("notCounted") else ""), ""]
+            if nc.get("why"):
+                out += [nc["why"] + " They are not in the totals.", ""]
         out += [f"### {g} ({d['repo']})", "", "| tool | docs | health | description | headless | live | model | note |", "|---|---|---|---|---|---|---|---|"]
         for t in d["tools"]:
             s = status.get(t, {})

@@ -1,5 +1,5 @@
 {
-"about": "Every tool the live server offered on 16 Nov 2026 (FreeCAD 1.1.3, the Mac), by group, read with tool_groups { group }. workbench: the hardening pass's batch. repo: where the tool's code lives. listedIn: the tool_groups group, when it is not the key. Added 18 Nov 2026: app_open, the approval tools, tool_find and the porting group. 19 Nov 2026 (V1 scope): groups holds only V1 tools, and tests/test_stats.py keeps it in step with the hub's tool data and docs/stats/addons.json. notInV1: tools that are not in the V1 bundle (packaging/addons.json), not counted. notInV1Features: V1 scope cuts that have no tool here. unlisted: tools that are callable but never listed.",
+"about": "Every tool the live server offered on 16 Nov 2026 (FreeCAD 1.1.3, the Mac), by group, read with tool_groups { group }. workbench: the hardening pass's batch. repo: where the tool's code lives. listedIn: the tool_groups group, when it is not the key. Added 18 Nov 2026: app_open, the approval tools, tool_find and the porting group. 19 Nov 2026 (V1 scope): groups holds only V1 tools, and tests/test_stats.py keeps it in step with the hub's tool data and docs/stats/addons.json. notInV1: tools that are not in the V1 bundle (packaging/addons.json), not counted. notInV1Features: V1 scope cuts that have no tool here. unlisted: tools that are callable but never listed. notCounted: sections of tools that are in V1 but are not FreeCAD functions, so they are not in the coverage totals; a group's notCounted names its section (19 Nov 2026, the owner: the porting group is a developer tool).",
 "groups": {
 "sketch": {"workbench": "Sketcher", "repo": "AgentLink-FreeCAD", "tools": ["pd_body_new","sketch_add","sketch_array","sketch_attach","sketch_bspline","sketch_carbon","sketch_constrain","sketch_copy","sketch_edit","sketch_extend","sketch_external","sketch_join","sketch_merge","sketch_mirror","sketch_new","sketch_offset","sketch_project","sketch_state","sketch_to_bspline","sketch_validate"]},
 "feature": {"workbench": "Part Design", "repo": "AgentLink-FreeCAD", "tools": ["feature_edit","feature_list","feature_remove","feature_suppress","pd_binder","pd_boolean","pd_chamfer","pd_datum","pd_datum_plane","pd_draft","pd_fillet","pd_gear","pd_groove","pd_helix","pd_hole","pd_linear_pattern","pd_loft","pd_mirrored","pd_multitransform","pd_pad","pd_pipe","pd_pocket","pd_polar_pattern","pd_primitive","pd_revolution","pd_shaft","pd_thickness"]},
@@ -32,7 +32,7 @@
 "inspection": {"workbench": "Inspection", "repo": "AgentLink-FreeCAD", "tools": ["insp_export","insp_faces","insp_list","insp_read","insp_run","insp_update"]},
 "openscad": {"workbench": "OpenSCAD", "repo": "AgentLink-FreeCAD", "tools": ["scad_code","scad_export","scad_import","scad_op","scad_status","scad_tidy"]},
 "robot": {"workbench": "Robot", "repo": "AgentLink-FreeCAD", "tools": ["robot_export","robot_move","robot_new","robot_path","robot_run","robot_tool","robot_trajectory"]},
-"porting": {"workbench": "Porting", "repo": "AgentLink-FreeCAD", "tools": ["cookbook_approve","cookbook_export","cookbook_import","cookbook_list","cookbook_run","cookbook_show","cookbook_unapprove","port_scaffold"]},
+"porting": {"workbench": "Porting", "repo": "AgentLink-FreeCAD", "notCounted": "developer", "tools": ["cookbook_approve","cookbook_export","cookbook_import","cookbook_list","cookbook_run","cookbook_show","cookbook_unapprove","port_scaffold"]},
 "fits": {"workbench": "Workshop", "repo": "Workshop-FreeCAD", "tools": ["fit","hw_hole"]},
 "make": {"workbench": "Workshop", "repo": "Workshop-FreeCAD", "tools": ["dfm_check","part_review","part_spec","setup","slice"]},
 "parts": {"workbench": "Workshop", "repo": "Workshop-FreeCAD", "tools": ["gen_make","gen_part"]},
@@ -127,5 +127,11 @@
 },
 "unlisted": {
  "library_pack": "Workshop's library_pack is an alias of ScanRuler-FreeCAD's pack_write when ScanRuler-FreeCAD is installed (the V1 bundle): callable by name, never listed (docs/hardening/addons4-findings.md, item 6)."
+},
+"notCounted": {
+ "developer": {
+  "title": "Developer tools (not counted)",
+  "why": "These tools turn a person's own FreeCAD macro or add-on into an Agent Link add-on (port_scaffold, cookbooks). They are a developer tool, not a FreeCAD function that Agent Link covers. The owner's decision, 19 Nov 2026."
+ }
 }
 }

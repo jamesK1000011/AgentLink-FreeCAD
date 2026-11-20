@@ -99,22 +99,31 @@ def coverage():
     inv = hardening_status.load_inventory()
     total, c, _tools = hardening_status.counts(groups, status)
     secs = hardening_status.sections(groups, status)
-    gaps = []
-    for sec in secs:
-        for g, d in groups.items():
-            if d["repo"] != sec["repo"]:
-                continue
-            part = d["workbench"] if sec["repo"] == "AgentLink-FreeCAD" else d.get("listedIn", g)
+    nc = hardening_status.not_counted(groups, status)
+
+    def gaps_of(title, mine):
+        out = []
+        for g, d in mine:
+            part = d["workbench"] if d["repo"] == "AgentLink-FreeCAD" else d.get("listedIn", g)
             for t in d["tools"]:
                 st = status.get(t, {})
                 short = _short(st)
                 if short:
-                    gaps.append({"tool": t, "section": sec["title"], "part": part, "short": short, "why": st.get("gap") or "Not tested yet.",
-                                 "format2Only": bool(st.get("liveFormat2"))})
+                    out.append({"tool": t, "section": title, "part": part, "short": short, "why": st.get("gap") or "Not tested yet.",
+                                "format2Only": bool(st.get("liveFormat2"))})
+        return out
+
+    counted = hardening_status.counted(groups)
+    gaps = []
+    for sec in secs:
+        gaps += gaps_of(sec["title"], [(g, d) for g, d in counted.items() if d["repo"] == sec["repo"]])
     nv = inv.get("notInV1", {})
     return {"total": total, **{k: c[k] for k, _l in COVER_ROWS},
             "sections": [{"repo": x["repo"], "title": x["title"], **x["counts"], "parts": x["parts"]} for x in secs],
             "gaps": gaps,
+            "notCounted": [{"key": x["key"], "title": x["title"], "why": x["why"], **x["counts"], "parts": x["parts"],
+                            "repos": sorted({d["repo"] for d in groups.values() if d.get("notCounted") == x["key"]}),
+                            "gaps": gaps_of(x["title"], [(g, d) for g, d in groups.items() if d.get("notCounted") == x["key"]])} for x in nc],
             "notInV1": {"tools": [{"tool": t, **e} for t, e in nv.get("tools", {}).items()], "features": nv.get("features", [])},
             "unlisted": [{"tool": t, "why": w} for t, w in inv.get("unlisted", {}).items()]}
 
@@ -129,11 +138,14 @@ def total_lines(cov):
     lines += [_row(label, cov[key], cov["total"]) for key, label in COVER_ROWS]
     lines += ["", "By section (tools proven / total)"]
     lines += [_row(x["title"], x["proven"], x["total"]) for x in cov["sections"]]
+    for n in cov.get("notCounted", []):
+        lines += ["", f"{n['title']}: not in the totals above"]
+        lines += [_row(label, n[key], n["total"]) for key, label in COVER_ROWS[:3]]
     return lines
 
 
 def section_lines(sec):
-    hub = sec["repo"] == "AgentLink-FreeCAD"
+    hub = "AgentLink-FreeCAD" in ([sec["repo"]] if "repo" in sec else sec.get("repos", []))
     lines = [_row(label, sec[key], sec["total"]) for key, label in COVER_ROWS]
     lines += ["", f"{sec['title']} by {'workbench' if hub else 'group'} (tools proven / total)"]
     lines += [_row(p["name"], p["proven"], p["total"]) for p in sec["parts"]]
@@ -435,7 +447,15 @@ def _sec_table(cov):
     for x in cov["sections"]:
         L.append(f"| {x['title']} | {x['total']} | {x['proven']} | {x['headless']} | {x['live']} | {x['docs']} | {x['health']} | {x['description']} |")
     L.append(f"| **All of V1** | **{cov['total']}** | **{cov['proven']}** | **{cov['headless']}** | **{cov['live']}** | **{cov['docs']}** | **{cov['health']}** | **{cov['description']}** |")
+    for n in cov.get("notCounted", []):
+        L.append(f"| *{n['title']}* | *{n['total']}* | *{n['proven']}* | *{n['headless']}* | *{n['live']}* | *{n['docs']}* | *{n['health']}* | *{n['description']}* |")
     return L
+
+
+def _nc_note(cov, repo):
+    """The sentence for a section whose repo also has tools that are not counted."""
+    ns = [n for n in cov.get("notCounted", []) if repo in n["repos"]]
+    return "".join(f" The {n['title'].replace(' (not counted)', '').lower()} ({', '.join(p['name'] for p in n['parts'])}, {n['total']} tools) are not in this count." for n in ns)
 
 
 def gap_lines(cov):
@@ -467,8 +487,16 @@ def gap_lines(cov):
     L += [f"- `{u['tool']}` is counted in Workshop's declared tools (section 2) but not here. {u['why']}" for u in cov["unlisted"]]
     f2 = [g["tool"] for g in cov["gaps"] if g["format2Only"]]
     if f2:
-        L.append(f"- The live proof of {', '.join('`' + t + '`' for t in f2)} was on a cookbook format 2 draft. Format 2 is V2, so that proof does not count. "
-                 "The porting tools are V1 (cookbook format 1) and stay in the counts.")
+        L.append(f"- The live proof of {', '.join('`' + t + '`' for t in f2)} was on a cookbook format 2 draft. Format 2 is V2, so that proof does not count.")
+    for n in cov.get("notCounted", []):
+        L += ["", f"### {n['title']}", "",
+              f"{n['why']} They are in V1, but not in the numbers above. Their own numbers: {n['proven']}/{n['total']} proven, "
+              f"{n['headless']}/{n['total']} headless, {n['live']}/{n['total']} live.", ""]
+        L += [f"- `{g['tool']}` ({g['part']}): {', '.join(g['short'])}. {g['why']}" for g in n["gaps"]]
+        f2 = [g["tool"] for g in n["gaps"] if g["format2Only"]]
+        if f2:
+            L.append(f"- The live proof of {', '.join('`' + t + '`' for t in f2)} was on a cookbook format 2 draft. Format 2 is V2, so that proof does not count. "
+                     "These tools are V1 (cookbook format 1).")
     return L
 
 
@@ -483,7 +511,9 @@ def render_md(s):
          "Proven: the tool worked on a test model, headless through the MCP tools or live in the FreeCAD window.", "",
          *_sec_table(cov), ""]
     for sec in cov["sections"]:
-        L += [f"### {sec['title']}", "", f"{SECTION_NOTE.get(sec['repo'], '')} {sec['total']} tools.", "", "```", *section_lines(sec), "```", ""]
+        L += [f"### {sec['title']}", "", f"{SECTION_NOTE.get(sec['repo'], '')} {sec['total']} tools.{_nc_note(cov, sec['repo'])}", "", "```", *section_lines(sec), "```", ""]
+    for n in cov.get("notCounted", []):
+        L += [f"### {n['title']}", "", f"{n['why']} {n['total']} tools. They are not in the totals of V1.", "", "```", *section_lines(n), "```", ""]
     L += ["### All of V1 together", "",
           "The same lines as the start of `python3 scripts/hardening_status.py bars`.", "",
           "```", *total_lines(cov), "```", "",
@@ -553,7 +583,9 @@ def readme_block(s):
          "```", *total_lines(cov), "```", "",
          "| Section | Tools | Proven | Headless | Live |", "|---|---:|---:|---:|---:|"]
     L += [f"| {x['title']} | {x['total']} | {x['proven']} | {x['headless']} | {x['live']} |" for x in cov["sections"]]
-    L += [f"| **All of V1** | **{cov['total']}** | **{cov['proven']}** | **{cov['headless']}** | **{cov['live']}** |", ""]
+    L += [f"| **All of V1** | **{cov['total']}** | **{cov['proven']}** | **{cov['headless']}** | **{cov['live']}** |"]
+    L += [f"| *{n['title']}* | *{n['total']}* | *{n['proven']}* | *{n['headless']}* | *{n['live']}* |" for n in cov.get("notCounted", [])]
+    L += [""]
     gaps = cov["gaps"]
     np_ = [g for g in gaps if g["short"] == ["not proven"]]
     nh = [g for g in gaps if "not headless" in g["short"]]
@@ -561,9 +593,11 @@ def readme_block(s):
     nv = len(cov["notInV1"]["tools"])
     L += [f"Known gaps: {len(np_)} tools are not proven, {len(nh)} more are proven live only and {len(nl)} more headless only. "
           "The main reasons: a program, a FreeCAD version or a printer that the test Mac does not have; a step that needs the person (a restart, an install, a go); "
-          "proof only on cookbook format 2, which is V2; or not tested yet. "
+          + ("proof only on cookbook format 2, which is V2; " if any(g["format2Only"] for g in gaps) else "") + "or not tested yet. "
           f"Each tool and its reason: [What is not covered, and why]({md}#what-is-not-covered-and-why). "
-          f"Not in V1 and not counted: {nv} tools of private add-ons (Home-FreeCAD, agentlink-collab), cookbook format 2 and PrintLoop.", "",
+          f"Not in V1 and not counted: {nv} tools of private add-ons (Home-FreeCAD, agentlink-collab), cookbook format 2 and PrintLoop."
+          + "".join(f" In V1 but not counted: {n['title'].replace(' (not counted)', '').lower()} ({n['total']} tools: {', '.join(p['name'] for p in n['parts'])}), not FreeCAD functions."
+                    for n in cov.get("notCounted", [])), "",
           f"Tools: {hub['total']} in Agent Link (core), {tok['totalAllInstalled']} with all add-ons installed"
           + (f" ({', '.join('`' + u['tool'] + '`' for u in cov['unlisted'])} in this count is callable but not listed)." if cov["unlisted"] else "."), "",
           TOKEN_WHAT + " Estimate: 3.5 characters for each token.", "",
