@@ -333,7 +333,11 @@ docs/packaging.md
 docs/records.md
 docs/security/red-team-2026-11-18.md
 docs/stats/STATS.md
+docs/stats/STATS.md
+docs/stats/STATS.md
 docs/stats/addons.json
+docs/stats/stats.json
+docs/stats/stats.json
 docs/stats/stats.json
 docs/workflow/README.md
 docs/workflow/addons.md
@@ -428,6 +432,7 @@ tests/test_app_install.py
 tests/test_app_open_1118.py
 tests/test_approvals.py
 tests/test_as_person.py
+tests/test_asm_datum_repick.py
 tests/test_assembly.py
 tests/test_assembly_more.py
 tests/test_batch_chain_fc.py
@@ -553,6 +558,8 @@ tests/test_millsim.py
 tests/test_model.py
 tests/test_model_more.py
 tests/test_more_families.py
+tests/test_needs.py
+tests/test_needs.py
 tests/test_needs.py
 tests/test_nexthint.py
 tests/test_no_addon_names.py

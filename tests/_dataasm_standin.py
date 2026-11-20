@@ -59,6 +59,7 @@ def install():
     Rotation.Q = property(lambda self: (0.0, 0.0, round(math.sin(turn(self) / 2), 9), round(math.cos(turn(self) / 2), 9)))
 
     Placement.multiply = lambda self, o: Placement(self.Base + self.Rotation.multVec(o.Base), self.Rotation.multiply(o.Rotation))
+    Placement.__mul__ = lambda self, o: self.multiply(o)  # FreeCAD's pl * pl
     Placement.inverse = lambda self: Placement(self.Rotation.inverted().multVec(self.Base) * -1, self.Rotation.inverted())
     Placement.copy = lambda self: Placement(Vec(self.Base), Rotation(Vec(0, 0, 1), math.degrees(turn(self.Rotation))))
     Placement.isSame = lambda self, o, tol=1e-7: (self.Base - o.Base).Length <= tol and abs(turn(self.Rotation) - turn(o.Rotation)) <= tol
