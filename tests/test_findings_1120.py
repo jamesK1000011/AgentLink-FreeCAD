@@ -517,8 +517,9 @@ class JointGap(unittest.TestCase):
         self.assertIn("nearLocal", e["inputSchema"]["properties"]["a"]["description"])
         steps = json.dumps(e["steps"])
         self.assertIn("gap: the gap across this joint cannot be measured", steps)
-        for words in ("near in a query uses document coordinates", "nearLocal uses the part's own frame", "its direction depends on which part moves",
-                      "gap: mm between the joined faces after the solve (negative: overlap)", "Not with offset", "at: each element's centre when picked, in document coordinates"):
+        # the card said shorter since (bicycle drive, the 900-token bound): the same facts
+        for words in ("near: document coordinates", "nearLocal: the part's own frame", "its direction depends on which part moves",
+                      "gap: mm between the joined faces after the solve (negative: overlap)", "Not with offset", "at (picked centres)"):
             self.assertIn(words, e["description"])
 
 

@@ -28,15 +28,18 @@ EXPECT = {
     ("asm_check", "a part joined to nothing"): {"notConnected": ["Pin"], "verdict": "clear"},
     ("asm_check", "a screw's thread"): {"threads": 2, "verdict": "clear"},
     ("asm_sweep", "a slider into the base"): {"verdict": "collides", "collidesAt": [2.5, 5.0, 7.5, 10.0], "clearFromStart": [0.0, 0.0]},
-    ("asm_sweep", "a slider that collides from the start"): {"collidesAt": [0.0, 5.0, 10.0], "clearFromStart": None},
+    # bicycle finding 7: the same overlap at every step is static, not a collision the motion makes
+    ("asm_sweep", "a slider that collides from the start"): {"collidesAt": None, "clearFromStart": None, "verdict": "clear"},
     ("asm_sweep", "gears drive a wheel"): {"moves": ["Lid"], "driven": [{"part": "Wheel", "via": "Gears", "turns": "degrees", "per": -2.0}], "verdict": "clear"},
     ("asm_sweep", "no steps"): ["refused", "invalid_input", "steps: 1 to 72 (got 0); each step checks every pair of parts — for a closer look sweep a shorter from/to range."],
     ("asm_joint", "named, a part moved by it"): {"joint": "Glue", "kind": "fixed", "a": "Base.Face1", "b": "Lid.Face2", "solve": "solved",
                                                  "moved": {"Lid": {"from": [0.0, 0.0, 0.0], "to": {"at": [0.0, 0.0, 20.0], "axis": [0.0, 0.0, 1.0], "angle": 0.0}, "by": 20.0}}},
     ("asm_joint", "reversed"): {"flipped": True},
-    ("asm_joint", "turned over to stop an overlap"): {"moved": {}, "flipped": "turned over to stop the parts overlapping (reverse: false keeps it as FreeCAD first put it)", "overlaps": None},
-    ("asm_joint", "turning over does not help"): {"flipped": None, "warning": "Parts overlap after the solve: a face picked the wrong way round, or the parts do not fit — reverse: true flips the second part, or check the sizes."},
-    ("asm_joint", "a kind not offered"): ["refused", "invalid_input", "kind: one of fixed, revolute, cylindrical, slider, ball, distance, parallel, perpendicular, angle, rackpinion, screw, gears, belt (got 'weld')."],
+    # bicycle finding 4: no turn by itself; autoFlip: true is the old way
+    ("asm_joint", "turned over to stop an overlap"): {"moved": {}, "flipped": "turned over to stop the parts overlapping (autoFlip: true; leave autoFlip out to keep it as FreeCAD first put it)", "overlaps": None},
+    ("asm_joint", "turning over does not help"): {"flipped": None, "warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reverse: true turns the moved part over on the joint; "
+                                                                              "autoFlip: true lets the tool try it; else check the sizes."},
+    ("asm_joint", "a kind not offered"): ["refused", "invalid_input", "kind: one of fixed, revolute, cylindrical, slider, ball, distance, parallel, perpendicular, angle, rackpinion, screw, gears, belt, chain (got 'weld')."],
     ("asm_joint", "the solver finds nothing grounded"): ["refused", "failed", "The fixed joint leaves Assembly unsolved: no part is grounded — nothing was kept. asm_ground { part } holds one part first."],
     ("asm_joint", "FreeCAD will not connect it"): ["refused", "failed", "FreeCAD could not make the fixed joint between Base.Face1 and Lid.Face2: setJointConnectors: it would not"],
     ("asm_fits", "held to H7/g6"): {"verdict": "fix"},
@@ -64,6 +67,14 @@ EXPECT = {
 UNREACHED = [
     'asm_joint: gap or offset, not both: gap is the mm between the two joined faces af',
     'asm_joint: gap: the gap across this joint cannot be measured — a or b must be a f',
+    # bicycle findings 3, 4, 5 (keep, autoFlip, chain by teeth): tests/test_bicycle_1120.py reaches each.
+    'asm_joint: keep turns no part over: not with reverse or autoFlip. keep holds the ',
+    'asm_joint: keep, or offset, rotate and gap: keep finds the offset that holds the ',
+    'asm_joint: autoFlip or reverse, not both: reverse says the way round, autoFlip le',
+    'asm_joint: teeth1, teeth2: for kind chain, belt and gears only.',
+    'asm_joint: teeth or radii, not both: teeth1 and teeth2 set radius1 and radius2.',
+    'asm_joint: chain: teeth1 and teeth2, a PartDesign Sprocket in each part, or radiu',
+    'asm_joint: keep: FreeCAD gave this joint no frames to read (Placement1, Placement',
 ]
 
 FACE = {"kind": "face"}
@@ -288,7 +299,7 @@ def cases(fc, tmp, old, new):
         ("asm_joint", "frames and undo that cannot be touched", prep(*duo, fail=("updateJCSPlacements",), no_methods=("clearUndo",)), dict(J)),
         ("asm_joint", "reversed", prep(*duo, flip_puts={"Lid": [0, 0, 30]}), dict(J, reverse=True)),
         ("asm_joint", "kept as FreeCAD put it, overlapping", prep(*duo, joint_puts={"Lid": [0, 0, -5]}), dict(J, reverse=False)),
-        ("asm_joint", "turned over to stop an overlap", prep(*duo, joint_puts={"Lid": [0, 0, -5]}, flip_puts={"Lid": [0, 0, 0]}), dict(J)),
+        ("asm_joint", "turned over to stop an overlap", prep(*duo, joint_puts={"Lid": [0, 0, -5]}, flip_puts={"Lid": [0, 0, 0]}), dict(J, autoFlip=True)),
         ("asm_joint", "turning over does not help", prep(*duo, joint_puts={"Lid": [0, 0, -5]}), dict(J)),
         ("asm_joint", "turned over, it no longer solves", prep(*duo, joint_puts={"Lid": [0, 0, -5]}, flip_puts={"Lid": [0, 0, 0]}, solve=[0, -1, 0]), dict(J)),
         ("asm_joint", "a ball joint is not turned over", prep(*duo, joint_puts={"Lid": [0, 0, -5]}, flip_puts={"Lid": [0, 0, 0]}), dict(J, kind="ball")),

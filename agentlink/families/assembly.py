@@ -8,6 +8,7 @@
 # joint does not depend on FreeCAD's numbering.
 
 import math
+import time
 
 import FreeCAD
 import Part
@@ -54,6 +55,10 @@ def _view_provider(obj, kind):
 OFFERED = ["fixed", "revolute", "cylindrical", "slider", "ball", "distance", "parallel", "perpendicular", "angle"]
 # the motion couplings, where this FreeCAD has them
 OFFERED += [k for k in ("rackpinion", "screw", "gears", "belt") if k in KINDS]
+# A chain is FreeCAD's belt joint, its ratio set by the sprockets' teeth.
+if "belt" in KINDS:
+    KINDS["chain"] = KINDS["belt"]
+    OFFERED.append("chain")
 # AssemblyObject.solve()'s codes as its own notes list them. FreeCAD 1.1's
 # solve returns only three of them (AssemblyObject.cpp): 0, -1 (the solver
 # threw) and -6 (nothing grounded); it does not count freedom left, and a
@@ -470,12 +475,19 @@ def _thread_engagement(screw, other, common):
         return None
 
 
-def _overlaps(parts, clearance=0.0):
+class _Late(Exception):
+    """A sweep's time ran out in the middle of a step."""
+
+
+def _overlaps(parts, clearance=0.0, deadline=None):
     """Pairs of parts that overlap (their common volume), and, with
-    clearance, those closer than it."""
+    clearance, those closer than it. deadline (a _clock() time): _Late
+    when it passes before every pair is cut."""
     out, near = [], []
     for i, a in enumerate(parts):
         for b in parts[i + 1:]:
+            if deadline is not None and _clock() > deadline:
+                raise _Late()
             sa, sb = _shape(a), _shape(b)
             if not sa.BoundBox.intersect(sb.BoundBox) and clearance <= 0:
                 continue
@@ -670,19 +682,36 @@ def driven_parts(doc, couplings, others, group, turning):
     return driven
 
 
-def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, clearance):
+# A sweep stops before the call's limit (about 80 s, the card says): this
+# long for its steps, the rest for the answer. _clock is swapped in tests.
+SWEEP_BUDGET = 60.0
+_clock = time.monotonic
+
+
+def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, clearance, budget=None):
     """The sweep itself: the group turned about (or slid along) the axis to
     each of steps + 1 values from lo to hi, the driven parts by their
     ratio, every pair of parts checked for overlap at each, and every part
     put back after whatever happened (which is why this is code: the steps
     have no "finally"). Values count from where the joint was made: an
     asm_pose since is taken off. A row a step: { at, driven, overlaps,
-    closer }."""
+    closer }. Test drive of 20 Nov (bicycle, finding 6): the steps stop when
+    the next one would pass the budget (seconds, SWEEP_BUDGET), or when the
+    time runs out inside a step. (rows, stopped): stopped is the index of the
+    first step not done, None when all were done."""
+    budget = SWEEP_BUDGET if budget is None else budget
+    t0 = _clock()
+    deadline = t0 + budget if budget and budget > 0 else None
     kept = {o.Name: o.Placement.copy() for o in _parts(asm)}
-    rows = []
+    rows, stopped = [], None
     try:
         posed = float(getattr(j, "AgentLinkPose", 0.0) or 0.0)
         for k in range(steps + 1):
+            if deadline is not None and rows:
+                now = _clock()
+                if now + (now - t0) / len(rows) > deadline:
+                    stopped = k
+                    break
             v = lo + (hi - lo) * k / steps
             if turning:
                 r = FreeCAD.Rotation(axis, v - posed)
@@ -702,7 +731,11 @@ def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, 
                 d["part"].Placement = dm.multiply(kept[d["part"].Name])
                 row.setdefault("driven", {})[d["part"].Label] = round(amount, 3)
             doc.recompute()
-            hits, near = _overlaps(_parts(asm), clearance)
+            try:
+                hits, near = _overlaps(_parts(asm), clearance, deadline)
+            except _Late:
+                stopped = k
+                break
             if hits:
                 row["overlaps"] = [{"parts": h["parts"], "volume": h["volume"]} for h in hits]
             if clearance > 0 and near:
@@ -714,7 +747,273 @@ def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, 
                 o.Placement = kept[o.Name]
         doc.recompute()
         _status(asm)
-    return rows
+    return rows, stopped
+
+
+def sweep_rest(j, lo, hi, steps, stopped):
+    """The call that goes on where a sweep stopped (finding 6): the same
+    step size, from the first value not done to the end. None when the
+    sweep was done."""
+    if stopped is None:
+        return None
+    return {"joint": j.Label, "from": round(lo + (hi - lo) * stopped / steps, 3), "to": round(hi, 3), "steps": max(steps - stopped, 1)}
+
+
+# Overlaps that stay the same through the whole sweep are there from the
+# start (a press fit, a part modelled into another): the motion does not
+# make them. Same volume: within STATIC_ABS mm³ or STATIC_REL of it.
+STATIC_ABS, STATIC_REL = 0.01, 0.01
+
+
+def split_static(rows):
+    """Test drive of 20 Nov (bicycle, finding 7): the overlaps present at
+    the first step with the same volume at every step, out of the rows.
+    (rows with only the contacts the motion makes, [{ parts, volume }] of
+    the static ones). One row alone proves nothing: all its overlaps stay."""
+    if len(rows) < 2:
+        return rows, []
+
+    def key(h):
+        return tuple(sorted(h["parts"]))
+
+    def vol(row, k):
+        return next((h["volume"] for h in row.get("overlaps", ()) if key(h) == k), 0.0)
+
+    static = []
+    for h in rows[0].get("overlaps", ()):
+        v0 = h["volume"]
+        if all(abs(vol(r, key(h)) - v0) <= max(STATIC_ABS, STATIC_REL * v0) for r in rows):
+            static.append({"parts": list(h["parts"]), "volume": v0})
+    if not static:
+        return rows, []
+    keys = {key(h) for h in static}
+    out = []
+    for r in rows:
+        left = [h for h in r.get("overlaps", ()) if key(h) not in keys]
+        out.append({**{k: v for k, v in r.items() if k != "overlaps"}, **({"overlaps": left} if left else {})})
+    return out, static
+
+
+# ---- asm_joint: keep, flips, chains (test drive of 20 Nov, bicycle findings 3, 4, 5) ----------
+
+KEEP_TOL_MM, KEEP_TOL_DEG = 1e-3, 1e-3
+
+
+def _turned(a, b):
+    """Degrees between two placements' rotations, 0 … 180."""
+    try:
+        d = abs(math.degrees(a.Rotation.inverted().multiply(b.Rotation).Angle)) % 360.0
+    except Exception:  # noqa: BLE001
+        return 0.0
+    return min(d, 360.0 - d)
+
+
+def moved_most(before, parts):
+    """The most any part moved from its placement in before: (mm, degrees)."""
+    mm = deg = 0.0
+    for o in parts:
+        b = before.get(o.Name)
+        if b is None:
+            continue
+        mm = max(mm, (o.Placement.Base - b.Base).Length)
+        deg = max(deg, _turned(b, o.Placement))
+    return mm, deg
+
+
+def _put_back(asm, before):
+    for o in _parts(asm):
+        if o.Name in before:
+            o.Placement = before[o.Name].copy()
+
+
+def keep_offset(doc, asm, j, ends, before):
+    """Finding 3: the joint's offset that holds the parts where they stand
+    (before: their placements before the joint), so the solve moves
+    nothing. A joint's frames meet as part·PlacementN·OffsetN; which side
+    FreeCAD puts the offset on is tried, as gap_set tries its sign: the
+    first that moves nothing is kept, else the one that moves least.
+    (code, words, { property, at, axis, angle, moved: { mm, degrees } }),
+    or None when the joint's frames cannot be read."""
+    (pa, _ea), (pb, _eb) = ends
+    if pa.Name not in before or pb.Name not in before:
+        return None
+    pl1, pl2 = getattr(j, "Placement1", None), getattr(j, "Placement2", None)
+    if pl1 is None or pl2 is None or not hasattr(j, "Offset2"):
+        return None
+    g1, g2 = before[pa.Name].multiply(pl1), before[pb.Name].multiply(pl2)
+    tries = [("Offset2", g2.inverse().multiply(g1)), ("Offset2", g1.inverse().multiply(g2))]
+    if hasattr(j, "Offset1"):
+        tries += [("Offset1", g1.inverse().multiply(g2)), ("Offset1", g2.inverse().multiply(g1))]
+    best = last = None
+    for prop, off in tries:
+        for name in ("Offset1", "Offset2"):
+            if hasattr(j, name):
+                setattr(j, name, off if name == prop else FreeCAD.Placement())
+        _put_back(asm, before)
+        doc.recompute()
+        code, said = _status(asm)
+        mm, deg = moved_most(before, _parts(asm))
+        row = last = (code != 0, mm + deg / 10.0, prop, off, code, said, mm, deg)
+        if best is None or row[:2] < best[:2]:
+            best = row
+        if code == 0 and mm <= KEEP_TOL_MM and deg <= KEEP_TOL_DEG:
+            break
+    _bad, _score, prop, off, code, said, mm, deg = best
+    if best is not last:
+        for name in ("Offset1", "Offset2"):
+            if hasattr(j, name):
+                setattr(j, name, off if name == prop else FreeCAD.Placement())
+        _put_back(asm, before)
+        doc.recompute()
+        code, said = _status(asm)
+        mm, deg = moved_most(before, _parts(asm))
+    return code, said, dict(property=prop, **_placement_of(off), moved={"mm": round(mm, 4), "degrees": round(deg, 4)})
+
+
+def _placement_of(p):
+    return {"at": geo.vec(p.Base), "axis": geo.vec(p.Rotation.Axis), "angle": round(math.degrees(p.Rotation.Angle), 4)}
+
+
+def joint_plane(j, ends):
+    """(origin, unit normal) of the plane across the joint's axis, in the
+    document's coordinates: the joint's first frame, else the first
+    element's axis. None when neither can be read."""
+    try:
+        import UtilsAssembly as UA
+
+        g = UA.getJcsGlobalPlc(j.Placement1, j.Reference1)
+        return V(g.Base), unit(g.Rotation.multVec(V(0, 0, 1)))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        ax = joint_axis(_shape(ends[0][0]).getElement(ends[0][1]))
+        return (V(ax[0]), unit(ax[1])) if ax else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _centre(o):
+    try:
+        sh = _shape(o)
+        return V(sh.BoundBox.Center)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def auto_flip(doc, asm, j, ends):
+    """Finding 4, autoFlip: true (the old way): with parts overlapping after
+    the solve, the moved part turned over on the joint, kept when that
+    lessens the overlap. (code, words, flipped, crossed): crossed names
+    each part the flip put on the other side of the joint's plane (its
+    centre), as a crankset's chainring on the wrong side of its frame."""
+    code, said = _status(asm)
+    hits = _overlaps(_parts(asm))[0]
+    if code != 0 or not hits:
+        return code, said, False, []
+    vol0 = sum(h["volume"] for h in hits)
+    kept = {o.Name: o.Placement.copy() for o in _parts(asm)}
+    plane = joint_plane(j, ends)
+    sides = {}
+    if plane is not None:
+        for o in _parts(asm):
+            c = _centre(o)
+            if c is not None:
+                sides[o.Name] = (c - plane[0]).dot(plane[1])
+    code2, said2 = turn_over(doc, asm, j)
+    second = _overlaps(_parts(asm))[0]
+    if code2 == 0 and sum(h["volume"] for h in second) < vol0 - 1e-6:
+        crossed = []
+        for o in _parts(asm):
+            if o.Name not in sides or o.Placement.isSame(kept[o.Name], 1e-6):
+                continue
+            c = _centre(o)
+            d0, d1 = sides[o.Name], ((c - plane[0]).dot(plane[1]) if c is not None else None)
+            if d1 is not None and abs(d0) > GAP_TOL and abs(d1) > GAP_TOL and (d0 > 0) != (d1 > 0):
+                crossed.append({"part": o.Label, "before": round(d0, 3), "after": round(d1, 3)})
+        return code2, said2, True, crossed
+    for o in _parts(asm):
+        o.Placement = kept[o.Name]
+    doc.recompute()
+    code, said = _status(asm)
+    return code, said, False, []
+
+
+def overlap_words(hits):
+    """"Base/Lid 350 mm³, …" for a warning."""
+    return ", ".join(f"{'/'.join(h['parts'])} {h['volume']:g} mm³" for h in hits)
+
+
+# The pitch of a bicycle chain (1/2 in), mm: a sprocket's pitch radius is
+# taken as teeth · pitch / 2π, so the ratio is the teeth's exactly.
+CHAIN_PITCH = 12.7
+
+
+def teeth_in(part, look):
+    """The features with NumberOfTeeth in a part (a Body, a link's target,
+    or the part itself) whose type or class name has look in it
+    ("Sprocket": PartDesign's Sprocket; "Gear": its InvoluteGear).
+    [(feature, teeth)]."""
+    found, seen, todo = [], set(), [part]
+    try:
+        tgt = part.getLinkedObject(True)
+        if tgt is not None and tgt is not part:
+            todo.append(tgt)
+    except Exception:  # noqa: BLE001
+        pass
+    while todo:
+        o = todo.pop(0)
+        if o is None or getattr(o, "Name", None) in seen:
+            continue
+        seen.add(o.Name)
+        n = getattr(o, "NumberOfTeeth", None)
+        names = (str(getattr(o, "TypeId", "")), type(getattr(o, "Proxy", None)).__name__)
+        if n is not None and any(look.lower() in x.lower() for x in names):
+            try:
+                found.append((o, int(n)))
+            except (TypeError, ValueError):
+                pass
+        todo.extend(getattr(o, "Group", None) or [])
+        todo.extend(getattr(o, "OutListRecursive", None) or [])
+    return found
+
+
+def coupling_teeth(ends, kind, teeth1, teeth2, pitch=None):
+    """Finding 5: the teeth of a chain's sprockets (or gears', a toothed
+    belt's pulleys), given or read from the parts (chain: a PartDesign
+    Sprocket in each; gears: an InvoluteGear). None when there are none
+    to go by. Else { teeth1, teeth2, ratio: teeth1 / teeth2, from, radius1,
+    radius2 }: the radii teeth · pitch / 2π, so the joint's ratio is the
+    teeth's."""
+    look = {"chain": "Sprocket", "gears": "Gear"}.get(kind)
+    got, said = [], []
+    for (part, _el), given, which in zip(ends, (teeth1, teeth2), ("teeth1", "teeth2")):
+        if given is not None:
+            n = picks.num(given, which)
+            if n <= 0 or n != int(n):
+                raise ToolError("invalid_input", f"{which}: a whole number of teeth, more than 0 (got {given}).")
+            got.append(int(n))
+            said.append(f"{which} {int(n)} given")
+            continue
+        found = teeth_in(part, look) if look else []
+        if len(found) > 1:
+            raise ToolError("invalid_input", f"{which}: {part.Label} holds {len(found)} parts with teeth ({', '.join(f'{o.Label} {n}' for o, n in found)}) — give {which}.")
+        if found:
+            o, n = found[0]
+            got.append(n)
+            said.append(f"{which} {n} read from {part.Label}'s {o.Label} (NumberOfTeeth)")
+        else:
+            got.append(None)
+    if got == [None, None]:
+        return None
+    if None in got:
+        i = got.index(None)
+        which, part = ("teeth1", "teeth2")[i], ends[i][0]
+        where = f"no {look} with NumberOfTeeth in {part.Label}" if look else f"{kind} reads no teeth from the parts"
+        raise ToolError("invalid_input", f"{which}: {where} — give {which}, or give radius1 and radius2 without teeth.")
+    p = float(pitch) if kind == "chain" and pitch else CHAIN_PITCH
+    t1, t2 = got
+    return {"teeth1": t1, "teeth2": t2, "ratio": round(t1 / t2, 6), "from": "; ".join(said),
+            "radius1": t1 * p / (2 * math.pi), "radius2": t2 * p / (2 * math.pi)}
 
 
 def tools(session):
@@ -747,7 +1046,11 @@ def tools(session):
                "ref_pair": lambda r: ref_element(doc(), r)[:2], "joint_axis": joint_axis, "unit": unit, "radius_of": radius_of, "joint_refs": joint_refs,
                "turn_over": lambda asm, j: turn_over(doc(), asm, j), "carried": lambda asm, j, moving, fixed, grounded: carried(doc(), asm, j, moving, fixed, grounded),
                "driven_parts": lambda couplings, others, group, turning: driven_parts(doc(), couplings, others, group, turning),
-               "sweep_run": lambda asm, j, *rest: sweep_run(doc(), asm, j, *rest),
+               "sweep_run": lambda asm, j, *rest: sweep_run(doc(), asm, j, *rest), "sweep_rest": sweep_rest, "split_static": split_static,
+               # test drive of 20 Nov (bicycle): keep, flips, chains by teeth
+               "keep_offset": lambda asm, j, ends, before: keep_offset(doc(), asm, j, ends, before),
+               "auto_flip": lambda asm, j, ends: auto_flip(doc(), asm, j, ends), "overlap_words": overlap_words,
+               "coupling_teeth": coupling_teeth,
                # tables
                "OFFERED": OFFERED, "KINDS": KINDS, "REVERSIBLE": REVERSIBLE}
     return runners.tools(GROUP, s, helpers)

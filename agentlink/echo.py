@@ -343,7 +343,7 @@ def command_for(name, args):
         return None
     kind = str((args or {}).get("kind") or "").lower().replace("-", "").replace("_", "")
     if name == "asm_joint" and kind:
-        return "Assembly_CreateJoint" + {"rackpinion": "RackPinion", "slider": "Slider", "ball": "Ball"}.get(kind, kind.capitalize())
+        return "Assembly_CreateJoint" + {"rackpinion": "RackPinion", "slider": "Slider", "ball": "Ball", "chain": "Belt"}.get(kind, kind.capitalize())
     if name == "cam_op" and kind in CAM_OP:
         return CAM_OP[kind]
     if name == "cam_dressup" and kind in CAM_DRESSUP:

@@ -13783,7 +13783,7 @@
   },
   "asm_joint": {
    "group": "assembly",
-   "description": "Join two parts and solve; this needs a grounded part. kind fixed: no motion. kind revolute: turns about the axis of the joint. kind cylindrical: turns and slides. kind slider: slides only. kind ball. kind distance: distance mm between the elements; round faces count from their surface. kind parallel, perpendicular. kind angle: angle degrees (90). Couplings tie one motion to another for asm_sweep. Each coupled part also needs its own revolute or slider. kind rackpinion: radius1, the pitch radius of the pinion. kind screw: pitch mm for each turn. kind gears and belt: radius1, radius2; when omitted, the tool reads them from round edges. a and b: each is a part and a face or edge on it. A flat face puts the joint at its middle, along its normal. A round edge or cylindrical face puts it on its axis. near in a query uses document coordinates; nearLocal uses the part's own frame. offset: mm along the joint normal of b; its direction depends on which part moves. gap: mm between the joined faces after the solve (negative: overlap); the tool finds the offset. Not with offset. rotate: degrees about it. reverse: true turns the moved part over. false keeps FreeCAD's direction. When omitted, the tool turns it over if that stops the parts from overlapping. The part that moves is the one not yet joined to a grounded part (a when neither is). What is joined to it moves with it. A grounded part never moves. Answer: joint, solve, moved { part: from, to, by }, flipped, overlaps with a warning. gap: the result, mm. at: each element's centre when picked, in document coordinates. The tool refuses an unsolved joint, and nothing is kept. FreeCAD 1.1's solver answers only solved or solver error. It does not tell the freedom left, or a joint that repeats another. asm_check and asm_sweep show what still moves.",
+   "description": "Join two parts and solve; a part must be grounded. kind fixed: no motion. revolute: turns about the joint axis. cylindrical: turns and slides. slider: slides only. ball. distance: distance mm between the elements (round faces: from their surface). parallel, perpendicular. angle: angle degrees (90). Couplings drive one part by another in asm_sweep; each also needs its own revolute or slider. rackpinion: radius1, the pinion's pitch radius. screw: pitch mm for each turn. gears, belt: radius1, radius2, else read from round edges. chain: the belt joint with the ratio teeth1 / teeth2 (50 / 16 = 3.125). Omitted teeth come from NumberOfTeeth of a PartDesign Sprocket in each part. pitch: the chain pitch, mm (12.7). gears and belt also take teeth1, teeth2. a, b: a part and a face or edge on it. A flat face puts the joint at its middle, on its normal; a round edge or face, on its axis. near: document coordinates; nearLocal: the part's own frame. offset: mm along the joint normal of b; its direction depends on which part moves. gap: mm between the joined faces after the solve (negative: overlap); the tool finds the offset. Not with offset. rotate: degrees about it. reverse: true turns the moved part over; false keeps FreeCAD's direction. Omitted: no turn; a warning names each overlap. autoFlip: true turns the part over if that stops the overlap. flipWarning tells if a part's centre went across the joint's plane. keep: true finds the offset and turn that hold placed parts in position: nothing moves. Not with offset, rotate, gap, reverse, autoFlip. The part not yet joined to a grounded part moves (a when neither is), with its joined parts. A grounded part never moves. Answer: joint, solve, moved { part: from, to, by }, flipped, overlaps, warning, gap mm, at (picked centres), kept, ratio, ratioFrom. The tool refuses an unsolved joint; nothing is kept. FreeCAD 1.1's solver answers only solved or solver error, not the freedom left or a repeated joint. asm_check and asm_sweep show them.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -13806,16 +13806,17 @@
        "rackpinion",
        "screw",
        "gears",
-       "belt"
+       "belt",
+       "chain"
       ]
      },
      "a": {
       "type": "object",
-      "description": "{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of several. near: document coordinates; nearLocal: the part's own frame."
+      "description": "{ part, element }: element \"Face6\" or a shape_query query { kind: face|edge, normal, near, nearLocal, radius, type }; near picks the closest."
      },
      "b": {
       "type": "object",
-      "description": "{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of several. near: document coordinates; nearLocal: the part's own frame."
+      "description": "As a."
      },
      "offset": {
       "type": "number"
@@ -13845,6 +13846,18 @@
      "reverse": {
       "type": "boolean"
      },
+     "autoFlip": {
+      "type": "boolean"
+     },
+     "keep": {
+      "type": "boolean"
+     },
+     "teeth1": {
+      "type": "integer"
+     },
+     "teeth2": {
+      "type": "integer"
+     },
      "name": {
       "type": "string"
      }
@@ -13869,14 +13882,21 @@
     {"refuse": {"fmt": "a and b are both on {ends[0][0].Label}: a joint is between two parts of the assembly (asm_list names them)."}, "when": "=ends[0][0] is ends[1][0]"},
     {"refuse": "gap or offset, not both: gap is the mm between the two joined faces after the solve (positive apart, negative overlapping), and the tool finds the offset for it.", "when": "=a.gap is not None and a.offset is not None"},
     {"let": {"want_gap": "=num(a.gap, 'gap') if a.gap is not None else None"}},
+    {"refuse": "keep turns no part over: not with reverse or autoFlip. keep holds the parts where they stand.", "when": "=a.keep and (a.reverse is not None or a.autoFlip)"},
+    {"refuse": "keep, or offset, rotate and gap: keep finds the offset that holds the parts where they stand.", "when": "=a.keep and (a.offset is not None or a.rotate is not None or a.gap is not None)"},
+    {"refuse": "autoFlip or reverse, not both: reverse says the way round, autoFlip lets the tool choose it.", "when": "=a.autoFlip and a.reverse is not None"},
+    {"refuse": "teeth1, teeth2: for kind chain, belt and gears only.", "when": "=(a.teeth1 is not None or a.teeth2 is not None) and kind not in ('gears', 'belt', 'chain')"},
     {"let": {"picked": "={'a': element_centre(ends[0][0], ends[0][1]), 'b': element_centre(ends[1][0], ends[1][1])}"}},
     {"let": {"before": "={o.Name: o.Placement.copy() for o in parts(asm)}"}},
-    {"let": {"j": "=joints(asm).newObject('App::FeaturePython', a.name or KINDS[kind])"}},
+    {"let": {"j": "=joints(asm).newObject('App::FeaturePython', a.name or ('Chain' if kind == 'chain' else KINDS[kind]))"}},
     {"do": ["=joint_proxy(j, kind)", "=view_provider(j, 'joint')"]},
     {"set": {"j.Label": "=a.name"}, "when": "=a.name"},
     {"set": {"j.Distance": "=num(a.get('distance', 0), 'distance')"}, "when": "=kind == 'distance'"},
     {"set": {"j.Angle": "=num(a.get('angle', 90), 'angle')"}, "when": "=kind == 'angle'"},
-    {"when": "=kind in ('rackpinion', 'screw', 'gears', 'belt')", "then": [{"let": {"r1": "=a.radius1 if a.radius1 is not None else (a.pitch if kind == 'screw' else radius_of(ends[0][0], ends[0][1]))"}}, {"let": {"no_r1": "=r1 is None or float(r1) <= 0"}}, {"refuse": "radius1: the pinion's pitch radius, mm (or give its round edge).", "when": "=no_r1 and kind == 'rackpinion'"}, {"refuse": "pitch: mm the nut moves per turn.", "when": "=no_r1 and kind == 'screw'"}, {"refuse": "radius1: the first gear's pitch radius, mm (or give its round edge).", "when": "=no_r1 and kind == 'gears'"}, {"refuse": "radius1: the first pulley's radius, mm (or give its round edge).", "when": "=no_r1 and kind == 'belt'"}, {"set": {"j.Distance": "=float(r1)"}}, {"when": "=kind in ('gears', 'belt')", "then": [{"let": {"r2": "=a.radius2 if a.radius2 is not None else radius_of(ends[1][0], ends[1][1])"}}, {"refuse": "radius2: the second wheel's radius, mm (or give its round edge).", "when": "=r2 is None or float(r2) <= 0"}, {"set": {"j.Distance2": "=float(r2)"}}]}]},
+    {"let": {"tt": "=coupling_teeth(ends, kind, a.teeth1, a.teeth2, a.pitch) if kind in ('gears', 'belt', 'chain') else None"}},
+    {"refuse": "teeth or radii, not both: teeth1 and teeth2 set radius1 and radius2.", "when": "=tt and (a.radius1 is not None or a.radius2 is not None)"},
+    {"when": "=kind in ('rackpinion', 'screw', 'gears', 'belt', 'chain')", "then": [{"let": {"r1": "=tt['radius1'] if tt else (a.radius1 if a.radius1 is not None else (a.pitch if kind == 'screw' else radius_of(ends[0][0], ends[0][1])))"}}, {"let": {"no_r1": "=r1 is None or float(r1) <= 0"}}, {"refuse": "radius1: the pinion's pitch radius, mm (or give its round edge).", "when": "=no_r1 and kind == 'rackpinion'"}, {"refuse": "pitch: mm the nut moves per turn.", "when": "=no_r1 and kind == 'screw'"}, {"refuse": "radius1: the first gear's pitch radius, mm (or give its round edge).", "when": "=no_r1 and kind == 'gears'"}, {"refuse": "radius1: the first pulley's radius, mm (or give its round edge).", "when": "=no_r1 and kind == 'belt'"}, {"refuse": "chain: teeth1 and teeth2, a PartDesign Sprocket in each part, or radius1 and radius2 mm (or round edges).", "when": "=no_r1 and kind == 'chain'"}, {"set": {"j.Distance": "=float(r1)"}}, {"when": "=kind in ('gears', 'belt', 'chain')", "then": [{"let": {"r2": "=tt['radius2'] if tt else (a.radius2 if a.radius2 is not None else radius_of(ends[1][0], ends[1][1]))"}}, {"refuse": "radius2: the second wheel's radius, mm (or give its round edge).", "when": "=r2 is None or float(r2) <= 0"}, {"set": {"j.Distance2": "=float(r2)"}}]}]},
+    {"let": {"ratio": "=round(float(j.Distance) / float(j.Distance2), 4) if kind in ('gears', 'belt', 'chain') and float(get(j, 'Distance2', 0) or 0) > 0 else None", "ratio_from": "=tt['from'] if tt else ('radius1 and radius2 given' if a.radius1 is not None and a.radius2 is not None else 'radii given or read from the round edges')"}},
     {"let": {"off": "=a.offset", "rot": "=a.rotate"}},
     {"set": {"j.Offset2": "=placement(V(0, 0, num(off or 0, 'offset')), rotation(V(0, 0, 1), num(rot or 0, 'rotate')))"}, "when": "=off is not None or rot is not None"},
     {"let": {"refs": "=joint_refs(asm, ends)"}},
@@ -13884,17 +13904,19 @@
     {"try": [{"do": "=j.Proxy.updateJCSPlacements(j)"}]},
     {"try": [{"do": "=asm.clearUndo()"}]},
     {"do": "=doc().recompute()"},
-    {"let": {"code, said": "=status(asm)", "flipped": false}},
+    {"let": {"code, said": "=status(asm)", "flipped": false, "crossed": [], "kept_by": null}},
     {"when": "=code == 0 and a.reverse", "then": [{"let": {"code, said": "=turn_over(asm, j)", "flipped": true}}]},
-    {"when": "=code == 0 and a.reverse is None and kind in REVERSIBLE", "then": [{"let": {"first_hits": "=overlaps(parts(asm))[0]"}}, {"when": "=first_hits", "then": [{"let": {"vol0": "=sum(h['volume'] for h in first_hits)", "kept": "={o.Name: o.Placement.copy() for o in parts(asm)}"}}, {"let": {"code2, said2": "=turn_over(asm, j)"}}, {"let": {"second": "=overlaps(parts(asm))[0]"}}, {"when": "=code2 == 0 and sum(h['volume'] for h in second) < vol0 - 1e-6", "then": [{"let": {"code": "=code2", "said": "=said2", "flipped": true}}], "else": [{"each": "o", "in": "=parts(asm)", "steps": [{"set": {"o.Placement": "=kept[o.Name]"}}]}, {"do": "=doc().recompute()"}, {"let": {"code, said": "=status(asm)"}}]}]}]},
+    {"when": "=code == 0 and a.autoFlip and a.reverse is None and kind in REVERSIBLE", "then": [{"let": {"code, said, flipped, crossed": "=auto_flip(asm, j, ends)"}}]},
+    {"when": "=code == 0 and a.keep", "then": [{"let": {"code, said, kept_by": "=keep_offset(asm, j, ends, before) or (code, said, None)"}}, {"refuse": "keep: FreeCAD gave this joint no frames to read (Placement1, Placement2), so the tool cannot find its offset. Nothing was kept; offset and rotate set it by hand.", "when": "=code == 0 and kept_by is None"}]},
     {"when": "=code == 0 and want_gap is not None", "then": [{"let": {"code, said, gap_now, gap_off": "=gap_set(asm, j, ends, want_gap)"}}, {"refuse": {"fmt": "gap: the gap across this joint cannot be measured — a or b must be a flat face, or a round edge on a flat face ({ends[0][0].Label}.{ends[0][1]}, {ends[1][0].Label}.{ends[1][1]}). Nothing was kept; offset (mm along the joint normal of b) works on any element."}, "when": "=code == 0 and gap_now is None"}]},
     {"refuse": {"fmt": "The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. asm_ground {{ part }} holds one part first."}, "code": "failed", "when": "=code == -6"},
     {"refuse": {"fmt": "The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. The solver could not put the parts where all the joints ask: this one fights another on the same parts (asm_list shows them; asm_joint_remove takes one out), or the elements cannot meet that way — pick other elements, or for parts far out of place try reverse: true."}, "code": "failed", "when": "=code != 0"},
     {"let": {"moved": "={o.Label: {'from': vec(b.Base), 'to': placement_of(o), 'by': round((o.Placement.Base - b.Base).Length, 4)} for o in parts(asm) for b in [before.get(o.Name)] if b is not None and not o.Placement.isSame(b, 1e-6)}"}},
     {"let": {"hits": "=[h for h in overlaps(parts(asm))[0] if not h.get('thread')]"}},
-    {"let": {"gap_end": "=joint_gap(ends)"}}
+    {"let": {"gap_end": "=joint_gap(ends)"}},
+    {"let": {"warn": "=('Parts overlap after the solve: ' + overlap_words(hits) + ('. The tool did not turn a part over. reverse: true turns the moved part over on the joint; autoFlip: true lets the tool try it; else check the sizes.' if not flipped and a.reverse is None and not a.autoFlip and not a.keep and kind in REVERSIBLE else ' — a face picked the wrong way round, or the parts do not fit. reverse: true flips the second part, or check the sizes.')) if hits else None"}}
    ],
-   "answer": {"fields": {"joint": "=j.Label", "kind": "=kind", "a": {"fmt": "{ends[0][0].Label}.{ends[0][1]}"}, "b": {"fmt": "{ends[1][0].Label}.{ends[1][1]}"}, "solve": "=said", "moved": "=moved", "flipped": {"when": "=flipped", "value": "=True if a.reverse else 'turned over to stop the parts overlapping (reverse: false keeps it as FreeCAD first put it)'"}, "overlaps": {"when": "=hits", "value": "=hits"}, "warning": {"when": "=hits", "value": "Parts overlap after the solve: a face picked the wrong way round, or the parts do not fit — reverse: true flips the second part, or check the sizes."}, "gap": {"when": "=gap_end is not None", "value": "=gap_end"}, "gapIs": {"when": "=gap_end is not None", "value": "mm between the two joined elements across the joint: positive apart, negative overlapping."}, "gapWarning": {"when": "=want_gap is not None and gap_end is not None and abs(gap_end - want_gap) > 0.001", "value": {"fmt": "gap {want_gap:g} mm was asked; the solver put the parts {gap_end:g} mm apart (another joint holds them)."}}, "offset": {"when": "=want_gap is not None and gap_end is not None", "value": "=round(float(j.Offset2.Base.z), 4)"}, "at": {"when": "=picked['a'] is not None or picked['b'] is not None", "value": "=picked"}}}
+   "answer": {"fields": {"joint": "=j.Label", "kind": "=kind", "a": {"fmt": "{ends[0][0].Label}.{ends[0][1]}"}, "b": {"fmt": "{ends[1][0].Label}.{ends[1][1]}"}, "solve": "=said", "moved": "=moved", "flipped": {"when": "=flipped", "value": "=True if a.reverse else 'turned over to stop the parts overlapping (autoFlip: true; leave autoFlip out to keep it as FreeCAD first put it)'"}, "flipWarning": {"when": "=crossed", "value": {"fmt": "The flip put the centre of {', '.join(c['part'] for c in crossed)} on the other side of the joint's plane. A symmetric part can be the wrong way round now (a chainring on the wrong side): check it. Leave autoFlip out to keep it as FreeCAD put it."}}, "crossedPlane": {"when": "=crossed", "value": "=crossed"}, "overlaps": {"when": "=hits", "value": "=hits"}, "warning": {"when": "=hits", "value": "=warn"}, "kept": {"when": "=kept_by", "value": "=kept_by"}, "keepWarning": {"when": "=kept_by and (kept_by['moved']['mm'] > 0.001 or kept_by['moved']['degrees'] > 0.001)", "value": {"fmt": "keep: the solve still moved the parts {kept_by['moved']['mm']:g} mm and {kept_by['moved']['degrees']:g} degrees. The elements cannot meet as they stand (for a revolute, axes not in line)."}}, "ratio": {"when": "=ratio is not None", "value": "=ratio"}, "ratioFrom": {"when": "=ratio is not None", "value": "=ratio_from"}, "teeth": {"when": "=tt", "value": "=[tt['teeth1'], tt['teeth2']] if tt else None"}, "gap": {"when": "=gap_end is not None", "value": "=gap_end"}, "gapIs": {"when": "=gap_end is not None", "value": "mm between the two joined elements across the joint: positive apart, negative overlapping."}, "gapWarning": {"when": "=want_gap is not None and gap_end is not None and abs(gap_end - want_gap) > 0.001", "value": {"fmt": "gap {want_gap:g} mm was asked; the solver put the parts {gap_end:g} mm apart (another joint holds them)."}}, "offset": {"when": "=want_gap is not None and gap_end is not None", "value": "=round(float(j.Offset2.Base.z), 4)"}, "at": {"when": "=picked['a'] is not None or picked['b'] is not None", "value": "=picked"}}}
   },
   "asm_list": {
    "group": "assembly",
@@ -13955,7 +13977,7 @@
   },
   "asm_sweep": {
    "group": "assembly",
-   "description": "Move a joint through a range in steps, and check every pair of parts for overlap at each step. Revolute joint: from, to in degrees (0 to 90, or its asm_limits). Slider or cylindrical joint: along its axis, in mm (0 to 10). turn: true turns a cylindrical joint. steps: 12, at most 72. clearance: mm; also lists pairs that are nearer. from and to count from the current position of the joint. The moving part carries the parts joined beyond it rigidly. gears, belt, rackpinion and screw drive their parts by ratio. The tool does not follow a closed loop (a four-bar). Answer: moves, driven, axis, steps [{ at, overlaps, closer }], verdict clear | collides, collidesAt, clearFromStart. The tool puts every part back. Use it to check if the lid opens fully, or if the arm swings past the post. Each step cuts every pair of parts. The tool drops a call after about 80 s. With many parts, use fewer steps or a shorter range, not a job.",
+   "description": "Move a joint through a range in steps, and check every pair of parts for overlap at each step. Revolute joint: from, to in degrees (0 to 90, or its asm_limits). Slider or cylindrical joint: along its axis, in mm (0 to 10). turn: true turns a cylindrical joint. steps: 12, at most 72. clearance: mm; also lists pairs that are nearer. from and to count from the current position of the joint. The moving part carries the parts joined beyond it rigidly. gears, belt, rackpinion and screw drive their parts by ratio. The tool does not follow a closed loop (a four-bar). Answer: moves, driven, axis, steps [{ at, overlaps, closer }], verdict clear | collides, collidesAt, clearFromStart. The tool puts every part back. Use it to check if the lid opens fully, or if the arm swings past the post. Each step cuts every pair of parts. The tool drops a call after about 80 s. Thus the sweep stops in time, after about 60 s. Then it answers the steps done with partial: true, stepsDone and continueWith { joint, from, to, steps }. Use continueWith for the next call. With many parts, use fewer steps or a shorter range, not a job. Some overlaps are static: they are there at the first step, with the same volume at every step. An example is a press fit. staticOverlaps lists them with their volume. verdict, collidesAt and clearFromStart count only the contacts that the motion makes.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -14009,11 +14031,12 @@
     {"let": {"centre": "=ax[0]", "axis": "=unit(ax[1])"}},
     {"let": {"group, others, couplings": "=carried(asm, j, moving, fixed_side, held)"}},
     {"let": {"driven": "=driven_parts(couplings, others, group, turning)"}},
-    {"let": {"rows": "=sweep_run(asm, j, group, driven, centre, axis, turning, lo, hi, steps, clearance)"}},
+    {"let": {"rows, stopped": "=sweep_run(asm, j, group, driven, centre, axis, turning, lo, hi, steps, clearance)"}},
+    {"let": {"rows, static": "=split_static(rows)", "rest": "=sweep_rest(j, lo, hi, steps, stopped)"}},
     {"let": {"unit_": "='degrees' if turning else 'mm'", "bad": "=[r['at'] for r in rows if r.get('overlaps')]", "moves": "=sorted(o.Label for o in group.values())"}},
     {"let": {"clear_run": "=[r['at'] for r in rows[:first([i for i, r in enumerate(rows) if r.get('overlaps')], len(rows))]]"}}
    ],
-   "answer": {"fields": {"joint": "=j.Label", "kind": "=kind", "unit": "=unit_", "from": "=lo", "to": "=hi", "moves": "=moves", "driven": {"when": "=driven", "value": "=[{'part': d['part'].Label, 'via': d['via'], d['how'] + 's': 'degrees' if d['how'] == 'turn' else 'mm', 'per': round(d['factor'], 5)} for d in driven]"}, "axis": "={'through': [round(c, 3) for c in centre], 'along': [round(c, 4) for c in axis]}", "steps": "=rows", "verdict": "='collides' if bad else 'clear'", "note": {"fmt": "{' and '.join(moves)} turned (or slid) about the joint's axis and put back after. Steps are {abs(hi - lo) / steps:g} {unit_} apart: a collision between two steps is not seen — more steps to look closer. A chain of moving joints beyond this one is carried along rigidly, not solved."}, "collidesAt": {"when": "=bad", "value": "=bad"}, "clearFromStart": {"when": "=bad", "value": "=[clear_run[0], clear_run[-1]] if clear_run else None"}}}
+   "answer": {"fields": {"joint": "=j.Label", "kind": "=kind", "unit": "=unit_", "from": "=lo", "to": "=hi", "moves": "=moves", "driven": {"when": "=driven", "value": "=[{'part': d['part'].Label, 'via': d['via'], d['how'] + 's': 'degrees' if d['how'] == 'turn' else 'mm', 'per': round(d['factor'], 5)} for d in driven]"}, "axis": "={'through': [round(c, 3) for c in centre], 'along': [round(c, 4) for c in axis]}", "steps": "=rows", "verdict": "='collides' if bad else ('clear' if rows else 'not checked')", "staticOverlaps": {"when": "=static", "value": "=static"}, "staticNote": {"when": "=static", "value": "These overlaps are there at the first step, with the same volume at every step: the motion does not make them (a press fit, or parts modelled into each other). verdict, collidesAt and clearFromStart leave them out. asm_check shows them."}, "partial": {"when": "=rest", "value": true}, "stepsDone": {"when": "=rest", "value": "=len(rows)"}, "continueWith": {"when": "=rest", "value": "=rest"}, "partialNote": {"when": "=rest", "value": {"fmt": "The sweep stopped before the call's time limit, after {len(rows)} of {steps + 1} steps. The verdict is for the steps done. asm_sweep with continueWith goes on; a shorter range or fewer steps also fits."}}, "note": {"fmt": "{' and '.join(moves)} turned (or slid) about the joint's axis and put back after. Steps are {abs(hi - lo) / steps:g} {unit_} apart: a collision between two steps is not seen — more steps to look closer. A chain of moving joints beyond this one is carried along rigidly, not solved."}, "collidesAt": {"when": "=bad", "value": "=bad"}, "clearFromStart": {"when": "=bad", "value": "=[clear_run[0], clear_run[-1]] if clear_run else None"}}}
   },
   "asm_check": {
    "group": "assembly",
