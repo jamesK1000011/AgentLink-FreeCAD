@@ -232,5 +232,7 @@ def tools(session):
                "alias_problem": C.alias_problem, "varsets": lambda: varsets(doc()), "varset_vars": varset_vars, "varset_rows": lambda: varset_rows(doc()),
                "varset_rows_one": varset_rows_one, "var_type": var_type, "is_name": lambda n: bool(NAME.match(n)), "is_cell": lambda n: bool(CELL.match(n)),
                "reserved": lambda n: n in C.UNITS or n in C.CONSTANTS, "own_prop": lambda n: n in VARSET_OWN,
-               "qualified": lambda expr: qualified(doc(), expr), "by_varset_label": lambda expr: by_varset_label(doc(), expr)}
+               "qualified": lambda expr: qualified(doc(), expr), "by_varset_label": lambda expr: by_varset_label(doc(), expr),
+               # on an LCS or an origin, other objects by their label (<<Dims>>.lift): no sub-object lookup
+               "doc_refs": lambda o, expr: picks.doc_refs(doc(), o, expr)}
     return runners.tools(GROUP, s, helpers)

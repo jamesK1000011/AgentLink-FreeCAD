@@ -129,6 +129,12 @@ def cases(fc, tmp, old, new):
         tip = fc.doc().new("PartDesign::Pad", "Pad", Refine=False)
         fc.body("Housing", fc.solid("housing", (0, 0, 0), (10, 10, 10), faces=9), type_="PartDesign::Body", name="PDBody", Tip=tip)
 
+    def pd_body_worse(s):  # 7a8477d: the tip's Refine halves the body (as a bad refine of a boolean's faces)
+        tip = fc.doc().new("PartDesign::Pad", "Pad", Refine=False)
+        good = fc.solid("housing", (0, 0, 0), (10, 10, 10), faces=9)
+        worse = fc.solid("refined housing", (0, 0, 0), (10, 10, 10), volume=500.0, faces=6)
+        fc.body("Housing", good, type_="PartDesign::Body", name="PDBody", Tip=tip, computes=lambda o: worse if tip.Refine else good)
+
     def mesh(n=12):
         def add(s):
             o = fc.doc().new("Mesh::Feature", "Mesh", Mesh=fc.MeshData(facets=n))
@@ -253,6 +259,7 @@ def cases(fc, tmp, old, new):
     yield T, "not sound after", prep(pieces), {"body": "Pieces"}
     yield T, "a PartDesign body's tip", prep(pd_body), {"body": "Housing"}
     yield T, "a PartDesign body's tip, not sound", prep(pd_body, objects_invalid=True, bool_invalid=True), {"body": "Housing"}
+    yield T, "a PartDesign body's tip, made worse", prep(pd_body_worse), {"body": "Housing"}
     yield T, "a PartDesign body, named", prep(pd_body), {"body": "Housing", "name": "Plain"}
     yield T, "a PartDesign body, fixed", prep(pd_body), {"body": "Housing", "fix": True}
     yield T, "no body", none, {}

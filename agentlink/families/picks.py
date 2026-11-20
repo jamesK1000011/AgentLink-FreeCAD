@@ -464,6 +464,7 @@ def repoint(doc, old, new):
         for path, expr in list(getattr(p, "ExpressionEngine", []) or []):
             if re.search(r"(?<![\w<])" + re.escape(old.Name) + r"\.", expr) or ("<<" + old.Label + ">>") in expr:
                 e2 = re.sub(r"(?<![\w<])" + re.escape(old.Name) + r"\.", new.Name + ".", expr).replace("<<" + old.Label + ">>", new.Name)
+                e2 = doc_refs(doc, p, e2)
                 try:
                     p.setExpression(path, e2)
                     hit_any = True
@@ -472,6 +473,40 @@ def repoint(doc, old, new):
         if hit_any:
             changed.append(p.Label)
     return changed
+
+
+# Objects whose own sub-objects FreeCAD looks for under a name in an
+# expression on them, and which log an exception when that name is not one
+# of them: a LocalCoordinateSystem (Part::LocalCoordinateSystem, FreeCAD 1.1's
+# PartDesign::CoordinateSystem) and an Origin (roles X_Axis, XY_Plane, ...).
+SUB_OWNERS = ("App::LocalCoordinateSystem", "App::Origin")
+
+
+def sub_owner(o):
+    """Whether o is a LocalCoordinateSystem or an Origin (SUB_OWNERS)."""
+    try:
+        if any(o.isDerivedFrom(t) for t in SUB_OWNERS):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    return str(getattr(o, "TypeId", "")) in SUB_OWNERS or "OriginFeatures" in (getattr(o, "PropertiesList", None) or ())
+
+
+def doc_refs(doc, o, expr):
+    """An expression to put on o with each other object it names written
+    by its label, <<Dims>>.lift (exprs.by_label), when o is a SUB_OWNERS
+    object; else expr as it is. Only objects whose label is their own (no
+    other object has it): a label two objects share would not resolve."""
+    if not isinstance(expr, str) or not sub_owner(o):
+        return expr
+    from .. import exprs
+
+    objs = list(getattr(doc, "Objects", []) or [])
+    count = {}
+    for x in objs:
+        count[x.Label] = count.get(x.Label, 0) + 1
+    labels = {x.Name: x.Label for x in objs if x is not o and count.get(x.Label) == 1 and x.Label}
+    return exprs.by_label(expr, labels)[0]
 
 
 def json_safe(v, depth=0):
