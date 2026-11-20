@@ -1,5 +1,4 @@
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
-<!-- DRAFT for Anthropic's plugin directory: the owner submits it (docs/RELEASING.md, section 5). Remove this line before you submit. -->
 # Agent Link for FreeCAD
 
 Agent Link lets Claude use FreeCAD for you. You tell Claude what you want:
