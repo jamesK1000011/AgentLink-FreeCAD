@@ -11636,7 +11636,7 @@
   },
   "part_datum": {
    "group": "model",
-   "description": "Make a Part datum: a point, line, plane or coordinate system. kind: point | line | plane | csys. at: [x,y,z]. normal (plane, line), or axis + angle. Or attach it by one reference: to \"Box.Face6\", an edge, a vertex. Then the placement is its offset. mode: a FreeCAD MapMode. By default it follows what to is: FlatFace, NormalToEdge, Translate. A line goes along a straight edge or the axis of a circle. A point goes at a vertex or centre. A line on a face needs mode. The tool refuses when it cannot attach.",
+   "description": "Make a Part datum: a point, line, plane or coordinate system. kind: point | line | plane | csys. at: [x,y,z]. normal (plane, line), or axis + angle. Or attach it by one reference: to \"Box.Face6\", an edge, a vertex. Then the placement is its offset. mode: a FreeCAD MapMode. By default it follows what to is: FlatFace, NormalToEdge, Translate. A line goes along a straight edge or the axis of a circle. A point goes at a vertex or centre. A line on a face needs mode. The tool refuses when it cannot attach. Or attach it by refs: one to four references of any object, such as [\"Binder.Vertex3\", \"Binder.Edge2\"]. The object can be a sketch, a binder, a datum or an LCS. Without mode, a vertex gives Translate. A vertex and an edge give OZX: the origin at the vertex and Z along the edge. Two or three vertices also give OZX. A circle gives Concentric. offset { at, rotate } sets the AttachmentOffset. param_bind can bind \"Datum.AttachmentOffset.Base.x\" to a parameter, so that the datum follows the parameter. body (a PartDesign Body) or part (an App::Part) holds the datum. Answer: datum, refs, mode, placement, world (in the coordinates of the document).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -11663,8 +11663,27 @@
      "to": {
       "type": "string"
      },
+     "refs": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "One to four references in order, any object: \"Binder.Vertex3\", \"Skeleton.Edge2\", a whole \"LCS\". Not with to."
+     },
      "mode": {
       "type": "string"
+     },
+     "offset": {
+      "type": "object",
+      "description": "{ at: [x,y,z], rotate: { axis, angle } }: the AttachmentOffset, in the frame that the references give."
+     },
+     "body": {
+      "type": "string",
+      "description": "A PartDesign Body to hold the datum."
+     },
+     "part": {
+      "type": "string",
+      "description": "An App::Part to hold the datum."
      },
      "name": {
       "type": "string"
@@ -11675,27 +11694,36 @@
    },
    "changes": true,
    "source": "Agent Link (was agentlink/families/part_more.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-20",
    "family": "part_more",
    "runner": "steps",
    "steps": [
     {"let": {"kind": "=a.get('kind', 'plane')"}},
     {"refuse": "kind: point | line | plane | csys (a coordinate system).", "when": "=kind not in DATUMS"},
+    {"refuse": "to or refs, not both: to is one reference, refs is a list of one to four.", "when": "=a.to and a.refs is not None"},
+    {"refuse": "body or part, not both: the datum goes in one container.", "when": "=a.body and a.part"},
+    {"refuse": "offset: { at: [x,y,z], rotate: { axis, angle } }.", "when": "=a.offset is not None and not is_dict(a.offset)"},
+    {"let": {"box": "=pd_body(a.body) if a.body else app_part(a.part) if a.part else None"}},
     {"let": {"pl": "=placement_of(a)"}},
     {"when": "=a.normal is not None and kind in ('plane', 'line')", "then": [{"let": {"n": "=direction(a.normal, 'normal')"}}, {"set": {"pl.Rotation": "=rotation(V(0, 0, 1), n)"}}]},
     {"let": {"o": "=None", "tried": "=[]"}},
     {"each": "t", "in": "=DATUMS[kind]", "steps": [{"try": [{"let": {"o": "=doc().addObject(t, kind.capitalize())"}}], "on": "error", "except": [{"push": {"tried": {"fmt": "{t}: {error}"}}}], "when": "=o is None"}]},
     {"let": {"made": "datum"}},
     {"when": "=o is None", "then": [{"let": {"made": "shape", "sh": "=datum_shape(kind)"}}, {"let": {"o": "=doc().addObject('Part::FeaturePython', kind.capitalize())"}}, {"try": [{"do": "=o.addExtension('Part::AttachExtensionPython')"}], "on": "error", "except": [{"push": {"tried": {"fmt": "attach: {error}"}}}]}, {"set": {"o.Shape": "=sh"}}]},
+    {"refuse": {"fmt": "{box.Label} cannot hold a plain shape, and this FreeCAD has no datum objects: {'; '.join(tried)}"}, "code": "invalid_state", "when": "=box is not None and made == 'shape'"},
+    {"do": "=box.addObject(o)", "when": "=box is not None"},
     {"set": {"o.Placement": "=pl"}},
-    {"refuse": {"fmt": "This FreeCAD cannot attach a datum here: {'; '.join(tried)}"}, "code": "invalid_state", "when": "=a.to and not (has(o, 'AttachmentSupport') or has(o, 'Support'))"},
+    {"refuse": {"fmt": "This FreeCAD cannot attach a datum here: {'; '.join(tried)}"}, "code": "invalid_state", "when": "=(a.to or a.refs) and not (has(o, 'AttachmentSupport') or has(o, 'Support'))"},
+    {"let": {"att": "=None"}},
+    {"when": "=a.refs is not None", "then": [{"let": {"att": "=attach_refs(doc(), o, a.refs, a.mode, kind, placement_of(a.offset) if a.offset is not None else pl, box if box is not None and box.TypeId == 'PartDesign::Body' else None)"}}]},
     {"when": "=a.to", "then": [{"let": {"label, sub, el": "=resolve(a.to)"}}, {"let": {"target": "=find(label)"}}, {"do": {"set": ["=o", "='AttachmentSupport' if has(o, 'AttachmentSupport') else 'Support'", "=[(target, sub or '')]"]}}, {"let": {"mode": "=a.mode"}}, {"when": "=not mode or mode == 'Deactivated'", "then": [{"let": {"elt": "=(sub or '')[:4]"}}, {"let": {"round_edge": "=elt == 'Edge' and is_round(el)"}}, {"refuse": "A line datum on a face needs mode: FreeCAD's line normal to a face (FaceNormal) takes a face and a vertex, and to is one reference. mode AxisOfInertia1 | AxisOfInertia2 | AxisOfInertia3 (through the face's centre of mass) or ObjectZ (the object's own z); or to an edge (a straight one: the line along it; a circle's: its axis); or leave to out and place it with at and normal.", "when": "=(kind, elt) == ('line', 'Face')"}, {"let": {"mode": "={('point', 'Vert'): 'Vertex', ('point', 'Edge'): 'CenterOfCurvature' if round_edge else 'CenterOfMass', ('point', 'Face'): 'CenterOfMass', ('line', 'Edge'): 'AxisOfCurvature' if round_edge else 'TwoPointLine', ('line', 'Vert'): 'ObjectZ', ('plane', 'Face'): 'FlatFace', ('plane', 'Edge'): 'NormalToEdge', ('plane', 'Vert'): 'Translate', ('csys', 'Face'): 'FlatFace', ('csys', 'Edge'): 'NormalToEdge', ('csys', 'Vert'): 'Translate'}.get((kind, elt), 'ObjectXY')"}}]}, {"try": [{"set": {"o.MapMode": "=mode"}}], "on": "error", "except": [{"refuse": {"fmt": "mode {mode!r}: not a FreeCAD attachment mode — the modes: {', '.join(o.getEnumerationsOfProperty('MapMode'))}."}}]}, {"set": {"o.AttachmentOffset": "=pl"}}]},
     {"set": {"o.Label": "=unique(a.name or 'Datum ' + kind)"}},
     {"do": "=doc().recompute()"},
+    {"refuse": {"fmt": "The {kind} datum would not attach to {', '.join(att['refs'])} as {att['mode']}: {o.getStatusString()} — nothing was kept. Check the order of refs and mode: OZX takes the origin vertex first, then an edge or vertex for Z, then one for X."}, "code": "failed", "when": "=att is not None and not o.isValid()"},
     {"when": "=a.to and get(o, 'MapMode', '') == 'Deactivated'", "then": [{"push": {"tried": "left unattached"}}], "else": [{"when": "=a.to", "then": [{"let": {"failed": "=False"}}, {"try": [{"let": {"failed": "=not o.isValid()"}}], "on": "error", "except": [{"let": {"failed": "=False"}}]}, {"refuse": {"fmt": "The {kind} datum would not attach to {a.to} as {o.MapMode}: {o.getStatusString()} — nothing was kept. With one reference: a plane or csys takes FlatFace (a flat face), NormalToEdge (an edge), Translate (a vertex), ObjectXY (a whole object); a line TwoPointLine (a straight edge), AxisOfCurvature (a circle or arc); a point Vertex, CenterOfCurvature, CenterOfMass."}, "code": "failed", "when": "=failed"}]}]},
     {"do": "=snapshot(tool)"}
    ],
-   "answer": {"fields": {"datum": "=o.Label", "kind": "=kind", "type": "=o.TypeId", "made": "=made", "placement": "=placement_json(o.Placement)", "mode": {"when": "=a.to", "value": "=o.MapMode"}, "notes": {"when": "=a.to and get(o, 'MapMode', '') == 'Deactivated'", "value": "=tried"}}}
+   "answer": {"fields": {"datum": "=o.Label", "kind": "=kind", "type": "=o.TypeId", "made": "=made", "placement": "=placement_json(o.Placement)", "mode": {"when": "=a.to or att", "value": "=o.MapMode"}, "notes": {"when": "=a.to and get(o, 'MapMode', '') == 'Deactivated'", "value": "=tried"}, "refs": {"when": "=att", "value": "=att['refs'] if att else None"}, "offset": {"when": "=att", "value": "=placement_json(o.AttachmentOffset)"}, "in": {"when": "=box is not None", "value": "=box.Label if box is not None else None"}, "world": {"when": "=att or box is not None", "value": "=world_json(o)"}}}
   },
   "draft_from_sketch": {
    "group": "draft",
@@ -19962,7 +19990,7 @@
     {"do": "=doc().recompute()"},
     {"let": {"bad": "=broken(doc())"}},
     {"refuse": {"fmt": "Binding {target} to {expr} breaks {bad[0]['object']}: {why(bad[0])}{' (and ' + ', '.join([b['object'] for b in bad[1:]]) + ')' if len(bad) > 1 else ''} — nothing was kept. Choose a value the features can take."}, "code": "failed", "when": "=bad"},
-    {"try": [{"let": {"now": "=num_json(o.getDatum(path.split('.', 1)[1])) if path.startswith('Constraints.') else num_json(getprop(o, path))"}}], "except": [{"let": {"now": "=None"}}]}
+    {"try": [{"let": {"now": "=num_json(o.getDatum(path.split('.', 1)[1])) if path.startswith('Constraints.') else num_json(prop_at(o, path))"}}], "except": [{"let": {"now": "=None"}}]}
    ],
    "answer": {"via": "finish", "with": ["param_bind", "$fields"], "late": true, "fields": {"target": "=target", "expression": "=expr", "value": "=now", "read": {"when": "=named", "value": {"as": "=named", "note": "A bare name is the Params sheet's parameter."}}, "bodies": "=bodies_now()"}}
   },
@@ -20258,7 +20286,7 @@
   },
   "pd_datum": {
    "group": "feature",
-   "description": "Make a datum, placed from the origin of the body. kind line: at, direction (along z by default). kind point: at. kind lcs: a coordinate system; at, rotate { axis, angle }. Or on: { near: [x,y,z] }, a round edge. Then the datum is its axis (line) or centre (point), attached so it follows the model. A line works by name as an axis or direction. Answer: datum, at, direction.",
+   "description": "Make a datum, placed from the origin of the body. kind line: at, direction (along z by default). kind point: at. kind lcs: a coordinate system; at, rotate { axis, angle }. Or on: { near: [x,y,z] }, a round edge. Then the datum is its axis (line) or centre (point), attached so it follows the model. A line works by name as an axis or direction. Or refs: one to four references in order, such as [\"Binder.Vertex1\", \"Binder.Edge1\"] or [\"Skeleton.Vertex1\"]. A reference can be a binder, a sketch, a datum or an LCS. mode: a FreeCAD MapMode (OZX, ObjectXY, Translate, Concentric …). Without mode, a vertex gives Translate. A vertex and an edge give OZX: the origin at the vertex and Z along the edge. offset { at, rotate } sets the AttachmentOffset. param_bind can bind \"LCS.AttachmentOffset.Base.x\" to a parameter, so that the datum follows the parameter. An lcs is a Part LocalCoordinateSystem: Assembly joints use it. Answer: datum, at, direction; with refs also refs, mode and world (in the coordinates of the document).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20289,6 +20317,21 @@
      },
      "rotate": {
       "type": "object"
+     },
+     "refs": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "One to four references in order, any object: \"Binder.Vertex1\", \"Skeleton.Edge2\", a whole \"Skeleton\". Not with on."
+     },
+     "mode": {
+      "type": "string",
+      "description": "With refs: a FreeCAD MapMode (OZX, ObjectXY, Translate, Concentric, NormalToEdge …)."
+     },
+     "offset": {
+      "type": "object",
+      "description": "With refs: { at: [x,y,z], rotate: { axis, angle } }, the AttachmentOffset in the frame that the references give."
      }
     },
     "required": [
@@ -20298,24 +20341,30 @@
    },
    "changes": true,
    "source": "Agent Link (was agentlink/families/feature_more.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-20",
    "family": "feature_more",
    "runner": "steps",
    "steps": [
-    {"let": {"b": "=body(a.body)", "kind": "=a.kind", "types": "={'line': 'PartDesign::Line', 'point': 'PartDesign::Point', 'lcs': 'PartDesign::CoordinateSystem'}"}},
+    {"let": {"b": "=body(a.body)", "kind": "=a.kind", "types": "={'line': ['PartDesign::Line'], 'point': ['PartDesign::Point'], 'lcs': ['Part::LocalCoordinateSystem', 'PartDesign::CoordinateSystem']}"}},
     {"refuse": "kind: line, point or lcs (a coordinate system); a plane is pd_datum_plane.", "when": "=kind not in types"},
+    {"refuse": "refs or on, not both: on finds one round edge, refs names the references.", "when": "=a.refs is not None and a.on is not None"},
+    {"refuse": "offset: { at: [x,y,z], rotate: { axis, angle } }.", "when": "=a.offset is not None and not is_dict(a.offset)"},
     {"let": {"default": "={'line': 'DatumLine', 'point': 'DatumPoint', 'lcs': 'LCS'}[kind]"}},
     {"let": {"label": "=unique(a.name or default)"}},
-    {"let": {"f": "=b.newObject(types[kind], default)"}},
+    {"let": {"f": "=None", "tried": "=[]"}},
+    {"each": "t", "in": "=types[kind]", "steps": [{"try": [{"let": {"f": "=b.newObject(t, default)"}}], "on": "error", "except": [{"push": {"tried": {"fmt": "{t}: {error}"}}}], "when": "=f is None"}]},
+    {"refuse": {"fmt": "This FreeCAD makes no {kind} datum in a body: {'; '.join(tried)}"}, "code": "invalid_state", "when": "=f is None"},
     {"set": {"f.Label": "=label"}},
-    {"let": {"how": "placed", "on": "=a.on"}},
-    {"when": "=on is not None", "then": [{"let": {"tip, shape": "=tip_shape(b)"}}, {"refuse": {"fmt": "on: {{ near: [x, y, z] }} a point on a round edge of the body — its axis (line) or centre (point); or leave on out and give at (and direction)."}, "when": "=not is_dict(on)"}, {"let": {"q": "=dict(on)"}}, {"do": "=q.setdefault('kind', 'circle')"}, {"let": {"edge": "=find_edges(ref_shape(b, shape), [q], ref_names(b, tip))[0]"}}, {"do": "=setprop(f, support_prop(f), [(tip, edge)])"}, {"set": {"f.MapMode": "={'line': 'AxisOfCurvature', 'point': 'CenterOfCurvature', 'lcs': 'ObjectXY'}[kind]"}}, {"let": {"how": {"fmt": "attached to {tip.Label}.{edge}"}}}], "else": [{"let": {"at": "=vec3(a.get('at', [0, 0, 0]), 'at')"}}, {"choose": "=kind", "of": {"line": [{"let": {"d": "=vec3(a.get('direction', [0, 0, 1]), 'direction')"}}, {"refuse": "direction: not zero.", "when": "=d.Length < 1e-9"}, {"let": {"pl": "=placement(at, rotation(V(0, 0, 1), d))"}}], "lcs": [{"let": {"pl": "=place(a)"}}]}, "else": [{"let": {"pl": "=placement(at, rotation())"}}]}, {"do": "=attach_origin(b, f, pl, {'line': 'ObjectZ', 'point': 'ObjectOrigin', 'lcs': 'FlatFace'}[kind])"}]},
+    {"let": {"how": "placed", "on": "=a.on", "att": "=None"}},
+    {"when": "=a.refs is not None", "then": [{"let": {"att": "=attach_refs(doc(), f, a.refs, a.mode, kind, place(a.offset) if a.offset is not None else place(a), b)"}}, {"let": {"how": {"fmt": "attached to {', '.join(att['refs'])} as {att['mode']}"}}}]},
+    {"when": "=att is None and on is not None", "then": [{"let": {"tip, shape": "=tip_shape(b)"}}, {"refuse": {"fmt": "on: {{ near: [x, y, z] }} a point on a round edge of the body — its axis (line) or centre (point); or leave on out and give at (and direction)."}, "when": "=not is_dict(on)"}, {"let": {"q": "=dict(on)"}}, {"do": "=q.setdefault('kind', 'circle')"}, {"let": {"edge": "=find_edges(ref_shape(b, shape), [q], ref_names(b, tip))[0]"}}, {"do": "=setprop(f, support_prop(f), [(tip, edge)])"}, {"set": {"f.MapMode": "={'line': 'AxisOfCurvature', 'point': 'CenterOfCurvature', 'lcs': 'ObjectXY'}[kind]"}}, {"let": {"how": {"fmt": "attached to {tip.Label}.{edge}"}}}], "else": [{"when": "=att is None", "then": [{"let": {"at": "=vec3(a.get('at', [0, 0, 0]), 'at')"}}, {"choose": "=kind", "of": {"line": [{"let": {"d": "=vec3(a.get('direction', [0, 0, 1]), 'direction')"}}, {"refuse": "direction: not zero.", "when": "=d.Length < 1e-9"}, {"let": {"pl": "=placement(at, rotation(V(0, 0, 1), d))"}}], "lcs": [{"let": {"pl": "=place(a)"}}]}, "else": [{"let": {"pl": "=placement(at, rotation())"}}]}, {"do": "=attach_origin(b, f, pl, {'line': 'ObjectZ', 'point': 'ObjectOrigin', 'lcs': 'FlatFace'}[kind])"}]}]},
     {"do": "=doc().recompute()"},
+    {"refuse": {"fmt": "The datum {kind} would not attach to {', '.join(att['refs'])} as {att['mode']}: {f.getStatusString()} — nothing was kept. Check the order of refs and mode: OZX takes the origin vertex first, then an edge or vertex for Z, then one for X."}, "code": "failed", "when": "=att is not None and not f.isValid()"},
     {"refuse": {"fmt": "The datum {kind} would not attach: {f.getStatusString()} — nothing was kept.{' on takes a point on a circle or arc edge of the body.' if on is not None else ''}"}, "code": "failed", "when": "=not f.isValid()"},
     {"do": "=snapshot('pd_datum')"},
     {"let": {"pl": "=f.Placement"}}
    ],
-   "answer": {"fields": {"datum": "=f.Label", "kind": "=kind", "how": "=how", "at": "=xyz(pl.Base)", "step": "=steps()", "direction": {"when": "=kind == 'line'", "value": "=xyz(pl.Rotation.multVec(V(0, 0, 1)))"}, "use": {"when": "=kind == 'line'", "value": "pd_polar_pattern, pd_revolution and pd_helix take it by name as their axis."}, "axes": {"when": "=kind == 'lcs'", "value": "={k: xyz(pl.Rotation.multVec(v)) for k, v in (('x', V(1, 0, 0)), ('y', V(0, 1, 0)), ('z', V(0, 0, 1)))}"}}}
+   "answer": {"fields": {"datum": "=f.Label", "kind": "=kind", "how": "=how", "at": "=xyz(pl.Base)", "step": "=steps()", "direction": {"when": "=kind == 'line'", "value": "=xyz(pl.Rotation.multVec(V(0, 0, 1)))"}, "use": {"when": "=kind == 'line'", "value": "pd_polar_pattern, pd_revolution and pd_helix take it by name as their axis."}, "axes": {"when": "=kind == 'lcs'", "value": "={k: xyz(pl.Rotation.multVec(v)) for k, v in (('x', V(1, 0, 0)), ('y', V(0, 1, 0)), ('z', V(0, 0, 1)))}"}, "refs": {"when": "=att", "value": "=att['refs'] if att else None"}, "mode": {"when": "=att", "value": "=f.MapMode"}, "offset": {"when": "=att", "value": "=placement_json(f.AttachmentOffset)"}, "world": {"when": "=att", "value": "=world_json(f)"}, "type": {"when": "=att", "value": "=f.TypeId"}}}
   },
   "pd_binder": {
    "group": "feature",

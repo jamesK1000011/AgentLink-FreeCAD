@@ -196,6 +196,34 @@ def one_of(pool, ref, which, missing, none=None, nocase=False):
 
 # ---- objects ----------------------------------------------------------------------------
 
+BODY = "PartDesign::Body"
+
+
+def named(doc, ref, prefer=(BODY,)):
+    """The object that ref names in doc, shown or hidden, or None. An exact
+    Name first, then an exact Label, then a Label or Name that differs only
+    in case. Among the Label matches, an object of a type in prefer (a
+    PartDesign Body) comes first: a hidden body is found by its label even
+    when its tip feature or a sketch has a near label (test drive of 20
+    Nov, finding 13: hidden sprocket bodies were not found)."""
+    if not isinstance(ref, str) or not ref:
+        return None
+    try:
+        o = doc.getObject(ref)
+    except Exception:
+        o = None
+    if o is not None:
+        return o
+    objs = list(getattr(doc, "Objects", None) or [])
+    low = ref.lower()
+    for exact in (True, False):
+        hits = [x for x in objs if (str(getattr(x, "Label", "")) == ref if exact
+                                    else str(getattr(x, "Label", "")).lower() == low or str(getattr(x, "Name", "")).lower() == low)]
+        if hits:
+            return next((x for x in hits if getattr(x, "TypeId", "") in prefer), hits[0])
+    return None
+
+
 def find(doc, ref, what="object"):
     if not isinstance(ref, str) or not ref:
         raise ToolError("invalid_input", f"{what}: an object's name or label.")

@@ -9,6 +9,8 @@ import FreeCAD
 import Part
 
 from .. import runners
+from ..protocol import ToolError
+from . import pd_common as pc
 from . import picks
 
 GROUP = "model"
@@ -122,6 +124,15 @@ def is_round(edge):
         return False
 
 
+def app_part(doc, ref):
+    """The App::Part named ref (by label or name), shown or hidden."""
+    o = picks.named(doc, ref, prefer=("App::Part",))
+    if o is None or o.TypeId != "App::Part":
+        have = ", ".join(x.Label for x in doc.Objects if x.TypeId == "App::Part") or "none (asm_new_part makes one)"
+        raise ToolError("not_found", f"part {ref!r}: no App::Part of that name — they are: {have}.")
+    return o
+
+
 def tools(s):
     """These Part tools are data (agentlink/data/tools.json, "family":
     "part_more"; run by agentlink/runners.py's steps runner): each entry has
@@ -155,5 +166,8 @@ def tools(s):
                "flat_face": lambda wires: Part.makeFace(wires, "Part::FaceMakerBullseye"),
                # the family's
                "plane_face": plane_face, "shape_stats": shape_stats, "add_shape": lambda shape, label: add(s, shape, label), "picked": picked, "sewn": _sew,
-               "DATUMS": DATUMS, "datum_shape": datum_shape, "is_round": is_round}
+               "DATUMS": DATUMS, "datum_shape": datum_shape, "is_round": is_round,
+               # the container and the datum on several references (pd_common)
+               "pd_body": lambda ref: pc.pd_body(doc(s), ref), "app_part": lambda ref: app_part(doc(s), ref),
+               "attach_refs": lambda *x: pc.attach_refs(*x), "world_json": pc.world_json}
     return runners.tools(GROUP, s, helpers, family="part_more")

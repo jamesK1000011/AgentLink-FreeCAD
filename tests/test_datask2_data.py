@@ -73,8 +73,8 @@ class Sk2Data(unittest.TestCase):
             b = self.before[name]
             self.assertEqual(t.name, b["name"], name)
             self.assertEqual(t.description.encode("utf-8"), _meant.description(name, b["description"]).encode("utf-8"), name)  # meant changes: tests/_meant.py
-            self.assertEqual(t.schema, b["inputSchema"], name)
-            self.assertEqual(json.dumps(t.schema), json.dumps(b["inputSchema"]), name)  # the order of every key too
+            self.assertEqual(t.schema, _meant.schema(name, b["inputSchema"]), name)  # meant changes: tests/_meant.py SCHEMAS
+            self.assertEqual(json.dumps(t.schema), json.dumps(_meant.schema(name, b["inputSchema"])), name)  # the order of every key too
             self.assertIs(t.changes, b["changes"], name)
             self.assertEqual(t.reads, b["reads"], name)
             self.assertEqual(t.group, b["group"], name)
@@ -118,6 +118,8 @@ class Sk2Data(unittest.TestCase):
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         hid = 0
         for c in got:
+            # Meant changes since BASE (tests/_meant.py): answer fields added (RESULTS), trace lines (TRACES).
+            c = {**c, "new": _meant.result_as_meant(c["tool"], c["new"]), "old": {**c["old"], "trace": _meant.trace_as_meant(c["old"].get("trace") or [])}}
             # Meant difference (famfix), pd_multitransform: as FreeCAD's own command leaves them
             # (src/Mod/PartDesign/Gui/TaskMultiTransformParameters.cpp finishAdd: FCMD_OBJ_HIDE of
             # each step; the MultiTransform shown), each step is hidden as it is made and the

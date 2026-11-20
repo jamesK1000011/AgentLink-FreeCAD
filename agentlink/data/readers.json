@@ -143,6 +143,7 @@
     "num_json",
     "place",
     "placement",
+    "placement_json",
     "plane_ref",
     "ref_list",
     "ref_names",
@@ -155,10 +156,12 @@
     "unique",
     "vec3",
     "volume",
+    "world_json",
     "xyz"
    ],
    "changers": [
     "attach_origin",
+    "attach_refs",
     "gear_profile",
     "new",
     "settle"
@@ -232,6 +235,7 @@
   "part_more": {
    "readers": [
     "V",
+    "app_part",
     "as_solid",
     "as_wire",
     "compound",
@@ -243,6 +247,7 @@
     "flat_face",
     "is_round",
     "make_shell",
+    "pd_body",
     "picked",
     "placement_json",
     "placement_of",
@@ -254,10 +259,12 @@
     "solid_body",
     "sort_edges",
     "split_ref",
-    "unique"
+    "unique",
+    "world_json"
    ],
    "changers": [
-    "add_shape"
+    "add_shape",
+    "attach_refs"
    ],
    "source": "scripts/tool_needs.py; the family's code",
    "date": "2026-11-16"
@@ -897,6 +904,7 @@
     "is_name",
     "num_json",
     "own_prop",
+    "prop_at",
     "ref_snap",
     "reserved",
     "rows",

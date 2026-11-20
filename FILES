@@ -467,6 +467,7 @@ tests/test_datasheet_data.py
 tests/test_datask2_data.py
 tests/test_datatd2_data.py
 tests/test_datatd_data.py
+tests/test_datum_skeleton.py
 tests/test_declared.py
 tests/test_doc.py
 tests/test_draft.py

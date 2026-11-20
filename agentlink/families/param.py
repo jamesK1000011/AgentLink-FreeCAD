@@ -200,6 +200,21 @@ def varset_rows_one(o):
     return [{"name": p, "value": var_value(o, p)[0], "unit": var_value(o, p)[1]} for p in varset_vars(o)]
 
 
+def prop_at(o, path):
+    """The value at a property path as param_bind takes it: "Length", or a
+    nested one, "AttachmentOffset.Base.x", "Placement.Rotation.Angle" (an
+    angle in degrees, as FreeCAD's expressions give it)."""
+    import math
+
+    parts = path.split(".")
+    v = getattr(o, parts[0])
+    for p in parts[1:]:
+        v = getattr(v, p)
+    if len(parts) > 1 and parts[-1] == "Angle" and parts[-2] == "Rotation" and isinstance(v, (int, float)):
+        return math.degrees(v)
+    return v
+
+
 def tools(session):
     s = session
     doc = lambda: s.doc  # noqa: E731
@@ -211,7 +226,7 @@ def tools(session):
                "broken": pc.newly_broken, "ref_snap": lambda: [e for b in pc.pd_bodies(doc()) for e in pc.ref_snapshot(b)], "repair_refs": pc.repair_refs,
                "why": lambda b: why(doc(), b), "bodies_now": lambda: [pc.body_reading(b) for b in pc.pd_bodies(doc())],
                # FreeCAD's own
-               "setprop": setattr, "getprop": getattr, "num_json": picks.num_json,
+               "setprop": setattr, "getprop": getattr, "num_json": picks.num_json, "prop_at": prop_at,
                # the family's: the Params sheet, the variable sets, names
                "sheet": lambda make=False: sheet(doc(), make), "rows": rows, "value_of": value_of, "users": lambda o, name: users(doc(), o, name),
                "alias_problem": C.alias_problem, "varsets": lambda: varsets(doc()), "varset_vars": varset_vars, "varset_rows": lambda: varset_rows(doc()),
