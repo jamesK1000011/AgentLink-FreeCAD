@@ -66,16 +66,46 @@ class Stats(unittest.TestCase):
         for k in ("total", "proven", "headless", "live", "docs", "health", "description"):
             self.assertEqual(sum(x[k] for x in cov["sections"]), cov[k], k)
         self.assertEqual(cov["sections"][0]["title"], "Agent Link (core)")
-        self.assertEqual(cov["sections"][0]["total"], self.s["hubTools"]["total"])
-        for x in cov["sections"]:
+        # The hub's declared tools are its counted tools and its tools that are not counted.
+        hub_nc = sum(x["total"] for x in cov["notCounted"] if x["repos"] == ["AgentLink-FreeCAD"])
+        self.assertEqual(cov["sections"][0]["total"] + hub_nc, self.s["hubTools"]["total"])
+        for x in cov["sections"] + cov["notCounted"]:
             self.assertEqual(sum(p["total"] for p in x["parts"]), x["total"], x["title"])
+        groups, status = hardening_status.load()
+        self.assertEqual(cov["total"] + sum(x["total"] for x in cov["notCounted"]), sum(len(d["tools"]) for d in groups.values()))
+
+    def test_developer_tools_are_not_counted(self):
+        # The owner (19 Nov 2026): the porting tools are a developer tool, not a FreeCAD function.
+        # They have their own section and lines, and they are not in the core or the V1 totals.
+        cov = self.s["coverage"]
+        groups, status = hardening_status.load()
+        self.assertEqual(groups["porting"].get("notCounted"), "developer")
+        dev = {x["key"]: x for x in cov["notCounted"]}
+        self.assertIn("developer", dev)
+        self.assertIn("not counted", dev["developer"]["title"])
+        self.assertTrue(dev["developer"]["why"].strip())
+        porting = set(groups["porting"]["tools"])
+        self.assertIn("port_scaffold", porting)
+        self.assertEqual(dev["developer"]["total"], len(porting))
+        self.assertEqual(sum(p["total"] for p in cov["sections"][0]["parts"] if p["name"] == "Porting"), 0)
+        self.assertEqual(cov["sections"][0]["total"], sum(len(d["tools"]) for d in groups.values() if d["repo"] == "AgentLink-FreeCAD" and not d.get("notCounted")))
+        self.assertFalse(porting & {g["tool"] for g in cov["gaps"]}, "a porting gap is in the counted gaps")
+        self.assertEqual({g["tool"] for g in dev["developer"]["gaps"]}, {t for t in porting if not (status.get(t, {}).get("headless") and status.get(t, {}).get("live"))})
+        hub = [x for x in cov["sections"] if x["repo"] == "AgentLink-FreeCAD"][0]
+        self.assertEqual(hub["proven"], sum(1 for d in groups.values() if d["repo"] == "AgentLink-FreeCAD" and not d.get("notCounted")
+                                           for t in d["tools"] if hardening_status.proven(status.get(t, {}))))
+        bars = hardening_status.bars(groups, status)
+        self.assertIn(dev["developer"]["title"], bars)
+        with open(stats.STATS_MD, encoding="utf-8") as f:
+            self.assertIn(f"### {dev['developer']['title']}", f.read())
 
     def test_every_gap_has_a_reason(self):
         groups, status = hardening_status.load()
         short = {t for d in groups.values() for t in d["tools"]
                  if not (status.get(t, {}).get("headless") and status.get(t, {}).get("live"))}
-        self.assertEqual({g["tool"] for g in self.s["coverage"]["gaps"]}, short)
-        for g in self.s["coverage"]["gaps"]:
+        nc_gaps = [g for x in self.s["coverage"]["notCounted"] for g in x["gaps"]]
+        self.assertEqual({g["tool"] for g in self.s["coverage"]["gaps"] + nc_gaps}, short)
+        for g in self.s["coverage"]["gaps"] + nc_gaps:
             self.assertTrue(g["why"].strip(), g["tool"])
         # A proof on cookbook format 2 (V2) is not a V1 proof.
         for t, st in status.items():

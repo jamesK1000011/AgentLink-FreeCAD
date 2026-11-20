@@ -7,6 +7,7 @@ All notable changes to Agent Link for FreeCAD. The format follows
 
 ## [Unreleased]
 
+- Release statistics: the porting tools (group `porting`: `port_scaffold` and the `cookbook_*` tools) are a developer tool, not a FreeCAD function (the owner, 19 Nov 2026). They are not in the Agent Link (core) or V1 totals. They have their own lines, "Developer tools (not counted)", in `docs/stats/STATS.md`, `docs/hardening/STATUS.md`, the README block and `hardening_status.py bars`, with their gaps. The data: `notCounted` in `docs/hardening/inventory.json`.
 - Release statistics (`scripts/stats.py`, `docs/stats/STATS.md`, the README block): Agent Link (core) first, then each add-on in its own section, with totals for each section and for all of V1. Only V1 counts: the Home-FreeCAD tools and `collab` (private add-ons) move to `notInV1` in `docs/hardening/inventory.json`, and a live proof on cookbook format 2 (V2) does not count (`liveFormat2`). The new section "What is not covered, and why" gives each short tool and its reason (`gap` in `status.json`). `tool_summary.py` reads `agentlink/ext.py`, so `app_extensions` counts (416 hub tools). A test keeps the inventory in step with the hub's tool data and the add-on snapshot.
 
 ## [1.0.0] - 2026-11-19

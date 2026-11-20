@@ -1,24 +1,24 @@
 {
  "about": "Made by scripts/stats.py from the repository's data. Do not edit by hand.",
  "coverage": {
-  "total": 627,
+  "total": 619,
   "proven": 613,
   "headless": 605,
   "live": 608,
   "docs": 554,
-  "health": 483,
-  "description": 568,
+  "health": 480,
+  "description": 565,
   "sections": [
    {
     "repo": "AgentLink-FreeCAD",
     "title": "Agent Link (core)",
     "docs": 367,
-    "health": 291,
-    "description": 381,
+    "health": 288,
+    "description": 378,
     "headless": 396,
     "live": 403,
     "proven": 403,
-    "total": 416,
+    "total": 408,
     "parts": [
      {
       "name": "Sketcher",
@@ -114,11 +114,6 @@
       "name": "Robot",
       "proven": 7,
       "total": 7
-     },
-     {
-      "name": "Porting",
-      "proven": 0,
-      "total": 8
      }
     ]
    },
@@ -500,86 +495,6 @@
     "format2Only": false
    },
    {
-    "tool": "cookbook_approve",
-    "section": "Agent Link (core)",
-    "part": "Porting",
-    "short": [
-     "not proven"
-    ],
-    "why": "Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.",
-    "format2Only": true
-   },
-   {
-    "tool": "cookbook_export",
-    "section": "Agent Link (core)",
-    "part": "Porting",
-    "short": [
-     "not proven"
-    ],
-    "why": "Not tested yet.",
-    "format2Only": false
-   },
-   {
-    "tool": "cookbook_import",
-    "section": "Agent Link (core)",
-    "part": "Porting",
-    "short": [
-     "not proven"
-    ],
-    "why": "Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.",
-    "format2Only": true
-   },
-   {
-    "tool": "cookbook_list",
-    "section": "Agent Link (core)",
-    "part": "Porting",
-    "short": [
-     "not proven"
-    ],
-    "why": "Not tested yet.",
-    "format2Only": false
-   },
-   {
-    "tool": "cookbook_run",
-    "section": "Agent Link (core)",
-    "part": "Porting",
-    "short": [
-     "not proven"
-    ],
-    "why": "Not tested yet.",
-    "format2Only": false
-   },
-   {
-    "tool": "cookbook_show",
-    "section": "Agent Link (core)",
-    "part": "Porting",
-    "short": [
-     "not proven"
-    ],
-    "why": "Not tested yet.",
-    "format2Only": false
-   },
-   {
-    "tool": "cookbook_unapprove",
-    "section": "Agent Link (core)",
-    "part": "Porting",
-    "short": [
-     "not proven"
-    ],
-    "why": "Not tested yet.",
-    "format2Only": false
-   },
-   {
-    "tool": "port_scaffold",
-    "section": "Agent Link (core)",
-    "part": "Porting",
-    "short": [
-     "not proven"
-    ],
-    "why": "Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.",
-    "format2Only": true
-   },
-   {
     "tool": "slice_open",
     "section": "Workshop",
     "part": "slice",
@@ -648,6 +563,112 @@
     ],
     "why": "Headless: watch mode on is the person's to turn on. Only the answer with watch mode off is proven, live (addons-unproven-findings.md).",
     "format2Only": false
+   }
+  ],
+  "notCounted": [
+   {
+    "key": "developer",
+    "title": "Developer tools (not counted)",
+    "why": "These tools turn a person's own FreeCAD macro or add-on into an Agent Link add-on (port_scaffold, cookbooks). They are a developer tool, not a FreeCAD function that Agent Link covers. The owner's decision, 19 Nov 2026.",
+    "docs": 0,
+    "health": 3,
+    "description": 3,
+    "headless": 0,
+    "live": 0,
+    "proven": 0,
+    "total": 8,
+    "parts": [
+     {
+      "name": "Porting",
+      "proven": 0,
+      "total": 8
+     }
+    ],
+    "repos": [
+     "AgentLink-FreeCAD"
+    ],
+    "gaps": [
+     {
+      "tool": "cookbook_approve",
+      "section": "Developer tools (not counted)",
+      "part": "Porting",
+      "short": [
+       "not proven"
+      ],
+      "why": "Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.",
+      "format2Only": true
+     },
+     {
+      "tool": "cookbook_export",
+      "section": "Developer tools (not counted)",
+      "part": "Porting",
+      "short": [
+       "not proven"
+      ],
+      "why": "Not tested yet.",
+      "format2Only": false
+     },
+     {
+      "tool": "cookbook_import",
+      "section": "Developer tools (not counted)",
+      "part": "Porting",
+      "short": [
+       "not proven"
+      ],
+      "why": "Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.",
+      "format2Only": true
+     },
+     {
+      "tool": "cookbook_list",
+      "section": "Developer tools (not counted)",
+      "part": "Porting",
+      "short": [
+       "not proven"
+      ],
+      "why": "Not tested yet.",
+      "format2Only": false
+     },
+     {
+      "tool": "cookbook_run",
+      "section": "Developer tools (not counted)",
+      "part": "Porting",
+      "short": [
+       "not proven"
+      ],
+      "why": "Not tested yet.",
+      "format2Only": false
+     },
+     {
+      "tool": "cookbook_show",
+      "section": "Developer tools (not counted)",
+      "part": "Porting",
+      "short": [
+       "not proven"
+      ],
+      "why": "Not tested yet.",
+      "format2Only": false
+     },
+     {
+      "tool": "cookbook_unapprove",
+      "section": "Developer tools (not counted)",
+      "part": "Porting",
+      "short": [
+       "not proven"
+      ],
+      "why": "Not tested yet.",
+      "format2Only": false
+     },
+     {
+      "tool": "port_scaffold",
+      "section": "Developer tools (not counted)",
+      "part": "Porting",
+      "short": [
+       "not proven"
+      ],
+      "why": "Proven live only on a cookbook format 2 draft (texturizer_v2 port). Format 2 is V2 (branch cookbook-v2). Format 1 is not tested yet.",
+      "format2Only": true
+     }
+    ]
    }
   ],
   "notInV1": {
