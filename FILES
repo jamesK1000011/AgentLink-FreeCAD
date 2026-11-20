@@ -333,11 +333,7 @@ docs/packaging.md
 docs/records.md
 docs/security/red-team-2026-11-18.md
 docs/stats/STATS.md
-docs/stats/STATS.md
-docs/stats/STATS.md
 docs/stats/addons.json
-docs/stats/stats.json
-docs/stats/stats.json
 docs/stats/stats.json
 docs/workflow/README.md
 docs/workflow/addons.md
@@ -558,8 +554,6 @@ tests/test_millsim.py
 tests/test_model.py
 tests/test_model_more.py
 tests/test_more_families.py
-tests/test_needs.py
-tests/test_needs.py
 tests/test_needs.py
 tests/test_nexthint.py
 tests/test_no_addon_names.py
