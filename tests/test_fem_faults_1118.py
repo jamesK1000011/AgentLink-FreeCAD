@@ -89,7 +89,7 @@ class SurfaceNodes(unittest.TestCase):
     def test_the_maps_use_them(self):
         view = src("agentlink", "families", "view.py")
         self.assertIn("render.surface_nodes(f.get(\"elements\") or ())", view)
-        self.assertIn("vals = render.smooth_values(V, SP, SV)", view)
+        self.assertIn("V, F, vals, fit = render.blend_fit(V, F, SP, SV, budget=render.map_budget(s))", view)  # smooth_values inside, on the surface nodes (test drive of 20 Nov)
         e = src("agentlink", "echo.py")
         self.assertIn("sv = render.smooth_values(layer[\"V\"], SP, SV)", e)
         self.assertIn("render.smooth_values(layer[\"V\"], SP, SU)", e)

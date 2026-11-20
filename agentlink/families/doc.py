@@ -818,6 +818,33 @@ def tools(session):
         show = [n for n in show if n not in going]
         return extra, show, labels
 
+    def holds(p, o):
+        """Whether p only holds o as a container does: o is in p's Group (a
+        PartDesign Body, an App::Part, a folder). Test drive of 20 Nov, finding 1:
+        an unused sketch or the tip feature of a Body was refused, because
+        the Body's Group counted as a user. A real user (the next feature,
+        a pad on the sketch) is in o's InList apart from the Body."""
+        try:
+            return o in list(getattr(p, "Group", None) or [])
+        except Exception:  # noqa: BLE001
+            return False
+
+    def let_go(objs):
+        """Each object taken out of the container that holds it first, as
+        FreeCAD's own delete does: a Body then moves its Tip back to the
+        feature before it. What cannot be taken out is left to removeObject."""
+        for o in objs:
+            try:
+                ins = list(o.InList)
+            except Exception:  # noqa: BLE001
+                continue
+            for p in ins:
+                if holds(p, o) and hasattr(p, "removeObject"):
+                    try:
+                        p.removeObject(o)
+                    except Exception:  # noqa: BLE001
+                        pass
+
     def removed(names):
         """Each of the named objects still in the document removed (one may
         have gone with another)."""
@@ -1127,7 +1154,7 @@ def tools(session):
         # objects
         "is_shape": is_shape, "shape_row": shape_row, "mesh_row": geo.mesh_row, "once": lambda xs: list(dict.fromkeys(xs)), "SKIP_PROPS": SKIP_PROPS, "prop_entry": prop_entry,
         "readonly": readonly, "near": lambda p, names: difflib.get_close_matches(p, names, 3), "read": lambda o, p: getattr(o, p),
-        "set_value": lambda o, p, v: setattr(o, p, to_value(o, p, v)), "built_from": built_from, "along": along, "removed": removed, "shown_again": shown_again,
+        "set_value": lambda o, p, v: setattr(o, p, to_value(o, p, v)), "built_from": built_from, "along": along, "holds": holds, "let_go": let_go, "removed": removed, "shown_again": shown_again,
         "meta_moved": meta_moved, "is_group": is_group, "group_row": group_row,
         "placement": lambda base, rot: FreeCAD.Placement(base, rot), "rotation": lambda: FreeCAD.Rotation(),
         # import

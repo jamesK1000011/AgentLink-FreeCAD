@@ -37,6 +37,21 @@ def _deferred(session, name, args):
         return None
     return {**out, "from": f"the {name} service of an installed add-on"}
 
+def printed_mass(session, label):
+    """A part's mass as printed, from the add-on that owns mass (its
+    "mass_properties" service: walls and infill, inserts in), as { mass,
+    as }; None when no add-on offers it, it refused, or it gave no figure.
+    asm_bom's rows read it for parts in a print setup."""
+    try:
+        out = _deferred(session, "mass_properties", {"body": label})
+    except ToolError:
+        return None
+    row = (out.get("bodies") or [None])[0] if isinstance(out, dict) else None
+    if not isinstance(row, dict) or isinstance(row.get("mass"), bool) or not isinstance(row.get("mass"), (int, float)):
+        return None
+    return {"mass": round(float(row["mass"]), 2), "as": str(row.get("as") or "as printed (an estimate)")}
+
+
 GROUP = "measure"
 INFO = "Find faces and edges (the references other tools take), measure between them, sections, mass properties, clearance."
 
