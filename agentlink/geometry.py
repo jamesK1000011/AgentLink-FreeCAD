@@ -228,6 +228,49 @@ def soundness(shape, solids_intended=False):
 
 
 
+def _closed_solids(shape):
+    """How many of shape's solids are closed (every shell of each)."""
+    n = 0
+    for so in shape.Solids:
+        try:
+            shells = so.Shells
+            if shells and all(x.isClosed() for x in shells):
+                n += 1
+        except Exception:
+            pass
+    return n
+
+
+def refine_harm(before, after, rel=1e-4, absolute=1e-3):
+    """Why a refine (or its fix step) made a shape worse, or None: a valid
+    shape became invalid, it has fewer closed solids, or its volume moved
+    by more than rel of it (absolute mm³ at the least). A shape that was
+    not valid, or had no solid, is not judged on that count: fix may repair
+    it. Plain shape reads only."""
+    why = []
+    try:
+        was_valid = before.isValid()
+    except Exception:
+        was_valid = False
+    try:
+        now_valid = after.isValid()
+    except Exception:
+        now_valid = False
+    if was_valid and not now_valid:
+        why.append("the shape was valid and the result is not (isValid false)")
+    c0, c1 = _closed_solids(before), _closed_solids(after)
+    if c1 < c0:
+        why.append(f"closed solids went from {c0} to {c1}")
+    try:
+        v0 = abs(before.Volume) if before.Solids else None
+        v1 = abs(after.Volume) if after.Solids else 0.0
+    except Exception:
+        v0 = v1 = None
+    if v0 and v1 is not None and abs(v1 - v0) > max(absolute, rel * v0):
+        why.append(f"the volume went from {v0:.3f} to {v1:.3f} mm³ ({(v1 - v0) / v0 * 100:+.2f} %)")
+    return "; ".join(why) or None
+
+
 # ---- mesh objects ----------------------------------------------------------------------------
 
 def mesh_of(o):

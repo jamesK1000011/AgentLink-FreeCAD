@@ -5508,7 +5508,7 @@
   },
   "part_transform": {
    "group": "model",
-   "description": "Move or copy a solid body. move { by [dx,dy,dz] } and rotate { axis, angle degrees, about [x,y,z] } change its Placement in place. about: default the centre of its box. A primitive stays parametric. copy: true makes a new body instead. mirror { normal, about (box centre) } makes a new body and keeps the original. mirror fuse: true joins both into the original. scale { factor or [fx,fy,fz], about (origin) } makes a new body and keeps the original. linear { count, step [dx,dy,dz] } arrays the body into itself. polar { count, axis, about (origin), angle } also arrays it. angle 360 shares out evenly; less goes end to end. count includes the original. The copies are fused; fuse: false keeps them apart in one body, which is quicker for many. Trap: all but move and rotate make a plain shape and renumber faces and edges. Use shape_query again. Answer: body, volume, box, sound, op, and placement, from or count.",
+   "description": "Move or copy a solid body. move { by [dx,dy,dz] } and rotate { axis, angle degrees, about [x,y,z] } change its Placement in place. about: default the centre of its box. A primitive stays parametric. copy: true makes a new body instead. mirror { normal, about (box centre) } makes a new body and keeps the original. mirror fuse: true joins both into the original. scale { factor or [fx,fy,fz], about (origin) } makes a new body and keeps the original. linear { count, step [dx,dy,dz] } arrays the body into itself. polar { count, axis, about (origin), angle } also arrays it. angle 360 shares out evenly; less goes end to end. count includes the original. The copies are fused; fuse: false keeps them apart in one body, which is quicker for many. Trap: all but move and rotate make a plain shape and renumber faces and edges. Use shape_query again. Answer: body, volume, box, sound, op, and placement, from or count. A new body keeps the material of the original.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -5576,11 +5576,12 @@
    "steps": [
     {"let": {"o": "=solid_body(a.body)", "op": "=a.op"}},
     {"let": {"sh": "=o.Shape", "about": "=vec3(a.about, 'about', (0, 0, 0)) if a.about is not None else None"}},
-    {"when": "=op in ('move', 'rotate')", "then": [{"when": "=op == 'move'", "then": [{"let": {"pl": "=placement(vec3(a.by, 'by'), rotation())"}}], "else": [{"let": {"c": "=about if about is not None else sh.BoundBox.Center"}}, {"let": {"pl": "=placement(V(), rotation(direction(a.axis, 'axis', (0, 0, 1)), num(a.angle, 'angle')), c)"}}]}, {"when": "=a.copy", "then": [{"let": {"new": "=sh.copy()"}}, {"set": {"new.Placement": "=pl.multiply(new.Placement)"}}, {"add": "Part::Feature", "name": "Body", "as": "n"}, {"set": {"n.Label": "=unique(a.name or o.Label)", "n.Shape": "=new"}}, {"do": "=doc().recompute()"}, {"answer": {"via": "report", "with": ["=n", "=tool", "$fields"], "fields": {"op": "=op", "from": "=o.Label"}}}]}, {"set": {"o.Placement": "=pl.multiply(o.Placement)"}}, {"do": "=doc().recompute()"}, {"answer": {"via": "report", "with": ["=o", "=tool", "$fields"], "fields": {"op": "=op", "placement": "=placement_json(o.Placement)"}}}]},
+    {"when": "=op in ('move', 'rotate')", "then": [{"when": "=op == 'move'", "then": [{"let": {"pl": "=placement(vec3(a.by, 'by'), rotation())"}}], "else": [{"let": {"c": "=about if about is not None else sh.BoundBox.Center"}}, {"let": {"pl": "=placement(V(), rotation(direction(a.axis, 'axis', (0, 0, 1)), num(a.angle, 'angle')), c)"}}]}, {"when": "=a.copy", "then": [{"let": {"new": "=sh.copy()"}}, {"set": {"new.Placement": "=pl.multiply(new.Placement)"}}, {"add": "Part::Feature", "name": "Body", "as": "n"}, {"set": {"n.Label": "=unique(a.name or o.Label)", "n.Shape": "=new"}}, {"let": {"kept": "=carry_material(o, [n])"}}, {"do": "=doc().recompute()"}, {"answer": {"via": "report", "with": ["=n", "=tool", "$fields"], "fields": {"op": "=op", "from": "=o.Label", "material": {"when": "=kept", "value": {"fmt": "{n.Label} keeps the material of {o.Label}."}}}}}]}, {"set": {"o.Placement": "=pl.multiply(o.Placement)"}}, {"do": "=doc().recompute()"}, {"answer": {"via": "report", "with": ["=o", "=tool", "$fields"], "fields": {"op": "=op", "placement": "=placement_json(o.Placement)"}}}]},
     {"choose": "=op", "of": {"mirror": [{"let": {"c": "=about if about is not None else sh.BoundBox.Center"}}, {"let": {"new": "=sh.mirror(c, direction(a.normal, 'normal', (1, 0, 0)))"}}, {"when": "=a.fuse", "then": [{"let": {"res": "=sh.fuse(new)"}}, {"answer": {"via": "report", "with": ["=bake(o, res, a.name)", "=tool", "$fields"], "fields": {"op": "mirror", "fused": true}}}]}], "scale": [{"let": {"f": "=a.factor", "c": "=about if about is not None else V(0, 0, 0)"}}, {"when": "=is_list(f)", "then": [{"let": {"fx, fy, fz": "=[num(x, 'factor') for x in (f + [1, 1, 1])[:3]]"}}, {"refuse": "factor: each above 0.", "when": "=min(fx, fy, fz) <= 0"}, {"let": {"new": "=scaled_each(sh, c, fx, fy, fz)"}}], "else": [{"let": {"fac": "=num(f, 'factor')"}}, {"refuse": "factor: above 0 — a number, or [fx, fy, fz] for each axis.", "when": "=fac <= 0"}, {"let": {"new": "=sh.copy()"}}, {"do": "=new.scale(fac, c)"}]}], "linear": [{"let": {"n": "=int(a.get('count', 2))"}}, {"refuse": "count: 2 or more, the original counted.", "when": "=n < 2"}, {"let": {"copies": "=[sh]", "step": "=vec3(a.step, 'step')"}}, {"each": "i", "in": "=range(1, n)", "steps": [{"let": {"c2": "=sh.copy()"}}, {"do": "=c2.translate(step * i)"}, {"push": {"copies": "=c2"}}]}], "polar": [{"let": {"n": "=int(a.get('count', 2))"}}, {"refuse": "count: 2 or more, the original counted.", "when": "=n < 2"}, {"let": {"copies": "=[sh]", "axis": "=direction(a.axis, 'axis', (0, 0, 1))", "c": "=about if about is not None else V(0, 0, 0)", "total": "=num(a.get('angle', 360), 'angle')"}}, {"let": {"turn": "=total / n if abs(abs(total) - 360) < 1e-9 else total / (n - 1)"}}, {"each": "i", "in": "=range(1, n)", "steps": [{"let": {"c2": "=sh.copy()"}}, {"do": "=c2.rotate(c, axis, turn * i)"}, {"push": {"copies": "=c2"}}]}]}, "else": [{"refuse": "op: move { by }, rotate { axis, angle, about }, mirror { normal, about, fuse }, scale { factor, about }, linear { count, step }, polar { count, axis, about, angle }."}]},
     {"when": "=op in ('linear', 'polar')", "then": [{"let": {"res": "=copies[0].fuse(copies[1:]) if a.get('fuse', True) else compound(copies)"}}, {"let": {"o2": "=bake(o, res, a.name)"}}, {"answer": {"via": "report", "with": ["=o2", "=tool", "$fields"], "fields": {"op": "=op", "count": "=n", "note": {"when": "=len(o2.Shape.Solids) > 1", "value": {"fmt": "{len(o2.Shape.Solids)} separate solids: the copies do not touch — one body holding them."}}}}}]},
     {"add": "Part::Feature", "name": "Body", "as": "n"},
     {"set": {"n.Label": "=unique(a.name or o.Label + ' ' + op)", "n.Shape": "=clean(new)"}},
+    {"do": "=carry_material(o, [n])"},
     {"do": "=doc().recompute()"}
    ],
    "answer": {"via": "report", "with": ["=n", "=tool", "$fields"], "fields": {"op": "=op", "from": "=o.Label"}}
@@ -11062,7 +11063,7 @@
   },
   "part_refine": {
    "group": "model",
-   "description": "Merge coplanar and co-cylindrical faces of a body that booleans left (refine). For a PartDesign Body, the tool sets Refine of its tip on, and the body stays parametric. fix: true first repairs it (ShapeFix at tolerance mm, 0.001). It also makes a closed shell into a solid. Faces get new numbers. Answer: faces { before, after }, done, sound.",
+   "description": "Merge coplanar and co-cylindrical faces of a body that booleans left (refine). For a PartDesign Body, the tool sets Refine of its tip on, and the body stays parametric. fix: true first repairs it (ShapeFix at tolerance mm, 0.001). It also makes a closed shell into a solid. Faces get new numbers. Answer: faces { before, after }, done, sound. A worse result is refused: a valid shape becomes invalid, fewer closed solids, or a volume change over 0.01 %. Then the tool changes nothing and tells why.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -11090,11 +11091,13 @@
    "steps": [
     {"let": {"o": "=solid_body(a.body)"}},
     {"let": {"tip": "=get(o, 'Tip') if o.TypeId == 'PartDesign::Body' else None"}},
-    {"when": "=tip is not None and 'Refine' in tip.PropertiesList and not a.fix and not a.name", "then": [{"let": {"before": "=len(o.Shape.Faces)"}}, {"set": {"tip.Refine": true}}, {"do": "=doc().recompute()"}, {"let": {"snd": "=soundness(o.Shape)"}}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"body": "=o.Label", "faces": {"before": "=before", "after": "=len(o.Shape.Faces)"}, "done": [{"fmt": "Refine turned on for {tip.Label}, the body's tip (it stays parametric)"}], "sound": "=snd['ok']", "problems": {"when": "=not snd['ok']", "value": "=snd['problems']"}, "step": "=step()"}}}]},
+    {"when": "=tip is not None and 'Refine' in tip.PropertiesList and not a.fix and not a.name", "then": [{"let": {"before": "=len(o.Shape.Faces)", "was": "=o.Shape.copy()", "had": "=bool(tip.Refine)"}}, {"set": {"tip.Refine": true}}, {"do": "=doc().recompute()"}, {"let": {"harm": "=refine_harm(was, o.Shape)"}}, {"when": "=harm", "then": [{"set": {"tip.Refine": "=had"}}, {"do": "=doc().recompute()"}, {"refuse": {"fmt": "Refine made {o.Label} worse: {harm}. Refine of {tip.Label} is set back, so {o.Label} is as it was. body_check {o.Label} says what is wrong with it now; leave the faces as they are, or rebuild the step that left them."}, "code": "failed"}]}, {"let": {"snd": "=soundness(o.Shape)"}}, {"do": "=snapshot(tool)"}, {"answer": {"fields": {"body": "=o.Label", "faces": {"before": "=before", "after": "=len(o.Shape.Faces)"}, "done": [{"fmt": "Refine turned on for {tip.Label}, the body's tip (it stays parametric)"}], "sound": "=snd['ok']", "problems": {"when": "=not snd['ok']", "value": "=snd['problems']"}, "step": "=step()"}}}]},
     {"let": {"sh": "=o.Shape"}},
     {"let": {"before": "=len(sh.Faces)", "tol": "=float(a.get('tolerance', 0))", "fixed": "=sh.copy()", "notes": "=[]"}},
     {"when": "=a.fix", "then": [{"try": [{"do": "=fixed.fix(tol or 1e-3, tol or 1e-3, tol or 1e-3)"}, {"push": {"notes": "fixed"}}], "on": "error", "except": [{"push": {"notes": {"fmt": "fix failed: {error}"}}}]}, {"try": [{"let": {"fixed": "=as_solid(as_shell(fixed.Faces) if len(fixed.Shells) != 1 else fixed.Shells[0])"}}, {"push": {"notes": "closed shell made solid"}}], "on": "error", "except": [{"push": {"notes": {"fmt": "no solid from the shell: {error}"}}}], "when": "=not fixed.Solids and fixed.Shells"}]},
     {"let": {"ref": "=fixed.removeSplitter()"}},
+    {"let": {"harm": "=refine_harm(sh, ref)"}},
+    {"refuse": {"fmt": "{'Fix and refine' if a.fix else 'Refine'} would make {o.Label} worse: {harm}. Nothing was changed; {o.Label} is as it was. {'Try again without fix, or with a smaller tolerance. ' if a.fix else ''}body_check {o.Label} says what is wrong with it."}, "code": "failed", "when": "=harm"},
     {"let": {"o2": "=bake(o, ref, a.name)"}},
     {"let": {"snd": "=soundness(o2.Shape)"}}
    ],
@@ -11824,7 +11827,7 @@
   },
   "draft_clone": {
    "group": "draft",
-   "description": "Make a Draft clone: a copy that follows the original. It starts on top of it. scale: a factor or [x,y,z]. move: [x,y,z]. Answer: object, of, box.",
+   "description": "Make a Draft clone: a copy that follows the original. It starts on top of it. scale: a factor or [x,y,z]. move: [x,y,z]. Answer: object, of, box. The clone keeps the material of the original.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -11854,7 +11857,7 @@
     {"let": {"o": "=find(a.object)", "sc": "=a.scale"}},
     {"when": "=sc is not None", "then": [{"let": {"sc": "=[sc, sc, sc] if is_num(sc) else sc"}}, {"refuse": "scale: a factor above 0, or [sx, sy, sz].", "when": "=not (is_list(sc) and len(sc) == 3 and all(is_num(x) and x > 0 for x in sc))"}]},
     {"refuse": {"fmt": "object: {o.Label} has no shape to clone ({o.TypeId})."}, "when": "=get(o, 'Shape') is None"},
-    {"make": "Draft.make_clone", "call": ["=o"], "as": "c"},
+    {"make": "Draft.make_clone", "call": ["=o"], "as": "c"}, {"do": "=carry_material(o, [c])"},
     {"when": "=sc is not None", "then": [{"refuse": {"fmt": "scale: {o.Label} is a BIM object, and its clone cannot be scaled — leave scale out, or draft_modify op scale with copy: true."}, "first": [{"do": "=doc().removeObject(c.Name)"}], "when": "='Scale' not in c.PropertiesList"}, {"set": {"c.Scale": "=V(float(sc[0]), float(sc[1]), float(sc[2]))"}}, {"do": "=doc().recompute()"}]},
     {"set": {"c.Placement": "=placement(vec(a.move, 'move'), rotation()).multiply(c.Placement)"}, "when": "=a.move"},
     {"let": {"label": {"fmt": "{o.Label} clone"}}},
@@ -15715,7 +15718,7 @@
   },
   "fea_setup": {
    "group": "strength",
-   "description": "Start or change a strength study of one body. body: the body. solid: n studies one solid of a multi-solid body alone. That solid is a hidden helper; the tool reads it again from the body at each solve. Its faces have their own numbers. material: the material of the body by default; it needs a Young's modulus. mesh: the largest element edge, mm. By default it is a third of the least size. The tool refuses a mesh that makes more than about 400,000 elements. The holds and loads of the same body are kept (said as kept). unmatched lists those that fit no face now. reset: true removes them (said as dropped). Answer: study, material and next. A rigid hold makes stress that no real mount makes. A coarse mesh gives peaks that are too low. Library figures are typical. The study is Agent Link's, kept with the document. fea_setup, fea_hold and fea_load add no FEM objects to the tree. fea_native builds the study as FreeCAD's own analysis; fea_solve does it where its FEM route runs.",
+   "description": "Start or change a strength study of one body. body: the body. solid: n studies one solid of a multi-solid body alone. That solid is a hidden helper; the tool reads it again from the body at each solve. Its faces have their own numbers. material: the material of the body by default; it needs a Young's modulus. mesh: the largest element edge, mm. By default it is a third of the least size. The tool refuses a mesh that makes more than about 400,000 elements. The holds and loads of the same body are kept (said as kept). unmatched lists those that fit no face now. reset: true removes them (said as dropped). Answer: study, material and next. A rigid hold makes stress that no real mount makes. A coarse mesh gives peaks that are too low. Library figures are typical. The study is Agent Link's, kept with the document. fea_setup, fea_hold and fea_load add no FEM objects to the tree. fea_native builds the study as FreeCAD's own analysis; fea_solve does it where its FEM route runs. material.from tells the source of the material. It is the body's record, the body it is a copy of, its ShapeMaterial, or assumed PLA.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -15753,7 +15756,7 @@
     {"refuse": "mesh: the largest element edge, mm, over 0.", "when": "=mesh <= 0"},
     {"let": {"est": "=o.Shape.Volume / (mesh ** 3 / 8.0)"}},
     {"refuse": {"fmt": "mesh {mesh:g} mm makes some {int(est):,} elements: too many to solve here — {round(mesh * (est / 300000) ** (1 / 3), 1)} mm or more."}, "when": "=est > 400000"},
-    {"when": "=a.material", "then": [{"let": {"c": "=card(a.material) or card(str(a.material).lower())"}}, {"refuse": {"fmt": "material {a.material!r}: no such material by id or name — material_list {{ words }} finds one."}, "code": "not_found", "when": "=c is None"}, {"let": {"said": "given"}}], "else": [{"let": {"c, was_set": "=of_body(of['body'] if of else o.Label)"}}, {"let": {"said": "=\"the body's\" if was_set else 'assumed PLA: material_set records the real one'"}}]},
+    {"when": "=a.material", "then": [{"let": {"c": "=card(a.material) or card(str(a.material).lower())"}}, {"refuse": {"fmt": "material {a.material!r}: no such material by id or name — material_list {{ words }} finds one."}, "code": "not_found", "when": "=c is None"}, {"let": {"said": "given"}}], "else": [{"let": {"c, was_set, said": "=of_body_said(of['body'] if of else o.Label)"}}]},
     {"let": {"mid": "=c['id']"}},
     {"refuse": {"fmt": "{c['name']} has no Young's modulus on its card: material_set custom {{ name, density, youngsMPa, yieldMPa }} gives one."}, "code": "invalid_state", "when": "=not c.get('E')"},
     {"let": {"old": "=study() or {}"}},
@@ -15764,7 +15767,7 @@
     {"do": "=snapshot(tool)"},
     {"let": {"lost": "=unmatched(st, o.Shape) if keep else []"}}
    ],
-   "answer": {"fields": {"study": "=st", "material": {"id": "=mid", "name": "=c['name']", "E": "=c['E']", "nu": "=c.get('nu')", "yield": "=c.get('yield')", "from": "=said"}, "...said": "=setup_said(old, keep, bool(a.reset))", "unmatched": {"when": "=lost", "value": "=lost"}, "warning": {"when": "=mesh > least / 2", "value": {"fmt": "mesh {mesh:g} mm is over half the part's least size ({least:.1f} mm): too coarse to read stress — {round(least / 3, 2)} mm or less."}}, "solid": {"when": "=of", "value": {"fmt": "Solid {of['solid']} of {of['body']} alone, as {o.Label} (hidden, kept for the study and read again from {of['body']} at each solve): its faces are numbered on their own — pick holds and loads by where they are (near, normal) or shape_query it."}}, "solids": {"when": "=not of and len(o.Shape.Solids) > 1", "value": {"fmt": "{o.Label} is {len(o.Shape.Solids)} solids: every one needs a hold of its own (they are not joined), or solid: n studies one alone."}}, "next": "fea_hold the faces it is held by, fea_load what pushes on it, then fea_solve."}}
+   "answer": {"fields": {"study": "=st", "material": {"id": "=mid", "name": "=c['name']", "E": "=c['E']", "nu": "=c.get('nu')", "yield": "=c.get('yield')", "from": "=said"}, "materialNote": {"fmt": "Material: {c['name']}, from {said}."}, "...said": "=setup_said(old, keep, bool(a.reset))", "unmatched": {"when": "=lost", "value": "=lost"}, "warning": {"when": "=mesh > least / 2", "value": {"fmt": "mesh {mesh:g} mm is over half the part's least size ({least:.1f} mm): too coarse to read stress — {round(least / 3, 2)} mm or less."}}, "solid": {"when": "=of", "value": {"fmt": "Solid {of['solid']} of {of['body']} alone, as {o.Label} (hidden, kept for the study and read again from {of['body']} at each solve): its faces are numbered on their own — pick holds and loads by where they are (near, normal) or shape_query it."}}, "solids": {"when": "=not of and len(o.Shape.Solids) > 1", "value": {"fmt": "{o.Label} is {len(o.Shape.Solids)} solids: every one needs a hold of its own (they are not joined), or solid: n studies one alone."}}, "next": "fea_hold the faces it is held by, fea_load what pushes on it, then fea_solve."}}
   },
   "fea_hold": {
    "group": "strength",
@@ -15880,7 +15883,7 @@
   },
   "fea_solve": {
    "group": "strength",
-   "description": "Solve the strength study: von Mises stress, displacement and safety. In some cases the tool solves it as FreeCAD's own FEM analysis. This needs one body, fixed holds, force/pressure/gravity, and a linear study. That analysis has a CalculiX solver object, a Gmsh mesh object and its constraints, and gets the results. The tool makes it new at each solve as \"<body> strength (fea_solve)\". Else the tool uses Agent Link's own CalculiX deck. solvedBy tells which, and why. Second-order tetrahedra, linear static; mm, N, MPa. Answer: vonMisesMax { MPa, at, face }, displacementMax { mm, at, face }, safety, mesh { nodes, elements }, warnings, files. safety is yield divided by the peak. health holds CalculiX's own warning lines. nonlinear: true follows large deflections and each material into yield. elasticOnly: true keeps it elastic. nonlinear also answers the plastic strain. It runs in the foreground, and FreeCAD waits. It takes seconds for a few thousand elements, minutes above 100,000. timeout: s (300); it limits Gmsh and the own deck. A rigid hold makes stress that no real mount makes. A coarse mesh gives peaks that are too low. Library figures are typical. Needs ccx and gmsh installed. Sometimes FreeCAD's FEM route fails. Then the tool removes what it made. The own deck's results are then the only answer and files (solvedBy says so). In some FreeCAD sessions, FreeCAD can no longer draw a FEM mesh (\"Cannot add static property\"). This FreeCAD fault comes from the first FEM mesh made while a window observer listened. Then the route fails until FreeCAD is restarted.",
+   "description": "Solve the strength study: von Mises stress, displacement and safety. In some cases the tool solves it as FreeCAD's own FEM analysis. This needs one body, fixed holds, force/pressure/gravity, and a linear study. That analysis has a CalculiX solver object, a Gmsh mesh object and its constraints, and gets the results. The tool makes it new at each solve as \"<body> strength (fea_solve)\". Else the tool uses Agent Link's own CalculiX deck. solvedBy tells which, and why. Second-order tetrahedra, linear static; mm, N, MPa. Answer: vonMisesMax { MPa, at, face }, displacementMax { mm, at, face }, safety, mesh { nodes, elements }, warnings, files. safety is yield divided by the peak. health holds CalculiX's own warning lines. nonlinear: true follows large deflections and each material into yield. elasticOnly: true keeps it elastic. nonlinear also answers the plastic strain. It runs in the foreground, and FreeCAD waits. It takes seconds for a few thousand elements, minutes above 100,000. timeout: s (300); it limits Gmsh and the own deck. A rigid hold makes stress that no real mount makes. A coarse mesh gives peaks that are too low. Library figures are typical. Needs ccx and gmsh installed. Sometimes FreeCAD's FEM route fails. Then the tool removes what it made. The own deck's results are then the only answer and files (solvedBy says so). In some FreeCAD sessions, FreeCAD can no longer draw a FEM mesh (\"Cannot add static property\"). This FreeCAD fault comes from the first FEM mesh made while a window observer listened. Then the route fails until FreeCAD is restarted. When Gmsh or CalculiX fails, the refusal gives their own error lines and where they are. For Gmsh: the surface, curve or volume numbers (surface 12 is Face12) and points. For CalculiX: the element and node numbers. It also gives the path of the full log (gmsh.log, ccx.log).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -19086,7 +19089,7 @@
   },
   "object_duplicate": {
    "group": "std_more",
-   "description": "Copy objects in the document (Std Duplicate). Each copy is independent, but it is still built from the same inputs. Example: a copied Pad uses the sketch of the original. dependencies: true also copies what each object is built from. simple: true copies only the shape, as a plain Part::Feature (no history, placement included). name: the label of the copy (\"<label> copy\" by default). Answer: duplicated [{ from, copy }].",
+   "description": "Copy objects in the document (Std Duplicate). Each copy is independent, but it is still built from the same inputs. Example: a copied Pad uses the sketch of the original. dependencies: true also copies what each object is built from. simple: true copies only the shape, as a plain Part::Feature (no history, placement included). name: the label of the copy (\"<label> copy\" by default). Answer: duplicated [{ from, copy }]. Each copy keeps the material of its original.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -19126,11 +19129,13 @@
        "then": [
         {"add": "Part::Feature", "name": "Copy", "as": "c"},
         {"set": {"c.Shape": "=get_shape(o)", "c.Label": "=unique(a.name or o.Label + ' copy', c)"}},
+        {"do": "=carry_material(o, [c])"},
         {"push": {"out": "={'from': o.Label, 'copy': c.Label, 'simple': True}"}}
        ],
        "else": [
         {"let": {"c": "=doc().copyObject(o, bool(a.dependencies))"}},
         {"set": {"c.Label": "=unique(a.name or o.Label + ' copy', c)"}},
+        {"do": "=carry_material(o, [c])"},
         {"push": {"out": "={'from': o.Label, 'copy': c.Label}"}}
        ]
       }
@@ -21081,7 +21086,7 @@
   },
   "doc_switch": {
    "group": "unattended",
-   "description": "Select the open document that the agent works in. document: internal name, label or .FCStd path. The session switches to it and stays there, whatever document the person brings to the front. front: true also brings its 3D view to the front. You must do this before gui_input, cmd_run and menu_run, because they act on the document in front. With no document: the session's document and open [{ name, label, file, modified }]. Answer: document, label, front, bodies. Changes no document. The session's undo steps start again in the new document.",
+   "description": "Select the open document that the agent works in. document: internal name, label or .FCStd path. The session switches to it and stays there, whatever document the person brings to the front. front: true also brings its 3D view to the front. You must do this before gui_input, cmd_run and menu_run, because they act on the document in front. With no document: the session's document and open [{ name, label, file, modified }]. Answer: document, label, front, bodies. Changes no document. The session's undo steps start again in the new document. Sometimes the session is on this document, but another document is in front (after a restart). Then the tool binds the session again and brings this document to the front (rebound: true). session_state says when the two differ (mismatch).",
    "inputSchema": {"type": "object", "properties": {"document": {"type": "string"}, "front": {"type": "boolean"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/unattended.py)",
@@ -21093,6 +21098,8 @@
     {"answer": {"fields": {"document": "=current().Name if current() else None", "label": "=current().Label if current() else None", "open": "=[open_row(d) for d in docs()]"}}, "when": "=not ref"},
     {"let": {"nd": "=doc_by(ref)"}},
     {"refuse": {"fmt": "{ref}: not open — open, as label (name): {doc_names(docs()) if docs() else 'no documents are open'}. doc_open {{ path }} opens a file."}, "code": "not_found", "when": "=nd is None"},
+    {"let": {"fd": "=front_doc()"}},
+    {"when": "=current() is not None and nd.Name == current().Name and (nd is not current() or (fd is not None and fd is not nd))", "then": [{"let": {"was": "=rebind(nd)"}}, {"answer": {"fields": {"document": "=nd.Name", "label": "=nd.Label", "front": "=gui_up()", "rebound": true, "bodies": "=[o.Label for o in bodies()]", "note": "=('The agent works in ' + nd.Label + ' again, and it is the active document' + (' in front of the window' if gui_up() else '') + (' (' + was + ' was in front).' if was else '.'))"}}}]},
     {"when": "=current() is not None and nd.Name == current().Name", "then": [{"let": {"out": "={'document': nd.Name, 'label': nd.Label, 'note': 'Already on it.'}"}}, {"put": {"front": "=bring_front(nd)"}, "when": "=a.get('front') and gui_up()"}, {"answer": {"fields": {"...": "=out"}}}]},
     {"do": "=moved_to(nd)"},
     {"let": {"front": "=bool(a.get('front') and gui_up() and bring_front(nd))"}}

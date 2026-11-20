@@ -905,7 +905,7 @@ def tools(session):
         return None
 
     # What the tools' entries (agentlink/data/tools.json) call by name.
-    helpers = {"doc": doc, "finish": finish, "report": lambda o, tool, extra=None, check=True: report(s, o, tool, extra, check),
+    helpers = {"carry_material": lambda src, copies: picks.carry_material(s, src, copies), "doc": doc, "finish": finish, "report": lambda o, tool, extra=None, check=True: report(s, o, tool, extra, check),
                "unique": lambda label, *own: s.unique(label, *own), "solid_body": lambda ref: picks.solid_body(s, ref),
                "bake": lambda base, shape, name=None: picks.bake(s, base, shape, name), "baked": baked, "clean": geo.clean,
                "find": lambda ref, *what: picks.find(doc(), ref, *what), "positive": positive, "num": picks.num, "vec3": picks.vec3,

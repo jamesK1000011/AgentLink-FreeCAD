@@ -530,9 +530,21 @@ class Session:
             **self._tools_state(),
             **self._extensions_state(),
             **self._unattended_state(),
+            **self._front_state(),
             **({"note": "The hidden FreeCAD answered: the FreeCAD window is closed, or its link is off or still starting, so this is not the document on screen."} if getattr(self, "where", "hidden") == "hidden" and os.environ.get("AGENTLINK_SUPERVISED") else {}),
             **({"launcher": _launcher()} if a.get("launcher") else {}),
         }
+
+    def _front_state(self):
+        """agentDocument, frontDocument and mismatch while the document in
+        front is not the session's (after a restart, say): tools that act on
+        the front document would act on that one (docstates.mismatch)."""
+        try:
+            from . import docstates
+
+            return docstates.mismatch(self.doc)
+        except Exception:  # noqa: BLE001
+            return {}
 
     def _next_state(self):
         """next: what the window is in the middle of (next_hint), in the
@@ -1284,7 +1296,9 @@ def make_tools(session):
                               "why. Fix or update the add-on, then use agentlink_update or app_restart. toolsChanged: the tool list is not the one last listed (groups enabled or "
                               "hidden, an add-on installed, updated or removed). The first time: added, removed, updated and callable (new but unlisted) by name. After that, the "
                               "counts, until the list is read again. launcher: true adds the Claude extension's launcher as seen here. That is the copy fetched from GitHub, if it "
-                              "can load, and its log's last lines. Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
+                              "can load, and its log's last lines. agentDocument, frontDocument and mismatch: the document in front is not the agent's document "
+                              "(after a restart, for example). Then the tools that act on the front document act on the other one. doc_switch to the agent's "
+                              "document binds both again. Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
         Tool("app_force_restart", "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang). Agent Link runs this outside FreeCAD. The "
                                   "documents come back from their newest saved copies, as after a crash. Use it for a stuck window; app_restart quits a working window cleanly.", obj({}), _force_restart_here),
         Tool("app_open", "Open the FreeCAD window when it is closed. Agent Link starts it in the background: it does not come to the front and takes no focus. "

@@ -184,7 +184,7 @@ def tools(session):
                "find": lambda ref, what="object": picks.find(doc(), ref, what), "shaped": lambda ref, what="body": picks.shaped(doc(), ref, what),
                "solid_body": lambda ref: picks.solid_body(s, ref), "resolve": lambda ref: picks.resolve(s, ref), "split_ref": picks.split_ref,
                "element": picks.element, "bake": lambda base, shape, name=None: picks.bake(s, base, shape, name), "num": picks.num, "vec3": picks.vec3,
-               "direction": picks.direction, "placement_json": picks.placement_json, "vec": lambda v: geo.vec(v), "soundness": lambda sh: geo.soundness(sh),
+               "direction": picks.direction, "placement_json": picks.placement_json, "vec": lambda v: geo.vec(v), "soundness": lambda sh: geo.soundness(sh), "refine_harm": lambda b, r: geo.refine_harm(b, r),
                "local": lambda p: paths.local(s, p),
                # FreeCAD's own
                "V": V, "placement": lambda *x: FreeCAD.Placement(*x), "rotation": lambda *x: FreeCAD.Rotation(*x), "as_wire": lambda edges: Part.Wire(edges),

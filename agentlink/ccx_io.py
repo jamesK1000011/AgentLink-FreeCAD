@@ -457,3 +457,156 @@ def find_binary(name, pref_group, pref_key, env):
     except Exception:  # noqa: BLE001 — no FreeCAD here, or no such preference
         pass
     return shutil.which(name)
+
+
+# ---- the solvers' own error lines, and where they are ----------------------------------------
+# Gmsh ends a failed run with a summary block ("Mesh generation error
+# summary", "2 errors", "Check the full log for details") that says nothing
+# of what or where. The words that do are its "Error" lines before that
+# block: the entity they name (surface 12, curve 7, volume 1), a point
+# ("at point (x, y, z)", "(x,y,z)"), facets that intersect. CalculiX writes
+# "*ERROR in <routine>: <what>" and often the next line or two say which
+# element or node. These read the lines out, with the numbers, and keep
+# the whole log in a file so the answer can name it.
+
+import re as _re
+
+_GMSH_SUMMARY = _re.compile(r"^(-+|mesh generation error summary|\d+\s+(warning|error)s?|check the full log( for details)?\.?|there (was|were) \d+ (warning|error)s?.*)$", _re.I)
+_GMSH_ENTITY = _re.compile(r"\b(surface|curve|volume|point|face|edge|line)s?\s+(\d+(?:\s*(?:,|and)\s*\d+)*)", _re.I)
+_POINT = _re.compile(r"\(\s*(-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)\s*,\s*(-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)\s*,\s*(-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)\s*\)", _re.I)
+_POINT_WORDS = _re.compile(r"\bpoint\s+(-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)\s+(-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)\s+(-?\d+(?:\.\d+)?(?:e[-+]?\d+)?)", _re.I)
+_KIND = {"surface": "surface", "face": "surface", "curve": "curve", "edge": "curve", "line": "curve", "volume": "volume", "point": "point"}
+_SHAPE_WORD = {"surface": "Face", "curve": "Edge", "volume": "Solid", "point": "Vertex"}
+
+
+def _tag_after(line):
+    """The text of a log line after its "Error   :" or "Warning :" head."""
+    return _re.sub(r"^\s*(error|warning|info)\s*:\s*", "", line, flags=_re.I).strip()
+
+
+def gmsh_report(text, limit=8):
+    """Gmsh's own error and warning lines (its summary block left out), and
+    where they are: entities [{kind, tag, shape}] (shape: the FreeCAD
+    sub-shape name of the same number, e.g. surface 12 is Face12 — Gmsh
+    keeps the order of a merged BREP's faces) and points [[x, y, z]].
+    Plain text in, plain dict out."""
+    errors, warnings, entities, points = [], [], [], []
+    seen = set()
+    for raw in str(text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        low = line.lower()
+        is_err = low.startswith("error") or "plc error" in low
+        is_warn = low.startswith("warning")
+        if not (is_err or is_warn):
+            continue
+        body = _tag_after(line).rstrip(".").strip()
+        if not body or _GMSH_SUMMARY.match(body):
+            continue
+        if body in seen:
+            continue
+        seen.add(body)
+        (errors if is_err else warnings).append(body)
+        for m in _GMSH_ENTITY.finditer(body):
+            kind = _KIND[m.group(1).lower()]
+            for t in _re.findall(r"\d+", m.group(2)):
+                row = {"kind": kind, "tag": int(t), "shape": f"{_SHAPE_WORD[kind]}{int(t)}"}
+                if row not in entities:
+                    entities.append(row)
+        for m in list(_POINT.finditer(body)) + list(_POINT_WORDS.finditer(body)):
+            p = [round(float(m.group(i)), 3) for i in (1, 2, 3)]
+            if p not in points:
+                points.append(p)
+    # A point named as an entity ("point 3") is a vertex tag; a point with
+    # three numbers is a place: the place is kept, not a tag of 3 numbers.
+    entities = [e for e in entities if not (e["kind"] == "point" and points and any(float(e["tag"]) in p for p in points))]
+    return {"errors": errors[:limit], "warnings": warnings[:max(2, limit // 2)], "entities": entities[:12], "points": points[:6],
+            "more": max(0, len(errors) - limit)}
+
+
+def ccx_report(text, limit=6):
+    """CalculiX's own *ERROR lines, each with the line after it when that
+    one says more (CalculiX often writes the element or node there), and
+    the elements and nodes they name."""
+    lines = [ln.rstrip() for ln in str(text or "").splitlines()]
+    errors, elements, nodes = [], [], []
+    i = 0
+    while i < len(lines):
+        ln = lines[i].strip()
+        if "*ERROR" in ln.upper() or ln.upper().startswith("ERROR"):
+            said = ln
+            j = i + 1
+            while j < len(lines) and j <= i + 2:
+                nxt = lines[j].strip()
+                if not nxt or nxt.startswith("*") or "ERROR" in nxt.upper():
+                    break
+                said += " " + nxt
+                j += 1
+            if said not in errors:
+                errors.append(said)
+            i = j
+            continue
+        i += 1
+    for e in errors:
+        for m in _re.finditer(r"\belements?\s+(\d+)", e, _re.I):
+            if int(m.group(1)) not in elements:
+                elements.append(int(m.group(1)))
+        for m in _re.finditer(r"\bnodes?\s+(\d+)", e, _re.I):
+            if int(m.group(1)) not in nodes:
+                nodes.append(int(m.group(1)))
+    return {"errors": errors[:limit], "elements": elements[:12], "nodes": nodes[:12], "more": max(0, len(errors) - limit)}
+
+
+def keep_log(folder, name, text):
+    """The whole log written as <folder>/<name>; its path, or None when it
+    could not be written."""
+    import os
+
+    try:
+        os.makedirs(folder, exist_ok=True)
+        p = os.path.join(folder, name)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(str(text or ""))
+        return p
+    except OSError:
+        return None
+
+
+def gmsh_words(rep, log=None, fallback=""):
+    """One sentence for a refusal from gmsh_report: Gmsh's own lines, then
+    where (the entities and points it named), then the log's path."""
+    said = " | ".join(rep["errors"] or rep["warnings"]) or fallback or "no error line (see the log)"
+    if rep.get("more"):
+        said += f" | and {rep['more']} more"
+    where = []
+    if rep["entities"]:
+        where.append(", ".join(f"Gmsh {e['kind']} {e['tag']} ({e['shape']})" for e in rep["entities"]))
+    if rep["points"]:
+        where.append("at " + ", ".join("(" + ", ".join(f"{v:g}" for v in p) + ")" for p in rep["points"]) + " mm")
+    out = "Gmsh said: " + said
+    if where:
+        out += ". Where: " + "; ".join(where)
+    if log:
+        out += f". Full Gmsh log: {log}"
+    return out
+
+
+def ccx_words(rep, log=None, at=None, fallback=""):
+    """One sentence for a refusal from ccx_report: CalculiX's own lines,
+    the elements and nodes they name (at: {element: [x, y, z]} where
+    known), then the log's path."""
+    said = " | ".join(rep["errors"]) or fallback or "no *ERROR line (see the log)"
+    if rep.get("more"):
+        said += f" | and {rep['more']} more"
+    where = []
+    if rep["elements"]:
+        where.append("element " + ", ".join(str(e) + (f" at ({', '.join(f'{v:g}' for v in at[e])}) mm" if at and e in at else "") for e in rep["elements"]))
+    if rep["nodes"]:
+        where.append("node " + ", ".join(str(n) for n in rep["nodes"]))
+    out = "CalculiX said: " + said
+    if where:
+        out += ". Where: " + "; ".join(where)
+    if log:
+        out += f". Full CalculiX log: {log}"
+    return out

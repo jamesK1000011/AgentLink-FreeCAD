@@ -348,6 +348,7 @@ def tools(session):
     # Every tool of this file is an entry in agentlink/data/tools.json (those of group draft that name no
     # family); they run on these.
     helpers = {
+        "carry_material": lambda src, copies: picks.carry_material(s, src, copies),
         # the family's finishing code
         "doc": doc, "active": active, "named": named, "finish": finish, "done": done, "objs_of": objs_of, "find": find, "resolve": resolve,
         "unique": s.unique, "snapshot": s.snapshot, "step": lambda: len(s.steps), "gui": gui,
