@@ -148,7 +148,7 @@ def rng(v, name):
 
 def query(session, a, default_kind="face"):
     """The elements of a body that pass every filter asked: [(index, element, description)], and the body."""
-    o = picks.solid_body(session, a.get("body")) if a.get("body") or not a.get("of") else None
+    o = query_body(session, a.get("body")) if a.get("body") or not a.get("of") else None
     of = a.get("of")
     el = None
     if of:
@@ -156,8 +156,29 @@ def query(session, a, default_kind="face"):
         if not sub or not sub.startswith("Face"):
             raise ToolError("invalid_input", "of: a face (\"Face6\" or \"Box.Face6\") whose edges or vertices to take.")
         o = picks.shaped(session.doc, label)
+    wire = not o.Shape.Solids and not o.Shape.Faces
+    if wire and not a.get("kind"):
+        default_kind = "edge"
     kind, out = filter_shape(o.Shape, a, default_kind, of_el=el)
+    if wire and kind == "edge":
+        for _, e, d in out:
+            vs = e.Vertexes
+            if vs:
+                d["from"], d["to"] = geo.vec(vs[0].Point), geo.vec(vs[-1].Point)
     return o, kind, out
+
+
+def query_body(session, ref):
+    """What shape_query reads: a solid body, or by name an object of edges
+    only (a binder of a skeleton, a sketch, a Draft wire): its edges and
+    vertices are listed (test drive of 20 Nov: a skeleton was refused)."""
+    if ref is None:
+        return session.body(None)
+    o = picks.shaped(session.doc, ref)
+    sh = o.Shape
+    if not sh.Solids and not sh.Faces and not sh.Edges:
+        raise ToolError("invalid_state", f"{o.Label} has no solid, face or edge to list.")
+    return o
 
 
 def filter_shape(shape, a, default_kind="face", of_el=None):

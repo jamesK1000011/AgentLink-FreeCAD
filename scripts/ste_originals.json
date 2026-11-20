@@ -2253,8 +2253,9 @@
    "kind": "data"
   },
   "object_list": {
-   "description": "Every object in the document: name (internal, fixed for life, unique), label (what the person sees and may rename), type, visible, parents (what uses it) and its shape (volume mm³, area, faces, solids, size for a solid; faces and edges else) or mesh; error: true marks a failed one (recompute gives the reason). type: part of the type to keep (\"Part::\", \"Sketch\"). Tools take either name or label; the name wins when both match. Changes nothing.",
+   "description": "Every object in the document: name (internal, fixed for life, unique), label (what the person sees and may rename), type, visible, parents (what uses it) and its shape (volume mm³, area, faces, solids, size for a solid; faces and edges else) or mesh; error: true marks a failed one (recompute gives the reason). type: part of the type to keep (\"Part::\", \"Sketch\"); a full type (\"PartDesign::Body\") also keeps the types derived from it. label: part of the label to keep, any case. Nothing kept: typesHere lists the types there are. Tools take either name or label; the name wins when both match. Changes nothing.",
    "inputs": [
+    "label",
     "type"
    ],
    "kind": "data"
@@ -2923,12 +2924,15 @@
    "kind": "data"
   },
   "pd_pipe": {
-   "description": "Sweep a closed profile sketch along a path sketch (all its edges, joined end to end); subtractive: true cuts it. The profile should sit across the path's start. Orientation, corners: feature_edit { Mode: \"Frenet\", Transition: \"Round corner\" }. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "description": "Sweep a closed profile along a path: a sketch in the body, a pd_binder of a skeleton or a wire; edges [\"Edge3\"] sweeps along those only, joined end to end (all its edges by default; shape_query { body: path, kind: \"edge\" } names them); subtractive: true cuts it. profile: a sketch across the path's start, or { circle: { d: 28.6, wall: 0.9 } } — a sketch made square to the path at its start with two circles, a tube (no wall: a rod); d and wall mm or an expression (\"Geo.tt_od\"). mode Standard | Fixed | Frenet | Auxiliary | Binormal, transition Transformed | Right corner | Round corner. Reply: feature, profile, path, edges, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
    "inputs": [
     "body",
+    "edges",
+    "mode",
     "path",
     "profile",
-    "subtractive"
+    "subtractive",
+    "transition"
    ],
    "kind": "data"
   },
@@ -3343,7 +3347,7 @@
    "kind": "coded"
   },
   "shape_query": {
-   "description": "Find a body's faces, edges or vertices by what they are; the refs it answers (\"Face12\", \"Edge3\", counted from 1) are what other tools take. kind face|edge|vertex; type plane, cylinder, cone, sphere, torus, bspline (faces) or line, circle, ellipse, bspline (edges); normal [x,y,z] (flat or curved faces, outward at the centre) or axis (a line's direction, a circle's or cylinder's axis, either way) within degrees (1); radius, area, length a number or [least, most]; x / y / z the centre's coordinate within tol (0.01); near [x,y,z] or { point, within } (nearest first); inside { min, max } (the centre in that box); of \"Face6\" that face's edges or vertices. sort area|radius|length|distance|x|y|z, -key largest first; limit (20; found counts all, more the rest). Reply items: ref, type, area / length, centroid / mid, normal, radius, axis, center. Trap: numbers change after any modelling step — query again rather than reuse old ones. Changes nothing.",
+   "description": "Find a body's faces, edges or vertices by what they are; the refs it answers (\"Face12\", \"Edge3\", counted from 1) are what other tools take. kind face|edge|vertex; type plane, cylinder, cone, sphere, torus, bspline (faces) or line, circle, ellipse, bspline (edges); normal [x,y,z] (flat or curved faces, outward at the centre) or axis (a line's direction, a circle's or cylinder's axis, either way) within degrees (1); radius, area, length a number or [least, most]; x / y / z the centre's coordinate within tol (0.01); near [x,y,z] or { point, within } (nearest first); inside { min, max } (the centre in that box); of \"Face6\" that face's edges or vertices. sort area|radius|length|distance|x|y|z, -key largest first; limit (20; found counts all, more the rest). Reply items: ref, type, area / length, centroid / mid, normal, radius, axis, center. body may also be an object of edges and no solid (a pd_binder of a skeleton, a sketch, a wire): kind is edge by default, each edge also has from and to [x,y,z], dir a line's direction. Trap: numbers change after any modelling step — query again rather than reuse old ones. Changes nothing.",
    "inputs": [
     "area",
     "axis",
@@ -3480,7 +3484,7 @@
    "kind": "data"
   },
   "sheet_table": {
-   "description": "Design tables (configurations), FreeCAD's own kind: action make { params [names; alias rules as sheet_set], configs [{ name, values [..] | { param: value } }], units { param: \"mm\" | \"deg\" | \"\" } (numbers default mm), sheet (else a new one), at (the header cell; the active row is under it), owner (the object carrying the switch; default the one Body, else a group holding the sheet), property (default Configuration), active } — then bind properties to <Sheet>.<param> with param_bind; use { config } switches and answers the bodies; add { config, values } adds a row; list. guide_read sheet.",
+   "description": "Design tables (configurations), FreeCAD's own kind: action make { params [names; alias rules as sheet_set], configs [{ name, values [..] | { param: value } }], units { param: \"mm\" | \"deg\" | \"\" } (numbers default mm), sheet (made with that label when no sheet has it; else a new one), at (the header cell; the active row is under it), owner (the object carrying the switch; default the one Body, else a group holding the sheet), property (default Configuration), active } — then bind properties to <Sheet>.<param> with param_bind; use { config } switches and answers the bodies; add { config, values } adds a row; list. guide_read sheet.",
    "inputs": [
     "action",
     "active",

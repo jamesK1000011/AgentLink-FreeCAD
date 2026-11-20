@@ -129,6 +129,7 @@ class CoreData(unittest.TestCase):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
+            c["new"] = _meant.result_as_meant(c["tool"], c["new"])  # answer fields added since: tests/_meant.py RESULTS
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], {**c["old"], "trace": _meant.trace_as_meant(c["old"].get("trace") or [])}, f"{c['tool']} {c['case']}")
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")

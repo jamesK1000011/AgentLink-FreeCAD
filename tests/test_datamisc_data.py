@@ -73,8 +73,8 @@ class MiscData(unittest.TestCase):
             b = self.before[name]
             self.assertEqual(t.name, b["name"], name)
             self.assertEqual(t.description.encode("utf-8"), _meant.description(name, b["description"]).encode("utf-8"), name)  # meant changes and the STE rewrite: tests/_meant.py
-            self.assertEqual(t.schema, b["inputSchema"], name)
-            self.assertEqual(json.dumps(t.schema), json.dumps(b["inputSchema"]), name)  # the order of every key too
+            self.assertEqual(t.schema, _meant.schema(name, b["inputSchema"]), name)  # meant changes: tests/_meant.py SCHEMAS
+            self.assertEqual(json.dumps(t.schema), json.dumps(_meant.schema(name, b["inputSchema"])), name)  # the order of every key too
             self.assertIs(t.changes, b["changes"], name)
             self.assertEqual(t.reads, b["reads"], name)
             self.assertEqual(t.group, b["group"], name)
@@ -117,6 +117,7 @@ class MiscData(unittest.TestCase):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
+            c["new"] = _meant.result_as_meant(c["tool"], c["new"])  # answer fields added since: tests/_meant.py RESULTS
             # Meant difference (round 6): a robot with no model file says so
             # (drawn false, drawnWhy): FreeCAD draws nothing of its arm.
             res = c["new"]["result"]
