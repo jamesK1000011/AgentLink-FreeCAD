@@ -13,7 +13,7 @@ import re
 from .. import runners
 from .. import store
 from .. import materials as _fil
-from ..materials import DENSITY
+from ..materials import DENSITY, STOCK
 
 
 def _owner(doc, bodies, material):
@@ -136,6 +136,49 @@ def defs(doc):
     return store.read(doc, "materialDefs", {})
 
 
+# measure_mass's short ids for stock (agentlink/data/stock.json) as
+# material_set takes them too (test drive of 20 Nov, finding 9: "steel" worked in
+# one tool and not the other): the first of these FreeCAD library cards that
+# this FreeCAD has, else Agent Link's own stock figures (density only).
+STOCK_LIBRARY = {
+    "steel": ("Steel-Generic", "Steel-1C22", "Steel-S235JR", "CalculiX-Steel"),
+    "stainless": ("Steel-X5CrNi18-10", "Steel-X2CrNiMo17-12-2", "Stainless-Steel-Generic"),
+    "aluminium": ("Aluminum-Generic", "Aluminum-6061-T6"),
+    "aluminum": ("Aluminum-Generic", "Aluminum-6061-T6"),
+    "brass": ("Brass-Generic", "CuZn39Pb3"),
+    "copper": ("Copper-Generic",),
+    "titanium": ("Titanium-Generic", "Ti-6Al-4V"),
+    "cast-iron": ("CastIron-Generic", "Cast-Iron-GG25"),
+    "nylon": ("PA6-Generic", "Nylon-Generic"),
+    "pc": ("PC-Generic", "Polycarbonate-Generic"),
+    "pom": ("POM-Generic",),
+    "acrylic": ("PMMA-Generic", "Acrylic-Glass-Generic"),
+    "hdpe": ("HDPE-Generic", "PE-HD-Generic"),
+}
+STOCK_SOURCE = "Agent Link's stock table (typical density only)"
+
+
+def short_id(mid):
+    """The stock key a short id names (steel, brass …), or None: a
+    filament key, a library card or a custom material is not one."""
+    k = str(mid or "").strip().lower()
+    return k if k in STOCK and k not in DENSITY else None
+
+
+def stock_card(doc, key):
+    """A stock key's card: the first library card of STOCK_LIBRARY there
+    is, by name, else the stock figures as a card of their own."""
+    lib = _library()
+    for name in STOCK_LIBRARY.get(key, ()):
+        norm = name.lower().replace(" ", "")
+        hit = next((c for c in lib.values() if str(c.get("name", "")).lower().replace(" ", "") == norm), None)
+        if hit is not None:
+            return hit
+    st = STOCK[key]
+    return {"id": key, "name": st["name"], "category": "Stock", "density": st["density"], "E": None, "nu": None, "yield": None, "uts": None, "k": None,
+            "softens": None, "source": STOCK_SOURCE}
+
+
 def card(doc, mid):
     """A material's figures by id, or None."""
     if mid is None:
@@ -143,6 +186,8 @@ def card(doc, mid):
     key = str(mid)
     if key.lower() in DENSITY:
         return filament_card(key.lower())
+    if short_id(key):
+        return stock_card(doc, short_id(key))
     if key.startswith("custom:"):
         d = defs(doc).get(key)
         return dict(d) if d else None
@@ -238,7 +283,7 @@ def tools(session):
                "read_materials": lambda: store.materials(s.doc), "write": lambda name, value: store.write(s.doc, name, value),
                # the cards
                "card": lambda mid: card(s.doc, mid), "defs": lambda: defs(s.doc), "brief": _brief, "all_cards": lambda: all_cards(s.doc), "haystack": haystack,
-               "search_words": search_words, "custom_id": custom_id, "has_library": lambda: _manager() is not None, "DENSITY": DENSITY,
+               "search_words": search_words, "custom_id": custom_id, "has_library": lambda: _manager() is not None, "DENSITY": DENSITY, "short_id": short_id,
                # FreeCAD's ShapeMaterial, the add-on that owns materials, the mass
                "library_id": library_id, "shape_material": shape_material, "owner": lambda bodies, material: _owner(s.doc, bodies, material),
                "masses": lambda bodies, density: masses(s, bodies, density)}

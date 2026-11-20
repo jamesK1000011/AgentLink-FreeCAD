@@ -465,6 +465,43 @@ def _snap_empty(s, view, w=None, h=None, fitted=False):
         return None
 
 
+def _same_box(p, q, tol=0.01):
+    """Whether two { min, max } boxes are the same within tol of the larger
+    one's diagonal (a mesh an add-on already draws as its own layer)."""
+    if not p or not q:
+        return False
+    a0, a1, b0, b1 = (np.asarray(x, dtype=float) for x in (p["min"], p["max"], q["min"], q["max"]))
+    d = max(float(np.linalg.norm(a1 - a0)), float(np.linalg.norm(b1 - b0)), 1e-9)
+    return float(np.abs(a0 - b0).max()) <= tol * d and float(np.abs(a1 - b1).max()) <= tol * d
+
+
+def _meshes(s, a, shapeless):
+    """The mesh objects to draw. Named: the named ones that have no solid
+    shape and are meshes (taken out of shapeless). Else every shown mesh
+    that nothing else is built from (a container holding it aside)."""
+    if s.doc is None:
+        return []
+    if a.get("objects") is not None:
+        out = []
+        for lab in list(shapeless):
+            o = next((x for x in s.doc.Objects if x.Label == lab or x.Name == lab), None)
+            if o is not None and render.is_mesh(o):
+                out.append(o)
+                shapeless.remove(lab)
+        return out
+    out = []
+    for o in s.doc.Objects:
+        try:
+            if not render.is_mesh(o) or not getattr(o, "Visibility", True) or s.helper(o):
+                continue
+            if any(getattr(p, "TypeId", "") not in s.CONTAINERS for p in (o.InList or [])):
+                continue
+        except Exception:  # noqa: BLE001
+            continue
+        out.append(o)
+    return out
+
+
 # ---- the maps Agent Link has ---------------------------------------------------------
 
 def _stress(s, a):
@@ -489,7 +526,9 @@ def _stress(s, a):
     surf = render.surface_nodes(f.get("elements") or ())
     if len(surf) >= 3 and max(surf) < len(P):
         SP, SV = P[surf], vm[surf]
-    vals = render.smooth_values(V, SP, SV)
+    # Blended within the time the render leaves it (render.map_budget): a
+    # fine FEM mesh's surface nodes against detail 30000 took 330 s before.
+    V, F, vals, fit = render.blend_fit(V, F, SP, SV, budget=render.map_budget(s))
     warp = None
     if a.get("deform") not in (None, False, 0):
         # The deformed shape (FEM's warp filter, headless): each spot moved by
@@ -519,6 +558,8 @@ def _stress(s, a):
     if stale:
         out["note"] += " The body changed since the solve: stale — fea_solve again."
         out["stale"] = True
+    if fit:
+        out["blendThinned"] = dict(fit, nodes=int(len(SP)))
     return out
 
 
@@ -534,8 +575,11 @@ def _heat(s, a):
     L = render.body_layer(o, 0, tol=float(a.get("tolerance", 0.05)))
     cap = int(a.get("detail", 30000))
     V, F = render.subdivide(L["V"], L["F"], render.even_length(L["V"], L["F"], cap), cap=cap)
-    out = {"layers": [{"name": o.Label, "V": V, "F": F, "values": render.smooth_values(V, P, T), "creases": True}], "unit": "C", "cmap": "jet", "worst": "max", "label": "TEMPERATURE",
+    V, F, vals, fit = render.blend_fit(V, F, P, T, budget=render.map_budget(s))
+    out = {"layers": [{"name": o.Label, "V": V, "F": F, "values": vals, "creases": True}], "unit": "C", "cmap": "jet", "worst": "max", "label": "TEMPERATURE",
            "note": "Steady temperature from the last fea_heat, blended smoothly from the nearest mesh nodes."}
+    if fit:
+        out["blendThinned"] = dict(fit, nodes=int(len(P)))
     if geo.stats(o.Shape) != r["stats"]:
         out["note"] += " The body changed since: stale — fea_heat again."
         out["stale"] = True
@@ -576,6 +620,7 @@ def tools(session):
         layers, shown = [], []
         shapeless = []
         capped_detail = None
+        map_took, blend_cut, meshes, n_bodies = 0.0, None, [], 0
         mapname = a.get("map")
         mapinfo = None
         if mapname:
@@ -592,6 +637,13 @@ def tools(session):
                 capped_detail = (int(a["detail"]), int(cap0))
             from .. import emptywhy
 
+            # The map's own reading (a blend from a solve's nodes, rays for a
+            # wall) has until RENDER_TARGET from the call's start
+            # (render.map_budget), so the drawing still has its time before
+            # the RENDER_STOP cut (test drive of 20 Nov, finding 4).
+            bn0 = getattr(s, "batch_now", None)
+            s.render_deadline = ((bn0.get("t0") if isinstance(bn0, dict) else None) or t0) + RENDER_TARGET
+            tm = _time.time()
             try:
                 m = render.MAPS[mapname][0](s, ma)
             except ToolError as e:
@@ -600,6 +652,10 @@ def tools(session):
                 # No data to colour by (no solve yet, no scan loaded): said,
                 # with no picture.
                 return {"empty": emptywhy.no_map(mapname, e.message), "map": mapname}
+            finally:
+                s.render_deadline = None
+            map_took = _time.time() - tm
+            blend_cut = m.get("blendThinned")
             vals = np.concatenate([np.asarray(l["values"], dtype=float) for l in m["layers"]]) if m["layers"] else np.zeros(0)
             fin = vals[np.isfinite(vals)]
             if not len(fin):
@@ -641,6 +697,8 @@ def tools(session):
                 l = render.body_layer(o, i, tol=float(a.get("tolerance", 0.05)))
                 layers.append(l)
                 shown.append({"layer": o.Label, "triangles": int(len(l["F"]))})
+            meshes = _meshes(s, a, shapeless)
+        n_bodies = len(layers)
         want = a.get("layers")
         for name, (fn, _) in render.LAYERS.items():
             if want is not None and name not in want:
@@ -652,6 +710,25 @@ def tools(session):
                     continue
                 layers.append(l)
                 shown.append({"layer": l["name"], "triangles": int(len(l["F"]))})
+        # Meshes (a Textured result, an imported STL) after the add-ons'
+        # layers: one an add-on already draws as its own layer (a scan) is
+        # not drawn twice (test drive of 20 Nov, finding 6: a mesh was "no solid
+        # shape" and not drawn at all).
+        drawn_counts = {(int(len(l["V"])), int(len(l["F"]))) for l in layers}
+        addon_boxes = [b for b in (_box([l]) for l in layers[n_bodies:]) if b] if meshes else []
+        for o in meshes:
+            try:
+                l = render.mesh_layer(o, len(layers))
+            except Exception:  # noqa: BLE001 - an empty or broken mesh: said, not drawn
+                shapeless.append(o.Label)
+                continue
+            if not len(l["F"]):
+                shapeless.append(o.Label)
+                continue
+            if a.get("objects") is None and ((int(len(l["V"])), int(len(l["F"]))) in drawn_counts or any(_same_box(_box([l]), b) for b in addon_boxes)):
+                continue
+            layers.append(l)
+            shown.append({"layer": o.Label, "triangles": int(len(l["F"])), "mesh": True})
         if want is not None:
             unknown = [x for x in want if x not in render.LAYERS]
             if unknown:
@@ -688,7 +765,14 @@ def tools(session):
             expected = keep.estimate_range(q, RENDER_KEY, work) if keep else None
         except Exception:
             pass
-        s.heavy_work = (RENDER_KEY, work)
+        if expected and map_took:
+            # The map's own reading is already spent: the time said is it
+            # plus the drawing's (it was the drawing's alone: "expected 3 s"
+            # for a 330 s stress map).
+            expected = tuple(x + map_took for x in expected)
+        # Logged in the drawing's units, the map's seconds in them too, so
+        # the time per unit stays the drawing's.
+        s.heavy_work = (RENDER_KEY, work + int(map_took / max(rate, 1e-12)))
         # The watchdog times the call from its start (a batch's start inside
         # a batch: the batch is one call to it). A render that may run long
         # marks itself heavy so the watchdog waits for it, and stops drawing
@@ -718,11 +802,18 @@ def tools(session):
             f.write(data)
         out = {"path": p, "views": views, "mmAcross": across, "layers": shown, "width": w, "height": h, "bytes": len(data),
                "time": {"took": round(_time.time() - t0, 1), "triangles": int(sum(len(l["F"]) for l in layers)),
+                        **({"map": round(map_took, 1)} if mapname else {}),
                         **({"expected": _said(expected)} if expected else {})}}
         if thinned:
             out["thinned"] = {"layers": thinned, "why": f"drawn on fewer triangles to finish in about {RENDER_TARGET:g} s here (" + ("from past renders" if hist else "a first render here: a cautious guess") + f", {int(work0):,} units of work as asked); the map's numbers are read on every point. A zoom or fewer views draws finer."}
         if capped_detail:
             out["detailCapped"] = {"asked": capped_detail[0], "used": capped_detail[1], "why": "the map's sample capped to what this render draws in time"}
+        if blend_cut:
+            asked = capped_detail[0] if capped_detail else a.get("detail", "default")
+            out["detailCapped"] = {"asked": asked, "used": blend_cut["to"],
+                                   "why": f"the map's blend from {blend_cut.get('nodes', 0):,} nodes would take about {blend_cut['estimate']:g} s, over the {blend_cut['budget']:g} s it has "
+                                          f"in this render: the map was thinned from {blend_cut['from']:,} to {blend_cut['to']:,} triangles before blending, so its min, max "
+                                          "and worst are read on the thinned map. A smaller detail or a zoom draws finer in time."}
         if cut:
             out["cut"] = {"views": cut, "why": f"stopped drawing at {RENDER_STOP:g} s into the call so the watchdog does not take FreeCAD for hung; fewer views, a zoom, or a smaller picture draws them"}
         if summary:
@@ -840,13 +931,14 @@ def tools(session):
         Tool(
             "view_render",
             "Draw the parts as a picture and look at it; works headless. It draws the shown parts, without the containers that hold them (an assembly, an "
-            "App::Part, a group). Hidden parts are not drawn, and the answer names them (hidden). objects: [names] draws those named. views: one or several (\"all\": "
+            "App::Part, a group). Shown meshes are drawn too, for example an imported STL or a texture result, but not with a map. Hidden parts are not drawn, and the answer names them (hidden). objects: [names] draws those named. views: one or several (\"all\": "
             "iso, top, front, right, each fitted). map: wall (thickness, red thin), stress (the last fea_solve), heat (the last fea_heat), or an add-on's map "
             "(view_maps lists them). A map has a legend and the worst spot's at. range: [lo, hi] fixes the colours. section { axis x|y|z, offset mm, flip }: cuts "
             "it open (cut faces hatched). zoom { at, size mm }: frames a spot, for example a finding's at. layers: which add-on layers (a scan …). The PNG comes "
             "back as an image (inline false: the file only) and is written to path. Limits: the size is calculated before it draws: every layer's triangles times "
             "the views, timed from past renders here. time gives took and expected. After about 40 s, the big layers are drawn thinned (thinned: from and to). A "
-            "map's min, max and worst still use every point. A larger detail is limited (detailCapped). At 90 s into the call (in a batch, from its start), it "
+            "map's min, max and worst still use every point. A larger detail is limited (detailCapped). The map's own reading has until 40 s into the call. A blend that "
+            "would take longer is thinned before it starts, and detailCapped says so. time.map gives its seconds, and expected includes them. At 90 s into the call (in a batch, from its start), it "
             "stops and names the views left (cut). Fewer views, a zoom or a smaller picture draws them. An empty picture is answered in words, with no image. empty "
             "tells why and what to do. Reasons: no shown body (the document is empty, every part is hidden, or nothing has a solid shape). The objects named have "
             "no solid shape (notDrawn names them when others were drawn). The zoom or section puts the parts out of frame, or below 0.2% of the picture (with the "

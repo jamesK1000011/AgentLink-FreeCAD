@@ -48,6 +48,19 @@ DESCRIPTIONS = {
         'st [{ at, distance }], health. An estimate over a minute: the first call answers with the time and runs nothing, the same call again runs it.'),
     'export': ('nce: the chord error, 0.01 mm.',
         'nce: the chord error, 0.01 mm. Meshing B-spline faces can be slow: an estimate over 20 s runs as a job (job_status); in a batch an estimate over a minute answers with the time first, the same call again runs it.'),
+    # Test drive of 20 Nov (findings 1, 2, 3, 9, 11, 12).
+    'object_delete': ('Again, renamed). Reply: deleted, errors, health.',
+        "Again, renamed). Reply: deleted, errors, health. A container that only holds the object is not a user (a Body, an App::Part, a group): an unused sketch or the tip feature of a Body deletes without force, and the Body's tip moves back."),
+    'object_get': ('— use it, a feature has dozens. Changes nothing.',
+        '— use it, a feature has dozens. Changes nothing. Several words go in one filter with | between them ("Length|Width"): a property that has one of them matches.'),
+    'object_set': ('only Placement; Label is set with object_rename.',
+        'only Placement; Label is set with object_rename. For one property, property and value also work: { property: "Length", value: 20 }.'),
+    'asm_joint': (': asm_check and asm_sweep show what still moves.',
+        ": asm_check and asm_sweep show what still moves. near in a query is in document coordinates (where the part is now); nearLocal is a point in the part's own frame, as modelled. offset's direction depends on which part moves; gap: mm between the two joined faces after the solve, positive apart, negative overlapping — the tool finds the offset for it (gap or offset, not both). Reply also: gap (the result across the joint, mm, negative for overlap) and at (the centre of each element when picked, in document coordinates)."),
+    'asm_bom': (' volume }]; a part with no material has no mass.',
+        " volume }]; a part with no material has no mass. A part can be in a print setup: then mass is the printed estimate (walls and infill) of an installed add-on that owns mass, massAs tells how and solidMass is the solid mass; without that add-on, massAs marks the mass as solid, not as printed. slice gives the slicer's own figure."),
+    'material_set': ('bject_rename does not carry it to the new label.',
+        "bject_rename does not carry it to the new label. The short ids of measure_mass also work (steel, stainless, aluminium, brass …): the tool sets a FreeCAD library card for one, or Agent Link's stock figures; mapped tells which."),
 }
 
 
@@ -108,3 +121,62 @@ def trace_as_meant(lines):
                 ln = ln.replace(old, new)
         out.append(ln)
     return out
+
+
+# Meant changes to a converted tool's inputSchema since its snapshot (test
+# drive of 20 Nov): per tool, new descriptions of inputs, inputs put
+# in after a named one (in that order), and the required list.
+_NEAR = ("{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of "
+         "several. near: document coordinates; nearLocal: the part's own frame.")
+SCHEMAS = {
+    "asm_joint": {"why": "findings 2, 3: gap across the joint; near's frame said, nearLocal",
+                  "describe": {"a": _NEAR, "b": _NEAR},
+                  "after": [("offset", "gap", {"type": "number", "description": "mm between the joined faces after the solve: positive apart, negative overlap. Not with offset."})]},
+    "object_set": {"why": "finding 12: { property, value } as well as { values }",
+                   "after": [("values", "property", {"type": "string", "description": "One property's name, with value: the same as values { property: value }."}),
+                             ("property", "value", {})],
+                   "required": ["object"]},
+}
+
+
+def schema(name, old):
+    """The snapshot's inputSchema of a tool with its meant change made."""
+    import copy
+
+    m = SCHEMAS.get(name)
+    if not m:
+        return old
+    new = copy.deepcopy(old)
+    props = new["properties"]
+    for k, text in m.get("describe", {}).items():
+        props[k]["description"] = text
+    for at, key, val in m.get("after", []):
+        out = {}
+        for k, v in props.items():
+            out[k] = v
+            if k == at:
+                out[key] = val
+        props = out
+    new["properties"] = props
+    if "required" in m:
+        new["required"] = list(m["required"])
+    # the keys in the order the entry keeps them
+    return {k: new[k] for k in old}
+
+
+# Answer fields a converted tool now adds to what its handler answered (the
+# data tests take them out of the new answer before they compare): per tool,
+# the field names and why.
+RESULTS = {
+    "asm_joint": (("gap", "gapIs", "gapWarning", "offset", "at"), "findings 2, 3: the gap across the joint and where each element was picked"),
+    "asm_bom": ((), "finding 11: rows of parts in a print setup carry massAs and solidMass (none in the stand-in's cases)"),
+}
+
+
+def result_as_meant(tool, new):
+    """A case's new run with the fields RESULTS names taken out of its answer."""
+    names = RESULTS.get(tool, ((),))[0]
+    res = new.get("result")
+    if not names or not (isinstance(res, list) and res and res[0] == "ok" and isinstance(res[1], dict)):
+        return new
+    return {**new, "result": [res[0], {k: v for k, v in res[1].items() if k not in names}] + res[2:]}

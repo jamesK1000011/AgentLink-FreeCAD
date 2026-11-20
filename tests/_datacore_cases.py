@@ -83,8 +83,13 @@ EXPECT = {
                                    "solid: true (a body of its triangles) first."],
     ("export", "a tolerance of nothing"): ["refused", "invalid_input", "tolerance: the chord error, above 0 mm."],
 }
-# Refusals written in the data that no case here reaches: none.
-UNREACHED = []
+# Refusals written in the data that no case here reaches (the handler at BASE had no such input,
+# so no case can compare them): tests/test_findings_1120.py reaches each.
+UNREACHED = [
+    'object_set: values or property with value, not both: values { Property: value, … }',
+    'object_set: value: the new value of property (property and value go together; valu',
+    'object_set: property: the name of the property that value sets (property and value',
+]
 
 
 def cases(fc, tmp, old, new):

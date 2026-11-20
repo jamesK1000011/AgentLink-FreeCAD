@@ -513,16 +513,50 @@ def bom_object(asm):
         return bom, False
 
 
-def bom_row(o, mats):
+def density_of(doc, m):
+    """g/cm³ of a recorded material: a filament key's, else the card's
+    (a FreeCAD library card, a stock key, a custom material); None."""
+    if not m:
+        return None
+    if m in DENSITY:
+        return DENSITY[m]
+    try:
+        from . import material as _material
+
+        c = _material.card(doc, m)
+        return float(c["density"]) if c and c.get("density") else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+SOLID_NOT_PRINTED = ("solid, not as printed: the part is in a print setup. An installed add-on that owns mass gives the printed estimate "
+                     "(walls and infill); slice gives the slicer's own figure.")
+
+
+def bom_row(o, mats, session=None):
     """A part's row of the bill: its material as recorded (material_set),
     mass in g from its volume where the material's density is known, and
-    volume in cm³."""
+    volume in cm³. Test drive of 20 Nov, finding 11: a part in a print setup was
+    given its solid mass (228 g where the slice said 89 g): there the mass
+    is the printed estimate of the add-on that owns mass (massAs says how,
+    solidMass keeps the solid one), else the solid mass marked as such."""
     m = mats.get(o.Label)
     vol = o.Shape.Volume / 1000.0
-    return {"name": o.Label, "material": m or "", "mass": (round(vol * DENSITY[m], 2) if m in DENSITY else ""), "volume": round(vol, 3)}
+    doc = getattr(session, "doc", None) if session is not None else None
+    rho = DENSITY[m] if m in DENSITY else density_of(doc, m)
+    row = {"name": o.Label, "material": m or "", "mass": (round(vol * rho, 2) if rho else ""), "volume": round(vol, 3)}
+    if session is not None and doc is not None and store.setup_of(doc, o.Label, "print"):
+        from .measure import printed_mass
+
+        got = printed_mass(session, o.Label)
+        if got is not None:
+            row["solidMass"], row["mass"], row["massAs"] = row["mass"], got["mass"], got["as"]
+        elif row["mass"] != "":
+            row["massAs"] = SOLID_NOT_PRINTED
+    return row
 
 
-def fill_native(doc, bom, rows, mats):
+def fill_native(doc, bom, rows, mats, session=None):
     """Material, Mass (g) and Volume (cm3) filled into FreeCAD's BOM by
     name, row by row as it generated them (custom columns are kept by
     FreeCAD across regenerations); a part inside a sub-assembly is found in
@@ -532,7 +566,7 @@ def fill_native(doc, bom, rows, mats):
     def nested(label):
         o = next((x for x in doc.Objects if x.Label == label and hasattr(x, "Shape") and not x.Shape.isNull() and x.Shape.Solids
                   and x.TypeId not in ("Assembly::AssemblyObject", "Assembly::AssemblyLink")), None)
-        return None if o is None else bom_row(o, mats)
+        return None if o is None else bom_row(o, mats, session)
 
     hdr = [bom.getContents(Cc.name(1, c)).lstrip("'") for c in range(1, len(bom.columnsNames) + 1)]
     name_col = hdr.index("Name") + 1 if "Name" in hdr else 2
@@ -594,8 +628,8 @@ def tools(session):
                "moving_group": lambda asm, j: moving_group(doc(), asm, j), "pose_move": lambda j, *rest: pose_move(doc(), j, *rest), "standing": standing,
                "key_frames": key_frames, "play": lambda *x: play(pose, *x), "collapse": lambda asm, parts: collapse(doc(), asm, parts), "bounds": bounds,
                "where_parts_sit": where_parts_sit, "axis_dir": axis_dir, "unit": A.unit, "stacked": stacked, "spread": spread, "exploded_view": _exploded_view,
-               "joints_off": joints_off, "keep_exploded": keep_exploded, "bom_object": bom_object, "bom_row": bom_row,
-               "fill_native": lambda bom, rows, mats: fill_native(doc(), bom, rows, mats), "fill_sheet": fill_sheet,
+               "joints_off": joints_off, "keep_exploded": keep_exploded, "bom_object": bom_object, "bom_row": lambda o, mats: bom_row(o, mats, s),
+               "fill_native": lambda bom, rows, mats: fill_native(doc(), bom, rows, mats, s), "fill_sheet": fill_sheet,
                # tables
                "POSE": POSE}
     made.extend(runners.tools(GROUP, s, helpers, family="assembly_more"))

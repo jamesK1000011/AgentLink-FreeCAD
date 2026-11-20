@@ -37,8 +37,10 @@ from agentlink.protocol import ToolError  # noqa: E402
 # The readers' pin: sha256 of readers.json's entries (each family's readers and changers, and the methods), as
 # scripts/tool_needs.py writes them. A helper or a method that joins or leaves a list changes it: read why
 # (`python3 scripts/tool_needs.py --why name`), then put the new value here.
-PIN = "ae5a2c118867f07c4fa8b69745a75148db39bd3900fa9f62fbb5fbb80b047368"
-COUNTS = {"readers": 893, "changers": 144, "families": 37}
+PIN = "bd612e1fe224b274b63016d0fb2e4e9e0eb130c3f6f27163d19094573a70a77d"
+# Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
+# cards (their cache is set on the first read), so it is no reader by the census any more.
+COUNTS = {"readers": 896, "changers": 146, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -367,7 +369,7 @@ class Census(unittest.TestCase):
             self.assertGreaterEqual(needs.later_refusals(e), 0, name)
 
 
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 772, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 775, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
 
 
 class Agreement(unittest.TestCase):

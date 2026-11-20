@@ -665,41 +665,121 @@ def fit_layers(layers, cap, floor=THIN_FLOOR):
     return out, said
 
 
+# The area of a triangle subdivide leaves, as a share of its longest edge
+# squared: halving the longest edge gives right-angled ones from L²/4 down to
+# about L²/10 by where the halving stops (a box's faces measured 0.10 to 0.20).
+SPLIT_AREA = 0.1
+
+
 def even_length(V, F, cap, floor=None):
     """The longest edge that lets the whole surface be split evenly within
     cap triangles: so no face is left whole when the budget runs out on
     the others."""
     T = np.asarray(V, dtype=float)[np.asarray(F, dtype=np.int64)]
     area = float(np.linalg.norm(np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]), axis=1).sum() / 2)
-    L = math.sqrt(area / (0.433 * 0.5 * cap)) if area > 0 else 1.0
+    L = math.sqrt(area / (SPLIT_AREA * cap)) if area > 0 else 1.0
     return max(L, floor or 0.0, 0.2)
 
 
 def subdivide(V, F, maxlen, cap=60000):
     """Split triangles until no edge is over maxlen (or the count reaches
-    cap): so a map has points to show on a big flat face. Unshared
-    vertices out — each triangle its own three."""
-    T = np.asarray(V, dtype=float)[np.asarray(F, dtype=np.int64)]
+    cap): so a map has points to show on a big flat face. Each split halves
+    a triangle's longest edge (by edge length, not by count: a long thin
+    triangle becomes a row of small ones, not ever thinner slivers that
+    spend the count and left the face's edge saw-toothed — README
+    screenshot pass, finding 1). When cap would be passed, the longest go
+    first. Unshared vertices out — each triangle its own three."""
+    T = np.asarray(V, dtype=float)[np.asarray(F, dtype=np.int64)].reshape(-1, 3, 3)
     while len(T) < cap:
         e = np.stack([np.linalg.norm(T[:, 1] - T[:, 0], axis=1), np.linalg.norm(T[:, 2] - T[:, 1], axis=1), np.linalg.norm(T[:, 0] - T[:, 2], axis=1)], axis=1)
-        long_ = e.max(1) > maxlen
+        top = e.max(1)
+        long_ = top > maxlen
         if not long_.any():
             break
-        if len(T) + 3 * long_.sum() > cap:
-            # Split the longest first, as many as fit.
-            room = max(0, (cap - len(T)) // 3)
-            if room == 0:
-                break
-            order = np.argsort(-e.max(1))[:room]
+        room = cap - len(T)  # each split adds one triangle
+        if long_.sum() > room:
+            order = np.argsort(-top)[:room]
             long_ = np.zeros(len(T), bool)
             long_[order] = True
         A = T[long_]
-        a, b, c = A[:, 0], A[:, 1], A[:, 2]
-        ab, bc, ca = (a + b) / 2, (b + c) / 2, (c + a) / 2
-        new = np.concatenate([np.stack([a, ab, ca], 1), np.stack([ab, b, bc], 1), np.stack([ca, bc, c], 1), np.stack([ab, bc, ca], 1)])
+        k = e[long_].argmax(1)
+        # Turned (keeping the winding) so the longest edge runs from 0 to 1.
+        turn = np.stack([k, (k + 1) % 3, (k + 2) % 3], axis=1)
+        R = np.take_along_axis(A, turn[:, :, None], axis=1)
+        m = (R[:, 0] + R[:, 1]) / 2
+        new = np.concatenate([np.stack([R[:, 0], m, R[:, 2]], 1), np.stack([m, R[:, 1], R[:, 2]], 1)])
         T = np.concatenate([T[~long_], new])
     n = len(T)
     return T.reshape(-1, 3), np.arange(3 * n, dtype=np.int64).reshape(n, 3)
+
+
+# Points a map's blend (blend_fit) is first timed on, to see whether the
+# whole would fit in its time.
+BLEND_PROBE = 1024
+
+
+def map_budget(session, floor=2.0):
+    """Seconds a map's own reading may still take in this render (the time
+    view_render leaves it before drawing: render_deadline on the session),
+    or None outside view_render. Test drive of 20 Nov, finding 4: a stress map
+    blended for 330 s before a cut that only watched the drawing."""
+    import time
+
+    t = getattr(session, "render_deadline", None)
+    if not isinstance(t, (int, float)):
+        return None
+    return max(float(floor), float(t) - time.time())
+
+
+def blend_fit(V, F, src_points, src_values, budget=None, k=SMOOTH_K):
+    """Values per vertex of the layer (V, F), blended from the sources
+    (smooth_values) on its distinct points only. With budget (s), the blend
+    is first timed on BLEND_PROBE points; when the whole would pass the
+    budget, the layer is thinned (thin) to the points that fit. (V, F,
+    values, info): info None, or { from, to, estimate, budget } triangles
+    and seconds when it was thinned."""
+    import time
+
+    V = np.asarray(V, dtype=float).reshape(-1, 3)
+    F = np.asarray(F, dtype=np.int64).reshape(-1, 3)
+    S = np.asarray(src_points, dtype=float).reshape(-1, 3)
+    vals = np.asarray(src_values, dtype=float)
+    U, inv = np.unique(V, axis=0, return_inverse=True)
+    info = None
+    if budget is not None and len(U) > BLEND_PROBE and len(S):
+        pick = np.linspace(0, len(U) - 1, BLEND_PROBE).astype(np.int64)
+        t0 = time.time()
+        smooth_values(U[pick], S, vals, k)
+        rate = (time.time() - t0) / BLEND_PROBE
+        est = rate * len(U)
+        if est > budget:
+            room = max(250, int(0.8 * float(budget) / max(rate, 1e-12)))
+            L = thin({"V": V, "F": F}, 2 * room)
+            if L.get("thinnedFrom"):
+                info = {"from": int(len(F)), "to": int(len(L["F"])), "estimate": round(est, 1), "budget": round(float(budget), 1)}
+                V, F = np.asarray(L["V"], dtype=float), np.asarray(L["F"], dtype=np.int64)
+                U, inv = np.unique(V, axis=0, return_inverse=True)
+    out = smooth_values(U, S, vals, k)[np.asarray(inv).reshape(-1)]
+    return V, F, out, info
+
+
+def is_mesh(o):
+    """Whether a document object is a mesh (Mesh::Feature and its kinds)."""
+    try:
+        if o.isDerivedFrom("Mesh::Feature"):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    return str(getattr(o, "TypeId", "")).startswith("Mesh::") and hasattr(o, "Mesh")
+
+
+def mesh_layer(o, i):
+    """A mesh object as a layer, as body_layer makes one of a solid: its
+    triangles where they are in the document (Topology gives them placed)."""
+    pts, tris = o.Mesh.Topology
+    V = np.array([[p.x, p.y, p.z] for p in pts], dtype=float).reshape(-1, 3)
+    F = np.array(tris, dtype=np.int64).reshape(-1, 3)
+    return {"name": o.Label, "V": V, "F": F, "color": colour(i), "creases": True}
 
 
 def cast(origins, dirs, V, F, reach, group=48, chunk_cells=4_000_000):

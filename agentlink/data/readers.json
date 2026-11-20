@@ -8,7 +8,6 @@
    "readers": [
     "assembly",
     "axis_dir",
-    "bom_row",
     "bounds",
     "doc",
     "expanduser",
@@ -323,7 +322,9 @@
     "body",
     "doc",
     "driven_parts",
+    "element_centre",
     "joint_axis",
+    "joint_gap",
     "joint_refs",
     "num",
     "part_of",
@@ -339,6 +340,7 @@
    ],
    "changers": [
     "carried",
+    "gap_set",
     "grounded",
     "joints",
     "status",
@@ -546,6 +548,7 @@
     "fmt_of",
     "free_name",
     "group_row",
+    "holds",
     "is_group",
     "is_holder",
     "is_mesh",
@@ -579,6 +582,7 @@
     "close_doc",
     "front_tab",
     "image_plane",
+    "let_go",
     "new_doc",
     "open_doc",
     "recompute_scoped",
@@ -698,7 +702,8 @@
     "haystack",
     "masses",
     "read_materials",
-    "search_words"
+    "search_words",
+    "short_id"
    ],
    "changers": [
     "shape_material",

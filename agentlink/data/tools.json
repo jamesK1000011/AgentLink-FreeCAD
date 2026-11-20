@@ -13780,7 +13780,7 @@
   },
   "asm_joint": {
    "group": "assembly",
-   "description": "Join two parts and solve; this needs a grounded part. kind fixed: no motion. kind revolute: turns about the axis of the joint. kind cylindrical: turns and slides. kind slider: slides only. kind ball. kind distance: distance mm between the elements; round faces count from their surface. kind parallel, perpendicular. kind angle: angle degrees (90). Couplings tie one motion to another for asm_sweep. Each coupled part also needs its own revolute or slider. kind rackpinion: radius1, the pitch radius of the pinion. kind screw: pitch mm for each turn. kind gears and belt: radius1, radius2; when omitted, the tool reads them from round edges. a and b: each is a part and a face or edge on it. A flat face puts the joint at its middle, along its normal. A round edge or cylindrical face puts it on its axis. offset: mm along the joint normal of b. rotate: degrees about it. reverse: true turns the moved part over. false keeps FreeCAD's direction. When omitted, the tool turns it over if that stops the parts from overlapping. The part that moves is the one not yet joined to a grounded part (a when neither is). What is joined to it moves with it. A grounded part never moves. Answer: joint, solve, moved { part: from, to, by }, flipped, overlaps with a warning. The tool refuses an unsolved joint, and nothing is kept. FreeCAD 1.1's solver answers only solved or solver error. It does not tell the freedom left, or a joint that repeats another. asm_check and asm_sweep show what still moves.",
+   "description": "Join two parts and solve; this needs a grounded part. kind fixed: no motion. kind revolute: turns about the axis of the joint. kind cylindrical: turns and slides. kind slider: slides only. kind ball. kind distance: distance mm between the elements; round faces count from their surface. kind parallel, perpendicular. kind angle: angle degrees (90). Couplings tie one motion to another for asm_sweep. Each coupled part also needs its own revolute or slider. kind rackpinion: radius1, the pitch radius of the pinion. kind screw: pitch mm for each turn. kind gears and belt: radius1, radius2; when omitted, the tool reads them from round edges. a and b: each is a part and a face or edge on it. A flat face puts the joint at its middle, along its normal. A round edge or cylindrical face puts it on its axis. near in a query uses document coordinates; nearLocal uses the part's own frame. offset: mm along the joint normal of b; its direction depends on which part moves. gap: mm between the joined faces after the solve (negative: overlap); the tool finds the offset. Not with offset. rotate: degrees about it. reverse: true turns the moved part over. false keeps FreeCAD's direction. When omitted, the tool turns it over if that stops the parts from overlapping. The part that moves is the one not yet joined to a grounded part (a when neither is). What is joined to it moves with it. A grounded part never moves. Answer: joint, solve, moved { part: from, to, by }, flipped, overlaps with a warning. gap: the result, mm. at: each element's centre when picked, in document coordinates. The tool refuses an unsolved joint, and nothing is kept. FreeCAD 1.1's solver answers only solved or solver error. It does not tell the freedom left, or a joint that repeats another. asm_check and asm_sweep show what still moves.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -13808,14 +13808,18 @@
      },
      "a": {
       "type": "object",
-      "description": "{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of several."
+      "description": "{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of several. near: document coordinates; nearLocal: the part's own frame."
      },
      "b": {
       "type": "object",
-      "description": "{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of several."
+      "description": "{ part, element } — element \"Face6\" or a query { kind: face|edge, normal, near, radius, type } as shape_query takes; near picks the closest of several. near: document coordinates; nearLocal: the part's own frame."
      },
      "offset": {
       "type": "number"
+     },
+     "gap": {
+      "type": "number",
+      "description": "mm between the joined faces after the solve: positive apart, negative overlap. Not with offset."
      },
      "rotate": {
       "type": "number"
@@ -13860,6 +13864,9 @@
     {"let": {"ends": []}},
     {"each": "side", "in": ["a", "b"], "steps": [{"let": {"e": "=a.get(side)"}}, {"refuse": {"fmt": "{side}: {{ part, element }} — element \"Face6\" or a query {{ kind: face|edge, normal, near, radius, type }}."}, "when": "=not is_dict(e) or 'part' not in e"}, {"let": {"prt": "=part_of(asm, e['part'])"}}, {"let": {"el": "=element(prt, e.get('element', dict([('kind', 'face')] + [(k, v) for k, v in e.items() if k not in ('part', 'element')])), side + '.element')"}}, {"push": {"ends": "=(prt, el)"}}]},
     {"refuse": {"fmt": "a and b are both on {ends[0][0].Label}: a joint is between two parts of the assembly (asm_list names them)."}, "when": "=ends[0][0] is ends[1][0]"},
+    {"refuse": "gap or offset, not both: gap is the mm between the two joined faces after the solve (positive apart, negative overlapping), and the tool finds the offset for it.", "when": "=a.gap is not None and a.offset is not None"},
+    {"let": {"want_gap": "=num(a.gap, 'gap') if a.gap is not None else None"}},
+    {"let": {"picked": "={'a': element_centre(ends[0][0], ends[0][1]), 'b': element_centre(ends[1][0], ends[1][1])}"}},
     {"let": {"before": "={o.Name: o.Placement.copy() for o in parts(asm)}"}},
     {"let": {"j": "=joints(asm).newObject('App::FeaturePython', a.name or KINDS[kind])"}},
     {"do": ["=joint_proxy(j, kind)", "=view_provider(j, 'joint')"]},
@@ -13877,12 +13884,14 @@
     {"let": {"code, said": "=status(asm)", "flipped": false}},
     {"when": "=code == 0 and a.reverse", "then": [{"let": {"code, said": "=turn_over(asm, j)", "flipped": true}}]},
     {"when": "=code == 0 and a.reverse is None and kind in REVERSIBLE", "then": [{"let": {"first_hits": "=overlaps(parts(asm))[0]"}}, {"when": "=first_hits", "then": [{"let": {"vol0": "=sum(h['volume'] for h in first_hits)", "kept": "={o.Name: o.Placement.copy() for o in parts(asm)}"}}, {"let": {"code2, said2": "=turn_over(asm, j)"}}, {"let": {"second": "=overlaps(parts(asm))[0]"}}, {"when": "=code2 == 0 and sum(h['volume'] for h in second) < vol0 - 1e-6", "then": [{"let": {"code": "=code2", "said": "=said2", "flipped": true}}], "else": [{"each": "o", "in": "=parts(asm)", "steps": [{"set": {"o.Placement": "=kept[o.Name]"}}]}, {"do": "=doc().recompute()"}, {"let": {"code, said": "=status(asm)"}}]}]}]},
+    {"when": "=code == 0 and want_gap is not None", "then": [{"let": {"code, said, gap_now, gap_off": "=gap_set(asm, j, ends, want_gap)"}}, {"refuse": {"fmt": "gap: the gap across this joint cannot be measured — a or b must be a flat face, or a round edge on a flat face ({ends[0][0].Label}.{ends[0][1]}, {ends[1][0].Label}.{ends[1][1]}). Nothing was kept; offset (mm along the joint normal of b) works on any element."}, "when": "=code == 0 and gap_now is None"}]},
     {"refuse": {"fmt": "The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. asm_ground {{ part }} holds one part first."}, "code": "failed", "when": "=code == -6"},
     {"refuse": {"fmt": "The {kind} joint leaves {asm.Label} unsolved: {said} — nothing was kept. The solver could not put the parts where all the joints ask: this one fights another on the same parts (asm_list shows them; asm_joint_remove takes one out), or the elements cannot meet that way — pick other elements, or for parts far out of place try reverse: true."}, "code": "failed", "when": "=code != 0"},
     {"let": {"moved": "={o.Label: {'from': vec(b.Base), 'to': placement_of(o), 'by': round((o.Placement.Base - b.Base).Length, 4)} for o in parts(asm) for b in [before.get(o.Name)] if b is not None and not o.Placement.isSame(b, 1e-6)}"}},
-    {"let": {"hits": "=[h for h in overlaps(parts(asm))[0] if not h.get('thread')]"}}
+    {"let": {"hits": "=[h for h in overlaps(parts(asm))[0] if not h.get('thread')]"}},
+    {"let": {"gap_end": "=joint_gap(ends)"}}
    ],
-   "answer": {"fields": {"joint": "=j.Label", "kind": "=kind", "a": {"fmt": "{ends[0][0].Label}.{ends[0][1]}"}, "b": {"fmt": "{ends[1][0].Label}.{ends[1][1]}"}, "solve": "=said", "moved": "=moved", "flipped": {"when": "=flipped", "value": "=True if a.reverse else 'turned over to stop the parts overlapping (reverse: false keeps it as FreeCAD first put it)'"}, "overlaps": {"when": "=hits", "value": "=hits"}, "warning": {"when": "=hits", "value": "Parts overlap after the solve: a face picked the wrong way round, or the parts do not fit — reverse: true flips the second part, or check the sizes."}}}
+   "answer": {"fields": {"joint": "=j.Label", "kind": "=kind", "a": {"fmt": "{ends[0][0].Label}.{ends[0][1]}"}, "b": {"fmt": "{ends[1][0].Label}.{ends[1][1]}"}, "solve": "=said", "moved": "=moved", "flipped": {"when": "=flipped", "value": "=True if a.reverse else 'turned over to stop the parts overlapping (reverse: false keeps it as FreeCAD first put it)'"}, "overlaps": {"when": "=hits", "value": "=hits"}, "warning": {"when": "=hits", "value": "Parts overlap after the solve: a face picked the wrong way round, or the parts do not fit — reverse: true flips the second part, or check the sizes."}, "gap": {"when": "=gap_end is not None", "value": "=gap_end"}, "gapIs": {"when": "=gap_end is not None", "value": "mm between the two joined elements across the joint: positive apart, negative overlapping."}, "gapWarning": {"when": "=want_gap is not None and gap_end is not None and abs(gap_end - want_gap) > 0.001", "value": {"fmt": "gap {want_gap:g} mm was asked; the solver put the parts {gap_end:g} mm apart (another joint holds them)."}}, "offset": {"when": "=want_gap is not None and gap_end is not None", "value": "=round(float(j.Offset2.Base.z), 4)"}, "at": {"when": "=picked['a'] is not None or picked['b'] is not None", "value": "=picked"}}}
   },
   "asm_list": {
    "group": "assembly",
@@ -14427,7 +14436,7 @@
   },
   "asm_bom": {
    "group": "assembly",
-   "description": "Make the bill of materials: FreeCAD's own BOM object (Assembly::BomObject). It is a spreadsheet that the workbench makes again on recompute. It has Index, Name, Quantity, and Material, Mass (g) and Volume (cm3) from the recorded materials (material_set). columns: adds more columns (\"File Name\"). \".Label2\" (a name that starts with a dot) reads that property from each part. Any other name is a column that FreeCAD keeps for values that you type. name: the label. Each call makes a new BOM. Answer: bom, sheet, native, parts [{ name, material, mass, volume }]. sheet: the name of the object, for sheet_read and td_table { sheet }. A part with no material has no mass.",
+   "description": "Make the bill of materials: FreeCAD's own BOM object (Assembly::BomObject). It is a spreadsheet that the workbench makes again on recompute. It has Index, Name, Quantity, and Material, Mass (g) and Volume (cm3) from the recorded materials (material_set). columns: adds more columns (\"File Name\"). \".Label2\" (a name that starts with a dot) reads that property from each part. Any other name is a column that FreeCAD keeps for values that you type. name: the label. Each call makes a new BOM. Answer: bom, sheet, native, parts [{ name, material, mass, volume }]. sheet: the name of the object, for sheet_read and td_table { sheet }. A part with no material has no mass. A part can be in a print setup. Then mass is the printed estimate (walls and infill) of an installed add-on that owns mass. Then massAs tells how, and solidMass is the solid mass. Without that add-on, massAs marks the mass as solid, not as printed. slice gives the slicer's own figure.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -14463,7 +14472,7 @@
     {"when": "=native", "then": [{"set": {"bom.columnsNames": "=cols + [c for c in ('Material', 'Mass (g)', 'Volume (cm3)') if c not in cols]"}}, {"do": ["=doc().recompute()", "=fill_native(bom, rows, mats)", "=doc().recompute()"]}], "else": [{"do": ["=fill_sheet(bom, rows)", "=doc().recompute()"]}]},
     {"do": "=snapshot('asm_bom')"}
    ],
-   "answer": {"fields": {"bom": "=bom.Label", "sheet": "=bom.Name", "native": "=native", "parts": "=rows", "step": "=step()", "next": "td_table { sheet } puts it on a drawing; sheet_read reads it.", "note": {"when": "=any(not r['material'] for r in rows)", "value": "Parts with no material recorded have no mass: material_set records one."}}}
+   "answer": {"fields": {"bom": "=bom.Label", "sheet": "=bom.Name", "native": "=native", "parts": "=rows", "step": "=step()", "next": "td_table { sheet } puts it on a drawing; sheet_read reads it.", "note": {"when": "=any(not r['material'] for r in rows)", "value": "Parts with no material recorded have no mass: material_set records one."}, "massNote": {"when": "=any(r.get('massAs') for r in rows)", "value": "Parts in a print setup: massAs says whether mass is as printed or solid; slice gives the slicer's own figure for a print."}}}
   },
   "td_list": {
    "group": "techdraw",
@@ -15265,7 +15274,7 @@
   },
   "material_set": {
    "group": "material",
-   "description": "Set the material of bodies. id: from material_list, or the exact name of a library card. Or custom { name, density g/cm³ (required), youngsMPa, yieldMPa, utsMPa, poisson, conductivity W/(m·K), softensC, source } for the supplier's figures. The tool keeps a custom material as custom:<name>. The document keeps the material by the label of the body. measure_mass, fea_* and drawings read it there. A library card also goes on the object's ShapeMaterial, which FreeCAD's own Material panel shows (shapeMaterial tells for each body). An installed add-on that owns materials keeps the materials it knows (printing filaments), marked from. bodies: the one body when omitted. Answer: material, mass_g (volume × density, solid through), missing (E / yield that the card does not have). Trap: object_rename does not move the material to the new label.",
+   "description": "Set the material of bodies. id: from material_list, or the exact name of a library card. The short ids of measure_mass also work (steel, stainless, aluminium, brass …). For one, the tool sets a FreeCAD library card, or Agent Link's stock figures; mapped tells which. Or custom { name, density g/cm³ (required), youngsMPa, yieldMPa, utsMPa, poisson, conductivity W/(m·K), softensC, source } for the supplier's figures. The tool keeps a custom material as custom:<name>. The document keeps the material by the label of the body. measure_mass, fea_* and drawings read it there. A library card also goes on the object's ShapeMaterial, which FreeCAD's own Material panel shows (shapeMaterial tells for each body). An installed add-on that owns materials keeps the materials it knows (printing filaments), marked from. bodies: the one body when omitted. Answer: material, mass_g (volume × density, solid through), missing (E / yield that the card does not have). Trap: object_rename does not move the material to the new label.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -15302,7 +15311,7 @@
     {"do": "=snapshot(tool)"},
     {"let": {"mass": "=masses(bodies, c['density']) if c.get('density') else {}", "missing": "=[k for k in ('E', 'yield') if c.get(k) is None]"}}
    ],
-   "answer": {"fields": {"bodies": "=bodies", "material": "=brief(c)", "shapeMaterial": "=shape_mat", "mass_g": {"when": "=mass", "value": "=mass"}, "shapeMaterialNote": {"when": "=not all(shape_mat.values())", "value": "Not every body's ShapeMaterial was set: only FreeCAD library cards go there; the material is kept with the document either way."}, "note": {"when": "=c['id'] not in DENSITY", "value": "Add-ons for printing read the filament keys only (pla, petg, abs, asa, pa6-cf, tpu-95a); measure_mass and fea_* read this material."}, "missing": {"when": "=missing", "value": "=missing"}}}
+   "answer": {"fields": {"bodies": "=bodies", "material": "=brief(c)", "shapeMaterial": "=shape_mat", "mass_g": {"when": "=mass", "value": "=mass"}, "mapped": {"when": "=short_id(a.id)", "value": {"fmt": "{a.id} is a short id: set as {c['name']} ({c['source']})."}}, "shapeMaterialNote": {"when": "=not all(shape_mat.values())", "value": "Not every body's ShapeMaterial was set: only FreeCAD library cards go there; the material is kept with the document either way."}, "note": {"when": "=c['id'] not in DENSITY", "value": "Add-ons for printing read the filament keys only (pla, petg, abs, asa, pa6-cf, tpu-95a); measure_mass and fea_* read this material."}, "missing": {"when": "=missing", "value": "=missing"}}}
   },
   "material_clear": {
    "group": "material",
@@ -21231,7 +21240,7 @@
   },
   "object_get": {
    "group": "doc",
-   "description": "Read the properties of one object. value: in mm and degrees; placements as { at, axis, angle }; links by label; a shape as its stats; lists cut at 50. Also type, readOnly, hidden and choices. readOnly: FreeCAD calculates it, and object_set refuses it. hidden: not shown in FreeCAD's property editor. choices: the values of an enumeration. filter: a word in the property's name or group (\"Placement\", \"Base\"), or a list of exact names. Use filter: a feature has dozens of properties. Changes nothing.",
+   "description": "Read the properties of one object. value: in mm and degrees; placements as { at, axis, angle }; links by label; a shape as its stats; lists cut at 50. Also type, readOnly, hidden and choices. readOnly: FreeCAD calculates it, and object_set refuses it. hidden: not shown in FreeCAD's property editor. choices: the values of an enumeration. filter: a word in the property's name or group (\"Placement\", \"Base\"), or a list of exact names. Several words go in one text with | between them (\"Length|Width\"): a property that has one of them matches. Use filter: a feature has dozens of properties. Changes nothing.",
    "inputSchema": {"type": "object", "properties": {"object": {"type": "string", "description": "An object's name or label."}, "filter": {}}, "required": ["object"], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/doc.py)",
@@ -21240,7 +21249,8 @@
    "steps": [
     {"let": {"o": "=find(a.get('object'))", "flt": "=a.get('filter')"}},
     {"let": {"names": "=[p for p in o.PropertiesList if p not in SKIP_PROPS]"}},
-    {"let": {"names": "=[p for p in names if p in flt] if is_list(flt) else [p for p in names if flt.lower() in p.lower() or flt.lower() in (o.getGroupOfProperty(p) or '').lower()] if is_str(flt) and flt else names"}},
+    {"let": {"words": "=[w.strip().lower() for w in flt.split('|') if w.strip()] if is_str(flt) else []"}},
+    {"let": {"names": "=[p for p in names if p in flt] if is_list(flt) else [p for p in names if any(w in p.lower() or w in (o.getGroupOfProperty(p) or '').lower() for w in words)] if words else names"}},
     {"let": {"props": "={p: prop_entry(o, p) for p in names}"}},
     {"refuse": {"fmt": "filter {flt!r}: no property of {o.Label} matches — object_get {{ object }} without filter lists them all."}, "code": "not_found", "when": "=not props and flt"}
    ],
@@ -21248,14 +21258,18 @@
   },
   "object_set": {
    "group": "doc",
-   "description": "Set properties of an object. values: for example { Length: 20, Placement: { at, axis, angle }, Refine: true, Base: \"Box\", Mode: \"…\" }. Placement also takes FreeCAD's Base, Axis, Angle, Rotation; what you omit is kept. Base is a link, by name or label; null clears it. The tool converts each value to its type. Numbers are mm and degrees. For lengths, angles and other quantities, a string with a unit also works (\"1 in\", \"30 deg\"), not plain floats. Integers and percents take whole numbers. The tool checks enumerations against their choices. Vectors are [x,y,z]. The tool refuses read-only properties, links to faces or edges, and property names that the object does not have. object_get lists names, types and choices. The tool recomputes the object and what is built from it. If that fails, the tool refuses and nothing is kept. Answer: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement. Set Label with object_rename.",
-   "inputSchema": {"type": "object", "properties": {"object": {"type": "string", "description": "An object's name or label."}, "values": {"type": "object"}}, "required": ["object", "values"], "additionalProperties": false},
+   "description": "Set properties of an object. values: for example { Length: 20, Placement: { at, axis, angle }, Refine: true, Base: \"Box\", Mode: \"…\" }. For one property, property and value also work: { property: \"Length\", value: 20 }. Placement also takes FreeCAD's Base, Axis, Angle, Rotation; what you omit is kept. Base is a link, by name or label; null clears it. The tool converts each value to its type. Numbers are mm and degrees. For lengths, angles and other quantities, a string with a unit also works (\"1 in\", \"30 deg\"), not plain floats. Integers and percents take whole numbers. The tool checks enumerations against their choices. Vectors are [x,y,z]. The tool refuses read-only properties, links to faces or edges, and property names that the object does not have. object_get lists names, types and choices. The tool recomputes the object and what is built from it. If that fails, the tool refuses and nothing is kept. Answer: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement. Set Label with object_rename.",
+   "inputSchema": {"type": "object", "properties": {"object": {"type": "string", "description": "An object's name or label."}, "values": {"type": "object"}, "property": {"type": "string", "description": "One property's name, with value: the same as values { property: value }."}, "value": {}}, "required": ["object"], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/doc.py)",
    "date": "2026-11-16",
    "runner": "steps",
    "steps": [
     {"let": {"o": "=find(a.get('object'))", "vals": "=a.get('values')"}},
+    {"refuse": "values or property with value, not both: values { Property: value, … } sets several, property and value set one.", "when": "=vals is not None and (a.get('property') is not None or 'value' in a)"},
+    {"refuse": "value: the new value of property (property and value go together; values { Property: value } is the other way).", "when": "=a.get('property') is not None and 'value' not in a"},
+    {"refuse": "property: the name of the property that value sets (property and value go together; values { Property: value } is the other way).", "when": "='value' in a and not (is_str(a.get('property')) and a.get('property').strip())"},
+    {"let": {"vals": "=dict([(a.get('property').strip(), a.get('value'))])"}, "when": "=vals is None and is_str(a.get('property')) and a.get('property').strip()"},
     {"refuse": "values: { Property: value, … } — object_get gives the names and types.", "when": "=not is_dict(vals) or not vals"},
     {"let": {"props": "=set(o.PropertiesList)"}},
     {"each": "p", "in": "=list(vals)", "steps": [{"when": "=p not in props", "then": [{"let": {"close": "=near(p, list(props))"}}, {"refuse": {"fmt": "values.{p}: {o.Label} has no such property{' — did you mean ' + ', '.join(close) if close else ''}. object_get lists them."}, "code": "not_found"}]}, {"let": {"more": "=' show { objects, visible } shows or hides it.' if p == 'Visibility' else ''"}}, {"refuse": {"fmt": "values.{p}: read-only on {o.Label} (FreeCAD computes it).{more}"}, "when": "=readonly(o, p)"}]},
@@ -21273,7 +21287,7 @@
   },
   "object_delete": {
    "group": "doc",
-   "description": "Delete objects (objects: names or labels). While another object uses one, the tool refuses and deletes nothing. FreeCAD itself deletes without a question and leaves the users broken; force: true allows that. The tool recomputes and lists any error. A PartDesign Body goes with its own features and Origin. A boolean's result goes with the helpers made only for it (alongWith names them). The inputs that it hid show again and get their names back (shownAgain, renamed). Answer: deleted, errors, health.",
+   "description": "Delete objects (objects: names or labels). While another object uses one, the tool refuses and deletes nothing. FreeCAD itself deletes without a question and leaves the users broken; force: true allows that. A container that only holds the object is not a user: a Body, an App::Part or a group. So an unused sketch or the tip feature of a Body deletes without force; the Body's tip moves back. The tool recomputes and lists any error. A PartDesign Body goes with its own features and Origin. A boolean's result goes with the helpers made only for it (alongWith names them). The inputs that it hid show again and get their names back (shownAgain, renamed). Answer: deleted, errors, health.",
    "inputSchema": {"type": "object", "properties": {"objects": {}, "force": {"type": "boolean"}}, "required": ["objects"], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/doc.py)",
@@ -21284,9 +21298,9 @@
     {"let": {"objs": "=[find(n) for n in names]"}},
     {"let": {"extra, show, labels": "=along(objs)"}},
     {"let": {"going": "=set([o.Name for o in objs] + [o.Name for o in extra])"}},
-    {"each": "o", "in": "=objs", "steps": [{"let": {"users": "=[p.Label for p in o.InList if p.Name not in going]"}}, {"refuse": {"fmt": "{o.Label} is used by {', '.join(users)}: name those in objects too, or force: true deletes it and leaves them broken (FreeCAD removes it without asking; they fail at the next recompute). Nothing was deleted."}, "code": "invalid_state", "when": "=users and not a.get('force')"}]},
+    {"each": "o", "in": "=objs", "steps": [{"let": {"users": "=[p.Label for p in o.InList if p.Name not in going and not holds(p, o)]"}}, {"refuse": {"fmt": "{o.Label} is used by {', '.join(users)}: name those in objects too, or force: true deletes it and leaves them broken (FreeCAD removes it without asking; they fail at the next recompute). Nothing was deleted."}, "code": "invalid_state", "when": "=users and not a.get('force')"}]},
     {"let": {"deleted": "=[o.Label for o in objs]", "gone_with": "=[o.Label for o in extra]"}},
-    {"do": "=removed([o.Name for o in objs] + [o.Name for o in extra])"},
+    {"do": ["=let_go(objs)", "=removed([o.Name for o in objs] + [o.Name for o in extra])"]},
     {"let": {"shown, renamed": "=shown_again(show, labels)"}}
    ],
    "answer": {"via": "finish", "with": ["=tool", "$fields"], "late": true, "fields": {"deleted": "=deleted", "errors": "=errors(current())", "alongWith": {"when": "=gone_with", "value": "=gone_with"}, "alongNote": {"when": "=gone_with", "value": "Made for what was deleted and used by nothing else: deleted with it."}, "shownAgain": {"when": "=shown", "value": "=shown"}, "renamed": {"when": "=renamed", "value": "=renamed"}}}

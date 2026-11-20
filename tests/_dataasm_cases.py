@@ -59,8 +59,12 @@ EXPECT = {
                                                                                                        {"name": "Lid", "material": "unobtainium", "mass": "", "volume": 0.2}]},
     ("asm_bom", "a FreeCAD with no BOM object"): {"sheet": "BOM", "native": False},
 }
-# Refusals written in the data that no case here reaches: none.
-UNREACHED = []
+# Refusals written in the data that no case here reaches (the handler at BASE had no such input,
+# so no case can compare them): tests/test_findings_1120.py reaches each.
+UNREACHED = [
+    'asm_joint: gap or offset, not both: gap is the mm between the two joined faces af',
+    'asm_joint: gap: the gap across this joint cannot be measured — a or b must be a f',
+]
 
 FACE = {"kind": "face"}
 

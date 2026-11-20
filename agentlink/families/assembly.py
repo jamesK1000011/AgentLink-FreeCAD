@@ -263,19 +263,154 @@ def _element(session, part, q, what):
         return q
     if not isinstance(q, dict):
         raise ToolError("invalid_input", f"{what}: a face or edge — \"Face6\", or a query {{ kind: face|edge, normal, near, radius, type }} as shape_query takes.")
-    query = {k: v for k, v in q.items() if k not in ("part",)}
+    query = {k: v for k, v in q.items() if k not in ("part", "nearLocal")}
+    if q.get("nearLocal") is not None:
+        # Test drive of 20 Nov, finding 3: near is in the document's coordinates,
+        # where the part is now; a point read off the part as modelled (its
+        # own frame) picked the wrong hole once an earlier joint had moved it.
+        if q.get("near") is not None:
+            raise ToolError("invalid_input", f"{what}: near or nearLocal, not both — near is in document coordinates, nearLocal in the part's own frame.")
+        query["near"] = geo.vec(local_to_world(part, picks.vec3(q["nearLocal"], "nearLocal")))
     query["body"] = part.Name  # by Name: a label can change on recompute
     _, _, hits = M.query(session, query)
     if not hits:
         raise ToolError("not_found", f"{what}: no {query.get('kind', 'face')} of {part.Label} matches {q} — shape_query {{ body: \"{part.Label}\" }} lists them.")
     if len(hits) > 1:
-        near = q.get("near")
+        near = query.get("near")
         if near is None:
             names = ", ".join(d.get("ref", "?") for _, _, d in hits[:8])
             raise ToolError("invalid_input", f"{what}: {len(hits)} match ({names}{' …' if len(hits) > 8 else ''}) — narrow it, or add near: [x, y, z] to take the closest.")
         p = picks.vec3(near if isinstance(near, list) else near.get("point"), "near")
         hits = sorted(hits, key=lambda h: h[1].distToShape(Part.Vertex(p))[0])
     return hits[0][2]["ref"]
+
+
+def local_to_world(part, p):
+    """A point given in the part's own frame (as it was modelled) in the
+    document's coordinates: through the placement its shape has now."""
+    try:
+        pl = _shape(part).Placement
+    except Exception:  # noqa: BLE001
+        pl = part.Placement
+    v = V(*p) if not hasattr(p, "x") else p
+    if hasattr(pl, "multVec"):
+        return pl.multVec(v)
+    return pl.Base + pl.Rotation.multVec(v)
+
+
+def element_centre(part, el):
+    """Where a joint element is now, in the document's coordinates: a
+    round edge's or face's centre on its axis, a flat face's middle, else
+    its centre of mass. [x, y, z], or None."""
+    try:
+        g = _shape(part).getElement(el)
+        ax = joint_axis(g)
+        return geo.vec(ax[0] if ax else g.CenterOfMass)
+    except Exception:  # noqa: BLE001 - an element this cannot read: not said
+        return None
+
+
+def outward(part, el):
+    """(point, outward unit normal) of a joint element in the document's
+    coordinates, or None: a flat face's middle and the normal that points
+    out of the part; a round edge's centre and the outward normal of the
+    flat face it bounds (a hole's rim on a flat face). A round face, a
+    straight edge or a free edge has no outward side here."""
+    try:
+        return _outward(part, el)
+    except Exception:  # noqa: BLE001 - an element this cannot read: no gap
+        return None
+
+
+def _outward(part, el):
+    try:
+        shape = _shape(part)
+        g = shape.getElement(el)
+    except Exception:  # noqa: BLE001
+        return None
+    face = None
+    if isinstance(g, Part.Face) and isinstance(g.Surface, Part.Plane):
+        face, at = g, None
+    elif isinstance(g, Part.Edge) and hasattr(g.Curve, "Axis"):
+        axis = unit(g.Curve.Axis)
+        try:
+            near = shape.ancestorsOfType(g, Part.Face)
+        except Exception:  # noqa: BLE001
+            near = []
+        flat = [f for f in near if isinstance(f.Surface, Part.Plane)]
+        flat = [f for f in flat if abs(unit(_face_normal(f)).dot(axis)) > 0.999]
+        if not flat:
+            return None
+        face, at = flat[0], g.Curve.Center
+    if face is None:
+        return None
+    n = unit(_face_normal(face))
+    return (face.CenterOfMass if at is None else at), n
+
+
+def _face_normal(face):
+    """A flat face's normal as it faces out of the solid (FreeCAD's normalAt
+    follows the face's orientation)."""
+    u0, u1, v0, v1 = face.ParameterRange
+    return face.normalAt((u0 + u1) / 2, (v0 + v1) / 2)
+
+
+def joint_gap(ends):
+    """The gap between the two joined elements across the joint, mm:
+    positive apart, negative overlapping (one part's face inside the
+    other). Measured along b's outward normal (a's when b has none), from
+    where the elements are now. None when neither has an outward side."""
+    (pa, ea), (pb, eb) = ends
+    ob, oa = outward(pb, eb), outward(pa, ea)
+    try:
+        if ob is not None:
+            ca = element_centre(pa, ea)
+            if ca is None:
+                return None
+            return round(float((V(*ca) - ob[0]).dot(ob[1])), 4)
+        if oa is not None:
+            cb = element_centre(pb, eb)
+            if cb is None:
+                return None
+            return round(float((V(*cb) - oa[0]).dot(oa[1])), 4)
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+GAP_TOL = 1e-3
+
+
+def gap_set(doc, asm, j, ends, want):
+    """The joint's offset set so the gap across it is want (mm, positive
+    apart), whichever way FreeCAD's offset runs for these two parts: the
+    offset moved by the difference, the result measured, and the other way
+    tried when it went the wrong way. (code, words, gap, offset mm)."""
+    code, said = _status(asm)
+    g0 = joint_gap(ends)
+    if code != 0 or g0 is None:
+        return code, said, g0, None
+    base = float(j.Offset2.Base.z) if hasattr(j, "Offset2") else 0.0
+    rot = j.Offset2.Rotation if hasattr(j, "Offset2") else FreeCAD.Rotation()
+    d = float(want) - g0
+    if abs(d) <= GAP_TOL:
+        return code, said, g0, base
+    best = (abs(g0 - want), code, said, g0, base)
+    for z in (base + d, base - d):
+        j.Offset2 = FreeCAD.Placement(V(0, 0, z), rot)
+        doc.recompute()
+        code, said = _status(asm)
+        g = joint_gap(ends)
+        if code == 0 and g is not None:
+            if abs(g - want) <= GAP_TOL:
+                return code, said, g, z
+            if abs(g - want) < best[0]:
+                best = (abs(g - want), code, said, g, z)
+    _err, code, said, g, z = best
+    j.Offset2 = FreeCAD.Placement(V(0, 0, z), rot)
+    doc.recompute()
+    code, said = _status(asm)
+    return code, said, joint_gap(ends), z
 
 
 def _status(asm):
@@ -606,7 +741,8 @@ def tools(session):
                "joint_proxy": lambda j, kind: JointObject.Joint(j, JointObject.JointTypes.index(KINDS[kind])),
                # the family's
                "assembly": lambda ref: _assembly(doc(), ref), "typed": _typed, "joints": _joints, "parts": _parts, "part_of": _part, "grounded": _grounded,
-               "placement_of": _placement, "element": lambda part, q, what: _element(s, part, q, what), "status": _status, "overlaps": _overlaps,
+               "placement_of": _placement, "element": lambda part, q, what: _element(s, part, q, what), "status": _status,
+               "element_centre": element_centre, "joint_gap": joint_gap, "gap_set": lambda asm, j, ends, want: gap_set(doc(), asm, j, ends, want), "overlaps": _overlaps,
                "check_parts": _check_parts, "view_provider": _view_provider, "ref_label": lambda r: ref_label(doc(), r),
                "ref_pair": lambda r: ref_element(doc(), r)[:2], "joint_axis": joint_axis, "unit": unit, "radius_of": radius_of, "joint_refs": joint_refs,
                "turn_over": lambda asm, j: turn_over(doc(), asm, j), "carried": lambda asm, j, moving, fixed, grounded: carried(doc(), asm, j, moving, fixed, grounded),
