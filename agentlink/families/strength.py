@@ -734,8 +734,10 @@ def tools(session):
             raise ToolError("failed", f"Gmsh took over {timeout:g} s: a coarser mesh (fea_setup {{ mesh }}) or a longer timeout.")
         unv = os.path.join(wd, "part.unv")
         if r.returncode != 0 or not os.path.isfile(unv):
-            tail = (r.stderr or r.stdout or "").strip().splitlines()[-3:]
-            raise ToolError("failed", f"Gmsh could not mesh {o.Label}: {' | '.join(tail)} — body_check it, or try another mesh size.")
+            text = (r.stdout or "") + "\n" + (r.stderr or "")
+            log = ccx_io.keep_log(wd, "gmsh.log", text)
+            tail = " | ".join(text.strip().splitlines()[-3:])
+            raise ToolError("failed", f"Gmsh could not mesh {o.Label}. {ccx_io.gmsh_words(ccx_io.gmsh_report(text), log, tail)}. body_check it, or try another mesh size.")
         femmesh = Fem.read(unv)
         if femmesh.VolumeCount == 0:
             raise ToolError("failed", "Gmsh made no volume elements: the body may not be a closed solid — body_check it.")
@@ -961,7 +963,8 @@ def tools(session):
         femmesh = mesh.FemMesh
         if not femmesh.VolumeCount:
             said = " | ".join([ln.strip() for ln in err.splitlines() if ln.strip()][-3:])[:600]
-            raise ToolError("failed", f"Gmsh did not mesh {o.Label}: {said or 'no volume elements'} — body_check it (one closed solid), or another mesh size (fea_setup {{ mesh }}).")
+            log = ccx_io.keep_log(paths.made(s, os.path.join(s.out_dir, "fea_" + "".join(ch if ch.isalnum() else "_" for ch in o.Label)), "run"), "gmsh.log", err) if err else None
+            raise ToolError("failed", f"Gmsh did not mesh {o.Label}. {ccx_io.gmsh_words(ccx_io.gmsh_report(err), log, said or 'no volume elements')}. body_check it (one closed solid), or another mesh size (fea_setup {{ mesh }}).")
         wd = paths.made(s, os.path.join(s.out_dir, "fea_" + "".join(ch if ch.isalnum() else "_" for ch in o.Label)), "run")
         os.makedirs(wd, exist_ok=True)
         fea = ccxtools.FemToolsCcx(an, solver)
@@ -1069,11 +1072,13 @@ def tools(session):
         s._ccx_tail = last_lines(log)
         if "*ERROR" in log or not os.path.isfile(frd):
             err = [l.strip() for l in log.splitlines() if "ERROR" in l][:2] or log.strip().splitlines()[-2:]
+            rep = ccx_io.ccx_report(log)
+            at = {e: [round(sum(nodes[n][i] for n in elems[e][:4] if n in nodes) / 4, 2) for i in range(3)] for e in rep["elements"] if e in elems}
             hint = ccx_hint(log)
             if nonlin and any("increment size smaller" in l.lower() for l in log.splitlines()):
                 hint += (" It stopped finding equilibrium as the load rose: past its strength the part gives way (it would collapse or break) — "
                          "less load, a stronger material or a larger section; or contact that never closes.")
-            raise ToolError("failed", f"CalculiX refused the job: {' | '.join(err)}.{hint}")
+            raise ToolError("failed", f"CalculiX refused the job. {ccx_io.ccx_words(rep, ccx_io.keep_log(wd, 'ccx.log', log), at, ' | '.join(err))}.{hint}")
         with open(frd) as f:
             disp, stress = ccx_io.read_frd(f.read())
         return wd, femmesh, nodes, elems, disp, stress, fixed, held_faces, applied, groups, pairs, part_cards, frd
@@ -1099,7 +1104,7 @@ def tools(session):
         log = (r.stdout or "") + (r.stderr or "")
         if "*ERROR" in log or not os.path.isfile(os.path.join(wd, "job.frd")):
             err = [l.strip() for l in log.splitlines() if "ERROR" in l][:2] or log.strip().splitlines()[-2:]
-            raise ToolError("failed", f"CalculiX refused the {what}: {' | '.join(err)}.{ccx_hint(log)}")
+            raise ToolError("failed", f"CalculiX refused the {what}. {ccx_io.ccx_words(ccx_io.ccx_report(log), ccx_io.keep_log(wd, 'ccx.log', log), None, ' | '.join(err))}.{ccx_hint(log)}")
         with open(os.path.join(wd, "job.frd")) as f:
             frd = f.read()
         dat = ""
@@ -1412,7 +1417,10 @@ def tools(session):
             f.write("\n".join(['Merge "shell.brep";', f"Mesh.MeshSizeMax = {mesh};", "Mesh.MeshSizeMin = 0;", "Mesh.ElementOrder = 2;", "Mesh.SecondOrderLinear = 0;",
                                "Mesh.Algorithm = 6;", "Mesh 2;", "Mesh.SaveAll = 1;", 'Save "shell.unv";', ""]))
         r = _job_run([gmsh, "-", "shell.geo"], cwd=wd, capture_output=True, text=True, timeout=timeout)
-        return {"wd": wd, "ok": r.returncode == 0 and os.path.isfile(os.path.join(wd, "shell.unv")), "said": " | ".join((r.stderr or r.stdout or "").strip().splitlines()[-2:])}
+        ok = r.returncode == 0 and os.path.isfile(os.path.join(wd, "shell.unv"))
+        text = (r.stdout or "") + "\n" + (r.stderr or "")
+        tail = " | ".join(text.strip().splitlines()[-2:])
+        return {"wd": wd, "ok": ok, "said": tail if ok else ccx_io.gmsh_words(ccx_io.gmsh_report(text), ccx_io.keep_log(wd, "gmsh.log", text), tail)}
 
     def shell_elements(m):
         """Gmsh's mesh read into a FemMesh and written as a deck's mesh, into
@@ -1743,7 +1751,7 @@ def tools(session):
                "csv_text": lambda rows: "\n".join(",".join(str(c) for c in row) for row in rows) + "\n", "write_text": write_text,
                "study": lambda: _study(s.doc), "save": lambda st: _save(s.doc, st), "study_body": study_body, "results": lambda: _results(s), "results_elsewhere": lambda: results_elsewhere(s), "forget": forget,
                "snapshot": lambda tool: s.snapshot(tool), "body": lambda ref: s.body(ref), "stats": lambda shape: geo.stats(shape),
-               "solid_holder": lambda src, n: solid_holder(s, src, n), "card": lambda mid: matfam.card(s.doc, mid), "of_body": lambda label: matfam.of_body(s.doc, label),
+               "solid_holder": lambda src, n: solid_holder(s, src, n), "card": lambda mid: matfam.card(s.doc, mid), "of_body": lambda label: matfam.of_body(s.doc, label), "of_body_said": lambda label: matfam.of_body_said(s.doc, label),
                "setup_said": _setup_said, "unmatched": lambda st, shape: unmatched(st, shape, facepick.pick),
                "pick": lambda shape, q, what="faces": facepick.pick(shape, q, what), "pick_both": lambda shape, q: _pick_report(shape, q, "faces"),
                "faces_normal": faces_normal, "same_in": _same_in, "alpha_of": _alpha, "vector": lambda xs: V(*[float(c) for c in xs]),

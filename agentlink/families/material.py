@@ -206,13 +206,128 @@ def card(doc, mid):
     return None
 
 
+def _object(doc, label):
+    """The object of that label (or name) in doc, or None."""
+    try:
+        for o in doc.Objects:
+            if o.Label == label or o.Name == label:
+                return o
+    except Exception:
+        pass
+    return None
+
+
+def _shape_card(o):
+    """The library card on the object's ShapeMaterial (FreeCAD 1.1), when
+    it is one with figures (FreeCAD's "Default" card has none), else None."""
+    try:
+        m = getattr(o, "ShapeMaterial", None)
+        uid = str(getattr(m, "UUID", "") or "") if m is not None else ""
+    except Exception:
+        return None
+    c = _library().get(uid) if uid else None
+    return c if c and c.get("E") else None
+
+
+def _source_of(o):
+    """What a copy follows, where FreeCAD keeps it: a Draft clone's object,
+    a link's object. None for anything else."""
+    for prop in ("LinkedObject", "Objects"):
+        try:
+            v = getattr(o, prop, None)
+        except Exception:
+            v = None
+        if isinstance(v, (list, tuple)):
+            v = v[0] if len(v) == 1 else None
+        if v is not None and hasattr(v, "Label"):
+            return v
+    return None
+
+
+def resolve(doc, label):
+    """The body's material card and where it came from, or (None, None):
+    its own record (material_set); the record of the body it was copied
+    from (part_transform copy, object_duplicate, draft_clone write the
+    copy's source; a Draft clone and a link name theirs), followed up to
+    five copies back; the library card on its ShapeMaterial."""
+    mats = store.materials(doc)
+    copied = store.read(doc, "materialFrom", {})
+    seen, at = set(), label
+    for _ in range(6):
+        if at in seen:
+            break
+        seen.add(at)
+        c = card(doc, mats.get(at))
+        if c:
+            return c, ("set on " + at if at == label else f"copied with the body from {at} (its material_set record)")
+        o = _object(doc, at)
+        sc = _shape_card(o) if o is not None else None
+        if sc:
+            return sc, ("the ShapeMaterial of " + at if at == label else f"the ShapeMaterial of {at}, which {label} was copied from")
+        src = copied.get(at)
+        if src is None and o is not None:
+            so = _source_of(o)
+            src = so.Label if so is not None else None
+        if not src:
+            break
+        at = src
+    return None, None
+
+
 def of_body(doc, label, default="pla"):
-    """The body's material card, and whether it was set or assumed."""
-    mid = store.materials(doc).get(label)
-    c = card(doc, mid)
+    """The body's material card, and whether it was set or assumed (set
+    also when it came with a copy: resolve)."""
+    c, _how = resolve(doc, label)
     if c:
         return c, True
     return (filament_card(default), False) if default else (None, False)
+
+
+def of_body_said(doc, label, default="pla"):
+    """(card, set, from): of_body and the words for where it came from."""
+    c, how = resolve(doc, label)
+    if c:
+        return c, True, how
+    return (filament_card(default), False, f"assumed {str(default).upper()}: no material on {label} or on what it was copied from (material_set records the real one)") if default else (None, False, None)
+
+
+def carry(doc, src, copies):
+    """A copy keeps the material of the body it was copied from: the
+    source's record goes to each copy that has none of its own, the copy's
+    source is kept (store materialFrom, so a later material_set on the
+    source is not followed: the copy has its own record), and the library
+    card on ShapeMaterial goes with it. The labels given the material."""
+    try:
+        src_label = src.Label if hasattr(src, "Label") else str(src)
+    except Exception:
+        return []
+    mats = dict(store.materials(doc))
+    copied = dict(store.read(doc, "materialFrom", {}))
+    mid = mats.get(src_label)
+    if mid is None:
+        c, _how = resolve(doc, src_label)
+        mid = c.get("id") if c else None
+    so = src if hasattr(src, "Label") else _object(doc, src_label)
+    done = []
+    for cp in copies if isinstance(copies, (list, tuple)) else [copies]:
+        try:
+            lbl = cp.Label
+        except Exception:
+            continue
+        if lbl == src_label:
+            continue
+        copied[lbl] = src_label
+        if mid is not None and lbl not in mats:
+            mats[lbl] = mid
+            done.append(lbl)
+        try:
+            if so is not None and hasattr(so, "ShapeMaterial") and hasattr(cp, "ShapeMaterial") and _shape_card(so) and not _shape_card(cp):
+                cp.ShapeMaterial = so.ShapeMaterial
+        except Exception:
+            pass
+    store.write(doc, "materials", mats)
+    store.write(doc, "materialFrom", copied)
+    return done
 
 
 def _brief(c):

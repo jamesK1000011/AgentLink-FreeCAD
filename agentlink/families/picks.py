@@ -477,3 +477,15 @@ def json_safe(v, depth=0):
     if isinstance(v, bytes):
         return f"<{len(v)} bytes>"
     return str(v)
+
+
+def carry_material(s, src, copies):
+    """A copy keeps the material of what it was copied from
+    (material.carry); the labels given it. A copy is never refused for
+    this: an error leaves the copy without a record, as before."""
+    try:
+        from . import material
+
+        return material.carry(s.doc, src, copies)
+    except Exception:  # noqa: BLE001
+        return []

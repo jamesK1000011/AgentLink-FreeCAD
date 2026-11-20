@@ -188,3 +188,47 @@ def set_aside(session):
     state is set aside for."""
     b = _book(session)
     return sorted(n for n, (d, _st) in b["parked"].items() if is_open(d, n))
+
+
+def front_document():
+    """The document in front: the window's active document (its 3D view's
+    tab) when there is a window, else FreeCAD's ActiveDocument; None when
+    none. Tools that act on "the active document" (FreeCAD's own commands,
+    FEM's and Draft's makers) act on this one, not on the session's."""
+    try:
+        import FreeCAD
+    except Exception:
+        return None
+    if getattr(FreeCAD, "GuiUp", False):
+        try:
+            import FreeCADGui
+
+            gd = FreeCADGui.ActiveDocument
+            if gd is not None and getattr(gd, "Document", None) is not None:
+                return gd.Document
+        except Exception:
+            pass
+    try:
+        return FreeCAD.ActiveDocument
+    except Exception:
+        return None
+
+
+def mismatch(session_doc):
+    """{agentDocument, frontDocument, mismatch} when the document in front
+    is another one than the session's (by name, or another object of the
+    same name: a document closed and opened again); {} when they agree or
+    no document is in front."""
+    front = front_document()
+    if front is None or session_doc is None:
+        return {}
+    try:
+        same = front is session_doc or (front.Name == session_doc.Name and is_open(session_doc))
+        if same:
+            return {}
+        mine, theirs = session_doc.Label, front.Label
+    except Exception:
+        return {}
+    return {"agentDocument": mine, "frontDocument": theirs,
+            "mismatch": f"The agent works in {mine}, but {theirs} is in front. Tools that act on the front document act on {theirs}. "
+                        f"doc_switch {{ document: \"{mine}\" }} binds both to {mine} again."}

@@ -408,7 +408,7 @@ def tools(s):
                     "cloud_points": cloud_points, "quadric_patch": quadric_patch}
 
     # The wrappers kept as data (agentlink/data/tools.json) run on these.
-    helpers = {"doc": d, "done": done, "unique": s.unique, "placed": picks.placed, "placement": picks.placement,
+    helpers = {"carry_material": lambda src, copies: picks.carry_material(s, src, copies), "doc": d, "done": done, "unique": s.unique, "placed": picks.placed, "placement": picks.placement,
                "shaped": lambda ref, what: picks.shaped(d(), ref, what),
                "find": lambda ref, what="object": picks.find(d(), ref, what), "snapshot": lambda tool: s.snapshot(tool), "V": V,
                # PartDesign: bodies, their features and their tip

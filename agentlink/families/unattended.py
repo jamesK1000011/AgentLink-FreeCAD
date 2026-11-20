@@ -152,6 +152,37 @@ def tools(s):
         except Exception:
             pass
 
+    def front_doc():
+        """The document in front (docstates.front_document), or None."""
+        from .. import docstates
+
+        return docstates.front_document()
+
+    def rebind(nd):
+        """The session bound to nd again, and nd made FreeCAD's active
+        document and, in the window, the tab in front: after a restart the
+        session can name nd while another document is in front, and the
+        tools that act on the front document act on that one. The label of
+        the document that was in front, or None."""
+        fd = front_doc()
+        was = None
+        try:
+            was = fd.Label if fd is not None and fd is not nd else None
+        except Exception:
+            pass
+        s.switch(nd)
+        try:
+            s.pinned_label = nd.Label
+        except Exception:
+            pass
+        try:
+            FreeCAD.setActiveDocument(nd.Name)
+        except Exception:
+            pass
+        if getattr(FreeCAD, "GuiUp", False):
+            _bring_front(nd)
+        return was
+
     def doc_names(docs):
         """Open documents for a refusal, as doc.doc_names writes them."""
         from .doc import doc_names as names
@@ -188,7 +219,7 @@ def tools(s):
         "file_picker_refusal": lambda d, btn: gl("file_picker_press")(d, btn),
         "file_dialog_approval": file_dialog_approval,
         "current": lambda: s.doc, "docs": lambda: list(FreeCAD.listDocuments().values()), "open_row": lambda d: {"name": d.Name, "label": d.Label, "file": d.FileName or None, **_modified(d)},
-        "doc_by": doc_by, "doc_names": doc_names, "moved_to": moved_to, "gui_up": lambda: bool(getattr(FreeCAD, "GuiUp", False)), "bring_front": _bring_front,
+        "doc_by": doc_by, "doc_names": doc_names, "moved_to": moved_to, "gui_up": lambda: bool(getattr(FreeCAD, "GuiUp", False)), "bring_front": _bring_front, "front_doc": front_doc, "rebind": rebind,
         "bodies": lambda: s.bodies(),
         "queue_state": lambda: keep.queue_state(), "lifted": lifted, "preset": lambda: keep.preset(),
     }

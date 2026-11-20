@@ -121,6 +121,7 @@
    ],
    "changers": [
     "active",
+    "carry_material",
     "edit_points",
     "finish",
     "named",
@@ -204,6 +205,7 @@
     "num",
     "placement",
     "placement_json",
+    "refine_harm",
     "resolve",
     "rotation",
     "section_area",
@@ -823,6 +825,7 @@
     "vec3"
    ],
    "changers": [
+    "carry_material",
     "finish",
     "tube"
    ],
@@ -1128,6 +1131,7 @@
    ],
    "changers": [
     "as_its_file",
+    "carry_material",
     "close_document",
     "join_feature",
     "open_document"
@@ -1311,6 +1315,7 @@
     "doc_names",
     "docs",
     "expanduser",
+    "front_doc",
     "gui_up",
     "isdir",
     "join",
