@@ -53,7 +53,7 @@ Notes:
 ```
 Agent Link connects an MCP client (an AI agent) to FreeCAD: headless, or live in the user's window, where the agent never moves the cursor. Workbench "Agent Link" (Start/Stop Link, a panel), two preference-pack themes (Studio Light, Studio Dark).
 - Index ID proposed: AgentLink (the Mod folder that our Claude extension also installs into, so both installs are the same add-on).
-- Branch: main. Release tag: agentlink-v1.0.0. package.xml: version 1.0.0, freecadmin 1.0.0.
+- Branch: main. Release tag: agentlink-v1.0.0. package.xml: version 1.0.0, freecadmin 1.1.0.
 - Python dependency: numpy (on the allow list).
 - Licence: LGPL-2.1-or-later; data CC-BY-4.0 (LICENSES/).
 - Network: none at import or start-up. Only on a user or agent request (FreeCAD and add-on updates from GitHub, the add-on catalog). Disclosed in docs/PRIVACY.md. No telemetry.
@@ -71,7 +71,7 @@ Notes:
 
 ```
 Workshop adds making features to the workbenches where they belong (standard parts in Part and Part Design, holes and threads, TechDraw drawings, KiCad boards, SafetyNet checkpoints in Tools) and one small Make workbench.
-- Index ID proposed: Workshop. Branch: main. Tag: v1.0.0. freecadmin 1.0.0.
+- Index ID proposed: Workshop. Branch: main. Tag: v1.0.0. freecadmin 1.1.0.
 - Python: numpy; scipy optional (both on the allow list).
 - Licence: LGPL-2.1-or-later; data CC-BY-4.0.
 - Agent tools through Agent Link when it is installed; works without it.
@@ -84,7 +84,7 @@ toolbars, menus, and other side effects stay within the addon's own
 workbench." Expect the reviewer to ask about this. Be ready to explain it
 or to move the commands into the Make workbench.
 
-### 3. ScanRuler for FreeCAD
+### 3. ScanRuler FC (repository ScanRuler-FreeCAD)
 
 Repository: `https://github.com/jamesK1000011/ScanRuler-FreeCAD`
 
@@ -92,7 +92,7 @@ Notes:
 
 ```
 A port of ScanRuler's scan measuring (fits, alignment, deviation, wall thickness, sections, mesh tools, reverse engineering) by Stefan Hermann (CNC Kitchen), as a ScanRuler workbench. An independent port, not made or endorsed by CNC Kitchen.
-- Index ID proposed: ScanRulerFC. Branch: main. Tag: v1.0.0. freecadmin 1.0.0.
+- Index ID proposed: ScanRulerFC. Branch: main. Tag: v1.0.0. freecadmin 1.1.0.
 - Python: numpy; scipy optional.
 - Licence: AGPL-3.0-only (as ScanRuler); fonts OFL-1.1. NOTICE.md credits the source.
 - Not affiliated with or endorsed by the FreeCAD project or the FPA.
@@ -106,7 +106,7 @@ Notes:
 
 ```
 Surface textures for printed parts: BumpMesh's texturing engine by Stefan Hermann (CNC Kitchen), ported to Python, with its settings sidebar, Texture Gallery and live preview, in a Texturizer workbench.
-- Index ID proposed: Texturizer. Branch: main. Tag: v1.0.0. freecadmin 1.0.0.
+- Index ID proposed: Texturizer. Branch: main. Tag: v1.0.0. freecadmin 1.1.0.
 - Python: numpy.
 - Licence: AGPL-3.0-only (as BumpMesh); textures CC-BY-4.0 and CC0-1.0. NOTICE.md credits the source.
 - Not affiliated with or endorsed by the FreeCAD project, the FPA or CNC Kitchen.

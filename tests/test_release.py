@@ -162,7 +162,7 @@ class PackageXml(unittest.TestCase):
             self.one(tag)
         self.assertRegex(self.one("version").text, r"^\d+\.\d+\.\d+$")
         self.assertRegex(self.one("date").text, r"^\d{4}-\d{2}-\d{2}$")
-        self.assertEqual(self.one("freecadmin").text.strip(), "1.0.0")
+        self.assertEqual(self.one("freecadmin").text.strip(), "1.1.0")
 
     def test_versions_agree(self):
         v = self.one("version").text.strip()

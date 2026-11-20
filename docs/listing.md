@@ -44,7 +44,7 @@ measuring, from ScanRuler by Stefan Hermann, CNC Kitchen), Workshop
 that is not installed costs no tokens.
 
 It works with Claude Desktop, Claude Code, Cursor, VS Code, LM Studio and
-other MCP clients. It needs FreeCAD 1.0 or later (1.1 recommended).
+other MCP clients. It needs FreeCAD 1.1 or later.
 
 Not affiliated with or endorsed by the FreeCAD project, the FreeCAD Project
 Association (FPA) or CNC Kitchen.

@@ -170,7 +170,7 @@ each marked DRAFT. Nothing is submitted for you.
 
 | Front door | What it needs | When |
 |---|---|---|
-| PyPI `agentlink-freecad` | a PyPI account; a token, or trusted publishing | after the hub tag |
+| PyPI `agentlink-freecad` | a PyPI account; trusted publishing (a pending publisher, once) | after the hub tag |
 | MCP Registry | the PyPI release; a GitHub sign-in | after PyPI |
 | Claude extension (`.mcpb`) | nothing more: it is the release file | at the hub tag |
 | Anthropic directory | the PyPI release; a paid Claude plan; GitHub connected on claude.ai | after PyPI |
@@ -197,25 +197,20 @@ after you delete it. Do it in a fresh clone of the tag.
    uvx twine check dist/*
    ```
 
-3. Upload. Use one of the two ways:
-   - **A. Token (the first upload).** Make an account-wide token at
-     https://pypi.org/manage/account/token/, then:
-
-     ```sh
-     uv publish dist/agentlink_freecad-1.0.0*
-     ```
-
-     User `__token__`, password the token. After the upload, delete that
-     token and make one for this project only.
-   - **B. Trusted publishing (no token).** Follow the steps at the top of
-     [packaging/listing/pypi-publish.yml](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/packaging/listing/pypi-publish.yml):
-     a pending publisher at https://pypi.org/manage/account/publishing/
-     (project `agentlink-freecad`, owner `jamesK1000011`, repository
-     `AgentLink-FreeCAD`, workflow `pypi-publish.yml`, environment `pypi`),
-     a `pypi` environment with you as reviewer, then move the file to
-     `.github/workflows/`. The next `agentlink-v*` tag uploads after you
-     approve it. Guide:
-     https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
+3. Upload. The chosen way is **trusted publishing** (no token):
+   `.github/workflows/pypi-publish.yml` is active and runs on each
+   `agentlink-v*` tag. **Before the first hub tag**, add a pending publisher
+   once at https://pypi.org/manage/account/publishing/ : project
+   `agentlink-freecad`, owner `jamesK1000011`, repository
+   `AgentLink-FreeCAD`, workflow `pypi-publish.yml`, environment `pypi`.
+   If the tag came first, the publish job fails and uploads nothing: add the
+   publisher, then re-run the job (`gh run rerun --failed <run id>`).
+   Optional: a required reviewer on the `pypi` environment (Settings >
+   Environments > pypi), so each upload waits for you. Guide:
+   https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
+   The way by hand, if ever needed: a token from
+   https://pypi.org/manage/account/token/ and `uv publish dist/agentlink_freecad-1.0.0*`
+   (user `__token__`).
 4. Check:
 
    ```sh

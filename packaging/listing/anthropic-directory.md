@@ -57,7 +57,7 @@ What Claude can do: Part and Part Design modelling, sketches with constraints, p
 
 The tool list starts short and grows by group, so a session costs few tokens. File steps and code runs need your approval.
 
-Needs FreeCAD 1.0 or later (1.1 recommended) and uv. Licence LGPL-2.1-or-later. Not affiliated with or endorsed by the FreeCAD project or the FreeCAD Project Association (FPA).
+Needs FreeCAD 1.1 or later and uv. Licence LGPL-2.1-or-later. Not affiliated with or endorsed by the FreeCAD project or the FreeCAD Project Association (FPA).
 ```
 
 ## Tools summary

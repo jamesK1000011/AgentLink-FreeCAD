@@ -11,7 +11,6 @@ submits each one by hand, in the order of `docs/RELEASING.md`
 | [mcp-registry.md](mcp-registry.md) | Official MCP Registry | `mcp-publisher publish` of the top-level `server.json` |
 | [anthropic-directory.md](anthropic-directory.md) | Anthropic's directory (claude.ai) | developer portal, "Plugin bundle" |
 | [claude-plugin/](claude-plugin/) | the plugin that the portal reads | portal "Plugin path": `packaging/listing/claude-plugin` |
-| [pypi-publish.yml](pypi-publish.yml) | PyPI trusted publishing (optional) | move to `.github/workflows/` and register it on PyPI |
 
 The listing text for every place is in
 [docs/listing.md](../../docs/listing.md). The privacy policy is

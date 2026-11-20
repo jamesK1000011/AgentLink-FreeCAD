@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# DRAFT, not active: GitHub runs workflows only from .github/workflows/.
 # PyPI trusted publishing for agentlink-freecad: no token is kept anywhere.
-# To use it (docs/RELEASING.md, section 3.3, option B):
-#   1. On https://pypi.org/manage/account/publishing/ add a pending
-#      publisher: PyPI project name agentlink-freecad, owner jamesK1000011,
-#      repository AgentLink-FreeCAD, workflow pypi-publish.yml,
-#      environment pypi.
-#   2. In the repository: Settings > Environments > New environment "pypi",
-#      with yourself as a required reviewer (each upload then waits for you).
-#   3. git mv packaging/listing/pypi-publish.yml .github/workflows/pypi-publish.yml
+# Active (the owner chose trusted publishing, 19 Nov 2026). Before the first
+# agentlink-v* tag, the owner adds a pending publisher once on
+# https://pypi.org/manage/account/publishing/ : PyPI project name
+# agentlink-freecad, owner jamesK1000011, repository AgentLink-FreeCAD,
+# workflow pypi-publish.yml, environment pypi. Without it the publish job
+# fails and nothing is uploaded; run it again after the publisher is added.
+# GitHub makes the "pypi" environment at the first run; a required reviewer
+# can be added there (Settings > Environments > pypi).
 # It runs on an agentlink-v* tag only, so it costs no minutes otherwise.
 # Guide: https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
 name: PyPI release
