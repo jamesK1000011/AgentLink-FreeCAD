@@ -77,7 +77,14 @@ EXPECT = {
 # Refusals written in the data that no case here reaches. One: varset_new shares varset_set's loop over the properties, and a set
 # just made has no property of its own names left to give (the VarSet's own are refused before): the refusal for a value an
 # existing property will not take is varset_set's, and is reached there.
-UNREACHED = ["varset_new: properties.{pname} = {value!r}: it is a {o.getTypeIdOfProperty(pname)}"]
+# The skeleton workflow's refusals (20 Nov: refs, offset, the container): the handler at BASE had no such input,
+# so no case here can compare them; tests/test_datum_skeleton.py reaches each.
+UNREACHED = ["varset_new: properties.{pname} = {value!r}: it is a {o.getTypeIdOfProperty(pname)}",
+             'pd_datum: refs or on, not both: on finds one round edge, refs names the referenc',
+             'pd_datum: offset: { at: [x,y,z], rotate: { axis, angle } }.',
+             "pd_datum: This FreeCAD makes no {kind} datum in a body: {'; '.join(tried)}",
+             "pd_datum: The datum {kind} would not attach to {', '.join(att['refs'])} as {att[",
+             ]
 
 
 def cases(fc, tmp, old, new):

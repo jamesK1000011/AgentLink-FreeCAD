@@ -128,6 +128,9 @@ def description(name, old):
 TRACES = [
     (", 0.0873, False)", ", 0.5, False)",
      "Live 65: an exported mesh is made with an angular deflection of 0.5 rad (geometry.EXPORT_ANGULAR), not 0.0873: one loft face made 3.77 M triangles."),
+    (".newObject('PartDesign::CoordinateSystem', 'LCS')", ".newObject('Part::LocalCoordinateSystem', 'LCS')",
+     "20 Nov, skeleton workflow: pd_datum kind lcs makes FreeCAD 1.1's Part::LocalCoordinateSystem (an App::LocalCoordinateSystem, which a Body "
+     "takes and Assembly joints read with its own origin, axes and planes); PartDesign::CoordinateSystem only where that type is not there."),
 ]
 
 
@@ -158,6 +161,19 @@ SCHEMAS = {
                    "after": [("values", "property", {"type": "string", "description": "One property's name, with value: the same as values { property: value }."}),
                              ("property", "value", {})],
                    "required": ["object"]},
+    # 20 Nov, the skeleton workflow of the design kickoff: a datum on several references of any object,
+    # its mode, its AttachmentOffset, and (part_datum) the Body or App::Part that holds it.
+    "pd_datum": {"why": "skeleton workflow: refs, mode, offset",
+                 "after": [("rotate", "refs", {"type": "array", "items": {"type": "string"},
+                                               "description": "One to four references in order, any object: \"Binder.Vertex1\", \"Skeleton.Edge2\", a whole \"Skeleton\". Not with on."}),
+                           ("refs", "mode", {"type": "string", "description": "With refs: a FreeCAD MapMode (OZX, ObjectXY, Translate, Concentric, NormalToEdge …)."}),
+                           ("mode", "offset", {"type": "object", "description": "With refs: { at: [x,y,z], rotate: { axis, angle } }, the AttachmentOffset in the frame that the references give."})]},
+    "part_datum": {"why": "skeleton workflow: refs, offset, body, part",
+                   "after": [("to", "refs", {"type": "array", "items": {"type": "string"},
+                                             "description": "One to four references in order, any object: \"Binder.Vertex3\", \"Skeleton.Edge2\", a whole \"LCS\". Not with to."}),
+                             ("mode", "offset", {"type": "object", "description": "{ at: [x,y,z], rotate: { axis, angle } }: the AttachmentOffset, in the frame that the references give."}),
+                             ("offset", "body", {"type": "string", "description": "A PartDesign Body to hold the datum."}),
+                             ("body", "part", {"type": "string", "description": "An App::Part to hold the datum."})]},
 }
 
 
@@ -196,6 +212,8 @@ RESULTS = {
                   "findings 2, 3: the gap across the joint and where each element was picked; bicycle 3, 4, 5: keep, the flip's plane, a coupling's ratio"),
     "asm_sweep": (("staticOverlaps", "staticNote", "partial", "stepsDone", "continueWith", "partialNote"), "bicycle 6, 7: a sweep in time, static overlaps apart"),
     "asm_bom": ((), "finding 11: rows of parts in a print setup carry massAs and solidMass (none in the stand-in's cases)"),
+    "pd_datum": (("refs", "mode", "offset", "world", "type"), "skeleton workflow (20 Nov): a datum attached by refs says them, its mode, offset and world placement"),
+    "part_datum": (("refs", "offset", "in", "world"), "skeleton workflow (20 Nov): refs, the container and the world placement"),
 }
 
 

@@ -130,6 +130,8 @@ def tools(session):
                "unique": lambda label, *own: s.unique(label, *own), "body": lambda ref: pc.pd_body(doc(), ref),
                "sketch_of": lambda ref, b=None: pc.sketch_of(doc(), ref, b), "in_body": pc.in_body, "body_of": pc.body_of, "volume": pc.volume,
                "tip_shape": pc.tip_shape, "ref_list": picks.ref_list,
+               # a datum on several references (pd_common: the skeleton workflow)
+               "attach_refs": lambda *x: pc.attach_refs(*x), "world_json": pc.world_json, "placement_json": picks.placement_json,
                # FreeCAD's own
                "V": V, "placement": FreeCAD.Placement, "rotation": FreeCAD.Rotation, "setprop": setattr, "getprop": getattr, "xyz": pc.geo.vec, "vec3": pc.vec3,
                "num_json": picks.num_json,

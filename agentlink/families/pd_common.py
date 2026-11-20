@@ -585,3 +585,158 @@ def repair_refs(doc, snap):
         f.Base = (base, new)
     doc.recompute()
     return moved
+
+
+# ---- datums attached to several references (the skeleton workflow) -------------------------
+#
+# A datum (point, line, plane, coordinate system) attached to one or more
+# references of any object: a sketch, a SubShapeBinder, a datum, an LCS, a
+# feature. FreeCAD's attacher (src/Mod/Part/App/Attacher.cpp, 1.1) reads the
+# references in order; the default mode for a combination comes from its
+# table of reference types per mode:
+#   coordinate system / plane (AttachEngine3D)
+#     vertex              Translate     origin at the vertex, axes as the global ones
+#     vertex + edge       OZX           origin at the vertex, Z along the edge (start to end)
+#     vertex + vertex     OZX           origin at the first, Z toward the second
+#     vertex + 2 more     OZX           Z by the second, X by the third
+#     vertex + circle     Concentric    origin at the circle's centre, Z on its axis
+#     straight edge       NormalToEdge  Z along the edge, at its start
+#     circle or arc       Concentric
+#     flat face           FlatFace
+#     face + vertex       TangentPlane
+#     whole object        ObjectXY      the object's own placement
+#   line (AttachEngineLine): straight edge or two vertices TwoPointLine, circle
+#     AxisOfCurvature, two faces IntersectionLine, whole object ObjectZ
+#   point (AttachEnginePoint): vertex Vertex, circle CenterOfCurvature, whole
+#     object ObjectOrigin, other edges, faces and several vertices CenterOfMass
+
+MODE_KIND = {"lcs": "csys"}
+
+
+def _elem_kind(o, sub):
+    """V vertex, E straight edge, C circle or arc, K other curve, F face, O whole object or a datum's own element."""
+    if not sub:
+        return "O"
+    m = picks.SUB.match(sub)
+    if not m:
+        return "O"  # an LCS's own Origin, X_Axis, XY_Plane …
+    sh = getattr(o, "Shape", None)
+    if sh is None or sh.isNull():
+        raise ToolError("invalid_state", f"{o.Label}.{sub}: {o.Label} has no shape to take {sub} from — give the whole object, or a binder, sketch or feature with a shape.")
+    el = picks.element(sh, sub, o.Label)
+    kind = m.group(1)
+    if kind == "Vertex":
+        return "V"
+    if kind == "Face":
+        return "F"
+    try:
+        c = el.Curve
+        name = type(c).__name__
+    except Exception:
+        name = ""
+    if name in ("Line", "LineSegment"):
+        return "E"
+    if name == "Circle":
+        return "C"
+    return "K"
+
+
+def default_mode(kind, sig):
+    """The attacher's mode for a datum kind and the references' kinds in
+    order (a string of V E C K F O), and the order to give them in: a list of
+    indexes. (None, None) when there is no plain choice: then mode is needed."""
+    k = MODE_KIND.get(kind, kind)
+    n = len(sig)
+    order = list(range(n))
+    if k in ("csys", "plane"):
+        one = {"V": "Translate", "E": "NormalToEdge", "C": "Concentric", "K": "NormalToEdge", "F": "FlatFace", "O": "ObjectXY"}
+        if n == 1:
+            return one[sig], order
+        if sorted(sig) in (["C", "V"],):
+            return "Concentric", order
+        if "V" in sig and 2 <= n <= 3 and all(c in "VE" for c in sig):
+            v = sig.index("V")  # the origin first: the O-modes take it so
+            return "OZX", [v] + [i for i in order if i != v]
+        if sorted(sig) == ["F", "V"]:
+            return "TangentPlane", order
+        return None, None
+    if k == "line":
+        if sig in ("E", "VV"):
+            return "TwoPointLine", order
+        if sig == "C":
+            return "AxisOfCurvature", order
+        if sig == "FF":
+            return "IntersectionLine", order
+        if sig == "O":
+            return "ObjectZ", order
+        return None, None
+    if k == "point":
+        if sig == "V":
+            return "Vertex", order
+        if sig == "C":
+            return "CenterOfCurvature", order
+        if sig == "O":
+            return "ObjectOrigin", order
+        if all(c != "O" for c in sig) and n <= 4:
+            return "CenterOfMass", order
+        return None, None
+    return None, None
+
+
+def ref_object(doc, name, body=None):
+    """The object a reference names, any kind, shown or hidden; one of the
+    body's own first when two have that label."""
+    if body is not None:
+        for o in getattr(body, "Group", None) or []:
+            if name in (o.Label, o.Name):
+                return o
+    return picks.named(doc, name, prefer=())
+
+
+def attach_refs(doc, o, refs, mode=None, kind="csys", offset=None, body=None):
+    """Attach the datum o to refs ["Obj.Vertex1", "Obj.Edge2", "Obj"] by
+    mode (a FreeCAD MapMode), or by the default for the references (the
+    table above). offset: the AttachmentOffset Placement. Returns
+    { refs: [as kept, in order], mode }."""
+    if not isinstance(refs, list) or not refs or len(refs) > 4 or not all(isinstance(r, str) and r for r in refs):
+        raise ToolError("invalid_input", "refs: one to four references, \"Binder.Vertex3\", \"Skeleton.Edge2\" or a whole object \"Skeleton\" — a sketch, binder, datum, LCS or feature.")
+    pairs, sig = [], ""
+    for r in refs:
+        head, sub = picks.split_ref(r)
+        if head is None:
+            raise ToolError("invalid_input", f"refs {r!r}: name the object too, \"Binder.{sub}\".")
+        t = ref_object(doc, head, body)
+        if t is None:
+            raise ToolError("not_found", f"refs {r!r}: no object {head!r} — session_state names them; a binder or sketch by its label.")
+        if t is o:
+            raise ToolError("invalid_input", f"refs {r!r}: the datum cannot attach to itself.")
+        sig += _elem_kind(t, sub)
+        pairs.append((t, sub or ""))
+    if mode:
+        order, chosen = list(range(len(pairs))), str(mode)
+    else:
+        chosen, order = default_mode(kind, sig)
+        if chosen is None:
+            raise ToolError("invalid_input", f"refs: no plain mode for these references ({', '.join(refs)}) — give mode, a FreeCAD MapMode: "
+                            "OZX (origin at a vertex, Z along an edge), ObjectXY, FlatFace, NormalToEdge, Concentric, Translate, TwoPointLine, CenterOfMass …")
+    pairs = [pairs[i] for i in order]
+    try:
+        allowed = o.getEnumerationsOfProperty("MapMode") or []
+    except Exception:
+        allowed = []
+    if allowed and chosen not in allowed:
+        raise ToolError("invalid_input", f"mode {chosen!r}: not a FreeCAD attachment mode of this datum — its modes: {', '.join(allowed)}.")
+    setattr(o, support_prop(o), pairs)
+    o.MapMode = chosen
+    if offset is not None:
+        o.AttachmentOffset = offset
+    return {"refs": [f"{t.Label}.{s}" if s else t.Label for t, s in pairs], "mode": chosen}
+
+
+def world_json(o):
+    """Where o is in the document's coordinates (its body or part's placement applied)."""
+    try:
+        p = o.getGlobalPlacement()
+    except Exception:
+        p = o.Placement
+    return picks.placement_json(p)

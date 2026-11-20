@@ -60,7 +60,15 @@ EXPECT = {
     ("part_datum", "left unattached"): {"mode": "Deactivated", "notes": ["left unattached"]},
 }
 # Refusals written in the data that no case here reaches: none.
-UNREACHED = []
+# The skeleton workflow's refusals (20 Nov: refs, offset, the container): the handler at BASE had no such input,
+# so no case here can compare them; tests/test_datum_skeleton.py reaches each.
+UNREACHED = [
+    'part_datum: to or refs, not both: to is one reference, refs is a list of one to fo',
+    'part_datum: body or part, not both: the datum goes in one container.',
+    'part_datum: offset: { at: [x,y,z], rotate: { axis, angle } }.',
+    'part_datum: {box.Label} cannot hold a plain shape, and this FreeCAD has no datum o',
+    "part_datum: The {kind} datum would not attach to {', '.join(att['refs'])} as {att[",
+]
 
 SQ = [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]]
 

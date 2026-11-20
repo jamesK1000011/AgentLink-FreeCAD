@@ -481,10 +481,12 @@ def refused(name):
 def named_objects(doc, names):
     """The objects named (by name or label), each once, and the names not
     found: a call over several objects does the rest and lists those."""
+    from . import picks
+
     objs, unknown = [], []
     for n in names if isinstance(names, list) else [names]:
-        o = doc.getObject(n) if isinstance(n, str) else None
-        o = o or next((x for x in doc.Objects if x.Label == n), None)
+        # Shown or hidden, a PartDesign Body first by its Label (picks.named).
+        o = picks.named(doc, n)
         if o is None:
             unknown.append(n)
         elif o not in objs:

@@ -438,9 +438,20 @@ class Session:
         # Named, any solid object answers (a hidden one, a feature); left
         # out, the one part shown.
         if ref is not None:
-            for o in self.doc.Objects:
-                if self._solid(o) and (o.Label == ref or o.Name == ref or o.Label.lower() == str(ref).lower()):
-                    return o
+            # Shown or hidden: an exact Name or Label before one that differs
+            # in case, a PartDesign Body before other objects of that label.
+            # A Body whose own Shape is empty gives its tip feature (test drive
+            # of 20 Nov, finding 13: hidden sprocket bodies were not found).
+            low = str(ref).lower()
+            for exact in (True, False):
+                hits = [o for o in self.doc.Objects if ((o.Name == ref or o.Label == ref) if exact else (o.Label.lower() == low or o.Name.lower() == low))]
+                hits = [o for o in hits if o.TypeId == "PartDesign::Body"] + [o for o in hits if o.TypeId != "PartDesign::Body"]
+                for o in hits:
+                    if self._solid(o):
+                        return o
+                    tip = getattr(o, "Tip", None) if o.TypeId == "PartDesign::Body" else None
+                    if tip is not None and self._solid(tip):
+                        return tip
         bs = self.bodies()
         if not bs:
             raise ToolError("not_found", "No body in the document: make one first (pd_body_new, part_primitive, or an add-on's generator).")

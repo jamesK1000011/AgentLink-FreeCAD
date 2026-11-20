@@ -37,11 +37,12 @@ from agentlink.protocol import ToolError  # noqa: E402
 # The readers' pin: sha256 of readers.json's entries (each family's readers and changers, and the methods), as
 # scripts/tool_needs.py writes them. A helper or a method that joins or leaves a list changes it: read why
 # (`python3 scripts/tool_needs.py --why name`), then put the new value here.
-PIN = "a5c63f724533e12c6ed917cc3d7962283cfaec012d58ea3325f6adb07cdaeaeb"
+PIN = "af7315d6e939ad7091f2c65757e8e424c46e07ef96313b652bb2aaad2c7bf18e"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
-COUNTS = {"readers": 902, "changers": 150, "families": 37}
+# Skeleton workflow of 20 Nov: world_json, placement_json, pd_body, app_part and prop_at read; attach_refs changes.
+COUNTS = {"readers": 908, "changers": 152, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -370,7 +371,8 @@ class Census(unittest.TestCase):
             self.assertGreaterEqual(needs.later_refusals(e), 0, name)
 
 
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 775, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+# leadingRefusals 780: pd_datum and part_datum check refs, offset and the container first (20 Nov).
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 780, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
 
 
 class Agreement(unittest.TestCase):
