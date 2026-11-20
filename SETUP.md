@@ -32,11 +32,11 @@ cannot be installed, Node 18+ is the backup only for the Claude Desktop
 extension; for other clients use FreeCAD's own Python
 ([docs/clients: Without uv](docs/clients/README.md#without-uv)).
 
-## 3. FreeCAD 1.0 or later (1.1 recommended)
+## 3. FreeCAD 1.1 or later
 
 Ask the person to install it from <https://www.freecad.org/downloads.php>
 (macOS: into /Applications) and to **open it once and close it**: that makes
-its user folder. Done when the check shows `FreeCAD: ok` with 1.0 or later.
+its user folder. Done when the check shows `FreeCAD: ok` with 1.1 or later.
 A FreeCAD in an unusual place: set `FREECAD_APP` (the app or install folder)
 or `FREECAD_LIB` (its `lib` folder) in the client's `env`.
 

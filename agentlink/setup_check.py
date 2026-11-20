@@ -20,12 +20,12 @@ import sys
 
 HOME = os.path.expanduser("~")
 OS = {"Darwin": "mac", "Windows": "windows"}.get(platform.system(), "linux")
-MIN_FREECAD = (1, 0)
+MIN_FREECAD = (1, 1)
 DOWNLOAD = "https://www.freecad.org/downloads.php"
 
 GET_FREECAD = {
-    "mac": f"Download FreeCAD 1.0 or later (1.1 recommended) from {DOWNLOAD} and drag it into /Applications (or set FREECAD_APP to its path).",
-    "linux": f"Install FreeCAD 1.0 or later (1.1 recommended): the AppImage from {DOWNLOAD}, your distribution's package, or conda-forge's `freecad`; or set FREECAD_LIB to its lib folder.",
+    "mac": f"Download FreeCAD 1.1 or later from {DOWNLOAD} and drag it into /Applications (or set FREECAD_APP to its path).",
+    "linux": f"Install FreeCAD 1.1 or later: the AppImage from {DOWNLOAD}, your distribution's package, or conda-forge's `freecad`; or set FREECAD_LIB to its lib folder.",
     "windows": f"Run the FreeCAD 1.1 (or later) installer from {DOWNLOAD}, or set FREECAD_APP to the folder it went in.",
 }
 GET_UV = {
@@ -175,7 +175,7 @@ def check(ask=True):
         if not version and OS == "mac" and fc["where"].endswith(".app"):
             version = _mac_version(fc["where"])
         if version and _vtuple(version)[:2] < MIN_FREECAD:
-            row("FreeCAD", "missing", f"{version} at {fc['where']}: 1.0 or later is needed", GET_FREECAD[OS])
+            row("FreeCAD", "missing", f"{version} at {fc['where']}: 1.1 or later is needed", GET_FREECAD[OS])
         else:
             row("FreeCAD", "ok", f"{version or 'version unknown'} at {fc['where']}")
     if fc and ask:

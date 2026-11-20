@@ -77,7 +77,7 @@ flowchart LR
 
 ## What you need
 
-- **FreeCAD 1.0 or later.** FreeCAD 1.1 is recommended. Get it from [freecad.org/downloads](https://www.freecad.org/downloads.php).
+- **FreeCAD 1.1 or later.** Get it from [freecad.org/downloads](https://www.freecad.org/downloads.php).
   On a Mac, drag it into Applications.
   **Open FreeCAD once, then close it.** This makes the folder that add-ons go into.
 - **An MCP client.** Claude Desktop is the easiest on a Mac. Claude Code, Cursor, VS Code, LM Studio and others also work.
@@ -86,7 +86,7 @@ flowchart LR
 
 | | macOS | Linux | Windows |
 |---|---|---|---|
-| **FreeCAD 1.0 or later** (required; 1.1 recommended) | [freecad.org/downloads](https://www.freecad.org/downloads.php), dragged into Applications | the AppImage, your distribution's package, or conda-forge's `freecad` | the installer from freecad.org |
+| **FreeCAD 1.1 or later** (required) | [freecad.org/downloads](https://www.freecad.org/downloads.php), dragged into Applications | the AppImage, your distribution's package, or conda-forge's `freecad` | the installer from freecad.org |
 | **uv** (preferred: it brings its own Python) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` or `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
 | **Node** (not needed) | the Claude Desktop extension uses the Node that comes with Claude Desktop | not used | not used |
 | OrcaSlicer (optional, slicing for 3D printing) | [releases](https://github.com/OrcaSlicer/OrcaSlicer/releases) | AppImage or Flatpak | installer |
@@ -560,7 +560,7 @@ Read a file before you share it in a bug report. Remove what you do not want to 
 
 `python3 -m unittest discover -s tests` runs the protocol, data, packaging and release tests anywhere.
 The tool tests need FreeCAD and are skipped without it.
-CI (`.github/workflows/ci.yml`) runs them all on Linux with FreeCAD 1.0 and the newest release, with PrusaSlicer and OrcaSlicer.
+CI (`.github/workflows/ci.yml`) runs them all on Linux with FreeCAD 1.1, with PrusaSlicer and OrcaSlicer.
 
 `AGENTLINK_AS_USER=1` is a test flag, off by default: the agent's calls run as yours (as a click in the panel does).
 So an add-on that follows what you do, such as a lesson you work through, can be tested end to end by an agent.

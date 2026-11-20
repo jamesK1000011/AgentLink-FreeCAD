@@ -13,7 +13,7 @@ Project Association (FPA). FreeCAD is the FPA's trademark.
 
 ## What you need
 
-- FreeCAD 1.0 or later (1.1 recommended), from https://www.freecad.org
+- FreeCAD 1.1 or later, from https://www.freecad.org
 - uv (https://docs.astral.sh/uv/), which starts the server with
   `uvx agentlink-freecad`
 

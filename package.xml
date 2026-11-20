@@ -11,7 +11,7 @@
   <url type="bugtracker">https://github.com/jamesK1000011/AgentLink-FreeCAD/issues</url>
   <url type="readme">https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/README.md</url>
   <url type="documentation">https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/clients/README.md</url>
-  <freecadmin>1.0.0</freecadmin>
+  <freecadmin>1.1.0</freecadmin>
   <icon>agentlink/icons/AgentLink_Workbench.svg</icon>
   <tag>MCP</tag>
   <tag>AI</tag>

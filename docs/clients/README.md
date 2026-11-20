@@ -20,7 +20,7 @@ uvx --from git+https://github.com/jamesK1000011/AgentLink-FreeCAD agentlink-free
 
 ## Before you start
 
-- FreeCAD 1.0 or later (1.1 recommended), opened once.
+- FreeCAD 1.1 or later, opened once.
 - `uv` ([install](https://docs.astral.sh/uv/getting-started/installation/)).
   GUI apps often do not see your shell's PATH: if the client says it cannot
   find `uvx`, put its full path in `command` (`~/.local/bin/uvx` on Mac and
