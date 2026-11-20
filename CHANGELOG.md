@@ -5,6 +5,10 @@ All notable changes to Agent Link for FreeCAD. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+- New guide `design` and the optional skill `skills/design-kickoff/SKILL.md`: the design-engineering method for a new design (brief, concepts, levels and gates, hand-off, feedback loop), with the Agent Link steps for each part of it.
+
 ## [Unreleased]
 
 - `asm_joint` after the bicycle test drive of 20 Nov (a Part boolean on a part broke the joints on its faces; tests/test_asm_datum_repick.py):
