@@ -116,6 +116,7 @@ class AssemblyData(unittest.TestCase):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
+            c["old"] = _meant.case_as_meant(c["tool"], c["case"], c["old"])  # the handler's way changed on purpose since: tests/_meant.py CASES
             c["new"] = _meant.result_as_meant(c["tool"], c["new"])  # answer fields added since: tests/_meant.py RESULTS
             c["new"] = _meant.trace_added_out(c["tool"], c["new"])  # trace lines added since: tests/_meant.py TRACE_ADDED
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")

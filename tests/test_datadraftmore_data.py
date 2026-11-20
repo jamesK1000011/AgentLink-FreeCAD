@@ -118,6 +118,8 @@ class DraftMoreData(unittest.TestCase):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
+            c["old"] = _meant.case_as_meant(c["tool"], c["case"], c["old"])  # the handler's way changed on purpose since: tests/_meant.py CASES
+            c["new"] = _meant.objects_added_out(c["tool"], _meant.trace_added_out(c["tool"], c["new"]))  # records added since: tests/_meant.py TRACE_ADDED, OBJECTS_ADDED
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")

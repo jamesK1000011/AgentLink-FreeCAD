@@ -66,3 +66,51 @@ def qualify(expr, names, sheet, keep=()):
         out.append(c)
         i += 1
     return "".join(out), done
+
+
+def by_label(expr, labels):
+    """(expression, {name: <<label>>}) with each object named by its name
+    before a "." ("VarSet.lift") written as <<label>>. ("<<Dims>>.lift").
+    labels: {object name: its label}. Not a member (after "." or "#"), not
+    inside <<…>> or quotes. FreeCAD's parser reads <<label>> as an object of
+    the document only (ObjectIdentifier: a real string, never a property or
+    a sub-object of the expression's own object). A bare "VarSet." can be
+    looked up as a sub-object of its own object: on a LocalCoordinateSystem
+    that logs "doesn't contain feature with role" (live, 20 Nov)."""
+    if not isinstance(expr, str) or not labels:
+        return expr, {}
+    out, done, i, n = [], {}, 0, len(expr)
+    while i < n:
+        c = expr[i]
+        if expr.startswith("<<", i):
+            j = expr.find(">>", i + 2)
+            j = n if j < 0 else j + 2
+            out.append(expr[i:j])
+            i = j
+            continue
+        if c in "\"'":
+            j = expr.find(c, i + 1)
+            j = n if j < 0 else j + 1
+            out.append(expr[i:j])
+            i = j
+            continue
+        m = IDENT.match(expr, i)
+        if m and (i == 0 or not (expr[i - 1].isalnum() or expr[i - 1] == "_")):
+            word, j = m.group(0), m.end()
+            member = expr[:i].rstrip().endswith((".", "#"))
+            if word in labels and not member and expr.startswith(".", j) and ">>" not in labels[word]:
+                q = f"<<{labels[word]}>>"
+                out.append(q)
+                done[word] = q
+            else:
+                out.append(word)
+            i = j
+            continue
+        if c.isdigit():
+            m = re.match(r"\d+(?:\.\d*)?(?:[eE][+-]?\d+)?", expr[i:])
+            out.append(m.group(0))
+            i += len(m.group(0))
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out), done

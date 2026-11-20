@@ -247,3 +247,109 @@ def trace_added_out(tool, new):
 
     pats = [re.compile(re.escape(s_).replace(re.escape("{j}"), r"[^.]+")) for s_ in starts]
     return {**new, "trace": [ln for ln in new["trace"] if not (isinstance(ln, str) and any(p.match(ln) for p in pats))]}
+
+
+# Trace lines and objects a converted tool now adds on the stand-in FreeCAD
+# (taken out of the new run before the compare, as TRACE_ADDED): per tool,
+# the line starts, the object labels, and why.
+TRACE_ADDED["draft_clone"] = (("addObject('App::FeaturePython', 'AgentLinkRecords')", "AgentLinkRecords."),
+                              "7a8477d, bicycle finding 11: a clone keeps its source's material; the record (materialFrom) is written to the document's records object")
+OBJECTS_ADDED = {
+    "draft_clone": (("Agent Link records",), "7a8477d: the records object that holds materialFrom"),
+}
+
+
+def objects_added_out(tool, new):
+    """A case's new run with the objects OBJECTS_ADDED names taken out."""
+    labels = OBJECTS_ADDED.get(tool, ((),))[0]
+    if not labels or not isinstance(new.get("objects"), list):
+        return new
+    return {**new, "objects": [o for o in new["objects"] if o not in labels]}
+
+
+# Meant changes to one case's run since the handler at BASE: the handler's
+# old way is no longer the tool's way (a test drive found it wrong). The
+# data tests make these changes to the old run before the compare, so any
+# other change still fails. Per (tool, case): why, and the changes:
+#   message: (old words, new words) in a refusal's message, once
+#   set: answer fields with their new value; drop: answer fields gone
+#   result: the whole new result (a refusal where the handler answered)
+#   trace: [(old lines, new lines)]: a run of trace lines put in place of another
+#   objects: the document's labels after the call
+_KINDS = ("gears, belt (got", "gears, belt, chain (got")
+_TURN_OVER = [  # the old way's flip on an overlap, gone (bicycle finding 4)
+    "common(Solid<Base>, [Solid<Lid>])", "flipOnePart(<Fixed>)"]
+_SLIDE_STEPS = [{"at": 0.0}, {"at": 5.0}, {"at": 10.0}]
+CASES = {
+    ("asm_joint", "a kind not offered"): {"why": "bicycle finding 5: kind chain", "message": _KINDS},
+    ("asm_joint", "no kind"): {"why": "bicycle finding 5: kind chain", "message": _KINDS},
+    ("asm_joint", "kept as FreeCAD put it, overlapping"): {
+        "why": "bicycle finding 4: the warning names each overlap and its volume",
+        "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³ — a face picked the wrong way round, or the parts do not fit. "
+                           "reverse: true flips the second part, or check the sizes."}},
+    ("asm_joint", "a ball joint is not turned over"): {
+        "why": "bicycle finding 4: the warning names each overlap and its volume",
+        "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³ — a face picked the wrong way round, or the parts do not fit. "
+                           "reverse: true flips the second part, or check the sizes."}},
+    ("asm_joint", "turned over to stop an overlap"): {
+        "why": "bicycle finding 4: only autoFlip: true turns a part over; it reads the solve's state again first (one more solve)",
+        "set": {"flipped": "turned over to stop the parts overlapping (autoFlip: true; leave autoFlip out to keep it as FreeCAD first put it)"},
+        "trace": [(["solve(<Assembly>)", "common(Solid<Base>, [Solid<Lid>])", "flipOnePart(<Fixed>)"],
+                   ["solve(<Assembly>)", "solve(<Assembly>)", "common(Solid<Base>, [Solid<Lid>])", "flipOnePart(<Fixed>)"])]},
+    ("asm_joint", "turning over does not help"): {
+        "why": "bicycle finding 4: no part is turned over by itself; the warning says how to flip",
+        "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reverse: true turns the moved part over "
+                           "on the joint; autoFlip: true lets the tool try it; else check the sizes."},
+        "trace": [(_TURN_OVER + ["recompute()", "solve(<Assembly>)", "common(Solid<Base>, [Solid<Lid>])",
+                                 "Base.Placement = Placement(V(0, 0, 0), Rotation(V(0, 0, 1), 0))",
+                                 "Lid.Placement = Placement(V(0, 0, -5), Rotation(V(0, 0, 1), 0))", "recompute()", "solve(<Assembly>)"], [])]},
+    ("asm_joint", "turned over, it no longer solves"): {
+        "why": "bicycle finding 4: no part is turned over by itself; the warning says how to flip",
+        "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reverse: true turns the moved part over "
+                           "on the joint; autoFlip: true lets the tool try it; else check the sizes."},
+        "trace": [(_TURN_OVER + ["Lid.Placement = Placement(V(0, 0, 0), Rotation(V(0, 0, 1), 0))", "recompute()", "solve(<Assembly>)",
+                                 "Base.Placement = Placement(V(0, 0, 0), Rotation(V(0, 0, 1), 0))",
+                                 "Lid.Placement = Placement(V(0, 0, -5), Rotation(V(0, 0, 1), 0))", "recompute()", "solve(<Assembly>)"], [])]},
+    ("asm_sweep", "a slider that collides from the start"): {
+        "why": "bicycle finding 7: the same overlap at every step is static (staticOverlaps); steps, verdict and collidesAt count motion contacts only",
+        "set": {"steps": _SLIDE_STEPS, "verdict": "clear"}, "drop": ("collidesAt", "clearFromStart")},
+    ("part_refine", "a PartDesign body's tip, made worse"): {
+        "why": "7a8477d, bicycle finding 10: a tip's Refine that makes the body worse is set back and refused",
+        "result": ["refused", "failed", "Refine made Housing worse: the volume went from 1000.000 to 500.000 mm³ (-50.00 %). Refine of Pad is set back, "
+                                        "so Housing is as it was. body_check Housing says what is wrong with it now; leave the faces as they are, "
+                                        "or rebuild the step that left them."],
+        "trace": [(["Pad.Refine = True"], ["copy(Solid<housing>)", "Pad.Refine = True"]),
+                  (["soundness(Solid<refined housing>)", "snapshot('part_refine')"], ["Pad.Refine = False", "recompute()"])]},
+}
+
+
+def case_as_meant(tool, case, old):
+    """A case's run at BASE with the meant changes CASES names for it."""
+    import copy
+
+    m = CASES.get((tool, case))
+    if not m:
+        return old
+    old = copy.deepcopy(old)
+    res = old["result"]
+    if "result" in m:
+        res = old["result"] = copy.deepcopy(m["result"])
+    if "message" in m:
+        was, now = m["message"]
+        assert res[0] == "refused" and res[2].count(was) == 1, (tool, case, res)
+        res[2] = res[2].replace(was, now)
+    if m.get("set") or m.get("drop"):
+        assert res[0] == "ok", (tool, case, res)
+        for k, v in m.get("set", {}).items():
+            assert k in res[1], (tool, case, k)
+            res[1][k] = copy.deepcopy(v)
+        for k in m.get("drop", ()):
+            del res[1][k]
+    for was, now in m.get("trace", []):
+        t = old["trace"]
+        at = [i for i in range(len(t) - len(was) + 1) if t[i:i + len(was)] == was]
+        assert len(at) == 1, (tool, case, was, at)
+        old["trace"] = t[:at[0]] + list(now) + t[at[0] + len(was):]
+    if "objects" in m:
+        old["objects"] = list(m["objects"])
+    return old

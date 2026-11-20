@@ -82,6 +82,8 @@ def doc_new(self, type_, _name=None, **kw):
     if type_ in DATUM_TYPES:
         o.__dict__.setdefault("AttachmentSupport", None)
         o.__dict__.setdefault("AttachmentOffset", fc.Placement())
+    if type_ in ("Part::LocalCoordinateSystem", "PartDesign::CoordinateSystem"):
+        o.__dict__.setdefault("kinds", ("App::LocalCoordinateSystem",))  # FreeCAD 1.1: both are an App::LocalCoordinateSystem
     return o
 type(fc.Session().doc).new = doc_new
 
@@ -279,7 +281,40 @@ class SkeletonTools(unittest.TestCase):
         self.assertEqual(got["r"][0], "ok", got["r"])
         self.assertEqual(got["r"][1]["target"], "Seat LCS.AttachmentOffset.Base.x")
         self.assertEqual(got["r"][1]["value"], 120.0)  # read at the nested path (it was None)
-        self.assertEqual(got["engine"], [["AttachmentOffset.Base.x", "VarSet.seat"]])
+        # On an LCS the variable set is written by its label: FreeCAD's parser reads <<Dims>> as an object of the
+        # document only. "VarSet.seat" was looked up as a sub-object of the LCS too, and FreeCAD 1.1 logged
+        # 'LocalCoordinateSystem ... doesn't contain feature with role "VarSet."' (live, 20 Nov).
+        self.assertEqual(got["engine"], [["AttachmentOffset.Base.x", "<<Dims>>.seat"]])
+        self.assertEqual(got["r"][1]["expression"], "<<Dims>>.seat")
+
+    def test_param_bind_writes_other_objects_by_label_on_an_lcs_only(self):
+        got = child('''
+            s, b, sk, bd = skeleton()
+            fc.varset(s, "Dims", seat=("App::PropertyLength", (120, "mm")), lift=("App::PropertyLength", (20, "mm")))
+            run(feature_more, s, "pd_datum", {"body": "Frame", "kind": "lcs", "refs": ["Skeleton binder.Vertex1", "Skeleton binder.Edge1"], "name": "Seat LCS"})
+            o = s.doc.getObjectsByLabel("Seat LCS")[0]
+            o.AttachmentOffset.Base.z = 30.0
+            r = run(param, s, "param_bind", {"target": "Seat LCS.AttachmentOffset.Base.z", "expression": "Dims.lift + VarSet.seat / 12"})
+            pad = s.doc.new("PartDesign::Pad", "Pad")
+            pad.__dict__["Length"] = 120.0
+            r2 = run(param, s, "param_bind", {"target": "Pad.Length", "expression": "Dims.seat"})
+            print(json.dumps({"r": r, "r2": r2, "lcs": o.__dict__.get("ExpressionEngine"), "pad": pad.__dict__.get("ExpressionEngine")}, default=str))
+        ''')
+        self.assertEqual(got["r"][0], "ok", got["r"])
+        self.assertEqual(got["lcs"], [["AttachmentOffset.Base.z", "<<Dims>>.lift + <<Dims>>.seat / 12"]])
+        # Not on an LCS: the object's name, as before (no sub-object lookup there).
+        self.assertEqual(got["r2"][0], "ok", got["r2"])
+        self.assertEqual(got["pad"], [["Length", "VarSet.seat"]])
+
+    def test_labels_in_an_expression_pure(self):
+        from agentlink import exprs
+
+        labels = {"VarSet": "Dims", "Params": "Params", "Odd": "a>>b"}
+        self.assertEqual(exprs.by_label("VarSet.lift", labels), ("<<Dims>>.lift", {"VarSet": "<<Dims>>"}))
+        self.assertEqual(exprs.by_label("Params.width / 2 + VarSet.lift", labels)[0], "<<Params>>.width / 2 + <<Dims>>.lift")
+        for same in ("<<Dims>>.lift", "lift", "Body.VarSet.x", "Doc#VarSet.lift", "'VarSet.lift'", "VarSet", "VarSet001.lift", "Odd.x", "2 * VarSet"):
+            self.assertEqual(exprs.by_label(same, labels)[0], same, same)
+        self.assertEqual(exprs.by_label("VarSet.lift", {}), ("VarSet.lift", {}))
 
     def test_show_and_body_find_a_hidden_body_by_its_label(self):
         got = child('''
