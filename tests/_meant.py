@@ -67,7 +67,9 @@ DESCRIPTIONS = {
          "side of the joint's plane). keep: true, for parts already placed: the offset (and the turn about the joint) that holds them where they stand, so nothing "
          "moves — reply kept { property, at, axis, angle, moved }; not with offset, rotate, gap, reverse or autoFlip."),
         (': asm_check and asm_sweep show what still moves.',
-        ": asm_check and asm_sweep show what still moves. near in a query is in document coordinates (where the part is now); nearLocal is a point in the part's own frame, as modelled. offset's direction depends on which part moves; gap: mm between the two joined faces after the solve, positive apart, negative overlapping — the tool finds the offset for it (gap or offset, not both). Reply also: gap (the result across the joint, mm, negative for overlap) and at (the centre of each element when picked, in document coordinates)."),
+        ": asm_check and asm_sweep show what still moves. near in a query is in document coordinates (where the part is now); nearLocal is a point in the part's own frame, as modelled. offset's direction depends on which part moves; gap: mm between the two joined faces after the solve, positive apart, negative overlapping — the tool finds the offset for it (gap or offset, not both). Reply also: gap (the result across the joint, mm, negative for overlap) and at (the centre of each element when picked, in document coordinates)."
+         # asm2, 20 Nov: joints on datums (LCS) and the stored query's re-pick
+         ' a or b may be a datum inside the part — an LCS, datum plane, line or point (element: its name or label, or { datum }): the joint sits on its origin along its z axis, and stays on through booleans and edits; put joints on LCS markers, not on faces a boolean makes. An end picked by a query keeps the query (queryKept): when a later change renumbers that face, the health check runs it again and re-points the joint ("re-picked Face12 -> Face15"), or leaves it broken and says why (nothing found, or two equal matches).'),
     ],
     'asm_sweep': ("Each step cuts every pair of parts (a call is dropped after about 80 s): with many parts, fewer steps or a shorter range, not a job.",
         "Each step cuts every pair of parts (a call is dropped after about 80 s): the sweep stops in time (about 60 s), and then answers the steps done with "
@@ -149,12 +151,13 @@ def trace_as_meant(lines):
 # drive of 20 Nov): per tool, new descriptions of inputs, inputs put
 # in after a named one (in that order), and the required list.
 # a: near's frame said, nearLocal (20 Nov); b said as a, so the card holds at 900 tokens (bicycle drive).
-_NEAR_A = "{ part, element }: element \"Face6\" or a shape_query query { kind: face|edge, normal, near, nearLocal, radius, type }; near picks the closest."
+_NEAR_A = "{ part, element }: \"Face6\", a datum (\"LCS\", { datum }), or a shape_query query (near picks the closest; nearLocal)."
 SCHEMAS = {
-    "asm_joint": {"why": "findings 2, 3: gap across the joint; near's frame said, nearLocal. Bicycle 3, 4, 5: keep, autoFlip, chain by teeth",
+    "asm_joint": {"why": "findings 2, 3: gap across the joint; near's frame said, nearLocal. Bicycle 3, 4, 5: keep, autoFlip, chain by teeth. asm2: a datum (LCS) as an end",
                   "describe": {"a": _NEAR_A, "b": "As a."},
                   "enum_add": {"kind": ["chain"]},
-                  "after": [("offset", "gap", {"type": "number", "description": "mm between the joined faces after the solve: positive apart, negative overlap. Not with offset."}),
+                  # asm2: gap's own words left to the card (the card stays at 900 tokens)
+                  "after": [("offset", "gap", {"type": "number"}),
                             ("reverse", "autoFlip", {"type": "boolean"}), ("autoFlip", "keep", {"type": "boolean"}), ("keep", "teeth1", {"type": "integer"}),
                             ("teeth1", "teeth2", {"type": "integer"})]},
     "object_set": {"why": "finding 12: { property, value } as well as { values }",
@@ -208,8 +211,8 @@ def schema(name, old):
 # data tests take them out of the new answer before they compare): per tool,
 # the field names and why.
 RESULTS = {
-    "asm_joint": (("gap", "gapIs", "gapWarning", "offset", "at", "flipWarning", "crossedPlane", "kept", "keepWarning", "ratio", "ratioFrom", "teeth"),
-                  "findings 2, 3: the gap across the joint and where each element was picked; bicycle 3, 4, 5: keep, the flip's plane, a coupling's ratio"),
+    "asm_joint": (("gap", "gapIs", "gapWarning", "offset", "at", "flipWarning", "crossedPlane", "kept", "keepWarning", "ratio", "ratioFrom", "teeth", "queryKept"),
+                  "findings 2, 3: the gap across the joint and where each element was picked; bicycle 3, 4, 5: keep, the flip's plane, a coupling's ratio; asm2: the ends whose query is kept"),
     "asm_sweep": (("staticOverlaps", "staticNote", "partial", "stepsDone", "continueWith", "partialNote"), "bicycle 6, 7: a sweep in time, static overlaps apart"),
     "asm_bom": ((), "finding 11: rows of parts in a print setup carry massAs and solidMass (none in the stand-in's cases)"),
     "pd_datum": (("refs", "mode", "offset", "world", "type"), "skeleton workflow (20 Nov): a datum attached by refs says them, its mode, offset and world placement"),
@@ -224,3 +227,23 @@ def result_as_meant(tool, new):
     if not names or not (isinstance(res, list) and res and res[0] == "ok" and isinstance(res[1], dict)):
         return new
     return {**new, "result": [res[0], {k: v for k, v in res[1].items() if k not in names}] + res[2:]}
+
+
+# Trace lines a converted tool now adds to what its handler did on the
+# stand-in FreeCAD (the data tests take them out of the new trace before
+# they compare): per tool, the lines' starts and why.
+TRACE_ADDED = {
+    "asm_joint": (("{j}.addProperty('App::PropertyString', 'AgentLinkQuery')", "{j}.AgentLinkQuery = "),
+                  "asm2 20 Nov: an end picked by a query keeps the query on the joint (AgentLinkQuery) for the re-pick"),
+}
+
+
+def trace_added_out(tool, new):
+    """A case's new run with the trace lines TRACE_ADDED names taken out."""
+    starts = TRACE_ADDED.get(tool, ((),))[0]
+    if not starts or not isinstance(new.get("trace"), list):
+        return new
+    import re
+
+    pats = [re.compile(re.escape(s_).replace(re.escape("{j}"), r"[^.]+")) for s_ in starts]
+    return {**new, "trace": [ln for ln in new["trace"] if not (isinstance(ln, str) and any(p.match(ln) for p in pats))]}

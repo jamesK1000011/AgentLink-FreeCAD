@@ -117,6 +117,7 @@ class AssemblyData(unittest.TestCase):
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
             c["new"] = _meant.result_as_meant(c["tool"], c["new"])  # answer fields added since: tests/_meant.py RESULTS
+            c["new"] = _meant.trace_added_out(c["tool"], c["new"])  # trace lines added since: tests/_meant.py TRACE_ADDED
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
             self.assertNotEqual(c["new"]["result"][0], "crashed" if not c["crash"] else None, f"{c['tool']} {c['case']}: {c['new']['result']}")

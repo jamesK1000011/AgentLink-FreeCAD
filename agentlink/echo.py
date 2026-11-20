@@ -5595,6 +5595,12 @@ class Echo:
                     if not isinstance(end, str) or "." not in end:
                         continue
                     label, el = end.rsplit(".", 1)
+                    if not re.match(r"^(Face|Edge|Vertex)\d+$", el):
+                        # a datum end ("Frame.Rear LCS"): the datum itself lit
+                        d = _objects(doc, [el])
+                        if d:
+                            lit.append((d[0], ""))
+                        continue
                     o = _objects(doc, [label])
                     if o:
                         lit.append((o[0], el))

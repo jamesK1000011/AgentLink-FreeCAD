@@ -7,7 +7,9 @@
 # Faces and edges are picked by what they are (shape_query's queries), so a
 # joint does not depend on FreeCAD's numbering.
 
+import json
 import math
+import re
 import time
 
 import FreeCAD
@@ -211,6 +213,10 @@ def ref_element(doc, r):
     if o.TypeId == "Assembly::AssemblyObject" and len(path) > 1:
         part = doc.getObject(path[0])
     name = path[-1]
+    if not name and len(path) > 1 and part is not None:
+        # a datum end ("LCS."): its frame where it stands now
+        d = datum_end(part, ".".join(path[1:]) if part is not o else sub)
+        return part, d, sub
     try:
         return part, part.Shape.getElement(name), name
     except Exception:
@@ -259,8 +265,14 @@ def _placement(o):
 def _element(session, part, q, what):
     """One face or edge of a part: its name ("Face6", "Edge3") or a query as
     shape_query takes it ({ kind, normal, near, radius, type, … }); with
-    several matching, near picks the closest."""
+    several matching, near picks the closest. A datum inside the part (an
+    LCS, a datum plane, line or point: by name or label, or { datum }) is
+    its sub-name, "LCS." (datum_sub)."""
+    if isinstance(q, dict) and q.get("datum") is not None:
+        return datum_sub(part, q["datum"], what)
     if isinstance(q, str):
+        if not _ELEMENT_NAME.match(q):
+            return datum_sub(part, q, what)
         try:
             part.Shape.getElement(q)
         except Exception:
@@ -268,14 +280,7 @@ def _element(session, part, q, what):
         return q
     if not isinstance(q, dict):
         raise ToolError("invalid_input", f"{what}: a face or edge — \"Face6\", or a query {{ kind: face|edge, normal, near, radius, type }} as shape_query takes.")
-    query = {k: v for k, v in q.items() if k not in ("part", "nearLocal")}
-    if q.get("nearLocal") is not None:
-        # Test drive of 20 Nov, finding 3: near is in the document's coordinates,
-        # where the part is now; a point read off the part as modelled (its
-        # own frame) picked the wrong hole once an earlier joint had moved it.
-        if q.get("near") is not None:
-            raise ToolError("invalid_input", f"{what}: near or nearLocal, not both — near is in document coordinates, nearLocal in the part's own frame.")
-        query["near"] = geo.vec(local_to_world(part, picks.vec3(q["nearLocal"], "nearLocal")))
+    query = query_of(part, q, what)
     query["body"] = part.Name  # by Name: a label can change on recompute
     _, _, hits = M.query(session, query)
     if not hits:
@@ -288,6 +293,21 @@ def _element(session, part, q, what):
         p = picks.vec3(near if isinstance(near, list) else near.get("point"), "near")
         hits = sorted(hits, key=lambda h: h[1].distToShape(Part.Vertex(p))[0])
     return hits[0][2]["ref"]
+
+
+def query_of(part, q, what):
+    """An element query as M.query takes it, from asm_joint's a or b: part
+    and nearLocal taken out, nearLocal turned into near in the document's
+    coordinates (where the part is now). No body."""
+    query = {k: v for k, v in q.items() if k not in ("part", "nearLocal", "body")}
+    if q.get("nearLocal") is not None:
+        # Test drive of 20 Nov, finding 3: near is in the document's coordinates,
+        # where the part is now; a point read off the part as modelled (its
+        # own frame) picked the wrong hole once an earlier joint had moved it.
+        if q.get("near") is not None:
+            raise ToolError("invalid_input", f"{what}: near or nearLocal, not both — near is in document coordinates, nearLocal in the part's own frame.")
+        query["near"] = geo.vec(local_to_world(part, picks.vec3(q["nearLocal"], "nearLocal")))
+    return query
 
 
 def local_to_world(part, p):
@@ -307,6 +327,9 @@ def element_centre(part, el):
     """Where a joint element is now, in the document's coordinates: a
     round edge's or face's centre on its axis, a flat face's middle, else
     its centre of mass. [x, y, z], or None."""
+    if is_datum_sub(el):
+        d = datum_end(part, el)
+        return geo.vec(d["Placement"].Base) if d is not None else None
     try:
         g = _shape(part).getElement(el)
         ax = joint_axis(g)
@@ -516,12 +539,25 @@ def _health(session, tool, changed):
     shared health check, agentlink/health.py): one line an assembly.
     FreeCAD 1.1's solve answers 0 (solved), -1 (the solver threw) or -6
     (nothing grounded) only; "solved" is not "fully constrained" — it does
-    not count the freedom left."""
-    if not str(getattr(tool, "group", "")).startswith("assembly"):
+    not count the freedom left. After any changing call, joint ends kept
+    with a query are read and picked again where a face was renumbered
+    (repick); the solver's line then follows too."""
+    doc = getattr(session, "doc", None)
+    if doc is None:
         return None
+    asms = [o for o in doc.Objects if o.TypeId == "Assembly::AssemblyObject"][:3]
+    own = str(getattr(tool, "group", "")).startswith("assembly")
     out = []
-    asms = [o for o in session.doc.Objects if o.TypeId == "Assembly::AssemblyObject"][:3]
     for asm in asms:
+        # Any changing call can renumber a part's faces (a Part boolean):
+        # the joint ends kept with a query are read, and picked again.
+        try:
+            picked = repick(doc, asm)
+        except Exception:  # noqa: BLE001 - the health check never fails the call
+            picked = []
+        out += picked
+        if not own and not any(x.get("repicked") for x in picked):
+            continue
         code, words = _status(asm)
         line = f"{asm.Label}: assembly {words}"
         if code == 0:
@@ -543,6 +579,14 @@ def ref_label(doc, r):
     if not subs:
         return o.Label
     path = subs[0].split(".")
+    if not path[-1] and len(path) > 1:
+        # a datum end ("LCS." or 1.0's "Part.LCS."): Part.LCS by labels
+        d = doc.getObject(path[-2])
+        label = d.Label if d is not None else path[-2]
+        if o.TypeId == "Assembly::AssemblyObject" and len(path) > 2:
+            p = doc.getObject(path[0])
+            return f"{p.Label if p else path[0]}.{label}"
+        return f"{o.Label}.{label}"
     if o.TypeId == "Assembly::AssemblyObject" and len(path) > 1:
         p = doc.getObject(path[0])
         return f"{p.Label if p else path[0]}.{path[-1]}"
@@ -552,7 +596,10 @@ def ref_label(doc, r):
 def joint_axis(el):
     """Where a joint on this element turns and slides, as asm_joint puts
     it: a flat face's middle and normal; a round edge's or face's axis; a
-    straight edge's start and run. None for anything else."""
+    straight edge's start and run; a datum end (LCS, datum plane …) its
+    origin and its own z axis. None for anything else."""
+    if is_datum_end(el):
+        return el["Placement"].Base, el["Placement"].Rotation.multVec(V(0, 0, 1))
     if isinstance(el, Part.Face):
         srf = el.Surface
         if isinstance(srf, Part.Plane):
@@ -1016,6 +1063,417 @@ def coupling_teeth(ends, kind, teeth1, teeth2, pitch=None):
             "radius1": t1 * p / (2 * math.pi), "radius2": t2 * p / (2 * math.pi)}
 
 
+# ---- datum ends: joints on an LCS or a datum inside a part ------------------------------------
+# FreeCAD 1.1's Assembly reads a whole datum as a joint end when the
+# reference's element is empty: [part, ["LCS.", "LCS."]] (UtilsAssembly.
+# getObject walks the names from the part down; findPlacement gives the
+# datum's own frame for an empty element). The joint then sits on the
+# datum's origin along its z axis. A datum is not a face: a boolean or an
+# edit of the part's solid does not rename it, so the joint stays on.
+
+_ELEMENT_NAME = re.compile(r"^(Face|Edge|Vertex)\d+$")
+DATUM_TYPES = ("App::LocalCoordinateSystem", "App::DatumElement", "Part::Datum")
+_DATUM_IDS = {"App::LocalCoordinateSystem", "App::Origin", "App::Plane", "App::Line", "App::Point", "Part::LocalCoordinateSystem", "Part::Datum",
+              "PartDesign::CoordinateSystem", "PartDesign::Plane", "PartDesign::Line", "PartDesign::Point", "Part::DatumPlane", "Part::DatumLine", "Part::DatumPoint"}
+
+
+def is_datum_end(el):
+    """A datum joint end as ref_element gives it: { datum: the object,
+    Placement: its frame in the document's coordinates } (a plain dict, so
+    reading one changes nothing). joint_axis reads it."""
+    return isinstance(el, dict) and "datum" in el and "Placement" in el
+
+
+def is_datum(o):
+    try:
+        if any(o.isDerivedFrom(t) for t in DATUM_TYPES):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    return getattr(o, "TypeId", "") in _DATUM_IDS
+
+
+def is_datum_sub(el):
+    """A joint element that names a whole datum: "LCS." (empty element)."""
+    return isinstance(el, str) and el.endswith(".") and len(el) > 1
+
+
+def _root(part):
+    """The object whose children hold the part's datums: a link's target."""
+    if getattr(part, "TypeId", "") in LINKS:
+        try:
+            return part.getLinkedObject(True) or part
+        except Exception:  # noqa: BLE001
+            return part
+    return part
+
+
+def _children(o):
+    """What can hold a datum below o: its group, an LCS's or origin's own
+    planes, axes and point, a Body's or App::Part's origin."""
+    out = []
+    for k in ("Group", "OriginFeatures"):
+        out += [x for x in (getattr(o, k, None) or []) if x is not None]
+    org = getattr(o, "Origin", None)
+    if org is not None and not isinstance(org, (str, bytes)) and hasattr(org, "Name"):
+        out.append(org)
+    seen, uniq = set(), []
+    for x in out:
+        if x.Name not in seen:
+            seen.add(x.Name)
+            uniq.append(x)
+    return uniq
+
+
+def _datums(part, depth=4):
+    """Every datum below a part: [(object, path of names)], path from the
+    part down ("Body.LCS" in an App::Part, "LCS" in a Body)."""
+    out, todo = [], [(c, [c.Name]) for c in _children(_root(part))]
+    while todo:
+        o, path = todo.pop(0)
+        if is_datum(o):
+            out.append((o, path))
+        if len(path) < depth:
+            todo += [(c, path + [c.Name]) for c in _children(o)]
+    return out
+
+
+def datum_sub(part, ref, what):
+    """The sub-name of a datum inside a part, as a joint reference ends in
+    it: "LCS." or "Body.LCS." — the datum named by object name, label, or a
+    dotted path of them ("LCS.XY_Plane"). Refused when the part holds no
+    such datum, or two."""
+    ref = str(ref).strip().rstrip(".")
+    found = _datums(part)
+    if not found:
+        kind = getattr(part, "TypeId", "")
+        raise ToolError("invalid_input", f"{what}: {part.Label} has no {ref} — no face or edge of that name, and {part.Label} ({kind}) holds no LCS or datum. "
+                        f"A joint on a datum needs it inside the part: pd_datum {{ kind: lcs, body }} in a Body, or put the part and a coordinate system in an App::Part and join that.")
+    want = ref.split(".")
+
+    def named(o, w):
+        return w == o.Name or w.lower() == str(o.Label).lower()
+
+    hits = []
+    for o, path in found:
+        objs = path  # names from the part down
+        if len(want) == 1:
+            if named(o, want[0]):
+                hits.append((o, path))
+        elif len(objs) >= len(want):
+            tail = [x for x in objs[-len(want):]]
+            chain = [_obj_of(part, n) for n in tail]
+            if all(c is not None and named(c, w) for c, w in zip(chain, want)):
+                hits.append((o, path))
+    if not hits:
+        names = ", ".join(sorted({o.Label for o, _ in found}))
+        raise ToolError("invalid_input", f"{what}: {part.Label} has no {ref} — no face or edge of that name, and no datum of that name or label. Its datums: {names}. "
+                        "shape_query lists its faces and edges.")
+    if len(hits) > 1:
+        raise ToolError("invalid_input", f"{what}: {len(hits)} datums of {part.Label} are named {ref} ({', '.join('.'.join(p) for _, p in hits)}) — give the path, e.g. \"{'.'.join(hits[0][1])}\".")
+    return ".".join(hits[0][1]) + "."
+
+
+def _obj_of(part, name):
+    doc = getattr(part, "Document", None)
+    o = doc.getObject(name) if doc is not None else None
+    if o is None:
+        r = _root(part)
+        d = getattr(r, "Document", None)
+        o = d.getObject(name) if d is not None else None
+    return o
+
+
+def _pmul(pl, v):
+    """A point through a placement."""
+    if hasattr(pl, "multVec"):
+        return pl.multVec(v)
+    return pl.Base + pl.Rotation.multVec(v)
+
+
+def datum_end(part, sub):
+    """The datum a joint end names ("LCS." or "Body.LCS.", from the part
+    down) and its frame in the document's coordinates: the part's placement
+    times each placement on the way down. None when a name is gone."""
+    names = [n for n in str(sub).split(".") if n]
+    if not names:
+        return None
+    pl = getattr(part, "Placement", None) or FreeCAD.Placement()
+    obj = None
+    for n in names:
+        obj = _obj_of(part, n)
+        if obj is None:
+            return None
+        own = getattr(obj, "Placement", None)
+        if own is not None:
+            pl = pl * own  # a new placement (no method: Matrix.multiply changes its own)
+    if obj is None or not is_datum(obj):
+        return None
+    return {"datum": obj, "Placement": pl}
+
+
+def end_text(end):
+    """A joint end as an answer says it: Part.Face6, or Part.LCS by labels."""
+    part, el = end
+    if is_datum_sub(el):
+        d = datum_end(part, el)
+        return f"{part.Label}.{d['datum'].Label if d is not None else el.rstrip('.').split('.')[-1]}"
+    return f"{part.Label}.{el}"
+
+
+# ---- stored element queries and the re-pick ---------------------------------------------------
+# A face picked by a query ({ kind, normal, near, radius … }) is kept on the
+# joint (property AgentLinkQuery, JSON): the query, the element it picked,
+# where that element was (its centre and size, in the document's
+# coordinates) and the part's frame then. A Part boolean renumbers the faces
+# of a plain shape, so the joint's FaceN can be gone or be another face. The
+# health check after each changing call reads each kept end; when its
+# element is gone or is no longer the face it was, the query runs again on
+# the part and the joint is pointed at what it finds — or it stays broken,
+# with the reason, when the query finds nothing or two equal matches.
+
+QUERY_PROP = "AgentLinkQuery"
+REPICK_MAX = 60  # joint ends read per health check
+SIG_TOL = 1e-3   # mm: an element's centre that has not moved
+
+
+def _plc_list(pl):
+    q = pl.Rotation.Q
+    return [float(pl.Base.x), float(pl.Base.y), float(pl.Base.z)] + [float(x) for x in q]
+
+
+def _plc_of(xs):
+    return FreeCAD.Placement(V(*xs[:3]), FreeCAD.Rotation(*xs[3:7]))
+
+
+def _frame(part):
+    try:
+        return _shape(part).Placement
+    except Exception:  # noqa: BLE001
+        return getattr(part, "Placement", FreeCAD.Placement())
+
+
+def element_sig(part, el):
+    """Where an element is and how big: { at: centre [x, y, z] in the
+    document's coordinates, size: area or length, kind }. None when the
+    part has no such element."""
+    try:
+        g = _shape(part).getElement(el)
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        kind = g.ShapeType
+        if kind == "Vertex":
+            c, size = g.Point, 0.0
+        else:
+            c, size = g.CenterOfMass, float(g.Area if kind == "Face" else g.Length)
+        return {"at": [round(float(c.x), 6), round(float(c.y), 6), round(float(c.z), 6)], "size": round(size, 6), "kind": kind}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def pick_note(part, q, el):
+    """What to keep of a pick by query, at the time of the pick: the query
+    (near in the document's coordinates) and the part's frame. None for an
+    element given by name or a datum: there is no query to run again."""
+    if not isinstance(q, dict) or q.get("datum") is not None or is_datum_sub(el):
+        return None
+    try:
+        query = query_of(part, q, "query")
+    except ToolError:
+        return None
+    return {"query": query, "element": el, "frame0": _plc_list(_frame(part))}
+
+
+def _same_sig(a, b):
+    if not a or not b or a.get("kind") != b.get("kind"):
+        return False
+    if abs(float(a["size"]) - float(b["size"])) > 1e-6 + 1e-6 * abs(float(a["size"])):
+        return False
+    return (V(*a["at"]) - V(*b["at"])).Length <= SIG_TOL
+
+
+def _moved_query(query, delta):
+    """A query's points and directions taken along by a rigid move of its
+    part (delta, in the document's coordinates). x, y, z and inside follow a
+    move without a turn; with a turn they are dropped (near stays)."""
+    out = dict(query)
+    turned = abs(delta.Rotation.Angle) > 1e-9
+    near = out.get("near")
+    if near is not None:
+        if isinstance(near, dict) and near.get("point") is not None:
+            out["near"] = dict(near, point=geo.vec(_pmul(delta, V(*near["point"]))))
+        elif isinstance(near, (list, tuple)):
+            out["near"] = geo.vec(_pmul(delta, V(*near)))
+    for k in ("normal", "axis"):
+        if isinstance(out.get(k), (list, tuple)) and len(out[k]) == 3:
+            out[k] = geo.vec(delta.Rotation.multVec(V(*out[k])))
+    for k in ("x", "y", "z", "inside"):
+        if k not in out:
+            continue
+        if turned:
+            out.pop(k)
+        elif k == "inside" and isinstance(out[k], dict):
+            out[k] = {m: geo.vec(V(*out[k][m]) + delta.Base) for m in ("min", "max") if m in out[k]}
+        elif k in ("x", "y", "z"):
+            out[k] = float(out[k]) + float(getattr(delta.Base, k))
+    return out
+
+
+def keep_notes(j, ends, notes):
+    """The query of each end picked by one, kept on the joint after its
+    solve: the query taken along with its part (the solve moved it), the
+    element's place now and the part's frame now."""
+    keep = {}
+    for i, (end, note) in enumerate(zip(ends, notes)):
+        if not note:
+            continue
+        part, el = end
+        f0, f1 = _plc_of(note["frame0"]), _frame(part)
+        delta = f1.multiply(f0.inverse())
+        keep[f"Reference{i + 1}"] = {"query": _moved_query(note["query"], delta), "element": el, "sig": element_sig(part, el), "frame": _plc_list(f1)}
+    if not keep:
+        return None
+    try:
+        if QUERY_PROP not in j.PropertiesList:
+            j.addProperty("App::PropertyString", QUERY_PROP, "AgentLink", "The element queries of this joint's ends, to pick them again when a face is renumbered (JSON)")
+        setattr(j, QUERY_PROP, json.dumps(keep))
+    except Exception:  # noqa: BLE001 - the joint works without its notes
+        return None
+    return keep
+
+
+def notes_of(j):
+    try:
+        raw = getattr(j, QUERY_PROP, "") if QUERY_PROP in j.PropertiesList else ""
+        return json.loads(raw) if raw else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def requery(part, query):
+    """The stored query run on the part as it is now: [(ref, element)]."""
+    kind, hits = M.filter_shape(_shape(part), query)
+    return [(d["ref"], el) for _i, el, d in hits]
+
+
+def repick_choice(hits, query):
+    """(ref, None) for the one element a query finds, or (None, why)."""
+    if not hits:
+        return None, "the stored query finds nothing now"
+    if len(hits) == 1:
+        return hits[0][0], None
+    near = query.get("near")
+    if near is None:
+        return None, f"the stored query finds {len(hits)} ({', '.join(r for r, _ in hits[:6])}) and has no near point"
+    p = picks.vec3(near.get("point") if isinstance(near, dict) else near, "near")
+    ranked = sorted(((el.distToShape(Part.Vertex(p))[0], r) for r, el in hits), key=lambda x: x[0])
+    if ranked[1][0] - ranked[0][0] <= 1e-6:
+        return None, f"the stored query finds two equal matches ({ranked[0][1]}, {ranked[1][1]})"
+    return ranked[0][1], None
+
+
+def _resub(sub, new, doc):
+    """A reference's sub-name with its element put to new: the object names
+    before it kept ("Part.Face6" in 1.0's form), the element (with any "?"
+    or mapped prefix) replaced."""
+    segs = str(sub).split(".")
+    keep = []
+    for s_ in segs[:-1]:
+        if doc.getObject(s_) is None:
+            break
+        keep.append(s_)
+    return ".".join(keep + [new])
+
+
+def _broken(sub, part, name):
+    if "?" in str(sub):
+        return True
+    try:
+        _shape(part).getElement(name.lstrip("?"))
+        return False
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def repick(doc, asm):
+    """The re-pick of the health check, over an assembly's joints: each end
+    kept with a query is read; one whose element is gone or changed is
+    picked again by its query and the joint pointed at it. Lines for the
+    health check: [{ line, red, todo }]; nothing when all ends stand."""
+    out, seen = [], 0
+    g = next((o for o in getattr(asm, "Group", []) if o.TypeId == "Assembly::JointGroup"), None)  # read only: no group made here
+    for j in list(getattr(g, "Group", None) or []):
+        if getattr(j, "ObjectToGround", None) is not None:
+            continue
+        notes, changed = notes_of(j), False
+        for prop in ("Reference1", "Reference2"):
+            if seen >= REPICK_MAX:
+                return out
+            ref = getattr(j, prop, None)
+            if not ref or len(ref) < 2 or not ref[1]:
+                continue
+            seen += 1
+            subs = list(ref[1])
+            part, _g, name = ref_element(doc, ref)
+            if part is None or is_datum_sub(subs[0]):
+                continue
+            name = str(name).lstrip("?")
+            note = notes.get(prop)
+            gone = _broken(subs[0], part, name)
+            if not note:
+                if gone:
+                    out.append({"line": f"{j.Label}: {part.Label}.{name} is broken, and the joint has no stored query to pick it again", "red": True,
+                                "todo": f"asm_joint_remove {j.Label} and join again: an LCS in the part (pd_datum {{ kind: lcs }}) holds through booleans"})
+                continue
+            now = None if gone else element_sig(part, name)
+            if now is not None and _same_sig(now, note.get("sig")):
+                frame = _plc_list(_frame(part))
+                if frame != note.get("frame"):
+                    # the element stands where it stood, the frame is new: a
+                    # Part boolean puts the result in the document's
+                    # coordinates and the object's placement to none
+                    note["frame"], changed = frame, True
+                continue
+            if now is not None and note.get("sig") and note.get("frame"):
+                # the same element, the part moved with no change to it
+                f0, f1 = _plc_of(note["frame"]), _frame(part)
+                delta = f1.multiply(f0.inverse())
+                moved = dict(note["sig"], at=geo.vec(_pmul(delta, V(*note["sig"]["at"]))))
+                if _same_sig(now, moved):
+                    note["query"], note["frame"], note["sig"], changed = _moved_query(note["query"], delta), _plc_list(f1), now, True
+                    continue
+            try:
+                new, why = repick_choice(requery(part, note["query"]), note["query"])
+            except Exception as e:  # noqa: BLE001 - a query this cannot run: said, kept broken
+                new, why = None, f"the stored query fails ({e})"
+            if new is None:
+                if gone or now is not None:
+                    out.append({"line": f"{j.Label}: {part.Label}.{name} is {'broken' if gone else 'another element now'}; not picked again: {why}", "red": True,
+                                "todo": f"asm_joint_remove {j.Label} and join again: an LCS in the part (pd_datum {{ kind: lcs }}) holds through booleans"})
+                continue
+            if new != name or gone:
+                try:
+                    setattr(j, prop, [ref[0], [_resub(x, new, doc) for x in subs]])
+                    try:
+                        j.Proxy.updateJCSPlacements(j)
+                    except Exception:  # noqa: BLE001
+                        pass
+                except Exception as e:  # noqa: BLE001
+                    out.append({"line": f"{j.Label}: {part.Label}.{name} is broken; FreeCAD did not take {new} ({e})", "red": True,
+                                "todo": f"asm_joint_remove {j.Label} and join again"})
+                    continue
+                out.append({"line": f"{j.Label}: re-picked {name} -> {new} on {part.Label} (stored query)", "repicked": True})
+            note.update(element=new, sig=element_sig(part, new), frame=_plc_list(_frame(part)))
+            changed = True
+        if changed:
+            try:
+                setattr(j, QUERY_PROP, json.dumps(notes))
+            except Exception:  # noqa: BLE001
+                pass
+    return out
+
+
 def tools(session):
     s = session
     try:
@@ -1051,6 +1509,7 @@ def tools(session):
                "keep_offset": lambda asm, j, ends, before: keep_offset(doc(), asm, j, ends, before),
                "auto_flip": lambda asm, j, ends: auto_flip(doc(), asm, j, ends), "overlap_words": overlap_words,
                "coupling_teeth": coupling_teeth,
+               "pick_note": pick_note, "keep_notes": keep_notes, "end_text": end_text,
                # tables
                "OFFERED": OFFERED, "KINDS": KINDS, "REVERSIBLE": REVERSIBLE}
     return runners.tools(GROUP, s, helpers)
