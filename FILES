@@ -111,6 +111,7 @@ agentlink/guides/assembly.md
 agentlink/guides/batch.md
 agentlink/guides/bim.md
 agentlink/guides/cam.md
+agentlink/guides/design.md
 agentlink/guides/doc.md
 agentlink/guides/draft.md
 agentlink/guides/feature.md
@@ -367,6 +368,7 @@ scripts/tool_needs.py
 scripts/tool_summary.py
 scripts/tool_tables.py
 server.json
+skills/design-kickoff/SKILL.md
 tests/_bim_before.py
 tests/_bim_cases.py
 tests/_bim_standin.py
