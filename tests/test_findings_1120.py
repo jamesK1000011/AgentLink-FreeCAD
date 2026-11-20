@@ -15,6 +15,8 @@
 #   11 asm_bom: the mass of a part in a print setup is as printed, or marked
 #      solid;
 #   12 object_get filter "A|B"; object_set { property, value };
+#   live 20 Nov: a wall that hosts openings is drawn (Hosts is no use);
+#      the wall map reads a 2 mm shell as 2 mm by its edges too;
 #   screenshot 1: subdivide by edge length (a long thin triangle becomes a
 #      row of small ones, not ever thinner slivers).
 import json
@@ -120,6 +122,74 @@ class SubdivideByLength(unittest.TestCase):
         fin = vals[np.isfinite(vals)]
         self.assertGreater(len(fin), 0.9 * len(vals))
         self.assertAlmostEqual(float(np.median(fin)), 2.0, places=2)
+
+
+def _shell(X=56.0, Y=36.0, Z=15.6, w=2.0, flip=()):
+    """An open box shell (walls and floor w thick), each face two long
+    triangles wound out of the solid; flip: faces wound the other way."""
+    def quad(a, b, c, d):
+        return [[a, b, c], [a, c, d]]
+    a, b, c, d = w, w, X - w, Y - w
+    faces = [quad((0, 0, 0), (0, Y, 0), (X, Y, 0), (X, 0, 0)),
+             quad((0, 0, 0), (X, 0, 0), (X, 0, Z), (0, 0, Z)), quad((X, 0, 0), (X, Y, 0), (X, Y, Z), (X, 0, Z)),
+             quad((X, Y, 0), (0, Y, 0), (0, Y, Z), (X, Y, Z)), quad((0, Y, 0), (0, 0, 0), (0, 0, Z), (0, Y, Z)),
+             quad((a, b, w), (c, b, w), (c, d, w), (a, d, w)),
+             quad((a, b, w), (a, b, Z), (c, b, Z), (c, b, w)), quad((c, b, w), (c, b, Z), (c, d, Z), (c, d, w)),
+             quad((c, d, w), (c, d, Z), (a, d, Z), (a, d, w)), quad((a, d, w), (a, d, Z), (a, b, Z), (a, b, w)),
+             quad((0, 0, Z), (X, 0, Z), (c, b, Z), (a, b, Z)), quad((X, 0, Z), (X, Y, Z), (c, d, Z), (c, b, Z)),
+             quad((X, Y, Z), (0, Y, Z), (a, d, Z), (c, d, Z)), quad((0, Y, Z), (0, 0, Z), (a, b, Z), (a, d, Z))]
+    tris = [[t[0], t[2], t[1]] if i in flip else t for i, f in enumerate(faces) for t in f]
+    V = np.array(tris, float).reshape(-1, 3)
+    return V, np.arange(len(V)).reshape(-1, 3)
+
+
+def _edge_distance(C, X=56.0, Y=36.0, Z=15.6, w=2.0):
+    """How far each point is from the nearest edge of the shell (the second
+    least of its distances to the planes the edges lie in)."""
+    planes = (np.array([0, w, X - w, X]), np.array([0, w, Y - w, Y]), np.array([0, w, Z]))
+    d = np.stack([np.abs(C[:, i:i + 1] - planes[i]).min(1) for i in range(3)], 1)
+    return np.sort(d, 1)[:, 1]
+
+
+class WallOnAShell(unittest.TestCase):
+    """Screenshot finding 1, again live (20 Nov): on a 2 mm shell the wall map
+    gave dark wedges (a ray along the next wall) and light slivers."""
+
+    def read(self, **kw):
+        V, F = _shell(**kw)
+        SV, SF, vals = render.wall_map(V, F, reach=12, cap=16000)
+        C = SV[SF].mean(1)
+        return C, vals[::3]
+
+    def test_a_2_mm_shell_reads_2_mm_away_from_the_rim(self):
+        C, d = self.read()
+        off_rim = C[:, 2] < 15.6 - 2.5  # one wall and a tolerance below the rim
+        clear = off_rim & (_edge_distance(C) > 1.0)
+        self.assertGreater(int(clear.sum()), 4000)
+        bad = clear & (np.abs(d - 2.0) > 0.2)
+        self.assertEqual(int(bad.sum()), 0, (C[bad][:5], d[bad][:5]))
+        # Within 1 mm of an edge (a floor meets a wall): still 2 mm nearly everywhere, no dark wedges.
+        # What is left is the eight outer corners, where three slabs meet.
+        near = off_rim & ~clear
+        self.assertGreater(float((np.abs(d[near] - 2.0) <= 0.2).mean()), 0.98)
+        far = near & (np.abs(d - 2.0) > 0.2)
+        corner = np.sort(np.stack([np.minimum(C[:, 0], 56 - C[:, 0]), np.minimum(C[:, 1], 36 - C[:, 1]), C[:, 2]], 1), 1)[:, 1] < 2.0
+        self.assertTrue(bool(corner[far].all()), C[far & ~corner][:5])
+        # Never thinner than the wall: no light slivers.
+        self.assertGreaterEqual(float(d[off_rim].min()), 1.99)
+        # Before (one straight ray): 946 of those spots read 12 mm.
+
+    def test_faces_wound_the_wrong_way_read_the_same(self):
+        _, d = self.read()
+        _, e = self.read(flip=(0, 2, 5, 11))
+        self.assertTrue(np.allclose(d, e))
+
+    def test_outward_turns_a_flipped_triangle_over(self):
+        V, F = _shell(flip=(3,))
+        G = render.outward(V, F)
+        W, H = _shell()
+        self.assertEqual(int((G != F).any(1).sum()), 2)  # the face's two triangles, no other
+        self.assertTrue(np.allclose(V[G], W[H]))
 
 
 # ---- finding 4: a map's blend within its time --------------------------------------------------
@@ -524,6 +594,48 @@ class BomPrinted(unittest.TestCase):
         e = entries()["asm_bom"]
         self.assertIn("massAs", e["description"])
         self.assertIn("massNote", e["answer"]["fields"])
+
+
+# ---- live, 20 Nov: a wall hosting openings is a part --------------------------------------------
+
+class HostWall(unittest.TestCase):
+    def test_a_window_does_not_consume_the_wall_it_sits_in(self):
+        got = child("_datapart_standin", '''
+            from agentlink.tools import Session
+            class O:
+                def __init__(self, name, links):
+                    self.Name, self.links = name, links
+                    self.PropertiesList = list(links)
+                def getTypeIdOfProperty(self, p):
+                    return "App::PropertyLinkList"
+                def getPropertyByName(self, p):
+                    return self.links[p]
+            wall = O("Walls", {})
+            window = O("Window", {"Hosts": [wall], "Base": None})
+            cut = O("Cut", {"Base": wall})
+            print(json.dumps([Session._consumes(window, wall), Session._consumes(cut, wall), "Hosts" in Session.REFERENCE_ONLY]))
+        ''')
+        self.assertEqual(got, [False, True, True])
+
+    def test_view_render_draws_the_host_wall(self):
+        try:
+            sys.path.insert(0, TESTS)
+            from _fc import HAVE, caller, server
+            import Arch  # noqa: F401
+        except ImportError:
+            self.skipTest("FreeCAD with BIM is not importable here")
+        if not HAVE:
+            self.skipTest("FreeCAD is not importable here")
+        s, srv = server()
+        call = caller(srv)
+        self.assertFalse(call("doc_new", {"name": "HostWall"})[0])
+        err, w = call("bim_wall", {"points": [[0, 0, 0], [0, 3600, 0], [4800, 3600, 0], [4800, 0, 0]], "width": 150, "height": 2700, "name": "Walls"})
+        self.assertFalse(err, w)
+        err, o = call("bim_opening", {"wall": "Walls", "kind": "window", "width": 1200, "height": 1000, "sill": 900, "at": 600})
+        self.assertFalse(err, o)
+        err, r = call("view_render", {"views": ["iso"], "inline": False})
+        self.assertFalse(err, r)
+        self.assertIn("Walls", [x["layer"] for x in r["layers"]])
 
 
 AM_SOLID = ("solid, not as printed: the part is in a print setup. An installed add-on that owns mass gives the printed estimate "

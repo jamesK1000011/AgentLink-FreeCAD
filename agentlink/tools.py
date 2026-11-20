@@ -382,7 +382,10 @@ class Session:
     # (one solid or a deliberate AllowCompound of several) stays a part —
     # session_state and view_render left a 2-solid Body out and drew only
     # the screws on it.
-    REFERENCE_ONLY = ("AttachmentSupport", "Support", "BaseObject", "MapReference", "_Body")
+    # An Arch window or door names the wall it sits in (Hosts, Host): the wall
+    # takes it as an opening, the window is not built from the wall (test drive
+    # of 20 Nov: a wall hosting openings was left out of view_render).
+    REFERENCE_ONLY = ("AttachmentSupport", "Support", "BaseObject", "MapReference", "_Body", "Hosts", "Host")
 
     @staticmethod
     def _own_feature(p, o):

@@ -681,7 +681,7 @@ def even_length(V, F, cap, floor=None):
     return max(L, floor or 0.0, 0.2)
 
 
-def subdivide(V, F, maxlen, cap=60000):
+def subdivide(V, F, maxlen, cap=60000, parents=False):
     """Split triangles until no edge is over maxlen (or the count reaches
     cap): so a map has points to show on a big flat face. Each split halves
     a triangle's longest edge (by edge length, not by count: a long thin
@@ -690,6 +690,7 @@ def subdivide(V, F, maxlen, cap=60000):
     screenshot pass, finding 1). When cap would be passed, the longest go
     first. Unshared vertices out — each triangle its own three."""
     T = np.asarray(V, dtype=float)[np.asarray(F, dtype=np.int64)].reshape(-1, 3, 3)
+    P = np.arange(len(T), dtype=np.int64)  # each small triangle's triangle of F
     while len(T) < cap:
         e = np.stack([np.linalg.norm(T[:, 1] - T[:, 0], axis=1), np.linalg.norm(T[:, 2] - T[:, 1], axis=1), np.linalg.norm(T[:, 0] - T[:, 2], axis=1)], axis=1)
         top = e.max(1)
@@ -709,7 +710,10 @@ def subdivide(V, F, maxlen, cap=60000):
         m = (R[:, 0] + R[:, 1]) / 2
         new = np.concatenate([np.stack([R[:, 0], m, R[:, 2]], 1), np.stack([m, R[:, 1], R[:, 2]], 1)])
         T = np.concatenate([T[~long_], new])
+        P = np.concatenate([P[~long_], P[long_], P[long_]])
     n = len(T)
+    if parents:
+        return T.reshape(-1, 3), np.arange(3 * n, dtype=np.int64).reshape(n, 3), P
     return T.reshape(-1, 3), np.arange(3 * n, dtype=np.int64).reshape(n, 3)
 
 
@@ -782,11 +786,12 @@ def mesh_layer(o, i):
     return {"name": o.Label, "V": V, "F": F, "color": colour(i), "creases": True}
 
 
-def cast(origins, dirs, V, F, reach, group=48, chunk_cells=4_000_000):
+def cast(origins, dirs, V, F, reach, group=48, chunk_cells=4_000_000, which=False):
     """For each ray, the distance to the nearest triangle it meets past
     2 µm and within reach, else nan (Möller–Trumbore). Rays go in groups of
     neighbours, each against only the triangles within reach of the group:
-    a wall map's rays look a few millimetres in, not across the part."""
+    a wall map's rays look a few millimetres in, not across the part.
+    which: also the index in F of the triangle met (-1 for none)."""
     V = np.asarray(V, dtype=float)
     F = np.asarray(F, dtype=np.int64)
     T = V[F]
@@ -794,8 +799,9 @@ def cast(origins, dirs, V, F, reach, group=48, chunk_cells=4_000_000):
     O = np.asarray(origins, dtype=float)
     D = np.asarray(dirs, dtype=float)
     out = np.full(len(O), np.nan)
+    hit = np.full(len(O), -1, dtype=np.int64)
     if not len(O) or not len(F):
-        return out
+        return (out, hit) if which else out
     finite = np.isfinite(reach) and reach < 1e8
     # Neighbours together: sorted along a coarse grid.
     cell = max((float(reach) / 3) if finite else np.ptp(O, axis=0).max(), 1e-6)
@@ -828,34 +834,186 @@ def cast(origins, dirs, V, F, reach, group=48, chunk_cells=4_000_000):
             v = f * (q * d).sum(-1)
             t = f * (e2[None] * q).sum(-1)
             m = ok & (u >= -1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9) & (t > 2e-3) & (t <= reach)
-            best = np.where(m, t, np.inf).min(1)
+            tt = np.where(m, t, np.inf)
+            k = tt.argmin(1)
+            best = tt[np.arange(len(r)), k]
             out[r] = np.where(np.isfinite(best), best, np.nan)
+            hit[r] = np.where(np.isfinite(best), near[k], -1)
+    return (out, hit) if which else out
+
+
+# Triangles past which wall_map does not check which way they face
+# (outward): a CAD part's tessellation is far under it.
+ORIENT_MAX = 400000
+# The rays a spot of the wall map is read on: straight in, and WALL_TILTS
+# more tilted WALL_TILT degrees round it, each length taken along the
+# straight-in direction (times the cosine). A ray that leaves through a side
+# face (one whose normal is more than 60 degrees off the way in: out at a
+# near edge) says nothing; the spot reads the shortest of the rest. Test
+# drive of 20 Nov, screenshot finding 1 again: one straight ray read along
+# the next wall where a floor meets a wall (dark wedges by the edges). On a
+# 2 mm shell every spot past 1 mm from an edge reads 2 mm, and within it all
+# but the outer corners (three slabs) do; a tight curved wall (8 mm inside
+# a 10 mm tube) reads at most 10 % under from inside.
+WALL_TILT = 45.0
+WALL_TILTS = 6
+
+
+def crossings(points, dirs, V, F, chunk_cells=4_000_000):
+    """How many triangles each ray from a point crosses (t > 0, any
+    distance): odd inside a closed surface, even outside."""
+    V = np.asarray(V, dtype=float)
+    T = V[np.asarray(F, dtype=np.int64)]
+    v0, e1, e2 = T[:, 0], T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]
+    O = np.asarray(points, dtype=float).reshape(-1, 3)
+    D = np.asarray(dirs, dtype=float).reshape(-1, 3)
+    out = np.zeros(len(O), dtype=np.int64)
+    if not len(O) or not len(T):
+        return out
+    step = max(1, chunk_cells // len(T))
+    for j in range(0, len(O), step):
+        o, d = O[j:j + step, None, :], D[j:j + step, None, :]
+        h = np.cross(d, e2[None])
+        a = (e1[None] * h).sum(-1)
+        ok = np.abs(a) > 1e-12
+        f = np.where(ok, 1.0 / np.where(ok, a, 1.0), 0.0)
+        s_ = o - v0[None]
+        u = f * (s_ * h).sum(-1)
+        q = np.cross(s_, e1[None])
+        v = f * (q * d).sum(-1)
+        t = f * (e2[None] * q).sum(-1)
+        out[j:j + step] = (ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 1e-9)).sum(1)
     return out
 
 
-def wall_map(V, F, reach=12.0, maxlen=None, cap=16000, closed=True):
-    """The wall at each spot of a solid's surface: straight in from each
-    small triangle's middle to where the ray leaves the material. A
-    triangle the ray leaves past reach reads reach (thick). A solid's
-    tessellation is closed; for a mesh that may not be (closed=False) a ray
-    that finds no way out at all reads nan. (V, F, values per vertex)."""
+def outward(V, F):
+    """F with each triangle wound so its normal points out of the solid. A
+    tessellation whose faces came wound both ways read through the air (a
+    whole triangle read reach). The triangles are made to agree with their
+    neighbours across each edge two of them share (points merged by
+    place), then each connected piece is turned over when the crossings
+    of three skew rays from just behind its largest triangles say outside.
+    F as it is past ORIENT_MAX triangles."""
+    from collections import deque
+
     V = np.asarray(V, dtype=float)
-    F = np.asarray(F, dtype=np.int64)
-    SV, SF = subdivide(V, F, even_length(V, F, cap, maxlen), cap=cap)
+    F = np.asarray(F, dtype=np.int64).reshape(-1, 3)
+    if not len(F) or len(F) > ORIENT_MAX:
+        return F
+    size = float(np.linalg.norm(np.ptp(V, axis=0))) or 1.0
+    _, vid = np.unique(np.round(V / (1e-7 * size)).astype(np.int64), axis=0, return_inverse=True)
+    G = np.asarray(vid).reshape(-1)[F]
+    by = {}
+    for t, (x, y, z) in enumerate(G.tolist()):
+        for u, v in ((x, y), (y, z), (z, x)):
+            by.setdefault((min(u, v), max(u, v)), []).append((t, u < v))
+    flip = np.zeros(len(F), bool)
+    piece = np.full(len(F), -1, dtype=np.int64)
+    edges_of = [[] for _ in range(len(F))]
+    for key, uses in by.items():
+        if len(uses) == 2:
+            (t1, d1), (t2, d2) = uses
+            edges_of[t1].append((t2, d1 == d2))
+            edges_of[t2].append((t1, d1 == d2))
+    n_pieces = 0
+    for start in range(len(F)):
+        if piece[start] >= 0:
+            continue
+        piece[start] = n_pieces
+        todo = deque([start])
+        while todo:
+            t = todo.popleft()
+            for u, same in edges_of[t]:
+                if piece[u] < 0:
+                    piece[u] = n_pieces
+                    flip[u] = flip[t] != same  # an edge run the same way twice: one of the two is turned
+                    todo.append(u)
+        n_pieces += 1
+    H = F.copy()
+    H[flip] = H[flip][:, [0, 2, 1]]
+    T = V[H]
+    nrm = np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0])
+    area = np.linalg.norm(nrm, axis=1)
+    ok = area > 1e-12
+    nrm[ok] /= area[ok, None]
+    c = T.mean(1)
+    eps = 1e-4 * size
+    dirs = np.array([[0.5773, 0.5774, 0.5776], [-0.6402, 0.2871, 0.7124], [0.3127, -0.8813, 0.3542]])
+    dirs /= np.linalg.norm(dirs, axis=1)[:, None]
+    for p in range(n_pieces):
+        mine = np.nonzero((piece == p) & ok)[0]
+        if not len(mine):
+            continue
+        pick = mine[np.argsort(-area[mine])[:5]]
+        vote = 0
+        for d in dirs:
+            D = np.repeat(d[None], len(pick), 0)
+            behind = crossings(c[pick] - nrm[pick] * eps, D, V, H) % 2
+            front = crossings(c[pick] + nrm[pick] * eps, D, V, H) % 2
+            vote += int(((behind == 0) & (front == 1)).sum()) - int(((behind == 1) & (front == 0)).sum())
+        if vote > 0:
+            H[piece == p] = H[piece == p][:, [0, 2, 1]]
+    return H
+
+
+def _cone(n, tilt, k):
+    """k unit directions tilt degrees round each unit vector of n. (k, len(n), 3)"""
+    a = np.where(np.abs(n[:, :1]) < 0.9, np.array([[1.0, 0.0, 0.0]]), np.array([[0.0, 1.0, 0.0]]))
+    u = np.cross(n, a)
+    u /= np.maximum(np.linalg.norm(u, axis=1), 1e-12)[:, None]
+    w = np.cross(n, u)
+    t = math.radians(tilt)
+    out = []
+    for i in range(k):
+        phi = 2 * math.pi * i / k
+        out.append(math.cos(t) * n + math.sin(t) * (math.cos(phi) * u + math.sin(phi) * w))
+    return np.stack(out)
+
+
+def wall_map(V, F, reach=12.0, maxlen=None, cap=16000, closed=True):
+    """The wall at each spot of a solid's surface: from each small
+    triangle's middle in through the material to where it ends, the
+    shortest of a straight ray and WALL_TILTS tilted ones that leave
+    through a face across from the spot (each taken along the straight
+    one). The triangles are first wound out of the solid (outward), and
+    each spot looks along its own triangle of F's normal (a small
+    triangle's own is less sure). Nothing past reach: reach (thick). A
+    solid's tessellation is closed; for a mesh that may not be
+    (closed=False) a spot whose straight ray finds no way out at all reads
+    nan. (V, F, values per vertex)."""
+    V = np.asarray(V, dtype=float)
+    F = outward(V, np.asarray(F, dtype=np.int64)) if closed else np.asarray(F, dtype=np.int64)
+    SV, SF, par = subdivide(V, F, even_length(V, F, cap, maxlen), cap=cap, parents=True)
+    T0 = V[F]
+    n0 = np.cross(T0[:, 1] - T0[:, 0], T0[:, 2] - T0[:, 0])
+    ln = np.linalg.norm(n0, axis=1)
+    ok = ln > 1e-12
+    n0[ok] /= ln[ok, None]
     T = SV[SF]
     c = T.mean(1)
-    n = np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0])
-    ln = np.linalg.norm(n, axis=1)
-    ok = ln > 1e-12
-    n[ok] /= ln[ok, None]
-    d = cast(c - n * 1e-3, -n, V, F, reach * 1.0001)
-    # No hit within reach: thick if the ray had room to go (inside the
-    # bounding box for reach), else the mesh is open there.
-    far = np.isnan(d)
-    if closed:
-        d[far] = reach
-    elif far.any():
-        d2 = cast(c[far] - n[far] * 1e-3, -n[far], V, F, 1e9)
-        d[np.nonzero(far)[0][np.isfinite(d2)]] = reach
+    n = n0[par]
+    size = float(np.linalg.norm(np.ptp(V, axis=0))) or 1.0
+    eps = max(1e-3, 1e-5 * size)
+    o = c - n * eps
+    dirs = np.concatenate([(-n)[None], _cone(-n, WALL_TILT, WALL_TILTS)])
+    cosines = np.array([1.0] + [math.cos(math.radians(WALL_TILT))] * WALL_TILTS)
+    reads = np.full((len(dirs), len(c)), np.nan)
+    for i, d in enumerate(dirs):
+        reads[i], met = cast(o, d, V, F, reach / cosines[i] * 1.0001, which=True)
+        # A ray that leaves through a side face (its normal across the way
+        # in, not along it: out at a near edge) says nothing of this wall.
+        side = (met >= 0) & ((n0[np.maximum(met, 0)] * (-n)).sum(1) < 0.5)
+        reads[i][side] = -1.0
+    open_ = np.zeros(len(c), bool)
+    if not closed:
+        # A spot whose straight ray finds no way out at all: the mesh is open there.
+        far = np.isnan(reads[0])
+        if far.any():
+            d2 = cast(o[far], -n[far], V, F, 1e9)
+            open_[np.nonzero(far)[0][~np.isfinite(d2)]] = True
+    reads = np.where(np.isnan(reads), reach / cosines[:, None], reads) * cosines[:, None]
+    reads[reads < 0] = np.inf
+    d = np.minimum(reads.min(axis=0), reach)
+    d[open_] = np.nan
     vals = np.repeat(d, 3)
     return SV, SF, vals
