@@ -37,13 +37,13 @@ from agentlink.protocol import ToolError  # noqa: E402
 # The readers' pin: sha256 of readers.json's entries (each family's readers and changers, and the methods), as
 # scripts/tool_needs.py writes them. A helper or a method that joins or leaves a list changes it: read why
 # (`python3 scripts/tool_needs.py --why name`), then put the new value here.
-PIN = "7351e887b8afa5272a249e08d9ae9361f2f36bd1f1bb022c97e29dcea39e0c7b"
+PIN = "57752785c0c35658c7a138c187a4912e17491d95c68796d4ba6ef081c9c783f1"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
 # Skeleton workflow of 20 Nov: world_json, placement_json, pd_body, app_part and prop_at read; attach_refs changes.
 # asm2 20 Nov: assembly gains readers end_text and pick_note (asm_joint's datum ends and kept queries); keep_notes changes.
-COUNTS = {"readers": 910, "changers": 152, "families": 37}
+COUNTS = {"readers": 913, "changers": 153, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -373,7 +373,8 @@ class Census(unittest.TestCase):
 
 
 # leadingRefusals 780: pd_datum and part_datum check refs, offset and the container first (20 Nov).
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 780, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+# 778: pd_pipe's path checks moved into pipe_path, a reader (pipe, 20 Nov).
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 778, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
 
 
 class Agreement(unittest.TestCase):

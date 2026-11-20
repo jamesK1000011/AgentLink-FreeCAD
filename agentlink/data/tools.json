@@ -7522,7 +7522,7 @@
   },
   "pd_pipe": {
    "group": "feature",
-   "description": "Sweep a closed profile sketch along a path sketch: all its edges, joined end to end. subtractive: true cuts it. Put the profile across the start of the path. For orientation and corners: feature_edit { Mode: \"Frenet\", Transition: \"Round corner\" }. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Sweep a closed profile along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. profile: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. Answer: feature, profile, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7531,12 +7531,20 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "profile": {
-      "type": "string",
-      "description": "The sketch, in the body."
+      "description": "A sketch in the body, or { circle: { d, wall } }."
      },
      "path": {
       "type": "string",
-      "description": "The sketch, in the body."
+      "description": "A sketch in the body, a binder, or another object with edges."
+     },
+     "edges": {
+      "description": "Edges of the path to sweep along, joined end to end: [\"Edge3\"]."
+     },
+     "mode": {
+      "type": "string"
+     },
+     "transition": {
+      "type": "string"
      },
      "subtractive": {
       "type": "boolean"
@@ -7550,21 +7558,30 @@
    },
    "changes": true,
    "source": "Agent Link (was agentlink/families/feature.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-20",
    "runner": "steps",
    "steps": [
-    {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.profile, b)"}},
-    {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
+    {"let": {"b": "=body(a.body)", "made": "=is_dict(a.profile)"}},
+    {"let": {"spec": "=tube_spec(a.profile) if made else None", "sk": "=None if made else sketch_of(a.profile, b)"}},
+    {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not made and not b.hasObject(sk)"},
     {"let": {"before": "=volume(b)", "sub": "=bool(a.subtractive)"}},
     {"refuse": {"fmt": "{b.Label} has no solid to cut: pd_pad something first."}, "code": "invalid_state", "when": "=sub and before <= 0"},
-    {"let": {"path": "=sketch_of(a.path, b)"}},
-    {"refuse": "path: another sketch than the profile — the profile is swept along the path's edges.", "when": "=path is sk"},
-    {"refuse": {"fmt": "path: {path.Label} has no edges (construction geometry does not count): sketch_add a line, arc or polyline."}, "when": "=not path.Shape.Edges"},
+    {"let": {"path, names, start, tangent, flip": "=pipe_path(b, a.path, a.edges, sk)"}},
+    {"let": {"held": "=None"}},
+    {"let": {"sk, held": "=tube_profile(b, spec, path, names, start, tangent, flip)"}, "when": "=made"},
     {"let": {"f": "=new(b, 'PartDesign::' + ('Subtractive' if sub else 'Additive') + 'Pipe', 'Pipe')"}},
     {"set": {"f.Profile": "=sk"}},
-    {"set": {"f.Spine": "=(path, ['Edge' + str(i + 1) for i in range(len(path.Shape.Edges))])"}}
+    {"set": {"f.Spine": "=(path, names)"}},
+    {"do": "=pipe_options(f, a)"}
    ],
-   "answer": {"via": "settle", "with": ["=b", "=f", "pd_pipe", "=before", "='cut' if sub else 'add'", "The profile should sit at the path's start, square to it; the path's edges must join end to end; a path that turns tighter than the profile fails."]}
+   "answer": {
+    "via": "settle",
+    "with": ["=b", "=f", "pd_pipe", "=before", "='cut' if sub else 'add'", "The profile should sit at the path's start, square to it; the path's edges must join end to end; a path that turns tighter than the profile fails."],
+    "then": [
+     {"put": {"profile": "=sk.Label", "path": "=path.Label", "edges": "=names"}, "when": "=made or a.edges is not None or not path.isDerivedFrom('Sketcher::SketchObject')"},
+     {"put": {"profileIs": "=held"}, "when": "=held"}
+    ]
+   }
   },
   "pd_datum_plane": {
    "group": "feature",
@@ -16482,7 +16499,7 @@
   },
   "shape_query": {
    "group": "measure",
-   "description": "Find the faces, edges or vertices of a body by their properties. Other tools take the refs that it answers (\"Face12\", \"Edge3\", counted from 1). kind: face|edge|vertex. type for faces: plane, cylinder, cone, sphere, torus, bspline. type for edges: line, circle, ellipse, bspline. normal [x,y,z]: for flat or curved faces, outward at the centre. axis: the direction of a line, or the axis of a circle or cylinder, in either direction. within: degrees for normal and axis (1). radius, area, length: a number or [least, most]. x / y / z: the coordinate of the centre, within tol (0.01). near [x,y,z] or { point, within }: nearest first. inside { min, max }: the centre is in that box. of \"Face6\": the edges or vertices of that face. sort: area|radius|length|distance|x|y|z; -key puts the largest first. limit: 20. found counts all; more gives the rest. Each item in the answer: ref, type, area / length, centroid / mid, normal, radius, axis, center. Trap: the numbers change after any modelling step. Query again; do not use old numbers. Changes nothing.",
+   "description": "Find the faces, edges or vertices of a body by their properties. Other tools take the refs that it answers (\"Face12\", \"Edge3\", counted from 1). kind: face|edge|vertex. type for faces: plane, cylinder, cone, sphere, torus, bspline. type for edges: line, circle, ellipse, bspline. normal [x,y,z]: for flat or curved faces, outward at the centre. axis: the direction of a line, or the axis of a circle or cylinder, in either direction. within: degrees for normal and axis (1). radius, area, length: a number or [least, most]. x / y / z: the coordinate of the centre, within tol (0.01). near [x,y,z] or { point, within }: nearest first. inside { min, max }: the centre is in that box. of \"Face6\": the edges or vertices of that face. sort: area|radius|length|distance|x|y|z; -key puts the largest first. limit: 20. found counts all; more gives the rest. Each item in the answer: ref, type, area / length, centroid / mid, normal, radius, axis, center. body can also be an object with edges and no solid: a pd_binder of a skeleton, a sketch, a wire. Then kind is edge by default. Each edge also has from and to [x,y,z]; dir is the direction of a line. Trap: the numbers change after any modelling step. Query again; do not use old numbers. Changes nothing.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -16546,7 +16563,7 @@
     {"refuse": "limit: how many to list, 1 … 500 (20 by default); found counts them all.", "when": "=limit < 1 or limit > 500"},
     {"let": {"limit": "=int(limit)"}}
    ],
-   "answer": {"fields": {"body": "=o.Label", "kind": "=kind", "found": "=len(hits)", "items": "=[hit[2] for hit in hits[:limit]]", "more": {"when": "=len(hits) > limit", "value": "=len(hits) - limit"}}}
+   "answer": {"fields": {"body": "=o.Label", "kind": "=kind", "found": "=len(hits)", "items": "=[hit[2] for hit in hits[:limit]]", "more": {"when": "=len(hits) > limit", "value": "=len(hits) - limit"}, "shapeIs": {"when": "=not o.Shape.Solids and not o.Shape.Faces", "value": "edges only (no solid): kind edge or vertex"}}}
   },
   "measure": {
    "group": "measure",
@@ -18478,7 +18495,7 @@
   },
   "sheet_table": {
    "group": "sheet",
-   "description": "Make and use design tables (configurations), FreeCAD's own kind. action make { params, configs, units, sheet, at, owner, property, active }. params: [names; alias rules as sheet_set]. configs: [{ name, values [..] | { param: value } }]. units: { param: \"mm\" | \"deg\" | \"\" } (numbers default to mm). sheet: else a new sheet. at: the header cell; the active row is under it. owner: the object that holds the switch; default the one Body, else a group that holds the sheet. property: default Configuration. Then bind properties to <Sheet>.<param> with param_bind. use { config }: switches, and answers the bodies. add { config, values }: adds a row. list: the tables. guide_read sheet tells more.",
+   "description": "Make and use design tables (configurations), FreeCAD's own kind. action make { params, configs, units, sheet, at, owner, property, active }. params: [names; alias rules as sheet_set]. configs: [{ name, values [..] | { param: value } }]. units: { param: \"mm\" | \"deg\" | \"\" } (numbers default to mm). sheet: the sheet to use; if no sheet has that label, the tool makes a new sheet with it. No sheet: a new sheet. at: the header cell; the active row is under it. owner: the object that holds the switch; default the one Body, else a group that holds the sheet. property: default Configuration. Then bind properties to <Sheet>.<param> with param_bind. use { config }: switches, and answers the bodies. add { config, values }: adds a row. list: the tables. guide_read sheet tells more.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -18568,12 +18585,13 @@
      "choose": "=act",
      "of": {
       "make": [
-       {"let": {"ss": "=find(a.sheet) if a.sheet else None"}},
+       {"let": {"ss": "=sheet_named(a.sheet) if a.sheet else None"}},
+       {"let": {"made_sheet": "=ss is None"}},
        {
         "when": "=ss is None",
         "then": [
          {"add": "Spreadsheet::Sheet", "name": "Spreadsheet", "as": "ss"},
-         {"set": {"ss.Label": "=unique(a.name or 'DesignTable')"}}
+         {"set": {"ss.Label": "=unique(a.sheet or a.name or 'DesignTable')"}}
         ]
        },
        {"let": {"params": "=a.params or []"}},
@@ -18721,6 +18739,7 @@
        {"do": "=check('The design table')"},
        {"let": {"out": "=table_reading(ss, table_at(ss, cell(r0 + 1, c0)))"}},
        {"put": {"next": {"fmt": "param_bind {{ target: \"Pad.Length\", expression: \"{ss.Name}.{params[0]}\" }} binds a property to it; sheet_table {{ action: \"use\", config }} switches. In FreeCAD by hand: {owner.Label} → {prop}."}}},
+       {"put": {"newSheet": "=ss.Label"}, "when": "=made_sheet"},
        {"answer": {"via": "done", "with": ["=tool", "=out", "=ss"]}}
       ],
       "use": [
@@ -21306,17 +21325,17 @@
   },
   "object_list": {
    "group": "doc",
-   "description": "List every object in the document. name: internal, unique, and it never changes. label: what the person sees and can rename. Also type, visible, parents (the objects that use it) and its shape or mesh. The shape is volume mm³, area, faces, solids and size for a solid; else faces and edges. error: true marks a failed object (recompute gives the reason). type: part of the type to keep (\"Part::\", \"Sketch\"). Tools take name or label; when both agree with an object, the name wins. Changes nothing.",
-   "inputSchema": {"type": "object", "properties": {"type": {"type": "string"}}, "required": [], "additionalProperties": false},
+   "description": "List every object in the document. name: internal, unique, and it never changes. label: what the person sees and can rename. Also type, visible, parents (the objects that use it) and its shape or mesh. The shape is volume mm³, area, faces, solids and size for a solid; else faces and edges. error: true marks a failed object (recompute gives the reason). type: part of the type to keep (\"Part::\", \"Sketch\"); a full type (\"PartDesign::Body\") also keeps the types made from it. label: part of the label to keep, in any case. If no object agrees, typesHere gives the types that the document has. Tools take name or label; when both agree with an object, the name wins. Changes nothing.",
+   "inputSchema": {"type": "object", "properties": {"type": {"type": "string"}, "label": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/doc.py)",
    "date": "2026-11-16",
    "runner": "steps",
    "steps": [
-    {"let": {"kind": "=(a.get('type') or '').lower()", "out": "=[]"}},
-    {"each": "o", "in": "=current().Objects", "steps": [{"when": "=o.Name != 'AgentLinkRecords' and not (kind and kind not in o.TypeId.lower())", "then": [{"let": {"e": "={'name': o.Name, 'label': o.Label, 'type': o.TypeId}", "parents": "=once([p.Label for p in o.InList])", "sh": "=get(o, 'Shape')", "st": "=list(get(o, 'State', []) or [])"}}, {"put": {"visible": "=bool(o.Visibility)"}, "into": "e", "when": "=has(o, 'Visibility')"}, {"put": {"parents": "=parents"}, "into": "e", "when": "=parents"}, {"when": "=is_shape(sh)", "then": [{"put": {"shape": "=shape_row(sh)"}, "into": "e"}], "else": [{"put": {"mesh": "=mesh_row(o)"}, "into": "e", "when": "=mesh_row(o) is not None"}]}, {"put": {"error": true}, "into": "e", "when": "='Invalid' in st or 'Error' in st"}, {"push": {"out": "=e"}}]}]}
+    {"let": {"kind": "=(a.get('type') or '').lower()", "full": "=a.get('type') if '::' in (a.get('type') or '') else None", "lab": "=(a.get('label') or '').lower()", "out": "=[]"}},
+    {"each": "o", "in": "=current().Objects", "steps": [{"when": "=o.Name != 'AgentLinkRecords' and (not kind or kind in o.TypeId.lower() or (full is not None and o.isDerivedFrom(full))) and (not lab or lab in str(o.Label).lower())", "then": [{"let": {"e": "={'name': o.Name, 'label': o.Label, 'type': o.TypeId}", "parents": "=once([p.Label for p in o.InList])", "sh": "=get(o, 'Shape')", "st": "=list(get(o, 'State', []) or [])"}}, {"put": {"visible": "=bool(o.Visibility)"}, "into": "e", "when": "=has(o, 'Visibility')"}, {"put": {"parents": "=parents"}, "into": "e", "when": "=parents"}, {"when": "=is_shape(sh)", "then": [{"put": {"shape": "=shape_row(sh)"}, "into": "e"}], "else": [{"put": {"mesh": "=mesh_row(o)"}, "into": "e", "when": "=mesh_row(o) is not None"}]}, {"put": {"error": true}, "into": "e", "when": "='Invalid' in st or 'Error' in st"}, {"push": {"out": "=e"}}]}]}
    ],
-   "answer": {"fields": {"document": "=current().Name", "count": "=len(out)", "objects": "=out"}}
+   "answer": {"fields": {"document": "=current().Name", "count": "=len(out)", "objects": "=out", "typesHere": {"when": "=not out and (kind or lab)", "value": "=sorted(set([o.TypeId for o in current().Objects if o.Name != 'AgentLinkRecords']))"}}}
   },
   "object_get": {
    "group": "doc",

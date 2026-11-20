@@ -80,6 +80,15 @@ DESCRIPTIONS = {
         " volume }]; a part with no material has no mass. A part can be in a print setup: then mass is the printed estimate (walls and infill) of an installed add-on that owns mass, massAs tells how and solidMass is the solid mass; without that add-on, massAs marks the mass as solid, not as printed. slice gives the slicer's own figure."),
     'material_set': ('bject_rename does not carry it to the new label.',
         "bject_rename does not carry it to the new label. The short ids of measure_mass also work (steel, stainless, aluminium, brass …): the tool sets a FreeCAD library card for one, or Agent Link's stock figures; mapped tells which."),
+    # pipe 20 Nov (bicycle, skeleton build): pd_pipe on edges of any object and a tube profile; shape_query of wires; sheet_table makes a named sheet; object_list by label.
+    'pd_pipe': ('Sweep a closed profile sketch along a path sketch (all its edges, joined end to end); subtractive: true cuts it. The profile should sit across the path\'s start. Orientation, corners: feature_edit { Mode: "Frenet", Transition: "Round corner" }. Reply: feature, volume mm³',
+        'Sweep a closed profile along a path: a sketch in the body, a pd_binder of a skeleton or a wire; edges ["Edge3"] sweeps along those only, joined end to end (all its edges by default; shape_query { body: path, kind: "edge" } names them); subtractive: true cuts it. profile: a sketch across the path\'s start, or { circle: { d: 28.6, wall: 0.9 } } — a sketch made square to the path at its start with two circles, a tube (no wall: a rod); d and wall mm or an expression ("Geo.tt_od"). mode Standard | Fixed | Frenet | Auxiliary | Binormal, transition Transformed | Right corner | Round corner. Reply: feature, profile, path, edges, volume mm³'),
+    'object_list': ('type: part of the type to keep ("Part::", "Sketch").',
+        'type: part of the type to keep ("Part::", "Sketch"); a full type ("PartDesign::Body") also keeps the types derived from it. label: part of the label to keep, any case. Nothing kept: typesHere lists the types there are.'),
+    'shape_query': ('Reply items: ref, type, area / length, centroid / mid, normal, radius, axis, center.',
+        "Reply items: ref, type, area / length, centroid / mid, normal, radius, axis, center. body may also be an object of edges and no solid (a pd_binder of a skeleton, a sketch, a wire): kind is edge by default, each edge also has from and to [x,y,z], dir a line's direction."),
+    'sheet_table': ('sheet (else a new one)',
+        'sheet (made with that label when no sheet has it; else a new one)'),
 }
 
 
@@ -177,6 +186,13 @@ SCHEMAS = {
                              ("mode", "offset", {"type": "object", "description": "{ at: [x,y,z], rotate: { axis, angle } }: the AttachmentOffset, in the frame that the references give."}),
                              ("offset", "body", {"type": "string", "description": "A PartDesign Body to hold the datum."}),
                              ("body", "part", {"type": "string", "description": "An App::Part to hold the datum."})]},
+    # pipe 20 Nov: pd_pipe's profile is a sketch or { circle }, its path any object with edges, and edges, mode, transition; object_list's label.
+    "pd_pipe": {"why": "bicycle skeleton build: a tube along one edge of a binder",
+                "replace": {"profile": {"description": "A sketch in the body, or { circle: { d, wall } }."}},
+                "describe": {"path": "A sketch in the body, a binder, or another object with edges."},
+                "after": [("path", "edges", {"description": "Edges of the path to sweep along, joined end to end: [\"Edge3\"]."}),
+                          ("edges", "mode", {"type": "string"}), ("mode", "transition", {"type": "string"})]},
+    "object_list": {"why": "bicycle skeleton build: a label filter", "after": [("type", "label", {"type": "string"})]},
 }
 
 
@@ -191,6 +207,8 @@ def schema(name, old):
     props = new["properties"]
     for k, text in m.get("describe", {}).items():
         props[k]["description"] = text
+    for k, val in m.get("replace", {}).items():
+        props[k] = val
     for k, more in m.get("enum_add", {}).items():
         props[k]["enum"] = list(props[k]["enum"]) + list(more)
     for at, key, val in m.get("after", []):
@@ -217,6 +235,10 @@ RESULTS = {
     "asm_bom": ((), "finding 11: rows of parts in a print setup carry massAs and solidMass (none in the stand-in's cases)"),
     "pd_datum": (("refs", "mode", "offset", "world", "type"), "skeleton workflow (20 Nov): a datum attached by refs says them, its mode, offset and world placement"),
     "part_datum": (("refs", "offset", "in", "world"), "skeleton workflow (20 Nov): refs, the container and the world placement"),
+    "pd_pipe": (("profile", "path", "edges", "profileIs"), "pipe 20 Nov: a made tube profile, a path of a binder or chosen edges are named"),
+    "sheet_table": (("newSheet",), "pipe 20 Nov: a sheet made with the label given"),
+    "shape_query": (("shapeIs",), "pipe 20 Nov: an object of edges only"),
+    "object_list": (("typesHere",), "pipe 20 Nov: the types there are when nothing is kept"),
 }
 
 

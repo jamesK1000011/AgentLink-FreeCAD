@@ -81,6 +81,16 @@ def find(doc, ref):
     raise ToolError("not_found", f"sheet {ref!r}: not here — the sheets: {', '.join(o.Label for o in all_) or 'none (sheet_new)'}.")
 
 
+def sheet_named(doc, ref):
+    """The sheet with that label or name (any case), or None: sheet_table
+    make makes a sheet with that label when there is none (test drive of
+    20 Nov: sheet: "Sizes" was refused)."""
+    try:
+        return find(doc, ref)
+    except ToolError:
+        return None
+
+
 def filled(ss):
     """The addresses that hold something, row by row."""
     for m in ("getNonEmptyCells", "getUsedCells"):
@@ -410,7 +420,7 @@ def tools(session):
         return next(t for t in tables(doc(), ss) if t["at"] == at)
 
     # The tools are data (agentlink/data/tools.json, docs/data-tools.md): the entries call these by name.
-    helpers = {"doc": doc, "done": done, "check": check, "unique": s.unique, "find": lambda ref: find(doc(), ref), "sheets": lambda: sheets(doc()), "ref_list": picks.ref_list,
+    helpers = {"doc": doc, "done": done, "check": check, "unique": s.unique, "find": lambda ref: find(doc(), ref), "sheet_named": lambda ref: sheet_named(doc(), ref), "sheets": lambda: sheets(doc()), "ref_list": picks.ref_list,
                "bodies_now": bodies_now, "users": lambda ss, alias: users_of(doc(), ss, alias), "tables": lambda ss: tables(doc(), ss), "table_at": table_at,
                # reading a sheet
                "filled": filled, "aliases": aliases, "bindings": bindings, "cell_reading": cell_reading, "value_of": value_of, "table_reading": table_reading, "column": column,

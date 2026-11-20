@@ -581,7 +581,7 @@ def install():
         if prop == "TransformMode":
             return flag("transform_modes", ["Features", "Whole shape"])
         if prop == "MapMode":
-            return ["Deactivated", "FlatFace", "ObjectXY"]
+            return ["Deactivated", "FlatFace", "ObjectXY", "NormalToEdge"]
         return None
 
     def effect(o):

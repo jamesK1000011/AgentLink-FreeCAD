@@ -12,6 +12,7 @@ import FreeCAD
 from .. import runners
 from . import pd_common as pc
 from . import picks
+from ..protocol import ToolError
 
 GROUP = "feature"
 INFO = "PartDesign features (pad, pocket, revolve, hole, fillet, chamfer, draft, shell, patterns, loft, pipe, datum planes) and the body's feature history."
@@ -219,6 +220,197 @@ def whole_body(f, b, prior):
         b.Tip = f
 
 
+# ---- pd_pipe: the path as edges of any object, and a tube profile made for it -------------------
+
+PIPE_MODES = ("Standard", "Fixed", "Frenet", "Auxiliary", "Binormal")
+PIPE_TRANSITIONS = ("Transformed", "Right corner", "Round corner")
+EDGE_RE = re.compile(r"^Edge([1-9][0-9]*)$")
+
+
+def pipe_path(doc, b, ref, edges, sk=None):
+    """The path of a pd_pipe: (object, [edge names] in the order they join,
+    the start point and the direction there, in the object's own shape).
+    ref: a sketch of the body first (its refusals as before), else any
+    object with edges (a SubShapeBinder of a skeleton, a Draft wire).
+    edges: None for all its edges, else names ("Edge3") joined end to end."""
+    try:
+        o = pc.sketch_of(doc, ref, b)
+    except ToolError as e:
+        o = picks.named(doc, ref) if isinstance(ref, str) else None
+        if o is None or not getattr(getattr(o, "Shape", None), "Edges", None):
+            if o is not None:
+                raise ToolError("invalid_input", f"path: {o.Label} has no edges: give a sketch, a pd_binder of a skeleton, or a wire.") from None
+            raise e
+    if sk is not None and o is sk:
+        raise ToolError("invalid_input", "path: another sketch than the profile — the profile is swept along the path's edges.")
+    all_edges = list(o.Shape.Edges)
+    if not all_edges:
+        raise ToolError("invalid_input", f"path: {o.Label} has no edges (construction geometry does not count): sketch_add a line, arc or polyline.")
+    if edges is None:
+        names = [f"Edge{i + 1}" for i in range(len(all_edges))]
+    else:
+        names = [edges] if isinstance(edges, str) else edges
+        if not isinstance(names, list) or not names or not all(isinstance(n, str) for n in names):
+            raise ToolError("invalid_input", f"edges: [\"Edge3\"] — names of edges of {o.Label}, joined end to end; shape_query {{ body: \"{o.Label}\", kind: \"edge\" }} lists them.")
+        for n in names:
+            m = EDGE_RE.match(n)
+            if not m or int(m.group(1)) > len(all_edges):
+                raise ToolError("not_found", f"edges: {n!r} is not an edge of {o.Label} (Edge1 … Edge{len(all_edges)}): shape_query {{ body: \"{o.Label}\", kind: \"edge\" }} lists them.")
+        if len(set(names)) != len(names):
+            raise ToolError("invalid_input", "edges: each edge once.")
+    if edges is not None:
+        names, start, tangent, flip = chain_edges(o.Shape, names, o.Label)
+        return o, names, start, tangent, flip
+    # All its edges, as FreeCAD's Pipe takes them (it joins them itself): the
+    # start read from the chain they make, else from the first edge.
+    try:
+        _, start, tangent, flip = chain_edges(o.Shape, names, o.Label)
+    except ToolError:
+        e = all_edges[0]
+        start, tangent, flip = e.Vertexes[0].Point, edge_tangent(e, False), False
+    return o, names, start, tangent, flip
+
+
+def chain_edges(shape, names, label, tol=1e-4):
+    """The edges in the order they join end to end: (names, the start point,
+    the direction there, whether the first edge runs backwards). Refused
+    when they do not make one chain."""
+    def ends(n):
+        e = shape.getElement(n)
+        vs = e.Vertexes
+        return vs[0].Point, vs[-1].Point, e
+
+    pts = {n: ends(n) for n in names}
+    if len(names) == 1:
+        a, z, e = pts[names[0]]
+        return names, a, edge_tangent(e, False), False
+
+    def near(p, q):
+        return (p - q).Length < tol
+
+    def links(n):
+        return sum(1 for m in names if m != n for p in pts[n][:2] for q in pts[m][:2] if near(p, q))
+
+    # The chain starts at an edge with a free end (or anywhere for a closed loop).
+    first = next((n for n in names if links(n) < 2), names[0])
+    left = [n for n in names if n != first]
+    a, z, e = pts[first]
+    # The free end is the start: when the first edge's own start joins the next edge, it runs backwards.
+    free_a = not any(near(a, q) for m in left for q in pts[m][:2])
+    free_z = not any(near(z, q) for m in left for q in pts[m][:2])
+    flip = not free_a and free_z
+    order, end = [first], (a if flip else z)
+    while left:
+        nxt = next((m for m in left if near(pts[m][0], end) or near(pts[m][1], end)), None)
+        if nxt is None:
+            raise ToolError("invalid_input", f"edges: {', '.join(names)} of {label} do not join end to end ({', '.join(left)} not reached from {order[-1]}): give edges that make one chain, in any order.")
+        end = pts[nxt][1] if near(pts[nxt][0], end) else pts[nxt][0]
+        order.append(nxt)
+        left.remove(nxt)
+    start = z if flip else a
+    return order, start, edge_tangent(e, flip), flip
+
+
+def edge_tangent(e, backwards):
+    """The unit direction an edge leaves its start with (its end, backwards)."""
+    try:
+        t = e.tangentAt(e.LastParameter if backwards else e.FirstParameter)
+    except Exception:
+        vs = e.Vertexes
+        t = vs[-1].Point - vs[0].Point
+    if backwards:
+        t = t * -1.0
+    return t.normalize() if t.Length > 1e-12 else t
+
+
+def tube_spec(spec):
+    """profile { circle: { d, wall } }: (d, wall) as numbers or expression
+    text; wall None for a solid rod."""
+    c = spec.get("circle") if isinstance(spec, dict) else None
+    if not isinstance(c, dict) or set(spec) - {"circle"} or set(c) - {"d", "wall"} or "d" not in c:
+        raise ToolError("invalid_input", "profile: a sketch's name, or { circle: { d: 28.6, wall: 0.9 } } (mm or an expression such as \"Geo.tt_od\") — a tube square to the path at its start; leave wall out for a rod.")
+    d, wall = c["d"], c.get("wall")
+    for k, v in (("d", d), ("wall", wall)):
+        if v is None:
+            continue
+        if isinstance(v, bool) or not isinstance(v, (int, float, str)) or (isinstance(v, str) and not v.strip()):
+            raise ToolError("invalid_input", f"profile.circle.{k}: mm, or an expression (\"Geo.tt_od\").")
+        if isinstance(v, (int, float)) and v <= 0:
+            raise ToolError("invalid_input", f"profile.circle.{k}: more than 0 mm.")
+    if isinstance(d, (int, float)) and isinstance(wall, (int, float)) and 2 * wall >= d:
+        raise ToolError("invalid_input", f"profile.circle.wall: less than half of d ({d / 2:g} mm) — a wall of {wall:g} mm leaves no bore.")
+    return d, wall
+
+
+def to_body(b, o, p, direction=False):
+    """A point (or direction) of o's shape in the body's coordinates."""
+    if b.hasObject(o):
+        return p
+    try:
+        outer = o.getGlobalPlacement().multiply(o.Placement.inverse())
+        inner = b.getGlobalPlacement().inverse()
+    except Exception:
+        outer, inner = FreeCAD.Placement(), b.Placement.inverse()
+    if direction:
+        return inner.Rotation.multVec(outer.Rotation.multVec(p))
+    return inner.multVec(outer.multVec(p))
+
+
+def tube_profile(s, b, spec, path, names, start, tangent, flip):
+    """A sketch in the body square to the path at its start, with the tube's
+    two circles (one for a rod): attached to the path's first edge
+    (NormalToEdge) when the path is in the body, so it follows the
+    skeleton; else placed there. The circles' diameters are named
+    constraints (od, id) bound to the expressions given. (sketch, how it
+    is held)."""
+    import Part
+    import Sketcher
+
+    d, wall = spec
+    sk = b.newObject("Sketcher::SketchObject", "TubeProfile")
+    sk.Label = s.unique(f"{path.Label} tube")
+    p0, t0 = to_body(b, path, start), to_body(b, path, tangent, True)
+    held = "placed square to the path's start"
+    if b.hasObject(path):
+        try:
+            setattr(sk, pc.support_prop(sk), [(path, names[0])])
+            sk.MapMode = "NormalToEdge"
+            sk.MapPathParameter = 1.0 if flip else 0.0
+            held = f"attached to {path.Label}.{names[0]} (NormalToEdge): it follows the skeleton"
+        except Exception:
+            setattr(sk, pc.support_prop(sk), None)
+            sk.MapMode = "Deactivated"
+    if sk.MapMode == "Deactivated":
+        sk.Placement = FreeCAD.Placement(p0, FreeCAD.Rotation(V(0, 0, 1), t0))
+    num = lambda v, dflt: float(v) if isinstance(v, (int, float)) else dflt  # noqa: E731
+    od = num(d, 10.0)
+    idia = od - 2 * wall if isinstance(wall, (int, float)) and isinstance(d, (int, float)) else (od * 0.8 if wall is not None else None)
+    rows = [("od", od)] + ([("id", idia)] if wall is not None else [])
+    # A number beside an expression keeps its unit: FreeCAD refuses mm minus a plain number.
+    mm = lambda v: v if isinstance(v, str) else f"{v:g} mm"  # noqa: E731
+    for cname, dia in rows:
+        g = sk.addGeometry(Part.Circle(V(0, 0, 0), V(0, 0, 1), dia / 2.0), False)
+        sk.addConstraint(Sketcher.Constraint("Coincident", g, 3, -1, 1))
+        c = sk.addConstraint(Sketcher.Constraint("Diameter", g, dia))
+        sk.renameConstraint(c, cname)
+        if cname == "od" and isinstance(d, str):
+            sk.setExpression(f"Constraints.{cname}", d)
+        if cname == "id" and (isinstance(d, str) or isinstance(wall, str)):
+            sk.setExpression(f"Constraints.{cname}", f"({mm(d)}) - 2 * ({mm(wall)})")
+    return sk, held
+
+
+def pipe_options(f, a):
+    """mode and transition passed to FreeCAD's Pipe (its own words)."""
+    for key, prop, allowed in (("mode", "Mode", PIPE_MODES), ("transition", "Transition", PIPE_TRANSITIONS)):
+        v = a.get(key)
+        if v is None:
+            continue
+        if v not in allowed:
+            raise ToolError("invalid_input", f"{key} {v!r}: one of {', '.join(allowed)}.")
+        setattr(f, prop, v)
+
+
 def tools(session):
     s = session
     doc = lambda: s.doc  # noqa: E731
@@ -251,5 +443,7 @@ def tools(session):
                "ref_snapshot": pc.ref_snapshot, "repair_refs": pc.repair_refs, "broken": pc.newly_broken,
                # the family's
                "has_prop": has, "own_keys": own_keys, "set_sides": set_sides, "thread_key": thread_key, "thread_pick": thread_pick, "hole_spots": hole_spots,
-               "key_values": key_values, "profile_sketch": profile_sketch, "users_of": users_of, "multi_steps": multi_steps, "whole_body": whole_body}
+               "key_values": key_values, "profile_sketch": profile_sketch, "users_of": users_of, "multi_steps": multi_steps, "whole_body": whole_body,
+               "pipe_path": lambda b, ref, edges, sk=None: pipe_path(doc(), b, ref, edges, sk), "tube_spec": tube_spec,
+               "tube_profile": lambda *x: tube_profile(s, *x), "pipe_options": pipe_options}
     return runners.tools(GROUP, s, helpers)
