@@ -210,6 +210,8 @@ SCHEMAS = {
                           ("rotate", "plane", {"type": "string", "description": "XY, XZ, YZ, a datum plane, \"LCS.XZ_Plane\" or an LCS."})]},
     # bicycle runs of 20 Nov, finding 5: relative: true keeps FreeCAD's default on a binder of a document-level source
     "pd_binder": {"why": "bicycle finding 5: Relative false for a source at document level", "after": [("frozen", "relative", {"type": "boolean"})]},
+    # 21 Nov, one file for each part: link_make links an object of another .FCStd
+    "link_make": {"why": "parts in other files: file", "after": [("to", "file", {"type": "string"})]},
 }
 
 
