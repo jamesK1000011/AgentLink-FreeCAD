@@ -384,7 +384,9 @@ class StaticOverlaps(unittest.TestCase):
 
     def test_the_sweep_leaves_static_overlaps_out_of_the_verdict(self):
         got = child('''
-            fc.a_part("Pin", (2, 2, 5), (4, 4, 15), name="Pin")  # pressed into the base, the lid turns round it
+            # pressed into the base, the lid slides along it: Lid/Pin the same at every step; Base/Pin never
+            # checked (neither moves, runs finding 1)
+            fc.a_part("Pin", (2, 2, -10), (4, 4, 40), name="Pin")
             asm, jg = assembly("Base", "Lid", "Pin")
             joint(jg, "Slider", "Base.Face2", "Lid.Face1", "Slide")
             print(json.dumps(run("asm_sweep", {"joint": "Slide", "steps": 2})))
@@ -392,7 +394,8 @@ class StaticOverlaps(unittest.TestCase):
         self.assertEqual(got[0], "ok", got)
         r = got[1]
         pairs = [sorted(h["parts"]) for h in r["staticOverlaps"]]
-        self.assertIn(["Base", "Pin"], pairs)
+        self.assertIn(["Lid", "Pin"], pairs)
+        self.assertNotIn(["Base", "Pin"], pairs)
         for row in r["steps"]:
             for h in row.get("overlaps", ()):
                 self.assertNotIn(sorted(h["parts"]), pairs)

@@ -5,6 +5,7 @@
 # Faces and edges are named by where they are, not by index. A feature
 # that fails is refused with FreeCAD's own error and nothing is kept.
 
+import json
 import re
 
 import FreeCAD
@@ -342,6 +343,42 @@ def tube_spec(spec):
     return d, wall
 
 
+def path_closed(path, names, tol=1e-4):
+    """Whether a pd_pipe's path closes on itself (a ring, a circle for a
+    rim): one closed edge, or edges whose every end meets another's."""
+    try:
+        es = [path.Shape.getElement(n) for n in names]
+    except Exception:  # noqa: BLE001
+        return False
+    if len(es) == 1:
+        e = es[0]
+        try:
+            if e.isClosed():
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+        vs = e.Vertexes
+        return len(vs) == 1 or (len(vs) > 1 and (vs[0].Point - vs[-1].Point).Length < tol)
+    ends = []
+    for e in es:
+        vs = e.Vertexes
+        if not vs:
+            return False
+        ends += [vs[0].Point, vs[-1].Point]
+    return all(sum(1 for j, q in enumerate(ends) if j != i and (p - q).Length < tol) >= 1 for i, p in enumerate(ends))
+
+
+CLOSED_TUBE = ("profile: a tube (circle with wall) on a closed path ({path}: {edges}) — FreeCAD's Pipe makes a solid ring there and leaves the bore out "
+               "(bicycle runs, a rim on a circle path). Nothing was made. Make the ring in two calls on the same path: pd_pipe {{ profile: {{ circle: {{ d: {d} }} }} }}, "
+               "then pd_pipe {{ profile: {{ circle: {{ d: {bore} }} }}, subtractive: true }}. Or pd_revolve a sketch of the ring's section.")
+
+
+def closed_tube_words(path, names, spec):
+    d, wall = spec
+    bore = (f"{d - 2 * wall:g}" if isinstance(d, (int, float)) and isinstance(wall, (int, float)) else f"\"({d if isinstance(d, str) else f'{d:g} mm'}) - 2 * ({wall if isinstance(wall, str) else f'{wall:g} mm'})\"")
+    return CLOSED_TUBE.format(path=path.Label, edges=", ".join(names), d=d if isinstance(d, (int, float)) else json.dumps(d), bore=bore)
+
+
 def to_body(b, o, p, direction=False):
     """A point (or direction) of o's shape in the body's coordinates."""
     if b.hasObject(o):
@@ -444,6 +481,6 @@ def tools(session):
                # the family's
                "has_prop": has, "own_keys": own_keys, "set_sides": set_sides, "thread_key": thread_key, "thread_pick": thread_pick, "hole_spots": hole_spots,
                "key_values": key_values, "profile_sketch": profile_sketch, "users_of": users_of, "multi_steps": multi_steps, "whole_body": whole_body,
-               "pipe_path": lambda b, ref, edges, sk=None: pipe_path(doc(), b, ref, edges, sk), "tube_spec": tube_spec,
+               "pipe_path": lambda b, ref, edges, sk=None: pipe_path(doc(), b, ref, edges, sk), "tube_spec": tube_spec, "path_closed": path_closed, "closed_tube_words": closed_tube_words,
                "tube_profile": lambda *x: tube_profile(s, *x), "pipe_options": pipe_options}
     return runners.tools(GROUP, s, helpers)

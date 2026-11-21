@@ -192,6 +192,9 @@ SCHEMAS = {
                 "describe": {"path": "A sketch in the body, a binder, or another object with edges."},
                 "after": [("path", "edges", {"description": "Edges of the path to sweep along, joined end to end: [\"Edge3\"]."}),
                           ("edges", "mode", {"type": "string"}), ("mode", "transition", {"type": "string"})]},
+    # later bicycle runs, finding 1: a sweep of 25 parts checks only the pairs asked
+    "asm_sweep": {"why": "bicycle runs finding 1: parts and skip",
+                  "after": [("turn", "parts", {"type": "array", "items": {"type": "string"}}), ("parts", "skip", {"type": "array", "items": {"type": "string"}})]},
     "object_list": {"why": "bicycle skeleton build: a label filter", "after": [("type", "label", {"type": "string"})]},
     # bicycle drive of 20 Nov, finding 5: pd_gear on a plane (body, datum, LCS), turned on it
     "pd_gear": {"why": "bicycle finding 5: a gear on any plane",
@@ -235,9 +238,9 @@ def schema(name, old):
 # data tests take them out of the new answer before they compare): per tool,
 # the field names and why.
 RESULTS = {
-    "asm_joint": (("gap", "gapIs", "gapWarning", "offset", "at", "flipWarning", "crossedPlane", "kept", "keepWarning", "ratio", "ratioFrom", "teeth", "queryKept"),
+    "asm_joint": (("gap", "gapIs", "gapWarning", "offset", "at", "flipWarning", "crossedPlane", "kept", "keepWarning", "ratio", "ratioFrom", "teeth", "queryKept", "sideCheck", "sideWarning"),
                   "findings 2, 3: the gap across the joint and where each element was picked; bicycle 3, 4, 5: keep, the flip's plane, a coupling's ratio; asm2: the ends whose query is kept"),
-    "asm_sweep": (("staticOverlaps", "staticNote", "partial", "stepsDone", "continueWith", "partialNote"), "bicycle 6, 7: a sweep in time, static overlaps apart"),
+    "asm_sweep": (("staticOverlaps", "staticNote", "partial", "stepsDone", "continueWith", "partialNote", "pairsChecked", "pairsSkipped"), "bicycle 6, 7: a sweep in time, static overlaps apart; runs finding 1: the pairs counted"),
     "asm_bom": ((), "finding 11: rows of parts in a print setup carry massAs and solidMass (none in the stand-in's cases)"),
     "pd_datum": (("refs", "mode", "offset", "world", "type"), "skeleton workflow (20 Nov): a datum attached by refs says them, its mode, offset and world placement"),
     "part_datum": (("refs", "offset", "in", "world"), "skeleton workflow (20 Nov): refs, the container and the world placement"),

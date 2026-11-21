@@ -757,14 +757,86 @@ def _holds_others(o):
         return False
 
 
-def overlaps(changed, parts, deadline):
+# Bicycle runs (21 Nov), finding 8: on 22 parts (two spoke bodies of 32
+# solids) each asm_joint took 15-35 s and each pd_primitive 8-15 s in this
+# pass. A pair is cut only when the changed part's box, MARGIN mm larger,
+# meets the other's; a part of many solids is cut solid by solid, only the
+# solids whose boxes meet; the other parts' shapes are kept between calls
+# while their key (mark()'s) stays the same.
+MARGIN = 0.01
+_still = {}  # (document, part name) -> (key, { shape, box, faces, ok })
+
+
+def _near(ba, bb, gap=MARGIN):
+    try:
+        return (ba.isValid() and bb.isValid() and ba.XMin - gap <= bb.XMax and bb.XMin - gap <= ba.XMax and ba.YMin - gap <= bb.YMax
+                and bb.YMin - gap <= ba.YMax and ba.ZMin - gap <= bb.ZMax and bb.ZMin - gap <= ba.ZMax)
+    except Exception:
+        return _boxes_meet(ba, bb)
+
+
+def _entry(o, doc_name=None, key=None, other=True):
+    """A part's shape and what the pass needs of it, kept for the next call
+    while key (its shape key, as mark() read it) is the same."""
+    k = (doc_name, o.Name)
+    if key is not None:
+        hit = _still.get(k)
+        if hit is not None and hit[0] == key:
+            return hit[1]
+    sh = o.Shape
+    ok = not sh.isNull() and bool(sh.Solids) and not _in_container(o) and not _holds_others(o) and (_visible(o) if other else True)
+    e = {"shape": sh, "box": sh.BoundBox if ok else None, "faces": _faces(sh) if ok else 0, "ok": ok}
+    if key is not None:
+        _still[k] = (key, e)
+        if len(_still) > 500:
+            for old in list(_still)[:100]:
+                _still.pop(old, None)
+    return e
+
+
+def _common(sa, sb):
+    """(volume, box of the common or None): a part of many solids is cut
+    solid by solid, only where their boxes meet."""
+    try:
+        la, lb = list(sa.Solids), list(sb.Solids)
+    except Exception:
+        la, lb = [], []
+    if len(la) <= 1 and len(lb) <= 1:
+        c = sa.common(sb)
+        return (0.0, None) if c.isNull() else (float(c.Volume), c.BoundBox)
+    vol, box = 0.0, None
+    for x in la:
+        bx = x.BoundBox
+        for y in lb:
+            if not _near(bx, y.BoundBox):
+                continue
+            c = x.common(y)
+            if c.isNull():
+                continue
+            v = float(c.Volume)
+            if v > 1e-9:
+                vol += v
+                if box is None:
+                    box = c.BoundBox
+                else:
+                    box.add(c.BoundBox)
+    return vol, box
+
+
+def overlaps(changed, parts, deadline, doc_name=None, keys=None, counts=None):
     """Changed parts against the other visible parts: [{ a, b, volume, box
     [x, y, z] mm, line }], and what was left unchecked. Parts inside an
     assembly are left to asm_check, which knows a screw's thread from an
-    overlap."""
+    overlap. keys: { part name: its shape key } of the parts the call left
+    as they were (their shapes are kept between calls, _still). counts: a
+    dict that gets { checked, skipped }: pairs cut, pairs left out."""
     out, skipped, tried = [], [], 0
     done = set()
     weights = {}
+    counts = {} if counts is None else counts
+    counts.setdefault("checked", 0)
+    counts.setdefault("skipped", 0)
+    names = {o.Name for o in changed}
 
     def weight(o, sh):
         if o.Name not in weights:
@@ -773,10 +845,11 @@ def overlaps(changed, parts, deadline):
 
     for a in changed:
         try:
-            sa = a.Shape
-            if sa.isNull() or not sa.Solids or _in_container(a) or _holds_others(a):
+            ea = _entry(a, other=False)
+            if not ea["ok"]:
+                counts["skipped"] += len(parts) - 1
                 continue
-            ba, na = sa.BoundBox, _faces(sa)
+            sa, ba, na = ea["shape"], ea["box"], ea["faces"]
         except Exception:
             continue
         for b in parts:
@@ -784,32 +857,32 @@ def overlaps(changed, parts, deadline):
                 continue
             done.add((a.Name, b.Name))
             try:
-                sb = b.Shape
-                if sb.isNull() or not sb.Solids or not _visible(b) or _in_container(b) or _holds_others(b):
-                    continue
+                eb = _entry(b, doc_name, None if b.Name in names or keys is None else keys.get(b.Name))
                 # Made from one another (a copy, a filter's pieces, a mesh
                 # made solid): they lie where their source does.
-                if b in a.OutListRecursive or b in a.InListRecursive:
+                if not eb["ok"] or not _near(ba, eb["box"]) or b in a.OutListRecursive or b in a.InListRecursive:
+                    counts["skipped"] += 1
                     continue
-                if not _boxes_meet(ba, sb.BoundBox):
-                    continue
-                if na > FACES_OVERLAP or _faces(sb) > FACES_OVERLAP:
+                sb = eb["shape"]
+                if na > FACES_OVERLAP or eb["faces"] > FACES_OVERLAP:
                     skipped.append(f"{_label(a)} × {_label(b)} (over {FACES_OVERLAP} faces)")
+                    counts["skipped"] += 1
                     continue
                 if tried >= MAX_PAIRS or time.time() > deadline:
                     skipped.append(f"{_label(a)} × {_label(b)} (out of time)")
+                    counts["skipped"] += 1
                     continue
                 # A boolean on large free-form faces (a swept spring) can
                 # take many seconds and cannot be stopped: left to clearance.
                 if weight(a, sa) + weight(b, sb) > FREEFORM_MAX:
                     skipped.append(f"{_label(a)} × {_label(b)} (large free-form faces)")
+                    counts["skipped"] += 1
                     continue
                 tried += 1
-                c = sa.common(sb)
-                vol = 0.0 if c.isNull() else float(c.Volume)
+                counts["checked"] += 1
+                vol, bb = _common(sa, sb)
                 if vol > 1e-3:
-                    bb = c.BoundBox
-                    box = [round(bb.XLength, 2), round(bb.YLength, 2), round(bb.ZLength, 2)]
+                    box = [round(bb.XLength, 2), round(bb.YLength, 2), round(bb.ZLength, 2)] if bb is not None else [0, 0, 0]
                     out.append({"a": _label(a), "b": _label(b), "volume": round(vol, 2), "box": box,
                                 "line": f"{_label(a)} interferes with {_label(b)}: {round(vol, 2):g} mm³ in a box {box[0]:g} × {box[1]:g} × {box[2]:g} mm"})
             except Exception:
@@ -1133,9 +1206,11 @@ def check(session, tool, m):
     # Yellow, not red: in Part work a body laid over another is the next
     # boolean's tool, and only the person or agent knows which it is. An
     # assembly's overlaps are asm_check's, which knows a thread from a clash.
+    pair_counts = {}
     if todo_parts and len(parts) > 1:
         try:
-            hits, skipped = overlaps(todo_parts[:MAX_SHAPES], parts, min(deadline, time.time() + OVERLAP_S))
+            hits, skipped = overlaps(todo_parts[:MAX_SHAPES], parts, min(deadline, time.time() + OVERLAP_S), doc_name,
+                                    {n: k for n, k in shapes0.items() if n not in touched_names}, pair_counts)
         except Exception:
             hits, skipped = [], []
         if hits:
@@ -1211,6 +1286,9 @@ def check(session, tool, m):
     ms = int((time.time() - t0) * 1000)
     if ms >= 200:
         out["ms"] = ms
+        if pair_counts.get("checked") or pair_counts.get("skipped"):
+            # the interference pass: pairs cut, pairs left out (finding 8)
+            out["overlapPairs"] = {"checked": pair_counts["checked"], "skipped": pair_counts["skipped"]}
     if ms >= MS_BY:
         # Where a long check's time went: state (the objects' flags),
         # sketches, shapes (validity and FreeCAD's geometry check),
