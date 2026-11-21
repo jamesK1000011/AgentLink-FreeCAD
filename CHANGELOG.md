@@ -7,6 +7,8 @@ All notable changes to Agent Link for FreeCAD. The format follows
 
 ## [Unreleased]
 
+- `asm_sweep`, later bicycle runs of 21 Nov (finding 1: 63 pair checks took 55.6 s and stopped at 4 of 5 steps): no recompute a step (a part's shape follows its placement); volumes solid by solid (`_SweepCuts`): a solid pair that cannot change (two still parts, or a round part that turns on its own axis, such as a tire under a calliper) is cut one time for the sweep; a solid whose surface stays out of the other's box is one point test, not a boolean; the next step is judged by the time of the last step, not the mean. The answer adds `booleans`. Test: a 32-solid moving body, a still overlapping pair (`tests/test_bicycle_runs_1121.py`).
+
 - Bicycle design runs of 21 Nov (FreeCAD 1.1.3), hub findings 1, 2, 3, 5, 6, 7, 8 (tests/test_bicycle_runs_1121.py):
   - `asm_sweep` on 25 parts (two spoke sets of 32 solids) did not finish one step in 60 s (1). Now only pairs with motion between them are checked (the moving group and each driven part against the rest; parts that move together, or stay put together, keep their overlap), only where their boxes meet (with the clearance); a part of many solids is cut solid by solid where boxes meet; a part that stays put is read once for the sweep. New inputs `parts` (only pairs of two of these) and `skip`; the answer has `pairsChecked` and `pairsSkipped`. The time budget is as before.
   - `asm_joint keep: true` on a rotated LCS (2): the joint frame was read as part · PlacementN, but FreeCAD puts it at part · (part⁻¹ · object) · PlacementN (the LCS's own placement in the part). The offset now uses UtilsAssembly.getGlobalPlacement for both; a test with an LCS turned 90° about x and an offset origin moves nothing.

@@ -604,6 +604,139 @@ def sweep_pairs(parts, motion, only=None, skip=None):
     return pairs, left
 
 
+def _parallel(u, v, tol=1e-6):
+    try:
+        return abs(abs(u.normalize().dot(v.normalize())) - 1.0) <= tol
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _on_axis(p, centre, axis, tol=1e-4):
+    try:
+        d = p - centre
+        return (d - axis * d.dot(axis)).Length <= tol
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _axisym(solid, centre, axis):
+    """True when the solid stays the same shape when it turns about the axis
+    through centre: each face lies on a plane across the axis, or on a
+    cylinder, cone, sphere, torus or surface of revolution with this axis,
+    each circle edge has this axis, and the centre of mass is on it (a
+    tire, a rim, a hub of revolution). A face of any other kind (a hole off
+    the axis, a tooth, a flat side) makes it False."""
+    try:
+        axis = FreeCAD.Vector(axis).normalize()
+        if not _on_axis(solid.CenterOfMass, centre, axis, 1e-3):
+            return False
+        faces = solid.Faces
+        if not faces:
+            return False
+        for f in faces:
+            srf = f.Surface
+            kind = type(srf).__name__
+            if kind == "Plane":
+                if not _parallel(srf.Axis, axis):
+                    return False
+            elif kind in ("Cylinder", "Cone", "Toroid"):
+                if not (_parallel(srf.Axis, axis) and _on_axis(srf.Center, centre, axis)):
+                    return False
+            elif kind == "Sphere":
+                if not _on_axis(srf.Center, centre, axis):
+                    return False
+            elif kind == "SurfaceOfRevolution":
+                if not (_parallel(srf.Direction, axis) and _on_axis(srf.Location, centre, axis)):
+                    return False
+            else:
+                return False
+        for e in solid.Edges:
+            c = getattr(e, "Curve", None)
+            if type(c).__name__ == "Circle" and not (_parallel(c.Axis, axis) and _on_axis(c.Center, centre, axis)):
+                return False
+        return True
+    except Exception:  # noqa: BLE001 - a solid that cannot be read is not taken as round
+        return False
+
+
+class _SweepCuts:
+    """The overlap volumes of one sweep, solid by solid (bicycle runs of
+    21 Nov, finding 1: 63 pair checks took about 13 s a step). Only solids
+    whose boxes meet are cut. A solid pair that cannot change through the
+    sweep is cut once: both solids stay put, or the moving one is round
+    about its own turning axis (a tire under a calliper). A solid whose
+    surface stays out of the other solid's box is all inside it or all
+    outside it: one point test, no boolean. booleans counts the cuts made."""
+
+    def __init__(self, motion, axes):
+        self.motion, self.axes = motion, axes  # axes: {part name: (centre, axis)} of the parts that turn
+        self.round, self.vols, self.faces = {}, {}, {}
+        self.booleans = self.reused = 0
+
+    def still(self, name, i, solid):
+        if name not in self.motion:
+            return True
+        key = (name, i)
+        if key not in self.round:
+            ax = self.axes.get(name)
+            self.round[key] = bool(ax) and _axisym(solid, ax[0], ax[1])
+        return self.round[key]
+
+    def face_boxes(self, name, i, solid, still):
+        key = (name, i)
+        if still and key in self.faces:
+            return self.faces[key]
+        try:
+            out = [f.BoundBox for f in solid.Faces]
+        except Exception:  # noqa: BLE001
+            out = []
+        if still:
+            self.faces[key] = out
+        return out
+
+    def _cut(self, x, y, fx, fy):
+        bx, by = x.BoundBox, y.BoundBox
+        try:
+            if fy and not any(_boxes_near(fb, bx, 1e-6) for fb in fy):
+                return x.Volume if y.isInside(x.Vertexes[0].Point, 1e-6, True) else 0.0
+            if fx and not any(_boxes_near(fb, by, 1e-6) for fb in fx):
+                return y.Volume if x.isInside(y.Vertexes[0].Point, 1e-6, True) else 0.0
+        except Exception:  # noqa: BLE001 - no point test here: the boolean decides
+            pass
+        self.booleans += 1
+        c = x.common(y)
+        return c.Volume if c.Solids else 0.0
+
+    def volume(self, a, b, sa, sb):
+        try:
+            la, lb = list(sa.Solids) or [sa], list(sb.Solids) or [sb]
+        except Exception:  # noqa: BLE001
+            la, lb = [sa], [sb]
+        vol = 0.0
+        for i, x in enumerate(la):
+            bx = x.BoundBox
+            sx = None
+            for k, y in enumerate(lb):
+                if not _boxes_near(bx, y.BoundBox):
+                    continue
+                if sx is None:
+                    sx = self.still(a.Name, i, x)
+                sy = self.still(b.Name, k, y)
+                key = (a.Name, i, b.Name, k)
+                if sx and sy and key in self.vols:
+                    self.reused += 1
+                    v = self.vols[key]
+                else:
+                    try:
+                        v = self._cut(x, y, self.face_boxes(a.Name, i, x, sx), self.face_boxes(b.Name, k, y, sy))
+                    except Exception:  # noqa: BLE001
+                        v = 0.0
+                    if sx and sy:
+                        self.vols[key] = v
+                vol += v if v > 1e-9 else 0.0
+        return vol
+
+
 def sweep_labels(asm, labels, what):
     """parts and skip of asm_sweep: each a part of the assembly (label or
     name), else refused; a set of names and labels, or None when not given."""
@@ -881,9 +1014,16 @@ def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, 
     the later runs (25 parts, two spoke sets of 32 solids: not one step in
     60 s): only pairs with motion between them (sweep_pairs; only, skip),
     boxes first (with the clearance), each part's shape read once while it
-    stays put. (rows, stopped, counts): stopped is the index of the first
-    step not done, None when all were done; counts { checked, skipped }:
-    pairs cut or measured, and pairs left out, over the steps done."""
+    stays put. Later runs of 21 Nov (63 pair checks, about 13 s a step):
+    no recompute a step (a part's shape follows its placement), the volumes
+    solid by solid with _SweepCuts (a still pair or a round part turning
+    about its own axis is cut once), and the next step judged by the time
+    of the last one, not the mean (the first step makes the cuts that the
+    later steps use again). (rows, stopped, counts): stopped is the index
+    of the first step not done, None when all were done; counts { checked,
+    skipped, booleans, reused }: pairs cut or measured, pairs left out,
+    the solid cuts made, and the solid pairs whose volume was kept, over
+    the steps done."""
     budget = SWEEP_BUDGET if budget is None else budget
     t0 = _clock()
     deadline = t0 + budget if budget and budget > 0 else None
@@ -898,14 +1038,22 @@ def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, 
     gap = max(float(clearance or 0.0), 0.0)
     rows, stopped = [], None
     counts = {"checked": 0, "skipped": 0}
+    axes = {}
+    if turning:
+        axes.update({o.Name: (centre, axis) for o in group.values()})
+    for d in driven:
+        if d["how"] == "turn":
+            axes[d["part"].Name] = (d["centre"], d["axis"])
+    cuts = None
+    last = None
     try:
         posed = float(getattr(j, "AgentLinkPose", 0.0) or 0.0)
         for k in range(steps + 1):
-            if deadline is not None and rows:
-                now = _clock()
-                if now + (now - t0) / len(rows) > deadline:
-                    stopped = k
-                    break
+            now = _clock()
+            if deadline is not None and rows and now + last > deadline:
+                stopped = k
+                break
+            began = now
             v = lo + (hi - lo) * k / steps
             if turning:
                 r = FreeCAD.Rotation(axis, v - posed)
@@ -914,6 +1062,8 @@ def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, 
                 move = FreeCAD.Placement(axis * (v - posed), FreeCAD.Rotation())
             for o in group.values():
                 o.Placement = move.multiply(kept[o.Name])
+            if cuts is None:
+                cuts = _SweepCuts(motion, axes)
             row = {"at": round(v, 3)}
             for d in driven:
                 amount = (v - posed) * d["factor"]
@@ -924,7 +1074,6 @@ def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, 
                     dm = FreeCAD.Placement(d["axis"] * amount, FreeCAD.Rotation())
                 d["part"].Placement = dm.multiply(kept[d["part"].Name])
                 row.setdefault("driven", {})[d["part"].Label] = round(amount, 3)
-            doc.recompute()
             moved = {}
 
             def shape_of(o):
@@ -946,10 +1095,23 @@ def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, 
                 if not _boxes_near(sa.BoundBox, sb.BoundBox, gap):
                     continue
                 n += 1
-                _pair_hit(a, b, sa, sb, clearance, hits, near)
+                try:
+                    vol = cuts.volume(a, b, sa, sb)
+                except Exception:  # noqa: BLE001
+                    vol = 0.0
+                if vol > 1e-3:
+                    hits.append({"parts": [a.Label, b.Label], "volume": round(vol, 3)})
+                elif clearance > 0:
+                    try:
+                        dd, pts, _ = sa.distToShape(sb)
+                        if dd < clearance:
+                            near.append({"parts": [a.Label, b.Label], "gap": round(dd, 4), "at": geo.vec(pts[0][0])})
+                    except Exception:  # noqa: BLE001
+                        pass
             if late:
                 stopped = k
                 break
+            last = _clock() - began
             counts["checked"] += n
             counts["skipped"] += left_out + len(pairs) - n
             if hits:
@@ -963,6 +1125,7 @@ def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, 
                 o.Placement = kept[o.Name]
         doc.recompute()
         _status(asm)
+    counts["booleans"], counts["reused"] = (cuts.booleans, cuts.reused) if cuts else (0, 0)
     return rows, stopped, counts
 
 
