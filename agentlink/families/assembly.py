@@ -998,8 +998,9 @@ CHAIN_PITCH = 12.7
 def teeth_in(part, look):
     """The features with NumberOfTeeth in a part (a Body, a link's target,
     or the part itself) whose type or class name has look in it
-    ("Sprocket": PartDesign's Sprocket; "Gear": its InvoluteGear).
-    [(feature, teeth)]."""
+    ("Sprocket": PartDesign's Sprocket; "Gear": its InvoluteGear), and
+    pd_gear's profiles, which keep the teeth in AgentLinkTeeth and the kind
+    in AgentLinkKind ("sprocket", "gear"). [(feature, teeth)]."""
     found, seen, todo = [], set(), [part]
     try:
         tgt = part.getLinkedObject(True)
@@ -1013,7 +1014,10 @@ def teeth_in(part, look):
             continue
         seen.add(o.Name)
         n = getattr(o, "NumberOfTeeth", None)
-        names = (str(getattr(o, "TypeId", "")), type(getattr(o, "Proxy", None)).__name__)
+        if n is None:
+            # pd_gear's sprocket is a plain sketch: its teeth are in AgentLinkTeeth, its kind in AgentLinkKind
+            n = getattr(o, "AgentLinkTeeth", None)
+        names = (str(getattr(o, "TypeId", "")), type(getattr(o, "Proxy", None)).__name__, str(getattr(o, "AgentLinkKind", "")))
         if n is not None and any(look.lower() in x.lower() for x in names):
             try:
                 found.append((o, int(n)))
@@ -1024,6 +1028,16 @@ def teeth_in(part, look):
     return found
 
 
+def pitch_of(o):
+    """A sprocket's chain pitch in mm as pd_gear keeps it (AgentLinkPitch), or None."""
+    v = getattr(o, "AgentLinkPitch", None)
+    v = getattr(v, "Value", v)
+    try:
+        return float(v) if v else None
+    except (TypeError, ValueError):
+        return None
+
+
 def coupling_teeth(ends, kind, teeth1, teeth2, pitch=None):
     """Finding 5: the teeth of a chain's sprockets (or gears', a toothed
     belt's pulleys), given or read from the parts (chain: a PartDesign
@@ -1032,7 +1046,7 @@ def coupling_teeth(ends, kind, teeth1, teeth2, pitch=None):
     radius2 }: the radii teeth · pitch / 2π, so the joint's ratio is the
     teeth's."""
     look = {"chain": "Sprocket", "gears": "Gear"}.get(kind)
-    got, said = [], []
+    got, said, pitches = [], [], []
     for (part, _el), given, which in zip(ends, (teeth1, teeth2), ("teeth1", "teeth2")):
         if given is not None:
             n = picks.num(given, which)
@@ -1047,7 +1061,9 @@ def coupling_teeth(ends, kind, teeth1, teeth2, pitch=None):
         if found:
             o, n = found[0]
             got.append(n)
-            said.append(f"{which} {n} read from {part.Label}'s {o.Label} (NumberOfTeeth)")
+            prop = "NumberOfTeeth" if getattr(o, "NumberOfTeeth", None) is not None else "AgentLinkTeeth"
+            said.append(f"{which} {n} read from {part.Label}'s {o.Label} ({prop})")
+            pitches.append(pitch_of(o))
         else:
             got.append(None)
     if got == [None, None]:
@@ -1058,6 +1074,10 @@ def coupling_teeth(ends, kind, teeth1, teeth2, pitch=None):
         where = f"no {look} with NumberOfTeeth in {part.Label}" if look else f"{kind} reads no teeth from the parts"
         raise ToolError("invalid_input", f"{which}: {where} — give {which}, or give radius1 and radius2 without teeth.")
     p = float(pitch) if kind == "chain" and pitch else CHAIN_PITCH
+    if kind == "chain" and not pitch and pitches and all(x is not None and abs(x - pitches[0]) < 1e-9 for x in pitches):
+        # the sprockets' own chain pitch (pd_gear keeps it in AgentLinkPitch)
+        p = pitches[0]
+        said.append(f"pitch {p:g} mm read from the sprockets (AgentLinkPitch)")
     t1, t2 = got
     return {"teeth1": t1, "teeth2": t2, "ratio": round(t1 / t2, 6), "from": "; ".join(said),
             "radius1": t1 * p / (2 * math.pi), "radius2": t2 * p / (2 * math.pi)}

@@ -98,6 +98,24 @@ def gear_profile(doc, b, a, kind, teeth, m):
     return prof, info
 
 
+def keep_teeth(prof, kind, teeth, info):
+    """The teeth kept on a gear's profile, where asm_joint kind chain (and
+    gears) reads them (assembly.teeth_in): FreeCAD's involute gear has its
+    own NumberOfTeeth; a sprocket is a plain sketch, so it gets
+    AgentLinkTeeth, AgentLinkPitch (the chain pitch, mm) and AgentLinkKind
+    "sprocket" (bicycle drive of 20 Nov, finding 5). {what: property}."""
+    if kind == "gear" and "NumberOfTeeth" in prof.PropertiesList:
+        return {"teeth": "NumberOfTeeth", "module": "Modules"}
+    rows = (("AgentLinkTeeth", "App::PropertyInteger", int(teeth), "Number of teeth (pd_gear)"),
+            ("AgentLinkPitch", "App::PropertyLength", float(info.get("chainPitch") or 0.0), "Chain pitch, mm (pd_gear)"),
+            ("AgentLinkKind", "App::PropertyString", kind, "What pd_gear made: sprocket or gear"))
+    for name, typ, value, doc_ in rows:
+        if name not in prof.PropertiesList:
+            prof.addProperty(typ, name, "Agent Link", doc_)
+        setattr(prof, name, value)
+    return {"teeth": "AgentLinkTeeth", "pitch": "AgentLinkPitch"}
+
+
 def tools(session):
     s = session
     doc = lambda: s.doc  # noqa: E731
@@ -124,8 +142,17 @@ def tools(session):
         f.MapMode = mode
         f.AttachmentOffset = pl
 
+    def attach_on(b, f, pl, link=None, words=""):
+        """On the plane plane_ref gave (link, words), offset to pl; the
+        body's XY plane when there is none (attach_origin)."""
+        if link is None:
+            return attach_origin(b, f, pl)
+        setattr(f, pc.support_prop(f), [(link[0], link[1][0])])
+        f.MapMode = pc.plane_mode(link, words)
+        f.AttachmentOffset = pl
+
     # What the tools' entries (agentlink/data/tools.json) call by name.
-    helpers = {"doc": doc, "new": new, "attach_origin": attach_origin, "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: len(s.steps),
+    helpers = {"doc": doc, "new": new, "attach_origin": attach_origin, "attach_on": attach_on, "keep_teeth": keep_teeth, "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: len(s.steps),
                "settle": lambda b, f, tool, before=None, must_change=None, hint="": pc.settle(s, b, f, tool, before, must_change, hint=hint),
                "unique": lambda label, *own: s.unique(label, *own), "body": lambda ref: pc.pd_body(doc(), ref),
                "sketch_of": lambda ref, b=None: pc.sketch_of(doc(), ref, b), "in_body": pc.in_body, "body_of": pc.body_of, "volume": pc.volume,

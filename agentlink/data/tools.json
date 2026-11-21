@@ -8090,7 +8090,7 @@
   },
   "sketch_new": {
    "group": "sketch",
-   "description": "Make a new sketch in a body. plane: XY | XZ | YZ | the name of a datum plane | \"Pad.Face3\". Or face { at, normal } finds a face of the solid. at is a point on it, normal is its outward normal. Never use a face index, because it changes after edits. Give plane or face, not both. offset: mm along the normal; flip reverses it. A face sketch aligns with the world: its x is along the world axis that lies most in the face. Answer: sketch (its label) and frame. frame: where the sketch x/y and its origin are in the world.",
+   "description": "Make a new sketch in a body. plane: XY | XZ | YZ | the name of a datum plane | \"Pad.Face3\". An LCS plane is \"LCS.XZ_Plane\"; a whole LCS gives its XY plane. A Part datum plane also works. Or face { at, normal } finds a face of the solid. at is a point on it, normal is its outward normal. Never use a face index, because it changes after edits. Give plane or face, not both. offset: mm along the normal; flip reverses it. A face sketch aligns with the world: its x is along the world axis that lies most in the face. Answer: sketch (its label) and frame. frame: where the sketch x/y and its origin are in the world.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8150,7 +8150,7 @@
     {"set": {"sk.Label": "=label"}},
     {"let": {"sup": "=support_prop(sk)", "link, what": "=plane_ref(b, a.plane if 'plane' in a else a.face, 'plane')"}},
     {"do": "=setprop(sk, sup, [(link[0], link[1][0])])"},
-    {"set": {"sk.MapMode": "FlatFace"}},
+    {"set": {"sk.MapMode": "=plane_mode(link, what)"}},
     {"set": {"sk.MapReversed": true}, "when": "=a.flip"},
     {"let": {"off": "=float(a.get('offset', 0))"}},
     {"do": "=doc().recompute()"},
@@ -8241,6 +8241,7 @@
       {"let": {"r": "={'kind': it.get('kind'), 'ids': ids}"}},
       {"put": {"constraints": "=[cids[0], cids[-1]] if len(cids) > 2 else cids"}, "into": "r", "when": "=cids"},
       {"put": {"dims": "={(str(it.name) + '_' + k if it.get('name') else k): v for k, v in dims.items()}"}, "into": "r", "when": "=dims"},
+      {"put": {"dimsNote": "=str(it.get('kind')) + ': no size to dimension here; sketch_constrain adds one.'"}, "into": "r", "when": "=it.get('dims') and not dims"},
       {"push": {"out": "=r"}}
      ]
     },
@@ -20084,7 +20085,7 @@
   },
   "pd_gear": {
    "group": "feature",
-   "description": "Make a gear as a padded PartDesign feature on the XY plane of the body. kind gear: an involute gear; teeth, module, pressureAngle 20, shift. internal: with rim mm of wall. kind sprocket: a roller-chain sprocket; teeth, pitch, roller diameter. pitch: 9.525 for #35 / 12.7 for #40. thickness, bore: mm. at: the position. If the body already has a solid, the gear is a second solid. Answer: the pitch and outside diameters.",
+   "description": "Make a gear as a padded PartDesign feature on a plane of the body. plane: XY (the default) | XZ | YZ | a datum plane | an LCS plane \"LCS.XZ_Plane\" | an LCS (its XY plane). kind gear: an involute gear; teeth, module, pressureAngle 20, shift. internal: with rim mm of wall. kind sprocket: a roller-chain sprocket; teeth, pitch, roller diameter. pitch: 9.525 for #35 / 12.7 for #40. thickness, bore: mm. at: the position on the plane; rotate { axis, angle } turns it. If the body already has a solid, the gear is a second solid. The profile keeps the teeth: a gear in NumberOfTeeth; a sprocket in AgentLinkTeeth and AgentLinkPitch. asm_joint kind chain reads them. Answer: the pitch and outside diameters, on (the plane) and stored (the properties that keep the teeth).",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20135,6 +20136,14 @@
       "type": "array",
       "items": {}
      },
+     "rotate": {
+      "type": "object",
+      "description": "{ axis: [x,y,z], angle: degrees }, on the plane."
+     },
+     "plane": {
+      "type": "string",
+      "description": "XY, XZ, YZ, a datum plane, \"LCS.XZ_Plane\" or an LCS."
+     },
      "name": {
       "type": "string"
      }
@@ -20158,17 +20167,19 @@
     {"refuse": "module: above 0 mm (pitch diameter = module × teeth).", "when": "=kind == 'gear' and m <= 0"},
     {"refuse": "internal: a ring gear is kind gear; a sprocket has outside teeth only.", "when": "=a.internal and kind != 'gear'"},
     {"refuse": "bore: mm across, over 0, for an outside gear or sprocket (a ring gear is open already; rim sets its wall).", "when": "=a.bore and (float(a.bore) < 0 or a.internal)"},
+    {"let": {"link, on": "=plane_ref(b, a.plane, 'plane') if a.plane else (None, \"the body's XY plane\")"}},
     {"let": {"before": "=volume(b)"}},
     {"let": {"prof, info": "=gear_profile(b, a, kind, teeth, m)"}},
     {"do": "=b.addObject(prof)", "when": "=prof not in b.Group"},
     {"set": {"prof.Label": "=unique(a.name and a.name + ' profile' or kind.capitalize() + ' ' + str(teeth) + 'T', prof)"}},
-    {"do": ["=attach_origin(b, prof, place(a))", "=doc().recompute()"]},
-    {"when": "=kind == 'gear' and a.internal", "then": [{"let": {"rim": "=float(a.get('rim', 3 * m))"}}, {"refuse": "rim: mm of wall outside the teeth, above 0.", "when": "=rim <= 0"}, {"let": {"ring": "=new(b, 'PartDesign::AdditiveCylinder', a.name or 'Ring gear ' + str(teeth) + 'T')"}}, {"set": {"ring.Radius": "=m * teeth / 2 + 1.25 * m + rim", "ring.Height": "=thick"}}, {"do": ["=attach_origin(b, ring, place(a))", "=settle(b, ring, 'pd_gear', before, 'add')"]}, {"let": {"pad": "=new(b, 'PartDesign::Pocket', str(teeth) + 'T teeth')"}}, {"set": {"pad.Profile": "=prof", "pad.Type": "ThroughAll", "pad.Reversed": true}}, {"put": {"outsideDiameter": "=round(2 * float(ring.Radius), 3)"}, "into": "info"}, {"let": {"before": "=volume(b)", "must": "cut"}}], "else": [{"let": {"pad": "=new(b, 'PartDesign::Pad', a.name or kind.capitalize() + ' ' + str(teeth) + 'T pad')"}}, {"set": {"pad.Profile": "=prof", "pad.Length": "=thick"}}, {"let": {"must": "add"}}]},
+    {"let": {"stored": "=keep_teeth(prof, kind, teeth, info)"}},
+    {"do": ["=attach_on(b, prof, place(a), link, on)", "=doc().recompute()"]},
+    {"when": "=kind == 'gear' and a.internal", "then": [{"let": {"rim": "=float(a.get('rim', 3 * m))"}}, {"refuse": "rim: mm of wall outside the teeth, above 0.", "when": "=rim <= 0"}, {"let": {"ring": "=new(b, 'PartDesign::AdditiveCylinder', a.name or 'Ring gear ' + str(teeth) + 'T')"}}, {"set": {"ring.Radius": "=m * teeth / 2 + 1.25 * m + rim", "ring.Height": "=thick"}}, {"do": ["=attach_on(b, ring, place(a), link, on)", "=settle(b, ring, 'pd_gear', before, 'add')"]}, {"let": {"pad": "=new(b, 'PartDesign::Pocket', str(teeth) + 'T teeth')"}}, {"set": {"pad.Profile": "=prof", "pad.Type": "ThroughAll", "pad.Reversed": true}}, {"put": {"outsideDiameter": "=round(2 * float(ring.Radius), 3)"}, "into": "info"}, {"let": {"before": "=volume(b)", "must": "cut"}}], "else": [{"let": {"pad": "=new(b, 'PartDesign::Pad', a.name or kind.capitalize() + ' ' + str(teeth) + 'T pad')"}}, {"set": {"pad.Profile": "=prof", "pad.Length": "=thick"}}, {"let": {"must": "add"}}]},
     {"put": {"bore": "=float(a.bore)"}, "into": "info", "when": "=a.bore"},
-    {"let": {"out": "=settle(b, pad, 'pd_gear', before, must, 'the gear lies on the body\\'s XY plane at at; a body with a solid already needs the gear beside it, not inside.')"}},
-    {"when": "=a.bore", "then": [{"let": {"hole": "=new(b, 'PartDesign::SubtractiveCylinder', pad.Label + ' bore')"}}, {"set": {"hole.Radius": "=float(a.bore) / 2", "hole.Height": "=thick + 2"}}, {"let": {"pl": "=place(a)"}}, {"do": "=attach_origin(b, hole, placement(pl.Base + V(0, 0, -1), pl.Rotation))"}, {"let": {"out": "=settle(b, hole, 'pd_gear', None)"}}]}
+    {"let": {"out": "=settle(b, pad, 'pd_gear', before, must, 'the gear lies on ' + on + ' at at; a body with a solid already needs the gear beside it, not inside.')"}},
+    {"when": "=a.bore", "then": [{"let": {"hole": "=new(b, 'PartDesign::SubtractiveCylinder', pad.Label + ' bore')"}}, {"set": {"hole.Radius": "=float(a.bore) / 2", "hole.Height": "=thick + 2"}}, {"let": {"pl": "=place(a)"}}, {"do": "=attach_on(b, hole, placement(pl.Base + V(0, 0, -1), pl.Rotation), link, on)"}, {"let": {"out": "=settle(b, hole, 'pd_gear', None)"}}]}
    ],
-   "answer": {"fields": {"...out": "=out", "teeth": "=teeth", "kind": "=kind", "profile": "=prof.Label", "...info": "={k: v for k, v in info.items() if v is not None}"}}
+   "answer": {"fields": {"...out": "=out", "teeth": "=teeth", "kind": "=kind", "profile": "=prof.Label", "on": "=on", "stored": "={k: prof.Label + '.' + v for k, v in stored.items()}", "...info": "={k: v for k, v in info.items() if v is not None}"}}
   },
   "pd_helix": {
    "group": "feature",
