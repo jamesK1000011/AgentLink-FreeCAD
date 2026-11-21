@@ -38,7 +38,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # scripts/tool_needs.py writes them. A helper or a method that joins or leaves a list changes it: read why
 # (`python3 scripts/tool_needs.py --why name`), then put the new value here.
 # 21 Nov: + binder_relative (feature_more), attach_path, bound_expr, missed (param readers), unbind (param changer).
-PIN = "b511e1eb2499ac5d3ab79229ff78f6d5b3034fdc1b3e57b97372cadfa101ebe8"
+# 21 Nov, bicycle runs: + sweep_labels, side_check (assembly), path_closed, closed_tube_words (feature).
+PIN = "ca271e1a8a331361b6f34fbfe76c7e3e9973889d817925ae7e8307984aa04a34"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -380,7 +381,8 @@ class Census(unittest.TestCase):
 # 778: pd_pipe's path checks moved into pipe_path, a reader (pipe, 20 Nov).
 # 779: param_bind refuses a target name that is two objects before it changes anything (bicycle finding 8).
 # 780: param_bind refuses a Placement path that FreeCAD computes on an attached object first (bicycle runs, 20 Nov).
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 780, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+# 781: pd_pipe refuses a tube (a wall) on a closed path before it makes anything (bicycle runs, finding 6).
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 781, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
 
 
 class Agreement(unittest.TestCase):

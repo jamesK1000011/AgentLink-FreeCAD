@@ -1,4 +1,6 @@
 CHANGELOG.md
+CHANGELOG.md
+CHANGELOG.md
 Init.py
 InitGui.py
 LICENSE
@@ -335,7 +337,11 @@ docs/packaging.md
 docs/records.md
 docs/security/red-team-2026-11-18.md
 docs/stats/STATS.md
+docs/stats/STATS.md
+docs/stats/STATS.md
 docs/stats/addons.json
+docs/stats/stats.json
+docs/stats/stats.json
 docs/stats/stats.json
 docs/workflow/README.md
 docs/workflow/addons.md
@@ -441,6 +447,7 @@ tests/test_batch_rollback.py
 tests/test_bicycle_1120.py
 tests/test_bicycle_bind_fuse.py
 tests/test_bicycle_params_1121.py
+tests/test_bicycle_runs_1121.py
 tests/test_bim_data.py
 tests/test_bim_gaps.py
 tests/test_cam.py
@@ -560,6 +567,8 @@ tests/test_millsim.py
 tests/test_model.py
 tests/test_model_more.py
 tests/test_more_families.py
+tests/test_needs.py
+tests/test_needs.py
 tests/test_needs.py
 tests/test_nexthint.py
 tests/test_no_addon_names.py

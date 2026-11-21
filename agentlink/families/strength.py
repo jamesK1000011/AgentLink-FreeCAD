@@ -345,6 +345,73 @@ def gmsh_run(tool, timeout, name="Gmsh", slow="a coarser mesh (fea_setup { mesh 
         return ""
 
 
+# Runs finding 5 (21 Nov): a solid study of a thin-walled tube at the
+# default mesh hung FreeCAD for about 22 minutes. A solve is refused before
+# meshing when Gmsh's second-order tetrahedra would pass this many.
+MESH_LIMIT = 400000  # as fea_setup refuses
+TET_FILL = 8.5  # tetrahedra a mm³ at size h: 6·√2 / h³ for regular ones
+TET_SKIN = 4.6  # tetrahedra a mm² of surface at size h: two a face triangle (√3/4·h²)
+
+
+def mesh_estimate(volume, area, size, limit=MESH_LIMIT):
+    """The tetrahedra Gmsh makes of a solid (volume mm³, surface area mm²)
+    at a size (mm), roughly: the larger of what fills the volume and what
+    the surface needs (a thin wall gets one layer of elements on every
+    surface triangle). The wall is taken as 2 · volume / area (a plate's or
+    a tube's own thickness). { elements, wall, through: elements through
+    the wall, over: past the limit, fits: the least mesh size within the
+    limit, rule: the size that gives 2 elements through the wall, ruleFits:
+    whether that size stays within the limit }."""
+    v, a_, h = max(float(volume), 0.0), max(float(area), 1e-9), max(float(size), 1e-6)
+    n = max(TET_FILL * v / h ** 3, TET_SKIN * a_ / h ** 2)
+    wall = 2.0 * v / a_
+    fits = max((TET_FILL * v / limit) ** (1 / 3), (TET_SKIN * a_ / limit) ** 0.5)
+    rule = wall / 2.0
+    n_rule = max(TET_FILL * v / rule ** 3, TET_SKIN * a_ / rule ** 2) if rule > 0 else float("inf")
+    return {"elements": int(n), "wall": round(wall, 3), "through": round(wall / h, 2), "over": n > limit,
+            "fits": round(fits * 1.05, 2), "rule": round(rule, 3), "ruleFits": n_rule <= limit, "limit": limit}
+
+
+def mesh_refusal(label, size, est):
+    """The words when the mesh would pass the limit (mesh_estimate)."""
+    words = (f"Not meshed: {label} at {size:g} mm makes about {est['elements']:,} tetrahedra, over the limit of {est['limit']:,} "
+             f"(a solve of that size runs many minutes and FreeCAD waits). A mesh of {est['fits']:g} mm fits (fea_setup {{ mesh: {est['fits']:g} }}). ")
+    rule = f"The rule is 2 elements through the wall: the wall is about {est['wall']:g} mm, so the size is {est['rule']:g} mm or less"
+    if est["ruleFits"]:
+        return words + rule + "."
+    return (words + rule + f", and that is over the limit too. A {est['fits']:g} mm mesh has {max(est['wall'] / est['fits'], 0):.1f} elements "
+            "through the wall: its stress is not to be read. For tubes and thin walls use a frame of beam elements (a frame tool of an installed add-on) or shells (fea_shell).")
+
+
+def left_of(t0, timeout, what):
+    """Seconds left of a solve's timeout (one budget for Gmsh and CalculiX
+    together, runs finding 5); refused when less than 2 s are left."""
+    left = float(timeout) - (time.monotonic() - t0)
+    if left < 2.0:
+        raise ToolError("failed", f"The solve used its timeout ({float(timeout):g} s) before {what}: a coarser mesh (fea_setup {{ mesh }}) or a longer timeout (fea_solve {{ timeout }}).")
+    return left
+
+
+def ccx_bounded(fea, ccx, timeout):
+    """CalculiX on the FEM route's deck, bounded (FemToolsCcx.ccx_run waits
+    without a limit: a solve of thin-walled tubes hung FreeCAD for about
+    22 minutes). Its output is kept on fea as ccx_run keeps it. The exit code."""
+    inp = fea.inp_file_name
+    env = dict(os.environ)
+    env.setdefault("OMP_NUM_THREADS", str(max(1, min(4, os.cpu_count() or 1))))
+    try:
+        r = _job_run([ccx, "-i", os.path.splitext(os.path.basename(inp))[0]], cwd=os.path.dirname(inp), capture_output=True, text=True, timeout=max(1.0, float(timeout)), env=env)
+    except subprocess.TimeoutExpired:
+        raise ToolError("failed", f"CalculiX took over {float(timeout):g} s (the rest of fea_solve's timeout): a coarser mesh (fea_setup {{ mesh }}) or a longer timeout.")
+    fea.ccx_stdout, fea.ccx_stderr = r.stdout or "", r.stderr or ""
+    return r.returncode
+
+
+def fem_tried(route_why):
+    """Whether FreeCAD's FEM route ran (and failed) before the own deck."""
+    return bool(route_why) and str(route_why).startswith("FreeCAD's FEM route failed here")
+
+
 def ccx_said(fea, ccx, timeout):
     """What CalculiX printed on a run that wrote no results: FemToolsCcx's
     kept stdout and stderr, else ccx run again in its folder on the same
@@ -959,6 +1026,7 @@ def tools(session):
                 fo.Direction = (ln, ["Edge1"])
                 an.addObject(fo)
         doc.recompute()
+        t0 = time.monotonic()
         err = gmsh_run(gmshtools.GmshTools(mesh), timeout)
         femmesh = mesh.FemMesh
         if not femmesh.VolumeCount:
@@ -980,18 +1048,11 @@ def tools(session):
         if msg:
             raise RuntimeError(f"its prerequisites: {msg.strip()}")
         fea.write_inp_file()
-        try:
-            rc = fea.ccx_run()
-        except AttributeError as e:
-            # Live, 17 Nov: FreeCAD 1.1.3's ccx_run (femtools/ccxtools.py 571)
-            # clears the mesh view's HighlightedNodes after CalculiX finished
-            # without error; a mesh whose view is a plain geometry view has no
-            # such property, so the FreeCAD route failed and Agent Link's own
-            # deck was used (no CCX_Results). CalculiX has run: go on to its
-            # .frd as the route does.
-            if "HighlightedNodes" not in str(e):
-                raise
-            rc = 0
+        # Runs finding 5: CalculiX run here, bounded by what is left of the
+        # timeout (FemToolsCcx.ccx_run has no limit). This also leaves out
+        # ccx_run's clearing of the mesh view's HighlightedNodes, which
+        # failed on a plain geometry view (live, 17 Nov).
+        rc = ccx_bounded(fea, ccx, left_of(t0, timeout, "CalculiX ran"))
         # CalculiX's own lines for the shared health check, as the own deck keeps them.
         said = [getattr(fea, k, "") or "" for k in ("ccx_stdout", "ccx_stderr")]
         s._ccx_tail = last_lines("\n".join(v.decode("utf-8", "replace") if isinstance(v, bytes) else str(v) for v in said)) or None
@@ -1035,6 +1096,7 @@ def tools(session):
         """Agent Link's own deck and run (the cases FreeCAD's FEM route does
         not take here)."""
         shape = o.Shape
+        t0 = time.monotonic()
         ccx, wd, femmesh, mesh_text, nodes, elems = _meshed(o, st, timeout)
         fixed, held_faces, cloads, dloads, gravity, applied = _assemble(st, shape, femmesh, nodes, elems)
         mat = {"E": float(c["E"]), "nu": float(c.get("nu") or 0.35), "rho": float(c["density"])}
@@ -1063,10 +1125,11 @@ def tools(session):
             f.write(text)
         env = dict(os.environ)
         env.setdefault("OMP_NUM_THREADS", str(max(1, min(4, os.cpu_count() or 1))))
+        left = left_of(t0, timeout, "CalculiX ran")
         try:
-            r = _job_run([ccx, "-i", "job"], cwd=wd, capture_output=True, text=True, timeout=timeout, env=env)
+            r = _job_run([ccx, "-i", "job"], cwd=wd, capture_output=True, text=True, timeout=left, env=env)
         except subprocess.TimeoutExpired:
-            raise ToolError("failed", f"CalculiX took over {timeout:g} s: a coarser mesh or a longer timeout.")
+            raise ToolError("failed", f"CalculiX took over {left:g} s (the rest of fea_solve's timeout, {timeout:g} s): a coarser mesh or a longer timeout.")
         frd = os.path.join(wd, "job.frd")
         log = (r.stdout or "") + (r.stderr or "")
         s._ccx_tail = last_lines(log)
@@ -1656,6 +1719,14 @@ def tools(session):
         held_faces, applied, groups, pairs, part_cards, frd, said
         (CalculiX's last lines)."""
         shape = o.Shape
+        # Runs finding 5: refused before Gmsh runs when the mesh is too big to solve here.
+        try:
+            est = mesh_estimate(shape.Volume, shape.Area, float(st["mesh"]))
+        except Exception:  # noqa: BLE001 - a shape that cannot be measured is meshed as before
+            est = None
+        if est and est["over"]:
+            raise ToolError("invalid_input", mesh_refusal(o.Label, float(st["mesh"]), est))
+        t0 = time.monotonic()
         groups = pairs = None
         part_cards = []
         an_label = None
@@ -1675,9 +1746,11 @@ def tools(session):
             st.pop("_centrif", None)
             frd = os.path.join(wd, "job.frd")
         else:
-            wd, femmesh, nodes, elems, disp, stress, fixed, held_faces, applied, groups, pairs, part_cards, frd = _solve_own(st, o, c, a, timeout)
+            # one timeout for both routes: the own deck gets what the FEM route left
+            left = left_of(t0, timeout, "Agent Link's own deck ran (after FreeCAD's FEM route failed)") if fem_tried(route_why) else timeout
+            wd, femmesh, nodes, elems, disp, stress, fixed, held_faces, applied, groups, pairs, part_cards, frd = _solve_own(st, o, c, a, left)
         said = getattr(s, "_ccx_tail", None) if fem is None else getattr(s, "_ccx_fem_tail", None)
-        return {"fem": fem is not None, "an_label": an_label, "route_why": route_why, "wd": wd, "nodes": nodes, "elems": elems, "disp": disp, "stress": stress, "fixed": fixed,
+        return {"fem": fem is not None, "an_label": an_label, "route_why": route_why, "estimate": est, "wd": wd, "nodes": nodes, "elems": elems, "disp": disp, "stress": stress, "fixed": fixed,
                 "held_faces": held_faces, "applied": applied, "groups": groups, "pairs": pairs, "part_cards": part_cards, "frd": frd, "said": said}
 
     def peaks(run, shape):

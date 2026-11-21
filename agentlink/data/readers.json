@@ -351,6 +351,7 @@
     "ref_pair",
     "rotation",
     "split_static",
+    "sweep_labels",
     "sweep_rest",
     "unit",
     "vec"
@@ -616,6 +617,7 @@
     "axis_ref",
     "body",
     "broken",
+    "closed_tube_words",
     "doc",
     "has_prop",
     "hole_spots",
@@ -624,6 +626,7 @@
     "multi_steps",
     "num_json",
     "own_keys",
+    "path_closed",
     "pipe_path",
     "placement",
     "plane_ref",
