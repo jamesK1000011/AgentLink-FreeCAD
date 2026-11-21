@@ -48,7 +48,7 @@ PIN = "ca271e1a8a331361b6f34fbfe76c7e3e9973889d817925ae7e8307984aa04a34"
 # Bicycle finding 8: param gains the reader target_object (param_bind's target by name or <<label>>, a name that is two objects).
 # Bicycle findings 3, 5 (20 Nov): sketch gains the reader plane_mode (a sketch on an LCS plane or a planeless PartDesign
 # coordinate system); feature_more's attach_on changes (pd_gear on any plane).
-COUNTS = {"readers": 919, "changers": 155, "families": 37}
+COUNTS = {"readers": 922, "changers": 155, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
