@@ -5370,7 +5370,7 @@
   },
   "part_primitive": {
    "group": "model",
-   "description": "Add a FreeCAD Part primitive as a body (mm, degrees). kind box { size [x,y,z] }: a corner at at. kind cylinder { radius, height }. kind cone { radius (base), radius2 (top) }; either can be 0. kind prism { sides, radius (centre to corner), height }. kind tube { radius, radius2 (bore), height }. Cylinder, cone, prism and tube have the base centred at at, with axis +z or along direction. kind sphere { radius } and torus { radius (ring), radius2 (tube) }: centred at at. kind wedge { wedge: { xmin, ymin, zmin, x2min, z2min, xmax, ymax, zmax, x2max, z2max } }. The front face of a wedge is at ymin, the rear face (x2, z2) at ymax. rotate { axis, angle }: turns it about at. It is parametric until a boolean, fillet or other part_ step makes it a plain shape. Until then, object_set changes Length / Width / Height (box x, y, z), Radius, Radius1 / Radius2. Radius1 / Radius2 are the cone base / top, or the torus ring / tube. Also Polygon / Circumradius, Xmin … Z2max, OuterRadius / InnerRadius. Answer: body, volume, area, faces, solids, box, sound, type, placement.",
+   "description": "Add a FreeCAD Part primitive as a body (mm, degrees). kind box { size [x,y,z] }: a corner at at. kind cylinder { radius, height }. kind cone { radius (base), radius2 (top) }; either can be 0. kind prism { sides, radius (centre to corner), height }. kind tube { radius, radius2 (bore), height }. Cylinder, cone, prism and tube have the base centred at at, with axis +z or along direction. kind sphere { radius } and torus { radius (ring), radius2 (tube) }: centred at at. kind wedge { wedge: { xmin, ymin, zmin, x2min, z2min, xmax, ymax, zmax, x2max, z2max } }. The front face of a wedge is at ymin, the rear face (x2, z2) at ymax. rotate { axis, angle }: turns it about at. It is parametric until a boolean, fillet or other part_ step makes it a plain shape. Until then, object_set changes Length / Width / Height (box x, y, z), Radius, Radius1 / Radius2. Radius1 / Radius2 are the cone base / top, or the torus ring / tube. Also Polygon / Circumradius, Xmin … Z2max, OuterRadius / InnerRadius. Answer: body, volume, area, faces, solids, box, sound, type, placement. Prefer a PartDesign body with sketch features for a made part. A Part primitive at world coordinates is for stand-ins and helpers.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -5452,7 +5452,7 @@
   },
   "part_boolean": {
    "group": "model",
-   "description": "Do a fuse, cut or common of base with tools. tools: solid bodies by name. base: the body that is kept. You must name it when more than one body shows. common with several tools keeps what base shares with any of them. The tool works on the shapes; it does not make a Part::Cut feature. The result keeps the label of base (name: a new label). It is a plain shape, with coplanar faces merged. The tool removes the tools (keep: true hides them). A hidden body is still a body to other tools. A PartDesign Body base gives a new Body on the result, and the tool hides the old one. Trap: faces and edges get new numbers; use shape_query again. The tool refuses, and keeps the tools, in these cases. Nothing would change (apart, or inside for fuse). common has no overlap. A tool is not a sound solid (invalid, open, inside out). OCC drops a tool or makes an invalid result. It first tries an invalid result again with a small fuzzy value (fuzzy says so). It is heavy with many faces (meshes made into solids). It always starts, and the window is frozen during the run. If it runs past about 60 s, the answer is a job id, and job_status gives the result. Answer: body, volume, box, sound (problems when not sound), op, volumeChange, removed or kept, hidden + hiddenNote. object_delete of the result shows the inputs again.",
+   "description": "Do a fuse, cut or common of base with tools. tools: solid bodies by name. base: the body that is kept. You must name it when more than one body shows. common with several tools keeps what base shares with any of them. The tool works on the shapes; it does not make a Part::Cut feature. The result keeps the label of base (name: a new label). It is a plain shape, with coplanar faces merged. The tool removes the tools (keep: true hides them). A hidden body is still a body to other tools. A PartDesign Body base gives a new Body on the result, and the tool hides the old one. Trap: faces and edges get new numbers; use shape_query again. The tool refuses, and keeps the tools, in these cases. Nothing would change (apart, or inside for fuse). common has no overlap. A tool is not a sound solid (invalid, open, inside out). OCC drops a tool or makes an invalid result. It first tries an invalid result again with a small fuzzy value (fuzzy says so). It is heavy with many faces (meshes made into solids). It always starts, and the window is frozen during the run. If it runs past about 60 s, the answer is a job id, and job_status gives the result. Answer: body, volume, box, sound (problems when not sound), op, volumeChange, removed or kept, hidden + hiddenNote. object_delete of the result shows the inputs again. Prefer pockets, pads and holes in one PartDesign body to a chain of booleans. A boolean gives a plain shape with no history. Its faces get new names.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6877,7 +6877,7 @@
   },
   "pd_hole": {
    "group": "feature",
-   "description": "Drill holes at the centre of every circle of a sketch, not construction geometry. FreeCAD 1.1 also drills at its points. The holes go on the face that they enter, against its normal. diameter: mm. Or thread: \"M5\" (ISO coarse; \"M8x1\" fine). threaded: default true, the tap-drill size; cosmetic unless modelThread. threaded: false makes a clearance hole (fit close|normal|loose). depth: mm | \"through\". drillPoint: flat|angled. cut: counterbore|countersink|counterdrill, with cutDiameter, cutDepth, countersinkAngle. A thread size gives standard values for them. The answer adds holes, diameter, thread, cut. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Drill holes at the centre of every circle of a sketch, not construction geometry. FreeCAD 1.1 also drills at its points. The holes go on the face that they enter, against its normal. diameter: mm. Or thread: \"M5\" (ISO coarse; \"M8x1\" fine). threaded: default true, the tap-drill size; cosmetic unless modelThread. threaded: false makes a clearance hole (fit close|normal|loose). depth: mm | \"through\". drillPoint: flat|angled. cut: counterbore|countersink|counterdrill, with cutDiameter, cutDepth, countersinkAngle. A thread size gives standard values for them. The answer adds holes, diameter, thread, cut. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a hole with its thread as data (threaded, no modelThread) and the thread on the drawing. Model a thread only for a printed thread. modelThread makes nothing when reversed or not through.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7029,7 +7029,7 @@
   },
   "pd_fillet": {
    "group": "feature",
-   "description": "Round edges of the body. edges: [{ near: [x,y,z] }] is the edge nearest a point. { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items). Or give its filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An inside corner gets material, an outside corner loses material: both are correct. The answer adds on (the edges). Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Round edges of the body. edges: [{ near: [x,y,z] }] is the edge nearest a point. { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items). Or give its filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An inside corner gets material, an outside corner loses material: both are correct. The answer adds on (the edges). Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer fillets last in the tree. Do not attach a sketch or a datum to a fillet face.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7228,7 +7228,7 @@
   },
   "pd_mirrored": {
    "group": "feature",
-   "description": "Mirror features (by name) across a plane. plane: XY | XZ | YZ (default), a datum plane, or a face query. features: \"all\" mirrors the whole body. That is FreeCAD 1.1's TransformMode \"Whole shape\", else every pad and pocket up to the tip. A copy that misses the body makes a second solid (health says so). Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Mirror features (by name) across a plane. plane: XY | XZ | YZ (default), a datum plane, or a face query. features: \"all\" mirrors the whole body. That is FreeCAD 1.1's TransformMode \"Whole shape\", else every pad and pocket up to the tip. A copy that misses the body makes a second solid (health says so). Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a mirror to a second set of features made by hand. A mirrored modelled thread changes its hand.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7296,7 +7296,7 @@
   },
   "pd_linear_pattern": {
    "group": "feature",
-   "description": "Repeat features along a line. direction: x|y|z (x) or a datum line. occurrences: 2 or more, with the original. spacing: mm between copies. Or length: mm from first to last. reversed. features: \"all\" repeats the whole body. For a grid: pd_multitransform. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Repeat features along a line. direction: x|y|z (x) or a datum line. occurrences: 2 or more, with the original. spacing: mm between copies. Or length: mm from first to last. reversed. features: \"all\" repeats the whole body. For a grid: pd_multitransform. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a pattern to many copies made one by one: it keeps one value for the count and the spacing.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7384,7 +7384,7 @@
   },
   "pd_polar_pattern": {
    "group": "feature",
-   "description": "Repeat features around an axis. axis: x|y|z (the body's axes; z) or a datum line (pd_datum). occurrences: with the original. angle: deg. 360 spreads them evenly around; less is from first to last. reversed. features: \"all\" repeats the whole body. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Repeat features around an axis. axis: x|y|z (the body's axes; z) or a datum line (pd_datum). occurrences: with the original. angle: deg. 360 spreads them evenly around; less is from first to last. reversed. features: \"all\" repeats the whole body. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a pattern to many copies made one by one: it keeps one value for the count. Copies of a whole part go in the assembly as links.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7522,7 +7522,7 @@
   },
   "pd_pipe": {
    "group": "feature",
-   "description": "Sweep a closed profile along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. profile: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). A tube on a closed path (a ring) is refused: a rod, then a subtractive rod. d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. refine: false by default. Refine on many pipes of one weldment can make the body unorientable after a change. Answer: feature, profile, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Sweep a closed profile along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. profile: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). A tube on a closed path (a ring) is refused: a rod, then a subtractive rod. d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. refine: false by default. Refine on many pipes of one weldment can make the body unorientable after a change. Answer: feature, profile, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a path from the skeleton (a pd_binder) to an edge of a made solid. Keep each member of a weldment unrefined.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7590,7 +7590,7 @@
   },
   "pd_datum_plane": {
    "group": "feature",
-   "description": "Make a datum plane in the body, for sketches off the body's planes. on: XY | XZ | YZ | a flat face query. offset: mm along its normal. rotate: { axis [x,y,z] (its own), angle deg }. name: use it in sketch_new { plane: its name }. Answer: plane, origin, normal.",
+   "description": "Make a datum plane in the body, for sketches off the body's planes. on: XY | XZ | YZ | a flat face query. offset: mm along its normal. rotate: { axis [x,y,z] (its own), angle deg }. name: use it in sketch_new { plane: its name }. Answer: plane, origin, normal. Prefer an origin plane with an offset, or a datum on the skeleton, to a made face. A made face can get a new name after a change.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8071,7 +8071,7 @@
   },
   "pd_body_new": {
    "group": "sketch",
-   "description": "Make an empty PartDesign body. It is the container for the features of a parametric part. It has its own XY/XZ/YZ planes and x/y/z axes. name: the label; the tool makes it unique. Answer: body, its label to give to other tools. Next: sketch_new on one of its planes.",
+   "description": "Make an empty PartDesign body. It is the container for the features of a parametric part. It has its own XY/XZ/YZ planes and x/y/z axes. name: the label; the tool makes it unique. Answer: body, its label to give to other tools. Next: sketch_new on one of its planes. Prefer one body for each made part and one solid in each body. Start it from the skeleton (pd_binder) or the origin planes.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -11086,7 +11086,7 @@
   },
   "part_refine": {
    "group": "model",
-   "description": "Merge coplanar and co-cylindrical faces of a body that booleans left (refine). For a PartDesign Body, the tool sets Refine of its tip on, and the body stays parametric. fix: true first repairs it (ShapeFix at tolerance mm, 0.001). It also makes a closed shell into a solid. Faces get new numbers. Answer: faces { before, after }, done, sound. A worse result is refused: a valid shape becomes invalid, fewer closed solids, or a volume change over 0.01 %. Then the tool changes nothing and tells why.",
+   "description": "Merge coplanar and co-cylindrical faces of a body that booleans left (refine). For a PartDesign Body, the tool sets Refine of its tip on, and the body stays parametric. fix: true first repairs it (ShapeFix at tolerance mm, 0.001). It also makes a closed shell into a solid. Faces get new numbers. Answer: faces { before, after }, done, sound. A worse result is refused: a valid shape becomes invalid, fewer closed solids, or a volume change over 0.01 %. Then the tool changes nothing and tells why. Prefer refine on one part only. Never refine the members of a weldment together.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -11659,7 +11659,7 @@
   },
   "part_datum": {
    "group": "model",
-   "description": "Make a Part datum: a point, line, plane or coordinate system. kind: point | line | plane | csys. at: [x,y,z]. normal (plane, line), or axis + angle. Or attach it by one reference: to \"Box.Face6\", an edge, a vertex. Then the placement is its offset. mode: a FreeCAD MapMode. By default it follows what to is: FlatFace, NormalToEdge, Translate. A line goes along a straight edge or the axis of a circle. A point goes at a vertex or centre. A line on a face needs mode. The tool refuses when it cannot attach. Or attach it by refs: one to four references of any object, such as [\"Binder.Vertex3\", \"Binder.Edge2\"]. The object can be a sketch, a binder, a datum or an LCS. Without mode, a vertex gives Translate. A vertex and an edge give OZX: the origin at the vertex and Z along the edge. Two or three vertices also give OZX. A circle gives Concentric. offset { at, rotate } sets the AttachmentOffset. param_bind can bind \"Datum.AttachmentOffset.Base.x\" to a parameter, so that the datum follows the parameter. body (a PartDesign Body) or part (an App::Part) holds the datum. Answer: datum, refs, mode, placement, world (in the coordinates of the document).",
+   "description": "Make a Part datum: a point, line, plane or coordinate system. kind: point | line | plane | csys. at: [x,y,z]. normal (plane, line), or axis + angle. Or attach it by one reference: to \"Box.Face6\", an edge, a vertex. Then the placement is its offset. mode: a FreeCAD MapMode. By default it follows what to is: FlatFace, NormalToEdge, Translate. A line goes along a straight edge or the axis of a circle. A point goes at a vertex or centre. A line on a face needs mode. The tool refuses when it cannot attach. Or attach it by refs: one to four references of any object, such as [\"Binder.Vertex3\", \"Binder.Edge2\"]. The object can be a sketch, a binder, a datum or an LCS. Without mode, a vertex gives Translate. A vertex and an edge give OZX: the origin at the vertex and Z along the edge. Two or three vertices also give OZX. A circle gives Concentric. offset { at, rotate } sets the AttachmentOffset. param_bind can bind \"Datum.AttachmentOffset.Base.x\" to a parameter, so that the datum follows the parameter. body (a PartDesign Body) or part (an App::Part) holds the datum. Answer: datum, refs, mode, placement, world (in the coordinates of the document). Prefer datums attached to the skeleton or the origin to datums at typed world positions.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -13764,7 +13764,7 @@
   },
   "asm_add": {
    "group": "assembly",
-   "description": "Put more bodies into an assembly. parts: by label. The tool moves them in; it does not link them. It skips parts already in. They float free until asm_joint ties them to a grounded part. Answer: added, parts.",
+   "description": "Put more bodies into an assembly. parts: by label. The tool moves them in; it does not link them. It skips parts already in. They float free until asm_joint ties them to a grounded part. Answer: added, parts. Prefer one body for each part. A body of many parts cannot be joined part by part. Correct a part's shape in its own body, not in the assembly.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -19015,7 +19015,7 @@
   },
   "link_make": {
    "group": "std_more",
-   "description": "Make a link (App::Link) to an object. It shows the object again without a copy, and follows every change. to: the object, or \"Box.Face3\" for one element. at, axis + angle: the placement of the link. It replaces the placement of the original; it is not added to it. count: an array of that many elements, all at the same start position. Each element is its own object; place it with object_set (answer: elements). kind: group makes an App::LinkGroup of objects. Answer: link, name, to, placement.",
+   "description": "Make a link (App::Link) to an object. It shows the object again without a copy, and follows every change. to: the object, or \"Box.Face3\" for one element. at, axis + angle: the placement of the link. It replaces the placement of the original; it is not added to it. count: an array of that many elements, all at the same start position. Each element is its own object; place it with object_set (answer: elements). kind: group makes an App::LinkGroup of objects. Answer: link, name, to, placement. Prefer links for repeated whole parts (bolts, spokes) to copies or patterns. It links objects of the same document only.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20047,7 +20047,7 @@
   },
   "pd_primitive": {
    "group": "feature",
-   "description": "Make a PartDesign primitive. kind: box | cylinder | sphere | cone | ellipsoid | torus | prism | wedge. size: { … } (mm). at: [x, y, z], the corner of a box or the base centre of a round one. rotate: { axis, angle } from the origin of the body. subtractive: true cuts it out; it must overlap the body. It is parametric, attached to the XY plane of the body. Answer: as pd_pad.",
+   "description": "Make a PartDesign primitive. kind: box | cylinder | sphere | cone | ellipsoid | torus | prism | wedge. size: { … } (mm). at: [x, y, z], the corner of a box or the base centre of a round one. rotate: { axis, angle } from the origin of the body. subtractive: true cuts it out; it must overlap the body. It is parametric, attached to the XY plane of the body. Answer: as pd_pad. Prefer a sketch and a pad, pocket or revolution for a part's shape. A primitive has no constraints to the rest. Use a primitive for a stand-in or a simple cut.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20293,7 +20293,7 @@
   },
   "pd_multitransform": {
    "group": "feature",
-   "description": "Repeat features through a chain of steps. Each step works on what the steps before it made. steps: [{ kind: mirror, plane } | { kind: linear, direction, occurrences, spacing } | { kind: polar, axis, angle, occurrences } | { kind: scale, factor, occurrences }]. A grid is two linear steps. A mirrored bolt circle is polar, then mirror. The steps stay in the body (feature_list: stepOf) and go with it. As FreeCAD's own command does, the tool hides the steps and lists them after the MultiTransform. The MultiTransform is the tip and the one shown.",
+   "description": "Repeat features through a chain of steps. Each step works on what the steps before it made. steps: [{ kind: mirror, plane } | { kind: linear, direction, occurrences, spacing } | { kind: polar, axis, angle, occurrences } | { kind: scale, factor, occurrences }]. A grid is two linear steps. A mirrored bolt circle is polar, then mirror. The steps stay in the body (feature_list: stepOf) and go with it. As FreeCAD's own command does, the tool hides the steps and lists them after the MultiTransform. The MultiTransform is the tip and the one shown. Prefer one multitransform to a chain of patterns of patterns.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20347,7 +20347,7 @@
   },
   "pd_datum": {
    "group": "feature",
-   "description": "Make a datum, placed from the origin of the body. kind line: at, direction (along z by default). kind point: at. kind lcs: a coordinate system; at, rotate { axis, angle }. Or on: { near: [x,y,z] }, a round edge. Then the datum is its axis (line) or centre (point), attached so it follows the model. A line works by name as an axis or direction. Or refs: one to four references in order, such as [\"Binder.Vertex1\", \"Binder.Edge1\"] or [\"Skeleton.Vertex1\"]. A reference can be a binder, a sketch, a datum or an LCS. mode: a FreeCAD MapMode (OZX, ObjectXY, Translate, Concentric …). Without mode, a vertex gives Translate. A vertex and an edge give OZX: the origin at the vertex and Z along the edge. offset { at, rotate } sets the AttachmentOffset. param_bind can bind \"LCS.AttachmentOffset.Base.x\" to a parameter, so that the datum follows the parameter. An lcs is a Part LocalCoordinateSystem: Assembly joints use it. Answer: datum, at, direction; with refs also refs, mode and world (in the coordinates of the document).",
+   "description": "Make a datum, placed from the origin of the body. kind line: at, direction (along z by default). kind point: at. kind lcs: a coordinate system; at, rotate { axis, angle }. Or on: { near: [x,y,z] }, a round edge. Then the datum is its axis (line) or centre (point), attached so it follows the model. A line works by name as an axis or direction. Or refs: one to four references in order, such as [\"Binder.Vertex1\", \"Binder.Edge1\"] or [\"Skeleton.Vertex1\"]. A reference can be a binder, a sketch, a datum or an LCS. mode: a FreeCAD MapMode (OZX, ObjectXY, Translate, Concentric …). Without mode, a vertex gives Translate. A vertex and an edge give OZX: the origin at the vertex and Z along the edge. offset { at, rotate } sets the AttachmentOffset. param_bind can bind \"LCS.AttachmentOffset.Base.x\" to a parameter, so that the datum follows the parameter. An lcs is a Part LocalCoordinateSystem: Assembly joints use it. Answer: datum, at, direction; with refs also refs, mode and world (in the coordinates of the document). Prefer datums attached to the skeleton or the origin to datums on a made face. Put an LCS at each interface and each motion axis.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21028,7 +21028,7 @@
   },
   "sketch_attach": {
    "group": "sketch",
-   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? }. offset: mm along its normal. rotate: deg in it. flip. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and flip stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Use it when an attachment lost its element (\"missing element reference\") after a change. Answer: on, mode, support, repaired.",
+   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? }. offset: mm along its normal. rotate: deg in it. flip. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and flip stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Use it when an attachment lost its element (\"missing element reference\") after a change. Answer: on, mode, support, repaired. Prefer an origin plane, a datum or the skeleton to a made face (\"Pad.Face3\"). A made face can get a new name after a change.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21306,7 +21306,7 @@
   },
   "doc_new": {
    "group": "doc",
-   "description": "Start a new, empty FreeCAD document, and work in it from now on. name: becomes its label. FreeCAD makes the internal name from it. Spaces and odd characters become _, and FreeCAD adds a number when the name is in use. document in the answer is that internal name; label is the label. The previous document stays open, with its unsaved changes (doc_switch goes back to it). In the window, the new document comes to the front (front: true in the answer). You cannot undo this. A batch's rollback does not include it.",
+   "description": "Start a new, empty FreeCAD document, and work in it from now on. name: becomes its label. FreeCAD makes the internal name from it. Spaces and odd characters become _, and FreeCAD adds a number when the name is in use. document in the answer is that internal name; label is the label. The previous document stays open, with its unsaved changes (doc_switch goes back to it). In the window, the new document comes to the front (front: true in the answer). You cannot undo this. A batch's rollback does not include it. Prefer one file for each part, in one project folder with a parameter file. Save it at once with doc_save: other files refer to it by its name.",
    "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/doc.py)",
@@ -21419,7 +21419,7 @@
   },
   "object_set": {
    "group": "doc",
-   "description": "Set properties of an object. values: for example { Length: 20, Placement: { at, axis, angle }, Refine: true, Base: \"Box\", Mode: \"…\" }. For one property, property and value also work: { property: \"Length\", value: 20 }. Placement also takes FreeCAD's Base, Axis, Angle, Rotation; what you omit is kept. Base is a link, by name or label; null clears it. The tool converts each value to its type. Numbers are mm and degrees. For lengths, angles and other quantities, a string with a unit also works (\"1 in\", \"30 deg\"), not plain floats. Integers and percents take whole numbers. The tool checks enumerations against their choices. Vectors are [x,y,z]. The tool refuses read-only properties, links to faces or edges, and property names that the object does not have. object_get lists names, types and choices. The tool recomputes the object and what is built from it. If that fails, the tool refuses and nothing is kept. On an attached object, Placement sets the AttachmentOffset (redirected). Answer: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement. Set Label with object_rename.",
+   "description": "Set properties of an object. values: for example { Length: 20, Placement: { at, axis, angle }, Refine: true, Base: \"Box\", Mode: \"…\" }. For one property, property and value also work: { property: \"Length\", value: 20 }. Placement also takes FreeCAD's Base, Axis, Angle, Rotation; what you omit is kept. Base is a link, by name or label; null clears it. The tool converts each value to its type. Numbers are mm and degrees. For lengths, angles and other quantities, a string with a unit also works (\"1 in\", \"30 deg\"), not plain floats. Integers and percents take whole numbers. The tool checks enumerations against their choices. Vectors are [x,y,z]. The tool refuses read-only properties, links to faces or edges, and property names that the object does not have. object_get lists names, types and choices. The tool recomputes the object and what is built from it. If that fails, the tool refuses and nothing is kept. On an attached object, Placement sets the AttachmentOffset (redirected). Answer: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement. Set Label with object_rename. Prefer attachment and expressions to a typed Placement for a part's position. Attach to the skeleton or a datum, and bind the offset to a parameter.",
    "inputSchema": {"type": "object", "properties": {"object": {"type": "string", "description": "An object's name or label."}, "values": {"type": "object"}, "property": {"type": "string", "description": "One property's name, with value: the same as values { property: value }."}, "value": {}}, "required": ["object"], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/doc.py)",

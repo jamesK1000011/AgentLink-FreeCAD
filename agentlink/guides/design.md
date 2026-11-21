@@ -6,7 +6,7 @@ The method behind the design-kickoff skill: clarify the task, freeze the interfa
 ## Start here
 A map of this guide. `guide_read { topic: "design", section: [...] }` reads the sections named.
 - Before the first question to the person: `The brief` (the records, the requirements list, the kickoff questions, the interface table).
-- Before L1: `Levels, build rules and gates` and `Agent Link steps and traps`.
+- Before L1: `Modelling principles`, `Levels, build rules and gates` and `Agent Link steps and traps`.
 - At their own moment (the index lists them under later): `Concepts and embodiment`, `Workflow branches`, `Hand-off and feedback`, `Sources`.
 
 ## The brief
@@ -142,6 +142,20 @@ The assembly fixes where parts meet. It does not design the parts. A fit problem
 - Then fit it to its neighbours through the frozen interfaces. When it does not fit, change the interface by a change note, not the part's concept.
 - A quick fix that changes a part's concept (another material, a bought part in place of a made one, a block in place of a shaped part, a moved interface outside the brief) is a trade-off for the person, also in a run without the person: log it as open, do not decide it alone.
 - A part that is still a box or a cylinder at L3 is a stand-in, not a design: say so in the BOM.
+
+## Modelling principles
+
+These rules apply to every part in every CAD tool. They make a model cheap to build, exact and easy to change. A model made of placed blocks and long chains of booleans is a script, not a design: it breaks when one value changes.
+
+1. **Plan the structure first.** One file for each part. A thin skeleton holds the shared values and the layout (centrelines, axes, interface points). Name and save it before anything refers to it. The assembly only places the parts.
+2. **Refer only to stable geometry.** That is the origin planes and axes, datums attached to them, the skeleton and sketches. Never attach to a face or edge that a later feature, a boolean, a fillet or a pattern made: it can get a new name after a change. If you must use a made face, use the first feature that made it.
+3. **Drive sizes from parameters.** Each value that sets a size, a fit or an interface has a name in one place. Features read it by name. Do not type the same number in two features. Keep the parameters outside the objects that they drive.
+4. **Build shape with real features. Repeat it with patterns.** Make a shape from a constrained profile (pad, pocket, revolve, sweep, loft, hole), not from placed primitives and booleans. Repeat a feature inside a part with a pattern or a mirror. Repeat a whole part with linked copies in the assembly, not with a pattern.
+5. **A stand-in is a block. A part is designed.** A block is correct for a placeholder that nothing else is built from. A made part gets its shape from its function, its load path and its process. Replace a stand-in before you add detail that depends on it.
+6. **Keep the feature tree short and in a clear order.** Base shape, then the main features, then holes, then patterns, then fillets and chamfers. Each feature is one more point that can break. Correct a part in its own file and its own tree, not with patches in the assembly.
+7. **Keep heavy detail cosmetic or last.** Threads, knurls, text and small fillets on many edges cost time on each rebuild. Give a thread as data (its size and standard) on a tap-drill hole and show it on the drawing. Model it only when the process needs the geometry (a printed thread). Put drawing dimensions on sketch-driven edges, as the last step.
+
+A merge setting that joins faces (refine) is a choice for each feature. Do not use it on members that must stay separate (the tubes of a weldment, the parts of a cut list).
 
 ## Levels, build rules and gates
 
@@ -412,6 +426,11 @@ Pin one FreeCAD version per project: 1.1 converts old Body origins when it opens
 - No tool makes a tube cut list in this version: calculate lengths, cope angles and phase from the skeleton.
 - Long calls go to a background job: read `job_status`; read the newest batch record before you call again.
 - Never approve code or file actions for the person (`approve_code`, `approve_file` are theirs).
+- One file for each part: make each part with `doc_new` and save it next to the others, in one project folder. Move the whole folder, never one file: links keep relative paths. In this version `link_make` links an object of the same document only, so no tool links a part from another file into an assembly. Until one does, build the parts as separate bodies in the assembly document, one body for each part, each from its own sketches and the skeleton. Say in the records which parts will move to their own files.
+- A value from another file (`File#<<Params>>.name`) needs that file open. A closed file keeps its last value and gives no warning. After you change a shared value, open the parameter file first, recompute, and read one driven value.
+- Threads not in FreeCAD 1.1's hole tables: there is no custom pitch, and 9/16"-20 (the bicycle pedal thread) is not there (UNF 9/16 is 18 TPI). Make the hole by its tap-drill diameter (9/16"-20: 33/64 in, 13.1 mm) and give the thread (size, pitch, hand) in a note and on the drawing. The hole's "cosmetic thread" option comes after 1.1.
+- `modelThread: true` makes no thread when the hole is reversed or when its depth is shorter than the part ("through" works). Mirroring a modelled thread changes its hand.
+- 1.1 changed the body origin and the datums: a file saved in 1.1 can break in 1.0. Part's datum line replaces PartDesign Line.
 
 ## Sources
 <!-- later: when the person asks where a rule comes from -->
@@ -450,6 +469,11 @@ Each rule in the skill comes from one of these. Standards marked * were read thr
 - FreeCAD 1.1 release notes (core datums usable in Assembly; Body origin conversion; external geometry defining; Hole threads; Check Geometry). https://github.com/FreeCAD/FreeCAD-documentation/blob/main/wiki/Release_notes_1.1.md
 - FreeCAD wiki: Topological naming problem; Feature editing; SubShapeBinder; Std VarSet; Configuration Tables; Part CoordinateSystem; KicadStepUp.
 - Assembly4 README (no geometry used to place parts). https://github.com/Zolko-123/FreeCAD_Assembly4
+- Modelling principles: FreeCAD wiki Feature editing (one solid in each Body; sketches and datums on the origin planes also after the 1.0 naming fix; dress-ups last; binders not from made geometry). https://github.com/FreeCAD/FreeCAD-documentation/blob/main/wiki/Feature_editing.md
+- FreeCAD wiki Expressions (cross-document values need the master file open). https://github.com/FreeCAD/FreeCAD-documentation/blob/main/wiki/Expressions.md
+- FreeCAD wiki PartDesign Hole and FeatureHole.cpp (thread tables; Model Thread limits; cosmetic thread option after 1.1). https://github.com/FreeCAD/FreeCAD-documentation/blob/main/wiki/PartDesign_Hole.md
+- FreeCAD issues on the naming problem in 1.x (#26889, #29154) and on links saved by scripts (#33468). https://github.com/FreeCAD/FreeCAD/issues/29154
+- Park Tool TAP-6 (9/16"-20 tap drill 33/64 in).
 - PTC Creo skeleton models; Autodesk Inventor skeletal modeling; Onshape master modeling; Solid Edge "10 golden rules"; CMU 24-688.
 
 ### Fits, stacks, analysis

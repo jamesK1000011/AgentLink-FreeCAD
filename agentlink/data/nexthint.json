@@ -493,6 +493,35 @@
      "additivehelix",
      "subtractivehelix",
      "boolean",
+     "featurebase"
+    ]
+   },
+   "suggest": [
+    {
+     "tool": "sketch_new",
+     "why": "the next feature's sketch, on a stable plane"
+    },
+    {
+     "tool": "pd_hole",
+     "why": "holes, from a sketch of points"
+    },
+    {
+     "tool": "pd_polar_pattern",
+     "why": "repeat a feature, not copies by hand"
+    },
+    {
+     "tool": "pd_fillet",
+     "why": "fillets last, when the shape is done"
+    }
+   ],
+   "weight": 50,
+   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
+   "date": "2026-11-16"
+  },
+  "body-after-primitive": {
+   "when": {
+    "body": "features",
+    "lastFeature": [
      "additivebox",
      "additivecylinder",
      "additivesphere",
@@ -508,27 +537,26 @@
      "subtractiveellipsoid",
      "subtractivetorus",
      "subtractiveprism",
-     "subtractivewedge",
-     "featurebase"
+     "subtractivewedge"
     ]
    },
    "suggest": [
     {
-     "tool": "pd_fillet",
-     "why": "round edges of the new solid"
+     "tool": "sketch_new",
+     "why": "a sketch keeps sizes as constraints"
     },
     {
-     "tool": "pd_chamfer",
-     "why": "bevel edges of the new solid"
+     "tool": "pd_pad",
+     "why": "or pd_pocket, pd_revolution from that sketch"
     },
     {
-     "tool": "pd_hole",
-     "why": "holes, from a sketch of points"
+     "tool": "pd_polar_pattern",
+     "why": "repeat a feature, not more primitives"
     }
    ],
-   "weight": 50,
-   "source": "Agent Link's own ranking, from FreeCAD 1.1's usual order of work (Part Design, Sketcher, TechDraw, Assembly)",
-   "date": "2026-11-16"
+   "weight": 52,
+   "source": "FreeCAD wiki Feature editing and PartDesign Workbench (sketch-based features); Agent Link's own ranking",
+   "date": "2026-11-21"
   },
   "body-after-dressup": {
    "when": {

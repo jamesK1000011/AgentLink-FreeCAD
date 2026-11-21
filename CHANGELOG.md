@@ -6,6 +6,8 @@ All notable changes to Agent Link for FreeCAD. The format follows
 [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+- Steering toward FreeCAD's own modelling practice (branch `steering`, 21 Nov): guide `design` gets the section "Modelling principles" (one file per part and a thin skeleton; stable references; sizes from parameters; real features and patterns; a stand-in is a block, a part is designed; a short ordered tree; heavy detail cosmetic or last) and FreeCAD 1.1 traps (no cross-file link tool yet; cross-file values need the file open; threads not in the hole tables, such as 9/16"-20; modelThread limits; 1.1 datums). Skill `design-kickoff`: the rule in one line and a pointer. A "Prefer" line on 20 tool cards (primitives, booleans, Placement, pipes, datums, patterns, hole, fillet, refine, attach, links, doc_new, bodies). Next hints: after a pad or pocket, the next sketch, holes and patterns come before fillets; after a primitive, a sketch and a pad.
+
 - Guide `design` and skill `design-kickoff`: a part-by-part design pass after L2; a fix that changes a part's concept is a trade-off for the person; traps for Refine on weldments and lost binder edges.
 
 - Bicycle L5 build of 21 Nov (FreeCAD 1.1.3, about 35 bodies, 32 assembly parts), findings 1 to 5 (tests/test_bicycle_l5_1121.py):

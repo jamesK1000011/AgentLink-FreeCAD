@@ -15,6 +15,7 @@ Write to the person in plain, short sentences. Assume no CAD or engineering skil
 The details are in Agent Link's guide `design`. Read each section at its step with `guide_read { topic: "design", section: "<name>" }` (start with `section: "Start here"`). Without Agent Link, read `agentlink/guides/design.md` in the AgentLink-FreeCAD repository.
 - `The brief` — the design records, the requirements list, stories, the kickoff questions, the interface table.
 - `Concepts and embodiment` — functions, concepts, how to present options, embodiment rules.
+- `Modelling principles` — how to model each part: structure, stable references, parameters, features and patterns, cosmetic detail.
 - `Levels, build rules and gates` — the level ladder, the build rules, the gate checklists, the design FMEA, change control.
 - `Hand-off and feedback` — the hand-off menu, the package per process, the feedback loop.
 - `Workflow branches` — what changes per workflow (printed, sheet/laser, machined, weldment, mechanism, spaces/BIM, PCB + enclosure, scan- or photo-based).
@@ -82,6 +83,8 @@ Core build rules:
 4. Clearances before joints. Joints on LCS only.
 5. Every level only adds features to the same bodies. Interfaces frozen at L1 change only through a change note the person approves.
 6. Save before each batch of changes and at each level.
+
+Model like a designer, not like a script: one file per part, references only to stable geometry, sizes from parameters, real features and patterns (not placed primitives and boolean chains), threads and heavy detail cosmetic. Read the guide section `Modelling principles` before L1.
 
 At L2, check each part against its process limits (printer bed, sheet size, tube stock, tool reach) and split the parts that do not fit. At L3, build each interface's joining feature (thread or its seat, clamp slot and bolts, bearing seat, retention), model every bought part as a stand-in at its catalogue fit size, check the parts list of the product type (the branch in `Workflow branches`), and check that each part can go on in the order of the assembly steps. Every part in the load path of a high-severity FMEA row gets a feasibility check; check aluminium and welds against fatigue, not only yield.
 
