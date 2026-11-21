@@ -85,6 +85,8 @@ Core build rules:
 
 At L2, check each part against its process limits (printer bed, sheet size, tube stock, tool reach) and split the parts that do not fit. At L3, build each interface's joining feature (thread or its seat, clamp slot and bolts, bearing seat, retention), model every bought part as a stand-in at its catalogue fit size, check the parts list of the product type (the branch in `Workflow branches`), and check that each part can go on in the order of the assembly steps. Every part in the load path of a high-severity FMEA row gets a feasibility check; check aluminium and welds against fatigue, not only yield.
 
+After L2, design each made part on its own: function, load path, process, then form, then fit it through the frozen interfaces (guide section `Part by part`). A fix that changes a part's concept (material, made to bought, a block in place of a shaped part, an interface outside the brief) is a trade-off for the person: log it as open, also in auto mode. A part that is still a box or a cylinder at L3 is a stand-in, not a design.
+
 At every level, run the gate checklist and fix before going on. Check with real readings (recompute, DoF, measurements, interference, mass, maps, FEA), not with a picture alone. After every fix, measure again. If a check fails three times, stop and give the person the trade-off.
 
 A requirement is met only with a reading next to it (a tool reading, or a hand check with its sum). With no reading it is open.

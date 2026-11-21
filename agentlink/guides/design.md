@@ -134,6 +134,15 @@ Design for X:
 - **Disposal**: one material per part where you can; joints that come apart; marked plastics.
 - **Standards**: standard parts and preferred sizes first.
 
+
+### Part by part (each part is a design of its own)
+
+The assembly fixes where parts meet. It does not design the parts. A fit problem in the assembly is not a reason to change a part's material, process or shape until that part was designed on its own.
+- After L2, design each made part in its own pass: its function, its load path, its process, then its form (sections that follow the load, fillets at changes of section, the native features of the process). Read the parts of a similar product (catalogue or a photo) before you draw.
+- Then fit it to its neighbours through the frozen interfaces. When it does not fit, change the interface by a change note, not the part's concept.
+- A quick fix that changes a part's concept (another material, a bought part in place of a made one, a block in place of a shaped part, a moved interface outside the brief) is a trade-off for the person, also in a run without the person: log it as open, do not decide it alone.
+- A part that is still a box or a cylinder at L3 is a stand-in, not a design: say so in the BOM.
+
 ## Levels, build rules and gates
 
 ### The level ladder
@@ -383,6 +392,8 @@ Pin one FreeCAD version per project: 1.1 converts old Body origins when it opens
 | Hand-off | `export`, `asm_bom`; add-on tools for slicing, drawings, cut files (their own skills) | Export; TechDraw; Assembly BOM |
 
 ### Known traps
+- Refine on every feature of a large pipe weldment can leave the body "unorientable" after a small parameter change. Keep Refine off on weldment features (pd_pipe does by default).
+- A sketch attached to a binder edge can lose the edge after a rebuild (topological naming): sketch_attach { sketch, repair: true }, or attach it again with edge and mode.
 
 - `param_bind` and expressions resolve an object by its **name**, not its label ("Pad" may be another body's pad). Use the label form `<<Label>>.Property` or the exact name from `feature_list` / `object_list`.
 - A feature made right after a datum it uses may read the datum's old position. Run `recompute { force: true }` after you make or move datums, before features that use them, and check the box size in the answer.

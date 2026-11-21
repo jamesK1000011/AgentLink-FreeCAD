@@ -6,6 +6,7 @@ All notable changes to Agent Link for FreeCAD. The format follows
 [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+- Guide `design` and skill `design-kickoff`: a part-by-part design pass after L2; a fix that changes a part's concept is a trade-off for the person; traps for Refine on weldments and lost binder edges.
 
 - Bicycle L5 build of 21 Nov (FreeCAD 1.1.3, about 35 bodies, 32 assembly parts), findings 1 to 5 (tests/test_bicycle_l5_1121.py):
   - `asm_sweep` (1): a driven part now carries the parts fixed to it, at any depth (spokes, rim and tire on the rear hub turn with it by the ratio). `moves` names them, and `driven` rows have `carries`. A coupling that ends on a part fixed to the one with the joint drives that one. A joint end held from a container counts as its part. `heldBack` names a grounded part that is fixed to a moving part.
