@@ -151,8 +151,26 @@ def tools(session):
         f.MapMode = pc.plane_mode(link, words)
         f.AttachmentOffset = pl
 
+    def binder_relative(src, given):
+        """(Relative to set or None to keep FreeCAD's default, words) for
+        pd_binder. A source at document level (a Part::Line helper, a sketch
+        outside any body) is bound with Relative false, so the binder's
+        shape goes with the body when an assembly moves the body (bicycle
+        runs, 20 Nov: the fork blades stayed at the origin). relative: true
+        keeps FreeCAD's default (true)."""
+        if given is not None:
+            return bool(given), ("relative: true (FreeCAD's default)" if given else "relative: false, as asked")
+        try:
+            parent = src.getParentGeoFeatureGroup()
+        except Exception:  # noqa: BLE001
+            parent = None
+        if parent is None and pc.body_of(src) is None:
+            return False, (f"relative: false — {src.Label} is at document level, so the binder's shape moves with this body "
+                           "(an assembly that places the body takes it along); relative: true keeps FreeCAD's default")
+        return None, f"relative: FreeCAD's default — {src.Label} is inside {(parent or pc.body_of(src)).Label}"
+
     # What the tools' entries (agentlink/data/tools.json) call by name.
-    helpers = {"doc": doc, "new": new, "attach_origin": attach_origin, "attach_on": attach_on, "keep_teeth": keep_teeth, "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: len(s.steps),
+    helpers = {"doc": doc, "new": new, "binder_relative": binder_relative, "attach_origin": attach_origin, "attach_on": attach_on, "keep_teeth": keep_teeth, "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: len(s.steps),
                "settle": lambda b, f, tool, before=None, must_change=None, hint="": pc.settle(s, b, f, tool, before, must_change, hint=hint),
                "unique": lambda label, *own: s.unique(label, *own), "body": lambda ref: pc.pd_body(doc(), ref),
                "sketch_of": lambda ref, b=None: pc.sketch_of(doc(), ref, b), "in_body": pc.in_body, "body_of": pc.body_of, "volume": pc.volume,

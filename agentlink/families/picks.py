@@ -188,9 +188,26 @@ def one_of(pool, ref, which, missing, none=None, nocase=False):
         if len(pool) == 1:
             return pool[0]
         raise ToolError("invalid_input", which.replace("{labels}", labels))
+    # The internal Name before the Label (a Name never changes; a label can be
+    # another object's name), then the label in any case, then a label the
+    # object had before object_rename (bicycle runs of 20 Nov: "FrameW" was
+    # not found after the body got the label "Frame").
     for o in pool:
-        if ref in (o.Label, o.Name) or (nocase and o.Label.lower() == str(ref).lower()):
+        if o.Name == ref:
             return o
+    for o in pool:
+        if o.Label == ref:
+            return o
+    if nocase:
+        for o in pool:
+            if o.Label.lower() == str(ref).lower():
+                return o
+    try:
+        was = former(getattr(pool[0], "Document", None) if pool else None, ref)
+    except Exception:  # noqa: BLE001
+        was = None
+    if was is not None and was in pool:
+        return was
     raise ToolError("not_found", re.sub(r"\{(ref|labels)\}", lambda m: repr(ref) if m[1] == "ref" else labels, missing))
 
 
@@ -224,6 +241,32 @@ def named(doc, ref, prefer=(BODY,)):
     return None
 
 
+# Labels that objects had before object_rename: {(document name, old label):
+# object Name}. A tool given the old label still finds the object, when no
+# object has that label or name now. Kept for the session only.
+FORMER = {}
+
+
+def keep_former(o, old):
+    """Note that o had the label old (object_rename)."""
+    try:
+        if old and old != o.Label:
+            FORMER[(o.Document.Name, old)] = o.Name
+    except Exception:  # noqa: BLE001 - a note only
+        pass
+
+
+def former(doc, ref):
+    """The object that had the label ref before object_rename, or None."""
+    if doc is None or not isinstance(ref, str):
+        return None
+    try:
+        name = FORMER.get((doc.Name, ref))
+        return doc.getObject(name) if name else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def find(doc, ref, what="object"):
     if not isinstance(ref, str) or not ref:
         raise ToolError("invalid_input", f"{what}: an object's name or label.")
@@ -233,6 +276,9 @@ def find(doc, ref, what="object"):
     hits = doc.getObjectsByLabel(ref) or [x for x in doc.Objects if x.Label.lower() == ref.lower()]
     if hits:
         return hits[0]
+    o = former(doc, ref)
+    if o is not None:
+        return o
     names = ", ".join(x.Label for x in doc.Objects[:30]) or "none"
     raise ToolError("not_found", f"{what} {ref!r}: not here — the objects: {names}.")
 
@@ -479,7 +525,7 @@ def repoint(doc, old, new):
 # expression on them, and which log an exception when that name is not one
 # of them: a LocalCoordinateSystem (Part::LocalCoordinateSystem, FreeCAD 1.1's
 # PartDesign::CoordinateSystem) and an Origin (roles X_Axis, XY_Plane, ...).
-SUB_OWNERS = ("App::LocalCoordinateSystem", "App::Origin")
+SUB_OWNERS = ("App::LocalCoordinateSystem", "App::Origin", "Part::LocalCoordinateSystem", "PartDesign::CoordinateSystem")
 
 
 def sub_owner(o):
@@ -492,21 +538,65 @@ def sub_owner(o):
     return str(getattr(o, "TypeId", "")) in SUB_OWNERS or "OriginFeatures" in (getattr(o, "PropertiesList", None) or ())
 
 
-def doc_refs(doc, o, expr):
-    """An expression to put on o with each other object it names written
-    by its label, <<Dims>>.lift (exprs.by_label), when o is a SUB_OWNERS
-    object; else expr as it is. Only objects whose label is their own (no
-    other object has it): a label two objects share would not resolve."""
-    if not isinstance(expr, str) or not sub_owner(o):
-        return expr
+def sub_names(o):
+    """The names FreeCAD can read as o's own sub-objects in an expression on
+    o: the roles, names and labels of its origin features (X_Axis,
+    XY_Plane …) and the names and labels of what its Group holds."""
+    out = set()
+    for f in list(getattr(o, "OriginFeatures", None) or []) + list(getattr(o, "Group", None) or []):
+        for k in ("Role", "Name", "Label"):
+            v = getattr(f, k, None)
+            if isinstance(v, str) and v:
+                out.add(v)
+    return out
+
+
+def attached(o):
+    """Whether FreeCAD computes o's Placement from its attachment: an
+    AttachExtension object with a MapMode other than Deactivated and a
+    support. Its own offset is AttachmentOffset."""
+    try:
+        props = list(getattr(o, "PropertiesList", None) or [])
+        if "AttachmentOffset" not in props or "MapMode" not in props:
+            return False
+        if str(getattr(o, "MapMode", "Deactivated")) in ("Deactivated", "", "None"):
+            return False
+        sup = getattr(o, "AttachmentSupport", None) if "AttachmentSupport" in props else getattr(o, "Support", None)
+        return bool(sup)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def doc_refs_said(doc, o, expr):
+    """(expression, {word: <<label>>}, [words left]) for an expression to
+    put on o. When o is a SUB_OWNERS object, or a word before a "." is one
+    of o's own sub-object names (sub_names), each other object it names is
+    written by its label, <<Dims>>.lift (exprs.by_label): by its name or by
+    its label as given. Only objects whose label is their own (no other
+    object has it): a label two objects share would not resolve; those
+    words are the third item. Else expr as it is."""
+    if not isinstance(expr, str):
+        return expr, {}, []
     from .. import exprs
 
+    words = [w for w, _m in exprs.owners(expr)]
+    if not sub_owner(o) and not (set(words) & sub_names(o)):
+        return expr, {}, []
     objs = list(getattr(doc, "Objects", []) or [])
-    count = {}
+    count, names = {}, {x.Name for x in objs}
     for x in objs:
         count[x.Label] = count.get(x.Label, 0) + 1
     labels = {x.Name: x.Label for x in objs if x is not o and count.get(x.Label) == 1 and x.Label}
-    return exprs.by_label(expr, labels)[0]
+    # an object named by its label, where no object has that word as its name
+    labels.update({x.Label: x.Label for x in objs if x is not o and count.get(x.Label) == 1 and x.Label not in names and exprs.IDENT.fullmatch(x.Label or "")})
+    out, done = exprs.by_label(expr, labels)
+    left = [w for w in words if w not in done and w not in labels and (w in names or count.get(w)) and w != o.Name and w != o.Label]
+    return out, done, left
+
+
+def doc_refs(doc, o, expr):
+    """doc_refs_said's expression only."""
+    return doc_refs_said(doc, o, expr)[0]
 
 
 def json_safe(v, depth=0):

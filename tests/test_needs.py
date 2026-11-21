@@ -37,7 +37,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # The readers' pin: sha256 of readers.json's entries (each family's readers and changers, and the methods), as
 # scripts/tool_needs.py writes them. A helper or a method that joins or leaves a list changes it: read why
 # (`python3 scripts/tool_needs.py --why name`), then put the new value here.
-PIN = "b3151698e3603aef6bd4967e48d526c5c2a80015eef662d399bc1d67421e5354"
+# 21 Nov: + binder_relative (feature_more), attach_path, bound_expr, missed (param readers), unbind (param changer).
+PIN = "b511e1eb2499ac5d3ab79229ff78f6d5b3034fdc1b3e57b97372cadfa101ebe8"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -46,7 +47,7 @@ PIN = "b3151698e3603aef6bd4967e48d526c5c2a80015eef662d399bc1d67421e5354"
 # Bicycle finding 8: param gains the reader target_object (param_bind's target by name or <<label>>, a name that is two objects).
 # Bicycle findings 3, 5 (20 Nov): sketch gains the reader plane_mode (a sketch on an LCS plane or a planeless PartDesign
 # coordinate system); feature_more's attach_on changes (pd_gear on any plane).
-COUNTS = {"readers": 915, "changers": 154, "families": 37}
+COUNTS = {"readers": 919, "changers": 155, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -378,7 +379,8 @@ class Census(unittest.TestCase):
 # leadingRefusals 780: pd_datum and part_datum check refs, offset and the container first (20 Nov).
 # 778: pd_pipe's path checks moved into pipe_path, a reader (pipe, 20 Nov).
 # 779: param_bind refuses a target name that is two objects before it changes anything (bicycle finding 8).
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 779, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+# 780: param_bind refuses a Placement path that FreeCAD computes on an attached object first (bicycle runs, 20 Nov).
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 780, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
 
 
 class Agreement(unittest.TestCase):

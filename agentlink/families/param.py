@@ -295,6 +295,85 @@ def expression_clash(doc, o, expr):
     return None
 
 
+# Bicycle runs of 20 Nov (param_bind findings 1, 2, 3): an expression that
+# FreeCAD took but did not apply, a Placement that FreeCAD computes from an
+# attachment, and an expression that could not be cleared.
+REDIRECT = ("Placement.Base.x", "Placement.Base.y", "Placement.Base.z", "Placement.Rotation.Angle")
+
+
+def attach_path(o, path):
+    """(path to bind, redirected or None, refusal words or None). On an
+    attached object (picks.attached) FreeCAD computes Placement: a
+    Placement.Base.x/y/z or Placement.Rotation.Angle path goes to
+    AttachmentOffset with the same subpath (redirected); another Placement
+    path is refused."""
+    if not (path == "Placement" or path.startswith("Placement.")) or not picks.attached(o):
+        return path, None, None
+    mode = getattr(o, "MapMode", "?")
+    sub = path[len("Placement"):].lstrip(".")
+    if path in REDIRECT:
+        to = "AttachmentOffset." + sub
+        return to, {"from": path, "to": to, "why": f"Placement is computed (attached, MapMode {mode}): the AttachmentOffset is bound instead. It is in the frame of the attachment (for a datum placed with at/rotate, the body's origin)."}, None
+    return path, None, f"{o.Label}.{path}: Placement is computed (attached, MapMode {mode}): bind AttachmentOffset.{sub or 'Base.x'} instead (AttachmentOffset.Base.x/y/z or AttachmentOffset.Rotation.Angle)."
+
+
+def _norm(p):
+    return str(p).lstrip(".")
+
+
+def bound_expr(o, path):
+    """The expression bound to path on o now, or None. FreeCAD can keep the
+    path with a leading "." in ExpressionEngine."""
+    for p, e in list(getattr(o, "ExpressionEngine", None) or []):
+        if _norm(p) == _norm(path):
+            return e
+    return None
+
+
+def unbind(o, path):
+    """Clear the expression on path: setExpression(path, None), and again by
+    the path as ExpressionEngine keeps it when that differs."""
+    o.setExpression(path, None)
+    for p, _e in list(getattr(o, "ExpressionEngine", None) or []):
+        if _norm(p) == _norm(path) and p != path:
+            o.setExpression(p, None)
+
+
+def _number(v):
+    if isinstance(v, bool) or v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    val = getattr(v, "Value", None)
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        return float(val)
+    return None
+
+
+def missed(o, path, want, now):
+    """Refusal words when the bound property does not read what the
+    expression gives after the recompute (FreeCAD took the expression but
+    did not apply it: a name it could not resolve, such as a role inside an
+    LCS); else None. Not for sketch constraints (their own units)."""
+    if path.startswith("Constraints."):
+        return None
+    w, n = _number(want), _number(now)
+    if w is None or n is None:
+        return None
+    tol = 1e-6 * max(1.0, abs(w))
+    if abs(w - n) <= tol:
+        return None
+    if isinstance(now, int) and round(w) == now:
+        return None
+    if path.endswith("Rotation.Angle"):  # FreeCAD keeps an angle as 0 … 180 with the axis turned
+        a = abs(w) % 360.0
+        if min(abs(a - n), abs(360.0 - a - n)) <= 1e-6 * 360:
+            return None
+    return (f"{o.Label}.{path} reads {round(n, 6)} after the recompute, not {round(w, 6)} that the expression gives: FreeCAD took the expression "
+            f"but did not apply it (a name it could not resolve; on an LCS or an origin a bare Name. is read as one of its own sub-objects — "
+            f"say the object as <<Label>>.prop). The expression was removed; nothing was kept.")
+
+
 def tools(session):
     s = session
     doc = lambda: s.doc  # noqa: E731
@@ -316,5 +395,8 @@ def tools(session):
                # on an LCS or an origin, other objects by their label (<<Dims>>.lift): no sub-object lookup
                "doc_refs": lambda o, expr: picks.doc_refs(doc(), o, expr),
                # a name that is two objects (bicycle finding 8)
-               "target_object": lambda t: target_object(doc(), t), "expression_clash": lambda o, expr: expression_clash(doc(), o, expr)}
+               "target_object": lambda t: target_object(doc(), t), "expression_clash": lambda o, expr: expression_clash(doc(), o, expr),
+               # bicycle runs of 20 Nov: said by label on an LCS, a computed Placement, clearing, the value read back
+               "doc_refs_said": lambda o, expr: picks.doc_refs_said(doc(), o, expr), "attach_path": attach_path,
+               "bound_expr": bound_expr, "unbind": unbind, "missed": missed}
     return runners.tools(GROUP, s, helpers)
