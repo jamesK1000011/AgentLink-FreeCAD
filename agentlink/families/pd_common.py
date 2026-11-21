@@ -7,6 +7,7 @@
 # (Support -> AttachmentSupport, Midplane -> SideType).
 
 import math
+import re
 
 import FreeCAD
 import Part
@@ -134,12 +135,97 @@ def origin_feature(body, role):
     raise ToolError("failed", f"{body.Label}'s origin has no {role}.")
 
 
+# Coordinate systems and the planes in them (FreeCAD 1.1, src/App/Datums.h): an
+# App::LocalCoordinateSystem (Part::LocalCoordinateSystem is one) keeps its
+# axes and planes in OriginFeatures, each with its Role ("XY_Plane" …), as a
+# Body's origin does. PartDesign::CoordinateSystem is a Part::Datum with no
+# planes of its own: a sketch takes its XY, XZ or YZ by the ObjectXY, ObjectXZ
+# or ObjectYZ mode. Part::DatumPlane is an App::Plane.
+CSYS_TYPES = ("App::LocalCoordinateSystem", "Part::LocalCoordinateSystem", "PartDesign::CoordinateSystem")
+PLANE_TYPES = ("PartDesign::Plane", "Part::DatumPlane", "App::Plane")
+_CSYS_PLANE = re.compile(r"\.(XY|XZ|YZ)_Plane \(.* has no planes")
+
+
+def _is(o, types):
+    if getattr(o, "TypeId", "") in types:
+        return True
+    try:
+        return any(o.isDerivedFrom(t) for t in types)
+    except Exception:
+        return False
+
+
+def _role_feature(holder, role):
+    """The axis or plane of a body's origin or of a coordinate system by its
+    Role (its name's start where an older file has no Role), or None."""
+    feats = list(getattr(holder, "OriginFeatures", None) or [])
+    for f in feats:
+        if getattr(f, "Role", "") == role:
+            return f
+    for f in feats:
+        if f.Name.startswith(role) or f.Label.startswith(role):
+            return f
+    return None
+
+
+def _plane_key(word):
+    key = str(word).upper().replace("-PLANE", "").replace("_PLANE", "").replace(" PLANE", "")
+    return key if key in PLANES else None
+
+
+def _holder_of(plane):
+    """The coordinate system or origin that holds an App::Plane, or None."""
+    for o in getattr(plane, "InList", None) or []:
+        if plane in list(getattr(o, "OriginFeatures", None) or []):
+            return o
+    return None
+
+
+def _plane_objects(body, ref, kinds):
+    """The objects of kinds that ref names: the body's own first, then the
+    document's; an exact name, an exact label, then a label in any case."""
+    doc = body.Document
+    pool = [o for o in doc.Objects if _is(o, kinds)]
+    own = [o for o in pool if body.hasObject(o) or any(body.hasObject(h) for h in [_holder_of(o)] if h is not None)]
+    low = str(ref).lower()
+    for group in (own, pool):
+        for how in ("name", "label", "case"):
+            hits = [o for o in group if (o.Name == ref if how == "name" else o.Label == ref if how == "label" else o.Label.lower() == low)]
+            if hits:
+                return hits
+    return []
+
+
+def _csys_plane(body, cs, key, what):
+    """A coordinate system's XY, XZ or YZ plane as a link, and its words."""
+    out = "" if body.hasObject(cs) else f" (outside {body.Label}: a cross-reference)"
+    pl = _role_feature(cs, PLANES[key])
+    if pl is not None:
+        return (pl, [""]), f"{cs.Label}.{PLANES[key]}{out}"
+    if cs.TypeId == "PartDesign::CoordinateSystem" or not _is(cs, ("App::LocalCoordinateSystem",)):
+        # no planes of its own: the sketch takes the system by ObjectXY | ObjectXZ | ObjectYZ (plane_mode)
+        return (cs, [""]), f"{cs.Label}.{PLANES[key]} ({cs.Label} has no planes: Object{key}){out}"
+    raise ToolError("failed", f"{what}: {cs.Label} has no {PLANES[key]}.")
+
+
+def plane_mode(link, words=""):
+    """The MapMode for a sketch on what plane_ref gave (link, words): FlatFace, or
+    Object<XY|XZ|YZ> on a coordinate system with no planes of its own
+    (PartDesign::CoordinateSystem)."""
+    m = _CSYS_PLANE.search(words or "")
+    if m and _is(link[0], CSYS_TYPES):
+        return "Object" + m.group(1)
+    return "FlatFace"
+
+
 def plane_ref(body, ref, what="plane"):
-    """XY | XZ | YZ, a datum plane's name, or a face query {at, normal}: the
+    """XY | XZ | YZ, a datum plane's name (PartDesign or Part), a coordinate
+    system's plane ("LCS.XZ_Plane", or the plane's own name), a whole
+    coordinate system (its XY plane), or a face query {at, normal}: the
     (object, [sub]) a property links to, and what it is."""
     if isinstance(ref, str):
-        key = ref.upper().replace("_PLANE", "")
-        if key in PLANES:
+        key = _plane_key(ref)
+        if key:
             return (origin_feature(body, PLANES[key]), [""]), key
         if "." in ref and ref.rsplit(".", 1)[1].startswith("Face"):
             # "Pad.Face3": that feature's face, as the reference names it.
@@ -150,14 +236,55 @@ def plane_ref(body, ref, what="plane"):
             except Exception:
                 raise ToolError("invalid_input", f"{what}: {o.Label} has no {sub}.")
             return (o, [sub]), f"{o.Label}.{sub}"
-        o = in_body(body, ref, ["PartDesign::Plane"], "datum plane")
-        return (o, [""]), o.Label
+        if "." in ref and _plane_key(ref.rsplit(".", 1)[1]):
+            # "LCS.XZ_Plane", "Part.LCS.XY", "Body.YZ_Plane": the plane of that system or origin.
+            head, tail = ref.rsplit(".", 1)
+            key = _plane_key(tail)
+            name = head.rsplit(".", 1)[-1]
+            hits = _plane_objects(body, name, CSYS_TYPES + ("PartDesign::Body",))
+            if not hits:
+                raise ToolError("not_found", f"{what} {ref!r}: no coordinate system or body {name!r} — {_planes_there(body)}.")
+            if len(hits) > 1:
+                raise ToolError("invalid_input", f"{what} {ref!r}: {len(hits)} objects are labelled {name!r} ({', '.join(o.Name for o in hits)}) — give the name.")
+            h = hits[0]
+            if h.TypeId == "PartDesign::Body":
+                return (origin_feature(h, PLANES[key]), [""]), f"{h.Label}.{PLANES[key]}"
+            return _csys_plane(body, h, key, what)
+        hits = _plane_objects(body, ref, PLANE_TYPES + CSYS_TYPES)
+        if len(hits) > 1:
+            def said(o):
+                h = _holder_of(o)
+                return f"{h.Label}.{o.Label}" if h is not None else o.Label
+            raise ToolError("invalid_input", f"{what} {ref!r}: {len(hits)} planes have that label ({', '.join(said(o) for o in hits)}) — "
+                                             "give \"LCS.XZ_Plane\" or the plane's name.")
+        if not hits:
+            raise ToolError("not_found", f"{what} {ref!r}: no datum plane, coordinate system or plane of that name — {_planes_there(body)}.")
+        o = hits[0]
+        if _is(o, CSYS_TYPES):
+            # a whole coordinate system: its XY plane
+            return _csys_plane(body, o, "XY", what)
+        out = "" if body.hasObject(o) else f" (outside {body.Label}: a cross-reference)"
+        h = _holder_of(o)
+        if h is not None and getattr(h, "TypeId", "") != "App::Origin":
+            role = getattr(o, "Role", "") or o.Label
+            return (o, [""]), f"{h.Label}.{role}{'' if body.hasObject(h) else out}"
+        return (o, [""]), f"{o.Label}{out}"
     if isinstance(ref, dict):
         tip, shape = tip_shape(body)
         i, f = find_face(shape, ref)
         own, j = face_owner(body, ref, tip, f)
         return (own, [f"Face{j + 1}"]), f"face at {geo.vec(f.CenterOfMass)}" + ("" if own is tip else f" ({own.Label}'s)")
-    raise ToolError("invalid_input", f"{what}: XY, XZ, YZ, a datum plane's name (pd_datum_plane makes one), \"Pad.Face3\" as shape_query names it, or a face {{ at: [x,y,z], normal: [x,y,z] }}.")
+    raise ToolError("invalid_input", f"{what}: XY, XZ, YZ, a datum plane's name (pd_datum_plane makes one), an LCS or its plane (\"LCS.XZ_Plane\"), "
+                                     f"\"Pad.Face3\" as shape_query names it, or a face {{ at: [x,y,z], normal: [x,y,z] }}.")
+
+
+def _planes_there(body):
+    """The planes a sketch of this body can take, for a refusal."""
+    doc = body.Document
+    names = [o.Label for o in body.Group if _is(o, ("PartDesign::Plane", "Part::DatumPlane"))]
+    names += [f"{o.Label}.XY_Plane" for o in doc.Objects if _is(o, CSYS_TYPES)]
+    names += [o.Label for o in doc.Objects if _is(o, ("Part::DatumPlane",)) and o.Label not in names]
+    return "there: XY, XZ, YZ" + (", " + ", ".join(names[:12]) if names else "")
 
 
 def solid_features(body, upto=None):

@@ -160,6 +160,7 @@
     "xyz"
    ],
    "changers": [
+    "attach_on",
     "attach_origin",
     "attach_refs",
     "gear_profile",
@@ -1077,6 +1078,7 @@
     "make_constraint",
     "offset_out",
     "placement",
+    "plane_mode",
     "plane_ref",
     "quantity",
     "ref",

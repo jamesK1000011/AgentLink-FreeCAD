@@ -37,14 +37,16 @@ from agentlink.protocol import ToolError  # noqa: E402
 # The readers' pin: sha256 of readers.json's entries (each family's readers and changers, and the methods), as
 # scripts/tool_needs.py writes them. A helper or a method that joins or leaves a list changes it: read why
 # (`python3 scripts/tool_needs.py --why name`), then put the new value here.
-PIN = "ded9cc29fe9c35f96209c5c435e7f475fef38647bca10a714483483b0f83ca08"
+PIN = "b3151698e3603aef6bd4967e48d526c5c2a80015eef662d399bc1d67421e5354"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
 # Skeleton workflow of 20 Nov: world_json, placement_json, pd_body, app_part and prop_at read; attach_refs changes.
 # asm2 20 Nov: assembly gains readers end_text and pick_note (asm_joint's datum ends and kept queries); keep_notes changes.
 # Bicycle finding 8: param gains the reader target_object (param_bind's target by name or <<label>>, a name that is two objects).
-COUNTS = {"readers": 914, "changers": 153, "families": 37}
+# Bicycle findings 3, 5 (20 Nov): sketch gains the reader plane_mode (a sketch on an LCS plane or a planeless PartDesign
+# coordinate system); feature_more's attach_on changes (pd_gear on any plane).
+COUNTS = {"readers": 915, "changers": 154, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {

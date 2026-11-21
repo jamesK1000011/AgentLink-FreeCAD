@@ -193,6 +193,10 @@ SCHEMAS = {
                 "after": [("path", "edges", {"description": "Edges of the path to sweep along, joined end to end: [\"Edge3\"]."}),
                           ("edges", "mode", {"type": "string"}), ("mode", "transition", {"type": "string"})]},
     "object_list": {"why": "bicycle skeleton build: a label filter", "after": [("type", "label", {"type": "string"})]},
+    # bicycle drive of 20 Nov, finding 5: pd_gear on a plane (body, datum, LCS), turned on it
+    "pd_gear": {"why": "bicycle finding 5: a gear on any plane",
+                "after": [("at", "rotate", {"type": "object", "description": "{ axis: [x,y,z], angle: degrees }, on the plane."}),
+                          ("rotate", "plane", {"type": "string", "description": "XY, XZ, YZ, a datum plane, \"LCS.XZ_Plane\" or an LCS."})]},
 }
 
 
@@ -239,6 +243,8 @@ RESULTS = {
     "sheet_table": (("newSheet",), "pipe 20 Nov: a sheet made with the label given"),
     "shape_query": (("shapeIs",), "pipe 20 Nov: an object of edges only"),
     "object_list": (("typesHere",), "pipe 20 Nov: the types there are when nothing is kept"),
+    "pd_gear": (("on", "stored"), "bicycle finding 5: the plane used and the properties that keep the teeth"),
+    "sketch_add": (("dimsNote",), "bicycle finding 6: dims asked of a kind with no size"),
 }
 
 
@@ -276,6 +282,9 @@ def trace_added_out(tool, new):
 # the line starts, the object labels, and why.
 TRACE_ADDED["draft_clone"] = (("addObject('App::FeaturePython', 'AgentLinkRecords')", "AgentLinkRecords."),
                               "7a8477d, bicycle finding 11: a clone keeps its source's material; the record (materialFrom) is written to the document's records object")
+TRACE_ADDED["pd_gear"] = (("{j}.addProperty('App::PropertyInteger', 'AgentLinkTeeth'", "{j}.addProperty('App::PropertyLength', 'AgentLinkPitch'",
+                            "{j}.addProperty('App::PropertyString', 'AgentLinkKind'", "{j}.AgentLinkTeeth = ", "{j}.AgentLinkPitch = ", "{j}.AgentLinkKind = "),
+                           "bicycle finding 5: a sprocket's profile keeps its teeth and chain pitch for asm_joint kind chain")
 OBJECTS_ADDED = {
     "draft_clone": (("Agent Link records",), "7a8477d: the records object that holds materialFrom"),
 }
@@ -335,6 +344,9 @@ CASES = {
     ("asm_sweep", "a slider that collides from the start"): {
         "why": "bicycle finding 7: the same overlap at every step is static (staticOverlaps); steps, verdict and collidesAt count motion contacts only",
         "set": {"steps": _SLIDE_STEPS, "verdict": "clear"}, "drop": ("collidesAt", "clearFromStart")},
+    ("sketch_new", "plane wrong"): {
+        "why": "bicycle finding 3: a plane may be an LCS's, a whole LCS or a Part datum plane; the refusal names what there is",
+        "message": ("datum plane 'XW': not in Body — there: none.", "plane 'XW': no datum plane, coordinate system or plane of that name — there: XY, XZ, YZ.")},
     ("part_refine", "a PartDesign body's tip, made worse"): {
         "why": "7a8477d, bicycle finding 10: a tip's Refine that makes the body worse is set back and refused",
         "result": ["refused", "failed", "Refine made Housing worse: the volume went from 1000.000 to 500.000 mm³ (-50.00 %). Refine of Pad is set back, "
