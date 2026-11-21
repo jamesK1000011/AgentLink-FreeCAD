@@ -441,7 +441,7 @@ class OnStandIns(unittest.TestCase):
             A._joints = lambda a: types.SimpleNamespace(newObject=lambda t, n: J())
             A._element = lambda s, p, q, w: "Edge1"
             A._status = lambda a: (0, "solved")
-            A._overlaps = lambda parts, clearance=0.0: ([], [])
+            A._overlaps = lambda parts, clearance=0.0, *more, **kw: ([], [])
             sess = types.SimpleNamespace(doc=doc)
             fn = next(t.fn for t in A.tools(sess) if t.name == "asm_joint")
             r = fn({"kind": "fixed", "a": {"part": "Stem", "element": "Edge1"}, "b": {"part": "M8x25-Screw", "element": "Edge1"}})
