@@ -123,24 +123,54 @@ def _num(v):
         return None
 
 
+def material_depth(hole):
+    """The length of material the hole's axis goes through, mm, measured on
+    the shape before the hole (its BaseFeature), from the sketch's first
+    circle centre against the sketch's normal (with Reversed, along it).
+    Both shapes are in the body's own frame. None when it cannot be read:
+    no profile sketch, no circle, no base shape, or no material there."""
+    try:
+        import FreeCAD as App
+        import Part
+        prof = getattr(hole, "Profile", None)
+        sk = prof[0] if isinstance(prof, (tuple, list)) else prof
+        base = getattr(getattr(hole, "BaseFeature", None), "Shape", None)
+        if sk is None or base is None or base.isNull():
+            return None
+        centres = [e.Curve.Center for e in sk.Shape.Edges if hasattr(e.Curve, "Radius")]
+        if not centres:
+            return None
+        n = sk.Placement.Rotation.multVec(App.Vector(0, 0, 1))
+        d = n if bool(getattr(hole, "Reversed", False)) else -n
+        far = max(base.BoundBox.DiagonalLength, 1.0) * 2
+        p0 = centres[0] - d * 0.01
+        cut = base.common(Part.LineSegment(p0, centres[0] + d * far).toShape())
+        best = None
+        for e in cut.Edges:
+            a, b = e.Vertexes[0].Point, e.Vertexes[-1].Point
+            near = min((a - centres[0]).Length, (b - centres[0]).Length)
+            if near < 0.05:
+                best = max(best or 0.0, e.Length)
+        return best
+    except Exception:
+        return None
+
+
 def thread(hole, body=None):
     """None, "modelled", or "not made" for a PartDesign Hole. FreeCAD
     issue #19254 and the PartDesign Hole wiki: a modelled thread with
-    Reversed on, or in a blind hole (DepthType Dimension) shorter than the
-    part, can be left out of the shape. The part's size is read from the
-    body's box (its smallest side): a hole shorter than that is blind."""
+    Reversed on, or in a blind hole (DepthType Dimension) whose depth is
+    less than the material on its axis, is left out of the shape. The
+    material is measured on the axis (material_depth). When it cannot be
+    read, the tool says only "modelled": no guess."""
     if _t(hole) != "PartDesign::Hole" or not bool(getattr(hole, "ModelThread", False)):
         return None
     if bool(getattr(hole, "Reversed", False)):
         return "not made"
     if str(getattr(hole, "DepthType", "")) == "Dimension":
         depth = _num(getattr(hole, "Depth", None))
-        try:
-            bb = body.Shape.BoundBox
-            side = min(bb.XLength, bb.YLength, bb.ZLength)
-        except Exception:
-            side = None
-        if depth is not None and side and depth < side - 1e-6:
+        mat = material_depth(hole)
+        if depth is not None and mat is not None and depth < mat - 1e-3:
             return "not made"
     return "modelled"
 

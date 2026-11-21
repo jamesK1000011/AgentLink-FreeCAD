@@ -131,8 +131,17 @@ def test_modelled_thread_and_thread_not_made():
     s = Session(d)
     h = run(s, d, lambda: [b])
     assert h["practice"] == ["Hole Hole has a modelled thread. A thread as data (threaded, no modelThread) is enough unless the part is printed."]
-    hole.DepthType, hole.Depth = "Dimension", 6.0  # blind: shorter than the part
-    h = run(s, d, lambda: [b])
+    hole.DepthType, hole.Depth = "Dimension", 6.0  # blind: 6 mm of 10 mm of material on its axis
+    real = practice.material_depth
+    try:
+        practice.material_depth = lambda _h: None  # not readable: no guess
+        assert practice.thread(hole, b) == "modelled"
+        practice.material_depth = lambda _h: 6.0  # depth reaches the far side: the thread is made
+        assert practice.thread(hole, b) == "modelled"
+        practice.material_depth = lambda _h: 10.0
+        h = run(s, d, lambda: [b])
+    finally:
+        practice.material_depth = real
     assert h["practice"] == ["Hole Hole: the thread is not made with Reversed or a blind depth. Turn off modelThread, or make the hole through all."]
     hole.DepthType, hole.Reversed = "ThroughAll", True
     assert practice.thread(hole, b) == "not made"
