@@ -411,6 +411,70 @@ class _Part:
         return self._shape
 
 
+class SweepCutsOnce(unittest.TestCase):
+    """Later bicycle runs of 21 Nov, finding 1: 63 pair checks took about
+    13 s a step. A solid pair that cannot change is cut once; a many-solid
+    moving body is cut only where its solids' boxes meet."""
+
+    CODE = r"""
+        from test_bicycle_runs_1121 import _Box, _Shape
+        class Named:
+            def __init__(self, name):
+                self.Name = self.Label = name
+        A._axisym = lambda solid, c, ax: getattr(solid, "round", False)
+        def spokes(shift):
+            return _Shape([((-300 + 18 * i + shift, -1, -1), (-290 + 18 * i + shift, 1, 1)) for i in range(32)])
+        tire = _Shape([((-50, -50, -5), (50, 50, 5))]); tire.round = True
+        caliper = _Shape([((40, 20, -8), (60, 40, 8))])
+        frame = _Shape([((-305, -2, -2), (-285, 2, 2))])
+        S, T, C, F = Named("Spokes"), Named("Tire"), Named("Caliper"), Named("Frame")
+        cuts = A._SweepCuts({"Spokes": "joint", "Tire": "joint"}, {"Spokes": (None, None), "Tire": (None, None)})
+        _Shape.cuts[0] = 0
+        vols = []
+        for step in range(5):
+            sp = spokes(step * 2.0)
+            t = _Shape(list(tire.boxes)); t.round = True  # read again a step, as a moving part is
+            vols.append([cuts.volume(T, C, t, caliper), cuts.volume(S, F, sp, frame), cuts.volume(S, C, sp, caliper), cuts.volume(T, F, t, frame)])
+        print(json.dumps([vols, _Shape.cuts[0], cuts.booleans, cuts.reused]))
+    """
+
+    def test_a_still_pair_is_cut_once_and_spokes_where_boxes_meet(self):
+        vols, made, booleans, reused = child(self.CODE)
+        # the tire is round about its axis and the calliper stays put: one cut for the five steps, the same volume each step
+        self.assertEqual({v[0] for v in vols}, {10 * 20 * 10})
+        self.assertEqual(reused, 4)
+        # spokes x frame: only the solids whose boxes meet the frame's (one or two a step); spokes x calliper: none meet
+        self.assertTrue(all(v[2] == 0 for v in vols))
+        self.assertEqual(made, booleans)
+        self.assertLessEqual(booleans, 1 + 2 * 5)
+        self.assertGreaterEqual(booleans, 1 + 5)
+
+    def test_a_solid_whose_surface_stays_out_is_a_point_test(self):
+        got = child(r"""
+            from test_bicycle_runs_1121 import _Box, _Shape
+            class Named:
+                def __init__(self, name):
+                    self.Name = self.Label = name
+            class Face:
+                def __init__(self, lo, hi):
+                    self.BoundBox = _Box(lo, hi)
+            class Pt:
+                def __init__(self, p):
+                    self.Point = p
+            # a tube wall (six faces far from the spoke) and a spoke inside the wall, one far outside
+            wall = _Shape([((0, 0, 0), (100, 100, 100))])
+            wall.Faces = [Face((0, 0, 0), (0, 100, 100)), Face((100, 0, 0), (100, 100, 100)), Face((0, 0, 0), (100, 0, 100)),
+                          Face((0, 100, 0), (100, 100, 100)), Face((0, 0, 0), (100, 100, 0)), Face((0, 0, 100), (100, 100, 100))]
+            wall.isInside = lambda p, tol, on: all(0 < c < 100 for c in p)
+            inner = _Shape([((40, 40, 40), (50, 50, 50))]); inner.Vertexes = [Pt((40, 40, 40))]
+            cuts = A._SweepCuts({"Spoke": "joint"}, {})
+            _Shape.cuts[0] = 0
+            v = cuts.volume(Named("Spoke"), Named("Wall"), inner, wall)
+            print(json.dumps([v, _Shape.cuts[0], cuts.booleans]))
+        """)
+        self.assertEqual(got, [1000, 0, 0])
+
+
 class HealthPairs(unittest.TestCase):
     """Finding 8: the health check's interference pass."""
 
