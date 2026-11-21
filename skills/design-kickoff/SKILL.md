@@ -32,14 +32,14 @@ If an add-on is installed that brings its own skill (for example slicing, scans,
    - **Interface part**: something new that fits to an existing item.
    - **Space**: a room, a building or a site.
 3. Check your tools: `session_state` (Agent Link) shows FreeCAD, the open document and the add-ons. If Agent Link is not there, use the FreeCAD GUI route in the section `Agent Link steps and traps`.
-4. Make the design records (section `The brief`). Keep them up to date all the way.
+4. Make the design records (section `The brief`) as plain markdown files where you can write them. Keep them up to date all the way.
 
 ## 1. Engineering Q&A (the brief, level L0)
 
 Goal: a requirements list the person approves. No real geometry before it, except a rough envelope to show progress.
 
 Rules:
-- Ask at most 3 questions per turn. Give a default with each question. Ask the questions that unlock the most first: what it must do and what must not fail, what you start from, what it fits to.
+- Ask one question per turn, unless the person asks for more at once. Give a default with each question. Ask the questions that unlock the most first: what it must do and what must not fail, what you start from, what it fits to.
 - When the person does not know a value: first look it up (the maker's spec sheet, a datasheet, a standard, a known size). If you find nothing, assume a sensible value. Mark each value with its source: stated, measured, looked up (with the link), or assumed.
 - Never guess a value that sets safety or fit when you can look it up or measure it. Loads, the jurisdiction (for buildings) and the user's use come from the person.
 - For a photo, get one known size to set the scale, or identify the item and look up its sizes.
@@ -83,11 +83,19 @@ Core build rules:
 5. Every level only adds features to the same bodies. Interfaces frozen at L1 change only through a change note the person approves.
 6. Save before each batch of changes and at each level.
 
+At L2, check each part against its process limits (printer bed, sheet size, tube stock, tool reach) and split the parts that do not fit. At L3, build each interface's joining feature (thread or its seat, clamp slot and bolts, bearing seat, retention), model every bought part as a stand-in at its catalogue fit size, check the parts list of the product type (the branch in `Workflow branches`), and check that each part can go on in the order of the assembly steps. Every part in the load path of a high-severity FMEA row gets a feasibility check; check aluminium and welds against fatigue, not only yield.
+
 At every level, run the gate checklist and fix before going on. Check with real readings (recompute, DoF, measurements, interference, mass, maps, FEA), not with a picture alone. After every fix, measure again. If a check fails three times, stop and give the person the trade-off.
+
+A requirement is met only with a reading next to it (a tool reading, or a hand check with its sum). With no reading it is open.
 
 At each gate, show one screen: what was done, renders and maps, each requirement's status (pass, fail, open), the open risks, and one question: approve, change or stop. In auto mode, record the gate and go on unless a demand fails. Write the decision in the decision log.
 
 ## 4. Hand-off (L4)
+
+Before G4, get a cold review: a separate reviewer (an agent with only the brief, the records and a read-out of the model) lists missing items, common-sense gaps and documents that do not agree. Fix its findings first. G4 cannot pass while a demand is open or failed.
+
+Make the hand-off list from the BOM: one row per made part with its process file, drawing and DFM result. An item is complete only when its file is read back.
 
 Make every item on the hand-off menu (section `Hand-off and feedback`). Each process gets its complete package. Always add: the BOM with real masses and cost, the assembly steps, and the requirements list with each line marked met or not.
 
@@ -98,6 +106,10 @@ Never call anything signed off. FEA is a feasibility check. A licensed professio
 After the part is made or the space is built, the person reports back in any mix: words ("too tight"), photos, measurements, a new scan. Ask for what you need. Check the report against the requirements, make a change note against the frozen items, change the model through the parameters, run the gates again, and make the next version of the package.
 
 ## When to stop and ask (also in auto mode)
+
+When you stop at a trade-off, offer an A/B/C check: run the same quick analysis on 2–3 options and show the readings side by side, then ask.
+
+When nobody can answer (a run without the person), do not stop the run at a trade-off. Take the reversible choice inside the brief's ranges that keeps the demands, log it for the person, and go on with all independent work. Stop only for money, for a step that cannot be undone, or for lower safety.
 
 - A change to a demand, a frozen interface, safety, the process, or the cost beyond what the person allowed.
 - A value you cannot measure, find or safely assume (loads, use, jurisdiction).

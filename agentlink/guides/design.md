@@ -13,7 +13,7 @@ A map of this guide. `guide_read { topic: "design", section: [...] }` reads the 
 
 ### Design records
 
-Keep these as files in a folder next to the FreeCAD file (`<design>-records/`). A later agent must be able to pick up the work from them alone.
+Keep these as plain markdown files in a folder that you can write: next to the FreeCAD file (`<design>-records/`) or in your own workspace. Agent Link has no records tool. A later agent must be able to pick up the work from them alone.
 
 | File | Holds |
 |---|---|
@@ -55,7 +55,7 @@ Write each requirement as what the product does, in positive words, as specific 
 
 Performance, environment (indoor/outdoor, heat, water, UV, chemicals), life in service (cycles, years), maintenance, target cost, quantity, manufacturing (what the person can make or order), size, weight, materials, look and finish, ergonomics (hand, reach, body), safety, standards and law, testing, disposal, time scale.
 
-### Kickoff questions (ask the missing ones, at most 3 per turn, each with a default)
+### Kickoff questions (ask the missing ones, one per turn by default, each with a default)
 
 | # | Question | Unlocks |
 |---|---|---|
@@ -194,8 +194,12 @@ Define for this design what each level adds before L1. Stop at the end-state lev
 - The parameter test rebuilds with no failure.
 - Interference: static overlaps named; motion sweep clear.
 - Mass and cost against the budget, with real materials.
-- Each requirement: pass, fail, or open with the check that will close it.
+- Each requirement: pass, fail, or open with the check that will close it. A line is pass only with a reading next to it (a tool reading, or a hand check with its sum). No reading: open.
+- Each interface has its joining feature (a thread or its seat, a clamp slot and bolts, a bearing seat, a retention feature). Each bought part has a stand-in at its catalogue fit size and mass.
+- The parts list of the product type is complete (for a bicycle, see `B4`). Each part can go on in the order of the assembly steps.
+- Each part fits its process limits: printer bed, sheet size, tube stock, tool reach. Split a part that does not fit before L3.
 - Analysis-ready (L3+): the study copy is valid; the mesh fits the thinnest wall.
+- Each part in the load path of an FMEA row with S ≥ 9 has a feasibility check. Run each load case on its own. Check aluminium and welds against a fatigue value, not only against yield. A "recheck" in `changes.md` blocks the next gate.
 - The branch rules of each part's process pass (the section `Workflow branches`).
 - Scan-based: the deviation map is inside each face's tolerance band.
 - Open risks from the FMEA with their action priority.
@@ -208,9 +212,13 @@ Define for this design what each level adds before L1. Stop at the end-state lev
 | G1 Concept | concepts | 2–3 options compared, the pick, process per part, the deal-breaker answered by a first model |
 | G2 Layout (PDR-like) | L2 | interfaces confirmed, load path, first mass and cost, motion clear, first FEA feasibility, DFM pass, FMEA rows |
 | G3 Detail (CDR-like) | L3 | every demand verified or with a planned test, high-priority FMEA items closed, frozen interfaces unchanged, change log reviewed |
-| G4 Release | L4 | the hand-off package complete per process, the validation step named |
+| G4 Release | L4 | the hand-off package complete per process (each file read back), the validation step named, a cold review done; no demand open or failed |
 
 Each gate is one screen: what was done, renders and maps, requirement status, open risks, and one question: approve, change or stop. Write the answer in `decisions.md`. In auto mode, record it and go on unless a demand fails or a stop rule (the skill) applies. Close the actions of a gate before the next gate.
+
+When nobody can answer (a run without the person), do not stop at a trade-off. Take the reversible choice inside the brief's ranges that keeps the demands, log it as a trade-off for the person, and go on with all work that does not depend on it. Stop only for a choice that costs money, cannot be undone, or lowers safety.
+
+**Cold review before G4.** A separate reviewer (an agent that gets only the brief, the records and a read-out of the model) lists missing items, common-sense gaps and documents that do not agree. Fix the findings, then release.
 
 **Verification** (did we build it right?) is your job: measurements, interference, FEA, DFM, renders. **Validation** (did we build the right thing?) is the person's, with the real part in use.
 
@@ -262,6 +270,8 @@ Offer:
 | PCB + enclosure | Gerbers (all layers and outline) + drill files; for assembly: BOM (designator, value, footprint, part number) and placement file (designator, X, Y, rotation, side); assembly drawing; enclosure STEP with board keep-outs | one revision for all files; designators match across BOM, placement and drawing; the same origin for all |
 | Building / home | to-scale sheets: cover (address, code edition, sheet index), site plan, floor/foundation/framing plans, elevations, sections and details, load notes, material list, schedules, the code rule-pack report, IFC | every sheet marked "for review by a licensed professional or the authority"; rules depend on the jurisdiction — ask where |
 
+Make the hand-off list from the BOM: one row per made part with its process file, its drawing and its DFM result. An item is complete only when its file is read back.
+
 Never present output as stamped, approved or signed off.
 
 ### Feedback loop (L5)
@@ -301,9 +311,12 @@ Each branch adds rules to the core method. Parameters, skeleton, datums and gate
 - The skeleton is the centrelines between nodes. Tubes are bodies swept along skeleton edges with real OD and wall.
 - Mitre or cope each tube end to its neighbour for a tight fit-up. Fillet gap: AWS D1.1 max 3/16 in; above 1/16 in, add the gap to the leg. Thin chromoly fit-up about 0.25–0.5 mm (forum default).
 - Tubular T/Y/K joints per AWS D1.1 Clause 10; watch acute crotches (dihedral < 30°) for weld access.
-- Where several tubes meet at one point (a bottom bracket, a node), end them at the shell or node surface, or cut the shell bore after the fuse, so the solid stays valid.
+- Where several tubes meet at one point (a bottom bracket, a head tube), make the shell first (as a ring, with its bore), then sweep the tubes into it, then cut the bores again. A bore cut after a fuse does not repair a shell that the fuse made invalid.
+- Put each tube node away from the shell faces: a tube centre at least its radius + 8 mm from a head-tube face; a top tube below the seat clamp; stays inboard of the BB shell faces.
+- Welded 6061 for T6: solution treat, quench, straighten in the W temper, then age. The usual filler for a heat treatment after welding is 4643 (confirm with the shop). After the heat treatment, ream and face the bores and chase the threads.
 - Jig and fixture datums in the skeleton; balanced weld order.
 - FEA of thin tubes: beams or shells, or a study copy whose mesh is at most half the wall.
+- Bicycle parts list (each one a body or a stand-in by L2): frame with dropouts (axle slots) and brake mounts; fork with a crown race seat and the steerer preload (top cap, star nut or expander); headset; BB (BSA: tap drill 33.6 mm, drive side left-hand); cranks on the spindle interface (separate arms); pedals (9/16 × 20, left pedal left-hand); chainring with its bolt holes; chain (length by the formula, even links); cog or freewheel on its thread; wheels (hub flanges, spoke holes, spoke length; rear laced tangent); rims with a smooth brake track; tires with a retention feature; brakes (calipers, levers, cables, housing, stops); bar with 22.2 mm grip ends; grips; stem with clamp slots and bolts; seatpost (insertion ≥ 100 mm) and seat clamp slot; saddle with 7 mm rails; city items (lights, reflectors, bell, mounts). Clearances: tire to frame and fork, chainring to stays, heel, toe overlap, pedal to ground.
 - Bicycle: origin at the bottom-bracket centre; stack and reach to the head-tube top; trail = (R·cos A − offset)/sin A with A from horizontal; head angle 71.5–74.5°, trail 55–60 mm (57 common); sizes as rows of a configuration table.
 - Hand-off: see the section `Hand-off and feedback` (weldment).
 
@@ -377,6 +390,14 @@ Pin one FreeCAD version per project: 1.1 converts old Body origins when it opens
 - `pd_gear` works on the body's own XY plane: build the gear at the part's origin and place the part by a joint.
 - Booleans and refine can rename faces; joints on LCS do not break. A joint picked by a query is picked again and the health line says so.
 - Tube ends that all meet at one point inside a solid can make the fused shape invalid: end tubes at the shell surface or cut the bore after the fuse; check with `body_check`.
+- A joint can put a part on the other side (the drive side on the left, a pedal into its arm). After each joint, check the side in `asm_check` or a top view; use `reverse: true`. A changed LCS offset does not move parts that are joined already: remove the joint and make it again.
+- Helper lines at document level used in a body through `pd_binder`: set the binder's `Relative` to false, else the shape stays at its world place when the assembly moves the body.
+- Expressions on an LCS (its `AttachmentOffset`) need the label form `<<Geo>>.name`; `VarSet.name` is read as a role inside the LCS. A placed LCS has a computed Placement: bind `AttachmentOffset`.
+- A PartDesign feature in the middle of a chain cannot be deleted: suppress it (`Suppressed: true`), the base feature first.
+- A part that goes around another (a brake caliper around a tire) needs an envelope with the gap, not a solid block.
+- A large assembly makes each call slower (5–35 s): hide or leave out stand-ins with many solids (spokes) for sweeps and renders.
+- The slicer command line can stop on the person's own filament preset or on a two-nozzle printer: use the system filament of the same type and say so.
+- No tool makes a tube cut list in this version: calculate lengths, cope angles and phase from the skeleton.
 - Long calls go to a background job: read `job_status`; read the newest batch record before you call again.
 - Never approve code or file actions for the person (`approve_code`, `approve_file` are theirs).
 
