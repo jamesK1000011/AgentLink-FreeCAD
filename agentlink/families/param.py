@@ -215,6 +215,86 @@ def prop_at(o, path):
     return v
 
 
+# Names that are two objects (bicycle test drive, 20 Nov, finding 8): FreeCAD
+# reads "Pad.Length" by the object's Name first, so it bound the chainring's
+# Pad when the frame's pad had the label "Pad". param_bind refuses a name that
+# is one object's Name and another object's Label, and a default name of an
+# object in another Body when the target's own Body has one like it.
+LABEL_REF = re.compile(r"^<<(.+?)>>\.(.+)$")
+
+
+def _stem(name):
+    return re.sub(r"\d+$", "", name or "")
+
+
+def _said_as(doc, o):
+    """How to name o so that FreeCAD finds only it: <<Label>> when no other
+    object has that label, else its Name."""
+    n = sum(1 for x in doc.Objects if x.Label == o.Label)
+    return f"<<{o.Label}>>" if n == 1 and ">>" not in o.Label else o.Name
+
+
+def _where(o):
+    b = pc.body_of(o) if o.TypeId != "PartDesign::Body" else None
+    lab = f", label {o.Label}" if o.Label != o.Name else ""
+    return f"{o.Name}{lab}{', in ' + b.Label if b is not None else ''}"
+
+
+def _clash(doc, word, member, what):
+    """The refusal's words when word is one object's Name and another
+    object's Label; else None."""
+    objs = list(doc.Objects)
+    named = next((x for x in objs if x.Name == word), None)
+    labelled = [x for x in objs if x.Label == word and x is not named]
+    if named is None or not labelled:
+        return None
+    choices = [named] + labelled
+    pick = " or ".join(f"{_said_as(doc, x)}.{member} ({_where(x)})" for x in choices)
+    others = ", ".join(_where(x) for x in labelled)
+    return (f"{what} {word}.{member}: {word!r} names two objects. It is the name of {_where(named)} and the label of {others}. "
+            f"FreeCAD reads a name first, so {word}.{member} is {named.Name}'s. Say which by its label: {pick}.")
+
+
+def target_object(doc, target):
+    """(name as given, property path, object or None, refusal words or None)
+    for param_bind's target: "Object.Property" by name or label, or
+    "<<Label>>.Property" by label only."""
+    m = LABEL_REF.match(target)
+    if m:
+        label, path = m.group(1), m.group(2)
+        return label, path, next((x for x in doc.Objects if x.Label == label), None), None
+    oname, path = target.split(".", 1)
+    o = next((x for x in doc.Objects if oname in (x.Label, x.Name)), None)
+    clash = _clash(doc, oname, path.split(".")[0], "target")
+    if clash:
+        o = next((x for x in doc.Objects if x.Name == oname), o)
+    return oname, path, o, clash
+
+
+def expression_clash(doc, o, expr):
+    """Refusal words when an object the expression names before a "." is
+    two objects (a Name and another's Label), or is a default name of an
+    object in another Body while o's own Body has one like it; else None."""
+    mine = pc.body_of(o) if o is not None and o.TypeId != "PartDesign::Body" else None
+    for word, member in exprs.owners(expr):
+        said = _clash(doc, word, member, "expression")
+        if said:
+            return said
+        x = next((y for y in doc.Objects if y.Name == word), None)
+        if x is None or mine is None or x is o or x.TypeId == "PartDesign::Body":
+            continue
+        theirs = pc.body_of(x)
+        if theirs is None or theirs is mine:
+            continue
+        like = [y for y in (getattr(mine, "Group", None) or []) if y is not o and y.TypeId == x.TypeId and _stem(y.Name) == _stem(word)]
+        if not like:
+            continue
+        here = " or ".join(f"{_said_as(doc, y)}.{member} ({_where(y)})" for y in like)
+        return (f"expression {word}.{member}: {word} is {_where(x)}, but {o.Label} is in {mine.Label}, which has its own: {here}. "
+                f"Say which by its label: {here}, or {_said_as(doc, x)}.{member} to keep the one in {theirs.Label}.")
+    return None
+
+
 def tools(session):
     s = session
     doc = lambda: s.doc  # noqa: E731
@@ -234,5 +314,7 @@ def tools(session):
                "reserved": lambda n: n in C.UNITS or n in C.CONSTANTS, "own_prop": lambda n: n in VARSET_OWN,
                "qualified": lambda expr: qualified(doc(), expr), "by_varset_label": lambda expr: by_varset_label(doc(), expr),
                # on an LCS or an origin, other objects by their label (<<Dims>>.lift): no sub-object lookup
-               "doc_refs": lambda o, expr: picks.doc_refs(doc(), o, expr)}
+               "doc_refs": lambda o, expr: picks.doc_refs(doc(), o, expr),
+               # a name that is two objects (bicycle finding 8)
+               "target_object": lambda t: target_object(doc(), t), "expression_clash": lambda o, expr: expression_clash(doc(), o, expr)}
     return runners.tools(GROUP, s, helpers)

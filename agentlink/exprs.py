@@ -114,3 +114,38 @@ def by_label(expr, labels):
         out.append(c)
         i += 1
     return "".join(out), done
+
+
+def owners(expr):
+    """[(object, member)] for each object an expression names before a "."
+    ("Pad.Length / 2" -> [("Pad", "Length")]): not a member (after "." or
+    "#"), not inside <<…>> (a label, said in full) or quotes, not a number."""
+    if not isinstance(expr, str):
+        return []
+    out, i, n = [], 0, len(expr)
+    while i < n:
+        c = expr[i]
+        if expr.startswith("<<", i):
+            j = expr.find(">>", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        if c in "\"'":
+            j = expr.find(c, i + 1)
+            i = n if j < 0 else j + 1
+            continue
+        m = IDENT.match(expr, i)
+        if m and (i == 0 or not (expr[i - 1].isalnum() or expr[i - 1] == "_")):
+            word, j = m.group(0), m.end()
+            member = expr[:i].rstrip().endswith((".", "#"))
+            rest = expr[j:].lstrip()
+            if not member and rest.startswith("."):
+                mm = IDENT.match(rest, 1)
+                out.append((word, mm.group(0) if mm else ""))
+            i = j
+            continue
+        if c.isdigit():
+            m = re.match(r"\d+(?:\.\d*)?(?:[eE][+-]?\d+)?", expr[i:])
+            i += len(m.group(0))
+            continue
+        i += 1
+    return out
