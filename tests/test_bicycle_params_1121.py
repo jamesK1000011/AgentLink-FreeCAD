@@ -254,7 +254,7 @@ class JointFollows(unittest.TestCase):
         self.assertEqual(got["calm"], [])
         self.assertEqual(got["calm solves"], 0)
         self.assertEqual(got["solves"], 1)
-        self.assertIn("Assembly: assembly solved again: the parts joined to Rear LCS follow it", [x["line"] for x in got["lcs"]])
+        self.assertIn("Assembly: assembly solved again: the parts joined to Rear LCS follow it (no part moved)", [x["line"] for x in got["lcs"]])
 
 
 if __name__ == "__main__":

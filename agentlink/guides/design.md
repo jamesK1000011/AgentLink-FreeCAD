@@ -312,6 +312,7 @@ Each branch adds rules to the core method. Parameters, skeleton, datums and gate
 - Mitre or cope each tube end to its neighbour for a tight fit-up. Fillet gap: AWS D1.1 max 3/16 in; above 1/16 in, add the gap to the leg. Thin chromoly fit-up about 0.25–0.5 mm (forum default).
 - Tubular T/Y/K joints per AWS D1.1 Clause 10; watch acute crotches (dihedral < 30°) for weld access.
 - Where several tubes meet at one point (a bottom bracket, a head tube), make the shell first (as a ring, with its bore), then sweep the tubes into it, then cut the bores again. A bore cut after a fuse does not repair a shell that the fuse made invalid.
+- Trap: Refine on every feature of a big pipe weldment can make the body unorientable (Check Geometry) after a small parameter change. Keep Refine off on the pipes (pd_pipe does this by default). If body_check or the health check says unorientable or not valid, set Refine false on each feature (object_set { object, values: { Refine: false } }), then recompute and body_check again.
 - Put each tube node away from the shell faces: a tube centre at least its radius + 8 mm from a head-tube face; a top tube below the seat clamp; stays inboard of the BB shell faces.
 - Welded 6061 for T6: solution treat, quench, straighten in the W temper, then age. The usual filler for a heat treatment after welding is 4643 (confirm with the shop). After the heat treatment, ream and face the bores and chase the threads.
 - Jig and fixture datums in the skeleton; balanced weld order.

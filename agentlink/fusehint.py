@@ -175,3 +175,40 @@ def for_error(feature, error):
     if not k or not ERROR_WORDS.search(error or ""):
         return None
     return todo(getattr(feature, "Label", "?"), k, "")
+
+
+# Bicycle L5 build (21 Nov, finding 4): PartDesign Refine on every feature
+# of a large pipe weldment made the body unorientable (FreeCAD's Check
+# Geometry) after small parameter changes; Refine off on all of them fixed it.
+REFINE_PIPES = 8   # pipes in one body past which Refine is named on an invalid shape
+UNORIENTABLE = re.compile(r"unorientable", re.I)
+PIPES = ("PartDesign::AdditivePipe", "PartDesign::SubtractivePipe")
+
+
+def refined(body):
+    """[labels] of the body's features with Refine on, in order."""
+    out = []
+    for f in list(getattr(body, "Group", None) or []):
+        try:
+            if "Refine" in (getattr(f, "PropertiesList", None) or ()) and bool(getattr(f, "Refine", False)):
+                out.append(getattr(f, "Label", "?"))
+        except Exception:
+            continue
+    return out
+
+
+def refine_todo(body, said=""):
+    """The todo for an invalid or unorientable PartDesign Body whose
+    features have Refine on, when the words say unorientable or the body
+    holds more than REFINE_PIPES pipes; else None."""
+    if getattr(body, "TypeId", "") != "PartDesign::Body":
+        return None
+    on = refined(body)
+    if not on:
+        return None
+    pipes = sum(1 for f in (getattr(body, "Group", None) or []) if getattr(f, "TypeId", "") in PIPES)
+    if not (UNORIENTABLE.search(said or "") or pipes > REFINE_PIPES):
+        return None
+    names = ", ".join(on[:5]) + (f" and {len(on) - 5} more" if len(on) > 5 else "")
+    return (f"Refine off on the features (object_set {{ object: \"{on[0]}\", values: {{ Refine: false }} }} on each: {names}), then rebuild "
+            f"(recompute) and body_check {{ body: \"{getattr(body, 'Label', '')}\" }}: Refine on the features of a weldment of many pipes ({pipes}) can leave it unorientable after a change")

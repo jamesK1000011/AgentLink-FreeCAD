@@ -120,11 +120,106 @@ def _invalid(o):
     return hasattr(o, "isValid") and not o.isValid()
 
 
+# Bicycle L5 build (21 Nov, finding 5): in a document of 35 bodies and an
+# assembly of 32 parts, a pd_primitive or object_set on one spoke set took
+# 14-23 s. A part's recompute makes the assembly that holds it recompute
+# too, and FreeCAD's assembly solves on each recompute (SolveOnRecompute).
+# Where no joint end of the assembly reads what the call recomputes (every
+# end on an LCS or datum that was not recomputed, or on another part), the
+# solve can move nothing: the assembly is left out of the recompute and its
+# touch mark cleared. The time of the recompute goes on the call's "around"
+# split (inside.recompute).
+ASSEMBLY = "Assembly::AssemblyObject"
+
+
+def _end_reads(r):
+    """The names of what a joint end's frame is read from: the datum objects
+    of its sub-name path ("Body.LCS." -> Body's LCS, not the part), else the
+    part and the objects on its path (a face of the part's shape)."""
+    if not r:
+        return set()
+    out = set()
+    o = r[0]
+    subs = list(r[1]) if len(r) > 1 and r[1] else []
+    datum = bool(subs) and all(str(x).endswith(".") for x in subs)
+    for sub in subs:
+        segs = [x for x in str(sub).split(".") if x]
+        if datum and segs:
+            out.add(segs[-1])
+        else:
+            out.update(segs[:-1])
+    if not datum and o is not None:
+        out.add(o.Name)
+    return out
+
+
+def _quiet_assemblies(doc, names):
+    """The assemblies among names (what a recompute would run) whose solve
+    cannot move a part: no joint end reads an object in names."""
+    out = []
+    for n in names:
+        a = doc.getObject(n)
+        if a is None or getattr(a, "TypeId", "") != ASSEMBLY:
+            continue
+        reads = set()
+        try:
+            for g in a.Group:
+                if g.TypeId != "Assembly::JointGroup":
+                    continue
+                for j in g.Group:
+                    for prop in ("Reference1", "Reference2"):
+                        reads |= _end_reads(getattr(j, prop, None))
+        except Exception:  # noqa: BLE001 - not read: solved as before
+            continue
+        if not reads & set(names):
+            out.append(a)
+    return out
+
+
+def _scoped(doc, todo):
+    """todo ({ name: object }) less the assemblies whose solve moves
+    nothing and what is built on them; (objects, the assemblies left out)."""
+    quiet = _quiet_assemblies(doc, list(todo))
+    if not quiet:
+        return list(todo.values()), []
+    gone = {a.Name for a in quiet}
+    keep = []
+    for o in todo.values():
+        if o.Name in gone:
+            continue
+        try:
+            if gone & {x.Name for x in o.OutListRecursive}:
+                continue  # a BOM or view built on the assembly would run it again
+        except Exception:  # noqa: BLE001
+            pass
+        keep.append(o)
+    return keep, quiet
+
+
+def _timed(doc, objs=None):
+    """doc.recompute, its time on the call's around split (recompute)."""
+    from .. import around
+
+    with around.part("recompute"):
+        return doc.recompute() if objs is None else doc.recompute(objs)
+
+
+def _recompute_list(doc, objs, quiet):
+    out = _timed(doc, objs)
+    for a in quiet:
+        try:
+            a.purgeTouched()
+        except Exception:  # noqa: BLE001
+            pass
+    return out
+
+
 def recompute_scoped(doc, objs):
     """Recompute objs and what is built from them (FreeCAD adds what they are
     built from, when that needs it) — not the rest of the document. A whole
     recompute after a call also re-ran objects the call never touched (one
     left touched, a heavy mesh), so a small change took as long as they did.
+    An assembly whose solve cannot move a part is left out (_scoped).
     The count recomputed; the whole document when objs is empty or this
     FreeCAD takes no list."""
     todo = {}
@@ -137,10 +232,44 @@ def recompute_scoped(doc, objs):
             continue
     if not todo:
         return doc.recompute()
+    keep, quiet = _scoped(doc, todo)
     try:
-        return doc.recompute(list(todo.values()))
+        return _recompute_list(doc, keep, quiet) if quiet else _timed(doc, keep)
     except TypeError:
-        return doc.recompute()
+        return _timed(doc)
+
+
+def _must(o):
+    """Whether FreeCAD would run o on a recompute though it is not marked touched."""
+    try:
+        f = getattr(o, "mustExecute", None)
+        return bool(f()) if callable(f) else False
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def recompute_whole(doc):
+    """doc.recompute(), less an assembly whose solve cannot move a part
+    (_scoped): what is touched and what is built on it."""
+    try:
+        objs = list(doc.Objects)
+        if not any(getattr(o, "TypeId", "") == ASSEMBLY for o in objs):
+            return _timed(doc)
+        todo = {}
+        for o in objs:
+            if "Touched" in (getattr(o, "State", None) or ()) or _must(o):
+                todo.setdefault(o.Name, o)
+                for p in o.InListRecursive:
+                    todo.setdefault(p.Name, p)
+        keep, quiet = _scoped(doc, todo) if todo else ([], [])
+    except Exception:  # noqa: BLE001 - not read: the whole recompute as before
+        return _timed(doc)
+    if not quiet:
+        return _timed(doc)
+    try:
+        return _recompute_list(doc, keep, quiet)
+    except TypeError:
+        return _timed(doc)
 
 
 def finish(session, tool, read=None, *, objs=(), refuse=None, broken=_invalid, check=None, doc=None, recompute=True, extra=None, step=True):
@@ -153,7 +282,7 @@ def finish(session, tool, read=None, *, objs=(), refuse=None, broken=_invalid, c
     after the recompute that refuses by itself."""
     d = session.doc if doc is None else doc
     if recompute:
-        d.recompute()
+        recompute_whole(d)
     if refuse is not None:
         bad_ = [o for o in objs if broken(o)]
         if bad_:

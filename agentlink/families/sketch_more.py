@@ -7,6 +7,7 @@
 # and its auto-constrainer.
 
 import math
+import re
 
 import FreeCAD
 import Part
@@ -14,6 +15,7 @@ import Part
 from .. import runners
 from . import pd_common as pc
 from . import picks
+from ..protocol import ToolError
 from .sketch import SOLVE, ext_count
 
 GROUP = "sketch"
@@ -249,6 +251,142 @@ def mirrored(src, about):
     return gs
 
 
+# Bicycle L5 build (21 Nov, finding 3): a tube profile sketch hung square to
+# a binder's edge (NormalToEdge) lost its edge after a VarSet change
+# ("missing element reference Binder010 ;Edge1;:H10f,..."). sketch_attach
+# { edge } hangs it on an edge again in place, with a feature built from it;
+# repair: true points each element of its support at the element of the same
+# number on the same object.
+EDGE_MODES = ("NormalToEdge", "FrenetNB", "FrenetTN", "FrenetTB", "Concentric", "RevolutionSection")
+_ELEMENT = re.compile(r"(Edge|Face|Vertex)(\d+)")
+
+
+def _plain(sub):
+    """The element of a sub-name as its type and number ("Edge1"), out of
+    a mapped one (";Edge1;:H10f,E…" or "Binder.;g3;SKT.Edge1"); None for none."""
+    hits = _ELEMENT.findall(str(sub or ""))
+    return (hits[-1][0] + hits[-1][1]) if hits else None
+
+
+def _has_element(o, el):
+    try:
+        return o.Shape.getElement(el) is not None
+    except Exception:
+        return False
+
+
+def _support_list(sk):
+    """The sketch's support as [(object, [subs])]."""
+    out = []
+    for item in getattr(sk, pc.support_prop(sk), None) or []:
+        try:
+            o, subs = item[0], item[1]
+        except Exception:
+            continue
+        out.append((o, list(subs) if isinstance(subs, (list, tuple)) else [subs]))
+    return out
+
+
+def attach_edge(doc, sk, b, a):
+    """sketch_attach { edge, mode, at } or { repair: true }: the sketch hung
+    on the edge (or its support re-pointed) where it is in the body, its
+    offset and flip kept unless given. Refused, with the sketch as it was,
+    when FreeCAD cannot attach it. The answer's extra."""
+    prop = pc.support_prop(sk)
+    off0 = sk.AttachmentOffset
+    was = (getattr(sk, prop, None), str(sk.MapMode), bool(getattr(sk, "MapReversed", False)), FreeCAD.Placement(off0.Base, off0.Rotation),
+           float(getattr(sk, "MapPathParameter", 0.0) or 0.0))
+    if a.get("repair"):
+        if a.get("edge") is not None:
+            raise ToolError("invalid_input", "edge or repair, not both: repair points the sketch's own support at the element of the same number; edge gives a new one.")
+        sup = _support_list(sk)
+        if not sup:
+            raise ToolError("invalid_state", f"{sk.Label} has no support to repair (MapMode {sk.MapMode}): sketch_attach {{ plane | face | edge }} attaches it.")
+        new, changed = [], []
+        for o, subs in sup:
+            keep = []
+            for sub in subs:
+                el = _plain(sub) if sub else sub
+                if sub and el is None:
+                    raise ToolError("invalid_state", f"{sk.Label}: the support element {sub!r} of {o.Label} names no edge, face or vertex — sketch_attach {{ edge | face | plane }} gives a new one.")
+                if el and not _has_element(o, el):
+                    raise ToolError("invalid_state", f"{sk.Label}: {o.Label} has no {el} now — sketch_attach {{ edge: \"{o.Label}.EdgeN\" }} with an edge it has (shape_query {{ body: \"{o.Label}\", kind: \"edge\" }} names them).")
+                if el != sub:
+                    changed.append(f"{o.Label}.{el}")
+                keep.append(el or "")
+            if keep:
+                new.extend((o, x) for x in keep)
+            else:
+                new.append((o, ""))
+        mode, what = str(sk.MapMode), ", ".join(f"{o.Label}.{x}" if x else o.Label for o, x in new)
+    else:
+        ref = str(a.get("edge") or "").strip()
+        obj_ref, _, el = ref.rpartition(".")
+        if not obj_ref or not _ELEMENT.fullmatch(el or "") or not el.startswith("Edge"):
+            raise ToolError("invalid_input", f"edge {ref!r}: an object and one of its edges, \"Binder.Edge1\" (shape_query {{ body, kind: \"edge\" }} names them).")
+        o = picks.find(doc, obj_ref, "edge")
+        try:
+            later = o in list(getattr(sk, "InListRecursive", None) or [])
+        except Exception:
+            later = False
+        if later:
+            raise ToolError("invalid_state", f"{o.Label} is built from {sk.Label}: hanging the sketch on its edge makes a cycle. Use an edge of an object made before the sketch (a binder of the skeleton).")
+        if not _has_element(o, el):
+            raise ToolError("invalid_input", f"edge {ref!r}: {o.Label} has no {el} (shape_query {{ body: \"{o.Label}\", kind: \"edge\" }} names its edges).")
+        mode = str(a.get("mode") or "NormalToEdge")
+        if mode not in EDGE_MODES:
+            raise ToolError("invalid_input", f"mode {mode!r}: on an edge, one of {', '.join(EDGE_MODES)} (NormalToEdge: square to the edge, at its start or where at says).")
+        new, what, changed = [(o, el)], f"{o.Label}.{el}", []
+    try:
+        setattr(sk, prop, new)
+        sk.MapMode = mode
+        if a.get("flip") is not None:
+            sk.MapReversed = bool(a.get("flip"))
+        if a.get("at") is not None:
+            t = float(a.get("at"))
+            if not 0.0 <= t <= 1.0:
+                raise ToolError("invalid_input", f"at {t:g}: where on the edge, 0 (its start) to 1 (its end).")
+            sk.MapPathParameter = t
+        if a.get("offset") is not None or a.get("rotate") is not None:
+            off = sk.AttachmentOffset
+            z = float(a["offset"]) if a.get("offset") is not None else float(off.Base.z)
+            rot = FreeCAD.Rotation(V(0, 0, 1), float(a["rotate"])) if a.get("rotate") is not None else off.Rotation
+            sk.AttachmentOffset = FreeCAD.Placement(V(off.Base.x, off.Base.y, z), rot)
+        doc.recompute()
+        bad = None if sk.isValid() else sk.getStatusString()
+    except ToolError:
+        _put_support(sk, prop, was)
+        raise
+    except Exception as e:  # noqa: BLE001 - said, with the sketch put back
+        bad = str(e)
+    if bad:
+        _put_support(sk, prop, was)
+        doc.recompute()
+        raise ToolError("failed", f"{sk.Label} would not attach to {what} ({mode}): {bad} — it stays as it was.")
+    out = {"sketch": sk.Label, "on": what, "mode": mode, "support": what}
+    if changed:
+        out["repaired"] = changed
+        out["note"] = f"{sk.Label} now names {', '.join(changed)} by number: the same element as before if the object's edges kept their order. sketch_state and the body's health show the result."
+    try:
+        out["at"] = round(float(sk.MapPathParameter), 4)
+    except Exception:
+        pass
+    return out
+
+
+def _put_support(sk, prop, was):
+    sup, mode, rev, off, t = was
+    try:
+        setattr(sk, prop, sup)
+        sk.MapMode = mode
+        sk.MapReversed = rev
+        sk.AttachmentOffset = off
+        if "MapPathParameter" in sk.PropertiesList:
+            sk.MapPathParameter = t
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def tools(session):
     s = session
     doc = lambda: s.doc  # noqa: E731
@@ -260,7 +398,7 @@ def tools(session):
                # FreeCAD's own
                "V": V, "placement": FreeCAD.Placement, "rotation": FreeCAD.Rotation, "setprop": setattr, "vec2": pc.vec2,
                # the family's: the solver's reading, a sketch kept and put back, the geometry
-               "state": state, "solver_lists": solver_lists, "ext_count": ext_count, "kind_of": kind_of, "kept": kept,
+               "attach_edge": lambda sk, b, a: attach_edge(doc(), sk, b, a), "state": state, "solver_lists": solver_lists, "ext_count": ext_count, "kind_of": kind_of, "kept": kept,
                "restore": lambda sk, snap: restore(doc(), sk, snap), "copies": copies, "turn": turn, "scaling": scaling, "reach": reach, "detect": detect,
                "lower_degree": lower_degree, "copy_frame": copy_frame, "new_beside": lambda src: new_beside(doc(), src), "bring_in": bring_in, "mirrored": mirrored}
     return runners.tools(GROUP, s, helpers, family="sketch_more")

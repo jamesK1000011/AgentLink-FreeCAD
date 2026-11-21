@@ -698,6 +698,16 @@ class Session:
                 else:
                     s["problems"] = [f"FreeCAD's Check Geometry: {'; '.join(said[:3])}"] + s["problems"]
                     s["ok"] = False
+        if not s.get("ok", True):
+            # Bicycle L5 build (21 Nov, finding 4): Refine on a pipe weldment's features
+            try:
+                from . import fusehint
+
+                rt = fusehint.refine_todo(o, " ".join(str(p) for p in s.get("problems") or []))
+            except Exception:
+                rt = None
+            if rt:
+                s["todo"] = rt
         return {"body": o.Label, **s, **self.stats_of(o)}
 
     def _mesh_named(self, ref):

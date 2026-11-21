@@ -191,7 +191,15 @@ SCHEMAS = {
                 "replace": {"profile": {"description": "A sketch in the body, or { circle: { d, wall } }."}},
                 "describe": {"path": "A sketch in the body, a binder, or another object with edges."},
                 "after": [("path", "edges", {"description": "Edges of the path to sweep along, joined end to end: [\"Edge3\"]."}),
-                          ("edges", "mode", {"type": "string"}), ("mode", "transition", {"type": "string"})]},
+                          ("edges", "mode", {"type": "string"}), ("mode", "transition", {"type": "string"}),
+                          # bicycle L5 build (21 Nov, finding 4): Refine off by default on a pipe
+                          ("subtractive", "refine", {"type": "boolean", "description": "FreeCAD's Refine on the pipe; false by default."})]},
+    # bicycle L5 build (21 Nov, finding 3): a sketch hung on an edge again in place, or its lost element re-pointed
+    "sketch_attach": {"why": "bicycle L5 finding 3: edge, mode, at, repair",
+                      "after": [("flip", "edge", {"type": "string", "description": "An object's edge, \"Binder.Edge1\": the sketch hangs on it."}),
+                                ("edge", "mode", {"type": "string", "description": "On an edge: NormalToEdge (default), FrenetNB, FrenetTN, FrenetTB, Concentric, RevolutionSection."}),
+                                ("mode", "at", {"type": "number", "description": "On an edge: where, 0 (its start) to 1 (its end)."}),
+                                ("at", "repair", {"type": "boolean"})]},
     # later bicycle runs, finding 1: a sweep of 25 parts checks only the pairs asked
     "asm_sweep": {"why": "bicycle runs finding 1: parts and skip",
                   "after": [("turn", "parts", {"type": "array", "items": {"type": "string"}}), ("parts", "skip", {"type": "array", "items": {"type": "string"}})]},

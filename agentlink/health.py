@@ -627,6 +627,14 @@ def shape_reading(o, deadline, doc_name=""):
                 words.append(fh["line"])
                 r["todo"] = fh["todo"]
                 r["fuse"] = {k: fh[k] for k in ("feature", "kind", "bores")}
+            try:
+                from . import fusehint
+
+                rt = fusehint.refine_todo(o, " ".join(str(w) for w in words))
+            except Exception:
+                rt = None
+            if rt:
+                r["todo"] = rt
     if solids:
         try:
             closed = all(s.isClosed() for s in sh.Shells)

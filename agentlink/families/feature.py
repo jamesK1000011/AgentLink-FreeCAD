@@ -446,6 +446,10 @@ def pipe_options(f, a):
         if v not in allowed:
             raise ToolError("invalid_input", f"{key} {v!r}: one of {', '.join(allowed)}.")
         setattr(f, prop, v)
+    # Bicycle L5 build (21 Nov, finding 4): Refine on every pipe of a large
+    # weldment made the body unorientable after small changes; off by default.
+    if "Refine" in (getattr(f, "PropertiesList", None) or ()):
+        f.Refine = bool(a.get("refine", False))
 
 
 def tools(session):
