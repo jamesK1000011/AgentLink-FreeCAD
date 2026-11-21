@@ -872,10 +872,33 @@ def _health(session, tool, changed):
             follow = []
         if not own and not follow and not any(x.get("repicked") for x in picked):
             continue
+        # Bicycle L5 build (21 Nov, finding 2): a joint's frames (Placement1,
+        # Placement2) are made from its ends when it is made; they are made
+        # again from the changed LCS here, as asm_joint does, before the solve.
+        named = joints_naming(doc, asm, changed) if follow else []
+        before = {o.Name: o.Placement.copy() for o in _parts(asm)} if named else {}
+        for j in named:
+            try:
+                j.Proxy.updateJCSPlacements(j)
+            except Exception:  # noqa: BLE001 - the joint keeps its frames; the check below says so
+                pass
         code, words = _status(asm)
         line = f"{asm.Label}: assembly {words}"
+        apart = []
+        if named and code == 0:
+            code, words, apart = settle_fixed(doc, asm, named, before)
+            line = f"{asm.Label}: assembly {words}"
         if follow and not own:
-            line += f" again: the parts joined to {', '.join(follow[:4])} follow it"
+            moved = sorted(o.Label for o in _parts(asm) if o.Name in before and not o.Placement.isSame(before[o.Name], 1e-6))
+            if apart:
+                line += f" again, but the fixed joint{'s' if len(apart) != 1 else ''} {', '.join(a['joint'] for a in apart)} on {', '.join(follow[:4])} did not follow: " + "; ".join(f"{a['joint']} frames {a['mm']} mm, {a['degrees']} degrees apart" for a in apart[:3])
+                out.append({"line": line, "red": True, "joints": apart[:6],
+                            "todo": f"asm_joint_remove {apart[0]['joint']}, then asm_joint again on the same LCS (keep: false): a new joint takes the LCS as it is now"})
+                continue
+            if before:
+                line += f" again: the parts joined to {', '.join(follow[:4])} follow it ({'moved: ' + ', '.join(moved[:6]) if moved else 'no part moved'})"
+            else:
+                line += f" again: the parts joined to {', '.join(follow[:4])} follow it"
         if code == 0:
             out.append({"line": line})
         elif code == -6:
@@ -883,6 +906,101 @@ def _health(session, tool, changed):
         else:
             out.append({"line": line, "red": True, "todo": "asm_list names the joints (asm_check the parts joined to nothing); asm_joint_remove the one that fights another, or history_undo"})
     return out
+
+
+def joints_naming(doc, asm, changed):
+    """The joints of asm (not the ground) with an end on a changed object
+    that is not a part itself: an LCS or datum in a part, on either side."""
+    if not changed:
+        return []
+    names = {o.Name for o in changed}
+    parts = {o.Name for o in getattr(asm, "Group", []) if o.TypeId != "Assembly::JointGroup"} | {asm.Name}
+    g = next((o for o in getattr(asm, "Group", []) if o.TypeId == "Assembly::JointGroup"), None)  # read only
+    out = []
+    for j in list(getattr(g, "Group", None) or []):
+        if getattr(j, "ObjectToGround", None) is not None:
+            continue
+        hit = False
+        for prop in ("Reference1", "Reference2"):
+            r = getattr(j, prop, None)
+            try:
+                for sub in (r[1] if r and len(r) > 1 else []) or []:
+                    segs = [x for x in str(sub).split(".")[:-1] if x]
+                    if any(x in names and x not in parts for x in segs):
+                        hit = True
+            except Exception:  # noqa: BLE001
+                continue
+        if hit:
+            out.append(j)
+    return out
+
+
+def jcs_global(j, prop, part):
+    """A joint end's frame in the document, as FreeCAD's solver reads it:
+    the part's placement, the named object in the part, then the joint's
+    own PlacementN (which holds its offset)."""
+    pl = getattr(j, "Placement" + prop[-1], None) or FreeCAD.Placement()
+    return part.Placement.multiply(ref_in_part(j, prop, part)).multiply(pl)
+
+
+FRAME_MM, FRAME_DEG = 1e-3, 1e-3
+
+
+def frames_apart(j, p1, p2):
+    """(mm, degrees) between the two ends' frames of a joint."""
+    g1, g2 = jcs_global(j, "Reference1", p1), jcs_global(j, "Reference2", p2)
+    d = g1.inverse().multiply(g2)
+    return float(d.Base.Length), abs(math.degrees(float(d.Rotation.Angle)))
+
+
+def settle_fixed(doc, asm, joints, before):
+    """After the solve that follows a change to an LCS a joint names: each
+    fixed joint's two frames must meet. Where they do not (the live miss: a
+    part stayed put after its LCS was turned), the part on the moving side
+    (b, or a when b is grounded) is put where they meet and the assembly
+    solved again. A part the second solve does not keep there goes back.
+    (code, words, [{ joint, mm, degrees }] still apart)."""
+    held = {o.Name for o in _grounded(asm)}
+    names = {o.Name for o in getattr(asm, "Group", []) or []}
+    code, words = 0, SOLVE.get(0, "solved")
+    apart, fixed = [], []
+    for j in joints:
+        if _kind(j) != "fixed":
+            continue
+        p1 = end_part(doc, getattr(j, "Reference1", None), names)
+        p2 = end_part(doc, getattr(j, "Reference2", None), names)
+        if p1 is None or p2 is None:
+            continue
+        try:
+            mm, deg = frames_apart(j, p1, p2)
+        except Exception:  # noqa: BLE001 - frames not readable: the solver's word stands
+            continue
+        if mm <= FRAME_MM and deg <= FRAME_DEG:
+            continue
+        if p2.Name in held and p1.Name in held:
+            apart.append({"joint": j.Label, "mm": round(mm, 3), "degrees": round(deg, 3)})
+            continue
+        side, other, prop = (p2, p1, "Reference2") if p2.Name not in held else (p1, p2, "Reference1")
+        try:
+            meet = jcs_global(j, "Reference1" if prop == "Reference2" else "Reference2", other)
+            own = side.Placement.inverse().multiply(jcs_global(j, prop, side))
+            side.Placement = meet.multiply(own.inverse())
+            fixed.append((j, p1, p2))
+        except Exception:  # noqa: BLE001
+            apart.append({"joint": j.Label, "mm": round(mm, 3), "degrees": round(deg, 3)})
+    if fixed:
+        code, words = _status(asm)
+        for j, p1, p2 in fixed:
+            try:
+                mm, deg = frames_apart(j, p1, p2)
+            except Exception:  # noqa: BLE001
+                continue
+            if mm > FRAME_MM or deg > FRAME_DEG:
+                apart.append({"joint": j.Label, "mm": round(mm, 3), "degrees": round(deg, 3)})
+        if apart or code != 0:
+            _put_back(asm, before)
+            code, words = _status(asm)
+    return code, words, apart
 
 
 def joined_names(doc, asm):
@@ -1006,63 +1124,143 @@ def turn_over(doc, asm, j):
 COUPLE = ("gears", "belt", "rackpinion", "screw")
 
 
+def end_part(doc, r, names=None):
+    """The part of the assembly a joint reference ends on: its object when
+    that is a part (names: the assembly's part names, None for any), else
+    the first object of its sub-name path that is one ("Crankset.LCS." held
+    from a container). None for no reference."""
+    if not r:
+        return None
+    p = ref_element(doc, r)[0]
+    if p is None or names is None or p.Name in names:
+        return p
+    for sub in (r[1] if len(r) > 1 else []) or []:
+        for seg in str(sub).split(".")[:-1]:
+            if seg in names:
+                return doc.getObject(seg)
+    return p
+
+
+def _kind(x):
+    return str(getattr(x, "JointType", "")).lower()
+
+
+def rigid_from(doc, joints, seeds, stop, names=None):
+    """The parts held to seeds by fixed joints, at any depth (a spoke set
+    fixed to a hub fixed to the wheel): { name: part }, seeds left out.
+    stop: names never added (grounded parts, the parts that already move)."""
+    out, todo = {}, list(seeds)
+    seen = {o.Name for o in seeds}
+    while todo:
+        cur = todo.pop()
+        for x in joints:
+            if _kind(x) != "fixed" or getattr(x, "ObjectToGround", None) is not None:
+                continue
+            q1 = end_part(doc, getattr(x, "Reference1", None), names)
+            q2 = end_part(doc, getattr(x, "Reference2", None), names)
+            for here, there in ((q1, q2), (q2, q1)):
+                if here is None or there is None or here.Name != cur.Name:
+                    continue
+                if there.Name in seen or there.Name in stop:
+                    continue
+                seen.add(there.Name)
+                out[there.Name] = there
+                todo.append(there)
+    return out
+
+
 def carried(doc, asm, j, moving, fixed_side, grounded):
     """What moves with a joint's moving part: the parts joined to it by
     other joints, short of grounded parts and the part it turns on. A
-    coupling drives its other part, it does not carry it along.
+    coupling drives its other part, it does not carry it along. A
+    reference held from a container ("Crankset.LCS.") counts as its part.
     ({ name: part }, the other joints that carry, the couplings)."""
     group, todo = {moving.Name: moving}, [moving]
     all_j = [x for x in _joints(asm).Group if x is not j and getattr(x, "ObjectToGround", None) is None]
-    couplings = [x for x in all_j if str(getattr(x, "JointType", "")).lower() in COUPLE]
+    couplings = [x for x in all_j if _kind(x) in COUPLE]
     others = [x for x in all_j if x not in couplings]
+    names = {o.Name for o in getattr(asm, "Group", []) or []}
+    held = {o.Name for o in grounded}
     while todo:
         cur = todo.pop()
         for x in others:
-            q1 = ref_element(doc, getattr(x, "Reference1", None))[0]
-            q2 = ref_element(doc, getattr(x, "Reference2", None))[0]
+            q1 = end_part(doc, getattr(x, "Reference1", None), names)
+            q2 = end_part(doc, getattr(x, "Reference2", None), names)
             for here, there in ((q1, q2), (q2, q1)):
-                if here is not None and there is not None and here.Name == cur.Name and there.Name not in group and there not in grounded and there is not fixed_side:
+                if here is not None and there is not None and here.Name == cur.Name and there.Name not in group and there.Name not in held and there.Name != getattr(fixed_side, "Name", None):
                     group[there.Name] = there
                     todo.append(there)
     return group, others, couplings
 
 
-def driven_parts(doc, couplings, others, group, turning):
+def held_back(doc, asm, group, driven, grounded):
+    """Bicycle L5 build (21 Nov, finding 1): grounded parts fixed to a part
+    that moves. A grounded part never moves, so the sweep leaves it where it
+    is and it seems to collide. [label]."""
+    names = {o.Name for o in getattr(asm, "Group", []) or []}
+    moving = set(group) | {d["part"].Name for d in driven} | {n for d in driven for n in d.get("carries", {})}
+    held = {o.Name: o for o in grounded}
+    out = []
+    for x in _joints(asm).Group:
+        if _kind(x) != "fixed" or getattr(x, "ObjectToGround", None) is not None:
+            continue
+        q1 = end_part(doc, getattr(x, "Reference1", None), names)
+        q2 = end_part(doc, getattr(x, "Reference2", None), names)
+        for here, there in ((q1, q2), (q2, q1)):
+            if here is not None and there is not None and here.Name in moving and there.Name in held and there.Label not in out:
+                out.append(there.Label)
+    return out
+
+
+def driven_parts(doc, couplings, others, group, turning, grounded=()):
     """Parts driven through a coupling: each on its own joint (revolute or
     slider to something that stays), moved by the coupling's ratio — gears
     turn the other way by r1 / r2, a belt the same way; a rack slides
     r · π / 180 mm a degree of its pinion, a screw's nut pitch / 360.
-    [{ part, how: turn | slide, factor, centre, axis, via }]."""
+    Bicycle L5 build (21 Nov, finding 1): the parts fixed to a driven part
+    (any depth: the rim, tire and spoke set on the rear hub) move with it
+    (carries), and a coupling that ends on a part fixed to the one with the
+    joint (a cog fixed to the hub) drives that one.
+    [{ part, how: turn | slide, factor, centre, axis, via, carries }]."""
     driven = []
+    held = {o.Name for o in grounded}
+    taken = set(group)
     for c in couplings:
         q1 = ref_element(doc, getattr(c, "Reference1", None))[0]
         q2 = ref_element(doc, getattr(c, "Reference2", None))[0]
         if q1 is None or q2 is None:
             continue
         if q1.Name in group and q2.Name not in group:
-            dvn, first = q2, True
+            end, first = q2, True
         elif q2.Name in group and q1.Name not in group:
-            dvn, first = q1, False
+            end, first = q1, False
         else:
             continue
         own = None
-        for x in others:
-            r1_, e1_ = ref_element(doc, getattr(x, "Reference1", None))[:2]
-            r2_, e2_ = ref_element(doc, getattr(x, "Reference2", None))[:2]
-            if str(getattr(x, "JointType", "")).lower() not in ("revolute", "slider", "cylindrical"):
-                continue
-            if r1_ is not None and r1_.Name == dvn.Name and (r2_ is None or r2_.Name not in group):
-                own = (x, e1_)
-            elif r2_ is not None and r2_.Name == dvn.Name and (r1_ is None or r1_.Name not in group):
-                own = (x, e2_)
+        # the coupling's end, then the parts fixed to it: the first on a joint of its own
+        for dvn in [end] + list(rigid_from(doc, others, [end], taken | held).values()):
+            for x in others:
+                r1_, e1_ = ref_element(doc, getattr(x, "Reference1", None))[:2]
+                r2_, e2_ = ref_element(doc, getattr(x, "Reference2", None))[:2]
+                if _kind(x) not in ("revolute", "slider", "cylindrical"):
+                    continue
+                if r1_ is not None and r1_.Name == dvn.Name and (r2_ is None or r2_.Name not in group):
+                    own = (x, e1_, dvn)
+                elif r2_ is not None and r2_.Name == dvn.Name and (r1_ is None or r1_.Name not in group):
+                    own = (x, e2_, dvn)
+                if own:
+                    break
             if own:
                 break
         if own is None or own[1] is None:
             continue
+        dvn = own[2]
+        if dvn.Name in taken:
+            continue
         dax = joint_axis(own[1])
         if dax is None:
             continue
-        ck = str(c.JointType).lower()
+        ck = _kind(c)
         r1v, r2v = float(getattr(c, "Distance", 0) or 0), float(getattr(c, "Distance2", 0) or 0)
         if ck in ("gears", "belt"):
             if r1v <= 0 or r2v <= 0:
@@ -1076,8 +1274,21 @@ def driven_parts(doc, couplings, others, group, turning):
         if not turning and how == "turn":
             continue
         dc, dv = dax
-        driven.append({"part": dvn, "how": how, "factor": factor, "centre": dc, "axis": unit(dv), "via": c.Label})
+        carries = rigid_from(doc, others, [dvn], taken | held)
+        taken |= {dvn.Name} | set(carries)
+        driven.append({"part": dvn, "how": how, "factor": factor, "centre": dc, "axis": unit(dv), "via": c.Label, "carries": carries})
     return driven
+
+
+def driven_rows(driven):
+    """asm_sweep's driven: [{ part, via, turns | slides, per, carries }]."""
+    out = []
+    for d in driven:
+        row = {"part": d["part"].Label, "via": d["via"], d["how"] + "s": "degrees" if d["how"] == "turn" else "mm", "per": round(d["factor"], 5)}
+        if d.get("carries"):
+            row["carries"] = sorted(o.Label for o in d["carries"].values())
+        out.append(row)
+    return out
 
 
 # A sweep stops before the call's limit (about 80 s, the card says): this
@@ -1116,7 +1327,8 @@ def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, 
     kept = {o.Name: o.Placement.copy() for o in every}
     motion = {o.Name: "joint" for o in group.values()}
     for d in driven:
-        motion[d["part"].Name] = "driven " + d["part"].Name
+        for o in [d["part"]] + list(d.get("carries", {}).values()):
+            motion[o.Name] = "driven " + d["part"].Name
     pairs, left = sweep_pairs(every, motion, only, skip)
     left_out = sum(left.values())
     still = {}  # the shapes of the parts that stay put, read once
@@ -1128,7 +1340,8 @@ def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, 
         axes.update({o.Name: (centre, axis) for o in group.values()})
     for d in driven:
         if d["how"] == "turn":
-            axes[d["part"].Name] = (d["centre"], d["axis"])
+            for o in [d["part"]] + list(d.get("carries", {}).values()):
+                axes[o.Name] = (d["centre"], d["axis"])
     cuts = None
     last = None
     try:
@@ -1157,7 +1370,9 @@ def sweep_run(doc, asm, j, group, driven, centre, axis, turning, lo, hi, steps, 
                     dm = FreeCAD.Placement(d["centre"] - r.multVec(d["centre"]), r)
                 else:
                     dm = FreeCAD.Placement(d["axis"] * amount, FreeCAD.Rotation())
-                d["part"].Placement = dm.multiply(kept[d["part"].Name])
+                for o in [d["part"]] + list(d.get("carries", {}).values()):
+                    if o.Name in kept:
+                        o.Placement = dm.multiply(kept[o.Name])
                 row.setdefault("driven", {})[d["part"].Label] = round(amount, 3)
             moved = {}
 
@@ -1998,7 +2213,8 @@ def tools(session):
                "check_parts": _check_parts, "view_provider": _view_provider, "ref_label": lambda r: ref_label(doc(), r),
                "ref_pair": lambda r: ref_element(doc(), r)[:2], "joint_axis": joint_axis, "unit": unit, "radius_of": radius_of, "joint_refs": joint_refs,
                "turn_over": lambda asm, j: turn_over(doc(), asm, j), "carried": lambda asm, j, moving, fixed, grounded: carried(doc(), asm, j, moving, fixed, grounded),
-               "driven_parts": lambda couplings, others, group, turning: driven_parts(doc(), couplings, others, group, turning),
+               "driven_parts": lambda couplings, others, group, turning, grounded=(): driven_parts(doc(), couplings, others, group, turning, grounded),
+               "driven_rows": driven_rows, "held_back": lambda asm, group, driven, grounded: held_back(doc(), asm, group, driven, grounded),
                "sweep_run": lambda asm, j, *rest: sweep_run(doc(), asm, j, *rest), "sweep_labels": sweep_labels, "sweep_rest": sweep_rest, "split_static": split_static,
                # test drive of 20 Nov (bicycle): keep, flips, chains by teeth
                "keep_offset": lambda asm, j, ends, before: keep_offset(doc(), asm, j, ends, before),

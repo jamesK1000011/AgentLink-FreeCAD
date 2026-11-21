@@ -291,6 +291,7 @@
     "version"
    ],
    "changers": [
+    "attach_edge",
     "copy_frame",
     "mirrored",
     "new_beside",
@@ -334,6 +335,7 @@
     "coupling_teeth",
     "doc",
     "driven_parts",
+    "driven_rows",
     "element_centre",
     "end_text",
     "joint_axis",
@@ -361,6 +363,7 @@
     "carried",
     "gap_set",
     "grounded",
+    "held_back",
     "joints",
     "status",
     "sweep_run",
@@ -652,6 +655,7 @@
    ],
    "changers": [
     "new",
+    "pipe_options",
     "repair_refs",
     "set_sides",
     "settle",

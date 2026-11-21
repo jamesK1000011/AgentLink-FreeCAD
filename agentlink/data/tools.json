@@ -7522,7 +7522,7 @@
   },
   "pd_pipe": {
    "group": "feature",
-   "description": "Sweep a closed profile along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. profile: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). A tube on a closed path (a ring) is refused: a rod, then a subtractive rod. d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. Answer: feature, profile, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Sweep a closed profile along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. profile: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). A tube on a closed path (a ring) is refused: a rod, then a subtractive rod. d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. refine: false by default. Refine on many pipes of one weldment can make the body unorientable after a change. Answer: feature, profile, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7548,6 +7548,10 @@
      },
      "subtractive": {
       "type": "boolean"
+     },
+     "refine": {
+      "type": "boolean",
+      "description": "FreeCAD's Refine on the pipe; false by default."
      }
     },
     "required": [
@@ -14026,7 +14030,7 @@
   },
   "asm_sweep": {
    "group": "assembly",
-   "description": "Move a joint through a range in steps, and check the pairs of parts for overlap at each step. Revolute joint: from, to in degrees (0 to 90, or its asm_limits). Slider or cylindrical joint: along its axis, in mm (0 to 10). turn: true turns a cylindrical joint. steps: 12, at most 72. clearance: mm; also lists pairs that are nearer. from and to count from the current position of the joint. The moving part carries the parts joined beyond it rigidly. gears, belt, rackpinion and screw drive their parts by ratio. The tool does not follow a closed loop (a four-bar). Answer: moves, driven, axis, steps [{ at, overlaps, closer }], verdict clear | collides, collidesAt, clearFromStart. The tool puts every part back. Use it to check if the lid opens fully, or if the arm swings past the post. Only pairs with motion between them are checked. A moving part is checked against the rest, where their boxes meet (with the clearance). parts: [labels]: only pairs of two of these. skip: [labels]: in no pair. pairsChecked, pairsSkipped count the pairs over the steps. booleans counts the solid cuts. The tool cuts a pair that cannot change one time. Examples are two parts that stay, or a tire that turns on its axis. The tool drops a call after about 80 s. Thus the sweep stops in time, after about 60 s. Then it answers the steps done with partial: true, stepsDone and continueWith { joint, from, to, steps }. Use continueWith for the next call. With many parts, use parts or skip, fewer steps or a shorter range, not a job. Some overlaps are static: they are there at the first step, with the same volume at every step. An example is a press fit. staticOverlaps lists them with their volume. verdict, collidesAt and clearFromStart count only the contacts that the motion makes.",
+   "description": "Move a joint through a range in steps, and check the pairs of parts for overlap at each step. Revolute joint: from, to in degrees (0 to 90, or its asm_limits). Slider or cylindrical joint: along its axis, in mm (0 to 10). turn: true turns a cylindrical joint. steps: 12, at most 72. clearance: mm; also lists pairs that are nearer. from and to count from the current position of the joint. The moving part carries the parts joined beyond it rigidly. gears, belt, rackpinion and screw drive their parts by ratio. A driven part carries the parts fixed to it, at any depth. moves names all the parts that move with the joint or with a driven part. heldBack names a grounded part that is fixed to a moving part. The tool does not follow a closed loop (a four-bar). Answer: moves, driven [{ part, via, per, carries }], heldBack, axis, steps [{ at, overlaps, closer }], verdict clear | collides, collidesAt, clearFromStart. The tool puts every part back. Use it to check if the lid opens fully, or if the arm swings past the post. Only pairs with motion between them are checked. A moving part is checked against the rest, where their boxes meet (with the clearance). parts: [labels]: only pairs of two of these. skip: [labels]: in no pair. pairsChecked, pairsSkipped count the pairs over the steps. booleans counts the solid cuts. The tool cuts a pair that cannot change one time. Examples are two parts that stay, or a tire that turns on its axis. The tool drops a call after about 80 s. Thus the sweep stops in time, after about 60 s. Then it answers the steps done with partial: true, stepsDone and continueWith { joint, from, to, steps }. Use continueWith for the next call. With many parts, use parts or skip, fewer steps or a shorter range, not a job. Some overlaps are static: they are there at the first step, with the same volume at every step. An example is a press fit. staticOverlaps lists them with their volume. verdict, collidesAt and clearFromStart count only the contacts that the motion makes.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -14091,14 +14095,15 @@
     {"refuse": {"fmt": "The axis of {j.Label} could not be read from its elements."}, "code": "failed", "when": "=ax is None or moving is None"},
     {"let": {"centre": "=ax[0]", "axis": "=unit(ax[1])"}},
     {"let": {"group, others, couplings": "=carried(asm, j, moving, fixed_side, held)"}},
-    {"let": {"driven": "=driven_parts(couplings, others, group, turning)"}},
+    {"let": {"driven": "=driven_parts(couplings, others, group, turning, held)"}},
+    {"let": {"held_by": "=held_back(asm, group, driven, held)"}},
     {"let": {"only": "=sweep_labels(asm, a.get('parts'), 'parts')", "skip_": "=sweep_labels(asm, a.get('skip'), 'skip')"}},
     {"let": {"rows, stopped, pc": "=sweep_run(asm, j, group, driven, centre, axis, turning, lo, hi, steps, clearance, None, only, skip_)"}},
     {"let": {"rows, static": "=split_static(rows)", "rest": "=sweep_rest(j, lo, hi, steps, stopped)"}},
-    {"let": {"unit_": "='degrees' if turning else 'mm'", "bad": "=[r['at'] for r in rows if r.get('overlaps')]", "moves": "=sorted(o.Label for o in group.values())"}},
+    {"let": {"unit_": "='degrees' if turning else 'mm'", "bad": "=[r['at'] for r in rows if r.get('overlaps')]", "moves": "=sorted([o.Label for o in group.values()] + [o.Label for d in driven for o in d['carries'].values()])"}},
     {"let": {"clear_run": "=[r['at'] for r in rows[:first([i for i, r in enumerate(rows) if r.get('overlaps')], len(rows))]]"}}
    ],
-   "answer": {"fields": {"joint": "=j.Label", "kind": "=kind", "unit": "=unit_", "from": "=lo", "to": "=hi", "moves": "=moves", "pairsChecked": "=pc['checked']", "pairsSkipped": "=pc['skipped']", "booleans": "=pc['booleans']", "driven": {"when": "=driven", "value": "=[{'part': d['part'].Label, 'via': d['via'], d['how'] + 's': 'degrees' if d['how'] == 'turn' else 'mm', 'per': round(d['factor'], 5)} for d in driven]"}, "axis": "={'through': [round(c, 3) for c in centre], 'along': [round(c, 4) for c in axis]}", "steps": "=rows", "verdict": "='collides' if bad else ('clear' if rows else 'not checked')", "staticOverlaps": {"when": "=static", "value": "=static"}, "staticNote": {"when": "=static", "value": "These overlaps are there at the first step, with the same volume at every step: the motion does not make them (a press fit, or parts modelled into each other). verdict, collidesAt and clearFromStart leave them out. asm_check shows them."}, "partial": {"when": "=rest", "value": true}, "stepsDone": {"when": "=rest", "value": "=len(rows)"}, "continueWith": {"when": "=rest", "value": "=rest"}, "partialNote": {"when": "=rest", "value": {"fmt": "The sweep stopped before the call's time limit, after {len(rows)} of {steps + 1} steps. The verdict is for the steps done. asm_sweep with continueWith goes on; a shorter range or fewer steps also fits."}}, "note": {"fmt": "{' and '.join(moves)} turned (or slid) about the joint's axis and put back after. Steps are {abs(hi - lo) / steps:g} {unit_} apart: a collision between two steps is not seen — more steps to look closer. A chain of moving joints beyond this one is carried along rigidly, not solved."}, "collidesAt": {"when": "=bad", "value": "=bad"}, "clearFromStart": {"when": "=bad", "value": "=[clear_run[0], clear_run[-1]] if clear_run else None"}}}
+   "answer": {"fields": {"joint": "=j.Label", "kind": "=kind", "unit": "=unit_", "from": "=lo", "to": "=hi", "moves": "=moves", "pairsChecked": "=pc['checked']", "pairsSkipped": "=pc['skipped']", "booleans": "=pc['booleans']", "driven": {"when": "=driven", "value": "=driven_rows(driven)"}, "heldBack": {"when": "=held_by", "value": "=held_by"}, "heldBackNote": {"when": "=held_by", "value": {"fmt": "{', '.join(held_by)} is grounded and fixed to a part that moves: a grounded part never moves, so the sweep leaves it where it is, and its overlaps are not real. asm_list shows the ground; remove the ground of that part (it follows its fixed joint), then sweep again."}}, "axis": "={'through': [round(c, 3) for c in centre], 'along': [round(c, 4) for c in axis]}", "steps": "=rows", "verdict": "='collides' if bad else ('clear' if rows else 'not checked')", "staticOverlaps": {"when": "=static", "value": "=static"}, "staticNote": {"when": "=static", "value": "These overlaps are there at the first step, with the same volume at every step: the motion does not make them (a press fit, or parts modelled into each other). verdict, collidesAt and clearFromStart leave them out. asm_check shows them."}, "partial": {"when": "=rest", "value": true}, "stepsDone": {"when": "=rest", "value": "=len(rows)"}, "continueWith": {"when": "=rest", "value": "=rest"}, "partialNote": {"when": "=rest", "value": {"fmt": "The sweep stopped before the call's time limit, after {len(rows)} of {steps + 1} steps. The verdict is for the steps done. asm_sweep with continueWith goes on; a shorter range or fewer steps also fits."}}, "note": {"fmt": "{' and '.join(moves)} turned (or slid) with the joint or with a driven part, and were put back after. Steps are {abs(hi - lo) / steps:g} {unit_} apart: a collision between two steps is not seen — more steps to look closer. A chain of moving joints beyond this one is carried along rigidly, not solved."}, "collidesAt": {"when": "=bad", "value": "=bad"}, "clearFromStart": {"when": "=bad", "value": "=[clear_run[0], clear_run[-1]] if clear_run else None"}}}
   },
   "asm_check": {
    "group": "assembly",
@@ -21023,7 +21028,7 @@
   },
   "sketch_attach": {
    "group": "sketch",
-   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? }. offset: mm along its normal. rotate: deg in it. flip. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch.",
+   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? }. offset: mm along its normal. rotate: deg in it. flip. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and flip stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Use it when an attachment lost its element (\"missing element reference\") after a change. Answer: on, mode, support, repaired.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -21044,6 +21049,21 @@
      },
      "flip": {
       "type": "boolean"
+     },
+     "edge": {
+      "type": "string",
+      "description": "An object's edge, \"Binder.Edge1\": the sketch hangs on it."
+     },
+     "mode": {
+      "type": "string",
+      "description": "On an edge: NormalToEdge (default), FrenetNB, FrenetTN, FrenetTB, Concentric, RevolutionSection."
+     },
+     "at": {
+      "type": "number",
+      "description": "On an edge: where, 0 (its start) to 1 (its end)."
+     },
+     "repair": {
+      "type": "boolean"
      }
     },
     "required": [],
@@ -21058,6 +21078,7 @@
     {"let": {"sk": "=sketch_of(a.sketch)"}},
     {"let": {"b": "=first([p for p in sk.InList if p.TypeId == 'PartDesign::Body'])"}},
     {"refuse": {"fmt": "{sk.Label} is in no body: attach works on a body's sketch — sketch_new makes one in a body, and sketch_carbon copies this one into it."}, "code": "invalid_state", "when": "=b is None"},
+    {"when": "=a.get('edge') is not None or a.get('repair')", "then": [{"refuse": "edge or repair: not with plane or face.", "when": "='plane' in a or 'face' in a"}, {"let": {"extra": "=attach_edge(sk, b, a)"}}, {"answer": {"via": "finish", "with": ["sketch_attach", "$fields"], "late": true, "fields": {"...state": "=state(sk)", "...extra": "=extra"}}}]},
     {"refuse": {"fmt": "Give plane (XY, XZ, YZ, a datum plane's name or \"Pad.Face3\") or face {{ at: [x,y,z], normal: [x,y,z] }}, one of them, not both."}, "when": "=('plane' in a) == ('face' in a)"},
     {"let": {"link, what": "=plane_ref(b, a['plane'] if 'plane' in a else a['face'], 'plane')"}},
     {"let": {"owner": "=link[0]", "moved": "=False", "order": "=list(b.Group)"}},
