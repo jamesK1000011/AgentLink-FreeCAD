@@ -7,6 +7,8 @@ All notable changes to Agent Link for FreeCAD. The format follows
 
 ## [Unreleased]
 
+- `asm_joint`, bicycle runs of 21 Nov (32 parts, two spoke bodies of 32 solids: one fixed joint took 134.7 s, 119.2 s in its own overlap scan of every pair): the scan cuts only pairs with a part the solve moved or one of the joint's two parts. Still pairs whose boxes meet are not cut; `otherPairs` gives their count and names `asm_check`. `autoFlip` and `asm_pose` cut only pairs with a part that moved. `asm_check` keeps its full list: boxes first, solid by solid, and a point test where a solid's surface stays out of the other's box (one helper with `asm_sweep`). Its answer adds `cuts { pairs, booleans, pointTests }`. Test: tests/test_joint_overlaps.py.
+
 - `asm_sweep`, later bicycle runs of 21 Nov (finding 1: 63 pair checks took 55.6 s and stopped at 4 of 5 steps): no recompute a step (a part's shape follows its placement); volumes solid by solid (`_SweepCuts`): a solid pair that cannot change (two still parts, or a round part that turns on its own axis, such as a tire under a calliper) is cut one time for the sweep; a solid whose surface stays out of the other's box is one point test, not a boolean; the next step is judged by the time of the last step, not the mean. The answer adds `booleans`. Test: a 32-solid moving body, a still overlapping pair (`tests/test_bicycle_runs_1121.py`).
 
 - Bicycle design runs of 21 Nov (FreeCAD 1.1.3), hub findings 1, 2, 3, 5, 6, 7, 8 (tests/test_bicycle_runs_1121.py):

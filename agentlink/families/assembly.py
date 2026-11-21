@@ -515,26 +515,70 @@ def _boxes_near(ba, bb, gap=0.0):
         return True
 
 
-def _common_volume(sa, sb, gap=0.0):
-    """(volume, common shape or None) of two shapes. A part of many solids
-    (a spoke set of 32) is cut solid by solid, and only the solids whose
-    boxes meet: one boolean of two big compounds took most of a sweep's
-    step (bicycle test drive of 20 Nov)."""
+def _face_boxes(solid):
     try:
-        la, lb = list(sa.Solids), list(sb.Solids)
+        return [f.BoundBox for f in solid.Faces]
     except Exception:  # noqa: BLE001
-        la, lb = [], []
-    if len(la) <= 1 and len(lb) <= 1:
-        common = sa.common(sb)
-        return (common.Volume if common.Solids else 0.0), common
+        return []
+
+
+def _solid_common(x, y, fx=None, fy=None):
+    """(volume, common or None, a boolean made) of two solids whose boxes
+    meet: the cut that asm_sweep, asm_joint and asm_check share. A solid
+    whose surface stays out of the other solid's box (no face box of the
+    other meets it) is all inside or all outside the other: one point test,
+    no boolean. fx, fy: the solids' face boxes, when already read."""
+    bx, by = x.BoundBox, y.BoundBox
+    try:
+        fy = _face_boxes(y) if fy is None else fy
+        if fy and not any(_boxes_near(fb, bx, 1e-6) for fb in fy):
+            return (x.Volume, x, False) if y.isInside(x.Vertexes[0].Point, 1e-6, True) else (0.0, None, False)
+        fx = _face_boxes(x) if fx is None else fx
+        if fx and not any(_boxes_near(fb, by, 1e-6) for fb in fx):
+            return (y.Volume, y, False) if x.isInside(y.Vertexes[0].Point, 1e-6, True) else (0.0, None, False)
+    except Exception:  # noqa: BLE001 - no point test here: the boolean decides
+        pass
+    c = x.common(y)
+    return (c.Volume if c.Solids else 0.0), c, True
+
+
+class _Prep:
+    """A part's shape for one overlap pass, read once: its box, its solids,
+    each solid's box, and each solid's face boxes when first needed."""
+
+    def __init__(self, sh):
+        self.shape, self.box = sh, sh.BoundBox
+        try:
+            self.solids = list(sh.Solids) or [sh]
+        except Exception:  # noqa: BLE001
+            self.solids = [sh]
+        self.boxes = [x.BoundBox for x in self.solids]
+        self._faces = {}
+
+    def faces(self, i):
+        if i not in self._faces:
+            self._faces[i] = _face_boxes(self.solids[i])
+        return self._faces[i]
+
+
+def _common_volume(sa, sb, gap=0.0, stats=None, pa=None, pb=None):
+    """(volume, common shape or None) of two shapes, solid by solid, and
+    only the solids whose boxes meet: one boolean of two big compounds took
+    most of a sweep's step (bicycle test drive of 20 Nov). A solid whose
+    surface stays out of the other's box is a point test (_solid_common).
+    stats: a dict that gets booleans and pointTests added."""
+    pa = pa or _Prep(sa)
+    pb = pb or _Prep(sb)
     vol, first = 0.0, None
-    for x in la or [sa]:
-        bx = x.BoundBox
-        for y in lb or [sb]:
-            if not _boxes_near(bx, y.BoundBox, gap):
+    for i, x in enumerate(pa.solids):
+        bx = pa.boxes[i]
+        for k, y in enumerate(pb.solids):
+            if not _boxes_near(bx, pb.boxes[k], gap):
                 continue
-            c = x.common(y)
-            v = c.Volume if c.Solids else 0.0
+            v, c, made = _solid_common(x, y, pa.faces(i), pb.faces(k))
+            if stats is not None:
+                key = "booleans" if made else "pointTests"
+                stats[key] = stats.get(key, 0) + 1
             if v > 1e-9:
                 vol += v
                 if first is None:
@@ -542,14 +586,14 @@ def _common_volume(sa, sb, gap=0.0):
     return vol, first
 
 
-def _pair_hit(a, b, sa, sb, clearance, out, near):
+def _pair_hit(a, b, sa, sb, clearance, out, near, stats=None, pa=None, pb=None):
     """One pair of parts checked: an overlap row into out, or with
     clearance a row into near when the parts are closer than it."""
     try:
-        vol, common = _common_volume(sa, sb, clearance)
+        vol, common = _common_volume(sa, sb, clearance, stats, pa, pb)
     except Exception:
         vol, common = 0.0, None
-    if vol > 1e-3:
+    if vol > 1e-3 and common is not None:
         c = common.BoundBox.Center
         row = {"parts": [a.Label, b.Label], "volume": round(vol, 3), "at": geo.vec(c)}
         eng = _thread_engagement(a, b, common) or _thread_engagement(b, a, common)
@@ -563,20 +607,69 @@ def _pair_hit(a, b, sa, sb, clearance, out, near):
             near.append({"parts": [a.Label, b.Label], "gap": round(d, 4), "at": geo.vec(pts[0][0])})
 
 
-def _overlaps(parts, clearance=0.0, deadline=None):
+def _overlaps(parts, clearance=0.0, deadline=None, focus=None, stats=None):
     """Pairs of parts that overlap (their common volume), and, with
-    clearance, those closer than it. deadline (a _clock() time): _Late
-    when it passes before every pair is cut."""
+    clearance, those closer than it. Each part's shape is read once; only
+    pairs whose boxes meet are cut, solid by solid (_common_volume).
+    focus: part names; only pairs with at least one of them are cut, and
+    stats["notChecked"] counts the other pairs whose boxes meet (bicycle
+    runs of 21 Nov: asm_joint cut every pair of 32 parts, 119 s). stats: a
+    dict that gets pairs, booleans, pointTests (and notChecked). deadline
+    (a _clock() time): _Late when it passes before every pair is cut."""
     out, near = [], []
+    stats = {} if stats is None else stats
+    for k in ("pairs", "booleans", "pointTests"):
+        stats.setdefault(k, 0)
+    if focus is not None:
+        stats.setdefault("notChecked", 0)
+    prep = {}
+
+    def got(o):
+        k = id(o)
+        if k not in prep:
+            prep[k] = _Prep(_shape(o))
+        return prep[k]
+
+    gap = max(clearance, 0.0)
     for i, a in enumerate(parts):
         for b in parts[i + 1:]:
             if deadline is not None and _clock() > deadline:
                 raise _Late()
-            sa, sb = _shape(a), _shape(b)
-            if not _boxes_near(sa.BoundBox, sb.BoundBox, max(clearance, 0.0)):
+            pa, pb = got(a), got(b)
+            if not _boxes_near(pa.box, pb.box, gap):
                 continue
-            _pair_hit(a, b, sa, sb, clearance, out, near)
+            if focus is not None and a.Name not in focus and b.Name not in focus:
+                stats["notChecked"] += 1
+                continue
+            stats["pairs"] += 1
+            _pair_hit(a, b, pa.shape, pb.shape, clearance, out, near, stats, pa, pb)
     return out, near
+
+
+def moved_names(parts, before, tol=1e-6):
+    """Names of the parts whose placement is not the one in before
+    ({ name: placement }); a part not in before counts as moved."""
+    out = set()
+    for o in parts:
+        b = before.get(o.Name)
+        try:
+            if b is None or not o.Placement.isSame(b, tol):
+                out.add(o.Name)
+        except Exception:  # noqa: BLE001
+            out.add(o.Name)
+    return out
+
+
+def joint_overlaps(asm, ends, before):
+    """asm_joint's overlaps after the solve: only pairs with a part the
+    solve moved or one of the joint's two parts; a pair of two parts that
+    stayed put keeps whatever overlap it had before (asm_check lists it).
+    (hits without threads, stats)."""
+    ps = _parts(asm)
+    focus = moved_names(ps, before) | {e[0].Name for e in ends}
+    stats = {}
+    hits = _overlaps(ps, 0.0, None, focus, stats)[0]
+    return [h for h in hits if not h.get("thread")], stats
 
 
 def sweep_pairs(parts, motion, only=None, skip=None):
@@ -695,17 +788,9 @@ class _SweepCuts:
         return out
 
     def _cut(self, x, y, fx, fy):
-        bx, by = x.BoundBox, y.BoundBox
-        try:
-            if fy and not any(_boxes_near(fb, bx, 1e-6) for fb in fy):
-                return x.Volume if y.isInside(x.Vertexes[0].Point, 1e-6, True) else 0.0
-            if fx and not any(_boxes_near(fb, by, 1e-6) for fb in fx):
-                return y.Volume if x.isInside(y.Vertexes[0].Point, 1e-6, True) else 0.0
-        except Exception:  # noqa: BLE001 - no point test here: the boolean decides
-            pass
-        self.booleans += 1
-        c = x.common(y)
-        return c.Volume if c.Solids else 0.0
+        v, _c, made = _solid_common(x, y, fx, fy)
+        self.booleans += 1 if made else 0
+        return v
 
     def volume(self, a, b, sa, sb):
         try:
@@ -1330,14 +1415,19 @@ def _centre(o):
         return None
 
 
-def auto_flip(doc, asm, j, ends):
+def auto_flip(doc, asm, j, ends, before=None):
     """Finding 4, autoFlip: true (the old way): with parts overlapping after
     the solve, the moved part turned over on the joint, kept when that
     lessens the overlap. (code, words, flipped, crossed): crossed names
     each part the flip put on the other side of the joint's plane (its
-    centre), as a crankset's chainring on the wrong side of its frame."""
+    centre), as a crankset's chainring on the wrong side of its frame.
+    before ({ name: placement } before the joint): only pairs with a part
+    the solve or the flip moved, or a joint's part, are cut."""
     code, said = _status(asm)
-    hits = _overlaps(_parts(asm))[0]
+    focus = None
+    if before is not None:
+        focus = moved_names(_parts(asm), before) | {e[0].Name for e in ends}
+    hits = _overlaps(_parts(asm), focus=focus)[0]
     if code != 0 or not hits:
         return code, said, False, []
     vol0 = sum(h["volume"] for h in hits)
@@ -1350,7 +1440,9 @@ def auto_flip(doc, asm, j, ends):
             if c is not None:
                 sides[o.Name] = (c - plane[0]).dot(plane[1])
     code2, said2 = turn_over(doc, asm, j)
-    second = _overlaps(_parts(asm))[0]
+    if focus is not None:
+        focus = focus | moved_names(_parts(asm), kept)
+    second = _overlaps(_parts(asm), focus=focus)[0]
     if code2 == 0 and sum(h["volume"] for h in second) < vol0 - 1e-6:
         crossed = []
         for o in _parts(asm):
@@ -1910,7 +2002,7 @@ def tools(session):
                "sweep_run": lambda asm, j, *rest: sweep_run(doc(), asm, j, *rest), "sweep_labels": sweep_labels, "sweep_rest": sweep_rest, "split_static": split_static,
                # test drive of 20 Nov (bicycle): keep, flips, chains by teeth
                "keep_offset": lambda asm, j, ends, before: keep_offset(doc(), asm, j, ends, before),
-               "auto_flip": lambda asm, j, ends: auto_flip(doc(), asm, j, ends), "side_check": side_check, "overlap_words": overlap_words,
+               "auto_flip": lambda asm, j, ends, before=None: auto_flip(doc(), asm, j, ends, before), "joint_overlaps": joint_overlaps, "side_check": side_check, "overlap_words": overlap_words,
                "coupling_teeth": coupling_teeth,
                "pick_note": pick_note, "keep_notes": keep_notes, "end_text": end_text,
                # tables

@@ -538,6 +538,7 @@ tests/test_installed_names.py
 tests/test_iso286.py
 tests/test_job_stop.py
 tests/test_jobs_and_restart.py
+tests/test_joint_overlaps.py
 tests/test_judge_r8.py
 tests/test_keep.py
 tests/test_layout.py

@@ -361,6 +361,7 @@ class _Box:
             setattr(self, a + "Max", max(getattr(self, a + "Max"), getattr(o, a + "Max")))
 
     XLength = property(lambda s: s.XMax - s.XMin)
+    Center = property(lambda s: __import__("types").SimpleNamespace(x=(s.XMin + s.XMax) / 2, y=(s.YMin + s.YMax) / 2, z=(s.ZMin + s.ZMax) / 2))
     YLength = property(lambda s: s.YMax - s.YMin)
     ZLength = property(lambda s: s.ZMax - s.ZMin)
 
