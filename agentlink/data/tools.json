@@ -19015,11 +19015,14 @@
   },
   "link_make": {
    "group": "std_more",
-   "description": "Make a link (App::Link) to an object. It shows the object again without a copy, and follows every change. to: the object, or \"Box.Face3\" for one element. at, axis + angle: the placement of the link. It replaces the placement of the original; it is not added to it. count: an array of that many elements, all at the same start position. Each element is its own object; place it with object_set (answer: elements). kind: group makes an App::LinkGroup of objects. Answer: link, name, to, placement. Prefer links for repeated whole parts (bolts, spokes) to copies or patterns. It links objects of the same document only.",
+   "description": "Make a link (App::Link) to an object. It shows the object again without a copy, and follows every change. to: the object, or \"Box.Face3\" for one element. A part in another file: to \"Doc#Object\" (document, then object, by name or label). Or file: the .FCStd path (relative: in the session's folder) and to: the object in it. The tool opens that file in the background. It links only to a saved file. at, axis + angle: the placement of the link. It replaces the placement of the original; it is not added to it. count: an array of that many elements, all at the same start position. Each element is its own object; place it with object_set (answer: elements). kind: group makes an App::LinkGroup of objects. Answer: link, name, to, placement; file and relative for another file. Prefer links for repeated whole parts (bolts, spokes) to copies or patterns.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "to": {
+      "type": "string"
+     },
+     "file": {
       "type": "string"
      },
      "kind": {
@@ -19081,8 +19084,9 @@
     },
     {"let": {"target": "=a.to"}},
     {"refuse": "to: the object to link — or \"Box.Face3\" for a link to one element (kind: element).", "when": "=not target"},
+    {"let": {"far, target": "=far_doc(target, a.file)"}},
     {"let": {"head, sub": "=split_ref(target) if is_str(target) else (None, None)"}},
-    {"let": {"src": "=find(head or target, 'to')"}},
+    {"let": {"src": "=find_in(far, head or target, 'to')"}},
     {
      "when": "=sub",
      "then": [
@@ -19096,7 +19100,7 @@
     {"set": {"lk.Placement": "=placement(a)"}, "when": "=placed(a)"},
     {"set": {"lk.ElementCount": "=count"}, "when": "=count"}
    ],
-   "answer": {"via": "done", "with": ["=tool", "$fields"], "late": true, "fields": {"link": "=lk.Label", "name": "=lk.Name", "to": "=src.Label", "element": {"when": "=sub", "value": "=sub"}, "placement": "=placement_json(lk.Placement)", "count": {"when": "=count", "value": "=count"}, "elements": {"when": "=count", "value": "=[e.Name for e in (get(lk, 'ElementList') or [])][:20]"}, "countNote": {"when": "=count", "value": "The elements start on top of one another: each is an object of its own (elements), placed with object_set { object, values: { Placement } }."}, "note": "A link shows the object again without a copy: change the original and every link follows. Its placement stands in for the original's own (LinkTransform false)."}}
+   "answer": {"via": "done", "with": ["=tool", "$fields"], "late": true, "fields": {"link": "=lk.Label", "name": "=lk.Name", "to": "=src.Label", "element": {"when": "=sub", "value": "=sub"}, "placement": "=placement_json(lk.Placement)", "count": {"when": "=count", "value": "=count"}, "elements": {"when": "=count", "value": "=[e.Name for e in (get(lk, 'ElementList') or [])][:20]"}, "countNote": {"when": "=count", "value": "The elements start on top of one another: each is an object of its own (elements), placed with object_set { object, values: { Placement } }."}, "note": "A link shows the object again without a copy: change the original and every link follows. Its placement stands in for the original's own (LinkTransform false).", "file": {"when": "=far is not None", "value": "=far.FileName"}, "relative": {"when": "=far is not None", "value": "=same_tree(far)"}, "check": {"when": "=far is not None", "value": "Save with doc_save. Then close the file and open it again with doc_open. Read the link's target with object_get { object: link, filter: \"LinkedObject\" }. A FreeCAD bug (issue 33468) can save a link made by a script with a path from the home folder. Keep all the files in one project folder, and move the whole folder, never one file."}}}
   },
   "link_edit": {
    "group": "std_more",
@@ -21383,7 +21387,7 @@
     {"when": "=a.get('path')", "then": [{"let": {"p": "=where(a.path, '.FCStd')", "mine": "=abspath(d.FileName) if d.FileName else None"}}, {"refuse": {"fmt": "{p} is another FreeCAD document already there: another name, or overwrite: true once the person says to replace it."}, "when": "=exists(p) and abspath(p) != mine and not a.get('overwrite')"}, {"do": ["=makedirs(dirname(p))", "=d.saveAs(p)"]}], "else": [{"when": "=d.FileName", "then": [{"do": "=d.save()"}, {"let": {"p": "=d.FileName"}}], "else": [{"let": {"p": "=free_name(where((d.Label or d.Name) + '.FCStd'), a.get('overwrite'))"}}, {"do": "=d.saveAs(p)"}]}]},
     {"do": "=saved(d)"}
    ],
-   "answer": {"fields": {"document": "=d.Name", "label": "=d.Label", "path": "=p", "bytes": "=filesize(p)", "...": "=modified_state(d)", "labelWas": {"when": "=d.Label != label_was", "value": "=label_was"}, "note": {"when": "=d.Label != label_was", "value": {"fmt": "Saved under a new file name, so FreeCAD relabelled the document {d.Label!r} (it was {label_was!r}); its name {d.Name!r} stays."}}}}
+   "answer": {"fields": {"document": "=d.Name", "label": "=d.Label", "path": "=p", "bytes": "=filesize(p)", "...": "=modified_state(d)", "labelWas": {"when": "=d.Label != label_was", "value": "=label_was"}, "linkWarning": {"when": "=lost_links(p)", "value": {"fmt": "Links in the saved file point to no file: {lost_links(p)}. A FreeCAD bug (issue 33468) can save a link path from the home folder. Make each link again with link_make {{ file, to }}, save, and check again."}}, "note": {"when": "=d.Label != label_was", "value": {"fmt": "Saved under a new file name, so FreeCAD relabelled the document {d.Label!r} (it was {label_was!r}); its name {d.Name!r} stays."}}}}
   },
   "object_list": {
    "group": "doc",

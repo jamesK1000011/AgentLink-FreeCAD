@@ -90,6 +90,82 @@ def shaft_solid(pts, axis="x"):
     return solid
 
 
+def open_far(s, p):
+    """The document of the .FCStd at p: the open one, else opened in the
+    background (hidden where FreeCAD allows it). The agent's own document
+    stays the active one."""
+    here = s.doc
+    ap = os.path.abspath(p)
+    for x in FreeCAD.listDocuments().values():
+        if os.path.abspath(x.FileName or "") == ap:
+            return x
+    try:
+        fd = FreeCAD.openDocument(p, hidden=True)
+    except TypeError:  # an older FreeCAD without hidden
+        fd = FreeCAD.openDocument(p)
+    try:
+        fd.recompute()
+        from ..store import _unchanged
+
+        _unchanged(fd)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        if here is not None:
+            FreeCAD.setActiveDocument(here.Name)
+    except Exception:  # noqa: BLE001
+        pass
+    return fd
+
+
+def far_doc(s, to, file):
+    """(the other document, the object reference in it) for link_make's to
+    "Doc#Object" or file + to; (None, to) for an object of this document.
+    Refused when that document has no file: a link cannot keep its path."""
+    here = s.doc
+    if file is not None:
+        if not isinstance(file, str) or not file.strip():
+            raise ToolError("invalid_input", "file: the path of a .FCStd (relative: in the session's folder).")
+        p = paths.in_file(s, "link_make", file, key="file")
+        if not p.lower().endswith(".fcstd"):
+            raise ToolError("invalid_input", f"file: {os.path.basename(p)} is not a FreeCAD document (.FCStd).")
+        if not os.path.isfile(p):
+            raise ToolError("not_found", f"file {p}: no such file. A relative path is in the session's folder.")
+        ref = to.split("#", 1)[1] if isinstance(to, str) and "#" in to else to
+        fd = open_far(s, p)
+    elif isinstance(to, str) and "#" in to:
+        name, ref = to.split("#", 1)
+        docs = FreeCAD.listDocuments()
+        fd = docs.get(name) or next((x for x in docs.values() if x.Name == name or x.Label == name), None) \
+            or next((x for x in docs.values() if name.lower() in (x.Name.lower(), x.Label.lower())), None)
+        if fd is None:
+            names = ", ".join(x.Label for x in docs.values()) or "none"
+            raise ToolError("not_found", f"to {to!r}: no open document {name!r}. Open ones: {names}. Give file: the .FCStd path to open it.")
+    else:
+        return None, to
+    if not ref:
+        raise ToolError("invalid_input", "to: the object in the other file, by name or label.")
+    if here is not None and fd.Name == here.Name:
+        return None, ref
+    if not fd.FileName:
+        raise ToolError("invalid_state", f"{fd.Label} is not saved yet, so a link cannot keep its path: doc_save it first.")
+    return fd, ref
+
+
+def same_tree(s, fd):
+    """Whether the other file is in the folder tree of this document's file
+    (or the session's folder before a save), or this one in its: FreeCAD
+    keeps such a path relative, and the folder can move as one."""
+    here = s.doc
+    a = os.path.dirname(os.path.abspath(here.FileName)) if here is not None and here.FileName else os.path.abspath(s.out_dir)
+    b = os.path.dirname(os.path.abspath(fd.FileName))
+    try:
+        c = os.path.commonpath([a, b])
+    except ValueError:
+        return False
+    return c in (a, b)
+
+
 def tools(s):
     def d():
         if s.doc is None:
@@ -285,7 +361,9 @@ def tools(s):
                    "dot_path": dot_path, "dot_text": dot_text, "dot_draw": dot_draw, "which": which, "write_text": write_text,
                    "gui_up": lambda: bool(getattr(FreeCAD, "GuiUp", False)), "frozen": frozen, "toggle_freeze": toggle_freeze,
                    "quantity": lambda text: FreeCAD.Units.Quantity(text), "pair_points": pair_points, "rigid_fit": rigid_fit,
-                   "moved_by": lambda m, pl: FreeCAD.Placement(FreeCAD.Matrix(*m)).multiply(pl), "degrees": math.degrees}
+                   "moved_by": lambda m, pl: FreeCAD.Placement(FreeCAD.Matrix(*m)).multiply(pl), "degrees": math.degrees,
+                   "far_doc": lambda to, file: far_doc(s, to, file), "same_tree": lambda fd: same_tree(s, fd),
+                   "find_in": lambda fd, ref, what="object": picks.find(fd if fd is not None else d(), ref, what)}
 
     # ---- what the Part, compound and Surface entries call by name ---------------------------
     # (their tools are data: agentlink/data/tools.json, docs/data-tools.md)

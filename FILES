@@ -633,3 +633,4 @@ tests/test_window_r8_hub.py
 tests/test_window_r9_echo.py
 tests/test_window_r9_fem.py
 tests/test_window_route.py
+tests/test_xlink_parts.py

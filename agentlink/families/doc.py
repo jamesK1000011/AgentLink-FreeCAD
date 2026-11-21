@@ -252,6 +252,28 @@ def doc_names(docs):
     return ", ".join(d.Label if d.Name == d.Label and labels.count(d.Label) == 1 else f"{d.Label} ({d.Name})" for d in docs) or "none"
 
 
+def lost_links(p):
+    """The links to other files (XLink file="…") in the saved .FCStd at p
+    whose path, read from p's folder, finds no file: FreeCAD issue 33468
+    can save a link made by a script relative to the home folder. [] when
+    p is not a FreeCAD file or cannot be read."""
+    import re
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(p) as z:
+            xml = z.read("Document.xml").decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001 - not a zip, or no Document.xml
+        return []
+    base = os.path.dirname(os.path.abspath(p))
+    out = []
+    for f in dict.fromkeys(re.findall(r'<XLink\b[^>]*?\bfile="([^"]+)"', xml)):
+        q = f if os.path.isabs(f) else os.path.join(base, f)
+        if not os.path.isfile(os.path.normpath(q)):
+            out.append(f)
+    return out
+
+
 def open_labels(docs):
     """Open documents as a list of labels; a label two of them share is
     given as "Label (Name)" for each, the name being what doc_switch and
@@ -1169,7 +1191,7 @@ def tools(session):
         "new_doc": lambda name: FreeCAD.newDocument(name), "open_doc": lambda p: FreeCAD.openDocument(p), "close_doc": close_doc,
         "listed_docs": lambda: FreeCAD.listDocuments(), "doc_hits": doc_hits, "own_doc": own_doc, "doc_names": doc_names, "open_labels": open_labels,
         "unsaved": unsaved, "touched_marks": touched_marks, "current_name": current_name, "back_to": back_to, "recent_files": recent_files, "open_at": open_at,
-        "is_changed": is_changed, "unchanged": unchanged, "free_name": free_name, "saved": saved, "modified_state": modified_state,
+        "is_changed": is_changed, "unchanged": unchanged, "free_name": free_name, "saved": saved, "modified_state": modified_state, "lost_links": lost_links,
         # files
         "isfile": os.path.isfile, "exists": os.path.exists, "abspath": os.path.abspath, "basename": os.path.basename, "dirname": os.path.dirname,
         "makedirs": lambda p: os.makedirs(p, exist_ok=True), "filesize": os.path.getsize, "stem": lambda p: os.path.splitext(os.path.basename(p))[0],
