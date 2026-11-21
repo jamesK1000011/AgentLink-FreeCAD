@@ -614,6 +614,19 @@ def shape_reading(o, deadline, doc_name=""):
         if not valid:
             r["red"] = True
             r["todo"] = "the last step left a broken shape: history_undo and rebuild it another way; body_check says where"
+            # An additive step (pad, pipe, revolution, loft) or a fuse: the
+            # step, the design rule and tube bores that end inside the new
+            # solid (bicycle finding 7). Only here, on an invalid shape.
+            try:
+                from . import fusehint
+
+                fh = fusehint.for_invalid(o)
+            except Exception:
+                fh = None
+            if fh:
+                words.append(fh["line"])
+                r["todo"] = fh["todo"]
+                r["fuse"] = {k: fh[k] for k in ("feature", "kind", "bores")}
     if solids:
         try:
             closed = all(s.isClosed() for s in sh.Shells)
@@ -995,6 +1008,18 @@ def check(session, tool, m):
                          + "; ".join(f"{e['object']} ({e['error'][:80]})" for e in show[:3]) + (" …" if len(new) > 3 else "")
                          + (f" — {old} more were failing before this call" if old else ""))
             todos.append("fix the input of the first failed object (those after it fail because of it), or history_undo")
+            # An additive step or a fuse whose result is not a valid solid: the design rule (bicycle finding 7).
+            try:
+                from . import fusehint
+
+                for e in new[:MAX_LIST]:
+                    o = next((x for x in objs if _label(x) == e["object"]), None)
+                    t = fusehint.for_error(o, e["error"]) if o is not None else None
+                    if t:
+                        todos.insert(len(todos) - 1, t)
+                        break
+            except Exception:
+                pass
         else:
             lines.append(f"{old} object{'s' if old != 1 else ''} still failing from before this call: " + ", ".join(e["object"] for e in show[:3]) + (" …" if old > 3 else ""))
             todos.append(HEALTH_TODOS["failing"])
@@ -1080,6 +1105,8 @@ def check(session, tool, m):
             red = True
             lines.append(r["line"])
             todos.append(r.get("todo"))
+            if r.get("fuse"):
+                h.setdefault("invalidAfter", []).append({"object": r["object"], **r["fuse"]})
         elif r.get("amber"):
             amber.append(r["line"])
         else:
