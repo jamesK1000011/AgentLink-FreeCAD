@@ -197,18 +197,33 @@ def refined(body):
     return out
 
 
+def members(body):
+    """The tube members a PartDesign Body fuses: its pipes, and the bodies
+    its PartDesign Booleans fuse (their Group). One count for the Refine
+    todo here and the practice warning (agentlink/practice.py)."""
+    n = 0
+    for f in getattr(body, "Group", None) or []:
+        t = getattr(f, "TypeId", "")
+        if t in PIPES:
+            n += 1
+        elif t == "PartDesign::Boolean" and str(getattr(f, "Type", "Fuse")) == "Fuse":
+            n += len(getattr(f, "Group", None) or [])
+    return n
+
+
 def refine_todo(body, said=""):
     """The todo for an invalid or unorientable PartDesign Body whose
     features have Refine on, when the words say unorientable or the body
-    holds more than REFINE_PIPES pipes; else None."""
+    holds more than REFINE_PIPES tube members (pipes, and bodies its
+    Booleans fuse: members()); else None."""
     if getattr(body, "TypeId", "") != "PartDesign::Body":
         return None
     on = refined(body)
     if not on:
         return None
-    pipes = sum(1 for f in (getattr(body, "Group", None) or []) if getattr(f, "TypeId", "") in PIPES)
+    pipes = members(body)
     if not (UNORIENTABLE.search(said or "") or pipes > REFINE_PIPES):
         return None
     names = ", ".join(on[:5]) + (f" and {len(on) - 5} more" if len(on) > 5 else "")
     return (f"Refine off on the features (object_set {{ object: \"{on[0]}\", values: {{ Refine: false }} }} on each: {names}), then rebuild "
-            f"(recompute) and body_check {{ body: \"{getattr(body, 'Label', '')}\" }}: Refine on the features of a weldment of many pipes ({pipes}) can leave it unorientable after a change")
+            f"(recompute) and body_check {{ body: \"{getattr(body, 'Label', '')}\" }}: Refine on the features of a weldment of many tube members ({pipes}) can leave it unorientable after a change")

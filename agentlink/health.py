@@ -23,7 +23,9 @@
 #   - "next": one short line of what the window is in the middle of (a sketch
 #     open in edit and its freedom, a task panel and its buttons, the
 #     workbench, tools whose FreeCAD commands are active), said when it is
-#     not what was last said (agentlink/nexthint.py).
+#     not what was last said (agentlink/nexthint.py);
+#   - "practice": modelling-practice advice (agentlink/practice.py), said once
+#     for each object and kind, never red.
 #
 # One place runs it (protocol.Server._call, round every changing tool), so a
 # tool gets it without doing anything. It only reads; it has a time budget
@@ -1276,7 +1278,34 @@ def check(session, tool, m):
         nxt = None
 
     took("window")
-    if not lines and not unchecked and not nxt:
+
+    # 8. Modelling practice (agentlink/practice.py): advice, never red, said
+    # once for each object and kind; nothing when nothing fires.
+    advice = []
+    if changed and len(objs) <= MAX_OBJECTS and time.time() < deadline:
+        try:
+            from . import practice
+
+            name = getattr(tool, "name", tool)
+            if name == "part_boolean":
+                practice.count_booleans(session, doc_name, [_label(o) for o in changed if getattr(o, "TypeId", "") in ("Part::Feature", "PartDesign::Body")
+                                                            and getattr(o, "Visibility", True)])
+            others = 0
+            try:
+                import FreeCAD
+
+                others = max(0, len(FreeCAD.listDocuments()) - 1)
+            except Exception:
+                others = 0
+            found = practice.findings(objs, parts, others, practice.booleans_of(session, doc_name))
+            said = practice.news(session, doc_name, found)
+            advice = said[:practice.MAX_LINES]
+            if len(said) > practice.MAX_LINES:
+                advice.append(f"{len(said) - practice.MAX_LINES} more: body_check names them")
+        except Exception:
+            advice = []
+    took("practice")
+    if not lines and not unchecked and not nxt and not advice:
         return None
     out = {"ok": not red, "verdict": "; ".join(lines) if lines else "nothing red"}
     if unchecked:
@@ -1289,6 +1318,8 @@ def check(session, tool, m):
     if todos:
         out["todo"] = "; ".join(todos[:3])
     out.update(h)
+    if advice:
+        out["practice"] = advice
     if unchecked:
         out["unchecked"] = unchecked[:MAX_LIST]
     ms = int((time.time() - t0) * 1000)

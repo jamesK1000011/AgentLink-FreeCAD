@@ -171,6 +171,7 @@ agentlink/paths.py
 agentlink/person_ok.py
 agentlink/pointfiles.py
 agentlink/porting.py
+agentlink/practice.py
 agentlink/protocol.py
 agentlink/quit_guard.py
 agentlink/refusal.py
@@ -580,6 +581,7 @@ tests/test_path_keys.py
 tests/test_paths.py
 tests/test_pipe_1120.py
 tests/test_porting.py
+tests/test_practice_warnings.py
 tests/test_pref_import.py
 tests/test_protocol.py
 tests/test_quiet_reads.py

@@ -280,7 +280,7 @@ class RefineOnAWeldment(unittest.TestCase):
         t = fusehint.refine_todo(body, "")
         self.assertIn('Refine off on the features (object_set { object: "Pipe000", values: { Refine: false } } on each: '
                       "Pipe000, Pipe001, Pipe002, Pipe003, Pipe004 and 7 more), then rebuild (recompute) and body_check { body: \"Frame\" }", t)
-        self.assertIn("a weldment of many pipes (12)", t)
+        self.assertIn("a weldment of many tube members (12)", t)
         # few pipes: only when the check says unorientable
         few = types.SimpleNamespace(TypeId="PartDesign::Body", Label="Lug", Group=pipes[:2])
         self.assertIsNone(fusehint.refine_todo(few, "NOT valid"))

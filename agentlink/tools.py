@@ -708,6 +708,18 @@ class Session:
                 rt = None
             if rt:
                 s["todo"] = rt
+        # Modelling practice (agentlink/practice.py): the same advice the
+        # health check says once, here each time it is asked for.
+        try:
+            from . import practice
+
+            others = max(0, len(FreeCAD.listDocuments()) - 1)
+            pr = [x[3] for x in practice.findings(list(self.doc.Objects), list(self.bodies_in(self.doc)), others,
+                                                  practice.booleans_of(self, self.doc.Name), body=o)]
+        except Exception:
+            pr = []
+        if pr:
+            s["practice"] = pr
         return {"body": o.Label, **s, **self.stats_of(o)}
 
     def _mesh_named(self, ref):
