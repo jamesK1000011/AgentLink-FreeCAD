@@ -134,6 +134,7 @@
    "readers": [
     "V",
     "axis_ref",
+    "binder_relative",
     "body",
     "body_of",
     "doc",
@@ -902,12 +903,15 @@
   "param": {
    "readers": [
     "alias_problem",
+    "attach_path",
+    "bound_expr",
     "broken",
     "by_varset_label",
     "doc",
     "getprop",
     "is_cell",
     "is_name",
+    "missed",
     "num_json",
     "own_prop",
     "prop_at",
@@ -924,7 +928,8 @@
    "changers": [
     "qualified",
     "repair_refs",
-    "sheet"
+    "sheet",
+    "unbind"
    ],
    "source": "scripts/tool_needs.py; the family's code",
    "date": "2026-11-16"

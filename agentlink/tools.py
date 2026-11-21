@@ -437,6 +437,13 @@ class Session:
     def body(self, ref):
         # Named, any solid object answers (a hidden one, a feature); left
         # out, the one part shown.
+        if ref is not None and not any(o.Name == ref or o.Label == ref for o in self.doc.Objects):
+            # A label the object had before object_rename (bicycle runs, 20 Nov).
+            from .families import picks as _picks
+
+            was = _picks.former(self.doc, ref)
+            if was is not None:
+                ref = was.Name
         if ref is not None:
             # Shown or hidden: an exact Name or Label before one that differs
             # in case, a PartDesign Body before other objects of that label.

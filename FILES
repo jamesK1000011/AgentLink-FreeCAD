@@ -440,6 +440,7 @@ tests/test_batch_nested_81b.py
 tests/test_batch_rollback.py
 tests/test_bicycle_1120.py
 tests/test_bicycle_bind_fuse.py
+tests/test_bicycle_params_1121.py
 tests/test_bim_data.py
 tests/test_bim_gaps.py
 tests/test_cam.py

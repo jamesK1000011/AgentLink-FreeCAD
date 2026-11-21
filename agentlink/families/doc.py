@@ -284,6 +284,8 @@ def to_placement(cur, v, p="Placement"):
     """A JSON placement over the current one: what is left out stays as it
     was (a move keeps the turn). Unknown keys are refused, with the keys
     there are."""
+    if isinstance(v, FreeCAD.Placement):  # attach_redirect's offset, made already
+        return FreeCAD.Placement(v)
     if not isinstance(v, dict):
         raise ValueError(PLACEMENT_HELP)
     keys = {}
@@ -374,6 +376,26 @@ def to_value(o, p, v):
     if "LinkSub" in t:
         raise ToolError("invalid_input", f"values.{p}: a {t} (an object with its faces or edges) is not set by object_set — the tool that made the object sets it again (sketch_attach for a sketch's support, link_make / link_edit for a link, measure_keep for a measurement).")
     raise ToolError("invalid_input", f"values.{p}: a {t} is not set by object_set — it takes numbers, text, true/false, enumerations, vectors, placements, object links and lists of them (object_get gives each property's type); the tool that made the object changes the rest.")
+
+
+def attach_redirect(o, vals):
+    """(values, redirected) for object_set: on an attached object (a placed
+    LCS or datum, an attached sketch) FreeCAD computes Placement from the
+    attachment and keeps it read-only, so a Placement given is set as the
+    AttachmentOffset that puts the object there (bicycle runs, 20 Nov,
+    finding 6): Placement = frame * AttachmentOffset, the frame read from
+    the two as they are now. redirected: {} when nothing was."""
+    if "Placement" not in vals or not picks.attached(o):
+        return vals, {}
+    if "AttachmentOffset" in vals:
+        raise ToolError("invalid_input", f"values: Placement or AttachmentOffset, not both — {o.Label} is attached (MapMode {o.MapMode}), so FreeCAD computes its Placement from the AttachmentOffset.")
+    cur, off = o.Placement, o.AttachmentOffset
+    want = to_placement(cur, vals["Placement"], "Placement")
+    frame = cur.multiply(off.inverse())
+    out = {k: v for k, v in vals.items() if k != "Placement"}
+    out["AttachmentOffset"] = frame.inverse().multiply(want)
+    return out, {"Placement": {"to": "AttachmentOffset", "mapMode": str(o.MapMode),
+                               "note": f"{o.Label} is attached (MapMode {o.MapMode}): FreeCAD computes its Placement, so the AttachmentOffset was set to put it where asked."}}
 
 
 def modified_state(d):
@@ -1155,7 +1177,7 @@ def tools(session):
         "is_shape": is_shape, "shape_row": shape_row, "mesh_row": geo.mesh_row, "once": lambda xs: list(dict.fromkeys(xs)), "SKIP_PROPS": SKIP_PROPS, "prop_entry": prop_entry,
         "readonly": readonly, "near": lambda p, names: difflib.get_close_matches(p, names, 3), "read": lambda o, p: getattr(o, p),
         "set_value": lambda o, p, v: setattr(o, p, to_value(o, p, v)), "built_from": built_from, "along": along, "holds": holds, "let_go": let_go, "removed": removed, "shown_again": shown_again,
-        "meta_moved": meta_moved, "is_group": is_group, "group_row": group_row,
+        "meta_moved": meta_moved, "is_group": is_group, "group_row": group_row, "keep_former": picks.keep_former, "attach_redirect": attach_redirect,
         "placement": lambda base, rot: FreeCAD.Placement(base, rot), "rotation": lambda: FreeCAD.Rotation(),
         # import
         "fmt_of": fmt_of, "CORE_READERS": CORE_READERS, "SOLID_FORMATS": SOLID_FORMATS, "MESH_FORMATS": MESH_FORMATS, "core_scene": core_scene,

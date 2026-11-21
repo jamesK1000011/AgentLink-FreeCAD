@@ -556,10 +556,19 @@ def _health(session, tool, changed):
         except Exception:  # noqa: BLE001 - the health check never fails the call
             picked = []
         out += picked
-        if not own and not any(x.get("repicked") for x in picked):
+        # A change to an object that a joint names (an LCS's AttachmentOffset
+        # flipped, a datum moved) moves nothing joined to it until the
+        # assembly solves again (bicycle runs, 20 Nov, finding 7): solved here.
+        try:
+            follow = joined_changed(doc, asm, changed)
+        except Exception:  # noqa: BLE001 - the health check never fails the call
+            follow = []
+        if not own and not follow and not any(x.get("repicked") for x in picked):
             continue
         code, words = _status(asm)
         line = f"{asm.Label}: assembly {words}"
+        if follow and not own:
+            line += f" again: the parts joined to {', '.join(follow[:4])} follow it"
         if code == 0:
             out.append({"line": line})
         elif code == -6:
@@ -567,6 +576,41 @@ def _health(session, tool, changed):
         else:
             out.append({"line": line, "red": True, "todo": "asm_list names the joints (asm_check the parts joined to nothing); asm_joint_remove the one that fights another, or history_undo"})
     return out
+
+
+def joined_names(doc, asm):
+    """The names of the objects the joints of asm name: each reference's
+    object and the objects in its sub-name path ("Part.LCS.", "LCS.Face1")."""
+    out = set()
+    g = next((o for o in getattr(asm, "Group", []) if o.TypeId == "Assembly::JointGroup"), None)  # read only
+    for j in list(getattr(g, "Group", None) or []):
+        if getattr(j, "ObjectToGround", None) is not None:
+            continue
+        for prop in ("Reference1", "Reference2"):
+            r = getattr(j, prop, None)
+            if not r:
+                continue
+            try:
+                if r[0] is not None:
+                    out.add(r[0].Name)
+                for sub in (r[1] if len(r) > 1 else []) or []:
+                    for seg in str(sub).split(".")[:-1]:
+                        if seg and doc.getObject(seg) is not None:
+                            out.add(seg)
+            except Exception:  # noqa: BLE001
+                continue
+    return out
+
+
+def joined_changed(doc, asm, changed):
+    """Labels of the changed objects (the call's) that a joint of asm names,
+    the joined parts themselves left out (their placements are the
+    solver's)."""
+    if not changed:
+        return []
+    names = joined_names(doc, asm)
+    parts = {o.Name for o in getattr(asm, "Group", []) if o.TypeId != "Assembly::JointGroup"} | {asm.Name}
+    return [o.Label for o in changed if o.Name in names and o.Name not in parts]
 
 
 def ref_label(doc, r):
