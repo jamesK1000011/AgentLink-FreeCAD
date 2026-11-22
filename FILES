@@ -640,6 +640,7 @@ tests/test_tool_groups.py
 tests/test_tool_index.py
 tests/test_tooldata.py
 tests/test_unattended.py
+tests/test_update_unsaved_1122.py
 tests/test_usage.py
 tests/test_usage_strip.py
 tests/test_view.py

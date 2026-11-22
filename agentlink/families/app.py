@@ -297,7 +297,9 @@ def _temp_copy(file):
     """True for a file in a temporary folder an add-on opened a copy from
     (agentlink-recovered-…, agentlink-restore-…)."""
     folder = os.path.basename(os.path.dirname(str(file or "")))
-    return folder.startswith(("agentlink-recovered-", "agentlink-restore-"))
+    # Also a copy kept beside its original ("Bicycle.agentlink-recovered-<time>.FCStd"),
+    # so an assembly's relative links still find its parts.
+    return folder.startswith(("agentlink-recovered-", "agentlink-restore-")) or ".agentlink-recovered-" in os.path.basename(str(file or ""))
 
 
 def _unsaved_dir():

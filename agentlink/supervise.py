@@ -412,6 +412,8 @@ def temp_copy(file):
         return False
     if os.path.basename(os.path.dirname(f)).startswith("agentlink-recovered-"):
         return True
+    if ".agentlink-recovered-" in os.path.basename(f):  # a copy kept beside its original
+        return True
     if "fc_recovery_file" in f.replace("\\", "/").lower():
         return True
     try:

@@ -324,6 +324,8 @@ def copy_file(f):
         return False
     if os.path.basename(os.path.dirname(f)).startswith(("agentlink-recovered-", "agentlink-restore-")):
         return True
+    if ".agentlink-recovered-" in os.path.basename(f):  # a copy kept beside its original
+        return True
     try:
         tmp = os.path.realpath(tempfile.gettempdir())
         return os.path.realpath(f).startswith(tmp + os.sep)
