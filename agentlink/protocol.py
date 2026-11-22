@@ -911,7 +911,10 @@ class Server:
             # called sys.exit or raised KeyboardInterrupt: FreeCAD stays up.
             # Session.execute has already taken the step back.
             out_of = _outcome(tool, e)
-            kept = "nothing was kept" if out_of in ("rolled_back", "not_started") else "some objects stay (left)"
+            if out_of is None:
+                kept = "it is a read, so nothing changed"
+            else:
+                kept = "nothing was kept" if out_of in ("rolled_back", "not_started") else "some objects stay (left)"
             what = "called exit" if isinstance(e, SystemExit) else "was interrupted (KeyboardInterrupt)"
             return self.refusal("failed", f"{name}: the add-on's code {what}; {kept}. FreeCAD and Agent Link go on.",
                                 outcome=out_of, left=getattr(e, "outcome_left", None))

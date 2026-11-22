@@ -78,6 +78,15 @@ class Exit(unittest.TestCase):
         r, b = call(s, "ok")
         self.assertEqual(b["fine"], True)
 
+    def test_a_read_that_exits_says_nothing_changed(self):
+        # Live, 22 Nov: a read that called exit was answered "some objects stay".
+        def bye(a):
+            raise SystemExit(0)
+        s = Server("t", "0", [Tool("r", "r", {"type": "object", "properties": {}}, bye)])
+        r, b = call(s, "r")
+        self.assertIn("it is a read, so nothing changed", b["error"]["message"])
+        self.assertNotIn("objects stay", b["error"]["message"])
+
     def test_keyboard_interrupt_is_refused(self):
         r, b = call(server(), "interrupts")
         self.assertEqual(b["error"]["code"], "failed")
