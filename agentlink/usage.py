@@ -45,7 +45,7 @@ def folder():
     return os.path.join(os.path.expanduser("~"), "AgentLink", "usage")
 
 
-# ---- the usage log (docs/design/usage-log-2026-11-18.md) ---------------------
+# ---- the usage log (private records: usage-log-2026-11-18.md) ---------------------
 #
 # Each call's row also holds: the job it is in (job, step n), the gap since
 # the call before, its group, the answer's bytes and estimated tokens, the

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """The person's approvals through the client's own tool permissions.
 
-The owner's decision (18 Nov 2026, docs/security/red-team-2026-11-18.md):
+The owner's decision (18 Nov 2026, private records: red-team-2026-11-18.md):
 an approval is a call of one of two small tools, and the person sets each
 of them in the client's tool permissions (Claude Desktop: "always allow",
 "ask first" or "block"):

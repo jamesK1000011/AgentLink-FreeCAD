@@ -382,7 +382,7 @@ arguments. The whole `now` reply (its ten tool rows too) is measured only where 
   stand-in (`tests/_datapd_standin.py`: a body's volume is a sum of what each feature adds, a sketch's
   solver counts), every `refuse` reached.
 - The stand-in is not FreeCAD: it proves order and words, not Arch's behaviour. The live model
-  (`docs/hardening/models/bimcam-bim-model.json`) on FreeCAD is the proof of that.
+  (`private records: models/bimcam-bim-model.json`) on FreeCAD is the proof of that.
 - `tests/test_datamesh_data.py` is the same proof for Mesh and Points (`tests/_datamesh_standin.py`,
   `_datamesh_cases.py`, `_datamesh_before.py`; numpy is real there, the mesh and the cloud are stand-ins).
 

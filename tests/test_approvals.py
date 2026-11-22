@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The owner's decisions of 18 Nov 2026 (docs/security/red-team-2026-11-18.md):
+# The owner's decisions of 18 Nov 2026 (private records: red-team-2026-11-18.md):
 # 1. approvals are approve_file / approve_code, guarded by the client's own
 #    tool permissions; the tools that need one answer pending and act once
 #    it exists; only a direct call from the client approves.

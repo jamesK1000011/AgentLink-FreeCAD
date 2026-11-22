@@ -76,7 +76,7 @@ def _tools():
 
 
 class Log(unittest.TestCase):
-    """The usage log at the MCP layer (docs/design/usage-log-2026-11-18.md)."""
+    """The usage log at the MCP layer (private records: usage-log-2026-11-18.md)."""
 
     def setUp(self):
         self.where = tempfile.mkdtemp()

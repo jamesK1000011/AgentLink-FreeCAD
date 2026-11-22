@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Meant changes to tool descriptions since the data tests' snapshots were taken
-# (docs/hardening/famfix-findings.md): each tool's old words and the true facts
+# (private records: famfix-findings.md): each tool's old words and the true facts
 # added or changed. The data tests apply them to the snapshot before comparing
 # byte for byte, so any other change to a description still fails.
 

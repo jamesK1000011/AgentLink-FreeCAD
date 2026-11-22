@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """The port scaffold: a draft Agent Link port of an installed FreeCAD add-on
-(docs/design/porting-2026-11-18.md, guide_read { topic: "porting" }).
+(private records: porting-2026-11-18.md, guide_read { topic: "porting" }).
 
 It reads the add-on's Python files as text (ast). It never imports and never
 runs the add-on's code. It finds each Gui.addCommand(name, obj) and the

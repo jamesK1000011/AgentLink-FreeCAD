@@ -6,7 +6,7 @@ work of (beside the one the echo lights), and search words its name lacks.
 
 Every command here was checked against FreeCAD 1.1.0's source (the names
 registered by its Command*.cpp files and addCommand calls:
-docs/hardening/freecad-1.1.0-commands.txt; tests/test_tool_index.py holds
+tests/data/freecad-1.1.0-commands.txt; tests/test_tool_index.py holds
 the index to that list). Add a tool here when it is new; leave a command
 out when it is not in that list.
 """
@@ -476,7 +476,7 @@ TOOLS = {
     "view_snapshot": (["Std_ViewScreenShot"], "picture image screenshot 3d window"),
     "window_snapshot": (["Std_ViewScreenShot"], "screenshot picture gui panel"),
     "workbench": (["Std_Workbench"], "switch activate workbenches"),
-    # Porting (docs/design/porting-2026-11-18.md).
+    # Porting (private records: porting-2026-11-18.md).
     "port_scaffold": ([], "port addon workbench draft hook tools commands scaffold template"),
     "cookbook_list": ([], "recipes installed entries"),
     "cookbook_show": ([], "recipes read review before approve"),

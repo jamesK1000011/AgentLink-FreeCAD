@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The echo's maps, round 7 (docs/hardening/window-r6-cam-fem-td-mesh-findings.md
+# The echo's maps, round 7 (private records: window-r6-cam-fem-td-mesh-findings.md
 # FEM and Mesh): a scene map pulled in front of its surface and never
 # picked, a colour scale in screen space left out of the bounding box, the
 # selection cleared and the body hidden under a stress map, a read's map

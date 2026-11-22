@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Cookbooks: an add-on's FreeCAD commands, functions and call lists as
-data, run by the runners that exist (docs/design/porting-2026-11-18.md).
+data, run by the runners that exist (private records: porting-2026-11-18.md).
 
 One file for each add-on: ~/AgentLink/cookbooks/<name>.json.
 

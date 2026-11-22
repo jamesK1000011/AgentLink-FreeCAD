@@ -3,7 +3,7 @@
 # the new data entry of each converted Draft tool (and the surface tools
 # beside them in draft.py), on the stand-in FreeCAD
 # (tests/_datapart_standin.py): its normal paths and each of its refusals.
-# (The live models under docs/hardening/models are run on FreeCAD, not here:
+# (The live models under private records: models are run on FreeCAD, not here:
 # datadraft-findings.md lists which of their calls reach each tool.)
 
 # The family files whose tools were converted.

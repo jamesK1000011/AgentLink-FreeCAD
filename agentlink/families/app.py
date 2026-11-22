@@ -423,7 +423,7 @@ REFUSED = {
 }
 # Commands that open a file dialog to read or write a file (red team 4,
 # R4-2): the path typed there is not checked. Read from FreeCAD 1.1's
-# command list (docs/hardening/freecad-1.1.0-commands.txt); each names the
+# command list (tests/data/freecad-1.1.0-commands.txt); each names the
 # tool that does the job with a checked path.
 FILE_DIALOG_COMMANDS = {
     "Std_Save": "doc_save (a never-saved document opens a Save As dialog)",

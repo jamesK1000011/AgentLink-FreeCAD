@@ -16,6 +16,10 @@ import stats  # noqa: E402
 import tool_summary  # noqa: E402
 
 
+# The hardening records are private since 22 Nov 2026 (scripts/hardening_status.py):
+# the checks that read them run where the owner's archive is beside this repo.
+NEED_RECORDS = unittest.skipUnless(hardening_status.available(), "the hardening records are private (not beside this repo)")
+
 class Stats(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -30,6 +34,7 @@ class Stats(unittest.TestCase):
         self.assertEqual(self.s["hubTools"]["total"], sum(len(v["tools"]) for v in gs.values()))
         self.assertEqual(len(self.s["hubTools"]["groups"]), len(gs))
 
+    @NEED_RECORDS
     def test_bars_are_hardening_status_bars(self):
         groups, status = hardening_status.load()
         self.assertEqual("\n".join(stats.coverage_lines(self.s["coverage"])), hardening_status.bars(groups, status))
@@ -40,6 +45,7 @@ class Stats(unittest.TestCase):
         with open(stats.STATS_MD, encoding="utf-8") as f:
             self.assertEqual(f.read(), stats.render_md(s))
 
+    @NEED_RECORDS
     def test_inventory_and_the_real_tools_are_in_step(self):
         # inventory.json holds the V1 tools: the hub's (tool_summary) and the add-ons' (addons.json snapshot),
         # each under the repository that has its code. A tool that is gone from the tool data fails here:
@@ -61,6 +67,7 @@ class Stats(unittest.TestCase):
         self.assertEqual(sorted(set(status) - set(listed) - unlisted - not_v1), [], "status.json has a tool that is in no list")
         self.assertEqual({r for r, _t in hardening_status.SECTIONS}, set(listed.values()))
 
+    @NEED_RECORDS
     def test_sections_add_up(self):
         cov = self.s["coverage"]
         for k in ("total", "proven", "headless", "live", "docs", "health", "description"):
@@ -74,6 +81,7 @@ class Stats(unittest.TestCase):
         groups, status = hardening_status.load()
         self.assertEqual(cov["total"] + sum(x["total"] for x in cov["notCounted"]), sum(len(d["tools"]) for d in groups.values()))
 
+    @NEED_RECORDS
     def test_developer_tools_are_not_counted(self):
         # The owner (19 Nov 2026): the porting tools are a developer tool, not a FreeCAD function.
         # They have their own section and lines, and they are not in the core or the V1 totals.
@@ -99,6 +107,7 @@ class Stats(unittest.TestCase):
         with open(stats.STATS_MD, encoding="utf-8") as f:
             self.assertIn(f"### {dev['developer']['title']}", f.read())
 
+    @NEED_RECORDS
     def test_every_gap_has_a_reason(self):
         groups, status = hardening_status.load()
         short = {t for d in groups.values() for t in d["tools"]

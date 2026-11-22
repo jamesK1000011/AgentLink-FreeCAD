@@ -179,7 +179,7 @@ class Settings(unittest.TestCase):
 class FileDialogCommands(unittest.TestCase):
     def test_refused_with_the_tool_that_does_the_job(self):
         app, _ns, _t = app_module()
-        with open(os.path.join(ROOT, "docs", "hardening", "freecad-1.1.0-commands.txt"), encoding="utf-8") as f:
+        with open(os.path.join(ROOT, "tests", "data", "freecad-1.1.0-commands.txt"), encoding="utf-8") as f:
             known = {ln.strip() for ln in f if ln.strip() and not ln.startswith("#")}
         with open(os.path.join(ROOT, "agentlink", "data", "tool_index.json"), encoding="utf-8") as f:
             tools = set(json.load(f)["entries"]) | {"doc_save_all", "view", "td_page", "import_file", "doc_open", "doc_save"}

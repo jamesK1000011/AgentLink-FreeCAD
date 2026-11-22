@@ -15,6 +15,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from agentlink import livescript as ls  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
+# The hub's own live scripts are private since 22 Nov 2026 (the owner's
+# archive); the tests that read them run where that archive is beside this repo.
+LIVE_ROOT = next((r for r in (os.path.join(ROOT, "..", "agentlink-collab", "archive", "agentlink-freecad"), ROOT)
+                  if os.path.isfile(os.path.join(r, "scripts", "live", "reset.json"))), None)
+NEED_LIVE = unittest.skipUnless(LIVE_ROOT, "the live scripts are private (not beside this repo)")
 
 ANS = [
     {"tool": "gui_input", "ok": True, "result": {"steps": [{"selected": ["Pad.Face6"], "hit": {"text": "Pin"}}, {"selected": []}], "as": "person"}},
@@ -120,14 +125,15 @@ class Run(unittest.TestCase):
         self.assertEqual(out["steps"][0]["refused"][0]["tool"], "gui_input")
         self.assertEqual(sent[0][1]["calls"][0]["arguments"]["steps"][0]["click"]["window"], [10, 20])
 
+    @NEED_LIVE
     def test_find_script(self):
-        self.assertTrue(ls.find_script("reset", [ROOT]).endswith("reset.json"))
+        self.assertTrue(ls.find_script("reset", [LIVE_ROOT]).endswith("reset.json"))
         self.assertIsNone(ls.find_script("nope", [ROOT]))
 
 
 class ShippedScripts(unittest.TestCase):
     def test_every_expect_is_a_known_check(self):
-        for f in glob.glob(os.path.join(ROOT, "scripts", "live", "*.json")):
+        for f in glob.glob(os.path.join(LIVE_ROOT or ROOT, "scripts", "live", "*.json")):
             sc = ls.load(f)
             for st in sc["steps"]:
                 for e in st.get("expect") or []:
@@ -246,8 +252,9 @@ class LiveReplay(unittest.TestCase):
         self.assertEqual([s["result"] for s in out["steps"]], ["pass", "fail"])
         self.assertEqual(out["steps"][0]["allowedRefusals"][0]["error"]["code"], "not_found")
 
+    @NEED_LIVE
     def test_reset_allows_closing_what_is_not_open(self):
-        with open(os.path.join(ROOT, "scripts", "live", "reset.json")) as f:
+        with open(os.path.join(LIVE_ROOT, "scripts", "live", "reset.json")) as f:
             d = json.load(f)
         closes = [c for st in d["steps"] for c in st["calls"] if c["tool"] == "doc_close"]
         self.assertTrue(closes and all("not_found" in c.get("allow", []) for c in closes))

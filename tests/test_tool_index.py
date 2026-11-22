@@ -28,7 +28,7 @@ def _json(*p):
 
 
 def _known_commands():
-    with open(os.path.join(ROOT, "docs", "hardening", "freecad-1.1.0-commands.txt"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "tests", "data", "freecad-1.1.0-commands.txt"), encoding="utf-8") as f:
         return {ln.strip() for ln in f if ln.strip() and not ln.startswith("#")}
 
 
@@ -45,7 +45,12 @@ class Index(unittest.TestCase):
 
     def test_every_tool_of_this_repository(self):
         self.assertEqual(sorted(self.entries), tool_index.tool_names())
-        inv = _json(ROOT, "docs", "hardening", "inventory.json")
+        sys.path.insert(0, os.path.join(ROOT, "scripts"))
+        import hardening_status
+
+        if not hardening_status.available():
+            self.skipTest("the hardening records are private (not beside this repo)")
+        inv = hardening_status.load_inventory()
         here = set(tool_index.tool_names())
         # The inventory was read off a live server with add-ons installed:
         # what it files under this repository and is defined here is indexed.
@@ -74,7 +79,7 @@ class Index(unittest.TestCase):
         known = _known_commands()
         self.assertGreater(len(known), 1000)
         bad = sorted({f"{n}: {c}" for n, e in self.entries.items() for c in e["commands"] if c not in known})
-        self.assertEqual(bad, [], "not a FreeCAD 1.1 command (docs/hardening/freecad-1.1.0-commands.txt)")
+        self.assertEqual(bad, [], "not a FreeCAD 1.1 command (tests/data/freecad-1.1.0-commands.txt)")
 
     def test_the_echo_is_the_source(self):
         known = _known_commands()

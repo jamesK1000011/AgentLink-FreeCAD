@@ -369,7 +369,7 @@ The table is generated: `python3 scripts/tool_summary.py` writes it again, and
 Release statistics for V1, made by `scripts/stats.py` from the data (all of them: [docs/stats/STATS.md](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md)).
 
 ```
-Per-tool status, all of V1 (measured: counted from docs/hardening/status.json)
+Per-tool status, all of V1 (measured: counted from the hardening records)
 proven on a test model    ████████████████████ 613/622
   headless                ███████████████████░ 605/622
   live in the window      ████████████████████ 608/622

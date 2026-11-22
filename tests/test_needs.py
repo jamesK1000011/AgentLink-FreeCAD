@@ -648,7 +648,7 @@ def _walk(x):
 # Measured (tokens): the 383 data tools' definitions; the 21 Tool(…) written in code; the lean listing (core and
 # view: what a session loads at its start); one data tool's card; tool_groups' and usage_report's own cards (586 and
 # 150 before needs, arguments and the meter's clause were added: the lean listing grew by 154; report_read's clause on known faults added 16).
-# The token pass (docs/hardening/tokens-findings.md) added 216 to the lean listing: batch's read/at, lines "full" and the
+# The token pass (private records: tokens-findings.md) added 216 to the lean listing: batch's read/at, lines "full" and the
 # file batch's record reply (+168), tool_groups' said (+22), guide_read's index wording (+26).
 # Every description in ASD-STE100 (merged 17 Nov; was explore/full-ste): data 79008 -> 83635, coded 9037 -> 9166, lean listing 7406 -> 7409,
 # one card's median 178 -> 190 and largest 824 -> 878, tool_groups' card 734 -> 729, usage_report's 178 -> 194.

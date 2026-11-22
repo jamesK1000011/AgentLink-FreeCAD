@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Red team, 2026-11-18 (docs/security/red-team-2026-11-18.md): each attack
+# Red team, 2026-11-18 (private records: red-team-2026-11-18.md): each attack
 # as a test, with stand-ins for FreeCAD and Qt. A test that passes is an
 # attack that held.
 import json

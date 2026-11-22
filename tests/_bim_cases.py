@@ -2,7 +2,7 @@
 # The cases tests/test_bim_data.py runs through the old handler and the new
 # data entry of each converted BIM tool, on the stand-in FreeCAD
 # (tests/_bim_standin.py): its normal paths and each of its refusals.
-# "model call N" is call N of docs/hardening/models/bimcam-bim-model.json.
+# "model call N" is call N of private records: models/bimcam-bim-model.json.
 
 # Each converted tool and its group.
 CONVERTED = {

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The echo's sixth window pass (docs/hardening/round6-findings.md): a heavy
+# The echo's sixth window pass (private records: round6-findings.md): a heavy
 # read run as a job is shown when its answer comes (a batch's, a job's end),
 # add-ons' SELECTS, OUT_MORE, WORDS and SELECTS_FOR, never a hidden object
 # selected, never a sheet's double-click (an Assembly BOM's opens a task

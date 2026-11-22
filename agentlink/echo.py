@@ -111,7 +111,7 @@ COMMAND.update({
 # Std toolbars), or to a command inside a toolbar dropdown (Part's compound,
 # split, join and offset groups, Std_LinkActions, TechDraw's groups: the
 # dropdown's button lights). Only names in
-# docs/hardening/freecad-1.1.0-commands.txt (tests/test_echo_rings.py). A
+# tests/data/freecad-1.1.0-commands.txt (tests/test_echo_rings.py). A
 # tool with no button on any toolbar is left out: its call lights nothing and
 # its trace says "no button".
 COMMAND.update({

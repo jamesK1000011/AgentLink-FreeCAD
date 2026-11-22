@@ -6,7 +6,7 @@ Each number comes from the data in this repository. To make the file again, run 
 
 ## 1. FreeCAD coverage, headless through MCP
 
-The source is `docs/hardening/status.json` and `inventory.json`. Only V1 counts: the hub and the add-ons of the V1 bundle (`packaging/addons.json`). A tool that is not in V1 is not in these numbers (see [What is not covered, and why](#what-is-not-covered-and-why)). Proven: the tool worked on a test model, headless through the MCP tools or live in the FreeCAD window.
+The source is the hardening records (status and inventory), which are not public; these numbers are their last count. Only V1 counts: the hub and the add-ons of the V1 bundle (`packaging/addons.json`). A tool that is not in V1 is not in these numbers (see [What is not covered, and why](#what-is-not-covered-and-why)). Proven: the tool worked on a test model, headless through the MCP tools or live in the FreeCAD window.
 
 | Section | Tools | Proven | Headless | Live | Docs checked | Health check seen | Description rewritten |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -187,7 +187,7 @@ Porting                   ░░░░░░░░░░░░░░░░░░
 The same lines as the start of `python3 scripts/hardening_status.py bars`.
 
 ```
-Per-tool status, all of V1 (measured: counted from docs/hardening/status.json)
+Per-tool status, all of V1 (measured: counted from the hardening records)
 proven on a test model    ████████████████████ 613/622
   headless                ███████████████████░ 605/622
   live in the window      ████████████████████ 608/622
@@ -309,7 +309,7 @@ To add timings, run `python3 scripts/stats.py --timings <file>`. The file is one
 
 ## What is not covered, and why
 
-Each line is one tool: the section, the workbench or group, what is short, and why. The reason comes from the tool's `gap` in `docs/hardening/status.json`, which cites the findings file in `docs/hardening/` that records it. A tool with no recorded reason says "Not tested yet."
+Each line is one tool: the section, the workbench or group, what is short, and why. The reason comes from the tool's `gap` in the hardening records, which cite the test run that found it. A tool with no recorded reason says "Not tested yet."
 
 ### Agent Link (core)
 
@@ -359,7 +359,7 @@ Every tool is proven headless and live.
 
 ### Review steps not done yet
 
-These rows are under 100% too: docs checked 554/622, health check seen 480/622, description rewritten 566/622. They are review steps of the hardening pass, not proofs. The per-tool list is in `docs/hardening/STATUS.md`.
+These rows are under 100% too: docs checked 554/622, health check seen 480/622, description rewritten 566/622. They are review steps of the hardening pass, not proofs. The per-tool list is kept with the hardening records, which are not public.
 
 ### Not in V1 (not counted)
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # The hub's faults read off the live run of the unproven-hub and bim-rest
-# models (docs/hardening/unproven-run-findings.md), on stand-ins (plain
+# models (private records: unproven-run-findings.md), on stand-ins (plain
 # Python, no FreeCAD):
 #   - workbench { activate } on the workbench that is active already
 #     answers (the entry; its behaviour beside the old handler is in

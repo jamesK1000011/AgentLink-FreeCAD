@@ -107,7 +107,7 @@ class BimGaps(unittest.TestCase):
 
 @unittest.skipUnless(BIM, "FreeCAD with BIM is not importable here")
 class BimHardening(unittest.TestCase):
-    """The hardening pass's fixes, each from FreeCAD 1.1's own source (docs/hardening/bimcam-findings.md)."""
+    """The hardening pass's fixes, each from FreeCAD 1.1's own source (private records: bimcam-findings.md)."""
 
     @classmethod
     def setUpClass(cls):

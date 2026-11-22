@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The echo's second window pass (docs/hardening/echo2-findings.md): the
+# The echo's second window pass (private records: echo2-findings.md): the
 # Model tab back in front of an empty Tasks tab (P3), a body left showing its
 # tip (P4), the view framed on what was made (P5), the feature selected and
 # not its body (P6), the right button lit and the last one put out (P7),
@@ -23,7 +23,7 @@ import _cowork_legacy  # noqa: E402  (the old camera and selection behaviour: Fo
 setUpModule, tearDownModule = _cowork_legacy.on, _cowork_legacy.off
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-COMMANDS = os.path.join(HERE, "..", "docs", "hardening", "freecad-1.1.0-commands.txt")
+COMMANDS = os.path.join(HERE, "..", "tests", "data", "freecad-1.1.0-commands.txt")
 
 
 # ---- stand-ins ----------------------------------------------------------------------------
