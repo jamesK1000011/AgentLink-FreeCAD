@@ -1344,7 +1344,7 @@ def make_tools(session):
                               "when it is news. leftOut [{ extension, error }] and warning: an installed add-on did not load in this FreeCAD. Its tools are missing; the error tells "
                               "why. Fix or update the add-on, then use agentlink_update or app_restart. toolsChanged: the tool list is not the one last listed (groups enabled or "
                               "hidden, an add-on installed, updated or removed). The first time: added, removed, updated and callable (new but unlisted) by name. After that, the "
-                              "counts, until the list is read again. launcher: true adds the Claude extension's launcher as seen here. That is the copy fetched from GitHub, if it "
+                              "counts, until the list is read again. launcher: true adds the Claude Desktop extension's launcher as seen here. That is the copy fetched from GitHub, if it "
                               "can load, and its log's last lines. agentDocument, frontDocument and mismatch: the document in front is not the agent's document "
                               "(after a restart, for example). Then the tools that act on the front document act on the other one. doc_switch to the agent's "
                               "document binds both again. Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
@@ -2811,7 +2811,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
     core = [
         Tool("usage_report", "Estimate on this side what work through Agent Link cost the agent. That is calls, tokens and the tool list that each session loads at the start. "
                              "Tokens: text at ~3.5 characters a token, pictures by size. It gives them for each day over days (7) and each session. Also the costliest tools, and "
-                             "tips to cut the cost. session: true gives this session alone. This is not Claude's own count: the plan's usage page has that. Changes nothing. "
+                             "tips to cut the cost. session: true gives this session alone. This is not your AI client's own count: the plan's usage page has that. Changes nothing. "
                              "appliesNow: this session's meter of the applies-now filter (notThenAnswered must stay near zero). "
                              "log: true gives the usage log summary: jobs and their steps, errors with reasons, retries, searches, dialogs and more. jobs: recent jobs (8).",
              obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}, "log": {"type": "boolean"},
@@ -2919,6 +2919,11 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
     ]
     for t in core:
         t.group = "core"
+        server.add(t)
+    # A self-test tool for live checks, only while its marker file is there (agentlink/selftest.py).
+    from . import selftest as _selftest
+
+    for t in _selftest.tools():
         server.add(t)
     # Extensions installed beside this add-on (agentlink/ext.py).
     from . import ext

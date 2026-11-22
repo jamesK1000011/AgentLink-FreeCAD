@@ -181,6 +181,7 @@ agentlink/render.py
 agentlink/report_watch.py
 agentlink/restart_mark.py
 agentlink/runners.py
+agentlink/selftest.py
 agentlink/server.py
 agentlink/setup_check.py
 agentlink/sheets.py
@@ -603,6 +604,7 @@ tests/test_restart_temp_copy.py
 tests/test_rider_calldone.py
 tests/test_round7_misc.py
 tests/test_runners.py
+tests/test_selftest_exit_1122.py
 tests/test_settle_copies.py
 tests/test_sheet.py
 tests/test_sheets.py

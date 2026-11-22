@@ -223,6 +223,25 @@ class Find(unittest.TestCase):
                            ("sketch add line", "sketch_add"), ("drawing dimension", "td_dim")):
             self.assertIn(want, self.names(find, 3 if want == "pd_fillet" else 1), find)
 
+    def test_the_whole_action_named_with_addons(self):
+        # Live, 22 Nov: with the add-ons installed, "pad sketch" gave
+        # ScanRuler's section_to_sketch first (its search words hold "pad")
+        # and Workshop's drawing_make came before td_dim. The add-on rows
+        # here have the same shape as the live ones (own words, not copies).
+        rows = list(self.rows) + [
+            {"name": "section_to_sketch", "group": "sections", "about": "",
+             "description": "Make a sketch from a section of the scan. The sketch can then be padded or pocketed.",
+             "entry": {"workbench": "SketcherWorkbench", "commands": ["Sketcher_NewSketch"],
+                       "words": ["sketch", "profile", "pad", "partdesign", "outline", "trace"]}},
+            {"name": "drawing_make", "group": "drawing", "about": "",
+             "description": "Make a dimensioned drawing of bodies in one call, and its files.",
+             "entry": {"workbench": "TechDrawWorkbench", "commands": ["TechDraw_View", "TechDraw_Dimension"], "words": []}}]
+        for find, want in (("pad sketch", "pd_pad"), ("drawing dimension", "td_dim"), ("pocket", "pd_pocket"),
+                           ("new document", "doc_new"), ("save document", "doc_save"), ("open document", "doc_open"),
+                           ("sketch add line", "sketch_add")):
+            got = [r["name"] for r, _m, _s in toolindex.rank(rows, find)[:1]]
+            self.assertEqual(got, [want], find)
+
     def test_freecads_own_names(self):
         self.assertEqual(self.names("PartDesign_Pad", 1), ["pd_pad"])
         self.assertEqual(self.names("Sketcher_CarbonCopy", 1), ["sketch_carbon"])
