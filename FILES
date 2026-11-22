@@ -551,6 +551,7 @@ tests/test_hubfix5.py
 tests/test_hubfix5b.py
 tests/test_hubfix_small.py
 tests/test_hull3d.py
+tests/test_input_forgive_1122.py
 tests/test_inspection.py
 tests/test_installed_names.py
 tests/test_iso286.py

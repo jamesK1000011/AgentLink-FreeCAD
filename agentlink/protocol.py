@@ -317,6 +317,84 @@ def _as_alias(spec, v):
     return v
 
 
+# tool_find's forms, shown whole when a call fits none (live, 22 Nov: a
+# local model sent queries as objects three times; the old words did not
+# say that queries are plain strings).
+FIND_FORMS = ('tool_find takes one of: words: "pad sketch" (plain words); queries: ["pad sketch", "hole"] '
+              '(up to 6 plain strings); tool: "pd_pad" (a name, or a list of up to 20); groups: true.')
+_QUERY_KEYS = ("words", "query", "q", "text", "find")
+
+
+def find_queries(a):
+    """tool_find's searches as plain strings, and what was read another way.
+    The meaning of these shapes is clear, so they are read, not refused:
+    queries as objects ({words: "…"}), words as a list, one query as a string."""
+    read_as = []
+    qs = a.get("queries")
+    words = a.get("words")
+    if qs is None and isinstance(words, list):
+        qs, words = words, None
+        read_as.append("words (a list) as queries")
+    if qs is None and words is not None:
+        qs = [words]
+    if isinstance(qs, (str, dict)):
+        qs = [qs]
+        read_as.append("queries as a list of one")
+    if not isinstance(qs, list):
+        return [], read_as
+    out, objects = [], False
+    for q in qs:
+        if isinstance(q, dict):
+            q = next((q[k] for k in _QUERY_KEYS if isinstance(q.get(k), str)), None)
+            objects = True
+        if not isinstance(q, str) or not q.strip():
+            return [], read_as
+        out.append(q)
+    if objects:
+        read_as.append('queries given as objects, read as their words (queries is a list of plain strings: ["pad sketch", "hole"])')
+    return out, read_as
+
+
+def close_names(server, n, k=4):
+    """The tool names closest to n: most shared name words first, then the
+    closest spelling (pd_pad_create: pd_pad before pd_pocket)."""
+    import difflib
+
+    n = plain_name(server, n)
+    if not isinstance(n, str) or not n:
+        return []
+    words = {p for p in n.lower().replace("-", "_").split("_") if p}
+    scored = []
+    for t in server.tools:
+        shared = len(words & set(t.split("_")))
+        ratio = difflib.SequenceMatcher(None, n, t).ratio()
+        if shared or ratio >= 0.6:
+            scored.append((shared, ratio, t))
+    scored.sort(key=lambda x: (-x[0], -x[1], x[2]))
+    return [t for _, _, t in scored[:k]]
+
+
+def plain_name(server, n):
+    """A tool's own name from a client's prefixed one (agentlink_pd_pad,
+    mcp__…__pd_pad: the prefix the client puts on MCP tools). Only an exact
+    tool name after the prefix counts; anything else comes back as it was."""
+    if not isinstance(n, str) or n in server.tools:
+        return n
+    rest = n
+    while "_" in rest:
+        rest = rest.split("_", 1)[1]
+        if rest in server.tools and n[: len(n) - len(rest)].rstrip("_").lower().split("__")[-1].replace("-", "_") in ("agentlink", "agentlink_freecad", "freecad_agent_link"):
+            return rest
+    return n
+
+
+# The pure reads that ignore (and name) a field they do not have. A list,
+# not the changes flag: approve_file and approve_code change nothing in the
+# document but must take their exact pending arguments, and a tool that
+# writes a file can misread a misspelled path. Every tool not here refuses.
+FORGIVING_READS = frozenset(("session_state", "tool_find", "tool_groups", "guide_read", "get", "job_status", "usage_report", "report_read"))
+
+
 def check_input(schema, args, tool=None):
     """Unknown keys and missing required ones refused by name, as the
     answers name them: what the agent got wrong and what is allowed.
@@ -325,6 +403,14 @@ def check_input(schema, args, tool=None):
         raise ToolError("invalid_input", "arguments: an object.")
     props = schema.get("properties", {})
     read_as = []
+    # The inputs wrapped as a batch step wraps them ({arguments: {…}} on a
+    # direct call; live, 22 Nov: a local model, five times in one run):
+    # taken from inside, when arguments is the only key and not a field here.
+    inner = args.get("arguments")
+    if set(args) == {"arguments"} and "arguments" not in props and isinstance(inner, dict):
+        args.clear()
+        args.update(inner)
+        read_as.append("inputs taken from inside arguments (a direct call takes them at the top level)")
     required = set(schema.get("required", []))
     empty = [k for k in (EMPTY_IS_LEFT_OUT.get(tool) or ()) if args.get(k) == "" and k not in required]
     for k in empty:
@@ -351,6 +437,14 @@ def check_input(schema, args, tool=None):
         if alt is not None:
             args[alt] = args.pop(k)
     unknown = [k for k in args if k not in props]
+    if unknown and schema.get("additionalProperties") is False and tool in FORGIVING_READS:
+        # A pure read: a field it does not have is ignored and named, not
+        # refused. Nothing can go wrong in a read, and a refusal costs the
+        # agent a turn (owner, 22 Nov: reads forgive, changes refuse).
+        for k in unknown:
+            args.pop(k)
+        read_as.append(f"ignored {', '.join(unknown)} (not {'a field' if len(unknown) == 1 else 'fields'} here — the fields: {', '.join(props) or 'none'})")
+        unknown = []
     if unknown and schema.get("additionalProperties") is False:
         raise ToolError("invalid_input", f"input.{unknown[0]}: not a known field — the fields here: {', '.join(props) or 'none'}")
     for k in schema.get("required", []):
@@ -866,6 +960,9 @@ class Server:
         name = params.get("name")
         args = params.get("arguments") or {}
         tool = self.tools.get(name)
+        if tool is None and plain_name(self, name) in self.tools:
+            name = plain_name(self, name)
+            tool = self.tools[name]
         if tool is None:
             import difflib
 

@@ -21,7 +21,7 @@ import Part
 
 from . import geometry as geo
 from . import changes, docstates, keep, store
-from .protocol import Tool, ToolError
+from .protocol import FIND_FORMS, Tool, ToolError, close_names, find_queries, plain_name
 
 
 
@@ -1853,16 +1853,26 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             names = [names] if isinstance(names, str) else names
             if not isinstance(names, list) or not all(isinstance(n, str) for n in names) or len(names) > 20:
                 raise ToolError("invalid_input", "tool: a tool's name, or up to 20 names — tool_groups { find: \"words\" } finds names by what they do.")
-            cards = []
+            cards, missed = [], []
             for n in names:
-                t = server.tools.get(n)
+                t = server.tools.get(plain_name(server, n))
                 if t is None:
-                    import difflib
-
-                    near = difflib.get_close_matches(n, list(server.tools), 4)
-                    raise ToolError("not_found", f"tool {n!r}: not here{' — did you mean ' + ', '.join(near) if near else ''}. tool_groups {{ find: \"words\" }} searches every tool by what it does.")
+                    # Not here: the close names, and the card of the closest one
+                    # (a card only; nothing runs on a guess).
+                    near = close_names(server, n)
+                    missed.append({"tool": n, "didYouMean": near})
+                    if near and all(c.get("tool") != near[0] for c in cards):
+                        cards.append(card(server.tools[near[0]]))
+                    continue
                 cards.append(card(t))
-            return {"tools": cards, "note": TG_CARDS_NOTE}
+            if missed and not cards:
+                raise ToolError("not_found", f"tool {missed[0]['tool']!r}: not here, and no name is close. tool_find {{ words: \"what it does\" }} searches every tool.")
+            out = {"tools": cards, "note": TG_CARDS_NOTE}
+            if missed:
+                out["notFound"] = missed
+                out["note"] = ("Not found: " + "; ".join(f"{m['tool']} (did you mean {', '.join(m['didYouMean'])}?)" for m in missed if m["didYouMean"])
+                               + ". The card of the closest name is in tools; check it is the tool you want before you call it. " + TG_CARDS_NOTE)
+            return out
         asked = a.get("needs")
         if asked is not None or a.get("arguments") is not None:
             # One tool's own leading checks, read against the document as it is and never run
@@ -2863,20 +2873,26 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             return tool_groups({})
         if a.get("tool"):
             return tool_groups({"tool": a["tool"]})
-        qs = a.get("queries")
-        if qs is None and a.get("words") is not None:
-            qs = [a.get("words")]
-        if not isinstance(qs, list) or not qs or not all(isinstance(q, str) and q.strip() for q in qs) or len(qs) > 6:
-            raise ToolError("invalid_input", "words: what the tool does, in plain words (\"fillet edge\"); or queries: up to 6 of them; or tool: a name; or groups: true.")
+        qs, read_as = find_queries(a)
+        if not qs or len(qs) > 6:
+            raise ToolError("invalid_input", FIND_FORMS)
         limit = int(a.get("limit") or 8)
         out = []
         for q in qs:
+            # Words that are a tool's name (or a client's prefixed name):
+            # its card with the hits, so the next call can be the call.
+            exact = server.tools.get(plain_name(server, q.strip()))
             got = tool_groups({"find": q, "limit": limit, **({"group": a["group"]} if a.get("group") else {})})
             for h in got.get("tools") or ():
                 h["listed"] = server.is_listed(h.get("tool"))
-            out.append({"find": q, "tools": got.get("tools") or [], **({"note": got["note"]} if not got.get("tools") else {})})
+            one = {"find": q, "tools": got.get("tools") or [], **({"note": got["note"]} if not got.get("tools") else {})}
+            if exact is not None:
+                one["card"] = tool_groups({"tool": exact.name})["tools"][0]
+            out.append(one)
         res = out[0] if len(out) == 1 else {"results": out}
         res["note"] = "Callable by name, listed or not; tool_find { tool: name } gives its whole description and inputs."
+        if read_as:
+            res["readAs"] = read_as
         return res
 
     core = [
