@@ -245,12 +245,45 @@ SYNONYMS = {
 }
 
 
-def check_input(schema, args):
+# Fields an agent often gives one tool by another name (seen in the usage
+# log's refusals, efficiency design C2, 22 Nov): per tool, the field given and
+# the field the tool has. Taken as that field when it is not given, and said
+# in the answer's readAs. The cards do not change.
+FIELD_ALIASES = {
+    "object_set": {"set": "values", "properties": "values", "props": "values"},
+    "varset_set": {"values": "properties", "set": "properties"},
+    "varset_new": {"values": "properties"},
+    "doc_close": {"document": "documents", "name": "documents"},
+    "doc_open": {"file": "path", "document": "path"},
+    "object_get": {"properties": "filter", "property": "filter", "names": "filter"},
+    "object_delete": {"object": "objects", "name": "objects"},
+    "shape_query": {"object": "body"},
+}
+
+
+def _as_alias(spec, v):
+    """A value given under an alias, in the shape of the field it is read as:
+    one name for a list field, a list of names for a filter."""
+    t = spec.get("type") if isinstance(spec, dict) else None
+    if t == "array" and not isinstance(v, list):
+        return [v]
+    if not t and isinstance(v, list) and all(isinstance(x, str) for x in v):
+        return "|".join(v)
+    return v
+
+
+def check_input(schema, args, tool=None):
     """Unknown keys and missing required ones refused by name, as the
-    answers name them: what the agent got wrong and what is allowed."""
+    answers name them: what the agent got wrong and what is allowed.
+    Answers the aliases read (FIELD_ALIASES), as "given as field" words."""
     if not isinstance(args, dict):
         raise ToolError("invalid_input", "arguments: an object.")
     props = schema.get("properties", {})
+    read_as = []
+    for k, alt in (FIELD_ALIASES.get(tool) or {}).items():
+        if k in args and k not in props and alt in props and alt not in args:
+            args[alt] = _as_alias(props.get(alt), args.pop(k))
+            read_as.append(f"{k} as {alt}")
     # The same thing by another common name (centre for center, body for
     # object …): taken as the field the tool has, when that one is not given.
     for k in [k for k in args if k not in props]:
@@ -267,6 +300,7 @@ def check_input(schema, args):
         spec = props.get(k)
         if isinstance(spec, dict) and v is not None:
             args[k] = _typed(f"input.{k}", spec, v)
+    return read_as
 
 
 _PY = {"string": (str,), "number": (int, float), "integer": (int,), "boolean": (bool,), "array": (list,), "object": (dict,)}
@@ -731,6 +765,7 @@ class Server:
             return self.refusal("not_found", f"{name}: no such tool — {hint}.")
         t0 = time.time()
         tool = tool.for_call(args)
+        read_as = []
         try:
             # background: true on any read the tool does not take itself:
             # run it as a job (agentlink/jobs.py).
@@ -739,7 +774,7 @@ class Server:
                 asked = args.pop("background") in (True, "true")
             from . import around as _ar
 
-            check_input(tool.schema, args)
+            read_as = check_input(tool.schema, args, tool.name)
             if self.guard is not None:
                 with _ar.part("guard"):
                     self.guard(tool, args)
@@ -824,6 +859,9 @@ class Server:
         except Exception as e:
             traceback.print_exc(file=sys.stderr)
             return self.refusal("failed", failed_words(name, e), _test_trace())
+        if read_as and isinstance(out, dict):
+            # Fields given by another common name (FIELD_ALIASES): what was read.
+            out["readAs"] = "read " + ", ".join(read_as)
         image = None
         s = self.session
         if isinstance(out, dict) and s is not None and getattr(s, "batch_now", None) is None:

@@ -167,6 +167,7 @@ agentlink/outputs.py
 agentlink/overlay.py
 agentlink/panel.py
 agentlink/panel_tabs.py
+agentlink/partialdoc.py
 agentlink/paths.py
 agentlink/person_ok.py
 agentlink/pointfiles.py
@@ -490,6 +491,7 @@ tests/test_echo_reads.py
 tests/test_echo_rings.py
 tests/test_echo_round6.py
 tests/test_echo_window.py
+tests/test_eff_a.py
 tests/test_exploded_view.py
 tests/test_export_mesh_1118.py
 tests/test_ext.py
@@ -577,6 +579,7 @@ tests/test_panel_polish.py
 tests/test_panel_tabs.py
 tests/test_param.py
 tests/test_part_hardening.py
+tests/test_partial_and_link_binds_1122.py
 tests/test_path_keys.py
 tests/test_paths.py
 tests/test_pipe_1120.py

@@ -215,6 +215,14 @@ class Find(unittest.TestCase):
                            ("bim wall", "bim_wall"), ("save", "doc_save"), ("linear pattern", "pd_linear_pattern")):
             self.assertIn(want, self.names(find, 3), find)
 
+    def test_the_whole_action_named(self):
+        # Efficiency design G1 (22 Nov): "pad sketch" gave three sketch tools before pd_pad.
+        # The tool whose whole action the search names comes first.
+        for find, want in (("pad sketch", "pd_pad"), ("pocket", "pd_pocket"), ("fillet edge", "pd_fillet"),
+                           ("new document", "doc_new"), ("save document", "doc_save"), ("open document", "doc_open"),
+                           ("sketch add line", "sketch_add"), ("drawing dimension", "td_dim")):
+            self.assertIn(want, self.names(find, 3 if want == "pd_fillet" else 1), find)
+
     def test_freecads_own_names(self):
         self.assertEqual(self.names("PartDesign_Pad", 1), ["pd_pad"])
         self.assertEqual(self.names("Sketcher_CarbonCopy", 1), ["sketch_carbon"])

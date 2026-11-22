@@ -206,7 +206,7 @@ class BatchSchema(unittest.TestCase):
             tree = ast.parse(f.read())
         read, listed = set(), None
         for fn in ast.walk(tree):
-            if isinstance(fn, ast.FunctionDef) and fn.name in ("batch", "_batch_read"):
+            if isinstance(fn, ast.FunctionDef) and fn.name in ("batch", "_batch_core", "_batch_read"):
                 for n in ast.walk(fn):
                     if isinstance(n, ast.Call) and getattr(n.func, "attr", None) == "get" and getattr(n.func.value, "id", None) == "a" \
                             and n.args and isinstance(n.args[0], ast.Constant):

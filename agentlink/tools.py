@@ -1422,6 +1422,71 @@ GROUP_OF = {
 }
 # Old names still callable but not listed (the listing carries one tool a job).
 ALIASES = {"export_file": "export"}
+
+
+def _shift_from(v, to):
+    """A call's arguments with every { "$from": n } put at to(n)."""
+    if isinstance(v, dict):
+        out = {k: _shift_from(x, to) for k, x in v.items()}
+        if isinstance(out.get("$from"), int) and not isinstance(out.get("$from"), bool):
+            out["$from"] = to(out["$from"])
+        return out
+    if isinstance(v, list):
+        return [_shift_from(x, to) for x in v]
+    return v
+
+
+def _flatten_batches(calls, depth=0):
+    """(calls, how many batches were opened): a call { tool: "batch",
+    arguments: { calls } } replaced by its calls, in order. A batch from a
+    file, or one that does not read, stays for batch's own refusal."""
+    import json as _json
+
+    if isinstance(calls, str):
+        try:
+            calls = _json.loads(calls)
+        except ValueError:
+            return calls, 0
+    if not isinstance(calls, list) or depth > 3:
+        return calls, 0
+    out, opened, at, mine = [], 0, [], []  # at[i]: where call i of this list is now (a batch: its last call); mine: this list's own calls
+    for c in calls:
+        if isinstance(c, str):
+            try:
+                c = _json.loads(c)
+            except ValueError:
+                pass
+        if isinstance(c, dict) and c.get("tool") == "batch":
+            args = c.get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = _json.loads(args) if args.strip() else {}
+                except ValueError:
+                    args = None
+            inner = args.get("calls") if isinstance(args, dict) and args.get("file") is None else None
+            if isinstance(inner, str):
+                try:
+                    inner = _json.loads(inner)
+                except ValueError:
+                    inner = None
+            if isinstance(inner, list):
+                inner, more = _flatten_batches(inner, depth + 1)
+                if isinstance(inner, list) and inner:
+                    base = len(out)
+                    out.extend(_shift_from(x, lambda n, base=base: n + base) if isinstance(x, dict) else x for x in inner)
+                    at.append(len(out) - 1)
+                    opened += 1 + more
+                    continue
+        at.append(len(out))
+        mine.append(len(out))
+        out.append(c)
+    if opened:
+        # A later call's $from to a call of this list: where that call is now.
+        def to(n):
+            return at[n] if 0 <= n < len(at) else n
+        own = set(mine)
+        out = [_shift_from(c, to) if isinstance(c, dict) and i in own else c for i, c in enumerate(out)]
+    return out, opened
 GROUP_INFO = {
     "core": "The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed in the classic tool list.",
     "find": "tool_find: any tool by plain words, its card, the groups. Listed in the static base (ToolListMode static).",
@@ -1735,7 +1800,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     try:
                         from .protocol import check_input
 
-                        check_input(t.schema, given)  # the call's first check: its inputs by the tool's own schema
+                        check_input(t.schema, given, t.name)  # the call's first check: its inputs by the tool's own schema
                     except ToolError as e:
                         return {"tool": t.name, "applies": False, "wouldRefuse": [{"code": e.code, "words": e.message}], "notChecked": [],
                                 "note": "Read, not run: the tool's own schema refuses these arguments."}
@@ -1932,7 +1997,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             raise ToolError("not_found", f"{name}: no such tool — tool_groups lists them.")
         args = dict(a.get("arguments") or {})
         t = t.for_call(args)
-        check_input(t.schema, args)
+        check_input(t.schema, args, name)
         if not jobs.wanted(t, args, s, asked=True):
             # A read that could be a job, asked for inside a batch: the batch is why not.
             if getattr(s, "batch_now", None) and jobs.eligible(t, args, s):
@@ -2002,6 +2067,20 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         return _hold.Hold(mark, check, snapshot)
 
     def batch(a):
+        """A batch, with a batch inside its calls run in its place (efficiency
+        design C2, 22 Nov): the inner calls are put in order where it stood,
+        their $from moved to count in the whole list, under the outer batch's
+        own rollback and budget; the answer's flattened says so."""
+        calls, inner = _flatten_batches(a.get("calls"))
+        if inner:
+            a = {**a, "calls": calls}
+        out = _batch_core(a)
+        if inner and isinstance(out, dict):
+            out["flattened"] = (f"{inner} batch{'es' if inner > 1 else ''} inside the calls ran as part of this one, in order, "
+                                "with this batch's rollback and budget (theirs are not read); calls count from 0 through the whole list.")
+        return out
+
+    def _batch_core(a):
         import json as _json
 
         from . import chain as _chain

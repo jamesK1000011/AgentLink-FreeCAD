@@ -21154,11 +21154,11 @@
   },
   "view_snapshot": {
    "group": "view",
-   "description": "Save the FreeCAD window's 3D view as the person sees it, and look at it. view: first turn to a standard view (fit true). views [..]: up to 6, or \"all\". This gives one grid picture, each view's file in paths, and puts the person's view back. width and height (800 x 600): the whole picture; several views share it. cell: true gives each view that size instead. The answer gives the sizes as saved. Sometimes no picture is taken: the answer is empty, with the reason and what to do. That occurs when nothing with a shape shows (an empty document, all hidden). It also occurs when the model is outside the frame, or less than 6 pixels across. fitted: false with fitNote: the view was not fitted again, so parts can be cut off. That is with no view given (as the person left it), or fit: false. Needs the window; view_render draws without one.",
+   "description": "Save the FreeCAD window's 3D view as the person sees it, to a file. The answer gives its path; inline: true also puts the picture in the answer. view: first turn to a standard view (fit true). views [..]: up to 6, or \"all\". This gives one grid picture, each view's file in paths, and puts the person's view back. width and height (800 x 600): the whole picture; several views share it. cell: true gives each view that size instead. The answer gives the sizes as saved. Sometimes no picture is taken: the answer is empty, with the reason and what to do. That occurs when nothing with a shape shows (an empty document, all hidden). It also occurs when the model is outside the frame, or less than 6 pixels across. fitted: false with fitNote: the view was not fitted again, so parts can be cut off. That is with no view given (as the person left it), or fit: false. Needs the window; view_render draws without one.",
    "inputSchema": {"type": "object", "properties": {"cell": {"type": "boolean", "description": "width and height are each view's in the grid, not the whole grid's."}, "view": {"type": "string"}, "views": {"description": "A list of views (iso, top, bottom, front, rear, left, right), up to 6, or \"all\" (iso, top, front, right): one grid picture."}, "fit": {"type": "boolean"}, "width": {"type": "integer"}, "height": {"type": "integer"}, "background": {"type": "string"}, "inline": {"type": "boolean"}, "path": {"type": "string"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/view.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-22",
    "runner": "steps",
    "steps": [
     {"let": {"v": "=a.get('views')"}},
@@ -21173,7 +21173,7 @@
     {"let": {"view": "=active_view()"}},
     {"refuse": "No 3D view open for this document: open one in FreeCAD, then again — or view_render.", "code": "unavailable", "when": "=view is None or not has(view, 'saveImage')"},
     {"let": {"bg": "=a.get('background', 'Current')"}},
-    {"when": "=len(views) <= 1", "then": [{"let": {"which": "=views[0] if views else None", "fitted": false}}, {"when": "=which", "then": [{"do": "=turn(view, which)"}, {"when": "=a.get('fit', True)", "then": [{"do": "=snap_fit(view, w, h)"}, {"let": {"fitted": true}}]}]}, {"let": {"why": "=snap_empty(view, w, h, fitted)"}}, {"answer": {"fields": {"empty": "=why", "view": "=which or 'as the person left it'", "fitted": "=fitted"}}, "when": "=why"}, {"let": {"p": "=out_file(a.get('path') or 'snapshot_' + (which or 'current') + '.png')"}}, {"do": ["=view.saveImage(p, w, h, bg)", "=fit_png(p, w, h)"]}, {"let": {"got": "=png_size(p) or (w, h)"}}, {"answer": {"fields": {"path": "=p", "view": "=which or 'as the person left it'", "width": "=got[0]", "height": "=got[1]", "bytes": "=filesize(p)", "fitted": {"when": "=not fitted", "value": false}, "fitNote": {"when": "=not fitted", "value": "='Not re-fitted: the view is as the person left it (its zoom and pan), so parts may be cut off or out of frame.' if not which else 'Turned but not re-fitted (fit: false): the zoom is the person\\'s, so parts may be cut off.'"}, "warning": {"when": "=got != (w, h)", "value": {"fmt": "Asked {w} x {h}; FreeCAD saved {got[0]} x {got[1]} and it could not be resized here."}}, "_png": {"when": "=a.get('inline', True)", "value": "=read_bytes(p)"}}}}]},
+    {"when": "=len(views) <= 1", "then": [{"let": {"which": "=views[0] if views else None", "fitted": false}}, {"when": "=which", "then": [{"do": "=turn(view, which)"}, {"when": "=a.get('fit', True)", "then": [{"do": "=snap_fit(view, w, h)"}, {"let": {"fitted": true}}]}]}, {"let": {"why": "=snap_empty(view, w, h, fitted)"}}, {"answer": {"fields": {"empty": "=why", "view": "=which or 'as the person left it'", "fitted": "=fitted"}}, "when": "=why"}, {"let": {"p": "=out_file(a.get('path') or 'snapshot_' + (which or 'current') + '.png')"}}, {"do": ["=view.saveImage(p, w, h, bg)", "=fit_png(p, w, h)"]}, {"let": {"got": "=png_size(p) or (w, h)"}}, {"answer": {"fields": {"path": "=p", "view": "=which or 'as the person left it'", "width": "=got[0]", "height": "=got[1]", "bytes": "=filesize(p)", "fitted": {"when": "=not fitted", "value": false}, "fitNote": {"when": "=not fitted", "value": "='Not re-fitted: the view is as the person left it (its zoom and pan), so parts may be cut off or out of frame.' if not which else 'Turned but not re-fitted (fit: false): the zoom is the person\\'s, so parts may be cut off.'"}, "warning": {"when": "=got != (w, h)", "value": {"fmt": "Asked {w} x {h}; FreeCAD saved {got[0]} x {got[1]} and it could not be resized here."}}, "_png": {"when": "=a.get('inline', False)", "value": "=read_bytes(p)"}}}}]},
     {"let": {"cols, rows, cw, ch": "=snap_size(w, h, len(views), bool(a.get('cell')))"}},
     {"refuse": {"fmt": "cell {cw} x {ch} in a {cols} x {rows} grid is {cw * cols} x {ch * rows} px: 8192 at most each way."}, "when": "=cw * cols > 8192 or ch * rows > 8192"},
     {"let": {"why": "=nothing_shown()"}},
@@ -21184,7 +21184,7 @@
     {"let": {"out": "={'views': views, 'paths': each, 'width': cw * cols, 'height': ch * rows, 'grid': [cols, rows], 'cell': [cw, ch]}"}},
     {"put": {"fitted": false, "fitNote": "Turned but not re-fitted (fit: false): each view keeps the person's zoom, so parts may be cut off or out of frame."}, "when": "=not a.get('fit', True)"},
     {"put": {"sizeIs": "='each view\\'s (cell: true)' if a.get('cell') else 'the whole grid (cell: true makes it each view\\'s)'", "note": "The person's own view is put back."}},
-    {"when": "=combined", "then": [{"let": {"got": "=png_size(p)"}}, {"when": "=got and got != (cw * cols, ch * rows)", "then": [{"do": "=fit_png(p, cw * cols, ch * rows)"}, {"let": {"got": "=png_size(p) or got"}}]}, {"put": {"width": "=got[0]", "height": "=got[1]"}, "when": "=got"}, {"put": {"path": "=p", "bytes": "=filesize(p)"}}, {"put": {"_png": "=read_bytes(p)"}, "when": "=a.get('inline', True)"}], "else": [{"put": {"warning": "The views could not be put in one picture here: each view's own file is in paths."}}]}
+    {"when": "=combined", "then": [{"let": {"got": "=png_size(p)"}}, {"when": "=got and got != (cw * cols, ch * rows)", "then": [{"do": "=fit_png(p, cw * cols, ch * rows)"}, {"let": {"got": "=png_size(p) or got"}}]}, {"put": {"width": "=got[0]", "height": "=got[1]"}, "when": "=got"}, {"put": {"path": "=p", "bytes": "=filesize(p)"}}, {"put": {"_png": "=read_bytes(p)"}, "when": "=a.get('inline', False)"}], "else": [{"put": {"warning": "The views could not be put in one picture here: each view's own file is in paths."}}]}
    ],
    "answer": {"fields": {"...": "=out"}}
   },
@@ -21777,21 +21777,23 @@
   },
   "window_snapshot": {
    "group": "app",
-   "description": "Take a picture of the FreeCAD window as the person sees it: toolbars, tree, panels, 3D view. part: one dock panel by its title (\"Report view\", \"Model\", \"Agent Link\"). A wrong title lists them. Qt draws it in the background: no screen recording, and the window need not be in front. An open menu or dialog is drawn where it is. It works while a menu or dialog holds the window. path: a .png (window.png in the session's folder). inline: false leaves the picture out of the answer. Answer: path, width, height. Use it to see how something looks, never as proof that a step worked: read state for that. Window only.",
-   "inputSchema": {"type": "object", "properties": {"part": {"type": "string"}, "path": {"type": "string"}, "inline": {"type": "boolean"}}, "required": [], "additionalProperties": false},
+   "description": "Take a picture of the FreeCAD window as the person sees it: toolbars, tree, panels, 3D view. part: one dock panel by its title (\"Report view\", \"Model\", \"Agent Link\"). A wrong title lists them. Qt draws it in the background: no screen recording, and the window need not be in front. An open menu or dialog is drawn where it is. It works while a menu or dialog holds the window. path: a .png (window.png in the session's folder). width: px, made smaller with the same shape (the window's own size by default). The picture goes to the file only. inline: true also puts it in the answer. Answer: path, width, height. Use it to see how something looks, never as proof that a step worked: read state for that. Window only.",
+   "inputSchema": {"type": "object", "properties": {"part": {"type": "string"}, "path": {"type": "string"}, "width": {"type": "integer"}, "inline": {"type": "boolean"}}, "required": [], "additionalProperties": false},
    "changes": false,
    "source": "Agent Link (was agentlink/families/app.py)",
-   "date": "2026-11-16",
+   "date": "2026-11-22",
    "runner": "steps",
    "steps": [
     {"let": {"mw": "=window().getMainWindow()"}},
     {"let": {"target": "=mw"}},
     {"when": "=a.part", "then": [{"let": {"want": "=str(a.part).lower()", "docks": "=dock_panels(mw)"}}, {"let": {"target": "=first([d for d in docks if d.windowTitle().lower() == want or d.objectName().lower() == want])"}}, {"refuse": {"fmt": "part: no panel titled {a.part!r} — the panels: {', '.join(sorted([d.windowTitle() for d in docks if d.windowTitle()]))}."}, "code": "not_found", "when": "=target is None"}]},
+    {"refuse": "width: 16 to 8192 px.", "code": "invalid_input", "when": "=a.get('width') is not None and not (16 <= int(a.width) <= 8192)"},
     {"let": {"pix": "=grab(target)"}},
+    {"let": {"pix": "=scaled(pix, a.width)"}, "when": "=a.get('width') is not None and int(a.width) < pix.width()"},
     {"let": {"file": "=local(a.path or out_file('window.png'))"}},
     {"refuse": {"fmt": "Could not write {file}"}, "code": "failed", "when": "=not pix.save(file, 'PNG')"}
    ],
-   "answer": {"fields": {"path": "=file", "width": "=pix.width()", "height": "=pix.height()", "_png": {"when": "=a.get('inline', True)", "value": "=read_bytes(file)"}}}
+   "answer": {"fields": {"path": "=file", "width": "=pix.width()", "height": "=pix.height()", "_png": {"when": "=a.get('inline', False)", "value": "=read_bytes(file)"}}}
   },
   "snapshot_latest": {
    "group": "app",

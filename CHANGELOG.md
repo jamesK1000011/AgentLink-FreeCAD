@@ -6,6 +6,11 @@ All notable changes to Agent Link for FreeCAD. The format follows
 [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+- Efficiency design, round 1a (branch `efficiency`, 22 Nov; claude/agent-link-design-efficiency-2026-11-22.md D1, G1, C2):
+  - `window_snapshot` and `view_snapshot` write the picture to the file and give its path; `inline: true` also puts it in the answer (before: in the answer unless `inline: false`). `window_snapshot { width }` makes the picture smaller with the same shape (16 to 8192 px).
+  - `tool_find`: the tool whose whole action the search names comes first ("pad sketch": `pd_pad`, before the sketch tools; "drawing dimension": `td_dim`).
+  - Fields given by another common name are read as the tool's own and the answer says so (`readAs`): `object_set` set/properties as values, `varset_set` values as properties, `doc_close` document as documents, `object_get` properties as filter, and a few more (`protocol.FIELD_ALIASES`). The cards do not change.
+  - A batch inside a batch's calls runs in its place, in order, under the outer batch's rollback and budget, with each `$from` moved to count through the whole list (`flattened` in the answer). A batch from a file inside the calls is still refused.
 - A partly loaded document (FreeCAD opened it only for a link in another document; `Document.Partial`) refuses every changing call and `doc_save`, with the way out (`doc_revert` loads the whole file). Before, the change and the save said ok and FreeCAD kept nothing.
 - `param_bind` refuses a target through a link property (`Body.Tip.Length`): FreeCAD keeps that expression on the Body and applies it to each new Tip. The refusal names the feature to bind instead.
 - Modelling-practice warning "thread not made": a blind hole is now found by the material on the hole's axis (a line from the sketch's circle centre, cut with the shape before the hole), not by the body's box. When that cannot be read, the warning says only "modelled".
