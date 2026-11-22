@@ -832,7 +832,7 @@ class Run:
                 self.read_checks += 1
                 if r.get("applies") is False and r.get("wouldRefuse"):
                     x = r["wouldRefuse"][0]
-                    self._dry_refusal(where, name, x.get("code", "invalid_input"), f"{x.get('words')} (read from its leading checks)")
+                    self._dry_refusal(where, name, x.get("code", "invalid_input"), _said(x.get("words")) + " That is its leading check.")
             except Stop:
                 raise
             except Exception:  # noqa: BLE001 - a reading is advice; it never stops a block by failing
@@ -882,6 +882,12 @@ def _plain(v):
         return json.loads(compact(v))
     except Exception:  # noqa: BLE001
         return str(v)
+
+
+def _said(s):
+    """Words that end as a sentence does, so the next words follow on."""
+    s = str(s).rstrip()
+    return s if not s or s[-1] in ".!?)»\"'" else s + "."
 
 
 def _cut(s, n=WORDS):
@@ -952,7 +958,7 @@ def precheck_calls(server, calls, first=0):
         try:
             check_input(t.schema, a, t.name)
         except ToolError as e:
-            return ToolError(e.code, f"calls.{first + i} ({t.name}): {e.message} Read before the batch ran (check: true). Nothing was run.")
+            return ToolError(e.code, f"calls.{first + i} ({t.name}): {_said(e.message)} Read before the batch ran (check: true). Nothing was run.")
         try:
             changing = bool(t.for_call(a).changes_for(a))
         except Exception:  # noqa: BLE001
@@ -964,7 +970,7 @@ def precheck_calls(server, calls, first=0):
                 r = needs.of_tool(t, a)
                 if r.get("applies") is False and r.get("wouldRefuse"):
                     x = r["wouldRefuse"][0]
-                    return ToolError(x.get("code", "invalid_input"), f"calls.{first + i} ({t.name}): {x.get('words')} Read from its leading checks "
+                    return ToolError(x.get("code", "invalid_input"), f"calls.{first + i} ({t.name}): {_said(x.get('words'))} Read from its leading checks "
                                                                       "before the batch ran (check: true). Nothing was run.")
             except Exception:  # noqa: BLE001 - advice only
                 pass
@@ -1001,7 +1007,7 @@ def fast_tool(server, session, a):
         raise ToolError("invalid_input", "do: a list of steps ({ call: tool, …fields }, { let }, { each }, { when }, { get } …). Nothing was run.")
     dry, stop = check(server, session, steps)
     if stop is not None:
-        err = ToolError(stop.code, f"step {stop.where}{' (' + stop.tool + ')' if stop.tool else ''}: {stop.words} Read before step 1. Nothing was run.")
+        err = ToolError(stop.code, f"step {stop.where}{' (' + stop.tool + ')' if stop.tool else ''}: {_said(stop.words)} Read before step 1. Nothing was run.")
         err.outcome = "not_started"
         raise err
     if a.get("check"):
@@ -1137,7 +1143,7 @@ def _run(server, session, steps, a):
                "warning": "The document the block started in was closed during it: nothing to take back there."}
     else:
         got = T.roll_back(s, start, state["made"], mine.get("own"), names0, run.rows, label="block")
-    words = [f"step {stop.where}{' (' + stop.tool + ')' if stop.tool else ''}: {stop.words}"]
+    words = [f"step {stop.where}{' (' + stop.tool + ')' if stop.tool else ''}: {_said(stop.words)}"]
     ran = sum(1 for r in run.rows if r.get("ok"))
     words.append(f"{ran} call{'s' if ran != 1 else ''} ran before it;"
                  f" the block was taken back ({got.get('undone', 0)} undo step{'s' if got.get('undone', 0) != 1 else ''})."
