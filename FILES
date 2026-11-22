@@ -167,6 +167,7 @@ agentlink/outputs.py
 agentlink/overlay.py
 agentlink/panel.py
 agentlink/panel_tabs.py
+agentlink/partialdoc.py
 agentlink/paths.py
 agentlink/person_ok.py
 agentlink/pointfiles.py
@@ -517,6 +518,7 @@ tests/test_gui_link_dialog.py
 tests/test_gui_popups.py
 tests/test_gui_saved.py
 tests/test_gui_shell.py
+tests/test_gui_words_neutral.py
 tests/test_guideidx.py
 tests/test_guides.py
 tests/test_health.py
@@ -570,6 +572,7 @@ tests/test_no_addon_names.py
 tests/test_note_faces.py
 tests/test_notice.py
 tests/test_once.py
+tests/test_outcome_exit_1122.py
 tests/test_outputs.py
 tests/test_overlay.py
 tests/test_owner_services.py
@@ -577,6 +580,7 @@ tests/test_panel_polish.py
 tests/test_panel_tabs.py
 tests/test_param.py
 tests/test_part_hardening.py
+tests/test_partial_and_link_binds_1122.py
 tests/test_path_keys.py
 tests/test_paths.py
 tests/test_pipe_1120.py

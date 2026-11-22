@@ -6,6 +6,10 @@ All notable changes to Agent Link for FreeCAD. The format follows
 [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+- A refused changing call says what it left in the document: `error.outcome` is `not_started` (refused before any change: safe to call again), `rolled_back` (taken back whole) or `cleanup_incomplete` with `left` (the objects the take-back did not reach). A batch that stops says `outcome` too: `rolled_back`, `partial` (fewer steps undone than made), `kept` (rollback off, or stopped inside a dialog's loop) or `not_started`. Reads carry no outcome.
+- Code a tool runs that calls `sys.exit` or raises `KeyboardInterrupt` (an add-on's, an approved cookbook entry's) is refused with code `failed` and its outcome; the step is taken back and FreeCAD and Agent Link go on. The window link refuses the same outside a tool's own guard.
+- The words in FreeCAD (Setup check, About, the usage note) no longer name Claude for what any AI client does; help about the Claude Desktop extension says "Claude Desktop extension". `tests/test_gui_words_neutral.py` keeps it so.
+- FILES lists `agentlink/partialdoc.py`, so the launcher installs it.
 - A partly loaded document (FreeCAD opened it only for a link in another document; `Document.Partial`) refuses every changing call and `doc_save`, with the way out (`doc_revert` loads the whole file). Before, the change and the save said ok and FreeCAD kept nothing.
 - `param_bind` refuses a target through a link property (`Body.Tip.Length`): FreeCAD keeps that expression on the Body and applies it to each new Tip. The refusal names the feature to bind instead.
 - Modelling-practice warning "thread not made": a blind hole is now found by the material on the hole's axis (a line from the sketch's circle centre, cut with the shape before the hole), not by the body's box. When that cannot be read, the warning says only "modelled".

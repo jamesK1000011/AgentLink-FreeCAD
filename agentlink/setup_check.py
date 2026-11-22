@@ -209,10 +209,10 @@ def check(ask=True):
         if launcher_check:
             r = launcher_check.report()
             if r.get("fetched"):
-                row("Claude extension launcher", "ok" if not launcher_check.can_mend(r) else "missing", launcher_check.summary(r).splitlines()[0],
+                row("Claude Desktop extension launcher", "ok" if not launcher_check.can_mend(r) else "missing", launcher_check.summary(r).splitlines()[0],
                     None if not launcher_check.can_mend(r) else "Run this check from FreeCAD (Agent Link > Setup Check) and press Mend.")
             else:
-                row("Claude extension launcher", "note", "not fetched (fine unless you use the Claude Desktop extension: open Claude Desktop once with it installed)")
+                row("Claude Desktop extension launcher", "note", "not fetched (fine unless you use the Claude Desktop extension: open Claude Desktop once with it installed)")
     for label, exes, bundles, why, url in OPTIONAL:
         p = find_app(label, exes, bundles, fc and fc["bin"])
         row(label, "ok" if p else "optional", p or f"not found; only for {why}", None if p else url)

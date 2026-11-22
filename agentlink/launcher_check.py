@@ -74,9 +74,9 @@ def summary(r):
     if r.get("error"):
         return f"Could not check the launcher: {r['error']}"
     if not r.get("fetched"):
-        lines = ["The Claude extension's launcher is not here yet. Open Claude Desktop with the FreeCAD Agent Link extension once: it fetches the launcher."]
+        lines = ["The Claude Desktop extension's launcher is not here yet. Open Claude Desktop with the FreeCAD Agent Link extension once: it fetches the launcher."]
     else:
-        lines = [f"The Claude extension's launcher is here ({r.get('bytes', 0)} bytes)."]
+        lines = [f"The Claude Desktop extension's launcher is here ({r.get('bytes', 0)} bytes)."]
         if r.get("esModuleScope") and not r.get("ownPackageJson"):
             lines.append(f"It cannot load: {r['esModuleScope']} makes it an ES module. Mend writes a package.json beside it that says CommonJS.")
         else:
