@@ -26,6 +26,11 @@ import json
 import os
 
 BASE = ("session_state", "batch", "guide_read", "tool_find", "approve_file", "approve_code")
+# With the fast path on (fastpath.enabled), its two tools are listed too:
+# a client that sends only listed tools (OpenCode) can then call them
+# directly, not only inside batch. Eight tools on, six off: the A/B test
+# decides whether eight becomes the default for every client (owner, 22 Nov).
+FAST = ("fast", "get")
 PREFS = "User parameter:BaseApp/Preferences/Mod/AgentLink"
 _STE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "ste.json")
 _cache = {}
@@ -66,9 +71,23 @@ def apply(server):
     """Set server.static_base from the mode now (None in classic)."""
     # A server without tool_find (a test server, a small add-on server on
     # this protocol) keeps its own list: the base is no use without a find.
-    has_find = "tool_find" in (getattr(server, "tools", None) or {})
-    server.static_base = BASE if mode() == "static" and has_find else None
+    tools = getattr(server, "tools", None) or {}
+    has_find = "tool_find" in tools
+    server.static_base = base(tools) if mode() == "static" and has_find else None
     return server.static_base
+
+
+def base(tools=None):
+    """BASE, plus the fast path's two tools when it is on and they are here."""
+    try:
+        from . import fastpath
+
+        on = fastpath.enabled()
+    except Exception:  # noqa: BLE001 - a server without the fast path
+        on = False
+    if on and all(t in (tools or {}) for t in FAST):
+        return BASE + FAST
+    return BASE
 
 
 def listing(server, tools):
