@@ -659,11 +659,38 @@ def offset_out(w, d, join):
     return off
 
 
+_FILLET_BEFORE = {}
+
+
+def _named(sk):
+    return [c.Name for c in sk.Constraints if getattr(c, "Name", "")]
+
+
 def fillet(sk, chamfer, *args):
     """Sketcher's fillet at a corner (geo, vertex, radius) or between two
-    curves (geo, geo, point, point, radius), the curves trimmed to it and no
-    constraints made; chamfer (FreeCAD 1.0+): a straight cut, not an arc."""
-    sk.fillet(*args, True, False, *((True,) if chamfer else ()))
+    curves (geo, geo, point, point, radius), the curves trimmed to it;
+    chamfer (FreeCAD 1.0+): a straight cut, not an arc. The corner is kept
+    as a point (Sketcher's "Preserve corner", createCorner): the corner's
+    constraints, bound ones too, move to it and stay (live finding T3,
+    21 Nov: without it they were deleted with no word)."""
+    _FILLET_BEFORE[id(sk)] = _named(sk)
+    sk.fillet(*args, True, True, *((True,) if chamfer else ()))
+
+
+def fillet_made(sk, n0, chamfer=False):
+    """What a fillet made and what it took away, for its answer: the new
+    arc (or chamfer line) by id, the kept corner point, and the named
+    constraints that are gone."""
+    kind = "Part::GeomLineSegment" if chamfer else "Part::GeomArcOfCircle"
+    made = [i for i in range(n0, len(sk.Geometry)) if sk.Geometry[i].TypeId == kind]
+    points = [i for i in range(n0, len(sk.Geometry)) if sk.Geometry[i].TypeId == "Part::GeomPoint"]
+    out = ("line " if chamfer else "arc ") + ", ".join(str(i) for i in made or [len(sk.Geometry) - 1])
+    if points:
+        out += f"; corner kept as point {points[0]}"
+    lost = [n for n in _FILLET_BEFORE.pop(id(sk), []) if n not in set(_named(sk))]
+    if lost:
+        out += f"; named constraints gone: {', '.join(lost)} (bind them again)"
+    return out
 
 
 def bounds(sk, geos):
@@ -721,6 +748,6 @@ def tools(session):
                # the family's: the solver's reading, the builders, constraints by name
                "frame": frame, "state_of": state_of, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
                "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_index": con_index,
-               "gid": gid, "face_frame": face_frame, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "bounds": bounds,
+               "gid": gid, "face_frame": face_frame, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines}
     return runners.tools(GROUP, s, helpers)

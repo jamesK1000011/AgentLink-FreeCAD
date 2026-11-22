@@ -8759,7 +8759,7 @@
        ]
       },
       {"refuse": {"fmt": "No fillet of {r:g} mm fits there — a smaller radius, or a corner where two curves meet."}, "code": "failed", "when": "=len(sk.Geometry) == n0"},
-      {"push": {"done": {"fmt": "{'chamfer' if x.get('chamfer') else 'fillet r'}{r:g}: {'line' if x.get('chamfer') else 'arc'} {len(sk.Geometry) - 1}"}}}
+      {"push": {"done": {"fmt": "{'chamfer' if x.get('chamfer') else 'fillet r'}{r:g}: {fillet_made(sk, n0, bool(x.get('chamfer')))}"}}}
      ]
     },
     {
@@ -21673,7 +21673,7 @@
   },
   "cmd_run": {
    "group": "app",
-   "description": "Run a FreeCAD command by name (Std_ViewFitAll, Std_ViewIsometric, PartDesign_Pad …), as when the person presses its button. It acts on the current selection of the window (set it with selection). It acts on the document in front (doc_switch { front: true }), in the active workbench. The tool refuses a command that is not active (greyed out), because FreeCAD would silently do nothing. It refuses commands that open a modal dialog, run macros or quit, and names the tool for the task. It also refuses commands that open a file dialog (Std_SaveCopy, Std_ViewScreenShot, TechDraw_ExportPageSVG …), because the path there is not checked. Many modelling commands open a task panel and wait: dialog_answer presses its OK or Cancel. index: the item of a group command (0). A Part Design command with no active body first makes the body of the selection active, as a double-click does. Answer: ran, wasActive, workbench, document, objectsAdded, activeBody. A command gives no result of its own, so read the model after it (session_state). The headless tools do modelling better; use this for view and window commands. Window only.",
+   "description": "Run a FreeCAD command by name (Std_ViewFitAll, Std_ViewIsometric, PartDesign_Pad …), as when the person presses its button. It acts on the current selection of the window (set it with selection). select: [objects]: the tool selects them for this run only, then puts the person's selection back. It acts on the document in front (doc_switch { front: true }), in the active workbench. The tool refuses a command that is not active (greyed out), because FreeCAD would silently do nothing. It refuses commands that open a modal dialog, run macros or quit, and names the tool for the task. It also refuses commands that open a file dialog (Std_SaveCopy, Std_ViewScreenShot, TechDraw_ExportPageSVG …), because the path there is not checked. Many modelling commands open a task panel and wait: dialog_answer presses its OK or Cancel. index: the item of a group command (0). A Part Design command with no active body first makes the body of the selection active, as a double-click does. Answer: ran, wasActive, workbench, document, objectsAdded, activeBody. A command gives no result of its own, so read the model after it (session_state). The headless tools do modelling better; use this for view and window commands. Window only.",
    "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "index": {"type": "integer"}, "select": {"type": "array", "items": {"type": "string"}, "description": "Objects (\"Block\") or faces and edges (\"Block.Face6\") selected for this run only. The person's selection comes back after the run."}}, "required": ["name"], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/app.py)",

@@ -1502,6 +1502,8 @@ class Link:
         err = {"code": "busy", "message": msg}
         if outcome:
             err["outcome"] = outcome
+        if retried:
+            err["retried"] = int(retried)  # in the answer itself, so every model sees it (owner, 22 Nov)
         result = {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}
         if retried:
             result["_meta"] = {"retried": int(retried)}
@@ -2063,6 +2065,7 @@ class Link:
                 reply = None  # sent already, while a dialog held the call
             elif reply is not None and getattr(line, "retried", 0) and isinstance(reply.get("result"), dict):
                 reply["result"].setdefault("_meta", {})["retried"] = 1
+                mark_retried(reply["result"])
         except ValueError:
             reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}
         if not self.going and _tool_name(line) == "app_restart":
@@ -2104,3 +2107,21 @@ class Link:
             import FreeCADGui
 
             FreeCADGui.updateGui()
+
+
+def mark_retried(result):
+    """E10: put retried: 1 in the answer's own JSON text, so every model sees
+    it (a client can hide _meta). Text that is not a JSON object stays."""
+    from .protocol import compact
+
+    for c in result.get("content") or []:
+        if c.get("type") != "text":
+            continue
+        try:
+            body = json.loads(c.get("text") or "")
+        except ValueError:
+            continue
+        if isinstance(body, dict):
+            body["retried"] = 1
+            c["text"] = compact(body)
+    return result

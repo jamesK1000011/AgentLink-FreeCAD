@@ -2868,7 +2868,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                            "}], with next: the topics not reached; guide_read { topic: next } reads on. Changes nothing.",
              obj({"topic": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "section": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}}), guide_read),
         Tool("job_status", "Read the state of a job. job: its id (call-N, or job-… for a heavy read). Answer: running (seconds so far), or done with the tool's answer or "
-                           "error. wait: seconds (up to 30) to wait first. No job: all jobs (kept for an hour). The server answers at once, also while FreeCAD "
+                           "error. wait: seconds (up to 30) to wait first. No job: all jobs (kept for an hour). late: the last 20 calls answered busy before they ended; job: such a call's id gives its late answer. The server answers at once, also while FreeCAD "
                            "is busy. stop: true stops a job-… job. The stop occurs at the next Python step of the job. A long step in FreeCAD's own code ends first. "
                            "Then the job fails with the code stopped. A job-… job is a read, so the document does not change. A call-N job runs on FreeCAD's "
                            "own thread and cannot stop in the middle. For it, the answer gives the next steps: wait, or app_force_restart. Without stop, it changes nothing.",

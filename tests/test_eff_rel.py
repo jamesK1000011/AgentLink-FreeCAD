@@ -414,3 +414,27 @@ class E2ChildSaysTook(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RetriedInTheAnswer(unittest.TestCase):
+    """Owner, 22 Nov: the retry mark is in the answer itself, not only in _meta."""
+
+    def test_success_text_carries_retried(self):
+        from agentlink import gui_link
+        r = {"content": [{"type": "text", "text": json.dumps({"ok": True})}]}
+        gui_link.mark_retried(r)
+        self.assertEqual(json.loads(r["content"][0]["text"])["retried"], 1)
+
+    def test_plain_text_stays(self):
+        from agentlink import gui_link
+        r = {"content": [{"type": "text", "text": "plain"}]}
+        gui_link.mark_retried(r)
+        self.assertEqual(r["content"][0]["text"], "plain")
+
+    def test_busy_error_carries_retried(self):
+        from agentlink import gui_link
+        rep = gui_link.Link.busy_reply(7, "a dialog", outcome="not_started", retried=1) if hasattr(gui_link, "Link") else None
+        if rep is None:
+            self.skipTest("no Link class")
+        body = json.loads(rep["result"]["content"][0]["text"])
+        self.assertEqual(body["error"]["retried"], 1)
