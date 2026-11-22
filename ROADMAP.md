@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 # Roadmap
 
 What Agent Link for FreeCAD builds now, next and later, and what we looked at and chose not to do. The list changes as work lands. It gives an order, not dates.

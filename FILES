@@ -9,6 +9,7 @@ LICENSES/LGPL-2.1-or-later.txt
 LICENSES/MIT.txt
 README.md
 REUSE.toml
+ROADMAP.md
 SETUP.md
 Studio Dark/Studio Dark.cfg
 Studio Dark/parameters/Studio Dark.yaml
@@ -519,6 +520,7 @@ tests/test_gui_link_dialog.py
 tests/test_gui_popups.py
 tests/test_gui_saved.py
 tests/test_gui_shell.py
+tests/test_gui_words_neutral.py
 tests/test_guideidx.py
 tests/test_guides.py
 tests/test_health.py
@@ -572,6 +574,7 @@ tests/test_no_addon_names.py
 tests/test_note_faces.py
 tests/test_notice.py
 tests/test_once.py
+tests/test_outcome_exit_1122.py
 tests/test_outputs.py
 tests/test_overlay.py
 tests/test_owner_services.py

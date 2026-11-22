@@ -202,6 +202,30 @@ def close(w):
     return ev, ok
 
 
+# ---- a refused call's outcome ----
+
+def mark_outcome(exc, ev, removed, doc, names0):
+    """Put on exc what a refused changing call left (read by
+    protocol.refusal; Session.execute calls it after the take-back): "not_started" (no change was made), "rolled_back"
+    (all of it was taken back) or "cleanup_incomplete" with the objects that
+    stay. Never raises."""
+    try:
+        if getattr(exc, "outcome", None):
+            return
+        left = []
+        if doc is not None and names0 is not None:
+            try:
+                left = [o.Label for o in doc.Objects if o.Name not in names0]
+            except Exception:
+                left = []
+        touched = bool(removed) or any(e and e[0] not in (RECOMPUTED, VIEW) for e in (ev or []))
+        exc.outcome = "cleanup_incomplete" if left else ("rolled_back" if touched else "not_started")
+        if left:
+            exc.outcome_left = left[:8]
+    except Exception:
+        pass
+
+
 # ---- readings ---------------------------------------------------------------------------
 
 def stays(ev):

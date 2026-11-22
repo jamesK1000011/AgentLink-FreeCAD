@@ -437,6 +437,22 @@ def compact(obj):
         return json.dumps(_finite(json.loads(json.dumps(obj, default=_plain))), separators=(",", ":"), ensure_ascii=False, allow_nan=False)
 
 
+
+def _outcome(tool, exc):
+    """A refusal's outcome for a changing call: what Session.execute put on
+    the error (changes.mark_outcome), else not_started (it was refused before
+    any change began: input, guards, a job check). None for a read."""
+    got = getattr(exc, "outcome", None)
+    if got:
+        return got
+    try:
+        if tool is not None and tool.changes and tool.name != "batch":
+            return "not_started"
+    except Exception:
+        pass
+    return None
+
+
 def failed_words(name, e):
     """A tool's own failure as a sentence. A bare KeyError said only the
     key ("asm_joint failed: 'M8x25-Screw219'"): it is an object or entry
@@ -852,13 +868,22 @@ class Server:
             if name == "batch":
                 from . import staticbase
 
-                return self.refusal(e.code, staticbase.batch_hint(e.message))
-            return self.refusal(e.code, e.message)
+                return self.refusal(e.code, staticbase.batch_hint(e.message), outcome=_outcome(tool, e))
+            return self.refusal(e.code, e.message, outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None))
         except ValueError as e:
-            return self.refusal("invalid_input", str(e))
+            return self.refusal("invalid_input", str(e), outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None))
+        except (SystemExit, KeyboardInterrupt) as e:
+            # Code a tool ran (an add-on's, an approved cookbook entry's)
+            # called sys.exit or raised KeyboardInterrupt: FreeCAD stays up.
+            # Session.execute has already taken the step back.
+            out_of = _outcome(tool, e)
+            kept = "nothing was kept" if out_of in ("rolled_back", "not_started") else "some objects stay (left)"
+            what = "called exit" if isinstance(e, SystemExit) else "was interrupted (KeyboardInterrupt)"
+            return self.refusal("failed", f"{name}: the add-on's code {what}; {kept}. FreeCAD and Agent Link go on.",
+                                outcome=out_of, left=getattr(e, "outcome_left", None))
         except Exception as e:
             traceback.print_exc(file=sys.stderr)
-            return self.refusal("failed", failed_words(name, e), _test_trace())
+            return self.refusal("failed", failed_words(name, e), _test_trace(), outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None))
         if read_as and isinstance(out, dict):
             # Fields given by another common name (FIELD_ALIASES): what was read.
             out["readAs"] = "read " + ", ".join(read_as)
@@ -913,8 +938,15 @@ class Server:
         return {**jobs.summary(job), "note": f"{tool.name} is still running (past {waited:.0f} s, longer than a call may wait): it goes on as a job; nothing else was changed."}
 
     @staticmethod
-    def refusal(code, message, trace=None):
+    def refusal(code, message, trace=None, outcome=None, left=None):
         err = {"code": code, "message": message}
+        if outcome:
+            # What the refused call left in the document: not_started (no
+            # change was made: safe to call again), rolled_back (taken back
+            # whole), cleanup_incomplete (left: the objects that stay).
+            err["outcome"] = outcome
+        if left:
+            err["left"] = list(left)
         if trace:
             err["trace"] = trace
         return {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}
