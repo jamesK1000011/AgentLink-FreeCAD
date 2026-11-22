@@ -36,6 +36,12 @@ class Unwrap(unittest.TestCase):
         check_input(CHANGE, args, "pd_pad")
         self.assertEqual(args, {})
 
+    def test_approvals_keep_their_exact_shape(self):
+        schema = {"type": "object", "properties": {"id": {"type": "string"}}, "additionalProperties": False}
+        for name in ("approve_code", "approve_file"):
+            with self.assertRaises(Exception):
+                check_input(schema, {"arguments": {"id": "Gears"}}, name)
+
     def test_not_unwrapped_with_other_keys(self):
         with self.assertRaises(Exception):
             check_input(CHANGE, {"arguments": {"length": 4}, "length": 4}, "pd_pad")

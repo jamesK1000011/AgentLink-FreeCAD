@@ -392,6 +392,7 @@ def plain_name(server, n):
 # not the changes flag: approve_file and approve_code change nothing in the
 # document but must take their exact pending arguments, and a tool that
 # writes a file can misread a misspelled path. Every tool not here refuses.
+STRICT_SHAPE = frozenset(("approve_file", "approve_code"))
 FORGIVING_READS = frozenset(("session_state", "tool_find", "tool_groups", "guide_read", "get", "job_status", "usage_report", "report_read"))
 
 
@@ -407,7 +408,8 @@ def check_input(schema, args, tool=None):
     # direct call; live, 22 Nov: a local model, five times in one run):
     # taken from inside, when arguments is the only key and not a field here.
     inner = args.get("arguments")
-    if set(args) == {"arguments"} and "arguments" not in props and isinstance(inner, dict):
+    # Not on the approval tools: they take the pending call exactly, shape too.
+    if set(args) == {"arguments"} and "arguments" not in props and isinstance(inner, dict) and tool not in STRICT_SHAPE:
         args.clear()
         args.update(inner)
         read_as.append("inputs taken from inside arguments (a direct call takes them at the top level)")
