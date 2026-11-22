@@ -326,11 +326,28 @@ def client_name(conn=False):
         return _NAMES.get(conn)
 
 
+def window_only_clients():
+    """The clients whose approvals the person wants to give in FreeCAD's
+    window, not in the client: the preference Mod/AgentLink
+    ApproveInWindowFor (names, comma separated; empty by default). Each
+    client asks the person as it is set up (Claude Desktop's tool
+    permissions, OpenCode's permission "ask"), so Agent Link does not judge
+    a client by its name unless the person says so (owner, 22 Nov)."""
+    try:
+        import FreeCAD
+
+        raw = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/AgentLink").GetString("ApproveInWindowFor", "")
+    except Exception:  # noqa: BLE001 - headless tests, no FreeCAD
+        raw = os.environ.get("AGENTLINK_APPROVE_IN_WINDOW_FOR", "")
+    return {x.strip().lower() for x in str(raw).split(",") if x.strip()}
+
+
 def asks_first(conn=False):
-    """True when the client on this connection is known to ask the person
-    before each tool call (ASKING_CLIENTS)."""
-    name = client_name(conn)
-    return bool(name) and name.strip().lower() in ASKING_CLIENTS
+    """True unless the person named this client in ApproveInWindowFor: then
+    its approvals go to the window's Approve dialog. ASKING_CLIENTS is kept
+    for the log only."""
+    name = (client_name(conn) or "").strip().lower()
+    return name not in window_only_clients() if name else "(unnamed)" not in window_only_clients()
 
 
 def _in_window(req):

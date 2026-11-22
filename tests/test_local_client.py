@@ -182,7 +182,9 @@ class ClientAsks(unittest.TestCase):
         self.addCleanup(setattr, person_ok, "SHOW", None)
         self.home = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.home, True)
-        env = mock.patch.dict(os.environ, {"AGENTLINK_HOME": self.home, "AGENTLINK_WINDOW_OK": ""})
+        # The person named these clients in ApproveInWindowFor (opt-in; empty by default).
+        env = mock.patch.dict(os.environ, {"AGENTLINK_HOME": self.home, "AGENTLINK_WINDOW_OK": "",
+                                           "AGENTLINK_APPROVE_IN_WINDOW_FOR": "opencode,(unnamed)"})
         env.start()
         self.addCleanup(env.stop)
         self.srv = approval_server()
@@ -203,6 +205,20 @@ class ClientAsks(unittest.TestCase):
             self.assertTrue(ok["approved"])
             err, got = call(self.srv, "standin_asks", {})
             self.assertTrue(got.get("ok"), name)
+
+    def test_by_default_every_client_approves_as_it_is_set_up(self):
+        # Owner, 22 Nov: OpenCode asks the person through its own permission
+        # setting ("agentlink_approve_*": "ask"); Agent Link does not judge it by name.
+        with mock.patch.dict(os.environ, {"AGENTLINK_APPROVE_IN_WINDOW_FOR": ""}):
+            for name in ("opencode", None):
+                approvals.reset()
+                if name:
+                    init(self.srv, name)
+                err, got = call(self.srv, "standin_asks", {})
+                self.assertNotIn("approveIn", got)
+                err, ok = call(self.srv, "approve_code", got["approve"]["arguments"])
+                self.assertFalse(err, ok)
+                self.assertTrue(ok["approved"])
 
     def test_a_client_that_does_not_ask_headless_is_refused(self):
         init(self.srv, "opencode")
