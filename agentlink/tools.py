@@ -2175,7 +2175,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         from . import hold as _hold
         from . import paths as _paths_mod
 
-        if a.get("read") is not None or a.get("at") is not None:
+        # at alone is no read (the input check leaves it out and says so).
+        if a.get("read") is not None:
             return _batch_read(a)
         calls = a.get("calls") or []
         if a.get("calls") is None and a.get("file") is None:

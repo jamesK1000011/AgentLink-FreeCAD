@@ -242,6 +242,11 @@ class Tool:
         return {"name": self.name, "description": self.description, "inputSchema": self.schema}
 
 
+# The supervisor tells the window which MCP client it serves (clientInfo,
+# from the client's initialize), on its own connection to the window link.
+CLIENT_METHOD = "agentlink/client"
+
+
 SYNONYMS = {
     "centre": ("center",), "center": ("centre",), "colour": ("color",), "color": ("colour",),
     "body": ("object", "part"), "object": ("body",), "part": ("body", "object"),
@@ -263,7 +268,42 @@ FIELD_ALIASES = {
     "object_get": {"properties": "filter", "property": "filter", "names": "filter"},
     "object_delete": {"object": "objects", "name": "objects"},
     "shape_query": {"object": "body"},
+    # live findings, 22 Nov: a local model gave batch its calls as commands
+    "batch": {"commands": "calls", "steps": "calls"},
 }
+
+# A field that means something only beside another one (per tool: field ->
+# the field it goes with). Given alone, it is left out and said in readAs
+# (live findings, 22 Nov: batch { at: "./", calls } was taken for a read).
+GOES_WITH = {
+    "batch": {"at": "read"},
+}
+
+
+# Fields that only ever appear in Agent Link's answers, never as a tool's
+# input (live findings, 22 Nov: a local model copied "ms": 0 from the answers
+# into every batch call, and each one was refused). Given to a tool that has
+# no such input, they are left out and the answer's readAs says so. A tool
+# whose schema has the name as a real input keeps it.
+ANSWER_FIELDS = ("ms", "msBy", "around", "saidBefore", "record", "appliesNow", "health", "readAs", "step",
+                 "options", "notice", "rider", "truncated", "outcome", "isError", "said", "flattened")
+
+# Optional text inputs that an empty string ("") means nothing for: read as
+# left out, so the call gets the answer it gives without them (live findings,
+# 22 Nov: tool_find { group: "", tool: "" }). Per tool, kept small: only where
+# an empty value cannot mean something of its own.
+EMPTY_IS_LEFT_OUT = {
+    "tool_find": ("words", "group", "tool", "to"),
+    "tool_groups": ("group", "tool", "find", "needs"),
+}
+
+
+def read_as_words(read_as):
+    """The answer's readAs line from check_input's list: the aliases read,
+    then the fields left out."""
+    aliases = [r for r in read_as if not r.startswith("ignored ")]
+    other = [r for r in read_as if r.startswith("ignored ")]
+    return "; ".join((["read " + ", ".join(aliases)] if aliases else []) + other)
 
 
 def _as_alias(spec, v):
@@ -285,6 +325,21 @@ def check_input(schema, args, tool=None):
         raise ToolError("invalid_input", "arguments: an object.")
     props = schema.get("properties", {})
     read_as = []
+    required = set(schema.get("required", []))
+    empty = [k for k in (EMPTY_IS_LEFT_OUT.get(tool) or ()) if args.get(k) == "" and k not in required]
+    for k in empty:
+        args.pop(k)
+    if empty:
+        read_as.append(f"ignored {', '.join(empty)} (empty: read as left out)")
+    answer_only = [k for k in args if k in ANSWER_FIELDS and k not in props]
+    for k in answer_only:
+        args.pop(k)
+    if answer_only:
+        read_as.append(f"ignored {', '.join(answer_only)} ({'an answer field' if len(answer_only) == 1 else 'answer fields'})")
+    for k, partner in (GOES_WITH.get(tool) or {}).items():
+        if k in args and args.get(partner) is None:
+            args.pop(k)
+            read_as.append(f"ignored {k} (it goes with {partner}, which was not given)")
     for k, alt in (FIELD_ALIASES.get(tool) or {}).items():
         if k in args and k not in props and alt in props and alt not in args:
             args[alt] = _as_alias(props.get(alt), args.pop(k))
@@ -604,6 +659,12 @@ class Server:
             return None
         try:
             if method == "initialize":
+                # The client's own name, per connection: approve_file and
+                # approve_code count only from a client known to ask the
+                # person first (agentlink/approvals.py).
+                from . import approvals
+
+                approvals.note_client(client, ((msg.get("params") or {}).get("clientInfo") or {}))
                 if self.session is not None:
                     # A new conversation: every standing word is said again (agentlink/once.py).
                     from . import once
@@ -622,6 +683,14 @@ class Server:
                     "instructions": self.instructions,
                 }
             elif method == "ping":
+                result = {}
+            elif method == CLIENT_METHOD:
+                # The supervisor's word on the window link: the name its MCP
+                # client gave in initialize (the window never sees that
+                # initialize). Nothing else changes.
+                from . import approvals
+
+                approvals.note_client(client, ((msg.get("params") or {}).get("clientInfo") or {}))
                 result = {}
             elif method == "tools/list":
                 from . import staticbase
@@ -937,7 +1006,7 @@ class Server:
             return self.refusal("failed", failed_words(name, e), _test_trace(), outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None))
         if read_as and isinstance(out, dict):
             # Fields given by another common name (FIELD_ALIASES): what was read.
-            out["readAs"] = "read " + ", ".join(read_as)
+            out["readAs"] = read_as_words(read_as)
         image = None
         s = self.session
         if isinstance(out, dict) and s is not None and getattr(s, "batch_now", None) is None:

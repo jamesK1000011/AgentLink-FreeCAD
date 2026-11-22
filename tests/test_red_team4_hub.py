@@ -353,6 +353,7 @@ class DialogAnswerInFileDialogs(unittest.TestCase):
 class AppInstall(unittest.TestCase):
     def setUp(self):
         approvals.reset()
+        approvals.note_client(None, "claude-ai")  # a client that asks the person first
         self.addCleanup(approvals.reset)
         self.app, _ns, _t = app_module()
 
@@ -433,6 +434,7 @@ class Extensions(unittest.TestCase):
 
     def test_add_refuses_bad_text_before_asking(self):
         approvals.reset()
+        approvals.note_client(None, "claude-ai")  # a client that asks the person first
         self.addCleanup(approvals.reset)
         tool = ext.tools(None)[0]
         fake = types.ModuleType("FreeCAD")

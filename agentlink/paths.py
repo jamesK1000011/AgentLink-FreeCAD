@@ -73,7 +73,9 @@ STATE_FILES = {"settings.json", "settings-log.jsonl", "approvals.log", "memory-s
                # the output folder's own record (agentlink/outputs.py)
                "outputs.jsonl", ".outputs-clean.json"}
 STATE_DIRS = {"cookbooks", "cookbook-scans", "usage", "crash", "addons-previous", "stopped", "unsaved",
-              "tests", "install", "addonmanager", "extensionrepos", "settings"}
+              "tests", "install", "addonmanager", "extensionrepos", "settings",
+              # run marks of a server started with --own (keep.runtime)
+              "own"}
 OPEN_DIRS = {"ports"}
 # State no tool reads either: the running jobs' tokens (agentlink/memguard.py)
 # and the printers file with its API keys, in the home.

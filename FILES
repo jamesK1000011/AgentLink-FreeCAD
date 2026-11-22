@@ -567,6 +567,7 @@ tests/test_live_dialog_1118.py
 tests/test_live_findings.py
 tests/test_live_person_1118.py
 tests/test_live_run.py
+tests/test_local_client.py
 tests/test_loft_findings.py
 tests/test_loft_spans.py
 tests/test_material.py

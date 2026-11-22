@@ -617,6 +617,51 @@ def _memory_job(q, window, state):
     return {"tool": r.get("tool"), "start": float(r.get("start") or r.get("t") or time.time()), "pid": pid}
 
 
+OWN = "AGENTLINK_OWN"
+OWN_ID = "AGENTLINK_OWN_ID"
+
+
+def own_mode(argv=None):
+    """True when this server is asked to keep apart from the FreeCAD window
+    (--own, or AGENTLINK_OWN=1): its calls never go to the window's link, and
+    its hidden FreeCAD keeps its run marks in a folder of its own."""
+    if argv is not None and "--own" in argv:
+        return True
+    return os.environ.get(OWN, "").strip().lower() in ("1", "true", "on", "yes")
+
+
+def set_own(argv):
+    """--own given: said in the environment for this process and the hidden
+    FreeCAD it starts, with an id of its own (this process's pid) for its
+    run marks (keep.runtime). Answers whether own mode is on."""
+    if not own_mode(argv):
+        return False
+    os.environ[OWN] = "1"
+    os.environ.setdefault(OWN_ID, str(os.getpid()))
+    return True
+
+
+SUPERVISOR_INFO = {"name": "agentlink-supervisor", "version": "1"}
+
+
+def restart_initialize(client_info=None):
+    """The initialize line for a FreeCAD started again: with the clientInfo
+    the MCP client gave (so the fresh one knows the same client: approvals
+    count only from a client that asks the person first), else the
+    supervisor's own."""
+    info = client_info if isinstance(client_info, dict) and client_info.get("name") else SUPERVISOR_INFO
+    return json.dumps({"jsonrpc": "2.0", "id": "__restart", "method": "initialize",
+                       "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": info}})
+
+
+def client_line(client_info):
+    """The line that tells the window link which MCP client this supervisor
+    serves (protocol.CLIENT_METHOD), or None when the client gave no name."""
+    if not (isinstance(client_info, dict) and client_info.get("name")):
+        return None
+    return json.dumps({"jsonrpc": "2.0", "id": "__client", "method": "agentlink/client", "params": {"clientInfo": client_info}})
+
+
 def heartbeat():
     if keep is None:
         return None
@@ -674,7 +719,11 @@ class Window:
         self.write = write
         self.f = None
         self.sock = None
-        self.off = os.environ.get("AGENTLINK_WINDOW", "1") == "0"
+        # --own (AGENTLINK_OWN=1): this server never uses the window; its
+        # calls run in its own hidden FreeCAD.
+        self.own = own_mode()
+        self.off = os.environ.get("AGENTLINK_WINDOW", "1") == "0" or self.own
+        self.client_info = None  # the MCP client's clientInfo (its initialize), told to the window at each connection
         self.seen = False  # the window has answered this session
         self.inflight = None  # {id, tool, args, start}
         self.answered = set()  # ids answered early (a dialog, a hang)
@@ -734,7 +783,29 @@ class Window:
         s.settimeout(None)
         self.sock = s
         self.f = f
+        self._tell_client()
         return True
+
+    def _tell_client(self):
+        """The window learns which MCP client this connection serves (the
+        window never sees the client's initialize). An older window that
+        does not know the line answers an error, which is left alone."""
+        line = client_line(self.client_info)
+        if line is None or self.f is None:
+            return
+        try:
+            self._send(line, forward=False)
+        except Exception:  # noqa: BLE001 - the calls still go on
+            pass
+
+    def note_client(self, client_info):
+        """The MCP client's initialize came: its clientInfo, told to the
+        window now when connected, else at the next connection."""
+        if not isinstance(client_info, dict) or client_info == self.client_info:
+            return
+        self.client_info = client_info
+        if self.f is not None:
+            self._tell_client()
 
     def _drop(self):
         try:
@@ -955,7 +1026,8 @@ class Window:
         never in front, no focus taken) when it is closed, and paired. The
         words for the answer, and whether a window answers now."""
         if self.off:
-            return {"opened": False, "note": "The window link is off here (AGENTLINK_WINDOW=0): calls go to the hidden FreeCAD."}
+            why = "this server runs its own hidden FreeCAD (--own)" if self.own else "AGENTLINK_WINDOW=0"
+            return {"opened": False, "note": f"The window link is off here ({why}): calls go to the hidden FreeCAD."}
         if self._open():
             return {"opened": False, "already": True, "note": "The FreeCAD window is open and linked."}
         hb = heartbeat() or self.last_hb or {}
@@ -1162,6 +1234,8 @@ class Window:
 def run(script, argv):
     """Serve stdin/stdout through a child running script, restarted when it
     dies. Gives up after three deaths in a minute."""
+    set_own(argv)
+    argv = [a for a in argv if a != "--own"]
     out = os.fdopen(os.dup(1), "w", buffering=1, encoding="utf-8", errors=WIRE_ERRORS)
     os.dup2(2, 1)
     lock = threading.Lock()
@@ -1255,17 +1329,17 @@ def run(script, argv):
             return None
 
     def died(code):
-        quiet = keep is not None and os.path.exists(keep.path(".hidden-restart"))
+        quiet = keep is not None and os.path.exists(keep.runtime(".hidden-restart"))
         if quiet and code == 0:
             # Asked for (a settings rollback with the window closed): started
             # again without a word; nothing was in hand.
             try:
-                os.remove(keep.path(".hidden-restart"))
+                os.remove(keep.runtime(".hidden-restart"))
             except OSError:
                 pass
             start()
             try:
-                send_child(json.dumps({"jsonrpc": "2.0", "id": "__restart", "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "agentlink-supervisor", "version": "1"}}}))
+                send_child(restart_initialize(state.get("client")))
                 send_child(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}))
                 # It left right after its answer: calls queued behind it that
                 # it never took go to the fresh one. A changing call it took
@@ -1321,7 +1395,7 @@ def run(script, argv):
         recovered = None
         reopened = []
         try:
-            send_child(json.dumps({"jsonrpc": "2.0", "id": "__restart", "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "agentlink-supervisor", "version": "1"}}}))
+            send_child(restart_initialize(state.get("client")))
             send_child(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}))
             # Saved, unchanged documents opened again from their own files
             # (unless a copy newer than hidden.json's word holds more).
@@ -1695,6 +1769,12 @@ def run(script, argv):
                 pending[msg["id"]] = msg["method"]
         except ValueError:
             pass
+        if isinstance(msg, dict) and msg.get("method") == "initialize":
+            # The client's name: for a restarted FreeCAD and for the window.
+            info = (msg.get("params") or {}).get("clientInfo")
+            if isinstance(info, dict):
+                state["client"] = info
+                window.note_client(info)
         if msg and msg.get("method") == "tools/call" and keep is not None:
             mid, tool, args = _call_info(line)
             if hangs.get(keep.call_key(tool, args), 0) >= 2:

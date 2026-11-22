@@ -89,8 +89,12 @@ def main(argv=None):
             out_dir = os.path.abspath(argv.pop(0))
         elif a == "--connect":
             port = int(argv.pop(0)) if argv and argv[0].isdigit() else 7318
+        elif a == "--own":
+            # Its own hidden FreeCAD, never the window (the supervisor reads it).
+            os.environ.setdefault("AGENTLINK_OWN", "1")
+            os.environ.setdefault("AGENTLINK_OWN_ID", str(os.getpid()))
         elif a in ("-h", "--help"):
-            sys.stderr.write("agentlink [--out DIR] [--connect [PORT]]\n")
+            sys.stderr.write("agentlink [--out DIR] [--own] [--connect [PORT]]\n")
             return 0
     out = _protocol_stdout()
     if port is not None:
@@ -122,7 +126,7 @@ def main(argv=None):
             try:
                 from . import keep
 
-                keep._save(keep.path(".hidden-restart"), {"why": "settings"})
+                keep._save(keep.runtime(".hidden-restart"), {"why": "settings"})
                 if how != "nosave":
                     import FreeCAD
 

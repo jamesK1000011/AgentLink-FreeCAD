@@ -100,6 +100,9 @@ IN_PLACE = {
     "get": "reads the window's selection and active body",
     # the person's OK dialog (agentlink/person_ok.py) is a Qt window: made on the GUI thread only
     "cookbook_approve": "shows the person's OK dialog in the window",
+    # a client that does not ask the person first: the approval goes to the window's OK dialog (approvals.approve)
+    "approve_file": "shows the person's OK dialog in the window",
+    "approve_code": "shows the person's OK dialog in the window",
     # poses placed, recomputed and put back (assembly.py sweep_run; assembly_more.py)
     "asm_sweep": "moves the parts through each pose and puts them back",
     "asm_motion": "moves the parts through each frame",

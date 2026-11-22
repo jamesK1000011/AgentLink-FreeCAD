@@ -4,7 +4,8 @@ rather than from the add-on's folder. The Python that runs this is uv's or
 any other; it finds FreeCAD (agentlink/setup_check.py) and runs
 agentlink_headless.py in FreeCAD's own Python, which serves.
 
-    agentlink-freecad [--out DIR]       headless
+    agentlink-freecad [--out DIR]       headless; a call goes to the FreeCAD window instead while its link is on
+    agentlink-freecad --own [--out DIR] headless only: its own hidden FreeCAD, never the window (or AGENTLINK_OWN=1)
     agentlink-freecad --connect [PORT]  relay to the FreeCAD window's Start link (needs no FreeCAD here)
     agentlink-freecad --check [--json]  what is missing and how to get it
     agentlink-freecad --version         the version (needs no FreeCAD)
@@ -70,6 +71,8 @@ def main(argv=None):
             env["FREECAD_LIB"] = fc["lib"]
         return subprocess.call([fc["python"], script] + argv, env=env)
     # FreeCADCmd takes the arguments after a script for files: flags by env.
+    if "--own" in argv:
+        env["AGENTLINK_OWN"] = "1"
     if "--out" in argv:
         i = argv.index("--out")
         if i + 1 < len(argv):

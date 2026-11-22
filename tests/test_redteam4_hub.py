@@ -232,6 +232,7 @@ class Hidden(unittest.TestCase):
 
     def setUp(self):
         approvals.reset()
+        approvals.note_client(None, "claude-ai")  # a client that asks the person first
         self.addCleanup(approvals.reset)
 
     def test_the_new_characters(self):
@@ -299,8 +300,12 @@ class Connections(unittest.TestCase):
 
     def setUp(self):
         approvals.reset()
+        approvals.note_client(None, "claude-ai")  # a client that asks the person first
         self.addCleanup(approvals.reset)
         self.srv = _approval_server()
+        for conn in ("link-1", "link-2"):
+            # each connection's client names itself, as an MCP client does
+            self.srv.handle({"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"clientInfo": {"name": "claude-ai", "version": "1"}}}, client=conn)
 
     def test_another_connection_cannot_approve(self):
         err, got = _call(self.srv, "standin_asks", {}, "link-1")
@@ -337,6 +342,7 @@ class GcodeKind(unittest.TestCase):
 
     def setUp(self):
         approvals.reset()
+        approvals.note_client(None, "claude-ai")  # a client that asks the person first
         self.addCleanup(approvals.reset)
 
     def test_gcode_is_a_code_kind(self):

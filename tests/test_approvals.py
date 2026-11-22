@@ -63,6 +63,7 @@ def client(srv, name, args):
 class ClientApproval(unittest.TestCase):
     def setUp(self):
         approvals.reset()
+        approvals.note_client(None, "claude-ai")  # a client that asks the person first
         person_ok.SHOW = None
         self.home = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.home, True)
@@ -134,12 +135,14 @@ class ClientApproval(unittest.TestCase):
         old = self.pending(fp="commit:abc")["approve"]["arguments"]
         # The add-on moved on before the approval: the tool asks again with the new commit.
         approvals.reset()
+        approvals.note_client(None, "claude-ai")  # a client that asks the person first
         self.pending(fp="commit:def", shown={"source": "https://example.org/Gears.git", "version": "commit def", "author": "someone"})
         err, out = client(srv, "approve_code", old)
         self.assertEqual(out["error"]["code"], "invalid_state")
         self.assertIn("new version", out["error"]["message"])
         # Approved at abc; the install now sees def: no grant for it.
         approvals.reset()
+        approvals.note_client(None, "claude-ai")  # a client that asks the person first
         a = self.pending(fp="commit:abc")["approve"]["arguments"]
         client(srv, "approve_code", a)
         self.assertTrue(approvals.ask("addon-install", "Gears", "Install", [], "commit:def")["pending"])

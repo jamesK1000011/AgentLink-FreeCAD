@@ -25,6 +25,17 @@ def path(*parts):
     return os.path.join(home(), *parts)
 
 
+def runtime(name):
+    """A run mark of one hidden FreeCAD and its supervisor (the restart mark,
+    the heavy call in hand, the checkpoint before it): in the home, or, for a
+    server started with --own (AGENTLINK_OWN_ID), in own/<id>/, so two such
+    servers never read each other's marks."""
+    own = os.environ.get("AGENTLINK_OWN_ID", "").strip()
+    if own and own.isalnum():
+        return path("own", own, name)
+    return path(name)
+
+
 def stamp(t=None):
     return time.strftime("%Y%m%d-%H%M%S", time.localtime(t if t is not None else time.time()))
 
@@ -353,7 +364,7 @@ def sized_estimate(q, tool, size, key=None):
 
 
 def call_checkpoint_mark():
-    return path("call-checkpoint.json")
+    return runtime("call-checkpoint.json")
 
 
 def mark_call_checkpoint(tool, checkpoint, t=None):
@@ -384,7 +395,7 @@ def call_checkpoint(since=0.0):
 
 
 def heavy_call_mark():
-    return path("heavy-call.json")
+    return runtime("heavy-call.json")
 
 
 def mark_heavy_call(tool, estimate_s, size, pid=None, t=None):

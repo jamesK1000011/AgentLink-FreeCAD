@@ -23,6 +23,7 @@ from agentlink.protocol import ToolError  # noqa: E402
 class PersonOk(unittest.TestCase):
     def setUp(self):
         person_ok.reset()
+        person_ok.approvals.note_client(None, "claude-ai")  # a client that asks the person first
         self.shown = []
         person_ok.SHOW = self.shown.append
         self.addCleanup(setattr, person_ok, "SHOW", None)
