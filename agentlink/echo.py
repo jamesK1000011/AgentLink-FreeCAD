@@ -21,6 +21,11 @@ except ImportError:  # the tables below are read without FreeCAD (tests)
 
 PREFS = "User parameter:BaseApp/Preferences/Mod/AgentLink"
 
+# The camera and the selection stay the person's (agentlink/cowork.py):
+# the echo frames only with FollowAgent on, and shows what it would select
+# as a highlight unless EchoSelects is "select".
+from . import cowork  # noqa: E402
+
 # Tool families → the workbench a person would be in.
 WORKBENCH = [
     ("pd_", "PartDesignWorkbench"), ("sketch_", "SketcherWorkbench"), ("feature_", "PartDesignWorkbench"),
@@ -1367,6 +1372,8 @@ def fit(animate=True, selection=False):
     selection: frame what is selected (what the call made), with a margin,
     not the whole document: in a document of many parts the new one was a
     few pixels. The whole document when nothing selected can be framed."""
+    if not cowork.follows():
+        return False  # the camera is the person's (FollowAgent off, or the person works the view)
     try:
         import FreeCADGui
 
@@ -1406,6 +1413,15 @@ def fit(animate=True, selection=False):
         return False
 
 
+def highlight(items, doc=None):
+    """What the echo shows lit, in place of its last highlight, drawn in
+    the 3D view's scene in FreeCAD's selection colour: items objects,
+    (object, sub) pairs or "Object" / "Object.Face6" names. FreeCAD's
+    selection (the person's) is not touched. {lit, missing}. Never raises
+    (cowork.highlight)."""
+    return cowork.highlight(items, doc)
+
+
 def fit_on(objs, animate=True):
     """The view framed on objs (selected for it), not on the whole
     document. "selection" when it was, else False (the caller frames the
@@ -1425,6 +1441,10 @@ def _fit_selection(v):
     caller then fits the whole document."""
     import FreeCADGui
 
+    if cowork.mode() != "select":
+        # The highlight is not FreeCAD's selection: framed on its box.
+        box = _union([_tuple(b) for b in (_box(o) for o in cowork.sel_objects()) if b is not None])
+        return bool(box is not None and frame_box(v, box))
     try:
         if not FreeCADGui.Selection.getSelection():
             return False
@@ -1586,7 +1606,7 @@ def frame_box(v, box):
     viewBoundingBox on the view's camera, as FreeCAD's Fit selection does.
     True when done. Never raises."""
     box = grown(box)
-    if v is None or box is None:
+    if v is None or box is None or not cowork.follows():
         return False
     try:
         from pivy import coin
@@ -1694,7 +1714,7 @@ def outlines_shown(doc, name, args, body):
     n = scene_marks([], lines, "#e8a33d", labels)
     gd = FreeCADGui.ActiveDocument
     v = getattr(gd, "ActiveView", None) if gd is not None else None
-    framed = bool(FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and frame_box(v, box))
+    framed = bool(cowork.follows() and frame_box(v, box))
     return {"lines": n, "labels": len(labels), "framed": framed}
 
 
@@ -1926,9 +1946,9 @@ def selection_cleared():
     try:
         import FreeCADGui
 
-        n = len(FreeCADGui.Selection.getSelectionEx() or ())
+        n = cowork.sel_count()
         _selected[0] += 1
-        FreeCADGui.Selection.clearSelection()
+        cowork.sel_clear()
         # The tree's own row follows the selection on a timer: run it now
         # (the globe's row stayed lit in the picture, mesh 012 round 8).
         views_follow()
@@ -1942,9 +1962,7 @@ def selected_now():
     """How many are selected now (a FACT after selection_cleared). Never
     raises."""
     try:
-        import FreeCADGui
-
-        return len(FreeCADGui.Selection.getSelectionEx() or ())
+        return cowork.sel_count()
     except Exception:  # noqa: BLE001
         return None
 
@@ -1977,7 +1995,7 @@ def framed_on_points(points):
         import FreeCADGui
 
         P = np.asarray(points, dtype=float).reshape(-1, 3)
-        if not len(P) or not FreeCAD.ParamGet(PREFS).GetBool("Follow", True):
+        if not len(P) or not cowork.follows():
             return False
         lo, hi = P.min(axis=0), P.max(axis=0)
         gd = FreeCADGui.ActiveDocument
@@ -2647,7 +2665,7 @@ def scene_marks_shown(body):
         try:
             import FreeCADGui
 
-            if FreeCAD.ParamGet(PREFS).GetBool("Follow", True):
+            if cowork.follows():
                 gd = FreeCADGui.ActiveDocument
                 v = getattr(gd, "ActiveView", None) if gd is not None else None
                 framed = frame_box(v, box_of(everything))
@@ -2724,7 +2742,7 @@ def see_through(doc, name, body, made):
             vo.Transparency = COVER_ALPHA
         rest = [x for x in made or () if x is not o and not _hidden(x)]
         _selected[0] += 1
-        FreeCADGui.Selection.clearSelection()
+        cowork.sel_clear()
         for x in rest:
             _add_sel(x)
         return {"body": o.Label, "transparency": int(vo.Transparency or 0), "selected": [x.Label for x in rest]}
@@ -2845,7 +2863,7 @@ def unwrap_shown(doc, args, body, made, animate=True):
         if not src and not pats:
             return None
         _selected[0] += 1
-        FreeCADGui.Selection.clearSelection()
+        cowork.sel_clear()
         picked = []
         for o in src:
             if _add_sel(o, r[1] if r else ""):
@@ -2858,7 +2876,7 @@ def unwrap_shown(doc, args, body, made, animate=True):
         if boxes:
             u = _union(boxes)
             out["size"] = [round(float(u[3] - u[0]), 3), round(float(u[4] - u[1]), 3), round(float(u[5] - u[2]), 3)]
-        if FreeCAD.ParamGet(PREFS).GetBool("Follow", True):
+        if cowork.follows():
             how = fit(animate=animate, selection=True)
             out["framed"] = "the piece" if how == "selection" else how or "not framed"
         if src:
@@ -3103,7 +3121,7 @@ def _clear_if(mark):
     try:
         import FreeCADGui
 
-        FreeCADGui.Selection.clearSelection()
+        cowork.sel_clear()
     except Exception:  # noqa: BLE001 - the window is closing
         return False
     return True
@@ -3207,15 +3225,15 @@ def _add_sel(o, sub=""):
     for doc, name, s in tries:
         try:
             if s:
-                FreeCADGui.Selection.addSelection(doc, name, s)
+                cowork.sel_add(doc, name, s)
             else:
-                FreeCADGui.Selection.addSelection(doc, name)
+                cowork.sel_add(doc, name)
             return True
         except Exception:  # noqa: BLE001
             continue
     if not sub:
         try:
-            FreeCADGui.Selection.addSelection(o)
+            cowork.sel_add(o)
             return True
         except Exception:  # noqa: BLE001
             pass
@@ -3288,11 +3306,11 @@ def _select(objs):
         # a robot's task watcher left up by an earlier selection goes too
         objs = [o for o in objs if not _watcher_type(o)]
         _selected[0] += 1
-        FreeCADGui.Selection.clearSelection()
+        cowork.sel_clear()
     if not objs:
         return
     _selected[0] += 1
-    FreeCADGui.Selection.clearSelection()
+    cowork.sel_clear()
     for o in objs:
         _add_sel(o)
     isolation_off(objs)
@@ -3442,29 +3460,26 @@ def reselect():
     "Object.Sub", or None (nothing selected, or more than RESELECT_MOST).
     Never raises."""
     try:
-        import FreeCADGui
-
-        rows = []
-        for x in FreeCADGui.Selection.getSelectionEx("", 0) or ():
-            subs = [str(n) for n in (getattr(x, "SubElementNames", None) or ()) if n]
-            for sub in subs or [""]:
-                rows.append((x.DocumentName, x.ObjectName, sub))
+        if cowork.mode() != "select":
+            # The highlight: drawn again (the scene may have been rebuilt).
+            rows = cowork.sel_rows()
+            if not rows or len(rows) > RESELECT_MOST:
+                return None
+            return cowork.redraw()
+        rows = cowork.sel_rows()
         if not rows or len(rows) > RESELECT_MOST:
             return None
         _selected[0] += 1
         # Only the active document's selection: another document's is left
         # as it is (round 10; with no name FreeCAD clears every document's).
-        try:
-            FreeCADGui.Selection.clearSelection(rows[0][0])
-        except TypeError:
-            FreeCADGui.Selection.clearSelection()
+        cowork.sel_clear(rows[0][0])
         done = []
         for d, o, sub in rows:
             try:
                 if sub:
-                    FreeCADGui.Selection.addSelection(d, o, sub)
+                    cowork.sel_add(d, o, sub)
                 else:
-                    FreeCADGui.Selection.addSelection(d, o)
+                    cowork.sel_add(d, o)
                 done.append(f"{o}.{sub}" if sub else o)
             except Exception:  # noqa: BLE001
                 continue
@@ -3535,7 +3550,7 @@ def _select_subs(obj, subs):
     if obj is None or not subs:
         return False
     _selected[0] += 1
-    FreeCADGui.Selection.clearSelection()
+    cowork.sel_clear()
     got = False
     for sub in subs:
         got = _add_sel(obj, sub) or got
@@ -3657,7 +3672,7 @@ def enter_edit(gd, obj):
         rot = obj.getGlobalPlacement().Rotation
         n = rot.multVec(FreeCAD.Vector(0, 0, 1))
         d = v.getViewDirection()
-        if not faces_plane((d.x, d.y, d.z), (n.x, n.y, n.z)):
+        if not faces_plane((d.x, d.y, d.z), (n.x, n.y, n.z)) and cowork.follows():
             with _Still(v):
                 v.setCameraOrientation(rot)
             did = "opened, camera turned to it"
@@ -4557,7 +4572,7 @@ def hold_framed(doc, body):
 
         b = body if isinstance(body, dict) else {}
         held = [h for h in b.get("held") or () if isinstance(h, dict) and h.get("face")]
-        if not held or not FreeCAD.ParamGet(PREFS).GetBool("Follow", True):
+        if not held or not cowork.follows():
             return None
         from . import annotate, store
 
@@ -5436,6 +5451,8 @@ class Echo:
             pass
         if not _on() or not self.live():
             return
+        if cowork.follow_on():
+            cowork.watch_view()  # the person's input on the 3D view seen from now on (once per view)
         tr = self._trace(tool.name)
         # A task dialog the echo's own double-click opened for the last call
         # closed now, before anything else looks at the task panel (round 6).
@@ -5449,6 +5466,9 @@ class Echo:
             rings_off()
             self._step(tr, "coversBack", restore_covers)
             self._step(tr, "sceneCleared", scene_clear)
+            if cowork.mode() != "select":
+                # The last change's highlight goes: this change shows its own.
+                self._step(tr, "highlightCleared", cowork.clear_highlight)
             # A sketch the agent left open in another document greys every
             # Part and Assembly button: left first (A1/S9, round 3).
             self._step(tr, "leftEdit", leave_agent_edit, tool.name, args, self.s.doc)
@@ -5605,10 +5625,10 @@ class Echo:
                     if o:
                         lit.append((o[0], el))
                 if lit:
-                    FreeCADGui.Selection.clearSelection()
+                    cowork.sel_clear()
                     for o, el in lit:
                         try:
-                            FreeCADGui.Selection.addSelection(o, el)
+                            cowork.sel_add(o, el)
                         except Exception:
                             pass
                     # The joint's two faces lit for the pause; at a batch's
@@ -5964,17 +5984,17 @@ class Echo:
             # The segments' colours show only with the mesh not selected
             # (the selection's green covered them: mesh 009).
             _selected[0] += 1
-            FreeCADGui.Selection.clearSelection()
+            cowork.sel_clear()
         if name in PIECE_TOOLS and self._step(tr, "piecesColoured", pieces_coloured, made):
             _selected[0] += 1
-            FreeCADGui.Selection.clearSelection()
+            cowork.sel_clear()
         if name in SEE_THROUGH:
             self._step(tr, "seeThrough", see_through, doc, name, body, made)
         if name in COLOUR_TOOLS:
             # The selection's green drew over the new colours (core 0032: Block
             # selected, blue and the red face hidden): nothing left selected.
             _selected[0] += 1
-            FreeCADGui.Selection.clearSelection()
+            cowork.sel_clear()
             tr["selectionCleared"] = "the new colours show only with nothing selected"
         self._step(tr, "modelTab", _model_tab_back)
         if sketch is None:
@@ -6059,12 +6079,12 @@ class Echo:
             return None
         front_3d(doc)
         try:
-            now = [x.Name for x in FreeCADGui.Selection.getSelection()]
+            now = cowork.sel_names()
         except Exception:  # noqa: BLE001
             now = None
         if picked:
             _selected[0] += 1
-            FreeCADGui.Selection.clearSelection()
+            cowork.sel_clear()
             for o, sub in picked:
                 _add_sel(o, sub)
             _read_sel[0] = True
@@ -6077,7 +6097,7 @@ class Echo:
             _select(objs)
             _read_sel[0] = True
             got = {"selected": [o.Label for o in objs]}
-            if FreeCAD.ParamGet(PREFS).GetBool("Follow", True):
+            if cowork.follows():
                 got["framed"] = "the read's object" if fit(animate=True, selection=True) == "selection" else "not framed"
             off = uncover(doc, objs)
             if off:
@@ -6146,7 +6166,7 @@ class Echo:
         if v is None or not made or gd.getInEdit() is not None:
             return None
         d = v.getViewDirection()
-        if abs(d.z) > 0.999:
+        if abs(d.z) > 0.999 or not cowork.follows():
             return None
         with _Still(v):
             v.viewTop()
@@ -6171,7 +6191,7 @@ class Echo:
         standing for this one. Returns how it was framed, or None."""
         import FreeCADGui
 
-        follow = (FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and not name.startswith(tuple(PAGES))
+        follow = (cowork.follows() and not name.startswith(tuple(PAGES))
                   and not getattr(self, "_front_other", False))
         animate = fit_animated(getattr(self.s, "batch_now", None), self.mode)
         self._left_sketch = False
@@ -6191,7 +6211,7 @@ class Echo:
             return how
         if not made:
             _selected[0] += 1
-            FreeCADGui.Selection.clearSelection()
+            cowork.sel_clear()
             if follow:
                 from . import around
 
@@ -6294,7 +6314,7 @@ class Echo:
         box = grown(box_of(pts), least=ROBOT_MM)
         gd = FreeCADGui.ActiveDocument
         v = getattr(gd, "ActiveView", None) if gd is not None else None
-        if box is not None and FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and frame_box(v, box):
+        if box is not None and cowork.follows() and frame_box(v, box):
             return "robot"
         return None
 
@@ -6322,7 +6342,7 @@ class Echo:
         self.tr["trackBox"] = [round(x, 1) for x in box]
         gd = FreeCADGui.ActiveDocument
         v = getattr(gd, "ActiveView", None) if gd is not None else None
-        if FreeCAD.ParamGet(PREFS).GetBool("Follow", True) and frame_box(v, box):
+        if cowork.follows() and frame_box(v, box):
             return "track"
         return None
 
@@ -6338,7 +6358,7 @@ class Echo:
             return None
         v = gd.ActiveView
         d = v.getViewDirection()
-        if max(abs(d.x), abs(d.y), abs(d.z)) <= 0.999:
+        if max(abs(d.x), abs(d.y), abs(d.z)) <= 0.999 or not cowork.follows():
             return None
         with _Still(v):
             v.viewIsometric()

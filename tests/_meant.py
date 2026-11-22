@@ -214,6 +214,10 @@ SCHEMAS = {
     "link_make": {"why": "parts in other files: file", "after": [("to", "file", {"type": "string"})]},
     # 22 Nov efficiency design D1: pictures go to the file by default; width makes the window's picture smaller
     "window_snapshot": {"why": "efficiency design D1: width", "after": [("path", "width", {"type": "integer"})]},
+    # 22 Nov co-work design E5 item 7b: the command's selection for its run only, the person's put back
+    "cmd_run": {"why": "co-work E5 7b: select",
+                "after": [("index", "select", {"type": "array", "items": {"type": "string"},
+                                               "description": "Objects (\"Block\") or faces and edges (\"Block.Face6\") selected for this run only. The person's selection comes back after the run."})]},
 }
 
 

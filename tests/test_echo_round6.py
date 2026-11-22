@@ -21,6 +21,10 @@ sys.path.insert(0, HERE)
 
 from agentlink import activity, annotate, echo, jobs  # noqa: E402
 from test_gui_link_dialog import gui_link  # noqa: E402,F401  (gui_link with its FreeCAD stand-in)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cowork_legacy  # noqa: E402  (the old camera and selection behaviour: FollowAgent on, EchoSelects select)
+
+setUpModule, tearDownModule = _cowork_legacy.on, _cowork_legacy.off
 
 
 def vo(shown=True, **kw):

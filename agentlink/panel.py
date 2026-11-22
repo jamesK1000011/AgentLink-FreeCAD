@@ -15,8 +15,8 @@ import FreeCADGui
 
 from .families import notes as nf
 from . import layout
-from .panel_tabs import (EMPTY, HOME, NO_REVIEWER, PIN_HINT, FlowRow, Tabs, activity_row, credit_shown, fit_activity, link_status,
-                         panel_qss, pin_event, review_hint, setup_activity, step_caption, tab_order, tabs_for)
+from .panel_tabs import (EMPTY, FOLLOW_LABEL, FOLLOW_TIP, HOME, NO_REVIEWER, PIN_HINT, FlowRow, Tabs, activity_row, credit_shown, fit_activity, link_status,
+                         follow_toggled, panel_qss, pin_event, review_hint, setup_activity, step_caption, tab_order, tabs_for)
 
 try:
     from PySide import QtCore, QtGui
@@ -62,6 +62,8 @@ def _doc():
     return FreeCAD.ActiveDocument
 
 
+
+
 def _check_geometry(label):
     """Part Check Geometry on the body labelled label: selected, then the
     command run, as the person would from the Part menu."""
@@ -70,9 +72,11 @@ def _check_geometry(label):
     if not objs:
         return False
     try:
-        FreeCADGui.Selection.clearSelection()
-        FreeCADGui.Selection.addSelection(objs[0])
-        FreeCADGui.runCommand("Part_CheckGeometry", 0)
+        from . import cowork
+
+        # The person's selection is put back after the command (cowork.held).
+        with cowork.held([objs[0]]):
+            FreeCADGui.runCommand("Part_CheckGeometry", 0)
         return True
     except Exception as e:
         FreeCAD.Console.PrintLog(f"Agent Link: Part_CheckGeometry did not open: {e}\n")
@@ -813,7 +817,7 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         row = QtWidgets.QHBoxLayout()
         prefs = FreeCAD.ParamGet(echo.PREFS)
         self.echo_on = QtWidgets.QCheckBox("Agent's steps")
-        self.echo_on.setToolTip("Show each step of the agent: the workbench, the button, the selection and a caption.")
+        self.echo_on.setToolTip("Show each step of the agent: the workbench, the button, what it works on (lit in the view) and a caption.")
         self.echo_on.setChecked(prefs.GetBool("Echo", True))
         self.echo_on.toggled.connect(lambda on: prefs.SetBool("Echo", on))
         self.pace = QtWidgets.QComboBox()
@@ -825,10 +829,12 @@ class Panel(Tabs, QtWidgets.QDockWidget if QtWidgets else object):
         self.pace.setCurrentIndex(min(range(3), key=lambda i: abs(paces[i][1] - cur)))
         self.pace.currentIndexChanged.connect(lambda i: prefs.SetInt("EchoDelay", paces[i][1]))
         row.addWidget(self.echo_on)
-        self.follow = QtWidgets.QCheckBox("Follow")
-        self.follow.setToolTip("Fit the part in the view after each change that the agent makes.")
-        self.follow.setChecked(prefs.GetBool("Follow", True))
-        self.follow.toggled.connect(lambda on: prefs.SetBool("Follow", on))
+        from . import cowork
+
+        self.follow = QtWidgets.QCheckBox(FOLLOW_LABEL)
+        self.follow.setToolTip(FOLLOW_TIP)
+        self.follow.setChecked(cowork.follow_on())
+        self.follow.toggled.connect(follow_toggled)
         row.addWidget(self.follow)
         row.addStretch(1)
         row.addWidget(self.pace)

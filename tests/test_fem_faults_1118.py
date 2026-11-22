@@ -185,6 +185,21 @@ class Eyes(WithStandIns):
 # ---- 4. the selection after a FEM read with no map -----------------------------------------
 
 class ReadSelection(WithStandIns):
+    # The old camera and selection behaviour (FollowAgent on, EchoSelects select): tests/_cowork_legacy.py.
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        import _cowork_legacy
+
+        _cowork_legacy.on()
+
+    @classmethod
+    def tearDownClass(cls):
+        import _cowork_legacy
+
+        _cowork_legacy.off()
+        super().tearDownClass()
+
     def test_cleared_and_noted(self):
         echo._read_sel[0] = False
         self.assertEqual(echo.fem_read_unselected(), 1)

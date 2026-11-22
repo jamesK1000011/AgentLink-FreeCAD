@@ -803,6 +803,47 @@ def body_for(gui, name):
         return None
 
 
+SUB_HEADS = ("Face", "Edge", "Vertex")
+
+
+def selection_picks(doc, names):
+    """cmd_run's select: [(object, sub)] for "Object" and "Object.Face6"
+    (names or labels in doc), and the names not found. Plain apart from
+    named_objects."""
+    picks, unknown = [], []
+    for n in names if isinstance(names, list) else [names]:
+        n = str(n)
+        name, sub = n, ""
+        if "." in n:
+            head, tail = n.rsplit(".", 1)
+            if tail.startswith(SUB_HEADS) and tail[len(tail.rstrip("0123456789")):].isdigit() and tail.rstrip("0123456789") in SUB_HEADS:
+                name, sub = head, tail
+        objs, missing = named_objects(doc, [name])
+        if missing or not objs:
+            unknown.append(n)
+            continue
+        if (objs[0], sub) not in picks:
+            picks.append((objs[0], sub))
+    return picks, unknown
+
+
+def hold_selection(names):
+    """cmd_run's select: FreeCAD's selection set to names in the document in
+    front for this run only. The person's selection is saved first and put
+    back when the run ends (agentlink/cowork.py; runners.run_steps). The
+    labels held. Refused, with nothing changed, when a name is not found."""
+    from .. import cowork
+
+    d = FreeCAD.ActiveDocument
+    if d is None:
+        raise ToolError("invalid_state", "select: no document is in front (doc_switch { front: true }).")
+    picks, unknown = selection_picks(d, names)
+    if unknown:
+        raise ToolError("not_found", f"select: no {', '.join(repr(u) for u in unknown)} in {d.Label}. Nothing was run.")
+    cowork.hold(picks)
+    return [f"{o.Label}.{s}" if s else o.Label for o, s in picks]
+
+
 def bare(text):
     """A menu's title as the person reads it: without the & that marks its
     shortcut letter."""
@@ -875,6 +916,7 @@ def tools(session):
         "group": _group, "contents": _contents, "subgroups": subgroups, "stored": stored, "set_value": _set, "removed": removed, "guarded": guarded,
         "changing": _settings_changing, "changed": _settings_changed, "packs": packs, "apply_cfg": apply_cfg,
         "refused": refused, "cmd_matches": cmd_matches, "cmd_row": cmd_row, "is_active": is_active, "body_for": body_for, "in_edit": in_edit, "selected": selected,
+        "hold_selection": hold_selection,
         "menubar": _menubar, "bare": bare, "walk": _actions, "find_action": _find_action, "bench_ready": bench_ready,
         "named_objects": named_objects, "dock_panels": dock_panels, "grab": grab, "scaled": scaled, "local": lambda p: paths.local(s, p),
         "out_file": lambda name: os.path.join(s.out_dir, name), "read_bytes": read_bytes, "isfile": os.path.isfile, "shots": shots,

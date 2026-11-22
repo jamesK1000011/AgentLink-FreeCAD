@@ -161,6 +161,9 @@ WRITE_METHODS = (
     "runCommand", "activateWorkbench", "setEdit", "resetEdit", "setActiveObject", "setCamera", "SetBool", "SetInt", "SetFloat", "SetString",
     "SetUnsigned", "RemBool", "RemInt", "RemFloat", "RemString", "RemGroup", "explodeCompound", "makeCompoundFilter",
 )
+# Classes whose making is a write: the mute the hub puts on while it holds a
+# command's selection (agentlink/cowork.py hold).
+WRITE_CLASSES = ("hooks.selection_muted",)
 WRITE_CALLS = ("FreeCAD.newDocument", "FreeCAD.openDocument", "FreeCAD.closeDocument", "FreeCAD.setActiveDocument", "App.newDocument",
                "App.openDocument", "App.closeDocument", "App.setActiveDocument")
 
@@ -175,6 +178,8 @@ def writes(why):
         return True
     if what.startswith("calls ."):
         return what[7:].rstrip("()") in WRITE_METHODS
+    if what.startswith("makes a "):
+        return what[8:] in WRITE_CLASSES
     return what.startswith("calls ") and what[6:] in WRITE_CALLS
 
 
