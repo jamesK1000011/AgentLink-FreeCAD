@@ -18,6 +18,8 @@
 # drives the document on the way (IN_PLACE below). While a job runs,
 # changing calls on the document are refused (the worker reads it).
 
+import collections
+import json
 import os
 import threading
 import time
@@ -636,15 +638,106 @@ def stop_job(j):
             "The job then fails with code stopped. A job is a read: it changed nothing in the document.")
 
 
+# ---- late answers (E6) -----------------------------------------------------
+#
+# A call answered busy while it ran (or early, by the dialog it opened), or
+# whose connection was gone when it ended, has its own answer still to give.
+# The window's link keeps the last LATE_KEEP of them (link.late);
+# job_status lists them under late, and job_status { job: "<call id>" }
+# gives one.
+
+LATE_KEEP = 20
+
+
+def _late_ring(link):
+    ring = getattr(link, "late", None)
+    if ring is None:
+        ring = link.late = collections.deque(maxlen=LATE_KEEP)
+    return ring
+
+
+def keep_late(link, mid, tool, reply, how):
+    """Keep reply (a JSON-RPC answer) as the late answer of call mid. how:
+    busy, early or lost (how the call was answered first)."""
+    if link is None or mid is None:
+        return None
+    result = (reply or {}).get("result") or {}
+    text = "".join(c.get("text", "") for c in result.get("content") or [] if isinstance(c, dict) and c.get("type") == "text")
+    try:
+        body = json.loads(text) if text else {}
+    except ValueError:
+        body = {"text": text}
+    entry = {"id": mid, "tool": tool, "finished": time.strftime("%H:%M:%S"), "t": time.time(), "answeredAs": how}
+    if result.get("isError") or (reply or {}).get("error"):
+        err = (body.get("error") if isinstance(body, dict) else None) or (reply or {}).get("error") or {"code": "failed", "message": text[:300]}
+        entry["error"] = err
+        entry["outcome"] = err.get("outcome") or "failed"
+    else:
+        if isinstance(body, dict):
+            body = {k: v for k, v in body.items() if k != "_png"}
+        entry["result"] = body
+        entry["outcome"] = "done"
+    with _lock:
+        _late_ring(link).append(entry)
+    return entry
+
+
+def _late_link():
+    try:
+        import agentlink_state
+
+        return getattr(agentlink_state, "link", None)
+    except ImportError:
+        return None
+
+
+def late_list(link=None):
+    """The late answers kept, newest last, each without its result."""
+    link = _late_link() if link is None else link
+    if link is None or getattr(link, "late", None) is None:
+        return []
+    with _lock:
+        got = list(link.late)
+    return [{k: v for k, v in e.items() if k not in ("result", "error", "t")} for e in got]
+
+
+def late_get(jid, link=None):
+    """The late answer of call jid (its JSON-RPC id, as text or a number), or None."""
+    link = _late_link() if link is None else link
+    if link is None or getattr(link, "late", None) is None:
+        return None
+    with _lock:
+        got = list(link.late)
+    for e in reversed(got):
+        if str(e.get("id")) == str(jid):
+            out = {"job": str(e["id"]), "tool": e.get("tool"), "status": "failed" if "error" in e else "done", "late": True,
+                   "finished": e.get("finished"), "answeredAs": e.get("answeredAs"), "outcome": e.get("outcome")}
+            if "error" in e:
+                out["error"] = e["error"]
+            else:
+                out["result"] = e.get("result")
+            return out
+    return None
+
+
 def status(a):
     """job_status: one job (wait up to MAX_POLL_WAIT s for it), or every
-    job kept."""
+    job kept; also a call's late answer (late_get), and the late answers
+    under late when no job is named."""
     jid = a.get("job")
     if not jid:
         _prune()
         with _lock:
             js = list(JOBS.values())
-        return {"jobs": [summary(j) for j in js], **({} if js else {"note": "No jobs: a long read (a heavy one, one slow before, or background: true) runs as one."})}
+        late = late_list()
+        return {"jobs": [summary(j) for j in js], **({"late": late} if late else {}),
+                **({} if js or late else {"note": "No jobs: a long read (a heavy one, one slow before, or background: true) runs as one."})}
+    with _lock:
+        known = jid in JOBS
+    if not known:
+        got = late_get(jid)
+        if got is not None:
+            return got
     j = get(jid)
     w = a.get("wait", 0)
     if isinstance(w, bool) or not isinstance(w, (int, float)) or w < 0:

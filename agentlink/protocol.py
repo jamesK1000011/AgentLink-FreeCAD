@@ -14,6 +14,11 @@ import time
 import traceback
 
 PROTOCOL = "2025-06-18"
+# How text that UTF-8 cannot hold (a lone surrogate, from a file name or an
+# add-on's text) is written on the wire: as a backslash escape. Inside a JSON
+# string that is a valid \uXXXX escape, so the line still goes out and parses;
+# "strict" failed the write and the call had no answer.
+WIRE_ERRORS = "backslashreplace"
 
 
 
@@ -451,6 +456,24 @@ def _outcome(tool, exc):
     except Exception:
         pass
     return None
+
+
+# Refusal codes that mean "not now", not "not so": the same call may go
+# through a moment later. Only the link's own busy answer is one today.
+TRANSIENT = {"busy"}
+
+
+def retry_once_ok(changes, err):
+    """True when the link may send a refused call again once by itself
+    (E10): a read refused for a transient cause, or a changing call refused
+    for one before it began (outcome not_started). Never a changing call
+    whose outcome is unknown or anything else: it may have changed the
+    document already."""
+    if not isinstance(err, dict) or err.get("code") not in TRANSIENT:
+        return False
+    if not changes:
+        return True
+    return err.get("outcome") == "not_started"
 
 
 def failed_words(name, e):
@@ -1246,6 +1269,19 @@ def add_report(reply, lines):
 
 
 _NOT_JSON = object()
+# The note the hidden FreeCAD writes as it takes a call off its input, before
+# the call begins: { id, changes } (supervise.py reads it; no client sees it).
+TOOK = "notifications/agentlink/took"
+
+
+def _call_changes(server, msg):
+    """True when the call in msg may change something; True when that cannot be told."""
+    try:
+        params = msg.get("params") or {}
+        tool = server.tools.get(params.get("name"))
+        return True if tool is None else bool(tool.changes_for(params.get("arguments") or {}))
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def serve_lines(server, readline, write):
@@ -1300,6 +1336,7 @@ def serve_lines(server, readline, write):
             inbox.put(msg)
 
     threading.Thread(target=reader, name="agentlink-stdin", daemon=True).start()
+    took_marks = bool(os.environ.get("AGENTLINK_SUPERVISED"))
     while True:
         msg = inbox.get()
         if msg is None:
@@ -1307,6 +1344,11 @@ def serve_lines(server, readline, write):
         if msg is _NOT_JSON:
             out(compact({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}) + "\n")
             continue
+        if took_marks and isinstance(msg, dict) and msg.get("method") == "tools/call" and msg.get("id") is not None:
+            # Said to the supervisor before the call begins (E2): after a
+            # restart it sends again only the calls never taken here.
+            # As a notification: written at once, with none of a reply's after-work.
+            server.notify({"jsonrpc": "2.0", "method": TOOK, "params": {"id": msg["id"], "changes": _call_changes(server, msg)}})
         reply = server.handle(msg)
         if reply is not None:
             out(compact(reply) + "\n")
