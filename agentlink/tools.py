@@ -222,8 +222,8 @@ class Session:
             self.doc.openTransaction(tool.name)
         try:
             out = fn()
-        except BaseException:
-            changes.close(watch)
+        except BaseException as exc:
+            ev, _ok = changes.close(watch)
             self.doc.abortTransaction()
             # With no step pending the abort leaves the call's name standing
             # as the application's active transaction, and the next change
@@ -232,7 +232,11 @@ class Session:
             # A call that opened a transaction of its own inside (which
             # commits the outer one) or made objects outside the undo stack
             # left them behind the abort: taken away too.
-            take_back(start, u0, names0)
+            removed = take_back(start, u0, names0)
+            # What the refusal says about the document (protocol.refusal's
+            # outcome): nothing was touched, all of it was taken back, or
+            # objects the take-back did not reach stay (named).
+            changes.mark_outcome(exc, ev, removed, start, names0)
             raise
         from . import around
 
@@ -2318,9 +2322,13 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 # step opened: no undo there (a dialog's command can hold an
                 # open transaction). What ran stays.
                 out["undone"] = 0
+                out["outcome"] = "kept" if made else "not_started"
                 out["rollbackNote"] = ("Not rolled back: a menu or dialog that a gui_input of this batch opened was still open, and the batch does not undo inside its loop. "
                                        "What ran stays. Close it, then history_undo takes back what you do not want.")
                 return ended(out)
+            if not rollback or start is None:
+                # What ran stays (rollback: false), or there is no document left to take it back in.
+                out["outcome"] = "kept" if made else "not_started"
             if rollback and start is None:
                 out["undone"] = 0
                 out["warning"] = "The document the batch started in was closed during it: nothing to take back there."
@@ -2343,6 +2351,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 if s.doc is start:
                     s.snapshot("batch rolled back")
                 out["undone"] = undone
+                out["outcome"] = "not_started" if not made else ("rolled_back" if undone >= made else "partial")
                 if any(isinstance(r.get("written"), dict) for r in results):
                     out["writtenNote"] = "The files the calls wrote (written) stay: they hold answers from before the rollback."
                 if s.doc is not start:

@@ -494,7 +494,7 @@ class Filter(unittest.TestCase):
         self.assertEqual(now["notChecked"], {"count": 1, "tools": ["fea_setup"]})
         self.assertLessEqual(tokens(got["now"]), BOUNDS["nowReply"])
         # The call itself: refused in the reading's words; then a batch, whose answer carries the one line.
-        self.assertEqual(got["refused"]["error"], {"code": "invalid_state", "message": "No strength study: fea_setup { body } first."})
+        self.assertEqual(got["refused"]["error"], {"code": "invalid_state", "message": "No strength study: fea_setup { body } first.", "outcome": "not_started"})
         b = got["batch"]
         self.assertEqual(b["appliesNow"].keys() - {"ms"}, {"groups", "not", "notChecked"})
         self.assertEqual(b["appliesNow"]["groups"], {"strength": 1})

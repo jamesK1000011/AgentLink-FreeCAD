@@ -1977,7 +1977,14 @@ class Link:
             # Progress notifications (protocol.progress) for this call go to its own connection, until it is answered.
             self.server.notify = lambda m, f=f, call=call: None if call["answered"] else self._write(f, m)
             try:
-                reply = self.server.handle(msg, client=self._client_of(conn))
+                try:
+                    reply = self.server.handle(msg, client=self._client_of(conn))
+                except (SystemExit, KeyboardInterrupt):
+                    # Code run for the call called sys.exit (or raised
+                    # KeyboardInterrupt) outside the tool's own guard: the
+                    # window stays up and the call is refused.
+                    text = compact({"error": {"code": "failed", "message": f"{name}: code run for this call called exit; the window and Agent Link go on.", "outcome": "unknown"}})
+                    reply = {"jsonrpc": "2.0", "id": call["id"], "result": {"content": [{"type": "text", "text": text}], "isError": True}}
             finally:
                 call["finished"] = True
                 self.busy, self.in_call, self.busy_since = prev
