@@ -837,6 +837,13 @@ def shots():
         return []
 
 
+def scaled(pix, width):
+    """The picture made smaller to width px, with the same shape (window_snapshot width)."""
+    from PySide import QtCore
+
+    return pix.scaledToWidth(int(width), QtCore.Qt.SmoothTransformation)
+
+
 def read_bytes(path):
     """A file's bytes (a picture for the answer)."""
     with open(path, "rb") as f:
@@ -869,7 +876,7 @@ def tools(session):
         "changing": _settings_changing, "changed": _settings_changed, "packs": packs, "apply_cfg": apply_cfg,
         "refused": refused, "cmd_matches": cmd_matches, "cmd_row": cmd_row, "is_active": is_active, "body_for": body_for, "in_edit": in_edit, "selected": selected,
         "menubar": _menubar, "bare": bare, "walk": _actions, "find_action": _find_action, "bench_ready": bench_ready,
-        "named_objects": named_objects, "dock_panels": dock_panels, "grab": grab, "local": lambda p: paths.local(s, p),
+        "named_objects": named_objects, "dock_panels": dock_panels, "grab": grab, "scaled": scaled, "local": lambda p: paths.local(s, p),
         "out_file": lambda name: os.path.join(s.out_dir, name), "read_bytes": read_bytes, "isfile": os.path.isfile, "shots": shots,
     }
 

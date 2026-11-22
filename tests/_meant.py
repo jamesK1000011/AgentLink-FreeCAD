@@ -212,6 +212,8 @@ SCHEMAS = {
     "pd_binder": {"why": "bicycle finding 5: Relative false for a source at document level", "after": [("frozen", "relative", {"type": "boolean"})]},
     # 21 Nov, one file for each part: link_make links an object of another .FCStd
     "link_make": {"why": "parts in other files: file", "after": [("to", "file", {"type": "string"})]},
+    # 22 Nov efficiency design D1: pictures go to the file by default; width makes the window's picture smaller
+    "window_snapshot": {"why": "efficiency design D1: width", "after": [("path", "width", {"type": "integer"})]},
 }
 
 

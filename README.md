@@ -411,8 +411,8 @@ Each token number is the estimated size of the `tools/list` answer: the tool nam
 |---|---:|---:|
 | static (default), ste | 6 | 1,616 |
 | static, full | 6 | 4,157 |
-| classic, ste | 23 | 6,290 |
-| classic, full | 23 | 8,744 |
+| classic, ste | 23 | 6,311 |
+| classic, full | 23 | 8,765 |
 <!-- stats:end -->
 
 ## Add-ons

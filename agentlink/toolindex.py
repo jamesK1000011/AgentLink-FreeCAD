@@ -183,6 +183,10 @@ def first_sentence(text, n=160):
 
 # ---- find ---------------------------------------------------------------------------------
 
+# What a tool gets when the search names its whole action (score()).
+ACTION_BONUS = 6
+
+
 def score(words, name, e, description="", group="", about="", named=None):
     """(words matched, score) of one tool for a search's words. Per word: the
     best of the tool's name, the index's words and its commands; then its
@@ -242,6 +246,12 @@ def score(words, name, e, description="", group="", about="", named=None):
     spare = sum(1 for tok in rest if not any(w == norm(tok) or (len(tok) > 2 and w.startswith(tok)) or (len(w) > 2 and tok.startswith(w)) for w in words))
     if matched:
         total -= min(spare, 2) * 1.5
+    # The tool whose whole action the search names ("pad sketch": pd_pad, not
+    # the sketch tools that a pad is made from): each word of the name past
+    # its family is a word of the search.
+    # A short name word counts for the word it starts (td_dim: "dimension").
+    if "_" in name and all(any(w == norm(tok) or (len(tok) > 2 and w.startswith(tok)) for w in words) for tok in rest):
+        total += ACTION_BONUS
     return matched, total
 
 
