@@ -45,6 +45,7 @@ GUARDS = {"copy": r"\bcop(?:y|ies|ied)\b", "undo": r"\bundo", "refuse": r"\brefu
 WAIVERS = {
     ("export", "20"): "the 20 s estimate that sent an export to a job is gone (no prejudging, 18 Nov); a call past about 60 s moves to the background",
     ("export", "batch"): "the batch-only estimate question is gone with the estimates (18 Nov)",
+    ("asm_joint", "get"): "the English verb in the original text, not the get tool that came on 22 Nov",
 }
 
 

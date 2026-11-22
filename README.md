@@ -315,7 +315,7 @@ How it works inside: [docs/workflow/approvals.md](https://github.com/jamesK10000
 ## What the agent can do
 
 <!-- tools:begin (scripts/tool_summary.py) -->
-Agent Link itself declares 417 tools in 32 groups; a FreeCAD build without a workbench (FEM, CAM …)
+Agent Link itself declares 419 tools in 33 groups; a FreeCAD build without a workbench (FEM, CAM …)
 serves fewer, and each installed add-on adds its own groups.
 By default the client lists only six tools; the agent finds any other tool with `tool_find` and calls it by name.
 With `AGENTLINK_TOOLLIST=classic`, groups marked *lean* are listed from the start, and the agent turns on the rest with `tool_groups`.
@@ -354,6 +354,7 @@ With `AGENTLINK_TOOLLIST=classic`, groups marked *lean* are listed from the star
 | `unattended` | 3 | Unattended use: the pinned document, the heavy-job queue, the Addon Manager (dialog_answer and app_force_restart are in core). |
 | `dev` | 4 | For add-on developers: an installed add-on's own test suite run in a separate FreeCAD process (addon_test); live window scripts replayed and checked (live_run); mouse and keyboard input to the window's own widgets for GUI checks (gui_input), and closing a menu or dialog that holds the window (gui_unstick). |
 | `porting` | 8 | Port an add-on to Agent Link: a draft port from its commands (port_scaffold), and cookbooks of its commands, functions and call lists, run after the person's OK. |
+| `fast` | 2 | The fast path: fast runs a block of steps in one call and gives one short answer; get reads one value with its unit. |
 <!-- tools:end -->
 
 Each group has a guide the agent reads (`guide_read`). Any tool runs by name, also when it is not listed.
@@ -369,15 +370,15 @@ Release statistics for V1, made by `scripts/stats.py` from the data (all of them
 
 ```
 Per-tool status, all of V1 (measured: counted from docs/hardening/status.json)
-proven on a test model    ████████████████████ 613/620
-  headless                ████████████████████ 605/620
-  live in the window      ████████████████████ 608/620
-docs checked              ██████████████████░░ 554/620
-health check seen         ███████████████░░░░░ 480/620
-description rewritten     ██████████████████░░ 566/620
+proven on a test model    ████████████████████ 613/622
+  headless                ███████████████████░ 605/622
+  live in the window      ████████████████████ 608/622
+docs checked              ██████████████████░░ 554/622
+health check seen         ███████████████░░░░░ 480/622
+description rewritten     ██████████████████░░ 566/622
 
 By section (tools proven / total)
-Agent Link (core)         ████████████████████ 403/409
+Agent Link (core)         ████████████████████ 403/411
 Workshop                  ████████████████████  59/59
 ScanRuler for FreeCAD     ████████████████████ 132/133
 Texturizer                ████████████████████  11/11
@@ -392,27 +393,27 @@ proven on a test model    ░░░░░░░░░░░░░░░░░░
 
 | Section | Tools | Proven | Headless | Live |
 |---|---:|---:|---:|---:|
-| Agent Link (core) | 409 | 403 | 396 | 403 |
+| Agent Link (core) | 411 | 403 | 396 | 403 |
 | Workshop | 59 | 59 | 59 | 54 |
 | ScanRuler for FreeCAD | 133 | 132 | 132 | 132 |
 | Texturizer | 11 | 11 | 11 | 11 |
 | Tutor | 3 | 3 | 2 | 3 |
 | Agent Link for OrcaSlicer | 5 | 5 | 5 | 5 |
-| **All of V1** | **620** | **613** | **605** | **608** |
+| **All of V1** | **622** | **613** | **605** | **608** |
 | *Developer tools (not counted)* | *8* | *0* | *0* | *0* |
 
-Known gaps: 7 tools are not proven, 8 more are proven live only and 5 more headless only. The main reasons: a program, a FreeCAD version or a printer that the test Mac does not have; a step that needs the person (a restart, an install, a go); or not tested yet. Each tool and its reason: [What is not covered, and why](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md#what-is-not-covered-and-why). Not in V1 and not counted: 10 tools of private add-ons (Home-FreeCAD, agentlink-collab), cookbook format 2 and PrintLoop. In V1 but not counted: developer tools (8 tools: Porting), not FreeCAD functions.
+Known gaps: 9 tools are not proven, 8 more are proven live only and 5 more headless only. The main reasons: a program, a FreeCAD version or a printer that the test Mac does not have; a step that needs the person (a restart, an install, a go); or not tested yet. Each tool and its reason: [What is not covered, and why](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md#what-is-not-covered-and-why). Not in V1 and not counted: 10 tools of private add-ons (Home-FreeCAD, agentlink-collab), cookbook format 2 and PrintLoop. In V1 but not counted: developer tools (8 tools: Porting), not FreeCAD functions.
 
-Tools: 417 in Agent Link (core), 629 with all add-ons installed (`library_pack` in this count is callable but not listed).
+Tools: 419 in Agent Link (core), 631 with all add-ons installed (`library_pack` in this count is callable but not listed).
 
 Each token number is the estimated size of the `tools/list` answer: the tool names, descriptions and input schemas that the client loads into the agent's context at the start of a session. The server instructions, the guides and the tool answers are not in it. Estimate: 3.5 characters for each token.
 
 | Tool list | Tools listed | Tokens (est.) of the `tools/list` answer |
 |---|---:|---:|
-| static (default), ste | 6 | 1,616 |
-| static, full | 6 | 4,159 |
-| classic, ste | 23 | 6,342 |
-| classic, full | 23 | 8,799 |
+| static (default), ste | 6 | 1,625 |
+| static, full | 6 | 4,168 |
+| classic, ste | 23 | 6,351 |
+| classic, full | 23 | 8,807 |
 <!-- stats:end -->
 
 ## Add-ons

@@ -48,6 +48,7 @@ NAMES = [
     "unattended",
     "dev",
     "porting",
+    "fast",
 ]
 
 

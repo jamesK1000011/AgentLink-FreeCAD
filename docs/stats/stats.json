@@ -1,7 +1,7 @@
 {
  "about": "Made by scripts/stats.py from the repository's data. Do not edit by hand.",
  "coverage": {
-  "total": 620,
+  "total": 622,
   "proven": 613,
   "headless": 605,
   "live": 608,
@@ -18,7 +18,7 @@
     "headless": 396,
     "live": 403,
     "proven": 403,
-    "total": 409,
+    "total": 411,
     "parts": [
      {
       "name": "Sketcher",
@@ -88,7 +88,7 @@
      {
       "name": "Core",
       "proven": 62,
-      "total": 65
+      "total": 67
      },
      {
       "name": "Window (GUI)",
@@ -435,6 +435,26 @@
     "format2Only": false
    },
    {
+    "tool": "fast",
+    "section": "Agent Link (core)",
+    "part": "Core",
+    "short": [
+     "not proven"
+    ],
+    "why": "Not tested yet.",
+    "format2Only": false
+   },
+   {
+    "tool": "get",
+    "section": "Agent Link (core)",
+    "part": "Core",
+    "short": [
+     "not proven"
+    ],
+    "why": "Not tested yet.",
+    "format2Only": false
+   },
+   {
     "tool": "app_install",
     "section": "Agent Link (core)",
     "part": "Window (GUI)",
@@ -753,7 +773,7 @@
   ]
  },
  "hubTools": {
-  "total": 417,
+  "total": 419,
   "groups": [
    {
     "group": "core",
@@ -914,6 +934,11 @@
     "group": "porting",
     "tools": 8,
     "lean": false
+   },
+   {
+    "group": "fast",
+    "tools": 2,
+    "lean": false
    }
   ]
  },
@@ -924,8 +949,8 @@
     "style": "ste",
     "default": true,
     "tools": 6,
-    "chars": 5656,
-    "tokens": 1616,
+    "chars": 5686,
+    "tokens": 1625,
     "estimatedCards": 6
    },
    {
@@ -933,8 +958,8 @@
     "style": "full",
     "default": false,
     "tools": 6,
-    "chars": 14557,
-    "tokens": 4159,
+    "chars": 14587,
+    "tokens": 4168,
     "estimatedCards": 6
    },
    {
@@ -942,8 +967,8 @@
     "style": "ste",
     "default": false,
     "tools": 23,
-    "chars": 22197,
-    "tokens": 6342,
+    "chars": 22227,
+    "tokens": 6351,
     "estimatedCards": 17
    },
    {
@@ -951,16 +976,16 @@
     "style": "full",
     "default": false,
     "tools": 23,
-    "chars": 30795,
-    "tokens": 8799,
+    "chars": 30825,
+    "tokens": 8807,
     "estimatedCards": 17
    }
   ],
   "allHubListed": {
-   "tools": 417,
-   "chars": 351332,
+   "tools": 419,
+   "chars": 353885,
    "estimatedCards": 25,
-   "tokens": 100381
+   "tokens": 101110
   },
   "base": [
    "session_state",
@@ -1089,7 +1114,7 @@
    }
   ],
   "addonToolsLoaded": 212,
-  "totalAllInstalled": 629
+  "totalAllInstalled": 631
  },
  "timings": {
   "note": "no timing data in the repo yet"

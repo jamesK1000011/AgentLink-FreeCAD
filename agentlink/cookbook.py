@@ -54,7 +54,7 @@ MAX_ABOUT = 400
 MAX_WORDS = 20
 # A script's calls never reach these: the OK and the cookbooks stay the
 # person's, and a script never nests another runner.
-SCRIPT_BLOCKED = {"batch", "job_start", "live_run", "app_restart", "app_force_restart", "agentlink_update", "pref_set", "pref_reset",
+SCRIPT_BLOCKED = {"batch", "fast", "job_start", "live_run", "app_restart", "app_force_restart", "agentlink_update", "pref_set", "pref_reset",
                   "pref_import", "pref_pack", "app_extensions", "addon", "port_scaffold", "approve_file", "approve_code",
                   # red team 2026-11-18: input to the window, a dialog's buttons and test runs (code) stay out too
                   "gui_input", "dialog_answer", "gui_unstick", "addon_test"}

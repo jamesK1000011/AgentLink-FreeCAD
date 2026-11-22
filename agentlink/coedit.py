@@ -18,7 +18,7 @@ CODE = "held_person_editing"
 FLOWS = ("cmd_", "menu_", "gui_", "dialog_")
 FREE_PREFIXES = FLOWS + ("app_",)
 # Calls that do not change the document they start in.
-FREE = frozenset({"batch", "doc_new", "doc_open", "doc_switch"})
+FREE = frozenset({"batch", "fast", "doc_new", "doc_open", "doc_switch"})
 
 BODY = "PartDesign::Body"
 
