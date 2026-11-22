@@ -37,6 +37,14 @@ except ImportError:
     sup_jobs = None
 
 FLAG = "AGENTLINK_SUPERVISED"
+# The hidden FreeCAD's note that it took a call (protocol.TOOK; the same text,
+# kept here so this module needs no FreeCAD-side import).
+TOOK = "notifications/agentlink/took"
+# How text that UTF-8 cannot hold (a lone surrogate, from a file name or an
+# add-on's text) is written on the wire: as a backslash escape. Inside a JSON
+# string that is a valid \uXXXX escape, so the line still goes out and parses;
+# "strict" failed the write and the call had no answer.
+WIRE_ERRORS = "backslashreplace"
 WINDOW_PORT = int(os.environ.get("AGENTLINK_WINDOW_PORT", "7318"))
 # Heavy tools: their deadline is their estimate times three (N); with no
 # estimate yet, half an hour. The rest get a change's 120 s.
@@ -126,8 +134,8 @@ POPUP_WAIT = float(os.environ.get("AGENTLINK_POPUP_WAIT", "10"))
 ANSWER_WAIT = 30.0
 
 
-def _answer(mid, code, message):
-    text = json.dumps({"error": {"code": code, "message": message}})
+def _answer(mid, code, message, outcome=None):
+    text = json.dumps({"error": {"code": code, "message": message, **({"outcome": outcome} if outcome else {})}})
     return json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
 
 
@@ -702,7 +710,7 @@ class Window:
             s = socket.create_connection(("127.0.0.1", WINDOW_PORT), timeout=0.3)
         except OSError:
             return False
-        f = s.makefile("rw", encoding="utf-8", newline="\n")
+        f = s.makefile("rw", encoding="utf-8", errors=WIRE_ERRORS, newline="\n")
         # Paired first (agentlink/link_token.py): both sides prove they know
         # the window's token. Whatever cannot is not the window: the hidden
         # FreeCAD answers instead.
@@ -1152,11 +1160,12 @@ class Window:
 def run(script, argv):
     """Serve stdin/stdout through a child running script, restarted when it
     dies. Gives up after three deaths in a minute."""
-    out = os.fdopen(os.dup(1), "w", buffering=1, encoding="utf-8")
+    out = os.fdopen(os.dup(1), "w", buffering=1, encoding="utf-8", errors=WIRE_ERRORS)
     os.dup2(2, 1)
     lock = threading.Lock()
     pending = {}
     lines = {}  # id -> the line, for a quiet restart to send again
+    took = {}  # id -> changes: the hidden FreeCAD took it off its input (protocol.TOOK)
     heavy_ids = {}  # hidden: id -> heavy tool, its queue place freed at the answer
     inflight = {}  # hidden: id -> {tool, args, start}
     hangs = {}  # call key -> times it hung
@@ -1176,7 +1185,7 @@ def run(script, argv):
     child_lock = threading.Lock()
 
     def start():
-        child = subprocess.Popen([sys.executable, script, *argv], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env, text=True, encoding="utf-8", bufsize=1)
+        child = subprocess.Popen([sys.executable, script, *argv], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env, text=True, encoding="utf-8", errors=WIRE_ERRORS, bufsize=1)
         state["child"] = child
 
         def pump():
@@ -1187,9 +1196,16 @@ def run(script, argv):
                         sys.stderr.write(f"freecad: {line}\n")
                     continue
                 try:
-                    mid = json.loads(line).get("id")
-                except ValueError:
-                    mid = None
+                    got = json.loads(line)
+                    mid = got.get("id")
+                except (ValueError, AttributeError):
+                    got, mid = None, None
+                if mid is None and isinstance(got, dict) and got.get("method") == TOOK:
+                    # The hidden FreeCAD began this call (E2): not for the client.
+                    p = got.get("params") or {}
+                    if p.get("id") is not None:
+                        took[p["id"]] = bool(p.get("changes", True))
+                    continue
                 if mid == "__restart":
                     continue
                 if mid == "__recover":
@@ -1201,6 +1217,7 @@ def run(script, argv):
                 if mid is not None:
                     pending.pop(mid, None)
                     lines.pop(mid, None)
+                    took.pop(mid, None)
                     if mid in heavy_ids:
                         queue_done(heavy_ids.pop(mid))
                     if inflight.pop(mid, None) is not None:
@@ -1248,13 +1265,28 @@ def run(script, argv):
             try:
                 send_child(json.dumps({"jsonrpc": "2.0", "id": "__restart", "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "agentlink-supervisor", "version": "1"}}}))
                 send_child(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}))
-                # It left right after its answer: calls queued behind it never
-                # ran, so they go to the fresh one.
+                # It left right after its answer: calls queued behind it that
+                # it never took go to the fresh one. A changing call it took
+                # but did not answer may have changed something: answered
+                # with outcome unknown, never sent twice (E2). A read it
+                # took is sent again (it changes nothing).
                 for mid in list(pending):
-                    if mid in lines:
-                        if mid in inflight:
-                            inflight[mid]["start"] = time.time()
-                        send_child(lines[mid])
+                    if mid not in lines:
+                        continue
+                    if took.pop(mid, False):
+                        c = inflight.pop(mid, None) or {}
+                        method = pending.pop(mid, None)
+                        lines.pop(mid, None)
+                        if mid in heavy_ids:
+                            queue_done(heavy_ids.pop(mid))
+                        if method == "tools/call":
+                            write(_answer(mid, "failed", f"The hidden FreeCAD started again (a settings rollback) while {c.get('tool') or 'this call'} was under way: "
+                                          "it may have changed the document before it stopped. It was not sent again. session_state shows the document as it is now.",
+                                          outcome="unknown"))
+                        continue
+                    if mid in inflight:
+                        inflight[mid]["start"] = time.time()
+                    send_child(lines[mid])
             except OSError:
                 pass
             return
@@ -1332,6 +1364,7 @@ def run(script, argv):
             c = inflight.pop(mid, None) or {}
             pending.pop(mid, None)
             lines.pop(mid, None)
+            took.pop(mid, None)
             if mid in heavy_ids:
                 queue_done(heavy_ids.pop(mid))
             if hang and mid == hang.get("id"):
@@ -1512,7 +1545,9 @@ def run(script, argv):
                     got = window.side_call("job_status", {}, timeout=3.0)
                     if isinstance(got, dict) and got.get("jobs"):
                         body["jobs"] = (got.get("jobs") or []) + body.get("jobs", [])
-                if not body.get("jobs") and not jid and not err:
+                    if isinstance(got, dict) and got.get("late"):
+                        body["late"] = got["late"]  # the window's late answers (E6)
+                if not body.get("jobs") and not body.get("late") and not jid and not err:
                     body["note"] = "No jobs. A call with no answer after about 60 s moves to the background as a job; job_start starts one."
                 write_out(_answer_body(mid, body) if err else _result(mid, body))
             threading.Thread(target=answer, daemon=True).start()

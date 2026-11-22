@@ -494,6 +494,7 @@ tests/test_echo_rings.py
 tests/test_echo_round6.py
 tests/test_echo_window.py
 tests/test_eff_a.py
+tests/test_eff_rel.py
 tests/test_exploded_view.py
 tests/test_export_mesh_1118.py
 tests/test_ext.py

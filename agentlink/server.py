@@ -20,10 +20,15 @@ import sys
 import threading
 
 VERSION = "1.0.0"
+# How text that UTF-8 cannot hold (a lone surrogate, from a file name or an
+# add-on's text) is written on the wire: as a backslash escape. Inside a JSON
+# string that is a valid \uXXXX escape, so the line still goes out and parses;
+# "strict" failed the write and the call had no answer.
+WIRE_ERRORS = "backslashreplace"
 
 
 def _protocol_stdout():
-    real = os.fdopen(os.dup(1), "w", buffering=1, encoding="utf-8")
+    real = os.fdopen(os.dup(1), "w", buffering=1, encoding="utf-8", errors=WIRE_ERRORS)
     os.dup2(2, 1)
     sys.stdout = sys.stderr
     return real
@@ -49,7 +54,7 @@ def relay(port, out):
         sys.stderr.write(f"Agent Link: no FreeCAD window listening on port {port} ({e}). In FreeCAD, switch to the Agent Link workbench and press Start link.\n")
         sys.exit(2)
     s.settimeout(None)
-    f = s.makefile("rw", encoding="utf-8", newline="\n")
+    f = s.makefile("rw", encoding="utf-8", errors=WIRE_ERRORS, newline="\n")
     from . import link_token
 
     try:
