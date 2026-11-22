@@ -402,11 +402,11 @@ def _longest(name, pairs):
 # still listed in Activity): the server's own, and what add-ons declare as
 # NO_ECHO (names or prefixes), such as tools that draw in the window
 # themselves.
-SKIP = {"batch", "session_state", "tool_groups", "guide_read"}
+SKIP = {"batch", "fast", "get", "session_state", "tool_groups", "guide_read"}
 NO_ECHO = set()
 # Of the looks, those that say their own words all the same (round 7): the
 # hub's SKIP reads (batch says none: its calls say theirs) and every WATCH.
-LOOK_WORDS = SKIP - {"batch"}
+LOOK_WORDS = SKIP - {"batch", "fast"}
 
 # Tools that look at the window or the session and leave it as it is: a
 # picture of the window, the Report view, the session's state. They show

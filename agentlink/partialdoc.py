@@ -10,7 +10,7 @@ the way out: doc_revert loads the whole file."""
 
 # Calls that act on the session rather than on the document's content:
 # they must still run on a partly loaded document (they are the way out).
-LEAVE = ("batch", "doc_revert", "doc_open", "doc_switch", "doc_close", "doc_new")
+LEAVE = ("batch", "fast", "doc_revert", "doc_open", "doc_switch", "doc_close", "doc_new")
 
 
 def partial(doc):

@@ -1147,7 +1147,7 @@ class Window:
                 head = f"FreeCAD stopped responding during {tool} after {int(hang['after'])} s and was stopped (its pid {hang['pid']})."
             else:
                 head = f"The FreeCAD window went away during {tool} (a crash, or it was quit): it may or may not have run."
-            if tool == "batch":
+            if tool in ("batch", "fast"):
                 head += (" A batch keeps what ran as it goes: the newest batches/<date>-<time>.json in the session's folder (session_state's outDir) "
                          "lists each call that finished with its result — read it before running any of them again.")
             tail = self.recover("hang" if hang else "crash", tool, t_crash)

@@ -460,7 +460,7 @@ _EXTENSIONS = {}
 # that guard code stay Agent Link's own.
 # An add-on keeps one of its own tools out of reach with keep_unextended().
 NOT_EXTENDED = {"cookbook_approve", "cookbook_unapprove", "cookbook_import", "cookbook_run", "app_extensions", "addon",
-                "pref_set", "pref_reset", "pref_import", "pref_pack", "agentlink_update", "batch",
+                "pref_set", "pref_reset", "pref_import", "pref_pack", "agentlink_update", "batch", "fast",
                 "gui_input", "dialog_answer", "cmd_run", "menu_run", "app_restart"}
 
 

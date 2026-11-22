@@ -72,6 +72,7 @@ agentlink/families/dev.py
 agentlink/families/doc.py
 agentlink/families/draft.py
 agentlink/families/draft_more.py
+agentlink/families/fast.py
 agentlink/families/feature.py
 agentlink/families/feature_more.py
 agentlink/families/fem_more.py
@@ -101,6 +102,7 @@ agentlink/families/surface.py
 agentlink/families/techdraw.py
 agentlink/families/unattended.py
 agentlink/families/view.py
+agentlink/fastpath.py
 agentlink/fitting.py
 agentlink/flat2d.py
 agentlink/fusehint.py
@@ -508,6 +510,7 @@ tests/test_extstate.py
 tests/test_facepick.py
 tests/test_failure_trace.py
 tests/test_famfix.py
+tests/test_fastpath.py
 tests/test_feature.py
 tests/test_feature_more.py
 tests/test_fem_faults_1118.py

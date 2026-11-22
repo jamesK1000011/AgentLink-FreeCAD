@@ -18,6 +18,7 @@ SOURCE = "FreeCAD 1.1.0 source; Agent Link"
 DATE = "2026-11-16"
 DATES = {t: "2026-11-18" for t in ("port_scaffold", "cookbook_list", "cookbook_show", "cookbook_import", "cookbook_export", "cookbook_approve", "cookbook_unapprove", "cookbook_run")}
 DATES.update({t: "2026-11-18" for t in ("approve_file", "approve_code")})
+DATES.update({t: "2026-11-22" for t in ("fast", "get")})
 
 # Tool or prefix → workbench, where the echo's WORKBENCH table says nothing
 # (the echo brings no bench up for these; the index still files them).
@@ -190,6 +191,7 @@ TOOLS = {
     "draft_to_sketch": (["Draft_Draft2Sketch"], "convert"),
     "export": (["Std_Export"], "step stl iges brep 3mf obj dxf svg save write file"),
     "export_file": (["Std_Export"], "step stl save write"),
+    "fast": ([], "fast path block steps loop chain quick terse many calls one answer"),
     "fea_buckle": ([], "buckling stability column"),
     "fea_chart": ([], "histogram plot graph"),
     "fea_clear": ([], "reset remove study"),
@@ -213,6 +215,7 @@ TOOLS = {
     "fem_add": (["FEM_ConstraintDisplacement", "FEM_ConstraintSpring", "FEM_ConstraintContact", "FEM_ConstraintTie", "FEM_ElementGeometry1D", "FEM_ElementGeometry2D", "FEM_MaterialMechanicalNonlinear", "FEM_MeshRegion"], "constraint displacement spring contact tie beam shell element"),
     "fem_linearize": (["FEM_PostFilterLinearizedStresses"], "stress membrane bending pressure vessel"),
     "fem_mesh": (["FEM_MeshNetgenFromShape", "FEM_FEMMesh2Mesh", "FEM_MeshClear"], "netgen nodes elements convert"),
+    "get": ([], "value read one property volume mass length dof targeted"),
     "gui_input": ([], "mouse keyboard click type widget"),
     "gui_unstick": ([], "escape close popup menu dialog stuck"),
     "guide_read": ([], "help howto workflow manual"),

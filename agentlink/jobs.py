@@ -94,6 +94,10 @@ def answered(job):
 # fails on one that is neither here, nor kept from jobs by its name
 # (NOT_JOBS_PREFIX, outputs.SHOT_TOOLS), nor listed there as looked at.
 IN_PLACE = {
+    # the fast path (agentlink/fastpath.py): a block's calls change the document and show in the window;
+    # get reads the window's selection and active body. On the GUI thread only.
+    "fast": "runs a block of tool calls, which change the document and show in the window",
+    "get": "reads the window's selection and active body",
     # the person's OK dialog (agentlink/person_ok.py) is a Qt window: made on the GUI thread only
     "cookbook_approve": "shows the person's OK dialog in the window",
     # poses placed, recomputed and put back (assembly.py sweep_run; assembly_more.py)

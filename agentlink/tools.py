@@ -111,6 +111,82 @@ def take_back(doc, u0, names0):
             pass
     return removed
 
+
+def undo_count(d):
+    """d's undo count, or None when d is gone (a call can close the document
+    under a batch: app_restart, doc_close) — read as gone, not as an error."""
+    try:
+        return d.UndoCount if d is not None else None
+    except Exception:
+        return None
+
+
+def own_steps(server, s, name, start, doc, u0, limit, mine, ok):
+    """After one call of a batch or a fast block: (the undo steps it made
+    that are the agent's, the start document or None when it is gone). The
+    names of those steps go on mine["own"] (None: not known), so a rollback
+    undoes a step only while it is the agent's (changes.undo_own)."""
+    from .coedit import FLOWS as coedit_flows
+
+    u1 = undo_count(start)
+    if u1 is None:
+        return 0, None
+    if not (ok and doc is start and s.doc is start):
+        return 0, start
+    tool_changes = getattr(server.tools.get(name), "changes", False)
+    d = u1 - u0
+    inc = d if d > 0 else (1 if u0 >= limit and tool_changes else 0)
+    if inc and not tool_changes and not str(name).startswith(coedit_flows):
+        # A read that left a step: not the agent's (the person's, made while
+        # it ran). Not counted, so the rollback stops at it (undo_own).
+        inc = 0
+    if mine.get("own") is not None:
+        got_names = changes.own_names(start, inc)
+        if got_names is None:
+            mine["own"] = None
+        else:
+            mine["own"].extend(got_names)
+    return inc, start
+
+
+def roll_back(s, start, made, own, names0, results=(), label="batch"):
+    """A batch's (or a fast block's) rollback in start: only the agent's own
+    steps, up to made, stopping at the first step that is not the agent's
+    (the person's, made while it ran: that step and all under it stay,
+    design E5 #6); then every object made since names0 that undo did not
+    reach. The answer's fields: undone, outcome, and removed, writtenNote,
+    warning or rollbackNote where they apply."""
+    out = {}
+    undone, foreign = changes.undo_own(start, made, own)
+    if foreign is None:
+        left = take_back(start, None, names0)
+        if left:
+            out["removed"] = left
+    # The steps taken back come off the count of the document they were
+    # made in, the first one — also when a call moved the session to another
+    # (its record is set aside).
+    rec = docstates.own_of(s, start)
+    if rec is not None:
+        rec["tx"] = max(0, rec["tx"] - undone)
+        rec["calls"] = [x for x in rec["calls"] if x["tx"] <= rec["tx"]]
+    start.recompute()
+    if s.doc is start:
+        s.snapshot(f"{label} rolled back")
+    out["undone"] = undone
+    out["outcome"] = "not_started" if not made else ("rolled_back" if undone >= made else "partial")
+    if any(isinstance(r.get("written"), dict) for r in results):
+        out["writtenNote"] = "The files the calls wrote (written) stay: they hold answers from before the rollback."
+    if s.doc is not start:
+        out["warning"] = f"The {label} moved to another document ({s.doc.Label if s.doc else 'none'}): only {start.Label}'s steps were taken back; what was done there stays."
+    elif foreign is not None:
+        out["outcome"] = "partial"
+        out["rollbackNote"] = (f"Stopped at a step that is not the agent's ({foreign}). {undone} of {made} agent steps were taken back. "
+                               "The person's step stays, and the agent steps under it stay. "
+                               "history_restore to the agent checkpoint goes back without your step.")
+    elif undone < made:
+        out["warning"] = f"Only {undone} of {made} steps could be taken back (FreeCAD's undo stack): the rest stay."
+    return out
+
 # Seconds a batch starts calls for before it answers with what ran and where
 # to go on (budget); the most that may be asked for.
 BATCH_BUDGET, BATCH_BUDGET_MAX = 55.0, 100.0
@@ -2120,8 +2196,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 # Bicycle runs, finding 7: the file's own to and lines (and from)
                 # count too; the call's own win. A file of { calls, to, lines:
                 # "full" } wrote no to file.
-                a = {**{k: data[k] for k in ("rollback", "stopOnError", "budget", "build", "title", "to", "lines", "from") if k in data},
-                     **{k: v for k, v in a.items() if k in ("rollback", "stopOnError", "budget", "from", "to", "lines", "file", "build", "title")}}
+                a = {**{k: data[k] for k in ("rollback", "stopOnError", "budget", "build", "title", "to", "lines", "from", "check") if k in data},
+                     **{k: v for k, v in a.items() if k in ("rollback", "stopOnError", "budget", "from", "to", "lines", "file", "build", "title", "check")}}
                 data = data.get("calls")
             if not isinstance(data, list):
                 raise ToolError("invalid_input", f"file: {f} holds no list of calls — [{{ tool, arguments }} …], or {{ calls: [...] }}. Nothing was run.")
@@ -2199,6 +2275,15 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 raise ToolError("invalid_input", f"calls.{i}: a batch does not run another batch. Nothing was run.")
             if rollback and c["tool"] in ("history_undo", "history_redo", "history_restore"):
                 raise ToolError("invalid_input", f"calls.{i}: {c['tool']} inside a batch that rolls back can't be taken back by undo — call it on its own, or rollback: false. Nothing was run.")
+        if a.get("check"):
+            # check: true (design A6): each call's fields and, up to its
+            # first changing call, its leading checks read before the first
+            # call runs; a refusal names the call by its index.
+            from . import fastpath as _fastpath
+
+            said = _fastpath.precheck_calls(server, calls, first)
+            if said is not None:
+                raise said
         # Rolled back by counting the undo steps the batch made, not by the
         # undo count: FreeCAD keeps 20 steps by default, and once the stack
         # is full each new step pushes the oldest off, so the count stops
@@ -2363,7 +2448,6 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
 
         first = mine.get("first", 0)
         hold = mine.get("hold")
-        from .coedit import FLOWS as coedit_flows
         # Each call's answer while the batch runs, for a later call's $from;
         # the JSON files $file named, parsed once while they stay the same.
         answers, files = {}, {}
@@ -2416,34 +2500,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 # Only the agent's own steps: at the first step that is not
                 # the batch's (the person's, made while it ran) it stops,
                 # and that step and all under it stay (design E5 #6).
-                undone, foreign = changes.undo_own(start, made, mine.get("own"))
-                if foreign is None:
-                    left = take_back(start, None, mine.get("names0"))
-                    if left:
-                        out["removed"] = left
-                # The steps taken back come off the count of the document
-                # they were made in, the batch's first — also when a call
-                # moved the session to another (its record is set aside).
-                rec = docstates.own_of(s, start)
-                if rec is not None:
-                    rec["tx"] = max(0, rec["tx"] - undone)
-                    rec["calls"] = [x for x in rec["calls"] if x["tx"] <= rec["tx"]]
-                start.recompute()
-                if s.doc is start:
-                    s.snapshot("batch rolled back")
-                out["undone"] = undone
-                out["outcome"] = "not_started" if not made else ("rolled_back" if undone >= made else "partial")
-                if any(isinstance(r.get("written"), dict) for r in results):
-                    out["writtenNote"] = "The files the calls wrote (written) stay: they hold answers from before the rollback."
-                if s.doc is not start:
-                    out["warning"] = f"The batch moved to another document ({s.doc.Label if s.doc else 'none'}): only {start.Label}'s steps were taken back; what was done there stays."
-                elif foreign is not None:
-                    out["outcome"] = "partial"
-                    out["rollbackNote"] = (f"Stopped at a step that is not the agent's ({foreign}). {undone} of {made} agent steps were taken back. "
-                                           "The person's step stays, and the agent steps under it stay. "
-                                           "history_restore to the agent checkpoint goes back without your step.")
-                elif undone < made:
-                    out["warning"] = f"Only {undone} of {made} steps could be taken back (FreeCAD's undo stack): the rest stay."
+                out.update(roll_back(s, start, made, mine.get("own"), mine.get("names0"), results))
             return ended(out)
 
         def build_broke(entry):
@@ -2645,26 +2702,10 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     ok = not r.get("isError")
                 else:
                     text, body, ok = "", {"error": miss}, False
-                u1 = undo_count(start)
-                if u1 is None:
-                    start = None
-                if ok and start is not None and doc is start and s.doc is start:
-                    d = u1 - u0
-                    inc = d if d > 0 else (1 if u0 >= limit and getattr(server.tools.get(c["tool"]), "changes", False) else 0)
-                    if inc and not getattr(server.tools.get(c["tool"]), "changes", False) and not str(c["tool"]).startswith(coedit_flows):
-                        # A read that left a step: not the agent's (the
-                        # person's, made while it ran). Not counted, so the
-                        # rollback stops at it (undo_own).
-                        inc = 0
-                    made += inc
-                    # The names of the steps this call made: a rollback
-                    # undoes a step only while it is the agent's (undo_own).
-                    if mine.get("own") is not None:
-                        got_names = changes.own_names(start, inc)
-                        if got_names is None:
-                            mine["own"] = None
-                        else:
-                            mine["own"].extend(got_names)
+                # The agent's own steps this call made, named on mine["own"]:
+                # a rollback undoes a step only while it is the agent's.
+                inc, start = own_steps(server, s, c["tool"], start, doc, u0, limit, mine, ok)
+                made += inc
                 if held and ok:
                     hold.note(first + i, c["tool"])
                     body = _hold.held_answer(c["tool"], body)
@@ -2930,7 +2971,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                       "opens a menu or dialog does not end the batch. The calls after it run inside that menu or dialog, in order. The batch then answers once, "
                       "with nested in the answer. If it closes before a call, the rest runs after it. A call refused inside it stops the batch, but nothing is "
                       "undone there (rollbackNote): what ran stays.",
-             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}, "lines": {"type": "string", "enum": ["all", "refused", "counts", "full"]}, "build": {"type": "string", "enum": ["end", "each"]}, "read": {"type": "string"}, "at": {"type": "string"}, "title": {"type": "string"}}), batch),
+             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}, "lines": {"type": "string", "enum": ["all", "refused", "counts", "full"]}, "build": {"type": "string", "enum": ["end", "each"]}, "read": {"type": "string"}, "at": {"type": "string"}, "title": {"type": "string"}, "check": {"type": "boolean"}}), batch),
         Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded). That is shots past the last 50 and 3 days, and "
                               "solver and job runs past 14 days. Also FreeCAD backups past 7; exports are only listed. Files go to the Trash. It is a dry run unless dry_run: false. "
                               "kinds, older_than_days: limit it. It also runs automatically each day.",
