@@ -658,6 +658,12 @@ class Server:
         return None if mid is None else {"jsonrpc": "2.0", "id": mid, "result": result}
 
     def call(self, params):
+        if params.get("name") == "pick" and "pick" in self.tools and self.session is not None:
+            # An option run by its number (agentlink/options.py): its call
+            # goes through this same path, under the tool's own name.
+            from . import options
+
+            return options.pick_call(self, params)
         t0 = time.time()
         s = self.session
         prior = None
@@ -890,6 +896,14 @@ class Server:
 
                     with _ar.part("appliesNow"):
                         appliesnow.push(s, tool, out, count=tool.name != "batch")
+                except Exception:
+                    pass
+                # The likely next steps as numbered, checked calls bound to the step (agentlink/options.py).
+                try:
+                    from . import options
+
+                    with _ar.part("options"):
+                        options.push(s, out)
                 except Exception:
                     pass
             if self.on_call is not None:

@@ -1,24 +1,24 @@
 {
  "about": "Made by scripts/stats.py from the repository's data. Do not edit by hand.",
  "coverage": {
-  "total": 619,
+  "total": 620,
   "proven": 613,
   "headless": 605,
   "live": 608,
   "docs": 554,
   "health": 480,
-  "description": 565,
+  "description": 566,
   "sections": [
    {
     "repo": "AgentLink-FreeCAD",
     "title": "Agent Link (core)",
     "docs": 367,
     "health": 288,
-    "description": 378,
+    "description": 379,
     "headless": 396,
     "live": 403,
     "proven": 403,
-    "total": 408,
+    "total": 409,
     "parts": [
      {
       "name": "Sketcher",
@@ -88,7 +88,7 @@
      {
       "name": "Core",
       "proven": 62,
-      "total": 64
+      "total": 65
      },
      {
       "name": "Window (GUI)",
@@ -412,6 +412,16 @@
      "not proven"
     ],
     "why": "Not tested yet.",
+    "format2Only": false
+   },
+   {
+    "tool": "pick",
+    "section": "Agent Link (core)",
+    "part": "Core",
+    "short": [
+     "not proven"
+    ],
+    "why": "Headless and live: not tested yet. tests/test_options.py runs it on stand-ins only.",
     "format2Only": false
    },
    {
@@ -743,7 +753,7 @@
   ]
  },
  "hubTools": {
-  "total": 416,
+  "total": 417,
   "groups": [
    {
     "group": "core",
@@ -751,13 +761,13 @@
     "lean": true
    },
    {
-    "group": "app",
-    "tools": 18,
+    "group": "find",
+    "tools": 2,
     "lean": false
    },
    {
-    "group": "find",
-    "tools": 1,
+    "group": "app",
+    "tools": 18,
     "lean": false
    },
    {
@@ -947,10 +957,10 @@
    }
   ],
   "allHubListed": {
-   "tools": 416,
-   "chars": 350329,
-   "estimatedCards": 24,
-   "tokens": 100094
+   "tools": 417,
+   "chars": 351332,
+   "estimatedCards": 25,
+   "tokens": 100381
   },
   "base": [
    "session_state",
@@ -989,6 +999,7 @@
    "job_status",
    "live_run",
    "outputs_clean",
+   "pick",
    "pref_import",
    "report_read",
    "session_state",
@@ -1078,7 +1089,7 @@
    }
   ],
   "addonToolsLoaded": 212,
-  "totalAllInstalled": 628
+  "totalAllInstalled": 629
  },
  "timings": {
   "note": "no timing data in the repo yet"

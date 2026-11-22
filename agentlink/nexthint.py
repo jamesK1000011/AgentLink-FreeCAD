@@ -58,6 +58,7 @@ def _buttons(names, n=5):
 # Past this many objects the document's own state is not read for the hint
 # (the selection, the sketch in edit and the page in front still are).
 MAX_OBJECTS = 2000
+MAX_NAMES = 6        # real names kept in a fact that lists them (bodies, sketches, picked edges)
 # PartDesign's solid features (FreeCAD's type names, lower case) are told
 # from its dress-ups and patterns by the rules themselves (data/nexthint.json).
 
@@ -85,7 +86,10 @@ def facts(doc, state=None, gui=None):
     reads only: object State flags, the active body's Group and Tip, an
     unused sketch's wires, an assembly's joint group, the selection and
     the view in front. A fact that cannot be read is left out, and a rule
-    that needs it then does not fit. Never raises."""
+    that needs it then does not fit. Beside the facts the rules read, the
+    real names an option's arguments are filled from (agentlink/options.py):
+    bodyName, bodies, sketchName, sketches, tipName, editSketch, picked,
+    pickedEdges, pickedFaces, failingName, assemblyName. Never raises."""
     state = state or {}
     out = {}
     if state.get("workbench"):
@@ -99,10 +103,22 @@ def facts(doc, state=None, gui=None):
     sel = next((k for k in ("edge", "face", "vertex") if k in subs), None) or ("object" if state.get("selected") else None)
     picked = None
     active_body = active_part = None
+    # The real names an option's arguments are filled from (agentlink/options.py):
+    # the sketch in edit, the picked object and its picked edges and faces.
+    edit_name = (state.get("sketch") or {}).get("obj")
+    if edit_name:
+        out["editSketch"] = edit_name
     if gui is not None:
         try:
             if sel:
-                picked = gui.Selection.getSelectionEx()[0].Object
+                first = gui.Selection.getSelectionEx()[0]
+                picked = first.Object
+                out["picked"] = str(picked.Name)
+                names = [str(n).rsplit(".", 1)[-1] for n in (first.SubElementNames or ())]
+                for kind, key in (("Edge", "pickedEdges"), ("Face", "pickedFaces")):
+                    got = [n for n in names if n.startswith(kind)][:MAX_NAMES]
+                    if got:
+                        out[key] = got
         except Exception:  # noqa: BLE001
             picked = None
         try:
@@ -129,7 +145,10 @@ def facts(doc, state=None, gui=None):
     if len(objs) > MAX_OBJECTS:
         return out
     try:
-        out["failing"] = any("Invalid" in o.State for o in objs)
+        bad = next((o for o in objs if "Invalid" in o.State), None)
+        out["failing"] = bad is not None
+        if bad is not None:
+            out["failingName"] = str(bad.Name)
     except Exception:  # noqa: BLE001
         pass
     try:
@@ -140,6 +159,7 @@ def facts(doc, state=None, gui=None):
             joints = sum(len(g.Group) for g in group if g.TypeId == "Assembly::JointGroup")
             parts = [o for o in group if not o.TypeId.endswith("Group")]
             out["assembly"] = "empty" if not parts else ("jointed" if joints else "unjointed")
+            out["assemblyName"] = str(asm.Name)
     except Exception:  # noqa: BLE001
         pass
     try:
@@ -152,6 +172,8 @@ def facts(doc, state=None, gui=None):
             body = picked if picked in bodies else next((p for p in picked.InList if p in bodies), None)
         if body is None:
             body = bodies[-1]
+        out["bodyName"] = str(body.Name)
+        out["bodies"] = [str(b.Name) for b in [body] + [b for b in reversed(bodies) if b is not body]][:MAX_NAMES]
         group = list(body.Group)
         sketches = [o for o in group if o.isDerivedFrom("Sketcher::SketchObject")]
         feats = [o for o in group if o.isDerivedFrom("PartDesign::Feature")]
@@ -159,10 +181,13 @@ def facts(doc, state=None, gui=None):
         out["features"] = "some" if feats else "none"
         if unused:
             out["body"] = _sketch_progress(unused[-1])
+            out["sketchName"] = str(unused[-1].Name)
+            out["sketches"] = [str(k.Name) for k in reversed(unused)][:MAX_NAMES]
         elif feats:
             out["body"] = "features"
             tip = getattr(body, "Tip", None) or feats[-1]
             out["lastFeature"] = str(tip.TypeId).rsplit("::", 1)[-1].lower()
+            out["tipName"] = str(tip.Name)
         else:
             out["body"] = "empty"
     except Exception:  # noqa: BLE001
@@ -190,7 +215,26 @@ def problems(entry):
     schema = _schema()
     if schema is None:
         return [] if isinstance(entry, dict) and isinstance(entry.get("when"), dict) and isinstance(entry.get("suggest"), list) else ["not a rule"]
-    return datafiles.validate(entry, schema)
+    out = datafiles.validate(entry, schema)
+    if not out:
+        out = _expr_problems(entry)
+    return out
+
+
+def _expr_problems(entry):
+    """An option's expressions (args and choices: "=…") that the hub's
+    checked language does not read (agentlink/expr.py; never eval)."""
+    from . import expr
+
+    out = []
+    for s in entry.get("suggest") or ():
+        for part in ("args", "choices"):
+            for k, v in (s.get(part) or {}).items():
+                if isinstance(v, str) and v.startswith("="):
+                    bad = expr.check(v[1:])
+                    if bad:
+                        out.append(f"{s.get('tool')}.{part}.{k}: {bad}")
+    return out
 
 
 def load(path=None):

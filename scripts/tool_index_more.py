@@ -18,6 +18,7 @@ SOURCE = "FreeCAD 1.1.0 source; Agent Link"
 DATE = "2026-11-16"
 DATES = {t: "2026-11-18" for t in ("port_scaffold", "cookbook_list", "cookbook_show", "cookbook_import", "cookbook_export", "cookbook_approve", "cookbook_unapprove", "cookbook_run")}
 DATES.update({t: "2026-11-18" for t in ("approve_file", "approve_code")})
+DATES["pick"] = "2026-11-22"
 
 # Tool or prefix → workbench, where the echo's WORKBENCH table says nothing
 # (the echo brings no bench up for these; the index still files them).
@@ -462,6 +463,7 @@ TOOLS = {
     "text_document": (["Std_TextDocument"], "notes readme text"),
     "tool_groups": ([], "tools find search list enable"),
     "tool_find": ([], "tools find search card words listing"),
+    "pick": ([], "option options choose number next step ready call run"),
     "units_convert": (["Std_UnitsCalculator"], "unit inch mm calculator conversion"),
     "usage_report": ([], "tokens cost calls"),
     "varset_new": (["Std_VarSet"], "variables variable set"),

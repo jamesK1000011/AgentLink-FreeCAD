@@ -554,6 +554,7 @@ class Session:
             "outDir": self.out_dir,
             "where": getattr(self, "where", "hidden"),
             **self._next_state(),
+            **self._options_state(),
             **self._tools_state(),
             **self._extensions_state(),
             **self._unattended_state(),
@@ -578,6 +579,13 @@ class Session:
         window only."""
         line = next_hint(self)
         return {"next": line} if line else {}
+
+    def _options_state(self):
+        """options: the likely next steps as numbered, checked calls bound
+        to the step (agentlink/options.py); pick runs one."""
+        from . import options
+
+        return options.state_field(self)
 
     def _extensions_state(self):
         """leftOut and warning while an installed add-on is not loaded in
@@ -1204,7 +1212,7 @@ def next_state(session):
         vp = gd.getInEdit() if gd is not None else None
         o = getattr(vp, "Object", None)
         if o is not None and o.isDerivedFrom("Sketcher::SketchObject"):
-            sketch = {"name": str(o.Label)}
+            sketch = {"name": str(o.Label), "obj": str(o.Name)}
             try:
                 sketch["dof"] = int(o.DoF)
             except Exception:  # noqa: BLE001
@@ -1413,7 +1421,7 @@ def _approve(tool, a):
 # ---- groups, guides, batches, undo: the server as a whole ---------------------------------
 
 GROUP_OF = {
-    "tool_find": "find",
+    "tool_find": "find", "pick": "find",
     "session_state": "core", "body_check": "core", "export_file": "core", "history_diff": "core",
     "app_force_restart": "core", "app_open": "app", "approve_file": "core", "approve_code": "core", "dialog_answer": "core", "report_read": "core", "crash_collect": "core",
     # export (every format) is core's; export_file stays an alias of it.
@@ -1493,7 +1501,7 @@ def _flatten_batches(calls, depth=0):
     return out, opened
 GROUP_INFO = {
     "core": "The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed in the classic tool list.",
-    "find": "tool_find: any tool by plain words, its card, the groups. Listed in the static base (ToolListMode static).",
+    "find": "tool_find: any tool by plain words, its card, the groups; tool_find is listed in the static base (ToolListMode static). pick: run one of the numbered options that session_state and changing answers give.",
 }
 # Listed by default (lean): core, the groups a part's make-check-verdict loop
 # needs, and the pictures to check it by.
@@ -2941,6 +2949,21 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
     for t in core:
         t.group = "core"
         server.add(t)
+    # pick runs an option by its number (agentlink/options.py). Found with
+    # tool_find, never in the static base: the list does not change.
+    from . import options as _options
+
+    pick = Tool("pick", "Run one of the numbered options. session_state and each changing answer give them: the step, then 1 to 4 ready calls. "
+                        "Each option has its tool, its arguments and the inputs it asks for (ask). option: its number. fill: the inputs that it asks for. "
+                        "Give them by name ({ length: 4 }) or in order (\"4mm\", [4]). A number with a unit is read in the unit of the input. "
+                        "The units are mm and deg; 1 in is 25.4 mm. A word of the option stands for its arguments (through_all). "
+                        "Plain text also works: option: \"1, 4mm\" or \"2, through_all\". fill can also set a choice of the option (sketch: Sketch002). "
+                        "The call runs as a call of the tool itself, with the same checks, health and undo step. Its answer starts with picked. "
+                        "If the document changed after the options were given, pick refuses. The refusal gives the new options. "
+                        "The Options preference (on) or AGENTLINK_OPTIONS=off turns the options off.",
+                obj({"option": {"type": ["integer", "string"]}, "fill": {}}, ["option"]), _options.pick_fn)
+    pick.group = "find"
+    server.add(pick)
     # A self-test tool for live checks, only while its marker file is there (agentlink/selftest.py).
     from . import selftest as _selftest
 
