@@ -322,6 +322,7 @@
    ],
    "changers": [
     "body_for",
+    "hold_selection",
     "set_value"
    ],
    "source": "scripts/tool_needs.py; the family's code",

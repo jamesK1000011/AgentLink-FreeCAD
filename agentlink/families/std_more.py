@@ -311,11 +311,11 @@ def tools(s):
         Python door to freezing, only the command, on the selection."""
         import FreeCADGui
 
-        FreeCADGui.Selection.clearSelection()
-        for o in objects:
-            FreeCADGui.Selection.addSelection(o)
-        FreeCADGui.runCommand("Std_ToggleFreeze", 0)
-        FreeCADGui.Selection.clearSelection()
+        from .. import cowork
+
+        # The person's selection is put back after the command (cowork.held).
+        with cowork.held(list(objects)):
+            FreeCADGui.runCommand("Std_ToggleFreeze", 0)
 
     def pair_points(pairs):
         """pairs [[from, to] …] as two n × 3 arrays, or None when they are not numbers."""

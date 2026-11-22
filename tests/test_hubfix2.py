@@ -739,6 +739,21 @@ class View:
 
 
 class Fit(unittest.TestCase):
+    # The old camera and selection behaviour (FollowAgent on, EchoSelects select): tests/_cowork_legacy.py.
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        import _cowork_legacy
+
+        _cowork_legacy.on()
+
+    @classmethod
+    def tearDownClass(cls):
+        import _cowork_legacy
+
+        _cowork_legacy.off()
+        super().tearDownClass()
+
     def test_when_the_fit_may_animate(self):
         self.assertTrue(echo.fit_animated(None, "full"))                                      # a call on its own
         self.assertFalse(echo.fit_animated({"i": 0, "n": 8, "lastChange": 6}, "full"))       # a batch's first calls

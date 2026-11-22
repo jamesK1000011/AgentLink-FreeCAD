@@ -46,6 +46,11 @@ Who is acting                 agent_acting(): True while one of the agent's
                               add-on's observers keep the person's events
                               apart from the agent's; not inside gui_input
                               with as: "person" (person_input, dev only)
+Selection muted               selection_is_muted(): True while the hub sets
+                              the selection for one command's run and
+                              puts the person's back (selection_muted);
+                              an add-on's selection observers ignore
+                              the changes then
 Socket-thread tools           register_thread_tool(name): the window link
                               answers it on its socket thread (a long poll
                               that never holds the GUI thread); the tool
@@ -289,6 +294,26 @@ class acting:
 def agent_acting():
     n = _ACTING[0]
     return n > 0 and not (_PERSON_AT and _PERSON_AT[-1] == n)
+
+
+# ---- the selection set for a command's run only (agentlink/cowork.py held):
+# while it is on, the selection changes are the hub's own, made and put back
+# for one command; an add-on's selection observers ignore them.
+_SEL_MUTED = [0]
+
+
+class selection_muted:
+    def __enter__(self):
+        _SEL_MUTED[0] += 1
+        return self
+
+    def __exit__(self, *exc):
+        _SEL_MUTED[0] = max(0, _SEL_MUTED[0] - 1)
+        return False
+
+
+def selection_is_muted():
+    return _SEL_MUTED[0] > 0
 
 
 # ---- the person's hands, for one call: gui_input's dev-only as: "person"

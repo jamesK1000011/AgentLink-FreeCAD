@@ -17,6 +17,10 @@ sys.path.insert(0, HERE)
 
 from agentlink import annotate, echo, render  # noqa: E402
 from test_echo_round6 import SceneNode, _Maker  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cowork_legacy  # noqa: E402  (the old camera and selection behaviour: FollowAgent on, EchoSelects select)
+
+setUpModule, tearDownModule = _cowork_legacy.on, _cowork_legacy.off
 
 
 class Coin:

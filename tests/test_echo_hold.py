@@ -15,6 +15,10 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from agentlink import echo, overlay  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cowork_legacy  # noqa: E402  (the old camera and selection behaviour: FollowAgent on, EchoSelects select)
+
+setUpModule, tearDownModule = _cowork_legacy.on, _cowork_legacy.off
 
 
 class Tool:

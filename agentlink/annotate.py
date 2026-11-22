@@ -263,6 +263,11 @@ class Annotations:
         self.roots[owner] = (sg, sep)
         return sep
 
+    def root(self, owner):
+        """The owner's group in the active view's scene (made when there is
+        none), or None without a 3D view."""
+        return self._root(owner)
+
     def light(self, obj, subs, owner="", colour="#3f93e0", shape=None, badge=None):
         """Draw each of subs (Face6, Edge3, Vertex1) of obj. {lit, missing:
         [(sub, why)]}. badge: a number drawn on the first lit one, at a

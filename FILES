@@ -31,6 +31,7 @@ agentlink/charts.py
 agentlink/coedit.py
 agentlink/commands.py
 agentlink/cookbook.py
+agentlink/cowork.py
 agentlink/crash_logs.py
 agentlink/data/activity.json
 agentlink/data/activity.schema.json
@@ -378,6 +379,7 @@ skills/design-kickoff/SKILL.md
 tests/_bim_before.py
 tests/_bim_cases.py
 tests/_bim_standin.py
+tests/_cowork_legacy.py
 tests/_dataapp_before.py
 tests/_dataapp_cases.py
 tests/_dataapp_standin.py
@@ -463,6 +465,7 @@ tests/test_core_check.py
 tests/test_core_guards.py
 tests/test_core_guards_fc.py
 tests/test_core_readers.py
+tests/test_cowork.py
 tests/test_cowork_e5.py
 tests/test_crash_logs.py
 tests/test_dataapp_data.py

@@ -405,14 +405,13 @@ def run_command(name, e, a, helpers):
         raise ToolError("unavailable", t.get("windowOnly") or f"{t['command']} works only through the FreeCAD window.")
     import FreeCADGui
 
+    from . import cowork
+
     sel = value(t.get("select", []), env, helpers) or []
-    FreeCADGui.Selection.clearSelection()
-    for o in sel:
-        FreeCADGui.Selection.addSelection(o)
-    try:
+    # The command's selection for its run only; the person's put back after
+    # (cowork.held, with hooks.selection_muted on).
+    with cowork.held(sel):
         FreeCADGui.runCommand(t["command"], 0)
-    finally:
-        FreeCADGui.Selection.clearSelection()
     env["selected"] = sel
     return _answer(e, env, helpers)
 
@@ -545,12 +544,18 @@ def _caught(on):
 
 
 def run_steps(name, e, a, helpers):
+    from . import cowork
+
     env = {"a": a, "tool": name}
+    held = cowork.depth()  # a selection a step holds for a command (cmd_run select) is put back when the run ends
     try:
-        _steps(e.get("steps") or [], env, helpers)
-    except _Done as d:
-        return d.out
-    return _answer(e, env, helpers)
+        try:
+            _steps(e.get("steps") or [], env, helpers)
+        except _Done as d:
+            return d.out
+        return _answer(e, env, helpers)
+    finally:
+        cowork.restore_to(held)
 
 
 RUN = {"make": run_make, "apply": run_apply, "command": run_command, "read": run_read, "steps": run_steps}
