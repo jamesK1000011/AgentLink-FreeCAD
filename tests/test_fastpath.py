@@ -297,6 +297,11 @@ def _child(case):
         out["fast"] = fast(design)
         out["get"] = one("get", {"what": "active.body"})
         out["labels"] = labels()
+    elif case == "names":
+        # Live, 22 Nov: a local model put the client's prefixed name inside a batch.
+        out["prefixed"] = one("batch", {"calls": [{"tool": "agentlink_tool_find", "arguments": {"words": "pad"}}]})
+        out["unknown"] = one("batch", {"calls": [{"tool": "agentlink_pd_pad_create", "arguments": {}}]})
+        out["toolread"] = fast({"do": [{"get": "body_check"}]})
     elif case == "safety":
         out["maker"] = fast({"do": [{"let": {"f": "=maker('os.system')"}}]})
         out["fmt"] = fast({"do": [{"let": {"f": "='{0.__class__}'.format(1)"}}]})
@@ -322,6 +327,13 @@ def run_case(case):
 
 
 class FastPath(unittest.TestCase):
+    def test_batch_reads_prefixed_names_and_near_names(self):
+        got = run_case("names")
+        self.assertFalse(got["prefixed"]["isError"], got["prefixed"])
+        msg = got["unknown"]["body"]["error"]["message"]
+        self.assertIn("near: pd_pad", msg)
+        self.assertIn('{ "call": "body_check" }', got["toolread"]["body"]["error"]["message"])
+
     def test_design_block_runs_each_call_through_the_server(self):
         got = run_case("design")
         self.assertFalse(got["got"]["isError"], got["got"])

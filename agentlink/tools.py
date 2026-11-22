@@ -2348,13 +2348,16 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         build_mode, words = _hold.mode(a.get("build"))
         if words:
             raise ToolError("invalid_input", words)
+        # A client's prefixed name inside a batch (agentlink_get) is the
+        # tool's own, as on a direct call (live, 22 Nov: a local model).
+        for c in calls:
+            if c["tool"] not in server.tools and plain_name(server, c["tool"]) in server.tools:
+                c["tool"] = plain_name(server, c["tool"])
         unknown = [c["tool"] for c in calls if c["tool"] not in server.tools]
         if unknown:
-            import difflib
-
             hints = []
             for u in sorted(set(unknown)):
-                near = difflib.get_close_matches(u, list(server.tools), n=3, cutoff=0.5)
+                near = close_names(server, u, 3)
                 hints.append(f"{u}" + (f" (near: {', '.join(near)})" if near else ""))
             raise ToolError("not_found", f"No tool named {'; '.join(hints)} — nothing was run. tool_groups lists them all.")
         rollback = a.get("rollback", True)

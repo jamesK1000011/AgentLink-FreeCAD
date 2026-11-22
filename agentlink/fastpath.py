@@ -275,7 +275,10 @@ def what_words(what):
         return None
     parts = w.split(".")
     if len(parts) < 2 or not all(parts):
-        return f"what {w!r}: an object and what to read of it, \"Object.Property\" (\"Pad.Length\", \"Body.volume\"), or one of {', '.join(ACTIVE)}"
+        # A tool's name here (live, 22 Nov: a local model read "body_check"):
+        # a tool runs as a step of its own.
+        tool = f" If {w} is a tool, run it as a step: {{ \"call\": \"{w}\" }}." if len(parts) == 1 and "_" in w else ""
+        return f"what {w!r}: an object and what to read of it, \"Object.Property\" (\"Pad.Length\", \"Body.volume\"), or one of {', '.join(ACTIVE)}.{tool}"
     return None
 
 
