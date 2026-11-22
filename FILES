@@ -166,6 +166,7 @@ agentlink/millsim.py
 agentlink/needs.py
 agentlink/nexthint.py
 agentlink/once.py
+agentlink/options.py
 agentlink/outputs.py
 agentlink/overlay.py
 agentlink/panel.py
@@ -582,6 +583,7 @@ tests/test_no_addon_names.py
 tests/test_note_faces.py
 tests/test_notice.py
 tests/test_once.py
+tests/test_options.py
 tests/test_outcome_exit_1122.py
 tests/test_outputs.py
 tests/test_overlay.py

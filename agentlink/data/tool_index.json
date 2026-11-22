@@ -295,6 +295,7 @@
   "pd_shaft": {"workbench": "PartDesignWorkbench", "commands": ["PartDesign_WizardShaft"], "words": ["partdesign", "axle", "stepped", "turned"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "pd_thickness": {"workbench": "PartDesignWorkbench", "commands": ["PartDesign_Thickness"], "words": ["partdesign", "shell", "hollow", "wall"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "pd_tip": {"workbench": "PartDesignWorkbench", "commands": ["PartDesign_MoveTip"], "words": ["partdesign", "set", "rollback", "insert"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
+  "pick": {"workbench": null, "commands": [], "words": ["option", "options", "choose", "number", "next", "step", "ready", "call", "run"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-22"},
   "points_crop": {"workbench": "PointsWorkbench", "commands": ["Points_PolyCut"], "words": ["cloud", "scan", "cut", "filter", "box", "region"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "points_export": {"workbench": "PointsWorkbench", "commands": ["Points_Export"], "words": ["cloud", "scan", "ply", "pcd", "xyz", "write"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "points_fit": {"workbench": "PointsWorkbench", "commands": ["Reen_ApproxPlane", "Reen_ApproxCylinder", "Reen_ApproxSphere"], "words": ["cloud", "scan", "plane", "cylinder", "sphere", "primitive", "best"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},

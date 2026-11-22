@@ -17,7 +17,7 @@ _owner = [None]
 
 # Parts that run inside a call's own "ms" (the server times the tool with
 # them); every other part runs outside it.
-INSIDE = ("healthMark", "health", "snapshot", "undoStep", "afterChange", "outputs", "appliesNow", "recompute")
+INSIDE = ("healthMark", "health", "snapshot", "undoStep", "afterChange", "outputs", "appliesNow", "options", "recompute")
 
 
 def start():

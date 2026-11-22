@@ -10,26 +10,26 @@ The source is `docs/hardening/status.json` and `inventory.json`. Only V1 counts:
 
 | Section | Tools | Proven | Headless | Live | Docs checked | Health check seen | Description rewritten |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Agent Link (core) | 408 | 403 | 396 | 403 | 367 | 288 | 378 |
+| Agent Link (core) | 409 | 403 | 396 | 403 | 367 | 288 | 379 |
 | Workshop | 59 | 59 | 59 | 54 | 43 | 43 | 43 |
 | ScanRuler for FreeCAD | 133 | 132 | 132 | 132 | 132 | 132 | 132 |
 | Texturizer | 11 | 11 | 11 | 11 | 11 | 11 | 11 |
 | Tutor | 3 | 3 | 2 | 3 | 1 | 1 | 1 |
 | Agent Link for OrcaSlicer | 5 | 5 | 5 | 5 | 0 | 5 | 0 |
-| **All of V1** | **619** | **613** | **605** | **608** | **554** | **480** | **565** |
+| **All of V1** | **620** | **613** | **605** | **608** | **554** | **480** | **566** |
 | *Developer tools (not counted)* | *8* | *0* | *0* | *0* | *0* | *3* | *3* |
 
 ### Agent Link (core)
 
-What you get with the hub alone: the FreeCAD workbenches that Agent Link covers with no add-on installed. 408 tools. The developer tools (Porting, 8 tools) are not in this count.
+What you get with the hub alone: the FreeCAD workbenches that Agent Link covers with no add-on installed. 409 tools. The developer tools (Porting, 8 tools) are not in this count.
 
 ```
-proven on a test model    ████████████████████ 403/408
-  headless                ███████████████████░ 396/408
-  live in the window      ████████████████████ 403/408
-docs checked              ██████████████████░░ 367/408
-health check seen         ██████████████░░░░░░ 288/408
-description rewritten     ███████████████████░ 378/408
+proven on a test model    ████████████████████ 403/409
+  headless                ███████████████████░ 396/409
+  live in the window      ████████████████████ 403/409
+docs checked              ██████████████████░░ 367/409
+health check seen         ██████████████░░░░░░ 288/409
+description rewritten     ███████████████████░ 379/409
 
 Agent Link (core) by workbench (tools proven / total)
 Sketcher                  ████████████████████  20/20
@@ -45,7 +45,7 @@ Surface                   ██████████████████
 Mesh                      ████████████████████  21/21
 CAM                       ████████████████████  15/15
 Points                    ████████████████████   9/9
-Core                      ███████████████████░  62/64
+Core                      ███████████████████░  62/65
 Window (GUI)              ███████████████████░  31/32
 Material                  ████████████████████   4/4
 Inspection                ████████████████████   6/6
@@ -188,15 +188,15 @@ The same lines as the start of `python3 scripts/hardening_status.py bars`.
 
 ```
 Per-tool status, all of V1 (measured: counted from docs/hardening/status.json)
-proven on a test model    ████████████████████ 613/619
-  headless                ████████████████████ 605/619
-  live in the window      ████████████████████ 608/619
-docs checked              ██████████████████░░ 554/619
-health check seen         ████████████████░░░░ 480/619
-description rewritten     ██████████████████░░ 565/619
+proven on a test model    ████████████████████ 613/620
+  headless                ████████████████████ 605/620
+  live in the window      ████████████████████ 608/620
+docs checked              ██████████████████░░ 554/620
+health check seen         ███████████████░░░░░ 480/620
+description rewritten     ██████████████████░░ 566/620
 
 By section (tools proven / total)
-Agent Link (core)         ████████████████████ 403/408
+Agent Link (core)         ████████████████████ 403/409
 Workshop                  ████████████████████  59/59
 ScanRuler for FreeCAD     ████████████████████ 132/133
 Texturizer                ████████████████████  11/11
@@ -211,13 +211,13 @@ proven on a test model    ░░░░░░░░░░░░░░░░░░
 
 ## 2. Tools
 
-Agent Link (core) declares 416 tools in 32 groups. The source is `scripts/tool_summary.py`. A lean group is in the classic list from the start.
+Agent Link (core) declares 417 tools in 32 groups. The source is `scripts/tool_summary.py`. A lean group is in the classic list from the start.
 
 | Group | Tools | Lean |
 |---|---:|---|
 | `core` | 20 | yes |
+| `find` | 2 | – |
 | `app` | 18 | – |
-| `find` | 1 | – |
 | `doc` | 12 | – |
 | `model` | 27 | – |
 | `measure` | 6 | – |
@@ -260,7 +260,7 @@ The source is `docs/stats/addons.json`: each add-on's own tool data (its `data/t
 | Tutor-FreeCAD | `dbf53e1` | 3 | 3 | 1 | – |
 | Workshop-FreeCAD | `5fc0102` | 60 | 60 | 17 | – |
 
-With all these add-ons installed, Agent Link has 628 tools: 416 of the hub and 212 of the add-ons.
+With all these add-ons installed, Agent Link has 629 tools: 417 of the hub and 212 of the add-ons.
 `library_pack` is in this count. Workshop's library_pack is an alias of ScanRuler-FreeCAD's pack_write when ScanRuler-FreeCAD is installed (the V1 bundle): callable by name, never listed (docs/hardening/addons4-findings.md, item 6).
 
 ## 3. Token cost of the tool list
@@ -274,7 +274,7 @@ Each token number is the estimated size of the `tools/list` answer: the tool nam
 | classic | ste | 23 | 22,197 | 6,342 |
 | classic | full | 23 | 30,795 | 8,799 |
 
-So with the default (static, ste), the tool list costs about 1,616 tokens for 6 tools. With every hub group turned on, the list has 416 tools, 350,329 characters and about 100,094 tokens (style full).
+So with the default (static, ste), the tool list costs about 1,616 tokens for 6 tools. With every hub group turned on, the list has 417 tools, 351,332 characters and about 100,381 tokens (style full).
 
 - static: only the base is listed (`session_state`, `batch`, `guide_read`, `tool_find`, `approve_file`, `approve_code`). The agent finds the other tools with `tool_find`.
 - classic: the lean groups are listed (`core`, `view`).
@@ -295,7 +295,7 @@ The extra tokens that an add-on adds to the `tools/list` answer. An add-on that 
 ### What is approximated
 
 - Each token number is an estimate: characters divided by 3.5.
-- 25 hub tools have an input schema in code that the script cannot read as data. For these tools, the script uses the length of the schema source text plus 40 characters, as `ste_check.card_tokens` does. The static base has 6 such tools. The classic list has 17 such tools.
+- 26 hub tools have an input schema in code that the script cannot read as data. For these tools, the script uses the length of the schema source text plus 40 characters, as `ste_check.card_tokens` does. The static base has 6 such tools. The classic list has 17 such tools.
 - 18 add-on tools have such an estimated entry (a schema or a description in code).
 - The script counts a FreeCAD build with every workbench. A build without a workbench (FEM, CAM …) serves fewer tools.
 - The add-on numbers come from the snapshot. Run `python3 scripts/stats.py --addons <folder with the add-on checkouts>` to make it again.
@@ -312,12 +312,13 @@ Each line is one tool: the section, the workbench or group, what is short, and w
 
 ### Agent Link (core)
 
-Rows under 100%: Assembly 17/18, Core 62/64, Window (GUI) 31/32, OpenSCAD 5/6.
+Rows under 100%: Assembly 17/18, Core 62/65, Window (GUI) 31/32, OpenSCAD 5/6.
 
 - `asm_rigid_group` (Assembly): not proven. It needs FreeCAD 1.2. The Mac has FreeCAD 1.1.3. Only its refusal is checked.
 - `app_force_restart` (Core): not headless. It quits FreeCAD. It needs the person's go, so the test models do not have it (unproven-findings.md).
 - `approve_code` (Core): not proven. Not tested yet.
 - `approve_file` (Core): not proven. Not tested yet.
+- `pick` (Core): not proven. Headless and live: not tested yet. tests/test_options.py runs it on stand-ins only.
 - `tool_find` (Core): not headless. Headless: not tested yet.
 - `app_install` (Window (GUI)): not headless. It installs a FreeCAD release. It needs the person's go, so the test models do not have it (unproven-findings.md). Live: status read only.
 - `app_open` (Window (GUI)): not proven. Not tested yet.
@@ -355,7 +356,7 @@ Every tool is proven headless and live.
 
 ### Review steps not done yet
 
-These rows are under 100% too: docs checked 554/619, health check seen 480/619, description rewritten 565/619. They are review steps of the hardening pass, not proofs. The per-tool list is in `docs/hardening/STATUS.md`.
+These rows are under 100% too: docs checked 554/620, health check seen 480/620, description rewritten 566/620. They are review steps of the hardening pass, not proofs. The per-tool list is in `docs/hardening/STATUS.md`.
 
 ### Not in V1 (not counted)
 
