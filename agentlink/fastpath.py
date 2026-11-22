@@ -462,10 +462,21 @@ def get_tool(server, session, a):
     whats = [what] if isinstance(what, str) else what
     if not isinstance(whats, list) or not whats or len(whats) > 20 or not all(isinstance(x, str) for x in whats):
         raise ToolError("invalid_input", "what: \"Pad.Length\", \"Body.volume\", \"Body.Edge7.length\", \"sketch.dof\", \"active.body\", or a list of up to 20.")
-    out = {}
+    out, missed = {}, {}
     for x in whats:
-        v, unit = read(server, session, x)
+        # One value that cannot be read does not lose the others (live, 22
+        # Nov: a body with no material had no mass, and the whole list was
+        # refused). A single what still refuses as before.
+        try:
+            v, unit = read(server, session, x)
+        except ToolError as e:
+            if len(whats) == 1:
+                raise
+            missed[x.strip()] = e.message
+            continue
         out[x.strip()] = with_unit(v, unit)
+    if missed:
+        out["missed"] = missed
     return out
 
 

@@ -44,7 +44,7 @@ def tools(session):
                      "\"Body.Edge7.length\" (an edge or a face: length, radius, area), \"sketch.dof\" (also closedWires, readyForFeature), "
                      "\"active.body\", \"active.sketch\", \"selection\" or \"bodies\". "
                      "body and sketch in lower case are the current ones. what can be a list of up to 20. "
-                     "Answer: { what: value }, for example { \"Body.volume\": \"1520 mm³\" }. "
+                     "Answer: { what: value }, for example { \"Body.volume\": \"1520 mm³\" }. In a list, a value that cannot be read goes in missed, with why. "
                      "It uses the readers of object_get, measure, measure_mass and sketch_state. "
                      "Changes nothing. The person's preference FastPath can turn it off."),
              {"type": "object", "properties": {"what": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}},

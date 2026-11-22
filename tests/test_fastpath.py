@@ -288,6 +288,7 @@ def _child(case):
         out["one"] = one("get", {"what": ["Pad.Length", "Body.volume", "Body.Edge7.length", "sketch.dof", "active.body", "active.sketch",
                                           "Body.mass", "bodies", "selection", "Sketch.closedWires"]})
         out["missing"] = one("get", {"what": "Nope.Length"})
+        out["listMiss"] = one("get", {"what": ["Pad.Length", "Nope.Length"]})
         out["badform"] = one("get", {"what": "Pad"})
         out["noprop"] = one("get", {"what": "Pad.Width"})
         out["inBlock"] = fast({"do": [{"get": "Body.volume", "as": "v"}, {"get": "=v * 2", "as": "twice"}, {"get": "Pad.Length"}]})
@@ -435,6 +436,11 @@ class FastPath(unittest.TestCase):
         self.assertEqual(v["selection"], [])
         self.assertEqual(v["Sketch.closedWires"], 3)
         self.assertEqual(got["missing"]["body"]["error"]["code"], "not_found")
+        # Live, 22 Nov: one value that cannot be read no longer loses the others.
+        lm = got["listMiss"]
+        self.assertFalse(lm["isError"], lm)
+        self.assertEqual(lm["body"]["Pad.Length"], "4 mm")
+        self.assertIn("Nope.Length", lm["body"]["missed"])
         self.assertEqual(got["badform"]["body"]["error"]["code"], "invalid_input")
         self.assertIn("no property Width", got["noprop"]["body"]["error"]["message"])
         blk = got["inBlock"]
