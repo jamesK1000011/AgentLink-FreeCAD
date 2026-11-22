@@ -28,6 +28,7 @@ agentlink/cells.py
 agentlink/chain.py
 agentlink/changes.py
 agentlink/charts.py
+agentlink/coedit.py
 agentlink/commands.py
 agentlink/cookbook.py
 agentlink/crash_logs.py
@@ -462,6 +463,7 @@ tests/test_core_check.py
 tests/test_core_guards.py
 tests/test_core_guards_fc.py
 tests/test_core_readers.py
+tests/test_cowork_e5.py
 tests/test_crash_logs.py
 tests/test_dataapp_data.py
 tests/test_dataasm_data.py

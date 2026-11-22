@@ -299,6 +299,44 @@ def undo_names(doc):
         return None
 
 
+def undo_own(doc, made, own):
+    """A rollback that undoes only the agent's steps (design E5 #6): up to
+    made undo steps of doc, each only when the top of its undo stack is the
+    agent's own next step. own: the names of the steps the agent made, the
+    newest last (None, or fewer than made: names not known, so undone
+    without the check, as before). Stops at the first step that is not the
+    agent's (the person's step, made while the agent worked): that step
+    and all under it stay. Returns (undone, the name of the step it stopped
+    at, or None)."""
+    undone = 0
+    known = own is not None and len(own) >= made
+    while undone < made:
+        try:
+            if doc.UndoCount <= 0:
+                break
+        except Exception:
+            break
+        if known:
+            top = undo_names(doc)
+            want = own[len(own) - 1 - undone]
+            if top and top[0] != want:
+                return undone, top[0]
+        doc.undo()
+        undone += 1
+    return undone, None
+
+
+def own_names(doc, n):
+    """The names of the n newest steps on doc's undo stack, the oldest
+    first (what a batch call just made), or None when not known."""
+    if n <= 0:
+        return []
+    names = undo_names(doc)
+    if names is None or len(names) < n:
+        return None
+    return list(reversed(names[:n]))
+
+
 def close_active(abort=False):
     """The application's active transaction closed, so no later change is
     recorded under this call's name (commitTransaction and abortTransaction
