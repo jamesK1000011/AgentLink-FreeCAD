@@ -328,6 +328,7 @@
   "scad_tidy": {"workbench": "OpenSCADWorkbench", "commands": ["OpenSCAD_RefineShapeFeature", "OpenSCAD_ColorCodeShape", "OpenSCAD_ExplodeGroup", "OpenSCAD_ExpandPlacements", "OpenSCAD_IncreaseToleranceFeature", "OpenSCAD_RemoveSubtree", "OpenSCAD_ReplaceObject"], "words": ["openscad", "csg", "tree", "cleanup"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "section": {"workbench": null, "commands": ["Part_Section", "Part_CrossSections"], "words": ["cut", "plane", "cross", "slice", "profile"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "selection": {"workbench": null, "commands": [], "words": ["select", "pick", "objects"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
+  "selftest_exit": {"workbench": null, "commands": [], "words": ["self", "test", "guard", "live", "check"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "session_state": {"workbench": null, "commands": [], "words": ["overview", "status", "document", "bodies", "volume"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "shape_query": {"workbench": null, "commands": [], "words": ["find", "faces", "edges", "vertices", "pick", "select", "reference"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "sheet_cells": {"workbench": "SpreadsheetWorkbench", "commands": ["Spreadsheet_MergeCells", "Spreadsheet_SplitCell"], "words": ["spreadsheet", "merge", "split"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},

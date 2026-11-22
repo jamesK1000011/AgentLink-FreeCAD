@@ -377,6 +377,7 @@ TOOLS = {
     "scad_tidy": (["OpenSCAD_ColorCodeShape", "OpenSCAD_ExplodeGroup", "OpenSCAD_ExpandPlacements", "OpenSCAD_IncreaseToleranceFeature", "OpenSCAD_RemoveSubtree", "OpenSCAD_ReplaceObject"], "csg tree cleanup"),
     "section": (["Part_CrossSections"], "cut plane cross slice profile"),
     "selection": ([], "select pick objects"),
+    "selftest_exit": ([], "self test exit guard live check"),
     "session_state": ([], "overview status document bodies volume"),
     "shape_query": ([], "find faces edges vertices pick select reference"),
     "sheet_cells": (["Spreadsheet_MergeCells", "Spreadsheet_SplitCell"], "merge split"),
