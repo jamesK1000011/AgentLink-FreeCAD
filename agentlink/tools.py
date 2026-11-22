@@ -1099,7 +1099,7 @@ WORKING = (
     "refused; in it a call's answer can go to a file (to) and feed a later call ($file, $from) without passing through the conversation, and build: \"end\" recomputes once for a run of sketch edits. A refusal is { error: { code, message } }: the code (invalid_input, invalid_state, not_found, "
     "unavailable, failed) and a message saying what to change — correct the call and go on. "
     "Words that stand the same from call to call (a tool's own note, the health's advice on an overlap) are given the first time "
-    "in a conversation; after that the answer names their key in saidBefore, and tool_groups { tool: name } gives them again (said). "
+    "in a conversation; after that the answer names their key in saidBefore, and tool_find { tool: name } gives them again (said). "
     "Look at the work after each change that matters: view_render draws the parts from any view, cut open, zoomed "
     "to a spot, or with a map (wall, stress, and those add-ons add), and gives the worst place; body_check says "
     "whether a body is sound. Ask the person what only they know — how a part is made, what it is made of, "
@@ -1120,11 +1120,31 @@ LEAN_NOTE = (
 )
 
 
-def instructions(lean, window):
-    return " ".join([ABOUT_WINDOW if window else ABOUT_HEADLESS, LEAN_NOTE if lean else "Every tool is listed.", WORKING])
+STATIC_NOTE = (
+    "Only a few tools are listed: session_state, batch, guide_read, tool_find and the approval tools (and fast and get with the "
+    "fast path). Every other tool is found and called by name: tool_find { words: \"what it does\" } searches every tool, "
+    "tool_find { tool: name } (or a list of names) gives each card, and the tool runs by name, or in batch { calls: [{ tool, "
+    "arguments }] } where the client sends only listed tools."
+)
 
 
-INSTRUCTIONS = instructions(True, False)
+def instructions(lean, window, static=None):
+    """The words sent at initialize. static: the static minimal list is on
+    (agentlink/staticbase.py, the default); the lean note's way to a tool
+    (tool_groups) is then not the way the list offers (live, 22 Nov: a
+    local model saw both)."""
+    if static is None:
+        try:
+            from . import staticbase
+
+            static = staticbase.mode() == "static"
+        except Exception:  # noqa: BLE001
+            static = False
+    note = STATIC_NOTE if static else (LEAN_NOTE if lean else "Every tool is listed.")
+    return " ".join([ABOUT_WINDOW if window else ABOUT_HEADLESS, note, WORKING])
+
+
+INSTRUCTIONS = instructions(True, False, static=False)
 
 
 def _report_read(a):
