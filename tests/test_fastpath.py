@@ -131,6 +131,7 @@ def _child(case):
     s.doc = doc
     doc.add("Body", "PartDesign::Body")  # sketch_new's own leading check wants a body (read before step 1)
     srv = build_server(s, lean=False)
+    srv._oriented = True  # the first answer's whereYouAre has its own tests (test_orient_1122.py)
     s.server = srv
     seen = []   # (tool, arguments) of every call the server ran
     real_call = srv.call

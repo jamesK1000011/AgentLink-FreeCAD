@@ -619,12 +619,56 @@ class Session:
 
     # ---- the tools ----
 
+    def documents_state(self):
+        """Every open document: name, label, unsaved, and whether an agent
+        made it (agent_docs). The agent's own is marked agent: true."""
+        from .store import is_changed
+
+        out = []
+        for name, d in sorted(FreeCAD.listDocuments().items()):
+            try:
+                unsaved = bool(is_changed(d) or (not d.FileName and len(d.Objects) > 0))
+            except Exception:  # noqa: BLE001
+                unsaved = None
+            row = {"name": name, "label": d.Label, "unsaved": unsaved, "byAgent": name in self.agent_docs}
+            if d is self.doc:
+                row["agent"] = True
+            out.append(row)
+        return out
+
+    def orientation(self):
+        """Where the agent is, short: for the words at connect and the first
+        answer of a conversation (owner, 22 Nov). The full read is
+        session_state; this leaves out what does not orient (machine, the
+        report lines)."""
+        import time as _t
+
+        docs = self.documents_state()
+        bodies = [self._body_row(o) for o in self.bodies()]
+        mine = self.doc.Name in self.agent_docs
+        got = {"at": _t.strftime("%H:%M"), "where": getattr(self, "where", "hidden"), "documents": docs,
+               "agentDocument": self.doc.Name,
+               "bodies": [{k: b[k] for k in ("name", "volume", "box") if k in b} for b in bodies[:8]]}
+        if len(bodies) > 8:
+            got["moreBodies"] = len(bodies) - 8
+        opts = self._options_state().get("options")
+        if opts:
+            got["options"] = opts
+        got["note"] = (("The agent's document is one an agent made. " if mine else
+                        f"{self.doc.Label} is the person's document: do not change, save or close it unless they ask. ")
+                       + "For new work, make a document of its own: batch { calls: [{ tool: \"doc_new\", arguments: { name } }] }. "
+                       "session_state reads all of this again.")
+        return got
+
     def session_state(self, a):
+        if a.get("orient"):
+            return self.orientation()
         return {
             "document": self.doc.Name,
             "label": self.doc.Label,
             "freecad": ".".join(FreeCAD.Version()[:3]),
             "bodies": [self._body_row(o) for o in self.bodies()],
+            "documents": self.documents_state(),
             **self._hidden_state(),
             "step": len(self.steps),
             "outDir": self.out_dir,
@@ -1120,6 +1164,17 @@ LEAN_NOTE = (
 )
 
 
+def orient_on():
+    """The orientation at connect and on the first answer: on unless
+    AGENTLINK_ORIENT=off or the preference Orient (Mod/AgentLink) is false."""
+    if os.environ.get("AGENTLINK_ORIENT", "on").strip().lower() in ("0", "false", "off", "no"):
+        return False
+    try:
+        return bool(FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/AgentLink").GetBool("Orient", True))
+    except Exception:  # noqa: BLE001
+        return True
+
+
 STATIC_NOTE = (
     "Only a few tools are listed: session_state, batch, guide_read, tool_find and the approval tools (and fast and get with the "
     "fast path). Every other tool is found and called by name: tool_find { words: \"what it does\" } searches every tool, "
@@ -1451,7 +1506,9 @@ def make_tools(session):
                               "counts, until the list is read again. launcher: true adds the Claude Desktop extension's launcher as seen here. That is the copy fetched from GitHub, if it "
                               "can load, and its log's last lines. agentDocument, frontDocument and mismatch: the document in front is not the agent's document "
                               "(after a restart, for example). Then the tools that act on the front document act on the other one. doc_switch to the agent's "
-                              "document binds both again. Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
+                              "document binds both again. documents: every open document (name, label, unsaved, byAgent; the agent's own has agent: true). "
+                              "orient: true answers only a short read: where, the documents, the agent's document and its bodies, the options. Changes nothing.",
+             obj({"launcher": {"type": "boolean"}, "orient": {"type": "boolean"}}), s.session_state),
         Tool("app_force_restart", "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang). Agent Link runs this outside FreeCAD. The "
                                   "documents come back from their newest saved copies, as after a crash. Use it for a stuck window; app_restart quits a working window cleanly.", obj({}), _force_restart_here),
         Tool("app_open", "Open the FreeCAD window when it is closed. Agent Link starts it in the background: it does not come to the front and takes no focus. "
@@ -1757,6 +1814,11 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
     for t in tools:
         if t.name in ALIASES:
             t.alias_of = ALIASES[t.name]
+    # Where the agent is: in the words at connect and on a conversation's
+    # first answer (protocol.Server.orient). AGENTLINK_ORIENT=off, or the
+    # preference Orient false, leaves both out (an A/B arm).
+    if orient_on():
+        server.orient = session.orientation
     server.on_call = session.record_call
     server.session = session
     session.server = server

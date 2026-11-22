@@ -980,6 +980,7 @@ def _hub():
 
     s = Session(doc=doc, out_dir=tempfile.mkdtemp())
     srv = tools.build_server(s, lean=True)
+    srv._oriented = True  # the first answer's whereYouAre has its own tests (test_orient_1122.py)
 
     def call(name, args=None):
         r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args or {}}})["result"]

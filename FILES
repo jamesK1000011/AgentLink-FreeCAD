@@ -589,6 +589,7 @@ tests/test_note_faces.py
 tests/test_notice.py
 tests/test_once.py
 tests/test_options.py
+tests/test_orient_1122.py
 tests/test_outcome_exit_1122.py
 tests/test_outputs.py
 tests/test_overlay.py

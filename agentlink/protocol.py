@@ -396,6 +396,14 @@ STRICT_SHAPE = frozenset(("approve_file", "approve_code"))
 FORGIVING_READS = frozenset(("session_state", "tool_find", "tool_groups", "guide_read", "get", "job_status", "usage_report", "report_read"))
 
 
+ORIENT_HEAD = "\n\nWhere you are, read at connect (session_state reads it again): "
+
+
+def orient_text(got):
+    """The orientation as the words at connect: compact JSON."""
+    return ORIENT_HEAD + json.dumps(got, ensure_ascii=False, separators=(",", ":"))
+
+
 def check_input(schema, args, tool=None):
     """Unknown keys and missing required ones refused by name, as the
     answers name them: what the agent got wrong and what is allowed.
@@ -650,6 +658,11 @@ class Server:
         self.version = version
         self.tools = {t.name: t for t in tools}
         self.instructions = instructions
+        # Where the agent is, short (Session.orientation): read at
+        # initialize into the words sent then, and given once on the first
+        # answer of a conversation (owner, 22 Nov). None: neither.
+        self.orient = None
+        self._oriented = False
         # How a call is run: run(tool, fn) — directly, or as one undo step
         # (the session's), or handed to the GUI's thread.
         self.run = run or (lambda tool, fn: fn())
@@ -745,6 +758,15 @@ class Server:
         self.groups = groups
         self.outbox.append({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
 
+    def orient_words(self):
+        """The orientation for the words at connect, or "" (none, or it failed)."""
+        if self.orient is None:
+            return ""
+        try:
+            return orient_text(self.orient())
+        except Exception:  # noqa: BLE001
+            return ""
+
     def handle(self, msg, client=None):
         """One message in; the reply, or None for a notification. client:
         the connection it came on (the window link's paired connection;
@@ -772,11 +794,12 @@ class Server:
                         self.meter.new_job("initialize")
                     except Exception:
                         pass
+                self._oriented = False
                 result = {
                     "protocolVersion": PROTOCOL,
                     "capabilities": {"tools": {"listChanged": True}, **({"resources": {}} if self.resources else {})},
                     "serverInfo": {"name": self.name, "version": self.version},
-                    "instructions": self.instructions,
+                    "instructions": self.instructions + self.orient_words(),
                 }
             elif method == "ping":
                 result = {}
@@ -787,6 +810,8 @@ class Server:
                 from . import approvals
 
                 approvals.note_client(client, ((msg.get("params") or {}).get("clientInfo") or {}))
+                # A new conversation on the window link: its first answer orients again.
+                self._oriented = False
                 result = {}
             elif method == "tools/list":
                 from . import staticbase
@@ -1106,6 +1131,15 @@ class Server:
         if read_as and isinstance(out, dict):
             # Fields given by another common name (FIELD_ALIASES): what was read.
             out["readAs"] = read_as_words(read_as)
+        if isinstance(out, dict) and not self._oriented and getattr(self.session, "batch_now", None) is None:
+            # The first answer of a conversation says where the agent is,
+            # once (a session_state is that read itself).
+            self._oriented = True
+            if name != "session_state" and self.orient is not None:
+                try:
+                    out["whereYouAre"] = self.orient()
+                except Exception:  # noqa: BLE001
+                    pass
         image = None
         s = self.session
         if isinstance(out, dict) and s is not None and getattr(s, "batch_now", None) is None:

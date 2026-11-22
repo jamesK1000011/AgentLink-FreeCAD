@@ -710,6 +710,11 @@ def _answers_dialog(c):
     return front_call(c.get("tool"), c.get("args"))
 
 
+# The same words as protocol.ORIENT_HEAD (tests/test_orient_1122.py checks):
+# the orientation's start in the words sent at initialize.
+ORIENT_HEAD = "\n\nWhere you are, read at connect (session_state reads it again): "
+
+
 class Window:
     """The FreeCAD window's link (the workbench's Start link), when it is on.
     Tried afresh for each call, so turning the link on or off takes effect
@@ -1290,6 +1295,11 @@ def run(script, argv):
                 if isinstance(mid, str) and mid.startswith("__sv-"):
                     state.setdefault("sv", {})[mid] = line
                     continue
+                if mid is not None and pending.get(mid) == "initialize" and isinstance(got, dict):
+                    # The hidden FreeCAD read where the agent is; with the
+                    # window link on, the window is where it works: its read
+                    # goes in the words at connect instead.
+                    line = window_orient(got, line)
                 if mid is not None:
                     pending.pop(mid, None)
                     lines.pop(mid, None)
@@ -1601,6 +1611,25 @@ def run(script, argv):
 
     if jobs is not None:
         threading.Thread(target=ticker, name="agentlink-jobs", daemon=True).start()
+
+    def window_orient(got, line):
+        """The initialize answer with the window's orientation in place of
+        the hidden FreeCAD's, when the window link is on. The line as it
+        was when there is nothing to replace."""
+        try:
+            text = got["result"]["instructions"]
+        except (KeyError, TypeError):
+            return line
+        if not isinstance(text, str) or ORIENT_HEAD not in text or not window_up():
+            return line
+        base = text.split(ORIENT_HEAD, 1)[0]
+        o = window.side_call("session_state", {"orient": True}, timeout=3.0)
+        if isinstance(o, dict) and o.get("where"):
+            words = ORIENT_HEAD + json.dumps(o, ensure_ascii=False, separators=(",", ":"))
+        else:
+            words = "\n\nWhere you are: the FreeCAD window did not answer in time at connect; call session_state."
+        got["result"]["instructions"] = base + words
+        return json.dumps(got)
 
     def window_up():
         hb = heartbeat() or {}
