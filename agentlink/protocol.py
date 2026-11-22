@@ -761,6 +761,12 @@ class Server:
                 # file belongs in the batch's order, a change is never a job.
                 raise ToolError("invalid_input", jobs.background_refusal(tool, args, getattr(s, "batch_now", None) is not None, s))
             changes0 = getattr(s, "_applies_seq", 0)
+            if tool.name == "doc_save" and s is not None:
+                from . import partialdoc
+
+                said = partialdoc.refusal(getattr(s, "doc", None), tool.name)
+                if said:
+                    raise ToolError("invalid_state", said)
             gate = self.gate
             if gate is not None:
                 gate.as_job = as_job

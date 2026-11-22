@@ -6,6 +6,8 @@ All notable changes to Agent Link for FreeCAD. The format follows
 [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+- A partly loaded document (FreeCAD opened it only for a link in another document; `Document.Partial`) refuses every changing call and `doc_save`, with the way out (`doc_revert` loads the whole file). Before, the change and the save said ok and FreeCAD kept nothing.
+- `param_bind` refuses a target through a link property (`Body.Tip.Length`): FreeCAD keeps that expression on the Body and applies it to each new Tip. The refusal names the feature to bind instead.
 - Modelling-practice warning "thread not made": a blind hole is now found by the material on the hole's axis (a line from the sketch's circle centre, cut with the shape before the hole), not by the body's box. When that cannot be read, the warning says only "modelled".
 
 - One file for each part (branch `steering`, 21 Nov): `link_make` links an object of another .FCStd (FreeCAD XLink): `to: "Doc#Object"`, or `file` (relative: in the session's folder) with `to`. A file that is not open opens in the background; the agent's document stays active. It refuses an unsaved other document ("doc_save it first"). The answer adds `file`, `relative` and a `check` note (FreeCAD issue 33468: save, open again, read the target). `doc_save` names link paths in the saved file that find no file (`linkWarning`). `asm_joint` reads an LCS of a linked part from the linked file, not an object of the same name in the assembly's file. Guides `design` and `assembly`: the route for parts in their own files.

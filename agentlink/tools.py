@@ -207,6 +207,11 @@ class Session:
     def execute(self, tool, fn):
         if not tool.changes:
             return fn()
+        from . import partialdoc
+
+        said = partialdoc.refusal(self.doc, tool.name)
+        if said:
+            raise ToolError("invalid_state", said)
         from . import around as _ar
 
         with _ar.part("txOpen"):
