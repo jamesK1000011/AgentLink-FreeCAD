@@ -798,9 +798,15 @@ class Server:
 
             s = self.session
             as_job = False
+            edit0, coedit = None, None
             if s is not None:
                 with _ar.part("jobCheck"):
                     jobs.guard_change(tool, args, s)
+                    # The person's open edit or task panel: a change to that
+                    # body (or that document) is held (agentlink/coedit.py).
+                    from . import coedit
+
+                    edit0 = coedit.check(tool, args, s)
                     as_job = jobs.wanted(tool, args, s, asked=asked)
             elif asked:
                 raise ToolError("invalid_input", "background: a job needs a session.")
@@ -838,9 +844,14 @@ class Server:
                 else:
                     out = self.run(tool, lambda: _settled(lambda: tool.fn(args)))
             except BaseException:
+                if coedit is not None:
+                    coedit.settle(edit0)
                 if gate is not None:
                     gate.after(tool, args, False)
                 raise
+            if coedit is not None:
+                # An edit the call opened (a cmd_run's sketch) is the agent's.
+                coedit.settle(edit0)
             if gate is not None:
                 # A job logs its own time when it ends (the call may have
                 # answered before it did).
