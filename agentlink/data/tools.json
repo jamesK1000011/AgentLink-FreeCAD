@@ -6660,7 +6660,7 @@
   },
   "pd_pocket": {
    "group": "feature",
-   "description": "Pocket a closed sketch out of the body. type: length | through_all | up_to_first | up_to_face (upToFace). sides: one | two (length2) | symmetric. reversed. taper. It cuts against the normal of the sketch. The tool refuses a pocket that cuts nothing. Then use reversed: true, or put the sketch on the face that it goes into. A cut that splits the body leaves 2 solids. Its AllowCompound allows this, and health says so. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Pocket a closed sketch out of the body. type: length | through_all | up_to_first | up_to_face (upToFace). sides: one | two (length2) | symmetric. reversed. taper: deg; a positive angle makes the pocket wider as it goes in, a negative one narrower (as FreeCAD's TaperAngle). It cuts against the normal of the sketch. The tool refuses a pocket that cuts nothing. Then use reversed: true, or put the sketch on the face that it goes into. A cut that splits the body leaves 2 solids. Its AllowCompound allows this, and health says so. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {

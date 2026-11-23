@@ -339,6 +339,14 @@ class Session:
     def record_call(self, tool, args):
         """A changing call that went through, for saving as a macro; a check
         that ran, for history_diff's recheck."""
+        if tool.name in PREF_WRITERS:
+            # Settings to disk at once, not only when FreeCAD quits: Agent
+            # Link's other FreeCAD (the hidden one that answers the tool
+            # list) reads them from there (owner, 22 Nov).
+            try:
+                FreeCAD.saveParameter()
+            except Exception:  # noqa: BLE001
+                pass
         if not tool.changes:
             try:
                 from . import diffing
@@ -1162,6 +1170,10 @@ LEAN_NOTE = (
     "guide names, not all. AGENTLINK_TOOLS=full "
     "lists every tool from the start."
 )
+
+
+# Tools that change FreeCAD's settings: their change is written to disk at once.
+PREF_WRITERS = frozenset(("pref_set", "pref_reset", "pref_import"))
 
 
 def orient_on():
@@ -2959,7 +2971,16 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         if a.get("tool"):
             return tool_groups({"tool": a["tool"]})
         qs, read_as = find_queries(a)
-        if not qs or len(qs) > 6:
+        # Searches that are all tool names are a card lookup (up to 20):
+        # live, 22 Nov, three models sent 7 names in queries and were refused.
+        named = [plain_name(server, q.strip()) for q in qs] if qs else []
+        if len(named) >= 2 and all(n in server.tools for n in named) and len(named) <= 20:
+            got = tool_groups({"tool": named})
+            got.setdefault("readAs", read_as + ["queries that are all tool names, read as tool: [names] (their cards)"])
+            return got
+        if len(qs) > 6:
+            raise ToolError("invalid_input", f"queries: {len(qs)} searches, and the most is 6. Split them into two calls, or give tool names in tool: [...] (up to 20). {FIND_FORMS}")
+        if not qs:
             raise ToolError("invalid_input", FIND_FORMS)
         limit = int(a.get("limit") or 8)
         out = []

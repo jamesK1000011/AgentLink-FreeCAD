@@ -554,6 +554,8 @@ class Run:
         self.warnings = []
         self.filled = []
         self.made = []           # labels of what the block made
+        self.made_rows = []      # {name, label, type} of the same: the names later calls take
+        self.checks = []         # the key results of check, save and close steps
         self.health_bad = 0
         self.changed = False     # a changing call came before (dry: leading checks stop counting)
         self.guarded = 0         # inside a try that catches refusals
@@ -795,6 +797,7 @@ class Run:
             if t in HELPERS_OF_ORIGIN:
                 continue
             self.made.append(o.Label)
+            self.made_rows.append({"name": o.Name, "label": o.Label, "type": t.split("::")[-1]})
             if t == "PartDesign::Body":
                 self.block_ctx["body"] = ctx["body"] = o.Name
             elif t == "Sketcher::SketchObject":
@@ -922,11 +925,50 @@ def _parent_body(o):
         return None
 
 
-def _volume(session):
+def _volume(session, doc=None):
+    """The shown bodies' volume of doc (the session's document when left out)."""
     try:
-        return sum(float(o.Shape.Volume) for o in session.bodies())
+        from .tools import Session
+
+        d = doc if doc is not None else session.doc
+        return sum(float(o.Shape.Volume) for o in Session.bodies_in(d))
     except Exception:  # noqa: BLE001
         return None
+
+
+def _open(doc):
+    """Whether doc is still an open document."""
+    try:
+        import FreeCAD
+
+        return doc is not None and any(d is doc for d in FreeCAD.listDocuments().values())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# The key fields of a check, save or close step, given in the block's answer
+# (live, 22 Nov: an agent spent a call reading the record for body_check's
+# verdict and the save's result).
+CHECK_KEYS = {
+    "body_check": ("body", "valid", "solids", "volume", "box", "problems"),
+    "doc_save": ("path", "bytes"),
+    "doc_close": ("closed", "discarded"),
+    "measure": ("value", "unit", "distance", "angle"),
+}
+
+
+def check_row(where, tool, body):
+    """A short row of a check step's answer, or None."""
+    # Any other *_check tool (an add-on's): its verdict and findings.
+    keys = CHECK_KEYS.get(tool) or (("ok", "valid", "findings", "problems") if tool.endswith("_check") else None)
+    if not keys or not isinstance(body, dict):
+        return None
+    row = {"step": where, "tool": tool}
+    for k in keys:
+        if k in body:
+            v = body[k]
+            row[k] = len(v) if k in ("problems", "findings") and isinstance(v, list) else v
+    return row
 
 
 def _health_words(body):
@@ -1068,7 +1110,8 @@ def _run(server, session, steps, a):
             "t0": _batchrec.clock_start(prev), "lastChange": None, "echoed": 0, "budget": float(budget), "first": 0, "total": None,
             "file": None, "record": record, "hold": None, "fast": True}
     run.mine = mine
-    v0 = _volume(s)
+    vol_doc = s.doc
+    v0 = _volume(s, vol_doc)
 
     def on_call(where, tool, args):
         name = tool.name
@@ -1108,6 +1151,9 @@ def _run(server, session, steps, a):
         if not ok:
             err = body.get("error") or {}
             raise Stop(where, name, err.get("code", "failed"), err.get("message") or f"{name} was refused", body)
+        cr = check_row(where, name, body)
+        if cr:
+            run.checks.append(cr)
         hw = _health_words(body)
         if hw:
             run.health_bad += 1
@@ -1136,7 +1182,15 @@ def _run(server, session, steps, a):
                 s.snapshot("fast block")
         except Exception:  # noqa: BLE001
             pass
-        out = {"fast": _summary(run, True, secs, v0, _volume(s))}
+        # The volume change of the document it was first read on, while that
+        # one is open (live, 22 Nov: a block that saved and closed its
+        # document reported the volume of the person's other document).
+        v1 = _volume(s, vol_doc) if _open(vol_doc) else None
+        out = {"fast": _summary(run, True, secs, v0, v1)}
+        if run.made_rows:
+            out["made"] = run.made_rows[:40]
+        if run.checks:
+            out["checks"] = run.checks[:12]
         if run.values:
             out["values"] = run.values
         if run.warnings:
@@ -1149,9 +1203,23 @@ def _run(server, session, steps, a):
             out["record"] = rel
         record.write({**out, "results": run.rows}, final=True)
         return out
-    # Refused: the block is taken back whole (batch's rollback).
+    # Refused: the block is taken back whole (batch's rollback), or with
+    # keep: true what ran stays and the answer says where to go on.
     got = {}
     start = state["start"]
+    ran_rows = [r for r in run.rows if r.get("ok")]
+    if a.get("keep") and ran_rows:
+        words = [f"step {stop.where}{' (' + stop.tool + ')' if stop.tool else ''}: {_said(stop.words)}",
+                 f"Kept what ran before it (keep: true): {len(ran_rows)} call{'s' if len(ran_rows) != 1 else ''}"
+                 + (f", made {', '.join(r['label'] + ' (' + r['name'] + ')' for r in run.made_rows[:12])}" if run.made_rows else "")
+                 + f". Go on from step {stop.where} in a new block."]
+        if rel:
+            words.append(f"The record: {rel}.")
+        err = ToolError(stop.code if stop.code in _CODES or stop.code == "busy" else "failed", " ".join(words))
+        err.outcome = "kept"
+        err.outcome_left = run.made
+        record.write({"error": {"code": err.code, "message": err.message, "outcome": "kept"}, "results": run.rows}, final=True)
+        raise err
     if start is None:
         got = {"undone": 0, "outcome": "kept" if state["made"] else "not_started",
                "warning": "The document the block started in was closed during it: nothing to take back there."}
@@ -1159,6 +1227,10 @@ def _run(server, session, steps, a):
         got = T.roll_back(s, start, state["made"], mine.get("own"), names0, run.rows, label="block")
     words = [f"step {stop.where}{' (' + stop.tool + ')' if stop.tool else ''}: {_said(stop.words)}"]
     ran = sum(1 for r in run.rows if r.get("ok"))
+    if ran_rows:
+        # What ran before the refusal, by step, so the next block can be the
+        # same steps with the one fixed (live, 22 Nov: an agent rebuilt it all).
+        words.append("Ran before it: " + ", ".join(f"{r['step']} {r['tool']}" for r in ran_rows[:12]) + (" …" if len(ran_rows) > 12 else "") + ".")
     words.append(f"{ran} call{'s' if ran != 1 else ''} ran before it;"
                  f" the block was taken back ({got.get('undone', 0)} undo step{'s' if got.get('undone', 0) != 1 else ''})."
                  if got.get("outcome") in ("rolled_back", "not_started") else

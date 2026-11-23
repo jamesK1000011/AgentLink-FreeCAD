@@ -28,16 +28,21 @@ def tools(session):
                       "A call's answer is its as name, and last. "
                       "Each call goes through the normal input checks, refusals, approvals and undo step of its tool. "
                       "The answer is one line: calls, time, objects made, the volume change and the health. "
+                      "made lists each object made: its name (later calls take it), label and type. "
+                      "checks has the main results of body_check, doc_save, doc_close, measure and other *_check steps. "
+                      "The volume change is of the document the block started in, while it is open. "
                       "values has the value of each get. warnings has only what is not clean. "
                       "A required field that you leave out comes from the current body, sketch or last result. "
                       "A body or sketch field that you leave out comes from what the block made. filled names each of them. "
                       "Before step 1, each step is checked: its fields, and its leading checks up to the first change. "
                       "A step that would refuse is refused by its number, and nothing runs. check: true does only this check. "
                       "If a call refuses, the block is undone as a whole, as batch does. The undo stops at a step of the person. "
+                      "The refusal names the steps that ran before it. keep: true keeps them instead, and the answer says "
+                      "from which step to go on in a new block. "
                       "record is the file of each call's whole answer; batch { read, at } reads it. "
                       "A block does not run batch, jobs, gui_input, dialog_answer, the history tools, approvals or a restart. "
                       "The person's preference FastPath can turn it off."),
-             {"type": "object", "properties": {"do": {"type": "array", "items": {"type": "object"}}, "check": {"type": "boolean"}},
+             {"type": "object", "properties": {"do": {"type": "array", "items": {"type": "object"}}, "check": {"type": "boolean"}, "keep": {"type": "boolean"}},
                                  "required": ["do"], "additionalProperties": False}, fast),
         Tool("get", ("Read one value, and get only that value with its unit. "
                      "what: \"Pad.Length\" (a property), \"Body.volume\" (also area, mass, centerOfMass, size), "

@@ -194,6 +194,19 @@ def check(server, name, args, ask, budget=ONE_S):
     return True
 
 
+def theirs_first(session, server):
+    """The doc_new option, when the document in front is the person's (not
+    one an agent made), or None."""
+    try:
+        doc = getattr(session, "doc", None)
+        if doc is None or "doc_new" not in server.tools or doc.Name in (getattr(session, "agent_docs", None) or ()):
+            return None
+        return {"n": 1, "tool": "doc_new", "args": {}, "ask": [{"arg": "name"}],
+                "why": f"new work in a document of its own: {doc.Label} is the person's"}
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def build(session, facts=None, state=None, table=None):
     """{ step, key, list: [{ n, tool, args, ask, choices, why }] } — at most
     MAX_OPTIONS, every one checked — or None (switched off, a dialog in
@@ -210,8 +223,11 @@ def build(session, facts=None, state=None, table=None):
                 return None
             facts, state = got
         cands = suggestions(facts, table)[:MAX_CANDIDATES]
+        # The person's document in front: a document of its own first, so the
+        # likeliest pick is not a change to their file (owner, 22 Nov).
+        theirs = theirs_first(session, server)
         if not cands:
-            return None
+            return {"step": step(session), "key": key(session), "list": [theirs]} if theirs else None
         gui = (state or {}).get("gui")
         if gui is not None:
             try:
@@ -222,7 +238,7 @@ def build(session, facts=None, state=None, table=None):
                 pass
         avail = {id(p) for p in nexthint.available([p for p, _ in cands], state, lambda n: n in server.tools, n=len(cands))}
         deadline = time.time() + BUDGET_MS / 1000.0
-        out = []
+        out = [theirs] if theirs else []
         for p, item in cands:
             if id(p) not in avail:
                 continue

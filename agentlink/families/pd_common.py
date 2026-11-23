@@ -567,12 +567,41 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
         if must_change == "cut" and delta >= -1e-6:
             what = ("removed no material — the wall did not hollow the body" if dress
                     else "cut nothing — the profile does not meet the body that way")
-            raise ToolError("failed", f"{feat.Label} {what}. Nothing was kept. {hint}".strip())
+            side = "" if dress else cut_side_words(feat, body)
+            raise ToolError("failed", f"{feat.Label} {what}.{(' ' + side) if side else ''} Nothing was kept. {hint}".strip())
         if must_change == "changed" and abs(delta) <= 1e-6:
             # A fillet or chamfer may add material (an inside corner, concave)
             # or take it away (an outside one): only no change at all is wrong.
             raise ToolError("failed", f"{feat.Label} left the body as it was — the edges it was given round or bevel nothing. Nothing was kept. {hint}".strip())
     return picks.finish(session, tool, out, recompute=False)
+
+
+def cut_side_words(feat, body):
+    """Where a cut that cut nothing went, against where the body is: the
+    sketch's normal, and the side of the sketch the body lies on (live,
+    22 Nov: an agent found a pocket's side by trial, twice)."""
+    try:
+        prof = getattr(feat, "Profile", None)
+        sk = prof[0] if isinstance(prof, (list, tuple)) else prof
+        pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
+        import FreeCAD
+
+        n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
+        bb = body.Shape.BoundBox
+        c = FreeCAD.Vector((bb.XMin + bb.XMax) / 2, (bb.YMin + bb.YMax) / 2, (bb.ZMin + bb.ZMax) / 2)
+        side = (c - pl.Base).dot(n)
+        axis = max(("x", abs(n.x), n.x), ("y", abs(n.y), n.y), ("z", abs(n.z), n.z), key=lambda t: t[1])
+        normal = f"{'+' if axis[2] > 0 else '-'}{axis[0]}"
+        rev = bool(getattr(feat, "Reversed", False))
+        if abs(side) < 1e-6:
+            return f"The sketch {sk.Label}'s normal is {normal}; the body's centre is in the sketch's plane."
+        where = "on the side its normal points to" if side > 0 else "on the side opposite its normal"
+        # A pocket goes against the normal, reversed along it.
+        fix = (f" reversed: {'false' if rev else 'true'} sends the cut that way." if (side > 0) != rev else
+               " The cut went toward the body: check that the sketch overlaps it (its position, not its side).")
+        return f"The sketch {sk.Label}'s normal is {normal}, and the body is {where}." + fix
+    except Exception:  # noqa: BLE001 - advice only
+        return ""
 
 
 def uses(o, f):

@@ -265,6 +265,10 @@ def _child(case):
         out["labels"] = labels()
         out["undone"] = doc.undone
         out["seen"] = [t for t, _a in seen]
+    elif case == "keep":
+        out["got"] = fast({"keep": True, "do": [{"call": "probe_change", "n": 1}, {"call": "probe_change", "n": 2}, {"call": "probe_fail"}]})
+        out["labels"] = labels()
+        out["undone"] = doc.undone
     elif case == "person":
         out["got"] = fast({"do": [{"call": "probe_change", "n": 1}, {"call": "probe_person"}, {"call": "probe_change", "n": 2}, {"call": "probe_fail"}]})
         out["labels"] = labels()
@@ -343,7 +347,7 @@ class FastPath(unittest.TestCase):
         self.assertIn("+Sketch", body["fast"])
         self.assertIn("+Pad", body["fast"])
         self.assertTrue(body["fast"].endswith("clean"), body)
-        self.assertLessEqual(set(body), {"fast", "values", "warnings", "filled", "checkpoint", "record", "ms"})
+        self.assertLessEqual(set(body), {"fast", "values", "warnings", "filled", "checkpoint", "record", "ms", "made", "checks"})
         # Every call went through the server's own path, in order, with the sketch filled in from the block.
         tools = [t for t, _a in got["seen"]]
         self.assertEqual(tools, ["fast", "sketch_new", "sketch_add", "sketch_add", "sketch_add", "pd_pad"])
@@ -379,6 +383,24 @@ class FastPath(unittest.TestCase):
         self.assertEqual(got["got"]["body"]["values"]["sk"], "Sketch")
         self.assertIn("probe_req.sketch=Sketch", got["got"]["body"]["filled"])
         self.assertEqual([a for t, a in got["seen"] if t == "probe_req"], [{"sketch": "Sketch"}])
+
+    def test_design_block_names_what_it_made(self):
+        body = run_case("design")["got"]["body"]
+        made = body["made"]
+        self.assertTrue(made and all({"name", "label", "type"} <= set(m) for m in made), made)
+        self.assertIn("Pad", [m["type"] for m in made])
+
+    def test_refusal_names_what_ran(self):
+        err = run_case("rollback")["got"]["body"]["error"]
+        self.assertIn("Ran before it: do.0 probe_change, do.1 probe_change.", err["message"])
+
+    def test_keep_keeps_what_ran(self):
+        got = run_case("keep")
+        err = got["got"]["body"]["error"]
+        self.assertEqual(err["outcome"], "kept")
+        self.assertIn("Go on from step do.2", err["message"])
+        self.assertEqual(got["undone"], 0)
+        self.assertIn("P1", got["labels"])
 
     def test_refused_call_rolls_the_block_back(self):
         got = run_case("rollback")
