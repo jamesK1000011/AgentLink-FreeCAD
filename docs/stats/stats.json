@@ -949,8 +949,8 @@
     "style": "ste",
     "default": true,
     "tools": 6,
-    "chars": 6136,
-    "tokens": 1753,
+    "chars": 6457,
+    "tokens": 1845,
     "estimatedCards": 6
    },
    {
@@ -958,8 +958,8 @@
     "style": "full",
     "default": false,
     "tools": 6,
-    "chars": 15117,
-    "tokens": 4319,
+    "chars": 15608,
+    "tokens": 4459,
     "estimatedCards": 6
    },
    {
@@ -967,8 +967,8 @@
     "style": "ste",
     "default": false,
     "tools": 23,
-    "chars": 22432,
-    "tokens": 6409,
+    "chars": 22761,
+    "tokens": 6503,
     "estimatedCards": 17
    },
    {
@@ -976,16 +976,16 @@
     "style": "full",
     "default": false,
     "tools": 23,
-    "chars": 31065,
-    "tokens": 8876,
+    "chars": 31593,
+    "tokens": 9027,
     "estimatedCards": 17
    }
   ],
   "allHubListed": {
    "tools": 419,
-   "chars": 356032,
+   "chars": 356761,
    "estimatedCards": 25,
-   "tokens": 101723
+   "tokens": 101932
   },
   "base": [
    "session_state",

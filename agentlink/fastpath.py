@@ -25,7 +25,7 @@ make, add, set or do, which reach FreeCAD's objects directly):
   {"when": e, "then": [steps], "else": [steps]}  ("when" on any step too)
   {"choose": e, "of": {"value": [steps]}, "else": [steps]}
   {"try": [steps], "on": "refusal" | "error", "except": [steps]}
-  {"refuse": "words", "code": "invalid_input"} ends the block, rolled back
+  {"refuse": "words", "code": "invalid_input"} ends the block
   {"push": {"list": e}}                       one more on a list
 
 e: a value, or "=expression" (agentlink/expr.py: parsed with Python's own
@@ -36,9 +36,9 @@ Safety of a block (the same as batch's where batch has it): every call goes
 through the server's own path (input checks, field aliases, path guards,
 each tool's leading checks and refusals, approvals, the co-work hold, the
 undo step, the health); one checkpoint before the first change, when an
-add-on offers checkpoints; the block stands or falls as a whole: a refusal
-rolls it back with batch's rollback (tools.roll_back), which stops at the
-person's own undo step; a record file like batch's (batches/…json); a dry
+add-on offers checkpoints; a refusal keeps what ran before it, as batch
+does, and with rollback: true rolls the block back with batch's rollback
+(tools.roll_back), which stops at the person's own undo step; a record file like batch's (batches/…json); a dry
 run (check: true) checks every step first and runs nothing. Before step 1
 of a real run the same check runs (A6): a step that would be refused is
 refused by its number before anything changes.
@@ -1107,6 +1107,9 @@ def _run(server, session, steps, a):
     if isinstance(budget, bool) or not isinstance(budget, (int, float)) or not 1 <= budget <= T.BATCH_BUDGET_MAX:
         raise ToolError("invalid_input", f"budget: seconds this block may start calls for, 1 to {T.BATCH_BUDGET_MAX:g} ({T.BATCH_BUDGET:g} when left out). Nothing was run.")
     run = Run(server, s, budget=float(budget))
+    # A refused call keeps what ran before it (the default, as batch does:
+    # owner, 23 Nov); rollback: true takes the block back whole.
+    rollback = a.get("rollback") is True
     start = s.doc
     _u0, names0 = T.undo_mark(start)
     try:
@@ -1144,7 +1147,7 @@ def _run(server, session, steps, a):
         except Exception:  # noqa: BLE001
             changing = bool(getattr(tool, "changes", False))
         if changing:
-            if state["start"] is not None and state["made"] >= limit:
+            if rollback and state["start"] is not None and state["made"] >= limit:
                 raise Stop(where, name, "invalid_input", f"past {limit} changing calls: FreeCAD keeps only {limit} undo steps, so the block could not be "
                                                          "taken back whole. Split it.")
             if state["cp"] is None:
@@ -1231,14 +1234,15 @@ def _run(server, session, steps, a):
             out["record"] = rel
         record.write({**out, "results": run.rows}, final=True)
         return out
-    # Refused: the block is taken back whole (batch's rollback), or with
-    # keep: true what ran stays and the answer says where to go on.
+    # Refused: what ran stays and the answer says where to go on (the
+    # default), or with rollback: true the block is taken back whole.
     got = {}
     start = state["start"]
     ran_rows = [r for r in run.rows if r.get("ok")]
-    if a.get("keep") and ran_rows:
+    if not rollback and ran_rows:
         words = [f"step {stop.where}{' (' + stop.tool + ')' if stop.tool else ''}: {_said(stop.words)}",
-                 f"Kept what ran before it (keep: true): {len(ran_rows)} call{'s' if len(ran_rows) != 1 else ''}"
+                 "Ran before it: " + ", ".join(f"{r['step']} {r['tool']}" for r in ran_rows[:12]) + (" …" if len(ran_rows) > 12 else "") + ".",
+                 f"What ran before it stays, each its own undo step: {len(ran_rows)} call{'s' if len(ran_rows) != 1 else ''}"
                  + (f", made {', '.join(r['label'] + ' (' + r['name'] + ')' for r in run.made_rows[:12])}" if run.made_rows else "")
                  + f". Go on from step {stop.where} in a new block."]
         if rel:

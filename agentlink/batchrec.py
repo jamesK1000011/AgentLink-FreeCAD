@@ -107,6 +107,12 @@ def clock_start(prev, now=None):
         return prev["t0"]
     return now
 
+# A batch's calls run one after another, never at the same time: said once a
+# conversation on the batch's answer (local-model runs, 23 Nov: a model
+# took the calls of a batch to run in parallel).
+ORDER_NOTE = "The calls ran one at a time, in order: each call saw what the calls before it made."
+
+_once.register("batch", "order", ORDER_NOTE)
 _once.register("batch", "toNote", TO_NOTE)
 _once.register("batch", "note", TO_NOTE)
 _once.register("batch", "healthNote", STANDING_NOTE)

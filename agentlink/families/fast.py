@@ -36,13 +36,13 @@ def tools(session):
                       "A body or sketch field that you leave out comes from what the block made. filled names each of them. "
                       "Before step 1, each step is checked: its fields, and its leading checks up to the first change. "
                       "A step that would refuse is refused by its number, and nothing runs. check: true does only this check. "
-                      "If a call refuses, the block is undone as a whole, as batch does. The undo stops at a step of the person. "
-                      "The refusal names the steps that ran before it. keep: true keeps them instead, and the answer says "
-                      "from which step to go on in a new block. "
+                      "If a call refuses, the block stops there. The calls before it stay, as in batch: each is its own undo step. "
+                      "The refusal names the steps that ran before it, and from which step to go on in a new block. "
+                      "keep: true is the same as the default. rollback: true undoes the whole block instead. The undo stops at a step of the person. "
                       "record is the file of each call's whole answer; batch { read, at } reads it. "
                       "A block does not run batch, jobs, gui_input, dialog_answer, the history tools, approvals or a restart. "
                       "The person's preference FastPath can turn it off."),
-             {"type": "object", "properties": {"do": {"type": "array", "items": {"type": "object"}}, "check": {"type": "boolean"}, "keep": {"type": "boolean"}},
+             {"type": "object", "properties": {"do": {"type": "array", "items": {"type": "object"}}, "check": {"type": "boolean"}, "keep": {"type": "boolean"}, "rollback": {"type": "boolean"}},
                                  "required": ["do"], "additionalProperties": False}, fast),
         Tool("get", ("Read one value, and get only that value with its unit. "
                      "what: \"Pad.Length\" (a property), \"Body.volume\" (also area, mass, centerOfMass, size), "

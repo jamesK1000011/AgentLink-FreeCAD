@@ -261,16 +261,17 @@ def _child(case):
         out["got"] = fast({"do": [{"call": "probe_req", "as": "r"}, {"get": "=r.sketch", "as": "sk"}]})
         out["seen"] = seen
     elif case == "rollback":
-        out["got"] = fast({"do": [{"call": "probe_change", "n": 1}, {"call": "probe_change", "n": 2}, {"call": "probe_fail"}, {"call": "probe_change", "n": 3}]})
+        out["got"] = fast({"rollback": True, "do": [{"call": "probe_change", "n": 1}, {"call": "probe_change", "n": 2}, {"call": "probe_fail"}, {"call": "probe_change", "n": 3}]})
         out["labels"] = labels()
         out["undone"] = doc.undone
         out["seen"] = [t for t, _a in seen]
     elif case == "keep":
-        out["got"] = fast({"keep": True, "do": [{"call": "probe_change", "n": 1}, {"call": "probe_change", "n": 2}, {"call": "probe_fail"}]})
+        # The default since 23 Nov (owner): what ran before a refusal stays.
+        out["got"] = fast({"do": [{"call": "probe_change", "n": 1}, {"call": "probe_change", "n": 2}, {"call": "probe_fail"}]})
         out["labels"] = labels()
         out["undone"] = doc.undone
     elif case == "person":
-        out["got"] = fast({"do": [{"call": "probe_change", "n": 1}, {"call": "probe_person"}, {"call": "probe_change", "n": 2}, {"call": "probe_fail"}]})
+        out["got"] = fast({"rollback": True, "do": [{"call": "probe_change", "n": 1}, {"call": "probe_person"}, {"call": "probe_change", "n": 2}, {"call": "probe_fail"}]})
         out["labels"] = labels()
         out["undoNames"] = list(doc.UndoNames)
     elif case == "dry":
@@ -281,7 +282,7 @@ def _child(case):
     elif case == "a6":
         out["fast"] = fast({"do": [{"call": "probe_change", "n": 1, "when": "=False"}, {"call": "probe_person", "as": "p"}, {"call": "probe_lead", "n": 0}]})
         out["seenFast"] = [t for t, _a in seen]
-        out["late"] = fast({"do": [{"call": "probe_change", "n": 1}, {"call": "probe_lead", "n": 0}]})
+        out["late"] = fast({"rollback": True, "do": [{"call": "probe_change", "n": 1}, {"call": "probe_lead", "n": 0}]})
         out["labelsAfterLate"] = labels()
         del seen[:]
         out["batch"] = one("batch", {"check": True, "calls": [{"tool": "probe_person", "arguments": {}}, {"tool": "probe_lead", "arguments": {"n": 0}}]})
@@ -334,7 +335,10 @@ class FastPath(unittest.TestCase):
     def test_batch_reads_prefixed_names_and_near_names(self):
         got = run_case("names")
         self.assertFalse(got["prefixed"]["isError"], got["prefixed"])
-        msg = got["unknown"]["body"]["error"]["message"]
+        # A tool that is not here is refused by itself, in its order (23 Nov).
+        self.assertFalse(got["unknown"]["isError"], got["unknown"])
+        self.assertEqual(got["unknown"]["body"]["refused"]["code"], "not_found")
+        msg = got["unknown"]["body"]["results"][0]["error"]["message"]
         self.assertIn("near: pd_pad", msg)
         self.assertIn('{ "call": "body_check" }', got["toolread"]["body"]["error"]["message"])
 
@@ -347,7 +351,7 @@ class FastPath(unittest.TestCase):
         self.assertIn("+Sketch", body["fast"])
         self.assertIn("+Pad", body["fast"])
         self.assertTrue(body["fast"].endswith("clean"), body)
-        self.assertLessEqual(set(body), {"fast", "values", "warnings", "filled", "checkpoint", "record", "ms", "made", "checks"})
+        self.assertLessEqual(set(body), {"fast", "values", "warnings", "filled", "checkpoint", "record", "ms", "made", "checks", "now"})
         # Every call went through the server's own path, in order, with the sketch filled in from the block.
         tools = [t for t, _a in got["seen"]]
         self.assertEqual(tools, ["fast", "sketch_new", "sketch_add", "sketch_add", "sketch_add", "pd_pad"])
@@ -398,6 +402,7 @@ class FastPath(unittest.TestCase):
         got = run_case("keep")
         err = got["got"]["body"]["error"]
         self.assertEqual(err["outcome"], "kept")
+        self.assertIn("Ran before it: do.0 probe_change, do.1 probe_change.", err["message"])
         self.assertIn("Go on from step do.2", err["message"])
         self.assertEqual(got["undone"], 0)
         self.assertIn("P1", got["labels"])
@@ -454,7 +459,7 @@ class FastPath(unittest.TestCase):
         self.assertIn("calls.1 (probe_lead)", got["batch"]["body"]["error"]["message"])
         self.assertEqual(got["seenBatch"], ["batch"])
         self.assertFalse(got["batchPlain"]["isError"])
-        self.assertEqual(got["batchPlain"]["body"].get("stopped"), 1)
+        self.assertEqual(got["batchPlain"]["body"]["refused"]["call"], 1)
         self.assertFalse(got["batchOk"]["isError"], got["batchOk"])
 
     def test_get_each_kind(self):

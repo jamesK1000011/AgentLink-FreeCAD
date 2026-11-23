@@ -21,7 +21,7 @@ import Part
 
 from . import geometry as geo
 from . import changes, docstates, keep, store
-from .protocol import FIND_FORMS, Tool, ToolError, close_names, describe, does_hits, find_queries, kinded, plain_name, sort_find
+from .protocol import FIND_FORMS, Tool, ToolError, close_names, describe, does_hits, find_queries, kinded, plain_name, sort_find, strip_kind
 
 
 
@@ -1271,8 +1271,9 @@ WORKING = (
     "Lengths are millimetres, angles degrees, masses grams. A body is named by its label; a face or edge by what it "
     "is (shape_query: normal, radius, near a point) rather than by FreeCAD's Face12, which changes with the model. "
     "Every tool that changes the document is one undo step: history_undo and history_redo (and checkpoints "
-    "where an add-on offers them); history_diff says what changed. batch runs calls in order and rolls back whole when one is "
-    "refused; in it a call's answer can go to a file (to) and feed a later call ($file, $from) without passing through the conversation, and build: \"end\" recomputes once for a run of sketch edits. A refusal is { error: { code, message } }: the code (invalid_input, invalid_state, not_found, "
+    "where an add-on offers them); history_diff says what changed. batch { calls: [{ tool, arguments }] } runs calls one at a time, in order; "
+    "at a refusal the calls before it stay, and the answer says which ran (done), which was refused (refused) and which did not run (notRun). "
+    "Give only calls at first: batch's other fields are in guide_read { topic: \"batch\" }. A refusal is { error: { code, message } }: the code (invalid_input, invalid_state, not_found, "
     "unavailable, failed) and a message saying what to change — correct the call and go on. "
     "Words that stand the same from call to call (a tool's own note, the health's advice on an overlap) are given the first time "
     "in a conversation; after that the answer names their key in saidBefore, and tool_find { tool: name } gives them again (said). "
@@ -1866,6 +1867,18 @@ def _guide_index():
     return out
 
 
+def _unknown_words(server, u):
+    """A tool name that is not here, with the near names, the tools that do
+    what its words say, and a sketch_add kind it names (did-you-mean only)."""
+    from .protocol import close_names, does_hits, kind_hint
+
+    near = close_names(server, u, 3)
+    does = does_hits(server, u)
+    kh = kind_hint(server, u)
+    return (f"{u}" + (f" ({kh})" if kh else "") + (f" (near: {', '.join(near)})" if near else "")
+            + (f" — by what it does, did you mean: {'; '.join(does)}?" if does else ""))
+
+
 def _call_shape(c, i):
     """A batch call that is not { tool, arguments }, described: what it is,
     which keys it has and what it lacks. Never the call's own text."""
@@ -2081,7 +2094,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             return doc_facts[0]
 
         def card(t):
-            out = {"tool": t.name, "group": t.group, "listed": server.groups is None or t.group in server.groups, "changes": bool(t.changes),
+            out = {"tool": t.name, "group": t.group, "changes": bool(t.changes),
                    "description": t.description, "inputSchema": t.schema}
             # A ready call, filled from the open document (owner, 22 Nov).
             from . import examples as _examples
@@ -2480,30 +2493,48 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 raise ToolError("invalid_input", f"calls came as a string that is not JSON ({e}) — give a list: [{{ tool, arguments }}].")
             calls = calls.get("calls", calls) if isinstance(calls, dict) else calls
         if not isinstance(calls, list):
-            raise ToolError("invalid_input", "calls: a list of { tool, arguments }.")
+            raise ToolError("invalid_input", "calls: a list of { tool, arguments }. Nothing was run.")
+        # What a batch does when a call is refused: by default the calls
+        # before it stay and the rest do not run (owner, 23 Nov); rollback:
+        # true takes the batch back whole, as before.
+        rollback = a.get("rollback", False) is True
         fixed = []
+
+        def bad_call(i, tool, code, words):
+            """A call that is refused by its form (no tool, arguments that
+            are not an object, no such tool …): refused by itself when it
+            is reached, so the calls before it run. With rollback the batch
+            is refused whole, before anything runs."""
+            if rollback:
+                raise ToolError(code, words + " Nothing was run.")
+            fixed.append({"tool": tool if isinstance(tool, str) else "?", "arguments": {}, "bad": {"code": code, "message": words + " The call was not run."}})
+
         for i, c in enumerate(calls):
             if isinstance(c, str):
                 try:
                     c = _json.loads(c)
                 except ValueError:
-                    raise ToolError("invalid_input", f"calls.{i} came as a string that is not a call's JSON — each call is {{ tool, arguments }}. Nothing was run.")
+                    bad_call(i, None, "invalid_input", f"calls.{i} came as a string that is not a call's JSON — each call is {{ tool, arguments }}.")
+                    continue
             if not isinstance(c, dict) or not isinstance(c.get("tool"), str):
                 # What it has and what it lacks, never the call itself (live,
                 # 22 Nov: a local model sent calls with arguments and no tool,
                 # 22 times; research, 22 Nov: an echo of a failed call makes
                 # the same call again more likely).
-                raise ToolError("invalid_input", f"calls.{i}: {{ tool, arguments }} with tool a tool's name. {_call_shape(c, i)} "
-                                                 f"Example: {{ \"tool\": \"sketch_new\", \"arguments\": {{ \"plane\": \"XY\" }} }}. "
-                                                 "The calls run in order, one after another. Nothing was run.")
+                bad_call(i, None, "invalid_input", f"calls.{i}: {{ tool, arguments }} with tool a tool's name. {_call_shape(c, i)} "
+                                                   f"Example: {{ \"tool\": \"sketch_new\", \"arguments\": {{ \"plane\": \"XY\" }} }}. "
+                                                   "The calls run in order, one after another.")
+                continue
             args = c.get("arguments") or {}
             if isinstance(args, str):
                 try:
                     args = _json.loads(args) if args.strip() else {}
                 except ValueError:
-                    raise ToolError("invalid_input", f"calls.{i}.arguments ({c['tool']}) came as a string that is not JSON — give an object, {{}} for none. Nothing was run.")
+                    bad_call(i, c["tool"], "invalid_input", f"calls.{i}.arguments ({c['tool']}) came as a string that is not JSON — give an object, {{}} for none.")
+                    continue
             if not isinstance(args, dict):
-                raise ToolError("invalid_input", f"calls.{i}.arguments ({c['tool']}): an object. Nothing was run.")
+                bad_call(i, c["tool"], "invalid_input", f"calls.{i}.arguments ({c['tool']}): an object.")
+                continue
             one = {"tool": c["tool"], "arguments": args}
             if c.get("profile"):
                 one["profile"] = True
@@ -2511,32 +2542,30 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 # This call's whole answer to a file of its own (chain.py).
                 words = _chain.to_name(c["to"], i)
                 if words:
-                    raise ToolError("invalid_input", words)
+                    bad_call(i, c["tool"], "invalid_input", words)
+                    continue
                 one["to"] = _batch_path(c["to"])
                 try:
                     _paths_mod.check("batch", f"calls.{i}.to", one["to"], s.out_dir, True)
                 except ToolError as e:
-                    raise ToolError(e.code, f"{e.message} Nothing was run.") from None
+                    bad_call(i, c["tool"], e.code, e.message)
+                    continue
             fixed.append(one)
         calls = fixed
         build_mode, words = _hold.mode(a.get("build"))
         if words:
-            raise ToolError("invalid_input", words)
+            raise ToolError("invalid_input", words + " Nothing was run.")
         # A client's prefixed name inside a batch (agentlink_get) is the
         # tool's own, as on a direct call (live, 22 Nov: a local model).
         for c in calls:
-            if c["tool"] not in server.tools and plain_name(server, c["tool"]) in server.tools:
+            if "bad" not in c and c["tool"] not in server.tools and plain_name(server, c["tool"]) in server.tools:
                 c["tool"] = plain_name(server, c["tool"])
-        unknown = [c["tool"] for c in calls if c["tool"] not in server.tools]
-        if unknown:
-            hints = []
-            for u in sorted(set(unknown)):
-                near = close_names(server, u, 3)
-                does = does_hits(server, u)
-                hints.append(f"{u}" + (f" (near: {', '.join(near)})" if near else "")
-                             + (f" — by what it does, did you mean: {'; '.join(does)}?" if does else ""))
-            raise ToolError("not_found", f"No tool named {'; '.join(hints)} — nothing was run. tool_find {{ tool: name }} gives a tool's card.")
-        rollback = a.get("rollback", True)
+        unknown = [c["tool"] for c in calls if "bad" not in c and c["tool"] not in server.tools]
+        if unknown and rollback:
+            raise ToolError("not_found", f"No tool named {'; '.join(_unknown_words(server, u) for u in sorted(set(unknown)))} — nothing was run. tool_find {{ tool: name }} gives a tool's card.")
+        for i, c in enumerate(calls):
+            if "bad" not in c and c["tool"] not in server.tools:
+                c["bad"] = {"code": "not_found", "message": f"calls.{i}: no tool named {_unknown_words(server, c['tool'])}. tool_find {{ tool: name }} gives a tool's card. The call was not run."}
         stop = a.get("stopOnError", True)
         # A long batch is answered in parts. The client drops a call after
         # about 80 s and the watchdog takes one past 120 s for hung and
@@ -2551,10 +2580,15 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             raise ToolError("invalid_input", f"from: the index of the call to start at, 0 to {len(calls)} (the calls are numbered from 0; an earlier answer's next). Nothing was run.")
         total, calls = len(calls), calls[first:]
         for i, c in enumerate(calls):
-            if c["tool"] == "batch":
-                raise ToolError("invalid_input", f"calls.{i}: a batch does not run another batch. Nothing was run.")
+            if c["tool"] == "batch" and "bad" not in c:
+                if rollback:
+                    raise ToolError("invalid_input", f"calls.{first + i}: a batch does not run another batch. Nothing was run.")
+                c["bad"] = {"code": "invalid_input", "message": f"calls.{first + i}: a batch does not run another batch. The call was not run."}
             if rollback and c["tool"] in ("history_undo", "history_redo", "history_restore"):
-                raise ToolError("invalid_input", f"calls.{i}: {c['tool']} inside a batch that rolls back can't be taken back by undo — call it on its own, or rollback: false. Nothing was run.")
+                raise ToolError("invalid_input", f"calls.{first + i}: {c['tool']} inside a batch that rolls back can't be taken back by undo — call it on its own, or leave rollback out. Nothing was run.")
+        if a.get("check") and any("bad" in c for c in calls):
+            c = next(c for c in calls if "bad" in c)
+            raise ToolError(c["bad"]["code"], c["bad"]["message"].replace(" The call was not run.", "") + " Read before the batch ran (check: true). Nothing was run.")
         if a.get("check"):
             # check: true (design A6): each call's fields and, up to its
             # first changing call, its leading checks read before the first
@@ -2571,7 +2605,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         limit = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Document").GetInt("MaxUndoSize", 20) if FreeCAD else 20
         changing = sum(1 for c in calls if getattr(server.tools.get(c["tool"]), "changes", False))
         if rollback and changing > limit:
-            raise ToolError("invalid_input", f"{changing} changing calls, but FreeCAD keeps only {limit} undo steps, so the batch could not be taken back whole: split it, or rollback: false. Nothing was run.")
+            raise ToolError("invalid_input", f"{changing} changing calls, but FreeCAD keeps only {limit} undo steps, so the batch could not be taken back whole: split it, or leave rollback out (what ran then stays). Nothing was run.")
         start = s.doc
         made = 0
         results = []
@@ -2741,13 +2775,54 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             return _chain.read_json(p, name, files, may_list=lambda d: _paths_mod.read_refusal(_paths_mod._real(d), s.out_dir) is None)
 
         def ended(out):
-            """What every answer of a batch { build: "end" } carries."""
+            """What every answer of a batch carries at its end: which calls
+            ran (done), which one was refused (refused) and which did not
+            run (notRun), counted from 0 through the whole list; and with
+            build: "end", its builds."""
+            summary(out)
             if hold is not None:
                 out["build"] = "end"
                 if hold.builds:
                     out["builds"] = hold.builds
                 if hold.off:
                     out["buildNote"] = hold.off
+            return out
+
+        def summary(out):
+            if out.get("answered_early"):
+                return out
+            from .batchrec import ORDER_NOTE
+
+            out["order"] = ORDER_NOTE
+            rows = out.get("results") or []
+            n = len(calls)
+            out["done"] = [first + j for j, r in enumerate(rows) if isinstance(r, dict) and r.get("ok") and not r.get("takenBack")]
+            gone = [first + j for j, r in enumerate(rows) if isinstance(r, dict) and r.get("takenBack")]
+            if gone:
+                out["takenBack"] = gone
+            if "stopped" in out:
+                k = out.pop("stopped")
+                r = rows[k] if 0 <= k < len(rows) and isinstance(rows[k], dict) else {}
+                err = r.get("error") if isinstance(r.get("error"), dict) else {}
+                ref = {"call": first + k, "tool": r.get("tool") or (calls[k]["tool"] if k < n else None)}
+                if out.get("buildFailed"):
+                    ref["buildFailed"] = True
+                else:
+                    ref.update({"code": err.get("code"), "kind": err.get("kind"), "error": strip_kind(err.get("message"))})
+                out["refused"] = ref
+                out["notRun"] = list(range(first + k + 1, first + n))
+                out["next"] = first + k
+                if not out.get("note"):
+                    kept = ("taken back (rollback: true)" if gone or out.get("outcome") == "rolled_back"
+                            else "ran and stay, each its own undo step" if out["done"] else "none")
+                    out["note"] = (f"Call {first + k} ({ref['tool']}) was refused; the calls in done {kept}; the calls in notRun did not run. "
+                                   f"Fix call {first + k} and send it with the calls after it (or the same calls with from: {first + k}).")
+            elif isinstance(out.get("notRun"), int) and not isinstance(out.get("notRun"), bool):
+                out["notRun"] = list(range(first + n - out["notRun"], first + n))
+            if not stop:
+                bad = [first + j for j, r in enumerate(rows) if isinstance(r, dict) and not r.get("ok")]
+                if bad:
+                    out["refusedCalls"] = bad
             return out
 
         def stopped(out):
@@ -2827,6 +2902,17 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": nxt,
                                   "note": f"Stopped after {time.time() - mine['t0']:.0f} s (budget {mine.get('budget', BATCH_BUDGET):g} s): a client waits about 80 s for an answer, so a long batch is answered in parts. "
                                           f"The {len(results)} calls above ran and stay; {len(calls) - i} were not started: {how}."})
+                if c.get("bad") is not None:
+                    # Refused by its form (no tool, no such tool, arguments
+                    # that are not an object): by itself, here in its order.
+                    berr = kinded(dict(c["bad"]))
+                    answers[first + i] = {"ok": False, "tool": c["tool"], "size": 0, "error": berr.get("message")}
+                    results.append({"tool": c["tool"], "ok": False, "error": berr})
+                    if mine.get("record") is not None:
+                        mine["record"].write({"running": True, "ran": len(results), "results": results})
+                    if stop:
+                        return stopped({"results": results, "stopped": i})
+                    continue
                 # A heavy read is not run inside a batch: alone it goes to a job
                 # and answers with an id, here it would hold FreeCAD for its whole
                 # length (a wall-thickness read in a 20-call batch ran past the
@@ -3156,8 +3242,6 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             # its card with the hits, so the next call can be the call.
             exact = server.tools.get(plain_name(server, q.strip()))
             got = tool_groups({"find": q, "limit": limit, **({"group": a["group"]} if a.get("group") else {})})
-            for h in got.get("tools") or ():
-                h["listed"] = server.is_listed(h.get("tool"))
             one = {"find": q, "tools": got.get("tools") or [], **({"note": got["note"]} if not got.get("tools") else {})}
             if exact is not None:
                 one["card"] = tool_groups({"tool": exact.name})["tools"][0]
@@ -3165,7 +3249,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         res = out[0] if len(out) == 1 else {"results": out}
         if names:
             res["cards"] = tool_groups({"tool": names})["tools"]
-        res["note"] = "Callable by name, listed or not; tool_find { tool: name } gives its whole description and inputs."
+        res["note"] = "Every tool found here can be called: by name, or in batch { calls: [{ tool, arguments }] }. tool_find { tool: name } gives its whole description and inputs."
         if read_as:
             res["readAs"] = read_as
         return res
@@ -3193,7 +3277,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                             "{ applies: true | false | null (not checked), wouldRefuse [{ code, words }], notChecked }. arguments: {…} also reads that call's checks; advice only. "
                             "find's hits that would refuse now come last, with applies: false. now: true carries appliesNow, the full form of the health's appliesNow line.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}, "needs": {"type": "string"}, "arguments": {"type": "object"}}), tool_groups),
         Tool("tool_find", "Find a tool by plain words: what it does, or FreeCAD's own command or workbench name. It gives up to limit (8) tools, best first. Each has its group, "
-                          "one line on what it does, and listed (if the client was shown it). queries: a list of searches (up to 6) and tool names (up to 20). tool: a name or a list of names answers the "
+                          "and one line on what it does. queries: a list of searches (up to 6) and tool names (up to 20). tool: a name or a list of names answers the "
                           "whole description and inputs of each one (its card). A name with a prefix, other letter case or a letter wrong is read as the name; readAs says so. "
                           "A card has example: a ready call from the open document, and fill: the values to give. tool and queries can be in one call: cards gives the cards, results the searches. groups: true gives the tool groups and what each holds. group: narrows a search. Every tool is "
                           "callable by name, listed or not. Where the client sends only listed tools, use batch { calls: [{ tool, arguments }] }. listing: true answers what the "
@@ -3219,11 +3303,16 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                           "job_status. wait: false gives the id at once. A client drops a call after about 80 s. So the server does this for any call past about 60 s. Not "
                           "for job_ and app_ tools. No estimate refuses a call.",
              obj({"tool": {"type": "string"}, "arguments": {"type": "object"}, "wait": {"type": "boolean"}}, ["tool"]), job_start),
-        Tool("batch", "Run several tools in one call, in order. calls: [{ tool, arguments }]. Or file: a .json file that holds that list, or { calls, rollback, stopOnError "
+        Tool("batch", "Run several tools in one call. The calls run one at a time, in order: a call sees what the calls before it made. "
+                      "calls: [{ tool, arguments }]. Or file: a .json file that holds that list, or { calls, rollback, stopOnError "
                       "}. The file is read on this side: a long run of calls stays out of the conversation. A relative path is in the session's folder; files are read where "
-                      "other tools can read. The first refused call stops the others (stopOnError: false runs them all). With rollback (the default), it then undoes the "
-                      "batch's earlier changes and removes every object it made. removed lists any that undo did not reach. So the batch stands or falls as a whole. Limits: "
-                      "with rollback, at most as many changing calls as FreeCAD keeps undo steps (20 by default). A heavy read (a wall-thickness or deviation reading) runs "
+                      "other tools can read. The first refused call stops the others (stopOnError: false runs them all). The calls before it stay: each is its own undo step. "
+                      "The answer has done (the calls that ran), refused (that call, its code, kind and error) and notRun. They count from 0. "
+                      "next is the refused call: fix it, then from: next with the same calls continues. "
+                      "A call with a wrong form is refused by itself, in its order. Examples: no tool, an unknown tool, arguments that are not an object. "
+                      "rollback: true makes the batch stand or fall as a whole. At a refusal it undoes the batch's earlier changes and removes every object it made. "
+                      "removed lists any that undo did not reach. With rollback, a call with a wrong form refuses the batch before anything runs. "
+                      "Also with rollback: at most as many changing calls as FreeCAD keeps undo steps (20 by default). A heavy read (a wall-thickness or deviation reading) runs "
                       "as a job, also in a batch. The batch waits for it while its budget lasts. If it still runs then, the answer has the job id (job_status gives its "
                       f"answer) and where to continue. No call starts after budget seconds ({BATCH_BUDGET:g} by default, at most {BATCH_BUDGET_MAX:g}). The answer then has "
                       "notRun and next. What ran stays, and from: next (with the same file or calls) continues. The result of each changing call has its own health. A batch "

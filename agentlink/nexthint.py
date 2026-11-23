@@ -105,7 +105,9 @@ def facts(doc, state=None, gui=None):
     active_body = active_part = None
     # The real names an option's arguments are filled from (agentlink/options.py):
     # the sketch in edit, the picked object and its picked edges and faces.
-    edit_name = (state.get("sketch") or {}).get("obj")
+    # Labels, as every answer names objects and every tool takes them (a
+    # Haiku run, 23 Nov: an option said Sketch001 where sketch_new said Sketch 2).
+    edit_name = (state.get("sketch") or {}).get("name") or (state.get("sketch") or {}).get("obj")
     if edit_name:
         out["editSketch"] = edit_name
     if gui is not None:
@@ -113,7 +115,7 @@ def facts(doc, state=None, gui=None):
             if sel:
                 first = gui.Selection.getSelectionEx()[0]
                 picked = first.Object
-                out["picked"] = str(picked.Name)
+                out["picked"] = str(picked.Label)
                 names = [str(n).rsplit(".", 1)[-1] for n in (first.SubElementNames or ())]
                 for kind, key in (("Edge", "pickedEdges"), ("Face", "pickedFaces")):
                     got = [n for n in names if n.startswith(kind)][:MAX_NAMES]
@@ -148,7 +150,7 @@ def facts(doc, state=None, gui=None):
         bad = next((o for o in objs if "Invalid" in o.State), None)
         out["failing"] = bad is not None
         if bad is not None:
-            out["failingName"] = str(bad.Name)
+            out["failingName"] = str(bad.Label)
     except Exception:  # noqa: BLE001
         pass
     try:
@@ -159,7 +161,7 @@ def facts(doc, state=None, gui=None):
             joints = sum(len(g.Group) for g in group if g.TypeId == "Assembly::JointGroup")
             parts = [o for o in group if not o.TypeId.endswith("Group")]
             out["assembly"] = "empty" if not parts else ("jointed" if joints else "unjointed")
-            out["assemblyName"] = str(asm.Name)
+            out["assemblyName"] = str(asm.Label)
     except Exception:  # noqa: BLE001
         pass
     try:
@@ -172,8 +174,8 @@ def facts(doc, state=None, gui=None):
             body = picked if picked in bodies else next((p for p in picked.InList if p in bodies), None)
         if body is None:
             body = bodies[-1]
-        out["bodyName"] = str(body.Name)
-        out["bodies"] = [str(b.Name) for b in [body] + [b for b in reversed(bodies) if b is not body]][:MAX_NAMES]
+        out["bodyName"] = str(body.Label)
+        out["bodies"] = [str(b.Label) for b in [body] + [b for b in reversed(bodies) if b is not body]][:MAX_NAMES]
         group = list(body.Group)
         sketches = [o for o in group if o.isDerivedFrom("Sketcher::SketchObject")]
         feats = [o for o in group if o.isDerivedFrom("PartDesign::Feature")]
@@ -181,13 +183,13 @@ def facts(doc, state=None, gui=None):
         out["features"] = "some" if feats else "none"
         if unused:
             out["body"] = _sketch_progress(unused[-1])
-            out["sketchName"] = str(unused[-1].Name)
-            out["sketches"] = [str(k.Name) for k in reversed(unused)][:MAX_NAMES]
+            out["sketchName"] = str(unused[-1].Label)
+            out["sketches"] = [str(k.Label) for k in reversed(unused)][:MAX_NAMES]
         elif feats:
             out["body"] = "features"
             tip = getattr(body, "Tip", None) or feats[-1]
             out["lastFeature"] = str(tip.TypeId).rsplit("::", 1)[-1].lower()
-            out["tipName"] = str(tip.Name)
+            out["tipName"] = str(tip.Label)
         else:
             out["body"] = "empty"
     except Exception:  # noqa: BLE001

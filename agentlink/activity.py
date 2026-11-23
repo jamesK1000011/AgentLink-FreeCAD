@@ -1071,8 +1071,9 @@ def batch_words(args, body):
     out = f"ran {_count(int(ran), 'call')} in one batch" + (f": {ok} ok" if ok is not None else "")
     if bad > 0:
         out += f", {bad} refused"
-    if _isnum(b.get("notRun")) and b["notRun"]:
-        out += f", {int(b['notRun'])} not run"
+    nr = len(b["notRun"]) if isinstance(b.get("notRun"), list) else int(b["notRun"]) if _isnum(b.get("notRun")) else 0
+    if nr:
+        out += f", {nr} not run"
     if b.get("undone"):
         out += ", taken back"
     title = a.get("title") or b.get("title")

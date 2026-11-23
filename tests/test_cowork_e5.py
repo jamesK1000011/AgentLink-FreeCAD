@@ -149,7 +149,7 @@ def _child(case):
         "interleaved": [ch, {"tool": "probe_person", "arguments": {}}, ch, {"tool": "probe_fail", "arguments": {}}],
         "clean": [ch, ch, {"tool": "probe_fail", "arguments": {}}],
     }[case]
-    r = srv.handle({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "batch", "arguments": {"calls": calls}}})
+    r = srv.handle({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "batch", "arguments": {"calls": calls, "rollback": True}}})
     return {"body": json.loads(r["result"]["content"][0]["text"]), "stack": s.doc.UndoNames}
 
 

@@ -243,7 +243,7 @@ class NestedBatch(unittest.TestCase):
         got = run_case("refused_inside")
         self.assertEqual(got["writtenIds"], [81])
         body = got["written"][0]
-        self.assertEqual(body["stopped"], 3)
+        self.assertEqual((body["refused"]["call"], body["notRun"]), (3, [4]))
         self.assertEqual(body["undone"], 0)
         self.assertIn("rollbackNote", body)
         self.assertEqual(got["undone"], 0)
@@ -253,7 +253,7 @@ class NestedBatch(unittest.TestCase):
         got = run_case("refused_outside")
         self.assertEqual(got["writtenIds"], [])
         body = got["returned"]
-        self.assertEqual(body["stopped"], 4)
+        self.assertEqual((body["refused"]["call"], body["notRun"]), (4, []))
         self.assertEqual(body["undone"], 2)  # both changes, the one before the menu too
         self.assertNotIn("rollbackNote", body)
 

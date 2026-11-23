@@ -8,7 +8,7 @@
 - `tool_groups { now: true }` (alone, or with `find`) puts first the tools that fit what is in front: the active workbench, a sketch open in edit, the selection, and whether FreeCAD's own command for the tool is active just now. Without a window it goes by the document's objects only.
 - `enable: [group]` lists a whole group and loads every description in it: do that only when a task uses most of the group (a drawing, a sketch-and-pad part), not for one tool.
 - Every change is one undo step: `history_undo`, `history_redo` (and checkpoints where an add-on offers them). `history_diff` says what a change did, so you don't have to describe the part again.
-- `batch` runs several calls in one, rolled back whole if one is refused: every object it made is taken away too. Use it for a run of edits you can predict.
+- `batch` runs several calls in one, one at a time, in order. If one is refused, the calls before it stay and the rest do not run: the answer says which (done, refused, notRun). Use it for a run of edits you can predict.
 - A long read (a heavy one, one slow here before, or any read with `background: true`) runs as a job: its answer comes back as usual when it ends within 45 s, else a job id — `job_status { job, wait: 25 }` gives the answer when it is done. A client drops a call after about 80 s, so never just call a long read again. While a job reads the document, changes to it are refused until it ends.
 - Answers can stay out of the conversation. In a batch, a call with `to` — `{ tool, arguments, to: "outline.json" }` — writes its whole answer to that file in the session's folder, and the reply keeps only where it is and its keys. A later call takes what it needs from it: `{ "$file": "outline.json", "$at": "loops.0.points" }` anywhere inside its arguments is replaced by that part of the file (a dotted path of keys and list indices from 0) as the call is about to run. `{ "$from": 2, "$at": "bodies.0.name" }` does the same from the answer of call 2 of the same batch. A reference that cannot be followed refuses that call and says what is there.
 - `batch { build: "end" }` recomputes once for a run of `sketch_add`, `sketch_constrain`, `sketch_edit`, `sketch_offset` and `object_set` calls instead of after each. Their answers say `build: "held"` and leave out what only the rebuilt shape tells (a sketch's wires and `readyForFeature`); the batch's `builds` carries the one health reading after the recompute. Any other tool builds first and runs as always.
@@ -54,7 +54,7 @@ Every refusal is `{ error: { code, message } }`; the message says what to change
 | `unavailable` | Something this computer lacks: a program, the FreeCAD window, a module | Say so to the person; the message names what to install or set |
 | `failed` | It ran and did not work: a boolean, a fillet, a mesh, a solve. Nothing was kept | Change the input (a smaller radius, another face, a coarser mesh); never send the same call again unchanged |
 
-- A batch stops at the first refusal and rolls back what it did (`rollback: false` keeps it): fix that call and send the batch again.
+- A batch stops at the first refusal; what ran before it stays (`rollback: true` takes it all back): fix that call and send it with the calls after it (`from: next`).
 - If FreeCAD itself stops (the answer says it was started again), the document was lost: `session_state`, then make the part again or `doc_open` what was saved. The same call doing it again means the call is the cause.
 
 ## Keeping answers small

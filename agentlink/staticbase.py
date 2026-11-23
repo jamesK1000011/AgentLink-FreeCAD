@@ -104,8 +104,20 @@ def listing(server, tools):
 GUIDE_HINT = ' guide_read { topic: "batch" } has the rules (chaining with $from, to, lines, from/next).'
 
 
+NOTHING_RAN = "Nothing was run."
+BASIC_FORM = " The basic form: batch { calls: [{ tool, arguments }] }."
+
+
 def batch_hint(message):
-    """A refused batch names its guide when the short descriptions are listed."""
-    if style() == "ste" and GUIDE_HINT.strip() not in message:
-        return message.rstrip() + GUIDE_HINT
-    return message
+    """A batch refused whole (its own form: a refused call is a row of its
+    answer, not this): the words say that nothing ran and give the basic
+    form (local-model runs, 23 Nov: models put every field in a first
+    batch); they name its guide when the short descriptions are listed."""
+    m = message.rstrip()
+    if "nothing was run" not in m.lower() and "nothing ran" not in m.lower():
+        m += " " + NOTHING_RAN
+    if BASIC_FORM.strip() not in m:
+        m += BASIC_FORM
+    if style() == "ste" and GUIDE_HINT.strip() not in m:
+        m += GUIDE_HINT
+    return m

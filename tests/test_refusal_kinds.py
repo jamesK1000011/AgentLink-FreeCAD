@@ -200,8 +200,10 @@ class BatchInAProcess(unittest.TestCase):
     print(json.dumps({"shape": shape, "rows": rows}))
 ''' % out)
         err, body = got["shape"]
-        self.assertTrue(err)
-        e = body["error"]
+        # A call with a wrong form is refused by itself, in its order (23 Nov).
+        self.assertFalse(err)
+        self.assertEqual((body["done"], body["notRun"], body["refused"]["call"]), ([], [], 0))
+        e = body["results"][0]["error"]
         self.assertEqual((e["code"], e["kind"]), ("invalid_input", "fixable"))
         self.assertIn("calls.0 has arguments and no tool.", e["message"])
         self.assertIn("The calls run in order", e["message"])

@@ -54,6 +54,8 @@ ONE_S = 0.05            # one option's check
 MAX_LINE = 360          # the line a changing answer carries
 MAX_VALUE = 40          # one argument's value in the line
 PICK_HOW = "pick { option: 1, fill: { length: 4 } } runs option 1; the text \"1, 4mm\" also works"
+# A value for an ask with no sample of its own, by its name (pick_how).
+ASK_SAMPLE = {"name": "Part"}
 
 _UNITS = {"mm": {"": 1.0, "mm": 1.0, "cm": 10.0, "m": 1000.0, "in": 25.4, "inch": 25.4, '"': 25.4},
           "deg": {"": 1.0, "deg": 1.0, "°": 1.0}}
@@ -273,6 +275,8 @@ def _val(v):
         return "true" if v else "false"
     if isinstance(v, float):
         return f"{v:g}"
+    if isinstance(v, str) and re.search(r"[\s,;=]", v):
+        return json.dumps(v, ensure_ascii=False)  # a label with a space ("Sketch 2") stays one value in the line
     if isinstance(v, (int, str)):
         return str(v)
     if isinstance(v, list):
@@ -330,7 +334,31 @@ def public(opts):
         if o.get("why"):
             r["why"] = o["why"]
         rows.append(r)
-    return {"step": opts["step"], "list": rows, "pick": PICK_HOW}
+    return {"step": opts["step"], "list": rows, "pick": pick_how(opts)}
+
+
+def pick_how(opts):
+    """How to run the first option, made from that option itself (its own
+    ask and that ask's sample), so the example fits the option it names
+    (local-model runs, 23 Nov: option 1 was doc_new, which asks for name,
+    and the fixed example gave length). PICK_HOW when there is no option."""
+    rows = (opts or {}).get("list") or []
+    if not rows:
+        return PICK_HOW
+    o = rows[0]
+    n = o.get("n", 1)
+    ask = o.get("ask") or []
+    if not ask:
+        return f"pick {{ option: {n} }} runs option {n}"
+    a = ask[0]
+    v = a.get("sample", ASK_SAMPLE.get(a.get("arg")))
+    if v is None:
+        return f"pick {{ option: {n}, fill: {{ {a['arg']}: your value }} }} runs option {n}"
+    head = f"pick {{ option: {n}, fill: {{ {a['arg']}: {json.dumps(v, ensure_ascii=False)} }} }} runs option {n}"
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        return head
+    text = f"{_val(v)}{a.get('unit') or ''}" if a.get("unit") == "mm" else _val(v)
+    return head + f"; the text \"{n}, {text}\" also works"
 
 
 # ---- after a call, and in session_state ----------------------------------------------------

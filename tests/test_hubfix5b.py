@@ -345,16 +345,17 @@ class BatchTypical(unittest.TestCase):
 ''' % out)
         err, plain = got["plain"]
         self.assertFalse(err, plain)
-        self.assertNotIn("notRun", plain)
+        # notRun is also given at a refusal now (23 Nov): the budget's stop says "Stopped after".
+        self.assertNotIn("Stopped after", plain.get("note", ""))
         err, slow = got["slow"]
         self.assertFalse(err, slow)
-        self.assertNotIn("notRun", slow)
+        self.assertNotIn("Stopped after", slow.get("note", ""))
         self.assertNotIn("typically takes", json.dumps(slow))
         self.assertEqual(slow["results"][1]["tool"], "session_state")  # it was started
         # the first call of a batch always runs
-        self.assertNotIn("notRun", got["first"][1])
+        self.assertNotIn("Stopped after", got["first"][1].get("note", ""))
         # its time recorded by the call itself (the stand-in's is short): the middle stays 80 s, under a 100 s budget
-        self.assertNotIn("notRun", got["roomy"][1])
+        self.assertNotIn("Stopped after", got["roomy"][1].get("note", ""))
 
 
 if __name__ == "__main__":

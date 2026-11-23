@@ -529,6 +529,89 @@ def does_hits(server, n, k=3):
     return [f"{h['tool']} ({h.get('does', '').rstrip('.')})" for h in (got.get("tools") or [])[:k] if isinstance(h, dict) and h.get("tool")]
 
 
+# A tool name that names a kind of sketch geometry (sketch_rectangle,
+# circle, draw_line): that kind is an item of sketch_add (local-model runs,
+# 23 Nov: models made up such tools and drew a rectangle as four lines).
+# Tool names only, so a did-you-mean: no call is changed or guessed.
+# Other words for a kind, as models write them in a tool name.
+SKETCH_KIND_WORDS = {"spline": "bspline", "rect": "rectangle", "square": "rectangle", "hexagon": "polygon", "oblong": "slot"}
+# The value of each field in a kind's example; fields that are not needed
+# (KIND_OPTIONAL) are left out. A kind can have its own value (KIND_VALUES).
+KIND_VALUE = {"from": [0, 0], "to": [40, 0], "center": [0, 0], "corner": [0, 0], "radius": 10, "size": [40, 20], "start": 0, "end": 90,
+              "points": [[0, 0], [20, 10], [40, 0]], "sides": 6, "at": [0, 0], "major": 40, "minor": 20, "width": 4}
+KIND_VALUES = {"rounded_rectangle": {"radius": 4}, "slot": {"radius": 5}, "arc_slot": {"radius": 20}}
+KIND_OPTIONAL = {"rotation", "closed", "construction", "dims", "name", "interpolate", "degree"}
+
+
+def sketch_kinds(server):
+    """{kind: [fields]} as sketch_add's card gives them ("circle {center,
+    radius|diameter}"), in its order; {} without sketch_add."""
+    t = (getattr(server, "tools", None) or {}).get("sketch_add")
+    if t is None:
+        return {}
+    out = {}
+    for kind, body in re.findall(r"\b([a-z][a-z0-9_]*) \{([^{}]*)\}", str(t.description or "")):
+        if kind in out or kind == "kind":
+            continue
+        fields = []
+        for part in re.sub(r"\([^)]*\)", "", body).split(","):
+            w = part.strip().split(" ")[0].split("|")[0].split(":")[0].strip()
+            if w == "…":
+                fields += [f for f in out.get(kind.split("_", 1)[-1], []) if f not in fields]
+            elif re.fullmatch(r"[a-z_]+", w) and w not in fields:
+                fields.append(w)
+        out[kind] = fields
+    return out
+
+
+def kind_in_name(server, n):
+    """The sketch_add kind a tool name names (the longest, by whole name
+    words: sketch_rectangle, CreateCircle, draw_arc_slot), or None."""
+    if not isinstance(n, str):
+        return None
+    kinds = sketch_kinds(server)
+    if not kinds:
+        return None
+    words = [w for w in re.split(r"[_\-\s.]+", re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", n.split("__")[-1]).lower()) if w]
+    best = None
+    for i in range(len(words)):
+        for j in range(i + 1, min(len(words), i + 3) + 1):
+            w = "_".join(words[i:j])
+            k = w if w in kinds else (w[:-1] if w.endswith("s") and w[:-1] in kinds else SKETCH_KIND_WORDS.get(w))
+            if k in kinds and (best is None or len(k) > len(best)):
+                best = k
+    return best
+
+
+def kind_example(server, kind):
+    """One sketch_add item of that kind, with values (KIND_VALUE), or None
+    when a field of the card has no known value."""
+    fields = sketch_kinds(server).get(kind)
+    if fields is None:
+        return None
+    item = {"kind": kind}
+    for f in fields:
+        if f in KIND_OPTIONAL:
+            continue
+        v = (KIND_VALUES.get(kind) or {}).get(f, KIND_VALUE.get(f))
+        if v is None:
+            return None
+        item[f] = v
+    return item
+
+
+def kind_hint(server, n):
+    """The words for a tool name that names a sketch_add kind, or None."""
+    kind = kind_in_name(server, n)
+    if kind is None:
+        return None
+    ex = kind_example(server, kind)
+    words = f'In a sketch, a {kind} is one item of sketch_add: use sketch_add with items [{{ kind: "{kind}", … }}]'
+    if ex is None:
+        return words + ". Its fields are in sketch_add's card: tool_find { tool: \"sketch_add\" }"
+    return words + ". Example: " + json.dumps({"tool": "sketch_add", "arguments": {"items": [ex]}}, separators=(", ", ": "))
+
+
 def close_names(server, n, k=4):
     """The tool names closest to n: most shared name words first, then the
     closest spelling (pd_pad_create: pd_pad before pd_pocket)."""
@@ -569,6 +652,13 @@ def plain_name(server, n):
 STRICT_SHAPE = frozenset(("approve_file", "approve_code"))
 FORGIVING_READS = frozenset(("session_state", "tool_find", "tool_groups", "guide_read", "get", "job_status", "usage_report", "report_read"))
 
+
+# Tools whose answer ends with the live names whatever they changed: the
+# runners of many calls (a batch, a fast block) and an option run by number.
+LIVE_NAMES_TOOLS = frozenset(("batch", "fast", "pick"))
+# The key of the live names; a tool whose answer has a "now" of its own (a
+# reading after a change) gets them under the other key.
+LIVE_KEY, LIVE_KEY_ELSE = "now", "nowNames"
 
 ORIENT_HEAD = "\n\nWhere you are, read at connect (session_state reads it again): "
 
@@ -1185,6 +1275,65 @@ class Server:
             pass
 
     def _call(self, params):
+        result = self._call_core(params)
+        if isinstance(result, dict) and result.get("isError"):
+            try:
+                self._refusal_extras(params, result)
+            except Exception:  # noqa: BLE001 - words only: the refusal stays as it is
+                pass
+        return result
+
+    def _live_names(self, name, tool, args):
+        """The live names of the agent's document (agentlink/livenames.py)
+        for an answer that ends a change: a changing call, a batch, a fast
+        block, a call of a tool that is not here. None inside a batch or a
+        block (their answer carries it once), or with no document."""
+        s = self.session
+        if s is None or getattr(s, "batch_now", None) is not None or getattr(s, "doc", None) is None:
+            return None
+        if not (tool is None or name in LIVE_NAMES_TOOLS):
+            try:
+                if not tool.changes_for(args if isinstance(args, dict) else {}):
+                    return None
+            except Exception:  # noqa: BLE001
+                if not getattr(tool, "changes", False):
+                    return None
+        from . import livenames
+
+        return livenames.names(s.doc)
+
+    def _refusal_extras(self, params, result):
+        """A refusal of a call at the top level: the live names (now) when
+        the call meant a change, and the orientation (whereYouAre) when it is
+        the conversation's first answer (local-model runs, 23 Nov: call 1 was
+        a refusal, and no answer oriented the model after it)."""
+        s = self.session
+        if s is None or getattr(s, "batch_now", None) is not None:
+            return
+        name = plain_name(self, params.get("name"))
+        tool = self.tools.get(name)
+        add = {}
+        now = self._live_names(name, tool, params.get("arguments") or {})
+        if now:
+            add[LIVE_KEY] = now
+        if not self._oriented and name != "session_state" and self.orient is not None:
+            self._oriented = True
+            try:
+                add["whereYouAre"] = self.orient()
+            except Exception:  # noqa: BLE001
+                pass
+        if not add:
+            return
+        content = result.get("content") or []
+        if not content or content[0].get("type") != "text":
+            return
+        body = json.loads(content[0]["text"])
+        if not isinstance(body, dict):
+            return
+        body.update(add)
+        content[0]["text"] = compact(body)
+
+    def _call_core(self, params):
         name = params.get("name")
         args = params.get("arguments") or {}
         tool = self.tools.get(name)
@@ -1204,6 +1353,9 @@ class Server:
             does = does_hits(self, name)
             if does:
                 hint += f". By what it does, did you mean: {'; '.join(does)}? tool_find {{ tool: name }} gives its card"
+            kh = kind_hint(self, name)
+            if kh:
+                hint = kh + ". Also " + hint
             return self.refusal("not_found", f"{name}: no such tool — {hint}.")
         t0 = time.time()
         tool = tool.for_call(args)
@@ -1368,6 +1520,14 @@ class Server:
             # text (the file is written as well; inline false leaves it out).
             image = out.pop("_png", None)
             out.setdefault("ms", int((time.time() - t0) * 1000))
+        if isinstance(out, dict):
+            # The live names last, so the answer ends on them (agentlink/livenames.py).
+            try:
+                now = self._live_names(name, tool, args)
+                if now:
+                    out[LIVE_KEY if LIVE_KEY not in out else LIVE_KEY_ELSE] = now
+            except Exception:  # noqa: BLE001 - words only
+                pass
         text = compact(out)
         if len(text) > MAX_REPLY and isinstance(out, dict):
             out = trim(out, MAX_REPLY)

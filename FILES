@@ -161,6 +161,7 @@ agentlink/launch.py
 agentlink/launcher_check.py
 agentlink/layout.py
 agentlink/link_token.py
+agentlink/livenames.py
 agentlink/livescript.py
 agentlink/loftmath.py
 agentlink/materials.py
@@ -454,6 +455,7 @@ tests/test_live_findings.py
 tests/test_live_person_1118.py
 tests/test_live_run.py
 tests/test_local_client.py
+tests/test_local_fixes_1123.py
 tests/test_loft_findings.py
 tests/test_loft_spans.py
 tests/test_material.py

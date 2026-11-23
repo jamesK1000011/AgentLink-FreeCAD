@@ -413,7 +413,8 @@ class NamesFromTheDocument(Base):
         other = body_with("Body001")
         f = nexthint.facts(doc_of(other, body, a, b), {"sketch": {"name": "My sketch", "obj": "Sketch001", "dof": 0}, "editing": "sketch"})
         # Without an active body the newest one is taken; the others are its choices.
-        self.assertEqual((f["bodyName"], f["bodies"], f["sketchName"], f["editSketch"]), ("Body", ["Body", "Body001"], "Sketch001", "Sketch001"))
+        # Labels, as every answer names objects (a Haiku run, 23 Nov): the sketch in edit by its label.
+        self.assertEqual((f["bodyName"], f["bodies"], f["sketchName"], f["editSketch"]), ("Body", ["Body", "Body001"], "Sketch001", "My sketch"))
         f = nexthint.facts(doc_of(body, a, b), {})
         self.assertEqual((f["bodyName"], f["sketchName"], f["sketches"]), ("Body", "Sketch001", ["Sketch001", "Sketch"]))
         bad = Obj("Part::Feature", "Broken", State=["Invalid"])
