@@ -382,7 +382,7 @@ Pin one FreeCAD version per project: 1.1 converts old Body origins when it opens
 ### Start of a session
 - `session_state`: FreeCAD version, the open document, bodies, add-ons, what FreeCAD is doing now.
 - After any FreeCAD restart: `doc_switch` to another document and back, so the agent and the window act on the same document; `session_state` shows `mismatch` when they differ.
-- `doc_new`, `doc_save { path }`. Save before each batch and at each level. Make a checkpoint (a saved copy) before a risky step.
+- `doc_new`, `doc_save { path }`. Save before each batch and at each level. Before each save, measure the bodies that changed (`body_check`, or `get` of `Body.volume`) and report the volume. Make a checkpoint (a saved copy) before a risky step.
 
 ### Step → tools → GUI
 

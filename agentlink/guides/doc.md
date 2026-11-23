@@ -13,6 +13,7 @@
   - a scene for viewers, web pages and render programs, a mesh and colour per object: glTF (glb, gltf) and Collada (dae), with `colors {label: "#rrggbb"}`;
   - 2D for laser, plasma and waterjet cutters or another CAD program: DXF (R12) or SVG of a `view` (top, front, right, … iso; `hidden: true` puts hidden lines on their own dashed layer), or of a `section` at z mm. Circles and arcs stay true circles and arcs. For a dimensioned drawing, use TechDraw (`td_export`).
 - `doc_save` before `doc_new` or `doc_open`: those switch the session to another document.
+- Measure before you save or say done. After the last change, read the geometry: `body_check { body }` or `get { what: "Body.volume" }`. Report the volume. A save of your own document without a measure after the last change is refused (in a batch or a fast block too: put the measure before `doc_save`).
 
 ## names and labels
 - Every object has a `name` (FreeCAD's internal one: fixed when it is made, unique, ASCII) and a `label` (what the person sees; `object_rename` changes it). Tools take either; the name wins when both match. FreeCAD keeps labels apart by itself unless its duplicate-labels preference is on.
