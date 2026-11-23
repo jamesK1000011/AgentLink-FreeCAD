@@ -42,7 +42,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # 21 Nov, bicycle L5 build: + attach_edge (sketch_more changer), driven_rows, held_back (assembly), pipe_options a changer (Refine).
 # 21 Nov, parts in other files: + find_in, same_tree (std_more readers); far_doc a changer (opens a file).
 # 22 Nov, local runs: + con_keys (sketch reader: a constraint's fields written another way).
-PIN = "07934da5b3a710ec31980c7e73503207acacaa50b6c2f9bfcda7a363962d0550"
+# 22 Nov, face selectors: + face_pick (sketch reader: the form that picks sketch_new's face again).
+PIN = "b44195fc96a38edf14f73e7ccf7f156be7ea96c70829304f5fcaaa6af6389089"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -52,7 +53,8 @@ PIN = "07934da5b3a710ec31980c7e73503207acacaa50b6c2f9bfcda7a363962d0550"
 # Bicycle findings 3, 5 (20 Nov): sketch gains the reader plane_mode (a sketch on an LCS plane or a planeless PartDesign
 # coordinate system); feature_more's attach_on changes (pd_gear on any plane).
 # 21 Nov, bicycle L5 build: + driven_rows (a reader), attach_edge, held_back, pipe_options (changers).
-COUNTS = {"readers": 926, "changers": 159, "families": 37}
+# 22 Nov, face selectors: + face_pick (a sketch reader).
+COUNTS = {"readers": 927, "changers": 159, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -64,7 +66,9 @@ SUITES = {
 }
 # What the cases must at least show (so that an agreement of nothing with nothing does not pass): per suite,
 # readings of false and of true with the arguments given.
-AT_LEAST = {"pd": (212, 307), "mesh": (133, 48), "td": (61, 73), "cam": (6, 2), "bim": (144, 155)}
+# 22 Nov, face selectors: pd 214 false, 305 true. sketch_new reads its face (face_pick) before it makes the sketch,
+# so "a face not found" and "a face on an empty body" are now told as the call's refusal.
+AT_LEAST = {"pd": (214, 305), "mesh": (133, 48), "td": (61, 73), "cam": (6, 2), "bim": (144, 155)}
 
 NUMPY = ("mesh", "td", "cam")
 CHARS_PER_TOKEN = 3.5

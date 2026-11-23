@@ -770,7 +770,7 @@ def tools(session):
     helpers = {"doc": doc, "finish": lambda tool, read, recompute=True: picks.finish(s, tool, read, recompute=recompute),
                "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: len(s.steps), "unique": lambda label, *own: s.unique(label, *own),
                "body": lambda ref: pc.pd_body(doc(), ref), "sketch_of": lambda ref, b=None: pc.sketch_of(doc(), ref, b), "body_of": pc.body_of,
-               "body_reading": pc.body_reading, "broken": pc.newly_broken, "plane_ref": lambda *x: pc.plane_ref(*x), "support_prop": pc.support_prop, "plane_mode": pc.plane_mode,
+               "body_reading": pc.body_reading, "broken": pc.newly_broken, "plane_ref": lambda *x: pc.plane_ref(*x), "face_pick": lambda *x: pc.face_pick(*x), "support_prop": pc.support_prop, "plane_mode": pc.plane_mode,
                "version": lambda: ".".join(FreeCAD.Version()[:3]),
                # FreeCAD's own
                "V": V, "placement": FreeCAD.Placement, "setprop": setattr, "vec2": pc.vec2, "is_tuple": lambda x: isinstance(x, tuple),

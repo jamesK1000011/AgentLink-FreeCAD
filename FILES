@@ -62,6 +62,7 @@ agentlink/exprs.py
 agentlink/ext.py
 agentlink/extstate.py
 agentlink/facepick.py
+agentlink/facesel.py
 agentlink/families/__init__.py
 agentlink/families/app.py
 agentlink/families/assembly.py
@@ -390,6 +391,7 @@ tests/test_export_mesh_1118.py
 tests/test_ext.py
 tests/test_ext_root_addon.py
 tests/test_extstate.py
+tests/test_face_selectors.py
 tests/test_facepick.py
 tests/test_failure_trace.py
 tests/test_famfix.py

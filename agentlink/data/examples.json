@@ -19,7 +19,7 @@
    "fill": [
     {
      "arg": "plane",
-     "what": "XY, XZ, YZ or a face (face: { at, normal })",
+     "what": "XY, XZ, YZ; or, in place of plane, face: { side: \"+z\" } or { at, normal }",
      "keep": true
     }
    ],
