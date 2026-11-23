@@ -25,6 +25,23 @@ from .theme import muted  # noqa: F401  (one copy: the theme's)
 # Activity stays last.
 CORE_TABS = (("Notes", 10), ("Steps", 20), ("Review", 50), ("Activity", 95))
 
+# The Activity tab's "Follow agent" check box (agentlink/cowork.py
+# FollowAgent): off by default; on until the person turns it off.
+FOLLOW_LABEL = "Follow agent"
+FOLLOW_TIP = ("Move the view to the agent's work after each change. Off: the view stays where you put it. "
+              "The view also stays while you work in it.")
+
+
+def follow_toggled(on):
+    """The check box set: the FollowAgent preference, and the 3D view's input
+    watch put on (cowork.watch_view)."""
+    from . import cowork
+
+    cowork.set_follow(on)
+    if on:
+        cowork.watch_view()
+
+
 # Agent Link's own workbench, and the tabs that show in every workbench.
 HOME = "AgentLinkWorkbench"
 ALWAYS = ("Notes", "Steps", "Activity")

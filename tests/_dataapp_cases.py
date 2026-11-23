@@ -83,8 +83,10 @@ EXPECT = {
     ("addon", "install that breaks the smoke test"): ["refused", "failed", "Gears broke the smoke test after its install: . It was removed again."],
     ("addon", "one of Agent Link's own"): ["refused", "invalid_input", "AgentLink is kept up to date by agentlink_update, not here."],
 }
-# Refusals written in the data that no case here reaches: none.
-UNREACHED = []
+# Refusals written in the data that no case here reaches. window_snapshot width (efficiency
+# design D1, 22 Nov) came after BASE: the handler had no width, so no case compares it with one;
+# tests/test_eff_a.py checks it.
+UNREACHED = ["window_snapshot: width: 16 to 8192 px."]
 
 
 def cases(fc, tmp, old, new):
@@ -337,12 +339,12 @@ def cases(fc, tmp, old, new):
 
     # ---- pictures ----------------------------------------------------------------------------------
     Wn = "window_snapshot"
-    add(Wn, "headless", prep(gui=False), {})
-    add(Wn, "the window", prep(), {})
+    add(Wn, "headless", prep(gui=False), {"inline": True})
+    add(Wn, "the window", prep(), {"inline": True})
     add(Wn, "a panel by its title, to a path, not sent", prep(), {"part": "report VIEW", "path": "panel.png", "inline": False})
-    add(Wn, "a panel by its own name", prep(), {"part": "comboview"})
-    add(Wn, "a panel there is not", prep(), {"part": "Tasks"})
-    add(Wn, "it will not save", prep(save_fails=True), {"path": "sub/window.png"})
+    add(Wn, "a panel by its own name", prep(), {"inline": True, "part": "comboview"})
+    add(Wn, "a panel there is not", prep(), {"inline": True, "part": "Tasks"})
+    add(Wn, "it will not save", prep(save_fails=True), {"inline": True, "path": "sub/window.png"})
     SL = "snapshot_latest"
     add(SL, "none yet", prep(gui=False), {})
     add(SL, "an index that does not read", prep(bad_index, gui=False), {})

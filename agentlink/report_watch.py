@@ -33,7 +33,7 @@ def quiet(line):
 #    a wall, which only a Part view provider has; on a wall whose view
 #    object answers as Gui.ViewProviderGeometryObject it raises each time.
 #    bim_wall makes walls with Arch.makeWall, as FreeCAD's own BIM_Wall
-#    command does (docs/hardening/hubfix5-findings.md). ArchCurtainWall.py's
+#    command does (private records: hubfix5-findings.md). ArchCurtainWall.py's
 #    ViewProviderCurtainWall.updateData (line 738) -> colorize (line 794)
 #    reads it the same way on every change of a curtain wall (window round
 #    7, bim 049): the same line, the same fault, said with the wall's.

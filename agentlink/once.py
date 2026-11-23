@@ -6,7 +6,7 @@ explanation written into the tool itself (doc_new's "The previous document
 stays open …", sketch_new's "Coordinates are the sketch's …", part_wire's
 use), the machine session_state reads, a batch { to } reply's own note, the
 health check's advice on an overlap. Measured over a full run of every
-family's test model (docs/hardening/tokens-findings.md) they were among
+family's test model (private records: tokens-findings.md) they were among
 the largest repeated parts of the replies, and none carries anything new the
 second time.
 

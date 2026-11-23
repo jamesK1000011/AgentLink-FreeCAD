@@ -2,7 +2,7 @@
 # The cases tests/test_datapd_data.py runs through the old handler and the new
 # data entry of each converted Part Design and Sketcher tool, on the stand-in
 # FreeCAD (tests/_datapd_standin.py): its normal paths and each of its
-# refusals. "model call N" is call N of docs/hardening/models/partdesign-model.json
+# refusals. "model call N" is call N of private records: models/partdesign-model.json
 # ("sketcher call N": of sketcher-model.json), with the stand-in's furniture
 # in place of the calls before it.
 
@@ -12,7 +12,7 @@ CONVERTED = {n: "feature" for n in ("pd_pad", "pd_pocket", "pd_revolution", "pd_
                                     "feature_suppress")}
 CONVERTED.update({n: "std_more" for n in ("pd_move_feature", "pd_reorder", "pd_tip", "pd_shaft")})
 CONVERTED.update({n: "sketch" for n in ("pd_body_new", "sketch_new", "sketch_add", "sketch_offset", "sketch_external", "sketch_constrain", "sketch_state", "sketch_edit")})
-# Each Part Design or Sketcher tool of the three family files kept as code, and why: none (docs/hardening/datapd-findings.md).
+# Each Part Design or Sketcher tool of the three family files kept as code, and why: none (private records: datapd-findings.md).
 KEPT = {}
 # What some cases must have answered (not two empty runs alike): fields of an answer, or the whole refusal.
 EXPECT = {

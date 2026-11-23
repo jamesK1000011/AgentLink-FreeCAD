@@ -3,7 +3,7 @@
 # new data entry of each converted tool of families/param.py, feature_more.py
 # and sketch_more.py, on the stand-in FreeCAD (tests/_datask2_standin.py): its
 # normal paths and each of its refusals. "sheet call N" is call N of
-# docs/hardening/models/sheetfem-sheet-model.json, "model call N" of
+# private records: models/sheetfem-sheet-model.json, "model call N" of
 # partdesign-model.json and "sketcher call N" of sketcher-model.json, with the
 # stand-in's furniture in place of the calls before it.
 

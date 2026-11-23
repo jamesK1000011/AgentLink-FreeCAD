@@ -3,7 +3,7 @@
 # add-on (agentlink/porting.py), and cookbooks: an add-on's commands,
 # functions and call lists as data, run by the runners that exist after the
 # person's OK (agentlink/cookbook.py). The design is
-# docs/design/porting-2026-11-18.md; the guide is guide_read { topic:
+# private records: porting-2026-11-18.md; the guide is guide_read { topic:
 # "porting" }. The tools are data (agentlink/data/tools.json, group
 # "porting"); what is here is what their entries call by name.
 #

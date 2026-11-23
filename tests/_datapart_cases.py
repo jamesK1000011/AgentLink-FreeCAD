@@ -2,7 +2,7 @@
 # The cases tests/test_datapart_data.py runs through the old handler and the
 # new data entry of each converted Part tool, on the stand-in FreeCAD
 # (tests/_datapart_standin.py): its normal paths and each of its refusals.
-# (The live models under docs/hardening/models are run on FreeCAD, not here: datapart-findings.md lists which of their calls reach each tool.)
+# (The live models under private records: models are run on FreeCAD, not here: datapart-findings.md lists which of their calls reach each tool.)
 
 # The family files whose tools were converted.
 FILES = ("model", "std_more", "surface")

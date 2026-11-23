@@ -78,8 +78,9 @@ class AppData(unittest.TestCase):
             b = self.before[name]
             self.assertEqual(t.name, b["name"], name)
             self.assertEqual(t.description.encode("utf-8"), _meant.description(name, b["description"]).encode("utf-8"), name)  # meant changes and the STE rewrite: tests/_meant.py
-            self.assertEqual(t.schema, b["inputSchema"], name)
-            self.assertEqual(json.dumps(t.schema), json.dumps(b["inputSchema"]), name)  # the order of every key too
+            want = _meant.schema(name, b["inputSchema"])  # meant changes: tests/_meant.py SCHEMAS
+            self.assertEqual(t.schema, want, name)
+            self.assertEqual(json.dumps(t.schema), json.dumps(want), name)  # the order of every key too
             self.assertIs(t.changes, b["changes"], name)
             self.assertEqual(t.reads, b["reads"], name)
             self.assertEqual(t.group, b["group"], name)

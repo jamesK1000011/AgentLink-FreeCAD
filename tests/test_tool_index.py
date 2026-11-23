@@ -28,7 +28,7 @@ def _json(*p):
 
 
 def _known_commands():
-    with open(os.path.join(ROOT, "docs", "hardening", "freecad-1.1.0-commands.txt"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "tests", "data", "freecad-1.1.0-commands.txt"), encoding="utf-8") as f:
         return {ln.strip() for ln in f if ln.strip() and not ln.startswith("#")}
 
 
@@ -45,7 +45,12 @@ class Index(unittest.TestCase):
 
     def test_every_tool_of_this_repository(self):
         self.assertEqual(sorted(self.entries), tool_index.tool_names())
-        inv = _json(ROOT, "docs", "hardening", "inventory.json")
+        sys.path.insert(0, os.path.join(ROOT, "scripts"))
+        import hardening_status
+
+        if not hardening_status.available():
+            self.skipTest("the hardening records are private (not beside this repo)")
+        inv = hardening_status.load_inventory()
         here = set(tool_index.tool_names())
         # The inventory was read off a live server with add-ons installed:
         # what it files under this repository and is defined here is indexed.
@@ -74,7 +79,7 @@ class Index(unittest.TestCase):
         known = _known_commands()
         self.assertGreater(len(known), 1000)
         bad = sorted({f"{n}: {c}" for n, e in self.entries.items() for c in e["commands"] if c not in known})
-        self.assertEqual(bad, [], "not a FreeCAD 1.1 command (docs/hardening/freecad-1.1.0-commands.txt)")
+        self.assertEqual(bad, [], "not a FreeCAD 1.1 command (tests/data/freecad-1.1.0-commands.txt)")
 
     def test_the_echo_is_the_source(self):
         known = _known_commands()
@@ -214,6 +219,33 @@ class Find(unittest.TestCase):
                            ("sketch constraint", "sketch_constrain"), ("sweep along path", "pd_pipe"), ("gcode", "cam_post"),
                            ("bim wall", "bim_wall"), ("save", "doc_save"), ("linear pattern", "pd_linear_pattern")):
             self.assertIn(want, self.names(find, 3), find)
+
+    def test_the_whole_action_named(self):
+        # Efficiency design G1 (22 Nov): "pad sketch" gave three sketch tools before pd_pad.
+        # The tool whose whole action the search names comes first.
+        for find, want in (("pad sketch", "pd_pad"), ("pocket", "pd_pocket"), ("fillet edge", "pd_fillet"),
+                           ("new document", "doc_new"), ("save document", "doc_save"), ("open document", "doc_open"),
+                           ("sketch add line", "sketch_add"), ("drawing dimension", "td_dim")):
+            self.assertIn(want, self.names(find, 3 if want == "pd_fillet" else 1), find)
+
+    def test_the_whole_action_named_with_addons(self):
+        # Live, 22 Nov: with the add-ons installed, "pad sketch" gave
+        # ScanRuler's section_to_sketch first (its search words hold "pad")
+        # and Workshop's drawing_make came before td_dim. The add-on rows
+        # here have the same shape as the live ones (own words, not copies).
+        rows = list(self.rows) + [
+            {"name": "section_to_sketch", "group": "sections", "about": "",
+             "description": "Make a sketch from a section of the scan. The sketch can then be padded or pocketed.",
+             "entry": {"workbench": "SketcherWorkbench", "commands": ["Sketcher_NewSketch"],
+                       "words": ["sketch", "profile", "pad", "partdesign", "outline", "trace"]}},
+            {"name": "drawing_make", "group": "drawing", "about": "",
+             "description": "Make a dimensioned drawing of bodies in one call, and its files.",
+             "entry": {"workbench": "TechDrawWorkbench", "commands": ["TechDraw_View", "TechDraw_Dimension"], "words": []}}]
+        for find, want in (("pad sketch", "pd_pad"), ("drawing dimension", "td_dim"), ("pocket", "pd_pocket"),
+                           ("new document", "doc_new"), ("save document", "doc_save"), ("open document", "doc_open"),
+                           ("sketch add line", "sketch_add")):
+            got = [r["name"] for r, _m, _s in toolindex.rank(rows, find)[:1]]
+            self.assertEqual(got, [want], find)
 
     def test_freecads_own_names(self):
         self.assertEqual(self.names("PartDesign_Pad", 1), ["pd_pad"])

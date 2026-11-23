@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The echo's sixth window pass (docs/hardening/round6-findings.md): a heavy
+# The echo's sixth window pass (private records: round6-findings.md): a heavy
 # read run as a job is shown when its answer comes (a batch's, a job's end),
 # add-ons' SELECTS, OUT_MORE, WORDS and SELECTS_FOR, never a hidden object
 # selected, never a sheet's double-click (an Assembly BOM's opens a task
@@ -21,6 +21,10 @@ sys.path.insert(0, HERE)
 
 from agentlink import activity, annotate, echo, jobs  # noqa: E402
 from test_gui_link_dialog import gui_link  # noqa: E402,F401  (gui_link with its FreeCAD stand-in)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cowork_legacy  # noqa: E402  (the old camera and selection behaviour: FollowAgent on, EchoSelects select)
+
+setUpModule, tearDownModule = _cowork_legacy.on, _cowork_legacy.off
 
 
 def vo(shown=True, **kw):

@@ -21,7 +21,7 @@ import Part
 
 from . import geometry as geo
 from . import changes, docstates, keep, store
-from .protocol import Tool, ToolError
+from .protocol import FIND_FORMS, Tool, ToolError, close_names, does_hits, find_queries, plain_name, sort_find
 
 
 
@@ -110,6 +110,101 @@ def take_back(doc, u0, names0):
         except Exception:
             pass
     return removed
+
+
+def undo_count(d):
+    """d's undo count, or None when d is gone (a call can close the document
+    under a batch: app_restart, doc_close) — read as gone, not as an error."""
+    try:
+        return d.UndoCount if d is not None else None
+    except Exception:
+        return None
+
+
+def own_steps(server, s, name, start, doc, u0, limit, mine, ok):
+    """After one call of a batch or a fast block: (the undo steps it made
+    that are the agent's, the start document or None when it is gone). The
+    names of those steps go on mine["own"] (None: not known), so a rollback
+    undoes a step only while it is the agent's (changes.undo_own)."""
+    from .coedit import FLOWS as coedit_flows
+
+    u1 = undo_count(start)
+    if u1 is None:
+        return 0, None
+    if not (ok and doc is start and s.doc is start):
+        return 0, start
+    tool_changes = getattr(server.tools.get(name), "changes", False)
+    d = u1 - u0
+    inc = d if d > 0 else (1 if u0 >= limit and tool_changes else 0)
+    if inc and not tool_changes and not str(name).startswith(coedit_flows):
+        # A read that left a step: not the agent's (the person's, made while
+        # it ran). Not counted, so the rollback stops at it (undo_own).
+        inc = 0
+    if mine.get("own") is not None:
+        got_names = changes.own_names(start, inc)
+        if got_names is None:
+            mine["own"] = None
+        else:
+            mine["own"].extend(got_names)
+    return inc, start
+
+
+def roll_back(s, start, made, own, names0, results=(), label="batch"):
+    """A batch's (or a fast block's) rollback in start: only the agent's own
+    steps, up to made, stopping at the first step that is not the agent's
+    (the person's, made while it ran: that step and all under it stay,
+    design E5 #6); then every object made since names0 that undo did not
+    reach. The answer's fields: undone, outcome, and removed, writtenNote,
+    warning or rollbackNote where they apply."""
+    out = {}
+    undone, foreign = changes.undo_own(start, made, own)
+    if foreign is None:
+        left = take_back(start, None, names0)
+        if left:
+            out["removed"] = left
+    # The steps taken back come off the count of the document they were
+    # made in, the first one — also when a call moved the session to another
+    # (its record is set aside).
+    rec = docstates.own_of(s, start)
+    if rec is not None:
+        rec["tx"] = max(0, rec["tx"] - undone)
+        rec["calls"] = [x for x in rec["calls"] if x["tx"] <= rec["tx"]]
+    start.recompute()
+    if s.doc is start:
+        s.snapshot(f"{label} rolled back")
+    out["undone"] = undone
+    out["outcome"] = "not_started" if not made else ("rolled_back" if undone >= made else "partial")
+    if any(isinstance(r.get("written"), dict) for r in results):
+        out["writtenNote"] = "The files the calls wrote (written) stay: they hold answers from before the rollback."
+    if s.doc is not start:
+        # Say what was taken back where (live, 22 Nov: "only <the person's
+        # document>'s steps were taken back" when none were, and the agent
+        # thought the person's document had changed).
+        here = (f"{undone} step{'s were' if undone != 1 else ' was'} taken back in {start.Label}" if undone
+                else f"nothing in {start.Label} was changed")
+        out["warning"] = f"The {label} moved to another document ({s.doc.Label if s.doc else 'none'}): {here}; what was done in {s.doc.Label if s.doc else 'it'} stays."
+    elif foreign is not None:
+        out["outcome"] = "partial"
+        out["rollbackNote"] = (f"Stopped at a step that is not the agent's ({foreign}). {undone} of {made} agent steps were taken back. "
+                               "The person's step stays, and the agent steps under it stay. "
+                               "history_restore to the agent checkpoint goes back without your step.")
+    elif undone < made:
+        out["warning"] = f"Only {undone} of {made} steps could be taken back (FreeCAD's undo stack): the rest stay."
+    if out["outcome"] == "rolled_back":
+        # The calls before the refusal answered ok, and what they made is
+        # gone now: say so on each, and name it (live, 22 Nov: a model kept
+        # naming a sketch that the rollback had taken back).
+        gone = []
+        for r in results or ():
+            if isinstance(r, dict) and r.get("ok"):
+                r["takenBack"] = True
+                res = r.get("result") if isinstance(r.get("result"), dict) else {}
+                what = next((res[k] for k in ("sketch", "feature", "body", "object", "document") if isinstance(res.get(k), str)), None)
+                gone.append(f"{r.get('tool')}{' ' + what if what else ''}")
+        if gone:
+            out["takenBackNote"] = (f"Taken back: {', '.join(gone)}. Those calls answered ok, but what they made is gone. "
+                                   "Fix the refused call and send the whole block again.")
+    return out
 
 # Seconds a batch starts calls for before it answers with what ran and where
 # to go on (budget); the most that may be asked for.
@@ -207,6 +302,11 @@ class Session:
     def execute(self, tool, fn):
         if not tool.changes:
             return fn()
+        from . import partialdoc
+
+        said = partialdoc.refusal(self.doc, tool.name)
+        if said:
+            raise ToolError("invalid_state", said)
         from . import around as _ar
 
         with _ar.part("txOpen"):
@@ -217,8 +317,8 @@ class Session:
             self.doc.openTransaction(tool.name)
         try:
             out = fn()
-        except BaseException:
-            changes.close(watch)
+        except BaseException as exc:
+            ev, _ok = changes.close(watch)
             self.doc.abortTransaction()
             # With no step pending the abort leaves the call's name standing
             # as the application's active transaction, and the next change
@@ -227,7 +327,11 @@ class Session:
             # A call that opened a transaction of its own inside (which
             # commits the outer one) or made objects outside the undo stack
             # left them behind the abort: taken away too.
-            take_back(start, u0, names0)
+            removed = take_back(start, u0, names0)
+            # What the refusal says about the document (protocol.refusal's
+            # outcome): nothing was touched, all of it was taken back, or
+            # objects the take-back did not reach stay (named).
+            changes.mark_outcome(exc, ev, removed, start, names0)
             raise
         from . import around
 
@@ -254,6 +358,14 @@ class Session:
     def record_call(self, tool, args):
         """A changing call that went through, for saving as a macro; a check
         that ran, for history_diff's recheck."""
+        if tool.name in PREF_WRITERS:
+            # Settings to disk at once, not only when FreeCAD quits: Agent
+            # Link's other FreeCAD (the hidden one that answers the tool
+            # list) reads them from there (owner, 22 Nov).
+            try:
+                FreeCAD.saveParameter()
+            except Exception:  # noqa: BLE001
+                pass
         if not tool.changes:
             try:
                 from . import diffing
@@ -534,17 +646,62 @@ class Session:
 
     # ---- the tools ----
 
+    def documents_state(self):
+        """Every open document: name, label, unsaved, and whether an agent
+        made it (agent_docs). The agent's own is marked agent: true."""
+        from .store import is_changed
+
+        out = []
+        for name, d in sorted(FreeCAD.listDocuments().items()):
+            try:
+                unsaved = bool(is_changed(d) or (not d.FileName and len(d.Objects) > 0))
+            except Exception:  # noqa: BLE001
+                unsaved = None
+            row = {"name": name, "label": d.Label, "unsaved": unsaved, "byAgent": name in self.agent_docs}
+            if d is self.doc:
+                row["agent"] = True
+            out.append(row)
+        return out
+
+    def orientation(self):
+        """Where the agent is, short: for the words at connect and the first
+        answer of a conversation (owner, 22 Nov). The full read is
+        session_state; this leaves out what does not orient (machine, the
+        report lines)."""
+        import time as _t
+
+        docs = self.documents_state()
+        bodies = [self._body_row(o) for o in self.bodies()]
+        mine = self.doc.Name in self.agent_docs
+        got = {"at": _t.strftime("%H:%M"), "where": getattr(self, "where", "hidden"), "documents": docs,
+               "agentDocument": self.doc.Name,
+               "bodies": [{k: b[k] for k in ("name", "volume", "box") if k in b} for b in bodies[:8]]}
+        if len(bodies) > 8:
+            got["moreBodies"] = len(bodies) - 8
+        opts = self._options_state().get("options")
+        if opts:
+            got["options"] = opts
+        got["note"] = (("The agent's document is one an agent made. " if mine else
+                        f"{self.doc.Label} is the person's document: do not change, save or close it unless they ask. ")
+                       + "For new work, make a document of its own: batch { calls: [{ tool: \"doc_new\", arguments: { name } }] }. "
+                       "session_state reads all of this again.")
+        return got
+
     def session_state(self, a):
+        if a.get("orient"):
+            return self.orientation()
         return {
             "document": self.doc.Name,
             "label": self.doc.Label,
             "freecad": ".".join(FreeCAD.Version()[:3]),
             "bodies": [self._body_row(o) for o in self.bodies()],
+            "documents": self.documents_state(),
             **self._hidden_state(),
             "step": len(self.steps),
             "outDir": self.out_dir,
             "where": getattr(self, "where", "hidden"),
             **self._next_state(),
+            **self._options_state(),
             **self._tools_state(),
             **self._extensions_state(),
             **self._unattended_state(),
@@ -569,6 +726,13 @@ class Session:
         window only."""
         line = next_hint(self)
         return {"next": line} if line else {}
+
+    def _options_state(self):
+        """options: the likely next steps as numbered, checked calls bound
+        to the step (agentlink/options.py); pick runs one."""
+        from . import options
+
+        return options.state_field(self)
 
     def _extensions_state(self):
         """leftOut and warning while an installed add-on is not loaded in
@@ -708,6 +872,18 @@ class Session:
                 rt = None
             if rt:
                 s["todo"] = rt
+        # Modelling practice (agentlink/practice.py): the same advice the
+        # health check says once, here each time it is asked for.
+        try:
+            from . import practice
+
+            others = max(0, len(FreeCAD.listDocuments()) - 1)
+            pr = [x[3] for x in practice.findings(list(self.doc.Objects), list(self.bodies_in(self.doc)), others,
+                                                  practice.booleans_of(self, self.doc.Name), body=o)]
+        except Exception:
+            pr = []
+        if pr:
+            s["practice"] = pr
         return {"body": o.Label, **s, **self.stats_of(o)}
 
     def _mesh_named(self, ref):
@@ -961,7 +1137,8 @@ class Session:
 
 
 # tool_groups' standing notes: said once a conversation (agentlink/once.py).
-TG_CARDS_NOTE = "Callable by name as they are, listed or not: directly, or batch { calls: [{ tool, arguments }] } where the client only sends listed tools."
+TG_CARDS_NOTE = ("Callable by name as they are, listed or not: directly, or batch { calls: [{ tool, arguments }] } where the client only sends listed tools. "
+                 "example is a ready call from the open document: copy it, and give each value that fill names.")
 TG_CARD_NOTE = "tool_groups { tool: name } gives a tool's whole description and inputs; each is callable by name without enabling its group."
 TG_ALL_NOTE = "Every tool is callable by name, listed or not. find: \"words\" searches them all; group: g gives one group's whole about and its tools, a line each; detail: true every group's whole about."
 
@@ -994,7 +1171,7 @@ WORKING = (
     "refused; in it a call's answer can go to a file (to) and feed a later call ($file, $from) without passing through the conversation, and build: \"end\" recomputes once for a run of sketch edits. A refusal is { error: { code, message } }: the code (invalid_input, invalid_state, not_found, "
     "unavailable, failed) and a message saying what to change — correct the call and go on. "
     "Words that stand the same from call to call (a tool's own note, the health's advice on an overlap) are given the first time "
-    "in a conversation; after that the answer names their key in saidBefore, and tool_groups { tool: name } gives them again (said). "
+    "in a conversation; after that the answer names their key in saidBefore, and tool_find { tool: name } gives them again (said). "
     "Look at the work after each change that matters: view_render draws the parts from any view, cut open, zoomed "
     "to a spot, or with a map (wall, stress, and those add-ons add), and gives the worst place; body_check says "
     "whether a body is sound. Ask the person what only they know — how a part is made, what it is made of, "
@@ -1015,11 +1192,46 @@ LEAN_NOTE = (
 )
 
 
-def instructions(lean, window):
-    return " ".join([ABOUT_WINDOW if window else ABOUT_HEADLESS, LEAN_NOTE if lean else "Every tool is listed.", WORKING])
+# Tools that change FreeCAD's settings: their change is written to disk at once.
+PREF_WRITERS = frozenset(("pref_set", "pref_reset", "pref_import"))
 
 
-INSTRUCTIONS = instructions(True, False)
+def orient_on():
+    """The orientation at connect and on the first answer: on unless
+    AGENTLINK_ORIENT=off or the preference Orient (Mod/AgentLink) is false."""
+    if os.environ.get("AGENTLINK_ORIENT", "on").strip().lower() in ("0", "false", "off", "no"):
+        return False
+    try:
+        return bool(FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/AgentLink").GetBool("Orient", True))
+    except Exception:  # noqa: BLE001
+        return True
+
+
+STATIC_NOTE = (
+    "Only a few tools are listed: session_state, batch, guide_read, tool_find and the approval tools (and fast and get with the "
+    "fast path). Every other tool is found and called by name: tool_find { words: \"what it does\" } searches every tool, "
+    "tool_find { tool: name } (or a list of names) gives each card, and the tool runs by name, or in batch { calls: [{ tool, "
+    "arguments }] } where the client sends only listed tools."
+)
+
+
+def instructions(lean, window, static=None):
+    """The words sent at initialize. static: the static minimal list is on
+    (agentlink/staticbase.py, the default); the lean note's way to a tool
+    (tool_groups) is then not the way the list offers (live, 22 Nov: a
+    local model saw both)."""
+    if static is None:
+        try:
+            from . import staticbase
+
+            static = staticbase.mode() == "static"
+        except Exception:  # noqa: BLE001
+            static = False
+    note = STATIC_NOTE if static else (LEAN_NOTE if lean else "Every tool is listed.")
+    return " ".join([ABOUT_WINDOW if window else ABOUT_HEADLESS, note, WORKING])
+
+
+INSTRUCTIONS = instructions(True, False, static=False)
 
 
 def _report_read(a):
@@ -1183,7 +1395,7 @@ def next_state(session):
         vp = gd.getInEdit() if gd is not None else None
         o = getattr(vp, "Object", None)
         if o is not None and o.isDerivedFrom("Sketcher::SketchObject"):
-            sketch = {"name": str(o.Label)}
+            sketch = {"name": str(o.Label), "obj": str(o.Name)}
             try:
                 sketch["dof"] = int(o.DoF)
             except Exception:  # noqa: BLE001
@@ -1323,10 +1535,12 @@ def make_tools(session):
                               "when it is news. leftOut [{ extension, error }] and warning: an installed add-on did not load in this FreeCAD. Its tools are missing; the error tells "
                               "why. Fix or update the add-on, then use agentlink_update or app_restart. toolsChanged: the tool list is not the one last listed (groups enabled or "
                               "hidden, an add-on installed, updated or removed). The first time: added, removed, updated and callable (new but unlisted) by name. After that, the "
-                              "counts, until the list is read again. launcher: true adds the Claude extension's launcher as seen here. That is the copy fetched from GitHub, if it "
+                              "counts, until the list is read again. launcher: true adds the Claude Desktop extension's launcher as seen here. That is the copy fetched from GitHub, if it "
                               "can load, and its log's last lines. agentDocument, frontDocument and mismatch: the document in front is not the agent's document "
                               "(after a restart, for example). Then the tools that act on the front document act on the other one. doc_switch to the agent's "
-                              "document binds both again. Changes nothing.", obj({"launcher": {"type": "boolean"}}), s.session_state),
+                              "document binds both again. documents: every open document (name, label, unsaved, byAgent; the agent's own has agent: true). "
+                              "orient: true answers only a short read: where, the documents, the agent's document and its bodies, the options. Changes nothing.",
+             obj({"launcher": {"type": "boolean"}, "orient": {"type": "boolean"}}), s.session_state),
         Tool("app_force_restart", "Stop FreeCAD's window process and start it again in the background, whatever holds it (a dialog, a hang). Agent Link runs this outside FreeCAD. The "
                                   "documents come back from their newest saved copies, as after a crash. Use it for a stuck window; app_restart quits a working window cleanly.", obj({}), _force_restart_here),
         Tool("app_open", "Open the FreeCAD window when it is closed. Agent Link starts it in the background: it does not come to the front and takes no focus. "
@@ -1392,7 +1606,7 @@ def _approve(tool, a):
 # ---- groups, guides, batches, undo: the server as a whole ---------------------------------
 
 GROUP_OF = {
-    "tool_find": "find",
+    "tool_find": "find", "pick": "find",
     "session_state": "core", "body_check": "core", "export_file": "core", "history_diff": "core",
     "app_force_restart": "core", "app_open": "app", "approve_file": "core", "approve_code": "core", "dialog_answer": "core", "report_read": "core", "crash_collect": "core",
     # export (every format) is core's; export_file stays an alias of it.
@@ -1405,9 +1619,74 @@ GROUP_OF = {
 }
 # Old names still callable but not listed (the listing carries one tool a job).
 ALIASES = {"export_file": "export"}
+
+
+def _shift_from(v, to):
+    """A call's arguments with every { "$from": n } put at to(n)."""
+    if isinstance(v, dict):
+        out = {k: _shift_from(x, to) for k, x in v.items()}
+        if isinstance(out.get("$from"), int) and not isinstance(out.get("$from"), bool):
+            out["$from"] = to(out["$from"])
+        return out
+    if isinstance(v, list):
+        return [_shift_from(x, to) for x in v]
+    return v
+
+
+def _flatten_batches(calls, depth=0):
+    """(calls, how many batches were opened): a call { tool: "batch",
+    arguments: { calls } } replaced by its calls, in order. A batch from a
+    file, or one that does not read, stays for batch's own refusal."""
+    import json as _json
+
+    if isinstance(calls, str):
+        try:
+            calls = _json.loads(calls)
+        except ValueError:
+            return calls, 0
+    if not isinstance(calls, list) or depth > 3:
+        return calls, 0
+    out, opened, at, mine = [], 0, [], []  # at[i]: where call i of this list is now (a batch: its last call); mine: this list's own calls
+    for c in calls:
+        if isinstance(c, str):
+            try:
+                c = _json.loads(c)
+            except ValueError:
+                pass
+        if isinstance(c, dict) and c.get("tool") == "batch":
+            args = c.get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = _json.loads(args) if args.strip() else {}
+                except ValueError:
+                    args = None
+            inner = args.get("calls") if isinstance(args, dict) and args.get("file") is None else None
+            if isinstance(inner, str):
+                try:
+                    inner = _json.loads(inner)
+                except ValueError:
+                    inner = None
+            if isinstance(inner, list):
+                inner, more = _flatten_batches(inner, depth + 1)
+                if isinstance(inner, list) and inner:
+                    base = len(out)
+                    out.extend(_shift_from(x, lambda n, base=base: n + base) if isinstance(x, dict) else x for x in inner)
+                    at.append(len(out) - 1)
+                    opened += 1 + more
+                    continue
+        at.append(len(out))
+        mine.append(len(out))
+        out.append(c)
+    if opened:
+        # A later call's $from to a call of this list: where that call is now.
+        def to(n):
+            return at[n] if 0 <= n < len(at) else n
+        own = set(mine)
+        out = [_shift_from(c, to) if isinstance(c, dict) and i in own else c for i, c in enumerate(out)]
+    return out, opened
 GROUP_INFO = {
     "core": "The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed in the classic tool list.",
-    "find": "tool_find: any tool by plain words, its card, the groups. Listed in the static base (ToolListMode static).",
+    "find": "tool_find: any tool by plain words, its card, the groups; tool_find is listed in the static base (ToolListMode static). pick: run one of the numbered options that session_state and changing answers give.",
 }
 # Listed by default (lean): core, the groups a part's make-check-verdict loop
 # needs, and the pictures to check it by.
@@ -1567,6 +1846,11 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
     for t in tools:
         if t.name in ALIASES:
             t.alias_of = ALIASES[t.name]
+    # Where the agent is: in the words at connect and on a conversation's
+    # first answer (protocol.Server.orient). AGENTLINK_ORIENT=off, or the
+    # preference Orient false, leaves both out (an A/B arm).
+    if orient_on():
+        server.orient = session.orientation
     server.on_call = session.record_call
     server.session = session
     session.server = server
@@ -1666,9 +1950,28 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         # are an index to query, not a list to load).
         first_sentence = toolindex.first_sentence
 
+        doc_facts = []
+
+        def facts_now():
+            # The open document's facts, read once for the cards of this call.
+            if not doc_facts:
+                try:
+                    from . import nexthint
+
+                    doc_facts.append(nexthint.facts(s.doc, {}) if s.doc is not None else {})
+                except Exception:  # noqa: BLE001
+                    doc_facts.append({})
+            return doc_facts[0]
+
         def card(t):
             out = {"tool": t.name, "group": t.group, "listed": server.groups is None or t.group in server.groups, "changes": bool(t.changes),
                    "description": t.description, "inputSchema": t.schema}
+            # A ready call, filled from the open document (owner, 22 Nov).
+            from . import examples as _examples
+
+            ex = _examples.for_tool(t.name, facts_now())
+            if ex:
+                out.update(ex)
             # The standing words its answers gave once in this conversation
             # and leave out since (saidBefore names the keys): agentlink/once.py.
             said = _once.said(s, t.name)
@@ -1683,16 +1986,26 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             names = [names] if isinstance(names, str) else names
             if not isinstance(names, list) or not all(isinstance(n, str) for n in names) or len(names) > 20:
                 raise ToolError("invalid_input", "tool: a tool's name, or up to 20 names — tool_groups { find: \"words\" } finds names by what they do.")
-            cards = []
+            cards, missed = [], []
             for n in names:
-                t = server.tools.get(n)
+                t = server.tools.get(plain_name(server, n))
                 if t is None:
-                    import difflib
-
-                    near = difflib.get_close_matches(n, list(server.tools), 4)
-                    raise ToolError("not_found", f"tool {n!r}: not here{' — did you mean ' + ', '.join(near) if near else ''}. tool_groups {{ find: \"words\" }} searches every tool by what it does.")
+                    # Not here: the close names, and the card of the closest one
+                    # (a card only; nothing runs on a guess).
+                    near = close_names(server, n)
+                    missed.append({"tool": n, "didYouMean": near})
+                    if near and all(c.get("tool") != near[0] for c in cards):
+                        cards.append(card(server.tools[near[0]]))
+                    continue
                 cards.append(card(t))
-            return {"tools": cards, "note": TG_CARDS_NOTE}
+            if missed and not cards:
+                raise ToolError("not_found", f"tool {missed[0]['tool']!r}: not here, and no name is close. tool_find {{ words: \"what it does\" }} searches every tool.")
+            out = {"tools": cards, "note": TG_CARDS_NOTE}
+            if missed:
+                out["notFound"] = missed
+                out["note"] = ("Not found: " + "; ".join(f"{m['tool']} (did you mean {', '.join(m['didYouMean'])}?)" for m in missed if m["didYouMean"])
+                               + ". The card of the closest name is in tools; check it is the tool you want before you call it. " + TG_CARDS_NOTE)
+            return out
         asked = a.get("needs")
         if asked is not None or a.get("arguments") is not None:
             # One tool's own leading checks, read against the document as it is and never run
@@ -1718,7 +2031,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     try:
                         from .protocol import check_input
 
-                        check_input(t.schema, given)  # the call's first check: its inputs by the tool's own schema
+                        check_input(t.schema, given, t.name)  # the call's first check: its inputs by the tool's own schema
                     except ToolError as e:
                         return {"tool": t.name, "applies": False, "wouldRefuse": [{"code": e.code, "words": e.message}], "notChecked": [],
                                 "note": "Read, not run: the tool's own schema refuses these arguments."}
@@ -1915,7 +2228,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             raise ToolError("not_found", f"{name}: no such tool — tool_groups lists them.")
         args = dict(a.get("arguments") or {})
         t = t.for_call(args)
-        check_input(t.schema, args)
+        check_input(t.schema, args, name)
         if not jobs.wanted(t, args, s, asked=True):
             # A read that could be a job, asked for inside a batch: the batch is why not.
             if getattr(s, "batch_now", None) and jobs.eligible(t, args, s):
@@ -1985,13 +2298,28 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         return _hold.Hold(mark, check, snapshot)
 
     def batch(a):
+        """A batch, with a batch inside its calls run in its place (efficiency
+        design C2, 22 Nov): the inner calls are put in order where it stood,
+        their $from moved to count in the whole list, under the outer batch's
+        own rollback and budget; the answer's flattened says so."""
+        calls, inner = _flatten_batches(a.get("calls"))
+        if inner:
+            a = {**a, "calls": calls}
+        out = _batch_core(a)
+        if inner and isinstance(out, dict):
+            out["flattened"] = (f"{inner} batch{'es' if inner > 1 else ''} inside the calls ran as part of this one, in order, "
+                                "with this batch's rollback and budget (theirs are not read); calls count from 0 through the whole list.")
+        return out
+
+    def _batch_core(a):
         import json as _json
 
         from . import chain as _chain
         from . import hold as _hold
         from . import paths as _paths_mod
 
-        if a.get("read") is not None or a.get("at") is not None:
+        # at alone is no read (the input check leaves it out and says so).
+        if a.get("read") is not None:
             return _batch_read(a)
         calls = a.get("calls") or []
         if a.get("calls") is None and a.get("file") is None:
@@ -2020,8 +2348,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 # Bicycle runs, finding 7: the file's own to and lines (and from)
                 # count too; the call's own win. A file of { calls, to, lines:
                 # "full" } wrote no to file.
-                a = {**{k: data[k] for k in ("rollback", "stopOnError", "budget", "build", "title", "to", "lines", "from") if k in data},
-                     **{k: v for k, v in a.items() if k in ("rollback", "stopOnError", "budget", "from", "to", "lines", "file", "build", "title")}}
+                a = {**{k: data[k] for k in ("rollback", "stopOnError", "budget", "build", "title", "to", "lines", "from", "check") if k in data},
+                     **{k: v for k, v in a.items() if k in ("rollback", "stopOnError", "budget", "from", "to", "lines", "file", "build", "title", "check")}}
                 data = data.get("calls")
             if not isinstance(data, list):
                 raise ToolError("invalid_input", f"file: {f} holds no list of calls — [{{ tool, arguments }} …], or {{ calls: [...] }}. Nothing was run.")
@@ -2044,7 +2372,15 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 except ValueError:
                     raise ToolError("invalid_input", f"calls.{i} came as a string that is not a call's JSON — each call is {{ tool, arguments }}. Nothing was run.")
             if not isinstance(c, dict) or not isinstance(c.get("tool"), str):
-                raise ToolError("invalid_input", f"calls.{i}: {{ tool, arguments }} with tool a tool's name. Nothing was run.")
+                # What it was given, and what it lacks (live, 22 Nov: a local
+                # model sent calls with arguments and no tool, 22 times).
+                sent = _json.dumps(c, ensure_ascii=False)
+                sent = sent if len(sent) <= 160 else sent[:157] + "…"
+                lacks = (" It has no tool." if isinstance(c, dict) and "tool" not in c else
+                         " Its tool is not a name (a string)." if isinstance(c, dict) else "")
+                raise ToolError("invalid_input", f"calls.{i}: {{ tool, arguments }} with tool a tool's name. calls.{i} was {sent}.{lacks} "
+                                                 f"Example: {{ \"tool\": \"sketch_new\", \"arguments\": {{ \"plane\": \"XY\" }} }}. "
+                                                 "The calls run in order, one after another. Nothing was run.")
             args = c.get("arguments") or {}
             if isinstance(args, str):
                 try:
@@ -2071,15 +2407,20 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         build_mode, words = _hold.mode(a.get("build"))
         if words:
             raise ToolError("invalid_input", words)
+        # A client's prefixed name inside a batch (agentlink_get) is the
+        # tool's own, as on a direct call (live, 22 Nov: a local model).
+        for c in calls:
+            if c["tool"] not in server.tools and plain_name(server, c["tool"]) in server.tools:
+                c["tool"] = plain_name(server, c["tool"])
         unknown = [c["tool"] for c in calls if c["tool"] not in server.tools]
         if unknown:
-            import difflib
-
             hints = []
             for u in sorted(set(unknown)):
-                near = difflib.get_close_matches(u, list(server.tools), n=3, cutoff=0.5)
-                hints.append(f"{u}" + (f" (near: {', '.join(near)})" if near else ""))
-            raise ToolError("not_found", f"No tool named {'; '.join(hints)} — nothing was run. tool_groups lists them all.")
+                near = close_names(server, u, 3)
+                does = does_hits(server, u)
+                hints.append(f"{u}" + (f" (near: {', '.join(near)})" if near else "")
+                             + (f" — by what it does, did you mean: {'; '.join(does)}?" if does else ""))
+            raise ToolError("not_found", f"No tool named {'; '.join(hints)} — nothing was run. tool_find {{ tool: name }} gives a tool's card.")
         rollback = a.get("rollback", True)
         stop = a.get("stopOnError", True)
         # A long batch is answered in parts. The client drops a call after
@@ -2099,6 +2440,15 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 raise ToolError("invalid_input", f"calls.{i}: a batch does not run another batch. Nothing was run.")
             if rollback and c["tool"] in ("history_undo", "history_redo", "history_restore"):
                 raise ToolError("invalid_input", f"calls.{i}: {c['tool']} inside a batch that rolls back can't be taken back by undo — call it on its own, or rollback: false. Nothing was run.")
+        if a.get("check"):
+            # check: true (design A6): each call's fields and, up to its
+            # first changing call, its leading checks read before the first
+            # call runs; a refusal names the call by its index.
+            from . import fastpath as _fastpath
+
+            said = _fastpath.precheck_calls(server, calls, first)
+            if said is not None:
+                raise said
         # Rolled back by counting the undo steps the batch made, not by the
         # undo count: FreeCAD keeps 20 steps by default, and once the stack
         # is full each new step pushes the oldest off, so the count stops
@@ -2157,7 +2507,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             except Exception:  # noqa: BLE001
                 if getattr(t, "changes", False):
                     last_change = i
-        mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False, "names0": mine_mark[1], "t0": t_out,
+        mine = s.batch_now = {"results": results, "n": len(calls), "i": 0, "tool": None, "answered": False, "names0": mine_mark[1], "own": [], "t0": t_out,
                               "lastChange": last_change, "echoed": 0,
                               "budget": float(budget), "first": first, "total": total, "file": a.get("file"), "record": record,
                               "hold": _batch_hold() if build_mode == "end" else None}
@@ -2301,37 +2651,21 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 # step opened: no undo there (a dialog's command can hold an
                 # open transaction). What ran stays.
                 out["undone"] = 0
+                out["outcome"] = "kept" if made else "not_started"
                 out["rollbackNote"] = ("Not rolled back: a menu or dialog that a gui_input of this batch opened was still open, and the batch does not undo inside its loop. "
                                        "What ran stays. Close it, then history_undo takes back what you do not want.")
                 return ended(out)
+            if not rollback or start is None:
+                # What ran stays (rollback: false), or there is no document left to take it back in.
+                out["outcome"] = "kept" if made else "not_started"
             if rollback and start is None:
                 out["undone"] = 0
                 out["warning"] = "The document the batch started in was closed during it: nothing to take back there."
             elif rollback:
-                undone = 0
-                while undone < made and start.UndoCount > 0:
-                    start.undo()
-                    undone += 1
-                left = take_back(start, None, mine.get("names0"))
-                if left:
-                    out["removed"] = left
-                # The steps taken back come off the count of the document
-                # they were made in, the batch's first — also when a call
-                # moved the session to another (its record is set aside).
-                rec = docstates.own_of(s, start)
-                if rec is not None:
-                    rec["tx"] = max(0, rec["tx"] - undone)
-                    rec["calls"] = [x for x in rec["calls"] if x["tx"] <= rec["tx"]]
-                start.recompute()
-                if s.doc is start:
-                    s.snapshot("batch rolled back")
-                out["undone"] = undone
-                if any(isinstance(r.get("written"), dict) for r in results):
-                    out["writtenNote"] = "The files the calls wrote (written) stay: they hold answers from before the rollback."
-                if s.doc is not start:
-                    out["warning"] = f"The batch moved to another document ({s.doc.Label if s.doc else 'none'}): only {start.Label}'s steps were taken back; what was done there stays."
-                elif undone < made:
-                    out["warning"] = f"Only {undone} of {made} steps could be taken back (FreeCAD's undo stack): the rest stay."
+                # Only the agent's own steps: at the first step that is not
+                # the batch's (the person's, made while it ran) it stops,
+                # and that step and all under it stay (design E5 #6).
+                out.update(roll_back(s, start, made, mine.get("own"), mine.get("names0"), results))
             return ended(out)
 
         def build_broke(entry):
@@ -2533,12 +2867,10 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     ok = not r.get("isError")
                 else:
                     text, body, ok = "", {"error": miss}, False
-                u1 = undo_count(start)
-                if u1 is None:
-                    start = None
-                if ok and start is not None and doc is start and s.doc is start:
-                    d = u1 - u0
-                    made += d if d > 0 else (1 if u0 >= limit and getattr(server.tools.get(c["tool"]), "changes", False) else 0)
+                # The agent's own steps this call made, named on mine["own"]:
+                # a rollback undoes a step only while it is the agent's.
+                inc, start = own_steps(server, s, c["tool"], start, doc, u0, limit, mine, ok)
+                made += inc
                 if held and ok:
                     hold.note(first + i, c["tool"])
                     body = _hold.held_answer(c["tool"], body)
@@ -2685,28 +3017,46 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             return got
         if a.get("groups"):
             return tool_groups({})
-        if a.get("tool"):
-            return tool_groups({"tool": a["tool"]})
-        qs = a.get("queries")
-        if qs is None and a.get("words") is not None:
-            qs = [a.get("words")]
-        if not isinstance(qs, list) or not qs or not all(isinstance(q, str) and q.strip() for q in qs) or len(qs) > 6:
-            raise ToolError("invalid_input", "words: what the tool does, in plain words (\"fillet edge\"); or queries: up to 6 of them; or tool: a name; or groups: true.")
+        # tool and queries in one call; names (also written loosely) give
+        # their cards, everything else is searched (owner, 22 Nov).
+        names, qs, read_as = sort_find(server, a)
+        lone = isinstance(a.get("queries"), list) and len(a["queries"]) == 1 or isinstance(a.get("words"), str)
+        if names and not qs and not (lone and not a.get("tool")):
+            got = tool_groups({"tool": names if len(names) > 1 or isinstance(a.get("tool"), list) else names[0]})
+            if read_as:
+                got["readAs"] = read_as
+            return got
+        if not qs and not names:
+            raise ToolError("invalid_input", FIND_FORMS)
+        if lone and names and not qs:
+            # One query that is a name: its search hits and its card, as before.
+            qs = names
+            names = []
         limit = int(a.get("limit") or 8)
         out = []
         for q in qs:
+            # Words that are a tool's name (or a client's prefixed name):
+            # its card with the hits, so the next call can be the call.
+            exact = server.tools.get(plain_name(server, q.strip()))
             got = tool_groups({"find": q, "limit": limit, **({"group": a["group"]} if a.get("group") else {})})
             for h in got.get("tools") or ():
                 h["listed"] = server.is_listed(h.get("tool"))
-            out.append({"find": q, "tools": got.get("tools") or [], **({"note": got["note"]} if not got.get("tools") else {})})
+            one = {"find": q, "tools": got.get("tools") or [], **({"note": got["note"]} if not got.get("tools") else {})}
+            if exact is not None:
+                one["card"] = tool_groups({"tool": exact.name})["tools"][0]
+            out.append(one)
         res = out[0] if len(out) == 1 else {"results": out}
+        if names:
+            res["cards"] = tool_groups({"tool": names})["tools"]
         res["note"] = "Callable by name, listed or not; tool_find { tool: name } gives its whole description and inputs."
+        if read_as:
+            res["readAs"] = read_as
         return res
 
     core = [
         Tool("usage_report", "Estimate on this side what work through Agent Link cost the agent. That is calls, tokens and the tool list that each session loads at the start. "
                              "Tokens: text at ~3.5 characters a token, pictures by size. It gives them for each day over days (7) and each session. Also the costliest tools, and "
-                             "tips to cut the cost. session: true gives this session alone. This is not Claude's own count: the plan's usage page has that. Changes nothing. "
+                             "tips to cut the cost. session: true gives this session alone. This is not your AI client's own count: the plan's usage page has that. Changes nothing. "
                              "appliesNow: this session's meter of the applies-now filter (notThenAnswered must stay near zero). "
                              "log: true gives the usage log summary: jobs and their steps, errors with reasons, retries, searches, dialogs and more. jobs: recent jobs (8).",
              obj({"days": {"type": "integer", "minimum": 1, "maximum": 60}, "session": {"type": "boolean"}, "log": {"type": "boolean"},
@@ -2726,8 +3076,9 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                             "{ applies: true | false | null (not checked), wouldRefuse [{ code, words }], notChecked }. arguments: {…} also reads that call's checks; advice only. "
                             "find's hits that would refuse now come last, with applies: false. now: true carries appliesNow, the full form of the health's appliesNow line.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}, "needs": {"type": "string"}, "arguments": {"type": "object"}}), tool_groups),
         Tool("tool_find", "Find a tool by plain words: what it does, or FreeCAD's own command or workbench name. It gives up to limit (8) tools, best first. Each has its group, "
-                          "one line on what it does, and listed (if the client was shown it). queries: up to 6 searches in one call. tool: a name or a list of names answers the "
-                          "whole description and inputs of each one (its card). groups: true gives the tool groups and what each holds. group: narrows a search. Every tool is "
+                          "one line on what it does, and listed (if the client was shown it). queries: a list of searches (up to 6) and tool names (up to 20). tool: a name or a list of names answers the "
+                          "whole description and inputs of each one (its card). A name with a prefix, other letter case or a letter wrong is read as the name; readAs says so. "
+                          "A card has example: a ready call from the open document, and fill: the values to give. tool and queries can be in one call: cards gives the cards, results the searches. groups: true gives the tool groups and what each holds. group: narrows a search. Every tool is "
                           "callable by name, listed or not. Where the client sends only listed tools, use batch { calls: [{ tool, arguments }] }. listing: true answers what the "
                           "client is shown now (mode, style, count, tokens, names). to: a .json file gets the whole listing. The write rule of every tool applies to it. Changes nothing.",
              obj({"words": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
@@ -2742,7 +3093,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                            "}], with next: the topics not reached; guide_read { topic: next } reads on. Changes nothing.",
              obj({"topic": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "section": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}}), guide_read),
         Tool("job_status", "Read the state of a job. job: its id (call-N, or job-… for a heavy read). Answer: running (seconds so far), or done with the tool's answer or "
-                           "error. wait: seconds (up to 30) to wait first. No job: all jobs (kept for an hour). The server answers at once, also while FreeCAD "
+                           "error. wait: seconds (up to 30) to wait first. No job: all jobs (kept for an hour). late: the last 20 calls answered busy before they ended; job: such a call's id gives its late answer. The server answers at once, also while FreeCAD "
                            "is busy. stop: true stops a job-… job. The stop occurs at the next Python step of the job. A long step in FreeCAD's own code ends first. "
                            "Then the job fails with the code stopped. A job-… job is a read, so the document does not change. A call-N job runs on FreeCAD's "
                            "own thread and cannot stop in the middle. For it, the answer gives the next steps: wait, or app_force_restart. Without stop, it changes nothing.",
@@ -2804,7 +3155,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                       "opens a menu or dialog does not end the batch. The calls after it run inside that menu or dialog, in order. The batch then answers once, "
                       "with nested in the answer. If it closes before a call, the rest runs after it. A call refused inside it stops the batch, but nothing is "
                       "undone there (rollbackNote): what ran stays.",
-             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}, "lines": {"type": "string", "enum": ["all", "refused", "counts", "full"]}, "build": {"type": "string", "enum": ["end", "each"]}, "read": {"type": "string"}, "at": {"type": "string"}, "title": {"type": "string"}}), batch),
+             obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "rollback": {"type": "boolean"}, "stopOnError": {"type": "boolean"}, "budget": {"type": "number"}, "from": {"type": "integer"}, "to": {"type": "string"}, "lines": {"type": "string", "enum": ["all", "refused", "counts", "full"]}, "build": {"type": "string", "enum": ["end", "each"]}, "read": {"type": "string"}, "at": {"type": "string"}, "title": {"type": "string"}, "check": {"type": "boolean"}}), batch),
         Tool("outputs_clean", "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded). That is shots past the last 50 and 3 days, and "
                               "solver and job runs past 14 days. Also FreeCAD backups past 7; exports are only listed. Files go to the Trash. It is a dry run unless dry_run: false. "
                               "kinds, older_than_days: limit it. It also runs automatically each day.",
@@ -2814,6 +3165,26 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
     ]
     for t in core:
         t.group = "core"
+        server.add(t)
+    # pick runs an option by its number (agentlink/options.py). Found with
+    # tool_find, never in the static base: the list does not change.
+    from . import options as _options
+
+    pick = Tool("pick", "Run one of the numbered options. session_state and each changing answer give them: the step, then 1 to 4 ready calls. "
+                        "Each option has its tool, its arguments and the inputs it asks for (ask). option: its number. fill: the inputs that it asks for. "
+                        "Give them by name ({ length: 4 }) or in order (\"4mm\", [4]). A number with a unit is read in the unit of the input. "
+                        "The units are mm and deg; 1 in is 25.4 mm. A word of the option stands for its arguments (through_all). "
+                        "Plain text also works: option: \"1, 4mm\" or \"2, through_all\". fill can also set a choice of the option (sketch: Sketch002). "
+                        "The call runs as a call of the tool itself, with the same checks, health and undo step. Its answer starts with picked. "
+                        "If the document changed after the options were given, pick refuses. The refusal gives the new options. "
+                        "The Options preference (on) or AGENTLINK_OPTIONS=off turns the options off.",
+                obj({"option": {"type": ["integer", "string"]}, "fill": {}}, ["option"]), _options.pick_fn)
+    pick.group = "find"
+    server.add(pick)
+    # A self-test tool for live checks, only while its marker file is there (agentlink/selftest.py).
+    from . import selftest as _selftest
+
+    for t in _selftest.tools():
         server.add(t)
     # Extensions installed beside this add-on (agentlink/ext.py).
     from . import ext

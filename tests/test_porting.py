@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Porting (docs/design/porting-2026-11-18.md): the guide, the scaffold
+# Porting (private records: porting-2026-11-18.md): the guide, the scaffold
 # (agentlink/porting.py) and cookbooks (agentlink/cookbook.py), with the
 # tools of families/porting.py on a stand-in session and server. Plain
 # Python: no FreeCAD. The red team's attacks are tested here: code run
@@ -285,6 +285,7 @@ class Cookbooks(Home):
         from agentlink import person_ok
 
         person_ok.reset()
+        person_ok.approvals.note_client(None, "claude-ai")  # a client that asks the person first
         self.shown = []
         person_ok.SHOW = self.shown.append
         self.addCleanup(setattr, person_ok, "SHOW", None)

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # The faults window review round 6 found in TechDraw, Robot, object_appearance
-# and the words (docs/hardening/window-r6-*.md), on stand-ins (plain Python,
+# and the words (private records: window-r6-*.md), on stand-ins (plain Python,
 # no FreeCAD):
 #   - TechDraw: a leader's WayPoints y down as FreeCAD keeps them; labels
 #     placed in free space; td_dimset's lanes in paper mm; centre marks made
@@ -190,7 +190,14 @@ class RobotAndAppearance(unittest.TestCase):
         self.assertIn("toolVisible", fields)
 
     def test_block_moved_is_made_where_it_is_needed(self):
-        calls = json.loads(src("docs", "hardening", "models", "coredoc-model.json"))["calls"]
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+        import hardening_status
+
+        model = os.path.join(hardening_status.HERE, "models", "coredoc-model.json")
+        if not os.path.isfile(model):
+            self.skipTest("the hardening records are private (not beside this repo)")
+        with open(model, encoding="utf-8") as f:
+            calls = json.load(f)["calls"]
         dup = next(i for i, c in enumerate(calls) if c["tool"] == "object_duplicate" and c["arguments"].get("name") == "Block moved")
         self.assertEqual(calls[dup + 1]["arguments"].get("object"), "Block moved")
         for tool in ("object_appearance", "shape_query", "measure"):

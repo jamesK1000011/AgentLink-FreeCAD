@@ -36,6 +36,7 @@ A map of this guide. `guide_read { topic: "assembly", section: [...] }` reads th
 - Which part moves: the one not yet joined to a grounded part — `a` when neither is — and the parts already joined to it go along. A grounded part never moves. Make joints from the grounded part outwards, the grounded side as `a`, and the answer's `moved` is what you expect.
 - An assembly needs one grounded part: `asm_ground`. With none, every solve answers "no part is grounded".
 - Some workbenches relabel their objects on every recompute (Fasteners counts its screws' labels up): name such a part by its object name (session_state's `object`, asm_list), which stays. A label that differs only by that counter still finds the one part it fits.
+- A part in another file: `link_make { file, to }` makes a link to it in the assembly's file, then `asm_add` the link and join it on its LCS by label. Save both files in one folder; save, open again and check the link's target.
 - The solve moves parts; it does not check they fit. `asm_check` does — a press fit reads as an overlap of its interference volume.
 
 ## What the solver tells, and what it does not

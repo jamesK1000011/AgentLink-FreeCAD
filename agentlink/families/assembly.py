@@ -1049,11 +1049,12 @@ def ref_label(doc, r):
         return o.Label
     path = subs[0].split(".")
     if not path[-1] and len(path) > 1:
-        # a datum end ("LCS." or 1.0's "Part.LCS."): Part.LCS by labels
-        d = doc.getObject(path[-2])
+        # a datum end ("LCS." or 1.0's "Part.LCS."): Part.LCS by labels; in
+        # a linked part, the datum of the linked file (_obj_of)
+        p = doc.getObject(path[0]) if o.TypeId == "Assembly::AssemblyObject" and len(path) > 2 else o
+        d = (_obj_of(p, path[-2]) if p is not None else None) or doc.getObject(path[-2])
         label = d.Label if d is not None else path[-2]
         if o.TypeId == "Assembly::AssemblyObject" and len(path) > 2:
-            p = doc.getObject(path[0])
             return f"{p.Label if p else path[0]}.{label}"
         return f"{o.Label}.{label}"
     if o.TypeId == "Assembly::AssemblyObject" and len(path) > 1:
@@ -1885,13 +1886,18 @@ def datum_sub(part, ref, what):
 
 
 def _obj_of(part, name):
-    doc = getattr(part, "Document", None)
-    o = doc.getObject(name) if doc is not None else None
-    if o is None:
-        r = _root(part)
-        d = getattr(r, "Document", None)
-        o = d.getObject(name) if d is not None else None
-    return o
+    """The object a datum path names below part. A link looks in its
+    target's document first: a part in another file (link_make { file })
+    has its datums there, and the assembly's file can hold another object
+    of the same name."""
+    docs = [getattr(part, "Document", None)]
+    if getattr(part, "TypeId", "") in LINKS:
+        docs.insert(0, getattr(_root(part), "Document", None))
+    for doc in docs:
+        o = doc.getObject(name) if doc is not None else None
+        if o is not None:
+            return o
+    return None
 
 
 def _pmul(pl, v):

@@ -306,9 +306,15 @@ def build(item):
         p = pc.vec2(item.get("at"), "at")
         return [Part.Point(p)], C, D
     if k in ("rectangle", "rounded_rectangle"):
-        w, h = (item.get("size") or [None, None])[:2]
+        size = item.get("size")
+        w, h = (list(size) + [None, None] if isinstance(size, (list, tuple)) else [None, None])[:2]
         if not (isinstance(w, (int, float)) and isinstance(h, (int, float)) and w > 0 and h > 0):
-            raise ToolError("invalid_input", f"{k}: size [w, h] (mm), and center [x, y] or corner [x, y] (its lower left).")
+            # The fields it was given, and the form (live, 22 Nov: x, y,
+            # width, height three times in one run).
+            other = [f for f in ("width", "height", "x", "y", "w", "h") if f in item]
+            raise ToolError("invalid_input", f"{k}: size [w, h] (mm), and center [x, y] or corner [x, y] (its lower left)."
+                                             + (f" {', '.join(other)}: not fields of a {k}." if other else "")
+                                             + f" Example: {{ \"kind\": \"{k}\", \"corner\": [0, 0], \"size\": [60, 30] }}.")
         if "corner" in item:
             c0 = pc.vec2(item["corner"], "corner")
             x0, y0 = c0.x, c0.y
@@ -515,6 +521,31 @@ def _ref(r, what):
     raise ToolError("invalid_input", f"{what}: a geometry id, [id, vertex] (vertex 1 start, 2 end, 3 centre) or \"origin\". The axes: -1 the horizontal, -2 the vertical; outside edges -3 down (sketch_external). sketch_state lists the ids.")
 
 
+CON_FIELDS = ("type", "refs", "value", "name")
+CON_EXAMPLE = ('{ "type": "fix", "refs": [[0, 1]] } holds line 0\'s start; '
+               '{ "type": "distance", "refs": [0], "value": 40 } makes line 0 40 mm long')
+
+
+def con_keys(c, i):
+    """One constraint checked for its fields: { type, refs, value, name }.
+    A field written another way (kind, point …) is refused by name, with
+    two worked constraints; nothing is guessed (owner, 22 Nov). A reader."""
+    if not isinstance(c, dict):
+        return c
+    extra = [k for k in c if k not in CON_FIELDS]
+    if extra:
+        hint = ""
+        if "kind" in extra or "constraint" in extra:
+            hint = " The constraint's kind goes in type."
+        if any(k in extra for k in ("point", "points", "geometry", "geometries", "ref")):
+            hint += " Its geometry and points go in refs, a list."
+        raise ToolError("invalid_input", f"constraints[{i}]: {', '.join(extra)}: not {'a field' if len(extra) == 1 else 'fields'} of a constraint.{hint} "
+                                         f"A constraint is {{ type, refs, value, name }}: {CON_EXAMPLE}.")
+    if not c.get("type"):
+        raise ToolError("invalid_input", f"constraints[{i}]: type is missing. {CON_EXAMPLE}.")
+    return c
+
+
 def make_constraint(sk, c):
     t = str(c.get("type", "")).lower().replace("_", "").replace("-", "")
     refs = [_ref(r, f"refs[{i}]") for i, r in enumerate(c.get("refs") or [])]
@@ -659,11 +690,38 @@ def offset_out(w, d, join):
     return off
 
 
+_FILLET_BEFORE = {}
+
+
+def _named(sk):
+    return [c.Name for c in sk.Constraints if getattr(c, "Name", "")]
+
+
 def fillet(sk, chamfer, *args):
     """Sketcher's fillet at a corner (geo, vertex, radius) or between two
-    curves (geo, geo, point, point, radius), the curves trimmed to it and no
-    constraints made; chamfer (FreeCAD 1.0+): a straight cut, not an arc."""
-    sk.fillet(*args, True, False, *((True,) if chamfer else ()))
+    curves (geo, geo, point, point, radius), the curves trimmed to it;
+    chamfer (FreeCAD 1.0+): a straight cut, not an arc. The corner is kept
+    as a point (Sketcher's "Preserve corner", createCorner): the corner's
+    constraints, bound ones too, move to it and stay (live finding T3,
+    21 Nov: without it they were deleted with no word)."""
+    _FILLET_BEFORE[id(sk)] = _named(sk)
+    sk.fillet(*args, True, True, *((True,) if chamfer else ()))
+
+
+def fillet_made(sk, n0, chamfer=False):
+    """What a fillet made and what it took away, for its answer: the new
+    arc (or chamfer line) by id, the kept corner point, and the named
+    constraints that are gone."""
+    kind = "Part::GeomLineSegment" if chamfer else "Part::GeomArcOfCircle"
+    made = [i for i in range(n0, len(sk.Geometry)) if sk.Geometry[i].TypeId == kind]
+    points = [i for i in range(n0, len(sk.Geometry)) if sk.Geometry[i].TypeId == "Part::GeomPoint"]
+    out = ("line " if chamfer else "arc ") + ", ".join(str(i) for i in made or [len(sk.Geometry) - 1])
+    if points:
+        out += f"; corner kept as point {points[0]}"
+    lost = [n for n in _FILLET_BEFORE.pop(id(sk), []) if n not in set(_named(sk))]
+    if lost:
+        out += f"; named constraints gone: {', '.join(lost)} (bind them again)"
+    return out
 
 
 def bounds(sk, geos):
@@ -720,7 +778,7 @@ def tools(session):
                "quantity": lambda text: FreeCAD.Units.Quantity(text), "constraint": constraint,
                # the family's: the solver's reading, the builders, constraints by name
                "frame": frame, "state_of": state_of, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
-               "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_index": con_index,
-               "gid": gid, "face_frame": face_frame, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "bounds": bounds,
+               "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
+               "gid": gid, "face_frame": face_frame, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines}
     return runners.tools(GROUP, s, helpers)

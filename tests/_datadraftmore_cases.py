@@ -2,7 +2,7 @@
 # The cases tests/test_datadraftmore_data.py runs through the old handler and
 # the new data entry of each of draft_more.py's tools, on the stand-in FreeCAD
 # and Draft (tests/_datadraftmore_standin.py): its normal paths and each of
-# its refusals. (The live model docs/hardening/models/draftmesh-draft-model.json
+# its refusals. (The live model private records: models/draftmesh-draft-model.json
 # is run on FreeCAD, not here.)
 
 # The family file whose tools were converted.

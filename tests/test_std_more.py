@@ -29,6 +29,32 @@ class StdMore(Base):
         self.assertEqual(el["element"], "Face1")
         self.assertEqual(self.ok("link_edit", {"action": "import_all"})["imported"], [])
 
+    def test_1b_link_to_another_file(self):
+        import FreeCAD
+        import Part
+
+        part_dir = os.path.join(self.dir, "xlink")
+        os.makedirs(part_dir, exist_ok=True)
+        fd = FreeCAD.newDocument("XFrame")
+        fd.addObject("Part::Feature", "Tube").Shape = Part.makeBox(40, 4, 4)
+        fd.saveAs(os.path.join(part_dir, "XFrame.FCStd"))
+        FreeCAD.closeDocument(fd.Name)
+        here = self.session.doc.Name
+        lk = self.ok("link_make", {"file": os.path.join(part_dir, "XFrame.FCStd"), "to": "Tube", "name": "X tube"})
+        self.assertTrue(lk["file"].endswith("XFrame.FCStd"))
+        self.assertIn("33468", lk["check"])
+        o = self.session.doc.getObjectsByLabel("X tube")[0]
+        self.assertEqual(o.LinkedObject.Document.Name, "XFrame")
+        self.assertEqual(self.session.doc.Name, here)
+        self.assertEqual(FreeCAD.ActiveDocument.Name, here)
+        fd = FreeCAD.newDocument("XUnsaved")
+        fd.addObject("Part::Feature", "Rod").Shape = Part.makeBox(1, 1, 1)
+        err, out = self.call("link_make", {"to": "XUnsaved#Rod"})
+        self.assertTrue(err)
+        self.assertIn("doc_save it first", str(out))
+        FreeCAD.closeDocument(fd.Name)
+        FreeCAD.setActiveDocument(here)
+
     def test_2_container_duplicate_text(self):
         self.box("C a", [4, 4, 4])
         p = self.ok("part_container", {"objects": ["C a"], "at": [0, 0, 50], "name": "C part"})

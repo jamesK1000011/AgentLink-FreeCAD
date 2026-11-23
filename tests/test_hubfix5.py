@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The hub's faults of docs/hardening/hubfix5-findings.md, on stand-ins
+# The hub's faults of private records: hubfix5-findings.md, on stand-ins
 # (plain Python, no FreeCAD):
 #   - view_snapshot: where the parts land is worked out from the camera for
 #     the picture's own size; after a fit that did not take it says so and

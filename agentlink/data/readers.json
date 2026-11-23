@@ -322,6 +322,7 @@
    ],
    "changers": [
     "body_for",
+    "hold_selection",
     "set_value"
    ],
    "source": "scripts/tool_needs.py; the family's code",
@@ -1076,6 +1077,7 @@
     "bounds",
     "broken",
     "con_index",
+    "con_keys",
     "con_words",
     "describe_con",
     "describe_geo",
@@ -1132,6 +1134,7 @@
     "errors",
     "filter_keeps",
     "find",
+    "find_in",
     "frozen",
     "get_shape",
     "getsize",
@@ -1153,6 +1156,7 @@
     "quantity",
     "ref_list",
     "rigid_fit",
+    "same_tree",
     "shape_kind",
     "shaped",
     "solid_feature",

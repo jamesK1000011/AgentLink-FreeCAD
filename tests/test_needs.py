@@ -40,7 +40,9 @@ from agentlink.protocol import ToolError  # noqa: E402
 # 21 Nov: + binder_relative (feature_more), attach_path, bound_expr, missed (param readers), unbind (param changer).
 # 21 Nov, bicycle runs: + sweep_labels, side_check (assembly), path_closed, closed_tube_words (feature).
 # 21 Nov, bicycle L5 build: + attach_edge (sketch_more changer), driven_rows, held_back (assembly), pipe_options a changer (Refine).
-PIN = "e9625fdc5407e17efaaae9b040e6e203a28f6cac28995a11ad48ff2f3eb0af79"
+# 21 Nov, parts in other files: + find_in, same_tree (std_more readers); far_doc a changer (opens a file).
+# 22 Nov, local runs: + con_keys (sketch reader: a constraint's fields written another way).
+PIN = "07934da5b3a710ec31980c7e73503207acacaa50b6c2f9bfcda7a363962d0550"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -50,7 +52,7 @@ PIN = "e9625fdc5407e17efaaae9b040e6e203a28f6cac28995a11ad48ff2f3eb0af79"
 # Bicycle findings 3, 5 (20 Nov): sketch gains the reader plane_mode (a sketch on an LCS plane or a planeless PartDesign
 # coordinate system); feature_more's attach_on changes (pd_gear on any plane).
 # 21 Nov, bicycle L5 build: + driven_rows (a reader), attach_edge, held_back, pipe_options (changers).
-COUNTS = {"readers": 923, "changers": 158, "families": 37}
+COUNTS = {"readers": 926, "changers": 159, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {
@@ -385,7 +387,8 @@ class Census(unittest.TestCase):
 # 780: param_bind refuses a Placement path that FreeCAD computes on an attached object first (bicycle runs, 20 Nov).
 # 781: pd_pipe refuses a tube (a wall) on a closed path before it makes anything (bicycle runs, finding 6).
 # 780 again: sketch_attach checks edge or repair before plane or face (bicycle L5 build, finding 3).
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 780, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+# 781: window_snapshot checks its width first (efficiency design D1, 22 Nov).
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 781, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
 
 
 class Agreement(unittest.TestCase):
@@ -493,7 +496,7 @@ class Filter(unittest.TestCase):
         self.assertEqual(now["notChecked"], {"count": 1, "tools": ["fea_setup"]})
         self.assertLessEqual(tokens(got["now"]), BOUNDS["nowReply"])
         # The call itself: refused in the reading's words; then a batch, whose answer carries the one line.
-        self.assertEqual(got["refused"]["error"], {"code": "invalid_state", "message": "No strength study: fea_setup { body } first."})
+        self.assertEqual(got["refused"]["error"], {"code": "invalid_state", "message": "No strength study: fea_setup { body } first.", "outcome": "not_started"})
         b = got["batch"]
         self.assertEqual(b["appliesNow"].keys() - {"ms"}, {"groups", "not", "notChecked"})
         self.assertEqual(b["appliesNow"]["groups"], {"strength": 1})
@@ -646,7 +649,7 @@ def _walk(x):
 # Measured (tokens): the 383 data tools' definitions; the 21 Tool(…) written in code; the lean listing (core and
 # view: what a session loads at its start); one data tool's card; tool_groups' and usage_report's own cards (586 and
 # 150 before needs, arguments and the meter's clause were added: the lean listing grew by 154; report_read's clause on known faults added 16).
-# The token pass (docs/hardening/tokens-findings.md) added 216 to the lean listing: batch's read/at, lines "full" and the
+# The token pass (private records: tokens-findings.md) added 216 to the lean listing: batch's read/at, lines "full" and the
 # file batch's record reply (+168), tool_groups' said (+22), guide_read's index wording (+26).
 # Every description in ASD-STE100 (merged 17 Nov; was explore/full-ste): data 79008 -> 83635, coded 9037 -> 9166, lean listing 7406 -> 7409,
 # one card's median 178 -> 190 and largest 824 -> 878, tool_groups' card 734 -> 729, usage_report's 178 -> 194.
@@ -978,6 +981,7 @@ def _hub():
 
     s = Session(doc=doc, out_dir=tempfile.mkdtemp())
     srv = tools.build_server(s, lean=True)
+    srv._oriented = True  # the first answer's whereYouAre has its own tests (test_orient_1122.py)
 
     def call(name, args=None):
         r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args or {}}})["result"]

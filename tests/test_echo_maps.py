@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The echo's maps, round 7 (docs/hardening/window-r6-cam-fem-td-mesh-findings.md
+# The echo's maps, round 7 (private records: window-r6-cam-fem-td-mesh-findings.md
 # FEM and Mesh): a scene map pulled in front of its surface and never
 # picked, a colour scale in screen space left out of the bounding box, the
 # selection cleared and the body hidden under a stress map, a read's map
@@ -17,6 +17,10 @@ sys.path.insert(0, HERE)
 
 from agentlink import annotate, echo, render  # noqa: E402
 from test_echo_round6 import SceneNode, _Maker  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cowork_legacy  # noqa: E402  (the old camera and selection behaviour: FollowAgent on, EchoSelects select)
+
+setUpModule, tearDownModule = _cowork_legacy.on, _cowork_legacy.off
 
 
 class Coin:

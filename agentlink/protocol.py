@@ -8,12 +8,18 @@
 import json
 import math
 import os
+import re
 import sys
 import threading
 import time
 import traceback
 
 PROTOCOL = "2025-06-18"
+# How text that UTF-8 cannot hold (a lone surrogate, from a file name or an
+# add-on's text) is written on the wire: as a backslash escape. Inside a JSON
+# string that is a valid \uXXXX escape, so the line still goes out and parses;
+# "strict" failed the write and the call had no answer.
+WIRE_ERRORS = "backslashreplace"
 
 
 
@@ -237,6 +243,11 @@ class Tool:
         return {"name": self.name, "description": self.description, "inputSchema": self.schema}
 
 
+# The supervisor tells the window which MCP client it serves (clientInfo,
+# from the client's initialize), on its own connection to the window link.
+CLIENT_METHOD = "agentlink/client"
+
+
 SYNONYMS = {
     "centre": ("center",), "center": ("centre",), "colour": ("color",), "color": ("colour",),
     "body": ("object", "part"), "object": ("body",), "part": ("body", "object"),
@@ -245,12 +256,269 @@ SYNONYMS = {
 }
 
 
-def check_input(schema, args):
+# Fields an agent often gives one tool by another name (seen in the usage
+# log's refusals, efficiency design C2, 22 Nov): per tool, the field given and
+# the field the tool has. Taken as that field when it is not given, and said
+# in the answer's readAs. The cards do not change.
+FIELD_ALIASES = {
+    "object_set": {"set": "values", "properties": "values", "props": "values"},
+    "varset_set": {"values": "properties", "set": "properties"},
+    "varset_new": {"values": "properties"},
+    "doc_close": {"document": "documents", "name": "documents"},
+    "doc_open": {"file": "path", "document": "path"},
+    "object_get": {"properties": "filter", "property": "filter", "names": "filter"},
+    "object_delete": {"object": "objects", "name": "objects"},
+    "shape_query": {"object": "body"},
+    # live findings, 22 Nov: a local model gave batch its calls as commands
+    "batch": {"commands": "calls", "steps": "calls"},
+}
+
+# A field that means something only beside another one (per tool: field ->
+# the field it goes with). Given alone, it is left out and said in readAs
+# (live findings, 22 Nov: batch { at: "./", calls } was taken for a read).
+GOES_WITH = {
+    "batch": {"at": "read"},
+}
+
+
+# Fields that only ever appear in Agent Link's answers, never as a tool's
+# input (live findings, 22 Nov: a local model copied "ms": 0 from the answers
+# into every batch call, and each one was refused). Given to a tool that has
+# no such input, they are left out and the answer's readAs says so. A tool
+# whose schema has the name as a real input keeps it.
+ANSWER_FIELDS = ("ms", "msBy", "around", "saidBefore", "record", "appliesNow", "health", "readAs", "step",
+                 "options", "notice", "rider", "truncated", "outcome", "isError", "said", "flattened")
+
+# Optional text inputs that an empty string ("") means nothing for: read as
+# left out, so the call gets the answer it gives without them (live findings,
+# 22 Nov: tool_find { group: "", tool: "" }). Per tool, kept small: only where
+# an empty value cannot mean something of its own.
+EMPTY_IS_LEFT_OUT = {
+    "tool_find": ("words", "group", "tool", "to"),
+    "tool_groups": ("group", "tool", "find", "needs"),
+}
+
+
+def read_as_words(read_as):
+    """The answer's readAs line from check_input's list: the aliases read,
+    then the fields left out."""
+    aliases = [r for r in read_as if not r.startswith("ignored ")]
+    other = [r for r in read_as if r.startswith("ignored ")]
+    return "; ".join((["read " + ", ".join(aliases)] if aliases else []) + other)
+
+
+def _as_alias(spec, v):
+    """A value given under an alias, in the shape of the field it is read as:
+    one name for a list field, a list of names for a filter."""
+    t = spec.get("type") if isinstance(spec, dict) else None
+    if t == "array" and not isinstance(v, list):
+        return [v]
+    if not t and isinstance(v, list) and all(isinstance(x, str) for x in v):
+        return "|".join(v)
+    return v
+
+
+# tool_find's forms, shown whole when a call fits none (live, 22 Nov: a
+# local model sent queries as objects three times; the old words did not
+# say that queries are plain strings).
+FIND_FORMS = ('tool_find takes: words: "pad sketch" (plain words); queries: ["pad sketch", "hole", "pd_pad"] '
+              '(searches, up to 6, and tool names, up to 20, in one list); tool: "pd_pad" (a name, or a list of names); groups: true. '
+              'tool and queries can be in one call.')
+_QUERY_KEYS = ("words", "query", "q", "text", "find")
+
+
+def find_queries(a):
+    """tool_find's searches as plain strings, and what was read another way.
+    The meaning of these shapes is clear, so they are read, not refused:
+    queries as objects ({words: "…"}), words as a list, one query as a string."""
+    read_as = []
+    qs = a.get("queries")
+    words = a.get("words")
+    if qs is None and isinstance(words, list):
+        qs, words = words, None
+        read_as.append("words (a list) as queries")
+    if qs is None and words is not None:
+        qs = [words]
+    if isinstance(qs, (str, dict)):
+        qs = [qs]
+        read_as.append("queries as a list of one")
+    if not isinstance(qs, list):
+        return [], read_as
+    out, objects = [], False
+    for q in qs:
+        if isinstance(q, dict):
+            q = next((q[k] for k in _QUERY_KEYS if isinstance(q.get(k), str)), None)
+            objects = True
+        if not isinstance(q, str) or not q.strip():
+            return [], read_as
+        out.append(q)
+    if objects:
+        read_as.append('queries given as objects, read as their words (queries is a list of plain strings: ["pad sketch", "hole"])')
+    return out, read_as
+
+
+FIND_MAX_SEARCHES = 6
+FIND_MAX_CARDS = 20
+
+
+def loose_name(server, n):
+    """A tool name from a name written loosely, or None: a client's prefix,
+    other letter case, - for _, or one or two letters wrong in a name with _
+    (pd_poket). Words with spaces are never a name."""
+    if not isinstance(n, str):
+        return None
+    w = n.strip()
+    if not w or any(c.isspace() for c in w):
+        return None
+    for cand in (w, w.lower().replace("-", "_")):
+        got = plain_name(server, cand)
+        if got in server.tools:
+            return got
+    w = plain_name(server, w.lower().replace("-", "_"))
+    if "_" not in w or len(w) < 5:
+        return None
+    import difflib
+
+    best = difflib.get_close_matches(w, list(server.tools), n=2, cutoff=0.88)
+    # Only one close name: two equally close ones are a guess.
+    if len(best) == 1 or (len(best) == 2 and difflib.SequenceMatcher(None, w, best[0]).ratio()
+                          - difflib.SequenceMatcher(None, w, best[1]).ratio() > 0.04):
+        return best[0]
+    return None
+
+
+def sort_find(server, a):
+    """tool_find's input sorted: (names, searches, read_as). tool and
+    queries (or words) can come in one call, and either can hold names or
+    words: a name, also written loosely, gives its card; anything else is a
+    search (owner, 22 Nov). Raises ToolError over the limits."""
+    qs, read_as = find_queries(a)
+    tool = a.get("tool")
+    tl = [tool] if isinstance(tool, str) else (list(tool) if isinstance(tool, list) else [])
+    names, searches = [], []
+    for src, items in (("tool", tl), ("queries", qs)):
+        for q in items:
+            if not isinstance(q, str) or not q.strip():
+                continue
+            n = loose_name(server, q)
+            if n is not None:
+                if n not in names:
+                    names.append(n)
+                if n != q.strip():
+                    read_as.append(f"{q.strip()} as the tool {n}")
+            else:
+                searches.append(q.strip())
+                if src == "tool":
+                    read_as.append(f"tool: {q.strip()} is no tool name, so it was searched")
+    if len(searches) > FIND_MAX_SEARCHES:
+        raise ToolError("invalid_input", f"{len(searches)} searches, and the most is {FIND_MAX_SEARCHES} in one call (tool names do not count). "
+                                         f"Split them into two calls. {FIND_FORMS}")
+    if len(names) > FIND_MAX_CARDS:
+        raise ToolError("invalid_input", f"{len(names)} tool names, and the most is {FIND_MAX_CARDS} cards in one call. Split them into two calls. {FIND_FORMS}")
+    return names, searches, read_as
+
+
+def does_hits(server, n, k=3):
+    """For a tool name that is not here: the tools that do what its words
+    say, by the search (tool_find), as "name (what it does)" — a wrong tool
+    name gets the right tool, never a guess at its inputs (owner, 22 Nov:
+    sketch_rectangle and sketch_circle are sketch_add)."""
+    t = (getattr(server, "tools", None) or {}).get("tool_find")
+    if t is None or not isinstance(n, str):
+        return []
+    words = re.sub(r"[_\-]+", " ", n.split("__")[-1]).strip()
+    try:
+        got = t.fn({"words": words, "limit": k})
+    except Exception:  # noqa: BLE001 - advice only
+        return []
+    return [f"{h['tool']} ({h.get('does', '').rstrip('.')})" for h in (got.get("tools") or [])[:k] if isinstance(h, dict) and h.get("tool")]
+
+
+def close_names(server, n, k=4):
+    """The tool names closest to n: most shared name words first, then the
+    closest spelling (pd_pad_create: pd_pad before pd_pocket)."""
+    import difflib
+
+    n = plain_name(server, n)
+    if not isinstance(n, str) or not n:
+        return []
+    words = {p for p in n.lower().replace("-", "_").split("_") if p}
+    scored = []
+    for t in server.tools:
+        shared = len(words & set(t.split("_")))
+        ratio = difflib.SequenceMatcher(None, n, t).ratio()
+        if shared or ratio >= 0.6:
+            scored.append((shared, ratio, t))
+    scored.sort(key=lambda x: (-x[0], -x[1], x[2]))
+    return [t for _, _, t in scored[:k]]
+
+
+def plain_name(server, n):
+    """A tool's own name from a client's prefixed one (agentlink_pd_pad,
+    mcp__…__pd_pad: the prefix the client puts on MCP tools). Only an exact
+    tool name after the prefix counts; anything else comes back as it was."""
+    if not isinstance(n, str) or n in server.tools:
+        return n
+    rest = n
+    while "_" in rest:
+        rest = rest.split("_", 1)[1]
+        if rest in server.tools and n[: len(n) - len(rest)].rstrip("_").lower().split("__")[-1].replace("-", "_") in ("agentlink", "agentlink_freecad", "freecad_agent_link"):
+            return rest
+    return n
+
+
+# The pure reads that ignore (and name) a field they do not have. A list,
+# not the changes flag: approve_file and approve_code change nothing in the
+# document but must take their exact pending arguments, and a tool that
+# writes a file can misread a misspelled path. Every tool not here refuses.
+STRICT_SHAPE = frozenset(("approve_file", "approve_code"))
+FORGIVING_READS = frozenset(("session_state", "tool_find", "tool_groups", "guide_read", "get", "job_status", "usage_report", "report_read"))
+
+
+ORIENT_HEAD = "\n\nWhere you are, read at connect (session_state reads it again): "
+
+
+def orient_text(got):
+    """The orientation as the words at connect: compact JSON."""
+    return ORIENT_HEAD + json.dumps(got, ensure_ascii=False, separators=(",", ":"))
+
+
+def check_input(schema, args, tool=None):
     """Unknown keys and missing required ones refused by name, as the
-    answers name them: what the agent got wrong and what is allowed."""
+    answers name them: what the agent got wrong and what is allowed.
+    Answers the aliases read (FIELD_ALIASES), as "given as field" words."""
     if not isinstance(args, dict):
         raise ToolError("invalid_input", "arguments: an object.")
     props = schema.get("properties", {})
+    read_as = []
+    # The inputs wrapped as a batch step wraps them ({arguments: {…}} on a
+    # direct call; live, 22 Nov: a local model, five times in one run):
+    # taken from inside, when arguments is the only key and not a field here.
+    inner = args.get("arguments")
+    # Not on the approval tools: they take the pending call exactly, shape too.
+    if set(args) == {"arguments"} and "arguments" not in props and isinstance(inner, dict) and tool not in STRICT_SHAPE:
+        args.clear()
+        args.update(inner)
+        read_as.append("inputs taken from inside arguments (a direct call takes them at the top level)")
+    required = set(schema.get("required", []))
+    empty = [k for k in (EMPTY_IS_LEFT_OUT.get(tool) or ()) if args.get(k) == "" and k not in required]
+    for k in empty:
+        args.pop(k)
+    if empty:
+        read_as.append(f"ignored {', '.join(empty)} (empty: read as left out)")
+    answer_only = [k for k in args if k in ANSWER_FIELDS and k not in props]
+    for k in answer_only:
+        args.pop(k)
+    if answer_only:
+        read_as.append(f"ignored {', '.join(answer_only)} ({'an answer field' if len(answer_only) == 1 else 'answer fields'})")
+    for k, partner in (GOES_WITH.get(tool) or {}).items():
+        if k in args and args.get(partner) is None:
+            args.pop(k)
+            read_as.append(f"ignored {k} (it goes with {partner}, which was not given)")
+    for k, alt in (FIELD_ALIASES.get(tool) or {}).items():
+        if k in args and k not in props and alt in props and alt not in args:
+            args[alt] = _as_alias(props.get(alt), args.pop(k))
+            read_as.append(f"{k} as {alt}")
     # The same thing by another common name (centre for center, body for
     # object …): taken as the field the tool has, when that one is not given.
     for k in [k for k in args if k not in props]:
@@ -258,18 +526,50 @@ def check_input(schema, args):
         if alt is not None:
             args[alt] = args.pop(k)
     unknown = [k for k in args if k not in props]
+    if unknown and schema.get("additionalProperties") is False and tool in FORGIVING_READS:
+        # A pure read: a field it does not have is ignored and named, not
+        # refused. Nothing can go wrong in a read, and a refusal costs the
+        # agent a turn (owner, 22 Nov: reads forgive, changes refuse).
+        for k in unknown:
+            args.pop(k)
+        read_as.append(f"ignored {', '.join(unknown)} (not {'a field' if len(unknown) == 1 else 'fields'} here — the fields: {', '.join(props) or 'none'})")
+        unknown = []
     if unknown and schema.get("additionalProperties") is False:
         raise ToolError("invalid_input", f"input.{unknown[0]}: not a known field — the fields here: {', '.join(props) or 'none'}")
     for k in schema.get("required", []):
         if k not in args:
             raise ToolError("invalid_input", f"input.{k}: required.")
+    # A value the card's example marks to give, sent as the example's null
+    # (or its <name>): refused by name, never read as left out (owner, 22 Nov).
+    if tool:
+        from . import examples
+
+        for k, what in examples.to_give(tool).items():
+            v = args.get(k, 0)
+            if v is None or v == f"<{k}>":
+                raise ToolError("invalid_input", f"input.{k}: give the value ({what}) in place of {'null' if v is None else v}.")
     for k, v in list(args.items()):
         spec = props.get(k)
         if isinstance(spec, dict) and v is not None:
             args[k] = _typed(f"input.{k}", spec, v)
+    return read_as
 
 
 _PY = {"string": (str,), "number": (int, float), "integer": (int,), "boolean": (bool,), "array": (list,), "object": (dict,)}
+
+
+def _form(spec):
+    """The field's form from its card, for a refusal of the wrong type
+    (owner, 22 Nov: show the form, do not guess): its own description, or
+    an object's fields. "" when the card has neither."""
+    d = spec.get("description")
+    if isinstance(d, str) and d.strip():
+        d = d.strip()
+        return " The form: " + (d if len(d) <= 220 else d[:217] + "…")
+    props = spec.get("properties")
+    if spec.get("type") == "object" and isinstance(props, dict) and props:
+        return " The form: { " + ", ".join(list(props)[:8]) + " }."
+    return ""
 
 
 def _typed(where, spec, v):
@@ -303,7 +603,7 @@ def _typed(where, spec, v):
         if not ok and t == "integer" and isinstance(v, float) and v.is_integer():
             v, ok = int(v), True
         if not ok:
-            raise ToolError("invalid_input", f"{where}: {_said(t)}, not {_kind(v)}.")
+            raise ToolError("invalid_input", f"{where}: {_said(t)}, not {_kind(v)}.{_form(spec)}")
     if "enum" in spec and v not in spec["enum"]:
         lowered = {str(e).lower(): e for e in spec["enum"]}
         if isinstance(v, str) and v.lower() in lowered:
@@ -403,6 +703,40 @@ def compact(obj):
         return json.dumps(_finite(json.loads(json.dumps(obj, default=_plain))), separators=(",", ":"), ensure_ascii=False, allow_nan=False)
 
 
+
+def _outcome(tool, exc):
+    """A refusal's outcome for a changing call: what Session.execute put on
+    the error (changes.mark_outcome), else not_started (it was refused before
+    any change began: input, guards, a job check). None for a read."""
+    got = getattr(exc, "outcome", None)
+    if got:
+        return got
+    try:
+        if tool is not None and tool.changes and tool.name != "batch":
+            return "not_started"
+    except Exception:
+        pass
+    return None
+
+
+# Refusal codes that mean "not now", not "not so": the same call may go
+# through a moment later. Only the link's own busy answer is one today.
+TRANSIENT = {"busy"}
+
+
+def retry_once_ok(changes, err):
+    """True when the link may send a refused call again once by itself
+    (E10): a read refused for a transient cause, or a changing call refused
+    for one before it began (outcome not_started). Never a changing call
+    whose outcome is unknown or anything else: it may have changed the
+    document already."""
+    if not isinstance(err, dict) or err.get("code") not in TRANSIENT:
+        return False
+    if not changes:
+        return True
+    return err.get("outcome") == "not_started"
+
+
 def failed_words(name, e):
     """A tool's own failure as a sentence. A bare KeyError said only the
     key ("asm_joint failed: 'M8x25-Screw219'"): it is an object or entry
@@ -426,6 +760,11 @@ class Server:
         self.version = version
         self.tools = {t.name: t for t in tools}
         self.instructions = instructions
+        # Where the agent is, short (Session.orientation): read at
+        # initialize into the words sent then, and given once on the first
+        # answer of a conversation (owner, 22 Nov). None: neither.
+        self.orient = None
+        self._oriented = False
         # How a call is run: run(tool, fn) — directly, or as one undo step
         # (the session's), or handed to the GUI's thread.
         self.run = run or (lambda tool, fn: fn())
@@ -521,6 +860,15 @@ class Server:
         self.groups = groups
         self.outbox.append({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
 
+    def orient_words(self):
+        """The orientation for the words at connect, or "" (none, or it failed)."""
+        if self.orient is None:
+            return ""
+        try:
+            return orient_text(self.orient())
+        except Exception:  # noqa: BLE001
+            return ""
+
     def handle(self, msg, client=None):
         """One message in; the reply, or None for a notification. client:
         the connection it came on (the window link's paired connection;
@@ -531,6 +879,12 @@ class Server:
             return None
         try:
             if method == "initialize":
+                # The client's own name, per connection: approve_file and
+                # approve_code count only from a client known to ask the
+                # person first (agentlink/approvals.py).
+                from . import approvals
+
+                approvals.note_client(client, ((msg.get("params") or {}).get("clientInfo") or {}))
                 if self.session is not None:
                     # A new conversation: every standing word is said again (agentlink/once.py).
                     from . import once
@@ -542,13 +896,24 @@ class Server:
                         self.meter.new_job("initialize")
                     except Exception:
                         pass
+                self._oriented = False
                 result = {
                     "protocolVersion": PROTOCOL,
                     "capabilities": {"tools": {"listChanged": True}, **({"resources": {}} if self.resources else {})},
                     "serverInfo": {"name": self.name, "version": self.version},
-                    "instructions": self.instructions,
+                    "instructions": self.instructions + self.orient_words(),
                 }
             elif method == "ping":
+                result = {}
+            elif method == CLIENT_METHOD:
+                # The supervisor's word on the window link: the name its MCP
+                # client gave in initialize (the window never sees that
+                # initialize). Nothing else changes.
+                from . import approvals
+
+                approvals.note_client(client, ((msg.get("params") or {}).get("clientInfo") or {}))
+                # A new conversation on the window link: its first answer orients again.
+                self._oriented = False
                 result = {}
             elif method == "tools/list":
                 from . import staticbase
@@ -585,6 +950,12 @@ class Server:
         return None if mid is None else {"jsonrpc": "2.0", "id": mid, "result": result}
 
     def call(self, params):
+        if params.get("name") == "pick" and "pick" in self.tools and self.session is not None:
+            # An option run by its number (agentlink/options.py): its call
+            # goes through this same path, under the tool's own name.
+            from . import options
+
+            return options.pick_call(self, params)
         t0 = time.time()
         s = self.session
         prior = None
@@ -602,6 +973,10 @@ class Server:
             result = self._call(params)
             with around.part("callDone"):  # the add-ons' call_done handlers
                 self._done(params, result, before)
+        try:
+            repeat_words(self, params.get("name"), result)
+        except Exception:  # noqa: BLE001 - words only
+            pass
         with around.part("notice"):
             _add_notice(result)
             _add_rider(result, params.get("name"))
@@ -718,6 +1093,9 @@ class Server:
         name = params.get("name")
         args = params.get("arguments") or {}
         tool = self.tools.get(name)
+        if tool is None and plain_name(self, name) in self.tools:
+            name = plain_name(self, name)
+            tool = self.tools[name]
         if tool is None:
             import difflib
 
@@ -728,9 +1106,13 @@ class Server:
                 hint = f"the tools: {', '.join(self.tools)}"
             else:
                 hint = f"near: {', '.join(near)}" if near else (f"its family: {', '.join(same)}" if same else "tool_groups lists them all")
+            does = does_hits(self, name)
+            if does:
+                hint += f". By what it does, did you mean: {'; '.join(does)}? tool_find {{ tool: name }} gives its card"
             return self.refusal("not_found", f"{name}: no such tool — {hint}.")
         t0 = time.time()
         tool = tool.for_call(args)
+        read_as = []
         try:
             # background: true on any read the tool does not take itself:
             # run it as a job (agentlink/jobs.py).
@@ -739,7 +1121,7 @@ class Server:
                 asked = args.pop("background") in (True, "true")
             from . import around as _ar
 
-            check_input(tool.schema, args)
+            read_as = check_input(tool.schema, args, tool.name)
             if self.guard is not None:
                 with _ar.part("guard"):
                     self.guard(tool, args)
@@ -747,9 +1129,15 @@ class Server:
 
             s = self.session
             as_job = False
+            edit0, coedit = None, None
             if s is not None:
                 with _ar.part("jobCheck"):
                     jobs.guard_change(tool, args, s)
+                    # The person's open edit or task panel: a change to that
+                    # body (or that document) is held (agentlink/coedit.py).
+                    from . import coedit
+
+                    edit0 = coedit.check(tool, args, s)
                     as_job = jobs.wanted(tool, args, s, asked=asked)
             elif asked:
                 raise ToolError("invalid_input", "background: a job needs a session.")
@@ -761,6 +1149,12 @@ class Server:
                 # file belongs in the batch's order, a change is never a job.
                 raise ToolError("invalid_input", jobs.background_refusal(tool, args, getattr(s, "batch_now", None) is not None, s))
             changes0 = getattr(s, "_applies_seq", 0)
+            if tool.name == "doc_save" and s is not None:
+                from . import partialdoc
+
+                said = partialdoc.refusal(getattr(s, "doc", None), tool.name)
+                if said:
+                    raise ToolError("invalid_state", said)
             gate = self.gate
             if gate is not None:
                 gate.as_job = as_job
@@ -781,9 +1175,14 @@ class Server:
                 else:
                     out = self.run(tool, lambda: _settled(lambda: tool.fn(args)))
             except BaseException:
+                if coedit is not None:
+                    coedit.settle(edit0)
                 if gate is not None:
                     gate.after(tool, args, False)
                 raise
+            if coedit is not None:
+                # An edit the call opened (a cmd_run's sketch) is the agent's.
+                coedit.settle(edit0)
             if gate is not None:
                 # A job logs its own time when it ends (the call may have
                 # answered before it did).
@@ -801,6 +1200,14 @@ class Server:
                         appliesnow.push(s, tool, out, count=tool.name != "batch")
                 except Exception:
                     pass
+                # The likely next steps as numbered, checked calls bound to the step (agentlink/options.py).
+                try:
+                    from . import options
+
+                    with _ar.part("options"):
+                        options.push(s, out)
+                except Exception:
+                    pass
             if self.on_call is not None:
                 try:
                     with _ar.part("onCall"):
@@ -811,13 +1218,37 @@ class Server:
             if name == "batch":
                 from . import staticbase
 
-                return self.refusal(e.code, staticbase.batch_hint(e.message))
-            return self.refusal(e.code, e.message)
+                return self.refusal(e.code, staticbase.batch_hint(e.message), outcome=_outcome(tool, e))
+            return self.refusal(e.code, e.message, outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None))
         except ValueError as e:
-            return self.refusal("invalid_input", str(e))
+            return self.refusal("invalid_input", str(e), outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None))
+        except (SystemExit, KeyboardInterrupt) as e:
+            # Code a tool ran (an add-on's, an approved cookbook entry's)
+            # called sys.exit or raised KeyboardInterrupt: FreeCAD stays up.
+            # Session.execute has already taken the step back.
+            out_of = _outcome(tool, e)
+            if out_of is None:
+                kept = "it is a read, so nothing changed"
+            else:
+                kept = "nothing was kept" if out_of in ("rolled_back", "not_started") else "some objects stay (left)"
+            what = "called exit" if isinstance(e, SystemExit) else "was interrupted (KeyboardInterrupt)"
+            return self.refusal("failed", f"{name}: the add-on's code {what}; {kept}. FreeCAD and Agent Link go on.",
+                                outcome=out_of, left=getattr(e, "outcome_left", None))
         except Exception as e:
             traceback.print_exc(file=sys.stderr)
-            return self.refusal("failed", failed_words(name, e), _test_trace())
+            return self.refusal("failed", failed_words(name, e), _test_trace(), outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None))
+        if read_as and isinstance(out, dict):
+            # Fields given by another common name (FIELD_ALIASES): what was read.
+            out["readAs"] = read_as_words(read_as)
+        if isinstance(out, dict) and not self._oriented and getattr(self.session, "batch_now", None) is None:
+            # The first answer of a conversation says where the agent is,
+            # once (a session_state is that read itself).
+            self._oriented = True
+            if name != "session_state" and self.orient is not None:
+                try:
+                    out["whereYouAre"] = self.orient()
+                except Exception:  # noqa: BLE001
+                    pass
         image = None
         s = self.session
         if isinstance(out, dict) and s is not None and getattr(s, "batch_now", None) is None:
@@ -869,11 +1300,67 @@ class Server:
         return {**jobs.summary(job), "note": f"{tool.name} is still running (past {waited:.0f} s, longer than a call may wait): it goes on as a job; nothing else was changed."}
 
     @staticmethod
-    def refusal(code, message, trace=None):
+    def refusal(code, message, trace=None, outcome=None, left=None):
         err = {"code": code, "message": message}
+        if outcome:
+            # What the refused call left in the document: not_started (no
+            # change was made: safe to call again), rolled_back (taken back
+            # whole), cleanup_incomplete (left: the objects that stay).
+            err["outcome"] = outcome
+        if left:
+            err["left"] = list(left)
         if trace:
             err["trace"] = trace
         return {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}
+
+
+# ---- the same refusal again -------------------------------------------------
+#
+# The repeat-error ladder, words only (efficiency design v2, D3; no
+# pictures): the 2nd same refusal of a tool says so and points to its card's
+# example; the 3rd and later say to try another way. A call of that tool that
+# goes through starts the count again (live, 22 Nov: a local model sent the
+# same wrong batch shape 12 and 14 times in a row).
+
+def _refusal_key(name, err):
+    return (name, err.get("code"), re.sub(r"\d+(\.\d+)?", "#", str(err.get("message", "")))[:120])
+
+
+def repeat_words(server, name, result):
+    counts = getattr(server, "_repeats", None)
+    if counts is None:
+        counts = server._repeats = {}
+    name = plain_name(server, name) if isinstance(name, str) else name
+    if not result.get("isError"):
+        for k in [k for k in counts if k[0] == name]:
+            counts.pop(k)
+        return
+    content = result.get("content") or []
+    if not content or content[0].get("type") != "text":
+        return
+    body = json.loads(content[0]["text"])
+    err = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(err, dict):
+        return
+    key = _refusal_key(name, err)
+    n = counts[key] = counts.get(key, 0) + 1
+    if n < 2:
+        return
+    card = f'tool_find {{ tool: "{name}" }}' if name and name in server.tools else "tool_find { words }"
+    try:
+        from . import examples
+
+        has_ex = bool(examples.load().get(name))
+    except Exception:  # noqa: BLE001
+        has_ex = False
+    if n == 2:
+        err["message"] += f" This is the same refusal as before: change what it names. {card} gives the card" + (" and a worked example." if has_ex else ".")
+    else:
+        err["message"] += (f" Refused the same way {n} times: try another way. "
+                           + (f"Copy the card's example ({card}) and change only its values, " if has_ex else f"Read the card again ({card}), ")
+                           + "or use another tool for this step.")
+    err["repeat"] = n
+    content[0]["text"] = compact(body)
 
 
 # ---- progress notifications --------------------------------------------------
@@ -1170,6 +1657,19 @@ def add_report(reply, lines):
 
 
 _NOT_JSON = object()
+# The note the hidden FreeCAD writes as it takes a call off its input, before
+# the call begins: { id, changes } (supervise.py reads it; no client sees it).
+TOOK = "notifications/agentlink/took"
+
+
+def _call_changes(server, msg):
+    """True when the call in msg may change something; True when that cannot be told."""
+    try:
+        params = msg.get("params") or {}
+        tool = server.tools.get(params.get("name"))
+        return True if tool is None else bool(tool.changes_for(params.get("arguments") or {}))
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def serve_lines(server, readline, write):
@@ -1224,6 +1724,7 @@ def serve_lines(server, readline, write):
             inbox.put(msg)
 
     threading.Thread(target=reader, name="agentlink-stdin", daemon=True).start()
+    took_marks = bool(os.environ.get("AGENTLINK_SUPERVISED"))
     while True:
         msg = inbox.get()
         if msg is None:
@@ -1231,6 +1732,11 @@ def serve_lines(server, readline, write):
         if msg is _NOT_JSON:
             out(compact({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}) + "\n")
             continue
+        if took_marks and isinstance(msg, dict) and msg.get("method") == "tools/call" and msg.get("id") is not None:
+            # Said to the supervisor before the call begins (E2): after a
+            # restart it sends again only the calls never taken here.
+            # As a notification: written at once, with none of a reply's after-work.
+            server.notify({"jsonrpc": "2.0", "method": TOOK, "params": {"id": msg["id"], "changes": _call_changes(server, msg)}})
         reply = server.handle(msg)
         if reply is not None:
             out(compact(reply) + "\n")

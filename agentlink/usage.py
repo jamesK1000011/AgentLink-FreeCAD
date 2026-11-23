@@ -45,7 +45,7 @@ def folder():
     return os.path.join(os.path.expanduser("~"), "AgentLink", "usage")
 
 
-# ---- the usage log (docs/design/usage-log-2026-11-18.md) ---------------------
+# ---- the usage log (private records: usage-log-2026-11-18.md) ---------------------
 #
 # Each call's row also holds: the job it is in (job, step n), the gap since
 # the call before, its group, the answer's bytes and estimated tokens, the
@@ -608,7 +608,7 @@ def report(days=7, where=None, top=12):
     out = {"days": days, "calls": t["calls"], "tokens": t["tokens"] + list_tok, "callTokens": t["tokens"], "toolListTokens": list_tok,
            "imageTokens": t["imageTokens"], "errors": t["errors"] + amended, "perDay": sorted(per_day.values(), key=lambda x: x["day"]),
            "sessions": len(sessions), "topTools": t["byTool"][:top],
-           "note": "Estimates from what passed through Agent Link (text at ~3.5 characters a token, pictures at width × height / 750): where the cost goes, not Claude's own count. The tool list is paid at each session's start; your plan's usage page has the real totals."}
+           "note": "Estimates from what passed through Agent Link (text at ~3.5 characters a token, pictures at width × height / 750): where the cost goes, not your AI client's own count. The tool list is paid at each session's start; your plan's usage page has the real totals."}
     tips = []
     if out["tokens"] and list_tok > 0.3 * out["tokens"]:
         tips.append("The tool list is over a third of it: fewer groups listed (tool_groups disable) cuts every session's start.")

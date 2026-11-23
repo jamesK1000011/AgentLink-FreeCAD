@@ -1182,8 +1182,8 @@ function recordVersions(before, after, outcome) {
 
 const UPDATE_TOOL = {
   name: 'agentlink_update',
-  description: 'Fetch the newest Agent Link and ScanRuler for FreeCAD from GitHub and start FreeCAD again on them, without restarting Claude: new tools and fixes from then on. Companion servers kept as git clones (those addons.json lists under companions) are brought up to their branch too and started again. The open document is lost unless saved (doc_save first). Answers the version before and after, and each companion\'s; the tool list is sent again. An installed add-on that loaded before and no longer loads fails the update (FreeCAD stays on the version before); one that does not load for another reason is named in leftOut [{ extension, error }] with a warning and, where they can be told, lostGroups (tool groups gone compared with before) — read them: success with a warning means tools are missing.',
-  inputSchema: { type: 'object', properties: {} },
+  description: 'Fetch the newest Agent Link and ScanRuler for FreeCAD from GitHub and start FreeCAD again on them, without restarting Claude: new tools and fixes from then on. Companion servers kept as git clones (those addons.json lists under companions) are brought up to their branch too and started again. The open document is lost unless saved (doc_save first). When open documents have changes not saved, it refuses first and names them (unsaved): ask the person to save them, or call again with unsaved: \"recover\", and each comes back as a recovered copy beside its file. Answers the version before and after, and each companion\'s; the tool list is sent again. An installed add-on that loaded before and no longer loads fails the update (FreeCAD stays on the version before); one that does not load for another reason is named in leftOut [{ extension, error }] with a warning and, where they can be told, lostGroups (tool groups gone compared with before) — read them: success with a warning means tools are missing.',
+  inputSchema: { type: 'object', properties: { unsaved: { type: 'string', enum: ['recover'] } } },
 }
 
 /** The window's heartbeat (written from its GUI thread every 2 s) says a
@@ -1216,6 +1216,13 @@ function restartWord(hb, now = Date.now() / 1000) {
 
 // Set when this launcher restarted the window; taken by the next start().
 let PENDING_RESTART = null
+
+/** The labels of the open documents with changes not saved, from the
+ *  heartbeat; [] when it cannot be read (the update then goes on as before). */
+function unsavedDocs(hb) {
+  if (!hb || !Array.isArray(hb.docs)) return []
+  return hb.docs.filter((d) => d && d.modified).map((d) => String(d.label || d.name))
+}
 
 function readHeartbeat() {
   try {
@@ -1533,6 +1540,17 @@ function headless(exe, args, e, inst = {}) {
       msg = JSON.parse(line)
     } catch {}
     if (msg && msg.method === 'tools/call' && msg.params && msg.params.name === UPDATE_TOOL.name) {
+      // Documents with unsaved changes come back only as recovered copies
+      // after the restart: say which first (live, 22 Nov: a person's
+      // assembly and three parts came back as copies, the assembly itself
+      // not at all). unsaved: "recover" goes on.
+      const held = unsavedDocs(readHeartbeat())
+      const args = (msg.params && msg.params.arguments) || {}
+      if (held.length && args.unsaved !== 'recover') {
+        reply(msg.id, { error: { code: 'invalid_state', outcome: 'not_started', unsaved: held,
+          message: `${held.length} open document${held.length > 1 ? 's have' : ' has'} changes not saved: ${held.join(', ')}. The update restarts FreeCAD, and then ${held.length > 1 ? 'they come' : 'it comes'} back only as a recovered copy beside ${held.length > 1 ? 'their files' : 'its file'}. Ask the person to save or close ${held.length > 1 ? 'them' : 'it'}, or call agentlink_update { unsaved: "recover" } to go on. Nothing was changed.` } }, true)
+        return
+      }
       selfUpdate(msg.id)
       return
     }

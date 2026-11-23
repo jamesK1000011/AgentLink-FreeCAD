@@ -183,6 +183,13 @@ def first_sentence(text, n=160):
 
 # ---- find ---------------------------------------------------------------------------------
 
+# What a tool gets when the search names its whole action (score()). It
+# is more than a word gets from an add-on's search words, so the tool that
+# does the action comes before a tool that only leads to it ("pad sketch":
+# pd_pad, not an add-on tool that makes the sketch and lists pad in its words).
+ACTION_BONUS = 12
+
+
 def score(words, name, e, description="", group="", about="", named=None):
     """(words matched, score) of one tool for a search's words. Per word: the
     best of the tool's name, the index's words and its commands; then its
@@ -224,7 +231,9 @@ def score(words, name, e, description="", group="", about="", named=None):
         got = best
         if wb and wb in named and any(norm(x) == w for x in WORKBENCH_WORDS.get(wb, ())):
             got += 5
-        if w in group_words:
+        # The group's name adds only for a word the tool's own name does not
+        # hold already (a drawing tool in group drawing: "drawing" once).
+        if w in group_words and w not in name_words:
             got += 3
         if re.search(rf"\b{re.escape(w)}", lead):
             got += 3
@@ -242,6 +251,12 @@ def score(words, name, e, description="", group="", about="", named=None):
     spare = sum(1 for tok in rest if not any(w == norm(tok) or (len(tok) > 2 and w.startswith(tok)) or (len(w) > 2 and tok.startswith(w)) for w in words))
     if matched:
         total -= min(spare, 2) * 1.5
+    # The tool whose whole action the search names ("pad sketch": pd_pad, not
+    # the sketch tools that a pad is made from): each word of the name past
+    # its family is a word of the search.
+    # A short name word counts for the word it starts (td_dim: "dimension").
+    if "_" in name and all(any(w == norm(tok) or (len(tok) > 2 and w.startswith(tok)) for w in words) for tok in rest):
+        total += ACTION_BONUS
     return matched, total
 
 

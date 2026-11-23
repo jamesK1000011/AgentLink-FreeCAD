@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The echo's third window pass (docs/hardening/echo3-findings.md): what a
+# The echo's third window pass (private records: echo3-findings.md): what a
 # changing call shows (its lit button, its words, its selection) is held
 # until the next changing call, so a picture of the window taken right after
 # it shows it; a sketch the agent left open in another document is left;
@@ -15,6 +15,10 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from agentlink import echo, overlay  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _cowork_legacy  # noqa: E402  (the old camera and selection behaviour: FollowAgent on, EchoSelects select)
+
+setUpModule, tearDownModule = _cowork_legacy.on, _cowork_legacy.off
 
 
 class Tool:

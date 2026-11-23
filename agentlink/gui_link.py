@@ -17,7 +17,7 @@ import time
 import FreeCAD
 
 from .protocol import FRONT_CALLS as _FRONT_CALLS
-from .protocol import compact, front_call
+from .protocol import WIRE_ERRORS, compact, front_call, retry_once_ok
 from .tools import Session, build_server
 
 PORT = 7318
@@ -31,6 +31,12 @@ FRONT_TOOLS = {"cmd_run", "menu_run", "view_snapshot"}
 # window (or past the call in hand's own time) is answered "busy" from the
 # socket thread, not left waiting for ever.
 BUSY_AFTER = 10.0
+# A queued call due to be answered busy (it was not started) is tried once
+# more after this many seconds: the menu or dialog that held the window may
+# have closed by then (E10). Its answer then carries _meta.retried: 1.
+RETRY_DELAY = 1.5
+# The clock the busy watch reads (a test puts a fake one here).
+_clock = time.time
 # A call answered early whose menu or dialog closed: calls wait this long for
 # the rest of it before they are answered busy.
 ENDING_WAIT = 30.0
@@ -1331,7 +1337,7 @@ class Link:
         the computer could reach the port as well."""
         from . import link_token
 
-        f = conn.makefile("rw", encoding="utf-8", newline="\n")
+        f = conn.makefile("rw", encoding="utf-8", errors=WIRE_ERRORS, newline="\n")
         # Pairing has 5 s in all and short lines only; at most four
         # connections wait unpaired, and a fifth pushes out the one that has
         # waited longest, so nothing holding connections open can lock the
@@ -1381,7 +1387,7 @@ class Link:
                 if self._thread_call(line, f):
                     continue  # answered on a thread of its own
                 line = _Line(line)
-                line.ticket = {"state": "queued", "t": time.time()}
+                line.ticket = {"state": "queued", "t": _clock()}
                 self.inbox.put((line, f, conn))
                 self._poke()
                 self._arm_busy(line, f)
@@ -1484,12 +1490,49 @@ class Link:
         return None
 
     @staticmethod
-    def busy_reply(mid, why, ran=False):
+    def busy_reply(mid, why, ran=False, outcome=None, retried=0):
+        """The busy answer. outcome: not_started (it was not run), unknown
+        (a changing call in hand: some of it may have run). retried: the
+        link sent it again once first (_meta.retried)."""
         msg = (f"FreeCAD's window has a menu or dialog open: {why}. Its own event loop holds the window, so "
                + ("this call's steps after the one that opened it may not have run" if ran else "this call was not run")
                + ". gui_unstick closes it (or gui_input { steps: [{ key: \"Escape\" }] }); app_force_restart if that does not help.")
-        text = compact({"error": {"code": "busy", "message": msg}})
-        return {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}}
+        if ran and mid is not None:
+            msg += f" When the call ends, job_status {{ job: {json.dumps(str(mid))} }} gives its late answer."
+        err = {"code": "busy", "message": msg}
+        if outcome:
+            err["outcome"] = outcome
+        if retried:
+            err["retried"] = int(retried)  # in the answer itself, so every model sees it (owner, 22 Nov)
+        result = {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}
+        if retried:
+            result["_meta"] = {"retried": int(retried)}
+        return {"jsonrpc": "2.0", "id": mid, "result": result}
+
+    def _line_changes(self, line):
+        """True when the call on line may change something (its tool's own
+        changes_for with its arguments); True when that cannot be told."""
+        try:
+            msg = json.loads(line)
+            params = msg.get("params") or {}
+            srv = getattr(self, "server", None)
+            tool = getattr(srv, "tools", {}).get(params.get("name")) if srv is not None else None
+            if tool is None:
+                return True
+            return bool(tool.changes_for(params.get("arguments") or {}))
+        except Exception:  # noqa: BLE001
+            return True
+
+    def _keep_late(self, call, reply, how):
+        """A call's own answer that came after it was already answered (busy,
+        or early by its dialog), or whose connection was gone: kept in the
+        link's ring of late answers (jobs.keep_late), which job_status reads."""
+        try:
+            from . import jobs
+
+            jobs.keep_late(self, call.get("id"), call.get("name"), reply, how)
+        except Exception:  # noqa: BLE001 - the record only
+            pass
 
     def _meter_refused(self, line, reply):
         """A refusal this window wrote itself, before the call ran, counted
@@ -1541,21 +1584,41 @@ class Link:
         answers = _dialog_call(line)
 
         def watch():
-            t0 = time.time()
+            # The busy time is counted from when the hold began, not from
+            # when the call was queued (E3): a call queued behind a long
+            # call, then held by a dialog, still gets its full time.
+            t0 = (line.ticket or {}).get("t") or _clock()
+            held = None
+            retry_at = None
             while True:
                 time.sleep(tick)
                 if line.ticket["state"] != "queued" or getattr(self, "going", False):
                     return
-                if time.time() - t0 < after:
+                now = _clock()
+                why = self._stuck()
+                if why is None:
+                    held = None
+                    retry_at = None
+                    continue
+                if held is None:
+                    held = now
+                start = max(t0, held)
+                if now - start < after:
                     continue
                 front = getattr(self, "front", None)
-                if answers and isinstance(front, dict) and front.get("kind") == "dialog" and time.time() - t0 < max(after, FRONT_WAIT):
+                if answers and isinstance(front, dict) and front.get("kind") == "dialog" and now - start < max(after, FRONT_WAIT):
                     # Only a dialog is up, and this call answers it: the
                     # dialog's own loop takes it (live 70).
                     continue
-                why = self._stuck()
-                if why is not None and self._claim(line, "busy"):
-                    reply = self.busy_reply(mid, why)
+                if retry_at is None and not getattr(line, "retried", 0) and retry_once_ok(self._line_changes(line), {"code": "busy", "outcome": "not_started"}):
+                    # Not started: tried once more after a short wait (E10).
+                    line.retried = 1
+                    retry_at = now + RETRY_DELAY
+                    continue
+                if retry_at is not None and now < retry_at:
+                    continue
+                if self._claim(line, "busy"):
+                    reply = self.busy_reply(mid, why, outcome="not_started", retried=getattr(line, "retried", 0))
                     self._write(f, reply)
                     self._meter_refused(line, reply)
                     return
@@ -1592,12 +1655,15 @@ class Link:
                     with self._writes():
                         if call.get("answered") or call.get("finished") or call.get("deadline") is None:
                             return
+                        reply = self.busy_reply(call["id"], gi.front_words(getattr(self, "front", None)), ran=True,
+                                                outcome="unknown" if call.get("changes", True) else None)
                         try:
-                            call["f"].write(compact(self.busy_reply(call["id"], gi.front_words(getattr(self, "front", None)), ran=True)) + "\n")
+                            call["f"].write(compact(reply) + "\n")
                             call["f"].flush()
                         except (OSError, ValueError):
                             pass
                         call["answered"] = True
+                        call["answeredAs"] = "busy"
                     return
 
         th = threading.Thread(target=watch, name="agentlink-busy-call", daemon=True)
@@ -1972,12 +2038,19 @@ class Link:
                     self.busy_since = time.time()
                 self.busy, self.in_call = name, True
             msg = json.loads(line)
-            call = {"id": msg.get("id") if isinstance(msg, dict) else None, "name": name, "f": f, "answered": False}
+            call = {"id": msg.get("id") if isinstance(msg, dict) else None, "name": name, "f": f, "answered": False, "changes": self._line_changes(line)}
             self.calls.append(call)
             # Progress notifications (protocol.progress) for this call go to its own connection, until it is answered.
             self.server.notify = lambda m, f=f, call=call: None if call["answered"] else self._write(f, m)
             try:
-                reply = self.server.handle(msg, client=self._client_of(conn))
+                try:
+                    reply = self.server.handle(msg, client=self._client_of(conn))
+                except (SystemExit, KeyboardInterrupt):
+                    # Code run for the call called sys.exit (or raised
+                    # KeyboardInterrupt) outside the tool's own guard: the
+                    # window stays up and the call is refused.
+                    text = compact({"error": {"code": "failed", "message": f"{name}: code run for this call called exit; the window and Agent Link go on.", "outcome": "unknown"}})
+                    reply = {"jsonrpc": "2.0", "id": call["id"], "result": {"content": [{"type": "text", "text": text}], "isError": True}}
             finally:
                 call["finished"] = True
                 self.busy, self.in_call, self.busy_since = prev
@@ -1987,7 +2060,12 @@ class Link:
             if call["answered"]:
                 if not ((reply or {}).get("result") or {}).get("isError"):
                     self._meter_amend(name)  # counted as answered; the agent was told busy
+                if reply is not None:
+                    self._keep_late(call, reply, call.get("answeredAs") or "early")  # job_status gives it (E6)
                 reply = None  # sent already, while a dialog held the call
+            elif reply is not None and getattr(line, "retried", 0) and isinstance(reply.get("result"), dict):
+                reply["result"].setdefault("_meta", {})["retried"] = 1
+                mark_retried(reply["result"])
         except ValueError:
             reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}
         if not self.going and _tool_name(line) == "app_restart":
@@ -2015,9 +2093,35 @@ class Link:
                 while self.server is not None and self.server.outbox:
                     f.write(compact(self.server.outbox.pop(0)) + "\n")
                 f.flush()
-        except OSError:
-            pass
+        except (OSError, ValueError):
+            # The connection went first (the relay or the supervisor let go
+            # of it): the answer is kept for job_status (E6).
+            if reply is not None and _tool_name(line) is not None:
+                try:
+                    mid = json.loads(line).get("id")
+                except ValueError:
+                    mid = None
+                if mid is not None:
+                    self._keep_late({"id": mid, "name": _tool_name(line)}, reply, "lost")
         if FreeCAD.GuiUp and not self.in_call:
             import FreeCADGui
 
             FreeCADGui.updateGui()
+
+
+def mark_retried(result):
+    """E10: put retried: 1 in the answer's own JSON text, so every model sees
+    it (a client can hide _meta). Text that is not a JSON object stays."""
+    from .protocol import compact
+
+    for c in result.get("content") or []:
+        if c.get("type") != "text":
+            continue
+        try:
+            body = json.loads(c.get("text") or "")
+        except ValueError:
+            continue
+        if isinstance(body, dict):
+            body["retried"] = 1
+            c["text"] = compact(body)
+    return result

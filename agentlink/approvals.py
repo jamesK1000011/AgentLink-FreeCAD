@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """The person's approvals through the client's own tool permissions.
 
-The owner's decision (18 Nov 2026, docs/security/red-team-2026-11-18.md):
+The owner's decision (18 Nov 2026, private records: red-team-2026-11-18.md):
 an approval is a call of one of two small tools, and the person sets each
 of them in the client's tool permissions (Claude Desktop: "always allow",
 "ask first" or "block"):
@@ -44,6 +44,16 @@ fingerprint): a new version needs a new approval.
 
 The FreeCAD window's Approve dialog (agentlink/person_ok.py) is an
 optional extra path: a person's press there gives the same approval.
+
+Only a client that asks the person before a tool call makes the client's
+approve call an approval (live findings, 22 Nov: a local model in a client
+that runs every tool without asking called approve_code by itself). The
+client names itself in the MCP initialize (clientInfo.name; note_client).
+ASKING_CLIENTS lists the clients known to ask. For any other client, or a
+connection that never said its name, approve_file and approve_code give no
+approval: the request goes to the FreeCAD window's Approve dialog, and the
+person's press there is the approval. With no window (headless), such a
+client cannot approve at all.
 """
 import hashlib
 import json
@@ -82,6 +92,13 @@ _OPEN = {}           # key -> request
 _GRANTS = {}         # key -> (expiry time, connection)
 _CLIENT = {}         # tool -> [arguments of calls in hand, from the client]
 _CONN = threading.local()  # .stack: the connections whose calls are in hand on this thread
+_NAMES = {}          # connection -> the client's own name (MCP initialize clientInfo.name)
+
+# The MCP clients known to ask the person before each tool call (their
+# "ask first" tool permission), by the name they give in initialize
+# (clientInfo.name, compared in lower case). Kept short and conservative:
+# a client that is not here approves only through the FreeCAD window.
+ASKING_CLIENTS = frozenset({"claude-ai", "claude-desktop", "claude desktop", "claude-code", "claude code"})
 
 
 class Refused(Exception):
@@ -288,6 +305,66 @@ def connection():
     return st[-1] if st else None
 
 
+def note_client(conn, info):
+    """The client on this connection named itself (MCP initialize's
+    clientInfo, or the supervisor's agentlink/client line for the window).
+    info: the clientInfo object, or a name."""
+    name = info.get("name") if isinstance(info, dict) else info
+    name = clean(name, 80) if isinstance(name, str) and name.strip() else None
+    with _lock:
+        if name is None:
+            _NAMES.pop(conn, None)
+        else:
+            _NAMES[conn] = name
+
+
+def client_name(conn=False):
+    """The name the client on this connection gave (the connection in hand
+    when conn is not given), or None."""
+    conn = connection() if conn is False else conn
+    with _lock:
+        return _NAMES.get(conn)
+
+
+def window_only_clients():
+    """The clients whose approvals the person wants to give in FreeCAD's
+    window, not in the client: the preference Mod/AgentLink
+    ApproveInWindowFor (names, comma separated; empty by default). Each
+    client asks the person as it is set up (Claude Desktop's tool
+    permissions, OpenCode's permission "ask"), so Agent Link does not judge
+    a client by its name unless the person says so (owner, 22 Nov)."""
+    try:
+        import FreeCAD
+
+        raw = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/AgentLink").GetString("ApproveInWindowFor", "")
+    except Exception:  # noqa: BLE001 - headless tests, no FreeCAD
+        raw = os.environ.get("AGENTLINK_APPROVE_IN_WINDOW_FOR", "")
+    return {x.strip().lower() for x in str(raw).split(",") if x.strip()}
+
+
+def asks_first(conn=False):
+    """True unless the person named this client in ApproveInWindowFor: then
+    its approvals go to the window's Approve dialog. ASKING_CLIENTS is kept
+    for the log only."""
+    name = (client_name(conn) or "").strip().lower()
+    return name not in window_only_clients() if name else "(unnamed)" not in window_only_clients()
+
+
+def _in_window(req):
+    """The request's Approve dialog in the FreeCAD window, shown for a client
+    that does not ask the person: True when it is in view."""
+    try:
+        from . import person_ok
+
+        return bool(person_ok.offer(req, again=True, force=True))
+    except Exception:  # noqa: BLE001 - no window here
+        return False
+
+
+def _who(name):
+    return f"This client ({name})" if name else "This client (it gave no name)"
+
+
 def from_client(tool, args):
     """True when a call of tool with these arguments is in hand from the
     client (client_call)."""
@@ -373,14 +450,28 @@ def ask(kind, name, title, lines=(), fingerprint=None, on_ok=None, shown=None, t
             req["alive"] = was.get("alive", True)
         _OPEN[k] = req
     in_window = False
-    if window:
+    asking = asks_first()
+    if window or not asking:
         try:
             from . import person_ok
 
-            in_window = person_ok.offer(req, again=was is not None)
+            # A client that does not ask the person: the window's dialog is
+            # the only way to approve, so it is shown whatever the setting.
+            in_window = person_ok.offer(req, again=was is not None, force=not asking)
         except Exception:  # noqa: BLE001 - the window is an extra path only
             in_window = False
     kept = "It is kept: the next call answers at once." if on_ok else "Then call this tool again with the same arguments."
+    if not asking:
+        who = _who(client_name())
+        if in_window:
+            next_words = (f"{who} does not ask the person before a tool call, so {tool} from it gives no approval. "
+                          f"Ask the person to read the request in FreeCAD's window and press Approve there. {kept}")
+        else:
+            next_words = (f"{who} does not ask the person before a tool call, and there is no FreeCAD window here to approve in. "
+                          "This step cannot be approved from this client: use a client that asks the person first (Claude Desktop, Claude Code), "
+                          "or the FreeCAD window. Nothing was approved.")
+        return {"pending": True, "kind": kind, "name": str(name), "approve": {"tool": tool, "arguments": args}, "next": next_words,
+                "approveIn": "window" if in_window else "none"}
     next_words = (f"Call {tool} with exactly these arguments (approve.arguments). The person sets {tool} in the client's tool permissions: "
                   f"with \"ask first\", the client asks the person before the call. {kept}"
                   + (" The person can also press Approve in the FreeCAD window." if in_window else ""))
@@ -395,7 +486,9 @@ def _record(req, by):
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "a", encoding="utf-8") as f:
             conn = req.get("client")
+            who = client_name(conn)
             f.write(json.dumps({"t": round(time.time(), 1), "by": by, **({"connection": str(conn)} if conn is not None else {}),
+                                **({"client": who} if who else {}),
                                 **{k: tilde(v) for k, v in req["args"].items()}}, ensure_ascii=False) + "\n")
     except Exception:  # noqa: BLE001 - a record only
         pass
@@ -479,6 +572,18 @@ def approve(tool, args):
     for f, v in want.items():
         if args.get(f) != v:
             raise Refused("invalid_input", f"{f}: must be exactly {json.dumps(v, ensure_ascii=False)} (the pending answer's). The client shows the person these arguments. Nothing was approved.")
+    if not asks_first():
+        # A client that runs tools without asking the person (or that never
+        # said its name): its call is not the person's OK. The person
+        # approves in FreeCAD's window, or not at all.
+        who = _who(client_name())
+        if _in_window(req):
+            return {"approved": False, "pending": True, "kind": kind, "id": name, "approveIn": "window",
+                    "next": f"{who} does not ask the person before a tool call, so this call gave no approval. The request is in view in FreeCAD's window: "
+                            "ask the person to read it and press Approve there. Then call the tool that asked again with the same arguments."}
+        raise Refused("not_allowed", f"{who} does not ask the person before a tool call, and there is no FreeCAD window here to approve in: "
+                                     f"{tool} cannot approve from it. Use a client that asks the person first (Claude Desktop, Claude Code), or the FreeCAD window. "
+                                     "Nothing was approved.")
     give(req, "client")
     return {"approved": True, "kind": kind, "id": name, "fingerprint": fp,
             "next": "Kept: the tool that asked answers at once now." if req.get("on_ok") else f"Call the tool that asked again with the same arguments within {int(TTL / 60)} min. The approval is for that one action."}
@@ -490,6 +595,7 @@ def reset():
         _OPEN.clear()
         _GRANTS.clear()
         _CLIENT.clear()
+        _NAMES.clear()
 
 
 # ---- the two tools' schemas (their words are in agentlink/tools.py) -------------------------

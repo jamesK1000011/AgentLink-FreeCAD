@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Meant changes to tool descriptions since the data tests' snapshots were taken
-# (docs/hardening/famfix-findings.md): each tool's old words and the true facts
+# (private records: famfix-findings.md): each tool's old words and the true facts
 # added or changed. The data tests apply them to the snapshot before comparing
 # byte for byte, so any other change to a description still fails.
 
@@ -210,6 +210,14 @@ SCHEMAS = {
                           ("rotate", "plane", {"type": "string", "description": "XY, XZ, YZ, a datum plane, \"LCS.XZ_Plane\" or an LCS."})]},
     # bicycle runs of 20 Nov, finding 5: relative: true keeps FreeCAD's default on a binder of a document-level source
     "pd_binder": {"why": "bicycle finding 5: Relative false for a source at document level", "after": [("frozen", "relative", {"type": "boolean"})]},
+    # 21 Nov, one file for each part: link_make links an object of another .FCStd
+    "link_make": {"why": "parts in other files: file", "after": [("to", "file", {"type": "string"})]},
+    # 22 Nov efficiency design D1: pictures go to the file by default; width makes the window's picture smaller
+    "window_snapshot": {"why": "efficiency design D1: width", "after": [("path", "width", {"type": "integer"})]},
+    # 22 Nov co-work design E5 item 7b: the command's selection for its run only, the person's put back
+    "cmd_run": {"why": "co-work E5 7b: select",
+                "after": [("index", "select", {"type": "array", "items": {"type": "string"},
+                                               "description": "Objects (\"Block\") or faces and edges (\"Block.Face6\") selected for this run only. The person's selection comes back after the run."})]},
 }
 
 

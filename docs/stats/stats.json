@@ -1,24 +1,24 @@
 {
  "about": "Made by scripts/stats.py from the repository's data. Do not edit by hand.",
  "coverage": {
-  "total": 619,
+  "total": 622,
   "proven": 613,
   "headless": 605,
   "live": 608,
   "docs": 554,
   "health": 480,
-  "description": 565,
+  "description": 566,
   "sections": [
    {
     "repo": "AgentLink-FreeCAD",
     "title": "Agent Link (core)",
     "docs": 367,
     "health": 288,
-    "description": 378,
+    "description": 379,
     "headless": 396,
     "live": 403,
     "proven": 403,
-    "total": 408,
+    "total": 411,
     "parts": [
      {
       "name": "Sketcher",
@@ -88,7 +88,7 @@
      {
       "name": "Core",
       "proven": 62,
-      "total": 64
+      "total": 67
      },
      {
       "name": "Window (GUI)",
@@ -415,6 +415,16 @@
     "format2Only": false
    },
    {
+    "tool": "pick",
+    "section": "Agent Link (core)",
+    "part": "Core",
+    "short": [
+     "not proven"
+    ],
+    "why": "Headless and live: not tested yet. tests/test_options.py runs it on stand-ins only.",
+    "format2Only": false
+   },
+   {
     "tool": "tool_find",
     "section": "Agent Link (core)",
     "part": "Core",
@@ -422,6 +432,26 @@
      "not headless"
     ],
     "why": "Headless: not tested yet.",
+    "format2Only": false
+   },
+   {
+    "tool": "fast",
+    "section": "Agent Link (core)",
+    "part": "Core",
+    "short": [
+     "not proven"
+    ],
+    "why": "Not tested yet.",
+    "format2Only": false
+   },
+   {
+    "tool": "get",
+    "section": "Agent Link (core)",
+    "part": "Core",
+    "short": [
+     "not proven"
+    ],
+    "why": "Not tested yet.",
     "format2Only": false
    },
    {
@@ -743,7 +773,7 @@
   ]
  },
  "hubTools": {
-  "total": 416,
+  "total": 419,
   "groups": [
    {
     "group": "core",
@@ -751,13 +781,13 @@
     "lean": true
    },
    {
-    "group": "app",
-    "tools": 18,
+    "group": "find",
+    "tools": 2,
     "lean": false
    },
    {
-    "group": "find",
-    "tools": 1,
+    "group": "app",
+    "tools": 18,
     "lean": false
    },
    {
@@ -904,6 +934,11 @@
     "group": "porting",
     "tools": 8,
     "lean": false
+   },
+   {
+    "group": "fast",
+    "tools": 2,
+    "lean": false
    }
   ]
  },
@@ -914,8 +949,8 @@
     "style": "ste",
     "default": true,
     "tools": 6,
-    "chars": 5656,
-    "tokens": 1616,
+    "chars": 6136,
+    "tokens": 1753,
     "estimatedCards": 6
    },
    {
@@ -923,8 +958,8 @@
     "style": "full",
     "default": false,
     "tools": 6,
-    "chars": 14549,
-    "tokens": 4157,
+    "chars": 15117,
+    "tokens": 4319,
     "estimatedCards": 6
    },
    {
@@ -932,8 +967,8 @@
     "style": "ste",
     "default": false,
     "tools": 23,
-    "chars": 22015,
-    "tokens": 6290,
+    "chars": 22432,
+    "tokens": 6409,
     "estimatedCards": 17
    },
    {
@@ -941,16 +976,16 @@
     "style": "full",
     "default": false,
     "tools": 23,
-    "chars": 30605,
-    "tokens": 8744,
+    "chars": 31065,
+    "tokens": 8876,
     "estimatedCards": 17
    }
   ],
   "allHubListed": {
-   "tools": 416,
-   "chars": 346969,
-   "estimatedCards": 24,
-   "tokens": 99134
+   "tools": 419,
+   "chars": 355008,
+   "estimatedCards": 25,
+   "tokens": 101431
   },
   "base": [
    "session_state",
@@ -989,6 +1024,7 @@
    "job_status",
    "live_run",
    "outputs_clean",
+   "pick",
    "pref_import",
    "report_read",
    "session_state",
@@ -1078,7 +1114,7 @@
    }
   ],
   "addonToolsLoaded": 212,
-  "totalAllInstalled": 628
+  "totalAllInstalled": 631
  },
  "timings": {
   "note": "no timing data in the repo yet"

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The echo's fourth window pass (docs/hardening/round4-findings.md): every
+# The echo's fourth window pass (private records: round4-findings.md): every
 # family's tools mapped to the button on its workbench's toolbar, the "»"
 # lit only for a button truly in its toolbar's overflow, the tree and the
 # property view brought up to the selection, an Assembly never isolated by
@@ -18,7 +18,7 @@ sys.path.insert(0, HERE)
 from agentlink import activity, echo  # noqa: E402
 from test_gui_link_dialog import gui_link  # noqa: E402  (gui_link with its FreeCAD stand-in)
 
-COMMANDS = os.path.join(HERE, "..", "docs", "hardening", "freecad-1.1.0-commands.txt")
+COMMANDS = os.path.join(HERE, "..", "tests", "data", "freecad-1.1.0-commands.txt")
 
 
 def known_commands():

@@ -24,7 +24,26 @@ import json
 import os
 import sys
 
-HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "hardening")
+def _where():
+    """The hardening records: private since 22 Nov 2026 (the owner's
+    archive, agentlink-collab/archive/agentlink-freecad/docs/hardening).
+    AGENTLINK_HARDENING names the folder; else the archive checked out
+    beside this repo; else docs/hardening here (an old checkout)."""
+    top = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    for p in (os.environ.get("AGENTLINK_HARDENING"),
+              os.path.join(top, "..", "agentlink-collab", "archive", "agentlink-freecad", "docs", "hardening"),
+              os.path.join(top, "docs", "hardening")):
+        if p and os.path.isfile(os.path.join(p, "inventory.json")):
+            return p
+    return None
+
+
+HERE = _where() or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "hardening")
+
+
+def available():
+    """Whether the hardening records are here to read."""
+    return os.path.isfile(INV)
 INV, STATUS, TABLE = (os.path.join(HERE, n) for n in ("inventory.json", "status.json", "STATUS.md"))
 FLAGS = ("docs", "health", "description", "headless", "live")
 
@@ -150,7 +169,7 @@ def row(label, n, total):
 
 def bars(groups, status):
     total, c, _tools = counts(groups, status)
-    lines = ["Per-tool status, all of V1 (measured: counted from docs/hardening/status.json)"]
+    lines = ["Per-tool status, all of V1 (measured: counted from the hardening records)"]
     lines += [row(label, c[key], total) for key, label in ROWS]
     secs = sections(groups, status)
     lines += ["", "By section (tools proven / total)"]

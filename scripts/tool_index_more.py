@@ -6,7 +6,7 @@ work of (beside the one the echo lights), and search words its name lacks.
 
 Every command here was checked against FreeCAD 1.1.0's source (the names
 registered by its Command*.cpp files and addCommand calls:
-docs/hardening/freecad-1.1.0-commands.txt; tests/test_tool_index.py holds
+tests/data/freecad-1.1.0-commands.txt; tests/test_tool_index.py holds
 the index to that list). Add a tool here when it is new; leave a command
 out when it is not in that list.
 """
@@ -18,6 +18,8 @@ SOURCE = "FreeCAD 1.1.0 source; Agent Link"
 DATE = "2026-11-16"
 DATES = {t: "2026-11-18" for t in ("port_scaffold", "cookbook_list", "cookbook_show", "cookbook_import", "cookbook_export", "cookbook_approve", "cookbook_unapprove", "cookbook_run")}
 DATES.update({t: "2026-11-18" for t in ("approve_file", "approve_code")})
+DATES["pick"] = "2026-11-22"
+DATES.update({t: "2026-11-22" for t in ("fast", "get")})
 
 # Tool or prefix → workbench, where the echo's WORKBENCH table says nothing
 # (the echo brings no bench up for these; the index still files them).
@@ -190,6 +192,7 @@ TOOLS = {
     "draft_to_sketch": (["Draft_Draft2Sketch"], "convert"),
     "export": (["Std_Export"], "step stl iges brep 3mf obj dxf svg save write file"),
     "export_file": (["Std_Export"], "step stl save write"),
+    "fast": ([], "fast path block steps loop chain quick terse many calls one answer"),
     "fea_buckle": ([], "buckling stability column"),
     "fea_chart": ([], "histogram plot graph"),
     "fea_clear": ([], "reset remove study"),
@@ -213,6 +216,7 @@ TOOLS = {
     "fem_add": (["FEM_ConstraintDisplacement", "FEM_ConstraintSpring", "FEM_ConstraintContact", "FEM_ConstraintTie", "FEM_ElementGeometry1D", "FEM_ElementGeometry2D", "FEM_MaterialMechanicalNonlinear", "FEM_MeshRegion"], "constraint displacement spring contact tie beam shell element"),
     "fem_linearize": (["FEM_PostFilterLinearizedStresses"], "stress membrane bending pressure vessel"),
     "fem_mesh": (["FEM_MeshNetgenFromShape", "FEM_FEMMesh2Mesh", "FEM_MeshClear"], "netgen nodes elements convert"),
+    "get": ([], "value read one property volume mass length dof targeted"),
     "gui_input": ([], "mouse keyboard click type widget"),
     "gui_unstick": ([], "escape close popup menu dialog stuck"),
     "guide_read": ([], "help howto workflow manual"),
@@ -377,6 +381,7 @@ TOOLS = {
     "scad_tidy": (["OpenSCAD_ColorCodeShape", "OpenSCAD_ExplodeGroup", "OpenSCAD_ExpandPlacements", "OpenSCAD_IncreaseToleranceFeature", "OpenSCAD_RemoveSubtree", "OpenSCAD_ReplaceObject"], "csg tree cleanup"),
     "section": (["Part_CrossSections"], "cut plane cross slice profile"),
     "selection": ([], "select pick objects"),
+    "selftest_exit": ([], "self test exit guard live check"),
     "session_state": ([], "overview status document bodies volume"),
     "shape_query": ([], "find faces edges vertices pick select reference"),
     "sheet_cells": (["Spreadsheet_MergeCells", "Spreadsheet_SplitCell"], "merge split"),
@@ -461,6 +466,7 @@ TOOLS = {
     "text_document": (["Std_TextDocument"], "notes readme text"),
     "tool_groups": ([], "tools find search list enable"),
     "tool_find": ([], "tools find search card words listing"),
+    "pick": ([], "option options choose number next step ready call run"),
     "units_convert": (["Std_UnitsCalculator"], "unit inch mm calculator conversion"),
     "usage_report": ([], "tokens cost calls"),
     "varset_new": (["Std_VarSet"], "variables variable set"),
@@ -470,7 +476,7 @@ TOOLS = {
     "view_snapshot": (["Std_ViewScreenShot"], "picture image screenshot 3d window"),
     "window_snapshot": (["Std_ViewScreenShot"], "screenshot picture gui panel"),
     "workbench": (["Std_Workbench"], "switch activate workbenches"),
-    # Porting (docs/design/porting-2026-11-18.md).
+    # Porting (private records: porting-2026-11-18.md).
     "port_scaffold": ([], "port addon workbench draft hook tools commands scaffold template"),
     "cookbook_list": ([], "recipes installed entries"),
     "cookbook_show": ([], "recipes read review before approve"),

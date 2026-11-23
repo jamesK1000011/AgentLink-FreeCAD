@@ -31,9 +31,22 @@ def vec3(a, what):
     return V(float(a[0]), float(a[1]), float(a[2]))
 
 
+def _num(x):
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
 def vec2(a, what):
-    if not (isinstance(a, (list, tuple)) and len(a) == 2 and all(isinstance(x, (int, float)) for x in a)):
-        raise ToolError("invalid_input", f"{what}: [x, y] in mm, in the sketch's own coordinates.")
+    """A sketch point [x, y]. Any other form is refused, with what was
+    given and the form (owner, 22 Nov: no guessing in a change)."""
+    if not (isinstance(a, (list, tuple)) and len(a) == 2 and all(_num(x) for x in a)):
+        got = ""
+        if isinstance(a, (list, tuple)) and len(a) == 3 and all(_num(x) for x in a):
+            got = " You gave [x, y, z]: a sketch is flat, so give [x, y]; sketch_new's offset or plane sets its height."
+        elif isinstance(a, dict):
+            got = f" You gave an object ({', '.join(map(str, a))}): give a list, [x, y]."
+        elif a is not None:
+            got = f" You gave {str(a)[:60]}."
+        raise ToolError("invalid_input", f"{what}: [x, y] in mm, in the sketch's own coordinates.{got} Example: \"{what.split('.')[-1]}\": [10, 0].")
     return V(float(a[0]), float(a[1]), 0)
 
 
@@ -535,6 +548,32 @@ def body_reading(body):
     return {"body": body.Label, **geo.stats(s)}
 
 
+def profile_words(feat):
+    """Why a feature's sketch makes no face, or "": no geometry, an open
+    outline, or outlines that cross or touch each other."""
+    try:
+        prof = getattr(feat, "Profile", None)
+        sk = prof[0] if isinstance(prof, (list, tuple)) else prof
+        if sk is None or not hasattr(sk, "Shape"):
+            return ""
+        name = sk.Label
+        geo = [g for i, g in enumerate(getattr(sk, "Geometry", ()) or ()) if not sk.getConstruction(i)] if hasattr(sk, "getConstruction") else list(getattr(sk, "Geometry", ()) or ())
+        if not geo:
+            return f"The sketch {name} has no geometry (construction lines do not count): add the outline with sketch_add first."
+        wires = list(sk.Shape.Wires)
+        opened = [i for i, w in enumerate(wires) if not w.isClosed()]
+        if opened:
+            return f"The sketch {name} has {len(opened)} open outline{'s' if len(opened) > 1 else ''}: close each one (sketch_state names the open ends)."
+        for i in range(len(wires)):
+            for j in range(i + 1, len(wires)):
+                if wires[i].distToShape(wires[j])[0] < 1e-6:
+                    return (f"In the sketch {name}, two outlines cross or touch (outline {i + 1} and {j + 1}): a hole circle on the outer edge does this. "
+                            "Move it inside the outline, or make it smaller.")
+    except Exception:  # noqa: BLE001 - advice only
+        return ""
+    return ""
+
+
 def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
     """Recompute; refuse (the call's transaction is rolled back) if the
     feature or anything after it failed; else the body's reading."""
@@ -550,6 +589,12 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
             # pointing at what is no longer there (worst in 1.0).
             hint = (f"{first['object']} refers to edges or faces of the model as it was, which the change renamed or removed. "
                     f"feature_remove {first['object']}, make the change, then add it again on the new edges (shape_query finds them; pd_fillet, pd_chamfer, pd_draft or pd_thickness).")
+        if "shape object is empty" in first["error"].lower() or "wire is not closed" in first["error"].lower():
+            # The profile makes no face (live, 22 Nov: a circle across the
+            # outline's edge, twice): say why, from the sketch itself.
+            why = profile_words(feat)
+            if why:
+                hint = (why + " " + hint).strip()
         if "multiple solids" in first["error"].lower():
             # FreeCAD 1.1: a body takes several solids only while its
             # AllowCompound is true (the default); with it off, a feature
@@ -567,12 +612,52 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
         if must_change == "cut" and delta >= -1e-6:
             what = ("removed no material — the wall did not hollow the body" if dress
                     else "cut nothing — the profile does not meet the body that way")
-            raise ToolError("failed", f"{feat.Label} {what}. Nothing was kept. {hint}".strip())
+            side = "" if dress else cut_side_words(feat, body)
+            raise ToolError("failed", f"{feat.Label} {what}.{(' ' + side) if side else ''} Nothing was kept. {hint}".strip())
         if must_change == "changed" and abs(delta) <= 1e-6:
             # A fillet or chamfer may add material (an inside corner, concave)
             # or take it away (an outside one): only no change at all is wrong.
             raise ToolError("failed", f"{feat.Label} left the body as it was — the edges it was given round or bevel nothing. Nothing was kept. {hint}".strip())
     return picks.finish(session, tool, out, recompute=False)
+
+
+def _profile_of(o):
+    prof = getattr(o, "Profile", None)
+    return prof[0] if isinstance(prof, (list, tuple)) and prof else prof
+
+
+def cut_side_words(feat, body):
+    """Where a cut that cut nothing went, against where the body is: the
+    sketch's normal, and the side of the sketch the body lies on (live,
+    22 Nov: an agent found a pocket's side by trial, twice)."""
+    try:
+        prof = getattr(feat, "Profile", None)
+        sk = prof[0] if isinstance(prof, (list, tuple)) else prof
+        pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
+        import FreeCAD
+
+        # The sketch is another feature's profile already (live, 22 Nov: holes
+        # drilled from the pad's own sketch, 14 times): it needs its own.
+        others = [o for o in (getattr(sk, "InList", None) or ()) if o is not feat and _profile_of(o) is sk]
+        if others:
+            return (f"The sketch {sk.Label} is the profile of {others[0].Label} already, so it lies on the body's own face. "
+                    "A hole or pocket needs a sketch of its own, on the face it goes into: sketch_new { face: { at, normal } }, then sketch_add.")
+        n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
+        bb = body.Shape.BoundBox
+        c = FreeCAD.Vector((bb.XMin + bb.XMax) / 2, (bb.YMin + bb.YMax) / 2, (bb.ZMin + bb.ZMax) / 2)
+        side = (c - pl.Base).dot(n)
+        axis = max(("x", abs(n.x), n.x), ("y", abs(n.y), n.y), ("z", abs(n.z), n.z), key=lambda t: t[1])
+        normal = f"{'+' if axis[2] > 0 else '-'}{axis[0]}"
+        rev = bool(getattr(feat, "Reversed", False))
+        if abs(side) < 1e-6:
+            return f"The sketch {sk.Label}'s normal is {normal}; the body's centre is in the sketch's plane."
+        where = "on the side its normal points to" if side > 0 else "on the side opposite its normal"
+        # A pocket goes against the normal, reversed along it.
+        fix = (f" reversed: {'false' if rev else 'true'} sends the cut that way." if (side > 0) != rev else
+               " The cut went toward the body: check that the sketch overlaps it (its position, not its side).")
+        return f"The sketch {sk.Label}'s normal is {normal}, and the body is {where}." + fix
+    except Exception:  # noqa: BLE001 - advice only
+        return ""
 
 
 def uses(o, f):

@@ -301,12 +301,38 @@ def expression_clash(doc, o, expr):
 REDIRECT = ("Placement.Base.x", "Placement.Base.y", "Placement.Base.z", "Placement.Rotation.Angle")
 
 
+def through_link(o, path):
+    """Refusal words for a path that goes through a link property of o
+    (Body.Tip.Length), else None. FreeCAD keeps such an expression on o and
+    applies it to whatever the link points to at each recompute: a new
+    feature at the Tip took the value over and its own length was lost
+    (test T2 of claude/tool-research-2026-11-21.md)."""
+    if "." not in path:
+        return None
+    seg, rest = path.split(".", 1)
+    try:
+        kind = o.getTypeIdOfProperty(seg)
+    except Exception:  # noqa: BLE001 - not a property
+        return None
+    if not str(kind).startswith("App::PropertyLink"):
+        return None
+    to = getattr(o, seg, None)
+    if isinstance(to, (list, tuple)):
+        to = None
+    there = (f"{to.Name}.{rest} (by its name; its label is {to.Label!r})" if getattr(to, "Name", None) else f"the object itself (<<Label>>.{rest})")
+    return (f"{o.Label}.{path}: {seg} is a link, so FreeCAD keeps this expression on {o.Label} and applies it to whatever {seg} "
+            f"points to at each recompute (a new feature at the Tip takes the value over). Bind the object itself: {there}.")
+
+
 def attach_path(o, path):
     """(path to bind, redirected or None, refusal words or None). On an
     attached object (picks.attached) FreeCAD computes Placement: a
     Placement.Base.x/y/z or Placement.Rotation.Angle path goes to
     AttachmentOffset with the same subpath (redirected); another Placement
     path is refused."""
+    said = through_link(o, path)
+    if said:
+        return path, None, said
     if not (path == "Placement" or path.startswith("Placement.")) or not picks.attached(o):
         return path, None, None
     mode = getattr(o, "MapMode", "?")

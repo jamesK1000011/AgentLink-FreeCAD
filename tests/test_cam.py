@@ -110,7 +110,7 @@ class Cam(unittest.TestCase):
 
 @unittest.skipUnless(CAM, "FreeCAD with the CAM workbench is not importable here")
 class CamHardening(unittest.TestCase):
-    """The hardening pass's fixes, each read from FreeCAD 1.1's CAM source (docs/hardening/bimcam-findings.md)."""
+    """The hardening pass's fixes, each read from FreeCAD 1.1's CAM source (private records: bimcam-findings.md)."""
 
     @classmethod
     def setUpClass(cls):

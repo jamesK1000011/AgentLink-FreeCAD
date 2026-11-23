@@ -202,6 +202,30 @@ def close(w):
     return ev, ok
 
 
+# ---- a refused call's outcome ----
+
+def mark_outcome(exc, ev, removed, doc, names0):
+    """Put on exc what a refused changing call left (read by
+    protocol.refusal; Session.execute calls it after the take-back): "not_started" (no change was made), "rolled_back"
+    (all of it was taken back) or "cleanup_incomplete" with the objects that
+    stay. Never raises."""
+    try:
+        if getattr(exc, "outcome", None):
+            return
+        left = []
+        if doc is not None and names0 is not None:
+            try:
+                left = [o.Label for o in doc.Objects if o.Name not in names0]
+            except Exception:
+                left = []
+        touched = bool(removed) or any(e and e[0] not in (RECOMPUTED, VIEW) for e in (ev or []))
+        exc.outcome = "cleanup_incomplete" if left else ("rolled_back" if touched else "not_started")
+        if left:
+            exc.outcome_left = left[:8]
+    except Exception:
+        pass
+
+
 # ---- readings ---------------------------------------------------------------------------
 
 def stays(ev):
@@ -273,6 +297,44 @@ def undo_names(doc):
         return list(doc.UndoNames)
     except Exception:
         return None
+
+
+def undo_own(doc, made, own):
+    """A rollback that undoes only the agent's steps (design E5 #6): up to
+    made undo steps of doc, each only when the top of its undo stack is the
+    agent's own next step. own: the names of the steps the agent made, the
+    newest last (None, or fewer than made: names not known, so undone
+    without the check, as before). Stops at the first step that is not the
+    agent's (the person's step, made while the agent worked): that step
+    and all under it stay. Returns (undone, the name of the step it stopped
+    at, or None)."""
+    undone = 0
+    known = own is not None and len(own) >= made
+    while undone < made:
+        try:
+            if doc.UndoCount <= 0:
+                break
+        except Exception:
+            break
+        if known:
+            top = undo_names(doc)
+            want = own[len(own) - 1 - undone]
+            if top and top[0] != want:
+                return undone, top[0]
+        doc.undo()
+        undone += 1
+    return undone, None
+
+
+def own_names(doc, n):
+    """The names of the n newest steps on doc's undo stack, the oldest
+    first (what a batch call just made), or None when not known."""
+    if n <= 0:
+        return []
+    names = undo_names(doc)
+    if names is None or len(names) < n:
+        return None
+    return list(reversed(names[:n]))
 
 
 def close_active(abort=False):

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The tool faults the window reviews found (docs/hardening/famfix-findings.md),
+# The tool faults the window reviews found (private records: famfix-findings.md),
 # on stand-ins (plain Python, no FreeCAD):
 #   - FEM: FreeCAD's FEM mesh view made once with Agent Link's window
 #     observer off, and "Cannot add static property" answered as a refusal

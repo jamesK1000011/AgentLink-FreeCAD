@@ -79,7 +79,7 @@ def _widgets():
 
 class _Check:
     def GetResources(self):
-        return {"Pixmap": "AgentLink_Check", "MenuText": "Setup Check", "ToolTip": "Whether the Claude extension's launcher is here and can load, and its log's last lines"}
+        return {"Pixmap": "AgentLink_Check", "MenuText": "Setup Check", "ToolTip": "Check the setup: FreeCAD, the add-on, uv and, if you use it, the Claude Desktop extension's launcher and its log's last lines"}
 
     def IsActive(self):
         return True
@@ -141,7 +141,7 @@ def updates_text(version, sha=None):
     return "\n".join((
         f"This is {this}.",
         "",
-        "The Claude extension updates Agent Link each time it starts. To update now, ask the agent to run agentlink_update; this window runs the new code once FreeCAD restarts.",
+        "With the Claude Desktop extension, Agent Link updates each time it starts. With any AI client, ask the agent to run agentlink_update to update now; this window runs the new code once FreeCAD restarts.",
         "Other add-ons update from Tools ▸ Addon Manager, or ask the agent.",
     ))
 

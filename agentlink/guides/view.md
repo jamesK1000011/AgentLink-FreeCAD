@@ -28,7 +28,7 @@ Look at the part after every change that matters, as a person would.
 - `view_snapshot` `width` and `height` are the whole picture. With several `views` they are split among the grid; `cell: true` makes them each view's size. The answer gives the sizes as saved.
 - Grey on a map is unread: an open mesh, a scan past the max distance.
 - The picture is the tessellation: a fine curve shows facets; `tolerance` sets the chord.
-- Big pictures are big answers: `inline: false` writes the file only.
+- Big pictures are big answers: `inline: false` writes the file only. `view_snapshot` and `window_snapshot` write the file only by default; `inline: true` puts the picture in the answer too. `window_snapshot { width }` makes it smaller.
 
 ## Driving the window (`gui_input`, group dev)
 - Panel buttons by `{widget:{text}}`; a panel's tabs by `{tab:{text, under?: dock title}}` (a tab is not a widget, so `widget` never finds it); rows of lists, trees and tables by `{item:{text, under?, column?}}`, scrolled into view first, and a row's check box by adding `check: true` (the answer's `hit.check` says whether the click took or the model's state was set); points on the part by `{view_world:[x,y,z]}` (each step answers its `point`: where it landed, and why if FreeCAD's own projection was used). Look with `shot`, then trust a headless read-back over the picture.

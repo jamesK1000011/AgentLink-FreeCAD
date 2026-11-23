@@ -58,7 +58,7 @@ class MoreFamilies(Base):
         self.assertEqual(back["points"], top["points"])
 
     def test_points_hardening(self):
-        # Fixes of the hardening pass (docs/hardening/bimcam-findings.md), on shapes of known size.
+        # Fixes of the hardening pass (private records: bimcam-findings.md), on shapes of known size.
         import FreeCAD
 
         self.have("points_fit")
