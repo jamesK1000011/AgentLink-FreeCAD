@@ -13,7 +13,7 @@ import FreeCAD
 import Part
 
 from .. import geometry as geo
-from ..protocol import ToolError
+from ..protocol import ToolError, describe
 from . import picks
 
 V = FreeCAD.Vector
@@ -45,7 +45,7 @@ def vec2(a, what):
         elif isinstance(a, dict):
             got = f" You gave an object ({', '.join(map(str, a))}): give a list, [x, y]."
         elif a is not None:
-            got = f" You gave {str(a)[:60]}."
+            got = f" You gave {describe(a)}."
         raise ToolError("invalid_input", f"{what}: [x, y] in mm, in the sketch's own coordinates.{got} Example: \"{what.split('.')[-1]}\": [10, 0].")
     return V(float(a[0]), float(a[1]), 0)
 

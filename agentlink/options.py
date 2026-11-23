@@ -490,13 +490,13 @@ def pick_call(server, params):
     (server.call: the echo, the health check, the undo step), with picked
     on its answer. A refused pick answers as any refusal does; a stale one
     carries the options now."""
-    from .protocol import ToolError, compact
+    from .protocol import ToolError, compact, set_kind
 
     s = getattr(server, "session", None)
     try:
         o, args = resolve(s, params.get("arguments") or {})
     except ToolError as e:
-        err = {"code": e.code, "message": e.message}
+        err = set_kind({"code": e.code, "message": e.message})
         if getattr(e, "options", None):
             err["options"] = e.options
         return {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}

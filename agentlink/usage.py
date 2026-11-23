@@ -251,7 +251,14 @@ def _json_of(text):
 def _error_of(text):
     d = _json_of(text)
     e = d.get("error") if d else None
-    return clean_error(e.get("message")) if isinstance(e, dict) else None
+    if not isinstance(e, dict):
+        return None
+    try:
+        from .protocol import strip_kind  # the kind's fixed sentence tells the log nothing
+
+        return clean_error(strip_kind(e.get("message")))
+    except Exception:  # noqa: BLE001
+        return clean_error(e.get("message"))
 
 
 def marks(tool, args, reply_text, error):

@@ -209,7 +209,8 @@ class PocketDepth(unittest.TestCase):
 
 
 class Ladder(unittest.TestCase):
-    """The same refusal again says so; the third says to try another way."""
+    """The same refusal again says so; the third says what to try next
+    (22 Nov: the card's example, and the place named again)."""
 
     def server(self):
         from agentlink.protocol import Server, Tool, ToolError
@@ -237,7 +238,7 @@ class Ladder(unittest.TestCase):
         self.assertIn("same refusal as before", two["message"])
         three = self.call(srv, "sketch_add", {"n": 3})["error"]
         self.assertEqual(three["repeat"], 3)
-        self.assertIn("try another way", three["message"])
+        self.assertIn("Refused the same way 3 times: rectangle is still wrong. Try this:", three["message"])
 
 
 class DoesHits(unittest.TestCase):

@@ -134,8 +134,19 @@ POPUP_WAIT = float(os.environ.get("AGENTLINK_POPUP_WAIT", "10"))
 ANSWER_WAIT = 30.0
 
 
+def _kinded(err):
+    """The refusal's kind and its sentence (protocol.set_kind), when the
+    protocol module loads here."""
+    try:
+        from .protocol import set_kind
+
+        return set_kind(err)
+    except Exception:  # noqa: BLE001 - words only
+        return err
+
+
 def _answer(mid, code, message, outcome=None):
-    text = json.dumps({"error": {"code": code, "message": message, **({"outcome": outcome} if outcome else {})}})
+    text = json.dumps({"error": _kinded({"code": code, "message": message, **({"outcome": outcome} if outcome else {})})})
     return json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": True}})
 
 
@@ -1457,7 +1468,7 @@ def run(script, argv):
                 msg = f"FreeCAD stopped responding during {hang['tool']} after {int(hang['after'])} s; it was stopped and started again.{tail or ' Its documents are gone from memory: app_recover lists the saved copies.'}"
             else:
                 msg = f"FreeCAD {why} during this call ({c.get('tool') or method}) and has been started again.{tail or ' The document and everything not saved in it is gone: session_state shows the fresh one; doc_open what was saved.'} If the same call does this again, it is the call — try another way."
-            answers.append(json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": json.dumps({"error": {"code": "failed", "message": msg}})}], "isError": True} if method == "tools/call" else {}}))
+            answers.append(json.dumps({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": json.dumps({"error": _kinded({"code": "failed", "message": msg})})}], "isError": True} if method == "tools/call" else {}}))
         for line in answers:
             write(line)
 
