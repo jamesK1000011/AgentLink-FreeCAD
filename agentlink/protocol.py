@@ -1155,6 +1155,15 @@ class Server:
                 said = partialdoc.refusal(getattr(s, "doc", None), tool.name)
                 if said:
                     raise ToolError("invalid_state", said)
+                # Measure before claim (agentlink/measured.py): the agent's own
+                # document is saved only after its geometry was read since its
+                # last change. In a batch or a fast block too: their calls come
+                # through here, in order.
+                said = s.measure_refusal() if hasattr(s, "measure_refusal") else None
+                if said:
+                    err = ToolError("invalid_input", said)
+                    err.outcome = "not_started"
+                    raise err
             gate = self.gate
             if gate is not None:
                 gate.as_job = as_job

@@ -430,12 +430,35 @@ def read(server, session, what):
         got = got.get("a", got) if tool == "measure" else got
         if key not in got:
             raise ToolError("not_found", f"{w}: {tool} gave no {key} for {o.Label}.")
+        _measured(session, o, head)
         return (_walk(got[key], rest[1:], w), unit if len(rest) == 1 else None)
     got = _reader(server, "object_get", {"object": o.Name, "filter": [head]})
     entry = (got.get("properties") or {}).get(head)
     if not isinstance(entry, dict):
         raise ToolError("not_found", f"{w}: {o.Label} has no property {head} (object_get {{ object: \"{o.Label}\" }} lists them).")
+    if head == "Shape":
+        _measured(session, o, head)
     return (_walk(entry.get("value"), rest[1:], w), PROP_UNITS.get(entry.get("type")) if len(rest) == 1 else None)
+
+
+def _measured(session, o, key):
+    """A get of a body's (or a PartDesign feature's) geometry is a measure
+    (agentlink/measured.py): a save after it is not held for it."""
+    try:
+        from . import measured
+
+        if not measured.enabled() or not hasattr(session, "note_measure"):
+            return
+        labels = [x.Label for x in session.bodies()]
+        try:
+            labels += [x.Label for x in type(session).hidden_in(session.doc)]
+        except Exception:  # noqa: BLE001 - a stand-in session
+            pass
+        t = str(getattr(o, "TypeId", ""))
+        if measured.is_get_measure(f"{o.Label}.{key}", labels + [o.Label] if t.startswith("PartDesign::") else labels):
+            session.note_measure()
+    except Exception:  # noqa: BLE001 - bookkeeping; never fails a read
+        pass
 
 
 def _has_prop(o, name):
@@ -1186,6 +1209,8 @@ def _run(server, session, steps, a):
         # one is open (live, 22 Nov: a block that saved and closed its
         # document reported the volume of the person's other document).
         v1 = _volume(s, vol_doc) if _open(vol_doc) else None
+        if v1 is not None and s.doc is vol_doc and hasattr(s, "note_measure"):
+            s.note_measure()  # the block's own end reading measures its document
         out = {"fast": _summary(run, True, secs, v0, v1)}
         if run.made_rows:
             out["made"] = run.made_rows[:40]

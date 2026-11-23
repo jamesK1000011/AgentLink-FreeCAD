@@ -163,6 +163,7 @@ agentlink/link_token.py
 agentlink/livescript.py
 agentlink/loftmath.py
 agentlink/materials.py
+agentlink/measured.py
 agentlink/memguard.py
 agentlink/meshbool.py
 agentlink/meshdist.py
@@ -456,6 +457,7 @@ tests/test_loft_spans.py
 tests/test_material.py
 tests/test_mcp_contract.py
 tests/test_measure.py
+tests/test_measure_gate.py
 tests/test_meshbool.py
 tests/test_meshdist.py
 tests/test_meshformats.py

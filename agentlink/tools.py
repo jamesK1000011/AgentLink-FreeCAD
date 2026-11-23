@@ -295,6 +295,7 @@ class Session:
     tx = _own_property("tx")
     calls = _own_property("calls")
     checks = _own_property("checks")
+    measured = _own_property("measured")
     del _own_property
 
     # ---- every change one undo step ----
@@ -314,6 +315,7 @@ class Session:
             u0, names0 = undo_mark(start)
             undo0 = changes.undo_names(start)
             watch = changes.open()
+            self.before_change()
             self.doc.openTransaction(tool.name)
         try:
             out = fn()
@@ -344,6 +346,7 @@ class Session:
         self.last_step = {"tool": tool.name, "made": made, **({"why": why} if why else {})}
         if self.doc is start and made:
             self.tx += 1
+            self.note_change()
         try:
             self.agent_docs.add(self.doc.Name)
         except Exception:
@@ -367,6 +370,7 @@ class Session:
             except Exception:  # noqa: BLE001
                 pass
         if not tool.changes:
+            self.note_read(tool.name, args)
             try:
                 from . import diffing
 
@@ -381,6 +385,106 @@ class Session:
 
             self.calls.append({"tool": tool.name, "args": copy.deepcopy(args), "tx": self.tx, "step": len(self.steps)})
             del self.calls[:-2000]
+
+    # ---- measure before claim (agentlink/measured.py) ----
+
+    def measure_sigs(self):
+        """Each part's numbers now, shown or hidden: { label: [volume, area,
+        faces, solids, size, at] }. What a measure reads and doc_save
+        compares with."""
+        out = {}
+        d = self.doc
+        if d is None:
+            return out
+        for o in list(Session.bodies_in(d)) + list(Session.hidden_in(d)):
+            try:
+                st = self.stats_of(o)
+                b = o.Shape.BoundBox
+                at = [round(b.XMin, 4), round(b.YMin, 4), round(b.ZMin, 4)]
+                out[o.Label] = [st.get("volume"), st.get("area"), st.get("faces"), st.get("solids"), list(st.get("box") or []), at]
+            except Exception:
+                out[getattr(o, "Label", "?")] = None
+        return out
+
+    def _measure_on(self):
+        from . import measured
+
+        return measured.enabled() and self.doc is not None
+
+    def before_change(self):
+        """Before a change: the numbers it is compared with, the first time."""
+        try:
+            if self._measure_on():
+                from . import measured
+
+                measured.before_change(measured.record(self), self.measure_sigs)
+        except Exception:
+            pass
+
+    def note_change(self):
+        """A change made an undo step in the document (or undo, redo)."""
+        try:
+            from . import measured
+
+            measured.changed(self, measured.record(self), len(self.steps))
+        except Exception:
+            pass
+
+    def note_measure(self):
+        """The document's geometry was read (or saved): what it is now is
+        what a save compares with."""
+        try:
+            if self._measure_on():
+                from . import measured
+
+                measured.measured(self, measured.record(self), self.measure_sigs())
+        except Exception:
+            pass
+
+    def note_read(self, name, args):
+        """A read that went through: a measure (measured.is_measure) or a
+        save (doc_save) sets the numbers a save compares with."""
+        try:
+            if not self._measure_on():
+                return
+            from . import measured
+
+            if name == "doc_save":
+                self.note_measure()
+                return
+            if name not in measured.ALWAYS + measured.OF_ONE + ("object_get", "get"):
+                return
+            parts = list(Session.bodies_in(self.doc)) + list(Session.hidden_in(self.doc))
+            labels = [o.Label for o in parts] + [o.Name for o in parts]
+            if measured.is_measure(name, args, labels, self._body_or_feature):
+                self.note_measure()
+        except Exception:
+            pass
+
+    def _body_or_feature(self, ref):
+        """ref names a PartDesign Body or one of its features (not a sketch)."""
+        for o in self.doc.Objects:
+            if o.Name == ref or o.Label == ref:
+                t = str(getattr(o, "TypeId", ""))
+                return t.startswith("PartDesign::") and self._solid(o)
+        return False
+
+    def measure_refusal(self):
+        """doc_save's refusal words when the agent's document changed after
+        its geometry was last measured, else None."""
+        try:
+            if not self._measure_on():
+                return None
+            from . import measured
+
+            rec = measured.record(self)
+            if rec.get("changed", 0) <= rec.get("measured", 0):
+                return None
+            d = self.doc
+            mine = d.Name in (self.agent_docs or ())
+            return measured.gate_words(rec, d.Label or d.Name, self.measure_sigs(), mine)
+        except Exception:
+            return None
 
     # ---- the document ----
 
@@ -2983,6 +3087,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                         break
                     d.redo()
                     s.tx += 1
+            if names:
+                s.note_change()
             d.recompute()
             s.snapshot(f"history_{action}")
             return {"done": action, "steps": names, "undoCount": d.UndoCount, "redoCount": d.RedoCount, "bodies": [o.Label for o in s.bodies()]}
