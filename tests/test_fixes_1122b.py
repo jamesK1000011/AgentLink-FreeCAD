@@ -254,3 +254,18 @@ class DoesHits(unittest.TestCase):
         self.assertEqual(does_hits(srv, "sketch_rectangle"), ["sketch_add (Add geometry to a sketch)"])
         self.assertEqual(seen, ["sketch rectangle"])
         self.assertEqual(does_hits(types.SimpleNamespace(tools={}), "x"), [])
+
+
+class WrongTypeForm(unittest.TestCase):
+    def test_face_as_text_gives_the_form(self):
+        import json
+
+        from agentlink.protocol import ToolError, check_input
+
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agentlink", "data", "tools.json"), encoding="utf-8") as f:
+            sc = json.load(f)["entries"]["sketch_new"]["inputSchema"]
+        with self.assertRaises(ToolError) as e:
+            check_input(sc, {"face": "Pad1"}, "sketch_new")
+        m = e.exception.message
+        self.assertIn("input.face: an object, not text.", m)
+        self.assertIn("The form: { at: [x,y,z]", m)

@@ -558,6 +558,20 @@ def check_input(schema, args, tool=None):
 _PY = {"string": (str,), "number": (int, float), "integer": (int,), "boolean": (bool,), "array": (list,), "object": (dict,)}
 
 
+def _form(spec):
+    """The field's form from its card, for a refusal of the wrong type
+    (owner, 22 Nov: show the form, do not guess): its own description, or
+    an object's fields. "" when the card has neither."""
+    d = spec.get("description")
+    if isinstance(d, str) and d.strip():
+        d = d.strip()
+        return " The form: " + (d if len(d) <= 220 else d[:217] + "…")
+    props = spec.get("properties")
+    if spec.get("type") == "object" and isinstance(props, dict) and props:
+        return " The form: { " + ", ".join(list(props)[:8]) + " }."
+    return ""
+
+
 def _typed(where, spec, v):
     """A value checked against its field's type and enum — and coerced where
     a client sent the same thing in another dress: a number or a boolean as
@@ -589,7 +603,7 @@ def _typed(where, spec, v):
         if not ok and t == "integer" and isinstance(v, float) and v.is_integer():
             v, ok = int(v), True
         if not ok:
-            raise ToolError("invalid_input", f"{where}: {_said(t)}, not {_kind(v)}.")
+            raise ToolError("invalid_input", f"{where}: {_said(t)}, not {_kind(v)}.{_form(spec)}")
     if "enum" in spec and v not in spec["enum"]:
         lowered = {str(e).lower(): e for e in spec["enum"]}
         if isinstance(v, str) and v.lower() in lowered:
