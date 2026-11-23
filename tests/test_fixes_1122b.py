@@ -124,3 +124,64 @@ class CutSide(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Stubbed(unittest.TestCase):
+    """The FreeCAD modules as stand-ins, for the plain-Python parts."""
+
+    def setUp(self):
+        fc = types.ModuleType("FreeCAD")
+        fc.Vector = lambda x=0, y=0, z=0: (x, y, z)
+        names = ("FreeCAD", "Part", "Sketcher", "agentlink.geometry", "agentlink.runners", "agentlink.families.picks",
+                 "agentlink.families.pd_common", "agentlink.families.sketch")
+        self._old = {n: sys.modules.get(n) for n in names}
+        sys.modules["FreeCAD"] = fc
+        sys.modules["Part"] = types.ModuleType("Part")
+        sys.modules["Sketcher"] = types.ModuleType("Sketcher")
+        self.addCleanup(self.restore)
+        try:
+            from agentlink.families import pd_common, sketch
+        except ImportError as e:
+            self.skipTest(f"needs FreeCAD: {e}")
+        self.pc, self.sk = pd_common, sketch
+
+    def restore(self):
+        for n, m in self._old.items():
+            if m is None:
+                sys.modules.pop(n, None)
+            else:
+                sys.modules[n] = m
+
+    def test_vec2_forms(self):
+        def xy(v):  # the stand-in Vector of whichever test loaded the module first
+            return (v.x, v.y) if hasattr(v, "x") else tuple(v[:2])
+
+        for given in ([1, 2], [1, 2, 0], {"x": 1, "y": 2}):
+            self.assertEqual(xy(self.pc.vec2(given, "c")), (1.0, 2.0), given)
+        with self.assertRaises(self.pc.ToolError) as e:
+            self.pc.vec2([1, 2, 5], "corner")
+        self.assertIn("z 5", e.exception.message)
+
+    def test_constraint_fields_read_and_refused(self):
+        self.assertEqual(self.sk.con_keys({"kind": "fix", "point": [1, 2]}, 0), {"type": "fix", "refs": [[1, 2]]})
+        self.assertEqual(self.sk.con_keys({"type": "equal", "geometry": [0, 1]}, 0), {"type": "equal", "refs": [0, 1]})
+        with self.assertRaises(self.sk.ToolError) as e:
+            self.sk.con_keys({"kind": "fix", "point": [1, 0], "axis": 0}, 2)
+        self.assertIn("constraints[2]: axis", e.exception.message)
+        self.assertIn('"type": "fix"', e.exception.message)
+        with self.assertRaises(self.sk.ToolError):
+            self.sk.con_keys({"refs": [0]}, 0)
+
+
+class PocketDepth(unittest.TestCase):
+    def test_depth_is_read_as_length(self):
+        import json
+
+        from agentlink.protocol import check_input
+
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agentlink", "data", "tools.json"), encoding="utf-8") as f:
+            sc = json.load(f)["entries"]["pd_pocket"]["inputSchema"]
+        a = {"depth": 5}
+        read = check_input(sc, a, "pd_pocket")
+        self.assertEqual(a, {"length": 5})
+        self.assertTrue(any("depth as length" in r for r in read))

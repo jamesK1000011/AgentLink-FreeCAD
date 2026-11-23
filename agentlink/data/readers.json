@@ -1077,6 +1077,7 @@
     "bounds",
     "broken",
     "con_index",
+    "con_keys",
     "con_words",
     "describe_con",
     "describe_geo",

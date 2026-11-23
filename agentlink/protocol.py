@@ -270,6 +270,9 @@ FIELD_ALIASES = {
     "shape_query": {"object": "body"},
     # live findings, 22 Nov: a local model gave batch its calls as commands
     "batch": {"commands": "calls", "steps": "calls"},
+    # live, 22 Nov: a local model gave a pocket its depth, twice
+    "pd_pocket": {"depth": "length"},
+    "pd_pad": {"height": "length", "depth": "length"},
 }
 
 # A field that means something only beside another one (per tool: field ->

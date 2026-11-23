@@ -8457,6 +8457,7 @@
        "index": "i",
        "steps": [
         {"refuse": {"fmt": "constraints[{i}]: an object {{ type, refs, value, name }}."}, "when": "=not is_dict(c)"},
+        {"let": {"c": "=con_keys(c, i)"}},
         {"let": {"refs": "=[ref(r, 'constraints[' + str(i) + '].refs') for r in c.get('refs') or []]", "outside": "='; outside edges -3 to ' + str(-2 - ne) if ne else '; it has no outside edges (sketch_external brings them in)'"}},
         {
          "each": "g, p",

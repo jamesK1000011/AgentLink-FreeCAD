@@ -41,7 +41,8 @@ from agentlink.protocol import ToolError  # noqa: E402
 # 21 Nov, bicycle runs: + sweep_labels, side_check (assembly), path_closed, closed_tube_words (feature).
 # 21 Nov, bicycle L5 build: + attach_edge (sketch_more changer), driven_rows, held_back (assembly), pipe_options a changer (Refine).
 # 21 Nov, parts in other files: + find_in, same_tree (std_more readers); far_doc a changer (opens a file).
-PIN = "eca83beaadaa35b1c4454017a857617d5f3dbd930c81be4ed5c800441ac543ce"
+# 22 Nov, local runs: + con_keys (sketch reader: a constraint's fields written another way).
+PIN = "07934da5b3a710ec31980c7e73503207acacaa50b6c2f9bfcda7a363962d0550"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -51,7 +52,7 @@ PIN = "eca83beaadaa35b1c4454017a857617d5f3dbd930c81be4ed5c800441ac543ce"
 # Bicycle findings 3, 5 (20 Nov): sketch gains the reader plane_mode (a sketch on an LCS plane or a planeless PartDesign
 # coordinate system); feature_more's attach_on changes (pd_gear on any plane).
 # 21 Nov, bicycle L5 build: + driven_rows (a reader), attach_edge, held_back, pipe_options (changers).
-COUNTS = {"readers": 925, "changers": 159, "families": 37}
+COUNTS = {"readers": 926, "changers": 159, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {

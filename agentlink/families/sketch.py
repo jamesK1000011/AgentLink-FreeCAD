@@ -515,6 +515,49 @@ def _ref(r, what):
     raise ToolError("invalid_input", f"{what}: a geometry id, [id, vertex] (vertex 1 start, 2 end, 3 centre) or \"origin\". The axes: -1 the horizontal, -2 the vertical; outside edges -3 down (sketch_external). sketch_state lists the ids.")
 
 
+CON_FIELDS = ("type", "refs", "value", "name")
+CON_EXAMPLE = ('{ "type": "fix", "refs": [[0, 1]] } holds line 0\'s start; '
+               '{ "type": "distance", "refs": [0], "value": 40 } makes line 0 40 mm long')
+
+
+def con_keys(c, i):
+    """One constraint with the fields written another way read as its own:
+    kind (or constraint) as type, point as refs [point], points (or
+    geometry) as refs (live, 22 Nov: a local model sent kind and point five
+    times). Any other field is refused by name, with a worked example.
+    Builds a new dict and changes nothing (a reader for the dry checks)."""
+    if not isinstance(c, dict):
+        return c
+    renamed = set()
+    t = c.get("type")
+    if t is None:
+        k = next((k for k in ("kind", "constraint") if isinstance(c.get(k), str)), None)
+        if k:
+            t, renamed = c[k], renamed | {k}
+    refs = c.get("refs")
+    if refs is None:
+        if "point" in c:
+            refs, renamed = [c["point"]], renamed | {"point"}
+        else:
+            k = next((k for k in ("points", "geometry", "geometries", "ref") if k in c), None)
+            if k:
+                v = c[k]
+                refs = v if isinstance(v, list) and k != "ref" else [v]
+                renamed = renamed | {k}
+    out = {k: v for k, v in c.items() if k not in renamed}
+    if t is not None:
+        out["type"] = t
+    if refs is not None:
+        out["refs"] = refs
+    extra = [k for k in out if k not in CON_FIELDS]
+    if extra:
+        raise ToolError("invalid_input", f"constraints[{i}]: {', '.join(extra)}: not {'a field' if len(extra) == 1 else 'fields'} of a constraint. "
+                                         f"A constraint is {{ type, refs, value, name }}: {CON_EXAMPLE}.")
+    if not out.get("type"):
+        raise ToolError("invalid_input", f"constraints[{i}]: type is missing. {CON_EXAMPLE}.")
+    return out
+
+
 def make_constraint(sk, c):
     t = str(c.get("type", "")).lower().replace("_", "").replace("-", "")
     refs = [_ref(r, f"refs[{i}]") for i, r in enumerate(c.get("refs") or [])]
@@ -747,7 +790,7 @@ def tools(session):
                "quantity": lambda text: FreeCAD.Units.Quantity(text), "constraint": constraint,
                # the family's: the solver's reading, the builders, constraints by name
                "frame": frame, "state_of": state_of, "describe_geo": describe_geo, "describe_con": describe_con, "geo_kind": _geo_kind, "ext_count": ext_count,
-               "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_index": con_index,
+               "con_words": con_words, "clashing": clashing, "build": build, "remap": _remap, "ref": _ref, "make_constraint": make_constraint, "con_keys": con_keys, "con_index": con_index,
                "gid": gid, "face_frame": face_frame, "geo_of_edge": geo_of_edge, "offset_out": offset_out, "edge_refs": edge_refs, "fillet": fillet, "fillet_made": fillet_made, "bounds": bounds,
                "font_file": _font, "text_outlines": text_outlines}
     return runners.tools(GROUP, s, helpers)
