@@ -1112,7 +1112,7 @@ def install():
             log("find_faces", shape, queries, list(names_))
             return names(queries, "Face")
 
-        def find_face(shape, q, tol=0.5):
+        def find_face(shape, q, tol=0.5, body=None, names=()):  # body, names: face selectors (22 Nov)
             if not isinstance(q, dict) or "at" not in q:
                 raise ToolError("invalid_input", "face: { at: [x,y,z] on the face, normal: [x,y,z] outward } — a point on it, not its index (indices change after edits).")
             log("find_face", shape, q)
@@ -1122,6 +1122,14 @@ def install():
             return i, shape.Faces[i]
 
         pc.find_edges, pc.find_faces, pc.find_face = find_edges, find_faces, find_face
+
+        def face_pick(body, q):
+            """The form to copy back (22 Nov face selectors): the query as given, on the stand-in."""
+            tip, shape = pc.tip_shape(body)
+            find_face(shape, q)
+            return dict(q)
+
+        pc.face_pick = face_pick
         from agentlink.families import measure as M
 
         def query(session, q):

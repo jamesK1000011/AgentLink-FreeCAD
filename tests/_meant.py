@@ -161,6 +161,13 @@ def trace_as_meant(lines):
 # in after a named one (in that order), and the required list.
 # a: near's frame said, nearLocal (20 Nov); b said as a, so the card holds at 900 tokens (bicycle drive).
 _NEAR_A = "{ part, element }: \"Face6\", a datum (\"LCS\", { datum }), or a shape_query query (near picks the closest; nearLocal)."
+_UPTO = "The face to go up to: { side: \"+z\" } (also of, largest; one face only), { at, normal }, \"Face8\", or shape_query's filters."
+_EDGES = ("edges: [{ near: [x,y,z] } the edge nearest a point | { face: { side: \"+z\" } or { at, normal } } every edge of a face | { all: true }, "
+          "kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, "
+          "or shape_query's filters ({ type: circle, radius, axis, near, \u2026 })")
+_FACES = ("faces: [{ side: \"+z\" } | { at, normal }] by where they are, a reference shape_query gives (\"Face8\", \"Body.Face8\") "
+          "or a list of them, or shape_query's filters ({ type, normal, near, x, y, z, \u2026 })")
+_PLANE_FACE = "XY | XZ | YZ, a datum plane's name, or a face { side: \"+z\" } | { at, normal }"
 SCHEMAS = {
     "asm_joint": {"why": "findings 2, 3: gap across the joint; near's frame said, nearLocal. Bicycle 3, 4, 5: keep, autoFlip, chain by teeth. asm2: a datum (LCS) as an end",
                   "describe": {"a": _NEAR_A, "b": "As a."},
@@ -218,6 +225,21 @@ SCHEMAS = {
     "cmd_run": {"why": "co-work E5 7b: select",
                 "after": [("index", "select", {"type": "array", "items": {"type": "string"},
                                                "description": "Objects (\"Block\") or faces and edges (\"Block.Face6\") selected for this run only. The person's selection comes back after the run."})]},
+    # 22 Nov (owner-approved): face selectors { side: "+z", of, largest } beside { at, normal }; one face only (agentlink/facesel.py)
+    **{n: {"why": "face selectors", "describe": {"upToFace": _UPTO}} for n in ("pd_pad", "pd_pocket")},
+    **{n: {"why": "face selectors", "describe": {"edges": _EDGES}} for n in ("pd_fillet", "pd_chamfer")},
+    "pd_draft": {"why": "face selectors", "describe": {"faces": _FACES, "neutral": _PLANE_FACE}},
+    "pd_thickness": {"why": "face selectors", "describe": {"faces": _FACES}},
+    "pd_mirrored": {"why": "face selectors", "describe": {"plane": _PLANE_FACE}},
+    "pd_datum_plane": {"why": "face selectors", "describe": {"on": _PLANE_FACE}},
+    "sketch_new": {"why": "face selectors", "replace": {"face": {
+        "type": "object",
+        "description": "{ side: \"+z\" | \"-z\" | \"+x\" | \"-x\" | \"+y\" | \"-y\", of: the feature that made it, largest: true } (one face only), "
+                       "or { at: [x,y,z] a point on the face, normal: [x,y,z] its outward normal }",
+        "properties": {"side": {"type": "string", "enum": ["+z", "-z", "+x", "-x", "+y", "-y"]}, "of": {"type": "string"}, "largest": {"type": "boolean"},
+                       "at": {"type": "array", "items": {"type": "number"}}, "normal": {"type": "array", "items": {"type": "number"}},
+                       "tol": {"type": "number"}},
+        "additionalProperties": False}}},
 }
 
 

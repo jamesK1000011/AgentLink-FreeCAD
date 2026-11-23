@@ -1083,6 +1083,7 @@
     "describe_geo",
     "doc",
     "ext_count",
+    "face_pick",
     "frame",
     "geo_kind",
     "geo_of_edge",

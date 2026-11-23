@@ -6560,7 +6560,7 @@
   },
   "pd_pad": {
    "group": "feature",
-   "description": "Pad a closed sketch into the body, along its normal. type: length (length mm) | up_to_last | up_to_first | up_to_face. up_to_face takes upToFace { at, normal } or \"Face8\". sides: one | two (length2 in the other direction) | symmetric. reversed. taper: deg. The first pad takes a length. The tool refuses an open sketch (use sketch_state first) and a pad inside the body. Faces and edges get new numbers: query again. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Pad a closed sketch into the body, along its normal. type: length (length mm) | up_to_last | up_to_first | up_to_face. up_to_face takes upToFace { side: \"+z\" }, { at, normal } or \"Face8\". sides: one | two (length2 in the other direction) | symmetric. reversed. taper: deg. The first pad takes a length. The tool refuses an open sketch (use sketch_state first) and a pad inside the body. Faces and edges get new numbers: query again. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6593,7 +6593,7 @@
       "type": "boolean"
      },
      "upToFace": {
-      "description": "The face to go up to: { at, normal }, \"Face8\", or shape_query's filters."
+      "description": "The face to go up to: { side: \"+z\" } (also of, largest; one face only), { at, normal }, \"Face8\", or shape_query's filters."
      },
      "taper": {
       "type": "number"
@@ -6625,7 +6625,7 @@
     {
      "when": "=typ == 'up_to_face'",
      "then": [
-      {"refuse": "type up_to_face: give upToFace — { at: [x,y,z], normal: [x,y,z] } on the body, or \"Face8\" as shape_query names it.", "when": "=a.upToFace is None"},
+      {"refuse": "type up_to_face: give upToFace — { side: \"+z\" } or { at: [x,y,z], normal: [x,y,z] } on the body, or \"Face8\" as shape_query names it.", "when": "=a.upToFace is None"},
       {"let": {"up_face": "=find_faces(ref_shape(b, tip.Shape), [a.upToFace], ref_names(b, tip))[0]"}}
      ]
     },
@@ -6693,7 +6693,7 @@
       "type": "boolean"
      },
      "upToFace": {
-      "description": "The face to go up to: { at, normal }, \"Face8\", or shape_query's filters."
+      "description": "The face to go up to: { side: \"+z\" } (also of, largest; one face only), { at, normal }, \"Face8\", or shape_query's filters."
      },
      "taper": {
       "type": "number"
@@ -6725,7 +6725,7 @@
     {
      "when": "=typ == 'up_to_face'",
      "then": [
-      {"refuse": "type up_to_face: give upToFace — { at: [x,y,z], normal: [x,y,z] } on the body, or \"Face8\" as shape_query names it.", "when": "=a.upToFace is None"},
+      {"refuse": "type up_to_face: give upToFace — { side: \"+z\" } or { at: [x,y,z], normal: [x,y,z] } on the body, or \"Face8\" as shape_query names it.", "when": "=a.upToFace is None"},
       {"let": {"up_face": "=find_faces(ref_shape(b, tip.Shape), [a.upToFace], ref_names(b, tip))[0]"}}
      ]
     },
@@ -7029,7 +7029,7 @@
   },
   "pd_fillet": {
    "group": "feature",
-   "description": "Round edges of the body. edges: [{ near: [x,y,z] }] is the edge nearest a point. { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items). Or give its filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An inside corner gets material, an outside corner loses material: both are correct. The answer adds on (the edges). Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer fillets last in the tree. Do not attach a sketch or a datum to a fillet face.",
+   "description": "Round edges of the body. edges: [{ near: [x,y,z] }] is the edge nearest a point. { face: { side: \"+z\" } } or { face: { at, normal } } is every edge of a face. { all: true } is all edges. kind: line|circle filters them. Or give what shape_query answers (\"Edge3\", \"Body.Edge3\", a list, its items). Or give its filters ({ type: circle, radius: 3 }): every such edge; with near, the nearest. radius: mm (default 1). References are good until the next change: query again after a change. The tool skips smooth (tangent) edges. An inside corner gets material, an outside corner loses material: both are correct. The answer adds on (the edges). Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer fillets last in the tree. Do not attach a sketch or a datum to a fillet face.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7038,7 +7038,7 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "edges": {
-      "description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, … })"
+      "description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { side: \"+z\" } or { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, … })"
      },
      "radius": {
       "type": "number"
@@ -7081,7 +7081,7 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "edges": {
-      "description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, … })"
+      "description": "edges: [{ near: [x,y,z] } the edge nearest a point | { face: { side: \"+z\" } or { at, normal } } every edge of a face | { all: true }, kind: line|circle], a reference shape_query gives (\"Edge3\", \"Body.Edge3\"; a face's: its edges) or a list of them, or shape_query's filters ({ type: circle, radius, axis, near, … })"
      },
      "size": {
       "type": "number"
@@ -7124,7 +7124,7 @@
   },
   "pd_draft": {
    "group": "feature",
-   "description": "Taper faces for moulding. faces: [{ at, normal }], or shape_query's references or filters. angle: deg (1.5). neutral: the plane that the faces pivot on (XY default, a datum plane, or a face). The faces must meet it. pull: the direction, x|y|z (z) or a datum line. reversed. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Taper faces for moulding. faces: [{ side: \"+z\" } or { at, normal }], or shape_query's references or filters. angle: deg (1.5). neutral: the plane that the faces pivot on (XY default, a datum plane, or a face). The faces must meet it. pull: the direction, x|y|z (z) or a datum line. reversed. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7133,13 +7133,13 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "faces": {
-      "description": "faces: [{ at, normal }] by where they are, a reference shape_query gives (\"Face8\", \"Body.Face8\") or a list of them, or shape_query's filters ({ type, normal, near, x, y, z, … })"
+      "description": "faces: [{ side: \"+z\" } | { at, normal }] by where they are, a reference shape_query gives (\"Face8\", \"Body.Face8\") or a list of them, or shape_query's filters ({ type, normal, near, x, y, z, … })"
      },
      "angle": {
       "type": "number"
      },
      "neutral": {
-      "description": "XY | XZ | YZ, a datum plane's name, or a face { at, normal }"
+      "description": "XY | XZ | YZ, a datum plane's name, or a face { side: \"+z\" } | { at, normal }"
      },
      "pull": {
       "type": "string"
@@ -7178,7 +7178,7 @@
   },
   "pd_thickness": {
    "group": "feature",
-   "description": "Shell the PartDesign body: open faces and leave walls of a thickness. faces: [{ at, normal }] (or shape_query's references or filters) to open; the tool removes them. thickness: mm of the wall (1). It goes inward unless outward: true. join: arc|intersection. A wall thicker than an inside fillet fails: shell before you fillet. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Shell the PartDesign body: open faces and leave walls of a thickness. faces: [{ side: \"+z\" } or { at, normal }] (or shape_query's references or filters) to open; the tool removes them. thickness: mm of the wall (1). It goes inward unless outward: true. join: arc|intersection. A wall thicker than an inside fillet fails: shell before you fillet. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7187,7 +7187,7 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "faces": {
-      "description": "faces: [{ at, normal }] by where they are, a reference shape_query gives (\"Face8\", \"Body.Face8\") or a list of them, or shape_query's filters ({ type, normal, near, x, y, z, … })"
+      "description": "faces: [{ side: \"+z\" } | { at, normal }] by where they are, a reference shape_query gives (\"Face8\", \"Body.Face8\") or a list of them, or shape_query's filters ({ type, normal, near, x, y, z, … })"
      },
      "thickness": {
       "type": "number"
@@ -7254,7 +7254,7 @@
       ]
      },
      "plane": {
-      "description": "XY | XZ | YZ, a datum plane's name, or a face { at, normal }"
+      "description": "XY | XZ | YZ, a datum plane's name, or a face { side: \"+z\" } | { at, normal }"
      }
     },
     "required": [
@@ -7599,7 +7599,7 @@
       "description": "The PartDesign body; may be left out when there is one."
      },
      "on": {
-      "description": "XY | XZ | YZ, a datum plane's name, or a face { at, normal }"
+      "description": "XY | XZ | YZ, a datum plane's name, or a face { side: \"+z\" } | { at, normal }"
      },
      "offset": {
       "type": "number"
@@ -8095,7 +8095,7 @@
   },
   "sketch_new": {
    "group": "sketch",
-   "description": "Make a new sketch in a body. plane: XY | XZ | YZ | the name of a datum plane | \"Pad.Face3\". An LCS plane is \"LCS.XZ_Plane\"; a whole LCS gives its XY plane. A Part datum plane also works. Or face { at, normal } finds a face of the solid. at is a point on it, normal is its outward normal. Never use a face index, because it changes after edits. Give plane or face, not both. offset: mm along the normal; flip reverses it. A face sketch aligns with the world: its x is along the world axis that lies most in the face. Answer: sketch (its label) and frame. frame: where the sketch x/y and its origin are in the world.",
+   "description": "Make a new sketch in a body. plane: XY | XZ | YZ | the name of a datum plane | \"Pad.Face3\". An LCS plane is \"LCS.XZ_Plane\"; a whole LCS gives its XY plane. A Part datum plane also works. Or face finds a face of the solid. face { side: \"+z\" } is the flat face farthest along +z (also -z, +x, -x, +y, -y). of: \"Pad\" keeps only the faces that Pad made. largest: true takes the largest face, not the farthest. It must match one face, or the tool refuses and lists the faces. Or face { at, normal }: at is a point on it, normal is its outward normal. Never use a face index, because it changes after edits. Give plane or face, not both. offset: mm along the normal; flip reverses it. A face sketch aligns with the world: its x is along the world axis that lies most in the face. Answer: sketch (its label) and frame. frame: where the sketch x/y and its origin are in the world. On a face, face is the form that picks it again.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8108,8 +8108,25 @@
      },
      "face": {
       "type": "object",
-      "description": "{ at: [x,y,z] a point on the face, normal: [x,y,z] its outward normal }",
+      "description": "{ side: \"+z\" | \"-z\" | \"+x\" | \"-x\" | \"+y\" | \"-y\", of: the feature that made it, largest: true } (one face only), or { at: [x,y,z] a point on the face, normal: [x,y,z] its outward normal }",
       "properties": {
+       "side": {
+        "type": "string",
+        "enum": [
+         "+z",
+         "-z",
+         "+x",
+         "-x",
+         "+y",
+         "-y"
+        ]
+       },
+       "of": {
+        "type": "string"
+       },
+       "largest": {
+        "type": "boolean"
+       },
        "at": {
         "type": "array",
         "items": {
@@ -8126,9 +8143,6 @@
         "type": "number"
        }
       },
-      "required": [
-       "at"
-      ],
       "additionalProperties": false
      },
      "offset": {
@@ -8150,7 +8164,8 @@
    "runner": "steps",
    "steps": [
     {"let": {"b": "=body(a.body)"}},
-    {"refuse": "Give plane (XY, XZ, YZ, a datum plane's name or \"Pad.Face3\") or face ({ at: [x,y,z], normal: [x,y,z] } on the body's solid), one of them, not both.", "when": "=('plane' in a) == ('face' in a)"},
+    {"refuse": "Give plane (XY, XZ, YZ, a datum plane's name or \"Pad.Face3\") or face ({ side: \"+z\" } or { at: [x,y,z], normal: [x,y,z] } on the body's solid), one of them, not both.", "when": "=('plane' in a) == ('face' in a)"},
+    {"let": {"pick": "=face_pick(b, a.face) if 'face' in a else None"}},
     {"let": {"label": "=unique(a.name or 'Sketch')", "sk": "=b.newObject('Sketcher::SketchObject', 'Sketch')"}},
     {"set": {"sk.Label": "=label"}},
     {"let": {"sup": "=support_prop(sk)", "link, what": "=plane_ref(b, a.plane if 'plane' in a else a.face, 'plane')"}},
@@ -8176,7 +8191,7 @@
     },
     {"refuse": {"fmt": "The sketch would not attach to {what}: {sk.getStatusString()} — nothing was made. A sketch needs a flat face or a plane: pick another face, or plane XY | XZ | YZ with offset."}, "code": "failed", "when": "=not sk.isValid()"}
    ],
-   "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"sketch": "=sk.Label", "body": "=b.Label", "on": "=what", "offset": {"when": "=off", "value": "=off"}, "frame": "=frame(sk.Placement)", "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}}
+   "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"sketch": "=sk.Label", "body": "=b.Label", "on": "=what", "face": {"when": "=pick", "value": "=pick"}, "offset": {"when": "=off", "value": "=off"}, "frame": "=frame(sk.Placement)", "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}}
   },
   "sketch_add": {
    "group": "sketch",
@@ -21033,7 +21048,7 @@
   },
   "sketch_attach": {
    "group": "sketch",
-   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? }. offset: mm along its normal. rotate: deg in it. flip. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and flip stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Use it when an attachment lost its element (\"missing element reference\") after a change. Answer: on, mode, support, repaired. Prefer an origin plane, a datum or the skeleton to a made face (\"Pad.Face3\"). A made face can get a new name after a change.",
+   "description": "Move a sketch onto another plane (Sketcher's map/reorient). plane: XY | XZ | YZ | a datum plane | \"Pad.Face3\". Or face { at, normal, feature? } or { side: \"+z\", feature? }. offset: mm along its normal. rotate: deg in it. flip. A face is bound to the feature that made it, not the tip. That is the earliest feature in the body that has it, or feature. A sketch that is before that feature moves after it. The tool refuses when a feature is built from the sketch. Or edge: \"Binder.Edge1\" with mode NormalToEdge (default) | FrenetNB | FrenetTN | FrenetTB | Concentric | RevolutionSection, and at: 0 to 1 along the edge. The sketch stays in place in the body. This is also so when a feature is built from it (a tube profile on an edge). offset, rotate and flip stay unless given. repair: true points each element of the sketch's support at the element of the same number on the same object. Use it when an attachment lost its element (\"missing element reference\") after a change. Answer: on, mode, support, repaired. Prefer an origin plane, a datum or the skeleton to a made face (\"Pad.Face3\"). A made face can get a new name after a change.",
    "inputSchema": {
     "type": "object",
     "properties": {

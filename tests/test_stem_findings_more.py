@@ -491,7 +491,7 @@ class OnStandIns(unittest.TestCase):
             body = Obj("Body", "PartDesign::Body")
             body.Group, body.Tip = [pad, sk, pocket], pocket
 
-            def find_face(shape, q, tol=0.5):
+            def find_face(shape, q, tol=0.5, body=None, names=()):  # body, names: 22 Nov face selectors
                 for i, f in enumerate(shape.faces):
                     if (f.CenterOfMass - Vec(*q["at"])).Length < tol:
                         return i, f

@@ -15,6 +15,7 @@ import Part
 from .. import geometry as geo
 from ..protocol import ToolError
 from . import picks
+from .. import facesel
 
 V = FreeCAD.Vector
 PLANES = {"XY": "XY_Plane", "XZ": "XZ_Plane", "YZ": "YZ_Plane"}
@@ -284,11 +285,11 @@ def plane_ref(body, ref, what="plane"):
         return (o, [""]), f"{o.Label}{out}"
     if isinstance(ref, dict):
         tip, shape = tip_shape(body)
-        i, f = find_face(shape, ref)
+        i, f = find_face(shape, ref, body=body)
         own, j = face_owner(body, ref, tip, f)
         return (own, [f"Face{j + 1}"]), f"face at {geo.vec(f.CenterOfMass)}" + ("" if own is tip else f" ({own.Label}'s)")
     raise ToolError("invalid_input", f"{what}: XY, XZ, YZ, a datum plane's name (pd_datum_plane makes one), an LCS or its plane (\"LCS.XZ_Plane\"), "
-                                     f"\"Pad.Face3\" as shape_query names it, or a face {{ at: [x,y,z], normal: [x,y,z] }}.")
+                                     f"\"Pad.Face3\" as shape_query names it, or a face {{ side: \"+z\" }} or {{ at: [x,y,z], normal: [x,y,z] }}.")
 
 
 def _planes_there(body):
@@ -336,18 +337,18 @@ def face_owner(body, ref, tip, face):
     named = ref.get("feature") if isinstance(ref, dict) else None
     if named:
         o = in_body(body, named, None, "feature")
-        i, _ = find_face(o.Shape, ref)
+        i, _ = find_face(o.Shape, ref, body=body)
         return o, i
     for o in solid_features(body, tip):
         if o is tip:
             break
         try:
-            i, g = find_face(o.Shape, ref)
+            i, g = find_face(o.Shape, ref, body=body)
         except ToolError:
             continue
         if same_face(g, face):
             return o, i
-    i, _ = find_face(tip.Shape, ref)
+    i, _ = find_face(tip.Shape, ref, body=body)
     return tip, i
 
 
@@ -413,11 +414,91 @@ def _angle(a, b):
     return math.degrees(math.acos(c))
 
 
-def find_face(shape, q, tol=0.5):
+def face_descs(shape, pl=None):
+    """The shape's faces as facesel describes them (center, a point on the
+    face, outward normal there, area, type); pl: a placement to carry them
+    into another shape's frame."""
+    out = []
+    for f in shape.Faces:
+        c = f.CenterOfMass
+        at = c
+        try:
+            d, pts, _ = f.distToShape(Part.Vertex(c))
+            if d > 1e-6:
+                at = pts[0][0]
+        except Exception:
+            pass
+        n = _normal_at(f, at)
+        if pl is not None:
+            c, at = pl.multVec(c), pl.multVec(at)
+            n = pl.Rotation.multVec(n) if n is not None else None
+        out.append({"center": [c.x, c.y, c.z], "at": [at.x, at.y, at.z], "normal": [n.x, n.y, n.z] if n is not None else None,
+                    "area": f.Area, "type": facesel.surface_type(type(f.Surface).__name__)})
+    return out
+
+
+def _body_named(names):
+    doc = FreeCAD.ActiveDocument
+    for b in (pd_bodies(doc) if doc is not None else []):
+        if b.Label in names or b.Name in names:
+            return b
+    return None
+
+
+def _mark_of(shape, descs, of, body=None, names=()):
+    """descs again, with of among the owners of the faces it made: those on
+    its AddSubShape (a PartDesign feature), else on its shape; the body:
+    all of them."""
+    body = body if body is not None else _body_named(names)
+    if of in names or (body is not None and of in (body.Label, body.Name)):
+        return facesel.with_owner(descs, set(range(len(descs))), of)
+    if body is not None:
+        o = in_body(body, of, None, "face.of")
+    else:
+        doc = FreeCAD.ActiveDocument
+        o = None
+        if doc is not None:
+            o = doc.getObject(of) or next(iter(doc.getObjectsByLabel(of)), None)
+        if o is None:
+            raise ToolError("not_found", f"face.of {of!r}: no feature or body of that name.")
+    # A PartDesign feature's Shape is the whole body up to it: the faces it
+    # made are those on its AddSubShape (the solid it added or cut).
+    theirs = None
+    for prop in ("AddSubShape", "Shape"):
+        t = getattr(o, prop, None)
+        if t is not None and not t.isNull() and t.Faces:
+            theirs = t
+            break
+    if theirs is None:
+        raise ToolError("invalid_input", f"face.of {of!r}: {o.Label} has no faces — a feature with a solid, or the body.")
+    pl = shape.Placement * theirs.Placement.inverse()
+    back = pl.inverse()
+    owned = set()
+    for i, j in facesel.owner_pairs(descs, face_descs(theirs, pl)):
+        if i not in owned and theirs.Faces[j].distToShape(Part.Vertex(back.multVec(FreeCAD.Vector(*descs[i]["at"]))))[0] <= 1e-4:
+            owned.add(i)
+    return facesel.with_owner(descs, owned, of)
+
+
+def _by_selector(shape, q, body=None, names=()):
+    """(index, descs) of the one face a selector names on the shape."""
+    descs = face_descs(shape)
+    _, of, _ = facesel.check(q)
+    if of is not None:
+        descs = _mark_of(shape, descs, of, body, names)
+    return facesel.select(descs, q), descs
+
+
+def find_face(shape, q, tol=0.5, body=None, names=()):
     """The face a query names: at [x,y,z] on it (within tol mm), normal
-    [x,y,z] outward there (within 15°). Returns (index, face)."""
+    [x,y,z] outward there (within 15°); or a selector { side: "+z", of,
+    largest } (facesel.py) that must match one face. Returns (index, face).
+    body / names: the body, to read a selector's of."""
+    if facesel.is_selector(q):
+        i, _ = _by_selector(shape, q, body, names)
+        return i, shape.Faces[i]
     if not isinstance(q, dict) or "at" not in q:
-        raise ToolError("invalid_input", "face: { at: [x,y,z] on the face, normal: [x,y,z] outward } — a point on it, not its index (indices change after edits).")
+        raise ToolError("invalid_input", f"{facesel.FORMS} — not its index or name (they change after edits).")
     p = vec3(q["at"], "face.at")
     n = vec3(q["normal"], "face.normal") if q.get("normal") is not None else None
     tol = float(q.get("tol", tol))
@@ -437,11 +518,25 @@ def find_face(shape, q, tol=0.5):
     raise ToolError("not_found", f"No face within {tol} mm of {geo.vec(p)}" + (f" facing {geo.vec(n)}" if n is not None else "") + f". Nearest faces: {near or 'none'} — give a point on the face and its outward normal.")
 
 
+def face_pick(body, ref):
+    """The form that picks the face ref names on the body's solid, for an
+    answer the next call can copy: { side, … } when one picks it alone,
+    else { at, normal }."""
+    _, shape = tip_shape(body)
+    sel = facesel.is_selector(ref)
+    if sel:
+        i, descs = _by_selector(shape, ref, body)
+    else:
+        i, _ = find_face(shape, ref, body=body)
+        descs = face_descs(shape)
+    return facesel.copyable(descs, i, ref if sel else None)
+
+
 EDGE_KEYS = ("near", "face", "all", "kind", "tol")
 FACE_KEYS = ("at", "normal", "tol")
 
 
-def _edges_legacy(shape, q):
+def _edges_legacy(shape, q, names=()):
     """The older edge forms: { near } the edge nearest a point (within 1
     mm), { face: { at, normal } } every edge of a face, { all: true };
     kind: line | circle filters any of them."""
@@ -457,7 +552,7 @@ def _edges_legacy(shape, q):
             raise ToolError("not_found", f"No edge within {tol} mm of {q['near']}: nearest edges (their mid-points) {close} — give a point on the edge.")
         idx = [ds[0][1]]
     elif "face" in q:
-        _, f = find_face(shape, q["face"])
+        _, f = find_face(shape, q["face"], names=names)
         idx = [i for i, e in enumerate(edges) if any(e.isSame(fe) for fe in f.Edges)]
     else:
         raise ToolError("invalid_input", "edges: each one { near } | { face } | { all: true }, a reference (\"Edge3\", \"Body.Edge3\") or shape_query's filters.")
@@ -479,9 +574,9 @@ def find_edges(shape, queries, names=()):
     from . import refs
 
     if not queries:
-        raise ToolError("invalid_input", "edges: [{ near: [x,y,z] } | { face: { at, normal } } | { all: true } | \"Edge3\" | shape_query's filters { type, radius, axis, … }, …], kind: line | circle to filter.")
+        raise ToolError("invalid_input", "edges: [{ near: [x,y,z] } | { face: { side: \"+z\" } or { at, normal } } | { all: true } | \"Edge3\" | shape_query's filters { type, radius, axis, … }, …], kind: line | circle to filter.")
     try:
-        got = refs.pick(shape, queries, "edge", "edges", legacy=lambda q: _edges_legacy(shape, q), is_legacy=refs.legacy_of(EDGE_KEYS), names=names)
+        got = refs.pick(shape, queries, "edge", "edges", legacy=lambda q: _edges_legacy(shape, q, names), is_legacy=refs.legacy_of(EDGE_KEYS), names=names)
     except ToolError as e:
         if e.message == "edges: nothing matched.":
             raise ToolError("not_found", "The queries matched no edge (kind filtered them all out?).") from None
@@ -496,14 +591,15 @@ def find_faces(shape, queries, names=()):
     from . import refs
 
     if not queries:
-        raise ToolError("invalid_input", "faces: [{ at: [x,y,z], normal: [x,y,z] } | \"Face8\" | shape_query's filters { type, normal, near, … }, …] — by where they are, not by index.")
+        raise ToolError("invalid_input", "faces: [{ side: \"+z\" } | { at: [x,y,z], normal: [x,y,z] } | \"Face8\" | shape_query's filters { type, normal, near, … }, …] — by where they are, not by index.")
 
     def legacy(q):
-        i, f = find_face(shape, q)
+        i, f = find_face(shape, q, names=names)
         return [(f"Face{i + 1}", f)]
 
+    old = refs.legacy_of(FACE_KEYS, lambda q: "at" in q)
     return [n for n, _ in refs.pick(shape, queries, "face", "faces", legacy=legacy,
-                                    is_legacy=refs.legacy_of(FACE_KEYS, lambda q: "at" in q), names=names)]
+                                    is_legacy=lambda q: facesel.is_selector(q) or old(q), names=names)]
 
 
 # ---- after a change ------------------------------------------------------------------------

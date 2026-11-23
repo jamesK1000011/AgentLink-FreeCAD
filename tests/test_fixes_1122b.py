@@ -268,4 +268,6 @@ class WrongTypeForm(unittest.TestCase):
             check_input(sc, {"face": "Pad1"}, "sketch_new")
         m = e.exception.message
         self.assertIn("input.face: an object, not text.", m)
-        self.assertIn("The form: { at: [x,y,z]", m)
+        # 22 Nov face selectors: the form names both, side first
+        self.assertIn('The form: { side: "+z"', m)
+        self.assertIn("{ at: [x,y,z]", m)
