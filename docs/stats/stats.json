@@ -1118,5 +1118,8 @@
  },
  "timings": {
   "note": "no timing data in the repo yet"
+ },
+ "benchmark": {
+  "note": "no benchmark runs in the repo yet"
  }
 }

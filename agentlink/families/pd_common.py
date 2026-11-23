@@ -722,6 +722,33 @@ def _profile_of(o):
     return prof[0] if isinstance(prof, (list, tuple)) and prof else prof
 
 
+def outside_words(sk, bb, n):
+    """Words when the sketch's outline lies beside the body along an axis
+    of the sketch's plane (world axes, the normal's axis left out), or ""."""
+    try:
+        pb = sk.Shape.BoundBox
+    except Exception:  # noqa: BLE001
+        return ""
+    return outside_text(sk.Label, (pb.XMin, pb.XMax, pb.YMin, pb.YMax, pb.ZMin, pb.ZMax),
+                        (bb.XMin, bb.XMax, bb.YMin, bb.YMax, bb.ZMin, bb.ZMax), (n.x, n.y, n.z))
+
+
+def outside_text(label, prof, body, normal, tol=1e-6):
+    """Plain-number form of outside_words (profile and body boxes as
+    xmin, xmax, ymin, ymax, zmin, zmax; normal x, y, z)."""
+    words = []
+    for i, ax in enumerate("xyz"):
+        if abs(normal[i]) > 0.9:  # the axis the cut goes along
+            continue
+        plo, phi, blo, bhi = prof[2 * i], prof[2 * i + 1], body[2 * i], body[2 * i + 1]
+        if phi < blo - tol or plo > bhi + tol:
+            words.append(f"the outline lies at {ax} {plo:g} to {phi:g}; the body spans {ax} {blo:g} to {bhi:g}")
+    if not words:
+        return ""
+    return (f"The sketch {label}'s outline is beside the body, not over it: " + "; ".join(words) +
+            ". Move the outline over the body (its position, not its direction).")
+
+
 def cut_side_words(feat, body):
     """Where a cut that cut nothing went, against where the body is: the
     sketch's normal, and the side of the sketch the body lies on (live,
@@ -740,6 +767,12 @@ def cut_side_words(feat, body):
                     "A hole or pocket needs a sketch of its own, on the face it goes into: sketch_new { face: { at, normal } }, then sketch_add.")
         n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
         bb = body.Shape.BoundBox
+        # First: does the outline lie over the body at all, across the
+        # sketch's plane? (live, 23 Nov: holes at y +15 beside a plate at
+        # y -30..0 got the direction words three times.)
+        off = outside_words(sk, bb, n)
+        if off:
+            return off
         c = FreeCAD.Vector((bb.XMin + bb.XMax) / 2, (bb.YMin + bb.YMax) / 2, (bb.ZMin + bb.ZMax) / 2)
         side = (c - pl.Base).dot(n)
         axis = max(("x", abs(n.x), n.x), ("y", abs(n.y), n.y), ("z", abs(n.z), n.z), key=lambda t: t[1])

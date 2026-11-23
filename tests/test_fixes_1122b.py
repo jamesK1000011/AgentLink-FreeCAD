@@ -272,3 +272,26 @@ class WrongTypeForm(unittest.TestCase):
         # 22 Nov face selectors: the form names both, side first
         self.assertIn('The form: { side: "+z"', m)
         self.assertIn("{ at: [x,y,z]", m)
+
+
+class OutlineBesideBody(unittest.TestCase):
+    """23 Nov: holes at y +15 beside a plate at y -30..0 got the direction words."""
+
+    def setUp(self):
+        try:
+            from agentlink.families import pd_common
+        except ImportError as e:
+            self.skipTest(f"needs FreeCAD: {e}")
+        self.pd = pd_common
+
+    def test_beside_names_both_ranges(self):
+        w = self.pd.outside_text("Holes", (12.5, 47.5, 12.5, 17.5, 5, 5), (0, 60, -30, 0, 0, 40), (0, 0, 1))
+        self.assertIn("the outline lies at y 12.5 to 17.5; the body spans y -30 to 0", w)
+        self.assertIn("not its direction", w)
+
+    def test_over_the_body_says_nothing(self):
+        self.assertEqual(self.pd.outside_text("Holes", (12.5, 47.5, -17.5, -12.5, 5, 5), (0, 60, -30, 0, 0, 40), (0, 0, 1)), "")
+
+    def test_the_cut_axis_is_left_out(self):
+        # Beside along z only (the cut's own axis): that is the direction words' job.
+        self.assertEqual(self.pd.outside_text("S", (0, 10, 0, 10, 50, 50), (0, 60, 0, 30, 0, 40), (0, 0, 1)), "")

@@ -307,6 +307,10 @@ No timing data in the repo yet. The findings files give times in prose only, and
 
 To add timings, run `python3 scripts/stats.py --timings <file>`. The file is one day of the Agent Link usage log (`~/AgentLink/usage/<day>.jsonl`) or the heavy-job queue (`queue.json`). The script keeps the tool names and the times only. It writes `docs/stats/timings.json`, and this section shows the median for each tool family.
 
+## 5. Model benchmark
+
+No benchmark runs in the repo yet.
+
 ## What is not covered, and why
 
 Each line is one tool: the section, the workbench or group, what is short, and why. The reason comes from the tool's `gap` in the hardening records, which cite the test run that found it. A tool with no recorded reason says "Not tested yet."

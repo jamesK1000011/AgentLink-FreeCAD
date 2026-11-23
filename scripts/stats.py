@@ -48,6 +48,9 @@ STATS_JSON = os.path.join(OUT, "stats.json")
 STATS_MD = os.path.join(OUT, "STATS.md")
 ADDONS_JSON = os.path.join(OUT, "addons.json")
 TIMINGS_JSON = os.path.join(OUT, "timings.json")
+# The model benchmark: runs scored by FreeCAD (written by hand from the run
+# records; this script only reads it and renders section 5).
+BENCHMARK_JSON = os.path.join(OUT, "benchmark.json")
 README = os.path.join(ROOT, "README.md")
 BEGIN, END = "<!-- stats:begin (scripts/stats.py) -->", "<!-- stats:end -->"
 CPT = ste_check.CHARS_PER_TOKEN
@@ -431,7 +434,57 @@ def build():
         "hubTools": hub,
         "tokens": tokens(hub, hub["groups"], addons),
         "timings": tim if tim else {"note": "no timing data in the repo yet"},
+        "benchmark": benchmark_summary(load_json(BENCHMARK_JSON)),
     }
+
+
+INTERFACES = {"agentlink": "Agent Link", "thin-mcp": "Thin code MCP", "raw-step": "Raw STEP (no tools)"}
+
+
+def benchmark_summary(b):
+    """Pass counts per model, interface and part, from benchmark.json."""
+    if not isinstance(b, dict) or not b.get("runs"):
+        return {"note": "no benchmark runs in the repo yet"}
+    cells = {}
+    for r in b["runs"]:
+        k = (r["model"], r["interface"], r.get("hub", ""))
+        c = cells.setdefault(k, {"model": r["model"], "interface": r["interface"], "hub": r.get("hub", ""), "parts": {}})
+        p = c["parts"].setdefault(r["part"], {"runs": 0, "passes": 0})
+        p["runs"] += 1
+        p["passes"] += 1 if r.get("pass") else 0
+    return {"date": b.get("date"), "runs": len(b["runs"]), "cells": list(cells.values())}
+
+
+def benchmark_lines(b, summ):
+    """Section 5: the model benchmark, from benchmark.json and its summary."""
+    L = ["", "## 5. Model benchmark", ""]
+    if not isinstance(b, dict) or not b.get("runs"):
+        return L + ["No benchmark runs in the repo yet."]
+    parts = list(b.get("parts", {}))
+    L += [b.get("intro", ""), ""]
+    L += ["### Results", "", "Passes out of runs, per part. A pass is FreeCAD's own measure of the saved file: one valid solid, "
+          "its volume in the range and its size, and the holes where the part has them.", "",
+          "| Model | Interface | Hub | " + " | ".join(p.capitalize() for p in parts) + " |",
+          "|---|---|---|" + "---:|" * len(parts)]
+    for c in summ["cells"]:
+        row = [f"{c['parts'][p]['passes']}/{c['parts'][p]['runs']}" if p in c["parts"] else "—" for p in parts]
+        L.append(f"| {c['model']} | {INTERFACES.get(c['interface'], c['interface'])} | {c['hub'] or '—'} | " + " | ".join(row) + " |")
+    L += ["", "### Each run", "",
+          "| Model | Interface | Part | Pass | Minutes | Tool calls | Refused | Tokens in / out | Volume (mm³) | Note |",
+          "|---|---|---|---|---:|---:|---:|---|---:|---|"]
+    for r in b["runs"]:
+        tok = f"{_fmt(r['tokensIn'])} / {_fmt(r['tokensOut'])}" if r.get("tokensIn") is not None else "—"
+        vol = f"{r['volume']:,.1f}" if isinstance(r.get("volume"), (int, float)) else "—"
+        mins = f"{r['minutes']:.1f}" if isinstance(r.get("minutes"), (int, float)) else "—"
+        calls = str(r["calls"]) if r.get("calls") is not None else "—"
+        ref = str(r["refused"]) if r.get("refused") is not None else "—"
+        L.append(f"| {r['model']} | {INTERFACES.get(r['interface'], r['interface'])} | {r['part']} | {'yes' if r.get('pass') else 'no'} | "
+                 f"{mins} | {calls} | {ref} | {tok} | {vol} | {r.get('note', '')} |")
+    for title, key in (("The parts", "partLines"), ("Method", "method"), ("What the hub does for the model", "techniques"),
+                       ("What is not comparable", "notComparable"), ("What these numbers are not", "limits")):
+        if b.get(key):
+            L += ["", f"### {title}", ""] + [f"- {x}" for x in b[key]]
+    return L
 
 
 def _fmt(n):
@@ -578,6 +631,7 @@ def render_md(s):
         L += [f"{tim['note'][0].upper()}{tim['note'][1:]}. The findings files give times in prose only, and the script does not read prose.", "",
               "To add timings, run `python3 scripts/stats.py --timings <file>`. The file is one day of the Agent Link usage log (`~/AgentLink/usage/<day>.jsonl`) "
               "or the heavy-job queue (`queue.json`). The script keeps the tool names and the times only. It writes `docs/stats/timings.json`, and this section shows the median for each tool family."]
+    L += benchmark_lines(load_json(BENCHMARK_JSON), s.get("benchmark") or {})
     L += ["", "## What is not covered, and why", "", *gap_lines(cov)]
     while L and L[-1] == "":
         L.pop()
