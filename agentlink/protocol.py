@@ -8,6 +8,7 @@
 import json
 import math
 import os
+import re
 import sys
 import threading
 import time
@@ -415,6 +416,22 @@ def sort_find(server, a):
     if len(names) > FIND_MAX_CARDS:
         raise ToolError("invalid_input", f"{len(names)} tool names, and the most is {FIND_MAX_CARDS} cards in one call. Split them into two calls. {FIND_FORMS}")
     return names, searches, read_as
+
+
+def does_hits(server, n, k=3):
+    """For a tool name that is not here: the tools that do what its words
+    say, by the search (tool_find), as "name (what it does)" — a wrong tool
+    name gets the right tool, never a guess at its inputs (owner, 22 Nov:
+    sketch_rectangle and sketch_circle are sketch_add)."""
+    t = (getattr(server, "tools", None) or {}).get("tool_find")
+    if t is None or not isinstance(n, str):
+        return []
+    words = re.sub(r"[_\-]+", " ", n.split("__")[-1]).strip()
+    try:
+        got = t.fn({"words": words, "limit": k})
+    except Exception:  # noqa: BLE001 - advice only
+        return []
+    return [f"{h['tool']} ({h.get('does', '').rstrip('.')})" for h in (got.get("tools") or [])[:k] if isinstance(h, dict) and h.get("tool")]
 
 
 def close_names(server, n, k=4):
@@ -942,6 +959,10 @@ class Server:
             result = self._call(params)
             with around.part("callDone"):  # the add-ons' call_done handlers
                 self._done(params, result, before)
+        try:
+            repeat_words(self, params.get("name"), result)
+        except Exception:  # noqa: BLE001 - words only
+            pass
         with around.part("notice"):
             _add_notice(result)
             _add_rider(result, params.get("name"))
@@ -1071,6 +1092,9 @@ class Server:
                 hint = f"the tools: {', '.join(self.tools)}"
             else:
                 hint = f"near: {', '.join(near)}" if near else (f"its family: {', '.join(same)}" if same else "tool_groups lists them all")
+            does = does_hits(self, name)
+            if does:
+                hint += f". By what it does, did you mean: {'; '.join(does)}? tool_find {{ tool: name }} gives its card"
             return self.refusal("not_found", f"{name}: no such tool — {hint}.")
         t0 = time.time()
         tool = tool.for_call(args)
@@ -1274,6 +1298,55 @@ class Server:
         if trace:
             err["trace"] = trace
         return {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}
+
+
+# ---- the same refusal again -------------------------------------------------
+#
+# The repeat-error ladder, words only (efficiency design v2, D3; no
+# pictures): the 2nd same refusal of a tool says so and points to its card's
+# example; the 3rd and later say to try another way. A call of that tool that
+# goes through starts the count again (live, 22 Nov: a local model sent the
+# same wrong batch shape 12 and 14 times in a row).
+
+def _refusal_key(name, err):
+    return (name, err.get("code"), re.sub(r"\d+(\.\d+)?", "#", str(err.get("message", "")))[:120])
+
+
+def repeat_words(server, name, result):
+    counts = getattr(server, "_repeats", None)
+    if counts is None:
+        counts = server._repeats = {}
+    name = plain_name(server, name) if isinstance(name, str) else name
+    if not result.get("isError"):
+        for k in [k for k in counts if k[0] == name]:
+            counts.pop(k)
+        return
+    content = result.get("content") or []
+    if not content or content[0].get("type") != "text":
+        return
+    body = json.loads(content[0]["text"])
+    err = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(err, dict):
+        return
+    key = _refusal_key(name, err)
+    n = counts[key] = counts.get(key, 0) + 1
+    if n < 2:
+        return
+    card = f'tool_find {{ tool: "{name}" }}' if name and name in server.tools else "tool_find { words }"
+    try:
+        from . import examples
+
+        has_ex = bool(examples.load().get(name))
+    except Exception:  # noqa: BLE001
+        has_ex = False
+    if n == 2:
+        err["message"] += f" This is the same refusal as before: change what it names. {card} gives the card" + (" and a worked example." if has_ex else ".")
+    else:
+        err["message"] += (f" Refused the same way {n} times: try another way. "
+                           + (f"Copy the card's example ({card}) and change only its values, " if has_ex else f"Read the card again ({card}), ")
+                           + "or use another tool for this step.")
+    err["repeat"] = n
+    content[0]["text"] = compact(body)
 
 
 # ---- progress notifications --------------------------------------------------

@@ -118,6 +118,17 @@ class CutSide(unittest.TestCase):
     def test_already_reversed_says_false(self):
         self.assertIn("reversed: false", self.words(-10, True))
 
+    def test_the_pads_own_sketch_needs_one_of_its_own(self):
+        rot = types.SimpleNamespace(multVec=lambda v: V(0, 0, 1))
+        sk = types.SimpleNamespace(Label="Base", Placement=types.SimpleNamespace(Rotation=rot, Base=V(0, 0, 0)))
+        pad = types.SimpleNamespace(Label="Pad", Profile=[sk, ["Face1"]])
+        hole = types.SimpleNamespace(Label="Hole", Profile=[sk, []], Reversed=False)
+        sk.InList = [pad, hole]
+        bb = types.SimpleNamespace(XMin=-5, XMax=5, YMin=-5, YMax=5, ZMin=0, ZMax=5)
+        w = self.pd.cut_side_words(hole, types.SimpleNamespace(Shape=types.SimpleNamespace(BoundBox=bb)))
+        self.assertIn("profile of Pad", w)
+        self.assertIn("sketch_new { face", w)
+
     def test_cut_toward_body_says_overlap(self):
         self.assertIn("overlaps", self.words(-10, False))
 
@@ -195,3 +206,51 @@ class PocketDepth(unittest.TestCase):
         with self.assertRaises(ToolError) as e:
             check_input(sc, {"depth": 5}, "pd_pocket")
         self.assertIn("input.depth: not a known field", e.exception.message)
+
+
+class Ladder(unittest.TestCase):
+    """The same refusal again says so; the third says to try another way."""
+
+    def server(self):
+        from agentlink.protocol import Server, Tool, ToolError
+
+        def bad(a):
+            raise ToolError("invalid_input", f"rectangle: size [w, h] (step {a.get('n', 1)}).")
+
+        obj = {"type": "object", "properties": {"n": {"type": "integer"}}}
+        return Server("t", "0", [Tool("sketch_add", "add.", obj, bad, changes=True),
+                                 Tool("session_state", "s.", obj, lambda a: {"ok": True})])
+
+    def call(self, srv, name, args):
+        import json
+
+        r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}})["result"]
+        return json.loads(r["content"][0]["text"])
+
+    def test_ladder(self):
+        srv = self.server()
+        one = self.call(srv, "sketch_add", {"n": 1})["error"]
+        self.assertNotIn("repeat", one)
+        self.call(srv, "session_state", {})  # a read between does not reset it
+        two = self.call(srv, "sketch_add", {"n": 7})["error"]  # numbers differ: the same refusal
+        self.assertEqual(two["repeat"], 2)
+        self.assertIn("same refusal as before", two["message"])
+        three = self.call(srv, "sketch_add", {"n": 3})["error"]
+        self.assertEqual(three["repeat"], 3)
+        self.assertIn("try another way", three["message"])
+
+
+class DoesHits(unittest.TestCase):
+    def test_by_what_it_does(self):
+        from agentlink.protocol import does_hits
+
+        seen = []
+
+        def find(a):
+            seen.append(a["words"])
+            return {"tools": [{"tool": "sketch_add", "does": "Add geometry to a sketch."}]}
+
+        srv = types.SimpleNamespace(tools={"tool_find": types.SimpleNamespace(fn=find)})
+        self.assertEqual(does_hits(srv, "sketch_rectangle"), ["sketch_add (Add geometry to a sketch)"])
+        self.assertEqual(seen, ["sketch rectangle"])
+        self.assertEqual(does_hits(types.SimpleNamespace(tools={}), "x"), [])

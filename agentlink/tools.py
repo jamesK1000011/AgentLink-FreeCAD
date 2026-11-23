@@ -21,7 +21,7 @@ import Part
 
 from . import geometry as geo
 from . import changes, docstates, keep, store
-from .protocol import FIND_FORMS, Tool, ToolError, close_names, find_queries, plain_name, sort_find
+from .protocol import FIND_FORMS, Tool, ToolError, close_names, does_hits, find_queries, plain_name, sort_find
 
 
 
@@ -2367,7 +2367,15 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 except ValueError:
                     raise ToolError("invalid_input", f"calls.{i} came as a string that is not a call's JSON — each call is {{ tool, arguments }}. Nothing was run.")
             if not isinstance(c, dict) or not isinstance(c.get("tool"), str):
-                raise ToolError("invalid_input", f"calls.{i}: {{ tool, arguments }} with tool a tool's name. Nothing was run.")
+                # What it was given, and what it lacks (live, 22 Nov: a local
+                # model sent calls with arguments and no tool, 22 times).
+                sent = _json.dumps(c, ensure_ascii=False)
+                sent = sent if len(sent) <= 160 else sent[:157] + "…"
+                lacks = (" It has no tool." if isinstance(c, dict) and "tool" not in c else
+                         " Its tool is not a name (a string)." if isinstance(c, dict) else "")
+                raise ToolError("invalid_input", f"calls.{i}: {{ tool, arguments }} with tool a tool's name. calls.{i} was {sent}.{lacks} "
+                                                 f"Example: {{ \"tool\": \"sketch_new\", \"arguments\": {{ \"plane\": \"XY\" }} }}. "
+                                                 "The calls run in order, one after another. Nothing was run.")
             args = c.get("arguments") or {}
             if isinstance(args, str):
                 try:
@@ -2404,8 +2412,10 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             hints = []
             for u in sorted(set(unknown)):
                 near = close_names(server, u, 3)
-                hints.append(f"{u}" + (f" (near: {', '.join(near)})" if near else ""))
-            raise ToolError("not_found", f"No tool named {'; '.join(hints)} — nothing was run. tool_groups lists them all.")
+                does = does_hits(server, u)
+                hints.append(f"{u}" + (f" (near: {', '.join(near)})" if near else "")
+                             + (f" — by what it does, did you mean: {'; '.join(does)}?" if does else ""))
+            raise ToolError("not_found", f"No tool named {'; '.join(hints)} — nothing was run. tool_find {{ tool: name }} gives a tool's card.")
         rollback = a.get("rollback", True)
         stop = a.get("stopOnError", True)
         # A long batch is answered in parts. The client drops a call after

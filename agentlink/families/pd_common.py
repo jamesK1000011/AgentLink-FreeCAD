@@ -621,6 +621,11 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
     return picks.finish(session, tool, out, recompute=False)
 
 
+def _profile_of(o):
+    prof = getattr(o, "Profile", None)
+    return prof[0] if isinstance(prof, (list, tuple)) and prof else prof
+
+
 def cut_side_words(feat, body):
     """Where a cut that cut nothing went, against where the body is: the
     sketch's normal, and the side of the sketch the body lies on (live,
@@ -631,6 +636,12 @@ def cut_side_words(feat, body):
         pl = sk.getGlobalPlacement() if hasattr(sk, "getGlobalPlacement") else sk.Placement
         import FreeCAD
 
+        # The sketch is another feature's profile already (live, 22 Nov: holes
+        # drilled from the pad's own sketch, 14 times): it needs its own.
+        others = [o for o in (getattr(sk, "InList", None) or ()) if o is not feat and _profile_of(o) is sk]
+        if others:
+            return (f"The sketch {sk.Label} is the profile of {others[0].Label} already, so it lies on the body's own face. "
+                    "A hole or pocket needs a sketch of its own, on the face it goes into: sketch_new { face: { at, normal } }, then sketch_add.")
         n = pl.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
         bb = body.Shape.BoundBox
         c = FreeCAD.Vector((bb.XMin + bb.XMax) / 2, (bb.YMin + bb.YMax) / 2, (bb.ZMin + bb.ZMax) / 2)

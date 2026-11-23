@@ -97,7 +97,8 @@ class JobStartInABatch(unittest.TestCase):
         self.assertEqual(said[0], jobs.start_in_batch_refusal("body_check"))
         # a tool that is never a job is still refused for what it is, in or out of a batch
         self.assertIn("session_state cannot run as a job: it changes nothing, but it", said[1])
-        self.assertEqual(said[1], got["alone"][1]["error"]["message"])
+        # the same refusal again, alone: the same words, and the repeat ladder's line after them (22 Nov)
+        self.assertTrue(got["alone"][1]["error"]["message"].startswith(said[1]), (said[1], got["alone"]))
         self.assertEqual(rows[2]["error"], {"code": "not_found", "message": "nosuchtool: no such tool — tool_groups lists them."})
         self.assertIn("view_render cannot run as a job: only a read that leaves the window and the 3D view alone can", said[3])
 
