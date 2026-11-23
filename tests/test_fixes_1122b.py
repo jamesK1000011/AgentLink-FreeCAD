@@ -173,6 +173,15 @@ class Stubbed(unittest.TestCase):
             self.sk.con_keys({"refs": [0]}, 0)
 
 
+class RectangleWords(Stubbed):
+    def test_x_y_width_height_refused_with_the_form(self):
+        with self.assertRaises(self.sk.ToolError) as e:
+            self.sk.build({"kind": "rectangle", "x": -30, "y": -15, "width": 60, "height": 30})
+        m = e.exception.message
+        self.assertIn("width, height, x, y: not fields", m)
+        self.assertIn('"size": [60, 30]', m)
+
+
 class PocketDepth(unittest.TestCase):
     def test_depth_is_read_as_length(self):
         import json

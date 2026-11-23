@@ -176,6 +176,9 @@ class BatchRollbackKeepsThePersonsStep(unittest.TestCase):
         self.assertEqual((body["undone"], body["outcome"]), (2, "rolled_back"), body)
         self.assertNotIn("rollbackNote", body)
         self.assertEqual(got["stack"], ["earlier"])
+        # The calls before the refusal say they were taken back (22 Nov).
+        self.assertTrue(all(r.get("takenBack") for r in body["results"] if r.get("ok")))
+        self.assertIn("Taken back: probe_change", body["takenBackNote"])
 
 
 # ---- #8: the hold -----------------------------------------------------------------------------

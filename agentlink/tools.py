@@ -185,6 +185,20 @@ def roll_back(s, start, made, own, names0, results=(), label="batch"):
                                "history_restore to the agent checkpoint goes back without your step.")
     elif undone < made:
         out["warning"] = f"Only {undone} of {made} steps could be taken back (FreeCAD's undo stack): the rest stay."
+    if out["outcome"] == "rolled_back":
+        # The calls before the refusal answered ok, and what they made is
+        # gone now: say so on each, and name it (live, 22 Nov: a model kept
+        # naming a sketch that the rollback had taken back).
+        gone = []
+        for r in results or ():
+            if isinstance(r, dict) and r.get("ok"):
+                r["takenBack"] = True
+                res = r.get("result") if isinstance(r.get("result"), dict) else {}
+                what = next((res[k] for k in ("sketch", "feature", "body", "object", "document") if isinstance(res.get(k), str)), None)
+                gone.append(f"{r.get('tool')}{' ' + what if what else ''}")
+        if gone:
+            out["takenBackNote"] = (f"Taken back: {', '.join(gone)}. Those calls answered ok, but what they made is gone. "
+                                   "Fix the refused call and send the whole block again.")
     return out
 
 # Seconds a batch starts calls for before it answers with what ran and where

@@ -306,9 +306,15 @@ def build(item):
         p = pc.vec2(item.get("at"), "at")
         return [Part.Point(p)], C, D
     if k in ("rectangle", "rounded_rectangle"):
-        w, h = (item.get("size") or [None, None])[:2]
+        size = item.get("size")
+        w, h = (list(size) + [None, None] if isinstance(size, (list, tuple)) else [None, None])[:2]
         if not (isinstance(w, (int, float)) and isinstance(h, (int, float)) and w > 0 and h > 0):
-            raise ToolError("invalid_input", f"{k}: size [w, h] (mm), and center [x, y] or corner [x, y] (its lower left).")
+            # The fields it was given, and the form (live, 22 Nov: x, y,
+            # width, height three times in one run).
+            other = [f for f in ("width", "height", "x", "y", "w", "h") if f in item]
+            raise ToolError("invalid_input", f"{k}: size [w, h] (mm), and center [x, y] or corner [x, y] (its lower left)."
+                                             + (f" {', '.join(other)}: not fields of a {k}." if other else "")
+                                             + f" Example: {{ \"kind\": \"{k}\", \"corner\": [0, 0], \"size\": [60, 30] }}.")
         if "corner" in item:
             c0 = pc.vec2(item["corner"], "corner")
             x0, y0 = c0.x, c0.y
