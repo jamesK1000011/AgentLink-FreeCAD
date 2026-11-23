@@ -35,6 +35,8 @@ agentlink/cowork.py
 agentlink/crash_logs.py
 agentlink/data/activity.json
 agentlink/data/activity.schema.json
+agentlink/data/examples.json
+agentlink/data/examples.schema.json
 agentlink/data/filaments.json
 agentlink/data/filaments.schema.json
 agentlink/data/nexthint.json
@@ -54,6 +56,7 @@ agentlink/docstates.py
 agentlink/dxfread.py
 agentlink/echo.py
 agentlink/emptywhy.py
+agentlink/examples.py
 agentlink/expr.py
 agentlink/exprs.py
 agentlink/ext.py
@@ -380,6 +383,7 @@ tests/test_echo_round6.py
 tests/test_echo_window.py
 tests/test_eff_a.py
 tests/test_eff_rel.py
+tests/test_examples_1122.py
 tests/test_exploded_view.py
 tests/test_export_mesh_1118.py
 tests/test_ext.py

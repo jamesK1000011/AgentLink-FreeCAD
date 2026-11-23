@@ -1,0 +1,237 @@
+{
+ "$schema": "examples.schema.json",
+ "dataVersion": "1.0.0",
+ "licence": "LGPL-2.1-or-later",
+ "about": "A ready call for each tool's card (tool_find { tool }): its arguments filled from the open document (=facts.… as in nexthint.json) and the values the agent must give marked. fill: each value to give (keep: true, a worked value to change; unless: an expression that, when it has a value, fills it). Owner, 22 Nov.",
+ "entries": {
+  "pd_body_new": {
+   "args": {
+    "name": "Part"
+   },
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "sketch_new": {
+   "args": {
+    "body": "=facts.bodyName",
+    "plane": "XY"
+   },
+   "fill": [
+    {
+     "arg": "plane",
+     "what": "XY, XZ, YZ or a face (face: { at, normal })",
+     "keep": true
+    }
+   ],
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "sketch_add": {
+   "args": {
+    "sketch": "=facts.editSketch or facts.sketchName",
+    "items": [
+     {
+      "kind": "rectangle",
+      "center": [
+       0,
+       0
+      ],
+      "size": [
+       40,
+       20
+      ]
+     },
+     {
+      "kind": "circle",
+      "center": [
+       10,
+       0
+      ],
+      "radius": 3
+     }
+    ]
+   },
+   "fill": [
+    {
+     "arg": "items",
+     "what": "your geometry, in the sketch's x/y, mm: these two items are a 40 x 20 rectangle at the origin and a 3 mm circle in it",
+     "keep": true
+    }
+   ],
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "sketch_constrain": {
+   "args": {
+    "sketch": "=facts.editSketch or facts.sketchName",
+    "constraints": [
+     {
+      "type": "coincident",
+      "refs": [
+       [
+        0,
+        2
+       ],
+       [
+        1,
+        1
+       ]
+      ]
+     },
+     {
+      "type": "horizontal",
+      "refs": [
+       0
+      ]
+     },
+     {
+      "type": "distance",
+      "refs": [
+       0
+      ],
+      "value": 40
+     },
+     {
+      "type": "fix",
+      "refs": [
+       [
+        0,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "fill": [
+    {
+     "arg": "constraints",
+     "what": "your constraints: a ref is a geometry id g, or a point [g, vertex] (vertex 1 start, 2 end, 3 centre); these four join line 0's end to line 1's start, make line 0 horizontal and 40 mm long, and fix its start",
+     "keep": true
+    }
+   ],
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "sketch_state": {
+   "args": {
+    "sketch": "=facts.editSketch or facts.sketchName"
+   },
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "pd_pad": {
+   "args": {
+    "body": "=facts.bodyName",
+    "sketch": "=facts.editSketch or facts.sketchName"
+   },
+   "fill": [
+    {
+     "arg": "length",
+     "what": "mm"
+    }
+   ],
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "pd_pocket": {
+   "args": {
+    "body": "=facts.bodyName",
+    "sketch": "=facts.editSketch or facts.sketchName"
+   },
+   "fill": [
+    {
+     "arg": "length",
+     "what": "mm, or type: \"through_all\""
+    }
+   ],
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "pd_revolution": {
+   "args": {
+    "body": "=facts.bodyName",
+    "sketch": "=facts.editSketch or facts.sketchName"
+   },
+   "fill": [
+    {
+     "arg": "angle",
+     "what": "deg (360 for a full turn)"
+    }
+   ],
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "pd_hole": {
+   "args": {
+    "body": "=facts.bodyName",
+    "sketch": "=facts.editSketch or facts.sketchName",
+    "depth": "through"
+   },
+   "fill": [
+    {
+     "arg": "diameter",
+     "what": "mm, or thread: \"M5\""
+    }
+   ],
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "pd_fillet": {
+   "args": {
+    "body": "=facts.bodyName",
+    "edges": "=facts.pickedEdges"
+   },
+   "fill": [
+    {
+     "arg": "edges",
+     "what": "[{ near: [x,y,z] }], shape_query's \"Edge3\", or { all: true }",
+     "unless": "=facts.pickedEdges"
+    },
+    {
+     "arg": "radius",
+     "what": "mm"
+    }
+   ],
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "pd_chamfer": {
+   "args": {
+    "body": "=facts.bodyName",
+    "edges": "=facts.pickedEdges"
+   },
+   "fill": [
+    {
+     "arg": "edges",
+     "what": "[{ near: [x,y,z] }], shape_query's \"Edge3\", or { all: true }",
+     "unless": "=facts.pickedEdges"
+    },
+    {
+     "arg": "size",
+     "what": "mm"
+    }
+   ],
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "body_check": {
+   "args": {
+    "body": "=facts.bodyName"
+   },
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "measure": {
+   "args": {
+    "a": "=facts.bodyName"
+   },
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  },
+  "doc_save": {
+   "args": {},
+   "source": "the tool's card and schema (tools.json); worked values written for this file",
+   "date": "2026-11-22"
+  }
+ }
+}

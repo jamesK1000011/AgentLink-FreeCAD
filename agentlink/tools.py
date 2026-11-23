@@ -1118,7 +1118,8 @@ class Session:
 
 
 # tool_groups' standing notes: said once a conversation (agentlink/once.py).
-TG_CARDS_NOTE = "Callable by name as they are, listed or not: directly, or batch { calls: [{ tool, arguments }] } where the client only sends listed tools."
+TG_CARDS_NOTE = ("Callable by name as they are, listed or not: directly, or batch { calls: [{ tool, arguments }] } where the client only sends listed tools. "
+                 "example is a ready call from the open document: copy it, and give each value that fill names.")
 TG_CARD_NOTE = "tool_groups { tool: name } gives a tool's whole description and inputs; each is callable by name without enabling its group."
 TG_ALL_NOTE = "Every tool is callable by name, listed or not. find: \"words\" searches them all; group: g gives one group's whole about and its tools, a line each; detail: true every group's whole about."
 
@@ -1930,9 +1931,28 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         # are an index to query, not a list to load).
         first_sentence = toolindex.first_sentence
 
+        doc_facts = []
+
+        def facts_now():
+            # The open document's facts, read once for the cards of this call.
+            if not doc_facts:
+                try:
+                    from . import nexthint
+
+                    doc_facts.append(nexthint.facts(s.doc, {}) if s.doc is not None else {})
+                except Exception:  # noqa: BLE001
+                    doc_facts.append({})
+            return doc_facts[0]
+
         def card(t):
             out = {"tool": t.name, "group": t.group, "listed": server.groups is None or t.group in server.groups, "changes": bool(t.changes),
                    "description": t.description, "inputSchema": t.schema}
+            # A ready call, filled from the open document (owner, 22 Nov).
+            from . import examples as _examples
+
+            ex = _examples.for_tool(t.name, facts_now())
+            if ex:
+                out.update(ex)
             # The standing words its answers gave once in this conversation
             # and leave out since (saidBefore names the keys): agentlink/once.py.
             said = _once.said(s, t.name)
@@ -3029,7 +3049,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
         Tool("tool_find", "Find a tool by plain words: what it does, or FreeCAD's own command or workbench name. It gives up to limit (8) tools, best first. Each has its group, "
                           "one line on what it does, and listed (if the client was shown it). queries: a list of searches (up to 6) and tool names (up to 20). tool: a name or a list of names answers the "
                           "whole description and inputs of each one (its card). A name with a prefix, other letter case or a letter wrong is read as the name; readAs says so. "
-                          "tool and queries can be in one call: cards gives the cards, results the searches. groups: true gives the tool groups and what each holds. group: narrows a search. Every tool is "
+                          "A card has example: a ready call from the open document, and fill: the values to give. tool and queries can be in one call: cards gives the cards, results the searches. groups: true gives the tool groups and what each holds. group: narrows a search. Every tool is "
                           "callable by name, listed or not. Where the client sends only listed tools, use batch { calls: [{ tool, arguments }] }. listing: true answers what the "
                           "client is shown now (mode, style, count, tokens, names). to: a .json file gets the whole listing. The write rule of every tool applies to it. Changes nothing.",
              obj({"words": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},

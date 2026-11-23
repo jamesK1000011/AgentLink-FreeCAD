@@ -522,6 +522,15 @@ def check_input(schema, args, tool=None):
     for k in schema.get("required", []):
         if k not in args:
             raise ToolError("invalid_input", f"input.{k}: required.")
+    # A value the card's example marks to give, sent as the example's null
+    # (or its <name>): refused by name, never read as left out (owner, 22 Nov).
+    if tool:
+        from . import examples
+
+        for k, what in examples.to_give(tool).items():
+            v = args.get(k, 0)
+            if v is None or v == f"<{k}>":
+                raise ToolError("invalid_input", f"input.{k}: give the value ({what}) in place of {'null' if v is None else v}.")
     for k, v in list(args.items()):
         spec = props.get(k)
         if isinstance(spec, dict) and v is not None:
