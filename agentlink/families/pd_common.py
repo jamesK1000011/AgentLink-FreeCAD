@@ -36,19 +36,17 @@ def _num(x):
 
 
 def vec2(a, what):
-    """A sketch point [x, y]. Also { x, y } and [x, y, 0]: the same point
-    (live, 22 Nov: a local model sent [0, 0, 0] eight times)."""
-    if isinstance(a, dict) and set(a) <= {"x", "y", "z"} and _num(a.get("x")) and _num(a.get("y")) and a.get("z", 0) == 0:
-        a = [a["x"], a["y"]]
-    if isinstance(a, (list, tuple)) and len(a) == 3 and all(_num(x) for x in a) and a[2] == 0:
-        a = a[:2]
+    """A sketch point [x, y]. Any other form is refused, with what was
+    given and the form (owner, 22 Nov: no guessing in a change)."""
     if not (isinstance(a, (list, tuple)) and len(a) == 2 and all(_num(x) for x in a)):
         got = ""
         if isinstance(a, (list, tuple)) and len(a) == 3 and all(_num(x) for x in a):
-            got = f" You gave [x, y, z] with z {a[2]}: a sketch is flat, so give [x, y]; sketch_new's offset or plane sets its height."
+            got = " You gave [x, y, z]: a sketch is flat, so give [x, y]; sketch_new's offset or plane sets its height."
+        elif isinstance(a, dict):
+            got = f" You gave an object ({', '.join(map(str, a))}): give a list, [x, y]."
         elif a is not None:
             got = f" You gave {str(a)[:60]}."
-        raise ToolError("invalid_input", f"{what}: [x, y] in mm, in the sketch's own coordinates.{got}")
+        raise ToolError("invalid_input", f"{what}: [x, y] in mm, in the sketch's own coordinates.{got} Example: \"{what.split('.')[-1]}\": [10, 0].")
     return V(float(a[0]), float(a[1]), 0)
 
 

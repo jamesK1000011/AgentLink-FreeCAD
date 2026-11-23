@@ -527,41 +527,23 @@ CON_EXAMPLE = ('{ "type": "fix", "refs": [[0, 1]] } holds line 0\'s start; '
 
 
 def con_keys(c, i):
-    """One constraint with the fields written another way read as its own:
-    kind (or constraint) as type, point as refs [point], points (or
-    geometry) as refs (live, 22 Nov: a local model sent kind and point five
-    times). Any other field is refused by name, with a worked example.
-    Builds a new dict and changes nothing (a reader for the dry checks)."""
+    """One constraint checked for its fields: { type, refs, value, name }.
+    A field written another way (kind, point …) is refused by name, with
+    two worked constraints; nothing is guessed (owner, 22 Nov). A reader."""
     if not isinstance(c, dict):
         return c
-    renamed = set()
-    t = c.get("type")
-    if t is None:
-        k = next((k for k in ("kind", "constraint") if isinstance(c.get(k), str)), None)
-        if k:
-            t, renamed = c[k], renamed | {k}
-    refs = c.get("refs")
-    if refs is None:
-        if "point" in c:
-            refs, renamed = [c["point"]], renamed | {"point"}
-        else:
-            k = next((k for k in ("points", "geometry", "geometries", "ref") if k in c), None)
-            if k:
-                v = c[k]
-                refs = v if isinstance(v, list) and k != "ref" else [v]
-                renamed = renamed | {k}
-    out = {k: v for k, v in c.items() if k not in renamed}
-    if t is not None:
-        out["type"] = t
-    if refs is not None:
-        out["refs"] = refs
-    extra = [k for k in out if k not in CON_FIELDS]
+    extra = [k for k in c if k not in CON_FIELDS]
     if extra:
-        raise ToolError("invalid_input", f"constraints[{i}]: {', '.join(extra)}: not {'a field' if len(extra) == 1 else 'fields'} of a constraint. "
+        hint = ""
+        if "kind" in extra or "constraint" in extra:
+            hint = " The constraint's kind goes in type."
+        if any(k in extra for k in ("point", "points", "geometry", "geometries", "ref")):
+            hint += " Its geometry and points go in refs, a list."
+        raise ToolError("invalid_input", f"constraints[{i}]: {', '.join(extra)}: not {'a field' if len(extra) == 1 else 'fields'} of a constraint.{hint} "
                                          f"A constraint is {{ type, refs, value, name }}: {CON_EXAMPLE}.")
-    if not out.get("type"):
+    if not c.get("type"):
         raise ToolError("invalid_input", f"constraints[{i}]: type is missing. {CON_EXAMPLE}.")
-    return out
+    return c
 
 
 def make_constraint(sk, c):

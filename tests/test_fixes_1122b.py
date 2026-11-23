@@ -152,23 +152,25 @@ class Stubbed(unittest.TestCase):
             else:
                 sys.modules[n] = m
 
-    def test_vec2_forms(self):
+    def test_vec2_refuses_other_forms_with_the_form(self):
         def xy(v):  # the stand-in Vector of whichever test loaded the module first
             return (v.x, v.y) if hasattr(v, "x") else tuple(v[:2])
 
-        for given in ([1, 2], [1, 2, 0], {"x": 1, "y": 2}):
-            self.assertEqual(xy(self.pc.vec2(given, "c")), (1.0, 2.0), given)
-        with self.assertRaises(self.pc.ToolError) as e:
-            self.pc.vec2([1, 2, 5], "corner")
-        self.assertIn("z 5", e.exception.message)
+        self.assertEqual(xy(self.pc.vec2([1, 2], "c")), (1.0, 2.0))
+        for given, words in (([1, 2, 0], "[x, y, z]"), ({"x": 1, "y": 2}, "an object")):
+            with self.assertRaises(self.pc.ToolError) as e:
+                self.pc.vec2(given, "corner")
+            self.assertIn(words, e.exception.message)
+            self.assertIn('"corner": [10, 0]', e.exception.message)
 
-    def test_constraint_fields_read_and_refused(self):
-        self.assertEqual(self.sk.con_keys({"kind": "fix", "point": [1, 2]}, 0), {"type": "fix", "refs": [[1, 2]]})
-        self.assertEqual(self.sk.con_keys({"type": "equal", "geometry": [0, 1]}, 0), {"type": "equal", "refs": [0, 1]})
+    def test_constraint_fields_refused_with_the_form(self):
+        self.assertEqual(self.sk.con_keys({"type": "fix", "refs": [[1, 2]]}, 0), {"type": "fix", "refs": [[1, 2]]})
         with self.assertRaises(self.sk.ToolError) as e:
-            self.sk.con_keys({"kind": "fix", "point": [1, 0], "axis": 0}, 2)
-        self.assertIn("constraints[2]: axis", e.exception.message)
-        self.assertIn('"type": "fix"', e.exception.message)
+            self.sk.con_keys({"kind": "fix", "point": [1, 0]}, 2)
+        m = e.exception.message
+        self.assertIn("constraints[2]: kind, point: not fields", m)
+        self.assertIn("goes in type", m)
+        self.assertIn('"type": "fix"', m)
         with self.assertRaises(self.sk.ToolError):
             self.sk.con_keys({"refs": [0]}, 0)
 
@@ -183,14 +185,13 @@ class RectangleWords(Stubbed):
 
 
 class PocketDepth(unittest.TestCase):
-    def test_depth_is_read_as_length(self):
+    def test_depth_is_refused_by_name(self):
         import json
 
-        from agentlink.protocol import check_input
+        from agentlink.protocol import ToolError, check_input
 
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             sc = json.load(f)["entries"]["pd_pocket"]["inputSchema"]
-        a = {"depth": 5}
-        read = check_input(sc, a, "pd_pocket")
-        self.assertEqual(a, {"length": 5})
-        self.assertTrue(any("depth as length" in r for r in read))
+        with self.assertRaises(ToolError) as e:
+            check_input(sc, {"depth": 5}, "pd_pocket")
+        self.assertIn("input.depth: not a known field", e.exception.message)
