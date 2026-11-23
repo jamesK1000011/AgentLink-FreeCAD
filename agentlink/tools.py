@@ -21,7 +21,7 @@ import Part
 
 from . import geometry as geo
 from . import changes, docstates, keep, store
-from .protocol import FIND_FORMS, Tool, ToolError, close_names, does_hits, find_queries, plain_name, sort_find
+from .protocol import FIND_FORMS, Tool, ToolError, close_names, describe, does_hits, find_queries, kinded, plain_name, sort_find
 
 
 
@@ -1762,6 +1762,19 @@ def _guide_index():
     return out
 
 
+def _call_shape(c, i):
+    """A batch call that is not { tool, arguments }, described: what it is,
+    which keys it has and what it lacks. Never the call's own text."""
+    at = f"calls.{i}"
+    if not isinstance(c, dict):
+        return f"{at} is {describe(c)}, not an object."
+    have = [k for k in c if isinstance(k, str)]
+    keys = (", ".join(have[:6]) + (" …" if len(have) > 6 else "")) if have else ""
+    if "tool" not in c:
+        return f"{at} has {keys} and no tool." if keys else f"{at} is an empty object: it has no tool."
+    return f"{at} has a tool that is {describe(c['tool'])}, not a tool's name (text)."
+
+
 def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
     """The server: every family's tools, grouped, with the core ones that
     act on the server itself (groups, guides, batch, undo)."""
@@ -2372,13 +2385,11 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 except ValueError:
                     raise ToolError("invalid_input", f"calls.{i} came as a string that is not a call's JSON — each call is {{ tool, arguments }}. Nothing was run.")
             if not isinstance(c, dict) or not isinstance(c.get("tool"), str):
-                # What it was given, and what it lacks (live, 22 Nov: a local
-                # model sent calls with arguments and no tool, 22 times).
-                sent = _json.dumps(c, ensure_ascii=False)
-                sent = sent if len(sent) <= 160 else sent[:157] + "…"
-                lacks = (" It has no tool." if isinstance(c, dict) and "tool" not in c else
-                         " Its tool is not a name (a string)." if isinstance(c, dict) else "")
-                raise ToolError("invalid_input", f"calls.{i}: {{ tool, arguments }} with tool a tool's name. calls.{i} was {sent}.{lacks} "
+                # What it has and what it lacks, never the call itself (live,
+                # 22 Nov: a local model sent calls with arguments and no tool,
+                # 22 times; research, 22 Nov: an echo of a failed call makes
+                # the same call again more likely).
+                raise ToolError("invalid_input", f"calls.{i}: {{ tool, arguments }} with tool a tool's name. {_call_shape(c, i)} "
                                                  f"Example: {{ \"tool\": \"sketch_new\", \"arguments\": {{ \"plane\": \"XY\" }} }}. "
                                                  "The calls run in order, one after another. Nothing was run.")
             args = c.get("arguments") or {}
@@ -2740,7 +2751,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                         try:
                             hargs = _chain.resolve(hargs, read_file, answers, first + i, first)
                         except _chain.Miss as e:
-                            hmiss = {"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."}
+                            hmiss = kinded({"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."})
                     nxt = first + i + 1
                     how = f"batch {{ file: \"{mine['file']}\", from: {nxt} }}" if mine.get("file") else f"batch again with the calls from index {nxt} on"
                     if hold is not None:
@@ -2759,7 +2770,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                             _echo_job(tt, hargs, None)
                             job = _jobs.start(tt, dict(hargs), s)
                         except ToolError as e:
-                            hmiss = {"code": e.code, "message": e.message}
+                            hmiss = kinded({"code": e.code, "message": e.message})
                     if hmiss is None and job is None:
                         return ended({"results": results, "ran": len(results), "notRun": len(calls) - i, "next": first + i,
                                       "note": f"Stopped before calls.{first + i} ({c['tool']}), a heavy read, with {max(left, 0):.0f} s of the budget left: "
@@ -2778,7 +2789,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                                       "note": f"calls.{first + i} ({c['tool']}) is a heavy read still running as job {job['job']} when the budget ran out: "
                                               f"job_status {{ job: \"{job['job']}\", wait: 25 }} gives its answer (changes to its document wait for it), then {how}."})
                     if hmiss is None and job["status"] == "failed":
-                        hmiss = job["error"]
+                        hmiss = kinded(job["error"])
                     hok = hmiss is None
                     hbody = job["result"] if hok else {"error": hmiss}
                     if hok and isinstance(hbody, dict):
@@ -2812,7 +2823,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     try:
                         args = _chain.resolve(args, read_file, answers, first + i, first)
                     except _chain.Miss as e:
-                        miss = {"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."}
+                        miss = kinded({"code": e.code, "message": f"calls.{first + i} ({c['tool']}): {e.message} The call was not run."})
                 held = False
                 if hold is not None and miss is None:
                     t = server.tools.get(c["tool"])
@@ -2875,7 +2886,7 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                     hold.note(first + i, c["tool"])
                     body = _hold.held_answer(c["tool"], body)
                 answers[first + i] = {"ok": ok, "tool": c["tool"], "size": len(text), **({"answer": body} if ok else {"error": (body.get("error") or {}).get("message")})}
-                row = {"tool": c.get("tool"), "ok": ok, **({"result": body} if ok else {"error": body.get("error")})}
+                row = {"tool": c.get("tool"), "ok": ok, **({"result": body} if ok else {"error": kinded(body.get("error"))})}
                 if ok and c.get("to"):
                     # The answer to its own file; the reply keeps where and its shape.
                     try:

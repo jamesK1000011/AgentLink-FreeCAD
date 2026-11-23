@@ -71,12 +71,107 @@ def _with_health(session, tool, args):
 
 class ToolError(Exception):
     """A refusal the agent can act on: a code (invalid_input, not_found,
-    failed) and a message that says what to do next."""
+    failed) and a message that says what to do next. kind: fixable, retry
+    or stop (refusal_kind), when the raiser knows it; else from the code."""
 
-    def __init__(self, code, message):
+    def __init__(self, code, message, kind=None):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.kind = kind
+
+
+# ---- what kind of refusal ---------------------------------------------------
+#
+# Every refusal's error carries "kind" (research on small local models,
+# 22 Nov): fixable (the call cannot succeed as written; the message says
+# what to change), retry (a transient cause: the same call may succeed),
+# stop (it cannot succeed: tell the person). The kind's fixed sentence ends
+# the message. The code and the outcome stay as they are.
+
+KIND_WORDS = {
+    "fixable": "This call cannot succeed as written. The error says what to change; call the tool again with the corrected value.",
+    "retry": "Retrying the same call is expected to succeed.",
+    "stop": "Do not call it again. Tell the person what happened.",
+}
+# The person's to say or to set: an approval, a hold, a refusal by rule.
+STOP_CODES = frozenset(("held_person_editing", "not_allowed", "refused", "denied", "declined", "stopped",
+                        "pending_approval", "approval_pending", "unsupported", "unavailable"))
+FIX_CODES = frozenset(("invalid_input", "not_found"))
+# Words of a cause that passes: the same call may then go through.
+TRANSIENT_WORDS = re.compile(r"\b(busy|timed out|time out|timeout|not ready|locked|took no queued call|still running|still starting|try again)\b", re.I)
+STOP_MARK = "No progress after "
+HELD_BY_DIALOG = "has a menu or dialog open"
+
+
+def refusal_kind(code, message=""):
+    """fixable, retry or stop for a refusal's code and words (KIND_WORDS)."""
+    m = str(message or "")
+    if code in STOP_CODES and not (code == "unavailable" and TRANSIENT_WORDS.search(m)):
+        return "stop"
+    if code in FIX_CODES:
+        return "fixable"
+    if HELD_BY_DIALOG in m:
+        return "fixable"  # a dialog holds the window: the words say what closes it first
+    if code == "busy" or TRANSIENT_WORDS.search(m):
+        return "retry"
+    return "fixable"
+
+
+def strip_kind(message):
+    """The message without the kind sentences it carries (a refusal that
+    wraps another one's words, a ladder that adds its own)."""
+    m = str(message or "")
+    for w in KIND_WORDS.values():
+        m = m.replace(" " + w, "").replace(w, "")
+    return m.strip()
+
+
+def set_kind(err, kind=None):
+    """err (a refusal's error object) with its kind and the kind's sentence
+    at the end of its message, once. kind None: from its code and words."""
+    if not isinstance(err, dict):
+        return err
+    msg = strip_kind(err.get("message", ""))
+    kind = kind or refusal_kind(err.get("code"), msg)
+    err["kind"] = kind
+    if kind == "stop" and STOP_MARK in msg:
+        err["message"] = msg  # the stop line says it already
+    else:
+        err["message"] = (msg + " " + KIND_WORDS[kind]).strip()
+    return err
+
+
+def kinded(err):
+    """set_kind for an error that has no kind yet; one that has stays."""
+    if isinstance(err, dict) and "kind" not in err:
+        set_kind(err)
+    return err
+
+
+def describe(v):
+    """What a value is, not the value (a refusal never pastes a model's
+    whole input back: research, 22 Nov — an echo raises the chance of the
+    same call again)."""
+    if isinstance(v, bool):
+        return "true/false"
+    if isinstance(v, (int, float)):
+        return "a number"
+    if isinstance(v, str):
+        return f"text of {len(v)} characters"
+    if isinstance(v, (list, tuple)):
+        return f"a list of {len(v)} item{'' if len(v) == 1 else 's'}"
+    if isinstance(v, dict):
+        return "an object with " + (f"keys {', '.join(map(str, list(v)[:6]))}" + (" …" if len(v) > 6 else "") if v else "no keys")
+    if v is None:
+        return "null"
+    return type(v).__name__
+
+
+def short_or_described(v, limit=40):
+    """v as written when it is short (a wrong enum value), else describe(v)."""
+    r = repr(v)
+    return r if len(r) <= limit and not isinstance(v, (dict, list, tuple)) else describe(v)
 
 
 # What runs while a dialog or menu holds the window: the calls that act on
@@ -608,7 +703,7 @@ def _typed(where, spec, v):
         lowered = {str(e).lower(): e for e in spec["enum"]}
         if isinstance(v, str) and v.lower() in lowered:
             return lowered[v.lower()]
-        raise ToolError("invalid_input", f"{where}: one of {', '.join(map(str, spec['enum']))} — not {v!r}.")
+        raise ToolError("invalid_input", f"{where}: one of {', '.join(map(str, spec['enum']))} — not {short_or_described(v)}.")
     return v
 
 
@@ -974,7 +1069,7 @@ class Server:
             with around.part("callDone"):  # the add-ons' call_done handlers
                 self._done(params, result, before)
         try:
-            repeat_words(self, params.get("name"), result)
+            repeat_words(self, params.get("name"), result, params.get("arguments"))
         except Exception:  # noqa: BLE001 - words only
             pass
         with around.part("notice"):
@@ -1218,8 +1313,8 @@ class Server:
             if name == "batch":
                 from . import staticbase
 
-                return self.refusal(e.code, staticbase.batch_hint(e.message), outcome=_outcome(tool, e))
-            return self.refusal(e.code, e.message, outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None))
+                return self.refusal(e.code, staticbase.batch_hint(e.message), outcome=_outcome(tool, e), kind=getattr(e, "kind", None))
+            return self.refusal(e.code, e.message, outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None), kind=getattr(e, "kind", None))
         except ValueError as e:
             return self.refusal("invalid_input", str(e), outcome=_outcome(tool, e), left=getattr(e, "outcome_left", None))
         except (SystemExit, KeyboardInterrupt) as e:
@@ -1300,8 +1395,8 @@ class Server:
         return {**jobs.summary(job), "note": f"{tool.name} is still running (past {waited:.0f} s, longer than a call may wait): it goes on as a job; nothing else was changed."}
 
     @staticmethod
-    def refusal(code, message, trace=None, outcome=None, left=None):
-        err = {"code": code, "message": message}
+    def refusal(code, message, trace=None, outcome=None, left=None, kind=None):
+        err = set_kind({"code": code, "message": message}, kind)
         if outcome:
             # What the refused call left in the document: not_started (no
             # change was made: safe to call again), rolled_back (taken back
@@ -1314,26 +1409,105 @@ class Server:
         return {"content": [{"type": "text", "text": compact({"error": err})}], "isError": True}
 
 
-# ---- the same refusal again -------------------------------------------------
+# ---- the same refusal again: a stop by progress ----------------------------
 #
-# The repeat-error ladder, words only (efficiency design v2, D3; no
-# pictures): the 2nd same refusal of a tool says so and points to its card's
-# example; the 3rd and later say to try another way. A call of that tool that
-# goes through starts the count again (live, 22 Nov: a local model sent the
-# same wrong batch shape 12 and 14 times in a row).
+# The server, not the model, says when to stop (research on small local
+# models, 22 Nov; it replaces the model-side "stop after 3 refusals" rule).
+# Per tool (its plain name) it keeps the failing keys of the last refusal
+# (failing_keys: what the message names, with the code) and the call as
+# sent (canonical: the same call with its keys in another order is the same
+# call). A refusal with other or fewer failing keys is progress: the count
+# starts again. The same keys again (or the same call): the count goes up.
+# At REPEAT_SAME the words say so and point to the card; at REPEAT_HINT
+# they give something new to try; at REPEAT_STOP the kind is stop. A call of
+# that tool that goes through clears it. Reads (FORGIVING_READS) never stop.
 
-def _refusal_key(name, err):
-    return (name, err.get("code"), re.sub(r"\d+(\.\d+)?", "#", str(err.get("message", "")))[:120])
+REPEAT_SAME = 2
+REPEAT_HINT = 3
+REPEAT_STOP = 5
+
+# What a message names as the place of the problem, in the forms the
+# refusals use: input.<field>, constraints[i], calls.<i>, step do.<n>.
+_PLACES = re.compile(r"\b(input\.[A-Za-z_][\w]*|constraints\[\d+\]|calls\.\d+(?:\.arguments)?|(?:step )?do\.\d+(?:\.\w+)?)")
+# Else the field the message starts with ("rectangle: …", "edges: …").
+_LEAD = re.compile(r"^([A-Za-z_][\w.\[\]]{0,40}):\s")
 
 
-def repeat_words(server, name, result):
-    counts = getattr(server, "_repeats", None)
-    if counts is None:
-        counts = server._repeats = {}
+def failing_keys(message):
+    """The places a refusal's message names (_PLACES), in order, each once;
+    else the field it starts with; else its words with the numbers taken
+    out (so the same words with other numbers are the same problem)."""
+    m = strip_kind(message)
+    got = list(dict.fromkeys(x.replace("step ", "") for x in _PLACES.findall(m)))
+    if got:
+        return tuple(got)
+    lead = _LEAD.match(m)
+    if lead:
+        return (lead.group(1),)
+    return (re.sub(r"\d+(\.\d+)?", "#", m)[:120],)
+
+
+def canonical_call(args):
+    """The call's arguments as one text, keys sorted at every level."""
+    try:
+        return json.dumps(args if args is not None else {}, sort_keys=True, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return repr(args)
+
+
+def _first_sentence(message):
+    m = strip_kind(message)
+    got = re.match(r"(.+?[.!?])(\s|$)", m, re.S)
+    first = (got.group(1) if got else m).strip()
+    return first if len(first) <= 200 else first[:197] + "…"
+
+
+def _field(keys):
+    """The input field a key names (input.depth → depth), else None."""
+    for k in keys:
+        if k.startswith("input."):
+            return k[len("input."):]
+    return None
+
+
+def _try_next(server, name, keys, n, card):
+    """The words at REPEAT_HINT and after: the place again, and something
+    new to try (the card's example, its value of the field when it has one)."""
+    place = keys[0] if keys and len(keys[0]) <= 60 else "the same problem"
+    words = f" Refused the same way {n} times: {place} is still wrong."
+    example = None
+    try:
+        from . import examples
+
+        if examples.load().get(name):
+            example = (examples.for_tool(name, {}) or {}).get("example")
+    except Exception:  # noqa: BLE001
+        example = None
+    field = _field(keys)
+    if example is not None:
+        val = (example.get("arguments") or {}).get(field) if field else None
+        if val is not None:
+            shown = compact(val)
+            words += f" Try this: the card's example gives {field} as {shown if len(shown) <= 160 else shown[:157] + '…'}. Use that form."
+        else:
+            words += f" Try this: copy the card's example ({card}) and change only its values."
+    else:
+        words += f" Try this: read the form of {field or place} on the card ({card}), or use another tool for this step."
+    left = REPEAT_STOP - n
+    if left > 0:
+        words += f" After {left} more {'try' if left == 1 else 'tries'} with no progress, the server tells you to stop."
+    return words
+
+
+def repeat_words(server, name, result, args=None):
+    """The progress-based stop (see above) applied to a tools/call result,
+    in place. Words only on a refusal; a call that went through clears."""
+    state = getattr(server, "_repeats", None)
+    if state is None:
+        state = server._repeats = {}
     name = plain_name(server, name) if isinstance(name, str) else name
     if not result.get("isError"):
-        for k in [k for k in counts if k[0] == name]:
-            counts.pop(k)
+        state.pop(name, None)
         return
     content = result.get("content") or []
     if not content or content[0].get("type") != "text":
@@ -1342,24 +1516,48 @@ def repeat_words(server, name, result):
     err = body.get("error") if isinstance(body, dict) else None
     if not isinstance(err, dict):
         return
-    key = _refusal_key(name, err)
-    n = counts[key] = counts.get(key, 0) + 1
-    if n < 2:
-        return
-    card = f'tool_find {{ tool: "{name}" }}' if name and name in server.tools else "tool_find { words }"
-    try:
-        from . import examples
-
-        has_ex = bool(examples.load().get(name))
-    except Exception:  # noqa: BLE001
-        has_ex = False
-    if n == 2:
-        err["message"] += f" This is the same refusal as before: change what it names. {card} gives the card" + (" and a worked example." if has_ex else ".")
+    msg = strip_kind(err.get("message", ""))
+    keys = failing_keys(msg)
+    code = err.get("code")
+    call = canonical_call(args)
+    last = state.get(name)
+    progress = ""
+    if last is not None and (last["call"] == call or (last["code"] == code and last["keys"] == keys)):
+        n = last["n"] + 1
+        first = last["first"]
     else:
-        err["message"] += (f" Refused the same way {n} times: try another way. "
-                           + (f"Copy the card's example ({card}) and change only its values, " if has_ex else f"Read the card again ({card}), ")
-                           + "or use another tool for this step.")
+        n = 1
+        first = msg
+        if last is not None and last["code"] == code and set(keys) < set(last["keys"]) and _PLACES.match(last["keys"][0]):
+            fixed = len(set(last["keys"]) - set(keys))
+            progress = f" Progress: {fixed} of {len(last['keys'])} named problems fixed."
+    state[name] = {"code": code, "keys": keys, "call": call, "n": n, "first": first}
+    kind = err.get("kind") or refusal_kind(code, msg)
+    if progress:
+        err["message"] = msg + progress
+        set_kind(err, kind)
+        content[0]["text"] = compact(body)
+        return
+    if n < REPEAT_SAME:
+        return
     err["repeat"] = n
+    card = f'tool_find {{ tool: "{name}" }}' if name and name in server.tools else "tool_find { words }"
+    if n >= REPEAT_STOP and name not in FORGIVING_READS:
+        err["message"] = f"{STOP_MARK}{REPEAT_STOP} tries of {name}. Do not call it again. Tell the person: {_first_sentence(first)}"
+        set_kind(err, "stop")
+    elif kind == "fixable":
+        if n == REPEAT_SAME:
+            try:
+                from . import examples
+
+                has_ex = bool(examples.load().get(name))
+            except Exception:  # noqa: BLE001
+                has_ex = False
+            msg += f" This is the same refusal as before: change what it names. {card} gives the card" + (" and a worked example." if has_ex else ".")
+        else:
+            msg += _try_next(server, name, keys, n, card)
+        err["message"] = msg
+        set_kind(err, kind)
     content[0]["text"] = compact(body)
 
 

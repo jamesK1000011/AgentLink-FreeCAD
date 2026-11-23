@@ -53,7 +53,7 @@ import re
 import time
 
 from . import expr
-from .protocol import ToolError, check_input, compact
+from .protocol import ToolError, check_input, compact, kinded, strip_kind
 
 PREFS = "User parameter:BaseApp/Preferences/Mod/AgentLink"
 PREF = "FastPath"
@@ -528,6 +528,7 @@ class Stop(Exception):
     def __init__(self, where, tool, code, words, body=None):
         super().__init__(words)
         self.where, self.tool, self.code, self.words, self.body = where, tool, code, words, body
+        self.kind = None  # the step's own refusal kind (protocol.refusal_kind), when it had one
 
 
 def _no_maker(*_a, **_k):
@@ -1145,12 +1146,14 @@ def _run(server, session, steps, a):
         state["made"] += inc
         if ok and before is not None:
             run.note_made(before, name, args)
-        row = {"step": where, "tool": name, "ok": ok, **({"result": body} if ok else {"error": body.get("error")})}
+        row = {"step": where, "tool": name, "ok": ok, **({"result": body} if ok else {"error": kinded(body.get("error"))})}
         run.rows.append(row)
         record.write({"running": True, "ran": len(run.rows), "results": run.rows})
         if not ok:
             err = body.get("error") or {}
-            raise Stop(where, name, err.get("code", "failed"), err.get("message") or f"{name} was refused", body)
+            st = Stop(where, name, err.get("code", "failed"), strip_kind(err.get("message")) or f"{name} was refused", body)
+            st.kind = err.get("kind")
+            raise st
         cr = check_row(where, name, body)
         if cr:
             run.checks.append(cr)
@@ -1216,6 +1219,7 @@ def _run(server, session, steps, a):
         if rel:
             words.append(f"The record: {rel}.")
         err = ToolError(stop.code if stop.code in _CODES or stop.code == "busy" else "failed", " ".join(words))
+        err.kind = stop.kind
         err.outcome = "kept"
         err.outcome_left = run.made
         record.write({"error": {"code": err.code, "message": err.message, "outcome": "kept"}, "results": run.rows}, final=True)
@@ -1243,6 +1247,7 @@ def _run(server, session, steps, a):
     if rel:
         words.append(f"The record: {rel}.")
     err = ToolError(stop.code if stop.code in _CODES or stop.code == "busy" else "failed", " ".join(words))
+    err.kind = stop.kind
     err.outcome = got.get("outcome") or "not_started"
     if got.get("outcome") in ("partial", "kept"):
         err.outcome_left = run.made

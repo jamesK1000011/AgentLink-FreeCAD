@@ -17,7 +17,7 @@ import time
 import FreeCAD
 
 from .protocol import FRONT_CALLS as _FRONT_CALLS
-from .protocol import WIRE_ERRORS, compact, front_call, retry_once_ok
+from .protocol import WIRE_ERRORS, compact, front_call, retry_once_ok, set_kind
 from .tools import Session, build_server
 
 PORT = 7318
@@ -1499,7 +1499,7 @@ class Link:
                + ". gui_unstick closes it (or gui_input { steps: [{ key: \"Escape\" }] }); app_force_restart if that does not help.")
         if ran and mid is not None:
             msg += f" When the call ends, job_status {{ job: {json.dumps(str(mid))} }} gives its late answer."
-        err = {"code": "busy", "message": msg}
+        err = set_kind({"code": "busy", "message": msg})
         if outcome:
             err["outcome"] = outcome
         if retried:
