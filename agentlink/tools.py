@@ -177,7 +177,12 @@ def roll_back(s, start, made, own, names0, results=(), label="batch"):
     if any(isinstance(r.get("written"), dict) for r in results):
         out["writtenNote"] = "The files the calls wrote (written) stay: they hold answers from before the rollback."
     if s.doc is not start:
-        out["warning"] = f"The {label} moved to another document ({s.doc.Label if s.doc else 'none'}): only {start.Label}'s steps were taken back; what was done there stays."
+        # Say what was taken back where (live, 22 Nov: "only <the person's
+        # document>'s steps were taken back" when none were, and the agent
+        # thought the person's document had changed).
+        here = (f"{undone} step{'s were' if undone != 1 else ' was'} taken back in {start.Label}" if undone
+                else f"nothing in {start.Label} was changed")
+        out["warning"] = f"The {label} moved to another document ({s.doc.Label if s.doc else 'none'}): {here}; what was done in {s.doc.Label if s.doc else 'it'} stays."
     elif foreign is not None:
         out["outcome"] = "partial"
         out["rollbackNote"] = (f"Stopped at a step that is not the agent's ({foreign}). {undone} of {made} agent steps were taken back. "
