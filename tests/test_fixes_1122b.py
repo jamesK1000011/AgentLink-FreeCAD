@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
 """22 Nov fixes (owner's items 2 and 3): doc_new first when the document in
 front is the person's; a pocket that cut nothing names the side."""
 import os
@@ -8,6 +9,42 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from agentlink import options  # noqa: E402
+from agentlink.protocol import ToolError, loose_name, sort_find  # noqa: E402
+
+
+class Srv:
+    tools = {n: None for n in ("pd_pad", "pd_pocket", "pd_fillet", "pd_chamfer", "sketch_add", "sketch_new", "body_check", "tool_find")}
+
+
+class SortFind(unittest.TestCase):
+    def test_names_and_words_in_one_list(self):
+        names, qs, _ = sort_find(Srv, {"queries": ["pd_pad", "round an edge", "sketch_add"]})
+        self.assertEqual((names, qs), (["pd_pad", "sketch_add"], ["round an edge"]))
+
+    def test_tool_and_queries_in_one_call(self):
+        names, qs, _ = sort_find(Srv, {"tool": ["pd_pad"], "queries": ["hole"]})
+        self.assertEqual((names, qs), (["pd_pad"], ["hole"]))
+
+    def test_loose_names(self):
+        for w in ("agentlink_pd_pad", "PD_PAD", "pd-pad", "pd_poket"):
+            self.assertIsNotNone(loose_name(Srv, w), w)
+        self.assertEqual(loose_name(Srv, "pd_poket"), "pd_pocket")
+        self.assertIsNone(loose_name(Srv, "pad sketch"))
+        self.assertIsNone(loose_name(Srv, "fillet"))  # a word, not a name
+        _, _, read_as = sort_find(Srv, {"queries": ["pd_poket", "x y"]})
+        self.assertTrue(any("pd_pocket" in r for r in read_as))
+
+    def test_word_in_tool_is_searched(self):
+        names, qs, read_as = sort_find(Srv, {"tool": "round edges"})
+        self.assertEqual((names, qs), ([], ["round edges"]))
+        self.assertTrue(read_as)
+
+    def test_limits_count_searches_and_names_apart(self):
+        names, qs, _ = sort_find(Srv, {"queries": ["pd_pad", "pd_pocket", "pd_fillet", "pd_chamfer", "sketch_add", "sketch_new", "body_check", "a", "b"]})
+        self.assertEqual((len(names), len(qs)), (7, 2))
+        with self.assertRaises(ToolError) as e:
+            sort_find(Srv, {"queries": [f"w{i} x" for i in range(7)]})
+        self.assertIn("7 searches", e.exception.message if hasattr(e.exception, "message") else str(e.exception))
 
 
 class TheirsFirst(unittest.TestCase):

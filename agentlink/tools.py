@@ -21,7 +21,7 @@ import Part
 
 from . import geometry as geo
 from . import changes, docstates, keep, store
-from .protocol import FIND_FORMS, Tool, ToolError, close_names, find_queries, plain_name
+from .protocol import FIND_FORMS, Tool, ToolError, close_names, find_queries, plain_name, sort_find
 
 
 
@@ -2968,20 +2968,21 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
             return got
         if a.get("groups"):
             return tool_groups({})
-        if a.get("tool"):
-            return tool_groups({"tool": a["tool"]})
-        qs, read_as = find_queries(a)
-        # Searches that are all tool names are a card lookup (up to 20):
-        # live, 22 Nov, three models sent 7 names in queries and were refused.
-        named = [plain_name(server, q.strip()) for q in qs] if qs else []
-        if len(named) >= 2 and all(n in server.tools for n in named) and len(named) <= 20:
-            got = tool_groups({"tool": named})
-            got.setdefault("readAs", read_as + ["queries that are all tool names, read as tool: [names] (their cards)"])
+        # tool and queries in one call; names (also written loosely) give
+        # their cards, everything else is searched (owner, 22 Nov).
+        names, qs, read_as = sort_find(server, a)
+        lone = isinstance(a.get("queries"), list) and len(a["queries"]) == 1 or isinstance(a.get("words"), str)
+        if names and not qs and not (lone and not a.get("tool")):
+            got = tool_groups({"tool": names if len(names) > 1 or isinstance(a.get("tool"), list) else names[0]})
+            if read_as:
+                got["readAs"] = read_as
             return got
-        if len(qs) > 6:
-            raise ToolError("invalid_input", f"queries: {len(qs)} searches, and the most is 6. Split them into two calls, or give tool names in tool: [...] (up to 20). {FIND_FORMS}")
-        if not qs:
+        if not qs and not names:
             raise ToolError("invalid_input", FIND_FORMS)
+        if lone and names and not qs:
+            # One query that is a name: its search hits and its card, as before.
+            qs = names
+            names = []
         limit = int(a.get("limit") or 8)
         out = []
         for q in qs:
@@ -2996,6 +2997,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 one["card"] = tool_groups({"tool": exact.name})["tools"][0]
             out.append(one)
         res = out[0] if len(out) == 1 else {"results": out}
+        if names:
+            res["cards"] = tool_groups({"tool": names})["tools"]
         res["note"] = "Callable by name, listed or not; tool_find { tool: name } gives its whole description and inputs."
         if read_as:
             res["readAs"] = read_as
@@ -3024,8 +3027,9 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                             "{ applies: true | false | null (not checked), wouldRefuse [{ code, words }], notChecked }. arguments: {…} also reads that call's checks; advice only. "
                             "find's hits that would refuse now come last, with applies: false. now: true carries appliesNow, the full form of the health's appliesNow line.", obj({"enable": {"type": "array", "items": {"type": "string"}}, "disable": {"type": "array", "items": {"type": "string"}}, "group": {"type": "string"}, "detail": {"type": "boolean"}, "find": {"type": "string"}, "now": {"type": "boolean"}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}, "limit": {"type": "integer"}, "needs": {"type": "string"}, "arguments": {"type": "object"}}), tool_groups),
         Tool("tool_find", "Find a tool by plain words: what it does, or FreeCAD's own command or workbench name. It gives up to limit (8) tools, best first. Each has its group, "
-                          "one line on what it does, and listed (if the client was shown it). queries: up to 6 searches in one call. tool: a name or a list of names answers the "
-                          "whole description and inputs of each one (its card). groups: true gives the tool groups and what each holds. group: narrows a search. Every tool is "
+                          "one line on what it does, and listed (if the client was shown it). queries: a list of searches (up to 6) and tool names (up to 20). tool: a name or a list of names answers the "
+                          "whole description and inputs of each one (its card). A name with a prefix, other letter case or a letter wrong is read as the name; readAs says so. "
+                          "tool and queries can be in one call: cards gives the cards, results the searches. groups: true gives the tool groups and what each holds. group: narrows a search. Every tool is "
                           "callable by name, listed or not. Where the client sends only listed tools, use batch { calls: [{ tool, arguments }] }. listing: true answers what the "
                           "client is shown now (mode, style, count, tokens, names). to: a .json file gets the whole listing. The write rule of every tool applies to it. Changes nothing.",
              obj({"words": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}}, "tool": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},

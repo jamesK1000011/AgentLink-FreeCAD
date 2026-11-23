@@ -85,7 +85,7 @@ class Find(unittest.TestCase):
 
     def test_unreadable(self):
         self.assertEqual(find_queries({"queries": [{"x": 1}]})[0], [])
-        self.assertIn('queries: ["pad sketch", "hole"]', FIND_FORMS)
+        self.assertIn('queries: ["pad sketch", "hole", "pd_pad"]', FIND_FORMS)
 
 
 class Names(unittest.TestCase):

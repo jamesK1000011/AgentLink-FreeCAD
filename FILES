@@ -401,6 +401,7 @@ tests/test_findings_1120.py
 tests/test_findings_1120b.py
 tests/test_findings_1120c.py
 tests/test_fitting.py
+tests/test_fixes_1122b.py
 tests/test_flat2d.py
 tests/test_gaps_redteam.py
 tests/test_grab_stacked.py

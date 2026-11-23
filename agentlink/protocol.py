@@ -320,8 +320,9 @@ def _as_alias(spec, v):
 # tool_find's forms, shown whole when a call fits none (live, 22 Nov: a
 # local model sent queries as objects three times; the old words did not
 # say that queries are plain strings).
-FIND_FORMS = ('tool_find takes one of: words: "pad sketch" (plain words); queries: ["pad sketch", "hole"] '
-              '(up to 6 plain strings); tool: "pd_pad" (a name, or a list of up to 20); groups: true.')
+FIND_FORMS = ('tool_find takes: words: "pad sketch" (plain words); queries: ["pad sketch", "hole", "pd_pad"] '
+              '(searches, up to 6, and tool names, up to 20, in one list); tool: "pd_pad" (a name, or a list of names); groups: true. '
+              'tool and queries can be in one call.')
 _QUERY_KEYS = ("words", "query", "q", "text", "find")
 
 
@@ -353,6 +354,67 @@ def find_queries(a):
     if objects:
         read_as.append('queries given as objects, read as their words (queries is a list of plain strings: ["pad sketch", "hole"])')
     return out, read_as
+
+
+FIND_MAX_SEARCHES = 6
+FIND_MAX_CARDS = 20
+
+
+def loose_name(server, n):
+    """A tool name from a name written loosely, or None: a client's prefix,
+    other letter case, - for _, or one or two letters wrong in a name with _
+    (pd_poket). Words with spaces are never a name."""
+    if not isinstance(n, str):
+        return None
+    w = n.strip()
+    if not w or any(c.isspace() for c in w):
+        return None
+    for cand in (w, w.lower().replace("-", "_")):
+        got = plain_name(server, cand)
+        if got in server.tools:
+            return got
+    w = plain_name(server, w.lower().replace("-", "_"))
+    if "_" not in w or len(w) < 5:
+        return None
+    import difflib
+
+    best = difflib.get_close_matches(w, list(server.tools), n=2, cutoff=0.88)
+    # Only one close name: two equally close ones are a guess.
+    if len(best) == 1 or (len(best) == 2 and difflib.SequenceMatcher(None, w, best[0]).ratio()
+                          - difflib.SequenceMatcher(None, w, best[1]).ratio() > 0.04):
+        return best[0]
+    return None
+
+
+def sort_find(server, a):
+    """tool_find's input sorted: (names, searches, read_as). tool and
+    queries (or words) can come in one call, and either can hold names or
+    words: a name, also written loosely, gives its card; anything else is a
+    search (owner, 22 Nov). Raises ToolError over the limits."""
+    qs, read_as = find_queries(a)
+    tool = a.get("tool")
+    tl = [tool] if isinstance(tool, str) else (list(tool) if isinstance(tool, list) else [])
+    names, searches = [], []
+    for src, items in (("tool", tl), ("queries", qs)):
+        for q in items:
+            if not isinstance(q, str) or not q.strip():
+                continue
+            n = loose_name(server, q)
+            if n is not None:
+                if n not in names:
+                    names.append(n)
+                if n != q.strip():
+                    read_as.append(f"{q.strip()} as the tool {n}")
+            else:
+                searches.append(q.strip())
+                if src == "tool":
+                    read_as.append(f"tool: {q.strip()} is no tool name, so it was searched")
+    if len(searches) > FIND_MAX_SEARCHES:
+        raise ToolError("invalid_input", f"{len(searches)} searches, and the most is {FIND_MAX_SEARCHES} in one call (tool names do not count). "
+                                         f"Split them into two calls. {FIND_FORMS}")
+    if len(names) > FIND_MAX_CARDS:
+        raise ToolError("invalid_input", f"{len(names)} tool names, and the most is {FIND_MAX_CARDS} cards in one call. Split them into two calls. {FIND_FORMS}")
+    return names, searches, read_as
 
 
 def close_names(server, n, k=4):
