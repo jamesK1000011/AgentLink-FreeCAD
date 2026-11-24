@@ -16,9 +16,10 @@ The block's steps (a subset of agentlink/runners.py's steps runner; never
 make, add, set or do, which reach FreeCAD's objects directly):
 
   {"let": {"name": e, …}}                     values, in order
-  {"call": "tool", "field": e, …, "as": "x"}  one tool call; its fields
-                                              inline, or "args": {…}; its
-                                              answer is "x" (and "last")
+  {"tool": "name", "arguments": {…}, "as": "x"}  one tool call, the same
+                                              shape as a batch call; its
+                                              answer is "x" (and "last").
+                                              The old {"call": …} is refused.
   {"get": "Body.volume" | "=e", "as": "v"}    a targeted read; its value
                                               goes in the answer's values
   {"each": "x", "in": e, "index": "i", "steps": [steps]}
@@ -76,8 +77,8 @@ MAX_CALLS = 200       # tool calls a block may make
 MAX_DRY_CALLS = 400   # calls a check reads before it stops reading
 WORDS = 240           # a warning's or refusal's words in the answer
 
-STEPS = ("call", "get", "let", "each", "choose", "try", "refuse", "push")
-EXTRA = {"call": ("as", "args"), "get": ("as",), "let": (), "each": ("in", "index", "steps"), "choose": ("of", "else"),
+STEPS = ("tool", "get", "let", "each", "choose", "try", "refuse", "push")
+EXTRA = {"tool": ("as", "arguments"), "get": ("as",), "let": (), "each": ("in", "index", "steps"), "choose": ("of", "else"),
          "try": ("on", "except"), "refuse": ("code",), "push": (), "then": ("else",)}
 CATCH = ("refusal", "error")
 
@@ -144,10 +145,10 @@ def _values_words(x, where):
 
 
 def action(st):
-    """A step's action: call when it has one (its other fields are the
-    call's), else the one of STEPS it has, else then (a when step)."""
-    if "call" in st:
-        return "call"
+    """A step's action: tool when it has one (a call: { tool, arguments,
+    as, when }), else the one of STEPS it has, else then (a when step)."""
+    if "tool" in st:
+        return "tool"
     acts = [k for k in STEPS if k in st]
     if len(acts) == 1:
         return acts[0]
@@ -167,26 +168,30 @@ def shape_words(steps, where="do"):
             out.append((at, "a step is an object"))
             continue
         act = action(st)
+        if act is None and "call" in st:
+            out.append((at, f"{{ call, … }} is the old form of a fast step. A tool step is {{ \"tool\": \"{st['call'] if isinstance(st['call'], str) else 'sketch_new'}\", "
+                            "\"arguments\": { … }, \"as\": \"name\" }, the same as a batch call, with every input inside arguments"))
+            continue
         if act is None:
             have = [k for k in STEPS if k in st]
             out.append((at, f"one of {', '.join(STEPS)}, or when with then (has {', '.join(sorted(st)) or 'nothing'})" if not have
                         else f"one action a step: {', '.join(have)}"))
             continue
-        if act != "call":
+        if act != "tool":
             extra = set(st) - {act, "when"} - set(EXTRA[act])
             if extra:
                 out.append((at, f"{act} does not take {', '.join(sorted(extra))}"))
                 continue
         if "when" in st:
             out += _values_words(st["when"], f"{at}.when")
-        if act == "call":
-            if not isinstance(st["call"], str) or not st["call"]:
-                out.append((at, "call: a tool's name"))
-            if "args" in st and not isinstance(st["args"], (dict, str)):
-                out.append((f"{at}.args", "the call's fields as an object"))
+        if act == "tool":
+            if not isinstance(st["tool"], str) or not st["tool"]:
+                out.append((at, "tool: a tool's name"))
+            if "arguments" in st and not isinstance(st["arguments"], (dict, str)):
+                out.append((f"{at}.arguments", "the call's inputs as an object, {} for none"))
             if "as" in st and not _name_ok(st["as"]):
                 out.append((f"{at}.as", "a plain name (letters, digits, _; not first)"))
-            out += _values_words({k: v for k, v in st.items() if k not in ("call", "as", "when")}, at)
+            out += _values_words({k: v for k, v in st.items() if k not in ("tool", "as", "when")}, at)
         elif act == "get":
             if not isinstance(st["get"], str) or not st["get"].strip():
                 out.append((at, "get: what to read (\"Pad.Length\", \"Body.volume\", \"=expression\")"))
@@ -277,7 +282,7 @@ def what_words(what):
     if len(parts) < 2 or not all(parts):
         # A tool's name here (live, 22 Nov: a local model read "body_check"):
         # a tool runs as a step of its own.
-        tool = f" If {w} is a tool, run it as a step: {{ \"call\": \"{w}\" }}." if len(parts) == 1 and "_" in w else ""
+        tool = f" If {w} is a tool, run it as a step: {{ \"tool\": \"{w}\", \"arguments\": {{}} }}." if len(parts) == 1 and "_" in w else ""
         return f"what {w!r}: an object and what to read of it, \"Object.Property\" (\"Pad.Length\", \"Body.volume\"), or one of {', '.join(ACTIVE)}.{tool}"
     return None
 
@@ -577,6 +582,7 @@ class Run:
         self.values = {}
         self.warnings = []
         self.filled = []
+        self.read_as = []        # fields moved from beside tool into arguments
         self.made = []           # labels of what the block made
         self.made_rows = []      # {name, label, type} of the same: the names later calls take
         self.checks = []         # the key results of check, save and close steps
@@ -638,7 +644,7 @@ class Run:
         if act == "let":
             for k, x in st["let"].items():
                 self._assign(k, self.val(x, f"{where}.let.{k}"), where)
-        elif act == "call":
+        elif act == "tool":
             self.call(st, where)
         elif act == "get":
             self.get(st, where)
@@ -733,7 +739,18 @@ class Run:
 
     # a call
     def call(self, st, where):
-        name = st["call"]
+        from . import callshape
+
+        try:
+            _n, _a, read_as = callshape.split(self.server, st, where, extra=("as", "when"), runner="fast")
+        except callshape.Refused as e:
+            raise Stop(where, st.get("tool") if isinstance(st.get("tool"), str) else None, "invalid_input", e.words) from None
+        if read_as:
+            st = {k: v for k, v in st.items() if k in ("tool", "as", "when")}
+            st["arguments"] = _a
+            if read_as not in self.read_as:
+                self.read_as.append(read_as)
+        name = st["tool"]
         server = self.server
         tool = server.tools.get(name)
         if tool is None:
@@ -744,17 +761,16 @@ class Run:
         if name in BLOCKED or getattr(tool, "alias_of", None) in BLOCKED or (name.startswith("history_") and name not in READ_HISTORY):
             raise Stop(where, name, "refused", f"{name} does not run in a fast block (another runner, the person's OK or settings, the window's "
                                                "input and dialogs, jobs, the history or a restart): call it on its own.")
-        if "args" in st:
-            args = self.val(st["args"], f"{where}.args")
-            if isinstance(args, str):
-                try:
-                    args = json.loads(args)
-                except ValueError:
-                    args = None
-        else:
-            args = {k: self.val(v, f"{where}.{k}") for k, v in st.items() if k not in ("call", "as", "when")}
+        args = self.val(st.get("arguments", {}), f"{where}.arguments")
+        if isinstance(args, str):
+            try:
+                args = json.loads(args) if args.strip() else {}
+            except ValueError:
+                args = None
+        if args is None:
+            args = {}
         if args is not UNKNOWN and not isinstance(args, dict):
-            raise Stop(where, name, "invalid_input", "args: the call's fields as an object")
+            raise Stop(where, name, "invalid_input", "arguments: the call's inputs as an object, {} for none")
         self.calls += 1
         if self.calls > MAX_CALLS and not self.dry:
             raise Stop(where, name, "invalid_input", f"more than {MAX_CALLS} calls in one block: split it.")
@@ -1084,7 +1100,7 @@ def fast_tool(server, session, a):
     if isinstance(steps, dict) and "do" in steps:
         steps = steps["do"]
     if not isinstance(steps, list) or not steps:
-        raise ToolError("invalid_input", "do: a list of steps ({ call: tool, …fields }, { let }, { each }, { when }, { get } …). Nothing was run.")
+        raise ToolError("invalid_input", "do: a list of steps ({ tool, arguments, as }, { let }, { each }, { when }, { get } …). Nothing was run.")
     dry, stop = check(server, session, steps)
     if stop is not None:
         err = ToolError(stop.code, f"step {stop.where}{' (' + stop.tool + ')' if stop.tool else ''}: {_said(stop.words)} Read before step 1. Nothing was run.")
@@ -1228,6 +1244,8 @@ def _run(server, session, steps, a):
             out["warnings"] = run.warnings[:12]
         if run.filled:
             out["filled"] = list(dict.fromkeys(run.filled))[:12]
+        if run.read_as:
+            out["readAs"] = "; ".join(run.read_as[:6])
         if state["cp"]:
             out["checkpoint"] = state["cp"]
         if rel:

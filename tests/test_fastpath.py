@@ -226,9 +226,9 @@ def _child(case):
 
     design = {"do": [
         {"let": {"xs": [10, 30, 50]}},
-        {"call": "sketch_new", "plane": "XY"},
-        {"each": "x", "in": "=xs", "steps": [{"call": "sketch_add", "items": [{"circle": {"at": ["=x", 0], "radius": 3}}]}]},
-        {"call": "pd_pad", "length": 4}]}
+        {"tool": "sketch_new", "arguments": {"plane": "XY"}},
+        {"each": "x", "in": "=xs", "steps": [{"tool": "sketch_add", "arguments": {"items": [{"circle": {"at": ["=x", 0], "radius": 3}}]}}]},
+        {"tool": "pd_pad", "arguments": {"length": 4}}]}
     out = {}
     if case == "design":
         out["got"] = fast(design)
@@ -248,41 +248,41 @@ def _child(case):
     elif case == "flow":
         out["got"] = fast({"do": [
             {"let": {"k": 2, "names": []}},
-            {"when": "=k > 1", "then": [{"call": "probe_change", "n": "=k * 10", "as": "r"}], "else": [{"call": "probe_fail"}]},
+            {"when": "=k > 1", "then": [{"tool": "probe_change", "arguments": {"n": "=k * 10"}, "as": "r"}], "else": [{"tool": "probe_fail", "arguments": {}}]},
             {"push": {"names": "=r.n"}},
-            {"choose": "=str(k)", "of": {"2": [{"call": "probe_change", "n": 22}]}, "else": [{"call": "probe_fail"}]},
-            {"call": "probe_change", "n": 99, "when": "=k == 3"},
-            {"try": [{"call": "probe_fail"}], "on": "refusal", "except": [{"get": "=error.code", "as": "caught"}]},
+            {"choose": "=str(k)", "of": {"2": [{"tool": "probe_change", "arguments": {"n": 22}}]}, "else": [{"tool": "probe_fail", "arguments": {}}]},
+            {"tool": "probe_change", "arguments": {"n": 99}, "when": "=k == 3"},
+            {"try": [{"tool": "probe_fail", "arguments": {}}], "on": "refusal", "except": [{"get": "=error.code", "as": "caught"}]},
             {"get": "=names", "as": "names"}]})
         out["labels"] = labels()
         out["seen"] = [t for t, _a in seen]
     elif case == "required":
-        out["first"] = fast({"do": [{"call": "sketch_new", "plane": "XY"}]})
-        out["got"] = fast({"do": [{"call": "probe_req", "as": "r"}, {"get": "=r.sketch", "as": "sk"}]})
+        out["first"] = fast({"do": [{"tool": "sketch_new", "arguments": {"plane": "XY"}}]})
+        out["got"] = fast({"do": [{"tool": "probe_req", "arguments": {}, "as": "r"}, {"get": "=r.sketch", "as": "sk"}]})
         out["seen"] = seen
     elif case == "rollback":
-        out["got"] = fast({"rollback": True, "do": [{"call": "probe_change", "n": 1}, {"call": "probe_change", "n": 2}, {"call": "probe_fail"}, {"call": "probe_change", "n": 3}]})
+        out["got"] = fast({"rollback": True, "do": [{"tool": "probe_change", "arguments": {"n": 1}}, {"tool": "probe_change", "arguments": {"n": 2}}, {"tool": "probe_fail", "arguments": {}}, {"tool": "probe_change", "arguments": {"n": 3}}]})
         out["labels"] = labels()
         out["undone"] = doc.undone
         out["seen"] = [t for t, _a in seen]
     elif case == "keep":
         # The default since 23 Nov (owner): what ran before a refusal stays.
-        out["got"] = fast({"do": [{"call": "probe_change", "n": 1}, {"call": "probe_change", "n": 2}, {"call": "probe_fail"}]})
+        out["got"] = fast({"do": [{"tool": "probe_change", "arguments": {"n": 1}}, {"tool": "probe_change", "arguments": {"n": 2}}, {"tool": "probe_fail", "arguments": {}}]})
         out["labels"] = labels()
         out["undone"] = doc.undone
     elif case == "person":
-        out["got"] = fast({"rollback": True, "do": [{"call": "probe_change", "n": 1}, {"call": "probe_person"}, {"call": "probe_change", "n": 2}, {"call": "probe_fail"}]})
+        out["got"] = fast({"rollback": True, "do": [{"tool": "probe_change", "arguments": {"n": 1}}, {"tool": "probe_person", "arguments": {}}, {"tool": "probe_change", "arguments": {"n": 2}}, {"tool": "probe_fail", "arguments": {}}]})
         out["labels"] = labels()
         out["undoNames"] = list(doc.UndoNames)
     elif case == "dry":
-        out["bad"] = fast({"check": True, "do": [{"let": {"xs": [1, 2]}}, {"each": "x", "in": "=xs", "steps": [{"call": "sketch_add", "items": [], "bogus": 1}]}]})
+        out["bad"] = fast({"check": True, "do": [{"let": {"xs": [1, 2]}}, {"each": "x", "in": "=xs", "steps": [{"tool": "sketch_add", "arguments": {"items": [], "bogus": 1}}]}]})
         out["good"] = fast({"check": True, **design})
         out["seen"] = seen
         out["labels"] = labels()
     elif case == "a6":
-        out["fast"] = fast({"do": [{"call": "probe_change", "n": 1, "when": "=False"}, {"call": "probe_person", "as": "p"}, {"call": "probe_lead", "n": 0}]})
+        out["fast"] = fast({"do": [{"tool": "probe_change", "arguments": {"n": 1}, "when": "=False"}, {"tool": "probe_person", "arguments": {}, "as": "p"}, {"tool": "probe_lead", "arguments": {"n": 0}}]})
         out["seenFast"] = [t for t, _a in seen]
-        out["late"] = fast({"rollback": True, "do": [{"call": "probe_change", "n": 1}, {"call": "probe_lead", "n": 0}]})
+        out["late"] = fast({"rollback": True, "do": [{"tool": "probe_change", "arguments": {"n": 1}}, {"tool": "probe_lead", "arguments": {"n": 0}}]})
         out["labelsAfterLate"] = labels()
         del seen[:]
         out["batch"] = one("batch", {"check": True, "calls": [{"tool": "probe_person", "arguments": {}}, {"tool": "probe_lead", "arguments": {"n": 0}}]})
@@ -290,7 +290,7 @@ def _child(case):
         out["batchPlain"] = one("batch", {"calls": [{"tool": "probe_person", "arguments": {}}, {"tool": "probe_lead", "arguments": {"n": 0}}]})
         out["batchOk"] = one("batch", {"check": True, "calls": [{"tool": "probe_lead", "arguments": {"n": 1}}]})
     elif case == "get":
-        fast({"do": [{"call": "sketch_new", "plane": "XY"}, {"call": "pd_pad", "length": 4}]})
+        fast({"do": [{"tool": "sketch_new", "arguments": {"plane": "XY"}}, {"tool": "pd_pad", "arguments": {"length": 4}}]})
         out["one"] = one("get", {"what": ["Pad.Length", "Body.volume", "Body.Edge7.length", "sketch.dof", "active.body", "active.sketch",
                                           "Body.mass", "bodies", "selection", "Sketch.closedWires"]})
         out["missing"] = one("get", {"what": "Nope.Length"})
@@ -311,9 +311,9 @@ def _child(case):
         out["maker"] = fast({"do": [{"let": {"f": "=maker('os.system')"}}]})
         out["fmt"] = fast({"do": [{"let": {"f": "='{0.__class__}'.format(1)"}}]})
         out["make"] = fast({"do": [{"make": "Part.show"}]})
-        out["batch"] = fast({"do": [{"call": "batch", "calls": []}]})
+        out["batch"] = fast({"do": [{"tool": "batch", "arguments": {"calls": []}}]})
         out["private"] = fast({"do": [{"let": {"f": "=a.__class__"}}]})
-        out["unknown"] = fast({"do": [{"call": "no_such_tool"}]})
+        out["unknown"] = fast({"do": [{"tool": "no_such_tool", "arguments": {}}]})
         out["labels"] = labels()
     print(json.dumps(out, default=str))
 
@@ -340,7 +340,7 @@ class FastPath(unittest.TestCase):
         self.assertEqual(got["unknown"]["body"]["refused"]["code"], "not_found")
         msg = got["unknown"]["body"]["results"][0]["error"]["message"]
         self.assertIn("near: pd_pad", msg)
-        self.assertIn('{ "call": "body_check" }', got["toolread"]["body"]["error"]["message"])
+        self.assertIn('{ "tool": "body_check", "arguments": {} }', got["toolread"]["body"]["error"]["message"])
 
     def test_design_block_runs_each_call_through_the_server(self):
         got = run_case("design")
@@ -512,7 +512,7 @@ class Shape(unittest.TestCase):
     def test_shape_words(self):
         from agentlink import fastpath
 
-        self.assertEqual(fastpath.shape_words([{"let": {"x": 1}}, {"call": "pd_pad", "length": "=x * 4"}]), [])
+        self.assertEqual(fastpath.shape_words([{"let": {"x": 1}}, {"tool": "pd_pad", "arguments": {"length": "=x * 4"}}]), [])
         self.assertTrue(fastpath.shape_words([{"set": {"o.Label": "x"}}]))
         self.assertTrue(fastpath.shape_words([{"do": "=x"}]))
         self.assertTrue(fastpath.shape_words([{"let": {"_x": 1}}]))

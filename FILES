@@ -23,6 +23,7 @@ agentlink/appliesnow.py
 agentlink/approvals.py
 agentlink/around.py
 agentlink/batchrec.py
+agentlink/callshape.py
 agentlink/ccx_io.py
 agentlink/cells.py
 agentlink/chain.py
@@ -331,6 +332,7 @@ tests/test_batch_chain_fc.py
 tests/test_batch_lines.py
 tests/test_batch_nested_81b.py
 tests/test_batch_rollback.py
+tests/test_batch_shape_1124.py
 tests/test_bicycle_1120.py
 tests/test_bicycle_bind_fuse.py
 tests/test_bicycle_l5_1121.py

@@ -149,6 +149,18 @@ def own_steps(server, s, name, start, doc, u0, limit, mine, ok):
     return inc, start
 
 
+def _profiling():
+    """Whether every batch call is timed by function (cProfile): a setting
+    on our side, AGENTLINK_PROFILE_CALLS=1 or the preference ProfileCalls
+    (Mod/AgentLink). The agent never sets it (owner decision 11)."""
+    if os.environ.get("AGENTLINK_PROFILE_CALLS", "").strip().lower() in ("1", "on", "true", "yes"):
+        return True
+    try:
+        return bool(FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/AgentLink").GetBool("ProfileCalls", False)) if FreeCAD else False
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _kept_or_none(results):
     """A batch's result when what ran stays: kept when a call went through,
     ran_none when none did (1f, 24 Nov)."""
@@ -2566,6 +2578,24 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 except ValueError:
                     bad_call(i, None, "invalid_input", f"calls.{i} came as a string that is not a call's JSON — each call is {{ tool, arguments }}.")
                     continue
+            # One call shape (owner decisions 1, 3; 24 Nov): exact card
+            # fields beside tool move inside arguments (said in readAs);
+            # wrappers, unknown keys and as are refused.
+            from . import callshape as _cs
+
+            if isinstance(c, dict) and isinstance(c.get("tool"), str) and "to" in c and "to" in (_cs.card_fields(server, c["tool"]) or ()):
+                bad_call(i, c["tool"], "invalid_input", f"calls.{i} ({c['tool']}): to beside tool writes this call's answer to a file, but {c['tool']} also has a field to. "
+                                                         f"Put {c['tool']}'s to inside arguments.")
+                continue
+            read_as = None
+            if isinstance(c, dict):
+                try:
+                    _n, _a, read_as = _cs.split(server, c, f"calls.{i}", extra=("to",), runner="batch")
+                except _cs.Refused as e:
+                    bad_call(i, c.get("tool") if isinstance(c.get("tool"), str) else None, "invalid_input", e.words)
+                    continue
+                if read_as:
+                    c = {**{k: v for k, v in c.items() if k in ("tool", "to")}, "arguments": _a}
             if not isinstance(c, dict) or not isinstance(c.get("tool"), str):
                 # What it has and what it lacks, never the call itself (live,
                 # 22 Nov: a local model sent calls with arguments and no tool,
@@ -2586,8 +2616,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 bad_call(i, c["tool"], "invalid_input", f"calls.{i}.arguments ({c['tool']}): an object.")
                 continue
             one = {"tool": c["tool"], "arguments": args}
-            if c.get("profile"):
-                one["profile"] = True
+            if read_as:
+                one["readAs"] = read_as
             if c.get("to") is not None:
                 # This call's whole answer to a file of its own (chain.py).
                 words = _chain.to_name(c["to"], i)
@@ -3088,9 +3118,11 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 if miss is None:
                     _t_sc = time.time()
                     _prof = None
-                    if c.get("profile"):
-                        # calls[i].profile: true — where this one call's time
-                        # went, by function (for finding what is slow round a tool).
+                    if _profiling():
+                        # Each call's time by function, when the setting is on
+                        # (AGENTLINK_PROFILE_CALLS=1 or the preference
+                        # ProfileCalls): never set by the agent (owner
+                        # decision 11, 24 Nov; it was calls[i].profile).
                         import cProfile
 
                         _prof = cProfile.Profile()
@@ -3135,6 +3167,8 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                         row = _chain.written_row(c["tool"], body, _chain.write_answer(c["to"], body))
                     except Exception as e:
                         row["toError"] = f"to: not written ({e}). The answer is here in full instead."
+                if c.get("readAs"):
+                    row["readAs"] = c["readAs"]
                 if mine.get("profile") is not None:
                     row["profile"] = mine.pop("profile")
                     if getattr(s, "echo_trace", None) is not None:

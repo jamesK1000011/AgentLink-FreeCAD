@@ -207,10 +207,10 @@ class OnStandIns(unittest.TestCase):
     def test_fast_block(self):
         out = stub("""
             r = {}
-            r["withGet"] = call("fast", {"do": [{"call": "grow"}, {"get": "Bracket.volume", "as": "v"}, {"call": "doc_save"}]})
+            r["withGet"] = call("fast", {"do": [{"tool": "grow", "arguments": {}}, {"get": "Bracket.volume", "as": "v"}, {"tool": "doc_save", "arguments": {}}]})
             r["saved"] = len(saved)
-            r["without"] = call("fast", {"do": [{"call": "grow", "by": 3}, {"call": "doc_save"}]})
-            r["getFirst"] = call("fast", {"do": [{"get": "Bracket.volume"}, {"call": "grow", "by": 4}, {"call": "doc_save"}]})
+            r["without"] = call("fast", {"do": [{"tool": "grow", "arguments": {"by": 3}}, {"tool": "doc_save", "arguments": {}}]})
+            r["getFirst"] = call("fast", {"do": [{"get": "Bracket.volume"}, {"tool": "grow", "arguments": {"by": 4}}, {"tool": "doc_save", "arguments": {}}]})
             print(json.dumps(r, default=repr))
         """)
         self.assertNotIn("isError", out["withGet"], out["withGet"])

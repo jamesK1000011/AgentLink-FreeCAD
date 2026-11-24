@@ -21,7 +21,8 @@ def tools(session):
 
     return [
         Tool("fast", ("Run a block of steps in one call, and get one short answer. Use it when you know the work. "
-                      "do: [steps]. A step is { call: tool, its fields, as: name }, { let: { name: value } }, { each: name, in: list, steps }, "
+                      "do: [steps]. A tool step is { tool, arguments, as: name }, the same as a batch call: every input goes inside arguments. "
+                      "Other steps: { let: { name: value } }, { each: name, in: list, steps }, "
                       "{ when: test, then, else }, { choose: value, of, else }, { try, on: refusal | error, except }, { get: \"Pad.Length\", as }, "
                       "{ push } or { refuse: words }. "
                       "A value \"=x * 2\" is an expression of names, numbers, lists and their own methods. It is not Python code. "

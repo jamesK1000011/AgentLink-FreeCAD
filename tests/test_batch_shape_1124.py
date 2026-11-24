@@ -82,3 +82,90 @@ class Texts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BesideTool(unittest.TestCase):
+    """1a (owner decision 1): exact card fields beside tool move inside
+    arguments, said in readAs; wrappers, unknown keys and as are refused."""
+
+    def test_an_exact_field_is_moved_and_said(self):
+        b = run('''
+    r = call("batch", {"calls": [{"tool": "probe_make", "name": "A"}]})
+    print(json.dumps([r[0], r[1], labels()]))
+''')
+        err, ans, labs = b
+        self.assertIn("A", labs)
+        row = ans["results"][0]
+        self.assertTrue(row["ok"])
+        self.assertIn("calls.0: name was beside tool: read inside arguments. Put every input inside arguments.", row["readAs"])
+
+    def test_a_wrapper_refuses_only_its_call(self):
+        b = run('''
+    print(json.dumps(call("batch", {"calls": [mk("A"), {"tool": "probe_make", "options": {"name": "B"}}, mk("C")]})))
+''')
+        b = b[1]
+        self.assertEqual((b["done"], b["refused"]["call"]), ([0], 1))
+        self.assertIn("options is not part of a call", b["refused"]["error"])
+        self.assertIn("options holds name: put it inside arguments.", b["refused"]["error"])
+        self.assertIn("The fields of probe_make: name, type, fail.", b["refused"]["error"])
+
+    def test_given_twice(self):
+        b = run('''
+    out = {}
+    out["other"] = call("batch", {"calls": [{"tool": "probe_make", "name": "A", "arguments": {"name": "B"}}]})
+    out["same"] = call("batch", {"calls": [{"tool": "probe_make", "name": "C", "arguments": {"name": "C"}}]})
+    print(json.dumps(out))
+''')
+        self.assertIn('name is given twice (beside tool: "A", in arguments: "B")', b["other"][1]["refused"]["error"])
+        self.assertTrue(b["same"][1]["results"][0]["ok"])
+        self.assertIn("the same as in arguments: dropped", b["same"][1]["results"][0]["readAs"])
+
+    def test_as_and_profile_and_wrapped_tool(self):
+        b = run('''
+    out = {}
+    out["as"] = call("batch", {"calls": [{"tool": "probe_make", "arguments": {"name": "A"}, "as": "p"}]})
+    out["profile"] = call("batch", {"calls": [{"tool": "probe_make", "arguments": {"name": "A"}, "profile": True}]})
+    out["inside"] = call("batch", {"calls": [{"arguments": {"tool": "probe_make", "name": "A"}}]})
+    print(json.dumps(out))
+''')
+        self.assertIn("as is a key of fast steps, not of batch calls", b["as"][1]["refused"]["error"])
+        self.assertIn('{ "$from": 0, "$at": "feature" }', b["as"][1]["refused"]["error"])
+        self.assertIn("profile is not part of a call", b["profile"][1]["refused"]["error"])
+        self.assertIn("tool is inside arguments. tool goes beside arguments", b["inside"][1]["refused"]["error"])
+
+    def test_rollback(self):
+        b = run('''
+    out = {}
+    out["moved"] = call("batch", {"rollback": True, "calls": [{"tool": "probe_make", "name": "A"}]})
+    out["wrapper"] = call("batch", {"rollback": True, "calls": [mk("B"), {"tool": "probe_make", "params": {}}]})
+    out["labels"] = labels()
+    print(json.dumps(out))
+''')
+        self.assertTrue(b["moved"][1]["results"][0]["ok"])
+        self.assertTrue(b["wrapper"][0])
+        self.assertIn("Nothing was run.", b["wrapper"][1]["error"]["message"])
+        self.assertNotIn("B", b["labels"])
+
+
+class FastShape(unittest.TestCase):
+    """Decision 3: fast's tool step is a batch call's shape, { tool,
+    arguments, as, when }; the old { call, … } is refused, no alias."""
+
+    def test_old_form_refused_before_step_one(self):
+        b = run('''
+    print(json.dumps([call("fast", {"do": [mk("A"), {"call": "probe_make", "name": "B"}]}), labels()]))
+''')
+        (err, ans, _t), labs = b
+        self.assertTrue(err)
+        self.assertIn("{ call, … } is the old form of a fast step", ans["error"]["message"])
+        self.assertIn('{ "tool": "probe_make", "arguments": { … }, "as": "name" }', ans["error"]["message"])
+        self.assertNotIn("A", labs)
+
+    def test_tool_step_runs_and_a_field_beside_tool_is_moved(self):
+        b = run('''
+    print(json.dumps([call("fast", {"do": [{"tool": "probe_make", "arguments": {"name": "A"}, "as": "a"}, {"tool": "probe_make", "name": "B"}]}), labels()]))
+''')
+        (err, ans, _t), labs = b
+        self.assertFalse(err, ans)
+        self.assertTrue({"A", "B"} <= set(labs))
+        self.assertIn("do.1: name was beside tool: read inside arguments.", ans["readAs"])

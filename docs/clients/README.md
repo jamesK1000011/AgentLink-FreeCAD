@@ -39,6 +39,7 @@ Optional flags, added after `agentlink-freecad` in `args`:
 | `AGENTLINK_TOOLLIST=classic` (env) | the classic tool list: the lean groups from the start, not the six-tool list |
 | `AGENTLINK_TOOLS=full` (env) | with `AGENTLINK_TOOLLIST=classic`: list every tool from the start (not for small models) |
 | `AGENTLINK_USAGE=off` (env) | turn the token-usage meter off |
+| `AGENTLINK_PROFILE_CALLS=1` (env), or the preference `ProfileCalls` | time every batch call by function (cProfile) and add `profile` to its row; for finding what is slow, never set by the agent |
 
 ### Without uv
 
