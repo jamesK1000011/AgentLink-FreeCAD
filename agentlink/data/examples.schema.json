@@ -1,13 +1,13 @@
 {
  "type": "object",
  "required": [
-  "args",
+  "arguments",
   "source",
   "date"
  ],
  "additionalProperties": false,
  "properties": {
-  "args": {
+  "arguments": {
    "type": "object"
   },
   "fill": {

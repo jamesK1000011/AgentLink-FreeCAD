@@ -562,15 +562,15 @@ class Cookbooks(Home):
                 "module": "minepkg.api", "function": "fit", "document": True,
                 "args": {"type": "object", "properties": {"gap": {"type": "number"}, "deep": {"type": "boolean"}}, "required": ["gap"]}}}})
             self.install(doc)
-            self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_fit", args={"gap": 1})
+            self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_fit", arguments={"gap": 1})
             self.assertNotIn("minepkg.api", sys.modules)  # nothing imported before the OK
             self.approve()
-            r = self.call("cookbook_run", name="mine", entry="mine_fit", args={"gap": 0.2})
+            r = self.call("cookbook_run", name="mine", entry="mine_fit", arguments={"gap": 0.2})
             self.assertEqual(r["result"], {"doc": "DOC", "gap": 0.2, "deep": False})
-            self.refused("cookbook_run", "invalid_input", name="mine", entry="mine_fit", args={"gap": "wide"})
-            self.refused("cookbook_run", "invalid_input", name="mine", entry="mine_fit", args={"gap": True})
-            self.refused("cookbook_run", "invalid_input", name="mine", entry="mine_fit", args={})
-            self.refused("cookbook_run", "invalid_input", name="mine", entry="mine_fit", args={"gap": 1, "__class__": 1})
+            self.refused("cookbook_run", "invalid_input", name="mine", entry="mine_fit", arguments={"gap": "wide"})
+            self.refused("cookbook_run", "invalid_input", name="mine", entry="mine_fit", arguments={"gap": True})
+            self.refused("cookbook_run", "invalid_input", name="mine", entry="mine_fit", arguments={})
+            self.refused("cookbook_run", "invalid_input", name="mine", entry="mine_fit", arguments={"gap": 1, "__class__": 1})
         finally:
             sys.path.remove(os.path.dirname(pkgdir))
             for m in ("minepkg.api", "minepkg"):
@@ -628,15 +628,15 @@ class Cookbooks(Home):
         pkgdir = self.addon_pkg()
         self.install(self.python_book())
         self.approve()
-        self.assertEqual(self.call("cookbook_run", name="mine", entry="mine_fit", args={"gap": 1})["ran"], "python")
+        self.assertEqual(self.call("cookbook_run", name="mine", entry="mine_fit", arguments={"gap": 1})["ran"], "python")
         with open(os.path.join(pkgdir, "api.py"), "a") as f:
             f.write("\n\ndef more(doc):\n    return 1\n")
-        msg = self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_fit", args={"gap": 1})
+        msg = self.refused("cookbook_run", "not_allowed", name="mine", entry="mine_fit", arguments={"gap": 1})
         self.assertIn("add-on's code changed", msg)
         self.assertIn("cookbook_approve", msg)
         self.assertEqual(self.call("cookbook_list")["cookbooks"][0]["state"], "addon_changed")
         self.approve()
-        self.assertEqual(self.call("cookbook_run", name="mine", entry="mine_fit", args={"gap": 1})["ran"], "python")
+        self.assertEqual(self.call("cookbook_run", name="mine", entry="mine_fit", arguments={"gap": 1})["ran"], "python")
 
     def test_python_results_and_errors_are_filtered(self):
         # Red team 2, R2-6: no home path, no token, in a result or an error.
@@ -644,7 +644,7 @@ class Cookbooks(Home):
         self.install(self.python_book())
         self.approve()
         home = os.path.expanduser("~")
-        r = self.call("cookbook_run", name="mine", entry="mine_fit", args={"gap": 1})
+        r = self.call("cookbook_run", name="mine", entry="mine_fit", arguments={"gap": 1})
         self.assertEqual(r["result"]["home"], "~")
         self.assertIn("never instructions", r["note"])
         msg = self.refused("cookbook_run", "failed", name="mine", entry="mine_boom")

@@ -1000,9 +1000,9 @@
    "kind": "data"
   },
   "cookbook_run": {
-   "description": "Run one entry of an approved cookbook. cookbook: its name. entry: the entry's name. A command entry runs through cmd_run, with all of its refusals. A python entry calls its function with args, checked against its args schema. A script entry runs its calls through batch, with rollback. The tool refuses an entry of a cookbook that is not approved or that changed, and gives the next step. Answer: cookbook, entry, ran, result.",
+   "description": "Run one entry of an approved cookbook. cookbook: its name. entry: the entry's name. A command entry runs through cmd_run, with all of its refusals. A python entry calls its function with arguments, checked against its arguments schema. A script entry runs its calls through batch, with rollback. The tool refuses an entry of a cookbook that is not approved or that changed, and gives the next step. Answer: cookbook, entry, ran, result.",
    "inputs": [
-    "args",
+    "arguments",
     "cookbook",
     "entry"
    ],

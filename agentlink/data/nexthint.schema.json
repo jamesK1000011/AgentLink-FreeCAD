@@ -48,7 +48,7 @@
   },
   "suggest": {
    "type": "array",
-   "description": "The tools, likeliest first (at most four are read). A tool with args is also an option: a ready call with its open inputs (ask).",
+   "description": "The tools, likeliest first (at most four are read). A tool with arguments is also an option: a ready call with its open inputs (ask).",
    "items": {
     "type": "object",
     "required": [
@@ -67,7 +67,7 @@
       "pattern": "^.{3,60}$",
       "description": "A few words on why, at most 60 characters."
      },
-     "args": {
+     "arguments": {
       "type": "object",
       "description": "Makes the tool an option (agentlink/options.py): the arguments the state settles. A value that starts with \"=\" is an expression of the hub's checked language (agentlink/expr.py), read with facts (the names facts() gives: facts.bodyName, facts.sketchName, facts.editSketch, facts.pickedEdges ...); a value that comes out None is left out. Any other value is used as it is. {} for a call with no arguments.",
       "additionalProperties": {}
@@ -111,7 +111,7 @@
      },
      "choices": {
       "type": "object",
-      "description": "Live choices for an argument (the real bodies, sketches, faces): an expression as in args that gives a list, or a list. Shown only when there is more than one.",
+      "description": "Live choices for an argument (the real bodies, sketches, faces): an expression as in arguments that gives a list, or a list. Shown only when there is more than one.",
       "additionalProperties": {
        "type": [
         "string",

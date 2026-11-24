@@ -135,6 +135,8 @@ RENAMES = {
     "varset_set": {"inputs": {"properties": "values"}, "words": [("properties", "values")]},
     "varset_new": {"inputs": {"properties": "values"}, "words": [("properties", "values")]},
     "pd_revolution": {"words": [("feature, set:", "feature, values:")]},
+    # Set 11: args -> arguments (V.2), a call's inputs.
+    "cookbook_run": {"inputs": {"args": "arguments"}, "words": [("args", "arguments")]},
 }
 
 

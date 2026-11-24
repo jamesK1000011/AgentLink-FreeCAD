@@ -608,7 +608,7 @@ def _entry_view(name, e, tool_names):
     out = {"entry": name, "kind": _recipe_kind(e.get("recipe")), "description": desc[:MAX_DESC]}
     p = (e.get("recipe") or {}).get("python") if isinstance(e.get("recipe"), dict) else None
     if isinstance(p, dict) and isinstance(p.get("args"), dict):
-        out["args"] = p["args"]
+        out["arguments"] = p["args"]  # the file's python.args: what cookbook_run takes as arguments
     if name in set(tool_names):
         out["refused"] = "a tool has this name"
     return out
@@ -712,19 +712,19 @@ _TYPES = {"string": str, "number": (int, float), "integer": int, "boolean": bool
 
 def check_args(schema, args):
     if not isinstance(args, dict):
-        raise Refused("invalid_input", "args: an object of the entry's arguments.")
+        raise Refused("invalid_input", "arguments: an object of the entry's arguments.")
     props = schema.get("properties", {}) if isinstance(schema, dict) else {}
     extra = sorted(set(args) - set(props))
     if extra:
-        raise Refused("invalid_input", f"args: {', '.join(extra[:8])} not in this entry's arguments ({', '.join(props) or 'none'}).")
+        raise Refused("invalid_input", f"arguments: {', '.join(extra[:8])} not in this entry's arguments ({', '.join(props) or 'none'}).")
     for r in schema.get("required", []) if isinstance(schema, dict) else []:
         if r not in args:
-            raise Refused("invalid_input", f"args.{r}: necessary for this entry.")
+            raise Refused("invalid_input", f"arguments.{r}: necessary for this entry.")
     for k, v in args.items():
         t = _TYPES.get(props[k].get("type"))
         bad = t is not None and (not isinstance(v, t) or (isinstance(v, bool) and props[k].get("type") in ("number", "integer")))
         if bad:
-            raise Refused("invalid_input", f"args.{k}: a {props[k].get('type')}.")
+            raise Refused("invalid_input", f"arguments.{k}: a {props[k].get('type')}.")
     return args
 
 
@@ -895,7 +895,7 @@ def run(name, entry, args, runners, tool_names=()):
     r = ents[entry]["recipe"]
     if "command" in r:
         if args:
-            raise Refused("invalid_input", f"{entry} runs the command {r['command']} and takes no args.")
+            raise Refused("invalid_input", f"{entry} runs the command {r['command']} and takes no arguments.")
         out = {"cookbook": name, "entry": entry, "ran": "command"}
         wb = (doc.get("addon") or {}).get("workbench") if isinstance(doc.get("addon"), dict) else None
         if "workbench" in runners:
@@ -920,7 +920,7 @@ def run(name, entry, args, runners, tool_names=()):
         return {"cookbook": name, "entry": entry, "ran": "python", "result": got, "note": RESULT_NOTE}
     s = r["script"]
     if args:
-        raise Refused("invalid_input", f"{entry} is a script and takes no args.")
+        raise Refused("invalid_input", f"{entry} is a script and takes no arguments.")
     calls = s.get("calls")
     if "file" in s:
         if s["file"] not in kept or len(kept[s["file"]]) > MAX_BYTES:

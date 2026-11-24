@@ -33,7 +33,7 @@ class Data(unittest.TestCase):
             if t is None:
                 continue  # a tool written in code
             props = t["inputSchema"]["properties"]
-            for a in list(e["args"]) + [f["arg"] for f in e.get("fill") or ()]:
+            for a in list(e["arguments"]) + [f["arg"] for f in e.get("fill") or ()]:
                 self.assertIn(a, props, f"{name}.{a}")
 
     def test_filled_example_passes_the_schema(self):

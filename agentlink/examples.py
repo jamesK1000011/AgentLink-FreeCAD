@@ -59,7 +59,7 @@ def for_tool(name, facts, table=None, how=None):
     how = how or mark()
     facts = facts or {}
     args = {}
-    for k, v in (e.get("args") or {}).items():
+    for k, v in (e.get("arguments") or {}).items():
         got = _value(v, facts)
         if got is not None and got != []:
             args[k] = got

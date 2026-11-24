@@ -5,14 +5,14 @@
  "about": "A ready call for each tool's card (tool_find { tool }): its arguments filled from the open document (=facts.… as in nexthint.json) and the values the agent must give marked. fill: each value to give (keep: true, a worked value to change; unless: an expression that, when it has a value, fills it). Owner, 22 Nov.",
  "entries": {
   "pd_body_new": {
-   "args": {
+   "arguments": {
     "name": "Part"
    },
    "source": "the tool's card and schema (tools.json); worked values written for this file",
    "date": "2026-11-22"
   },
   "sketch_new": {
-   "args": {
+   "arguments": {
     "body": "=facts.bodyName",
     "plane": "XY"
    },
@@ -27,7 +27,7 @@
    "date": "2026-11-22"
   },
   "sketch_add": {
-   "args": {
+   "arguments": {
     "sketch": "=facts.editSketch or facts.sketchName",
     "items": [
      {
@@ -62,7 +62,7 @@
    "date": "2026-11-22"
   },
   "sketch_constrain": {
-   "args": {
+   "arguments": {
     "sketch": "=facts.editSketch or facts.sketchName",
     "constraints": [
      {
@@ -113,14 +113,14 @@
    "date": "2026-11-22"
   },
   "sketch_state": {
-   "args": {
+   "arguments": {
     "sketch": "=facts.editSketch or facts.sketchName"
    },
    "source": "the tool's card and schema (tools.json); worked values written for this file",
    "date": "2026-11-22"
   },
   "pd_pad": {
-   "args": {
+   "arguments": {
     "body": "=facts.bodyName",
     "sketch": "=facts.editSketch or facts.sketchName",
     "length": 10
@@ -136,7 +136,7 @@
    "date": "2026-11-22"
   },
   "pd_pocket": {
-   "args": {
+   "arguments": {
     "body": "=facts.bodyName",
     "sketch": "=facts.editSketch or facts.sketchName",
     "length": 5
@@ -152,7 +152,7 @@
    "date": "2026-11-22"
   },
   "pd_revolution": {
-   "args": {
+   "arguments": {
     "body": "=facts.bodyName",
     "sketch": "=facts.editSketch or facts.sketchName"
    },
@@ -166,7 +166,7 @@
    "date": "2026-11-22"
   },
   "pd_hole": {
-   "args": {
+   "arguments": {
     "body": "=facts.bodyName",
     "sketch": "=facts.editSketch or facts.sketchName",
     "depth": "through"
@@ -181,7 +181,7 @@
    "date": "2026-11-22"
   },
   "pd_fillet": {
-   "args": {
+   "arguments": {
     "body": "=facts.bodyName",
     "edges": "=facts.pickedEdges"
    },
@@ -200,7 +200,7 @@
    "date": "2026-11-22"
   },
   "pd_chamfer": {
-   "args": {
+   "arguments": {
     "body": "=facts.bodyName",
     "edges": "=facts.pickedEdges"
    },
@@ -219,21 +219,21 @@
    "date": "2026-11-22"
   },
   "body_check": {
-   "args": {
+   "arguments": {
     "body": "=facts.bodyName"
    },
    "source": "the tool's card and schema (tools.json); worked values written for this file",
    "date": "2026-11-22"
   },
   "measure": {
-   "args": {
+   "arguments": {
     "a": "=facts.bodyName"
    },
    "source": "the tool's card and schema (tools.json); worked values written for this file",
    "date": "2026-11-22"
   },
   "doc_save": {
-   "args": {},
+   "arguments": {},
    "source": "the tool's card and schema (tools.json); worked values written for this file",
    "date": "2026-11-22"
   }

@@ -183,5 +183,40 @@ class Set10Values(Base):
         self.assertEqual(r[1]["set"]["Length"]["to"], 20.0)
 
 
+
+class Set11Arguments(Base):
+    """args -> arguments: cookbook_run, the examples and the options (nexthint.json)."""
+
+    def test_old_name_refused(self):
+        self.refused_by_name("cookbook_run", {"name": "mine", "entry": "mine_fit", "args": {"gap": 1}}, "args", "arguments")
+
+    def test_new_name_works(self):
+        from agentlink import cookbook
+
+        e = runners.entries()["cookbook_run"]
+        self.assertIn("a.get('arguments')", json.dumps(e["answer"]))
+        self.assertEqual(cookbook.check_args({"type": "object", "properties": {"gap": {"type": "number"}}}, {"gap": 1}), {"gap": 1})
+        with self.assertRaises(cookbook.Refused) as r:
+            cookbook.check_args({"type": "object", "properties": {"gap": {"type": "number"}}, "required": ["gap"]}, {})
+        self.assertEqual(r.exception.message, "arguments.gap: necessary for this entry.")
+        view = cookbook._entry_view("mine_fit", {"recipe": {"python": {"module": "m", "function": "f", "args": {"type": "object"}}}}, ())
+        self.assertEqual(view["arguments"], {"type": "object"})
+        self.assertNotIn("args", view)
+
+    def test_the_data_files_say_arguments(self):
+        from agentlink import datafiles, examples, nexthint, options
+
+        here = os.path.join(ROOT, "agentlink", "data")
+        for f in ("examples.json", "nexthint.json"):
+            self.assertEqual(datafiles.check(os.path.join(here, f)), [], f)
+            with open(os.path.join(here, f), encoding="utf-8") as fh:
+                self.assertNotIn('"args"', fh.read(), f)
+        got = examples.for_tool("sketch_new", {"bodyName": "Body"})
+        self.assertEqual(got["example"]["arguments"]["body"], "Body")
+        self.assertEqual(nexthint._expr_problems({"suggest": [{"tool": "x", "arguments": {"a": "=__import__('os')"}}]})[0][:14], "x.arguments.a:")
+        pub = options.public({"step": 1, "list": [{"n": 1, "tool": "doc_new", "arguments": {}}]})
+        self.assertEqual(pub["list"][0], {"n": 1, "tool": "doc_new", "arguments": {}})
+
+
 if __name__ == "__main__":
     unittest.main()
