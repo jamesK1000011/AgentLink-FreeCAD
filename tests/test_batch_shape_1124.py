@@ -230,3 +230,16 @@ class RecordRead(unittest.TestCase):
         for k in ("read", "file", "from", "to"):
             self.assertTrue(got[k][0], k)
             self.assertIn(f"input.{k}: not a known field", got[k][1]["error"]["message"])
+
+
+class StartDocument(unittest.TestCase):
+    """24 Nov: the headless start document is Agent Link's, not the person's."""
+
+    def test_start_document_words(self):
+        got = run('''
+    print(json.dumps(call("session_state", {"orient": True})))
+''')
+        note = got[1]["note"]
+        self.assertNotIn("is the person's document", note)
+        self.assertIn("empty start document that Agent Link made", note)
+        self.assertTrue(got[1]["documents"][0].get("start"))

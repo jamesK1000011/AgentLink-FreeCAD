@@ -538,6 +538,16 @@ def _meter_dialog(link, d):
         pass
 
 
+
+def _new_start_doc():
+    """Agent Link's own empty start document (tools.new_start_doc), read
+    late: the tests put a stand-in tools module in its place."""
+    from . import tools as _t
+
+    make = getattr(_t, "new_start_doc", None)
+    return make() if make else FreeCAD.newDocument("AgentLink")
+
+
 class _Line(str):
     """A line read off a connection, with its ticket: queued, taken (by the
     GUI thread) or busy (answered from the socket thread instead)."""
@@ -1062,7 +1072,7 @@ class Link:
         if self.session is None:
             out = os.path.expanduser("~/AgentLink")
             os.makedirs(out, exist_ok=True)
-            self.session = Session(doc=active or FreeCAD.newDocument("AgentLink"), out_dir=out)
+            self.session = Session(doc=active or _new_start_doc(), out_dir=out)
             # session_state says which FreeCAD answered: this window, not the hidden one.
             self.session.where = "window"
             from .server import VERSION
@@ -1077,7 +1087,7 @@ class Link:
             # (agentlink/ext.py): kept whatever the person brings to the front.
             if self.session.doc.Name not in FreeCAD.listDocuments():
                 self.session.keep_doc = False
-                self.session.doc = active or FreeCAD.newDocument("AgentLink")
+                self.session.doc = active or _new_start_doc()
         else:
             # Pinned (unattended use, K): the session keeps its document
             # whatever the person brings to the front. Switching is the
@@ -1091,7 +1101,7 @@ class Link:
             if not alive:
                 gone = getattr(s, "pinned_label", None) or "The agent's document"
                 s.closed_doc = gone
-                s.doc = active or FreeCAD.newDocument("AgentLink")
+                s.doc = active or _new_start_doc()
                 from .store import undo_on
 
                 undo_on(s.doc)

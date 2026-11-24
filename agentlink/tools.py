@@ -278,11 +278,32 @@ from .batchrec import BatchRecord  # noqa: E402 - a batch's record of what ran
 MESH_OUT = ("stl", "obj", "ply", "off", "3mf", "amf")
 
 
+# The empty start documents Agent Link made itself (no document was open):
+# neither the person's nor one an agent made with doc_new (24 Nov: the
+# headless start document was called the person's document).
+START_DOCS = set()
+
+
+def new_start_doc():
+    """A new, empty start document of Agent Link's own."""
+    d = FreeCAD.newDocument("AgentLink")
+    START_DOCS.add(d.Name)
+    return d
+
+
+def is_start_doc(d):
+    """d is Agent Link's empty start document, still empty and never saved."""
+    try:
+        return d.Name in START_DOCS and not d.Objects and not d.FileName
+    except Exception:  # noqa: BLE001
+        return False
+
+
 class Session:
     def __init__(self, doc=None, out_dir=None):
         """doc: the document to work in — the GUI's open one — or None for a
         new one of its own (headless)."""
-        self.doc = doc or FreeCAD.newDocument("AgentLink")
+        self.doc = doc or new_start_doc()
         undo_on(self.doc)
         # Each family's own state, under its group's name: one dict per
         # document (the family_state property below; agentlink/docstates.py).
@@ -824,6 +845,8 @@ class Session:
             except Exception:  # noqa: BLE001
                 unsaved = None
             row = {"name": name, "label": d.Label, "unsaved": unsaved, "byAgent": name in self.agent_docs}
+            if is_start_doc(d):
+                row["start"] = True
             if d is self.doc:
                 row["agent"] = True
             out.append(row)
@@ -848,6 +871,7 @@ class Session:
         if opts:
             got["options"] = opts
         got["note"] = (("The agent's document is one an agent made. " if mine else
+                        f"{self.doc.Label} is an empty start document that Agent Link made, not the person's. " if is_start_doc(self.doc) else
                         f"{self.doc.Label} is the person's document: do not change, save or close it unless they ask. ")
                        + "For new work, make a document of its own: batch { calls: [{ tool: \"doc_new\", arguments: { name } }] }. "
                        "session_state reads all of this again.")
