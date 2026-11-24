@@ -1128,7 +1128,9 @@ class Server:
                 result = {"contents": [self.resources.read((msg.get("params") or {}).get("uri", ""))]}
             elif method == "tools/call":
                 params = msg.get("params") or {}
-                from . import approvals
+                from . import approvals, timelimit
+
+                timelimit.started()  # the run's time counts from the first call (AGENTLINK_TIME_LIMIT_MIN)
 
                 with approvals.connection_call(client):
                     if params.get("name") in approvals.CLIENT_ONLY:
@@ -1219,6 +1221,9 @@ class Server:
         args = params.get("arguments") or {}
         tool = self.tools.get(name)
         t0 = time.time()
+        from . import timelimit
+
+        timelimit.started()
         try:
             if tool is None:
                 result = self.refusal("not_found", f"{name}: no such tool.")
@@ -1460,6 +1465,15 @@ class Server:
                     gate.after(tool, args, not as_job)
             if s is not None and not as_job:
                 jobs.note_slow(tool, args, s, time.time() - t0)
+            if tool.name == "batch" and s is not None and getattr(s, "batch_now", None) is None:
+                # The run's time line (AGENTLINK_TIME_LIMIT_MIN): once, on the
+                # last health a batch's calls carry (agentlink/timelimit.py).
+                try:
+                    from . import health
+
+                    health.time_on_batch(s, out)
+                except Exception:
+                    pass
             if s is not None and not as_job and (tool.changes or (tool.name == "batch" and getattr(s, "_applies_seq", 0) != changes0)):
                 # Which tools apply to the document as it is now, read from their own leading checks: one short
                 # line beside the health's next (agentlink/appliesnow.py). A batch's answer carries it once.

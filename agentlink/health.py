@@ -1346,18 +1346,52 @@ def attach(session, tool, m, out):
     try:
         if m is None or not isinstance(out, dict) or "health" in out:
             _close(m)
+            if m is not None and isinstance(out, dict):
+                _timed(session, out.get("health"))  # a batch's own health
             return out
         h = check(session, tool, m)
         # Nothing recomputed and nothing red is said too: an answer of a
         # changing call with no health at all read as a check that did not
         # run (a drawing with a section, live).
-        out["health"] = h if h is not None else {"ok": True, "verdict": "nothing red"}
+        out["health"] = _timed(session, h if h is not None else {"ok": True, "verdict": "nothing red"})
     except Exception as e:
         _close(m)
         try:
             out["health"] = {"ok": None, "verdict": f"the health check did not run ({type(e).__name__}: {str(e)[:120]}): recompute lists what is failing; body_check and sketch_state read the result"}
         except Exception:
             pass
+    return out
+
+
+def _timed(session, h):
+    """The run's time line at the end of the verdict when a time limit is
+    set (agentlink/timelimit.py, AGENTLINK_TIME_LIMIT_MIN); a call inside a
+    batch leaves it to the batch's own answer. Never raises."""
+    try:
+        if getattr(session, "batch_now", None) is None:
+            from . import timelimit
+
+            timelimit.mark_health(h)
+    except Exception:
+        pass
+    return h
+
+
+def time_on_batch(session, out):
+    """The time line on the last health of a batch's answer (its calls'
+    healths leave it out: _timed). Never raises."""
+    try:
+        rows = out.get("results") if isinstance(out, dict) else None
+        if isinstance(out, dict) and isinstance(out.get("health"), dict):
+            _timed(session, out["health"])
+            return out
+        for r in reversed(rows or []):
+            h = (r.get("result") or {}).get("health") if isinstance(r, dict) and isinstance(r.get("result"), dict) else None
+            if isinstance(h, dict):
+                _timed(session, h)
+                break
+    except Exception:
+        pass
     return out
 
 

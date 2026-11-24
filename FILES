@@ -208,6 +208,7 @@ agentlink/targets.py
 agentlink/td_wait.py
 agentlink/testrun.py
 agentlink/theme.py
+agentlink/timelimit.py
 agentlink/tooldata.py
 agentlink/toolindex.py
 agentlink/tools.py
@@ -533,6 +534,7 @@ tests/test_sync_shared.py
 tests/test_techdraw.py
 tests/test_techdraw_gaps.py
 tests/test_theme.py
+tests/test_time_setting_1124.py
 tests/test_tool_groups.py
 tests/test_tool_index.py
 tests/test_tooldata.py

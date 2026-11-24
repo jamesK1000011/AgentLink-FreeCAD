@@ -810,6 +810,7 @@ class Session:
             **self._extensions_state(),
             **self._unattended_state(),
             **self._front_state(),
+            **_time_state(),
             **({"note": "The hidden FreeCAD answered: the FreeCAD window is closed, or its link is off or still starting, so this is not the document on screen."} if getattr(self, "where", "hidden") == "hidden" and os.environ.get("AGENTLINK_SUPERVISED") else {}),
             **({"launcher": _launcher()} if a.get("launcher") else {}),
         }
@@ -1831,6 +1832,17 @@ def _guide_files():
 
 # The words at connect for a lean headless server (made once, at import).
 INSTRUCTIONS = instructions(True, False, static=False)
+
+
+def _time_state():
+    """time: "N of M minutes used" when the runner set a time limit
+    (AGENTLINK_TIME_LIMIT_MIN, agentlink/timelimit.py), else nothing."""
+    try:
+        from . import timelimit
+
+        return timelimit.state()
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 class Resources:

@@ -39,6 +39,7 @@ Optional flags, added after `agentlink-freecad` in `args`:
 | `AGENTLINK_TOOLLIST=classic` (env) | the classic tool list: the lean groups from the start, not the six-tool list |
 | `AGENTLINK_TOOLS=full` (env) | with `AGENTLINK_TOOLLIST=classic`: list every tool from the start (not for small models) |
 | `AGENTLINK_USAGE=off` (env) | turn the token-usage meter off |
+| `AGENTLINK_TIME_LIMIT_MIN=30` (env) | a run with a fixed time: the limit in minutes, read at start and counted from the first tool call; `session_state` and the health verdict show `time: N of M minutes used`. Not set: nothing shows |
 
 ### Without uv
 
