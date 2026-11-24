@@ -23,7 +23,7 @@ class FeatureTools(Base):
         self.assertEqual(sk["frame"]["origin"], [0, 0, 10])
         self.assertEqual(sk["frame"]["xAxis"], [1, 0, 0])
         self.ok("sketch_add", {"sketch": "Top", "items": [{"kind": "circle", "center": [10, 0], "radius": 3}]})
-        p = self.ok("pd_pocket", {"sketch": "Top", "type": "through_all"})
+        p = self.ok("pd_pocket", {"sketch": "Top", "extent": "through_all"})
         self.assertAlmostEqual(p["volumeChange"], -math.pi * 9 * 10, delta=0.5)
 
     def test_3_pocket_that_cuts_nothing_is_refused(self):
@@ -105,7 +105,7 @@ class FeatureTools(Base):
         # two sides without the second length is refused, saying which input
         e = self.refused("pd_pad", {"body": "Hard", "sketch": "HBase", "length": 6, "sides": "two"})
         self.assertIn("length2", e["message"])
-        e = self.refused("pd_pad", {"body": "Hard", "sketch": "HBase", "type": "through_all"})
+        e = self.refused("pd_pad", {"body": "Hard", "sketch": "HBase", "extent": "through_all"})
         self.assertIn("up_to_last", e["message"])
         p = self.ok("pd_pad", {"body": "Hard", "sketch": "HBase", "length": 6, "length2": 4, "sides": "two"})
         self.assertAlmostEqual(p["volume"], 6000, delta=0.5)
@@ -126,11 +126,11 @@ class FeatureTools(Base):
     def test_9b_through_all_both_ways(self):
         self.ok("sketch_new", {"body": "Hard", "plane": "XY", "name": "HCut"})
         self.ok("sketch_add", {"sketch": "HCut", "items": [{"kind": "circle", "center": [0, 0], "radius": 2}]})
-        err, c = self.call("pd_pocket", {"body": "Hard", "sketch": "HCut", "type": "through_all", "sides": "two"})
+        err, c = self.call("pd_pocket", {"body": "Hard", "sketch": "HCut", "extent": "through_all", "sides": "two"})
         if err:
             # before 1.1 two sides exist for a length only: said so, nothing kept
             self.assertEqual(c["error"]["code"], "unavailable", c)
-            c = self.ok("pd_pocket", {"body": "Hard", "sketch": "HCut", "type": "through_all", "sides": "symmetric"})
+            c = self.ok("pd_pocket", {"body": "Hard", "sketch": "HCut", "extent": "through_all", "sides": "symmetric"})
         self.assertAlmostEqual(c["volumeChange"], -math.pi * 4 * 10, delta=0.5)
         type(self).hard_cut = c["feature"]
 

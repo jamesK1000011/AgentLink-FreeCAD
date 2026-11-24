@@ -134,7 +134,7 @@ class StdMore(Base):
         pad = self.ok("pd_pad", {"sketch": "P sk", "length": 5})
         self.ok("sketch_new", {"body": "P one", "plane": "XY", "name": "P sk2"})
         self.ok("sketch_add", {"sketch": "P sk2", "items": [{"kind": "circle", "center": [5, 2], "radius": 2}]})
-        pocket = self.ok("pd_pocket", {"sketch": "P sk2", "type": "through_all", "reversed": True})
+        pocket = self.ok("pd_pocket", {"sketch": "P sk2", "extent": "through_all", "reversed": True})
         feats = [o.Label for o in self.session.doc.getObjectsByLabel("P one")[0].Group if o.TypeId.startswith("PartDesign::P")]
         self.assertEqual(len(feats), 2)
         t = self.ok("pd_tip", {"body": "P one", "feature": feats[0]})

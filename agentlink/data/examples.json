@@ -144,7 +144,7 @@
    "fill": [
     {
      "arg": "length",
-     "what": "mm: 5 is a worked value; or type: \"through_all\" in its place",
+     "what": "mm: 5 is a worked value; or extent: \"through_all\" in its place",
      "keep": true
     }
    ],

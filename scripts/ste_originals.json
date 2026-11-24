@@ -2909,17 +2909,17 @@
    "kind": "data"
   },
   "pd_pad": {
-   "description": "Pad a closed sketch into the body, along its normal: type length (length mm) | up_to_last | up_to_first | up_to_face (upToFace { at, normal } or \"Face8\"); sides one | two (length2 the other way) | symmetric; reversed; taper deg. The first pad takes a length. An open sketch (sketch_state first) or a pad inside the body is refused. Faces and edges are renumbered: query again. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "description": "Pad a closed sketch into the body, along its normal: extent length (length mm) | up_to_last | up_to_first | up_to_face (face { at, normal } or \"Face8\"); sides one | two (length2 the other way) | symmetric; reversed; taper deg. The first pad takes a length. An open sketch (sketch_state first) or a pad inside the body is refused. Faces and edges are renumbered: query again. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
    "inputs": [
     "body",
+    "extent",
+    "face",
     "length",
     "length2",
     "reversed",
     "sides",
     "sketch",
-    "taper",
-    "type",
-    "upToFace"
+    "taper"
    ],
    "kind": "data"
   },
@@ -2937,17 +2937,17 @@
    "kind": "data"
   },
   "pd_pocket": {
-   "description": "Pocket a closed sketch out of the body: type length | through_all | up_to_first | up_to_face (upToFace); sides one | two (length2) | symmetric; reversed; taper. It cuts against the sketch's normal: one that cuts nothing is refused — reversed: true, or sketch on the face it enters. A cut that splits the body leaves 2 solids (allowed by its AllowCompound; health says so). Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
+   "description": "Pocket a closed sketch out of the body: extent length | through_all | up_to_first | up_to_face (face); sides one | two (length2) | symmetric; reversed; taper. It cuts against the sketch's normal: one that cuts nothing is refused — reversed: true, or sketch on the face it enters. A cut that splits the body leaves 2 solids (allowed by its AllowCompound; health says so). Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
    "inputs": [
     "body",
+    "extent",
+    "face",
     "length",
     "length2",
     "reversed",
     "sides",
     "sketch",
-    "taper",
-    "type",
-    "upToFace"
+    "taper"
    ],
    "kind": "data"
   },

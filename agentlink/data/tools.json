@@ -6560,7 +6560,7 @@
   },
   "pd_pad": {
    "group": "feature",
-   "description": "Pad a closed sketch into the body, along its normal. type: length (length mm) | up_to_last | up_to_first | up_to_face. up_to_face takes upToFace { side: \"+z\" }, { at, normal } or \"Face8\". sides: one | two (length2 in the other direction) | symmetric. reversed. taper: deg. The first pad takes a length. The tool refuses an open sketch (use sketch_state first) and a pad inside the body. Faces and edges get new numbers: query again. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Pad a closed sketch into the body, along its normal. extent: length (length mm) | up_to_last | up_to_first | up_to_face. up_to_face takes face { side: \"+z\" }, { at, normal } or \"Face8\". sides: one | two (length2 in the other direction) | symmetric. reversed. taper: deg. The first pad takes a length. The tool refuses an open sketch (use sketch_state first) and a pad inside the body. Faces and edges get new numbers: query again. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6572,12 +6572,13 @@
       "type": "string",
       "description": "The sketch, in the body."
      },
-     "type": {
-      "type": "string"
+     "extent": {
+      "type": "string",
+      "description": "length (default), up_to_first, up_to_last or up_to_face."
      },
      "length": {
       "type": "number",
-      "description": "The pad's depth in mm, along the sketch's normal (type length)."
+      "description": "The pad's depth in mm, along the sketch's normal (extent length)."
      },
      "length2": {
       "type": "number"
@@ -6593,7 +6594,7 @@
      "reversed": {
       "type": "boolean"
      },
-     "upToFace": {
+     "face": {
       "description": "The face to go up to: { side: \"+z\" } (also of, largest; one face only), { at, normal }, \"Face8\", or shape_query's filters."
      },
      "taper": {
@@ -6611,23 +6612,23 @@
     {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.sketch, b)"}},
     {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
     {"let": {"before": "=volume(b)", "tip": "=solid_tip(b)"}},
-    {"let": {"types": "={'length': 'Length', 'up_to_face': 'UpToFace', 'up_to_first': 'UpToFirst', 'up_to_last': 'UpToLast'}", "typ": "=a.type or ('up_to_face' if a.upToFace is not None else 'length')", "why": "=\" — a pad has no through_all: up_to_last goes to the body's far side.\" if typ == 'through_all' else '.'"}},
-    {"refuse": {"fmt": "type {typ!r}: one of length, up_to_face, up_to_first, up_to_last{why}"}, "when": "=typ not in types"},
+    {"let": {"types": "={'length': 'Length', 'up_to_face': 'UpToFace', 'up_to_first': 'UpToFirst', 'up_to_last': 'UpToLast'}", "typ": "=a.extent or ('up_to_face' if a.face is not None else 'length')", "why": "=\" — a pad has no through_all: up_to_last goes to the body's far side.\" if typ == 'through_all' else '.'"}},
+    {"refuse": {"fmt": "extent {typ!r}: one of length, up_to_face, up_to_first, up_to_last{why}"}, "when": "=typ not in types"},
     {"let": {"side": "=a.sides or 'one'"}},
     {"refuse": {"fmt": "sides {side!r}: one, two (with length2) or symmetric."}, "when": "=side not in ('one', 'two', 'symmetric')"},
-    {"refuse": {"fmt": "type {typ}: {b.Label} has no solid to go up to yet — the first pad takes type length."}, "code": "invalid_state", "when": "=typ != 'length' and tip is None"},
+    {"refuse": {"fmt": "extent {typ}: {b.Label} has no solid to go up to yet — the first pad takes extent length."}, "code": "invalid_state", "when": "=typ != 'length' and tip is None"},
     {"let": {"L": "=a.length"}},
-    {"refuse": "length: mm, over 0 — or type up_to_face | up_to_first | up_to_last.", "when": "=typ == 'length' and (not is_num(L) or L <= 0)"},
+    {"refuse": "length: mm, over 0 — or extent up_to_face | up_to_first | up_to_last.", "when": "=typ == 'length' and (not is_num(L) or L <= 0)"},
     {"let": {"L2": "=a.length2"}},
     {"refuse": "sides two: give length2, the mm on the other side of the sketch (length is this side's) — or sides symmetric to share length both ways.", "when": "=side == 'two' and typ == 'length' and (not is_num(L2) or L2 <= 0)"},
     {"let": {"taper": "=a.taper"}},
-    {"refuse": "taper: degrees, under 90 (positive widens it away from the sketch; type length only).", "when": "=taper and (not is_number(taper) or abs(taper) >= 90)"},
+    {"refuse": "taper: degrees, under 90 (positive widens it away from the sketch; extent length only).", "when": "=taper and (not is_number(taper) or abs(taper) >= 90)"},
     {"let": {"up_face": null}},
     {
      "when": "=typ == 'up_to_face'",
      "then": [
-      {"refuse": "type up_to_face: give upToFace — { side: \"+z\" } or { at: [x,y,z], normal: [x,y,z] } on the body, or \"Face8\" as shape_query names it.", "when": "=a.upToFace is None"},
-      {"let": {"up_face": "=find_faces(ref_shape(b, tip.Shape), [a.upToFace], ref_names(b, tip))[0]"}}
+      {"refuse": "extent up_to_face: give face — { side: \"+z\" } or { at: [x,y,z], normal: [x,y,z] } on the body, or \"Face8\" as shape_query names it.", "when": "=a.face is None"},
+      {"let": {"up_face": "=find_faces(ref_shape(b, tip.Shape), [a.face], ref_names(b, tip))[0]"}}
      ]
     },
     {"let": {"f": "=new(b, 'PartDesign::Pad', 'Pad')"}},
@@ -6647,7 +6648,7 @@
      ]
     },
     {"let": {"sided": "=set_sides(f, side, L2 if typ == 'length' else None)"}},
-    {"refuse": {"fmt": "sides two with type {f.Type}: this FreeCAD ({version()}) has two sides for type length only — sides symmetric, or two features."}, "code": "unavailable", "when": "=not sided"},
+    {"refuse": {"fmt": "sides two with extent {typ}: this FreeCAD ({version()}) has two sides for extent length only — sides symmetric, or two features."}, "code": "unavailable", "when": "=not sided"},
     {"set": {"f.Reversed": true}, "when": "=a.reversed"},
     {"set": {"f.TaperAngle": "=float(taper)"}, "when": "=taper and has_prop(f, 'TaperAngle')"}
    ],
@@ -6661,7 +6662,7 @@
   },
   "pd_pocket": {
    "group": "feature",
-   "description": "Pocket a closed sketch out of the body. type: length | through_all | up_to_first | up_to_face (upToFace). sides: one | two (length2) | symmetric. reversed. taper: deg; a positive angle makes the pocket wider as it goes in, a negative one narrower (as FreeCAD's TaperAngle). It cuts against the normal of the sketch. The tool refuses a pocket that cuts nothing. Then use reversed: true, or put the sketch on the face that it goes into. A cut that splits the body leaves 2 solids. Its AllowCompound allows this, and health says so. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Pocket a closed sketch out of the body. extent: length | through_all | up_to_first | up_to_face (face). sides: one | two (length2) | symmetric. reversed. taper: deg; a positive angle makes the pocket wider as it goes in, a negative one narrower (as FreeCAD's TaperAngle). It cuts against the normal of the sketch. The tool refuses a pocket that cuts nothing. Then use reversed: true, or put the sketch on the face that it goes into. A cut that splits the body leaves 2 solids. Its AllowCompound allows this, and health says so. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -6673,12 +6674,13 @@
       "type": "string",
       "description": "The sketch, in the body."
      },
-     "type": {
-      "type": "string"
+     "extent": {
+      "type": "string",
+      "description": "length (default), through_all, up_to_first or up_to_face."
      },
      "length": {
       "type": "number",
-      "description": "The cut's depth in mm (type length)."
+      "description": "The cut's depth in mm (extent length)."
      },
      "length2": {
       "type": "number"
@@ -6694,7 +6696,7 @@
      "reversed": {
       "type": "boolean"
      },
-     "upToFace": {
+     "face": {
       "description": "The face to go up to: { side: \"+z\" } (also of, largest; one face only), { at, normal }, \"Face8\", or shape_query's filters."
      },
      "taper": {
@@ -6713,22 +6715,22 @@
     {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
     {"let": {"before": "=volume(b)", "tip": "=solid_tip(b)"}},
     {"refuse": {"fmt": "{b.Label} has no solid to pocket: pd_pad (or pd_primitive) first."}, "code": "invalid_state", "when": "=tip is None"},
-    {"let": {"types": "={'length': 'Length', 'up_to_face': 'UpToFace', 'up_to_first': 'UpToFirst', 'through_all': 'ThroughAll'}", "typ": "=a.type or ('up_to_face' if a.upToFace is not None else 'length')", "why": "=' — a pocket has no up_to_last: through_all.' if typ == 'up_to_last' else '.'"}},
-    {"refuse": {"fmt": "type {typ!r}: one of length, up_to_face, up_to_first, through_all{why}"}, "when": "=typ not in types"},
+    {"let": {"types": "={'length': 'Length', 'up_to_face': 'UpToFace', 'up_to_first': 'UpToFirst', 'through_all': 'ThroughAll'}", "typ": "=a.extent or ('up_to_face' if a.face is not None else 'length')", "why": "=' — a pocket has no up_to_last: through_all.' if typ == 'up_to_last' else '.'"}},
+    {"refuse": {"fmt": "extent {typ!r}: one of length, up_to_face, up_to_first, through_all{why}"}, "when": "=typ not in types"},
     {"let": {"side": "=a.sides or 'one'"}},
     {"refuse": {"fmt": "sides {side!r}: one, two (with length2) or symmetric."}, "when": "=side not in ('one', 'two', 'symmetric')"},
     {"let": {"L": "=a.length"}},
-    {"refuse": "length: mm, over 0 — or type up_to_face | up_to_first | through_all.", "when": "=typ == 'length' and (not is_num(L) or L <= 0)"},
+    {"refuse": "length: mm, over 0 — or extent up_to_face | up_to_first | through_all.", "when": "=typ == 'length' and (not is_num(L) or L <= 0)"},
     {"let": {"L2": "=a.length2"}},
     {"refuse": "sides two: give length2, the mm on the other side of the sketch (length is this side's) — or sides symmetric to share length both ways.", "when": "=side == 'two' and typ == 'length' and (not is_num(L2) or L2 <= 0)"},
     {"let": {"taper": "=a.taper"}},
-    {"refuse": "taper: degrees, under 90 (positive widens it away from the sketch; type length only).", "when": "=taper and (not is_number(taper) or abs(taper) >= 90)"},
+    {"refuse": "taper: degrees, under 90 (positive widens it away from the sketch; extent length only).", "when": "=taper and (not is_number(taper) or abs(taper) >= 90)"},
     {"let": {"up_face": null}},
     {
      "when": "=typ == 'up_to_face'",
      "then": [
-      {"refuse": "type up_to_face: give upToFace — { side: \"+z\" } or { at: [x,y,z], normal: [x,y,z] } on the body, or \"Face8\" as shape_query names it.", "when": "=a.upToFace is None"},
-      {"let": {"up_face": "=find_faces(ref_shape(b, tip.Shape), [a.upToFace], ref_names(b, tip))[0]"}}
+      {"refuse": "extent up_to_face: give face — { side: \"+z\" } or { at: [x,y,z], normal: [x,y,z] } on the body, or \"Face8\" as shape_query names it.", "when": "=a.face is None"},
+      {"let": {"up_face": "=find_faces(ref_shape(b, tip.Shape), [a.face], ref_names(b, tip))[0]"}}
      ]
     },
     {"let": {"f": "=new(b, 'PartDesign::Pocket', 'Pocket')"}},
@@ -6748,7 +6750,7 @@
      ]
     },
     {"let": {"sided": "=set_sides(f, side, L2 if typ == 'length' else None)"}},
-    {"refuse": {"fmt": "sides two with type {f.Type}: this FreeCAD ({version()}) has two sides for type length only — sides symmetric, or two features."}, "code": "unavailable", "when": "=not sided"},
+    {"refuse": {"fmt": "sides two with extent {typ}: this FreeCAD ({version()}) has two sides for extent length only — sides symmetric, or two features."}, "code": "unavailable", "when": "=not sided"},
     {"set": {"f.Reversed": true}, "when": "=a.reversed"},
     {"set": {"f.TaperAngle": "=float(taper)"}, "when": "=taper and has_prop(f, 'TaperAngle')"}
    ],

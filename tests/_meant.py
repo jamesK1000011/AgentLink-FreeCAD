@@ -41,6 +41,11 @@ DESCRIPTIONS = {
         "an empty sheet is refused. size: the text's height on the paper, mm (3.5): the table's scale is set for it (reply: scale)."),
     'td_weld': ('page), drawn by td_export (the window shows the leader only',
         "page), drawn by td_export, and in the window as FreeCAD's own weld symbol on the leader (TechDraw::DrawWeldSymbol, with FreeCAD's own symbol for fillet, square, v, plug and surfacing; the other kinds show their words only, and window says which"),
+    # 24 Nov, rename set 3 (rule R5): type -> extent, upToFace -> face.
+    'pd_pad': ('normal: type length (length mm) | up_to_last | up_to_first | up_to_face (upToFace {',
+        'normal: extent length (length mm) | up_to_last | up_to_first | up_to_face (face {'),
+    'pd_pocket': ('body: type length | through_all | up_to_first | up_to_face (upToFace);',
+        'body: extent length | through_all | up_to_first | up_to_face (face);'),
     # 18 Nov live build, 18 Nov: heavy changes estimated first, a big export a job.
     'part_from_mesh': ('omes the solid (note says so).',
         'omes the solid (note says so). refine about doubles the time; an estimate over a minute: the first call answers with the time and runs nothing, the same call again runs it.'),
@@ -227,8 +232,11 @@ SCHEMAS = {
                                                "description": "Objects (\"Block\") or faces and edges (\"Block.Face6\") selected for this run only. The person's selection comes back after the run."})]},
     # 22 Nov (owner-approved): face selectors { side: "+z", of, largest } beside { at, normal }; one face only (agentlink/facesel.py)
     # 24 Nov, audit top 10 #1: length has a description (small models guessed height or depth)
-    "pd_pad": {"why": "face selectors; length described", "describe": {"upToFace": _UPTO, "length": "The pad's depth in mm, along the sketch's normal (type length)."}},
-    "pd_pocket": {"why": "face selectors; length described", "describe": {"upToFace": _UPTO, "length": "The cut's depth in mm (type length)."}},
+    # 24 Nov, rename set 3 (rule R5, no alias): type -> extent, upToFace -> face
+    "pd_pad": {"why": "face selectors; length described; rename set 3", "describe": {"upToFace": _UPTO, "length": "The pad's depth in mm, along the sketch's normal (extent length)."},
+               "rename": {"type": ("extent", {"type": "string", "description": "length (default), up_to_first, up_to_last or up_to_face."}), "upToFace": ("face", None)}},
+    "pd_pocket": {"why": "face selectors; length described; rename set 3", "describe": {"upToFace": _UPTO, "length": "The cut's depth in mm (extent length)."},
+                  "rename": {"type": ("extent", {"type": "string", "description": "length (default), through_all, up_to_first or up_to_face."}), "upToFace": ("face", None)}},
     **{n: {"why": "face selectors", "describe": {"edges": _EDGES}} for n in ("pd_fillet", "pd_chamfer")},
     "pd_draft": {"why": "face selectors", "describe": {"faces": _FACES, "neutral": _PLANE_FACE}},
     "pd_thickness": {"why": "face selectors", "describe": {"faces": _FACES}},
@@ -258,6 +266,9 @@ def schema(name, old):
         props[k]["description"] = text
     for k, val in m.get("replace", {}).items():
         props[k] = val
+    for k, (to, val) in m.get("rename", {}).items():
+        # a field renamed in its place (rule R5: the old name is gone); val None keeps its value
+        props = {(to if kk == k else kk): ((v if val is None else val) if kk == k else v) for kk, v in props.items()}
     for k, more in m.get("enum_add", {}).items():
         props[k]["enum"] = list(props[k]["enum"]) + list(more)
     for at, key, val in m.get("after", []):
@@ -272,6 +283,40 @@ def schema(name, old):
         new["required"] = list(m["required"])
     # the keys in the order the entry keeps them
     return {k: new[k] for k in old}
+
+
+# Inputs renamed since a converted tool's handler (rule R5, no alias): per
+# tool, the new name -> the handler's old name, and the refusal words that
+# changed with them (old, new), made in that order. The data tests give the
+# handler the old names and put the new words in its refusals before the
+# compare, so any other change still fails.
+_PADWORDS = [("sides two with type UpToFirst: this FreeCAD (0.21.2) has two sides for type length only",
+              "sides two with extent up_to_first: this FreeCAD (0.21.2) has two sides for extent length only"),
+             ("give upToFace", "give face"), ("type ", "extent ")]
+RENAMED = {
+    "pd_pad": {"why": "rename set 3, 24 Nov", "args": {"extent": "type", "face": "upToFace"}, "words": _PADWORDS},
+    "pd_pocket": {"why": "rename set 3, 24 Nov", "args": {"extent": "type", "face": "upToFace"}, "words": _PADWORDS},
+}
+
+
+def args_for_old(tool, args):
+    """A case's inputs as the handler at BASE named them (RENAMED)."""
+    names = RENAMED.get(tool, {}).get("args", {})
+    return {names.get(k, k): v for k, v in args.items()}
+
+
+def renamed_words(tool, old):
+    """The handler's run with its refusal said in the renamed words (RENAMED)."""
+    import copy
+
+    words = RENAMED.get(tool, {}).get("words")
+    res = old.get("result")
+    if not words or not (isinstance(res, list) and res and res[0] == "refused"):
+        return old
+    old = copy.deepcopy(old)
+    for was, now in words:
+        old["result"][2] = old["result"][2].replace(was, now)
+    return old
 
 
 # Answer fields a converted tool now adds to what its handler answered (the

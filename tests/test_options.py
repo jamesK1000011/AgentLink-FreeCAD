@@ -306,16 +306,16 @@ class Pick(Base):
         self.assertEqual(self.s.calls[-1][1]["length"], 4.0)
         call(self.server, "session_state", {})
         call(self.server, "pick", {"option": "2, through_all"})
-        self.assertEqual(self.s.calls[-1], ("pd_pocket", {"sketch": "Sketch", "body": "Body", "type": "through_all"}))
+        self.assertEqual(self.s.calls[-1], ("pd_pocket", {"sketch": "Sketch", "body": "Body", "extent": "through_all"}))
 
     def test_units_and_words(self):
-        a = {"arg": "length", "unit": "mm", "or": {"through_all": {"type": "through_all"}}}
+        a = {"arg": "length", "unit": "mm", "or": {"through_all": {"extent": "through_all"}}}
         self.assertEqual(options.read_value(a, "4mm"), {"length": 4.0})
         self.assertEqual(options.read_value(a, "1 in"), {"length": 25.4})
         self.assertEqual(options.read_value(a, "2cm"), {"length": 20.0})
         self.assertEqual(options.read_value(a, "4"), {"length": 4.0})
         self.assertEqual(options.read_value(a, 4), {"length": 4})
-        self.assertEqual(options.read_value(a, "Through All"), {"type": "through_all"})
+        self.assertEqual(options.read_value(a, "Through All"), {"extent": "through_all"})
         self.assertEqual(options.read_value({"arg": "angle", "unit": "deg"}, "90°"), {"angle": 90.0})
         self.assertEqual(options.read_value({"arg": "occurrences"}, "6"), {"occurrences": 6})
         self.assertEqual(options.read_value({"arg": "kind"}, "box"), {"kind": "box"})

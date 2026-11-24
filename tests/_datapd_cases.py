@@ -17,8 +17,8 @@ KEPT = {}
 # What some cases must have answered (not two empty runs alike): fields of an answer, or the whole refusal.
 EXPECT = {
     ('pd_pad', 'model call 8'): {'feature': 'Pad', 'volume': 5300.0, 'volumeChange': 5300.0, 'solids': 1, 'step': 1},
-    ('pd_pad', 'type of the other tool'): ['refused', 'invalid_input', "type 'through_all': one of length, up_to_face, up_to_first, up_to_last — a pad has no through_all: up_to_last goes to the body's far side."],
-    ('pd_pad', 'two sides up to first, old FreeCAD'): ['refused', 'unavailable', 'sides two with type UpToFirst: this FreeCAD (0.21.2) has two sides for type length only — sides symmetric, or two features.'],
+    ('pd_pad', 'extent of the other tool'): ['refused', 'invalid_input', "extent 'through_all': one of length, up_to_face, up_to_first, up_to_last — a pad has no through_all: up_to_last goes to the body's far side."],
+    ('pd_pad', 'two sides up to first, old FreeCAD'): ['refused', 'unavailable', 'sides two with extent up_to_first: this FreeCAD (0.21.2) has two sides for extent length only — sides symmetric, or two features.'],
     ('pd_pocket', 'model call 11'): {'feature': 'Pocket', 'volumeChange': -200.0},
     ('pd_pocket', 'no solid'): ['refused', 'invalid_state', 'Body has no solid to pocket: pd_pad (or pd_primitive) first.'],
     ('pd_pocket', 'it changes nothing'): ['refused', 'failed', 'Pocket cut nothing — the profile does not meet the body that way. Nothing was kept. Check the sketch with sketch_state (closed wires, no open vertices); reversed: true goes the other way into the body.'],
@@ -111,10 +111,10 @@ def cases(fc, tmp):
         case(tool, "which sketch", padded, {"length": 5})
         case(tool, "length", padded, {"sketch": "Top", "length": 5})
         case(tool, "length on an empty body", empty, {"length": 5})
-        case(tool, "type wrong", padded, {"sketch": "Top", "type": "sideways"})
-        case(tool, "type of the other tool", padded, {"sketch": "Top", "type": "through_all" if pad else "up_to_last"})
+        case(tool, "extent wrong", padded, {"sketch": "Top", "extent": "sideways"})
+        case(tool, "extent of the other tool", padded, {"sketch": "Top", "extent": "through_all" if pad else "up_to_last"})
         case(tool, "sides wrong", padded, {"sketch": "Top", "length": 5, "sides": "both"})
-        case(tool, "up to on an empty body", empty, {"type": "up_to_first"})
+        case(tool, "up to on an empty body", empty, {"extent": "up_to_first"})
         case(tool, "length missing", padded, {"sketch": "Top"})
         case(tool, "length a boolean", padded, {"sketch": "Top", "length": True})
         case(tool, "length zero", padded, {"sketch": "Top", "length": 0})
@@ -123,25 +123,25 @@ def cases(fc, tmp):
         case(tool, "symmetric", padded, {"sketch": "Top", "length": 5, "sides": "symmetric"})
         case(tool, "symmetric, old FreeCAD", padded, {"sketch": "Top", "length": 5, "sides": "symmetric"}, old=True)
         case(tool, "two sides, old FreeCAD", padded, {"sketch": "Top", "length": 5, "length2": 3, "sides": "two"}, old=True)
-        case(tool, "two sides up to first, old FreeCAD", padded, {"sketch": "Top", "type": "up_to_first", "sides": "two"}, old=True)
+        case(tool, "two sides up to first, old FreeCAD", padded, {"sketch": "Top", "extent": "up_to_first", "sides": "two"}, old=True)
         case(tool, "taper too steep", padded, {"sketch": "Top", "length": 5, "taper": 95})
         case(tool, "taper not a number", padded, {"sketch": "Top", "length": 5, "taper": "steep"})
         case(tool, "taper and reversed", padded, {"sketch": "Top", "length": 5, "taper": 5, "reversed": True})
         case(tool, "taper where FreeCAD has none", padded, {"sketch": "Top", "length": 5, "taper": 5}, old=True, no_taper=True)
-        case(tool, "up to face without the face", padded, {"sketch": "Top", "type": "up_to_face"})
-        case(tool, "up to face", padded, {"sketch": "Top", "upToFace": {"at": [0, 0, 10], "n": 3}})
-        case(tool, "up to face by name", padded, {"sketch": "Top", "type": "up_to_face", "upToFace": "Body.Face8"})
-        case(tool, "up to face not found", padded, {"sketch": "Top", "upToFace": {"miss": True}})
-        case(tool, "up to first", padded, {"sketch": "Top", "type": "up_to_first"})
-        case(tool, "the other end", padded, {"sketch": "Top", "type": "up_to_last" if pad else "through_all"})
-        case(tool, "the other end, two sides", padded, {"sketch": "Top", "type": "up_to_last" if pad else "through_all", "sides": "two"})
+        case(tool, "up to face without the face", padded, {"sketch": "Top", "extent": "up_to_face"})
+        case(tool, "up to face", padded, {"sketch": "Top", "face": {"at": [0, 0, 10], "n": 3}})
+        case(tool, "up to face by name", padded, {"sketch": "Top", "extent": "up_to_face", "face": "Body.Face8"})
+        case(tool, "up to face not found", padded, {"sketch": "Top", "face": {"miss": True}})
+        case(tool, "up to first", padded, {"sketch": "Top", "extent": "up_to_first"})
+        case(tool, "the other end", padded, {"sketch": "Top", "extent": "up_to_last" if pad else "through_all"})
+        case(tool, "the other end, two sides", padded, {"sketch": "Top", "extent": "up_to_last" if pad else "through_all", "sides": "two"})
         case(tool, "it fails", padded, {"sketch": "Top", "length": 5}, invalid={kind: "Wire is not closed."})
         case(tool, "it breaks a later one", padded, {"sketch": "Top", "length": 5}, invalid={"Pad": "Invalid edge link"})
         case(tool, "multiple solids", padded, {"sketch": "Top", "length": 5}, invalid={kind: "Result has multiple solids"})
         case(tool, "it changes nothing", padded, {"sketch": "Top", "length": 5}, effect={kind: 0.0})
         case(tool, "two solids", padded, {"sketch": "Top", "length": 5}, solids=2)
     case("pd_pad", "model call 8", lambda s: fc.sketch(s, fc.body(s, "Tut"), "Profile"), {"body": "Tut", "sketch": "Profile", "length": 53, "sides": "symmetric"})
-    case("pd_pocket", "model call 11", lambda s: (padded(s), fc.sketch(s, s.doc.getObject("Body"), "Corner")), {"body": "Body", "sketch": "Corner", "type": "through_all", "reversed": True})
+    case("pd_pocket", "model call 11", lambda s: (padded(s), fc.sketch(s, s.doc.getObject("Body"), "Corner")), {"body": "Body", "sketch": "Corner", "extent": "through_all", "reversed": True})
     case("pd_pocket", "model call 19", lambda s: (padded(s), fc.sketch(s, s.doc.getObject("Body"), "Window")), {"sketch": "Window", "length": 8.5, "length2": 8.5, "sides": "two"})
     case("pd_pocket", "no solid", empty, {"length": 5})
 

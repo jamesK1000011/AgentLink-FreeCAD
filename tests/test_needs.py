@@ -880,7 +880,7 @@ def _states():
     second, _e, _p = call("pd_pad", {"sketch": "Sketch", "length": 6})
     calls += 2
     m = appliesnow.meter_of(s)
-    refused, err, _p = call("pd_pad", {"sketch": "Sketch", "length": 5, "type": "through_all"})
+    refused, err, _p = call("pd_pad", {"sketch": "Sketch", "length": 5, "extent": "through_all"})
     calls += 1
     lead = {o: n for o, n in m.counts["notChecked"].items() if n}
     refused_outcome = "refusedLeading" if err and m.counts["notChecked"]["refusedLeading"] == 1 else f"{refused} {lead}"

@@ -237,7 +237,7 @@ entry does).
     → { "tool": "fea_hold", "applies": false,
         "wouldRefuse": [{ "code": "invalid_state", "words": "No strength study: fea_setup { body } first." }], "notChecked": [] }
 
-    tool_groups { needs: "pd_pad", arguments: { "sketch": "Top", "type": "through_all" } }     the checks of that call too
+    tool_groups { needs: "pd_pad", arguments: { "sketch": "Top", "extent": "through_all" } }     the checks of that call too
 
 | `applies` | Means |
 |---|---|

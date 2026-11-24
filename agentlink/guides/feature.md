@@ -31,8 +31,8 @@ Order that keeps a model stable (FreeCAD's own advice): sketches on the body's p
 - Changing tools cannot run as background jobs. Keep one call under about a minute: a modelled thread (`modelThread`), a helix of many turns and a pattern of hundreds of copies are the slow ones. Split a big pattern into two steps or check the count first.
 
 ## pad and pocket
-<!-- later: when a pad or pocket needs a type or sides other than a plain length -->
-- `type`: `length` (default), `up_to_first`, `up_to_face` (with `upToFace`), and `up_to_last` for a pad or `through_all` for a pocket. These are FreeCAD's Length, UpToFirst, UpToFace, UpToLast and ThroughAll.
+<!-- later: when a pad or pocket needs an extent or sides other than a plain length -->
+- `extent`: `length` (default), `up_to_first`, `up_to_face` (with `face`), and `up_to_last` for a pad or `through_all` for a pocket. These are FreeCAD's Length, UpToFirst, UpToFace, UpToLast and ThroughAll.
 - `sides`: `one`; `symmetric` (the length shared both ways about the sketch); `two` (`length` on the normal's side, `length2` on the other). FreeCAD 1.1 keeps these as SideType "One side", "Symmetric", "Two sides" with Type2 and Length2; a through-all pocket with `sides: "two"` goes through both ways.
 - `feature_edit` reaches the rest by FreeCAD's names: `Offset` (mm from the up-to face), `TaperAngle`, `Type2`, `Refine`.
 

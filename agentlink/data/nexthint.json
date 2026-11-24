@@ -329,7 +329,7 @@
        "sample": 10,
        "or": {
         "through_all": {
-         "type": "through_all"
+         "extent": "through_all"
         }
        }
       }
@@ -833,7 +833,7 @@
        "sample": 10,
        "or": {
         "through_all": {
-         "type": "through_all"
+         "extent": "through_all"
         }
        }
       }

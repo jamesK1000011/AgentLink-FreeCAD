@@ -101,7 +101,7 @@
         },
         "or": {
          "type": "object",
-         "description": "Plain words that stand for this input: { word: { arguments } } (\"through_all\": { \"type\": \"through_all\" }).",
+         "description": "Plain words that stand for this input: { word: { arguments } } (\"through_all\": { \"extent\": \"through_all\" }).",
          "additionalProperties": {
           "type": "object"
          }
