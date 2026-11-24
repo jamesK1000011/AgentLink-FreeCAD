@@ -122,12 +122,14 @@
   "pd_pad": {
    "args": {
     "body": "=facts.bodyName",
-    "sketch": "=facts.editSketch or facts.sketchName"
+    "sketch": "=facts.editSketch or facts.sketchName",
+    "length": 10
    },
    "fill": [
     {
      "arg": "length",
-     "what": "mm"
+     "what": "mm: 10 is a worked value",
+     "keep": true
     }
    ],
    "source": "the tool's card and schema (tools.json); worked values written for this file",
@@ -136,12 +138,14 @@
   "pd_pocket": {
    "args": {
     "body": "=facts.bodyName",
-    "sketch": "=facts.editSketch or facts.sketchName"
+    "sketch": "=facts.editSketch or facts.sketchName",
+    "length": 5
    },
    "fill": [
     {
      "arg": "length",
-     "what": "mm, or type: \"through_all\""
+     "what": "mm: 5 is a worked value; or type: \"through_all\" in its place",
+     "keep": true
     }
    ],
    "source": "the tool's card and schema (tools.json); worked values written for this file",

@@ -52,24 +52,32 @@ class Data(unittest.TestCase):
 class Build(unittest.TestCase):
     def test_from_the_document(self):
         got = examples.for_tool("pd_pad", {"bodyName": "Body", "sketchName": "Sketch001"}, how="null")
-        self.assertEqual(got["example"], {"tool": "pd_pad", "arguments": {"body": "Body", "sketch": "Sketch001", "length": None}})
+        self.assertEqual(got["example"], {"tool": "pd_pad", "arguments": {"body": "Body", "sketch": "Sketch001", "length": 10}})
         self.assertTrue(got["fill"][0].startswith("length: mm"))
+        self.assertIn("Change it to yours", got["fill"][0])
+
+    def test_pad_and_pocket_examples_carry_a_length(self):
+        # Audit top 10 #1 (24 Nov): the depth is in the call, not only named.
+        for name in ("pd_pad", "pd_pocket"):
+            got = examples.for_tool(name, {}, how="angle")
+            self.assertIsInstance(got["example"]["arguments"]["length"], (int, float))
+            self.assertTrue(tools_json()[name]["inputSchema"]["properties"]["length"].get("description"))
 
     def test_null_fails_cleanly_and_names_the_field(self):
-        schema = tools_json()["pd_pad"]["inputSchema"]
+        schema = tools_json()["pd_fillet"]["inputSchema"]
         with self.assertRaises(ToolError) as e:
-            check_input(schema, {"length": None}, "pd_pad")
-        self.assertIn("length", str(e.exception.message if hasattr(e.exception, "message") else e.exception))
+            check_input(schema, {"edges": ["Edge1"], "radius": None}, "pd_fillet")
+        self.assertIn("radius", str(e.exception.message if hasattr(e.exception, "message") else e.exception))
 
     def test_angle_value_sent_as_is_is_refused(self):
-        schema = tools_json()["pd_pad"]["inputSchema"]
+        schema = tools_json()["pd_fillet"]["inputSchema"]
         with self.assertRaises(ToolError):
-            check_input(schema, {"length": "<length>"}, "pd_pad")
-        check_input(schema, {"length": 10}, "pd_pad")  # a value goes through
+            check_input(schema, {"edges": ["Edge1"], "radius": "<radius>"}, "pd_fillet")
+        check_input(schema, {"edges": ["Edge1"], "radius": 2}, "pd_fillet")  # a value goes through
 
     def test_angle_marker(self):
-        got = examples.for_tool("pd_pad", {}, how="angle")
-        self.assertEqual(got["example"]["arguments"], {"length": "<length>"})
+        got = examples.for_tool("pd_fillet", {}, how="angle")
+        self.assertEqual(got["example"]["arguments"]["radius"], "<radius>")
 
     def test_open_sketch_first_and_no_facts_left_out(self):
         got = examples.for_tool("sketch_add", {"editSketch": "Sk2", "sketchName": "Sk1"})

@@ -6576,7 +6576,8 @@
       "type": "string"
      },
      "length": {
-      "type": "number"
+      "type": "number",
+      "description": "The pad's depth in mm, along the sketch's normal (type length)."
      },
      "length2": {
       "type": "number"
@@ -6676,7 +6677,8 @@
       "type": "string"
      },
      "length": {
-      "type": "number"
+      "type": "number",
+      "description": "The cut's depth in mm (type length)."
      },
      "length2": {
       "type": "number"
