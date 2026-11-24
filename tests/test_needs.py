@@ -393,7 +393,8 @@ class Census(unittest.TestCase):
 # 781: pd_pipe refuses a tube (a wall) on a closed path before it makes anything (bicycle runs, finding 6).
 # 780 again: sketch_attach checks edge or repair before plane or face (bicycle L5 build, finding 3).
 # 781: window_snapshot checks its width first (efficiency design D1, 22 Nov).
-TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 781, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
+# 787: pd_datum_plane and pd_mirrored check plane or face (both; a face as plane; a plane as face) first (rename set 8, 24 Nov).
+TOTAL = {"tools": 391, "steps": 378, "leadingRefusals": 787, "noArgument": 38, "blocked": 111, "needsArguments": 195, "complete": 72, "noCheck": 63}
 
 
 class Agreement(unittest.TestCase):

@@ -88,7 +88,7 @@ class FeatureTools(Base):
         self.ok("pd_body_new", {"name": "Frustum"})
         self.ok("sketch_new", {"body": "Frustum", "plane": "XY", "name": "Bottom"})
         self.ok("sketch_add", {"sketch": "Bottom", "items": [{"kind": "rectangle", "center": [0, 0], "size": [20, 20]}]})
-        d = self.ok("pd_datum_plane", {"body": "Frustum", "on": "XY", "offset": 20, "name": "Up"})
+        d = self.ok("pd_datum_plane", {"body": "Frustum", "plane": "XY", "offset": 20, "name": "Up"})
         self.assertEqual(d["origin"], [0, 0, 20])
         self.ok("sketch_new", {"body": "Frustum", "plane": "Up", "name": "TopSec"})
         self.ok("sketch_add", {"sketch": "TopSec", "items": [{"kind": "rectangle", "center": [0, 0], "size": [10, 10]}]})

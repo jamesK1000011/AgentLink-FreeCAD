@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Part Design renames of 24 Nov (rule R5: a renamed field keeps no alias).
-# Set 3: pd_pad and pd_pocket type -> extent, upToFace -> face. A call with
-# an old name is refused like any unknown field; the new names work, on the
-# stand-in FreeCAD (tests/_datapd_standin.py, in a process of its own).
+# Set 3: pd_pad and pd_pocket type -> extent, upToFace -> face. Set 8:
+# pd_datum_plane on, and pd_mirrored's plane that took a plane or a face,
+# split in two fields of one meaning each: plane (a plane's name) and face
+# (a face selector). A call with an old name is refused like any unknown
+# field; the new names work, on the stand-in FreeCAD (tests/_datapd_standin.py,
+# in a process of its own).
 import json
 import os
 import subprocess
@@ -118,6 +121,54 @@ class PadPocketExtent(unittest.TestCase):
         self.assertNotIn("upToFace", guide)
         with open(os.path.join(ROOT, "agentlink", "data", "examples.json"), encoding="utf-8") as f:
             self.assertEqual(json.load(f)["entries"]["pd_pocket"]["fill"][0]["what"], "mm: 5 is a worked value; or extent: \"through_all\" in its place")
+
+
+
+class PlaneOrFace(unittest.TestCase):
+    def test_on_is_gone_and_plane_and_face_are_there(self):
+        props = schema("pd_datum_plane")["properties"]
+        self.assertNotIn("on", props)
+        msg = refused_field("pd_datum_plane", {"on": "XY"})
+        self.assertIn("input.on: not a known field", msg)
+        for tool in ("pd_datum_plane", "pd_mirrored"):
+            props = schema(tool)["properties"]
+            self.assertEqual(props["plane"]["type"], "string", tool)
+            self.assertIn("face", props, tool)
+            self.assertNotIn("face", props["plane"]["description"].replace("datum plane", ""), tool)
+
+    def test_each_field_takes_its_own_kind_and_one_of_them(self):
+        both = "Give plane or face, not both: plane is XY, XZ, YZ or a datum plane; face is a face."
+        got = run('''
+            m = ["Pad"]
+            print(json.dumps({
+                "plane": call("pd_datum_plane", {"plane": "XZ", "offset": 5}),
+                "face": call("pd_datum_plane", {"face": {"at": [0, 0, 10], "n": 2}}),
+                "face by name": call("pd_datum_plane", {"face": "Pad.Face3"}),
+                "neither": call("pd_datum_plane", {}),
+                "both": call("pd_datum_plane", {"plane": "XY", "face": "Pad.Face3"}),
+                "a face as plane": call("pd_datum_plane", {"plane": "Pad.Face3"}),
+                "a plane as face": call("pd_datum_plane", {"face": "XY"}),
+                "mirror plane": call("pd_mirrored", {"features": m, "plane": "Mid"}),
+                "mirror face": call("pd_mirrored", {"features": m, "face": {"at": [0, 0, 0], "n": 1}}),
+                "mirror both": call("pd_mirrored", {"features": m, "plane": "XY", "face": "Pad.Face3"}),
+                "mirror face as plane": call("pd_mirrored", {"features": m, "plane": {"at": [0, 0, 0], "n": 1}}),
+                "mirror plane as face": call("pd_mirrored", {"features": m, "face": "YZ"}),
+            }))
+        ''')
+        for k in ("plane", "face", "face by name", "neither", "mirror plane", "mirror face"):
+            self.assertEqual(got[k][0], "ok", (k, got[k]))
+        self.assertEqual(got["plane"][1]["on"], "XZ")
+        self.assertEqual(got["neither"][1]["on"], "XY")
+        self.assertTrue(got["face"][1]["on"].startswith("face at"), got["face"])
+        self.assertEqual(got["face by name"][1]["on"], "Pad.Face3")
+        self.assertTrue("Mirrored.MirrorPlane = (<Plane>, [''])" in got["mirror plane"][2], got["mirror plane"][2])
+        self.assertTrue(any("MirrorPlane" in ln and "Face" in ln for ln in got["mirror face"][2]), got["mirror face"][2])
+        for k in ("both", "mirror both"):
+            self.assertEqual(got[k], ["refused", "invalid_input", both], k)
+        for k in ("a face as plane", "mirror face as plane"):
+            self.assertEqual(got[k], ["refused", "invalid_input", "plane: XY, XZ, YZ or a datum plane's name. Give a face as face."], k)
+        for k in ("a plane as face", "mirror plane as face"):
+            self.assertEqual(got[k], ["refused", "invalid_input", 'face: { side: "+z" }, { at: [x,y,z], normal: [x,y,z] } or "Pad.Face3". Give a plane as plane.'], k)
 
 
 if __name__ == "__main__":

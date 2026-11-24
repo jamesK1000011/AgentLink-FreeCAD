@@ -67,8 +67,13 @@ EXPECT = {
     ('sketch_edit', 'it breaks the pad'): ['refused', 'failed', 'After the edit Pad fails: Pad: Wire is not closed. — nothing was kept. A feature built on this sketch needs its profile closed and its referenced edges still there: make the edit another way, or change that feature first.'],
     ('sketch_edit', 'group, before 1.2'): ['refused', 'unavailable', 'Group constraints came in FreeCAD 1.2; this is 1.1.3. To hold geometry still here: sketch_constrain { type: "fix", refs: [g] } blocks one geometry where it is.'],
 }
-# Refusals written in the data that no case here reaches: none.
-UNREACHED = []
+# Refusals written in the data that no case here reaches (the handler at BASE
+# had no such input to compare with): rename set 8's plane-or-face checks,
+# reached in tests/test_rename_pd_1124.py.
+_SET8 = ("Give plane or face, not both: plane is XY, XZ, YZ or a datum plane; face is a face.",
+         "plane: XY, XZ, YZ or a datum plane's name. Give a face as face.")
+UNREACHED = [f"{t}: {m[:70]}" for t in ("pd_datum_plane", "pd_mirrored") for m in _SET8] + [
+    "pd_mirrored: " + 'face: { side: "+z" }, { at: [x,y,z], normal: [x,y,z] } or "Pad.Face3". Give a plane as plane.'[:70]]
 
 
 def cases(fc, tmp):
@@ -259,7 +264,7 @@ def cases(fc, tmp):
     case("pd_mirrored", "model call 12", patterned, {"body": "Body", "features": ["Pocket"], "plane": "YZ"})
     case("pd_mirrored", "model call 43", patterned, {"body": "Body", "features": "all", "plane": "XZ"})
     case("pd_mirrored", "across a datum plane", patterned, {"features": ["Pad"], "plane": "Mid"})
-    case("pd_mirrored", "across a face", patterned, {"features": ["Pad"], "plane": {"at": [0, 0, 0], "n": 1}})
+    case("pd_mirrored", "across a face", patterned, {"features": ["Pad"], "face": {"at": [0, 0, 0], "n": 1}})
     case("pd_mirrored", "plane wrong", patterned, {"features": ["Pad"], "plane": "XX"})
     case("pd_linear_pattern", "model call 26", patterned, {"body": "Body", "features": ["Pocket"], "direction": "x", "occurrences": 3, "spacing": 6})
     case("pd_linear_pattern", "by length, reversed", patterned, {"features": ["Pocket"], "direction": "y", "occurrences": 4.0, "length": 30, "reversed": True})
@@ -309,17 +314,17 @@ def cases(fc, tmp):
     case("pd_pipe", "no such path", sections, {"profile": "Top", "path": "Nope"})
 
     case("pd_datum_plane", "no body", none, {})
-    case("pd_datum_plane", "model call 29", padded, {"body": "Body", "on": "XY", "offset": 30, "name": "Above"})
+    case("pd_datum_plane", "model call 29", padded, {"body": "Body", "plane": "XY", "offset": 30, "name": "Above"})
     case("pd_datum_plane", "default", padded, {})
     case("pd_datum_plane", "a name taken", patterned, {"name": "Mid"})
-    case("pd_datum_plane", "on a face, turned", padded, {"on": {"at": [0, 0, 10], "n": 2}, "rotate": {"axis": [0, 1, 0], "angle": 30}})
-    case("pd_datum_plane", "on a face by name", padded, {"on": "Pad.Face3", "rotate": {}})
+    case("pd_datum_plane", "on a face, turned", padded, {"face": {"at": [0, 0, 10], "n": 2}, "rotate": {"axis": [0, 1, 0], "angle": 30}})
+    case("pd_datum_plane", "on a face by name", padded, {"face": "Pad.Face3", "rotate": {}})
     case("pd_datum_plane", "turned by default", padded, {"rotate": {"angle": 15}})
     case("pd_datum_plane", "rotate not an object", padded, {"rotate": 30})
     case("pd_datum_plane", "rotate axis wrong", padded, {"rotate": {"axis": [1, 0]}})
-    case("pd_datum_plane", "on wrong", padded, {"on": 3})
-    case("pd_datum_plane", "it does not attach", padded, {"on": "XZ"}, invalid={"Plane": "Attachment failed"})
-    case("pd_datum_plane", "old FreeCAD", padded, {"on": "YZ", "offset": -4}, old=True)
+    case("pd_datum_plane", "face wrong", padded, {"face": 3})
+    case("pd_datum_plane", "it does not attach", padded, {"plane": "XZ"}, invalid={"Plane": "Attachment failed"})
+    case("pd_datum_plane", "old FreeCAD", padded, {"plane": "YZ", "offset": -4}, old=True)
 
     def history(s):
         b = patterned(s)

@@ -240,8 +240,13 @@ SCHEMAS = {
     **{n: {"why": "face selectors", "describe": {"edges": _EDGES}} for n in ("pd_fillet", "pd_chamfer")},
     "pd_draft": {"why": "face selectors", "describe": {"faces": _FACES, "neutral": _PLANE_FACE}},
     "pd_thickness": {"why": "face selectors", "describe": {"faces": _FACES}},
-    "pd_mirrored": {"why": "face selectors", "describe": {"plane": _PLANE_FACE}},
-    "pd_datum_plane": {"why": "face selectors", "describe": {"on": _PLANE_FACE}},
+    # 24 Nov, rename set 8 (rule R5): the plane-or-face field split in two, one meaning each
+    "pd_mirrored": {"why": "face selectors; rename set 8",
+                    "replace": {"plane": {"type": "string", "description": "XY, XZ, YZ (default) or a datum plane's name."}},
+                    "after": [("plane", "face", {"description": "A flat face: { side: \"+z\" }, { at, normal } or \"Pad.Face3\"."})]},
+    "pd_datum_plane": {"why": "face selectors; rename set 8",
+                       "rename": {"on": ("plane", {"type": "string", "description": "XY (default), XZ, YZ or a datum plane's name."})},
+                       "after": [("plane", "face", {"description": "A flat face: { side: \"+z\" }, { at, normal } or \"Pad.Face3\"."})]},
     "sketch_new": {"why": "face selectors", "replace": {"face": {
         "type": "object",
         "description": "{ side: \"+z\" | \"-z\" | \"+x\" | \"-x\" | \"+y\" | \"-y\", of: the feature that made it, largest: true } (one face only), "
@@ -296,6 +301,13 @@ _PADWORDS = [("sides two with type UpToFirst: this FreeCAD (0.21.2) has two side
 RENAMED = {
     "pd_pad": {"why": "rename set 3, 24 Nov", "args": {"extent": "type", "face": "upToFace"}, "words": _PADWORDS},
     "pd_pocket": {"why": "rename set 3, 24 Nov", "args": {"extent": "type", "face": "upToFace"}, "words": _PADWORDS},
+    # rename set 8: one field, one meaning (plane: a plane's name; face: a face selector)
+    "pd_datum_plane": {"why": "rename set 8, 24 Nov", "args": {"plane": "on", "face": "on"}, "words": [
+        ("nothing was kept. on takes a flat face or XY | XZ | YZ.", "nothing was kept. face takes a flat face; plane takes XY, XZ, YZ or a datum plane."),
+        ("on: XY, XZ, YZ, a datum plane's name (pd_datum_plane makes one), an LCS or its plane (\"LCS.XZ_Plane\"), \"Pad.Face3\" as shape_query names it, "
+         "or a face { side: \"+z\" } or { at: [x,y,z], normal: [x,y,z] }.",
+         "face: { side: \"+z\" }, { at: [x,y,z], normal: [x,y,z] } or \"Pad.Face3\". Give a plane as plane.")]},
+    "pd_mirrored": {"why": "rename set 8, 24 Nov", "args": {"face": "plane"}},
 }
 
 

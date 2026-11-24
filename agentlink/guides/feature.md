@@ -45,6 +45,7 @@ Order that keeps a model stable (FreeCAD's own advice): sketches on the body's p
 ## patterns and mirrors
 <!-- later: when using pd_linear_pattern, pd_polar_pattern, pd_mirrored or pd_multitransform -->
 - `pd_linear_pattern`: `spacing` between copies or `length` first to last; kept as FreeCAD's Extent mode (Length = spacing × (occurrences − 1)).
+- `pd_mirrored`: give `plane` (XY, XZ, YZ or a datum plane; YZ by default) or `face` (a flat face), not both.
 - `pd_polar_pattern`: `angle: 360` spaces the copies evenly all round; a smaller angle is from the first to the last copy.
 - A copy of a pocket or hole must land on material. A copy of a pad that does not touch the body becomes a second solid.
 - `pd_multitransform { features, steps }` chains patterns. A grid is two linear steps; `scale` steps grow the copies. Its steps stay in the body under it (`feature_list` marks them `stepOf`) and are removed with it.
@@ -60,7 +61,7 @@ Order that keeps a model stable (FreeCAD's own advice): sketches on the body's p
 <!-- later: when using pd_primitive, pd_helix, pd_datum, pd_binder, pd_boolean, pd_loft or pd_pipe -->
 - `pd_primitive { kind: "cylinder", size: { radius, height }, at, rotate }` adds a box, cylinder, sphere, cone, ellipsoid, torus, prism or wedge without a sketch. `at` is a box's corner, a cylinder's or cone's base centre, a sphere's or torus's centre. `subtractive: true` cuts it out instead: a quick bore or slot.
 - `pd_helix { profile, axis, pitch, height }` makes a spring or a coil; `subtractive: true` cuts a thread or a groove. Give two of pitch, height and turns. The profile must not cross the axis, and its height should be under the pitch.
-- `pd_datum` makes a line, point or coordinate system: placed from the origin, or `on: { near }` a round edge (its axis or centre), which then follows the model. A datum line serves as an axis by name. `pd_datum_plane` makes a plane to sketch on.
+- `pd_datum` makes a line, point or coordinate system: placed from the origin, or `on: { near }` a round edge (its axis or centre), which then follows the model. A datum line serves as an axis by name. `pd_datum_plane` makes a plane to sketch on: give `plane` (XY, XZ, YZ or a datum plane) or `face` (a flat face), not both.
 - `pd_binder { from: "Other body", faces }` brings another body's faces in to sketch on (`sketch_external`). `pd_boolean { op, with }` fuses, cuts or keeps the common part of other bodies.
 - `pd_loft` needs each section on its own plane, one closed wire each, the same number of edges. `pd_pipe` sweeps a profile along a path sketch; `feature_edit` sets its `Mode` (Standard, Fixed, Frenet, Auxiliary, Binormal) and `Transition` (Transformed, Right corner, Round corner).
 

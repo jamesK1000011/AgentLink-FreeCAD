@@ -7232,7 +7232,7 @@
   },
   "pd_mirrored": {
    "group": "feature",
-   "description": "Mirror features (by name) across a plane. plane: XY | XZ | YZ (default), a datum plane, or a face query. features: \"all\" mirrors the whole body. That is FreeCAD 1.1's TransformMode \"Whole shape\", else every pad and pocket up to the tip. A copy that misses the body makes a second solid (health says so). Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a mirror to a second set of features made by hand. A mirrored modelled thread changes its hand.",
+   "description": "Mirror features (by name) across a plane. plane: XY | XZ | YZ (default) or a datum plane. Or face: a flat face query. features: \"all\" mirrors the whole body. That is FreeCAD 1.1's TransformMode \"Whole shape\", else every pad and pocket up to the tip. A copy that misses the body makes a second solid (health says so). Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a mirror to a second set of features made by hand. A mirrored modelled thread changes its hand.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7258,7 +7258,11 @@
       ]
      },
      "plane": {
-      "description": "XY | XZ | YZ, a datum plane's name, or a face { side: \"+z\" } | { at, normal }"
+      "type": "string",
+      "description": "XY, XZ, YZ (default) or a datum plane's name."
+     },
+     "face": {
+      "description": "A flat face: { side: \"+z\" }, { at, normal } or \"Pad.Face3\"."
      }
     },
     "required": [
@@ -7276,7 +7280,10 @@
     {"let": {"before": "=volume(b)", "refs": "=a.features", "whole": "=is_str(a.features) and a.features.strip().lower() in ('all', 'body', 'whole body')"}},
     {"let": {"refs": "=[refs]"}, "when": "=is_str(refs) and not whole"},
     {"refuse": "features: [names] — the features to repeat (feature_list names them) — or \"all\" for the whole body.", "when": "=not whole and (not is_list(refs) or not refs or not all(is_str(r) for r in refs))"},
-    {"let": {"orig": "=None if whole else [in_body(b, r, ['PartDesign::']) for r in refs]", "prior": "=b.Tip", "ref": "=plane_ref(b, a.get('plane', 'YZ'), 'plane')[0]"}},
+    {"refuse": "Give plane or face, not both: plane is XY, XZ, YZ or a datum plane; face is a face.", "when": "='plane' in a and 'face' in a"},
+    {"refuse": "plane: XY, XZ, YZ or a datum plane's name. Give a face as face.", "when": "='plane' in a and (not is_str(a.plane) or '.Face' in a.plane)"},
+    {"refuse": "face: { side: \"+z\" }, { at: [x,y,z], normal: [x,y,z] } or \"Pad.Face3\". Give a plane as plane.", "when": "='face' in a and not (is_dict(a.face) or (is_str(a.face) and '.Face' in a.face))"},
+    {"let": {"orig": "=None if whole else [in_body(b, r, ['PartDesign::']) for r in refs]", "prior": "=b.Tip", "ref": "=plane_ref(b, a.face, 'face')[0] if 'face' in a else plane_ref(b, a.get('plane', 'YZ'), 'plane')[0]"}},
     {"let": {"f": "=new(b, 'PartDesign::Mirrored', 'Mirrored')"}},
     {
      "when": "=whole",
@@ -7594,7 +7601,7 @@
   },
   "pd_datum_plane": {
    "group": "feature",
-   "description": "Make a datum plane in the body, for sketches off the body's planes. on: XY | XZ | YZ | a flat face query. offset: mm along its normal. rotate: { axis [x,y,z] (its own), angle deg }. name: use it in sketch_new { plane: its name }. Answer: plane, origin, normal. Prefer an origin plane with an offset, or a datum on the skeleton, to a made face. A made face can get a new name after a change.",
+   "description": "Make a datum plane in the body, for sketches off the body's planes. plane: XY | XZ | YZ (default) or a datum plane. Or face: a flat face query. offset: mm along its normal. rotate: { axis [x,y,z] (its own), angle deg }. name: use it in sketch_new { plane: its name }. Answer: plane, origin, normal. Prefer an origin plane with an offset, or a datum on the skeleton, to a made face. A made face can get a new name after a change.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7602,8 +7609,12 @@
       "type": "string",
       "description": "The PartDesign body; may be left out when there is one."
      },
-     "on": {
-      "description": "XY | XZ | YZ, a datum plane's name, or a face { side: \"+z\" } | { at, normal }"
+     "plane": {
+      "type": "string",
+      "description": "XY (default), XZ, YZ or a datum plane's name."
+     },
+     "face": {
+      "description": "A flat face: { side: \"+z\" }, { at, normal } or \"Pad.Face3\"."
      },
      "offset": {
       "type": "number"
@@ -7624,7 +7635,10 @@
    "runner": "steps",
    "steps": [
     {"let": {"b": "=body(a.body)"}},
-    {"let": {"base, what": "=plane_ref(b, a.get('on', 'XY'), 'on')", "f": "=new(b, 'PartDesign::Plane', a.name or 'DatumPlane')"}},
+    {"refuse": "Give plane or face, not both: plane is XY, XZ, YZ or a datum plane; face is a face.", "when": "='plane' in a and 'face' in a"},
+    {"refuse": "plane: XY, XZ, YZ or a datum plane's name. Give a face as face.", "when": "='plane' in a and (not is_str(a.plane) or '.Face' in a.plane)"},
+    {"refuse": "face: { side: \"+z\" }, { at: [x,y,z], normal: [x,y,z] } or \"Pad.Face3\". Give a plane as plane.", "when": "='face' in a and not (is_dict(a.face) or (is_str(a.face) and '.Face' in a.face))"},
+    {"let": {"base, what": "=plane_ref(b, a.face, 'face') if 'face' in a else plane_ref(b, a.get('plane', 'XY'), 'plane')", "f": "=new(b, 'PartDesign::Plane', a.name or 'DatumPlane')"}},
     {"do": "=setprop(f, support_prop(f), [(base[0], base[1][0])])"},
     {"set": {"f.MapMode": "FlatFace"}},
     {"let": {"rot": "=rotation()"}},
@@ -7638,7 +7652,7 @@
     },
     {"set": {"f.AttachmentOffset": "=placement(V(0, 0, float(a.get('offset', 0))), rot)"}},
     {"do": "=doc().recompute()"},
-    {"refuse": {"fmt": "The datum plane would not attach to {what}: {f.getStatusString()} — nothing was kept. on takes a flat face or XY | XZ | YZ."}, "code": "failed", "when": "=not f.isValid()"},
+    {"refuse": {"fmt": "The datum plane would not attach to {what}: {f.getStatusString()} — nothing was kept. face takes a flat face; plane takes XY, XZ, YZ or a datum plane."}, "code": "failed", "when": "=not f.isValid()"},
     {"do": "=snapshot('pd_datum_plane')"},
     {"let": {"pl": "=f.Placement"}}
    ],
