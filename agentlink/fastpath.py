@@ -1172,6 +1172,9 @@ def _run(server, session, steps, a):
         state["made"] += inc
         if ok and before is not None:
             run.note_made(before, name, args)
+        if ok and isinstance(body, dict) and isinstance(body.get("filled"), list):
+            # A sketch the tool took when none was named (pd_common.sketch_of).
+            run.filled += [str(x) for x in body["filled"]]
         row = {"step": where, "tool": name, "ok": ok, **({"result": body} if ok else {"error": kinded(body.get("error"))})}
         run.rows.append(row)
         record.write({"running": True, "ran": len(run.rows), "results": run.rows})

@@ -91,6 +91,11 @@ TRUSTED = {
     # part_attach's check before anything is set: the references and mode are set on a copy of the object's
     # attacher (o.Attacher is a copy, copied once more), and only its calculateAttachedPlacement is asked.
     ("model_more.py", "attach_check"): "sets a copy of the attacher only, to ask it whether the attachment fits",
+    # sketch_of's notes for the call's own answer (decision 4, 23 Nov): the sketch a left-out sketch took (filled)
+    # and the sketch the call works on (sketchNote), on the session's per-call lists. Never the document or the
+    # window, and nothing while a dry reading runs (needs.dry()).
+    ("pd_common.py", "took"): "notes the call's own answer on the session; nothing in a dry reading",
+    ("pd_common.py", "note_named"): "notes the call's own answer on the session; nothing in a dry reading",
 }
 
 

@@ -173,7 +173,7 @@ def tools(session):
     helpers = {"doc": doc, "new": new, "binder_relative": binder_relative, "attach_origin": attach_origin, "attach_on": attach_on, "keep_teeth": keep_teeth, "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: len(s.steps),
                "settle": lambda b, f, tool, before=None, must_change=None, hint="": pc.settle(s, b, f, tool, before, must_change, hint=hint),
                "unique": lambda label, *own: s.unique(label, *own), "body": lambda ref: pc.pd_body(doc(), ref),
-               "sketch_of": lambda ref, b=None: pc.sketch_of(doc(), ref, b), "in_body": pc.in_body, "body_of": pc.body_of, "volume": pc.volume,
+               "sketch_of": lambda ref, b=None: pc.sketch_of(doc(), ref, b, s), "in_body": pc.in_body, "body_of": pc.body_of, "volume": pc.volume,
                "tip_shape": pc.tip_shape, "ref_list": picks.ref_list,
                # a datum on several references (pd_common: the skeleton workflow)
                "attach_refs": lambda *x: pc.attach_refs(*x), "world_json": pc.world_json, "placement_json": picks.placement_json,

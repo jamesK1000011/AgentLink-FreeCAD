@@ -88,18 +88,145 @@ def in_body(body, ref, kinds=None, what="feature"):
     raise ToolError("not_found", f"{what} {ref!r}: not in {body.Label} — there: {', '.join(o.Label for o in items) or 'none'}.")
 
 
-def sketch_of(doc, ref, body=None):
+# Which sketch a tool takes when none is named (local fixes, 23 Nov,
+# decision 4; rule R2: no other guess): (1) the sketch open in edit in the
+# window, else (2) the sketch this session's agent made last (its last
+# sketch_new), else (3) the only sketch there is, else a refusal that lists
+# the sketches: unused first, newest first, each marked "(not used)" or
+# "(used by Pad)". A sketch taken by this rule is said in the answer's
+# filled (agentlink/protocol.py): took() puts it on the session.
+
+def sketch_users(sk):
+    """Labels of what uses a sketch (a feature, not the body or a group)."""
+    out = []
+    for p in getattr(sk, "InList", None) or []:
+        t = str(getattr(p, "TypeId", "") or "")
+        if t.startswith(("PartDesign::Body", "App::")):
+            continue
+        out.append(str(p.Label))
+    return out
+
+
+def sketch_list(sketches):
+    """The sketches in words: unused first, newest first, each marked."""
+    order = list(reversed(list(sketches)))
+    unused = [o for o in order if not sketch_users(o)]
+    used = [o for o in order if sketch_users(o)]
+    return ", ".join([f"{o.Label} (not used)" for o in unused] + [f"{o.Label} (used by {', '.join(sketch_users(o))})" for o in used])
+
+
+def sketch_in_edit(doc):
+    """The sketch of doc open in edit in the window, or None (no GUI too)."""
+    try:
+        if not getattr(FreeCAD, "GuiUp", False):
+            return None
+        import FreeCADGui
+
+        gd = FreeCADGui.ActiveDocument
+        o = getattr(gd.getInEdit(), "Object", None) if gd is not None else None
+    except Exception:
+        return None
+    if o is None or getattr(o, "TypeId", "") != "Sketcher::SketchObject" or getattr(o, "Document", None) is not doc:
+        return None
+    return o
+
+
+def note_made_sketch(session, sk):
+    """Record sk as the sketch this session's agent made last (sketch_new)."""
+    if session is None or sk is None or getattr(session, "by", "agent") != "agent":
+        return
+    try:
+        rec = getattr(session, "made_sketch", None)
+        if not isinstance(rec, dict):
+            rec = session.made_sketch = {}
+        rec[sk.Document.Name] = sk.Name
+    except Exception:
+        pass
+
+
+def made_sketch(session, doc):
+    """The sketch this session's agent made last in doc, if it is still there."""
+    try:
+        name = (getattr(session, "made_sketch", None) or {}).get(doc.Name)
+        return doc.getObject(name) if name else None
+    except Exception:
+        return None
+
+
+def _dry():
+    try:
+        from .. import needs
+
+        return needs.dry()
+    except Exception:
+        return False
+
+
+def took(session, sk, why):
+    """Say in the answer's filled which sketch a left-out sketch took. Only
+    the call's own answer notes; nothing in a dry reading (needs.py)."""
+    got = getattr(session, "filled_now", None) if session is not None else None
+    if isinstance(got, list) and not _dry():
+        got.append(f"sketch={sk.Label} ({why})")
+
+
+def note_named(session, sk):
+    """Keep the first sketch a call works on: the used-sketch note reads it.
+    Only the call's own answer notes; nothing in a dry reading (needs.py)."""
+    if session is None or _dry():
+        return
+    try:
+        if getattr(session, "sketch_now", None) is None and isinstance(getattr(session, "filled_now", None), list):
+            session.sketch_now = sk
+    except Exception:
+        pass
+
+
+def sketch_of(doc, ref, body=None, session=None):
     sk = [o for o in doc.Objects if o.TypeId == "Sketcher::SketchObject"]
     if ref is None:
         if body is not None:
             sk = [o for o in sk if body.hasObject(o)]
+        if session is not None:
+            for o, why in ((sketch_in_edit(doc), "open in edit in the window"), (made_sketch(session, doc), "you made it last")):
+                if o is not None and any(o is x for x in sk):
+                    took(session, o, why)
+                    note_named(session, o)
+                    return o
         if len(sk) == 1:
+            if session is not None:
+                took(session, sk[0], "the only sketch" + (f" in {body.Label}" if body is not None else ""))
+                note_named(session, sk[0])
             return sk[0]
-        raise ToolError("invalid_input", f"sketch: say which — {', '.join(o.Label for o in sk) or 'none yet: sketch_new makes one'}.")
+        where = f" in {body.Label}" if body is not None else ""
+        if not sk:
+            raise ToolError("invalid_input", f"sketch: there is no sketch{where} yet. sketch_new makes one.")
+        why = "No sketch is open in edit, and you made none here. " if session is not None else ""
+        raise ToolError("invalid_input", f"sketch: say which. {why}The sketches{where}, unused first and newest first: {sketch_list(sk)}.")
     for o in sk:
         if ref in (o.Label, o.Name) or o.Label.lower() == str(ref).lower():
+            note_named(session, o)
             return o
     raise ToolError("not_found", f"sketch {ref!r}: no such sketch — they are: {', '.join(o.Label for o in sk) or 'none: sketch_new makes one'}.")
+
+
+def used_sketch_note(sk, body=None):
+    """For a change to a sketch that a feature uses while its body has an
+    unused sketch (decision 4, D-b): words that name both; else None."""
+    users = sketch_users(sk)
+    if not users:
+        return None
+    body = body if body is not None else body_of(sk)
+    if body is None:
+        return None
+    free = [o for o in reversed(list(getattr(body, "Group", None) or [])) if getattr(o, "TypeId", "") == "Sketcher::SketchObject"
+            and o is not sk and not sketch_users(o)]
+    if not free:
+        return None
+    names = ", ".join(o.Label for o in free[:3])
+    return (f"{sk.Label} is used by {', '.join(users)}, so this change also changes {', '.join(users)}. "
+            f"{body.Label} also has a sketch that is not used: {names}. "
+            f"If you meant {free[0].Label}, use history_undo, then give sketch: \"{free[0].Label}\".")
 
 
 def tip_shape(body, need=True):

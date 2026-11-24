@@ -58,6 +58,14 @@ STEP_S = 1.0          # one reading asked for by name (tool_groups { needs }) st
 MAX_WORDS = 300       # a refusal's words in a reading
 
 _cache = {}
+# Dry readings running now: a helper that notes the call's answer on the
+# session (families/pd_common.py took, note_named) says nothing while one runs.
+DRY = [0]
+
+
+def dry():
+    """Whether a dry reading is running now."""
+    return DRY[0] > 0
 
 
 def _file():
@@ -620,6 +628,7 @@ def reading(name, entry, helpers, args=None, budget=STEP_S):
     run = _Run(entry, helpers, args, None if budget is None else time.time() + budget)
     env = {"a": dict(args) if args is not None else {}, "tool": name, expr.GUARD: _guard}
     stop = None
+    DRY[0] += 1
     try:
         run.steps(entry.get("steps") or [], env)
     except _Stop as s:
@@ -628,6 +637,8 @@ def reading(name, entry, helpers, args=None, budget=STEP_S):
         return _result(name, False, [{"code": e.code, "words": str(e.message)[:MAX_WORDS], "step": id(getattr(e, "step", None) or run.at)}])
     except Exception as e:  # noqa: BLE001 - a step that raises is not a refusal, and not a reading
         return _result(name, None, not_checked=[f"a leading step raised {type(e).__name__}: {str(e)[:80]}"])
+    finally:
+        DRY[0] -= 1
     notes = []
     if run.args_steps:
         n = sum(run.args_steps)
