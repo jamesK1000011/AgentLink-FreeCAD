@@ -245,6 +245,7 @@ def plane_ref(body, ref, what="plane"):
             # "Pad.Face3": that feature's face, as the reference names it.
             name, sub = ref.rsplit(".", 1)
             o = in_body(body, name, None, "feature")
+            _owner_ok(o, sub, what)
             try:
                 o.Shape.getElement(sub)
             except Exception:
@@ -287,9 +288,43 @@ def plane_ref(body, ref, what="plane"):
         tip, shape = tip_shape(body)
         i, f = find_face(shape, ref, body=body)
         own, j = face_owner(body, ref, tip, f)
+        # Checked before the sketch is bound to it (decision 5, 23 Nov): a
+        # broken feature, or a face that is not there, gives a lost face.
+        _owner_ok(own, f"Face{j + 1}", what)
+        try:
+            there = own.Shape.getElement(f"Face{j + 1}") is not None
+        except AttributeError:
+            there = True  # a shape with no getElement: nothing to check
+        except Exception:
+            there = False
+        if not there:
+            raise ToolError("invalid_state", f"{what}: {own.Label} has no Face{j + 1} now. Its faces changed. "
+                                             f"Find the face again: {facesel.FORMS}.")
         return (own, [f"Face{j + 1}"]), f"face at {geo.vec(f.CenterOfMass)}" + ("" if own is tip else f" ({own.Label}'s)")
     raise ToolError("invalid_input", f"{what}: XY, XZ, YZ, a datum plane's name (pd_datum_plane makes one), an LCS or its plane (\"LCS.XZ_Plane\"), "
                                      f"\"Pad.Face3\" as shape_query names it, or a face {{ side: \"+z\" }} or {{ at: [x,y,z], normal: [x,y,z] }}.")
+
+
+def _owner_ok(own, sub, what):
+    """Refuse a face of a feature that failed its recompute."""
+    try:
+        ok = own.isValid()
+    except Exception:
+        ok = True
+    if not ok:
+        raise ToolError("invalid_state", f"{what}: {own.Label} is broken now (it failed to recompute). "
+                                         f"So its {sub} cannot hold a sketch. Repair {own.Label} first, or use a plane: XY, XZ or YZ.")
+
+
+def status_words(o):
+    """FreeCAD's status of a failed object, in plain words where known."""
+    try:
+        raw = o.getStatusString()
+    except Exception:
+        raw = "invalid"
+    from .. import fusehint
+
+    return fusehint.plain_error(o, raw)
 
 
 def _planes_there(body):
@@ -612,7 +647,7 @@ def broken(doc):
         except Exception:
             ok = "Invalid" not in o.State
         if not ok:
-            out.append({"object": o.Label, "type": short(o), "error": (o.getStatusString() if hasattr(o, "getStatusString") else "invalid")})
+            out.append({"object": o.Label, "type": short(o), "error": (status_words(o) if hasattr(o, "getStatusString") else "invalid")})
     return out
 
 
