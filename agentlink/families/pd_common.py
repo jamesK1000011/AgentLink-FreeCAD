@@ -804,6 +804,22 @@ def newly_broken(doc):
     return [b for b in broken(doc) if b["object"] not in labels]
 
 
+def dressup_valid(body):
+    """False only when the body's shape is there and FreeCAD's check says it
+    is not valid; a shape too large to check in time counts as valid."""
+    try:
+        sh = body.Shape
+        if sh is None or sh.isNull():
+            return True
+        from ..health import FACES_VALID
+
+        if len(sh.Faces) > FACES_VALID:
+            return True
+        return bool(sh.isValid())
+    except Exception:  # noqa: BLE001 - not known: not refused
+        return True
+
+
 def body_reading(body):
     s = body.Shape
     if s is None or s.isNull() or not s.Solids:
@@ -865,6 +881,12 @@ def settle(session, body, feat, tool, before=None, must_change=None, hint=""):
             hint = (f"The result would be more than one solid and {body.Label}'s AllowCompound is off: make the feature touch the rest of the body, "
                     f"or object_set {{ object: \"{body.Label}\", values: {{ AllowCompound: true }} }} first.")
         raise ToolError("failed", f"{first['object']} ({first['type']}) failed: {first['error']}" + (f"; also broken: {[b['object'] for b in bad if b is not first]}" if len(bad) > 1 else "") + f" — nothing was kept.{(' ' + hint) if hint else ''}")
+    if feat is not None and getattr(feat, "TypeId", "") in DRESSUPS and not dressup_valid(body):
+        # 24 Nov QA: a fillet that FreeCAD computed without an error left a
+        # shape that is not valid (2 solids, NOT valid), and the answer said
+        # ok; the health line said broken only after it.
+        raise ToolError("failed", f"{feat.Label} ({short(feat)}) made a shape that is not valid (FreeCAD's shape check), though it gave no error — nothing was kept. "
+                                  f"{hint or 'Try a smaller size, or fewer edges.'}".strip())
     out = {**({"feature": feat.Label, "type": short(feat)} if feat is not None else {}), "valid": True, **body_reading(body)}
     if before is not None and "volume" in out:
         delta = out["volume"] - before

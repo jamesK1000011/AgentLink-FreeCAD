@@ -270,3 +270,55 @@ class Describe(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BatchRepeats(unittest.TestCase):
+    """24 Nov QA: a batch answer is not an error, so the same refusal inside
+    five batches never stopped. The refused call counts under its own tool;
+    the calls refused after it do not; done clears."""
+
+    def srv(self):
+        obj = {"type": "object", "properties": {}}
+        return Server("t", "0", [Tool(n, n + ".", obj, lambda a: {"ok": True}, changes=True) for n in ("batch", "pd_pocket", "sketch_new", "pd_pad")])
+
+    def batch_answer(self, i=1):
+        msg = f"Pocket cut nothing — the outline lies at x {150 + i} to {180 + i}; the body spans x -6 to 6. Nothing was kept. " + FIX
+        body = {"result": "kept", "done": [0], "refused": {"call": 1, "tool": "pd_pocket", "code": "failed", "kind": "fixable", "error": msg},
+                "notRun": [2], "refusedCalls": [1, 2], "note": "Call 1 (pd_pocket) was refused.",
+                "results": [{"ok": True}, {"ok": False, "error": {"code": "failed", "kind": "fixable", "message": msg}},
+                            {"ok": False, "error": {"code": "not_found", "kind": "fixable", "message": "sketch 'S9': no such sketch."}}]}
+        return {"content": [{"type": "text", "text": json.dumps(body)}]}
+
+    ARGS = {"calls": [{"tool": "sketch_new", "arguments": {"plane": "XY"}}, {"tool": "pd_pocket", "arguments": {"sketch": "S"}},
+                      {"tool": "pd_pad", "arguments": {"sketch": "S9"}}]}
+
+    def test_fifth_batch_refusal_is_stop(self):
+        s = self.srv()
+        for i in range(1, REPEAT_STOP + 1):
+            r = self.batch_answer(i)
+            protocol.repeat_words(s, "agentlink_batch", r, self.ARGS)
+            body = json.loads(r["content"][0]["text"])
+        ref = body["refused"]
+        self.assertEqual((ref["kind"], ref["repeat"]), ("stop", 5))
+        self.assertTrue(ref["error"].startswith("No progress after 5 tries of pd_pocket."), ref["error"])
+        self.assertEqual(body["results"][1]["error"]["kind"], "stop")
+        self.assertIn("No progress after 5 tries of pd_pocket", body["note"])
+        # The cascaded refusal (pd_pad, sketch not found) was not counted.
+        self.assertNotIn("pd_pad", s._repeats)
+
+    def test_second_says_same(self):
+        s = self.srv()
+        for i in (1, 2):
+            r = self.batch_answer(i)
+            protocol.repeat_words(s, "batch", r, self.ARGS)
+        body = json.loads(r["content"][0]["text"])
+        self.assertIn("This is the same refusal as before", body["refused"]["error"])
+        self.assertFalse(body["refused"]["error"].endswith(FIX))  # refused.error has no kind sentence
+        self.assertTrue(body["results"][1]["error"]["message"].endswith(FIX))
+
+    def test_done_clears(self):
+        s = self.srv()
+        protocol.repeat_words(s, "batch", self.batch_answer(), self.ARGS)
+        ok = {"content": [{"type": "text", "text": json.dumps({"result": "kept", "done": [0]})}]}
+        protocol.repeat_words(s, "batch", ok, {"calls": [{"tool": "pd_pocket", "arguments": {}}]})
+        self.assertNotIn("pd_pocket", s._repeats)

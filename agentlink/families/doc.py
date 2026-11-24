@@ -779,6 +779,25 @@ def tools(session):
 
         _unchanged(d)
 
+    def agent_file(d, p):
+        """Whether an agent's document d may write over the file at p without
+        overwrite: this session saved p from a document an agent made, and no
+        other open document has it (24 Nov QA: an agent made its part again in
+        a new document and doc_save told it to ask the person for its own
+        file)."""
+        if d.Name not in (getattr(s, "agent_docs", None) or ()):
+            return False
+        if os.path.abspath(p) not in s.__dict__.get("agent_files", ()):
+            return False
+        there = open_at(p)
+        return there is None or there is d
+
+    def note_agent_file(d, p):
+        """After a save: p is recorded as an agent's file when d is an
+        agent's document."""
+        if d.Name in (getattr(s, "agent_docs", None) or ()):
+            s.__dict__.setdefault("agent_files", set()).add(os.path.abspath(p))
+
     def free_name(p, overwrite):
         """p, or "<name> 2.FCStd" … when a file is there already and it may
         not be written over."""
@@ -1191,7 +1210,7 @@ def tools(session):
         "new_doc": lambda name: FreeCAD.newDocument(name), "open_doc": lambda p: FreeCAD.openDocument(p), "close_doc": close_doc,
         "listed_docs": lambda: FreeCAD.listDocuments(), "doc_hits": doc_hits, "own_doc": own_doc, "doc_names": doc_names, "open_labels": open_labels,
         "unsaved": unsaved, "touched_marks": touched_marks, "current_name": current_name, "back_to": back_to, "recent_files": recent_files, "open_at": open_at,
-        "is_changed": is_changed, "unchanged": unchanged, "free_name": free_name, "saved": saved, "modified_state": modified_state, "lost_links": lost_links,
+        "is_changed": is_changed, "unchanged": unchanged, "free_name": free_name, "agent_file": agent_file, "note_agent_file": note_agent_file, "saved": saved, "modified_state": modified_state, "lost_links": lost_links,
         # files
         "isfile": os.path.isfile, "exists": os.path.exists, "abspath": os.path.abspath, "basename": os.path.basename, "dirname": os.path.dirname,
         "makedirs": lambda p: os.makedirs(p, exist_ok=True), "filesize": os.path.getsize, "stem": lambda p: os.path.splitext(os.path.basename(p))[0],

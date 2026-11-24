@@ -259,3 +259,22 @@ class NoToolKey(unittest.TestCase):
         self.assertIn('Form: { "tool": "probe_make"', err)
         self.assertEqual(err.count("The call was not run."), 1)
         self.assertNotIn('"B"', err)
+
+
+class DressupValid(unittest.TestCase):
+    """24 Nov QA: a fillet that FreeCAD computed without an error left a shape
+    that is not valid, and the answer said ok. dressup_valid reads that."""
+
+    def test_reads_the_check(self):
+        got = run('''
+    from agentlink.families import pd_common
+    class Sh:
+        def __init__(self, ok, n=10): self.ok, self.Faces = ok, [0] * n
+        def isNull(self): return False
+        def isValid(self): return self.ok
+    class B:
+        def __init__(self, sh): self.Shape = sh
+    print(json.dumps([pd_common.dressup_valid(B(Sh(True))), pd_common.dressup_valid(B(Sh(False))),
+                      pd_common.dressup_valid(B(Sh(False, 5000))), pd_common.dressup_valid(B(None))]))
+''')
+        self.assertEqual(got, [True, False, True, True])

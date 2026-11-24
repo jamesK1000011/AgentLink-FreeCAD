@@ -44,7 +44,7 @@ from agentlink.protocol import ToolError  # noqa: E402
 # 22 Nov, local runs: + con_keys (sketch reader: a constraint's fields written another way).
 # 22 Nov, face selectors: + face_pick (sketch reader: the form that picks sketch_new's face again).
 # 24 Nov, lost face in plain words: + status_words (sketch reader: FreeCAD's status through fusehint.plain_error).
-PIN = "15ad9e80860fe2e3346402b82e5ae765d1b73ac6c8a548d3a8c1750ab55ea420"
+PIN = "d413ece5ee7a428fb118c67ca6241e32c22c8db1c5d77e52ff66ded211663cda"
 # Test drive of 20 Nov: holds, element_centre, joint_gap and short_id read; let_go and gap_set change; bom_row reads the material
 # cards (their cache is set on the first read), so it is no reader by the census any more.
 # Bicycle drive of 20 Nov: coupling_teeth, overlap_words, sweep_rest and split_static read; auto_flip changes (it solves).
@@ -55,7 +55,7 @@ PIN = "15ad9e80860fe2e3346402b82e5ae765d1b73ac6c8a548d3a8c1750ab55ea420"
 # coordinate system); feature_more's attach_on changes (pd_gear on any plane).
 # 21 Nov, bicycle L5 build: + driven_rows (a reader), attach_edge, held_back, pipe_options (changers).
 # 22 Nov, face selectors: + face_pick (a sketch reader).
-COUNTS = {"readers": 928, "changers": 159, "families": 37}
+COUNTS = {"readers": 929, "changers": 159, "families": 37}
 
 # The stand-in suites whose cases are run: name -> (stand-in, cases, family files).
 SUITES = {

@@ -552,6 +552,7 @@
   "doc": {
    "readers": [
     "abspath",
+    "agent_file",
     "along",
     "basename",
     "bodies",
