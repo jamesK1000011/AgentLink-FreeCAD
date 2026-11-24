@@ -1760,82 +1760,26 @@ def _try_next(server, name, keys, n, card):
 
 def repeat_words(server, name, result, args=None):
     """The progress-based stop (see above) applied to a tools/call result,
-    in place. Words only on a refusal; a call that went through clears.
-    A batch counts the call it was refused at, under that call's own tool
-    (24 Nov QA: a batch answer is not an error, so a pocket refused the same
-    way in five batches never stopped); the calls refused after it
-    (stopOnError: false, most of them follow from the first) are not
-    counted, and the calls in done clear their tools."""
+    in place. Words only on a refusal; a call that went through clears."""
     state = getattr(server, "_repeats", None)
     if state is None:
         state = server._repeats = {}
     name = plain_name(server, name) if isinstance(name, str) else name
-    content = result.get("content") or []
-    if not content or content[0].get("type") != "text":
-        if not result.get("isError"):
-            state.pop(name, None)
-        return
-    if name == "batch" and not result.get("isError"):
-        try:
-            body = json.loads(content[0]["text"])
-        except ValueError:
-            return
-        if isinstance(body, dict) and _repeat_batch(server, state, body, args):
-            content[0]["text"] = compact(body)
+    if getattr(server, "_repeat_quiet", False):
+        # A call of a batch with stopOnError: false that runs after an
+        # earlier call of it was refused: its refusal most often follows
+        # from that one, so it is not counted (24 Nov QA: cascades).
         return
     if not result.get("isError"):
         state.pop(name, None)
+        return
+    content = result.get("content") or []
+    if not content or content[0].get("type") != "text":
         return
     body = json.loads(content[0]["text"])
     err = body.get("error") if isinstance(body, dict) else None
     if not isinstance(err, dict):
         return
-    _repeat_count(server, state, name, err, args)
-    content[0]["text"] = compact(body)
-
-
-def _repeat_batch(server, state, body, args):
-    """A batch answer: clear the tools of the calls in done; count the
-    refused call (body.refused) under its tool. True when words changed."""
-    calls = (args or {}).get("calls") if isinstance(args, dict) else None
-    calls = calls if isinstance(calls, list) else []
-    first = (args or {}).get("start") if isinstance(args, dict) else 0
-    first = first if isinstance(first, int) and not isinstance(first, bool) else 0
-
-    def call_at(i):
-        j = i - first
-        return calls[j] if 0 <= j < len(calls) and isinstance(calls[j], dict) else {}
-
-    for i in body.get("done") or ():
-        t = call_at(i).get("tool")
-        if isinstance(t, str):
-            state.pop(plain_name(server, t), None)
-    ref = body.get("refused")
-    if not isinstance(ref, dict) or ref.get("buildFailed") or not isinstance(ref.get("tool"), str) or not ref.get("error"):
-        return False
-    tool = plain_name(server, ref["tool"])
-    err = {"code": ref.get("code"), "kind": ref.get("kind"), "message": ref.get("error")}
-    was = (err["message"], err["kind"])
-    _repeat_count(server, state, tool, err, call_at(ref.get("call", -1)).get("arguments"))
-    if (strip_kind(err["message"]), err.get("kind")) == (strip_kind(was[0]), was[1]):
-        return False
-    ref["error"] = strip_kind(err["message"])
-    ref["kind"] = err.get("kind")
-    if err.get("repeat"):
-        ref["repeat"] = err["repeat"]
-    rows = body.get("results")
-    k = ref.get("call", -1) - first
-    if isinstance(rows, list) and 0 <= k < len(rows) and isinstance(rows[k], dict) and isinstance(rows[k].get("error"), dict):
-        rows[k]["error"]["message"] = err["message"]
-        rows[k]["error"]["kind"] = err.get("kind")
-    if err.get("kind") == "stop":
-        body["note"] = f"Call {ref.get('call')} ({tool}) was refused: {strip_kind(err['message'])}"
-    return True
-
-
-def _repeat_count(server, state, name, err, args):
-    """Count one refusal of tool name (err: code, kind, message), and put the
-    REPEAT_SAME / REPEAT_HINT / REPEAT_STOP words in err, in place."""
     msg = strip_kind(err.get("message", ""))
     keys = failing_keys(msg)
     code = err.get("code")
@@ -1861,6 +1805,7 @@ def _repeat_count(server, state, name, err, args):
     if progress:
         err["message"] = msg + progress
         set_kind(err, kind)
+        content[0]["text"] = compact(body)
         return
     if n < REPEAT_SAME:
         return
@@ -1882,6 +1827,7 @@ def _repeat_count(server, state, name, err, args):
             msg += _try_next(server, name, keys, n, card)
         err["message"] = msg
         set_kind(err, kind)
+    content[0]["text"] = compact(body)
 
 
 # ---- progress notifications --------------------------------------------------

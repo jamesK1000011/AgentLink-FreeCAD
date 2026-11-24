@@ -278,3 +278,18 @@ class DressupValid(unittest.TestCase):
                       pd_common.dressup_valid(B(Sh(False, 5000))), pd_common.dressup_valid(B(None))]))
 ''')
         self.assertEqual(got, [True, False, True, True])
+
+
+class CascadeNotCounted(unittest.TestCase):
+    """24 Nov QA: with stopOnError: false, the refusals after the first in a
+    batch are not counted toward the repeat stop; the first is."""
+
+    def test_counts(self):
+        got = run('''
+    calls = [mk("A", fail=True)] + [mk("B%d" % i, fail=True) for i in range(6)]
+    b = call("batch", {"calls": calls, "stopOnError": False})
+    print(json.dumps([b[1]["refusedCalls"], srv._repeats.get("probe_make", {}).get("n"), [r["error"].get("repeat") for r in b[1]["results"]]]))
+''')
+        self.assertEqual(got[0], list(range(7)))
+        self.assertEqual(got[1], 1)
+        self.assertEqual(got[2], [None] * 7)

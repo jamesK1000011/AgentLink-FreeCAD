@@ -3215,7 +3215,12 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
 
                         _prof = cProfile.Profile()
                         _prof.enable()
-                    r = server.call({"name": c["tool"], "arguments": args})
+                    quiet = getattr(server, "_repeat_quiet", False)
+                    server._repeat_quiet = quiet or (not stop and any(isinstance(x, dict) and not x.get("ok") for x in results))
+                    try:
+                        r = server.call({"name": c["tool"], "arguments": args})
+                    finally:
+                        server._repeat_quiet = quiet
                     if _prof is not None:
                         _prof.disable()
                         import io
