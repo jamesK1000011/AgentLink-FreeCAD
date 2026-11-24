@@ -7471,7 +7471,7 @@
   },
   "pd_loft": {
    "group": "feature",
-   "description": "Loft through closed sketches. profile: the first sketch. sections: [the other sketches, in order, each on its own plane]. ruled, closed. subtractive: true cuts it. The sketches must have the same edge count and matching start corners, or the loft twists. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
+   "description": "Loft through closed sketches. sketch: the first sketch. sections: [the other sketches, in order, each on its own plane]. ruled, closed. subtractive: true cuts it. The sketches must have the same edge count and matching start corners, or the loft twists. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7479,7 +7479,7 @@
       "type": "string",
       "description": "The PartDesign body; may be left out when there is one."
      },
-     "profile": {
+     "sketch": {
       "type": "string",
       "description": "The sketch, in the body."
      },
@@ -7500,7 +7500,7 @@
      }
     },
     "required": [
-     "profile",
+     "sketch",
      "sections"
     ],
     "additionalProperties": false
@@ -7510,21 +7510,21 @@
    "date": "2026-11-16",
    "runner": "steps",
    "steps": [
-    {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.profile, b)"}},
+    {"let": {"b": "=body(a.body)", "sk": "=sketch_of(a.sketch, b)"}},
     {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not b.hasObject(sk)"},
     {"let": {"before": "=volume(b)", "sub": "=bool(a.subtractive)"}},
     {"refuse": {"fmt": "{b.Label} has no solid to cut: pd_pad something first."}, "code": "invalid_state", "when": "=sub and before <= 0"},
     {"let": {"f": "=new(b, 'PartDesign::' + ('Subtractive' if sub else 'Additive') + 'Loft', 'Loft')"}},
     {"set": {"f.Profile": "=sk"}},
     {"let": {"secs": "=[sketch_of(r, b) for r in (a.sections or [])]"}},
-    {"refuse": "sections: [sketch names] — the profiles after the first (profile), in order; each on its own plane (pd_datum_plane, or sketch_new with offset).", "when": "=not secs or sk in secs"},
+    {"refuse": "sections: [sketch names] — the sketches after the first (sketch), in order; each on its own plane (pd_datum_plane, or sketch_new with offset).", "when": "=not secs or sk in secs"},
     {"set": {"f.Sections": "=secs", "f.Ruled": "=bool(a.get('ruled', False))", "f.Closed": "=bool(a.get('closed', False))"}}
    ],
    "answer": {"via": "settle", "with": ["=b", "=f", "pd_loft", "=before", "='cut' if sub else 'add'", "Sections must each be one closed wire and should have the same number of edges, started at matching corners; ruled: true for straight sides."]}
   },
   "pd_pipe": {
    "group": "feature",
-   "description": "Sweep a closed profile along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. profile: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). A tube on a closed path (a ring) is refused: a rod, then a subtractive rod. d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. refine: false by default. Refine on many pipes of one weldment can make the body unorientable after a change. Answer: feature, profile, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a path from the skeleton (a pd_binder) to an edge of a made solid. Keep each member of a weldment unrefined.",
+   "description": "Sweep a closed sketch along a path. path: a sketch in the body, a pd_binder of a skeleton, or a wire. edges: [\"Edge3\"] sweeps along these edges only, joined end to end (all edges if you leave it out); shape_query { body: path, kind: \"edge\" } names them. sketch: a sketch across the start of the path, or { circle: { d: 28.6, wall: 0.9 } }. The circle makes a sketch square to the path at its start. It has two circles (a tube); with no wall, one (a rod). A tube on a closed path (a ring) is refused: a rod, then a subtractive rod. d and wall: mm or an expression (\"Geo.tt_od\"). mode: Standard | Fixed | Frenet | Auxiliary | Binormal. transition: Transformed | Right corner | Round corner. subtractive: true cuts it. refine: false by default. Refine on many pipes of one weldment can make the body unorientable after a change. Answer: feature, sketch, path, edges, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a path from the skeleton (a pd_binder) to an edge of a made solid. Keep each member of a weldment unrefined.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7532,7 +7532,7 @@
       "type": "string",
       "description": "The PartDesign body; may be left out when there is one."
      },
-     "profile": {
+     "sketch": {
       "description": "A sketch in the body, or { circle: { d, wall } }."
      },
      "path": {
@@ -7557,7 +7557,7 @@
      }
     },
     "required": [
-     "profile",
+     "sketch",
      "path"
     ],
     "additionalProperties": false
@@ -7567,8 +7567,8 @@
    "date": "2026-11-20",
    "runner": "steps",
    "steps": [
-    {"let": {"b": "=body(a.body)", "made": "=is_dict(a.profile)"}},
-    {"let": {"spec": "=tube_spec(a.profile) if made else None", "sk": "=None if made else sketch_of(a.profile, b)"}},
+    {"let": {"b": "=body(a.body)", "made": "=is_dict(a.sketch)"}},
+    {"let": {"spec": "=tube_spec(a.sketch) if made else None", "sk": "=None if made else sketch_of(a.sketch, b)"}},
     {"refuse": {"fmt": "{sk.Label} is not in {b.Label}: a feature takes a sketch of its own body."}, "when": "=not made and not b.hasObject(sk)"},
     {"let": {"before": "=volume(b)", "sub": "=bool(a.subtractive)"}},
     {"refuse": {"fmt": "{b.Label} has no solid to cut: pd_pad something first."}, "code": "invalid_state", "when": "=sub and before <= 0"},
@@ -7583,10 +7583,10 @@
    ],
    "answer": {
     "via": "settle",
-    "with": ["=b", "=f", "pd_pipe", "=before", "='cut' if sub else 'add'", "The profile should sit at the path's start, square to it; the path's edges must join end to end; a path that turns tighter than the profile fails."],
+    "with": ["=b", "=f", "pd_pipe", "=before", "='cut' if sub else 'add'", "The sketch should sit at the path's start, square to it; the path's edges must join end to end; a path that turns tighter than the sketch fails."],
     "then": [
-     {"put": {"profile": "=sk.Label", "path": "=path.Label", "edges": "=names"}, "when": "=made or a.edges is not None or not path.isDerivedFrom('Sketcher::SketchObject')"},
-     {"put": {"profileIs": "=held"}, "when": "=held"}
+     {"put": {"sketch": "=sk.Label", "path": "=path.Label", "edges": "=names"}, "when": "=made or a.edges is not None or not path.isDerivedFrom('Sketcher::SketchObject')"},
+     {"put": {"sketchIs": "=held"}, "when": "=held"}
     ]
    }
   },
@@ -20234,14 +20234,14 @@
   },
   "pd_helix": {
    "group": "feature",
-   "description": "Sweep the profile of a closed sketch in a helix about an axis. axis: default the sketch's V_Axis; also H_Axis, x | y | z, a datum line, the id of a line. Give two of pitch (mm for each turn), height (mm), turns. taper: degrees. Or growth: mm for each turn, with height and turns (a spiral). leftHanded, reversed. subtractive: true cuts it (a thread, a groove). Keep the profile off the axis and less than the pitch. Many turns are slow. The answer adds helix.",
+   "description": "Sweep a closed sketch in a helix about an axis. axis: default the sketch's V_Axis; also H_Axis, x | y | z, a datum line, the id of a line. Give two of pitch (mm for each turn), height (mm), turns. taper: degrees. Or growth: mm for each turn, with height and turns (a spiral). leftHanded, reversed. subtractive: true cuts it (a thread, a groove). Keep the sketch off the axis and less than the pitch. Many turns are slow. The answer adds helix.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "body": {
       "type": "string"
      },
-     "profile": {
+     "sketch": {
       "type": "string"
      },
      "axis": {
@@ -20279,7 +20279,7 @@
      }
     },
     "required": [
-     "profile"
+     "sketch"
     ],
     "additionalProperties": false
    },
@@ -20290,7 +20290,7 @@
    "runner": "steps",
    "steps": [
     {"let": {"b": "=body(a.body)"}},
-    {"let": {"sk": "=sketch_of(a.profile, b)", "sub": "=bool(a.subtractive)", "before": "=volume(b)"}},
+    {"let": {"sk": "=sketch_of(a.sketch, b)", "sub": "=bool(a.subtractive)", "before": "=volume(b)"}},
     {"refuse": {"fmt": "{b.Label} has no solid to cut a helix into: pd_pad or pd_primitive first."}, "code": "invalid_state", "when": "=sub and before <= 0"},
     {"let": {"pitch": "=a.pitch", "height": "=a.height", "turns": "=a.turns"}},
     {"let": {"sizes": "=(('pitch', pitch), ('height', height), ('turns', turns))"}},
@@ -20312,7 +20312,7 @@
     {"set": {"f.Reversed": true}, "when": "=a.reversed"},
     {"set": {"b.Tip": "=f"}, "when": "=b.Tip != f"}
    ],
-   "answer": {"via": "settle", "with": ["=b", "=f", "pd_helix", "=before", "='cut' if sub else 'add'", "='The profile is swept around the axis: it must be closed, off the axis and not across it; a pitch smaller than the profile\\'s height makes the turns run into one another.' + (' A cut must pass through the body.' if sub else ' An added helix must touch the body\\'s solid, if it has one, or it is a second solid.')"], "then": [{"put": {"helix": "={k: num_json(getprop(f, p)) for k, p in (('pitch', 'Pitch'), ('height', 'Height'), ('turns', 'Turns'))}"}}]}
+   "answer": {"via": "settle", "with": ["=b", "=f", "pd_helix", "=before", "='cut' if sub else 'add'", "='The sketch is swept around the axis: it must be closed, off the axis and not across it; a pitch smaller than the sketch\\'s height makes the turns run into one another.' + (' A cut must pass through the body.' if sub else ' An added helix must touch the body\\'s solid, if it has one, or it is a second solid.')"], "then": [{"put": {"helix": "={k: num_json(getprop(f, p)) for k, p in (('pitch', 'Pitch'), ('height', 'Height'), ('turns', 'Turns'))}"}}]}
   },
   "pd_multitransform": {
    "group": "feature",

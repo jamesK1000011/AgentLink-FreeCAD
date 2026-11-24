@@ -84,7 +84,7 @@ CATCH = ("refusal", "error")
 
 # A left-out field a tool requires, filled from what the session holds now
 # (the current body, sketch and last result): field → what fills it.
-REQUIRED_FROM = {"body": "body", "sketch": "sketch", "profile": "sketch", "object": "last", "objects": "last", "feature": "feature",
+REQUIRED_FROM = {"body": "body", "sketch": "sketch", "object": "last", "objects": "last", "feature": "feature",
                  "bodies": "body"}
 # A field a tool takes "when there is one" (body, sketch): filled only from
 # what this block made or named, so the block's own sketch is meant.

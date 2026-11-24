@@ -249,8 +249,8 @@ def schema(name, old):
     """The snapshot's inputSchema of a tool with its meant change made."""
     import copy
 
-    m = SCHEMAS.get(name)
-    if not m:
+    m = SCHEMAS.get(name) or {}
+    if not m and name not in RENAMES:
         return old
     new = copy.deepcopy(old)
     props = new["properties"]
@@ -270,8 +270,34 @@ def schema(name, old):
     new["properties"] = props
     if "required" in m:
         new["required"] = list(m["required"])
+    # Renamed fields last: same place, same schema, the new name (RENAMES).
+    names = RENAMES.get(name, ({}, ""))[0]
+    if names:
+        new["properties"] = {names.get(k, k): v for k, v in new["properties"].items()}
+        new["required"] = [names.get(k, k) for k in new.get("required", [])]
     # the keys in the order the entry keeps them
     return {k: new[k] for k in old}
+
+
+# Renamed inputs (vocabulary renames of 24 Nov, rule R5: no alias, the old
+# name is refused like any unknown field): per tool, {old: new} and why. The
+# snapshot's schema takes the new names in schema(); the data tests give the
+# new run its arguments with the new names (args_as_meant), the old handler
+# the old ones.
+RENAMES = {
+    "pd_helix": ({"profile": "sketch"}, "rename set 4: a PartDesign feature's sketch is sketch"),
+    "pd_loft": ({"profile": "sketch"}, "rename set 4: the first sketch is sketch; the others stay sections"),
+    "pd_pipe": ({"profile": "sketch"}, "rename set 4: sketch, a sketch or { circle: { d, wall } }"),
+}
+
+
+def args_as_meant(tool, args):
+    """A case's arguments with the renamed inputs (RENAMES) given by their
+    new names, for the new run."""
+    names = RENAMES.get(tool, ({}, ""))[0]
+    if not names or not isinstance(args, dict):
+        return args
+    return {names.get(k, k): v for k, v in args.items()}
 
 
 # Answer fields a converted tool now adds to what its handler answered (the
@@ -284,7 +310,7 @@ RESULTS = {
     "asm_bom": ((), "finding 11: rows of parts in a print setup carry massAs and solidMass (none in the stand-in's cases)"),
     "pd_datum": (("refs", "mode", "offset", "world", "type"), "skeleton workflow (20 Nov): a datum attached by refs says them, its mode, offset and world placement"),
     "part_datum": (("refs", "offset", "in", "world"), "skeleton workflow (20 Nov): refs, the container and the world placement"),
-    "pd_pipe": (("profile", "path", "edges", "profileIs"), "pipe 20 Nov: a made tube profile, a path of a binder or chosen edges are named"),
+    "pd_pipe": (("sketch", "path", "edges", "sketchIs"), "pipe 20 Nov: a made tube sketch, a path of a binder or chosen edges are named (sketch, sketchIs: rename set 4)"),
     "sheet_table": (("newSheet",), "pipe 20 Nov: a sheet made with the label given"),
     "shape_query": (("shapeIs",), "pipe 20 Nov: an object of edges only"),
     "object_list": (("typesHere",), "pipe 20 Nov: the types there are when nothing is kept"),
@@ -400,6 +426,23 @@ CASES = {
         "trace": [(["Pad.Refine = True"], ["copy(Solid<housing>)", "Pad.Refine = True"]),
                   (["soundness(Solid<refined housing>)", "snapshot('part_refine')"], ["Pad.Refine = False", "recompute()"])]},
 }
+
+
+# Rename set 4 (24 Nov): pd_helix, pd_loft and pd_pipe take sketch, not profile; their words say sketch.
+_PIPE_HINT = ("The profile should sit at the path's start, square to it; the path's edges must join end to end; a path that turns tighter than the profile fails.",
+              "The sketch should sit at the path's start, square to it; the path's edges must join end to end; a path that turns tighter than the sketch fails.")
+_LOFT_SECTIONS = ("the profiles after the first (profile), in order", "the sketches after the first (sketch), in order")
+CASES.update({
+    ("pd_pipe", "it fails"): {"why": "rename set 4: sketch in the words", "message": _PIPE_HINT},
+    ("pd_pipe", "it adds nothing"): {"why": "rename set 4: sketch in the words", "message": _PIPE_HINT},
+    ("pd_pipe", "the profile as its path"): {"why": "rename set 4: sketch in the words",
+                                            "message": ("path: another sketch than the profile — the profile is swept", "path: not the sketch given in sketch — the sketch is swept")},
+    ("pd_loft", "no sections"): {"why": "rename set 4: sketch in the words", "message": _LOFT_SECTIONS},
+    ("pd_loft", "the profile among the sections"): {"why": "rename set 4: sketch in the words", "message": _LOFT_SECTIONS},
+    ("pd_helix", "a cut that misses"): {"why": "rename set 4: sketch in the words",
+                                        "message": ("The profile is swept around the axis: it must be closed, off the axis and not across it; a pitch smaller than the profile's height",
+                                                    "The sketch is swept around the axis: it must be closed, off the axis and not across it; a pitch smaller than the sketch's height")},
+})
 
 
 def case_as_meant(tool, case, old):

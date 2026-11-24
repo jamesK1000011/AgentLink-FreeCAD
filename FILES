@@ -509,6 +509,7 @@ tests/test_redteam4_hub.py
 tests/test_refusal_kinds.py
 tests/test_release.py
 tests/test_release_tools.py
+tests/test_renames_4_7_9.py
 tests/test_render_sizing.py
 tests/test_report_watch.py
 tests/test_restart_temp_copy.py

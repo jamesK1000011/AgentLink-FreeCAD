@@ -133,7 +133,7 @@
   "part_split": {"did": ["Split {object}", "Split a shape"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "part_from_mesh": {"did": ["Turned {mesh} into a solid", "Turned {file} into a solid", "Turned a mesh into a solid"], "source": "Agent Link's own wording", "date": "2026-11-17"},
   "pd_boolean": {"did": ["Combined bodies into {body}", "Combined bodies"], "source": "Agent Link's own wording", "date": "2026-11-15"},
-  "pd_helix": {"did": ["Made a helix from {profile}", "Made a helix from {sketch}", "Made a helix"], "source": "Agent Link's own wording", "date": "2026-11-17"},
+  "pd_helix": {"did": ["Made a helix from {sketch}", "Made a helix"], "source": "Agent Link's own wording", "date": "2026-11-17"},
   "pd_primitive": {"did": ["Added a {kind} to {body}", "Added a {kind}", "Added a basic shape"], "source": "Agent Link's own wording", "date": "2026-11-15"},
   "pd_shaft": {"did": ["Made a shaft {name}", "Made a shaft"], "source": "Agent Link's own wording", "date": "2026-11-17"},
   "pd_gear": {"did": ["Made a gear {name}", "Made a gear"], "source": "Agent Link's own wording", "date": "2026-11-17"},

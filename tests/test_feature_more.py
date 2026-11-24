@@ -27,9 +27,9 @@ class FeatureMore(Base):
         self.ok("pd_body_new", {"name": "Spring"})
         self.ok("sketch_new", {"body": "Spring", "plane": "XZ", "name": "Wire"})
         self.ok("sketch_add", {"sketch": "Wire", "items": [{"kind": "circle", "center": [10, 0], "radius": 1}]})
-        h = self.ok("pd_helix", {"body": "Spring", "profile": "Wire", "pitch": 4, "height": 20})
+        h = self.ok("pd_helix", {"body": "Spring", "sketch": "Wire", "pitch": 4, "height": 20})
         self.assertEqual(h["helix"]["turns"], 5.0)
-        self.refused("pd_helix", {"body": "Spring", "profile": "Wire", "pitch": 4})
+        self.refused("pd_helix", {"body": "Spring", "sketch": "Wire", "pitch": 4})
 
     def test_4_binder_boolean(self):
         self.ok("pd_body_new", {"name": "Cap"})
