@@ -151,5 +151,37 @@ class Set6Reversed(Base):
         self.assertNotRegex(runners.entries()["asm_joint"]["description"], r"\breverse\b")
 
 
+
+class Set10Values(Base):
+    """One property map, values: feature_edit set, varset_set/new properties; object_set values only."""
+
+    def test_old_name_refused(self):
+        self.refused_by_name("feature_edit", {"feature": "Pad", "set": {"Length": 20}}, "set", "values")
+        self.refused_by_name("varset_set", {"properties": {"size": "60 mm"}}, "properties", "values")
+        self.refused_by_name("varset_new", {"name": "Dims", "properties": {"size": "60 mm"}}, "properties", "values")
+        for old in ("set", "properties", "props", "property", "value"):
+            self.refused_by_name("object_set", {"object": "Box", old: 1}, old, "values")
+        self.assertEqual(list(runners.entries()["object_set"]["inputSchema"]["properties"]), ["object", "values"])
+        for t in ("object_set", "varset_set", "varset_new"):
+            self.assertNotIn(t, protocol.FIELD_ALIASES)
+
+    def test_new_name_works(self):
+        r = run_case("datapd", "feature_edit", "several", {"feature": "pad", "values": {"Length": 20, "Type": "UpToLast", "Reversed": True}})
+        self.assertEqual(r[0], "ok", r)
+        self.assertEqual(sorted(r[1]["set"]), ["Length", "Reversed", "Type"])
+        r = run_case("datapd", "feature_edit", "set not an object", {"feature": "Pad", "values": ["Length", 20]})
+        self.assertEqual(r[0], "refused")
+        self.assertTrue(r[2].startswith("values: { Property: value }"), r)
+        r = run_case("datask2", "varset_new", "sheet call 33", {"name": "NutVars", "values": {"Thickness": "8.4 mm", "Chamfer": "30 deg", "Count": 2}})
+        self.assertEqual(r[0], "ok", r)
+        self.assertEqual(sorted(r[1]["set"]), ["Chamfer", "Count", "Thickness"])
+        r = run_case("datask2", "varset_set", "sheet call 35", {"varset": "Dims", "values": {"size": "10.8 mm"}})
+        self.assertEqual(r[0], "ok", r)
+        self.assertEqual(list(r[1]["set"]), ["size"])
+        r = run_case("datacore", "object_set", "a length and a placement", {"object": "Block", "values": {"Length": 20}})
+        self.assertEqual(r[0], "ok", r)
+        self.assertEqual(r[1]["set"]["Length"]["to"], 20.0)
+
+
 if __name__ == "__main__":
     unittest.main()

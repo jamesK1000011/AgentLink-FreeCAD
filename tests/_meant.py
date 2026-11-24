@@ -53,8 +53,6 @@ DESCRIPTIONS = {
         "Again, renamed). Reply: deleted, errors, health. A container that only holds the object is not a user (a Body, an App::Part, a group): an unused sketch or the tip feature of a Body deletes without force, and the Body's tip moves back."),
     'object_get': ('— use it, a feature has dozens. Changes nothing.',
         '— use it, a feature has dozens. Changes nothing. Several words go in one filter with | between them ("Length|Width"): a property that has one of them matches.'),
-    'object_set': ('only Placement; Label is set with object_rename.',
-        'only Placement; Label is set with object_rename. For one property, property and value also work: { property: "Length", value: 20 }.'),
     'asm_joint': [
         # Test drive of 20 Nov (bicycle, findings 4, 3, 5): no flip by itself, keep, chain by teeth.
         ("gears and belt (radius1, radius2 — read off round edges when left out).",
@@ -132,6 +130,11 @@ RENAMES = {
     "sketch_new": {"inputs": {"flip": "reversed"}, "words": [("flip", "reversed")]},
     "sketch_attach": {"inputs": {"flip": "reversed"}, "words": [("flip", "reversed")]},
     "asm_joint": {"inputs": {"reverse": "reversed"}, "words": [("reverse", "reversed")]},
+    # Set 10: one property map, values (V.2). object_set's { property, value } (finding 12) went: values only.
+    "feature_edit": {"inputs": {"set": "values"}, "words": [("set", "values")]},
+    "varset_set": {"inputs": {"properties": "values"}, "words": [("properties", "values")]},
+    "varset_new": {"inputs": {"properties": "values"}, "words": [("properties", "values")]},
+    "pd_revolution": {"words": [("feature, set:", "feature, values:")]},
 }
 
 
@@ -248,10 +251,6 @@ SCHEMAS = {
                   "after": [("offset", "gap", {"type": "number"}),
                             ("reverse", "autoFlip", {"type": "boolean"}), ("autoFlip", "keep", {"type": "boolean"}), ("keep", "teeth1", {"type": "integer"}),
                             ("teeth1", "teeth2", {"type": "integer"})]},
-    "object_set": {"why": "finding 12: { property, value } as well as { values }",
-                   "after": [("values", "property", {"type": "string", "description": "One property's name, with value: the same as values { property: value }."}),
-                             ("property", "value", {})],
-                   "required": ["object"]},
     # 20 Nov, the skeleton workflow of the design kickoff: a datum on several references of any object,
     # its mode, its AttachmentOffset, and (part_datum) the Body or App::Part that holds it.
     "pd_datum": {"why": "skeleton workflow: refs, mode, offset",
@@ -320,7 +319,6 @@ SCHEMAS = {
 def schema(name, old):
     """The snapshot's inputSchema of a tool with its meant change made."""
     import copy
-    import json
 
     m = SCHEMAS.get(name) or {}
     if not m and name not in RENAMES:
@@ -348,8 +346,13 @@ def schema(name, old):
         new["properties"] = {ren.get(k, k): v for k, v in new["properties"].items()}
         if "required" in new:
             new["required"] = [ren.get(k, k) for k in new["required"]]
-    if name in RENAMES:
-        new = json.loads(_rename_words(name, json.dumps(new)))
+    if name in RENAMES:  # the words of each description, not the schema's own keys
+        def words(x):
+            if isinstance(x, dict):
+                return {k: (_rename_words(name, v) if k == "description" and isinstance(v, str) else words(v)) for k, v in x.items()}
+            return [words(v) for v in x] if isinstance(x, list) else x
+
+        new = words(new)
     # the keys in the order the entry keeps them
     return {k: new[k] for k in old}
 

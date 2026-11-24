@@ -6804,7 +6804,7 @@
     {"let": {"angle": "=a.get('angle', 360)"}},
     {"refuse": "angle: degrees, over 0 up to 360.", "when": "=not is_num(angle) or not (0 < angle <= 360)"},
     {"let": {"side": "=a.sides or 'one'"}},
-    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit {{ feature, set: {{ Type: \"TwoAngles\", Angle2: … }} }}."}, "when": "=side not in ('one', 'symmetric')"},
+    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit {{ feature, values: {{ Type: \"TwoAngles\", Angle2: … }} }}."}, "when": "=side not in ('one', 'symmetric')"},
     {"let": {"f": "=new(b, 'PartDesign::Revolution', 'Revolution')"}},
     {"set": {"f.Profile": "=sk", "f.ReferenceAxis": "=axis_ref(b, a.get('axis', 'V_Axis'), sk)[0]", "f.Angle": "=float(angle)"}},
     {"set": {"f.Midplane": true}, "when": "=side == 'symmetric'"},
@@ -6863,7 +6863,7 @@
     {"let": {"angle": "=a.get('angle', 360)"}},
     {"refuse": "angle: degrees, over 0 up to 360.", "when": "=not is_num(angle) or not (0 < angle <= 360)"},
     {"let": {"side": "=a.sides or 'one'"}},
-    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit {{ feature, set: {{ Type: \"TwoAngles\", Angle2: … }} }}."}, "when": "=side not in ('one', 'symmetric')"},
+    {"refuse": {"fmt": "sides {side!r}: one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit {{ feature, values: {{ Type: \"TwoAngles\", Angle2: … }} }}."}, "when": "=side not in ('one', 'symmetric')"},
     {"let": {"f": "=new(b, 'PartDesign::Groove', 'Groove')"}},
     {"set": {"f.Profile": "=sk", "f.ReferenceAxis": "=axis_ref(b, a.get('axis', 'V_Axis'), sk)[0]", "f.Angle": "=float(angle)"}},
     {"set": {"f.Midplane": true}, "when": "=side == 'symmetric'"},
@@ -7689,7 +7689,7 @@
   },
   "feature_edit": {
    "group": "feature",
-   "description": "Change the properties of a feature by FreeCAD's names, then recompute. set: { Length: 20, Type: \"ThroughAll\", Reversed: true, Radius: 2, Occurrences: 4, Refine: true, … }. feature_list shows them. A wrong enumeration value lists the correct values. The tool does not edit links (sketch, edges, axis): remove the feature and make it again. The tool refuses and undoes a change that breaks the feature or a later feature. The tool finds again the fillets whose edges the change renumbered (refsFound). Change a property bound to a parameter with param_set.",
+   "description": "Change the properties of a feature by FreeCAD's names, then recompute. values: { Length: 20, Type: \"ThroughAll\", Reversed: true, Radius: 2, Occurrences: 4, Refine: true, … }. feature_list shows them. A wrong enumeration value lists the correct values. The tool does not edit links (sketch, edges, axis): remove the feature and make it again. The tool refuses and undoes a change that breaks the feature or a later feature. The tool finds again the fillets whose edges the change renumbered (refsFound). Change a property bound to a parameter with param_set.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7700,13 +7700,13 @@
      "feature": {
       "type": "string"
      },
-     "set": {
+     "values": {
       "type": "object"
      }
     },
     "required": [
      "feature",
-     "set"
+     "values"
     ],
     "additionalProperties": false
    },
@@ -7715,8 +7715,8 @@
    "date": "2026-11-16",
    "runner": "steps",
    "steps": [
-    {"let": {"b": "=body(a.body)", "f": "=in_body(b, a.feature, ['PartDesign::'])", "changes": "=a.set"}},
-    {"refuse": {"fmt": "set: {{ Property: value }} by FreeCAD's property names — {f.Label}'s: {own_keys(f)}."}, "when": "=not is_dict(changes) or not changes"},
+    {"let": {"b": "=body(a.body)", "f": "=in_body(b, a.feature, ['PartDesign::'])", "changes": "=a.values"}},
+    {"refuse": {"fmt": "values: {{ Property: value }} by FreeCAD's property names — {f.Label}'s: {own_keys(f)}."}, "when": "=not is_dict(changes) or not changes"},
     {"let": {"before": "=volume(b)", "refs": "=ref_snapshot(b)", "bound": "={p.lstrip('.'): e for p, e in get(f, 'ExpressionEngine', [])}", "done": "={}"}},
     {
      "each": "k, v",
@@ -19899,14 +19899,14 @@
   },
   "varset_new": {
    "group": "param",
-   "description": "Make a variable set (App::VarSet, FreeCAD 1.0 and later). name: its label. properties: its variables, for example { size: \"55 mm\" (a length), angle: \"30 deg\", count: 3, ratio: 0.5, on: true, note: \"text\" }. A variable name has letters, digits and _; it must not be a unit or a constant. group: the property group (Variables). Expressions read a variable as <object name>.size (refAs in the answer). param_bind { target, expression: \"Dims.size\" } also takes the label.",
+   "description": "Make a variable set (App::VarSet, FreeCAD 1.0 and later). name: its label. values: its variables, for example { size: \"55 mm\" (a length), angle: \"30 deg\", count: 3, ratio: 0.5, on: true, note: \"text\" }. A variable name has letters, digits and _; it must not be a unit or a constant. group: the property group (Variables). Expressions read a variable as <object name>.size (refAs in the answer). param_bind { target, expression: \"Dims.size\" } also takes the label.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "name": {
       "type": "string"
      },
-     "properties": {
+     "values": {
       "type": "object"
      },
      "group": {
@@ -19930,7 +19930,7 @@
     {"try": [{"let": {"o": "=doc().addObject('App::VarSet', 'VarSet')"}}], "except": [{"refuse": {"fmt": "App::VarSet is FreeCAD 1.0's and later ({error}): param_set keeps parameters in a Params sheet instead."}, "code": "unavailable"}]},
     {"set": {"o.Label": "=name"}},
     {"let": {"done": "={}"}},
-    {"when": "=a.properties", "then": [{"try": [{"let": {"props": "=a.properties or {}"}}, {"refuse": {"fmt": "properties: {{ name: value }} — \"55 mm\" a length, \"30 deg\" an angle, a number, true/false or text."}, "when": "=not is_dict(props) or not props"}, {"each": "pname, value", "in": "=props.items()", "steps": [{"refuse": {"fmt": "properties.{pname}: a name of letters, digits and _, not starting with a digit — and not a cell address (A1), which an expression would read as a cell."}, "when": "=not is_str(pname) or not is_name(pname) or is_cell(pname)"}, {"refuse": {"fmt": "properties.{pname}: {pname} is a unit or constant in FreeCAD's expressions — a longer name ({pname}_value)."}, "when": "=reserved(pname)"}, {"refuse": {"fmt": "properties.{pname}: the VarSet's own property — another name."}, "when": "=own_prop(pname)"}, {"let": {"typ, v": "=var_type(value)"}}, {"refuse": {"fmt": "{value!r}: a number, true/false, text, or a quantity with its unit (\"55 mm\", \"30 deg\")."}, "when": "=typ is None"}, {"let": {"fresh": "=pname not in o.PropertiesList", "kind": "=typ.split('::')[-1]"}}, {"do": "=o.addProperty(typ, pname, a.group or 'Variables', 'Set by Agent Link (varset_new / varset_set)')", "when": "=fresh"}, {"try": [{"do": "=setprop(o, pname, v)"}], "except": [{"refuse": {"fmt": "properties.{pname} = {value!r}: FreeCAD refuses it as a {kind} ({error}) — a quantity is a number and a unit FreeCAD knows (\"55 mm\", \"2 in\", \"30 deg\"); other text is kept as text."}, "when": "=fresh"}, {"refuse": {"fmt": "properties.{pname} = {value!r}: it is a {o.getTypeIdOfProperty(pname)} — give a value of that kind ({error})."}}]}, {"do": "=done.update({pname: {'new': fresh, 'type': o.getTypeIdOfProperty(pname).split('::')[-1]}})"}]}], "on": "refusal", "except": [{"do": "=doc().removeObject(o.Name)"}], "reraise": true}]},
+    {"when": "=a.values", "then": [{"try": [{"let": {"props": "=a.values or {}"}}, {"refuse": {"fmt": "values: {{ name: value }} — \"55 mm\" a length, \"30 deg\" an angle, a number, true/false or text."}, "when": "=not is_dict(props) or not props"}, {"each": "pname, value", "in": "=props.items()", "steps": [{"refuse": {"fmt": "values.{pname}: a name of letters, digits and _, not starting with a digit — and not a cell address (A1), which an expression would read as a cell."}, "when": "=not is_str(pname) or not is_name(pname) or is_cell(pname)"}, {"refuse": {"fmt": "values.{pname}: {pname} is a unit or constant in FreeCAD's expressions — a longer name ({pname}_value)."}, "when": "=reserved(pname)"}, {"refuse": {"fmt": "values.{pname}: the VarSet's own property — another name."}, "when": "=own_prop(pname)"}, {"let": {"typ, v": "=var_type(value)"}}, {"refuse": {"fmt": "{value!r}: a number, true/false, text, or a quantity with its unit (\"55 mm\", \"30 deg\")."}, "when": "=typ is None"}, {"let": {"fresh": "=pname not in o.PropertiesList", "kind": "=typ.split('::')[-1]"}}, {"do": "=o.addProperty(typ, pname, a.group or 'Variables', 'Set by Agent Link (varset_new / varset_set)')", "when": "=fresh"}, {"try": [{"do": "=setprop(o, pname, v)"}], "except": [{"refuse": {"fmt": "values.{pname} = {value!r}: FreeCAD refuses it as a {kind} ({error}) — a quantity is a number and a unit FreeCAD knows (\"55 mm\", \"2 in\", \"30 deg\"); other text is kept as text."}, "when": "=fresh"}, {"refuse": {"fmt": "values.{pname} = {value!r}: it is a {o.getTypeIdOfProperty(pname)} — give a value of that kind ({error})."}}]}, {"do": "=done.update({pname: {'new': fresh, 'type': o.getTypeIdOfProperty(pname).split('::')[-1]}})"}]}], "on": "refusal", "except": [{"do": "=doc().removeObject(o.Name)"}], "reraise": true}]},
     {"do": "=doc().recompute()"},
     {"let": {"found": "=(repair_refs(doc(), refs) or {}) if refs and broken(doc()) else {}"}},
     {"let": {"bad": "=broken(doc())"}},
@@ -19941,14 +19941,14 @@
   },
   "varset_set": {
    "group": "param",
-   "description": "Set or add variables of a variable set. varset: its label (you can omit it when there is only one). properties: { name: value }, as varset_new takes them. An existing variable keeps its kind: a length takes \"60 mm\", not text. All objects bound to the variables recompute. The tool refuses a value that breaks a feature, and nothing is kept. Answer: variables, usedBy, bodies.",
+   "description": "Set or add variables of a variable set. varset: its label (you can omit it when there is only one). values: { name: value }, as varset_new takes them. An existing variable keeps its kind: a length takes \"60 mm\", not text. All objects bound to the variables recompute. The tool refuses a value that breaks a feature, and nothing is kept. Answer: variables, usedBy, bodies.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "varset": {
       "type": "string"
      },
-     "properties": {
+     "values": {
       "type": "object"
      },
      "group": {
@@ -19956,7 +19956,7 @@
      }
     },
     "required": [
-     "properties"
+     "values"
     ],
     "additionalProperties": false
    },
@@ -19966,12 +19966,12 @@
    "runner": "steps",
    "steps": [
     {"let": {"vs": "=varsets()", "ref": "=a.varset"}},
-    {"refuse": {"fmt": "No variable set here: varset_new {{ name, properties }} makes one."}, "code": "not_found", "when": "=not vs"},
+    {"refuse": {"fmt": "No variable set here: varset_new {{ name, values }} makes one."}, "code": "not_found", "when": "=not vs"},
     {"when": "=ref is None", "then": [{"refuse": {"fmt": "varset: say which — {', '.join([x.Label for x in vs])}."}, "when": "=len(vs) != 1"}, {"let": {"o": "=vs[0]"}}], "else": [{"let": {"o": "=first([x for x in vs if ref in (x.Label, x.Name)])"}}, {"refuse": {"fmt": "varset {ref!r}: the variable sets are {', '.join([x.Label for x in vs])}."}, "code": "not_found", "when": "=o is None"}]},
     {"let": {"refs": "=ref_snap()", "done": "={}"}},
-    {"let": {"props": "=a.properties"}},
-    {"refuse": {"fmt": "properties: {{ name: value }} — \"55 mm\" a length, \"30 deg\" an angle, a number, true/false or text."}, "when": "=not is_dict(props) or not props"},
-    {"each": "pname, value", "in": "=props.items()", "steps": [{"refuse": {"fmt": "properties.{pname}: a name of letters, digits and _, not starting with a digit — and not a cell address (A1), which an expression would read as a cell."}, "when": "=not is_str(pname) or not is_name(pname) or is_cell(pname)"}, {"refuse": {"fmt": "properties.{pname}: {pname} is a unit or constant in FreeCAD's expressions — a longer name ({pname}_value)."}, "when": "=reserved(pname)"}, {"refuse": {"fmt": "properties.{pname}: the VarSet's own property — another name."}, "when": "=own_prop(pname)"}, {"let": {"typ, v": "=var_type(value)"}}, {"refuse": {"fmt": "{value!r}: a number, true/false, text, or a quantity with its unit (\"55 mm\", \"30 deg\")."}, "when": "=typ is None"}, {"let": {"fresh": "=pname not in o.PropertiesList", "kind": "=typ.split('::')[-1]"}}, {"do": "=o.addProperty(typ, pname, a.group or 'Variables', 'Set by Agent Link (varset_new / varset_set)')", "when": "=fresh"}, {"try": [{"do": "=setprop(o, pname, v)"}], "except": [{"refuse": {"fmt": "properties.{pname} = {value!r}: FreeCAD refuses it as a {kind} ({error}) — a quantity is a number and a unit FreeCAD knows (\"55 mm\", \"2 in\", \"30 deg\"); other text is kept as text."}, "when": "=fresh"}, {"refuse": {"fmt": "properties.{pname} = {value!r}: it is a {o.getTypeIdOfProperty(pname)} — give a value of that kind ({error})."}}]}, {"do": "=done.update({pname: {'new': fresh, 'type': o.getTypeIdOfProperty(pname).split('::')[-1]}})"}]},
+    {"let": {"props": "=a.values"}},
+    {"refuse": {"fmt": "values: {{ name: value }} — \"55 mm\" a length, \"30 deg\" an angle, a number, true/false or text."}, "when": "=not is_dict(props) or not props"},
+    {"each": "pname, value", "in": "=props.items()", "steps": [{"refuse": {"fmt": "values.{pname}: a name of letters, digits and _, not starting with a digit — and not a cell address (A1), which an expression would read as a cell."}, "when": "=not is_str(pname) or not is_name(pname) or is_cell(pname)"}, {"refuse": {"fmt": "values.{pname}: {pname} is a unit or constant in FreeCAD's expressions — a longer name ({pname}_value)."}, "when": "=reserved(pname)"}, {"refuse": {"fmt": "values.{pname}: the VarSet's own property — another name."}, "when": "=own_prop(pname)"}, {"let": {"typ, v": "=var_type(value)"}}, {"refuse": {"fmt": "{value!r}: a number, true/false, text, or a quantity with its unit (\"55 mm\", \"30 deg\")."}, "when": "=typ is None"}, {"let": {"fresh": "=pname not in o.PropertiesList", "kind": "=typ.split('::')[-1]"}}, {"do": "=o.addProperty(typ, pname, a.group or 'Variables', 'Set by Agent Link (varset_new / varset_set)')", "when": "=fresh"}, {"try": [{"do": "=setprop(o, pname, v)"}], "except": [{"refuse": {"fmt": "values.{pname} = {value!r}: FreeCAD refuses it as a {kind} ({error}) — a quantity is a number and a unit FreeCAD knows (\"55 mm\", \"2 in\", \"30 deg\"); other text is kept as text."}, "when": "=fresh"}, {"refuse": {"fmt": "values.{pname} = {value!r}: it is a {o.getTypeIdOfProperty(pname)} — give a value of that kind ({error})."}}]}, {"do": "=done.update({pname: {'new': fresh, 'type': o.getTypeIdOfProperty(pname).split('::')[-1]}})"}]},
     {"do": "=doc().recompute()"},
     {"let": {"found": "=(repair_refs(doc(), refs) or {}) if refs and broken(doc()) else {}"}},
     {"let": {"bad": "=broken(doc())"}},
@@ -21442,18 +21442,14 @@
   },
   "object_set": {
    "group": "doc",
-   "description": "Set properties of an object. values: for example { Length: 20, Placement: { at, axis, angle }, Refine: true, Base: \"Box\", Mode: \"…\" }. For one property, property and value also work: { property: \"Length\", value: 20 }. Placement also takes FreeCAD's Base, Axis, Angle, Rotation; what you omit is kept. Base is a link, by name or label; null clears it. The tool converts each value to its type. Numbers are mm and degrees. For lengths, angles and other quantities, a string with a unit also works (\"1 in\", \"30 deg\"), not plain floats. Integers and percents take whole numbers. The tool checks enumerations against their choices. Vectors are [x,y,z]. The tool refuses read-only properties, links to faces or edges, and property names that the object does not have. object_get lists names, types and choices. The tool recomputes the object and what is built from it. If that fails, the tool refuses and nothing is kept. On an attached object, Placement sets the AttachmentOffset (redirected). Answer: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement. Set Label with object_rename. Prefer attachment and expressions to a typed Placement for a part's position. Attach to the skeleton or a datum, and bind the offset to a parameter.",
-   "inputSchema": {"type": "object", "properties": {"object": {"type": "string", "description": "An object's name or label."}, "values": {"type": "object"}, "property": {"type": "string", "description": "One property's name, with value: the same as values { property: value }."}, "value": {}}, "required": ["object"], "additionalProperties": false},
+   "description": "Set properties of an object. values: for example { Length: 20, Placement: { at, axis, angle }, Refine: true, Base: \"Box\", Mode: \"…\" }. Placement also takes FreeCAD's Base, Axis, Angle, Rotation; what you omit is kept. Base is a link, by name or label; null clears it. The tool converts each value to its type. Numbers are mm and degrees. For lengths, angles and other quantities, a string with a unit also works (\"1 in\", \"30 deg\"), not plain floats. Integers and percents take whole numbers. The tool checks enumerations against their choices. Vectors are [x,y,z]. The tool refuses read-only properties, links to faces or edges, and property names that the object does not have. object_get lists names, types and choices. The tool recomputes the object and what is built from it. If that fails, the tool refuses and nothing is kept. On an attached object, Placement sets the AttachmentOffset (redirected). Answer: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement. Set Label with object_rename. Prefer attachment and expressions to a typed Placement for a part's position. Attach to the skeleton or a datum, and bind the offset to a parameter.",
+   "inputSchema": {"type": "object", "properties": {"object": {"type": "string", "description": "An object's name or label."}, "values": {"type": "object"}}, "required": ["object", "values"], "additionalProperties": false},
    "changes": true,
    "source": "Agent Link (was agentlink/families/doc.py)",
    "date": "2026-11-16",
    "runner": "steps",
    "steps": [
     {"let": {"o": "=find(a.get('object'))", "vals": "=a.get('values')"}},
-    {"refuse": "values or property with value, not both: values { Property: value, … } sets several, property and value set one.", "when": "=vals is not None and (a.get('property') is not None or 'value' in a)"},
-    {"refuse": "value: the new value of property (property and value go together; values { Property: value } is the other way).", "when": "=a.get('property') is not None and 'value' not in a"},
-    {"refuse": "property: the name of the property that value sets (property and value go together; values { Property: value } is the other way).", "when": "='value' in a and not (is_str(a.get('property')) and a.get('property').strip())"},
-    {"let": {"vals": "=dict([(a.get('property').strip(), a.get('value'))])"}, "when": "=vals is None and is_str(a.get('property')) and a.get('property').strip()"},
     {"refuse": "values: { Property: value, … } — object_get gives the names and types.", "when": "=not is_dict(vals) or not vals"},
     {"let": {"vals, redirected": "=attach_redirect(o, vals)"}},
     {"let": {"props": "=set(o.PropertiesList)"}},

@@ -22,7 +22,7 @@ EXPECT = {
     ('pd_pocket', 'model call 11'): {'feature': 'Pocket', 'volumeChange': -200.0},
     ('pd_pocket', 'no solid'): ['refused', 'invalid_state', 'Body has no solid to pocket: pd_pad (or pd_primitive) first.'],
     ('pd_pocket', 'it changes nothing'): ['refused', 'failed', 'Pocket cut nothing — the profile does not meet the body that way. Nothing was kept. Check the sketch with sketch_state (closed wires, no open vertices); reversed: true goes the other way into the body.'],
-    ('pd_revolution', 'model call 65'): ['refused', 'invalid_input', 'sides \'two\': one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit { feature, set: { Type: "TwoAngles", Angle2: … } }.'],
+    ('pd_revolution', 'model call 65'): ['refused', 'invalid_input', 'sides \'two\': one or symmetric (the angle shared both ways). Two different angles: make it one-sided, then feature_edit { feature, values: { Type: "TwoAngles", Angle2: … } }.'],
     ('pd_groove', 'symmetric, reversed, about a construction line'): {'feature': 'Groove', 'volumeChange': -100.0, 'sketchDof': 2},
     ('pd_hole', 'model call 46'): ['refused', 'invalid_input', 'thread \'M6x7\': not an ISO metric size FreeCAD has — coarse by diameter ("M5"): M4x0.7, M5x0.8, M6x1.0, M8x1.25, M10x1.5, M12x1.75, M16x2.0, M20x2.5, M24x3.0, M30x3.5 …; fine pitches for M6: M6x0.75. Other standards (UNC, UNF, BSP …): make the hole by diameter, then feature_edit its ThreadType and ThreadSize.'],
     ('pd_hole', 'model call 47'): {'feature': 'Hole', 'holes': 3, 'diameter': 6.0, 'thread': 'M6x1.0 (cosmetic)', 'cut': {'type': 'Counterbore', 'diameter': 0.0, 'depth': 0.0}},

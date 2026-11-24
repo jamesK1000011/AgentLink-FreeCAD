@@ -14,7 +14,7 @@
 #   9  material_set takes measure_mass's short ids (steel …);
 #   11 asm_bom: the mass of a part in a print setup is as printed, or marked
 #      solid;
-#   12 object_get filter "A|B"; object_set { property, value };
+#   12 object_get filter "A|B"; object_set { property, value } (gone 24 Nov: values only, rename set 10);
 #   live 20 Nov: a wall that hosts openings is drawn (Hosts is no use);
 #      the wall map reads a 2 mm shell as 2 mm by its edges too;
 #   screenshot 1: subdivide by edge length (a long thin triangle becomes a
@@ -377,7 +377,7 @@ class DeleteInABody(unittest.TestCase):
         self.assertIn("A container that only holds the object is not a user", e["description"])
 
 
-# ---- finding 12: object_get "A|B", object_set { property, value } ----------------------------
+# ---- finding 12: object_get "A|B"; object_set values only (rename set 10) -----------------------
 
 class GetAndSet(unittest.TestCase):
     BLOCK = CALL + '''
@@ -403,30 +403,24 @@ class GetAndSet(unittest.TestCase):
         self.assertEqual(sorted(got["one"][1]["properties"]), ["Mode"])
         self.assertEqual(got["none"][:2], ["refused", "not_found"])
 
-    def test_one_property_by_property_and_value(self):
+    def test_one_property_map(self):
+        # Rename set 10 (24 Nov, rule R5): values is the one property map; { property, value } went.
         got = child("_datacore_standin", self.BLOCK + '''
             s = fc.Session(tempfile.mkdtemp())
             block(s)
-            out = {"pv": run(doc, s, "object_set", {"object": "Block", "property": "Length", "value": 20}),
-                   "both": run(doc, s, "object_set", {"object": "Block", "values": {"Length": 5}, "property": "Length", "value": 20}),
-                   "no value": run(doc, s, "object_set", {"object": "Block", "property": "Length"}),
-                   "no property": run(doc, s, "object_set", {"object": "Block", "value": 3}),
-                   "neither": run(doc, s, "object_set", {"object": "Block"}),
+            out = {"neither": run(doc, s, "object_set", {"object": "Block"}),
                    "values": run(doc, s, "object_set", {"object": "Block", "values": {"Length": 12}})}
             print(json.dumps(out, default=str))
         ''')
-        self.assertEqual(got["pv"][0], "ok", got["pv"])
-        self.assertEqual(got["pv"][1]["set"]["Length"]["to"], 20.0)
         self.assertEqual(got["values"][0], "ok", got["values"])
-        self.assertEqual(got["both"], ["refused", "invalid_input", "values or property with value, not both: values { Property: value, … } sets several, property and value set one."])
-        self.assertEqual(got["no value"], ["refused", "invalid_input", "value: the new value of property (property and value go together; values { Property: value } is the other way)."])
-        self.assertEqual(got["no property"], ["refused", "invalid_input", "property: the name of the property that value sets (property and value go together; values { Property: value } is the other way)."])
+        self.assertEqual(got["values"][1]["set"]["Length"]["to"], 12.0)
         self.assertEqual(got["neither"], ["refused", "invalid_input", "values: { Property: value, … } — object_get gives the names and types."])
 
-    def test_the_schema_takes_both(self):
+    def test_the_schema_takes_values_only(self):
         sch = entries()["object_set"]["inputSchema"]
-        self.assertEqual(sch["required"], ["object"])
-        self.assertEqual(list(sch["properties"]), ["object", "values", "property", "value"])
+        self.assertEqual(sch["required"], ["object", "values"])
+        self.assertEqual(list(sch["properties"]), ["object", "values"])
+        self.assertNotIn("property and value", entries()["object_set"]["description"])
 
 
 # ---- findings 2, 3: asm_joint gap and near ----------------------------------------------------

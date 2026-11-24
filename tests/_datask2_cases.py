@@ -23,9 +23,9 @@ EXPECT = {
     ('param_set', "it renames a chamfer's edge, found again"): {'refsFound': {'Chamfer': 'relinked'}, 'usedBy': ['Sketch.Constraints.width', 'Pad.Length']},
     ('param_set', 'it breaks two'): ['refused', 'failed', 'width = 0.1 breaks Sketch: Sketch: conflicting (and Pad) — nothing was kept. Choose a value the features can take.'],
     ('param_list', 'sheet call 41'): {'sheet': 'Params', 'refAs': 'Params.<name>'},
-    ('varset_new', 'sheet call 32'): ['refused', 'invalid_input', "properties.mm: mm is a unit or constant in FreeCAD's expressions — a longer name (mm_value)."],
+    ('varset_new', 'sheet call 32'): ['refused', 'invalid_input', "values.mm: mm is a unit or constant in FreeCAD's expressions — a longer name (mm_value)."],
     ('varset_new', 'sheet call 33'): {'varset': 'NutVars', 'object': 'VarSet', 'set': {'Thickness': {'new': True, 'type': 'PropertyLength'}, 'Chamfer': {'new': True, 'type': 'PropertyAngle'}, 'Count': {'new': True, 'type': 'PropertyInteger'}}, 'refAs': 'VarSet.<name> (or NutVars.<name>: param_bind writes it by name)'},
-    ('varset_set', 'sheet call 36'): ['refused', 'invalid_input', "properties.size = 'thick': it is a App::PropertyLength — give a value of that kind (Quantity: unit mismatch in 'thick')."],
+    ('varset_set', 'sheet call 36'): ['refused', 'invalid_input', "values.size = 'thick': it is a App::PropertyLength — give a value of that kind (Quantity: unit mismatch in 'thick')."],
     ('varset_set', 'sheet call 35'): {'set': {'size': {'new': False, 'type': 'PropertyLength'}}, 'usedBy': ['Pad.Length2']},
     ('param_remove', 'sheet call 42'): {'removed': 'half', 'left': ['width', 'label'], 'step': 1},
     ('param_remove', 'one in use'): ['refused', 'invalid_state', 'width is used by Sketch.Constraints.width, Pad.Length: param_bind each to null (or another expression) first.'],
@@ -79,7 +79,7 @@ EXPECT = {
 # existing property will not take is varset_set's, and is reached there.
 # The skeleton workflow's refusals (20 Nov: refs, offset, the container): the handler at BASE had no such input,
 # so no case here can compare them; tests/test_datum_skeleton.py reaches each.
-UNREACHED = ["varset_new: properties.{pname} = {value!r}: it is a {o.getTypeIdOfProperty(pname)}",
+UNREACHED = ["varset_new: values.{pname} = {value!r}: it is a {o.getTypeIdOfProperty(pname)} — g",
              'pd_datum: refs or on, not both: on finds one round edge, refs names the referenc',
              'pd_datum: offset: { at: [x,y,z], rotate: { axis, angle } }.',
              "pd_datum: This FreeCAD makes no {kind} datum in a body: {'; '.join(tried)}",

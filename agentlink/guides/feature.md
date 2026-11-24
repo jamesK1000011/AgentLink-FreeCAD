@@ -40,7 +40,7 @@ Order that keeps a model stable (FreeCAD's own advice): sketches on the body's p
 <!-- later: when using pd_hole -->
 - `thread: "M5"` is ISO coarse (FreeCAD's "M5x0.8"); `"M8x1"` is ISO fine ("M8x1.0"). With `threaded: true` (default) the hole is the tap drill's size and the thread is only recorded; `modelThread: true` cuts the real thread and is slow. `threaded: false` gives a clearance hole: `fit` close, normal or loose (FreeCAD's Fine, Medium, Coarse for metric).
 - `cut`: counterbore, countersink or counterdrill. With a thread size FreeCAD fills in standard sizes (ISO 4762 for a counterbore, ISO 10642 for a countersink) and also takes a screw standard by name; with a plain `diameter`, give `cutDiameter` (and `cutDepth`, `countersinkAngle`).
-- Other thread standards (UNC, UNF, BSP …): make the hole by diameter, then `feature_edit { set: { ThreadType: "UNC" } }` and its `ThreadSize`; a wrong value lists the right ones.
+- Other thread standards (UNC, UNF, BSP …): make the hole by diameter, then `feature_edit { values: { ThreadType: "UNC" } }` and its `ThreadSize`; a wrong value lists the right ones.
 
 ## patterns and mirrors
 <!-- later: when using pd_linear_pattern, pd_polar_pattern, pd_mirrored or pd_multitransform -->

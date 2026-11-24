@@ -490,7 +490,7 @@ class Words(unittest.TestCase):
         self.assertEqual(activity.did("asm_ground", {"part": "Base"}), "Fixed Base in place")
         self.assertEqual(activity.did("pd_tip", {"body": "Hist"}), "Read Hist's tip")
         self.assertEqual(activity.did("pd_tip", {"body": "Hist", "feature": "H1"}), "Set Hist's tip to H1")
-        self.assertEqual(activity.did("feature_edit", {"feature": "Pocket 2", "set": {"Refine": True}}), "Set Pocket 2 Refine to on")
+        self.assertEqual(activity.did("feature_edit", {"feature": "Pocket 2", "values": {"Refine": True}}), "Set Pocket 2 Refine to on")
         self.assertEqual(activity.did("sketch_edit", {"sketch": "PlateSketch", "set": [{"constraint": "plate_width", "value": 70}]}),
                          "Set plate_width to 70 in PlateSketch")
         self.assertEqual(activity.did("sketch_merge", {"sketches": ["A", "B"], "name": "TourBoth"}), "Merged A and B into TourBoth")

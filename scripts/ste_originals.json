@@ -1559,11 +1559,11 @@
    "kind": "data"
   },
   "feature_edit": {
-   "description": "Change a feature's properties by FreeCAD's names: set { Length: 20, Type: \"ThroughAll\", Reversed: true, Radius: 2, Occurrences: 4, Refine: true, … } (feature_list shows them; a wrong enumeration value lists the right ones); recomputes. Links (sketch, edges, axis) are not edited: remove and remake. A change that breaks it or a later feature is refused and undone; fillets whose edges it renumbered are found again (refsFound). A property bound to a parameter is changed with param_set.",
+   "description": "Change a feature's properties by FreeCAD's names: values { Length: 20, Type: \"ThroughAll\", Reversed: true, Radius: 2, Occurrences: 4, Refine: true, … } (feature_list shows them; a wrong enumeration value lists the right ones); recomputes. Links (sketch, edges, axis) are not edited: remove and remake. A change that breaks it or a later feature is refused and undone; fillets whose edges it renumbered are found again (refsFound). A property bound to a parameter is changed with param_set.",
    "inputs": [
     "body",
     "feature",
-    "set"
+    "values"
    ],
    "kind": "data"
   },
@@ -2269,7 +2269,7 @@
    "kind": "data"
   },
   "object_set": {
-   "description": "Set properties of an object: values { Length: 20, Placement: { at, axis, angle } (or FreeCAD's Base, Axis, Angle, Rotation; what is left out is kept), Refine: true, Base: \"Box\" (a link, by name or label; null clears), Mode: \"…\" } — each converted to its type: numbers are mm and degrees, or a string with a unit (\"1 in\", \"30 deg\") for lengths, angles and other quantities (not plain floats); whole numbers for integers and percents; enumerations checked against their choices; vectors [x,y,z]. Read-only properties, links to faces or edges and property names it does not have are refused (object_get lists names, types, choices). Recomputes the object and what is built from it; refused with nothing kept when that fails. Reply: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement; Label is set with object_rename. For one property, property and value also work: { property: \"Length\", value: 20 }.",
+   "description": "Set properties of an object: values { Length: 20, Placement: { at, axis, angle } (or FreeCAD's Base, Axis, Angle, Rotation; what is left out is kept), Refine: true, Base: \"Box\" (a link, by name or label; null clears), Mode: \"…\" } — each converted to its type: numbers are mm and degrees, or a string with a unit (\"1 in\", \"30 deg\") for lengths, angles and other quantities (not plain floats); whole numbers for integers and percents; enumerations checked against their choices; vectors [x,y,z]. Read-only properties, links to faces or edges and property names it does not have are refused (object_get lists names, types, choices). Recomputes the object and what is built from it; refused with nothing kept when that fails. Reply: set { from, to }, unchanged, health. Trap: a plain shape (Part::Feature from a boolean or import) has no sizes, only Placement; Label is set with object_rename.",
    "inputs": [
     "object",
     "values"
@@ -4287,19 +4287,19 @@
    "kind": "coded"
   },
   "varset_new": {
-   "description": "Make a variable set (App::VarSet, FreeCAD 1.0 on): name (its label), properties { size: \"55 mm\" (a length), angle: \"30 deg\", count: 3, ratio: 0.5, on: true, note: \"text\" } as its variables (names: letters, digits, _; not a unit or constant), group (Variables). Expressions read them as <object name>.size (the reply's refAs) — param_bind { target, expression: \"Dims.size\" } takes the label too.",
+   "description": "Make a variable set (App::VarSet, FreeCAD 1.0 on): name (its label), values { size: \"55 mm\" (a length), angle: \"30 deg\", count: 3, ratio: 0.5, on: true, note: \"text\" } as its variables (names: letters, digits, _; not a unit or constant), group (Variables). Expressions read them as <object name>.size (the reply's refAs) — param_bind { target, expression: \"Dims.size\" } takes the label too.",
    "inputs": [
     "group",
     "name",
-    "properties"
+    "values"
    ],
    "kind": "data"
   },
   "varset_set": {
-   "description": "Set or add variables of a variable set: varset (its label; may be left out when there is one), properties { name: value } as varset_new takes them (an existing one keeps its kind: a length takes \"60 mm\", not text). Everything bound to them recomputes; a value that breaks a feature is refused and nothing kept. Reply: variables, usedBy, bodies.",
+   "description": "Set or add variables of a variable set: varset (its label; may be left out when there is one), values { name: value } as varset_new takes them (an existing one keeps its kind: a length takes \"60 mm\", not text). Everything bound to them recomputes; a value that breaks a feature is refused and nothing kept. Reply: variables, usedBy, bodies.",
    "inputs": [
     "group",
-    "properties",
+    "values",
     "varset"
    ],
    "kind": "data"

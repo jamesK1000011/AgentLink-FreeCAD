@@ -118,10 +118,10 @@ class SheetTools(Base):
         self.refused("param_set", {"name": "_w", "value": 1})
         self.refused("param_set", {"name": "hardp", "value": "(2 +"})
         self.assertNotIn("hardp", [x["name"] for x in self.ok("param_list")["params"]])
-        self.refused("varset_new", {"name": "HardSet", "properties": {"mm": 1}})
-        v = self.ok("varset_new", {"name": "HardSet", "properties": {"size": "55 mm", "count": 3}})
+        self.refused("varset_new", {"name": "HardSet", "values": {"mm": 1}})
+        v = self.ok("varset_new", {"name": "HardSet", "values": {"size": "55 mm", "count": 3}})
         self.assertEqual(v["set"]["size"]["type"], "PropertyLength")
-        self.refused("varset_set", {"varset": "HardSet", "properties": {"size": "wide"}})
+        self.refused("varset_set", {"varset": "HardSet", "values": {"size": "wide"}})
 
 
 if __name__ == "__main__":

@@ -356,9 +356,6 @@ SYNONYMS = {
 # the field the tool has. Taken as that field when it is not given, and said
 # in the answer's readAs. The cards do not change.
 FIELD_ALIASES = {
-    "object_set": {"set": "values", "properties": "values", "props": "values"},
-    "varset_set": {"values": "properties", "set": "properties"},
-    "varset_new": {"values": "properties"},
     "doc_close": {"document": "documents", "name": "documents"},
     "doc_open": {"file": "path", "document": "path"},
     "object_get": {"properties": "filter", "property": "filter", "names": "filter"},
@@ -366,6 +363,8 @@ FIELD_ALIASES = {
     "shape_query": {"object": "body"},
     # batch's commands/steps → calls went on 24 Nov (owner decision 10): the
     # listed schema shows calls, and a wrong name is refused with the fields.
+    # object_set's set/properties/props and varset_set/new's values went on 24
+    # Nov (rename set 10, rule R5): values is the one property map's name.
 }
 
 # A field that means something only beside another one (per tool: field ->

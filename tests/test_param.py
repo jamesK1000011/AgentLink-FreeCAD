@@ -27,7 +27,7 @@ class ParamTools(Base):
         self.refused("param_remove", {"name": "width"})
         self.refused("param_set", {"name": "height", "value": 0})
         self.assertEqual(self.ok("param_list")["params"][1]["value"], 8)
-        self.refused("feature_edit", {"feature": "Pad", "set": {"Length": 3}})
+        self.refused("feature_edit", {"feature": "Pad", "values": {"Length": 3}})
         self.refused("param_bind", {"target": "Pad.Length", "expression": "Params.nothere"})
         self.refused("param_set", {"name": "A1", "value": 1})
 
