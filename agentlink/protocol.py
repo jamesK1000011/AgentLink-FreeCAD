@@ -86,13 +86,13 @@ class ToolError(Exception):
 # Every refusal's error carries "kind" (research on small local models,
 # 22 Nov): fixable (the call cannot succeed as written; the message says
 # what to change), retry (a transient cause: the same call may succeed),
-# stop (it cannot succeed: tell the person). The kind's fixed sentence ends
+# stop (it cannot succeed: report it). The kind's fixed sentence ends
 # the message. The code and the outcome stay as they are.
 
 KIND_WORDS = {
     "fixable": "This call cannot succeed as written. The error says what to change; call the tool again with the corrected value.",
     "retry": "Retrying the same call is expected to succeed.",
-    "stop": "Do not call it again. Tell the person what happened.",
+    "stop": "Do not call it again. Report what happened.",
 }
 # The person's to say or to set: an approval, a hold, a refusal by rule.
 STOP_CODES = frozenset(("held_person_editing", "not_allowed", "refused", "denied", "declined", "stopped",
@@ -1586,7 +1586,8 @@ class Server:
 # (failing_keys: what the message names, with the code) and the call as
 # sent (canonical: the same call with its keys in another order is the same
 # call). A refusal with other or fewer failing keys is progress: the count
-# starts again. The same keys again (or the same call): the count goes up.
+# starts again. The same code and keys again (or the same call with the same
+# words): the count goes up.
 # At REPEAT_SAME the words say so and point to the card; at REPEAT_HINT
 # they give something new to try; at REPEAT_STOP the kind is stop. A call of
 # that tool that goes through clears it. Reads (FORGIVING_READS) never stop.
@@ -1691,7 +1692,12 @@ def repeat_words(server, name, result, args=None):
     call = canonical_call(args)
     last = state.get(name)
     progress = ""
-    if last is not None and (last["call"] == call or (last["code"] == code and last["keys"] == keys)):
+    # The same refusal: the same code and the same failing keys. The same
+    # call counts only when its words (numbers out) are the same too: the
+    # document can change under the same call, and a new reason is progress
+    # (1i, 24 Nov).
+    words = re.sub(r"\d+(\.\d+)?", "#", strip_kind(msg))
+    if last is not None and last["code"] == code and (last["keys"] == keys or (last["call"] == call and last.get("words") == words)):
         n = last["n"] + 1
         first = last["first"]
     else:
@@ -1700,7 +1706,7 @@ def repeat_words(server, name, result, args=None):
         if last is not None and last["code"] == code and set(keys) < set(last["keys"]) and _PLACES.match(last["keys"][0]):
             fixed = len(set(last["keys"]) - set(keys))
             progress = f" Progress: {fixed} of {len(last['keys'])} named problems fixed."
-    state[name] = {"code": code, "keys": keys, "call": call, "n": n, "first": first}
+    state[name] = {"code": code, "keys": keys, "call": call, "words": words, "n": n, "first": first}
     kind = err.get("kind") or refusal_kind(code, msg)
     if progress:
         err["message"] = msg + progress
@@ -1712,7 +1718,7 @@ def repeat_words(server, name, result, args=None):
     err["repeat"] = n
     card = f'tool_find {{ tool: "{name}" }}' if name and name in server.tools else "tool_find { words }"
     if n >= REPEAT_STOP and name not in FORGIVING_READS:
-        err["message"] = f"{STOP_MARK}{REPEAT_STOP} tries of {name}. Do not call it again. Tell the person: {_first_sentence(first)}"
+        err["message"] = f"{STOP_MARK}{REPEAT_STOP} tries of {name}. Do not call it again. Report it: {_first_sentence(first)}"
         set_kind(err, "stop")
     elif kind == "fixable":
         if n == REPEAT_SAME:

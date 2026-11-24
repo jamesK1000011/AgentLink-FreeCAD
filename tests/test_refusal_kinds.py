@@ -28,7 +28,7 @@ class Kinds(unittest.TestCase):
     def test_words_are_fixed(self):
         self.assertEqual(FIX, "This call cannot succeed as written. The error says what to change; call the tool again with the corrected value.")
         self.assertEqual(RETRY, "Retrying the same call is expected to succeed.")
-        self.assertEqual(STOP, "Do not call it again. Tell the person what happened.")
+        self.assertEqual(STOP, "Do not call it again. Report what happened.")
 
     def test_kind_per_code(self):
         self.assertEqual(refusal_kind("invalid_input", "input.x: required."), "fixable")
@@ -107,13 +107,27 @@ class Ladder(unittest.TestCase):
         self.assertTrue(three["error"]["message"].endswith(FIX))
 
     def test_reordered_keys_are_the_same_call(self):
-        def words_by_order(a):  # the refusal names the first key, so its words follow the order
-            raise ToolError("invalid_input", f"input.{next(iter(a))}: not this.")
+        def fixed_words(a):
+            raise ToolError("not_found", "Sketch 2 has no geometry.")
 
-        srv = self.server(words_by_order)
+        srv = self.server(fixed_words)
         call(srv, "pd_pad", {"a": 1, "b": 2})
         _, two = call(srv, "pd_pad", {"b": 2, "a": 1})
         self.assertEqual(two["error"]["repeat"], 2)
+
+    def test_same_call_new_reason_is_progress(self):
+        # 1i (24 Nov, gpt-oss bracket): the same pd_pad call refused for two
+        # different reasons is not "the same refusal".
+        said = iter(["Linked shape object is empty: Sketch 2 has no geometry.", "Pad 2 added no material: it lies inside the body already."])
+
+        def two_reasons(a):
+            raise ToolError("invalid_state", next(said))
+
+        srv = self.server(two_reasons)
+        call(srv, "pd_pad", {"a": 5})
+        _, two = call(srv, "pd_pad", {"a": 5})
+        self.assertNotIn("repeat", two["error"])
+        self.assertNotIn("same refusal", two["error"]["message"])
 
     def test_fifth_same_refusal_is_stop(self):
         srv = self.server()
@@ -124,7 +138,8 @@ class Ladder(unittest.TestCase):
         self.assertTrue(r["isError"])
         err = five["error"]
         self.assertEqual((err["kind"], err["code"], err["repeat"]), ("stop", "invalid_input", 5))
-        self.assertEqual(err["message"], "No progress after 5 tries of pd_pad. Do not call it again. Tell the person: input.a: required.")
+        self.assertEqual(err["message"], "No progress after 5 tries of pd_pad. Do not call it again. Report it: input.a: required.")
+        self.assertNotIn("person", err["message"])
 
     def test_hint_names_the_place_again(self):
         srv = self.server()
