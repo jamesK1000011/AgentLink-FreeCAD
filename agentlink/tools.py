@@ -161,6 +161,35 @@ def _profiling():
         return False
 
 
+def _no_tool_words(server, session, c, i):
+    """The refusal of a batch call with arguments and no tool: tool is
+    missing, the tools whose cards take every one of those inputs (the ones
+    this session used first, at most 4), and the form. It names no tool as
+    the one meant: the agent picks."""
+    keys = [k for k in c["arguments"] if isinstance(k, str)]
+    used = []
+    for rec in getattr(session, "calls", None) or []:
+        n = rec.get("tool") if isinstance(rec, dict) else None
+        if n and n not in used:
+            used.append(n)
+    fits = []
+    if keys:
+        for name, t in getattr(server, "tools", {}).items():
+            props = (getattr(t, "schema", None) or {}).get("properties") or {}
+            if name not in ("batch", "fast") and all(k in props for k in keys):
+                fits.append(name)
+    fits.sort(key=lambda n: (n not in used, used.index(n) if n in used else 0, n))
+    words = f"calls.{i} has no \"tool\": every call names its tool beside arguments."
+    if fits:
+        more = f" (and {len(fits) - 4} more)" if len(fits) > 4 else ""
+        words += f" Tools whose cards take {', '.join(keys[:6])}: {', '.join(fits[:4])}{more}."
+    elif keys:
+        words += f" No tool's card takes all of {', '.join(keys[:6])}: read the card of the tool you mean (tool_find {{ tool: name }})."
+    name = fits[0] if fits else "sketch_new"
+    shown = ", ".join(f"\"{k}\": …" for k in keys[:3]) if fits else "\"plane\": \"XY\""
+    return words + f" Form: {{ \"tool\": \"{name}\", \"arguments\": {{ {shown} }} }}. The calls run in order, one after another."
+
+
 def _kept_or_none(results):
     """A batch's result when what ran stays: kept when a call went through,
     ran_none when none did (1f, 24 Nov)."""
@@ -2656,6 +2685,12 @@ def build_server(session, name="freecad-agentlink", version="1.0.0", lean=None):
                 # 22 Nov: a local model sent calls with arguments and no tool,
                 # 22 times; research, 22 Nov: an echo of a failed call makes
                 # the same call again more likely).
+                if isinstance(c, dict) and "tool" not in c and isinstance(c.get("arguments"), dict):
+                    # 24 Nov (LFM, 35 refusals in 2 runs): the call had its
+                    # inputs and left tool out. Say that first, and list the
+                    # tools whose cards take those inputs; pick none (R2).
+                    bad_call(i, None, "invalid_input", _no_tool_words(server, s, c, i))
+                    continue
                 bad_call(i, None, "invalid_input", f"calls.{i}: {{ tool, arguments }} with tool a tool's name. {_call_shape(c, i)} "
                                                    f"Example: {{ \"tool\": \"sketch_new\", \"arguments\": {{ \"plane\": \"XY\" }} }}. "
                                                    "The calls run in order, one after another.")

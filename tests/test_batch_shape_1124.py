@@ -243,3 +243,19 @@ class StartDocument(unittest.TestCase):
         self.assertNotIn("is the person's document", note)
         self.assertIn("empty start document that Agent Link made", note)
         self.assertTrue(got[1]["documents"][0].get("start"))
+
+
+class NoToolKey(unittest.TestCase):
+    """24 Nov (LFM): a batch call with arguments and no tool is refused with
+    "no tool" first and the tools whose cards take those inputs."""
+
+    def test_no_tool_words(self):
+        got = run('''
+    print(json.dumps(call("batch", {"calls": [mk("A"), {"arguments": {"name": "B", "fail": False}}]})))
+''')
+        err = got[1]["refused"]["error"]
+        self.assertTrue(err.startswith('calls.1 has no "tool": every call names its tool beside arguments.'), err)
+        self.assertIn("Tools whose cards take name, fail: probe_make", err)
+        self.assertIn('Form: { "tool": "probe_make"', err)
+        self.assertEqual(err.count("The call was not run."), 1)
+        self.assertNotIn('"B"', err)

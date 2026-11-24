@@ -220,7 +220,7 @@ class BatchInAProcess(unittest.TestCase):
         self.assertEqual((body["done"], body["notRun"], body["refused"]["call"]), ([], [], 0))
         e = body["results"][0]["error"]
         self.assertEqual((e["code"], e["kind"]), ("invalid_input", "fixable"))
-        self.assertIn("calls.0 has arguments and no tool.", e["message"])
+        self.assertIn('calls.0 has no "tool": every call names its tool beside arguments.', e["message"])
         self.assertIn("The calls run in order", e["message"])
         self.assertIn('"tool": "sketch_new"', e["message"])  # the worked example stays
         self.assertNotIn("Odd_label_77", e["message"])

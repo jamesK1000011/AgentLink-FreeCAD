@@ -312,7 +312,7 @@ class BatchKeepsWhatRan(unittest.TestCase):
         self.assertIn("input.bogus", b["refused"]["error"])
         b = got["shape"][1]
         self.assertEqual((b["done"], b["refused"]["call"], b["notRun"]), ([0], 1, [2]))
-        self.assertIn("calls.1 has arguments and no tool.", b["refused"]["error"])
+        self.assertIn("calls.1 has no \"tool\": every call names its tool beside arguments.", b["refused"]["error"])
         b = got["tool"][1]
         self.assertEqual((b["done"], b["refused"]["call"], b["refused"]["code"]), ([0], 1, "not_found"))
         self.assertEqual([x for x in got["labels"] if len(x) == 1], ["A", "D", "G"])
