@@ -12,7 +12,7 @@ A map of this guide. `guide_read { topic: "assembly", section: [...] }` reads th
 ## The workflow
 1. `asm_new { parts }`: the bodies into a new assembly (the bodies themselves, moved in — a body is in one assembly). The first is **grounded** (held fixed) unless `ground` names another; the solver moves only the others.
 2. `asm_joint` between two parts, one at a time, each solved as it is made. Read `moved` (which part went where) and `overlaps` after every joint.
-3. `view_render { views: "all" }` — look. A part upside down or inside another is a face picked the wrong way: `history_undo`, then the joint again with `reverse: true`.
+3. `view_render { views: "all" }` — look. A part upside down or inside another is a face picked the wrong way: `history_undo`, then the joint again with `reversed: true`.
 4. `asm_check { clearance }` at the end: solves, overlaps (volume and where), pairs closer than the clearance, parts joined to nothing. **verdict clear** is the goal.
 5. Draw it from where the parts now sit (`td_page`, `td_view`); `export` each part.
 

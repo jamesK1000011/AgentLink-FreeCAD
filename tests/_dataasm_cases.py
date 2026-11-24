@@ -37,7 +37,7 @@ EXPECT = {
     ("asm_joint", "reversed"): {"flipped": True},
     # bicycle finding 4: no turn by itself; autoFlip: true is the old way
     ("asm_joint", "turned over to stop an overlap"): {"moved": {}, "flipped": "turned over to stop the parts overlapping (autoFlip: true; leave autoFlip out to keep it as FreeCAD first put it)", "overlaps": None},
-    ("asm_joint", "turning over does not help"): {"flipped": None, "warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reverse: true turns the moved part over on the joint; "
+    ("asm_joint", "turning over does not help"): {"flipped": None, "warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reversed: true turns the moved part over on the joint; "
                                                                               "autoFlip: true lets the tool try it; else check the sizes."},
     ("asm_joint", "a kind not offered"): ["refused", "invalid_input", "kind: one of fixed, revolute, cylindrical, slider, ball, distance, parallel, perpendicular, angle, rackpinion, screw, gears, belt, chain (got 'weld')."],
     ("asm_joint", "the solver finds nothing grounded"): ["refused", "failed", "The fixed joint leaves Assembly unsolved: no part is grounded — nothing was kept. asm_ground { part } holds one part first."],
@@ -68,9 +68,9 @@ UNREACHED = [
     'asm_joint: gap or offset, not both: gap is the mm between the two joined faces af',
     'asm_joint: gap: the gap across this joint cannot be measured — a or b must be a f',
     # bicycle findings 3, 4, 5 (keep, autoFlip, chain by teeth): tests/test_bicycle_1120.py reaches each.
-    'asm_joint: keep turns no part over: not with reverse or autoFlip. keep holds the ',
+    'asm_joint: keep turns no part over: not with reversed or autoFlip. keep holds the',
     'asm_joint: keep, or offset, rotate and gap: keep finds the offset that holds the ',
-    'asm_joint: autoFlip or reverse, not both: reverse says the way round, autoFlip le',
+    'asm_joint: autoFlip or reversed, not both: reversed says the way round, autoFlip ',
     'asm_joint: teeth1, teeth2: for kind chain, belt and gears only.',
     'asm_joint: teeth or radii, not both: teeth1 and teeth2 set radius1 and radius2.',
     'asm_joint: chain: teeth1 and teeth2, a PartDesign Sprocket in each part, or radiu',

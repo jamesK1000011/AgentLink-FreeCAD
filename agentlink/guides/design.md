@@ -416,7 +416,7 @@ Pin one FreeCAD version per project: 1.1 converts old Body origins when it opens
 - `pd_gear` works on the body's own XY plane: build the gear at the part's origin and place the part by a joint.
 - Booleans and refine can rename faces; joints on LCS do not break. A joint picked by a query is picked again and the health line says so.
 - Tube ends that all meet at one point inside a solid can make the fused shape invalid: end tubes at the shell surface or cut the bore after the fuse; check with `body_check`.
-- A joint can put a part on the other side (the drive side on the left, a pedal into its arm). After each joint, check the side in `asm_check` or a top view; use `reverse: true`. A changed LCS offset does not move parts that are joined already: remove the joint and make it again.
+- A joint can put a part on the other side (the drive side on the left, a pedal into its arm). After each joint, check the side in `asm_check` or a top view; use `reversed: true`. A changed LCS offset does not move parts that are joined already: remove the joint and make it again.
 - Helper lines at document level used in a body through `pd_binder`: set the binder's `Relative` to false, else the shape stays at its world place when the assembly moves the body.
 - Expressions on an LCS (its `AttachmentOffset`) need the label form `<<Geo>>.name`; `VarSet.name` is read as a role inside the LCS. A placed LCS has a computed Placement: bind `AttachmentOffset`.
 - A PartDesign feature in the middle of a chain cannot be deleted: suppress it (`Suppressed: true`), the base feature first.

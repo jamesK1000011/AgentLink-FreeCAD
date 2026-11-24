@@ -24,7 +24,7 @@ HARNESS = {"datask2": ("param", "feature_more", "sketch_more"), "datapd": ("feat
 CHILD = r'''
 import importlib, inspect, json, sys, tempfile
 sys.path[:0] = [%(root)r, %(here)r]
-harness, tool, case, args = json.loads(sys.argv[1])
+harness, tool, case, args, probe = json.loads(sys.argv[1])
 stand = importlib.import_module("_" + harness + "_standin")
 fc = stand.install()
 if hasattr(fc, "patch"):
@@ -45,16 +45,19 @@ try:
     res = ["ok", t.fn(args)]
 except ToolError as e:
     res = ["refused", e.code, e.message]
-print(json.dumps(res, default=repr))
+print(json.dumps([res, eval(probe) if probe else None], default=repr))
 ''' % {"root": ROOT, "here": HERE, "files": HARNESS}
 
 
-def run_case(harness, tool, case, args):
-    """The new entry of tool, called with args on the stand-in prepared as the named case."""
-    r = subprocess.run([sys.executable, "-c", CHILD, json.dumps([harness, tool, case, args])], capture_output=True, text=True, timeout=120)
+def run_case(harness, tool, case, args, probe=None):
+    """The new entry of tool, called with args on the stand-in prepared as the
+    named case; with probe (a Python expression over s, the session), also
+    its value after the call."""
+    r = subprocess.run([sys.executable, "-c", CHILD, json.dumps([harness, tool, case, args, probe])], capture_output=True, text=True, timeout=120)
     if r.returncode != 0:
         raise AssertionError(r.stderr[-3000:])
-    return json.loads(r.stdout.strip().splitlines()[-1])
+    res, seen = json.loads(r.stdout.strip().splitlines()[-1])
+    return (res, seen) if probe else res
 
 
 def checked(tool, args):
@@ -113,6 +116,39 @@ class Set5Geometry(Base):
         self.assertIn("mirror.geometry", r[2])
         d = runners.entries()["sketch_edit"]["description"]
         self.assertNotRegex(d, r"\bgeos?\b")
+
+
+
+class Set6Reversed(Base):
+    """flip -> reversed (sketch_new, sketch_attach); asm_joint reverse -> reversed."""
+
+    def test_old_name_refused(self):
+        self.refused_by_name("sketch_new", {"plane": "XY", "flip": True}, "flip", "reversed")
+        self.refused_by_name("sketch_attach", {"sketch": "S", "plane": "XY", "flip": True}, "flip", "reversed")
+        self.refused_by_name("asm_joint", {"kind": "fixed", "a": {}, "b": {}, "reverse": True}, "reverse", "reversed")
+
+    def test_new_name_works(self):
+        top = "[o for o in s.doc.Objects if o.Label == %r][0].MapReversed"
+        r, rev = run_case("datapd", "sketch_new", "on a datum plane, flipped, a name taken", {"plane": "Mid", "reversed": True, "name": "Top"},
+                          "s.doc.Objects[-1].MapReversed")
+        self.assertEqual(r[0], "ok", r)
+        self.assertIs(rev, True)
+        r, rev = run_case("datask2", "sketch_attach", "flipped and turned on a later feature's face",
+                          {"sketch": "Top", "plane": "Pad.Face3", "reversed": True, "rotate": 45}, top % "Top")
+        self.assertEqual(r[0], "ok", r)
+        self.assertIs(rev, True)
+        j = {"kind": "fixed", "a": {"part": "Base", "element": "Face1"}, "b": {"part": "Lid", "element": "Face2"}}
+        r = run_case("dataasm", "asm_joint", "reversed", dict(j, reversed=True))
+        self.assertEqual(r[0], "ok", r)
+        self.assertIs(r[1]["flipped"], True)
+        r = run_case("dataasm", "asm_joint", "reversed", dict(j, keep=True, reversed=True))
+        self.assertEqual(r[:2], ["refused", "invalid_input"])
+        self.assertIn("not with reversed or autoFlip", r[2])
+
+    def test_no_old_word_in_the_cards(self):
+        for n in ("sketch_new", "sketch_attach"):
+            self.assertNotRegex(runners.entries()[n]["description"], r"\bflip\b", n)
+        self.assertNotRegex(runners.entries()["asm_joint"]["description"], r"\breverse\b")
 
 
 if __name__ == "__main__":

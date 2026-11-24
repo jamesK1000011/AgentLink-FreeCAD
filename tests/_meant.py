@@ -128,6 +128,10 @@ RENAMES = {
     "sketch_edit": {"inputs": {**{f"{k}.geo": "geometry" for k in ("move", "construction", "trim", "split")},
                                **{f"{k}.geos": "geometry" for k in ("fillet", "mirror")}}, "words": _GEO},
     "sketch_join": {"words": _GEO},
+    # Set 6: flip and reverse -> reversed (V.2).
+    "sketch_new": {"inputs": {"flip": "reversed"}, "words": [("flip", "reversed")]},
+    "sketch_attach": {"inputs": {"flip": "reversed"}, "words": [("flip", "reversed")]},
+    "asm_joint": {"inputs": {"reverse": "reversed"}, "words": [("reverse", "reversed")]},
 }
 
 
@@ -438,11 +442,11 @@ CASES = {
     ("asm_joint", "kept as FreeCAD put it, overlapping"): {
         "why": "bicycle finding 4: the warning names each overlap and its volume",
         "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³ — a face picked the wrong way round, or the parts do not fit. "
-                           "reverse: true flips the second part, or check the sizes."}},
+                           "reversed: true flips the second part, or check the sizes."}},
     ("asm_joint", "a ball joint is not turned over"): {
         "why": "bicycle finding 4: the warning names each overlap and its volume",
         "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³ — a face picked the wrong way round, or the parts do not fit. "
-                           "reverse: true flips the second part, or check the sizes."}},
+                           "reversed: true flips the second part, or check the sizes."}},
     ("asm_joint", "turned over to stop an overlap"): {
         "why": "bicycle finding 4: only autoFlip: true turns a part over; it reads the solve's state again first (one more solve)",
         "set": {"flipped": "turned over to stop the parts overlapping (autoFlip: true; leave autoFlip out to keep it as FreeCAD first put it)"},
@@ -450,14 +454,14 @@ CASES = {
                    ["solve(<Assembly>)", "solve(<Assembly>)", "common(Solid<Base>, [Solid<Lid>])", "flipOnePart(<Fixed>)"])]},
     ("asm_joint", "turning over does not help"): {
         "why": "bicycle finding 4: no part is turned over by itself; the warning says how to flip",
-        "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reverse: true turns the moved part over "
+        "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reversed: true turns the moved part over "
                            "on the joint; autoFlip: true lets the tool try it; else check the sizes."},
         "trace": [(_TURN_OVER + ["recompute()", "solve(<Assembly>)", "common(Solid<Base>, [Solid<Lid>])",
                                  "Base.Placement = Placement(V(0, 0, 0), Rotation(V(0, 0, 1), 0))",
                                  "Lid.Placement = Placement(V(0, 0, -5), Rotation(V(0, 0, 1), 0))", "recompute()", "solve(<Assembly>)"], [])]},
     ("asm_joint", "turned over, it no longer solves"): {
         "why": "bicycle finding 4: no part is turned over by itself; the warning says how to flip",
-        "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reverse: true turns the moved part over "
+        "set": {"warning": "Parts overlap after the solve: Base/Lid 100 mm³. The tool did not turn a part over. reversed: true turns the moved part over "
                            "on the joint; autoFlip: true lets the tool try it; else check the sizes."},
         "trace": [(_TURN_OVER + ["Lid.Placement = Placement(V(0, 0, 0), Rotation(V(0, 0, 1), 0))", "recompute()", "solve(<Assembly>)",
                                  "Base.Placement = Placement(V(0, 0, 0), Rotation(V(0, 0, 1), 0))",

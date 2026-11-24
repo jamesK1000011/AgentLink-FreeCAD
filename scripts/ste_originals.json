@@ -108,7 +108,7 @@
    "kind": "data"
   },
   "asm_joint": {
-   "description": "Join two parts and solve (needs a grounded part): kind fixed (no motion), revolute (turns about the joint's axis), cylindrical (turns and slides), slider (slides only), ball, distance (distance mm between the elements; round faces count from their surface), parallel, perpendicular, angle (angle degrees, 90); couplings, which tie one motion to another for asm_sweep and need each part's own revolute or slider too: rackpinion (radius1, the pinion's pitch radius), screw (pitch mm a turn), gears and belt (radius1, radius2 — read off round edges when left out); chain, FreeCAD's belt joint with the ratio teeth1 / teeth2 (50 / 16 = 3.125): the teeth given, or read from a PartDesign Sprocket (NumberOfTeeth) in each part, pitch the chain pitch mm (12.7); gears and belt take teeth1, teeth2 too; reply ratio and ratioFrom. a and b each a part and a face or edge on it — a flat face puts the joint at its middle along its normal; a round edge or cylindrical face, on its axis. offset mm along b's joint normal and rotate degrees about it; reverse: true turns the moved part over (false keeps FreeCAD's way; left out, no part is turned over by itself: parts that overlap after the solve get a warning naming them, with how to flip; autoFlip: true turns the moved part over when that stops the overlap, the old way, and flipWarning says when the flip put a part's centre on the other side of the joint's plane). keep: true, for parts already placed: the offset (and the turn about the joint) that holds them where they stand, so nothing moves — reply kept { property, at, axis, angle, moved }; not with offset, rotate, gap, reverse or autoFlip. Which part moves: the one not yet joined to a grounded part (a when neither is), with what is joined to it; a grounded part never. Reply: joint, solve, moved { part: from, to, by }, flipped, overlaps with a warning. Unsolved is refused, nothing kept. FreeCAD 1.1's solver answers only solved or solver error — not freedom left, nor a joint that repeats another: asm_check and asm_sweep show what still moves. near in a query is in document coordinates (where the part is now); nearLocal is a point in the part's own frame, as modelled. offset's direction depends on which part moves; gap: mm between the two joined faces after the solve, positive apart, negative overlapping — the tool finds the offset for it (gap or offset, not both). Reply also: gap (the result across the joint, mm, negative for overlap) and at (the centre of each element when picked, in document coordinates). a or b may be a datum inside the part — an LCS, datum plane, line or point (element: its name or label, or { datum }): the joint sits on its origin along its z axis, and stays on through booleans and edits; put joints on LCS markers, not on faces a boolean makes. An end picked by a query keeps the query (queryKept): when a later change renumbers that face, the health check runs it again and re-points the joint (\"re-picked Face12 -> Face15\"), or leaves it broken and says why (nothing found, or two equal matches).",
+   "description": "Join two parts and solve (needs a grounded part): kind fixed (no motion), revolute (turns about the joint's axis), cylindrical (turns and slides), slider (slides only), ball, distance (distance mm between the elements; round faces count from their surface), parallel, perpendicular, angle (angle degrees, 90); couplings, which tie one motion to another for asm_sweep and need each part's own revolute or slider too: rackpinion (radius1, the pinion's pitch radius), screw (pitch mm a turn), gears and belt (radius1, radius2 — read off round edges when left out); chain, FreeCAD's belt joint with the ratio teeth1 / teeth2 (50 / 16 = 3.125): the teeth given, or read from a PartDesign Sprocket (NumberOfTeeth) in each part, pitch the chain pitch mm (12.7); gears and belt take teeth1, teeth2 too; reply ratio and ratioFrom. a and b each a part and a face or edge on it — a flat face puts the joint at its middle along its normal; a round edge or cylindrical face, on its axis. offset mm along b's joint normal and rotate degrees about it; reversed: true turns the moved part over (false keeps FreeCAD's way; left out, no part is turned over by itself: parts that overlap after the solve get a warning naming them, with how to flip; autoFlip: true turns the moved part over when that stops the overlap, the old way, and flipWarning says when the flip put a part's centre on the other side of the joint's plane). keep: true, for parts already placed: the offset (and the turn about the joint) that holds them where they stand, so nothing moves — reply kept { property, at, axis, angle, moved }; not with offset, rotate, gap, reversed or autoFlip. Which part moves: the one not yet joined to a grounded part (a when neither is), with what is joined to it; a grounded part never. Reply: joint, solve, moved { part: from, to, by }, flipped, overlaps with a warning. Unsolved is refused, nothing kept. FreeCAD 1.1's solver answers only solved or solver error — not freedom left, nor a joint that repeats another: asm_check and asm_sweep show what still moves. near in a query is in document coordinates (where the part is now); nearLocal is a point in the part's own frame, as modelled. offset's direction depends on which part moves; gap: mm between the two joined faces after the solve, positive apart, negative overlapping — the tool finds the offset for it (gap or offset, not both). Reply also: gap (the result across the joint, mm, negative for overlap) and at (the centre of each element when picked, in document coordinates). a or b may be a datum inside the part — an LCS, datum plane, line or point (element: its name or label, or { datum }): the joint sits on its origin along its z axis, and stays on through booleans and edits; put joints on LCS markers, not on faces a boolean makes. An end picked by a query keeps the query (queryKept): when a later change renumbers that face, the health check runs it again and re-points the joint (\"re-picked Face12 -> Face15\"), or leaves it broken and says why (nothing found, or two equal matches).",
    "inputs": [
     "a",
     "angle",
@@ -123,7 +123,7 @@
     "pitch",
     "radius1",
     "radius2",
-    "reverse",
+    "reversed",
     "rotate",
     "teeth1",
     "teeth2"
@@ -3532,12 +3532,12 @@
    "kind": "data"
   },
   "sketch_attach": {
-   "description": "Move a sketch onto another plane (Sketcher's map/reorient): plane XY | XZ | YZ | a datum plane | \"Pad.Face3\", or face { at, normal, feature? }; offset mm along its normal, rotate deg in it, flip. A face is bound to the feature that made it (the earliest in the body that has it, or feature), not the tip; a sketch that sits before that feature is moved after it (refused when a feature is built from it).",
+   "description": "Move a sketch onto another plane (Sketcher's map/reorient): plane XY | XZ | YZ | a datum plane | \"Pad.Face3\", or face { at, normal, feature? }; offset mm along its normal, rotate deg in it, reversed. A face is bound to the feature that made it (the earliest in the body that has it, or feature), not the tip; a sketch that sits before that feature is moved after it (refused when a feature is built from it).",
    "inputs": [
     "face",
-    "flip",
     "offset",
     "plane",
+    "reversed",
     "rotate",
     "sketch"
    ],
@@ -3655,16 +3655,16 @@
    "kind": "data"
   },
   "sketch_new": {
-   "description": "A new sketch in a body, on plane XY | XZ | YZ | a datum plane's name | \"Pad.Face3\", or on a face of the solid found by face { at: a point on it, normal: its outward normal } — never by face index, which changes after edits. One of plane or face. offset mm along the normal; flip reverses it. A face sketch is lined up with the world: its x along the world axis that lies most in the face. Answers sketch (its label) and frame: where sketch x/y and its origin lie in the world.",
+   "description": "A new sketch in a body, on plane XY | XZ | YZ | a datum plane's name | \"Pad.Face3\", or on a face of the solid found by face { at: a point on it, normal: its outward normal } — never by face index, which changes after edits. One of plane or face. offset mm along the normal; reversed reverses it. A face sketch is lined up with the world: its x along the world axis that lies most in the face. Answers sketch (its label) and frame: where sketch x/y and its origin lie in the world.",
    "inputs": [
     "at",
     "body",
     "face",
-    "flip",
     "name",
     "normal",
     "offset",
     "plane",
+    "reversed",
     "tol"
    ],
    "kind": "data"
