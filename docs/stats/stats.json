@@ -949,8 +949,8 @@
     "style": "ste",
     "default": true,
     "tools": 6,
-    "chars": 6572,
-    "tokens": 1878,
+    "chars": 5988,
+    "tokens": 1711,
     "estimatedCards": 6
    },
    {
@@ -967,8 +967,8 @@
     "style": "ste",
     "default": false,
     "tools": 23,
-    "chars": 22876,
-    "tokens": 6536,
+    "chars": 22292,
+    "tokens": 6369,
     "estimatedCards": 17
    },
    {

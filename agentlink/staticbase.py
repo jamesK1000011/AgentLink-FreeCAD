@@ -22,6 +22,7 @@ ToolDescStyle (preference, text) or AGENTLINK_DESC:
 Both are read again at each tools/list, so a preference set while FreeCAD
 runs takes effect when the client next lists the tools.
 """
+import copy
 import json
 import os
 
@@ -90,14 +91,45 @@ def base(tools=None):
     return BASE
 
 
+# The schema a client sees for batch and fast with the short descriptions
+# (owner decision 2, 23 Nov): only what a first call needs, each step typed
+# { tool, arguments }. The server still checks the tool's whole schema, so
+# the other fields (file, from, to, lines, build, check, budget, title) work
+# and the batch guide gives them. No additionalProperties here: a client
+# that checks a call against the listed schema must let them through.
+_CALL_ITEM = {"type": "object",
+              "properties": {"tool": {"type": "string", "description": "The tool's plain name, as tool_find gives it (sketch_new)."},
+                             "arguments": {"type": "object", "description": "Every input of the tool, by the names on its card. {} for none."}},
+              "required": ["tool", "arguments"]}
+LISTED_SCHEMAS = {
+    "batch": {"type": "object",
+              "properties": {"calls": {"type": "array", "minItems": 1, "description": "The calls, run one at a time, in order.", "items": _CALL_ITEM},
+                             "rollback": {"type": "boolean", "description": "true: at a refusal, take back the whole batch."},
+                             "stopOnError": {"type": "boolean", "description": "false: run every call, also after a refusal."}},
+              "required": ["calls"]},
+    "fast": {"type": "object",
+             "properties": {"do": {"type": "array", "minItems": 1,
+                                   "description": "The steps, in order. A tool step is { tool, arguments, as }; the other steps are on fast's card.",
+                                   "items": {"type": "object",
+                                             "properties": {**_CALL_ITEM["properties"],
+                                                            "as": {"type": "string", "description": "A name for this call's answer, for later steps."}}}},
+                            "rollback": {"type": "boolean", "description": "true: at a refusal, take back the whole block."},
+                            "check": {"type": "boolean", "description": "true: check every step, run nothing."}},
+             "required": ["do"]},
+}
+
+
 def listing(server, tools):
-    """The tools/list entries, with the STE descriptions when asked for."""
+    """The tools/list entries, with the STE descriptions when asked for,
+    and in the static list the short listed schemas (LISTED_SCHEMAS)."""
     out = [t.listing() for t in tools]
     if style() == "ste":
         ste = ste_descriptions()
         for e in out:
             if e.get("name") in ste:
                 e["description"] = ste[e["name"]]
+            if e.get("name") in LISTED_SCHEMAS and mode() == "static":
+                e["inputSchema"] = copy.deepcopy(LISTED_SCHEMAS[e["name"]])
     return out
 
 

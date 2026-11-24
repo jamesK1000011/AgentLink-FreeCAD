@@ -136,15 +136,13 @@ class AnswerFields(unittest.TestCase):
         self.assertNotIn('a.get("at") is not None:\n            return _batch_read(a)', src)
         self.assertIn('if a.get("read") is not None:\n            return _batch_read(a)', src)
 
-    def test_batch_commands_and_steps_are_read_as_calls(self):
+    def test_batch_commands_and_steps_are_refused_with_the_fields(self):
+        # Owner decision 10 (24 Nov): no alias; the refusal names calls.
         for k in ("commands", "steps"):
-            a = {k: [{"tool": "echo"}], "ms": 0}
-            said = check_input(self.BATCH, a, "batch")
-            self.assertEqual(a, {"calls": [{"tool": "echo"}]})
-            self.assertEqual(protocol.read_as_words(said), f"read {k} as calls; ignored ms (an answer field)")
-        a = {"calls": [], "commands": [{"tool": "x"}]}
-        with self.assertRaises(ToolError):  # both given: commands is not read over calls
-            check_input(self.BATCH, a, "batch")
+            with self.assertRaises(ToolError) as e:
+                check_input(self.BATCH, {k: [{"tool": "echo"}]}, "batch")
+            self.assertIn(f"input.{k}: not a known field", e.exception.message)
+            self.assertIn("calls", e.exception.message)
 
     def test_no_answer_field_is_a_real_input_of_the_hub_in_its_answers_sense(self):
         # The list names only riders that answers carry; each is plain text.

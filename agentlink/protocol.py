@@ -364,8 +364,8 @@ FIELD_ALIASES = {
     "object_get": {"properties": "filter", "property": "filter", "names": "filter"},
     "object_delete": {"object": "objects", "name": "objects"},
     "shape_query": {"object": "body"},
-    # live findings, 22 Nov: a local model gave batch its calls as commands
-    "batch": {"commands": "calls", "steps": "calls"},
+    # batch's commands/steps → calls went on 24 Nov (owner decision 10): the
+    # listed schema shows calls, and a wrong name is refused with the fields.
 }
 
 # A field that means something only beside another one (per tool: field ->

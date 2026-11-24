@@ -169,3 +169,42 @@ class FastShape(unittest.TestCase):
         self.assertFalse(err, ans)
         self.assertTrue({"A", "B"} <= set(labs))
         self.assertIn("do.1: name was beside tool: read inside arguments.", ans["readAs"])
+
+
+class ListedSchema(unittest.TestCase):
+    """1b (owner decision 2): in the static list the batch schema shows
+    calls (required, items typed { tool, arguments }), rollback and
+    stopOnError; the server still takes the other fields."""
+
+    def test_listed_batch_and_fast(self):
+        got = run('''
+    tl = srv.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})["result"]["tools"]
+    print(json.dumps({t["name"]: t["inputSchema"] for t in tl if t["name"] in ("batch", "fast")}))
+''')
+        b = got["batch"]
+        self.assertEqual(sorted(b["properties"]), ["calls", "rollback", "stopOnError"])
+        self.assertEqual(b["required"], ["calls"])
+        self.assertEqual(b["properties"]["calls"]["items"]["required"], ["tool", "arguments"])
+        self.assertNotIn("additionalProperties", b)
+        if "fast" in got:
+            self.assertEqual(sorted(got["fast"]["properties"]["do"]["items"]["properties"]), ["arguments", "as", "tool"])
+
+    def test_hidden_fields_still_work_and_unknown_is_refused(self):
+        got = run('''
+    out = {}
+    out["lines"] = call("batch", {"calls": [mk("A")], "lines": "counts"})
+    out["steps"] = call("batch", {"steps": [mk("B")]})
+    print(json.dumps(out))
+''')
+        self.assertFalse(got["lines"][0])
+        self.assertTrue(got["steps"][0])
+
+    def test_classic_keeps_the_full_schema(self):
+        os.environ["AGENTLINK_TOOLLIST"] = "classic"
+        self.addCleanup(os.environ.pop, "AGENTLINK_TOOLLIST", None)
+        got = run('''
+    tl = srv.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})["result"]["tools"]
+    print(json.dumps([t["inputSchema"] for t in tl if t["name"] == "batch"]))
+''')
+        if got:
+            self.assertIn("file", got[0]["properties"])
