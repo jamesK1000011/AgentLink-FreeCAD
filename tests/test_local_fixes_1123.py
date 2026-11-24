@@ -170,12 +170,17 @@ class PickExample(unittest.TestCase):
     """Fix 4: option 1 was doc_new, and the example filled length."""
 
     def test_the_example_fits_option_one(self):
+        # The classic list's short form (the static list shows a batch call: test_connect_1124).
+        from unittest import mock
+
         doc_new = {"step": 0, "list": [{"n": 1, "tool": "doc_new", "args": {}, "ask": [{"arg": "name"}]}]}
-        self.assertEqual(options.public(doc_new)["pick"], 'pick { option: 1, fill: { name: "Part" } } runs option 1; the text "1, Part" also works')
+        with mock.patch.dict(os.environ, {"AGENTLINK_TOOLLIST": "classic"}):
+            got = options.public(doc_new)["pick"]
+        self.assertEqual(got, 'pick { option: 1, fill: { name: "Part" } } runs option 1; the text "1, Part" also works')
         pad = {"step": 3, "list": [{"n": 1, "tool": "pd_pad", "args": {"sketch": "Sketch 2"}, "ask": [{"arg": "length", "unit": "mm", "sample": 10}]}]}
-        self.assertEqual(options.pick_how(pad), 'pick { option: 1, fill: { length: 10 } } runs option 1; the text "1, 10mm" also works')
+        self.assertEqual(options.pick_how(pad, static=False), 'pick { option: 1, fill: { length: 10 } } runs option 1; the text "1, 10mm" also works')
         none = {"step": 3, "list": [{"n": 1, "tool": "body_check", "args": {}}]}
-        self.assertEqual(options.pick_how(none), "pick { option: 1 } runs option 1")
+        self.assertEqual(options.pick_how(none, static=False), "pick { option: 1 } runs option 1")
         # A label with a space stays one value in the option line.
         self.assertEqual(options.option_words(pad["list"][0]), '1 pd_pad sketch="Sketch 2" ask length mm')
 

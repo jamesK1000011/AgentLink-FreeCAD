@@ -1,0 +1,35 @@
+{
+ "$schema": "guide_words.schema.json",
+ "dataVersion": "1.0.0",
+ "licence": "CC-BY-4.0",
+ "about": "Common words for kinds of work and the guides that hold them (agentlink/guideidx.py). The connect text gives one line per entry, made from the guides there at the time; guide_read with an unknown topic matches the words and answers the guides. An add-on can put a guide_words.json of the same shape in the guide folder it registers.",
+ "entries": {
+  "partdesign": {
+   "work": "PartDesign work (bodies, pads, pockets, holes, fillets)",
+   "guides": [
+    "feature",
+    "sketch"
+   ],
+   "words": [
+    "partdesign",
+    "part design",
+    "pd",
+    "body",
+    "bodies",
+    "pad",
+    "pads",
+    "pocket",
+    "pockets",
+    "hole",
+    "holes",
+    "fillet",
+    "fillets",
+    "chamfer",
+    "revolution",
+    "features"
+   ],
+   "source": "local-model runs, 23 Nov 2026: models asked guide_read for partdesign; design 1h and decision 6",
+   "date": "2026-11-24"
+  }
+ }
+}

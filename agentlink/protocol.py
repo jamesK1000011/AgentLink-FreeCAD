@@ -615,14 +615,20 @@ def kind_hint(server, n):
 def close_names(server, n, k=4):
     """The tool names closest to n: most shared name words first, then the
     closest spelling (pd_pad_create: pd_pad before pd_pocket)."""
+    return close_in(plain_name(server, n), server.tools, k)
+
+
+def close_in(n, names, k=4):
+    """The names closest to n: most shared name words (split at _ and -)
+    first, then the closest spelling. For tool and guide names only, never
+    for the inputs of a tool that changes the document (owner, 24 Nov)."""
     import difflib
 
-    n = plain_name(server, n)
     if not isinstance(n, str) or not n:
         return []
     words = {p for p in n.lower().replace("-", "_").split("_") if p}
     scored = []
-    for t in server.tools:
+    for t in names:
         shared = len(words & set(t.split("_")))
         ratio = difflib.SequenceMatcher(None, n, t).ratio()
         if shared or ratio >= 0.6:
@@ -1082,6 +1088,14 @@ class Server:
                     except Exception:
                         pass
                 self._oriented = False
+                now = getattr(self, "instructions_now", None)
+                if now is not None:
+                    # Made again at each connect: the guide list is read from
+                    # the guide files there now (an add-on's guides too).
+                    try:
+                        self.instructions = now()
+                    except Exception:
+                        pass
                 result = {
                     "protocolVersion": PROTOCOL,
                     "capabilities": {"tools": {"listChanged": True}, **({"resources": {}} if self.resources else {})},

@@ -39,6 +39,8 @@ agentlink/data/examples.json
 agentlink/data/examples.schema.json
 agentlink/data/filaments.json
 agentlink/data/filaments.schema.json
+agentlink/data/guide_words.json
+agentlink/data/guide_words.schema.json
 agentlink/data/nexthint.json
 agentlink/data/nexthint.schema.json
 agentlink/data/readers.json
@@ -347,6 +349,7 @@ tests/test_cells.py
 tests/test_chain.py
 tests/test_charts.py
 tests/test_cmd_run_body_1118.py
+tests/test_connect_1124.py
 tests/test_core_check.py
 tests/test_core_guards.py
 tests/test_core_guards_fc.py

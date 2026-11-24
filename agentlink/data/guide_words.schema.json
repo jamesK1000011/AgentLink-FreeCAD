@@ -1,0 +1,44 @@
+{
+ "$comment": "One entry of guide_words.json: plain words for a kind of work and the guides that hold it. The connect text gets one line per entry; guide_read with an unknown topic matches these words (agentlink/guideidx.py).",
+ "type": "object",
+ "required": [
+  "work",
+  "guides",
+  "words",
+  "source",
+  "date"
+ ],
+ "additionalProperties": false,
+ "properties": {
+  "work": {
+   "type": "string",
+   "minLength": 1,
+   "description": "The kind of work in common words, as the connect line says it."
+  },
+  "guides": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "minLength": 1
+   },
+   "minItems": 1,
+   "description": "The guides that hold it, in reading order. A guide that is not here is left out of the line."
+  },
+  "words": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "minLength": 1
+   },
+   "description": "Words a reader may give as a guide's topic for this work (compared in lower case, without spaces, - or _)."
+  },
+  "source": {
+   "type": "string",
+   "description": "Where the entry came from."
+  },
+  "date": {
+   "type": "string",
+   "description": "When it was added (YYYY-MM-DD)."
+  }
+ }
+}
