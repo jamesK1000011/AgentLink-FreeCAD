@@ -176,7 +176,7 @@ class Files(unittest.TestCase):
         self.assertIsNone(C.to_name("a.json", 0))
         self.assertIsNone(C.to_name("sub/A.JSON", 0))
         for bad in ("a.txt", "", 3, None, "a.py"):
-            self.assertIn("calls.4.to", C.to_name(bad, 4))
+            self.assertIn("calls.4.writeTo", C.to_name(bad, 4))
 
     def test_the_row_left_in_the_reply(self):
         w = {"path": "p", "bytes": 3}

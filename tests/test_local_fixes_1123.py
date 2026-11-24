@@ -190,11 +190,11 @@ class ConnectText(unittest.TestCase):
         for text in texts:
             self.assertIn("batch { calls: [{ tool, arguments }] }", text)
             self.assertIn('guide_read { topic: "batch" }', text)
-            for field in ("$from", "$file", "build: ", "(to)", "lines", "read:"):
+            for field in ("$from", "$file", "build: ", "(writeTo)", "lines", "record_read"):
                 self.assertNotIn(field, text, field)
         with open(os.path.join(ROOT, "agentlink", "guides", "batch.md"), encoding="utf-8") as f:
             guide = f.read()
-        for field in ("$from", "$file", 'build: "end"', "lines:", "read:", "to:", "rollback: true", "The basic form"):
+        for field in ("$from", "$file", 'build: "end"', "lines:", "record_read {", "writeTo:", "rollback: true", "The basic form"):
             self.assertIn(field, guide, field)
 
     def test_a_batch_refused_whole_says_nothing_ran_and_gives_the_basic_form(self):
@@ -285,7 +285,7 @@ class BatchKeepsWhatRan(unittest.TestCase):
         self.assertIn("fail: told to refuse.", b["refused"]["error"])
         self.assertEqual((b["notRun"], b["next"]), ([4, 5], 3))
         self.assertIn("Calls 0, 1, 2 (probe_make, probe_make, probe_make) ran and stay: do not send them again.", b["note"])
-        self.assertIn("in order: probe_make (fixed), probe_make, probe_make. Leave from out.", b["note"])
+        self.assertIn("in order: probe_make (fixed), probe_make, probe_make. Leave start out.", b["note"])
         self.assertEqual((b["result"], b["refused"]["status"]), ("kept", "not_started"))
         self.assertNotIn("outcome", b)
         self.assertEqual([x for x in got["labels"] if x in "ABCDEF"], ["A", "B", "C"])

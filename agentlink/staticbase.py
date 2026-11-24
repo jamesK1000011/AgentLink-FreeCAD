@@ -133,7 +133,7 @@ def listing(server, tools):
     return out
 
 
-GUIDE_HINT = ' guide_read { topic: "batch" } has the rules (chaining with $from, to, lines, from/next).'
+GUIDE_HINT = ' guide_read { topic: "batch" } has the rules (chaining with $from, writeTo, lines, start/next).'
 
 
 NOTHING_RAN = "Nothing was run."

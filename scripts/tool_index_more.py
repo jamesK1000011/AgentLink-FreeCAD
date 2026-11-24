@@ -89,6 +89,7 @@ TOOLS = {
     "asm_sub": ([], "subassembly nested"),
     "asm_sweep": ([], "motion range move interference animate"),
     "batch": ([], "several many calls sequence script"),
+    "record_read": ([], "batch record answer file read back part"),
     "bim_building": (["Arch_Site"], "site project"),
     "bim_component": (["Arch_Component", "BIM_Clone", "BIM_Unclone"], "generic clone"),
     "bim_covering": ([], "tiles finish floor cladding"),

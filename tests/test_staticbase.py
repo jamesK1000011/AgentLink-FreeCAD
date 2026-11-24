@@ -78,7 +78,7 @@ class Static(unittest.TestCase):
         here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agentlink", "guides", "batch.md")
         with open(here, encoding="utf-8") as f:
             g = f.read()
-        for words in ("$from", "$file", 'build: "end"', "lines:", "EchoBatchDelay", "budget", "record", "read:"):
+        for words in ("$from", "$file", 'build: "end"', "lines:", "EchoBatchDelay", "budget", "record", "record_read {"):
             self.assertIn(words, g)
 
 

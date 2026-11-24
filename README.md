@@ -315,14 +315,14 @@ How it works inside: [docs/workflow/approvals.md](https://github.com/jamesK10000
 ## What the agent can do
 
 <!-- tools:begin (scripts/tool_summary.py) -->
-Agent Link itself declares 419 tools in 33 groups; a FreeCAD build without a workbench (FEM, CAM …)
+Agent Link itself declares 420 tools in 33 groups; a FreeCAD build without a workbench (FEM, CAM …)
 serves fewer, and each installed add-on adds its own groups.
 By default the client lists only six tools; the agent finds any other tool with `tool_find` and calls it by name.
 With `AGENTLINK_TOOLLIST=classic`, groups marked *lean* are listed from the start, and the agent turns on the rest with `tool_groups`.
 
 | Group | Tools | What it holds |
 |---|---:|---|
-| `core` *lean* | 20 | The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed in the classic tool list. |
+| `core` *lean* | 21 | The session, groups, guides, batches, jobs (long reads), undo, soundness, export. Always listed in the classic tool list. |
 | `find` | 2 | tool_find: any tool by plain words, its card, the groups; tool_find is listed in the static base (ToolListMode static). pick: run one of the numbered options that session_state and changing answers give. |
 | `app` | 18 | FreeCAD itself: settings (any parameter, preference packs), commands and menus run by name in the window, workbenches. |
 | `doc` | 12 | The document: new, open, save; objects listed, read, set, renamed, deleted; recompute; import and export files. |
@@ -404,16 +404,16 @@ proven on a test model    ░░░░░░░░░░░░░░░░░░
 
 Known gaps: 9 tools are not proven, 8 more are proven live only and 5 more headless only. The main reasons: a program, a FreeCAD version or a printer that the test Mac does not have; a step that needs the person (a restart, an install, a go); or not tested yet. Each tool and its reason: [What is not covered, and why](https://github.com/jamesK1000011/AgentLink-FreeCAD/blob/main/docs/stats/STATS.md#what-is-not-covered-and-why). Not in V1 and not counted: 10 tools of private add-ons (Home-FreeCAD, agentlink-collab), cookbook format 2 and PrintLoop. In V1 but not counted: developer tools (8 tools: Porting), not FreeCAD functions.
 
-Tools: 419 in Agent Link (core), 631 with all add-ons installed (`library_pack` in this count is callable but not listed).
+Tools: 420 in Agent Link (core), 632 with all add-ons installed (`library_pack` in this count is callable but not listed).
 
 Each token number is the estimated size of the `tools/list` answer: the tool names, descriptions and input schemas that the client loads into the agent's context at the start of a session. The server instructions, the guides and the tool answers are not in it. Estimate: 3.5 characters for each token.
 
 | Tool list | Tools listed | Tokens (est.) of the `tools/list` answer |
 |---|---:|---:|
-| static (default), ste | 6 | 1,711 |
-| static, full | 6 | 4,463 |
-| classic, ste | 23 | 6,369 |
-| classic, full | 23 | 9,031 |
+| static (default), ste | 6 | 1,701 |
+| static, full | 6 | 4,407 |
+| classic, ste | 24 | 6,461 |
+| classic, full | 24 | 9,077 |
 <!-- stats:end -->
 
 ## Add-ons

@@ -60,7 +60,7 @@ def _parts(p):
 # output folder too (outDir ~/AgentLink on the Mac), so there only these
 # are refused: the state files by name at its top level (and their ".tmp"
 # and other "<name>." copies), and the state folders. Any other file at the
-# top (an export, a batch "to" file, a report) is ordinary output.
+# top (an export, a batch "writeTo" file, a report) is ordinary output.
 # ports/ is open (port drafts). With an output folder outside the home,
 # all of the home but ports/ is refused.
 STATE_FILES = {"settings.json", "settings-log.jsonl", "approvals.log", "memory-stop.json", "memory-jobs.json",

@@ -302,7 +302,7 @@ s.doc = Doc()
 srv = build_server(s, lean=False); s.server = srv
 srv.tools["probe_state"] = Tool("probe_state", "probe", {"type": "object", "properties": {"n": {}}}, lambda a: {"n": a.get("n"), "big": "x" * 50})
 args = json.loads(sys.argv[2])
-if "file" in args:
+if "path" in args:
     with open(os.path.join(s.out_dir, "calls.json"), "w") as fh:
         json.dump(json.loads(sys.argv[3]), fh)
 r = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "batch", "arguments": args}})
@@ -327,18 +327,18 @@ class BatchFileTo(unittest.TestCase):
     CALLS = [{"tool": "probe_state", "arguments": {"n": 1}}]
 
     def test_to_and_full_in_the_file(self):
-        got = self.run_batch({"file": "calls.json"}, {"calls": self.CALLS, "to": "out.json", "lines": "full"})
+        got = self.run_batch({"path": "calls.json"}, {"calls": self.CALLS, "writeTo": "out.json", "lines": "full"})
         self.assertTrue(got["file"], got)
         self.assertEqual(got["reply"]["written"]["path"], os.path.join(got["out_dir"], "out.json"))
         self.assertEqual(got["reply"]["results"][0]["result"]["n"], 1)  # full: the whole answer here too
 
     def test_full_in_the_call_and_to_in_the_file(self):
-        got = self.run_batch({"file": "calls.json", "lines": "full"}, {"calls": self.CALLS, "to": "out.json"})
+        got = self.run_batch({"path": "calls.json", "lines": "full"}, {"calls": self.CALLS, "writeTo": "out.json"})
         self.assertTrue(got["file"], got)
         self.assertIn("result", got["reply"]["results"][0])
 
     def test_calls_with_to_and_full(self):
-        got = self.run_batch({"calls": self.CALLS, "to": "out.json", "lines": "full"}, None)
+        got = self.run_batch({"calls": self.CALLS, "writeTo": "out.json", "lines": "full"}, None)
         self.assertTrue(got["file"], got)
         self.assertIn("written", got["reply"])
         self.assertIn("result", got["reply"]["results"][0])

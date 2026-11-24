@@ -211,11 +211,11 @@ proven on a test model    ░░░░░░░░░░░░░░░░░░
 
 ## 2. Tools
 
-Agent Link (core) declares 419 tools in 33 groups. The source is `scripts/tool_summary.py`. A lean group is in the classic list from the start.
+Agent Link (core) declares 420 tools in 33 groups. The source is `scripts/tool_summary.py`. A lean group is in the classic list from the start.
 
 | Group | Tools | Lean |
 |---|---:|---|
-| `core` | 20 | yes |
+| `core` | 21 | yes |
 | `find` | 2 | – |
 | `app` | 18 | – |
 | `doc` | 12 | – |
@@ -261,7 +261,7 @@ The source is `docs/stats/addons.json`: each add-on's own tool data (its `data/t
 | Tutor-FreeCAD | `dbf53e1` | 3 | 3 | 1 | – |
 | Workshop-FreeCAD | `5fc0102` | 60 | 60 | 17 | – |
 
-With all these add-ons installed, Agent Link has 631 tools: 419 of the hub and 212 of the add-ons.
+With all these add-ons installed, Agent Link has 632 tools: 420 of the hub and 212 of the add-ons.
 `library_pack` is in this count. Workshop's library_pack is an alias of ScanRuler-FreeCAD's pack_write when ScanRuler-FreeCAD is installed (the V1 bundle): callable by name, never listed (docs/hardening/addons4-findings.md, item 6).
 
 ## 3. Token cost of the tool list
@@ -270,12 +270,12 @@ Each token number is the estimated size of the `tools/list` answer: the tool nam
 
 | Mode | Style | Tools listed | Characters | Tokens (est.) of the `tools/list` answer |
 |---|---|---:|---:|---:|
-| static (default) | ste | 6 | 5,988 | 1,711 |
-| static | full | 6 | 15,622 | 4,463 |
-| classic | ste | 23 | 22,292 | 6,369 |
-| classic | full | 23 | 31,607 | 9,031 |
+| static (default) | ste | 6 | 5,952 | 1,701 |
+| static | full | 6 | 15,424 | 4,407 |
+| classic | ste | 24 | 22,615 | 6,461 |
+| classic | full | 24 | 31,768 | 9,077 |
 
-So with the default (static, ste), the tool list costs about 1,711 tokens for 6 tools. With every hub group turned on, the list has 419 tools, 356,980 characters and about 101,994 tokens (style full).
+So with the default (static, ste), the tool list costs about 1,701 tokens for 6 tools. With every hub group turned on, the list has 420 tools, 357,147 characters and about 102,042 tokens (style full).
 
 - static: only the base is listed (`session_state`, `batch`, `guide_read`, `tool_find`, `approve_file`, `approve_code`). The agent finds the other tools with `tool_find`.
 - classic: the lean groups are listed (`core`, `view`).
@@ -296,7 +296,7 @@ The extra tokens that an add-on adds to the `tools/list` answer. An add-on that 
 ### What is approximated
 
 - Each token number is an estimate: characters divided by 3.5.
-- 26 hub tools have an input schema in code that the script cannot read as data. For these tools, the script uses the length of the schema source text plus 40 characters, as `ste_check.card_tokens` does. The static base has 6 such tools. The classic list has 17 such tools.
+- 27 hub tools have an input schema in code that the script cannot read as data. For these tools, the script uses the length of the schema source text plus 40 characters, as `ste_check.card_tokens` does. The static base has 6 such tools. The classic list has 18 such tools.
 - 18 add-on tools have such an estimated entry (a schema or a description in code).
 - The script counts a FreeCAD build with every workbench. A build without a workbench (FEM, CAM …) serves fewer tools.
 - The add-on numbers come from the snapshot. Run `python3 scripts/stats.py --addons <folder with the add-on checkouts>` to make it again.

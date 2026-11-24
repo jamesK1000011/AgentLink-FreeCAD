@@ -9,7 +9,7 @@ call's answer without that value passing through the conversation:
   { "$from": 2, "$at": "bodies.0.name" }           from call 2's answer
 
 and a call can keep its own answer out of the reply: { tool, arguments,
-to: "outline.json" } writes the answer to that file and the batch's result
+writeTo: "outline.json" } writes the answer to that file and the batch's result
 for the call is { written: { path, bytes }, keys | length }.
 
 $at is a dotted path of keys and list indices (from 0; -1 is the last).
@@ -126,8 +126,8 @@ def _from_call(ref, answers, index, first):
     if n >= index:
         raise Miss("invalid_input", f"{FROM}: {n} is not before this call (calls.{index}): a call takes only an earlier call's answer.")
     if n < first:
-        raise Miss("invalid_state", f"{FROM}: call {n} ran in an earlier part of this batch (this part began at from: {first}), and its answer is not kept between parts — "
-                                    f"give that call to: \"file.json\" and read it here with {{ \"{FILE}\": \"file.json\", \"{AT}\": … }}.")
+        raise Miss("invalid_state", f"{FROM}: call {n} ran in an earlier part of this batch (this part began at start: {first}), and its answer is not kept between parts — "
+                                    f"give that call writeTo: \"file.json\" and read it here with {{ \"{FILE}\": \"file.json\", \"{AT}\": … }}.")
     got = answers.get(n)
     if got is None:
         raise Miss("invalid_state", f"{FROM}: call {n} has no answer to take from (it did not run).")
@@ -172,9 +172,9 @@ def read_json(path, name, cache=None, may_list=None):
         except OSError:
             near = None
         if near is None and os.path.isdir(folder):
-            raise Miss("not_found", f"{FILE}: {name} — no such file (a relative path is in the session's folder). A call writes its answer to one with to: \"file.json\".") from None
+            raise Miss("not_found", f"{FILE}: {name} — no such file (a relative path is in the session's folder). A call writes its answer to one with writeTo: \"file.json\".") from None
         what = "there is no such folder" if near is None else (f"the .json files there: {', '.join(near[:KEYS_SHOWN])}" if near else "there are no .json files there")
-        raise Miss("not_found", f"{FILE}: {name} — no such file (a relative path is in the session's folder); {what}. A call writes its answer to one with to: \"file.json\".") from None
+        raise Miss("not_found", f"{FILE}: {name} — no such file (a relative path is in the session's folder); {what}. A call writes its answer to one with writeTo: \"file.json\".") from None
     if not os.path.isfile(path):
         raise Miss("invalid_input", f"{FILE}: {name} is a folder, not a .json file.")
     if st.st_size > MAX_BYTES:
@@ -212,7 +212,7 @@ def to_name(to, i):
     """A call's to checked as a name: a .json file's path. The refusal's
     words, or None."""
     if not isinstance(to, str) or not to.strip() or not to.lower().endswith(".json"):
-        return f"calls.{i}.to: a .json file's path the call's answer is written to (relative: in the session's folder), not {to!r}. Nothing was run."
+        return f"calls.{i}.writeTo: a .json file's path the call's answer is written to (relative: in the session's folder), not {to!r}. Nothing was run."
     return None
 
 

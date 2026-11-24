@@ -347,7 +347,7 @@ SYNONYMS = {
     "centre": ("center",), "center": ("centre",), "colour": ("color",), "color": ("colour",),
     "body": ("object", "part"), "object": ("body",), "part": ("body", "object"),
     "bodies": ("objects", "parts"), "objects": ("bodies",), "parts": ("bodies", "objects"),
-    "file": ("path",), "filename": ("path", "file"), "path": ("file",),
+    # file/filename → path went on 24 Nov (rename set 2, rule R5: no alias for a renamed field).
 }
 
 
@@ -372,7 +372,7 @@ FIELD_ALIASES = {
 # the field it goes with). Given alone, it is left out and said in readAs
 # (live findings, 22 Nov: batch { at: "./", calls } was taken for a read).
 GOES_WITH = {
-    "batch": {"at": "read"},
+    # batch { read, at } became record_read { path, at } (owner decision 12, 24 Nov).
 }
 
 

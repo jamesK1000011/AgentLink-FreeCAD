@@ -194,7 +194,7 @@ class FileBatch(unittest.TestCase):
         self.assertTrue(e.exception.message.startswith("at "))
         with self.assertRaises(chain.Miss) as e:
             batchrec.read_part(os.path.join(self.d, "nope.json"), "nope.json", None)
-        self.assertTrue(e.exception.message.startswith("read: nope.json"))
+        self.assertTrue(e.exception.message.startswith("path: nope.json"))
 
 
 class BatchSchema(unittest.TestCase):
@@ -206,14 +206,14 @@ class BatchSchema(unittest.TestCase):
             tree = ast.parse(f.read())
         read, listed = set(), None
         for fn in ast.walk(tree):
-            if isinstance(fn, ast.FunctionDef) and fn.name in ("batch", "_batch_core", "_batch_read"):
+            if isinstance(fn, ast.FunctionDef) and fn.name in ("batch", "_batch_core"):
                 for n in ast.walk(fn):
                     if isinstance(n, ast.Call) and getattr(n.func, "attr", None) == "get" and getattr(n.func.value, "id", None) == "a" \
                             and n.args and isinstance(n.args[0], ast.Constant):
                         read.add(n.args[0].value)
             if isinstance(fn, ast.Call) and getattr(fn.func, "id", None) == "Tool" and fn.args and getattr(fn.args[0], "value", None) == "batch":
                 listed = set(ast.literal_eval(fn.args[2].args[0]))
-        self.assertTrue(read >= {"calls", "file", "to", "lines", "from", "build", "read", "at"}, read)
+        self.assertTrue(read >= {"calls", "path", "writeTo", "lines", "start", "build"}, read)
         self.assertEqual(sorted(read - listed), [])
 
 

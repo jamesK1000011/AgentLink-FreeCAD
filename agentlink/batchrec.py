@@ -78,9 +78,9 @@ class BatchRecord:
 
 
 # The file's own note in a batch { to } reply.
-TO_NOTE = ("Each call's whole answer is in the file (results[i].result; a call with a to of its own: in that file, written here); "
-           "here: ok, a refusal's words and the health verdict. batch { read: the file, at: \"results.0.result\" } gives any part of it "
-           "back (results count from this part's first call, i minus from).")
+TO_NOTE = ("Each call's whole answer is in the file (results[i].result; a call with a writeTo of its own: in that file, written here); "
+           "here: ok, a refusal's words and the health verdict. record_read { path: the file, at: \"results.0.result\" } gives any part of it "
+           "back (results count from this part's first call, i minus start).")
 
 
 # The part of a health verdict that stands from call to call: the objects
@@ -218,8 +218,8 @@ def record_reply(got, first, record_path, from_file, lines):
 
 
 def read_part(path, name, at=None):
-    """batch { read, at }: the part at the dotted path at of the JSON file at
-    path (name: as the agent gave it) — a batch's record or a to file, so an
+    """record_read { path, at }: the part at the dotted path at of the JSON
+    file at path (name: as the agent gave it) — a batch's record or a writeTo file, so an
     answer a reply left out can be read back. Raises chain.Miss in a
     refusal's words."""
     from . import chain
@@ -227,5 +227,5 @@ def read_part(path, name, at=None):
     try:
         value = chain.at(chain.read_json(path, name), at, name)
     except chain.Miss as e:
-        raise chain.Miss(e.code, e.message.replace(chain.FILE + ": ", "read: ", 1).replace(chain.AT + " ", "at ", 1)) from None
-    return {"read": path, "at": at or "", "value": value}
+        raise chain.Miss(e.code, e.message.replace(chain.FILE + ": ", "path: ", 1).replace(chain.AT + " ", "at ", 1)) from None
+    return {"path": path, "at": at or "", "value": value}

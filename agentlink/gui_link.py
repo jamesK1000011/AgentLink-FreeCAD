@@ -137,7 +137,7 @@ FRONT_CALLS = _FRONT_CALLS
 
 
 # batch arguments the socket thread's light batch does not do.
-LIGHT_NOT = ("to", "lines", "file", "read", "at", "from", "build")
+LIGHT_NOT = ("writeTo", "lines", "path", "start", "build")
 
 
 def _thread_batch(line, tools):
@@ -151,10 +151,10 @@ def _thread_batch(line, tools):
         return None
     if _tool_name(line) != "batch":
         return None
-    # A batch that asks for its answer written (to), cut (lines), read from a
-    # file or a record (file, read, at) or started part way (from) goes the
+    # A batch that asks for its answer written (writeTo), cut (lines), read
+    # from a file (path) or started part way (start) goes the
     # whole batch's way: the light answer here knows none of those, and a
-    # batch { calls: [job_status], to, lines: "counts" } came back as the
+    # batch { calls: [job_status], writeTo, lines: "counts" } came back as the
     # job's whole answer (live, round 3).
     if any(args.get(k) is not None for k in LIGHT_NOT):
         return None

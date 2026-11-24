@@ -315,6 +315,7 @@
   "pref_set": {"workbench": null, "commands": [], "words": ["preferences", "settings", "parameters", "change"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "queue_go": {"workbench": null, "commands": [], "words": ["heavy", "jobs", "held", "approve"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "recompute": {"workbench": null, "commands": ["Std_Refresh", "Std_Recompute"], "words": ["refresh", "rebuild", "update", "errors"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
+  "record_read": {"workbench": null, "commands": [], "words": ["batch", "answer", "file", "back", "part"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "report_read": {"workbench": null, "commands": [], "words": ["console", "log", "errors", "warnings", "output"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "robot_export": {"workbench": "RobotWorkbench", "commands": ["Robot_ExportKukaFull", "Robot_ExportKukaCompact"], "words": ["kuka", "krl", "program"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},
   "robot_move": {"workbench": "RobotWorkbench", "commands": ["Robot_RestoreHomePos"], "words": ["axes", "joints", "tcp", "inverse", "kinematics", "pose"], "source": "FreeCAD 1.1.0 source; Agent Link", "date": "2026-11-16"},

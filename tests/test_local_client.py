@@ -122,19 +122,9 @@ class AnswerFields(unittest.TestCase):
 
     BATCH = obj({"calls": {"type": "array", "items": {"type": "object"}}, "file": {"type": "string"}, "read": {"type": "string"}, "at": {"type": "string"}})
 
-    def test_batch_at_without_read_is_left_out(self):
-        for at in ("./", "", "results.0"):
-            a = {"at": at, "calls": [{"tool": "echo"}]}
-            said = check_input(self.BATCH, a, "batch")
-            self.assertEqual(a, {"calls": [{"tool": "echo"}]})
-            self.assertEqual(protocol.read_as_words(said), "ignored at (it goes with read, which was not given)")
-        a = {"read": "batches/x.json", "at": "results.0"}
-        self.assertEqual(check_input(self.BATCH, a, "batch"), [])
-        self.assertEqual(a, {"read": "batches/x.json", "at": "results.0"})
-        with open(os.path.join(ROOT, "agentlink", "tools.py"), encoding="utf-8") as f:
-            src = f.read()
-        self.assertNotIn('a.get("at") is not None:\n            return _batch_read(a)', src)
-        self.assertIn('if a.get("read") is not None:\n            return _batch_read(a)', src)
+    def test_batch_at_and_read_are_gone(self):
+        # Owner decision 12 (24 Nov): batch { read, at } became record_read.
+        self.assertNotIn("batch", protocol.GOES_WITH)
 
     def test_batch_commands_and_steps_are_refused_with_the_fields(self):
         # Owner decision 10 (24 Nov): no alias; the refusal names calls.

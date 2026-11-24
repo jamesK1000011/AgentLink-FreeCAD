@@ -132,6 +132,10 @@
       "description": "Clear the output folder of what Agent Link made there and no longer needs (only files it recorded making): shots past the last 50 and 3 days, solver and job runs past 14 days, FreeCAD backups past 7; exports only listed."
     },
     {
+      "name": "record_read",
+      "description": "Read back a part of a batch's record or of a writeTo file: an answer that a reply left out."
+    },
+    {
       "name": "report_read",
       "description": "FreeCAD's Report view in the window: its last lines (last, 40 by default), or only the warnings and errors (problems: true)."
     },

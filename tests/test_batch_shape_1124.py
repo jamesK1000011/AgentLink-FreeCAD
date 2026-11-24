@@ -40,7 +40,7 @@ class ResultAndStatus(unittest.TestCase):
         self.assertEqual((b["result"], b["done"], b["notRun"]), ("ran_none", [], [1]))
         self.assertEqual(b["refused"]["status"], "not_started")
         self.assertIn("Call 0 (probe_make) was refused; it changed nothing.", b["note"])
-        self.assertIn("in order: probe_make (fixed), probe_make. Leave from out.", b["note"])
+        self.assertIn("in order: probe_make (fixed), probe_make. Leave start out.", b["note"])
 
     def test_rollback_result_and_resend_list(self):
         _, b, _ = run('''
@@ -60,9 +60,9 @@ class ResultAndStatus(unittest.TestCase):
 
     def test_from_on_an_inline_list_says_leave_it_out(self):
         _, b, _ = run('''
-    print(json.dumps(call("batch", {"from": 1, "calls": [mk("A"), mk("B"), mk("C", fail=True)]})))
+    print(json.dumps(call("batch", {"start": 1, "calls": [mk("A"), mk("B"), mk("C", fail=True)]})))
 ''')
-        self.assertIn("from counts in the list you send. In a new, shorter list, leave from out.", b["note"])
+        self.assertIn("start counts in the list you send. In a new, shorter list, leave start out.", b["note"])
 
     def test_direct_refusal_has_status(self):
         _, b, _ = run('''
@@ -207,4 +207,26 @@ class ListedSchema(unittest.TestCase):
     print(json.dumps([t["inputSchema"] for t in tl if t["name"] == "batch"]))
 ''')
         if got:
-            self.assertIn("file", got[0]["properties"])
+            self.assertIn("path", got[0]["properties"])
+
+
+class RecordRead(unittest.TestCase):
+    """Decision 12 and rename set 2: record_read { path, at }; batch path,
+    start and writeTo; read, at, file, from and to are gone."""
+
+    def test_record_read_and_old_names(self):
+        got = run('''
+    out = {}
+    b = call("batch", {"calls": [mk("A")]})
+    out["rec"] = call("record_read", {"path": b[1]["record"], "at": "results.0.ok"})
+    out["write"] = call("batch", {"calls": [{"tool": "probe_make", "arguments": {"name": "B"}, "writeTo": "b.json"}]})
+    for k, v in (("read", "x.json"), ("file", "x.json"), ("from", 0), ("to", "y.json")):
+        out[k] = call("batch", {"calls": [mk("C")], k: v})
+    print(json.dumps(out))
+''')
+        self.assertFalse(got["rec"][0], got["rec"])
+        self.assertEqual(got["rec"][1]["value"], True)
+        self.assertIn("written", got["write"][1]["results"][0])
+        for k in ("read", "file", "from", "to"):
+            self.assertTrue(got[k][0], k)
+            self.assertIn(f"input.{k}: not a known field", got[k][1]["error"]["message"])

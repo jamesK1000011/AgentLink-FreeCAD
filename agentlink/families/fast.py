@@ -40,7 +40,7 @@ def tools(session):
                       "If a call refuses, the block stops there. The calls before it stay, as in batch: each is its own undo step. "
                       "The refusal names the steps that ran before it, and from which step to go on in a new block. "
                       "keep: true is the same as the default. rollback: true undoes the whole block instead. The undo stops at a step of the person. "
-                      "record is the file of each call's whole answer; batch { read, at } reads it. "
+                      "record is the file of each call's whole answer; record_read { path, at } reads it. "
                       "A block does not run batch, jobs, gui_input, dialog_answer, the history tools, approvals or a restart. "
                       "The person's preference FastPath can turn it off."),
              {"type": "object", "properties": {"do": {"type": "array", "items": {"type": "object"}}, "check": {"type": "boolean"}, "keep": {"type": "boolean"}, "rollback": {"type": "boolean"}},
