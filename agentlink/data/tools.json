@@ -8439,7 +8439,7 @@
   },
   "sketch_constrain": {
    "group": "sketch",
-   "description": "Constrain a sketch with geometric and dimensional constraints. constraints: [{ type, refs, value, name }]. A ref is FreeCAD's: a geometry id g, a point p = [g, vertex], or \"origin\". Vertex: 1 start, 2 end, 3 centre. -1 is the horizontal axis, -2 the vertical axis, -3 down are outside edges. Each type and its refs follow. coincident [p, p]. point_on_object [p, g]. horizontal | vertical [g] or [p, p]. parallel | perpendicular | equal [g, g]. tangent [g, g] or end points [p, p]. symmetric [p, p, g] (about a line) or [p, p, p]. distance [g] (length), [p, p] or [p, g]. distance_x | distance_y [g], [p] (from the origin) or [p, p] (second minus first). radius | diameter [g]. All lengths are mm. angle [g] (from +x) or [g, g] (first to second, ccw), deg. fix [p]: holds a point where it is. fix [g]: blocked; add it last. name: lets you bind it to a parameter later. All or nothing: the tool refuses a constraint that conflicts or is redundant. It names what clashes, and adds nothing. Answer: added (constraint ids from 0) and state.",
+   "description": "Constrain a sketch with geometric and dimensional constraints. constraints: [{ type, refs, value, name }], one item for each constraint. Example: { type: \"tangent\", refs: [0, 1] } makes line 0 tangent to circle 1. A ref is FreeCAD's: a geometry id g, a point p = [g, vertex], or \"origin\". Vertex: 1 start, 2 end, 3 centre. -1 is the horizontal axis, -2 the vertical axis, -3 down are outside edges. Each type and its refs follow. coincident [p, p]. point_on_object [p, g]. horizontal | vertical [g] or [p, p]. parallel | perpendicular | equal [g, g]. tangent [g, g] or end points [p, p]. symmetric [p, p, g] (about a line) or [p, p, p]. distance [g] (length), [p, p] or [p, g]. distance_x | distance_y [g], [p] (from the origin) or [p, p] (second minus first). radius | diameter [g]. All lengths are mm. angle [g] (from +x) or [g, g] (first to second, ccw), deg. fix [p]: holds a point where it is. fix [g]: blocked; add it last. name: lets you bind it to a parameter later. All or nothing: the tool refuses a constraint that conflicts or is redundant. It names what clashes, and adds nothing. Answer: added (constraint ids from 0) and state.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8449,8 +8449,31 @@
      },
      "constraints": {
       "type": "array",
+      "description": "One item for each constraint: { type, refs, value, name }.",
       "items": {
-       "type": "object"
+       "type": "object",
+       "properties": {
+        "type": {
+         "type": "string",
+         "description": "coincident, tangent, distance, radius … (the card lists all)."
+        },
+        "refs": {
+         "type": "array",
+         "description": "Ids g or points [g, vertex]. Line 0 tangent to circle 1: [0, 1]."
+        },
+        "value": {
+         "type": "number",
+         "description": "A size: mm, or deg for angle."
+        },
+        "name": {
+         "type": "string",
+         "description": "A name for param_bind."
+        }
+       },
+       "required": [
+        "type"
+       ],
+       "additionalProperties": false
       }
      }
     },

@@ -367,6 +367,15 @@ FIELD_ALIASES = {
     # Nov (rename set 10, rule R5): values is the one property map's name.
 }
 
+# A field a model sends to a tool that does not take it, with the words
+# that say why and what to send (local-model runs, 24 Nov: sketch_add
+# { body }). Not an alias: the call is still refused, and these words come
+# after the fields.
+WRONG_FIELD_WORDS = {
+    "sketch_add": {"body": 'sketch_add takes sketch, not body: a sketch is already in a body. '
+                           'Example: { "sketch": "Sketch", "items": [{ "kind": "rectangle", "center": [0, 0], "size": [40, 20] }] }.'},
+}
+
 # A field that means something only beside another one (per tool: field ->
 # the field it goes with). Given alone, it is left out and said in readAs
 # (live findings, 22 Nov: batch { at: "./", calls } was taken for a read).
@@ -730,7 +739,8 @@ def check_input(schema, args, tool=None):
         read_as.append(f"ignored {', '.join(unknown)} (not {'a field' if len(unknown) == 1 else 'fields'} here — the fields: {', '.join(props) or 'none'})")
         unknown = []
     if unknown and schema.get("additionalProperties") is False:
-        raise ToolError("invalid_input", f"input.{unknown[0]}: not a known field — the fields here: {', '.join(props) or 'none'}")
+        more = (WRONG_FIELD_WORDS.get(tool) or {}).get(unknown[0])
+        raise ToolError("invalid_input", f"input.{unknown[0]}: not a known field — the fields here: {', '.join(props) or 'none'}" + (f". {more}" if more else ""))
     for k in schema.get("required", []):
         if k not in args:
             raise ToolError("invalid_input", f"input.{k}: required.")

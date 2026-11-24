@@ -307,6 +307,16 @@ SCHEMAS = {
     "pd_thickness": {"why": "face selectors", "describe": {"faces": _FACES}},
     "pd_mirrored": {"why": "face selectors", "describe": {"plane": _PLANE_FACE}},
     "pd_datum_plane": {"why": "face selectors", "describe": {"on": _PLANE_FACE}},
+    # 24 Nov, local-model runs (a, b, kind sent for a constraint's fields): each constraint item typed on the card
+    "sketch_constrain": {"why": "local-model runs: a constraint item's fields typed",
+                         "replace": {"constraints": {
+                             "type": "array", "description": "One item for each constraint: { type, refs, value, name }.",
+                             "items": {"type": "object",
+                                       "properties": {"type": {"type": "string", "description": "coincident, tangent, distance, radius \u2026 (the card lists all)."},
+                                                      "refs": {"type": "array", "description": "Ids g or points [g, vertex]. Line 0 tangent to circle 1: [0, 1]."},
+                                                      "value": {"type": "number", "description": "A size: mm, or deg for angle."},
+                                                      "name": {"type": "string", "description": "A name for param_bind."}},
+                                       "required": ["type"], "additionalProperties": False}}}},
     "sketch_new": {"why": "face selectors", "replace": {"face": {
         "type": "object",
         "description": "{ side: \"+z\" | \"-z\" | \"+x\" | \"-x\" | \"+y\" | \"-y\", of: the feature that made it, largest: true } (one face only), "
