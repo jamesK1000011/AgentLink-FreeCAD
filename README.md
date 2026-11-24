@@ -449,6 +449,14 @@ The tool list starts short. Add-ons that are not installed cost nothing: their t
 `usage_report` gives the agent the same figures. They are kept in `~/AgentLink/usage`.
 `AGENTLINK_USAGE=off` turns the meter off.
 
+## A run with a time limit
+
+A runner that gives the agent a fixed time (a test run, a scheduled job) can tell Agent Link the limit.
+Set `AGENTLINK_TIME_LIMIT_MIN` to the minutes in the server's `env`.
+Agent Link reads it when it starts. The time counts from the agent's first tool call.
+`session_state` then shows `time: N of M minutes used`, and the health verdict of each changing answer ends with the same words.
+When it is not set, nothing is shown.
+
 ## Privacy
 
 Agent Link has no telemetry. It sends nothing anywhere on its own.

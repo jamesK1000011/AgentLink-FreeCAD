@@ -337,28 +337,56 @@ def public(opts):
     return {"step": opts["step"], "list": rows, "pick": pick_how(opts)}
 
 
-def pick_how(opts):
+def pick_how(opts, static=None):
     """How to run the first option, made from that option itself (its own
     ask and that ask's sample), so the example fits the option it names
     (local-model runs, 23 Nov: option 1 was doc_new, which asks for name,
-    and the fixed example gave length). PICK_HOW when there is no option."""
+    and the fixed example gave length). PICK_HOW when there is no option.
+    static: pick is not listed (the static list, the default): the example
+    is a batch call, which a client that sends only listed tools can make;
+    classic keeps the short form (design 1h, 24 Nov). None: read the mode."""
     rows = (opts or {}).get("list") or []
+    if static is None:
+        static = pick_unlisted()
     if not rows:
-        return PICK_HOW
+        return as_batch(PICK_ARGS, 1, PICK_TAIL) if static else PICK_HOW
     o = rows[0]
     n = o.get("n", 1)
     ask = o.get("ask") or []
     if not ask:
-        return f"pick {{ option: {n} }} runs option {n}"
-    a = ask[0]
-    v = a.get("sample", ASK_SAMPLE.get(a.get("arg")))
-    if v is None:
-        return f"pick {{ option: {n}, fill: {{ {a['arg']}: your value }} }} runs option {n}"
-    head = f"pick {{ option: {n}, fill: {{ {a['arg']}: {json.dumps(v, ensure_ascii=False)} }} }} runs option {n}"
-    if isinstance(v, bool) or not isinstance(v, (int, float, str)):
-        return head
-    text = f"{_val(v)}{a.get('unit') or ''}" if a.get("unit") == "mm" else _val(v)
-    return head + f"; the text \"{n}, {text}\" also works"
+        args, tail = f"{{ option: {n} }}", ""
+    else:
+        a = ask[0]
+        v = a.get("sample", ASK_SAMPLE.get(a.get("arg")))
+        if v is None:
+            args, tail = f"{{ option: {n}, fill: {{ {a['arg']}: your value }} }}", ""
+        else:
+            args = f"{{ option: {n}, fill: {{ {a['arg']}: {json.dumps(v, ensure_ascii=False)} }} }}"
+            tail = ""
+            if not isinstance(v, bool) and isinstance(v, (int, float, str)):
+                text = f"{_val(v)}{a.get('unit') or ''}" if a.get("unit") == "mm" else _val(v)
+                tail = (f"; option: \"{n}, {text}\" also works" if static else f"; the text \"{n}, {text}\" also works")
+    return as_batch(args, n, tail) if static else f"pick {args} runs option {n}{tail}"
+
+
+PICK_ARGS = "{ option: 1, fill: { length: 4 } }"
+PICK_TAIL = "; option: \"1, 4mm\" also works"
+
+
+def as_batch(args, n, tail=""):
+    """The pick call inside a batch: batch { calls: [{ tool: "pick", arguments: … }] }."""
+    return f'batch {{ calls: [{{ tool: "pick", arguments: {args} }}] }} runs option {n}{tail}'
+
+
+def pick_unlisted():
+    """True when the static list is on (staticbase.mode, the default): pick
+    is then found by name, not listed. Never raises."""
+    try:
+        from . import staticbase
+
+        return staticbase.mode() == "static" and "pick" not in staticbase.BASE + staticbase.FAST
+    except Exception:  # noqa: BLE001
+        return False
 
 
 # ---- after a call, and in session_state ----------------------------------------------------

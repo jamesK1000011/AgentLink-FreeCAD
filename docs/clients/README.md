@@ -40,6 +40,7 @@ Optional flags, added after `agentlink-freecad` in `args`:
 | `AGENTLINK_TOOLS=full` (env) | with `AGENTLINK_TOOLLIST=classic`: list every tool from the start (not for small models) |
 | `AGENTLINK_USAGE=off` (env) | turn the token-usage meter off |
 | `AGENTLINK_PROFILE_CALLS=1` (env), or the preference `ProfileCalls` | time every batch call by function (cProfile) and add `profile` to its row; for finding what is slow, never set by the agent |
+| `AGENTLINK_TIME_LIMIT_MIN=30` (env) | a run with a fixed time: the limit in minutes, read at start and counted from the first tool call; `session_state` and the health verdict show `time: N of M minutes used`. Not set: nothing shows |
 
 ### Without uv
 

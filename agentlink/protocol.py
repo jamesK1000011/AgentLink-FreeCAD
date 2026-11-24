@@ -615,14 +615,20 @@ def kind_hint(server, n):
 def close_names(server, n, k=4):
     """The tool names closest to n: most shared name words first, then the
     closest spelling (pd_pad_create: pd_pad before pd_pocket)."""
+    return close_in(plain_name(server, n), server.tools, k)
+
+
+def close_in(n, names, k=4):
+    """The names closest to n: most shared name words (split at _ and -)
+    first, then the closest spelling. For tool and guide names only, never
+    for the inputs of a tool that changes the document (owner, 24 Nov)."""
     import difflib
 
-    n = plain_name(server, n)
     if not isinstance(n, str) or not n:
         return []
     words = {p for p in n.lower().replace("-", "_").split("_") if p}
     scored = []
-    for t in server.tools:
+    for t in names:
         shared = len(words & set(t.split("_")))
         ratio = difflib.SequenceMatcher(None, n, t).ratio()
         if shared or ratio >= 0.6:
@@ -1087,6 +1093,14 @@ class Server:
                     except Exception:
                         pass
                 self._oriented = False
+                now = getattr(self, "instructions_now", None)
+                if now is not None:
+                    # Made again at each connect: the guide list is read from
+                    # the guide files there now (an add-on's guides too).
+                    try:
+                        self.instructions = now()
+                    except Exception:
+                        pass
                 result = {
                     "protocolVersion": PROTOCOL,
                     "capabilities": {"tools": {"listChanged": True}, **({"resources": {}} if self.resources else {})},
@@ -1119,7 +1133,9 @@ class Server:
                 result = {"contents": [self.resources.read((msg.get("params") or {}).get("uri", ""))]}
             elif method == "tools/call":
                 params = msg.get("params") or {}
-                from . import approvals
+                from . import approvals, timelimit
+
+                timelimit.started()  # the run's time counts from the first call (AGENTLINK_TIME_LIMIT_MIN)
 
                 with approvals.connection_call(client):
                     if params.get("name") in approvals.CLIENT_ONLY:
@@ -1210,6 +1226,9 @@ class Server:
         args = params.get("arguments") or {}
         tool = self.tools.get(name)
         t0 = time.time()
+        from . import timelimit
+
+        timelimit.started()
         try:
             if tool is None:
                 result = self.refusal("not_found", f"{name}: no such tool.")
@@ -1498,6 +1517,15 @@ class Server:
                     gate.after(tool, args, not as_job)
             if s is not None and not as_job:
                 jobs.note_slow(tool, args, s, time.time() - t0)
+            if tool.name == "batch" and s is not None and getattr(s, "batch_now", None) is None:
+                # The run's time line (AGENTLINK_TIME_LIMIT_MIN): once, on the
+                # last health a batch's calls carry (agentlink/timelimit.py).
+                try:
+                    from . import health
+
+                    health.time_on_batch(s, out)
+                except Exception:
+                    pass
             if s is not None and not as_job and (tool.changes or (tool.name == "batch" and getattr(s, "_applies_seq", 0) != changes0)):
                 # Which tools apply to the document as it is now, read from their own leading checks: one short
                 # line beside the health's next (agentlink/appliesnow.py). A batch's answer carries it once.

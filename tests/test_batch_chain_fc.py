@@ -216,9 +216,12 @@ class GuideRead(unittest.TestCase):
         self.assertEqual(many["read"][0]["topic"], list(by)[0])
         err, rest = self.call("guide_read", {"topic": many["next"]})
         self.assertFalse(err, rest)
+        # An unknown topic answers the close guides and the index, and reads nothing (decision 6, 24 Nov).
         err, e = self.call("guide_read", {"topic": ["model", "nope"]})
-        self.assertTrue(err)
-        self.assertIn("nope", e["error"]["message"])
+        self.assertFalse(err)
+        self.assertEqual(e["notFound"][0]["topic"], "nope")
+        self.assertTrue(e["guides"])
+        self.assertNotIn("text", e)
 
 
 if __name__ == "__main__":

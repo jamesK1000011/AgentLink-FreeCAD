@@ -65,6 +65,13 @@ replace the file. Give `uvx`'s full path (`which uvx` / `where uvx`) when the
 client is a GUI app. Small local model: keep the default six-tool list (do
 not set `AGENTLINK_TOOLLIST` or `AGENTLINK_TOOLS`).
 
+A run with a fixed time (a test run, a scheduled job): set
+`AGENTLINK_TIME_LIMIT_MIN` to the limit in minutes in the server's `env`.
+It is read when the server starts, and the time counts from the first
+tool call. `session_state` then shows `time: N of M minutes used`, and
+the health verdict of each changing answer ends with the same words.
+Not set: nothing is shown. Do not set it for normal use.
+
 The person restarts the client. Done when the client lists the
 `agentlink-freecad` server with tools such as `session_state`.
 

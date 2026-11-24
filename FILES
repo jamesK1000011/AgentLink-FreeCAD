@@ -40,6 +40,8 @@ agentlink/data/examples.json
 agentlink/data/examples.schema.json
 agentlink/data/filaments.json
 agentlink/data/filaments.schema.json
+agentlink/data/guide_words.json
+agentlink/data/guide_words.schema.json
 agentlink/data/nexthint.json
 agentlink/data/nexthint.schema.json
 agentlink/data/readers.json
@@ -207,6 +209,7 @@ agentlink/targets.py
 agentlink/td_wait.py
 agentlink/testrun.py
 agentlink/theme.py
+agentlink/timelimit.py
 agentlink/tooldata.py
 agentlink/toolindex.py
 agentlink/tools.py
@@ -349,6 +352,7 @@ tests/test_cells.py
 tests/test_chain.py
 tests/test_charts.py
 tests/test_cmd_run_body_1118.py
+tests/test_connect_1124.py
 tests/test_core_check.py
 tests/test_core_guards.py
 tests/test_core_guards_fc.py
@@ -534,6 +538,7 @@ tests/test_sync_shared.py
 tests/test_techdraw.py
 tests/test_techdraw_gaps.py
 tests/test_theme.py
+tests/test_time_setting_1124.py
 tests/test_tool_groups.py
 tests/test_tool_index.py
 tests/test_tooldata.py

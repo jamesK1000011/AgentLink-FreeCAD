@@ -28,6 +28,9 @@ class StaticWords(unittest.TestCase):
         w = _const("WORKING")
         self.assertIn("Start with session_state", w)
         self.assertNotIn("tool_groups { tool: name } gives them again", w)
+        # The guide list is made at connect from the guide files (24 Nov), not typed here.
+        self.assertIn("The guides here: {guides}. {words}", w)
+        self.assertIn("A tool's card (tool_find { tool: name })", w)
 
     def test_static_is_chosen_by_the_mode(self):
         src = open(SRC, encoding="utf-8").read()
