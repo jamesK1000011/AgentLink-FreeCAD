@@ -116,6 +116,7 @@ class AssemblyData(unittest.TestCase):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
+            c["old"] = _meant.old_as_renamed(c["tool"], c["old"])  # renamed inputs and words: tests/_meant.py RENAMES
             c["old"] = _meant.case_as_meant(c["tool"], c["case"], c["old"])  # the handler's way changed on purpose since: tests/_meant.py CASES
             c["new"] = _meant.result_as_meant(c["tool"], c["new"])  # answer fields added since: tests/_meant.py RESULTS
             c["new"] = _meant.trace_added_out(c["tool"], c["new"])  # trace lines added since: tests/_meant.py TRACE_ADDED
@@ -293,7 +294,7 @@ def _main(mode):
             fc.trace.append("---- the call")
             t = _tool(mods[where[tool]], s, tool, which == "old")
             try:
-                res = ["ok", t.fn(json.loads(json.dumps(args)))]
+                res = ["ok", t.fn(json.loads(json.dumps(_meant.args_as_meant(tool, args) if which == "new" else args)))]  # renamed inputs: tests/_meant.py RENAMES
             except ToolError as e:
                 res = ["refused", e.code, e.message]
             except Exception as e:  # noqa: BLE001 - a crash is compared as one

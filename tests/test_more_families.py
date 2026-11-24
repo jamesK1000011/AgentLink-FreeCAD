@@ -518,7 +518,7 @@ class MoreFamilies(Base):
                                                                  {"kind": "bspline", "points": [[0, 80], [20, 90], [40, 80], [60, 95]]}]})
         ov = r["state"]["openVertices"]
         self.assertIn([5.0, 50.0], ov)
-        b = self.ok("sketch_bspline", {"sketch": "Sm s1", "geo": 2, "op": "degree", "by": 1})
+        b = self.ok("sketch_bspline", {"sketch": "Sm s1", "geometry": 2, "op": "degree", "by": 1})
         self.assertEqual(b["degree"], 4)
         self.ok("sketch_new", {"body": "Sm body", "plane": "XY", "name": "Sm s2"})
         self.ok("sketch_add", {"sketch": "Sm s2", "items": [{"kind": "rectangle", "corner": [100, 0], "size": [20, 10]}]})

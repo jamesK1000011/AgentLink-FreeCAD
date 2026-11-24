@@ -118,6 +118,7 @@ class Sk2Data(unittest.TestCase):
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         hid = 0
         for c in got:
+            c = {**c, "old": _meant.old_as_renamed(c["tool"], c["old"])}  # renamed inputs and words: tests/_meant.py RENAMES
             # Meant changes since BASE (tests/_meant.py): answer fields added (RESULTS), trace lines (TRACES).
             c = {**c, "new": _meant.result_as_meant(c["tool"], c["new"]), "old": {**c["old"], "trace": _meant.trace_as_meant(c["old"].get("trace") or [])}}
             # Meant difference (famfix), pd_multitransform: as FreeCAD's own command leaves them
@@ -307,7 +308,7 @@ def _main(mode):
             fc.trace.append("---- the call")
             t = _tool(mods[where[tool]], s, tool, which == "old")
             try:
-                res = ["ok", t.fn(json.loads(json.dumps(args)))]
+                res = ["ok", t.fn(json.loads(json.dumps(_meant.args_as_meant(tool, args) if which == "new" else args)))]  # renamed inputs: tests/_meant.py RENAMES
             except ToolError as e:
                 res = ["refused", e.code, e.message]
             except Exception as e:  # noqa: BLE001 - a crash is compared as one

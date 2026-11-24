@@ -3544,10 +3544,10 @@
    "kind": "data"
   },
   "sketch_bspline": {
-   "description": "Edit a B-spline in a sketch: geo, op degree (by: +1 raises, -1 lowers) | knot (param: insert a knot there, multiplicity; or knot: its index from 1 and by: raise/lower its multiplicity — a corner at 0 continuity). Answers degree, poles, knots, multiplicities.",
+   "description": "Edit a B-spline in a sketch: geometry, op degree (by: +1 raises, -1 lowers) | knot (param: insert a knot there, multiplicity; or knot: its index from 1 and by: raise/lower its multiplicity — a corner at 0 continuity). Answers degree, poles, knots, multiplicities.",
    "inputs": [
     "by",
-    "geo",
+    "geometry",
     "knot",
     "multiplicity",
     "op",
@@ -3587,7 +3587,7 @@
    "kind": "data"
   },
   "sketch_edit": {
-   "description": "Edit a sketch; several keys may go in one call, done in this order: move { geo, vertex (0 the whole curve, 1/2/3), to [x,y] } (drags it as far as its constraints let it), set [{ constraint: id|name, value mm|deg }], construction { geo, on }, rename { constraint, name }, deleteConstraints [id|name], delete [geometry ids — their constraints go too], fillet { at: [g, v] a corner, or geos [g1, g2] near [[x,y],[x,y]]; radius; chamfer: true cuts it straight } (the curves trimmed to it), trim { geo, at [x,y] } (cuts off the piece there, between crossings), split { geo, at }, mirror { geos, about: \"x\" | \"y\" | \"origin\" | a line id } (free mirrored copies: no symmetric constraints are added), group [geos] (held as one, FreeCAD 1.2), text { text, at, height, font, construction } (letters as geometry), exposeInternal [geos] (an ellipse's axes or a B-spline's poles back as construction geometry), removeAxesAlignment [geos]. delete, fillet, trim and split renumber geometry: read sketch_state before using ids again. Answers done, state, geometryCount, and bodyAfter when features are built on it; an edit that breaks one is refused with FreeCAD's error and nothing kept.",
+   "description": "Edit a sketch; several keys may go in one call, done in this order: move { geometry, vertex (0 the whole curve, 1/2/3), to [x,y] } (drags it as far as its constraints let it), set [{ constraint: id|name, value mm|deg }], construction { geometry, on }, rename { constraint, name }, deleteConstraints [id|name], delete [geometry ids — their constraints go too], fillet { at: [g, v] a corner, or geometry [g1, g2] near [[x,y],[x,y]]; radius; chamfer: true cuts it straight } (the curves trimmed to it), trim { geometry, at [x,y] } (cuts off the piece there, between crossings), split { geometry, at }, mirror { geometry, about: \"x\" | \"y\" | \"origin\" | a line id } (free mirrored copies: no symmetric constraints are added), group [geometry] (held as one, FreeCAD 1.2), text { text, at, height, font, construction } (letters as geometry), exposeInternal [geometry] (an ellipse's axes or a B-spline's poles back as construction geometry), removeAxesAlignment [geometry]. delete, fillet, trim and split renumber geometry: read sketch_state before using ids again. Answers done, state, geometryCount, and bodyAfter when features are built on it; an edit that breaks one is refused with FreeCAD's error and nothing kept.",
    "inputs": [
     "construction",
     "delete",
@@ -3608,11 +3608,11 @@
    "kind": "data"
   },
   "sketch_extend": {
-   "description": "Lengthen (or shorten) a line or arc of a circle at one end: geo, end 1 | 2 (default 2), by mm (negative shortens; along the arc for an arc), or to: another curve's id a line should reach.",
+   "description": "Lengthen (or shorten) a line or arc of a circle at one end: geometry, end 1 | 2 (default 2), by mm (negative shortens; along the arc for an arc), or to: another curve's id a line should reach.",
    "inputs": [
     "by",
     "end",
-    "geo",
+    "geometry",
     "sketch",
     "to"
    ],
@@ -3627,7 +3627,7 @@
    "kind": "data"
   },
   "sketch_join": {
-   "description": "Join two open curves' ends into one B-spline: a [geo, vertex], b [geo, vertex] (vertex 1 | 2, different curves), continuity 0 (corner) or 1 (smooth). It replaces both: ids change; answers bspline, its id.",
+   "description": "Join two open curves' ends into one B-spline: a [geometry, vertex], b [geometry, vertex] (vertex 1 | 2, different curves), continuity 0 (corner) or 1 (smooth). It replaces both: ids change; answers bspline, its id.",
    "inputs": [
     "a",
     "b",

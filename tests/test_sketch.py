@@ -89,7 +89,7 @@ class SketchTools(Base):
         # The corner where line 0 ends.
         f = self.ok("sketch_edit", {"sketch": "EditMe", "fillet": {"at": [0, 2], "radius": 5}})
         self.assertIn("fillet r5", f["done"][0])
-        m = self.ok("sketch_edit", {"sketch": "EditMe", "mirror": {"geos": [4], "about": "y"}})
+        m = self.ok("sketch_edit", {"sketch": "EditMe", "mirror": {"geometry": [4], "about": "y"}})
         self.assertIn("mirrored", m["done"][0])
         p = self.ok("pd_pad", {"body": "Edited", "sketch": "EditMe", "length": 4})
         vol = next(o for o in self.session.doc.Objects if o.Label == "Edited").Shape.Volume
@@ -98,9 +98,9 @@ class SketchTools(Base):
         # Trim and split on a sketch of its own: a line across a circle.
         self.ok("sketch_new", {"body": "Edited", "plane": "XY", "name": "Cuts"})
         self.ok("sketch_add", {"sketch": "Cuts", "items": [{"kind": "circle", "center": [0, 0], "radius": 10}, {"kind": "line", "from": [-15, 0], "to": [15, 0]}]})
-        t = self.ok("sketch_edit", {"sketch": "Cuts", "trim": {"geo": 1, "at": [-13, 0]}})
+        t = self.ok("sketch_edit", {"sketch": "Cuts", "trim": {"geometry": 1, "at": [-13, 0]}})
         self.assertIn("trimmed", t["done"][0])
-        sp = self.ok("sketch_edit", {"sketch": "Cuts", "split": {"geo": 0, "at": [0, 10]}})
+        sp = self.ok("sketch_edit", {"sketch": "Cuts", "split": {"geometry": 0, "at": [0, 10]}})
         self.assertIn("split", sp["done"][0])
         e = self.refused("sketch_edit", {"sketch": "Cuts", "fillet": {"at": [0, 1], "radius": 0}})
         self.assertIn("radius", e["message"])

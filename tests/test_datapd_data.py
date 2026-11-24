@@ -116,6 +116,7 @@ class DatapdData(unittest.TestCase):
         got = _child("--behave")
         self.assertEqual(sorted({c["tool"] for c in got}), sorted(CONVERTED))
         for c in got:
+            c["old"] = _meant.old_as_renamed(c["tool"], c["old"])  # renamed inputs and words: tests/_meant.py RENAMES
             c["new"] = _meant.result_as_meant(c["tool"], c["new"])  # answer fields added since: tests/_meant.py RESULTS
             self.assertEqual(c["new"]["result"], c["old"]["result"], f"{c['tool']} {c['case']}")
             self.assertEqual(c["new"], c["old"], f"{c['tool']} {c['case']}")
@@ -291,7 +292,7 @@ def _main(mode):
             fc.trace.append("---- the call")
             t = _tool(mods[where[tool]], s, tool, which == "old")
             try:
-                res = ["ok", t.fn(json.loads(json.dumps(args)))]
+                res = ["ok", t.fn(json.loads(json.dumps(_meant.args_as_meant(tool, args) if which == "new" else args)))]  # renamed inputs: tests/_meant.py RENAMES
             except ToolError as e:
                 res = ["refused", e.code, e.message]
             except Exception as e:  # noqa: BLE001 - a crash is compared as one

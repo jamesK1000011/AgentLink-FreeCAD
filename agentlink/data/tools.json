@@ -8578,7 +8578,7 @@
   },
   "sketch_edit": {
    "group": "sketch",
-   "description": "Edit a sketch: move, set, delete, fillet, trim, split or mirror its geometry and constraints. One call can have several keys; the tool does them in this order. move { geo, vertex, to [x,y] }: vertex 0 is the whole curve, or 1/2/3. It drags as far as its constraints let it. set [{ constraint: id|name, value mm|deg }]. construction { geo, on }. rename { constraint, name }. deleteConstraints [id|name]. delete [geometry ids]: their constraints go too. fillet { at, geos, near, radius, chamfer }. at: [g, v], a corner. Or geos [g1, g2] near [[x,y],[x,y]]. chamfer: true cuts it straight. The tool trims the curves to the fillet. trim { geo, at [x,y] }: cuts off the piece there, between crossings. split { geo, at }. mirror { geos, about: \"x\" | \"y\" | \"origin\" | a line id }: free mirrored copies, no symmetric constraints added. group [geos]: held as one (FreeCAD 1.2). text { text, at, height, font, construction }: letters as geometry. exposeInternal [geos]: the axes of an ellipse or the poles of a B-spline, back as construction geometry. removeAxesAlignment [geos]. delete, fillet, trim and split renumber geometry. Read sketch_state before you use ids again. Answer: done, state, geometryCount, and bodyAfter when features are built on it. The tool refuses an edit that breaks a feature, with FreeCAD's error, and nothing is kept.",
+   "description": "Edit a sketch: move, set, delete, fillet, trim, split or mirror its geometry and constraints. One call can have several keys; the tool does them in this order. move { geometry, vertex, to [x,y] }: vertex 0 is the whole curve, or 1/2/3. It drags as far as its constraints let it. set [{ constraint: id|name, value mm|deg }]. construction { geometry, on }. rename { constraint, name }. deleteConstraints [id|name]. delete [geometry ids]: their constraints go too. fillet { at, geometry, near, radius, chamfer }. at: [g, v], a corner. Or geometry [g1, g2] near [[x,y],[x,y]]. chamfer: true cuts it straight. The tool trims the curves to the fillet. trim { geometry, at [x,y] }: cuts off the piece there, between crossings. split { geometry, at }. mirror { geometry, about: \"x\" | \"y\" | \"origin\" | a line id }: free mirrored copies, no symmetric constraints added. group [geometry]: held as one (FreeCAD 1.2). text { text, at, height, font, construction }: letters as geometry. exposeInternal [geometry]: the axes of an ellipse or the poles of a B-spline, back as construction geometry. removeAxesAlignment [geometry]. delete, fillet, trim and split renumber geometry. Read sketch_state before you use ids again. Answer: done, state, geometryCount, and bodyAfter when features are built on it. The tool refuses an edit that breaks a feature, with FreeCAD's error, and nothing is kept.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -8654,7 +8654,7 @@
      "when": "='move' in a",
      "then": [
       {"let": {"m": "=a.move"}},
-      {"let": {"g": "=gid(sk, m.get('geo'))"}},
+      {"let": {"g": "=gid(sk, m.get('geometry'))"}},
       {"let": {"k": "=geo_kind(sk.Geometry[g])"}},
       {"let": {"p": "=m.get('vertex', 0 if k == 'Line' else 1 if k == 'Point' else 3)"}},
       {"refuse": "move.vertex: 0 the whole curve, 1 its start, 2 its end, 3 its centre.", "when": "=p not in (0, 1, 2, 3) or is_bool(p)"},
@@ -8702,7 +8702,7 @@
      "when": "='construction' in a",
      "then": [
       {"let": {"x": "=a.construction"}},
-      {"let": {"g": "=gid(sk, x.get('geo'))"}},
+      {"let": {"g": "=gid(sk, x.get('geometry'))"}},
       {"do": "=sk.setConstruction(g, bool(x.get('on', True)))"},
       {"push": {"done": {"fmt": "construction {g} {bool(x.get('on', True))}"}}}
      ]
@@ -8756,7 +8756,7 @@
             {"do": "=fillet(sk, x.get('chamfer'), gid(sk, g), int(v), r)"}
            ],
            "else": [
-            {"let": {"g1, g2": "=x.get('geos') or []", "q1, q2": "=x.get('near') or []"}},
+            {"let": {"g1, g2": "=x.get('geometry') or []", "q1, q2": "=x.get('near') or []"}},
             {"let": {"g1": "=gid(sk, g1)"}},
             {"let": {"g2": "=gid(sk, g2)"}},
             {"let": {"p1": "=vec2(q1, 'fillet.near')"}},
@@ -8768,7 +8768,7 @@
          "on": ["ValueError", "TypeError"],
          "except": [
           {"refuse": {"fmt": "No fillet of {r:g} mm fits there: {error} — a smaller radius, or a corner where exactly two curves meet (lines and arcs)."}, "code": "failed", "when": "='Not able to fillet' in str(error)"},
-          {"refuse": "fillet: at [geo, vertex] (a corner where two curves meet), or geos [g1, g2] with near [[x, y], [x, y]] (a point on each, on the side to keep), and radius."}
+          {"refuse": "fillet: at [geometry, vertex] (a corner where two curves meet), or geometry [g1, g2] with near [[x, y], [x, y]] (a point on each, on the side to keep), and radius."}
          ]
         }
        ],
@@ -8785,7 +8785,7 @@
      "when": "='trim' in a",
      "then": [
       {"let": {"x": "=a.trim"}},
-      {"let": {"g": "=gid(sk, x.get('geo'))"}},
+      {"let": {"g": "=gid(sk, x.get('geometry'))"}},
       {"let": {"at": "=vec2(x.get('at'), 'trim.at')", "n0": "=len(sk.Geometry)"}},
       {
        "try": [
@@ -8802,7 +8802,7 @@
      "when": "='split' in a",
      "then": [
       {"let": {"x": "=a.split"}},
-      {"let": {"g": "=gid(sk, x.get('geo'))"}},
+      {"let": {"g": "=gid(sk, x.get('geometry'))"}},
       {"let": {"at": "=vec2(x.get('at'), 'split.at')"}},
       {
        "try": [
@@ -8819,8 +8819,8 @@
      "when": "='mirror' in a",
      "then": [
       {"let": {"x": "=a.mirror"}},
-      {"let": {"geos": "=[gid(sk, g) for g in x.get('geos') or []]"}},
-      {"refuse": "mirror.geos: the geometry ids to mirror.", "when": "=not geos"},
+      {"let": {"geos": "=[gid(sk, g) for g in x.get('geometry') or []]"}},
+      {"refuse": "mirror.geometry: the geometry ids to mirror.", "when": "=not geos"},
       {"let": {"about": "=x.get('about', 'y')"}},
       {"let": {"ref": "={'x': (-1, None), 'y': (-2, None), 'origin': (-1, 1)}.get(about) if is_str(about) else (gid(sk, about), None)"}},
       {"refuse": "mirror.about: \"x\" (the horizontal axis), \"y\" (the vertical), \"origin\", or a line's id.", "when": "=ref is None"},
@@ -8918,7 +8918,7 @@
       {"push": {"done": {"fmt": "axes alignment of {geos} taken off: horizontal/vertical became parallel/perpendicular"}}}
      ]
     },
-    {"refuse": "Give one or more of: group [geos], text { text, at, height, font }, exposeInternal [geos], removeAxesAlignment [geos], move { geo, vertex, to }, set [{ constraint, value }], construction { geo, on }, rename { constraint, name }, deleteConstraints [ids|names], delete [geometry ids], fillet { at [g, v] | geos, near; radius }, trim { geo, at }, split { geo, at }, mirror { geos, about }.", "when": "=not done"},
+    {"refuse": "Give one or more of: group [geometry], text { text, at, height, font }, exposeInternal [geometry], removeAxesAlignment [geometry], move { geometry, vertex, to }, set [{ constraint, value }], construction { geometry, on }, rename { constraint, name }, deleteConstraints [ids|names], delete [geometry ids], fillet { at [g, v] | geometry, near; radius }, trim { geometry, at }, split { geometry, at }, mirror { geometry, about }.", "when": "=not done"},
     {"do": "=doc().recompute()"},
     {"let": {"st": "=state_of(sk)", "b": "=body_of(sk)", "bad": "=broken(doc())"}},
     {"refuse": {"fmt": "After the edit {bad[0]['object']} fails: {bad[0]['error']} — nothing was kept. A feature built on this sketch needs its profile closed and its referenced edges still there: make the edit another way, or change that feature first."}, "code": "failed", "when": "=bad"},
@@ -20675,7 +20675,7 @@
   },
   "sketch_extend": {
    "group": "sketch",
-   "description": "Make a line or arc of a circle longer (or shorter) at one end. geo: the curve. end: 1 | 2 (default 2). by: mm; negative makes it shorter. For an arc, by is along the arc. Or to: the id of another curve that a line must reach.",
+   "description": "Make a line or arc of a circle longer (or shorter) at one end. geometry: the curve. end: 1 | 2 (default 2). by: mm; negative makes it shorter. For an arc, by is along the arc. Or to: the id of another curve that a line must reach.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20683,7 +20683,7 @@
       "type": "string",
       "description": "The sketch's name; may be left out when there is one."
      },
-     "geo": {
+     "geometry": {
       "type": "integer"
      },
      "end": {
@@ -20697,7 +20697,7 @@
      }
     },
     "required": [
-     "geo"
+     "geometry"
     ],
     "additionalProperties": false
    },
@@ -20708,10 +20708,10 @@
    "runner": "steps",
    "steps": [
     {"let": {"sk": "=sketch_of(a.sketch)"}},
-    {"let": {"g": "=a.geo", "n": "=len(sk.Geometry)"}},
-    {"refuse": {"fmt": "geo: the id of a line or an arc of a circle in {sk.Label} (0 to {n - 1}; sketch_state lists them)."}, "when": "=not is_int(g) or not 0 <= g < n"},
+    {"let": {"g": "=a.geometry", "n": "=len(sk.Geometry)"}},
+    {"refuse": {"fmt": "geometry: the id of a line or an arc of a circle in {sk.Label} (0 to {n - 1}; sketch_state lists them)."}, "when": "=not is_int(g) or not 0 <= g < n"},
     {"let": {"kind": "=kind_of(sk.Geometry[g])"}},
-    {"refuse": {"fmt": "geo {g} is a {kind}: FreeCAD extends lines and arcs of circles only. For another curve: sketch_edit move its end point, or sketch_edit split / trim."}, "when": "=kind not in ('LineSegment', 'ArcOfCircle')"},
+    {"refuse": {"fmt": "geometry {g} is a {kind}: FreeCAD extends lines and arcs of circles only. For another curve: sketch_edit move its end point, or sketch_edit split / trim."}, "when": "=kind not in ('LineSegment', 'ArcOfCircle')"},
     {"let": {"end": "=a.get('end', 2)"}},
     {"refuse": "end: 1 (the start) or 2 (the end) — sketch_state shows which is which (from/to, start/end).", "when": "=end not in (1, 2) or is_bool(end)"},
     {"when": "=a.to is not None", "then": [{"let": {"t": "=a.to"}}, {"refuse": "to: works for a line; for an arc give by, mm along the arc.", "when": "=kind != 'LineSegment'"}, {"refuse": {"fmt": "to: the id of another curve in {sk.Label} (0 to {n - 1}) for the line to reach."}, "when": "=not is_int(t) or not 0 <= t < n or t == g"}, {"let": {"gap, inc": "=reach(sk, g, end, t)"}}, {"refuse": {"fmt": "Line {g} does not meet geometry {t} going on from its {'start' if end == 1 else 'end'}: try the other end, or give by (mm)."}, "code": "not_found", "when": "=gap > 1e-6"}, {"refuse": {"fmt": "Line {g} already reaches geometry {t} at that end: nothing to extend."}, "code": "invalid_state", "when": "=inc < 1e-9"}, {"let": {"amount": "=inc"}}], "else": [{"let": {"by": "=a.get('by', 0)"}}, {"refuse": "Give by (mm to add at that end; negative shortens; along the arc for an arc) or to (the id of a curve a line should reach).", "when": "=not is_num(by) or by == 0"}, {"let": {"inc": "=float(by)"}}, {"let": {"amount": "=inc / sk.Geometry[g].Radius if kind == 'ArcOfCircle' else inc"}}]},
@@ -20725,7 +20725,7 @@
   },
   "sketch_join": {
    "group": "sketch",
-   "description": "Join the ends of two open curves into one B-spline. a: [geo, vertex]. b: [geo, vertex]. vertex: 1 | 2, on different curves. continuity: 0 (corner) or 1 (smooth). It replaces both, so ids change. Answer: bspline, its id.",
+   "description": "Join the ends of two open curves into one B-spline. a: [geometry, vertex]. b: [geometry, vertex]. vertex: 1 | 2, on different curves. continuity: 0 (corner) or 1 (smooth). It replaces both, so ids change. Answer: bspline, its id.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -20759,9 +20759,9 @@
    "steps": [
     {"let": {"sk": "=sketch_of(a.sketch)"}},
     {"let": {"x": "=a.a", "y": "=a.b"}},
-    {"refuse": "a and b: [geo, vertex] each, vertex 1 (start) or 2 (end) — the two ends, of two different curves, to join into one B-spline.", "when": "=not (is_list(x) and is_list(y) and len(x) == len(y) == 2)"},
+    {"refuse": "a and b: [geometry, vertex] each, vertex 1 (start) or 2 (end) — the two ends, of two different curves, to join into one B-spline.", "when": "=not (is_list(x) and is_list(y) and len(x) == len(y) == 2)"},
     {"let": {"n": "=len(sk.Geometry)"}},
-    {"refuse": {"fmt": "a and b: [geo, vertex] of two different curves in {sk.Label} (ids 0 to {n - 1}), vertex 1 (start) or 2 (end) — FreeCAD cannot join a curve to itself."}, "when": "=not all([is_int(v) for v in x + y]) or not (0 <= x[0] < n and 0 <= y[0] < n) or x[0] == y[0] or x[1] not in (1, 2) or y[1] not in (1, 2)"},
+    {"refuse": {"fmt": "a and b: [geometry, vertex] of two different curves in {sk.Label} (ids 0 to {n - 1}), vertex 1 (start) or 2 (end) — FreeCAD cannot join a curve to itself."}, "when": "=not all([is_int(v) for v in x + y]) or not (0 <= x[0] < n and 0 <= y[0] < n) or x[0] == y[0] or x[1] not in (1, 2) or y[1] not in (1, 2)"},
     {"let": {"cont": "=a.get('continuity', 0)"}},
     {"refuse": "continuity: 0 (the two meet at a corner) or 1 (smooth).", "when": "=cont not in (0, 1)"},
     {"try": [{"do": "=sk.join(x[0], x[1], y[0], y[1], cont)"}], "except": [{"refuse": {"fmt": "The join failed: {error} — nothing was changed. Both must be open curves (not circles, ellipses or closed B-splines), both construction or both not."}, "code": "failed"}]},
@@ -20900,14 +20900,14 @@
   },
   "sketch_bspline": {
    "group": "sketch",
-   "description": "Edit a B-spline in a sketch. geo: the B-spline. op degree: by +1 raises, -1 lowers. op knot: param inserts a knot there, with multiplicity. Or knot: its index from 1, with by to raise/lower its multiplicity. A multiplicity at 0 continuity makes a corner. Answer: degree, poles, knots, multiplicities.",
+   "description": "Edit a B-spline in a sketch. geometry: the B-spline. op degree: by +1 raises, -1 lowers. op knot: param inserts a knot there, with multiplicity. Or knot: its index from 1, with by to raise/lower its multiplicity. A multiplicity at 0 continuity makes a corner. Answer: degree, poles, knots, multiplicities.",
    "inputSchema": {
     "type": "object",
     "properties": {
      "sketch": {
       "type": "string"
      },
-     "geo": {
+     "geometry": {
       "type": "integer"
      },
      "op": {
@@ -20931,7 +20931,7 @@
      }
     },
     "required": [
-     "geo",
+     "geometry",
      "op"
     ],
     "additionalProperties": false
@@ -20943,14 +20943,14 @@
    "runner": "steps",
    "steps": [
     {"let": {"sk": "=sketch_of(a.sketch)"}},
-    {"let": {"g": "=a.geo"}},
-    {"refuse": "geo: the id of a B-spline in the sketch (sketch_state lists kinds; sketch_to_bspline converts other curves).", "when": "=not (is_number(g) and not is_float(g)) or not 0 <= g < len(sk.Geometry) or 'BSpline' not in kind_of(sk.Geometry[g])"},
+    {"let": {"g": "=a.geometry"}},
+    {"refuse": "geometry: the id of a B-spline in the sketch (sketch_state lists kinds; sketch_to_bspline converts other curves).", "when": "=not (is_number(g) and not is_float(g)) or not 0 <= g < len(sk.Geometry) or 'BSpline' not in kind_of(sk.Geometry[g])"},
     {"let": {"op": "=a.op", "snap": "=kept(sk)"}},
     {"try": [{"choose": "=op", "of": {"degree": [{"let": {"by": "=int(a.get('by', 1))"}}, {"when": "=by > 0", "then": [{"do": "=sk.increaseBSplineDegree(g, by)"}], "else": [{"refuse": "by: how many degrees to raise (+1) or lower (-1), not 0.", "when": "=by == 0"}, {"refuse": {"fmt": "This FreeCAD cannot lower a B-spline's degree: draw it again with sketch_add bspline {{ interpolate: false, degree }}."}, "code": "unavailable", "when": "=not has(sk, 'decreaseBSplineDegree')"}, {"do": "=lower_degree(sk, g, -by)"}]}], "knot": [{"when": "=a.param is not None", "then": [{"do": "=sk.insertBSplineKnot(g, float(a.param), int(a.get('multiplicity', 1)))"}], "else": [{"do": "=sk.modifyBSplineKnotMultiplicity(g, int(a.get('knot', 1)), int(a.get('by', 1)))"}]}]}, "else": [{"refuse": "op: degree (by +1 / -1) | knot (param: insert one there, multiplicity; or knot: its index from 1, by: its multiplicity up or down)."}]}], "on": "failure", "except": [{"do": "=restore(sk, snap)"}, {"refuse": {"fmt": "Sketcher refused: {error} — the B-spline is as it was. A knot's index runs from 1 to the count of knots, param lies inside its knot range, and a multiplicity cannot pass the degree (the reply of a successful call lists knots and multiplicities)."}, "code": "failed"}]},
     {"do": "=doc().recompute()"},
     {"let": {"bs": "=[x for x in sk.Geometry if 'BSpline' in kind_of(x)]"}},
-    {"let": {"geo": "=sk.Geometry[g] if g < len(sk.Geometry) and 'BSpline' in kind_of(sk.Geometry[g]) else bs[-1]"}},
-    {"let": {"extra": "={'geo': g, 'degree': int(geo.Degree), 'poles': int(geo.NbPoles), 'knots': [round(k, 4) for k in geo.getKnots()], 'multiplicities': list(geo.getMultiplicities())}"}},
+    {"let": {"bsp": "=sk.Geometry[g] if g < len(sk.Geometry) and 'BSpline' in kind_of(sk.Geometry[g]) else bs[-1]"}},
+    {"let": {"extra": "={'geometry': g, 'degree': int(bsp.Degree), 'poles': int(bsp.NbPoles), 'knots': [round(k, 4) for k in bsp.getKnots()], 'multiplicities': list(bsp.getMultiplicities())}"}},
     {"do": "=doc().recompute()"},
     {"let": {"bad": "=broken(doc())"}},
     {"refuse": {"fmt": "That breaks {bad[0]['object']}: {bad[0]['error']} — nothing was kept. sketch_state reads the sketch as it is; a feature built on it needs its profile closed."}, "code": "failed", "when": "=bad"}

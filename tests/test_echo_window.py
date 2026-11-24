@@ -145,7 +145,7 @@ class Buttons(unittest.TestCase):
         with open(os.path.join(HERE, "..", "agentlink", "data", "tools.json"), encoding="utf-8") as f:
             entries = json.load(f)["entries"]
         examples = {"sketch_add": {"items": [{"kind": "line"}]}, "sketch_constrain": {"constraints": [{"type": "horizontal"}]},
-                    "sketch_edit": {"trim": {"geo": 1}}}
+                    "sketch_edit": {"trim": {"geometry": 1}}}
         missing = [n for n, t in entries.items() if n.startswith("sketch_") and t.get("changes")
                    and not echo.command_for(n, examples.get(n, {}))]
         self.assertEqual(missing, [])
@@ -470,7 +470,7 @@ class Selected(unittest.TestCase):
 
     def test_sub_names(self):
         self.assertEqual(echo.sub_names("sketch_join", {"bspline": 4}), ["Edge5"])
-        self.assertEqual(echo.sub_names("sketch_extend", {}, {"geo": 2}), ["Edge3"])
+        self.assertEqual(echo.sub_names("sketch_extend", {}, {"geometry": 2}), ["Edge3"])
         self.assertEqual(echo.sub_names("sketch_to_bspline", {}, {"geometry": [0, 1]}), ["Edge1", "Edge2"])
         self.assertEqual(echo.sub_names("sketch_add", {"added": [{"ids": [0, 1]}]}), ["Edge1", "Edge2"])
         self.assertEqual(echo.sub_names("sketch_constrain", {"added": [3]}), ["Constraint4"])

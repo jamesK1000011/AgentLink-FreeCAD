@@ -113,6 +113,74 @@ def _ste():
     return _STE
 
 
+# Rename sets of 24 Nov (owner rule R5: a renamed input keeps no alias).
+# Per tool: "inputs" {old: new}, a dotted path for a key inside an object
+# input ("move.geo"); "answer" {old: new} for answer fields; "words" [(old,
+# new)], whole-word changes made to the snapshot's description and schema
+# words and to the old handler's answers and refusals. The data tests give a
+# case's inputs to the new entry by the new names (args_as_meant) and make
+# the word changes in the old run (old_as_renamed).
+_GEO = [("geo", "geometry"), ("geos", "geometry")]
+RENAMES = {
+    # Set 5: geo -> geometry (V.2), in sketch_extend, sketch_bspline and sketch_edit's keys; sketch_join's words.
+    "sketch_extend": {"inputs": {"geo": "geometry"}, "words": _GEO},
+    "sketch_bspline": {"inputs": {"geo": "geometry"}, "answer": {"geo": "geometry"}, "words": _GEO},
+    "sketch_edit": {"inputs": {**{f"{k}.geo": "geometry" for k in ("move", "construction", "trim", "split")},
+                               **{f"{k}.geos": "geometry" for k in ("fillet", "mirror")}}, "words": _GEO},
+    "sketch_join": {"words": _GEO},
+}
+
+
+def _rename_words(name, text):
+    import re
+
+    for was, now in RENAMES.get(name, {}).get("words", ()):
+        text = re.sub(r"(?<![\w])" + re.escape(was) + r"(?![\w])", lambda _m, now=now: now, text)
+    return text
+
+
+def args_as_meant(name, args):
+    """A case's inputs, as the snapshot gave them, by the new names."""
+    import copy
+
+    ren = RENAMES.get(name, {}).get("inputs")
+    if not ren or not isinstance(args, dict):
+        return args
+    args = copy.deepcopy(args)
+    for path, new in ren.items():
+        *outer, key = path.split(".")
+        at = args
+        for k in outer:
+            at = at.get(k) if isinstance(at, dict) else None
+        for d in (at if isinstance(at, list) else [at]):
+            if isinstance(d, dict) and key in d:
+                d[new] = d.pop(key)
+    return args
+
+
+def old_as_renamed(name, old):
+    """The old handler's run with the renamed answer fields and words."""
+    if name not in RENAMES:
+        return old
+    fields = RENAMES[name].get("answer", {})
+
+    def walk(x, top=False):
+        if isinstance(x, str):
+            return _rename_words(name, x)
+        if isinstance(x, list):
+            return [walk(v) for v in x]
+        if isinstance(x, dict):
+            return {(fields.get(k, k) if top else k): walk(v) for k, v in x.items()}
+        return x
+
+    res = old.get("result")
+    if isinstance(res, list) and res and res[0] == "ok" and isinstance(res[1], dict):
+        res = [res[0], walk(res[1], True)] + walk(res[2:])
+    elif isinstance(res, list):
+        res = walk(res)
+    return {**old, "result": res}
+
+
 def _meant_only(name, old):
     if name not in DESCRIPTIONS:
         return old
@@ -126,7 +194,7 @@ def _meant_only(name, old):
 def description(name, old):
     """The snapshot's description of a tool with its meant change made, and
     then the STE rewrite when the result is main's original word for word."""
-    text = _meant_only(name, old)
+    text = _rename_words(name, _meant_only(name, old))
     s = _ste()
     if name in s["now"] and s["orig"].get(name, {}).get("description") == text:
         return s["now"][name]
@@ -248,9 +316,10 @@ SCHEMAS = {
 def schema(name, old):
     """The snapshot's inputSchema of a tool with its meant change made."""
     import copy
+    import json
 
-    m = SCHEMAS.get(name)
-    if not m:
+    m = SCHEMAS.get(name) or {}
+    if not m and name not in RENAMES:
         return old
     new = copy.deepcopy(old)
     props = new["properties"]
@@ -270,6 +339,13 @@ def schema(name, old):
     new["properties"] = props
     if "required" in m:
         new["required"] = list(m["required"])
+    ren = {k: v for k, v in RENAMES.get(name, {}).get("inputs", {}).items() if "." not in k}
+    if ren:
+        new["properties"] = {ren.get(k, k): v for k, v in new["properties"].items()}
+        if "required" in new:
+            new["required"] = [ren.get(k, k) for k in new["required"]]
+    if name in RENAMES:
+        new = json.loads(_rename_words(name, json.dumps(new)))
     # the keys in the order the entry keeps them
     return {k: new[k] for k in old}
 
