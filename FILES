@@ -460,6 +460,7 @@ tests/test_local_client.py
 tests/test_local_fixes_1123.py
 tests/test_loft_findings.py
 tests/test_loft_spans.py
+tests/test_lost_face_1124.py
 tests/test_material.py
 tests/test_mcp_contract.py
 tests/test_measure.py
@@ -516,6 +517,7 @@ tests/test_sheet.py
 tests/test_sheets.py
 tests/test_sketch.py
 tests/test_sketch_gaps.py
+tests/test_sketch_names_1124.py
 tests/test_smart_calls.py
 tests/test_static_eight_1122.py
 tests/test_static_instructions_1122.py

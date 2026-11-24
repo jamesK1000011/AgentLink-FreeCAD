@@ -474,7 +474,7 @@ def tools(session):
 
     # What the tools' entries (agentlink/data/tools.json) call by name.
     helpers = {"doc": doc, "settle": settle, "new": new, "snapshot": lambda tool: s.snapshot(tool), "steps": lambda: len(s.steps),
-               "body": lambda ref: pc.pd_body(doc(), ref), "sketch_of": lambda ref, b=None: pc.sketch_of(doc(), ref, b), "in_body": pc.in_body,
+               "body": lambda ref: pc.pd_body(doc(), ref), "sketch_of": lambda ref, b=None: pc.sketch_of(doc(), ref, b, s), "in_body": pc.in_body,
                "volume": pc.volume, "tip_shape": pc.tip_shape, "solid_tip": solid_tip, "body_reading": pc.body_reading, "short": pc.short, "version": version,
                # FreeCAD's own
                "V": V, "placement": FreeCAD.Placement, "rotation": FreeCAD.Rotation, "setprop": setattr, "xyz": pc.geo.vec, "vec3": pc.vec3, "num_json": picks.num_json,

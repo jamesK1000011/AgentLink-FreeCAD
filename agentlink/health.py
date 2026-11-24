@@ -1058,12 +1058,24 @@ def check(session, tool, m):
         lap[0] = now
 
     # 1. State flags and recompute errors.
-    errors, pending = [], []
+    errors, pending, lost = [], [], []
     if len(objs) <= MAX_OBJECTS:
         for o in objs:
             why = _failing(o)
             if why:
-                errors.append({"object": _label(o), "type": _short(o), "error": why[:200], **({} if o.Name in before_bad else {"new": True})})
+                # FreeCAD's words for a lost face or edge, in plain words (decision 5, 23 Nov).
+                try:
+                    from . import fusehint
+
+                    pl = fusehint.lost_ref(o, why)
+                except Exception:
+                    pl = None
+                if pl:
+                    why = pl["words"]
+                    if o.Name not in before_bad:
+                        lost.append(pl["todo"])
+                errors.append({"object": _label(o), "type": _short(o), "error": why[:200], **({} if o.Name in before_bad else {"new": True}),
+                               **({"plain": True} if pl else {})})
             else:
                 try:
                     # Still touched after the call recomputed it is that
@@ -1086,10 +1098,13 @@ def check(session, tool, m):
         old = len(errors) - len(new)
         show = (new or errors)[:MAX_LIST]
         if new:
-            h["errors"] = show  # failures that were there before are named, not listed again each call
+            # A plain-word reason is said whole and first: it is the cause of those after it.
+            show = sorted(show, key=lambda e: not e.get("plain"))
+            h["errors"] = [{k: v for k, v in e.items() if k != "plain"} for e in show]  # failures that were there before are named, not listed again each call
             lines.append(f"{len(new)} object{'s' if len(new) != 1 else ''} failed to recompute: "
-                         + "; ".join(f"{e['object']} ({e['error'][:80]})" for e in show[:3]) + (" …" if len(new) > 3 else "")
+                         + "; ".join(e["error"] if e.get("plain") else f"{e['object']} ({e['error'][:80]})" for e in show[:3]) + (" …" if len(new) > 3 else "")
                          + (f" — {old} more were failing before this call" if old else ""))
+            todos.extend(lost[:1])
             todos.append("fix the input of the first failed object (those after it fail because of it), or history_undo")
             # An additive step or a fuse whose result is not a valid solid: the design rule (bicycle finding 7).
             try:

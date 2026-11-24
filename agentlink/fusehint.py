@@ -227,3 +227,91 @@ def refine_todo(body, said=""):
     names = ", ".join(on[:5]) + (f" and {len(on) - 5} more" if len(on) > 5 else "")
     return (f"Refine off on the features (object_set {{ object: \"{on[0]}\", values: {{ Refine: false }} }} on each: {names}), then rebuild "
             f"(recompute) and body_check {{ body: \"{getattr(body, 'Label', '')}\" }}: Refine on the features of a weldment of many tube members ({pipes}) can leave it unorientable after a change")
+
+
+# A lost face or edge (local fixes, 23 Nov, decision 5): a change renumbered
+# the faces of the feature a sketch is attached to, and FreeCAD says
+# "AttachEngine3D: subshape not found Pad.Face3" (or an EdgeN, or "missing
+# element reference …"). Those words reach a model through the health and
+# refusals. Here they become plain words and a todo that names history_undo
+# and sketch_attach with its real inputs. Nothing re-attaches by itself.
+LOST = re.compile(r"(?:subshape not found|missing element reference)\s*:?\s*", re.I)
+_ELEMENT = re.compile(r"(Face|Edge|Vertex)(\d+)")
+_OWNER = re.compile(r"[A-Za-z_][\w]*")
+LOST_KIND = {"Face": "face", "Edge": "edge", "Vertex": "point"}
+SIDES = ("x", "y", "z")
+
+
+def _owner_label(o, name):
+    """The label of the object a lost reference names, else the name."""
+    try:
+        x = o.Document.getObject(name)
+        if x is not None:
+            return str(x.Label)
+    except Exception:
+        pass
+    return name
+
+
+def _side(o):
+    """"+z" … for a sketch whose normal lies along a world axis, else None."""
+    try:
+        import FreeCAD
+
+        n = o.Placement.Rotation.multVec(FreeCAD.Vector(0, 0, 1))
+    except Exception:
+        try:
+            n = o.Placement.Rotation.multVec((0, 0, 1))
+        except Exception:
+            return None
+    try:
+        v = (float(n.x), float(n.y), float(n.z))
+    except Exception:
+        return None
+    if bool(getattr(o, "MapReversed", False)):
+        v = tuple(-c for c in v)
+    for i, c in enumerate(v):
+        if abs(c) > 0.999:
+            return ("+" if c > 0 else "-") + SIDES[i]
+    return None
+
+
+def lost_ref(o, raw):
+    """For an object whose recompute failed because its attachment lost a
+    face, edge or point: {words, todo, element}; else None."""
+    parts = re.split(LOST, str(raw or ""), maxsplit=1)
+    if len(parts) < 2:
+        return None
+    rest = parts[1]
+    el = _ELEMENT.search(rest)
+    head = _OWNER.match(rest.lstrip(" ;'\""))
+    owner = head.group(0) if head else ""
+    if el is None or not owner or _ELEMENT.fullmatch(owner):
+        return None
+    kind, element = LOST_KIND[el.group(1)], el.group(1) + el.group(2)
+    label = str(getattr(o, "Label", "") or getattr(o, "Name", "?"))
+    own = _owner_label(o, owner)
+    article = "an" if kind == "edge" else "a"
+    words = f"{label} lost its {kind} {own}.{element} after the last change; attach it to {article} {kind} again"
+    undo = "history_undo takes the last change back"
+    if getattr(o, "TypeId", "") == "Sketcher::SketchObject":
+        if kind == "edge":
+            how = f'sketch_attach {{ sketch: "{label}", edge: "{own}.Edge…" }} hangs it on an edge again (shape_query names the edges)'
+        else:
+            side = _side(o)
+            face = f'{{ side: "{side}", feature: "{own}" }}' if side else "{ at: [x, y, z], normal: [x, y, z] }"
+            how = f'sketch_attach {{ sketch: "{label}", face: {face} }} attaches it to a face again'
+        todo = f"{undo}; or {how}"
+    else:
+        todo = f"{undo}; or attach {label} to {article} {kind} again"
+    return {"words": words, "todo": todo, "element": f"{own}.{element}"}
+
+
+def plain_error(o, raw):
+    """FreeCAD's words for a failed object, in plain words where they are
+    known (lost_ref); else FreeCAD's own."""
+    try:
+        got = lost_ref(o, raw)
+    except Exception:
+        got = None
+    return got["words"] if got else raw

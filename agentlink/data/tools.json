@@ -8191,7 +8191,8 @@
       {"do": "=doc().recompute()"}
      ]
     },
-    {"refuse": {"fmt": "The sketch would not attach to {what}: {sk.getStatusString()} — nothing was made. A sketch needs a flat face or a plane: pick another face, or plane XY | XZ | YZ with offset."}, "code": "failed", "when": "=not sk.isValid()"}
+    {"refuse": {"fmt": "The sketch would not attach to {what}. Nothing was made. A sketch needs a flat face or a plane: pick another face, or plane XY | XZ | YZ with offset. FreeCAD said: {status_words(sk)}"}, "code": "failed", "when": "=not sk.isValid()"},
+    {"do": "=note_sketch(sk)"}
    ],
    "answer": {"via": "finish", "with": ["=tool", "$fields", false], "late": true, "fields": {"sketch": "=sk.Label", "body": "=b.Label", "on": "=what", "face": {"when": "=pick", "value": "=pick"}, "offset": {"when": "=off", "value": "=off"}, "frame": "=frame(sk.Placement)", "note": "Coordinates are the sketch's: x along xAxis, y along yAxis, from origin (world mm)."}}
   },

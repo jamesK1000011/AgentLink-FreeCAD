@@ -659,6 +659,11 @@ LIVE_NAMES_TOOLS = frozenset(("batch", "fast", "pick"))
 # The key of the live names; a tool whose answer has a "now" of its own (a
 # reading after a change) gets them under the other key.
 LIVE_KEY, LIVE_KEY_ELSE = "now", "nowNames"
+# Sketch tools that change a sketch's geometry: a change to a sketch that a
+# feature uses, while its body has an unused sketch, gets the sketchNote.
+SKETCH_GEOMETRY_TOOLS = frozenset(("sketch_add", "sketch_offset", "sketch_external", "sketch_edit", "sketch_copy", "sketch_array",
+                                   "sketch_extend", "sketch_join", "sketch_carbon", "sketch_project", "sketch_to_bspline",
+                                   "sketch_bspline", "sketch_mirror"))
 
 ORIENT_HEAD = "\n\nWhere you are, read at connect (session_state reads it again): "
 
@@ -1275,13 +1280,60 @@ class Server:
             pass
 
     def _call(self, params):
-        result = self._call_core(params)
+        s = self.session
+        held = None
+        if s is not None:
+            # A sketch a tool took when none was named, said in filled; the
+            # sketch the call works on, for the used-sketch note
+            # (families/pd_common.py sketch_of; decision 4, 23 Nov).
+            held = (getattr(s, "filled_now", None), getattr(s, "sketch_now", None))
+            s.filled_now, s.sketch_now = [], None
+        try:
+            result = self._call_core(params)
+        finally:
+            if s is not None:
+                got, sk = s.filled_now, s.sketch_now
+                s.filled_now, s.sketch_now = held
+        if s is not None:
+            try:
+                self._sketch_words(params, result, got, sk)
+            except Exception:  # noqa: BLE001 - words only
+                pass
         if isinstance(result, dict) and result.get("isError"):
             try:
                 self._refusal_extras(params, result)
             except Exception:  # noqa: BLE001 - words only: the refusal stays as it is
                 pass
         return result
+
+    def _sketch_words(self, params, result, filled, sk):
+        """filled: the sketch a tool took when none was named, as
+        "pd_pad.sketch=Sketch 2 (open in edit in the window)". sketchNote: a
+        change to the geometry of a sketch a feature uses while its body
+        has an unused sketch (decision 4, D-b)."""
+        name = plain_name(self, params.get("name")) or params.get("name")
+        note = None
+        if sk is not None and name in SKETCH_GEOMETRY_TOOLS and isinstance(result, dict) and not result.get("isError"):
+            from .families import pd_common
+
+            note = pd_common.used_sketch_note(sk)
+        if not filled and not note:
+            return
+        content = (result or {}).get("content") or []
+        if not content or content[0].get("type") != "text":
+            return
+        body = json.loads(content[0]["text"])
+        if not isinstance(body, dict):
+            return
+        tail = {k: body.pop(k) for k in (LIVE_KEY, LIVE_KEY_ELSE) if k in body}
+        if filled:
+            had = body.get("filled")
+            had = list(had) if isinstance(had, list) else ([had] if had else [])
+            body["filled"] = list(dict.fromkeys(had + [f"{name}.{w}" for w in filled]))
+        if note:
+            body["sketchNote"] = note
+        body.update(tail)
+        content[0]["text"] = compact(body)
 
     def _live_names(self, name, tool, args):
         """The live names of the agent's document (agentlink/livenames.py)
