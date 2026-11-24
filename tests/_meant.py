@@ -288,6 +288,8 @@ RENAMES = {
     "pd_helix": ({"profile": "sketch"}, "rename set 4: a PartDesign feature's sketch is sketch"),
     "pd_loft": ({"profile": "sketch"}, "rename set 4: the first sketch is sketch; the others stay sections"),
     "pd_pipe": ({"profile": "sketch"}, "rename set 4: sketch, a sketch or { circle: { d, wall } }"),
+    "pd_linear_pattern": ({"occurrences": "count"}, "rename set 7: how many, the original counted, is count"),
+    "pd_polar_pattern": ({"occurrences": "count"}, "rename set 7: how many, the original counted, is count"),
 }
 
 
@@ -443,6 +445,13 @@ CASES.update({
                                         "message": ("The profile is swept around the axis: it must be closed, off the axis and not across it; a pitch smaller than the profile's height",
                                                     "The sketch is swept around the axis: it must be closed, off the axis and not across it; a pitch smaller than the sketch's height")},
 })
+
+
+# Rename set 7 (24 Nov): pd_linear_pattern and pd_polar_pattern take count, not occurrences.
+_COUNT = ("occurrences: a whole number", "count: a whole number")
+CASES.update({(t, c): {"why": "rename set 7: count in the words", "message": _COUNT}
+              for t, c in (("pd_linear_pattern", "occurrences one"), ("pd_linear_pattern", "occurrences a fraction"),
+                           ("pd_linear_pattern", "occurrences a boolean"), ("pd_polar_pattern", "occurrences one"))})
 
 
 def case_as_meant(tool, case, old):

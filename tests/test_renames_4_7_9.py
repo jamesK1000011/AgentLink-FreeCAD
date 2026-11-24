@@ -6,6 +6,7 @@
 # and the new name runs on the data tests' stand-in FreeCAD (a child
 # process each: the stand-in must not be seen by the other tests).
 #   set 4  pd_helix, pd_loft, pd_pipe: profile -> sketch
+#   set 7  pd_linear_pattern, pd_polar_pattern: occurrences -> count
 import json
 import os
 import subprocess
@@ -23,6 +24,8 @@ RENAMED = [
     ("pd_helix", "profile", "sketch"),
     ("pd_loft", "profile", "sketch"),
     ("pd_pipe", "profile", "sketch"),
+    ("pd_linear_pattern", "occurrences", "count"),
+    ("pd_polar_pattern", "occurrences", "count"),
 ]
 
 # One case of each tool that answers, from the data tests' cases: (stand-in
@@ -31,6 +34,8 @@ RUNS = {
     "pd_helix": ("sk2", "model call 75"),
     "pd_loft": ("pd", "model call 83"),
     "pd_pipe": ("pd", "model call 89"),
+    "pd_linear_pattern": ("pd", "model call 26"),
+    "pd_polar_pattern": ("pd", "model call 57"),
 }
 
 
@@ -83,7 +88,7 @@ class OldNamesRefused(unittest.TestCase):
             text = json.dumps({k: e[tool].get(k) for k in ("rules", "steps", "answer", "args")})
             for form in (f"a.{old})", f"a.{old},", f"a.{old} ", f"a.get('{old}'", f'a.get(\\"{old}\\"'):
                 self.assertNotIn(form, text, f"{tool}: {form}")
-            self.assertIn(f"a.{new}", text, tool)
+            self.assertTrue(f"a.{new}" in text or f"a.get('{new}'" in text, tool)
 
     def test_no_alias_is_left_for_the_old_names(self):
         from agentlink import fastpath, protocol

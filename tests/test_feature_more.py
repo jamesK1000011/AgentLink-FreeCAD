@@ -20,7 +20,7 @@ class FeatureMore(Base):
         d = self.ok("pd_datum", {"body": "Block", "kind": "line", "on": {"near": [13, 10, 10]}})
         self.assertEqual(d["at"][:2], [10.0, 10.0])
         self.ok("pd_primitive", {"body": "Block", "kind": "prism", "size": {"sides": 6, "circumradius": 2, "height": 4}, "at": [5, 25, 10], "name": "Knob"})
-        p = self.ok("pd_polar_pattern", {"body": "Block", "features": ["Knob"], "axis": d["datum"], "occurrences": 3, "angle": 360})
+        p = self.ok("pd_polar_pattern", {"body": "Block", "features": ["Knob"], "axis": d["datum"], "count": 3, "angle": 360})
         self.assertGreater(p["volumeChange"], 0)
 
     def test_3_helix(self):

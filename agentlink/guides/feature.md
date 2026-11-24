@@ -44,8 +44,8 @@ Order that keeps a model stable (FreeCAD's own advice): sketches on the body's p
 
 ## patterns and mirrors
 <!-- later: when using pd_linear_pattern, pd_polar_pattern, pd_mirrored or pd_multitransform -->
-- `pd_linear_pattern`: `spacing` between copies or `length` first to last; kept as FreeCAD's Extent mode (Length = spacing × (occurrences − 1)).
-- `pd_polar_pattern`: `angle: 360` spaces the copies evenly all round; a smaller angle is from the first to the last copy.
+- `pd_linear_pattern`: `count` copies (the original counted), `spacing` between copies or `length` first to last; kept as FreeCAD's Extent mode (Length = spacing × (count − 1)).
+- `pd_polar_pattern`: `count` copies (the original counted); `angle: 360` spaces the copies evenly all round; a smaller angle is from the first to the last copy.
 - A copy of a pocket or hole must land on material. A copy of a pad that does not touch the body becomes a second solid.
 - `pd_multitransform { features, steps }` chains patterns. A grid is two linear steps; `scale` steps grow the copies. Its steps stay in the body under it (`feature_list` marks them `stepOf`) and are removed with it.
 

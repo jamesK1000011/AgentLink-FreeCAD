@@ -48,7 +48,7 @@ class FeatureTools(Base):
         h = self.ok("pd_hole", {"sketch": "Holes", "thread": "M5", "depth": "through"})
         self.assertLess(h["volumeChange"], -100)
         self.assertIn("M5", h["thread"])
-        p = self.ok("pd_linear_pattern", {"features": ["Pocket"], "direction": "y", "occurrences": 2, "spacing": 6})
+        p = self.ok("pd_linear_pattern", {"features": ["Pocket"], "direction": "y", "count": 2, "spacing": 6})
         self.assertLess(p["volumeChange"], -50)
 
     def test_6_edit_suppress_remove(self):

@@ -915,7 +915,7 @@
      },
      "ask": [
       {
-       "arg": "occurrences",
+       "arg": "count",
        "sample": 4
       }
      ]
@@ -981,7 +981,7 @@
      },
      "ask": [
       {
-       "arg": "occurrences",
+       "arg": "count",
        "sample": 4
       }
      ]

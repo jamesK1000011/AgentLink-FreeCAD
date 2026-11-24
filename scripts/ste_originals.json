@@ -2860,10 +2860,10 @@
    "description": "Repeat features in a line: direction x|y|z (x) or a datum line, occurrences (2 or more, the original counted), spacing mm between copies or length mm first to last, reversed; features: \"all\" repeats the whole body. A grid: pd_multitransform. Reply: feature, volume mm³, volumeChange, faces, solids, box, health. A failure is refused with FreeCAD's error; nothing is kept.",
    "inputs": [
     "body",
+    "count",
     "direction",
     "features",
     "length",
-    "occurrences",
     "reversed",
     "spacing"
    ],
@@ -2957,8 +2957,8 @@
     "angle",
     "axis",
     "body",
+    "count",
     "features",
-    "occurrences",
     "reversed"
    ],
    "kind": "data"

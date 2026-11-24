@@ -983,9 +983,9 @@
   ],
   "allHubListed": {
    "tools": 420,
-   "chars": 357121,
+   "chars": 357097,
    "estimatedCards": 26,
-   "tokens": 102035
+   "tokens": 102028
   },
   "base": [
    "session_state",

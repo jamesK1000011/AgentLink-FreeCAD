@@ -7298,7 +7298,7 @@
   },
   "pd_linear_pattern": {
    "group": "feature",
-   "description": "Repeat features along a line. direction: x|y|z (x) or a datum line. occurrences: 2 or more, with the original. spacing: mm between copies. Or length: mm from first to last. reversed. features: \"all\" repeats the whole body. For a grid: pd_multitransform. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a pattern to many copies made one by one: it keeps one value for the count and the spacing.",
+   "description": "Repeat features along a line. direction: x|y|z (x) or a datum line. count: 2 or more, with the original. spacing: mm between copies. Or length: mm from first to last. reversed. features: \"all\" repeats the whole body. For a grid: pd_multitransform. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a pattern to many copies made one by one: it keeps one value for the count and the spacing.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7326,7 +7326,7 @@
      "direction": {
       "type": "string"
      },
-     "occurrences": {
+     "count": {
       "type": "integer"
      },
      "spacing": {
@@ -7366,9 +7366,9 @@
       {"set": {"f.Originals": "=orig"}}
      ]
     },
-    {"let": {"n": "=a.get('occurrences', 2)"}},
+    {"let": {"n": "=a.get('count', 2)"}},
     {"let": {"n": "=int(n)"}, "when": "=is_float(n) and n.is_integer()"},
-    {"refuse": "occurrences: a whole number, 2 or more, the original counted.", "when": "=not is_int(n) or n < 2"},
+    {"refuse": "count: a whole number, 2 or more, the original counted.", "when": "=not is_int(n) or n < 2"},
     {"set": {"f.Occurrences": "=n"}},
     {"set": {"f.Direction": "=ref"}},
     {"let": {"step": "=a.get('spacing', a.get('length'))"}},
@@ -7386,7 +7386,7 @@
   },
   "pd_polar_pattern": {
    "group": "feature",
-   "description": "Repeat features around an axis. axis: x|y|z (the body's axes; z) or a datum line (pd_datum). occurrences: with the original. angle: deg. 360 spreads them evenly around; less is from first to last. reversed. features: \"all\" repeats the whole body. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a pattern to many copies made one by one: it keeps one value for the count. Copies of a whole part go in the assembly as links.",
+   "description": "Repeat features around an axis. axis: x|y|z (the body's axes; z) or a datum line (pd_datum). count: with the original. angle: deg. 360 spreads them evenly around; less is from first to last. reversed. features: \"all\" repeats the whole body. Answer: feature, volume mm³, volumeChange, faces, solids, box, health. On a failure, it refuses with FreeCAD's error; nothing is kept. Prefer a pattern to many copies made one by one: it keeps one value for the count. Copies of a whole part go in the assembly as links.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -7414,7 +7414,7 @@
      "axis": {
       "type": "string"
      },
-     "occurrences": {
+     "count": {
       "type": "integer"
      },
      "angle": {
@@ -7451,9 +7451,9 @@
       {"set": {"f.Originals": "=orig"}}
      ]
     },
-    {"let": {"n": "=a.get('occurrences', 2)"}},
+    {"let": {"n": "=a.get('count', 2)"}},
     {"let": {"n": "=int(n)"}, "when": "=is_float(n) and n.is_integer()"},
-    {"refuse": "occurrences: a whole number, 2 or more, the original counted.", "when": "=not is_int(n) or n < 2"},
+    {"refuse": "count: a whole number, 2 or more, the original counted.", "when": "=not is_int(n) or n < 2"},
     {"set": {"f.Occurrences": "=n"}},
     {"set": {"f.Axis": "=ref"}},
     {"let": {"ang": "=a.get('angle', 360)"}},
